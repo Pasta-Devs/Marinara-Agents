@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client.js";
 import { slpKeys } from "../../base/state/slp-query-keys.js";
 import type { SlurpReusablePromptInstruction } from "../../base/state/slp-state-types.js";
+import { currentMemoryStatus, type SlurpMemoryStatus } from "./slp-ltm-sharing-offer.js";
 import type {
   SlurpPromptBlocksResponse,
   SlurpPromptPreviewResponse,
@@ -25,6 +26,21 @@ export function useSlurpCarryoverReach(enabled: boolean) {
     queryFn: () => api.get<{ on: number; off: number }>("/slurp2/settings/carryover-reach"),
     enabled,
     staleTime: 30_000,
+  });
+}
+/** How the last read of Long-Term Memory went, while Creators are allowed to read it. */
+export function useSlurpMemoryStatus(enabled: boolean) {
+  return useQuery({
+    queryKey: [...slpKeys.settings(), "memory-status"] as const,
+    queryFn: () =>
+      currentMemoryStatus({
+        read: () => api.get<{ status: SlurpMemoryStatus }>("/slurp2/settings/memory-status"),
+        readLtm: () => api.get<{ longTermMemoryShareWithPackages?: boolean }>("/long-term-memory/settings"),
+      }),
+    enabled,
+    staleTime: 30_000,
+    // Long-Term Memory's own settings can turn sharing on without telling Slurp, so ask again on every open.
+    refetchOnMount: "always",
   });
 }
 export function useSlurpSettingsDefaults() {

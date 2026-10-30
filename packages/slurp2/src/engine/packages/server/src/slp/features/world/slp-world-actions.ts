@@ -23,8 +23,10 @@ import {
   SLURP_SHIPPED_TYPE_REACTIONS,
   slurpCommissionBrief,
   slurpCreatorPeerComment,
+  slurpWorldShockBodies,
   type SlurpCommentContext,
 } from "../../modules/world/slp-world-copy.js";
+import { readSlurpWorldLens } from "../../data/creators/slp-canon-anchor-storage.js";
 import { slurpReactionBodiesForType, type SlurpReactionBanks } from "../../modules/world/slp-reaction-bank.js";
 import { enqueueSlurpPendingText } from "./slp-pending-text-service.js";
 import { createSlurpEventsStorage } from "../../data/notifications/slp-notification-storage.js";
@@ -334,11 +336,16 @@ export async function applyPulse(
       ? slurpResolveFanType(fanTypes, actor).id
       : slurpPickFanType(fanTypes, actor.id).id;
   const sides = isComment ? await rivalrySides(noodle, action.postId) : null;
-  // Somebody she is publicly with: now and then the crowd talks to her about them (her public side).
+  // Somebody the Creator is publicly with: now and then the crowd asks about them (their public side).
   const partner =
     isComment && !sides && hash(`${action.postId}:${actor.id}:partner`) % 4 === 0
       ? await publicPartnerName(db, action.creatorAccountId)
       : null;
+  // A Creator from another era or world: now and then a regular fan reacts to the culture shock.
+  const shock =
+    isComment && !sides && !partner && fanTypeId === "regular" && hash(`${action.postId}:${actor.id}:shock`) % 4 === 0
+      ? slurpWorldShockBodies(await readSlurpWorldLens(db, action.creatorAccountId))
+      : [];
   const result = await noodle.createNoodlerWorldInteraction(action.postId, {
     creatorAccountId: action.creatorAccountId,
     actorId: actor.id,
@@ -354,9 +361,11 @@ export async function applyPulse(
               : slurpRivalryBodies(sides.self, sides.rival)
             : partner
               ? slurpPartnerCommentBodies(partner)
-              : slurpReactionBodiesForType(banks, fanTypeId, SLURP_SHIPPED_TYPE_REACTIONS[fanTypeId ?? ""] ?? []),
+              : shock.length
+                ? shock
+                : slurpReactionBodiesForType(banks, fanTypeId, SLURP_SHIPPED_TYPE_REACTIONS[fanTypeId ?? ""] ?? []),
           // Only the regular voice with no own bank takes a generic titled line; every other voice keeps its own pool.
-          sides || partner || fanTypeId !== "regular" || banks.byType.regular?.length
+          sides || partner || shock.length || fanTypeId !== "regular" || banks.byType.regular?.length
             ? { ...(await pulseContext()), title: null }
             : await pulseContext(),
         )

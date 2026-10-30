@@ -27,6 +27,7 @@ import { LongTermMemoryStorage } from "../persistence/storage.js";
 import { getPackagePersistence, getPackageResources } from "../package-runtime.js";
 import { readSavedLtmSubjectIdentityChoices } from "../drafts/rejected-suggestions.js";
 import {
+  nameTokensRelated,
   partialNameTokensMatch,
   SOURCE_BACKED_NPC_NAME_PATTERN,
   sourceBackedNpcNames,
@@ -551,6 +552,7 @@ type MutableCatalogIdentity = {
   aliases: Set<string>;
   familyId?: string;
   subject?: LtmSubject;
+  sourceScope?: "direct" | "group" | "local_note" | "local_source";
 };
 
 function mutableHasRelatedIdentity(mutable: Map<string, MutableCatalogIdentity>, name: string, familyId: string) {
@@ -562,8 +564,21 @@ function mutableHasRelatedIdentity(mutable: Map<string, MutableCatalogIdentity>,
     if (normalizeSubjectName(entry.name) === slug) return true;
     // A short source form must not seed a local identity when a trusted character/persona
     // with a longer name covers it. Resolution then routes the name to review instead.
+    if (
+      entry.subject &&
+      isTrustedCharacterOrPersonaSubject(entry.subject) &&
+      partialNameTokensMatch(name, entry.name)
+    ) {
+      return true;
+    }
+    // A saved note of LTM's own character in this chat relates the same way extracted names do.
+    // Other source names don't: every capitalized run is one ("When Preston Farraday").
     return Boolean(
-      entry.subject && isTrustedCharacterOrPersonaSubject(entry.subject) && partialNameTokensMatch(name, entry.name),
+      entry.sourceScope === "local_note" &&
+      entry.familyId === familyId &&
+      entry.subject &&
+      isLocalCharacterSubject(entry.subject) &&
+      nameTokensRelated(name, entry.name),
     );
   });
 }

@@ -16,10 +16,23 @@ export type SlpCanonAnchors = {
   essentials?: string[];
   /** The page's niche (it weighs post jobs); not edited here. */
   niches?: { main: string | null; side: string[] };
+  /** The Creator's world when it is not today's. Absent for a modern card. */
+  world?: { era: string; device: string; money: string; festivals: string[] };
 };
 
 export type SlpCanonAnchorDraft = Record<
-  "essentials" | "people" | "places" | "work" | "objects" | "habits" | "runningJokes" | "routine",
+  | "essentials"
+  | "people"
+  | "places"
+  | "work"
+  | "objects"
+  | "habits"
+  | "runningJokes"
+  | "routine"
+  | "worldEra"
+  | "worldDevice"
+  | "worldMoney"
+  | "worldFestivals",
   string
 > & { heatMin: number; heatMax: number };
 
@@ -41,6 +54,10 @@ export function slpCanonAnchorDraft(anchors: SlpCanonAnchors | null): SlpCanonAn
     habits: (anchors?.habits ?? []).join("\n"),
     runningJokes: (anchors?.runningJokes ?? []).join("\n"),
     routine: (anchors?.routine ?? []).map((block) => `${block.time} ${block.activity}`).join("\n"),
+    worldEra: anchors?.world?.era ?? "modern",
+    worldDevice: anchors?.world?.device ?? "",
+    worldMoney: anchors?.world?.money ?? "",
+    worldFestivals: (anchors?.world?.festivals ?? []).join("\n"),
     heatMin: anchors?.heat.min ?? 0,
     heatMax: anchors?.heat.max ?? 1,
   };
@@ -71,5 +88,15 @@ export function slpCanonAnchorsFromDraft(
     }),
     essentials: lines(draft.essentials),
     ...(niches ? { niches } : {}),
+    ...(draft.worldEra !== "modern"
+      ? {
+          world: {
+            era: draft.worldEra,
+            device: draft.worldDevice.trim(),
+            money: draft.worldMoney.trim(),
+            festivals: lines(draft.worldFestivals),
+          },
+        }
+      : {}),
   };
 }

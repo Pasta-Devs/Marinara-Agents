@@ -25,13 +25,18 @@ function checkedId(id: string): string {
 
 export function createOtomeStore(documents: CapabilityDocumentStore) {
   const get = (id: string) => documents.getById(OTOME_FORGE_PACKAGE_ID, checkedId(id));
+  /** Writes and removals this store has made, counted once each has landed (version()). */
+  let writes = 0;
 
   /** The removed revision, or null when the document was already gone; a newer revision is re-read and removed. */
   async function remove(id: string, attempts: number) {
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       const document = await get(id);
       if (!document) return null;
-      if (await documents.remove(OTOME_FORGE_PACKAGE_ID, document.id, document.revision)) return document;
+      if (await documents.remove(OTOME_FORGE_PACKAGE_ID, document.id, document.revision)) {
+        writes += 1;
+        return document;
+      }
     }
     throw new OtomeForgeError(409, `Otome Forge data changed while removing ${id}. Try again.`, "conflict");
   }
@@ -61,6 +66,7 @@ export function createOtomeStore(documents: CapabilityDocumentStore) {
             createdAt: at,
             updatedAt: at,
           });
+          writes += 1;
           return normalize(created.data);
         } catch (error) {
           // Another request created it first: apply the change on top of theirs. Still missing means the create
@@ -78,12 +84,21 @@ export function createOtomeStore(documents: CapabilityDocumentStore) {
         data: next,
         updatedAt: at,
       });
-      if (saved) return normalize(saved.data);
+      if (saved) {
+        writes += 1;
+        return normalize(saved.data);
+      }
     }
     throw new OtomeForgeError(409, `Otome Forge data changed while saving ${id}. Try again.`, "conflict");
   }
 
   return {
+    /**
+     * How many writes and removals this store has made. Every Otome document but the kit's memory store is written
+     * through it, so what was read from them is still current while this has not moved since the read began.
+     */
+    version: () => writes,
+
     /** The normalized document, or null while it does not exist. Never creates it. */
     async readDoc<T>(id: string, normalize: Normalize<T>): Promise<T | null> {
       const document = await get(id);

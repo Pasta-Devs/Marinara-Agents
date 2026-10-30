@@ -33,7 +33,11 @@ import {
   normalizeChapter,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/story.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
-import { normalizeBeatReply } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/beats.ts";
+import {
+  normalizeBeatReply,
+  segmentLists,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/beats.ts";
+import { normalizeConfrontationReply } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/confrontation.ts";
 import {
   DECISIONS_HEADING,
   EASE_OFF_MARKER,
@@ -414,6 +418,154 @@ test("a love interest's thought under his first name alone keeps the stage and o
     /at most one thought line/,
   );
   assert.equal(check(scene([], [choice(0, [thought("Kai")], [thought("Kai Arden")])])), "[object Object]");
+});
+
+test("an explicit saved-place reference canonicalizes mainline and every branch without merging numbered rooms", () => {
+  const canonical = "Dottore’s wing4";
+  const context = {
+    node: { i: 0, kind: "beat", guide: "The same laboratory.", cast: [KAI] } as ChapterNode,
+    units: [{ id: KAI, name: "Kai" }],
+    state: normalizeState({ lis: { [KAI]: {} } }),
+    last: false,
+    places: {
+      "dottore-s-wing4": {
+        name: canonical,
+        tags: "laboratory, green glass, no humans",
+        art: { state: "ready" as const, at: "old", url: "/saved-lab.png" },
+      },
+    },
+  };
+  const reply = twoChoices();
+  reply.places = [{ name: "dottore’s wing5", tags: "obsolete new tags", reuse: "dottore-s-wing4" }];
+  for (const segment of reply.segments) segment.place = "dottore’s wing5";
+  for (const choice of reply.choices)
+    for (const option of choice.options) for (const segment of option.segments) delete segment.place;
+  const result = normalizeBeatReply(reply, context);
+  assert.equal(typeof result, "object", String(result));
+  if (typeof result === "string") return;
+  assert.deepEqual(result.places, [{ name: canonical, tags: "laboratory, green glass, no humans" }]);
+  for (const segment of [
+    ...result.segments,
+    ...result.choices.flatMap((choice) => choice.options.flatMap((option) => option.segments)),
+  ])
+    assert.equal(segment.place, canonical);
+  assert.equal(JSON.stringify(result).includes('"reuse"'), false, "references are not new saved identity fields");
+  const rawGame = confrontationReply({
+    places: reply.places,
+    opening: [{ speaker: "", text: "The argument begins.", place: "dottore’s wing5" }],
+  });
+  const game = normalizeConfrontationReply(
+    rawGame,
+    { li: KAI, node: context.node, cgOpen: false },
+    segmentLists(context),
+  );
+  assert.equal(typeof game, "object", String(game));
+  if (typeof game !== "string") {
+    assert.deepEqual(game.places, result.places);
+    const lines = [
+      ...game.segments,
+      ...game.confrontation.rounds.flatMap((round) => [
+        ...round.his,
+        ...Object.values(round.options).flatMap((option) => option.segments),
+      ]),
+      ...Object.values(game.confrontation.endings).flat(),
+    ];
+    for (const line of lines)
+      assert.equal(line.place, canonical, "every unchosen Confrontation branch retains the same canonical background");
+  }
+  const untagged = normalizeBeatReply(reply, {
+    ...context,
+    places: { "dottore-s-wing4": { name: canonical, tags: "" } },
+  });
+  assert.equal(typeof untagged, "object");
+  if (typeof untagged !== "string")
+    assert.equal(
+      untagged.places[0]!.tags,
+      "obsolete new tags",
+      "a location without a description can still take its first tags",
+    );
+  const different = normalizeBeatReply(
+    beatReply({
+      places: [{ name: "Room 5", tags: "laboratory, no humans" }],
+      segments: [{ speaker: "", text: "Another room.", place: "Room 5" }],
+    }),
+    { ...context, places: { "room-4": { name: "Room 4", tags: "laboratory, no humans" } } },
+  );
+  assert.equal(typeof different, "object");
+  if (typeof different !== "string") assert.equal(different.places[0]!.name, "Room 5");
+  const unknown = normalizeBeatReply(
+    beatReply({ places: [{ name: "The lab", tags: "laboratory", reuse: "missing-key" }] }),
+    context,
+  );
+  assert.match(String(unknown), /reuse.*existing|unknown.*place/i, "unknown references enter the existing repair path");
+});
+
+test("Confrontation place references retain their specific repair reason without changing segment-list null handling", () => {
+  const context = {
+    node: { i: 0, kind: "confrontation", guide: "The lab.", cast: [KAI] } as ChapterNode,
+    units: [{ id: KAI, name: "Kai" }],
+    state: normalizeState({ lis: { [KAI]: {} } }),
+    last: false,
+    places: {
+      "saved-a": { name: "Laboratory A", tags: "laboratory, no humans" },
+      "saved-b": { name: "Laboratory B", tags: "laboratory, no humans" },
+    },
+  };
+  for (const [places, reason] of [
+    [[{ name: "The lab", reuse: "missing-key" }], /reuse.*existing saved place key/],
+    [[{ name: "", reuse: "saved-a" }], /reused place needs its scene name/],
+    [
+      [
+        { name: "The lab", reuse: "saved-a" },
+        { name: "The lab", reuse: "saved-b" },
+      ],
+      /conflicting reuse references/,
+    ],
+  ] as const) {
+    const reply = confrontationReply({ places });
+    const result = normalizeConfrontationReply(
+      reply,
+      { li: KAI, node: context.node, cgOpen: false },
+      segmentLists(context),
+    );
+    assert.match(String(result), reason);
+    assert.equal(
+      segmentLists(context).list({ segments: reply.opening, places }, ""),
+      null,
+      "the segment-list null contract remains intact",
+    );
+  }
+});
+
+test("optional background reuse treats blank values as omission, trims keys and rejects invalid supplied references", () => {
+  const context = {
+    node: { i: 0, kind: "beat", guide: "A new room.", cast: [] } as ChapterNode,
+    units: [],
+    state: normalizeState({ lis: {} }),
+    last: false,
+    places: { "saved-lab": { name: "The saved laboratory", tags: "laboratory, no humans" } },
+  };
+  const place = { name: "Room 5", tags: "glass room, no humans" };
+  const reply = beatReply({ places: [place], segments: [{ speaker: "", text: "A new room.", place: place.name }] });
+  const baseline = normalizeBeatReply(reply, context);
+  assert.equal(typeof baseline, "object");
+  for (const reuse of [undefined, null, "", " \t\n"]) {
+    assert.deepEqual(
+      normalizeBeatReply({ ...reply, places: [{ ...place, reuse }] }, context),
+      baseline,
+      `omission: ${JSON.stringify(reuse)}`,
+    );
+  }
+  const trimmed = normalizeBeatReply({ ...reply, places: [{ ...place, reuse: "  saved-lab\t " }] }, context);
+  assert.equal(typeof trimmed, "object", String(trimmed));
+  if (typeof trimmed !== "string") assert.deepEqual(trimmed.places, [context.places["saved-lab"]]);
+  for (const reuse of [false, 0, {}, [], "missing-key", "  missing-key  "]) {
+    assert.match(
+      String(normalizeBeatReply({ ...reply, places: [{ ...place, reuse }] }, context)),
+      /reuse.*existing saved place key/,
+      `invalid: ${JSON.stringify(reuse)}`,
+    );
+  }
 });
 
 test("a declined scene can be eased off from the declined panel: no call, read, and the story goes on without it", async () => {
@@ -1003,6 +1155,7 @@ test("the art hears of every beat: faces when served, places and its CG once whe
   const at = new Date().toISOString();
   const seen: Array<[string, string, number, boolean?]> = [];
   t.deps.art = {
+    repaintExpressions: async () => assert.fail("serving a beat must not repaint expressions"),
     queueExpressions: (_runId, beat, { debugMode }) => {
       seen.push(["faces", (beat.segments[0] as { text: string }).text, beat.segments.length, debugMode]);
     },

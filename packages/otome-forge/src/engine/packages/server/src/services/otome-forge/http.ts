@@ -10,9 +10,11 @@ import type { OtomeErrorCode } from "../../../../client/src/features/otome-forge
 import type { ForgeStoryCancellation } from "@forge-kit/story-cancel-server.mjs";
 import type { OtomeArt } from "./art/expressions.js";
 import type { ImageClient } from "./art/image-client.js";
+import type { BackgroundQueue } from "./background-queue.js";
 import type { OtomeMemory } from "./memory/memory.js";
 import { isLiId, isRunKey, runIdOf } from "./ids.js";
 import type { OtomeStore } from "./store.js";
+import type { CutoutClient } from "./art/cutout.js";
 
 export class OtomeForgeError extends Error {
   constructor(
@@ -42,9 +44,18 @@ export interface OtomeReply {
 
 export type RouteHandler = (request: OtomeRequest, reply: OtomeReply) => Promise<unknown>;
 
+/**
+ * Fastify route options, which the Engine's collector hands to app.route as they are. `logLevel: "silent"` drops the
+ * Engine's own lines for the request (incoming request, request completed, an aborted client, Fastify's error line).
+ */
+export interface OtomeRouteOptions {
+  logLevel: "silent";
+}
+
 export interface OtomeRouter {
   get(path: string, handler: RouteHandler): void;
   post(path: string, handler: RouteHandler): void;
+  post(path: string, options: OtomeRouteOptions, handler: RouteHandler): void;
 }
 
 export interface OtomeLogger {
@@ -88,10 +99,14 @@ export interface RouteDeps {
   handle: Handle;
   /** The loopback image client by default (art/paint.ts imagesOf); tests pass a fake. */
   images?: ImageClient;
+  /** The loopback cut-out client by default (art/cutout.ts); tests pass a fake. */
+  cutouts?: CutoutClient;
   /** Private story memory (S/memory/memory.ts); without it prompts carry no recall. */
   memory?: OtomeMemory;
   /** The run-scoped Cancel for story writes (forge-kit story-cancel-server). */
   cancellation?: ForgeStoryCancellation;
+  /** The package's background lane (line packs, M3); without it nothing is written in the background. */
+  background?: BackgroundQueue;
   /**
    * The story's art (M2b, S/art/expressions.ts createOtomeArt): faces for each beat served, places and the CG for each
    * beat written, a replaced beat's CG released. Without it nothing is painted.

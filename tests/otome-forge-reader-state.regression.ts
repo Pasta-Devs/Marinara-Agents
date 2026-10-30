@@ -217,8 +217,8 @@ test("a `locked` refusal of a route chapter's scene is its love interest's ruptu
 
 test("the face on stage is his latest line's; narration keeps it; a first name finds him", () => {
   const timeline = buildTimeline(beat({ choices: [] }), {}, "Mira");
-  // Before anyone speaks, the first love interest who speaks in this beat stands there, never one who is not in it.
-  assert.deepEqual(onStageAt(timeline.lines, 0, LIS), { li: ILVAR, face: "", speaking: false });
+  // A future love interest's turn must not reveal him during the opening narration.
+  assert.deepEqual(onStageAt(timeline.lines, 0, LIS), { li: null, face: "", speaking: false });
   const alone = buildTimeline(
     beat({
       choices: [],
@@ -397,6 +397,9 @@ test("a place's picture is found by its name, and only a ready paint has one", (
     { name: "The Lab", tags: "glass", art: { state: "waiting-consent" as const, at: "" } },
   ];
   assert.equal(readyUrl(placeEntry(places, "the observation  room")?.art), "/gallery/1.png");
+  assert.equal(readyUrl(placeEntry(places, "THE-observation-room")?.art), "/gallery/1.png");
+  assert.equal(placeEntry([{ name: "Dottore’s wing 4", tags: "lab" }], "dottore's wing 4")?.name, "Dottore’s wing 4");
+  assert.equal(placeEntry([{ name: "Dottore’s wing 4", tags: "lab" }], "Dottore’s wing 5"), null);
   assert.equal(readyUrl(placeEntry(places, "The Lab")?.art), null);
   assert.equal(placeEntry(places, "Elsewhere"), null);
   assert.equal(placeEntry(null, "The Lab"), null);

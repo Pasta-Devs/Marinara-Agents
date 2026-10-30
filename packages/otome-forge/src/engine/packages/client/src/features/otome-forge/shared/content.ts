@@ -154,6 +154,8 @@ export function limitsForDarkness(
 
 /** Maintainer defaults: Heat SFW, Darkness Angst, image rating SFW. */
 export const DEFAULT_IMAGE_RATING: ImageRating = "sfw";
+/** The player's image style (Settings → Images): a short line of art-style words. */
+export const IMAGE_STYLE_MAX = 300;
 export function defaultContent(): ContentSettings {
   return { heat: "sfw", darkness: "angst", limits: defaultLimits("angst"), custom: [] };
 }

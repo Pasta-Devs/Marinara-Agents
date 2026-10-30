@@ -81,16 +81,18 @@ export async function storyWorld({
   lis = {},
   content = defaultContent(),
   cancellation = false,
+  personas = [],
 }: {
   runKey: string;
   replies?: FakeReply[];
   lis?: Record<string, Partial<LiState>>;
   content?: ReturnType<typeof defaultContent>;
   cancellation?: boolean;
+  personas?: Array<{ id: string; data: unknown }>;
 }) {
   const fake = createFakeDocuments();
   const store = createOtomeStore(fake.documents);
-  const { runtime, logs, calls } = createFakeRuntime({ documents: fake.documents, replies });
+  const { runtime, logs, calls } = createFakeRuntime({ documents: fake.documents, replies, personas });
   const runId = runIdOf(runKey);
   await store.mutateDoc(INDEX_TARGET, normalizeIndex, (index) => ({
     ...index,
@@ -230,6 +232,66 @@ export function beatReply(changes: Record<string, unknown> = {}): Record<string,
 }
 
 export const json = (value: unknown) => JSON.stringify(value);
+
+/**
+ * Kai's rows as the shared story (main-1) and Mireille's own route and repair chapters left them (M3's ownView keeps
+ * the second kind from every prompt for Kai alone): a grievance, a disclosure and the newest relationship and
+ * off-screen lines of each, and a rupture whose grievance opened in Mireille's route. The markers name which is which.
+ */
+export const KAI_SHARED = ["KAI-MAIN-GRIEVANCE", "KAI-MAIN-DISCLOSURE", "KAI-MAIN-RELATIONSHIP", "KAI-MAIN-OFFSCREEN"];
+export const MIREILLE_ONLY = [
+  "MIR-ROUTE-GRIEVANCE",
+  "MIR-ROUTE-RUPTURE",
+  "MIR-REPAIR-DISCLOSURE",
+  "MIR-ROUTE-RELATIONSHIP",
+  "MIR-REPAIR-OFFSCREEN",
+];
+export const RUPTURE_ID = "g-3";
+export function withMireillesPrivateRows(state: RunState, { rupture = false } = {}): RunState {
+  const kai = state.lis[KAI]!;
+  const grievance = (id: string, text: string, opened: string, severity: "minor" | "rupture" = "minor") => ({
+    id,
+    li: KAI,
+    by: "li" as const,
+    text,
+    severity,
+    opened,
+    status: "open" as const,
+  });
+  return {
+    ...state,
+    ledgers: {
+      ...state.ledgers,
+      // The shared row first, so the newest row Kai may know is the shared one and the newest of all is Mireille's.
+      relationship: [
+        { key: "main-1", li: KAI, line: "KAI-MAIN-RELATIONSHIP: he let her hold the lamp." },
+        { key: `route-${MIR}-2`, li: KAI, line: "MIR-ROUTE-RELATIONSHIP: he saw the forged pages." },
+      ],
+      offscreen: [
+        { key: "main-1", li: KAI, line: "KAI-MAIN-OFFSCREEN: Kai rewired the bell." },
+        { key: `repair-${MIR}-1`, li: KAI, line: "MIR-REPAIR-OFFSCREEN: Kai watched the key change hands." },
+      ],
+    },
+    lis: {
+      ...state.lis,
+      [KAI]: {
+        ...kai,
+        grievances: [
+          grievance("g-1", "KAI-MAIN-GRIEVANCE: the lamp.", "main-1/0"),
+          grievance("g-2", "MIR-ROUTE-GRIEVANCE: the burned page.", `route-${MIR}-2/0`),
+          ...(rupture
+            ? [grievance(RUPTURE_ID, "MIR-ROUTE-RUPTURE: the ledger he hid.", `route-${MIR}-2/1`, "rupture")]
+            : []),
+        ],
+        disclosures: [
+          { text: "KAI-MAIN-DISCLOSURE: she fears the sea.", at, ref: "main-1/0" },
+          { text: "MIR-REPAIR-DISCLOSURE: she kept the key.", at, ref: `repair-${MIR}-1/0` },
+        ],
+        rupture: rupture ? { grievanceId: RUPTURE_ID, since: at } : null,
+      },
+    },
+  };
+}
 
 /** True for a P12 call (the Confrontation narrator). */
 export const isConfrontationPrompt = (messages: Array<{ content: string }>) =>

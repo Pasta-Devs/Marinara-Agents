@@ -10,6 +10,7 @@ import {
   humanizeDebugText,
   LTM_DEBUG_STALE_OPERATION_MS,
 } from "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/settings/debug-activity.js";
+import { offerSlurpMemories } from "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/settings/slurp-memory-offer.js";
 import english from "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/locales/en.json" with { type: "json" };
 import type { LtmDebugEvent } from "../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.js";
 
@@ -158,5 +159,43 @@ for (const [ago, expected] of [
   assert.equal(formatAge(new Date(ageNow - ago).toISOString(), "en", ageNow), expected, `${ago} ms ago`);
 }
 assert.equal(formatAge("not a date", "en", ageNow), "");
+
+// Slurp's memory switch: the offer asks only when Slurp answers with the switch off, and saves only on yes.
+const offer = async (read: () => Promise<{ flavourFromAgents?: boolean }>, answer: boolean) => {
+  const calls = { confirm: 0, save: 0 };
+  const outcome = await offerSlurpMemories({
+    read,
+    confirm: () => (calls.confirm++, answer),
+    save: async () => void calls.save++,
+  });
+  return { outcome, ...calls };
+};
+void (async () => {
+  assert.deepEqual(await offer(async () => ({ flavourFromAgents: false }), true), {
+    outcome: "enabled",
+    confirm: 1,
+    save: 1,
+  });
+  assert.deepEqual(await offer(async () => ({ flavourFromAgents: false }), false), {
+    outcome: "declined",
+    confirm: 1,
+    save: 0,
+  });
+  assert.deepEqual(await offer(async () => ({ flavourFromAgents: true }), true), {
+    outcome: "skipped",
+    confirm: 0,
+    save: 0,
+  });
+  assert.deepEqual(
+    await offer(async () => {
+      throw new Error("Slurp is not installed");
+    }, true),
+    { outcome: "skipped", confirm: 0, save: 0 },
+  );
+  console.log("long-term-memory slurp memory offer: ok");
+})().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
 
 console.log("long-term-memory debug-activity helpers: ok");

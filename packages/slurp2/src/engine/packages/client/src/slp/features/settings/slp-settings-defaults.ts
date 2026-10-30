@@ -42,7 +42,14 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
     "pictureReuse",
   ],
   // Everything that crosses into Engine chats resets with the Engine link page it lives on.
-  engine: ["carryoverModes", "carryoverHours", "carryoverMaxItems", "enableLorebookContext", "flavourFromAgents"],
+  engine: [
+    "carryoverModes",
+    "carryoverHours",
+    "carryoverMaxItems",
+    "enableLorebookContext",
+    "flavourFromAgents",
+    "memoryRecall",
+  ],
   images: [
     "imageWidth",
     "imageHeight",

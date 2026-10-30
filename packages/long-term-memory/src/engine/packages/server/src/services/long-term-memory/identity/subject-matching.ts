@@ -10,7 +10,7 @@ import {
 } from "../../../../../shared/src/features/agents/long-term-memory/index.js";
 import { isLocalCharacterSubject } from "./chat-scope.js";
 import { uniqueStrings, normalizeSubjectName } from "../ltm-utils.js";
-import { damerauLevenshtein, isHangulParticle, partialNameTokensMatch } from "./subject-names.js";
+import { damerauLevenshtein, isHangulParticle, nameTokensRelated, partialNameTokensMatch } from "./subject-names.js";
 
 export type TrustedLtmSubjectCatalogEntry = {
   subject: LtmSubject;
@@ -146,7 +146,8 @@ export function matchDirectName(index: CatalogIndex, name: string): SubjectMatch
 // character is created. Exact names and explicit aliases bind; a short or partial
 // form of one trusted character/persona is routed to review instead of binding by
 // first name alone, and an ambiguous relation fails closed with the competing
-// identities.
+// identities. Without a trusted relation, a name sharing whole name parts with exactly one of
+// LTM's own characters in the same chat binds to it; several go to review.
 export function matchTrustedNameRelation(
   index: CatalogIndex,
   name: string,
@@ -164,7 +165,6 @@ export function matchTrustedNameRelation(
         (isTrustedCharacterOrPersonaSubject(entry.subject) && partialNameTokensMatch(name, entry.name))),
   );
   const uniqueSubjects = new Map(related.map((entry) => [entry.subject.key, entry]));
-  if (uniqueSubjects.size === 0) return null;
   const allowDifferent = familyId !== null;
   if (uniqueSubjects.size === 1) {
     const entry = [...uniqueSubjects.values()][0]!;
@@ -185,7 +185,30 @@ export function matchTrustedNameRelation(
       ],
     };
   }
-  const competing = [...uniqueSubjects.values()];
+  if (uniqueSubjects.size > 1) return partialNameReview(name, [...uniqueSubjects.values()], allowDifferent);
+  if (familyId === null) return null;
+  const local = new Map(
+    index.entries
+      .filter(
+        // Names seen in a source are its capitalized runs, not saved characters, and match exactly.
+        (entry) =>
+          entry.sourceScope !== "local_source" &&
+          entry.familyId === familyId &&
+          isLocalCharacterSubject(entry.subject) &&
+          nameTokensRelated(name, entry.name),
+      )
+      .map((entry) => [entry.subject.key, entry]),
+  );
+  if (local.size === 0) return null;
+  if (local.size === 1) return { status: "matched", entries: [...local.values()], basis: "local_name_relation" };
+  return partialNameReview(name, [...local.values()], allowDifferent);
+}
+
+export function partialNameReview(
+  name: string,
+  competing: TrustedLtmSubjectCatalogEntry[],
+  allowDifferent: boolean,
+): SubjectMatch {
   const { collisionSource, competingRecords } = diagnoseCollision(competing, "partial_name");
   return {
     status: "ambiguous",

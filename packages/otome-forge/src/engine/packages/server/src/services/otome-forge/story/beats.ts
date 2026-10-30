@@ -21,6 +21,10 @@
 //   beat counts as read, and the lookahead written from the uncut scene is removed (again on a retry, and by the
 //   lookahead itself when it was saved just after the cut). A Confrontation eased off after its ending keeps its canon
 //   whole, so its lookahead stays.
+// - A date's beat (M5, chapter kind "date") has exactly one small choice whose options each carry a hidden `score`
+//   (−1/0/1, how the date's love interest takes it; at least one scores 1), read by index like the effects and saved
+//   as `beat.scores`. A date never ends on a big choice, and an option opens a grievance only on a date planned to go
+//   wrong, and then at most a minor one. S/minigames/date-night.ts totals the scores of the first-play picks.
 // M2b:
 // - A confrontation node with a love interest in it is written by P12 as a stance game (S/story/confrontation.ts):
 //   the beat's segments are its opening. Each stance is saved on the beat once (chooseStance) and its effects reach
@@ -51,8 +55,10 @@ import type {
   Segment,
   StanceResult,
   Unit,
+  World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { stageRow, type Stance } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
+import type { DateScore } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { LIMIT_IDS, type LimitId } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import {
   FACES,
@@ -62,17 +68,20 @@ import {
 } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { generateJson, readOrGenerate, runForeground } from "../generation.js";
 import type { OtomeArt } from "../art/expressions.js";
+import { explicitCgAllowed } from "../content-contract.js";
 import { OtomeForgeError } from "../http.js";
-import { beatId, runDocTarget, stateId, unitId, worldId } from "../ids.js";
+import { PROLOGUE_KEY, beatId, mainChapterKey, runDocTarget, stateId, unitId, worldId } from "../ids.js";
 import { normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeBeat } from "../schemas/story.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
+import { withPersonaStoryAbout } from "../setup/prompts.js";
 import { applyChoiceEffects } from "../state/relationship.js";
 import { readBeatToEnd } from "../state/rewards.js";
 import { countedNow, gateShut, healRupture, passGate } from "../state/stages.js";
 import type { ChapterDeps } from "./chapters.js";
 import { chapterSoFar, readBeat, readChapter, recallText } from "./canon.js";
+import { prologueEnding, prologueProblem } from "./prologue.js";
 import {
   afterRound,
   applyConfrontation,
@@ -128,12 +137,18 @@ const nameKey = (value: unknown) => str(value, NAME_MAX).normalize("NFKC").toLow
 /** What normalizing a reply needs to know about the node and its cast. */
 export interface BeatContext {
   node: ChapterNode;
+  /** The world allowed an explicit key image as the beat was written (content-contract.ts explicitCgAllowed). */
+  cgExplicit?: boolean;
   /** Every love interest, so a speaker's name can be matched to his stage. */
   units: ReadonlyArray<Pick<Unit, "id" | "name">>;
+  /** Existing backgrounds a raw reply may explicitly reuse; never inferred from numbered names or tags. */
+  places?: World["places"];
   state: RunState;
   last: boolean;
   /** The beat must end on one big choice (a stage-5 route chapter's gate). */
   mustChoose?: boolean;
+  /** A date's beat (M5): one scored choice, no big choice, and a grievance only when the date was planned to go wrong. */
+  date?: { goesWrong: boolean };
 }
 
 interface NormalizeOptions {
@@ -147,6 +162,35 @@ interface BeatBody {
   places: Array<{ name: string; tags: string }>;
   musicMood: MusicMood;
   cg?: Beat["cg"];
+}
+
+/** Validate raw reuse references, then normalize them away instead of saving another identity field. */
+function declaredPlaces(raw: unknown, known: World["places"] = {}) {
+  const declared = new Map<string, { name: string; tags: string }>();
+  for (const entry of Array.isArray(raw) ? raw : []) {
+    if (!entry || typeof entry !== "object") continue;
+    const place = entry as Record<string, unknown>;
+    const name = str(place.name, NAME_MAX);
+    const reuse = typeof place.reuse === "string" ? place.reuse.trim() : place.reuse;
+    const hasReuse = Object.hasOwn(place, "reuse") && reuse !== undefined && reuse !== null && reuse !== "";
+    let target = { name, tags: str(place.tags, 600) };
+    if (hasReuse) {
+      if (typeof reuse !== "string" || !Object.hasOwn(known, reuse))
+        return "place reuse must name an existing saved place key from SAVED BACKGROUNDS";
+      if (!name) return "a reused place needs its scene name";
+      const existing = known[reuse]!;
+      target = { name: existing.name, tags: existing.tags.trim() ? existing.tags : target.tags };
+    }
+    const key = nameKey(name);
+    const previous = declared.get(key);
+    if (previous && previous.name !== target.name) return "the same place name has conflicting reuse references";
+    if (name && !previous) {
+      declared.set(key, target);
+      // Choice branches inherit the canonical mainline place rather than the raw alias.
+      if (hasReuse && !declared.has(nameKey(target.name))) declared.set(nameKey(target.name), target);
+    }
+  }
+  return declared;
 }
 
 /**
@@ -185,22 +229,18 @@ export function normalizeBeatBody(raw: unknown, options: NormalizeOptions): Beat
   if (!raw || typeof raw !== "object") return null;
   const reply = raw as Record<string, unknown>;
   if (!Array.isArray(reply.segments) || !reply.segments.length) return null;
-  const declared = new Map<string, { name: string; tags: string }>();
-  for (const place of Array.isArray(reply.places) ? reply.places : []) {
-    const name = str((place as Record<string, unknown> | null)?.name, NAME_MAX);
-    if (name && !declared.has(nameKey(name))) {
-      declared.set(nameKey(name), { name, tags: str((place as Record<string, unknown>).tags, 600) });
-    }
-  }
+  const declared = declaredPlaces(reply.places, options.context.places);
+  if (typeof declared === "string") return null;
   const used = new Map<string, { name: string; tags: string }>();
   const resolve = (value: unknown) => {
     const key = nameKey(value);
     if (!key) return "";
-    const known = used.get(key);
+    const place = declared.get(key) ?? { name: str(value, NAME_MAX), tags: "" };
+    const canonical = nameKey(place.name);
+    const known = used.get(canonical);
     if (known) return known.name;
     if (used.size >= BEAT_PLACES_MAX) return "";
-    const place = declared.get(key) ?? { name: str(value, NAME_MAX), tags: "" };
-    used.set(key, place);
+    used.set(canonical, place);
     return place.name;
   };
   // The place it opens in counts only once a line falls back to it: a scene that names its own place first never lists
@@ -241,6 +281,7 @@ export function normalizeBeatBody(raw: unknown, options: NormalizeOptions): Beat
           .map((name) => str(name, NAME_MAX))
           .filter(Boolean)
           .slice(0, CG_CAST_MAX),
+        ...(options.context.cgExplicit && cg.explicit === true ? { explicit: true as const } : {}),
       };
     }
   }
@@ -251,6 +292,8 @@ type NormalizedBeat = BeatBody & { choices: ForgeChoice[] };
 
 /** The reply as a beat body with its choices, or the reason it is refused (the repair turn names it). */
 export function normalizeBeatReply(reply: BeatReply, context: BeatContext): NormalizedBeat | string {
+  const places = declaredPlaces(reply.places, context.places);
+  if (typeof places === "string") return places;
   // One thought per love interest on the path with the most of them: the mainline, then in each choice (every one
   // is played) the option that holds the most.
   let counts = new Map<string, number>();
@@ -273,7 +316,7 @@ export function normalizeBeatReply(reply: BeatReply, context: BeatContext): Norm
     reply,
     { start: context.node.place, cgOpen: !!context.node.cg, context } as NormalizeOptions,
     normalizeBeatBody,
-    { enabled: true, terminal: context.last, label: forgeChoiceLabel },
+    { enabled: true, terminal: context.last && !context.date, label: forgeChoiceLabel },
   );
   if (!beat) {
     return "the segments or choices did not follow the format (check the PLAYER CHOICES rules: 2-4 options, a selection each, branches of 1-8 segments, distinct `at` indexes)";
@@ -282,15 +325,62 @@ export function normalizeBeatReply(reply: BeatReply, context: BeatContext): Norm
   if (context.mustChoose && !choices.some((choice) => choice.kind === "big")) {
     return "this node must end on ONE big choice (see the PLAYER CHOICES rules for a big choice)";
   }
-  return { ...beat, choices };
+  const dateProblem = context.date ? dateChoiceProblem(reply, choices) : "";
+  return dateProblem || { ...beat, choices };
 }
 
 /** P6's segment rules, lent to P12 (S/story/confrontation.ts normalizes each of its lists with them). */
 export function segmentLists(context: BeatContext): SegmentLists {
   return {
+    placesProblem: (raw) => {
+      const places = declaredPlaces(raw, context.places);
+      return typeof places === "string" ? places : "";
+    },
     list: (raw, start) => normalizeBeatBody(raw, { start, context }),
     thoughts: (raw, counts) => thoughtProblem(context, raw, counts),
   };
+}
+
+/** A score as stored: 1, 0 or −1; anything else (missing, a word, 2) is null. */
+function readScore(value: unknown): DateScore | null {
+  const number = typeof value === "string" && value.trim() ? Number(value) : value;
+  return number === 1 || number === 0 || number === -1 ? number : null;
+}
+
+/** The raw options of the reply's choice `choice-<c+1>`, by index. */
+function rawOptionsOf(reply: BeatReply, c: number): unknown[] {
+  const raw = Array.isArray(reply.choices) ? reply.choices[c] : undefined;
+  const options = (raw as { options?: unknown } | undefined)?.options;
+  return Array.isArray(options) ? options : [];
+}
+
+/** Why a date beat's choices break the date's rules (exactly one small choice, every option scored, one scoring 1). */
+function dateChoiceProblem(reply: BeatReply, choices: readonly ForgeChoice[]): string {
+  if (choices.length !== 1 || choices[0]!.kind !== "small") {
+    return "a date's beat needs exactly ONE small choice (2 to 4 options), never more and never a big one";
+  }
+  const scores = rawOptionsOf(reply, 0).map((option) => readScore((option as { score?: unknown } | null)?.score));
+  if (scores.length !== choices[0]!.options.length || scores.some((score) => score === null)) {
+    return 'every option of the date\'s choice needs a "score" of 1, 0 or -1';
+  }
+  if (!scores.includes(1)) return "at least one option of the date's choice must score 1 (something they would love)";
+  return "";
+}
+
+/** A date beat's hidden scores, read from the raw reply at the indexes the kit numbered the choices and options by. */
+export function scoresOf(reply: BeatReply, choices: readonly ForgeChoice[]): NonNullable<Beat["scores"]> {
+  const scores: NonNullable<Beat["scores"]> = {};
+  for (const [c, choice] of choices.entries()) {
+    if (choice.id !== `choice-${c + 1}`) continue;
+    const raw = rawOptionsOf(reply, c);
+    const own: Record<string, DateScore> = {};
+    for (const option of choice.options) {
+      const index = Number(/^option-(\d+)$/.exec(option.id)?.[1] ?? 0) - 1;
+      own[option.id] = readScore((raw[index] as { score?: unknown } | undefined)?.score) ?? 0;
+    }
+    scores[choice.id] = own;
+  }
+  return scores;
 }
 
 const unitSign = (value: unknown): -1 | 0 | 1 => {
@@ -333,10 +423,13 @@ export function effectsOf(reply: BeatReply, choices: readonly ForgeChoice[], con
         if (tension) effect.tension = tension;
         const grievance = source.grievance as Record<string, unknown> | undefined;
         const grievanceText = str(grievance?.text, EFFECT_TEXT_MAX);
-        if (grievanceText && (grievance?.by === "li" || grievance?.by === "protagonist")) {
-          const severity = ["minor", "major", "rupture"].includes(grievance.severity as string)
-            ? (grievance.severity as "minor" | "major" | "rupture")
-            : "minor";
+        // A date opens a grievance only when it was planned to go wrong, and never more than a minor one.
+        const mayOpen = !context.date || context.date.goesWrong;
+        if (mayOpen && grievanceText && (grievance?.by === "li" || grievance?.by === "protagonist")) {
+          const severity =
+            !context.date && ["minor", "major", "rupture"].includes(grievance.severity as string)
+              ? (grievance.severity as "minor" | "major" | "rupture")
+              : "minor";
           effect.grievance = { by: grievance.by, text: grievanceText, severity };
         }
         const disclose = str(source.disclose, EFFECT_TEXT_MAX);
@@ -369,7 +462,7 @@ async function load(deps: BeatDeps, runId: string, key: string): Promise<Loaded>
   const [run, chapter] = await Promise.all([readRun(deps.store, runId), readChapter(deps.store, runId, key)]);
   if (!run) throw runNotFound();
   if (!chapter) throw chapterNotFound();
-  return { run, chapter };
+  return { run: { ...run, player: await withPersonaStoryAbout(deps.runtime, run.player) }, chapter };
 }
 
 const castUnits = (run: RunDocuments) =>
@@ -446,15 +539,43 @@ async function generateBeat(
   const last = i === chapter.nodes.length - 1;
   const mustChoose =
     chapter.kind === "route" && !!node.gate && !!chapter.stage && stageRow(chapter.stage).gate === "confrontation";
-  const context: BeatContext = { node, units, state: run.state, last, mustChoose };
+  const cgExplicit = explicitCgAllowed(run.world);
+  const context: BeatContext = {
+    node,
+    units,
+    places: run.world.places,
+    state: run.state,
+    last,
+    mustChoose,
+    cgExplicit,
+    ...(chapter.kind === "date" ? { date: { goesWrong: chapter.date?.goesWrong ?? false } } : {}),
+  };
   const opponent = confrontationOpponent(chapter, node, units);
-  const input = { world: run.world, player: run.player, units, state: run.state, chapter, node, storySoFar, memory };
+  // Chapter 1 opens where the prologue ended, with the choices taken in it.
+  const prologue =
+    key === mainChapterKey(1) && i === 0
+      ? prologueEnding(
+          await readBeat(deps.store, runId, PROLOGUE_KEY, 0),
+          await chapterSoFar(deps.store, runId, PROLOGUE_KEY, 1, run.player.name),
+        )
+      : "";
+  const input = {
+    world: run.world,
+    player: run.player,
+    units,
+    state: run.state,
+    chapter,
+    node,
+    storySoFar,
+    memory,
+    prologue,
+  };
   let body: Omit<Beat, "key" | "i" | "kind" | "choiceCanon" | "applied" | "readThrough" | "written" | "rewrites">;
   let written: { connectionId: string; model: string };
   if (opponent) {
     // P12: the whole stance game in one call; its opening is the beat's segments.
     const lists = segmentLists(context);
-    const shape = { li: opponent, node, cgOpen: !!node.cg };
+    const shape = { li: opponent, node, cgOpen: !!node.cg, cgExplicit };
     const { value, connectionId, model } = await generateJson(deps, {
       runId,
       job: "narration",
@@ -495,7 +616,8 @@ async function generateBeat(
       schema: BeatReplySchema,
       normalize: (reply) => {
         const beat = normalizeBeatReply(reply, context);
-        return typeof beat === "string" ? beat : reply;
+        if (typeof beat === "string") return beat;
+        return (chapter.kind === "prologue" && prologueProblem(beat, units)) || reply;
       },
       temperature: 0.9,
       maxTokens: 6000,
@@ -510,6 +632,7 @@ async function generateBeat(
       segments: scene.segments,
       choices: scene.choices,
       effects: effectsOf(value, scene.choices, context),
+      ...(context.date ? { scores: scoresOf(value, scene.choices) } : {}),
       musicMood: scene.musicMood,
       ...(scene.cg ? { cg: scene.cg } : {}),
     };
@@ -731,6 +854,11 @@ export async function serveBeat(
         current && !current.shown ? { ...current, shown: true as const } : current,
       )) ?? beat;
   }
+  if (!run.state.chapters[key]?.completed && i >= (run.state.chapters[key]?.beatsRead ?? 0)) {
+    // generateBeat may itself run inside the foreground queue. Await its place registration only after that lock
+    // has been released; the reader's first art response must distinguish pending from no image/description.
+    await deps.art?.prepareScenePlaces?.(runId, beat, { debugMode, review });
+  }
   queueFaces(deps, runId, beat, debugMode);
   if (!run.state.chapters[key]?.completed) queueLookahead(deps, runId, chapter, beat, { debugMode, review });
   return beat;
@@ -922,7 +1050,9 @@ export async function chooseStance(
 // ── Reading, and the end of a chapter ──
 
 /** The first-play picks a beat's canon holds: each choice picked, up to its Ease off cut. */
-const canonPicks = (beat: Beat): Array<[choice: string, option: string]> => {
+export const canonPicks = (
+  beat: Pick<Beat, "choices" | "choiceCanon" | "easedOff">,
+): Array<[choice: string, option: string]> => {
   const cut = beat.easedOff?.at ?? Infinity;
   return beat.choices.flatMap((choice) => {
     const option = beat.choiceCanon[choice.id];

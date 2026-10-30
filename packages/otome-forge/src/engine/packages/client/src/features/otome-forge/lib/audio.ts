@@ -74,7 +74,7 @@ export function lineSpeaker(
     const gender = li.voiceGender || segment.gender || pronounGender(li.pronouns);
     return {
       name: li.name,
-      characterId: li.source === "card" && li.cardId ? li.cardId : null,
+      characterId: li.cardId || null,
       ...(gender ? { gender } : {}),
       cast: true,
     };
@@ -96,6 +96,18 @@ export function wouldVoice(settings: AudioSettings, speaker: LineSpeaker | null)
  * rewritten beat never replays the old clip. The Engine adds the connection, voice and speaker to it.
  */
 export const voiceCacheKey = (runKey: string, ref: string) => `otome-forge:${runKey}:${ref}`;
+
+/**
+ * The ref a Home tap line is voiced under (M3): his id and a hash of the line, since the Engine keys a clip by its ref,
+ * voice and speaker but never its text, and a new stage's pack may put other words in the same place. `kind` names
+ * the screen's lines (M5's Claw Machine voices its pack lines as "claw").
+ */
+export function tapLineRef(li: string, text: string, kind = "tap"): string {
+  // FNV-1a, 32 bits: plenty for a love interest's few dozen lines.
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < text.length; index += 1) hash = Math.imul(hash ^ text.charCodeAt(index), 0x01000193);
+  return `${kind}:${li}:${(hash >>> 0).toString(36)}`;
+}
 
 /** The tracks generated for this story (`world.audio.tracks`), as the server keeps them. */
 export function worldTracks(world: WorldView): SoundtrackTrack[] {

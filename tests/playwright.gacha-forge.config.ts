@@ -14,6 +14,7 @@ export default defineConfig({
     "package-gacha-forge-home.e2e.ts",
     "package-gacha-forge-editors.e2e.ts",
     "package-gacha-forge-units.e2e.ts",
+    "package-gacha-forge-signature-weapons.e2e.ts",
     "package-gacha-forge-unit-art.e2e.ts",
     "package-gacha-forge-choices.e2e.ts",
     "package-gacha-forge-choice-plan-reload.e2e.ts",

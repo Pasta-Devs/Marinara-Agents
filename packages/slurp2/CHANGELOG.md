@@ -1,5 +1,29 @@
 # Slurp release notes
 
+## 0.4.11 — 2026-10-29
+
+- Backstage (Engine link) no longer says Long-Term Memory isn't sharing after its "Other Agents can read memories" switch is turned on. The line clears at once after Slurp's offer, and the next time the panel loads after Long-Term Memory's offer or Memory Settings.
+
+## 0.4.10 — 2026-10-29
+
+- Turning on "What your other Agents know" now asks whether to turn on Long-Term Memory's "Other Agents can read memories" when that switch is off. "Turn it on" changes only that switch; "Not now" leaves it alone.
+
+## 0.4.9 — 2026-10-29
+
+- Creators' posts and DM replies now use what Long-Term Memory remembers about them, through its recall service. A new "Long-term memory" choice in Backstage (Engine link) sets whether they get whole memories (the default) or only the parts that fit the post or message. It shows while "What your other Agents know" is on.
+- Backstage says when Long-Term Memory is missing, or is not sharing ("Other Agents can read memories" is off in its Memory Settings).
+- A DM brings in the persona's memories only when that persona's Slurp page uses Linked identity. A hinted or concealed page never does.
+- The Creator brief no longer reads Long-Term Memory's storage; the Character Tracker, World State and Persona Stats lines are unchanged.
+
+## 0.4.8 — 2026-10-28
+
+- World lens: the canon-anchor reading also returns `world` (era, device, money, festivals). Cache version v4 → v5, so each card is read once more in the background. A modern card has no lens and nothing changes.
+- The Creator brief (posts, DMs, comment replies, scenes, Stir suggestions, rewritten fan lines) and both live show prompts get one "Your world" line for a non-modern lens. Drama and Support desk prompts do not use the brief and are unchanged.
+- Pictures: a non-modern Creator never gets the mirror, desk or screenshot camera source, so no phone or screen appears. The image model gets no world words.
+- Holidays: when events run, a non-modern Creator is told to play them as their world's nearest festival.
+- Culture-shock fans: about 1 in 4 regular fan comments under a non-modern Creator's post comes from a free bank per era.
+- Backstage: the canon-anchor editor shows and edits the world (era, device, money, festivals); a player's fix survives a new reading.
+
 ## 0.4.7 — 2026-10-28
 
 - Fan comments see the post: a short title (40 characters or fewer) gets quoted in some questions and reactions, the question bank has 16 more lines, and a fan line is skipped when the same text is already under the post.

@@ -13,6 +13,7 @@ import { createNoodleStorage } from "../storage/noodle.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
 import { loadPrompt, NOODLE_TIMELINE_BASE, NOODLE_TIMELINE_VOICE } from "../prompt-overrides/index.js";
 import { NOODLE_JSON_OUTPUT_HEADING } from "./noodle-response-format.js";
+import { noodleMemoryQueryText, recallNoodleMemories } from "./noodle-ltm-recall.js";
 import {
   collectNoodlePromptImageCandidates,
   composeNoodleTimelineSystemPrompt,
@@ -357,14 +358,26 @@ export async function buildRefreshPrompt(input: {
   } else {
     recalledPosts = sampleNoodlePastMemories(olderPosts, pastMemorySampleSize);
   }
-  const [chatContext, characterScheduleContext, recentInteractions, recalledInteractions] = await Promise.all([
-    buildOptedInChatContext(input.chats, input.characters, selectedCharacterIds),
-    input.settings.includeCharacterSchedules
-      ? buildGeneratedCharacterScheduleContext(input.chats, characterNamesById, input.timeZone)
-      : Promise.resolve(""),
-    input.noodle.listInteractions(recentPosts.map((post) => post.id)),
-    input.noodle.listInteractions(recalledPosts.map((post) => post.id)),
-  ]);
+  const [chatContext, characterScheduleContext, recentInteractions, recalledInteractions, memories] = await Promise.all(
+    [
+      buildOptedInChatContext(input.chats, input.characters, selectedCharacterIds),
+      input.settings.includeCharacterSchedules
+        ? buildGeneratedCharacterScheduleContext(input.chats, characterNamesById, input.timeZone)
+        : Promise.resolve(""),
+      input.noodle.listInteractions(recentPosts.map((post) => post.id)),
+      input.noodle.listInteractions(recalledPosts.map((post) => post.id)),
+      recallNoodleMemories({
+        settings: input.settings as NoodleSettings & { useLtmMemories?: boolean; ltmMemoryRecall?: string },
+        characterIds: selectedCharacterIds,
+        personaId: input.personaAccount?.entityId,
+        queryText: noodleMemoryQueryText(
+          recentPosts.map((post) => post.content ?? ""),
+          [...characterNamesById.values()],
+        ),
+      }),
+    ],
+  );
+  const memoryLines = memories.lines;
 
   const promptMacroContext = await buildPromptMacroContext({
     db: input.db,
@@ -523,6 +536,14 @@ export async function buildRefreshPrompt(input: {
       "Only chats whose Chat Settings allow Noodle references are included here.",
       chatContext,
       "",
+      ...(memoryLines.length > 0
+        ? [
+            "# What Long-Term Memory remembers",
+            "Background on these accounts' characters and the user. Use it only where it fits naturally; posts are public, so never quote it, never mention Long-Term Memory, and never let an account reveal something it would not know or share.",
+            ...memoryLines,
+            "",
+          ]
+        : []),
       "# Recent Noodle Timeline",
       "Recent persona comments are especially relevant. Characters may naturally respond to them by using the comment replyId as parentInteractionId.",
       formatNoodleTimelineForPrompt(recentPosts, recentInteractions, {

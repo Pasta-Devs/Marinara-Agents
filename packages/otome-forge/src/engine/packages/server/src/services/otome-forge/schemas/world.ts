@@ -4,7 +4,7 @@
 // The mystery's truth and pieces and the web's secrets are the hidden story: toWorldView strips them before anything
 // reaches the client. `audio` and `places` (M2b) are read here so every normalized write keeps them; S/art and
 // S/audio write them.
-import { normalizeForgeAudio } from "@forge-kit/audio-settings.mjs";
+import { normalizeOtomeAudio } from "../../../../../client/src/features/otome-forge/shared/audio.js";
 import { z, type ZodType } from "zod";
 import type {
   Connections,
@@ -24,6 +24,7 @@ import {
   DARKNESSES,
   DEFAULT_IMAGE_RATING,
   HEATS,
+  IMAGE_STYLE_MAX,
   LIMIT_IDS,
   LIMIT_LEVELS,
   defaultContent,
@@ -100,6 +101,7 @@ export function normalizeImages(data: unknown): ImageSettings {
       expressions: z.boolean(),
       expressionsSince: z.string().optional(),
       styleProfileId: z.string().optional(),
+      style: z.string().max(IMAGE_STYLE_MAX).optional(),
     },
     () => ({ connectionId: null, rating: DEFAULT_IMAGE_RATING, ask: false, expressions: true }),
     data,
@@ -121,7 +123,7 @@ export const TRACKS_MAX = 120;
 export const PLACES_MAX = 400;
 
 const BriefSchema = z.object({ fingerprint: z.string().max(200), prompt: z.string().min(1).max(1000) });
-const TrackSchema: ZodType<SoundtrackTrack> = z.object({
+export const TrackSchema: ZodType<SoundtrackTrack> = z.object({
   cue: z.string().max(80),
   connectionId: z.string().max(200),
   tag: z.string().max(1000),
@@ -142,7 +144,7 @@ export function normalizeWorldAudio(data: unknown): WorldAudio {
     if (parsed.success) briefs[cue] = parsed.data;
   }
   return {
-    ...normalizeForgeAudio(data),
+    ...normalizeOtomeAudio(data),
     briefs,
     tracks: validItems(TrackSchema, field(data, "tracks"), TRACKS_MAX),
   };
@@ -188,6 +190,7 @@ export function normalizeWorld(data: unknown): World {
       mystery: MysterySchema,
       web: (value) => validItems(WebRowSchema, value),
       openingSituation: z.string(),
+      writingStyle: z.string().optional(),
       content: normalizeContent,
       images: normalizeImages,
       connections: normalizeConnections,

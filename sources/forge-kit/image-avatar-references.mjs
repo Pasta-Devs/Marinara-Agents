@@ -42,12 +42,32 @@ export function forgeLocalAvatarPath(value) {
     : "";
 }
 
-function forgeSavedPortraits(unit) {
-  const outfit = Array.isArray(unit.outfits) && unit.outfits.find((item) => item?.id === unit.wornOutfit);
-  return [outfit?.url, unit.portrait, unit.avatarPath];
+// The Engine's avatar-generation route keeps the first four references (characters.routes.ts), and a provider
+// may keep fewer: for example xAI and NanoGPT three; Stability, Together, Atlas Cloud, Automatic1111 and
+// OpenRouter's image models other than GPT Image only the first; NovelAI models other than V4.5 none.
+// ponytail: the package cannot see a connection's own limit, so it orders for the narrowest one (faces first);
+// read the limit from the Engine once it exposes one per connection.
+const FORGE_IMAGE_REFERENCES_MAX = 4;
+
+// The outfit a subject has on. The caller keeps wornOutfit only on a subject its prompt dresses in that outfit and
+// leaves it out when the picture paints other clothes, so the reference never contradicts the prompt.
+function forgeWornOutfitPath(unit) {
+  const id = forgeImageText(unit.wornOutfit);
+  return id && Array.isArray(unit.outfits)
+    ? unit.outfits.find((item) => forgeImageText(item?.id) === id)?.url
+    : undefined;
 }
 
-async function forgeSubjectReference(client, unit) {
+async function forgeReferenceImage(client, paths) {
+  for (const path of new Set(paths.map(forgeLocalAvatarPath).filter(Boolean))) {
+    const image = await client.cardAvatarImage(path);
+    if (image?.base64 && /^image\//u.test(image.mime)) return `data:${image.mime};base64,${image.base64}`;
+  }
+  return null;
+}
+
+// Who the subject is: never the outfit they have on, which would follow them into a new look or outfit.
+export async function forgeSubjectReference(client, unit) {
   const paths = [];
   // Only IDs already carried by the actual selected card/persona are used. Never
   // infer a card from a model-written name or attach a style profile's subject.
@@ -57,37 +77,57 @@ async function forgeSubjectReference(client, unit) {
   } catch {
     // A removed card must not break generation; try this same unit's saved art.
   }
-  paths.push(...forgeSavedPortraits(unit));
-  for (const path of new Set(paths.map(forgeLocalAvatarPath).filter(Boolean))) {
-    const image = await client.cardAvatarImage(path);
-    if (image?.base64 && /^image\//u.test(image.mime)) return `data:${image.mime};base64,${image.base64}`;
-  }
-  return null;
+  return forgeReferenceImage(client, [...paths, unit.portrait, unit.avatarPath]);
 }
 
-export function forgeWrapImageReferenceClient(client, logger, { logPrefix = "[gacha-forge]" } = {}) {
+export function forgeWrapImageReferenceClient(
+  client,
+  logger,
+  { logPrefix = "[gacha-forge]", subjectReference = forgeSubjectReference } = {},
+) {
   for (const method of ["generateBannerArt", "generatePortrait", "generateOutfit"]) {
     const generate = client[method];
+    // Only a scene or banner shows the subject in the outfit they have on; a base look or a new outfit paints them anew.
+    const scene = method === "generateBannerArt";
     client[method] = async function (options) {
-      const subjects = (method === "generateBannerArt" ? (options.units ?? []) : [options.unit]).filter(
+      const subjects = (scene ? (options.units ?? []) : [options.unit]).filter(
         (unit) => unit && typeof unit === "object" && unit.kind !== "weapon",
       );
-      const references = [];
-      let resolved = 0;
+      const identities = [],
+        outfits = [];
       for (const subject of subjects) {
-        const reference = await forgeSubjectReference(client, subject);
-        if (!reference) continue;
-        resolved += 1;
-        if (!references.includes(reference)) references.push(reference);
+        const identity = await subjectReference(client, subject);
+        if (identity) identities.push(identity);
+        const outfit = scene && forgeWornOutfitPath(subject);
+        if (outfit) {
+          const image = await forgeReferenceImage(client, [outfit]);
+          if (image) outfits.push(image);
+        }
       }
+      // Every subject's face before any outfit, so a provider that keeps fewer references still knows who is who.
+      const distinct = [...new Set([...identities, ...outfits])];
+      const references = distinct.slice(0, FORGE_IMAGE_REFERENCES_MAX);
       if (subjects.length) {
-        const level = resolved === subjects.length ? "debug" : "warn";
+        const level = identities.length === subjects.length ? "debug" : "warn";
         logger?.[level]?.(
-          `${logPrefix} %s: avatar references resolved for %d/%d subjects (%d distinct); Engine/provider reference limits still apply`,
+          `${logPrefix} %s: identity references resolved for %d/%d subjects, %d worn outfit(s); sending %d distinct of at most %d (a provider may keep fewer)`,
           method,
-          resolved,
+          identities.length,
           subjects.length,
+          outfits.length,
           references.length,
+          FORGE_IMAGE_REFERENCES_MAX,
+        );
+      }
+      const left = distinct.slice(FORGE_IMAGE_REFERENCES_MAX);
+      if (left.length) {
+        const faces = left.filter((reference) => identities.includes(reference)).length;
+        logger?.warn?.(
+          `${logPrefix} %s: left out %d identity and %d worn outfit reference(s) past the Engine's limit of %d`,
+          method,
+          faces,
+          left.length - faces,
+          FORGE_IMAGE_REFERENCES_MAX,
         );
       }
       return generate.call(this, { ...options, referenceImages: references.length ? references : undefined });

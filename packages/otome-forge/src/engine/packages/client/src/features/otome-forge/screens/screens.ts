@@ -1,23 +1,6 @@
 // ──────────────────────────────────────────────
-// Otome Forge: the screens OtomeForgeView routes between, with each one's name and icon
+// Otome Forge: the screens OtomeForgeView routes between, with each one's name (its icon: screen-icons.ts)
 // ──────────────────────────────────────────────
-import {
-  BookHeart,
-  BookLock,
-  BookOpen,
-  CalendarHeart,
-  Gem,
-  Heart,
-  House,
-  Images,
-  Settings,
-  Shirt,
-  Smartphone,
-  Sparkles,
-  WandSparkles,
-  type LucideIcon,
-} from "lucide-react";
-
 export type ScreenId =
   | "picker"
   | "setup"
@@ -27,10 +10,14 @@ export type ScreenId =
   | "story"
   | "reader"
   | "dates"
+  | "read-him"
+  | "date-night"
+  | "claw"
   | "wish"
   | "wardrobe"
   | "album"
   | "phone"
+  | "remind"
   | "settings";
 
 /** The Dock's screens, in order; Wish is the raised one in the middle. */
@@ -42,11 +29,25 @@ export const RUN_SCREENS: ReadonlySet<ScreenId> = new Set([
   "home",
   "story",
   "dates",
+  "read-him",
+  "date-night",
+  "claw",
   "wish",
   "wardrobe",
   "album",
   "phone",
+  "remind",
 ]);
+
+/**
+ * Whether the home cue is the music beneath this screen (OtomeForgeView's audio): inside a run, in the reader too (its
+ * scenes hold their own cue once one arrives, so Home's plays on while the first scene loads), and in Settings opened
+ * from inside a run.
+ */
+export function playsHomeCue(screen: ScreenId, settingsReturn: ScreenId): boolean {
+  const inRun = (id: ScreenId) => RUN_SCREENS.has(id) || id === "reader";
+  return inRun(screen) || (screen === "settings" && inRun(settingsReturn));
+}
 
 export const SCREEN_NAME_KEYS: Record<ScreenId, string> = {
   picker: "ui.otomeForge.common.screenPicker",
@@ -57,25 +58,13 @@ export const SCREEN_NAME_KEYS: Record<ScreenId, string> = {
   story: "ui.otomeForge.common.screenStory",
   reader: "ui.otomeForge.common.screenReader",
   dates: "ui.otomeForge.common.screenDates",
+  "read-him": "ui.otomeForge.common.screenReadHim",
+  "date-night": "ui.otomeForge.common.screenDateNight",
+  claw: "ui.otomeForge.common.screenClaw",
   wish: "ui.otomeForge.common.screenWish",
   wardrobe: "ui.otomeForge.common.screenWardrobe",
   album: "ui.otomeForge.common.screenAlbum",
   phone: "ui.otomeForge.common.screenPhone",
+  remind: "ui.otomeForge.common.screenRemind",
   settings: "ui.otomeForge.common.screenSettings",
-};
-
-export const SCREEN_ICONS: Record<ScreenId, LucideIcon> = {
-  picker: Heart,
-  setup: WandSparkles,
-  forge: Gem,
-  bible: BookLock,
-  home: House,
-  story: BookHeart,
-  reader: BookOpen,
-  dates: CalendarHeart,
-  wish: Sparkles,
-  wardrobe: Shirt,
-  album: Images,
-  phone: Smartphone,
-  settings: Settings,
 };

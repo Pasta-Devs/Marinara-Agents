@@ -15,6 +15,7 @@ import { formatAge } from "./debug-activity";
 import { ExtractionPromptTemplates } from "./ExtractionPromptTemplates";
 import { MaintenancePanel } from "./MaintenancePanel";
 import { confirm, Toggle, type SettingsRebuildOutcome } from "./settings-shared";
+import { offerSlurpMemories } from "./slurp-memory-offer";
 import { useLtmTranslation } from "../localization";
 import { recallStyleDescriptionKey } from "../recall-style";
 
@@ -163,6 +164,7 @@ function extractionForm(settings: LtmExtractionSettingsPatch): ExtractionForm {
     activePromptTemplateIdsByMode: resolved.activePromptTemplateIdsByMode ?? {},
     aiKeywordExtraction: resolved.aiKeywordExtraction ?? false,
     finishCutOffAnswers: resolved.finishCutOffAnswers ?? false,
+    chatImportDetail: resolved.chatImportDetail ?? "standard",
     useExtractionAgentOnGameMode: resolved.useExtractionAgentOnGameMode ?? false,
     ...(resolved.systemPrompt === undefined ? {} : { systemPrompt: resolved.systemPrompt }),
     ...(resolved.activePromptTemplateId === undefined
@@ -196,6 +198,7 @@ export default function MemorySettings({
   const memoryStopWordsLabelId = useId();
   const reasoningEffortLabelId = useId();
   const verbosityLabelId = useId();
+  const chatImportDetailLabelId = useId();
   const extractionConnectionLabelId = useId();
   const queryClient = useQueryClient();
   const global = useQuery(settingsQueryOptions);
@@ -341,15 +344,18 @@ export default function MemorySettings({
     setPending("global");
     setMessage("");
     let rebuild: SettingsRebuildOutcome | null = null;
+    let sharingTurnedOn = false;
     try {
       if (globalDirty && globalForm) {
         const submitted = globalForm;
+        const sharingWasOff = savedGlobal?.longTermMemoryShareWithPackages === false;
         const response = await request<LtmGlobalSettings & { rebuild?: SettingsRebuildOutcome | null }>(
           "/settings",
           "PUT",
           globalPayload(submitted),
         );
         const saved = settingsForm(response);
+        sharingTurnedOn = sharingWasOff && saved.longTermMemoryShareWithPackages;
         setSavedGlobal(saved);
         // Saving now awaits an index rebuild, so only clear the form when no newer edit
         // arrived while it was in flight; otherwise those edits stay dirty.
@@ -380,6 +386,27 @@ export default function MemorySettings({
         setMessage(localizeUi("ui.longTermMemory.memorysettings.memorySettingsSavedIndexRebuilt"), "success", surface);
       } else {
         setMessage(localizeUi("ui.longTermMemory.memorysettings.memorySettingsSaved"), "success", surface);
+      }
+      // Slurp's Creators need their own switch too, so the offer comes once the save has landed.
+      if (sharingTurnedOn) {
+        try {
+          await offerSlurpMemories({
+            read: () => requestHost<{ flavourFromAgents?: boolean }>("/api/slurp2/settings"),
+            confirm: () =>
+              confirm(
+                props,
+                localizeUi("ui.longTermMemory.memorysettings.slurpMemoryOfferTitle"),
+                localizeUi("ui.longTermMemory.memorysettings.slurpMemoryOfferMessage"),
+                localizeUi("ui.longTermMemory.memorysettings.slurpMemoryOfferConfirm"),
+                false,
+                localizeUi("ui.longTermMemory.memorysettings.slurpMemoryOfferCancel"),
+              ),
+            save: () => requestHost("/api/slurp2/settings", "PATCH", { flavourFromAgents: true }),
+          });
+        } catch {
+          // The fixed text keeps saying that Long-Term Memory itself saved.
+          setMessage(localizeUi("ui.longTermMemory.memorysettings.slurpMemoryOfferFailed"), "danger", surface);
+        }
       }
     } catch (error) {
       setMessage(
@@ -1061,6 +1088,33 @@ export default function MemorySettings({
               })
             }
           />
+          <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+            <span id={chatImportDetailLabelId} className="flex items-center gap-1">
+              {localizeUi("ui.longTermMemory.memorysettings.chatImportDetail")}
+              <InfoPopover
+                label={localizeUi("ui.longTermMemory.memorysettings.chatImportDetail")}
+                content={localizeUi("ui.longTermMemory.memorysettings.chatImportDetailHelp")}
+              />
+            </span>
+            <select
+              aria-labelledby={chatImportDetailLabelId}
+              className={inputClass}
+              value={extractionFormState.chatImportDetail}
+              onChange={(event) =>
+                setExtractionFormState({
+                  ...extractionFormState,
+                  chatImportDetail: event.target.value as ExtractionForm["chatImportDetail"],
+                })
+              }
+            >
+              <option value="standard">
+                {localizeUi("ui.longTermMemory.memorysettings.chatImportDetailStandard")}
+              </option>
+              <option value="detailed">
+                {localizeUi("ui.longTermMemory.memorysettings.chatImportDetailDetailed")}
+              </option>
+            </select>
+          </div>
           <NumberField
             label={localizeUi("ui.longTermMemory.memorysettings.temperature")}
             help={localizeUi(

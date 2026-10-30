@@ -11,6 +11,7 @@
 // an off-screen line for each absent one, no tag for a Line, and conflict seeds that never repeat that love interest's
 // last two kinds of angst, counting the seeds planted earlier in the same plan (at most one open misunderstanding
 // each, resolved within two chapters). A failed check is the generation core's one repair turn.
+import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import type {
   Chapter,
   ChapterDetail,
@@ -28,11 +29,12 @@ import type {
 import { LIMIT_IDS, type LimitId } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import { generateJson, readOrGenerate, type GenerationDeps } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
-import { beatId, chapterId, mainChapterKey, mainChapterNumber, runDocTarget, stateId } from "../ids.js";
+import { PROLOGUE_KEY, beatId, chapterId, mainChapterKey, mainChapterNumber, runDocTarget, stateId } from "../ids.js";
 import { defaultLiState, normalizeState, readRun } from "../schemas/state.js";
 import { normalizeBeat, normalizeChapter, toChapterView } from "../schemas/story.js";
 import { repairOffers, routeEntries } from "../state/stages.js";
 import type { OtomeStore } from "../store.js";
+import { withPersonaStoryAbout } from "../setup/prompts.js";
 import { recallText, type StoryMemory } from "./canon.js";
 import {
   ANGST_TYPES,
@@ -46,6 +48,7 @@ import {
 } from "./prompts.js";
 
 export interface ChapterDeps extends GenerationDeps {
+  runtime: GenerationDeps["runtime"] & Pick<CapabilityRuntimeHost, "resources">;
   store: OtomeStore;
   memory?: StoryMemory;
 }
@@ -313,7 +316,7 @@ export async function planNextChapter(
       label: `chapter-plan/${key}`,
       messages: chapterPlanMessages({
         world: run.world,
-        player: run.player,
+        player: await withPersonaStoryAbout(deps.runtime, run.player),
         units,
         state: run.state,
         number,
@@ -359,20 +362,20 @@ export async function planNextChapter(
 // ── The story view ──
 
 /**
- * GET /runs/:run/story: every chapter planned so far, the next main chapter's candidates when it may start, each love
- * interest's stage and next route chapter, and a repair for each rupture.
+ * GET /runs/:run/story: every chapter planned so far but dates, the next main chapter's candidates when it may start,
+ * each love interest's stage and next route chapter, and a repair for each rupture.
  */
+/** The prologue first, then main chapters by number, then every other chapter. */
+const storyOrder = (key: string) => (key === PROLOGUE_KEY ? 0 : (mainChapterNumber(key) ?? Infinity));
+
 export async function storyView(deps: { store: OtomeStore }, runId: string): Promise<StoryView> {
   const run = await readRun(deps.store, runId);
   if (!run) throw notFound("Otome Forge run");
+  // Dates (M5) are played from Dates, not listed with the story.
   const chapters = (await deps.store.listRun("chapter", runId))
     .map((record) => normalizeChapter(record.data))
-    .filter((chapter): chapter is Chapter => !!chapter)
-    .sort(
-      (a, b) =>
-        (mainChapterNumber(a.key) ?? Infinity) - (mainChapterNumber(b.key) ?? Infinity) ||
-        a.plannedAt.localeCompare(b.plannedAt),
-    );
+    .filter((chapter): chapter is Chapter => !!chapter && chapter.kind !== "date")
+    .sort((a, b) => storyOrder(a.key) - storyOrder(b.key) || a.plannedAt.localeCompare(b.plannedAt));
   const entries: StoryChapterEntry[] = chapters.map((chapter) => {
     const progress = run.state.chapters[chapter.key];
     return {

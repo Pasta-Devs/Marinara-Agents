@@ -15,7 +15,8 @@ const MENU_WORDS: Record<string, string> = {
 const menuWords = (id: string | undefined) => (id ? (MENU_WORDS[id] ?? id) : "");
 
 export type SlpLivePromptInput = {
-  host: { name: string; pronouns: string; bio: string; canon: string };
+  /** `world`: the Creator's world line, empty for a modern Creator. */
+  host: { name: string; pronouns: string; bio: string; canon: string; world?: string };
   spiceLines: readonly string[];
   state: SlpLiveState;
   /** Milliseconds since the start. */
@@ -36,6 +37,7 @@ const camRule = (name: string, seconds: number) =>
 /** The rules when the user hosts: the room is the model's, the host is the user's. */
 function hostingSystem(host: SlpLivePromptInput["host"], seconds: number, spiceLines: readonly string[]) {
   return [
+    ...(host.world ? [host.world] : []),
     `You write the room of a live cam show on Slurp, a creator platform like OnlyFans with live rooms like Chaturbate. ${host.name} (${host.pronouns}) is the host and is played by the user: never write a line for ${host.name}. Write the next ${seconds} seconds of what the fans in ROOM type in chat, and three ideas for ${host.name}'s next move.`,
     `Chat lines come only from fans in ROOM, by their exact name. Every fan sounds like a different person: some type short, some long, some lowercase or with a typo, emojis only now and then. They react to concrete things: what ${host.name} just did or said, a tip by name, the goal, the order on stage (NOW), each other. They ask ${host.name} for things, tease, flirt and cheer. Never a generic line that could fit any stream, never two lines alike.`,
     `Write 6 to 10 chat lines in order of "t" (seconds from now, 0 to ${seconds}). Money, goals and orders are already counted by the app: never invent a tip, a goal or a number.`,
@@ -92,6 +94,7 @@ export function slpLivePrompt(input: SlpLivePromptInput) {
   const system = input.hosting
     ? hostingSystem(host, seconds, input.spiceLines)
     : [
+        ...(host.world ? [host.world] : []),
         `You write a live cam show on Slurp, a creator platform like OnlyFans with live rooms like Chaturbate. Write the next ${seconds} seconds: what ${host.name} says and does on camera, and what the fans in the room type in chat.`,
         `${host.name} uses ${host.pronouns}. Write ${host.name} in their own voice from the profile: first person, spoken to the camera, casual, like a real streamer who knows the regulars. One or two short sentences per line. Put what ${host.name} does in "action" (present tense, a few words, no asterisks); keep "text" for the spoken words.`,
         ...(alone

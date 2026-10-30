@@ -167,6 +167,26 @@ async function setup({ galleryWorks = true } = {}) {
 }
 
 const HE = { subject: "he", object: "him", possessive: "his" };
+
+test("GET run exposes intended appearance without opening spoiler-heavy bibles or generating images", async () => {
+  const { call, store, run, fake } = await setup();
+  await store.mutateDoc(runDocTarget("unit", unitId(runIdOf(RUN_KEY), KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    identityLine: "adult man, silver hair, amber eyes",
+    outfitLine: "navy coat, brass buttons",
+  }));
+  // The normal first run read refreshes the legacy persona fallback; measure descriptions after that migration.
+  await call("GET", "/runs/:run", { params: run });
+  const before = structuredClone([...fake.rows]);
+  const response = await call("GET", "/runs/:run", { params: run });
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body.view.lis.find((li: { id: string }) => li.id === KAI).look, {
+    identityLine: "adult man, silver hair, amber eyes",
+    outfitLine: "navy coat, brass buttons",
+  });
+  assert.doesNotMatch(JSON.stringify(response.body), /poisoned the old king|The Duke is alive|share a father/u);
+  assert.deepEqual([...fake.rows], before, "describing an appearance does not mutate the run");
+});
 const SHE = { subject: "she", object: "her", possessive: "her" };
 const THEY = { subject: "they", object: "them", possessive: "their" };
 

@@ -32,8 +32,8 @@ const FACE_ICONS: Record<Face, LucideIcon> = {
 /** Face images already asked for in this page, so each one is fetched once. */
 const preloaded = new Set<string>();
 
-/** Decodes every ready face of the love interest on stage, so a face change never waits on the network. */
-function usePreloadedFaces(expressions: RunLiView["expressions"]) {
+/** Decodes every ready face of the love interest on stage (or on Home), so a face change never waits on the network. */
+export function usePreloadedFaces(expressions: RunLiView["expressions"]) {
   useEffect(() => {
     for (const url of Object.values(expressions ?? {})) {
       if (typeof url !== "string" || !url || preloaded.has(url)) continue;
@@ -57,8 +57,9 @@ export function FacePlate({ li, face, speaking }: FacePlateProps) {
   const expressions = li?.expressions;
   usePreloadedFaces(expressions);
   if (!li) return null;
+  // The look he wears is his stage art: his faces are painted on it, so a plain line shows the same outfit.
   const shown = forgeStoryExpressionArt(
-    { art: li.portrait ?? "", expressions: expressions ?? {} },
+    { art: li.worn?.url ?? li.portrait ?? "", expressions: expressions ?? {} },
     { expression: face },
     FACES,
   );
@@ -77,7 +78,7 @@ export function FacePlate({ li, face, speaking }: FacePlateProps) {
       aria-label={label}
     >
       {shown.art ? (
-        <FaceLayers url={shown.art} />
+        <FaceLayers url={shown.art} cut={li.cut} />
       ) : (
         <div className="of-face-medallion" aria-hidden="true">
           <span className="of-face-aura" />
@@ -95,8 +96,11 @@ export function FacePlate({ li, face, speaking }: FacePlateProps) {
   );
 }
 
-/** Two image layers: a new face decodes in the hidden one, then the two crossfade (instantly under reduced motion). */
-function FaceLayers({ url }: { url: string }) {
+/**
+ * Two image layers: a new face decodes in the hidden one, then the two crossfade (instantly under reduced motion). A
+ * cut-out (`cut`, no backdrop) stands whole on the stage's floor; an uncut look is cropped and faded at its edges.
+ */
+export function FaceLayers({ url, cut = [] }: { url: string; cut?: readonly string[] }) {
   const [layers, setLayers] = useState<{ a: string; b: string; front: "a" | "b" }>({ a: url, b: "", front: "a" });
   useEffect(() => {
     if (url === layers[layers.front]) return;
@@ -123,7 +127,14 @@ function FaceLayers({ url }: { url: string }) {
     <div className="of-face-art" aria-hidden="true">
       {(["a", "b"] as const).map((layer) =>
         layers[layer] ? (
-          <img key={layer} className="of-face-img" src={layers[layer]} alt="" data-front={layers.front === layer} />
+          <img
+            key={layer}
+            className="of-face-img"
+            src={layers[layer]}
+            alt=""
+            data-front={layers.front === layer}
+            data-cut={cut.includes(layers[layer])}
+          />
         ) : null,
       )}
     </div>
@@ -152,7 +163,7 @@ interface QuietCgProps {
 export function QuietCg({ names, state, onPaint, busy = false }: QuietCgProps) {
   const { t } = useTranslation();
   const statusKey = state ? QUIET_STATUS_KEYS[state] : undefined;
-  const offer = onPaint && (state === "waiting-consent" || state === "failed" || state === "stopped");
+  const offer = onPaint && (!state || state === "waiting-consent" || state === "failed" || state === "stopped");
   const retry = state === "failed" || state === "stopped";
   return (
     <figure className="of-cg-quiet of-glass" data-state={state ?? "none"}>

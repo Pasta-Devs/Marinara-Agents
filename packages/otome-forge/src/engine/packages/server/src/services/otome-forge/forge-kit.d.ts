@@ -6,8 +6,15 @@ declare module "@forge-kit/time-zone-server.mjs" {
   /** Wraps a router's get and post so each handler runs in the request's `timeZone` (body for POST, query for GET). */
   export function forgeTimeZoneRoutes<R extends object>(routes: R): R;
   export function forgeValidTimeZone(value: unknown): string;
-  /** "YYYY-MM-DD" of the instant in the current request's time zone. */
-  export function forgeDayKey(value?: number | string | Date): string;
+  /**
+   * "YYYY-MM-DD" of the instant in the current request's time zone. It reads Number(value), so an ISO string would read
+   * as now: pass Date.parse(iso). The same holds for forgeWallDate and forgeWeekday.
+   */
+  export function forgeDayKey(value?: number | Date): string;
+  /** The instant's wall-clock time in the request's zone, as a Date whose UTC fields read that local time. */
+  export function forgeWallDate(value?: number | Date, timeZone?: string): Date;
+  /** Monday 0 … Sunday 6, in the request's time zone. */
+  export function forgeWeekday(value?: number | Date): number;
 }
 
 declare module "@forge-kit/character-card-context.mjs" {
@@ -45,6 +52,39 @@ declare module "@forge-kit/story-memory-integration.mjs" {
   export const forgeKnowledgeBoundary: string;
   /** Re-orders side stories opened after the same main chapter by when they opened; other sources keep their place. */
   export function orderForgeStorySources<S extends { kind: string; id: string }>(rows: S[]): S[];
+  /** What a chat reply recalls with: the player's messages since his last reply (cues), the recent window, speakers. */
+  export function forgeChatRecallQuery(
+    messages: ReadonlyArray<{ who?: string; text?: unknown }>,
+    options?: { speakers?: string[] },
+  ): { cues: string[]; window: string; speakers: string[] };
+}
+
+// ── M3: phone threads ──
+
+declare module "@forge-kit/chat-continuity-server.mjs" {
+  /** True while a reply for that thread is being written (in this process). */
+  export function forgeChatReplyBusy(runId: string, unitId: string): boolean;
+  /** Runs `send` unless a reply for that thread is already in flight, which resolves the busy result instead. */
+  export function withForgeChatSend<T>(
+    runId: string,
+    unitId: string,
+    send: () => Promise<T>,
+  ): Promise<T | { ok: false; error: "generation-in-progress"; busy: true; retry: false }>;
+  /** One page of a thread, newest last; messages inside closed sessions are marked `archived`. */
+  export function forgeChatHistoryPage<M extends object>(
+    data: { messages?: M[]; sessions?: Array<{ count?: number }> } | null | undefined,
+    page: unknown,
+    pageSize: number,
+    busy?: boolean,
+  ): {
+    messages: Array<M & { archived: boolean }>;
+    page: number;
+    pages: number;
+    past: number;
+    activeCount: number;
+    busy: boolean;
+    retry: boolean;
+  };
 }
 
 declare module "@forge-kit/image-avatar-references.mjs" {
@@ -55,6 +95,22 @@ declare module "@forge-kit/image-avatar-references.mjs" {
     cast: A[],
     name: unknown,
   ): A | null;
+  export interface ImageIdentitySubject {
+    cardId?: string;
+    personaId?: string;
+    portrait?: string;
+    avatarPath?: string;
+  }
+  export interface ImageIdentityClient {
+    characterCard(id: string): Promise<{ avatarPath: string } | null>;
+    personaAvatar(id: string): Promise<string>;
+    cardAvatarImage(path: string): Promise<{ mime: string; base64: string } | null>;
+  }
+  /** The default card/persona/avatar identity fallback, shared with Gacha Forge. */
+  export function forgeSubjectReference(
+    client: ImageIdentityClient,
+    subject: ImageIdentitySubject,
+  ): Promise<string | null>;
   /**
    * Wraps the client's generatePortrait, generateOutfit and generateBannerArt so each call carries the subject's card
    * or persona avatar (or saved portrait) as `referenceImages`. Needs characterCard, personaAvatar and cardAvatarImage.
@@ -62,7 +118,10 @@ declare module "@forge-kit/image-avatar-references.mjs" {
   export function forgeWrapImageReferenceClient<C extends object>(
     client: C,
     logger?: { debug?(message: string, ...args: unknown[]): void; warn?(message: string, ...args: unknown[]): void },
-    options?: { logPrefix?: string },
+    options?: {
+      logPrefix?: string;
+      subjectReference?: (client: C, subject: ImageIdentitySubject) => Promise<string | null>;
+    },
   ): C;
 }
 
@@ -295,6 +354,12 @@ declare module "@forge-kit/story-expressions-server.mjs" {
     model?: string;
   }
   export interface ForgeStoryExpressions {
+    repaint(
+      runId: string,
+      unitId: string,
+      base: string,
+      prompts?: Record<string, unknown>,
+    ): Promise<{ state: "ready" | "failed" | "stopped"; at: string; error?: string } | undefined> | null;
     /** Called with the cast a scene is served or written with; queues the faces in the background, returns the cast. */
     queue<C extends { name?: string; prota?: boolean }>(runId: string, run: unknown, cast: C[], beat: unknown): C[];
     /** Package teardown: queued faces of this instance stop before their paid call. */

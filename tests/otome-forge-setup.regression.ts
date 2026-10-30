@@ -518,18 +518,16 @@ test("paint steps wait for consent, paint once, and a failed paint is repainted 
   assert.match(kaiArt.error ?? "", /provider down/);
   assert.equal((await t.step("paint:player"))?.state, "done");
   const player = await t.player();
-  assert.equal(
-    player.look.identityLine,
-    "dark curls, brown skin, ink-stained fingers",
-    "P4 wrote the protagonist's look",
-  );
+  assert.equal(player.look.identityLine, "", "an empty current Appearance invents no description");
+  assert.equal(t.calls.length, 3, "painting the persona adds no P4 model call");
   assert.equal(player.portrait, "/api/global-gallery/file/look-2.png");
   assert.equal(player.portraitRef, "global-gallery:img2");
   assert.deepEqual(t.paid[1].unit, { kind: "character", personaId: "persona-ines" });
   assert.match(
     t.paid[1].prompt,
-    /dark curls.*full body, standing, neutral pose, plain flat mid-grey background.*safe for work/,
+    /full body, standing, neutral pose, plain flat solid chroma green #00FF00 background.*safe for work/,
   );
+  assert.doesNotMatch(t.paid[1].prompt, /dark curls|brown skin|ink-stained fingers|travel coat/);
   assert.match(t.paid[1].prompt, /adult person/);
 
   // The look prompt: identity, outfit, framing, the SFW rating and "adult man"; negatives keep the adult guard.
@@ -719,6 +717,42 @@ test("the loopback image client sends debugMode, the prompt override and the car
     }),
     /engine returned no usable image/,
   );
+});
+
+test("an archetype's look painted with no reference keeps xAI's JPEG, which the Engine wraps again as a PNG", async () => {
+  // xAI's generations endpoint answers b64_json as a whole data URL; the Engine passes it on as image/png.
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00]);
+  const requests: Array<{ url: string; body: unknown }> = [];
+  const fetch = (async (url: string | URL, init?: RequestInit) => {
+    const path = String(url).replace("http://127.0.0.1:7860", "");
+    requests.push({ url: path, body: init?.body });
+    const json = (value: unknown) =>
+      new Response(JSON.stringify(value), { headers: { "content-type": "application/json" } });
+    if (path === "/api/characters/avatar-generation") {
+      return json({ image: `data:image/png;base64,data:image/jpeg;base64,${jpeg.toString("base64")}`, prompt: "p" });
+    }
+    if (path === "/api/global-gallery/upload") return json({ id: "g2", url: "/api/global-gallery/file/g2.jpg" });
+    return new Response(JSON.stringify({ error: "no" }), { status: 404 });
+  }) as typeof globalThis.fetch;
+  const painted = await createImageClient({ baseUrl: "http://127.0.0.1:7860", fetch }).generatePortrait({
+    connectionId: "conn-grok",
+    name: "Maukie Escher",
+    unit: { kind: "character", outfits: [] },
+    prompt: "p",
+    negativePrompt: "",
+    width: 832,
+    height: 1216,
+    debugMode: false,
+  });
+  assert.deepEqual(painted, { id: "g2", url: "/api/global-gallery/file/g2.jpg" });
+  const generation = JSON.parse(String(requests.find((request) => request.url.endsWith("avatar-generation"))?.body));
+  assert.equal(generation.referenceImages, undefined, "an archetype has no likeness to send");
+  const file = (requests.find((request) => request.url === "/api/global-gallery/upload")?.body as FormData).get(
+    "file",
+  ) as File;
+  assert.equal(file.name, "maukie-escher.jpg");
+  assert.equal(file.type, "image/jpeg");
+  assert.deepEqual(Buffer.from(await file.arrayBuffer()), jpeg, "the gallery keeps the real image bytes");
 });
 
 test("POST /runs takes 2–5 love interests, enforces the 18+ gate, and its forge reaches ready", async () => {

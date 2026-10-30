@@ -14,6 +14,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { normalizeBible } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit";
 
 const engineRoot = process.env.MARINARA_ENGINE_ROOT;
 if (!engineRoot) throw new Error("Set MARINARA_ENGINE_ROOT to a compatible Engine checkout");
@@ -186,7 +187,14 @@ function readResult(stub: { view: Json }, grants: Json[] = [], extra: Json = {})
   return { grants, starlight: stub.view.starlight, chapterDone: false, ...extra };
 }
 
-type Answer = { status: number; json?: unknown; body?: Buffer; contentType?: string; delay?: number };
+type Answer = {
+  status: number;
+  json?: unknown;
+  body?: Buffer;
+  contentType?: string;
+  delay?: number;
+  wait?: Promise<void>;
+};
 
 async function stubRoutes(page: Page, answer: (call: Call) => Answer | undefined, calls: Call[]) {
   await page.route("**/api/app-settings/ui", (route) =>
@@ -225,6 +233,7 @@ async function stubRoutes(page: Page, answer: (call: Call) => Answer | undefined
       status: 404,
       json: { error: `No stub for ${call.method} ${call.path}`, code: "not-found" },
     };
+    if (reply.wait) await reply.wait;
     if (reply.delay) await new Promise((done) => setTimeout(done, reply.delay));
     if (reply.body) await route.fulfill({ status: reply.status, body: reply.body, contentType: reply.contentType });
     else await route.fulfill({ status: reply.status, json: reply.json });
@@ -235,7 +244,19 @@ async function stubRoutes(page: Page, answer: (call: Call) => Answer | undefined
 }
 
 /** `reviewPrompts`: the Engine's "Review image prompts before sending" is on. */
-async function openOtome(page: Page, { reviewPrompts = false }: { reviewPrompts?: boolean } = {}): Promise<Locator> {
+async function openOtome(
+  page: Page,
+  { reviewPrompts = false, recordMusic = false }: { reviewPrompts?: boolean; recordMusic?: boolean } = {},
+): Promise<Locator> {
+  // Engine's calendar greeting can appear after startup. Keep its theme through the normal, specific dialog action.
+  await page.addLocatorHandler(
+    page
+      .getByRole("dialog", { name: "Happy Halloween!", exact: true })
+      .filter({ has: page.getByRole("button", { name: "Keep it", exact: true }) }),
+    async (dialog) => {
+      await dialog.getByRole("button", { name: "Keep it", exact: true }).click();
+    },
+  );
   await page.addInitScript(
     ({ version, review }) => {
       localStorage.setItem("marinara:whats-new:seen-version", version);
@@ -255,8 +276,49 @@ async function openOtome(page: Page, { reviewPrompts = false }: { reviewPrompts?
     },
     { version: appVersion, review: reviewPrompts },
   );
+  if (recordMusic)
+    await page.addInitScript(() => {
+      // The host and its players are frozen. Observe their calls through a frozen forwarding facade at publication.
+      const events: string[] = [];
+      (globalThis as any).__otomeMusicEvents = events;
+      const define = Object.defineProperty;
+      Object.defineProperty = ((target: object, key: PropertyKey, descriptor: PropertyDescriptor) => {
+        if (target === globalThis && key === "__MARINARA_HOST__") {
+          Object.defineProperty = define;
+          const host = descriptor.value;
+          const audio = host.services.audio;
+          descriptor = {
+            ...descriptor,
+            value: Object.freeze({
+              ...host,
+              services: Object.freeze({
+                ...host.services,
+                audio: Object.freeze({
+                  ...audio,
+                  createPlayer: () => {
+                    const player = audio.createPlayer();
+                    return Object.freeze({
+                      ...player,
+                      playMusic: (tag: string, assets: unknown) => {
+                        events.push(tag);
+                        return player.playMusic(tag, assets);
+                      },
+                      stopMusic: (...args: unknown[]) => {
+                        events.push("STOP");
+                        return player.stopMusic(...args);
+                      },
+                    });
+                  },
+                }),
+              }),
+            }),
+          };
+        }
+        return define(target, key, descriptor);
+      }) as typeof Object.defineProperty;
+    });
   await page.goto("/");
-  await page.getByRole("tab", { name: "Open Otome Forge" }).click();
+  await page.getByRole("tab", { name: "Open Otome Hearth" }).click();
   const root = page.locator("marinara-capability-otome-forge .of-root");
   await expect(root).toBeVisible({ timeout: 60_000 });
   return root;
@@ -274,18 +336,228 @@ const posts = (calls: Call[], suffix: string) =>
 
 /** Goes on once the line has typed itself out (waiting, never racing the typing: see the reader spec's next). */
 async function next(root: Locator) {
+  await setReaderControlsExpanded(root, false);
   const button = root.locator(".of-next");
   await expect(button).toHaveAttribute("data-done", "true");
   await button.click();
 }
 
 const line = (root: Locator) => root.locator(".of-dialogue .of-line");
+/** DialogueBox keeps a full accessible copy beside this visible, typed copy. */
+const displayedLine = (root: Locator) => line(root).locator(':scope > span[aria-hidden="true"]');
+
+async function setReaderControlsExpanded(root: Locator, expanded = true) {
+  const more = root.getByRole("button", { name: "More reader controls" });
+  if ((await more.isVisible()) && (await more.getAttribute("aria-expanded")) !== String(expanded)) await more.click();
+}
 
 /** The cues music was generated for, in order of their names; a cue made twice shows twice. */
 const generatedCues = (calls: Call[]) =>
   posts(calls, "/api/audio/generate")
     .map((call) => /-([a-z]+)$/u.exec(call.body!.context.key)?.[1] ?? "")
     .sort();
+
+const REPAINT_FACES = ["tender", "flustered", "cold", "hurt", "angry"];
+const REPAINT_ERROR = "The new expressions didn’t finish. Your current artwork stays. Try Repaint expressions again.";
+
+function expressionRepaintFixture({
+  failFirst = false,
+  conflictFirst = false,
+  wait,
+}: { failFirst?: boolean; conflictFirst?: boolean; wait?: Promise<void> } = {}) {
+  const fixture = createSceneStub({ audio: false });
+  const { view } = fixture.stub;
+  const forge = { phase: "ready", steps: [{ id: `paint:${ILVAR}`, state: "done" }] };
+  view.forge = forge;
+  view.world.forge = forge;
+  Object.assign(view.lis[0], { portrait: FACE_COLD, cut: [FACE_COLD] });
+  const prompts = Object.fromEntries(
+    REPAINT_FACES.map((face) => [
+      face,
+      {
+        prompt: `Edit only the ${face} expression. Configured copper etching style.`,
+        negativePrompt: "lowres, child, underage",
+      },
+    ]),
+  );
+  const home = {
+    li: ILVAR,
+    show: "him",
+    note: {
+      li: ILVAR,
+      dayKey: now().slice(0, 10),
+      text: "Come inside.",
+      face: "",
+      mood: { word: "Fond", reason: "You came back" },
+      curt: false,
+      at: now(),
+    },
+    look: { url: FACE_COLD, source: "look", cutout: FACE_COLD, cutoutState: "ready" },
+    faces: {},
+    backdrop: null,
+    lines: { ready: false },
+    rupture: false,
+    unread: 0,
+    noticed: null,
+    noticing: false,
+  };
+  let attempts = 0;
+  const answer = (call: Call): Answer | undefined => {
+    if (call.path.endsWith("/art/expressions/prompt")) return { status: 200, json: { base: FACE_COLD, prompts } };
+    if (call.path.endsWith("/art/expressions")) {
+      attempts += 1;
+      if (conflictFirst && attempts === 1)
+        return {
+          status: 409,
+          json: { error: "This character's expressions are already being painted.", code: "conflict" },
+        };
+      return {
+        status: 200,
+        json: { paint: { state: failFirst && attempts === 1 ? "failed" : "ready", at: now() } },
+        wait,
+      };
+    }
+    if (call.path.endsWith("/home")) return { status: 200, json: home };
+    if (call.path.endsWith(`/lis/${ILVAR}/lines`))
+      return {
+        status: 200,
+        json: { ready: false, stage: 1, rupture: false, tap: null, annoyed: [], cold: [], comfort: [], claw: null },
+      };
+    return fixture.answer(call);
+  };
+  return { answer, view, prompts };
+}
+
+async function openRepaintCast(page: Page, reviewPrompts = false) {
+  const root = await openOtome(page, { reviewPrompts });
+  await root.getByRole("button", { name: "Who’s home" }).click();
+  await page.getByRole("dialog", { name: "Who’s home" }).getByRole("button", { name: "Your cast" }).click();
+  await expect(root.getByRole("heading", { name: "Your story is ready", exact: true })).toBeVisible();
+  return root;
+}
+
+test("Otome Hearth expression repaint labels five images, shares busy controls and preserves the current look", async ({
+  page,
+}, testInfo) => {
+  let release!: () => void;
+  const wait = new Promise<void>((resolve) => (release = resolve));
+  const fixture = expressionRepaintFixture({ wait });
+  const calls: Call[] = [];
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+  await stubRoutes(page, fixture.answer, calls);
+  try {
+    const root = await openRepaintCast(page);
+    const button = root.getByRole("button", { name: "Repaint expressions for Ilvar Thorne", exact: true });
+    const look = root.getByRole("button", { name: "Repaint Ilvar Thorne’s look", exact: true });
+    const actions = root.locator(".of-forge-retry--paints");
+    await expect(button).toBeVisible();
+    await expect(look).toBeVisible();
+    await expect(actions.getByText("Paints 1 image", { exact: true })).toBeVisible();
+    await expect(actions.getByText("Paints 5 images", { exact: true })).toBeVisible();
+    const original = await root.locator(".of-cast-card").first().locator("img").getAttribute("src");
+    const done = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/art/expressions"));
+    await button.click();
+    await expect(button).toBeDisabled();
+    await expect(look).toBeDisabled();
+    await expect.poll(() => posts(calls, "/art/expressions").length).toBe(1);
+    expect(posts(calls, "/art/expressions")[0]!.body).toMatchObject({ li: ILVAR });
+    expect(posts(calls, "/art/paint")).toEqual([]);
+    expect(posts(calls, "/art/expressions/prompt")).toEqual([]);
+    await expect(root.locator(".of-cast-card").first().locator("img")).toHaveAttribute("src", original!);
+    await page.screenshot({ path: testInfo.outputPath("expression-repaint-busy-midnight.png") });
+    release();
+    await (await done).finished();
+    await expect(button).toBeEnabled();
+    await expect(root.locator(".of-cast-card").first().locator("img")).toHaveAttribute("src", original!);
+    expect(posts(calls, "/art/expressions")).toHaveLength(1);
+    expect(errors).toEqual([]);
+  } finally {
+    release();
+  }
+});
+
+test("Otome Hearth expression repaint reviews five prompts before paying, cancels cleanly and retains edits after failure", async ({
+  page,
+}, testInfo) => {
+  const fixture = expressionRepaintFixture({ failFirst: true });
+  const calls: Call[] = [];
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
+  await stubRoutes(page, fixture.answer, calls);
+  const root = await openRepaintCast(page, true);
+  const repaint = root.getByRole("button", { name: "Repaint expressions for Ilvar Thorne", exact: true });
+  await repaint.click();
+  let dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("heading")).toContainText("tender (1 of 5)");
+  await dialog.getByRole("button", { name: "Cancel repaint", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(posts(calls, "/art/expressions")).toEqual([]);
+  await repaint.click();
+  const edited = `${"Keep the copper etching. ".repeat(200)}FINAL REVIEW WORDS`;
+  for (const [index, face] of REPAINT_FACES.entries()) {
+    dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("heading")).toContainText(`${face} (${index + 1} of 5)`);
+    await expect(dialog.getByText("Paints 5 images", { exact: true })).toBeVisible();
+    if (index === 0) {
+      await dialog.getByLabel("Prompt", { exact: true }).fill(edited);
+      await dialog.getByLabel("Negative prompt", { exact: true }).fill("Keep the edited negative whole.");
+    }
+    expect(posts(calls, "/art/expressions")).toEqual([]);
+    if (index < REPAINT_FACES.length - 1) await dialog.getByRole("button", { name: "Review next expression" }).click();
+  }
+  await page.screenshot({ path: testInfo.outputPath("expression-repaint-last-review-pearl.png") });
+  await dialog.getByRole("button", { name: "Repaint 5 expressions", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toHaveText(REPAINT_ERROR);
+  const first = posts(calls, "/art/expressions")[0]!.body!;
+  expect(first).toMatchObject({ li: ILVAR, base: FACE_COLD });
+  expect(Object.keys(first.prompts).sort()).toEqual([...REPAINT_FACES].sort());
+  expect(first.prompts.tender).toEqual({ prompt: edited, negativePrompt: "Keep the edited negative whole." });
+  expect(first.prompts.angry).toEqual(fixture.prompts.angry);
+  await expect(dialog.getByLabel("Prompt", { exact: true })).toHaveValue(fixture.prompts.angry.prompt);
+  await page.screenshot({ path: testInfo.outputPath("expression-repaint-failure-pearl.png") });
+  await dialog.getByRole("button", { name: "Repaint 5 expressions", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(posts(calls, "/art/expressions")).toHaveLength(2);
+  expect(posts(calls, "/art/expressions")[1]!.body).toEqual(first);
+  expect(posts(calls, "/art/paint")).toEqual([]);
+  expect(posts(calls, "/api/audio/generate")).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test("Otome Hearth expression repaint keeps reviewed edits after a concurrent request conflict", async ({
+  page,
+}, testInfo) => {
+  const fixture = expressionRepaintFixture({ conflictFirst: true });
+  const calls: Call[] = [];
+  await stubRoutes(page, fixture.answer, calls);
+  const root = await openRepaintCast(page, true);
+  await root.getByRole("button", { name: "Repaint expressions for Ilvar Thorne", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  for (const [index, face] of REPAINT_FACES.entries()) {
+    await expect(dialog.getByRole("heading")).toContainText(`${face} (${index + 1} of 5)`);
+    if (index < REPAINT_FACES.length - 1) await dialog.getByRole("button", { name: "Review next expression" }).click();
+  }
+  const edited = "Keep this separately reviewed angry expression.";
+  const negative = "Keep this separate reviewed negative.";
+  await dialog.getByLabel("Prompt", { exact: true }).fill(edited);
+  await dialog.getByLabel("Negative prompt", { exact: true }).fill(negative);
+  await dialog.getByRole("button", { name: "Repaint 5 expressions", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toHaveText("That changed somewhere else. Try again.");
+  await expect(dialog.getByLabel("Prompt", { exact: true })).toHaveValue(edited);
+  await expect(dialog.getByLabel("Negative prompt", { exact: true })).toHaveValue(negative);
+  const first = posts(calls, "/art/expressions")[0]!.body!;
+  expect(first.prompts.angry).toEqual({ prompt: edited, negativePrompt: negative });
+  await page.screenshot({ path: testInfo.outputPath("expression-repaint-conflict-edits.png") });
+  await dialog.getByRole("button", { name: "Repaint 5 expressions", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(posts(calls, "/art/expressions")).toHaveLength(2);
+  expect(posts(calls, "/art/expressions")[1]!.body).toEqual(first);
+  expect(posts(calls, "/art/paint")).toEqual([]);
+  expect(posts(calls, "/api/audio/generate")).toEqual([]);
+});
 
 // ── Arcs ──
 
@@ -470,7 +742,7 @@ test("Otome Forge arcs: a rupture's banner plans the repair, routes open, wait o
 
   // The rupture, in the pronouns his bible gives him; his route waits behind it, Sora's behind affection.
   const rupture = root.getByRole("region", { name: "Ilvar Thorne is keeping his distance" });
-  await expect(rupture).toContainText("Until it is, his route stays shut.");
+  await expect(rupture).toContainText("Until you do, his route stays shut.");
   const routes = root.getByRole("region", { name: "Routes" });
   const ilvar = routes.getByRole("listitem").filter({ hasText: "Ilvar Thorne" });
   await expect(ilvar).toContainText("Shut while Ilvar Thorne keeps his distance.");
@@ -532,7 +804,7 @@ test("Otome Forge arcs: a rupture that opens elsewhere holds a gate scene, says 
   await next(root);
   const held = root.locator(".of-reader-notice");
   await expect(held).toContainText(
-    "Something has come between you and Cassian. This scene will wait until you make it right",
+    "Something has come between you and Cassian. This scene waits until you make it right",
   );
   await expect(held).not.toContainText("That isn’t open yet.");
   await expect(held.getByRole("button")).toHaveText(["Back to the story"]);
@@ -568,6 +840,7 @@ for (const refused of ["Rewrite", "Ease off"] as const) {
     await root.getByRole("button", { name: "Begin Cassian’s next chapter" }).click();
     await expect(line(root)).toContainText("The workshop smells of oil and rain.");
 
+    await setReaderControlsExpanded(root);
     if (refused === "Rewrite") await root.getByRole("button", { name: /Rewrite/u }).click();
     else {
       await root.getByRole("button", { name: "Ease off" }).click();
@@ -577,7 +850,7 @@ for (const refused of ["Rewrite", "Ease off"] as const) {
     }
     const held = root.locator(".of-reader-notice");
     await expect(held).toContainText(
-      "Something has come between you and Cassian. This scene will wait until you make it right",
+      "Something has come between you and Cassian. This scene waits until you make it right",
     );
     const sent =
       refused === "Rewrite"
@@ -591,6 +864,7 @@ for (const refused of ["Rewrite", "Ease off"] as const) {
     await expect(root.getByRole("button", { name: /Rewrite/u })).toHaveCount(0);
     await expect(root.getByRole("button", { name: "Ease off" })).toHaveCount(0);
     // Back on the story screen, the rupture's banner offers Make it right with him.
+    await setReaderControlsExpanded(root, false);
     await held.getByRole("button", { name: "Back to the story" }).click();
     const rupture = root.getByRole("region", { name: "Cassian is keeping his distance" });
     await expect(rupture.getByRole("button", { name: "Make it right with Cassian" })).toBeVisible();
@@ -913,6 +1187,578 @@ function createSceneStub({
   return { stub, answer, beat0 };
 }
 
+test("Otome Hearth imageless play: intended appearance is readable without Bible spoilers or model calls", async ({
+  page,
+}, testInfo) => {
+  const fixture = expressionRepaintFixture();
+  fixture.view.world.images.connectionId = null;
+  const appearance = "adult man, silver hair, amber eyes\nnavy coat, brass buttons";
+  fixture.view.lis[0].look = {
+    identityLine: "adult man, silver hair, amber eyes",
+    outfitLine: "navy coat, brass buttons",
+  };
+  delete fixture.view.lis[0].portrait;
+  delete fixture.view.lis[0].art;
+  const calls: Call[] = [];
+  await stubRoutes(page, fixture.answer, calls);
+  const root = await openRepaintCast(page);
+  const card = root.locator(".of-cast-card").filter({ hasText: "Ilvar Thorne" });
+  const disclosure = card.locator("summary").filter({ hasText: "Image description" });
+  await disclosure.focus();
+  await page.keyboard.press("Enter");
+  await expect(card.getByText(appearance, { exact: true })).toBeVisible();
+  expect(calls.filter((call) => /\/bible(?:$|\?)/u.test(call.path))).toEqual([]);
+  expect(calls.filter((call) => call.method === "POST" && /\/art\/|\/api\/audio\/generate/u.test(call.path))).toEqual(
+    [],
+  );
+  await page.screenshot({ path: testInfo.outputPath("imageless-appearance.png"), animations: "disabled" });
+});
+
+test("Otome Hearth imageless play: old locations and key moments can be painted explicitly with prompt review", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const fixture = createSceneStub({ ask: true, audio: false });
+  delete fixture.stub.view.world.places["the-observation-room"].art;
+  delete fixture.beat0.cg.art;
+  const calls: Call[] = [];
+  await stubRoutes(
+    page,
+    (call) =>
+      call.path.endsWith("/art/place/prompt")
+        ? { status: 200, json: { prompt: "Glass dome, night, rain.", negativePrompt: "text" } }
+        : fixture.answer(call),
+    calls,
+  );
+  const root = await openStory(page, { reviewPrompts: true });
+  await root.getByRole("button", { name: "Continue", exact: true }).first().click();
+  await expect(displayedLine(root)).toHaveText("Rain needles the glass dome.");
+  expect(posts(calls, "/art/place")).toEqual([]);
+  const paintPlace = root.getByRole("button", { name: "Paint The Observation Room (1 image)", exact: true });
+  await expect(paintPlace).toHaveText("Paint · 1 image");
+  await paintPlace.click();
+  let review = page.getByRole("dialog");
+  await expect(review.getByLabel("Prompt", { exact: true })).toHaveValue("Glass dome, night, rain.");
+  await expect(review.getByText("Paints 1 image", { exact: true })).toBeVisible();
+  expect(posts(calls, "/art/place")).toEqual([]);
+  await review.getByRole("button", { name: "Paint", exact: true }).click();
+  await expect(review).toHaveCount(0);
+  await expect(paintPlace).toHaveCount(0);
+  expect(posts(calls, "/art/place")).toHaveLength(1);
+  await next(root);
+  await next(root);
+  await next(root);
+  await expect(root.getByRole("button", { name: "Paint this moment", exact: true })).toBeVisible();
+  expect(posts(calls, "/art/cg")).toEqual([]);
+  await root.getByRole("button", { name: "Paint this moment", exact: true }).click();
+  review = page.getByRole("dialog");
+  await expect(review.getByLabel("Prompt", { exact: true })).toHaveValue("Two figures under a glass dome, rain.");
+  expect(posts(calls, "/art/cg")).toEqual([]);
+  await review.getByRole("button", { name: "Paint", exact: true }).click();
+  await expect(review).toHaveCount(0);
+  await expect(root.getByRole("img", { name: "An illustration: Ilvar Thorne" })).toBeVisible();
+  expect(posts(calls, "/art/cg")).toHaveLength(1);
+  expect(posts(calls, "/art/paint")).toEqual([]);
+  expect(posts(calls, "/api/audio/generate")).toEqual([]);
+});
+
+test("Otome Hearth imageless play: full visual descriptions keep reading controls reachable and keyboard scroll does not advance", async ({
+  page,
+}, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+  const fixture = createSceneStub({ ask: true, audio: false });
+  const description = `${"marble floor,\n".repeat(30)}FINAL VISUAL DETAIL`;
+  expect(description.length).toBeLessThan(600);
+  fixture.stub.view.world.places["the-observation-room"].tags = description;
+  const calls: Call[] = [];
+  await stubRoutes(page, fixture.answer, calls);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Continue", exact: true }).first().click();
+  await expect(displayedLine(root)).toHaveText("Rain needles the glass dome.");
+  const disclosure = root.locator(".of-reader-head .of-image-description");
+  await disclosure.locator("summary").click();
+  await expect(root.locator(".of-next")).toBeInViewport({ ratio: 0.99 });
+  const descriptionText = disclosure.getByRole("region", { name: "Image description", exact: true });
+  expect(await descriptionText.textContent()).toBe(description);
+  await descriptionText.focus();
+  await expect(descriptionText).toBeFocused();
+  await page.keyboard.press("PageDown");
+  await expect.poll(() => descriptionText.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  await page.keyboard.press("End");
+  await expect
+    .poll(() => descriptionText.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+    .toBeLessThanOrEqual(1);
+  await expect(displayedLine(root)).toHaveText("Rain needles the glass dome.");
+  expect(calls.filter((call) => call.method === "POST" && /\/art\/(place|cg)(?:\/prompt)?$/u.test(call.path))).toEqual(
+    [],
+  );
+  await page.screenshot({ path: testInfo.outputPath("imageless-description-midnight.png"), animations: "disabled" });
+});
+
+test("Otome Hearth backgrounds: reading waits for the current place paint and image decode", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const fixture = createSceneStub();
+  fixture.stub.view.lis[0].cut = [FACE_COLD];
+  let painted = false;
+  let decodeRequested = false;
+  let releaseImage!: () => void;
+  const imageWait = new Promise<void>((resolve) => {
+    releaseImage = resolve;
+  });
+  const imageUrl = "/api/otome-forge/background-preparation.svg";
+  const currentPlace = () => ({
+    name: "The Observation Room",
+    tags: "glass dome, night",
+    art: painted ? { state: "ready", at: now(), url: imageUrl } : { state: "pending", at: now() },
+  });
+  fixture.stub.view.world.places = { "the-observation-room": currentPlace() };
+  await stubRoutes(
+    page,
+    (call) => {
+      if (call.path === imageUrl) {
+        decodeRequested = true;
+        return {
+          status: 200,
+          body: Buffer.from(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="18"><rect width="32" height="18" fill="#3a2a4f"/></svg>',
+          ),
+          contentType: "image/svg+xml",
+          wait: imageWait,
+        };
+      }
+      const reply = fixture.answer(call);
+      if (call.path.endsWith("/beats/0") && call.method === "POST") {
+        const result = reply!.json as Json;
+        return {
+          ...reply!,
+          json: {
+            ...result,
+            beat: {
+              ...result.beat,
+              cg: null,
+              choices: [],
+              segments: [
+                seg("Ilvar Thorne", "Stay inside the lab until its lights settle.", {
+                  place: "The Observation Room",
+                  expression: "cold",
+                }),
+              ],
+            },
+          },
+        };
+      }
+      if (call.path.endsWith("/art/scene"))
+        return {
+          status: 200,
+          json: {
+            places: [
+              currentPlace(),
+              { name: "A later room", tags: "stone corridor", art: { state: "pending", at: now() } },
+            ],
+            cg: { at: 0, brief: "The lab's lights", cast: ["Ilvar Thorne"], art: { state: "pending", at: now() } },
+            faces: {},
+            facesComing: [ILVAR],
+          },
+        };
+      return reply;
+    },
+    calls,
+  );
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Continue" }).first().click();
+  const preparing = root.getByRole("status").filter({ hasText: "Preparing the background…" });
+  await expect(preparing).toBeVisible();
+  await expect(line(root)).toHaveCount(0);
+  await root.locator(".of-reader").focus();
+  await page.keyboard.press("ArrowRight");
+  await root.locator(".of-reader-stage").click();
+  await setReaderControlsExpanded(root);
+  await expect(root.getByRole("button", { name: "Auto", exact: true })).toBeDisabled();
+  await expect(root.getByRole("button", { name: "Skip what you’ve read" })).toBeDisabled();
+  await root.getByRole("button", { name: "Backlog" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Backlog" }).getByText("Stay inside the lab until its lights settle."),
+  ).toHaveCount(0);
+  await page.getByRole("dialog", { name: "Backlog" }).getByRole("button", { name: "Close" }).click();
+  expect(posts(calls, "/read")).toHaveLength(0);
+  expect(posts(calls, "/api/tts/speak")).toHaveLength(0);
+  painted = true;
+  await expect.poll(() => decodeRequested).toBe(true);
+  await expect(preparing).toBeVisible();
+  await expect(line(root)).toHaveCount(0);
+  expect(posts(calls, "/read")).toHaveLength(0);
+  releaseImage();
+  await expect(displayedLine(root)).toHaveText("Stay inside the lab until its lights settle.");
+  await expect(line(root).locator(".of-visually-hidden")).toHaveText("Stay inside the lab until its lights settle.");
+  await expect(root.locator('.of-place[data-on="true"]')).toHaveCSS(
+    "background-image",
+    new RegExp("background-preparation\\.svg"),
+  );
+  await expect.poll(() => posts(calls, "/read").length).toBe(1);
+  await expect.poll(() => posts(calls, "/api/tts/speak").length).toBe(1);
+  expect(calls.filter((call) => call.method === "POST" && /\/art\/(place|cg)(?:\/prompt)?$/u.test(call.path))).toEqual(
+    [],
+  );
+  expect(posts(calls, "/cancel")).toEqual([]);
+});
+
+for (const scenario of [
+  "disabled",
+  "ask",
+  "review",
+  "waiting-consent",
+  "failed",
+  "stopped",
+  "missing",
+  "poll failure",
+  "image failure",
+] as const) {
+  test(`Otome Hearth backgrounds: ${scenario} does not hold the story or paint automatically`, async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const calls: Call[] = [];
+    const fixture = createSceneStub({ images: scenario !== "disabled", ask: scenario === "ask", audio: false });
+    fixture.beat0.cg = null;
+    const savedPlace = fixture.stub.view.world.places["the-observation-room"];
+    if (savedPlace)
+      savedPlace.art = {
+        state:
+          scenario === "image failure"
+            ? "ready"
+            : scenario === "ask" || scenario === "review"
+              ? "waiting-consent"
+              : ["failed", "stopped", "waiting-consent"].includes(scenario)
+                ? scenario
+                : "pending",
+        at: now(),
+        ...(scenario === "image failure" ? { url: "/api/otome-forge/unavailable-background.svg" } : {}),
+      };
+    if (scenario === "missing") {
+      fixture.stub.view.world.places = {};
+      fixture.beat0.places = [];
+    }
+    await stubRoutes(
+      page,
+      (call) => {
+        if (call.path.endsWith("/art/scene") && scenario === "poll failure")
+          return { status: 503, json: { error: "Art unavailable", code: "unavailable" } };
+        if (call.path.endsWith("/art/scene") && scenario === "missing")
+          return { status: 200, json: { places: [], cg: null, faces: {}, facesComing: [] } };
+        return fixture.answer(call);
+      },
+      calls,
+    );
+    const root = await openStory(page, { reviewPrompts: scenario === "review" });
+    await root.getByRole("button", { name: "Continue" }).first().click();
+    await expect(displayedLine(root)).toHaveText("Rain needles the glass dome.");
+    await expect(root.getByText("Preparing the background…", { exact: true })).toHaveCount(0);
+    if (scenario === "waiting-consent")
+      await expect(root.getByRole("button", { name: /Paint.*The Observation Room/u })).toBeVisible();
+    if (scenario === "failed" || scenario === "stopped")
+      await expect(root.getByRole("button", { name: /Try.*The Observation Room/u })).toBeVisible();
+    expect(
+      calls.filter((call) => call.method === "POST" && /\/art\/(place|cg)(?:\/prompt)?$/u.test(call.path)),
+    ).toEqual([]);
+    expect(posts(calls, "/cancel")).toEqual([]);
+  });
+}
+
+test("Otome Hearth backgrounds: continuing without a pending background holds no later line and never cancels or repaints", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const fixture = createSceneStub({ audio: false });
+  fixture.beat0.cg = null;
+  fixture.stub.view.world.places["the-observation-room"].art = { state: "pending", at: now() };
+  await stubRoutes(page, fixture.answer, calls);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Continue" }).first().click();
+  await expect(line(root)).toHaveCount(0);
+  await root.getByRole("button", { name: "Continue without background", exact: true }).click();
+  await expect(displayedLine(root)).toHaveText("Rain needles the glass dome.");
+  await next(root);
+  await expect(displayedLine(root)).toHaveText("You came back. How inefficient of you.");
+  await expect.poll(() => calls.filter((call) => call.path.endsWith("/art/scene")).length).toBeGreaterThan(1);
+  await expect(displayedLine(root)).toHaveText("You came back. How inefficient of you.");
+  await expect(root.getByText("Preparing the background…", { exact: true })).toHaveCount(0);
+  expect(calls.filter((call) => call.method === "POST" && /\/art\/(place|cg)(?:\/prompt)?$/u.test(call.path))).toEqual(
+    [],
+  );
+  expect(posts(calls, "/cancel")).toEqual([]);
+});
+
+test("Otome Hearth backgrounds: a manual retry does not interrupt a scene that already opened", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const fixture = createSceneStub({ audio: false });
+  fixture.beat0.cg = null;
+  const place = fixture.stub.view.world.places["the-observation-room"];
+  place.art = { state: "failed", at: now(), error: "Paint failed" };
+  const imageUrl = "/api/otome-forge/retried-background.svg";
+  let releaseImage!: () => void;
+  const imageWait = new Promise<void>((resolve) => {
+    releaseImage = resolve;
+  });
+  let decoding = false;
+  await stubRoutes(
+    page,
+    (call) => {
+      if (call.path === imageUrl) {
+        decoding = true;
+        return {
+          status: 200,
+          body: Buffer.from(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="18"><rect width="32" height="18" fill="#3a2a4f"/></svg>',
+          ),
+          contentType: "image/svg+xml",
+          wait: imageWait,
+        };
+      }
+      if (call.path.endsWith("/art/place") && call.method === "POST") {
+        place.art = { state: "ready", at: now(), url: imageUrl };
+        return { status: 200, json: { place, world: fixture.stub.view.world } };
+      }
+      return fixture.answer(call);
+    },
+    calls,
+  );
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Continue" }).first().click();
+  await expect(displayedLine(root)).toHaveText("Rain needles the glass dome.");
+  expect(posts(calls, "/art/place")).toHaveLength(0);
+  await root.getByRole("button", { name: "Try painting The Observation Room again (1 image)" }).click();
+  await expect.poll(() => decoding).toBe(true);
+  await expect(displayedLine(root)).toHaveText("Rain needles the glass dome.");
+  await expect(root.getByText("Preparing the background…", { exact: true })).toHaveCount(0);
+  await next(root);
+  await expect(displayedLine(root)).toHaveText("You came back. How inefficient of you.");
+  releaseImage();
+  await expect(root.locator('.of-place[data-on="true"]')).toHaveCount(1);
+  expect(posts(calls, "/art/place")).toHaveLength(1);
+  expect(posts(calls, "/cancel")).toEqual([]);
+});
+
+test("Otome Hearth backgrounds: an old image decode cannot release a different scene", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const fixture = createSceneStub({ audio: false });
+  fixture.beat0.cg = null;
+  fixture.beat0.segments = [seg("", "The first room waits.", { place: "The Observation Room" })];
+  const imageUrl = "/api/otome-forge/old-background.svg";
+  fixture.stub.view.world.places["the-observation-room"].art = { state: "ready", at: now(), url: imageUrl };
+  const otherPlace = { name: "The second room", tags: "stone lab", art: { state: "pending", at: now() } };
+  let releaseImage!: () => void;
+  const imageWait = new Promise<void>((resolve) => {
+    releaseImage = resolve;
+  });
+  let decoding = false;
+  await stubRoutes(
+    page,
+    (call) => {
+      if (call.path === imageUrl) {
+        decoding = true;
+        return {
+          status: 200,
+          body: Buffer.from(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="18"><rect width="32" height="18" fill="#3a2a4f"/></svg>',
+          ),
+          contentType: "image/svg+xml",
+          wait: imageWait,
+        };
+      }
+      if (call.path.endsWith("/beats/1") && call.method === "POST")
+        return {
+          status: 200,
+          json: {
+            beat: {
+              ...fixture.beat0,
+              i: 1,
+              places: [otherPlace],
+              segments: [seg("", "The second room waits.", { place: otherPlace.name })],
+            },
+          },
+        };
+      if (call.path.endsWith("/art/scene") && call.query.get("i") === "1")
+        return { status: 200, json: { places: [otherPlace], cg: null, faces: {}, facesComing: [] } };
+      return fixture.answer(call);
+    },
+    calls,
+  );
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Continue" }).first().click();
+  await expect.poll(() => decoding).toBe(true);
+  await root.getByRole("button", { name: "Continue without background", exact: true }).click();
+  await expect(displayedLine(root)).toHaveText("The first room waits.");
+  await next(root);
+  await expect(root.getByText("Preparing the background…", { exact: true })).toBeVisible();
+  const response = page.waitForResponse((reply) => new URL(reply.url()).pathname === imageUrl);
+  releaseImage();
+  await (await response).finished();
+  await page.evaluate(
+    () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+  );
+  await expect(line(root)).toHaveCount(0);
+  await expect(root.getByText("Preparing the background…", { exact: true })).toBeVisible();
+  expect(calls.filter((call) => call.method === "POST" && /\/art\/(place|cg)(?:\/prompt)?$/u.test(call.path))).toEqual(
+    [],
+  );
+});
+
+test("Otome Hearth backgrounds: polling recovery keeps the opened place readable and prepares the next place", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const fixture = createSceneStub({ audio: false });
+  fixture.beat0.cg = null;
+  fixture.beat0.segments = [
+    seg("", "The first lab stays open.", { place: "The Observation Room" }),
+    seg("", "The next lab waits.", { place: "The second room" }),
+  ];
+  const firstPlace = fixture.stub.view.world.places["the-observation-room"];
+  firstPlace.art = { state: "pending", at: now() };
+  const otherPlace = { name: "The second room", tags: "stone lab", art: { state: "pending", at: now() } };
+  fixture.stub.view.world.places["the-second-room"] = otherPlace;
+  fixture.beat0.places.push({ name: otherPlace.name, tags: otherPlace.tags });
+  let polls = 0;
+  let painted = false;
+  let decoding = false;
+  let releaseImage!: () => void;
+  const imageWait = new Promise<void>((resolve) => {
+    releaseImage = resolve;
+  });
+  const imageUrl = "/api/otome-forge/recovered-background.svg";
+  await stubRoutes(
+    page,
+    (call) => {
+      if (call.path === imageUrl) {
+        decoding = true;
+        return {
+          status: 200,
+          body: Buffer.from(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="18"><rect width="32" height="18" fill="#3a2a4f"/></svg>',
+          ),
+          contentType: "image/svg+xml",
+          wait: imageWait,
+        };
+      }
+      if (call.path.endsWith("/art/scene")) {
+        polls += 1;
+        if (polls === 1) return { status: 503, json: { error: "Art unavailable", code: "unavailable" } };
+        return {
+          status: 200,
+          json: {
+            places: [
+              { ...firstPlace, art: { state: "ready", at: now(), url: PLACE_ART } },
+              { ...otherPlace, ...(painted ? { art: { state: "ready", at: now(), url: imageUrl } } : {}) },
+            ],
+            cg: null,
+            faces: {},
+            facesComing: [],
+          },
+        };
+      }
+      return fixture.answer(call);
+    },
+    calls,
+  );
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Continue" }).first().click();
+  await expect(displayedLine(root)).toHaveText("The first lab stays open.");
+  await expect(root.locator('.of-place[data-on="true"]')).toHaveCount(1);
+  await expect(displayedLine(root)).toHaveText("The first lab stays open.");
+  await next(root);
+  await expect(root.getByText("Preparing the background…", { exact: true })).toBeVisible();
+  await expect(line(root)).toHaveCount(0);
+  expect(posts(calls, "/read")).toHaveLength(0);
+  painted = true;
+  await expect.poll(() => decoding).toBe(true);
+  await expect(line(root)).toHaveCount(0);
+  releaseImage();
+  await expect(displayedLine(root)).toHaveText("The next lab waits.");
+  await expect.poll(() => posts(calls, "/read").length).toBe(1);
+  expect(calls.filter((call) => call.method === "POST" && /\/art\/(place|cg)(?:\/prompt)?$/u.test(call.path))).toEqual(
+    [],
+  );
+});
+
+test("Otome Hearth backgrounds: a failed next-place image clears the previous room and opens the fallback", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const fixture = createSceneStub({ audio: false });
+  fixture.beat0.cg = null;
+  const otherPlace = {
+    name: "The second room",
+    tags: "stone lab",
+    art: { state: "ready", at: now(), url: "/api/otome-forge/failed-next-background.svg" },
+  };
+  fixture.stub.view.world.places["the-second-room"] = otherPlace;
+  fixture.beat0.places.push({ name: otherPlace.name, tags: otherPlace.tags });
+  fixture.beat0.segments = [
+    seg("", "The first lab is lit.", { place: "The Observation Room" }),
+    seg("", "The second lab is dark.", { place: otherPlace.name }),
+  ];
+  await stubRoutes(page, fixture.answer, calls);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Continue" }).first().click();
+  await expect(displayedLine(root)).toHaveText("The first lab is lit.");
+  await expect(root.locator('.of-place[data-on="true"]')).toHaveCSS("background-image", `url("${PLACE_ART}")`);
+  await next(root);
+  await expect(displayedLine(root)).toHaveText("The second lab is dark.");
+  expect(calls.some((call) => call.path === "/api/otome-forge/failed-next-background.svg")).toBe(true);
+  await expect(root.locator('.of-place[data-on="true"]')).toHaveCount(0);
+  await expect(root.getByText("Preparing the background…", { exact: true })).toHaveCount(0);
+  expect(calls.filter((call) => call.method === "POST" && /\/art\/(place|cg)(?:\/prompt)?$/u.test(call.path))).toEqual(
+    [],
+  );
+  expect(posts(calls, "/cancel")).toEqual([]);
+});
+
+test("Otome Hearth backgrounds: exiting a pending location saves only the last visible line", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const fixture = createSceneStub({ audio: false });
+  fixture.beat0.cg = null;
+  const firstPlace = fixture.stub.view.world.places["the-observation-room"];
+  firstPlace.art = { state: "pending", at: now() };
+  const otherPlace = { name: "The second room", tags: "stone lab", art: { state: "pending", at: now() } };
+  fixture.stub.view.world.places["the-second-room"] = otherPlace;
+  fixture.beat0.places.push({ name: otherPlace.name, tags: otherPlace.tags });
+  fixture.beat0.segments = [
+    seg("", "The first lab opens.", { place: "The Observation Room" }),
+    seg("", "You read the note beside the door."),
+    seg("", "The second lab is still unseen.", { place: otherPlace.name }),
+  ];
+  const starlight = fixture.stub.view.starlight;
+  await stubRoutes(page, fixture.answer, calls);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Continue" }).first().click();
+  await expect(root.getByText("Preparing the background…", { exact: true })).toBeVisible();
+  await root.getByRole("button", { name: "Leave the chapter", exact: true }).click();
+  await expect(root.getByRole("heading", { name: "Story", exact: true })).toBeVisible();
+  expect(posts(calls, "/read")).toHaveLength(0);
+  firstPlace.art = { state: "ready", at: now(), url: PLACE_ART };
+  await root.getByRole("button", { name: "Continue" }).first().click();
+  await expect(displayedLine(root)).toHaveText("The first lab opens.");
+  await next(root);
+  await expect(displayedLine(root)).toHaveText("You read the note beside the door.");
+  await next(root);
+  await expect(root.getByText("Preparing the background…", { exact: true })).toBeVisible();
+  await expect(line(root)).toHaveCount(0);
+  expect(posts(calls, "/read")).toHaveLength(0);
+  await root.getByRole("button", { name: "Leave the chapter", exact: true }).click();
+  await expect(root.getByRole("heading", { name: "Story", exact: true })).toBeVisible();
+  await expect.poll(() => posts(calls, "/read").map((call) => call.body!.segment)).toEqual([1]);
+  expect(posts(calls, "/choose")).toEqual([]);
+  expect(fixture.stub.view.starlight).toBe(starlight);
+  expect(calls.filter((call) => call.method === "POST" && /\/art\/(place|cg)(?:\/prompt)?$/u.test(call.path))).toEqual(
+    [],
+  );
+});
+
 /** Records every line the Engine's voice service is asked to speak (the Engine's own instance, not a copy). */
 async function recordSpeech(page: Page) {
   await page.evaluate(() => {
@@ -928,12 +1774,450 @@ async function recordSpeech(page: Page) {
 }
 const spoken = (page: Page) => page.evaluate(() => (window as any).__spoken as Array<{ requests: Json[]; id: string }>);
 
+// The reader's phone layout is selected from the available frame, including a coarse-pointer phone in landscape.
+// A full-body cut-out with recognizable head, torso, thighs and boots, rather than an opaque portrait rectangle.
+const READER_CUTOUT = `data:image/svg+xml;base64,${Buffer.from(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="360" height="800" viewBox="0 0 360 800">
+    <circle cx="180" cy="76" r="44" fill="#e6c98a"/>
+    <path d="M135 128 L225 128 L250 320 L225 380 L135 380 L110 320Z" fill="#9db8f0"/>
+    <path d="M135 380 L175 380 L170 600 L125 600Z M185 380 L225 380 L235 600 L190 600Z" fill="#b79cf2"/>
+    <path d="M125 600 L170 600 L170 770 L105 770 L105 735Z M190 600 L235 600 L255 770 L190 770Z" fill="#e7a6b8"/>
+    <g fill="#1c142e" font-family="sans-serif" font-size="18" text-anchor="middle">
+      <text x="180" y="82">HEAD</text><text x="180" y="250">TORSO</text>
+      <text x="150" y="450" transform="rotate(90 150 450)">THIGH</text>
+      <text x="210" y="450" transform="rotate(90 210 450)">THIGH</text>
+      <text x="140" y="735">BOOT</text><text x="215" y="735">BOOT</text>
+    </g>
+  </svg>`,
+).toString("base64")}`;
+
+function readerCutoutStub() {
+  const fixture = createSceneStub({ audio: false });
+  const faces = { cold: READER_CUTOUT, tender: READER_CUTOUT, angry: READER_CUTOUT, hurt: READER_CUTOUT };
+  fixture.stub.view.lis[0].expressions = faces;
+  fixture.stub.view.lis[0].cut = [READER_CUTOUT];
+  return {
+    ...fixture,
+    answer: (call: Call): Answer | undefined => {
+      const reply = fixture.answer(call);
+      if (call.path.endsWith("/art/scene") && reply?.json) {
+        const scene = reply.json as Json;
+        return { ...reply, json: { ...scene, faces: { ...scene.faces, [ILVAR]: faces } } };
+      }
+      return reply;
+    },
+  };
+}
+
+test.describe("Otome Forge reader mobile", () => {
+  test.use({ hasTouch: true, isMobile: true });
+
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 320, height: 700 },
+    { width: 844, height: 390 },
+  ]) {
+    test(`chapter controls and cut-out framing at ${viewport.width}×${viewport.height}`, async ({ page }, testInfo) => {
+      test.setTimeout(120_000);
+      await page.setViewportSize(viewport);
+      await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
+      const calls: Call[] = [];
+      const { answer } = readerCutoutStub();
+      const pageErrors: string[] = [];
+      page.on("pageerror", (error) => pageErrors.push(error.message));
+      await stubRoutes(page, answer, calls);
+      const root = await openStory(page);
+      if (viewport.width > viewport.height) {
+        const frame = (await root.locator(".of-frame").boundingBox())!;
+        const stage = (await root.locator(".of-stage").boundingBox())!;
+        expect(stage.height).toBeGreaterThan(stage.width);
+        expect(stage.width).toBeLessThan(frame.width - 1);
+      }
+      await root.getByRole("button", { name: "Continue" }).first().click();
+      await expect(root.locator(".of-reader")).toBeVisible();
+      if (viewport.width > viewport.height) {
+        const frame = (await root.locator(".of-frame").boundingBox())!;
+        const stage = (await root.locator(".of-stage").boundingBox())!;
+        expect(stage.width).toBeCloseTo(frame.width, 0);
+      }
+      await next(root);
+      await expect(line(root)).toContainText("You came back. How inefficient of you.");
+      const originalLine = (await line(root).textContent())!;
+      const primary = root.locator(".of-reader-primary");
+      const more = primary.getByRole("button", { name: "More reader controls" });
+      const secondary = root.locator(".of-reader-secondary");
+      await expect(primary.getByRole("button")).toHaveCount(3);
+      await expect(primary.getByRole("button", { name: "Mute audio" })).toBeVisible();
+      await expect(primary.getByRole("button", { name: /fullscreen/iu })).toBeVisible();
+      await expect(more).toHaveAttribute("aria-expanded", "false");
+      await expect(secondary).toBeHidden();
+      expect
+        .soft(
+          await primary.getByRole("button").evaluateAll((buttons) =>
+            buttons
+              .map((button) => ({ label: button.getAttribute("aria-label"), x: button.getBoundingClientRect().x }))
+              .sort((a, b) => a.x - b.x)
+              .map((button) => button.label),
+          ),
+        )
+        .toEqual(["Mute audio", expect.stringMatching(/fullscreen/iu), "More reader controls"]);
+      const centeredIcon = async (button: Locator) => {
+        const geometry = await button.evaluate((element) => {
+          const box = element.getBoundingClientRect();
+          const icon = element.querySelector("svg")!.getBoundingClientRect();
+          return {
+            label: element.getAttribute("aria-label"),
+            centerX: box.x + box.width / 2,
+            dx: icon.x + icon.width / 2 - (box.x + box.width / 2),
+            dy: icon.y + icon.height / 2 - (box.y + box.height / 2),
+          };
+        });
+        expect.soft(Math.abs(geometry.dx), `${geometry.label}: icon horizontal center`).toBeLessThanOrEqual(1);
+        expect.soft(Math.abs(geometry.dy), `${geometry.label}: icon vertical center`).toBeLessThanOrEqual(1);
+        return geometry.centerX;
+      };
+      for (const button of await primary.getByRole("button").all()) await centeredIcon(button);
+      const moreBox = (await more.boundingBox())!;
+      const moreCenter = moreBox.x + moreBox.width / 2;
+
+      const openTools = async () => {
+        if ((await more.getAttribute("aria-expanded")) === "false") await more.click();
+        await expect(secondary).toBeVisible();
+      };
+      await openTools();
+      const tools = secondary.getByRole("button");
+      await expect(tools).toHaveCount(6);
+      expect(await tools.evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label")))).toEqual([
+        "Auto",
+        "Skip what you’ve read",
+        "Hide the text",
+        "Backlog",
+        expect.stringMatching(/^Rewrite this scene/u),
+        "Ease off",
+      ]);
+      const boxes = await tools.evaluateAll((buttons) =>
+        buttons.map((button) => {
+          const box = button.getBoundingClientRect();
+          return { x: box.x, y: box.y, width: box.width, height: box.height };
+        }),
+      );
+      for (let i = 0; i < boxes.length; i++) {
+        const box = boxes[i]!;
+        expect(box.width).toBeGreaterThanOrEqual(44);
+        expect(box.height).toBeGreaterThanOrEqual(44);
+        expect(box.x).toBeCloseTo(boxes[0]!.x, 0);
+        if (i) expect(box.y).toBeGreaterThanOrEqual(boxes[i - 1]!.y + boxes[i - 1]!.height);
+      }
+      if (viewport.width > viewport.height) {
+        // A notch can move the controls lower than ordinary desktop emulation's zero safe-area inset.
+        await root.locator(".of-reader-head").evaluate((element: HTMLElement) => {
+          element.style.paddingTop = "47px";
+        });
+        const menu = await secondary.evaluate((element) => ({
+          height: element.clientHeight,
+          content: element.scrollHeight,
+        }));
+        expect(menu.content).toBeGreaterThan(menu.height);
+      }
+      // A short landscape menu scrolls: every action remains reachable without moving the whole stage.
+      for (const tool of await tools.all()) {
+        await tool.scrollIntoViewIfNeeded();
+        const box = (await tool.boundingBox())!;
+        expect(box.y).toBeGreaterThanOrEqual(0);
+        expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+        const center = await centeredIcon(tool);
+        expect.soft(Math.abs(center - moreCenter), "secondary button directly below More").toBeLessThanOrEqual(1);
+      }
+      await tools.first().scrollIntoViewIfNeeded();
+      if (viewport.width > viewport.height) {
+        await page.screenshot({ path: testInfo.outputPath("mobile-landscape-safe-area-controls.png") });
+        await root.locator(".of-reader-head").evaluate((element: HTMLElement) => {
+          element.style.removeProperty("padding-top");
+        });
+      }
+      expect(await secondary.getByRole("button", { name: /^Rewrite this scene/u }).innerText()).toBe("");
+      expect(await secondary.getByRole("button", { name: "Ease off" }).innerText()).toBe("");
+      await page.screenshot({ path: testInfo.outputPath(`mobile-${viewport.width}-controls.png`) });
+      await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+      await expect(root).toHaveAttribute("data-look", "midnight");
+      await page.screenshot({ path: testInfo.outputPath(`mobile-${viewport.width}-controls-midnight.png`) });
+      await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
+      await expect(root).toHaveAttribute("data-look", "pearl");
+      await page.keyboard.press("Escape");
+      await expect(secondary).toBeHidden();
+      await expect(more).toBeFocused();
+      await expect(line(root)).toHaveText(originalLine);
+
+      await primary.getByRole("button", { name: /fullscreen/iu }).click();
+      await expect(line(root)).toHaveText(originalLine);
+      await primary.getByRole("button", { name: /fullscreen/iu }).click();
+      await expect(line(root)).toHaveText(originalLine);
+      await openTools();
+      const auto = secondary.getByRole("button", { name: "Auto", exact: true });
+      await auto.click();
+      await expect(auto).toHaveAttribute("aria-pressed", "true");
+      await auto.click();
+      await expect(auto).toHaveAttribute("aria-pressed", "false");
+      await expect(line(root)).toHaveText(originalLine);
+
+      // A disabled Skip, opening/closing a dialog and hiding/showing the box never act as a tap on the stage.
+      await openTools();
+      const skip = secondary.getByRole("button", { name: "Skip what you’ve read" });
+      await expect(skip).toHaveAttribute("aria-disabled", "true");
+      // aria-disabled keeps this button focusable; a physical tap still reaches its guarded click handler.
+      const skipBox = (await skip.boundingBox())!;
+      await page.touchscreen.tap(skipBox.x + skipBox.width / 2, skipBox.y + skipBox.height / 2);
+      await expect(line(root)).toHaveText(originalLine);
+      await openTools();
+      await secondary.getByRole("button", { name: "Backlog" }).click();
+      const backlog = page.getByRole("dialog", { name: "Backlog" });
+      await expect(backlog).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(backlog).toBeHidden();
+      await expect(more).toHaveAttribute("aria-expanded", "true");
+      await expect(line(root)).toHaveText(originalLine);
+      await openTools();
+      await secondary.getByRole("button", { name: "Ease off", exact: true }).click();
+      await page.getByRole("dialog", { name: "Ease off?" }).getByRole("button", { name: "Keep reading" }).click();
+      await expect(line(root)).toHaveText(originalLine);
+      await openTools();
+      await secondary.getByRole("button", { name: "Hide the text" }).click();
+      await root.getByRole("button", { name: "Show the text" }).click();
+      await expect(line(root)).toHaveText(originalLine);
+      await openTools();
+      // Exercise the exposed stage background rather than an overlapping reader control.
+      const stage = root.locator(".of-reader-stage");
+      const stageTap = await stage.evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        const reader = element.closest(".of-reader")!;
+        const top = Math.max(box.top, reader.querySelector(".of-reader-head")!.getBoundingClientRect().bottom);
+        const bottom = Math.min(box.bottom, reader.querySelector(".of-reader-bottom")!.getBoundingClientRect().top);
+        const position = { x: 20, y: (top + bottom) / 2 - box.top };
+        const scope = element.getRootNode() as Document | ShadowRoot;
+        const hit = scope.elementFromPoint(box.left + position.x, box.top + position.y);
+        return { position, exposedHeight: bottom - top, hitStage: hit?.closest(".of-reader-stage") === element };
+      });
+      expect(stageTap.exposedHeight, "space remains between the header and dialogue panel").toBeGreaterThan(0);
+      expect(stageTap.hitStage, "the outside-dismiss tap targets exposed stage content").toBe(true);
+      await stage.click({ position: stageTap.position });
+      await expect(more).toHaveAttribute("aria-expanded", "false");
+      await expect(line(root)).toHaveText(originalLine);
+
+      // The full cut-out continues behind the dialogue, with only its upper body exposed above the box.
+      const image = root.locator('.of-face-img[data-front="true"][data-cut="true"]');
+      await expect(image).toBeVisible();
+      const sprite = (await image.boundingBox())!;
+      const dialogue = (await root.locator(".of-dialogue").boundingBox())!;
+      expect(sprite.y).toBeLessThan(dialogue.y);
+      expect(sprite.y + sprite.height).toBeGreaterThan(dialogue.y + 40);
+      expect((dialogue.y - sprite.y) / sprite.height).toBeLessThan(0.8);
+      // The SVG's marked head (y=32..120) stays visible; its boots (y=600+) are behind the dialogue.
+      await expect(image).toHaveCSS("object-fit", "cover");
+      const scale = Math.max(sprite.width / 360, sprite.height / 800);
+      expect(sprite.y + 120 * scale).toBeLessThan(dialogue.y);
+      expect(sprite.y + 600 * scale).toBeGreaterThan(dialogue.y);
+      await page.screenshot({ path: testInfo.outputPath(`mobile-${viewport.width}-sprite.png`) });
+      expect(pageErrors).toEqual([]);
+    });
+  }
+
+  test("the first outside tap closes the controls before a pending choice can be selected", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const calls: Call[] = [];
+    const fixture = createSceneStub({ images: false, audio: false });
+    fixture.beat0.choices = [
+      {
+        id: "choice-mobile",
+        kind: "small",
+        at: 1,
+        options: [
+          {
+            id: "option-stay",
+            text: "Stay with him.",
+            selection: { kind: "action", text: "You stay by the door." },
+            segments: [seg("Ilvar", "A sensible decision.")],
+          },
+        ],
+      },
+    ];
+    await stubRoutes(
+      page,
+      (call) => {
+        if (call.path.endsWith("/choose")) {
+          fixture.beat0.choiceCanon[call.body!.choice] = call.body!.option;
+          return { status: 200, json: { beat: fixture.beat0, remembered: false, rememberedBy: [] } };
+        }
+        return fixture.answer(call);
+      },
+      calls,
+    );
+    const root = await openStory(page);
+    await root.getByRole("button", { name: "Continue" }).first().click();
+    await next(root);
+    const choice = root.getByRole("group", { name: "What do you do?" });
+    const stay = choice.getByRole("button", { name: "Stay with him." });
+    await expect(stay).toBeVisible();
+    const more = root.getByRole("button", { name: "More reader controls" });
+    await more.click();
+    await expect(more).toHaveAttribute("aria-expanded", "true");
+    // Tab can reach a choice outside the header: Escape still owns the open disclosure, without selecting anything.
+    await stay.focus();
+    await page.keyboard.press("Escape");
+    await expect(more).toHaveAttribute("aria-expanded", "false");
+    await expect(more).toBeFocused();
+    expect(posts(calls, "/choose")).toHaveLength(0);
+    await more.click();
+    await stay.click();
+    await expect(more).toHaveAttribute("aria-expanded", "false");
+    await expect(stay).toBeVisible();
+    expect(posts(calls, "/choose")).toHaveLength(0);
+    await expect(line(root)).toContainText("You came back. How inefficient of you.");
+    await stay.click();
+    await expect(line(root)).toContainText("You stay by the door.");
+    expect(posts(calls, "/choose")).toHaveLength(1);
+  });
+
+  test("mute silences music and aborts the current voice without advancing", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.addInitScript(() => {
+      const gains: Array<{ value: number; connected: boolean }> = [];
+      (window as any).__readerGains = gains;
+      const create = AudioContext.prototype.createGain;
+      AudioContext.prototype.createGain = function (this: AudioContext) {
+        const node = create.call(this);
+        const state = { value: node.gain.value, connected: false };
+        gains.push(state);
+        const connect = node.connect.bind(node) as (...args: any[]) => any;
+        node.connect = ((...args: any[]) => {
+          state.connected = true;
+          return connect(...args);
+        }) as typeof node.connect;
+        const disconnect = node.disconnect.bind(node) as (...args: any[]) => void;
+        node.disconnect = ((...args: any[]) => {
+          state.connected = false;
+          return disconnect(...args);
+        }) as typeof node.disconnect;
+        const set = node.gain.setValueAtTime.bind(node.gain);
+        node.gain.setValueAtTime = (value: number, time: number) => {
+          state.value = value;
+          return set(value, time);
+        };
+        return node;
+      };
+    });
+    const calls: Call[] = [];
+    const { answer } = createSceneStub({ images: false, audio: { generate: false } });
+    await stubRoutes(page, answer, calls);
+    const root = await openStory(page);
+    await page.evaluate(() => {
+      const service = (globalThis as any).__MARINARA_HOST__.services.tts.ttsService;
+      const speak = service.speakSequence.bind(service);
+      (window as any).__readerVoiceAborted = 0;
+      service.speakSequence = (requests: any[], id: string, options: any) => {
+        options.signal.addEventListener("abort", () => ((window as any).__readerVoiceAborted += 1), { once: true });
+        return speak(requests, id, options);
+      };
+    });
+    // Hold the real voice fetch so a completed 0.1-second fixture clip cannot race the mute tap.
+    let release!: () => void;
+    const heldVoice = new Promise<void>((resolveHeld) => (release = resolveHeld));
+    await page.route("**/api/tts/speak", async (route) => {
+      await heldVoice;
+      await route.fallback();
+    });
+    try {
+      await root.getByRole("button", { name: "Continue" }).first().click();
+      await next(root);
+      await expect(line(root)).toContainText("You came back. How inefficient of you.");
+      const originalLine = (await line(root).textContent())!;
+      // A stopped crossfade disconnects its gain; its historical value no longer contributes any audio.
+      const gains = () =>
+        page.evaluate(
+          () =>
+            (window as any).__readerGains
+              .filter((gain: { connected: boolean }) => gain.connected)
+              .map((gain: { value: number }) => gain.value) as number[],
+        );
+      const voiceState = () =>
+        page.evaluate(() => (globalThis as any).__MARINARA_HOST__.services.tts.ttsService.getState() as string);
+      await expect.poll(voiceState).toBe("loading");
+      await expect.poll(async () => (await gains()).some((value) => value > 0)).toBe(true);
+      await root.locator(".of-reader-primary").getByRole("button", { name: "Mute audio" }).click();
+      await expect(root.getByRole("button", { name: "Unmute audio", exact: true })).toBeVisible();
+      await expect.poll(() => page.evaluate(() => (window as any).__readerVoiceAborted as number)).toBe(1);
+      await expect.poll(voiceState).toBe("idle");
+      expect((await gains()).length).toBeGreaterThan(0);
+      await expect.poll(async () => (await gains()).every((value) => value === 0)).toBe(true);
+      await expect(line(root)).toHaveText(originalLine);
+      await root.getByRole("button", { name: "Unmute audio", exact: true }).click();
+      await expect.poll(async () => (await gains()).some((value) => value > 0)).toBe(true);
+      await expect(line(root)).toHaveText(originalLine);
+    } finally {
+      release();
+    }
+  });
+});
+
+test.describe("Otome Forge reader desktop", () => {
+  test.use({ hasTouch: false, isMobile: false, viewport: { width: 1280, height: 900 } });
+
+  test("a hidden mobile disclosure does not consume the next desktop story action", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const calls: Call[] = [];
+    const { answer } = readerCutoutStub();
+    await stubRoutes(page, answer, calls);
+    const root = await openStory(page);
+    await root.getByRole("button", { name: "Continue" }).first().click();
+    await next(root);
+    await expect(line(root)).toContainText("You came back. How inefficient of you.");
+    const more = root.getByRole("button", { name: "More reader controls" });
+    await more.click();
+    await expect(more).toHaveAttribute("aria-expanded", "true");
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await expect(more).toBeHidden();
+    await next(root);
+    await expect(line(root)).toContainText("I should have stayed away.");
+  });
+
+  test("keeps the existing controls and full cut-out framing", async ({ page }, testInfo) => {
+    test.setTimeout(120_000);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const calls: Call[] = [];
+    const { answer } = readerCutoutStub();
+    await stubRoutes(page, answer, calls);
+    const root = await openStory(page);
+    await root.getByRole("button", { name: "Continue" }).first().click();
+    await next(root);
+    await expect(root.getByRole("button", { name: "More reader controls" })).toBeHidden();
+    await expect(root.getByRole("button", { name: "Auto", exact: true })).toBeVisible();
+    await expect(root.getByRole("button", { name: "Skip what you’ve read" })).toBeVisible();
+    await expect(root.getByRole("button", { name: "Backlog" })).toBeVisible();
+    await expect(root.getByRole("button", { name: "Hide the text" })).toBeVisible();
+    await expect(root.getByRole("button", { name: /^Rewrite this scene/u })).toHaveText("Rewrite");
+    await expect(root.getByRole("button", { name: "Ease off", exact: true })).toHaveText("Ease off");
+    const sprite = (await root.locator('.of-face-img[data-front="true"]').boundingBox())!;
+    const dialogue = (await root.locator(".of-dialogue").boundingBox())!;
+    expect(sprite.y + sprite.height).toBeLessThanOrEqual(dialogue.y);
+    await page.screenshot({ path: testInfo.outputPath("desktop-reader.png") });
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+    await expect(root).toHaveAttribute("data-look", "midnight");
+    await page.screenshot({ path: testInfo.outputPath("desktop-reader-midnight.png") });
+  });
+});
+
 test("Otome Forge reader: a CG unlocks once seen, faces swap, lines are voiced, music plays, and a Confrontation plays to its ending", async ({
   page,
 }, testInfo) => {
   test.setTimeout(180_000);
   const calls: Call[] = [];
-  const { answer } = createSceneStub();
+  const { answer, stub } = createSceneStub();
+  // This positive presentation fixture represents faces whose cleanup is already complete.
+  stub.view.lis[0].cut = [FACE_COLD, FACE_TENDER, FACE_ANGRY, FACE_HURT];
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await stubRoutes(page, answer, calls);
@@ -984,6 +2268,7 @@ test("Otome Forge reader: a CG unlocks once seen, faces swap, lines are voiced, 
   // Her thought is silent; the backlog replays his line with its cache key.
   await next(root);
   await expect(root.locator(".of-line--thought")).toContainText("I should have stayed away.");
+  await setReaderControlsExpanded(root);
   await root.getByRole("button", { name: "Backlog" }).click();
   const backlog = page.getByRole("dialog", { name: "Backlog" });
   await expect(backlog.getByRole("button", { name: /Play .*line/u })).toHaveCount(1);
@@ -1146,13 +2431,22 @@ test("Otome Forge reader: a reviewed key-image prompt stops Auto and paints the 
   await expect(line(root)).toContainText("Stay, then.");
 
   // The review is a dialog, so it stops Auto as the Backlog does: the line waits while the prompt is read.
+  await setReaderControlsExpanded(root);
   const auto = root.getByRole("button", { name: "Auto", exact: true });
   await auto.click();
   await expect(auto).toHaveAttribute("aria-pressed", "true");
+  await setReaderControlsExpanded(root, false);
   await root.getByRole("button", { name: "Paint this moment" }).click();
   const review = page.getByRole("dialog", { name: "Paint: A moment to keep" });
   await expect(review).toBeVisible();
-  await expect(auto).toHaveAttribute("aria-pressed", "false");
+  // Both responsive copies reflect the same stopped Auto state, including the now-collapsed phone disclosure.
+  await expect
+    .poll(() =>
+      root
+        .locator('button[aria-label="Auto"]')
+        .evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-pressed"))),
+    )
+    .toEqual(["false", "false"]);
   // Longer than Auto's pause on this line (lib/reader-state.ts autoDelay: 1.6 s and 48 ms a character).
   await page.waitForTimeout(3_600);
   await expect(line(root)).toContainText("Stay, then.");
@@ -1308,4 +2602,582 @@ test("Otome Forge audio: a recorded track the Engine no longer lists is made aga
     .toBe(true);
   expect(calls.filter((call) => call.path.endsWith("/gone.mp3"))).toEqual([]);
   expect(pageErrors).toEqual([]);
+});
+
+/** Two stored chapters with their own track records; every provider request remains stubbed. */
+function chapterMusicFixture(audio: Json = {}) {
+  const fixture = createSceneStub({
+    images: false,
+    audio: { tts: false, generate: true, chapterThemes: true, ...audio },
+  });
+  const tracks = new Map<string, Json>();
+  const music = new Map<string, Json>();
+  const answer = (call: Call): Answer | undefined => {
+    if (call.path.endsWith("/audio/brief") && call.body?.chapterKey)
+      return {
+        status: 200,
+        json: { prompt: `A distinctive instrumental clockwork theme for ${call.body.chapterKey}.` },
+      };
+    if (call.path.endsWith("/audio/track")) {
+      const { chapterKey, timeZone: _zone, debugMode: _debug, ...track } = call.body!;
+      tracks.set(track.tag, track);
+      if (chapterKey) {
+        if (!music.has(chapterKey)) music.set(chapterKey, track);
+        return { status: 200, json: { track: music.get(chapterKey) } };
+      }
+    }
+    const reply = fixture.answer({ ...call, path: call.path.replace("/chapters/main-2", "/chapters/main-1") });
+    if (call.path === "/api/game-assets/manifest" && reply?.json) {
+      const data = reply.json as Json;
+      for (const track of tracks.values()) data.assets[track.tag] = { path: track.path };
+    }
+    if (call.path.endsWith("/story") && reply?.json) {
+      const data = reply.json as Json;
+      data.chapters.push({ ...data.chapters[0], key: "main-2", title: "The Second Hour", state: "in-progress" });
+    }
+    const key = /\/chapters\/(main-[12])(?:\/|$)/u.exec(call.path)?.[1];
+    if (key && reply?.json) {
+      const data = reply.json as Json;
+      if (data.chapter)
+        data.chapter = {
+          ...data.chapter,
+          key,
+          tags: ["threats"],
+          title: key === "main-1" ? "The Observation Room" : "The Second Hour",
+          ...(music.has(key) ? { music: { track: music.get(key) } } : {}),
+        };
+      if (data.beat) data.beat = { ...data.beat, key };
+    }
+    return reply;
+  };
+  return { ...fixture, answer, music };
+}
+
+const musicEvents = (page: Page) => page.evaluate(() => [...(globalThis as any).__otomeMusicEvents] as string[]);
+const chapterGenerations = (calls: Call[]) =>
+  posts(calls, "/api/audio/generate").filter((call) => call.body?.context?.key.includes("-chapter-"));
+
+test("Otome Hearth chapter music is optional, saved, starts after Begin and reuses its theme on replay", async ({
+  page,
+}, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const fixture = chapterMusicFixture({ generate: false, chapterThemes: false });
+  await stubRoutes(page, fixture.answer, calls);
+  let root = await openStory(page, { recordMusic: true });
+  await root.getByRole("button", { name: "Settings" }).click();
+  await root.getByRole("tab", { name: "Audio" }).click();
+  const option = root.getByRole("switch", { name: "Generate a theme for each chapter" });
+  await expect(option).toHaveCount(0);
+  await root.getByRole("switch", { name: "Generate music", exact: true }).check();
+  await expect(option).not.toBeChecked();
+  await option.check();
+  expect(chapterGenerations(calls)).toHaveLength(0);
+  await page.screenshot({ path: testInfo.outputPath("chapter-music-settings.png") });
+  await root.getByRole("button", { name: "Save changes" }).click();
+  await expect(root.getByRole("status").filter({ hasText: "Saved." })).toBeVisible();
+  await root.locator(".of-topbar").getByRole("button", { name: "Back", exact: true }).click();
+  await expect.poll(() => posts(calls, "/audio/track").filter((call) => call.body?.cue === "home").length).toBe(1);
+  await root.getByRole("button", { name: "Continue: The Observation Room", exact: true }).click();
+  await expect(root.getByRole("heading", { name: "Before you begin" })).toBeVisible();
+  expect(calls.filter((call) => call.body?.chapterKey && call.path.endsWith("/audio/brief"))).toHaveLength(0);
+  await root.getByRole("button", { name: "Begin" }).click();
+  await expect.poll(() => fixture.music.has("main-1")).toBe(true);
+  await expect.poll(async () => (await musicEvents(page)).at(-1)).toContain("-chapter-main-1:");
+  await next(root);
+  await next(root);
+  expect(chapterGenerations(calls)).toHaveLength(1);
+  await root.getByRole("button", { name: "Leave the chapter" }).click();
+  await root.getByRole("button", { name: "Continue: The Second Hour", exact: true }).click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  await expect.poll(() => fixture.music.has("main-2")).toBe(true);
+  expect(chapterGenerations(calls)).toHaveLength(2);
+  expect(fixture.music.get("main-1")!.tag).not.toBe(fixture.music.get("main-2")!.tag);
+
+  root = await openStory(page, { recordMusic: true });
+  await root.getByRole("button", { name: "Continue: The Observation Room", exact: true }).click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  await expect.poll(async () => (await musicEvents(page)).at(-1)).toContain("-chapter-main-1:");
+  expect(chapterGenerations(calls)).toHaveLength(2);
+});
+
+test("Otome Hearth keeps current music on chapter generation failure without retrying on another line", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const fixture = chapterMusicFixture();
+  await stubRoutes(
+    page,
+    (call) =>
+      call.path === "/api/audio/generate" && call.body?.context?.key.includes("-chapter-")
+        ? { status: 502, json: { error: "Fixture chapter generation failed" } }
+        : fixture.answer(call),
+    calls,
+  );
+  const root = await openStory(page, { recordMusic: true });
+  await expect.poll(async () => (await musicEvents(page)).at(-1)).toContain("-home:");
+  await root.getByRole("button", { name: "Continue: The Observation Room", exact: true }).click();
+  const before = await musicEvents(page);
+  await root.getByRole("button", { name: "Begin" }).click();
+  await expect(root).toContainText("Chapter music couldn’t be generated.");
+  await next(root);
+  await next(root);
+  expect(chapterGenerations(calls)).toHaveLength(1);
+  expect(await musicEvents(page)).toEqual(before);
+});
+
+test("Otome Hearth keeps current music when a saved chapter theme is missing without paying again on replay or reload", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const fixture = chapterMusicFixture();
+  fixture.music.set("main-1", {
+    cue: "chapter-main-1",
+    connectionId: "conn-audio",
+    tag: "music:contexts:otome-forge:world-0-chapter-main-1:gone",
+    path: "music/contexts/otome-forge/world-0-chapter-main-1/gone.mp3",
+  });
+  await stubRoutes(page, fixture.answer, calls);
+  for (let visit = 0; visit < 2; visit += 1) {
+    const root = await openStory(page, { recordMusic: true });
+    await expect.poll(async () => (await musicEvents(page)).at(-1)).toContain("-home:");
+    await root.getByRole("button", { name: "Continue: The Observation Room", exact: true }).click();
+    const before = await musicEvents(page);
+    await root.getByRole("button", { name: "Begin" }).click();
+    await expect(root).toContainText("The saved chapter theme isn’t available. Any current music keeps playing.");
+    if (visit === 0) {
+      await next(root);
+      await next(root);
+    }
+    expect(chapterGenerations(calls)).toHaveLength(0);
+    expect(calls.filter((call) => call.path.endsWith("/audio/brief") && call.body?.chapterKey)).toHaveLength(0);
+    expect(await musicEvents(page)).toEqual(before);
+    await root.getByRole("button", { name: "Leave the chapter" }).click();
+    await root.getByRole("button", { name: "Continue: The Observation Room", exact: true }).click();
+    await root.getByRole("button", { name: "Begin" }).click();
+    await expect(line(root)).toContainText("I should have stayed away. I didn’t.");
+    expect(chapterGenerations(calls)).toHaveLength(0);
+    expect(calls.filter((call) => call.path.endsWith("/audio/brief") && call.body?.chapterKey)).toHaveLength(0);
+  }
+  expect(calls.filter((call) => call.path.endsWith("/gone.mp3"))).toHaveLength(0);
+});
+
+test("Otome Hearth keeps the server's first chapter theme fresh when the chapter cue returns", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const fixture = chapterMusicFixture();
+  await stubRoutes(
+    page,
+    (call) => {
+      const reply = fixture.answer(call);
+      if (call.path.endsWith("/audio/track") && call.body?.chapterKey && reply?.json) {
+        const { timeZone: _zone, debugMode: _debug, chapterKey, ...track } = call.body;
+        const kept = {
+          ...track,
+          tag: track.tag.replace(/:[^:]+$/u, ":other-first"),
+          path: track.path.replace(/[^/]+$/u, "other-first.mp3"),
+        };
+        fixture.music.set(chapterKey, kept);
+        reply.json = { track: kept };
+      }
+      return reply;
+    },
+    calls,
+  );
+  const root = await openStory(page, { recordMusic: true });
+  await expect.poll(async () => (await musicEvents(page)).at(-1)).toContain("-home:");
+  await root.getByRole("button", { name: "Continue: The Observation Room", exact: true }).click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  await expect.poll(async () => (await musicEvents(page)).at(-1)).toContain(":other-first");
+  await next(root);
+  await next(root);
+  await expect(root).not.toContainText("The saved chapter theme isn’t available.");
+  await root.getByRole("button", { name: "Leave the chapter" }).click();
+  await expect.poll(async () => (await musicEvents(page)).at(-1)).toContain("-home:");
+  await root.getByRole("button", { name: "Continue: The Observation Room", exact: true }).click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  await expect.poll(async () => (await musicEvents(page)).at(-1)).toContain(":other-first");
+  await expect(root).not.toContainText("The saved chapter theme isn’t available.");
+  expect(chapterGenerations(calls)).toHaveLength(1);
+  expect(calls.filter((call) => call.path.endsWith("/audio/brief") && call.body?.chapterKey)).toHaveLength(1);
+});
+
+test("Otome Hearth saves a late chapter theme without playing it over the next chapter", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const fixture = chapterMusicFixture();
+  await stubRoutes(page, fixture.answer, calls);
+  let release!: () => void;
+  const gate = new Promise<void>((done) => {
+    release = done;
+  });
+  await page.route("**/api/audio/generate", async (route) => {
+    if (route.request().postDataJSON().context.key.endsWith("-chapter-main-1")) await gate;
+    await route.fallback();
+  });
+  const root = await openStory(page, { recordMusic: true });
+  await expect.poll(async () => (await musicEvents(page)).at(-1)).toContain("-home:");
+  await root.getByRole("button", { name: "Continue: The Observation Room", exact: true }).click();
+  const before = await musicEvents(page);
+  const started = page.waitForRequest(
+    (request) =>
+      request.url().endsWith("/api/audio/generate") && request.postDataJSON().context.key.endsWith("-chapter-main-1"),
+  );
+  await root.getByRole("button", { name: "Begin" }).click();
+  await started;
+  expect(await musicEvents(page)).toEqual(before);
+  await root.getByRole("button", { name: "Leave the chapter" }).click();
+  await root.getByRole("button", { name: "Continue: The Second Hour", exact: true }).click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  await expect.poll(async () => (await musicEvents(page)).at(-1)).toContain("-chapter-main-2:");
+  const second = await musicEvents(page);
+  release();
+  await expect.poll(() => fixture.music.has("main-1")).toBe(true);
+  await expect(line(root)).toContainText("Rain needles the glass dome.");
+  expect(await musicEvents(page)).toEqual(second);
+  expect(chapterGenerations(calls)).toHaveLength(2);
+});
+
+test("Otome Hearth card link: a generated LI keeps their story and art while an explicit card supplies their current voice", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(150_000);
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
+  const name = "Maukie Escher";
+  const cardId = "card-maukie-escher";
+  const calls: Call[] = [];
+  const fixture = createSceneStub({ images: false, audio: { generate: false } });
+  const li = fixture.stub.view.lis[0];
+  Object.assign(li, { name, source: "archetype", portrait: FACE_COLD, expressions: {} });
+  delete li.cardId;
+  fixture.stub.view.lis[1].cardId = "card-cassian";
+  const bible = normalizeBible({ age: 29, pronouns: HE, publicFace: "The generated story still belongs to Maukie." })!;
+  const note = {
+    li: ILVAR,
+    dayKey: "2026-10-29",
+    text: "The light is still on. Come inside.",
+    face: "",
+    mood: { word: "Fond", reason: "You came back" },
+    curt: false,
+    at: written.at,
+  };
+  const home = {
+    li: ILVAR,
+    show: "him",
+    note,
+    look: { url: FACE_COLD, source: "look", cutoutState: "uncut" },
+    faces: {},
+    backdrop: null,
+    lines: { ready: false },
+    rupture: false,
+    unread: 0,
+    noticed: null,
+    noticing: false,
+  };
+  let cards: Json[] = [];
+  let revision = 0;
+  const configReadAt: number[] = [];
+  const cardPath = `/api/otome-forge/runs/${RUN}/lis/${ILVAR}/card`;
+  await stubRoutes(
+    page,
+    (call) => {
+      if (call.path === cardPath && call.method === "POST") {
+        revision += 1;
+        if (call.body!.cardId) li.cardId = call.body!.cardId;
+        else delete li.cardId;
+        return { status: 200, json: { cardId: li.cardId ?? null } };
+      }
+      if (call.path.endsWith(`/lis/${ILVAR}/bible`)) return { status: 200, json: { bible } };
+      if (call.path.endsWith("/home")) return { status: 200, json: home };
+      if (call.path.endsWith(`/lis/${ILVAR}/lines`)) {
+        return {
+          status: 200,
+          json: {
+            ready: false,
+            stage: li.stage,
+            rupture: false,
+            tap: null,
+            annoyed: [],
+            cold: [],
+            comfort: [],
+            claw: null,
+          },
+        };
+      }
+      if (call.path === "/api/tts/config") {
+        configReadAt.push(Date.now());
+        return {
+          status: 200,
+          json: {
+            enabled: true,
+            connectionId: "conn-tts",
+            connectionProfiles: {
+              "conn-tts": {
+                voiceAssignments: li.cardId ? [{ characterId: cardId, voice: "Maukie card voice" }] : [],
+                npcDefaultMaleVoices: [revision ? "Unlinked pool voice" : "Original pool voice"],
+                npcDefaultFemaleVoices: ["Pool Female"],
+              },
+            },
+          },
+        };
+      }
+      return fixture.answer(call);
+    },
+    calls,
+  );
+  await page.route("**/api/characters/catalog?*", (route) => route.fulfill({ json: { items: cards, hasMore: false } }));
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  const root = await openOtome(page);
+  await recordSpeech(page);
+  const configReads = () => calls.filter((call) => call.path === "/api/tts/config").length;
+  const playNote = async (voice: string, expectedCard: string | null, fromBible = false) => {
+    if (fromBible) {
+      await expect(root.getByRole("heading", { name: `${name}’s bible` })).toBeVisible();
+      await root.locator(".of-topbar").getByRole("button", { name: "Back", exact: true }).click();
+      await expect(root.getByRole("heading", { name: "Your story is ready", exact: true })).toBeVisible();
+      await root.locator(".of-topbar").getByRole("button", { name: "Back", exact: true }).click();
+    }
+    await root.getByRole("button", { name: `Home with ${name}`, exact: true }).click();
+    await expect(root.getByRole("heading", { name, exact: true })).toBeVisible();
+    const count = (await spoken(page)).length;
+    // The host also reads its own config on startup; isolate this note action's Otome fetch.
+    const configsBefore = configReads();
+    await root.getByRole("button", { name: `Hear ${name} read the note` }).click();
+    await expect.poll(async () => (await spoken(page)).length).toBe(count + 1);
+    expect(configReads()).toBe(configsBefore + 1);
+    const request = (await spoken(page))[count]!.requests[0]!;
+    expect(request).toMatchObject({ speaker: name, text: note.text, voice });
+    expect(request.characterId ?? null).toBe(expectedCard);
+    await expect
+      .poll(() => page.evaluate(() => (globalThis as any).__MARINARA_HOST__.services.tts.ttsService.getState()))
+      .toBe("idle");
+    return configReadAt.at(-1)!;
+  };
+  const openLink = async () => {
+    await root.getByRole("button", { name: "Who’s home" }).click();
+    const picker = page.getByRole("dialog", { name: "Who’s home" });
+    await expect(picker.getByText("Affection 2", { exact: true })).toBeVisible();
+    await picker.getByRole("button", { name: "Your cast" }).click();
+    await root.getByRole("button", { name: `Open ${name}’s bible (spoilers)` }).click();
+    await expect(root.getByRole("heading", { name: `${name}’s bible` })).toBeVisible();
+    await expect(root.locator(".of-page-head .of-avatar img")).toHaveAttribute("src", FACE_COLD);
+    return root.getByRole("form", { name: "Character card", exact: true });
+  };
+
+  // A same-name card cannot silently attach itself: the generated LI starts with its own pool voice and no link.
+  const originalConfigAt = await playNote("Original pool voice", null);
+  let form = await openLink();
+  const select = form.getByRole("combobox", { name: "Character card", exact: true });
+  await expect(select).toHaveValue("");
+  await expect(root.getByRole("button", { name: "Show spoilers" })).toBeVisible();
+  cards = [
+    { id: cardId, name, avatarPath: "/api/avatars/file/maukie.png" },
+    { id: "card-cassian", name: "Cassian card", avatarPath: null },
+  ];
+  await form.getByRole("button", { name: "Refresh cards" }).click();
+  await expect(select.getByRole("option", { name, exact: true })).toHaveCount(1);
+  await expect(select.getByRole("option", { name: "Cassian card", exact: true })).toBeDisabled();
+  await select.selectOption(cardId);
+  await form.getByRole("button", { name: "Save card link" }).click();
+  await expect(form.getByRole("status")).toHaveText("Saved.");
+  expect(posts(calls, "/card").map((call) => call.body!.cardId)).toEqual([cardId]);
+  await page.screenshot({ path: testInfo.outputPath("card-link-saved.png") });
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+  await expect(root).toHaveAttribute("data-look", "midnight");
+  await page.screenshot({ path: testInfo.outputPath("card-link-saved-midnight.png") });
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
+  await expect(root).toHaveAttribute("data-look", "pearl");
+
+  // The same controller has a cached config from the unlinked voice: linking must fetch the new assignment now.
+  const linkedConfigAt = await playNote("Maukie card voice", cardId, true);
+  expect(
+    linkedConfigAt - originalConfigAt,
+    "the previous config is still inside its 30-second cache window",
+  ).toBeLessThan(30_000);
+  expect(posts(calls, "/api/tts/speak").some((call) => call.body?.voice === "Maukie card voice")).toBe(true);
+  await page.reload();
+  await page.getByRole("tab", { name: "Open Otome Hearth" }).click();
+  await expect(root.getByRole("heading", { name, exact: true })).toBeVisible();
+  await recordSpeech(page);
+  form = await openLink();
+  await expect(form.getByRole("combobox", { name: "Character card" })).toHaveValue(cardId);
+  // Removing a library card does not silently reassign or unlink this LI when the catalogue is refreshed.
+  const available = cards;
+  cards = [];
+  await form.getByRole("button", { name: "Refresh cards" }).click();
+  await expect(form.getByRole("option", { name: "Linked card unavailable" })).toHaveCount(1);
+  await expect(form.getByRole("combobox", { name: "Character card" })).toHaveValue(cardId);
+  cards = available;
+  await form.getByRole("button", { name: "Refresh cards" }).click();
+  await expect(form.getByRole("option", { name, exact: true })).toHaveCount(1);
+  await root.getByRole("button", { name: "Show spoilers" }).click();
+  await expect(root.getByText(bible.publicFace, { exact: true })).toBeVisible();
+  await expect(root.getByText("Card canon wins.", { exact: true })).toHaveCount(0);
+  const reloadedLinkedConfigAt = await playNote("Maukie card voice", cardId, true);
+  form = await openLink();
+  await form.getByRole("combobox", { name: "Character card" }).selectOption("");
+  await form.getByRole("button", { name: "Save card link" }).click();
+  await expect(form.getByRole("status")).toHaveText("Saved.");
+  await expect(form.getByRole("combobox", { name: "Character card" })).toHaveValue("");
+  const unlinkedConfigAt = await playNote("Unlinked pool voice", null, true);
+  expect(unlinkedConfigAt - reloadedLinkedConfigAt, "unlink refreshes the still-cached linked config").toBeLessThan(
+    30_000,
+  );
+  form = await openLink();
+  await expect(form.getByRole("combobox", { name: "Character card" })).toHaveValue("");
+  await root.getByRole("button", { name: "Show spoilers" }).click();
+  await expect(root.getByText(bible.publicFace, { exact: true })).toBeVisible();
+  await expect(root.getByText("Card canon wins.", { exact: true })).toHaveCount(0);
+  expect(posts(calls, "/card").map((call) => call.body!.cardId)).toEqual([cardId, null]);
+  for (const call of posts(calls, "/card")) {
+    expect(Object.keys(call.body!).sort()).toEqual(["cardId", "debugMode", "timeZone"]);
+    expect(call.path).toBe(cardPath);
+  }
+  expect(
+    calls.filter(
+      (call) =>
+        call.method === "POST" &&
+        call.path.startsWith("/api/otome-forge/") &&
+        !call.path.endsWith("/index/opened") &&
+        call.path !== cardPath,
+    ),
+  ).toEqual([]);
+  expect(posts(calls, "/api/audio/generate")).toEqual([]);
+  expect(pageErrors).toEqual([]);
+});
+
+// Check bounds before clicking: Playwright otherwise scrolls clipped horizontal tabs into view for the test.
+test("Otome Hearth Settings fills its frame and exposes every tab on desktop and phone", async ({
+  page,
+  isMobile,
+}, testInfo) => {
+  const sizes = isMobile
+    ? [
+        { width: 390, height: 844 },
+        { width: 844, height: 390 },
+      ]
+    : [
+        { width: 1280, height: 720 },
+        { width: 961, height: 640 },
+      ];
+  await page.setViewportSize(sizes[0]!);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const { answer } = createSceneStub({ images: false, audio: false });
+  await stubRoutes(page, answer, calls);
+  const root = await openStory(page);
+  const fullscreen = root.getByRole("button", { name: /fullscreen/iu });
+  const initialFullscreen = await fullscreen.getAttribute("aria-label");
+  await root.getByRole("button", { name: "Settings", exact: true }).click();
+  const settings = root.locator(".of-settings");
+  const tabs = settings.getByRole("tablist");
+  const names = ["Look", "Content", "Connections", "Images", "Audio", "Tracker", "Privacy & data", "Debug"];
+  for (const [index, size] of sizes.entries()) {
+    await page.setViewportSize(size);
+    await settings.evaluate((element) => element.scrollTo(0, 0));
+    await tabs.getByRole("tab", { name: "Look", exact: true }).click();
+    const look = index === 0 ? "Midnight" : "Pearl";
+    await settings.getByText(look, { exact: true }).click();
+    await expect(root).toHaveAttribute("data-look", look.toLowerCase());
+    const [frame, stage] = [
+      await root.locator(".of-frame").boundingBox(),
+      await root.locator(".of-stage").boundingBox(),
+    ];
+    expect(Math.abs(stage!.x - frame!.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(stage!.y - frame!.y)).toBeLessThanOrEqual(1);
+    expect(Math.abs(stage!.width - frame!.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(stage!.height - frame!.height)).toBeLessThanOrEqual(1);
+    const bounds = await tabs.evaluate((element) => {
+      const strip = element.getBoundingClientRect();
+      return {
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+        tabs: [...element.querySelectorAll('[role="tab"]')].map((tab) => {
+          const box = tab.getBoundingClientRect();
+          return { left: box.left - strip.left, right: box.right - strip.right };
+        }),
+      };
+    });
+    expect(bounds.scrollWidth).toBeLessThanOrEqual(bounds.clientWidth + 1);
+    expect(bounds.tabs).toHaveLength(names.length);
+    for (const tab of bounds.tabs) {
+      expect(tab.left).toBeGreaterThanOrEqual(-1);
+      expect(tab.right).toBeLessThanOrEqual(1);
+    }
+    for (const name of names) {
+      const tab = tabs.getByRole("tab", { name, exact: true });
+      await tab.click();
+      await expect(tab).toHaveAttribute("aria-selected", "true");
+      await expect(settings.getByRole("tabpanel")).toBeVisible();
+    }
+    await tabs.getByRole("tab", { name: "Debug", exact: true }).focus();
+    await page.keyboard.press("Home");
+    await expect(tabs.getByRole("tab", { name: "Look", exact: true })).toBeFocused();
+    await page.keyboard.press("End");
+    await expect(tabs.getByRole("tab", { name: "Debug", exact: true })).toBeFocused();
+    await expect(fullscreen).toHaveAttribute("aria-label", initialFullscreen!);
+    await page.screenshot({ path: testInfo.outputPath(`settings-${size.width}-${look.toLowerCase()}.png`) });
+  }
+  await root.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(root.getByRole("heading", { name: "Story", exact: true })).toBeVisible();
+  const [frame, stage] = [await root.locator(".of-frame").boundingBox(), await root.locator(".of-stage").boundingBox()];
+  expect(stage!.width).toBeLessThan(frame!.width);
+  await expect(fullscreen).toHaveAttribute("aria-label", initialFullscreen!);
+});
+
+test("Otome Hearth Settings scrolls to the last control on long pages", async ({ page, isMobile, browserName }) => {
+  // Enter from a normal Story height; only Settings is under test at the short viewport.
+  await page.setViewportSize({ width: isMobile ? 390 : 961, height: isMobile ? 844 : 640 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const { answer } = createSceneStub({ images: false, audio: false });
+  await stubRoutes(page, answer, calls);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Settings", exact: true }).click();
+  const settings = root.locator(".of-settings");
+  await expect(settings).toBeVisible();
+  await page.setViewportSize({ width: isMobile ? 390 : 961, height: 480 });
+  let scrolledPages = 0;
+  for (const name of ["Content", "Audio", "Privacy & data"]) {
+    await settings.getByRole("tab", { name, exact: true }).click();
+    await settings.evaluate((element) => element.scrollTo(0, 0));
+    const [frame, stage] = [
+      await root.locator(".of-frame").boundingBox(),
+      await root.locator(".of-stage").boundingBox(),
+    ];
+    expect(stage!.width).toBeLessThanOrEqual(frame!.width + 1);
+    expect(stage!.height).toBeLessThanOrEqual(frame!.height + 1);
+    const before = await settings.evaluate((element) => ({
+      height: element.clientHeight,
+      content: element.scrollHeight,
+    }));
+    const box = await settings.boundingBox();
+    if (before.content > before.height + 1) {
+      if (browserName === "webkit" && isMobile) {
+        // Mobile WebKit has no Playwright wheel API. This native CSSOM probe is not physical touch proof.
+        await settings.evaluate((element, distance) => element.scrollBy(0, distance), before.content);
+      } else {
+        await page.mouse.move(box!.x + 4, box!.y + box!.height / 2);
+        await page.mouse.wheel(0, before.content);
+      }
+      await expect.poll(() => settings.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+      await expect
+        .poll(() => settings.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+        .toBeLessThanOrEqual(1);
+      scrolledPages += 1;
+    }
+    const last = settings.getByRole("tabpanel").getByRole("button").last();
+    const control = await last.boundingBox();
+    expect(control!.y).toBeGreaterThanOrEqual(box!.y - 1);
+    expect(control!.y + control!.height).toBeLessThanOrEqual(box!.y + box!.height + 1);
+    await last.focus();
+    await expect(last).toBeFocused();
+    expect(await root.locator(".of-frame").evaluate((element) => element.scrollTop)).toBe(0);
+    expect(await root.locator(".of-stage").evaluate((element) => element.scrollTop)).toBe(0);
+  }
+  expect(scrolledPages).toBeGreaterThan(0);
+  expect(calls.filter((call) => call.method === "POST" && call.path.endsWith("/settings"))).toEqual([]);
 });

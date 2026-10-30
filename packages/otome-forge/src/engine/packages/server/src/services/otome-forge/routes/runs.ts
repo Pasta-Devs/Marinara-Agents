@@ -12,6 +12,7 @@
 // GET  /runs/:run/lis/:li/bible?spoilers=1 → {bible}
 // POST /runs/:run/lis/:li/bible {bible}    → {bible}
 // POST /runs/:run/lis/:li/accent {accent}  → {accent}
+// POST /runs/:run/lis/:li/card {cardId}    → {cardId}; null unlinks, keeping the same love interest
 //
 // The server never trusts the client with content. The gate is read from the index on each write: raising Heat or the
 // image rating, or picking Dark romance, needs it (403 `age-gate`), lowering never does, and every stored content goes
@@ -21,16 +22,19 @@ import { ARCHETYPE_IDS } from "../../../../../client/src/features/otome-forge/sh
 import {
   DEFAULT_IMAGE_RATING,
   IMAGE_RATINGS,
+  IMAGE_STYLE_MAX,
   contentNeedsAgeGate,
   enforceContent,
   imageRatingNeedsAgeGate,
   raisesGatedSetting,
 } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import { galleryRefIds } from "../art/image-client.js";
-import { imagesOf, paintView } from "../art/paint.js";
+import { imagesOf, paintView, updateIfChanged } from "../art/paint.js";
 import { withPlaceViews } from "../art/places.js";
+import { runForeground } from "../generation.js";
 import { OtomeForgeError, debugModeOf, liParam, parseBody, runParam, type RegisterRoutes } from "../http.js";
 import {
+  PROLOGUE_KEY,
   INDEX_ID,
   INDEX_TARGET,
   RUN_DOC_KINDS,
@@ -46,7 +50,15 @@ import {
 import { PronounsSchema, field } from "../schemas/common.js";
 import { normalizeIndex } from "../schemas/index.js";
 import { PLAYER_GOAL_MAX, PLAYER_TRAITS_MAX, normalizePlayer } from "../schemas/player.js";
-import { defaultLiState, normalizeState, readRun, toRunView, type RunDocuments } from "../schemas/state.js";
+import {
+  defaultLiState,
+  normalizeState,
+  readRun,
+  remapLearnedTells,
+  toRunView,
+  type RunDocuments,
+  stageArtUrls,
+} from "../schemas/state.js";
 import { ACCENT_PATTERN, BibleSchema, LI_NOTES_MAX, normalizeUnit } from "../schemas/unit.js";
 import {
   ConnectionsSchema,
@@ -59,8 +71,9 @@ import {
 } from "../schemas/world.js";
 import { checkBible } from "../setup/bible.js";
 import { initialForge, settleForge, startForge, withPaintSteps } from "../setup/forge.js";
-import { readCard, readPersona } from "../setup/prompts.js";
+import { personaStoryAbout, readCard, readPersona, withPersonaStoryAbout } from "../setup/prompts.js";
 import type { OtomeStore } from "../store.js";
+import { cutoutsPending, queueCutouts } from "../art/cutout.js";
 
 const NoFields = z.object({});
 const LIS_MIN = 2;
@@ -76,11 +89,17 @@ const SetupLiSchema = z.union([
     notes: z.string().max(LI_NOTES_MAX).optional(),
   }),
 ]);
+const ImageStyleSchema = z
+  .string()
+  .max(IMAGE_STYLE_MAX)
+  .transform((style) => style.trim());
 const SetupBody = z.object({
   setup: z.object({
     title: z.string().max(200).optional(),
     premise: z.string().max(2000),
     language: z.string().min(1).max(LANGUAGE_MAX),
+    // The player wrote it: no cap.
+    writingStyle: z.string().optional(),
     protagonist: z.object({
       personaId: z.string().min(1).max(ID_MAX),
       pronouns: PronounsSchema,
@@ -94,6 +113,7 @@ const SetupBody = z.object({
       rating: z.enum(IMAGE_RATINGS),
       ask: z.boolean(),
       expressions: z.boolean(),
+      style: ImageStyleSchema.optional(),
     }),
     connections: ConnectionsSchema,
   }),
@@ -109,13 +129,16 @@ const SettingsBody = z.object({
       ask: z.boolean().optional(),
       expressions: z.boolean().optional(),
       styleProfileId: z.string().max(200).optional(),
+      style: ImageStyleSchema.optional(),
     })
     .optional(),
   connections: ConnectionsSchema.optional(),
   language: z.string().min(1).max(LANGUAGE_MAX).optional(),
+  writingStyle: z.string().optional(),
 });
 const BibleBody = z.object({ bible: BibleSchema });
 const AccentBody = z.object({ accent: z.string().regex(ACCENT_PATTERN) });
+const CardLinkBody = z.object({ cardId: z.string().trim().min(1).max(ID_MAX).nullable() });
 
 const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
 const liNotFound = () => new OtomeForgeError(404, "No such love interest.", "not-found");
@@ -125,14 +148,28 @@ const ageGateNeeded = () => new OtomeForgeError(403, "Confirm the 18+ gate befor
 const readIndex = async (store: Pick<OtomeStore, "readDoc">) =>
   (await store.readDoc(INDEX_ID, normalizeIndex)) ?? normalizeIndex(undefined);
 
-/** The run as the client sees it: the protagonist's or a place's paint left pending by a restart reads as `stopped`. */
+/** The run as the client sees it: a look's or a place's paint left pending by a restart reads as `stopped`. */
 function runView(runKey: string, runId: string, { world, player, units, state }: RunDocuments) {
   const shown = player.art ? { ...player, art: paintView(runId, "player", player.art) } : player;
-  return toRunView(runKey, withPlaceViews(runId, world), shown, units, state);
+  const lis = units.map((unit) => (unit.art ? { ...unit, art: paintView(runId, `li:${unit.id}`, unit.art) } : unit));
+  return toRunView(runKey, withPlaceViews(runId, world), shown, lis, state);
 }
 
 export const registerRunRoutes: RegisterRoutes = (router, deps) => {
   const { runtime, store, handle } = deps;
+
+  /**
+   * Keep the selected persona's four authored story fields current, including saves which only kept Description.
+   * A missing persona retains this protagonist's last saved copy; no other persona is substituted.
+   */
+  const withPersonaAbout = async (run: RunDocuments, runId: string): Promise<RunDocuments> => {
+    const about = (await withPersonaStoryAbout(runtime, run.player)).about ?? "";
+    if (run.player.about === about) return run;
+    const player = await store.updateDoc(runDocTarget("player", playerId(runId)), normalizePlayer, (current) =>
+      current.personaId === run.player.personaId ? { ...current, about } : current,
+    );
+    return player ? { ...run, player } : run;
+  };
 
   router.post(
     "/runs",
@@ -181,6 +218,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         ...player,
         personaId: protagonist.personaId,
         name: persona.name,
+        about: personaStoryAbout(persona),
         pronouns: protagonist.pronouns,
         traits: protagonist.traits.map((trait) => trait.trim()).filter(Boolean),
         goal: protagonist.goal.trim(),
@@ -194,6 +232,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         title: setup.title?.trim() ?? "",
         premise,
         language: setup.language.trim() || DEFAULT_LANGUAGE,
+        ...(setup.writingStyle?.trim() ? { writingStyle: setup.writingStyle.trim() } : {}),
         createdAt: at,
         content: enforceContent(setup.content, ageGate),
         images: { ...current.images, ...setup.images },
@@ -258,9 +297,30 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       const { runKey, runId } = runParam(request);
       // A forge step left running or pending by a restart reads as failed, with Retry.
       await settleForge(deps, runId);
-      const run = await readRun(store, runId);
-      if (!run) throw runNotFound();
-      return { view: runView(runKey, runId, run) };
+      const read = await readRun(store, runId);
+      if (!read) throw runNotFound();
+      const run = await withPersonaAbout(read, runId);
+      // Each image he stands on stage in is cut out of its backdrop in the background, once (free: the Engine's
+      // sprite cleanup); the view shows the cut-out from the read after it is ready.
+      const units = await Promise.all(
+        run.units.map((unit) => queueCutouts(deps, runId, unit, stageArtUrls(run.world, unit))),
+      );
+      const queuedPlayer = await queueCutouts(
+        deps,
+        runId,
+        { id: "player", cutouts: run.player.cutouts ?? {} },
+        [run.player.portrait, run.player.outfits.find((outfit) => outfit.id === run.player.wornOutfit)?.url].filter(
+          (url): url is string => !!url,
+        ),
+      );
+      const player = { ...run.player, cutouts: queuedPlayer.cutouts };
+      return {
+        view: {
+          ...runView(runKey, runId, { ...run, units, player }),
+          ...(cutoutsPending(runId, [...units, queuedPlayer]) ? { cutoutsPending: true as const } : {}),
+          prologue: !!run.state.chapters[PROLOGUE_KEY]?.completed,
+        },
+      };
     }),
   );
 
@@ -342,6 +402,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         return {
           ...current,
           language: body.language?.trim() || current.language,
+          writingStyle: body.writingStyle !== undefined ? body.writingStyle.trim() : current.writingStyle,
           connections: body.connections ? normalizeConnections(body.connections) : current.connections,
           content: enforceContent(content, ageGate),
           images: { ...images, rating: ageGate ? images.rating : DEFAULT_IMAGE_RATING },
@@ -351,6 +412,41 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       });
       if (!world) throw runNotFound();
       return { world: toWorldView(withPlaceViews(runId, world)) };
+    }),
+  );
+
+  router.post(
+    "/runs/:run/lis/:li/card",
+    handle(async (request) => {
+      const { cardId } = parseBody(CardLinkBody, request.body);
+      const { runId } = runParam(request);
+      const li = liParam(request);
+      // The shared run lane keeps two simultaneous links from claiming the same card.
+      return runForeground(runId, async () => {
+        const run = await readRun(store, runId);
+        if (!run) throw runNotFound();
+        if (!run.units.some((unit) => unit.id === li)) throw liNotFound();
+        if (cardId) {
+          if (
+            /[\\/\u0000-\u001f\u007f]/u.test(cardId) ||
+            cardId.includes("..") ||
+            !(await readCard(runtime, cardId))?.name.trim()
+          ) {
+            throw badRequest("That character card is not available.");
+          }
+          if (run.units.some((unit) => unit.id !== li && unit.cardId === cardId)) {
+            throw new OtomeForgeError(409, "That card is linked to another love interest.", "conflict");
+          }
+        }
+        const unit = await store.updateDoc(runDocTarget("unit", unitId(runId, li)), normalizeUnit, (current) => {
+          const next = { ...current };
+          if (cardId) next.cardId = cardId;
+          else delete next.cardId;
+          return next;
+        });
+        if (!unit) throw liNotFound();
+        return { cardId: unit.cardId ?? null };
+      });
     }),
   );
 
@@ -382,8 +478,10 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       // The player is the authority on an edit: no `pronouns` here, so the ones they set are kept.
       const bible = checkBible(body.bible, { others });
       if (typeof bible === "string") throw new OtomeForgeError(400, `Invalid bible: ${bible}`, "bad-request");
+      let tellsBefore: readonly string[] = [];
       const unit = await store.updateDoc(runDocTarget("unit", unitId(runId, li)), normalizeUnit, (current) => {
         if (!current.bible) throw new OtomeForgeError(409, "This bible is still being written.", "conflict");
+        tellsBefore = current.bible.mask.tells;
         // His pronouns and look live on the unit too (the run view and scene cards read the pronouns there, and the
         // next paint reads the look), so an edit to either steers what comes next.
         return {
@@ -396,6 +494,21 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         };
       });
       if (!unit) throw liNotFound();
+      // The tells he has learned are indexes into `mask.tells`: follow them to where an edit left those tells, so none
+      // names a tell the protagonist did not read.
+      // ponytail: the unit and the state are two writes, so a scene card built between them reads the old indexes
+      // against the new tells; the upgrade path is to store each learned tell's text beside its index.
+      const tellsAfter = unit.bible?.mask.tells;
+      if (tellsAfter && tellsBefore.join("\n") !== tellsAfter.join("\n")) {
+        await updateIfChanged(store, runDocTarget("state", stateId(runId)), normalizeState, (state) => {
+          const learned = state.lis[li]?.tellsLearned ?? [];
+          const remapped = remapLearnedTells(learned, tellsBefore, tellsAfter);
+          if (remapped.length === learned.length && remapped.every((index, at) => index === learned[at])) {
+            return undefined;
+          }
+          return { ...state, lis: { ...state.lis, [li]: { ...state.lis[li]!, tellsLearned: remapped } } };
+        });
+      }
       return { bible: unit.bible };
     }),
   );

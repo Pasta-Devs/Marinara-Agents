@@ -12,6 +12,7 @@ import {
   runIdOf,
   wouldVoice,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/audio.ts";
+import { playsHomeCue } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/screens/screens.ts";
 import type { RunLiView } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import {
   MUSIC_MEDIUM,
@@ -54,6 +55,16 @@ test("each story cue has a stock stand-in, and P14 writes an English brief for e
     assert.doesNotMatch(MUSIC_SCENES[cue], /\b(?:he|him|his|she|her)\b/i);
   }
   assert.equal(MUSIC_MEDIUM, "romance visual novel");
+});
+
+test("the home cue plays on in the reader until its first scene's cue arrives, and only inside a run", () => {
+  for (const screen of ["home", "story", "phone", "album", "reader"] as const) {
+    assert.equal(playsHomeCue(screen, "picker"), true, screen);
+  }
+  for (const screen of ["picker", "setup", "forge", "bible"] as const)
+    assert.equal(playsHomeCue(screen, "home"), false);
+  assert.equal(playsHomeCue("settings", "home"), true, "Settings opened from inside a run");
+  assert.equal(playsHomeCue("settings", "picker"), false);
 });
 
 test("a cue's brief is one model call, kept for the next request, and never written while music is off", async () => {
@@ -154,6 +165,7 @@ test("voices: a card's own Engine voice, the pool for an archetype love interest
       "tts-1": {
         voiceAssignments: [
           { characterId: "card-kai", voice: "kai-voice" },
+          { characterId: "card-mireille", voice: "mireille-card-voice" },
           { characterId: "persona-ines", voice: "ines-voice" },
         ],
         npcDefaultMaleVoices: ["m1", "m2", "m3"],
@@ -199,6 +211,15 @@ test("voices: a card's own Engine voice, the pool for an archetype love interest
   const mireille = await voice("Mireille");
   assert.ok(["f1", "f2"].includes(mireille!), "an archetype love interest gets the pool for her voice");
   assert.equal(await voice("Mireille"), mireille, "and always the same one");
+  lis[1]!.cardId = "card-mireille";
+  assert.equal(
+    await voice("Mireille"),
+    "mireille-card-voice",
+    "a linked generated love interest uses the selected card",
+  );
+  assert.equal(lis[1]!.source, "archetype", "linking retains the love interest's creation source");
+  delete lis[1]!.cardId;
+  assert.equal(await voice("Mireille"), mireille, "unlinking restores the same generated voice fallback");
   assert.equal(await voice("Ines"), "ines-voice", "the protagonist uses her persona's voice");
   assert.equal(await voice("you"), "ines-voice");
   assert.equal(

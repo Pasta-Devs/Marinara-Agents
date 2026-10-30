@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { CgTakeover } from "../../components/CgTakeover";
+import { usePaintsByItself } from "../../components/CostHint";
 import { DeclinedPanel } from "../../components/DeclinedPanel";
 import { PromptReviewDialog } from "../../components/PromptReviewDialog";
 import {
@@ -39,7 +40,7 @@ import {
 } from "../../hooks/use-otome-audio";
 import { useReader, useReducedMotion, type ReaderState } from "../../hooks/use-reader";
 import { accentOf } from "../../lib/accent";
-import { canonOption, placeEntry, readyUrl, sumGrants, voiceOf, worldPlaces, type Voice } from "../../lib/reader-state";
+import { canonOption, readyUrl, sumGrants, voiceOf, type Voice } from "../../lib/reader-state";
 import { useOtomeProps } from "../../props";
 import type { Grant, RunView } from "../../shared/api-types";
 import { MUSIC_MOODS, type MusicMood } from "../../shared/faces";
@@ -51,6 +52,7 @@ import { DialogueBox } from "./DialogueBox";
 import { EaseOffDialog } from "./EaseOffDialog";
 import { FACE_LABEL_KEYS, FacePlate, QuietCg } from "./FacePlate";
 import { ReaderControls } from "./ReaderControls";
+import { SpeakerPlate } from "./SpeakerPlate";
 import { stageNameKey } from "../story/StoryHome";
 
 interface ReaderProps {
@@ -60,7 +62,11 @@ interface ReaderProps {
   /** Opens at this node instead of the first one not read to its end. */
   startNode?: number | null;
   onExit: () => void;
+  /** The way out's label when it leads somewhere other than the Story screen (M4: Wish, the Wardrobe, the Album). */
+  exitLabel?: string;
   onHome: () => void;
+  /** Called once the last node is read, in place of the chapter's end card (a date shows its own ending, M5). */
+  onFinished?: () => void;
 }
 
 const INTERACTIVE = "button, a, input, select, textarea, summary, [role='dialog']";
@@ -77,10 +83,12 @@ export function Reader(props: ReaderProps) {
 
 const AUDIO_NOTICE_KEYS = {
   musicFailed: "ui.otomeForge.audio.musicFailed",
+  chapterMusicFailed: "ui.otomeForge.audio.chapterMusicFailed",
+  chapterMusicUnavailable: "ui.otomeForge.audio.chapterMusicUnavailable",
   voiceFailed: "ui.otomeForge.audio.voiceFailed",
 } as const;
 
-function ReaderScene({ runKey, chapterKey, view, startNode, onExit, onHome }: ReaderProps) {
+function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, onHome, onFinished }: ReaderProps) {
   const { t } = useTranslation();
   const reducedMotion = useReducedMotion();
   const audio = useOtomeAudio();
@@ -110,6 +118,11 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, onHome }: Re
 
   const chapter = reader.detail?.chapter ?? null;
   const { beat, current } = reader;
+  const finishedRef = useRef(onFinished);
+  finishedRef.current = onFinished;
+  useEffect(() => {
+    if (reader.finished) finishedRef.current?.();
+  }, [reader.finished]);
   const protagonist = view.player.name;
   const voice = current ? voiceOf(current.segment, view.lis, protagonist) : null;
   const aftermath = current?.kind === "aftermath";
@@ -174,28 +187,28 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, onHome }: Re
 
   // The scene keeps the last beat's music while the next one is opened or written; before the first one, whatever was
   // playing (Home's cue) plays on, and a mood the player never hears is never generated.
-  if (beat?.musicMood) lastMood.current = beat.musicMood;
-  const mood = beat?.musicMood ?? lastMood.current;
-  useMusicCue(mood);
-  const lines = reader.timeline?.lines ?? [];
-  const place = lines
-    .slice(0, reader.lineIndex + 1)
-    .reverse()
-    .find((line) => line.segment.place)?.segment.place;
-  // The scene's record and the world's: whichever has its picture (a paint lands in one before the other is read).
-  const scenePlace = reading ? placeEntry(reader.sceneArt?.places, place) : null;
-  const worldPlace = reading ? placeEntry(worldPlaces(view.world), place) : null;
-  const placeInfo = readyUrl(scenePlace?.art)
-    ? scenePlace
-    : readyUrl(worldPlace?.art)
-      ? worldPlace
-      : (scenePlace ?? worldPlace);
-  const placeUrl = readyUrl(placeInfo?.art);
+  if (beat?.musicMood && !reader.preparingBackground) lastMood.current = beat.musicMood;
+  const mood = (!reader.preparingBackground && beat?.musicMood) || lastMood.current;
+  useMusicCue(
+    chapter && mood && view.world.audio.generate && view.world.audio.chapterThemes
+      ? { chapterKey: chapter.key, mood, track: chapter.music?.track }
+      : mood,
+  );
+  // The target place stays mounted while its image decodes, before any of its lines are exposed.
+  const { place, placeInfo, placeUrl } = reader;
   const canPaint = !!view.world.images.connectionId;
+  const paintsByItself = usePaintsByItself(view.world.images);
   const placeState = placeInfo?.art?.state;
   const placePaint =
-    canPaint && place && (placeState === "waiting-consent" || placeState === "failed" || placeState === "stopped")
-      ? { retry: placeState !== "waiting-consent", busy: reader.painting, onPaint: () => void reader.paintPlace(place) }
+    canPaint &&
+    placeInfo?.tags.trim() &&
+    place &&
+    (!placeState || placeState === "waiting-consent" || placeState === "failed" || placeState === "stopped")
+      ? {
+          retry: placeState === "failed" || placeState === "stopped",
+          busy: reader.painting,
+          onPaint: () => void reader.paintPlace(place),
+        }
       : undefined;
   const cg = reader.cg && current && current.main >= reader.cg.at ? reader.cg : null;
   const cgUrl = readyUrl(cg?.art);
@@ -212,11 +225,17 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, onHome }: Re
   // Whom a Confrontation faces: the opponent the server set (not whoever spoke last), else the chapter's own.
   const facingId = reader.confrontation?.li ?? chapter?.li ?? chapter?.lead;
   const facing = view.lis.find((li) => li.id === facingId) ?? null;
-  // His faces as the scene's art last reported them (they may arrive while the beat is read).
+  // Phone stickers may use uncut originals. The stage accepts only faces authorized by the run's cutout metadata.
   const stageLi = reader.onStage.li;
-  const sceneFaces = stageLi ? reader.sceneArt?.faces?.[stageLi.id] : undefined;
-  const onStageLi =
-    stageLi && sceneFaces && Object.keys(sceneFaces).length ? { ...stageLi, expressions: sceneFaces } : stageLi;
+  const onStageLi = stageLi
+    ? {
+        ...stageLi,
+        expressions: Object.fromEntries(
+          Object.entries(stageLi.expressions ?? {}).filter(([, url]) => !!url && stageLi.cut?.includes(url)),
+        ),
+      }
+    : null;
+  const otherSpeaker = voice?.kind === "other" && !voice.thought ? voice.name : null;
 
   // Each new line is voiced when the settings voice its speaker; leaving the line stops it. Narration, thoughts and
   // the aftermath line never are.
@@ -301,7 +320,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, onHome }: Re
         {MUSIC_MOODS.map((name) => (
           <div key={name} className="of-mood" data-mood={name} data-on={name === (mood ?? "tender")} />
         ))}
-        <PlaceBackdrop url={placeUrl} />
+        <PlaceBackdrop id={reader.backgroundKey} url={placeUrl} onSettled={reader.backgroundSettled} />
         <div className="of-reader-motes" />
         <div className="of-reader-vignette" />
       </div>
@@ -324,6 +343,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, onHome }: Re
           nodeCount={reader.nodeCount}
           replay={!!reader.position?.replay && reading}
           place={reading ? place : undefined}
+          imageDescription={reading ? [placeInfo?.tags, cg?.brief].filter(Boolean).join("\n") : undefined}
           placePaint={placePaint}
           tags={reader.tags}
           reading={reading}
@@ -337,6 +357,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, onHome }: Re
             setHidden(true);
           }}
           canRewrite={reader.canRewrite}
+          rewritePaints={paintsByItself}
           onRewrite={() => void reader.rewrite()}
           canEaseOff={reader.canEaseOff}
           onEaseOff={() => openDialog("ease")}
@@ -353,6 +374,8 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, onHome }: Re
             busy={reader.painting}
             onPaint={canPaint ? () => void reader.paintCg() : undefined}
           />
+        ) : otherSpeaker ? (
+          <SpeakerPlate key={reader.lineKey} name={otherSpeaker} lineKey={reader.lineKey} />
         ) : (
           <FacePlate li={onStageLi} face={reader.onStage.face} speaking={reader.onStage.speaking} />
         )}
@@ -409,7 +432,9 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, onHome }: Re
             facing={facing}
             onAdvance={advance}
             onExit={onExit}
+            exitLabel={exitLabel}
             onHome={onHome}
+            ownEnding={!!onFinished}
             onEaseOff={() => openDialog("ease")}
           />
         )}
@@ -473,7 +498,10 @@ interface BottomPanelProps {
   /** Goes on (ends a CG's pan first). */
   onAdvance: () => void;
   onExit: () => void;
+  exitLabel?: string;
   onHome: () => void;
+  /** The screen that opened the reader shows the ending itself. */
+  ownEnding: boolean;
   onEaseOff: () => void;
 }
 
@@ -492,7 +520,7 @@ function BottomPanel(props: BottomPanelProps) {
         <p className="of-body">{reader.chapterQuery.error ? t("ui.otomeForge.reader.chapterFailed") : ""}</p>
         <div className="of-inline-actions">
           <button type="button" className="of-button of-button--quiet of-glass of-button--small" onClick={props.onExit}>
-            {t("ui.otomeForge.reader.toStory")}
+            {props.exitLabel ?? t("ui.otomeForge.reader.toStory")}
           </button>
           <button
             type="button"
@@ -506,15 +534,18 @@ function BottomPanel(props: BottomPanelProps) {
       </section>
     );
   }
+  if (reader.finished && chapter && props.ownEnding) return null;
   if (reader.finished && chapter) {
     return (
       <ChapterEnd
         title={chapter.title}
+        prologue={chapter.kind === "prologue"}
         grants={reader.chapterGrants}
         arcNews={reader.arcNews}
         view={view}
         levelsBefore={props.levelsBefore}
         onStory={props.onExit}
+        storyLabel={props.exitLabel}
         onHome={props.onHome}
       />
     );
@@ -572,6 +603,24 @@ function BottomPanel(props: BottomPanelProps) {
             {t("ui.otomeForge.common.retry")}
           </button>
         </div>
+      </section>
+    );
+  }
+  if (reader.preparingBackground) {
+    return (
+      <section className="of-reader-panel of-writing of-glass of-glass--strong" role="status">
+        <span className="of-quill" aria-hidden="true">
+          <Images size={22} strokeWidth={1.7} />
+        </span>
+        <p className="of-section-title">{t("ui.otomeForge.reader.preparingBackground")}</p>
+        <button
+          type="button"
+          className="of-button of-button--quiet of-glass of-button--small"
+          onClick={reader.continueWithoutBackground}
+          data-autofocus=""
+        >
+          {t("ui.otomeForge.reader.continueWithoutBackground")}
+        </button>
       </section>
     );
   }
@@ -660,16 +709,29 @@ function BottomPanel(props: BottomPanelProps) {
 
 interface ChapterEndProps {
   title: string;
+  /** The prologue ends as itself, not as a chapter. */
+  prologue?: boolean;
   grants: Grant[];
   arcNews: ReaderState["arcNews"];
   view: RunView;
   levelsBefore: ReadonlyMap<string, number>;
   onStory: () => void;
+  storyLabel?: string;
   onHome: () => void;
 }
 
 /** The chapter's end: what it earned (Starlight, each love interest's affection, a level that rose). */
-function ChapterEnd({ title, grants, arcNews, view, levelsBefore, onStory, onHome }: ChapterEndProps) {
+function ChapterEnd({
+  title,
+  prologue = false,
+  grants,
+  arcNews,
+  view,
+  levelsBefore,
+  onStory,
+  storyLabel,
+  onHome,
+}: ChapterEndProps) {
   const { t } = useTranslation();
   const { locale } = useOtomeProps().localization;
   const { starlight, affection } = sumGrants(grants);
@@ -682,7 +744,7 @@ function ChapterEnd({ title, grants, arcNews, view, levelsBefore, onStory, onHom
         <Sparkles size={22} strokeWidth={1.6} />
       </span>
       <h2 id="of-chapter-end" className="of-chapter-end-title" tabIndex={-1} data-autofocus="">
-        {t("ui.otomeForge.reader.chapterDone")}
+        {prologue ? t("ui.otomeForge.reader.prologueDone") : t("ui.otomeForge.reader.chapterDone")}
       </h2>
       {title ? <p className="of-subtitle">{title}</p> : null}
       {raised && arcNews.stageUp ? (
@@ -734,7 +796,9 @@ function ChapterEnd({ title, grants, arcNews, view, levelsBefore, onStory, onHom
           })}
         </ul>
       ) : (
-        <p className="of-hint">{t("ui.otomeForge.reader.chapterDoneQuiet")}</p>
+        <p className="of-hint">
+          {prologue ? t("ui.otomeForge.reader.prologueDoneQuiet") : t("ui.otomeForge.reader.chapterDoneQuiet")}
+        </p>
       )}
       <div className="of-inline-actions">
         <button type="button" className="of-button of-button--quiet of-glass of-button--small" onClick={onHome}>
@@ -743,7 +807,7 @@ function ChapterEnd({ title, grants, arcNews, view, levelsBefore, onStory, onHom
         </button>
         <button type="button" className="of-button of-button--primary of-button--small" onClick={onStory}>
           <BookHeart size={15} strokeWidth={2} aria-hidden="true" />
-          {t("ui.otomeForge.reader.toStory")}
+          {storyLabel ?? t("ui.otomeForge.reader.toStory")}
         </button>
       </div>
     </section>
@@ -751,7 +815,15 @@ function ChapterEnd({ title, grants, arcNews, view, levelsBefore, onStory, onHom
 }
 
 /** The painted place behind the scene: a new picture decodes, then crossfades over the last one. */
-function PlaceBackdrop({ url }: { url: string | null }) {
+function PlaceBackdrop({
+  id,
+  url,
+  onSettled,
+}: {
+  id: string;
+  url: string | null;
+  onSettled: (id: string, url: string) => void;
+}) {
   const [layers, setLayers] = useState<{ a: string; b: string; front: "a" | "b" | null }>({
     a: "",
     b: "",
@@ -767,19 +839,24 @@ function PlaceBackdrop({ url }: { url: string | null }) {
     image.src = url;
     image
       .decode()
-      .catch(() => undefined)
-      .finally(() => {
+      .then(() => {
         if (!live) return;
         setLayers((current) => {
           if (current.front && current[current.front] === url) return current;
           const back = current.front === "a" ? "b" : "a";
           return { ...current, [back]: url, front: back };
         });
+      })
+      .catch(() => {
+        if (live) setLayers((current) => (current.front ? { ...current, front: null } : current));
+      })
+      .finally(() => {
+        if (live) onSettled(id, url);
       });
     return () => {
       live = false;
     };
-  }, [url]);
+  }, [id, onSettled, url]);
   return (
     <>
       {(["a", "b"] as const).map((layer) =>

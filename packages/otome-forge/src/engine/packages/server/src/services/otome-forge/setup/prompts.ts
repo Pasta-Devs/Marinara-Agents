@@ -1,14 +1,14 @@
 // ──────────────────────────────────────────────
-// Otome Forge: the setup prompts P1–P4 (plan M1 "Prompts") and the shapes their replies must take
+// Otome Forge: the setup prompts P1–P3 (plan M1 "Prompts") and the shapes their replies must take
 // ──────────────────────────────────────────────
-// P1 premise suggestion, P2 world plan, P3 one bible per love interest, P4 the protagonist's look. Each builder
+// P1 premise suggestion, P2 world plan, P3 one bible per love interest. Each builder
 // returns `messages` in the plan's order (§1.7): system (role, JSON shape, rules, then the content contract), then the
 // user turn with the inputs, ending with the contract reminder. Card love interests carry their current card canon
 // (forgeHydrateStoryCharacters + forgeFormatCharacterCardReference); archetype ones carry the archetype seed and the
 // player's notes. The world plan and the bible author the hidden truth, so they never get the knowledge boundary
-// (plan §1.7); P1 and P4 write no story. P1 and P2 write prose the player reads but no story, so of the writing rules
+// (plan §1.7). P1 and P2 write prose the player reads but no story, so of the writing rules
 // they get only the banned-phrases line. Prompts are English and never localized; prose fields are written in the
-// world's language, look tags always in English.
+// world's language, model-written look tags always in English.
 import {
   forgeFormatCharacterCardReference,
   forgeHydrateStoryCharacters,
@@ -31,10 +31,9 @@ import type { OtomeMessage } from "../generation.js";
 import { MIN_AGE } from "../../../../../client/src/features/otome-forge/shared/bible.js";
 import { text } from "../schemas/common.js";
 import { BANNED_PHRASES_RULE, otomeWritingRules } from "../writing-rules.js";
+import { aboutLine } from "../schemas/player.js";
 
 const PREMISE_MAX = 2000;
-const LOOK_LINE_MAX = 600;
-const PERSONA_TEXT_MAX = 1200;
 
 // ── Engine cards and personas, read through api.runtime.resources ──
 
@@ -85,7 +84,11 @@ export async function readCard(
 export interface PersonaFields {
   name: string;
   description: string;
-  /** The image appearance when the persona turns it on, else the appearance, else an image appearance left off. */
+  personality: string;
+  backstory: string;
+  /** Authored story appearance, independent of the optional image-only override. */
+  authoredAppearance: string;
+  /** The image appearance only while its override is enabled, otherwise the authored Appearance. */
   appearance: string;
 }
 
@@ -102,8 +105,51 @@ export async function readPersona(
   return {
     name: str(data.name),
     description: str(data.description),
-    appearance: (imageFirst && imageAppearance) || str(data.appearance) || imageAppearance,
+    personality: str(data.personality),
+    backstory: str(data.backstory),
+    authoredAppearance: str(data.appearance),
+    appearance: (imageFirst && imageAppearance) || str(data.appearance),
   };
+}
+
+/** Only the persona's four authored story fields; roleplay scenarios and sample dialogue are not story canon. */
+export function personaStoryAbout(persona: PersonaFields): string {
+  return [
+    persona.description,
+    persona.personality ? `Personality: ${persona.personality}` : "",
+    persona.backstory ? `Backstory: ${persona.backstory}` : "",
+    persona.authoredAppearance ? `Appearance: ${persona.authoredAppearance}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** Read current authored persona fields for a prompt; an unavailable persona keeps this protagonist's saved copy. */
+export async function withPersonaStoryAbout(
+  runtime: Pick<CapabilityRuntimeHost, "resources">,
+  player: Player,
+): Promise<Player> {
+  try {
+    const persona = await readPersona(runtime, player.personaId);
+    return persona ? { ...player, about: personaStoryAbout(persona) } : player;
+  } catch {
+    return player;
+  }
+}
+
+/** Current persona appearance is authoritative for every image; retain the action's separate outfit line. */
+export async function withPersonaImageAppearance(
+  runtime: Pick<CapabilityRuntimeHost, "resources">,
+  player: Player,
+): Promise<Player> {
+  try {
+    const persona = await readPersona(runtime, player.personaId);
+    // Empty is still the current selection. A disabled override must not return through the saved identity cache.
+    return persona ? { ...player, look: { ...player.look, identityLine: persona.appearance } } : player;
+  } catch {
+    // A deleted/unavailable persona keeps the same protagonist's saved look instead of borrowing another subject.
+    return player;
+  }
 }
 
 // ── The cast as the prompts see it ──
@@ -131,7 +177,7 @@ const pronounText = (pronouns: Pronouns) => `${pronouns.subject}/${pronouns.obje
 /** How the prompts introduce one love interest: id, name and pronouns, then the card or the archetype seed. */
 function castEntry({ unit, canon }: CastMember): string {
   const head = `id ${unit.id}: ${unit.name} (${pronounText(unit.pronouns)})`;
-  if (unit.source === "card") {
+  if (unit.cardId) {
     return canon
       ? `${head}\n${forgeFormatCharacterCardReference(canon, unit.name)}`
       : `${head}\n(The linked character card could not be read; keep to the name and pronouns.)`;
@@ -151,6 +197,7 @@ function protagonistEntry(player: Player): string {
     `${player.name || "The protagonist"} (${pronounText(player.pronouns)})`,
     player.traits.length ? `Traits: ${player.traits.join("; ")}` : "",
     player.goal.trim() ? `Their own goal: ${player.goal.trim()}` : "",
+    aboutLine(player),
   ]
     .filter(Boolean)
     .join("\n");
@@ -359,7 +406,7 @@ export function bibleMessages({
   others: readonly CastMember[];
 }): OtomeMessage[] {
   const { unit } = member;
-  const fromCard = unit.source === "card";
+  const fromCard = !!unit.cardId;
   const system = [
     "You write the hidden character bible of one love interest in an otome game. It stays behind a spoiler gate; every scene with this character is written from it.",
     "Reply with ONLY a JSON object of this shape:",
@@ -387,7 +434,7 @@ export function bibleMessages({
     `- Write every text field except look in ${world.language}.`,
     "- Omit an optional field rather than writing null.",
     "",
-    otomeWritingRules({ story: false }),
+    otomeWritingRules({ story: false, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: [{ name: unit.name }], kind: "planner" }),
   ].join("\n");
@@ -423,60 +470,5 @@ export function bibleMessages({
   return [
     { role: "system", content: system },
     { role: "user", content: user },
-  ];
-}
-
-// ── P4: the protagonist's look (structured, 0.3; only when the persona has no appearance) ──
-
-export interface PlayerLookReply {
-  identityLine: string;
-  outfitLine: string;
-}
-export const PlayerLookSchema: ZodType<PlayerLookReply> = z.object({
-  identityLine: z.string().min(1),
-  outfitLine: z.string(),
-});
-
-export function normalizePlayerLook(reply: PlayerLookReply): PlayerLookReply | string {
-  const identityLine = reply.identityLine.trim().slice(0, LOOK_LINE_MAX);
-  if (!identityLine) return "identityLine must describe how they look";
-  return { identityLine, outfitLine: reply.outfitLine.trim().slice(0, LOOK_LINE_MAX) };
-}
-
-export function playerLookMessages({
-  world,
-  player,
-  persona,
-}: {
-  world: Pick<World, "setting" | "premise">;
-  player: Player;
-  persona: PersonaFields | null;
-}): OtomeMessage[] {
-  const description = persona?.description.slice(0, PERSONA_TEXT_MAX) ?? "";
-  return [
-    {
-      role: "system",
-      content: [
-        "You describe how to draw the protagonist of an otome game for an image model.",
-        'Reply with ONLY a JSON object: {"identityLine": "...", "outfitLine": "..."}',
-        "RULES",
-        "- English only: visual-only comma-separated tags, with no names and no story.",
-        "- identityLine: face, hair, eyes, build, skin, marks. They are an adult (18 or older), with adult features.",
-        "- outfitLine: everyday clothing that fits the setting.",
-        "- Follow anything the persona says about their looks; otherwise choose plainly.",
-        "- Never assume a gender the pronouns do not state.",
-      ].join("\n"),
-    },
-    {
-      role: "user",
-      content: [
-        `Setting: ${world.setting.trim() || world.premise.trim() || "(unknown)"}`,
-        `Protagonist: ${player.name || "the protagonist"} (${pronounText(player.pronouns)})`,
-        description ? `Persona: ${description}` : "",
-        player.traits.length ? `Traits: ${player.traits.join("; ")}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n"),
-    },
   ];
 }

@@ -12,7 +12,8 @@
 // - Voices: the kit's voice picking over the Engine's TTS settings (explicit assignments win; the protagonist uses her
 //   persona's voice or stays silent; love interests and, with "voice everyone else", anyone else get the Engine's pool
 //   voice for their gender). Narration and thoughts are never voiced. Each line has a cache key, so a replay from the
-//   backlog plays the saved clip.
+//   backlog plays the saved clip; a comfort line (M3's Rough day?) is voiced with none, so it never lands in the
+//   Engine's audio cache (plan §1.9).
 // - One controller per story. <OtomeAudioProvider> makes it; a provider inside another one adds nothing, so OtomeForgeView
 //   can hold one for every screen and the reader still works on its own. A screen claims its music cue with
 //   useMusicCue; the newest claim wins, and the provider's own cue plays when none is held.
@@ -29,7 +30,8 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { forgeSoundtrackContextKey, normalizeForgeAudio } from "@forge-kit/audio-settings.mjs";
+import { forgeSoundtrackContextKey } from "@forge-kit/audio-settings.mjs";
+import { chapterMusicCue, normalizeOtomeAudio } from "../shared/audio";
 import { forgeSpeakerVoice } from "@forge-kit/voice-picking.mjs";
 import { host } from "marinara:host";
 import { api } from "../../../lib/api-client";
@@ -61,6 +63,7 @@ interface HostPlayer {
   unlock(): void;
   playMusic(tag: string, assets?: AssetMap | null): void;
   stopMusic(immediate?: boolean): void;
+  playSfx(tag: string, assets?: AssetMap | null): void;
   setVolumes(volumes: { music: number; sfx: number }): void;
   setMuted(muted: boolean): void;
   dispose(): void;
@@ -102,7 +105,7 @@ const PROBE_MS = 60_000;
 const TTS_CONFIG_MS = 30_000;
 
 export type SpeakOutcome = "spoken" | "silent" | "failed" | "stopped";
-export type AudioNoticeKind = "musicFailed" | "voiceFailed";
+export type AudioNoticeKind = "musicFailed" | "chapterMusicFailed" | "chapterMusicUnavailable" | "voiceFailed";
 
 interface AudioSnapshot {
   /** The newest notice; `id` changes with each one. */
@@ -122,7 +125,12 @@ interface ControllerDeps {
 }
 
 /** A screen's music: a cue, null for silence, or undefined for no opinion (the cue beneath it plays on). */
-type HeldCue = MusicMood | null | undefined;
+interface ChapterCue {
+  chapterKey: string;
+  mood: MusicMood;
+  track?: SoundtrackTrack;
+}
+type HeldCue = MusicMood | ChapterCue | null | undefined;
 
 interface CueClaim {
   set(cue: HeldCue): void;
@@ -135,7 +143,7 @@ export class OtomeAudioController {
   private readonly player: HostPlayer | null;
   private readonly manifest: Promise<AssetManifest | null>;
   private deps: ControllerDeps | null = null;
-  private settings: AudioSettings = normalizeForgeAudio({});
+  private settings: AudioSettings = normalizeOtomeAudio({});
   /** The story's saved settings: only these start or stop music generation (`settings` may be a preview). */
   private saved: AudioSettings = this.settings;
   private tracks: SoundtrackTrack[] = [];
@@ -144,7 +152,9 @@ export class OtomeAudioController {
   private baseCue: MusicMood | null = null;
   private claims: Array<{ id: number; cue: HeldCue }> = [];
   private claimId = 0;
-  private currentCue: MusicMood | null = null;
+  private currentCue: string | null = null;
+  private readonly chapterTracks = new Map<string, SoundtrackTrack>();
+  private readonly unavailableChapterTracks = new Set<string>();
   private currentTag: string | null = null;
   private revision = 0;
   private readiness: { at: number; connection: string; promise: Promise<AudioReadiness | null> } | null = null;
@@ -195,11 +205,22 @@ export class OtomeAudioController {
   // ── Settings ──
 
   setDeps(deps: ControllerDeps) {
+    if (
+      this.deps &&
+      deps.lis.some((li) => this.deps?.lis.find((before) => before.id === li.id)?.cardId !== li.cardId)
+    ) {
+      this.ttsConfig = null;
+    }
     this.deps = deps;
   }
 
   get audioSettings(): AudioSettings {
     return this.settings;
+  }
+
+  /** The reader's quick mute shares Settings → Audio's live preview, without changing saved generation settings. */
+  setMuted(muted: boolean) {
+    this.configure({ ...this.settings, muted }, this.saved);
   }
 
   /** `next` plays now; `saved` is the story's (Settings → Audio passes both while it previews Mute and the volumes). */
@@ -208,7 +229,10 @@ export class OtomeAudioController {
     const before = this.saved;
     this.settings = next;
     this.saved = saved;
-    const source = before.generate !== saved.generate || before.audioConnectionId !== saved.audioConnectionId;
+    const source =
+      before.generate !== saved.generate ||
+      before.chapterThemes !== saved.chapterThemes ||
+      before.audioConnectionId !== saved.audioConnectionId;
     if (source) {
       // A new source starts clean: what failed on the old one may work now (the player changed it, never a timer).
       this.abortGeneration();
@@ -267,12 +291,20 @@ export class OtomeAudioController {
     };
   }
 
-  private effectiveCue(): MusicMood | null {
+  private effectiveCue(): Exclude<HeldCue, undefined> {
     for (let index = this.claims.length - 1; index >= 0; index -= 1) {
       const held = this.claims[index]!.cue;
       if (held !== undefined) return held;
     }
     return this.baseCue;
+  }
+
+  /** A stock sound from the Engine's library (`sfx:ui:<name>`) at the effects volume; silent while muted (M4). */
+  playSfx(tag: string) {
+    if (!this.player || this.disposed || this.settings.muted || this.settings.sfxVolume <= 0) return;
+    void this.manifest.then((manifest) => {
+      if (!this.disposed) this.player?.playSfx(tag, manifest?.assets ?? null);
+    });
   }
 
   /** Lets the player start music: the Engine waits for an interaction before it plays anything. */
@@ -320,10 +352,14 @@ export class OtomeAudioController {
 
   private async playCue(force: boolean) {
     if (!this.player || this.disposed) return;
-    const cue = this.effectiveCue();
-    if (!force && cue === this.currentCue) return;
+    const held = this.effectiveCue();
+    const descriptor = held && typeof held === "object" ? held : null;
+    const chapter = descriptor && this.saved.generate && this.saved.chapterThemes ? descriptor : null;
+    const cue = descriptor ? descriptor.mood : (held as MusicMood | null);
+    const identity = chapter ? `${chapterMusicCue(chapter.chapterKey)}:${chapter.track?.tag ?? ""}` : cue;
+    if (!force && identity === this.currentCue) return;
     const revision = (this.revision += 1);
-    this.currentCue = cue;
+    this.currentCue = identity;
     if (!cue) {
       if (this.currentTag) this.player.stopMusic();
       this.currentTag = null;
@@ -331,6 +367,31 @@ export class OtomeAudioController {
     }
     const manifest = await this.manifest;
     if (this.disposed || revision !== this.revision) return;
+    if (chapter) {
+      const track = this.chapterTracks.get(chapter.chapterKey) ?? chapter.track;
+      if (track && this.listed(track, manifest)) {
+        this.play(track.tag, { [track.tag]: { path: track.path } });
+        return;
+      }
+      // Keep the music already playing until this chapter's theme is ready, also when generation fails.
+      if (!this.currentTag && manifest) {
+        const stock = this.audio?.selectDefaultMusic(ENGINE_MUSIC_CUE[cue], manifest);
+        if (stock) this.play(stock, manifest.assets);
+      }
+      // A saved theme is never paid for again, even if its Engine file was deleted. Fresh tracks pass listed above.
+      if (track) {
+        if (!this.unavailableChapterTracks.has(track.tag)) {
+          this.unavailableChapterTracks.add(track.tag);
+          this.notify("chapterMusicUnavailable");
+        }
+        return;
+      }
+      if (!this.canGenerate()) return;
+      const made = await this.generate(cue, chapter);
+      if (made && !this.disposed && revision === this.revision)
+        this.play(made.tag, { [made.tag]: { path: made.path } });
+      return;
+    }
     const connection = this.settings.audioConnectionId || this.probedConnection;
     const track = this.trackFor(cue, connection, manifest);
     if (track) this.play(track.tag, { [track.tag]: { path: track.path } });
@@ -360,7 +421,7 @@ export class OtomeAudioController {
   }
 
   /** Makes the cue's track once on this story's audio connection; null when it cannot or did not. */
-  private generate(cue: MusicMood): Promise<SoundtrackTrack | null> {
+  private generate(cue: MusicMood, chapter?: ChapterCue): Promise<SoundtrackTrack | null> {
     const chosen = this.saved.audioConnectionId;
     const deps = this.deps;
     if (!deps) return Promise.resolve(null);
@@ -368,19 +429,23 @@ export class OtomeAudioController {
       const readiness = await this.ready(chosen);
       const manifest = await this.manifest;
       if (this.disposed || !this.canGenerate(chosen)) return null;
+      if (chapter && !this.saved.chapterThemes) return null;
       if (!readiness?.configured || !readiness.connectionId || readiness.music !== true) return null;
       const connectionId = chosen || readiness.connectionId;
       this.probedConnection = connectionId;
-      const id = `${connectionId}:${cue}`;
+      const trackCue = chapter ? chapterMusicCue(chapter.chapterKey) : cue;
+      const id = `${connectionId}:${trackCue}`;
       // A record whose file is gone from the Engine is made again (the stock track plays meanwhile).
-      const owned = this.tracks.find(
-        (track) => track.cue === cue && track.connectionId === connectionId && this.listed(track, manifest),
-      );
-      if (owned) return owned;
+      const owned = chapter
+        ? (this.chapterTracks.get(chapter.chapterKey) ?? chapter.track)
+        : this.tracks.find((track) => track.cue === cue && track.connectionId === connectionId);
+      if (owned && this.listed(owned, manifest)) return owned;
       if (this.failed.has(id)) return null;
       const running = this.pending.get(id);
       if (running) return running;
-      const request = this.makeTrack(cue, chosen, connectionId, deps).finally(() => this.pending.delete(id));
+      const request = this.makeTrack(trackCue, chosen, connectionId, deps, chapter?.chapterKey).finally(() =>
+        this.pending.delete(id),
+      );
       this.pending.set(id, request);
       return request;
     })();
@@ -388,10 +453,11 @@ export class OtomeAudioController {
   }
 
   private async makeTrack(
-    cue: MusicMood,
+    cue: string,
     chosen: string,
     connectionId: string,
     deps: ControllerDeps,
+    chapterKey?: string,
   ): Promise<SoundtrackTrack | null> {
     const key = forgeSoundtrackContextKey(runIdOf(this.runKey), connectionId, cue);
     const abort = new AbortController();
@@ -406,13 +472,13 @@ export class OtomeAudioController {
       else {
         const brief = await deps.post<{ prompt?: unknown }>(
           `/runs/${encodeURIComponent(this.runKey)}/audio/brief`,
-          { cue },
+          chapterKey ? { chapterKey } : { cue },
           { signal: abort.signal },
         );
         const prompt = typeof brief?.prompt === "string" ? brief.prompt.trim() : "";
         if (!prompt) throw new Error("The music brief was empty");
         // The player may have turned generation off while the brief was written: the paid call is then never made.
-        if (!this.canGenerate(chosen)) abort.abort();
+        if (!this.canGenerate(chosen) || (chapterKey && !this.saved.chapterThemes)) abort.abort();
         abort.signal.throwIfAborted();
         const made = await api.post<{ tag?: unknown; path?: unknown }>(
           "/audio/generate",
@@ -430,14 +496,24 @@ export class OtomeAudioController {
       }
       const track: SoundtrackTrack = { cue, connectionId, tag: asset.tag, path: asset.path };
       this.fresh.add(track.tag);
-      this.tracks = [...this.tracks.filter((item) => item.tag !== track.tag), track];
+      if (chapterKey) this.chapterTracks.set(chapterKey, track);
+      else this.tracks = [...this.tracks.filter((item) => item.tag !== track.tag), track];
       // Recorded on the story, so the next visit plays it with no new call. A failed record keeps it for this visit;
       // the next one finds the file under the same key.
       try {
-        const saved = await deps.post<{ tracks?: unknown }>(`/runs/${encodeURIComponent(this.runKey)}/audio/track`, {
-          ...track,
-        });
-        if (Array.isArray(saved?.tracks)) deps.onTracks(saved.tracks as SoundtrackTrack[]);
+        const saved = await deps.post<{ tracks?: unknown; track?: SoundtrackTrack }>(
+          `/runs/${encodeURIComponent(this.runKey)}/audio/track`,
+          {
+            ...track,
+            ...(chapterKey ? { chapterKey } : {}),
+          },
+        );
+        if (chapterKey && saved?.track) {
+          this.fresh.add(saved.track.tag);
+          this.chapterTracks.set(chapterKey, saved.track);
+          return saved.track;
+        }
+        if (!chapterKey && Array.isArray(saved?.tracks)) deps.onTracks(saved.tracks as SoundtrackTrack[]);
       } catch (error) {
         console.warn("Otome Forge could not record a generated track", error);
       }
@@ -446,7 +522,7 @@ export class OtomeAudioController {
       if (!abort.signal.aborted && (error as { name?: string })?.name !== "AbortError") {
         this.failed.add(`${connectionId}:${cue}`);
         console.warn("Otome Forge could not generate music", error);
-        this.notify("musicFailed");
+        this.notify(chapterKey ? "chapterMusicFailed" : "musicFailed");
       }
       return null;
     } finally {
@@ -502,8 +578,11 @@ export class OtomeAudioController {
     return request;
   };
 
-  /** Voices one line (stopping any other); resolves when it has played, or at once when nobody would voice it. */
-  async speak(segment: Segment, ref: string): Promise<SpeakOutcome> {
+  /**
+   * Voices one line (stopping any other); resolves when it has played, or at once when nobody would voice it. `cache`
+   * false voices it with no cache key.
+   */
+  async speak(segment: Segment, ref: string, { cache = true }: { cache?: boolean } = {}): Promise<SpeakOutcome> {
     const deps = this.deps;
     const settings = this.settings;
     const speaker = deps ? lineSpeaker(segment, deps.lis, deps.player) : null;
@@ -525,7 +604,7 @@ export class OtomeAudioController {
             speaker: segment.speaker,
             voice,
             ...(speaker.characterId ? { characterId: speaker.characterId } : {}),
-            cacheKey: voiceCacheKey(this.runKey, ref),
+            ...(cache ? { cacheKey: voiceCacheKey(this.runKey, ref) } : {}),
           },
         ],
         `${this.voicePrefix}${(this.voiceIndex += 1)}`,
@@ -618,7 +697,7 @@ function AudioScope({ run, cue = null, children }: ProviderProps) {
 
   // Keyed on the saved values, not the record: a track landing (or a refetch) gives world.audio a new identity, and
   // configuring again then would undo a Settings → Audio preview of Mute or the volumes.
-  const settingsKey = JSON.stringify(normalizeForgeAudio(run?.world.audio));
+  const settingsKey = JSON.stringify(normalizeOtomeAudio(run?.world.audio));
   const settings = useMemo(() => JSON.parse(settingsKey) as AudioSettings, [settingsKey]);
   useEffect(() => controller?.configure(settings), [controller, settings]);
   const world = run?.world ?? null;

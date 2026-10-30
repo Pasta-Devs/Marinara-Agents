@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import { CircleAlert, Feather, PlugZap, RotateCcw, ShieldAlert } from "lucide-react";
 import { otomeErrorCode, useOtomeApi } from "../api";
 import { useConnections } from "../hooks/use-engine-resources";
+import { CheckAgain, RetryNotice } from "./RetryNotice";
 import { useSaveSettings } from "../hooks/use-run";
 import type { GenerationJob, RunView } from "../shared/api-types";
 
@@ -102,7 +103,24 @@ function ConnectionSwitch({
       </p>
     );
   }
-  if (!others.length) return <p className="of-hint">{t("ui.otomeForge.reader.noOtherConnection")}</p>;
+  // A failed list is not an empty one: the player is not told to add a connection they may already have.
+  if (connections.isError && !connections.text.length) {
+    return (
+      <RetryNotice
+        message={t("ui.otomeForge.setup.connectionsFailed")}
+        onRetry={() => void connections.refetch()}
+        retrying={connections.retrying}
+      />
+    );
+  }
+  if (!others.length) {
+    return (
+      <div className="of-inline-actions">
+        <p className="of-hint">{t("ui.otomeForge.reader.noOtherConnection")}</p>
+        <CheckAgain onCheck={connections.refetch} />
+      </div>
+    );
+  }
   return (
     <div className="of-field">
       <label className="of-label" htmlFor={id}>

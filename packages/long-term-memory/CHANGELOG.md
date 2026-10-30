@@ -1,5 +1,33 @@
 # Long-Term Memory changelog
 
+## 1.5.14 — 2026-10-30
+
+- Settings → Extraction adds Chat import detail. Detailed imports a chat's messages in pieces half the size (12,000 characters instead of 24,000), giving finer memories for about twice the extraction cost. It applies to chats imported from now on; a chat already imported keeps its size.
+
+## 1.5.13 — 2026-10-30
+
+- When a chat calls one of Long-Term Memory's own characters by part of their name ("Preston" for "Preston Farraday", or the other way round), the memory joins that character's note instead of starting a second one. If the name fits more than one character, it waits for you in review.
+
+## 1.5.12 — 2026-10-30
+
+- Sources → Chat Summaries keeps the range visible when a chat has a long name: the name is cut, and the message range, day, week or game session stays whole beside it.
+
+## 1.5.11 — 2026-10-30
+
+- A memory whose score (salience or confidence) the model writes in quotes ("0.5") is kept instead of dropped, and a chat piece whose every memory is malformed fails with Retry instead of reporting success with nothing kept.
+
+## 1.5.10 — 2026-10-29
+
+- Long-Term Memory no longer offers the older way other Agents read memories. Slurp 0.4.8 and earlier stop adding memories to Creator posts; update Slurp to keep them.
+
+## 1.5.9 — 2026-10-29
+
+- After you turn on "Other Agents can read memories" and save, Memory Settings offers to turn on Slurp's "What your other Agents know" switch too, since Slurp's Creators need both before they use memories.
+
+## 1.5.8 — 2026-10-29
+
+- Other Agents that read memories, such as Slurp and Noodle, can ask for whole memories instead of the parts that fit what they are writing. The same memories are shared either way.
+
 ## 1.5.7 — 2026-10-28
 
 - Memory Settings → Recall → Sharing lists each Agent that has read memories with when it last did, how many times it read this week and how many memories it got, so you can tell whether an Agent such as Slurp is using them. The counts come from the Debug activity log, so clearing it or a very busy install can lower them.

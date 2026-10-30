@@ -72,27 +72,123 @@
     "otome-forge": {
       "versions": [
         {
-          "version": "0.0.4",
-          "date": "2026-10-28",
-          "notes": "- Each love interest now has a route: six stages from Mask to Bond, each opened by a free route chapter at an affection level and moved only by its last scene. The fourth reveals a secret; the fifth holds a confrontation and a choice that cannot be undone.\n- Every main chapter builds to a confrontation: three rounds of Press, Hold, Yield or Reveal, ending in the truth, a walkout or a standoff. A walkout can open a rift that shuts their route until you Make it right.\n- With an image connection, places and key moments are painted (or wait for your tap with Ask before painting), CGs join the Album once seen, and faces are painted in the background. Music follows each scene's mood, and dialogue can be voiced.",
+          "version": "0.1.17",
+          "date": "2026-10-30",
+          "notes": "- Read a love interest’s intended appearance from Your cast or Who’s home without opening Bible spoilers. Wardrobe looks and reached story illustrations also expose their existing visual descriptions, including when no image was painted.\n- After adding an image connection, missing story locations and key moments offer the existing explicit Paint action with its image cost and prompt review. Reading descriptions and saving image settings paint nothing.",
           "highlight": false
         },
         {
-          "version": "0.0.3",
-          "date": "2026-10-28",
-          "notes": "- Now offered to Engine `staging` testers. The story begins: pick who leads each main chapter from two love interests, the one you have seen least and the one with the most unresolved between you, and play six to nine scenes that build to a confrontation.\n- Scenes mark each love interest's face line by line (a later build paints the faces), set thoughts apart, and offer choices. Your first choice is canon; replays show the other branches and change nothing, and a choice that matters names who will remember it.\n- Trust, tension and grievances move only through your choices and are never shown. Each love interest remembers only what they saw or were told.\n- Rewrite a scene before choosing (one model call), or Ease off to end it at once with no model call, also when your model declines a scene. Settings → Debug shows the story memory.\n- Reading earns Starlight and affection. Every prompt that writes the story keeps your content settings and the 18+ gate.",
+          "version": "0.1.16",
+          "date": "2026-10-30",
+          "notes": "- Automatically painted current-location backgrounds prepare before reading begins, with the existing manual-paint and failure paths retained.\n- Story generation can reuse saved location artwork for recurring settings instead of painting a new numbered visit.\n- Protagonist dialogue, thoughts and performed choices explicitly follow the selected persona’s authored identity and the player’s writing instructions.",
           "highlight": false
         },
         {
-          "version": "0.0.2",
-          "date": "2026-10-28",
-          "notes": "- Still a development build, in no catalog. A story now starts from a setup: a premise, your protagonist from a persona, and two to five love interests from your cards or six original archetypes, each with the pronouns you pick.\n- The forge plans the story's mystery and writes each love interest a hidden bible, which never contradicts their card. Bibles sit behind a spoiler gate, and you can edit them. Love interests are always adults.\n- Content settings: Heat (SFW by default), Darkness (Angst by default), Lines & Veils and an image rating (SFW by default). NSFW Heat, Dark romance and images above SFW need a one-time 18+ confirmation that the server enforces; turning a setting down never asks.\n- Base looks are painted only after you tap to paint them, and a failed paint waits for Retry. Without an image connection everything still works, with initials in each love interest's colour, and one added later can paint them.\n- In debug mode, every prompt sent to the model is logged.",
+          "version": "0.1.15",
+          "date": "2026-10-29",
+          "notes": "- Opening narration no longer previews the portrait of a love interest whose speaking turn has not been reached. Established speakers can still stay visible during later narration.\n\n- The pre-chapter warning places its Ease off feather after the guidance sentence.\n\n- Harmful story/date choices and Confrontation outcomes can reduce Affection progress within the current level. Unlocked levels stay permanent, and replaying never repeats the deduction or refunds daily earning limits.",
           "highlight": false
         },
         {
-          "version": "0.0.1",
+          "version": "0.1.14",
+          "date": "2026-10-29",
+          "notes": "- Album Memories can be filtered by 3★, 4★ or 5★, with unplayed content listed first.\n\n- Owned 3★ Snapshots can be illustrated on first opening through the existing image connection, confirmation and prompt review flow. Paintings are saved and reused; old vignettes and story progress stay intact.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.13",
+          "date": "2026-10-29",
+          "notes": "- Suggestive is an image-content ceiling: neutral portraits and facial expression edits no longer receive mandatory suggestive or sensitive-content tags. Image briefs follow the actual moment, with non-explicit adult intimacy allowed when appropriate.\n- Wish and Wardrobe display cleaned love-interest and persona outfits while retaining the original paintings. Wardrobe banner art is centered and shown whole, and tapping a ready banner image opens a full-image view without making a wish.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.12",
+          "date": "2026-10-29",
+          "notes": "- Desktop settings use the available stage space, with every settings section reachable and long pages scrollable.\n- Text generation can recover when an endpoint rejects the optional JSON-format hint, while retaining reply validation and output budgets.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.11",
+          "date": "2026-10-29",
+          "notes": "- Named speakers outside your love-interest cast clear the previous character's sprite. An exact, unique matching character card can supply an existing Full Body sprite, with Neutral preferred; opaque art waits for free cleanup before appearing.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.10",
+          "date": "2026-10-29",
+          "notes": "- Repaint a love interest’s five expressions for their current look from Your cast, with a five-image cost and all prompts reviewed before painting when prompt review is enabled. Existing artwork stays available during replacement or after a failure.\n- Expression generation preserves the configured image style for both prose and tag-based profiles. Reviewed prompts stay bound to the look they were written for, with their full text and required safety wording retained.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.9",
+          "date": "2026-10-29",
+          "notes": "- Chapter, scene, route and date writers now receive the selected persona’s full Description, Personality, Backstory and authored Appearance, including on existing runs. The same saved identity fields also ground item stories and outfit reactions, phone replies, Home notes and touch lines, Caring messages, and Read Him. Their authored facts stay distinct from image-only appearance overrides; roleplay scenarios, greetings and dialogue examples are excluded.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.8",
+          "date": "2026-10-29",
+          "notes": "- Music settings can give every chapter its own saved theme. Enable chapter themes with music generation on; each theme is generated when reading starts and reused on replay.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.7",
+          "date": "2026-10-29",
+          "notes": "- Chapter and Home expressions keep the clean neutral sprite visible until free background cleanup is ready, instead of showing a green original. Saved and newly painted expressions share the repair, with their originals, outfits and story progress retained.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.6",
+          "date": "2026-10-29",
+          "notes": "- Mobile reader controls now show mute, fullscreen, then More, with centered icons and the secondary controls aligned directly below More.\n- A thought's closing parenthesis now appears when the line finishes typing.\n- Removed the daily-storage caption beneath a generated period-day caring message.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.5",
+          "date": "2026-10-29",
+          "notes": "- The downloadable package now includes the merged reader resize repair: switching from a phone-sized reader to desktop no longer leaves a hidden mobile menu consuming the next story action.\n- Linking a generated love interest to a card keeps their existing story bible, without showing the imported-card canon notice.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.4",
+          "date": "2026-10-29",
+          "notes": "- Link an existing love interest to a character card in Your cast. Its assigned voice and image references apply while their story, progress and pictures stay; unlinking restores their own fallback.\n- Future paints prefer the linked card's Full Body → Neutral sprite, then its current avatar, then the retained Otome look. Linking never paints automatically.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.3",
+          "date": "2026-10-29",
+          "notes": "- Mobile chapter cutouts continue behind the dialogue panel for a closer view. A three-dot button opens the secondary reader controls vertically, beside working mute and fullscreen buttons.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.2",
+          "date": "2026-10-29",
+          "notes": "- Home cleans your own generated looks and outfits as well as the love interests'. Originals stay in the Wardrobe.\n- On an Engine with corrected sprite cleanup, old cut-outs are rebuilt from the retained originals for free. The previous image stays visible until its replacement is ready.\n- Card-imported love interests use their card's Full Body → Neutral sprite as the likeness reference when available, then their painted base look, then the card avatar.\n- Every image of your persona reads their current Appearance, or the enabled Image Appearance Override, whole. Outfit changes keep that identity instead of reusing a stale generated description.\n- Empty Appearance uses your avatar and the requested clothing, with no invented body description or extra model call.\n- Otome Hearth's Home tab uses a heart icon.",
+          "highlight": true
+        },
+        {
+          "version": "0.1.1",
+          "date": "2026-10-29",
+          "notes": "- **Begin** plays a prologue: one short scene of your protagonist's own life, just before the story opens, with no love interest in it. Chapter 1 picks up where it ends, and the Story screen offers it again.\n- **Phone** is now **Messages**, so it fits any world, and love interests write by whatever carries messages there.\n- **How it's written**, in setup and Settings → Content: your own instructions for every scene, message and note. Your persona's description reaches every story prompt whole.\n- Love interests stand without a backdrop: painted on a chroma matte, then cut out, as the Engine's sprites are.\n- The reader: fullscreen, a plain **Rewrite**, Ease off that fits, and long lines scroll as they type.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.0",
           "date": "2026-10-28",
-          "notes": "- First development build, not listed in any catalog yet. It adds a Home tab, Otome Forge, with the game's portrait stage, its Midnight and Pearl looks and its fonts. Every screen still says it arrives in a later build.\n- Otome Forge keeps its saves in its own `otome-forge:` documents, so it works alongside Gacha Forge.",
+          "notes": "- First Date: release 1 of Otome Hearth, an otome game made from your own characters, for Engine staging testers.\n- Set up a story from a premise, your persona and two to five love interests of any gender, from your cards or six archetypes. Each gets a hidden bible, a route from Mask to Bond, and memories of only what they saw.\n- Main chapters build to a confrontation. Your first choice is canon, and a rift lasts until you make it right.\n- Home brings a note a day, and each love interest has a phone thread. Wish for Memories and looks with Starlight you earn (no real money; banners never expire).\n- Dates: Read Them, Date Night and the Claw Machine. Remind Me keeps their days, with an opt-in period tracker kept in this browser.\n- Your limits hold: Heat, Darkness, Lines & Veils and an 18+ gate. Paid work is labelled where you start it.\n- An **Image style** for every picture, **Repaint** for a painted look, and archetype love interests now paint on xAI.",
+          "highlight": true
+        },
+        {
+          "version": "0.0.9",
+          "date": "2026-10-28",
+          "notes": "- Every prompt that writes the story or a character's words asks the model to read each character's mind more carefully: what they know, want and feel.\n- In NSFW mode the content contract opens by stating that the request complies with the adult fiction content policy.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.8",
+          "date": "2026-10-28",
+          "notes": "- Remind Me, from Home: a month of your story's days, with each love interest's birthday, the day your story began, its firsts with each love interest, and your own birthday if you add it (kept only on this device).\n- A period tracker for anyone who has periods, off by default and stored only in this browser. Logged days show as filled hearts, predicted ones as outlined hearts, and it never calls a period late. Export moves it; one click deletes all of it.\n- On a tracked day, Caring message asks the love interest on Home for a note. Only one line about today reaches your model provider, never the history; with Keep it off the model, or while debug logging is on, a comfort line written in advance answers instead. The note stays in this browser for the day only.\n- Home: on the shortest phones the rail tightens so the note keeps a line of its words, and a long name on Him / Me is cut short inside the rail rather than reach over the love interest's tap zones.",
           "highlight": false
         }
       ]
@@ -163,6 +259,12 @@
     },
     "saucelings": {
       "versions": [
+        {
+          "version": "0.23.2",
+          "date": "2026-10-30",
+          "notes": "- On a wide screen, an open Background, Caretaker, Looks or New egg panel no longer stretches the stage card beside it.",
+          "highlight": false
+        },
         {
           "version": "0.23.1",
           "date": "2026-10-27",

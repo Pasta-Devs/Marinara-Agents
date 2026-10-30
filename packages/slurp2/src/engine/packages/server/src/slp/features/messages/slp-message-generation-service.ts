@@ -7,8 +7,7 @@
  * machinery around it is reused rather than rebuilt.
  */
 import { slpAccountGender, slpPronouns } from "../../../../../shared/src/slp/slp-gender.js";
-import { listSlurpContinuityFor } from "../../data/continuity/slp-continuity-storage.js";
-import { slurpContinuityInstruction } from "../../modules/continuity/slp-continuity-prompt.js";
+import { slurpReplyContinuity } from "./slp-reply-continuity.js";
 import { type APIProvider } from "@marinara-engine/shared";
 import { slurpCommissionPriceRange } from "../../modules/economy/slp-creator-pricing.js";
 import { type SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
@@ -567,16 +566,13 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
     historyTurns: HISTORY_TURNS,
     recentPosts: RECENT_POSTS,
   });
-  // Approved notes: the Creator's own, plus this thread's private ones; `slurpContinuityReadable` fences other threads.
-  const continuityInstruction = input.threadId
-    ? await listSlurpContinuityFor(input.db, input.creator.id, "fan_thread", {
-        at: new Date(),
-        threadId: input.threadId,
-        limit: 20,
-      })
-        .then((ledger) => slurpContinuityInstruction({ ...ledger, threadId: input.threadId }))
-        .catch(() => "")
-    : "";
+  const continuityInstruction = await slurpReplyContinuity(input, {
+    settings,
+    source,
+    disclosureMode,
+    viewerPage: viewerPageAccount,
+    fanVoice,
+  });
   // Slurp Support's thread: the desk record, the Offer waiting, the ticket; none with the desk off.
   const supportThread = input.viewer.id === SLURP_SUPPORT_ACCOUNT_ID;
   const supportDesk =

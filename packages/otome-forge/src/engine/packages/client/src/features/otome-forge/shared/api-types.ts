@@ -4,7 +4,12 @@
 // Imported by both bundles, so a code or field added on one side has to be handled on the other.
 import type { ConfrontationEnding, RouteEntry, Stance } from "./arcs";
 import type { ContentSettings, ImageRating, LimitId } from "./content";
+import type { DatePlan, DateScore } from "./dates";
 import type { Face, MusicMood } from "./faces";
+import type { ClawRound } from "./claw";
+import type { ReadHimPaid } from "./read-him";
+import type { ClawLineKind, TapZone, TimeOfDay } from "./home";
+import type { BannerKind, PityCounter, Rarity } from "./wish";
 
 export type { ConfrontationEnding, RouteEntry, RouteNext, Stance } from "./arcs";
 
@@ -62,6 +67,13 @@ export interface Paint {
   error?: string;
 }
 
+/** A free derivative of a retained look, tagged with the Engine cleanup that produced it. */
+export interface Cutout extends Paint {
+  cleanupRevision?: number;
+  /** Retain older derivatives for existing run deletion without deleting an image a live view may still show. */
+  previousRefs?: string[];
+}
+
 /** The model jobs a world names a connection for; a job without its own uses `narration`. */
 export type GenerationJob = "structured" | "narration" | "chat" | "compress";
 export interface Connections {
@@ -80,6 +92,8 @@ export interface ImageSettings {
   expressions: boolean;
   expressionsSince?: string;
   styleProfileId?: string;
+  /** The player's own words for how every picture looks (art style, medium); they lead each image prompt. */
+  style?: string;
 }
 
 export type ForgeStepState = "pending" | "running" | "done" | "failed" | "waiting-consent";
@@ -113,6 +127,8 @@ export interface AudioSettings {
   /** Kept for the kit's shape; Otome has no combat. */
   combatVoices: boolean;
   generate: boolean;
+  /** Generate and retain one theme for each chapter, instead of changing music with every mood. */
+  chapterThemes: boolean;
   homeMusic: string;
   audioConnectionId: string;
   muted: boolean;
@@ -128,6 +144,12 @@ export interface SoundtrackTrack {
   connectionId: string;
   tag: string;
   path: string;
+}
+
+/** Chapter-owned music is retained independently of the world's bounded mood soundtrack. */
+export interface ChapterMusic {
+  prompt?: string;
+  track?: SoundtrackTrack;
 }
 
 /** `world.audio` (M2b): the settings, each cue's music brief (P14, English), and the generated tracks. */
@@ -154,6 +176,8 @@ export interface World {
   mystery: { question: string; truth: string; pieces: Record<LiId, { piece: string; reasonToHide: string }> };
   web: WebRow[];
   openingSituation: string;
+  /** The player's own instructions for how the story is written (tense, voice, pacing…), whole; "" or absent: none. */
+  writingStyle?: string;
   content: ContentSettings;
   images: ImageSettings;
   connections: Connections;
@@ -163,6 +187,30 @@ export interface World {
   places: Record<string, PlaceArt>;
 }
 
+/**
+ * A complete look won on Wish (M4), in the kit's outfit shape (image-avatar-references, story-expressions-server):
+ * `id` is the look's item id, which `wornOutfit` names; `url` is its painted full-body image.
+ */
+export interface Outfit {
+  id: string;
+  /** In the world's language. */
+  name: string;
+  /** English, visual only. */
+  outfitLine: string;
+  url: string;
+  ref?: string;
+  at: string;
+}
+
+/** P19 (M4): what a love interest noticed about the protagonist's new look, one line of 20 words or fewer. */
+export interface Noticed {
+  li: LiId;
+  text: string;
+  /** The outfit id she wore when he noticed. */
+  look: string;
+  at: string;
+}
+
 /** `${R}:player`: the protagonist, from an Engine persona. */
 export interface Player {
   personaId: string;
@@ -170,11 +218,24 @@ export interface Player {
   pronouns: Pronouns;
   traits: string[];
   goal: string;
+  /**
+   * The persona's full authored story fields, retained as this protagonist's fallback. Chapter and scene generation
+   * refreshes them from the selected persona; image-only appearance overrides are not story facts.
+   */
+  about?: string;
   /** English, visual-only tags. */
   look: { identityLine: string; outfitLine: string };
   portrait?: string;
   portraitRef?: string;
   art?: Paint;
+  /** M4: her looks from My Wardrobe. */
+  outfits: Outfit[];
+  /** Free background-cleaned derivatives of retained generated looks; absent on older stories. */
+  cutouts?: Record<string, Cutout>;
+  /** M4: the look she wears at home (an outfit id); absent wears her base look. */
+  wornOutfit?: string;
+  /** M4: his line about the look she wears now (P19), or null. */
+  noticed: Noticed | null;
 }
 
 export type ArcStageKey = "1" | "2" | "3" | "4" | "5" | "6";
@@ -253,13 +314,248 @@ export interface Unit {
   art?: Paint;
   identityLine: string;
   outfitLine: string;
-  /** Kit-owned shapes (outfits arrive in M4, expressions in M2b). */
-  outfits: unknown[];
+  /** M4: his looks from His Wardrobe (the kit reads them as references and as expression bases). */
+  outfits: Outfit[];
+  /** M4: the look he wears (an outfit id); absent wears his base portrait. */
+  wornOutfit?: string;
+  /** Kit-owned (M2b): the faces painted for each look, keyed by the look's URL. */
   expressions: Record<string, unknown>;
   /** Null until the forge's `bible:<li>` step writes it. */
   bible: Bible | null;
   bibleEdited: boolean;
   createdAt: string;
+  /** His pre-written Home lines (P15), written in the background; absent until the first pack lands. */
+  lines?: LinePacks;
+  /** Home cut-outs, keyed by the look's URL: `ready` carries the cut-out; `failed` means pan over the uncut look. */
+  cutouts: Record<string, Cutout>;
+}
+
+// ── Home (M3): line packs, the message of the day, and what Home shows ──
+
+/** Tap lines: three per zone and time of day. */
+export type TapLines = Record<TapZone, Record<TimeOfDay, string[]>>;
+
+/** One stage's lines (P15): taps, the lines for too many pokes, and the cold lines a rupture shows instead. */
+export interface StageLines {
+  stage: number;
+  tap: TapLines;
+  annoyed: string[];
+  cold: string[];
+  at: string;
+}
+
+export type ClawLines = Record<ClawLineKind, string[]>;
+
+/** Lines written once (with his first stage pack): generic rough-day comfort, and the Claw Machine's. */
+export interface FixedLines {
+  comfort: string[];
+  claw: ClawLines;
+  at: string;
+}
+
+export interface LinePacks {
+  stages: Partial<Record<ArcStageKey, StageLines>>;
+  fixed: FixedLines | null;
+}
+
+/** GET /runs/:run/lis/:li/lines. During a rupture only `cold` is his to say: `tap` is null and `annoyed` empty. */
+export interface LinesView {
+  /** True once the pack for his current stage exists; until then the nearest stage's pack, or none (catalog lines). */
+  ready: boolean;
+  stage: number;
+  rupture: boolean;
+  tap: TapLines | null;
+  annoyed: string[];
+  cold: string[];
+  /** Empty until his fixed lines exist (Rough day? then uses the catalog's comfort lines). */
+  comfort: string[];
+  claw: ClawLines | null;
+}
+
+/** The message of the day's mood chip: one word, and a reason of four words or fewer. */
+export interface NoteMood {
+  word: string;
+  reason: string;
+}
+
+/** `${R}:note:${dayKey}:${li}`: one love interest's message of the day (never a care note). */
+export interface Note {
+  li: LiId;
+  /** The local day it was written for, "YYYY-MM-DD" in the request's time zone. */
+  dayKey: string;
+  text: string;
+  /** The face it is written with; "" for his plain look. */
+  face: Face | "";
+  mood: NoteMood;
+  /**
+   * Written while a rupture stood between them. A note whose `curt` no longer matches (a rupture opened or was repaired
+   * since) is stale: Home shows none and the next request writes the day's note again.
+   */
+  curt: boolean;
+  at: string;
+  connectionId: string;
+  model: string;
+}
+
+export type NoteView = Omit<Note, "connectionId" | "model">;
+
+export type HomeShow = "him" | "me";
+
+/** `state.home`: who Home shows. `li` null means the first love interest in cast order. */
+export interface HomeState {
+  li: LiId | null;
+  show: HomeShow;
+}
+
+/**
+ * What Home stands up: `look` is his worn look ("him") or the protagonist's ("me"): a painted full-body `look`, or the
+ * persona's `avatar`. Null shows initials on a gradient. `cutoutState` "pending" means a cut-out is on its way (ask
+ * again later); "uncut" means none will come, so Home pans slowly over the uncut image.
+ */
+export interface HomeLook {
+  url: string;
+  source: "look" | "avatar";
+  cutout?: string;
+  cutoutState: "ready" | "pending" | "uncut";
+}
+
+/** GET /runs/:run/home */
+export interface HomeView {
+  /** The love interest Home is about (state.home.li, else the first in cast order); null with no cast. */
+  li: LiId | null;
+  show: HomeShow;
+  /** Today's note from `li`, or null until POST .../home/note writes it. */
+  note: NoteView | null;
+  look: HomeLook | null;
+  /**
+   * His ready faces for the worn look (painted in the background from M2b), each with its cut-out once ready and the
+   * cut-out's state, as the look's: Home asks again while one is "pending".
+   */
+  faces: Partial<Record<Face, { url: string; cutout?: string; cutoutState: HomeLook["cutoutState"] }>>;
+  /**
+   * L0: his newest unlocked CG (a story CG once seen, a pair portrait, an owned Memory's CG: the Album's), else the
+   * newest painted place; null shows the gradient alone.
+   */
+  backdrop: { url: string; kind: "cg" | "place" } | null;
+  lines: { ready: boolean };
+  /** A rupture stands between him and the protagonist: the note is curt and Home shows his cold lines. */
+  rupture: boolean;
+  /** Replies waiting unread across every phone thread. */
+  unread: number;
+  /** M4: what a love interest said on noticing the look she wears now (P19), shown under her look on Me. */
+  noticed: Noticed | null;
+  /** M4: a love interest is noticing her new look right now: Home asks again until the line lands. */
+  noticing: boolean;
+}
+
+// ── Phone (M3): one private thread per love interest. S/phone/chat.ts reads and writes these shapes. ──
+
+export interface PhoneMessage {
+  /** `m-<time base36>-<8 hex>`, or the client's own id for the player's message. */
+  id: string;
+  who: "player" | "li";
+  /** "" for a sticker on its own. */
+  text: string;
+  /** One of his faces, sent as a sticker (by either of them). */
+  sticker?: Face;
+  /** ISO time it was saved. */
+  at: string;
+  /** The note of the day this message replies to (Reply on Home). */
+  quote?: string;
+}
+
+/** A closed conversation: messages `start`..`start + count - 1`, and what he remembers of it. */
+export interface PhoneSession {
+  start: number;
+  count: number;
+  memory: { text: string; quote: string };
+  closedAt: string;
+  /** His name when it closed, so a later rename does not rewrite the memory's title. */
+  name?: string;
+}
+
+/** `${R}:chat:${li}`. */
+export interface PhoneThread {
+  version: 1;
+  li: LiId;
+  messages: PhoneMessage[];
+  sessions: PhoneSession[];
+  seenAt: string | null;
+  suggestions: string[];
+}
+
+/** GET /runs/:run/phone */
+export interface PhoneListView {
+  threads: Array<{ li: LiId; last: PhoneMessage | null; unread: number; busy: boolean }>;
+}
+
+/** GET /runs/:run/phone/:li?page= : the kit's forgeChatHistoryPage, plus what the thread screen shows around it. */
+export interface PhoneHistoryPage {
+  /** This page, oldest first; `archived` marks the messages of closed conversations. */
+  messages: Array<PhoneMessage & { archived: boolean }>;
+  /** 1 is the newest page. */
+  page: number;
+  pages: number;
+  /** The thread-wide index of this page's first message (session `start`s count from it). */
+  from: number;
+  /** How many conversations are closed. */
+  past: number;
+  /** Messages in the open conversation. */
+  activeCount: number;
+  /** His reply (or a close) is being written right now. */
+  busy: boolean;
+  /** The protagonist's last message is still waiting for a reply: offer Retry. */
+  retry: boolean;
+  sessions: PhoneSession[];
+  suggestions: string[];
+  seenAt: string | null;
+}
+
+/** POST .../send */
+export interface PhoneSendResult {
+  /** What this request added or found: the player's message (when it was new or named by `id`), then his reply. */
+  messages: PhoneMessage[];
+  suggestions: string[];
+}
+
+/** Affection from Close and remember (the Grant shape, with its own source). */
+export interface PhoneGrant {
+  source: "close-and-remember";
+  li: LiId;
+  affection: number;
+}
+
+/** POST .../close */
+export interface PhoneCloseResult {
+  memory: PhoneSession["memory"];
+  /** Empty when nothing was earned: a replay, a one-sided conversation, or the day's cap. */
+  grants: PhoneGrant[];
+}
+
+// ── Remind Me and the caring message (M6). Tracker data never reaches a server document: the client works out
+// today's state (C/lib/cycle.ts) and sends at most its one templated line. ──
+
+/**
+ * GET /runs/:run/calendar: the story's days. `md` is "MM-DD", every year; `day` is a local date ("YYYY-MM-DD").
+ * Anniversaries are the world's first day and the Love Timeline's firsts (each stage reached, each `first-<what>`; its
+ * Snapshots and couple sets stay in the Album); `label` is shown as written (story text) and `year`, when given, is
+ * the year it happened (none is drawn before it).
+ */
+export interface CalendarView {
+  birthdays: Array<{ li: LiId; md: string }>;
+  anniversaries: Array<{ md: string; label: string; li?: LiId; year?: number }>;
+  /** Wish banners' last days (M4); empty before any banner exists. */
+  bannerEnds: Array<{ day: string; banner: string }>;
+}
+
+/**
+ * POST /runs/:run/care-note {li, careLine?}. `careLine` is one of C/lib/cycle.ts careLines, exactly; without it, or
+ * while any debug condition holds, the server answers from their comfort lines (`note` null while those aren't written
+ * yet: the client shows one of the catalog's). Nothing is stored (Cache-Control: no-store).
+ */
+export interface CareNoteResult {
+  note: string | null;
+  source: "model" | "pool";
 }
 
 // ── State (M1, with M2a's angst, ledgers and reading progress). Trust and tension are never shown to the player. ──
@@ -289,7 +585,7 @@ export interface ChapterShift {
 
 /** One love interest's progress and the state of things between him and the protagonist. */
 export interface LiState {
-  /** Affection points; they only rise. Level = min(10, 1 + floor(points / 300)). */
+  /** Affection points may fall within the reached level. Level = min(10, 1 + floor(points / 300)). */
   points: number;
   stage: number;
   /** −3..+3, starting at 0; moved only by first-play choices, capped per beat and per chapter. */
@@ -311,6 +607,8 @@ export interface LiState {
   angst: string[];
   /** Dated firsts for the Love Timeline: first-kind → ISO time. */
   firsts: Record<string, string>;
+  /** Indexes into his bible's `mask.tells` the protagonist has learned to read (Read Him, M5). */
+  tellsLearned: number[];
 }
 
 /** A chapter's reading progress. `applied` holds `${i}/${choiceId}` for every pick whose effects reached the state. */
@@ -375,14 +673,42 @@ export interface RunState {
   ledgers: Ledgers;
   timeline: TimelineEntry[];
   favorites: Favorite[];
+  /** Who Home shows (M3). */
+  home: HomeState;
   /** M2b: the CGs unlocked once seen. */
   album: { cgs: AlbumCg[] };
+  /** M4: each banner kind's pity (GF's counter names), carried over from banner to banner and shared by Echoes. */
+  pity: Record<BannerKind, PityCounter>;
+  /**
+   * What the player owns. M4: the item ids, in the order won, and when each was won (an ISO time, by item id). M5: the
+   * plush shelf, prize id → how many (SH/claw.ts).
+   */
+  owned: { items: string[]; at: Record<string, string>; plush: Record<string, number> };
+  /**
+   * M4: the love interests whose Memory Selector (affection 10) has been used, each with the Memory it claimed (`true`:
+   * an early claim that did not record which).
+   */
+  selector: Record<LiId, string | true>;
+  /** M4: the newest pulls by request id, so a retried pull answers with the same results and charges once. */
+  pulls: WishPullRecord[];
+  /** Each LI's newest finished Claw Machine rounds (M5): a repeated finish is answered from here; each is his memory. */
+  claw: { rounds: ClawRound[] };
+  /** The newest paid Read Him sets (M5): the finish's once-only mark, in the same write as its pay. */
+  readHim: { paid: ReadHimPaid[] };
+}
+
+/** One pull as the state keeps it (S/wish/pull.ts), for answering a retried request. */
+export interface WishPullRecord {
+  id: string;
+  banner: string;
+  at: string;
+  results: Array<{ item: string; rarity: Rarity; isNew: boolean; refund: number }>;
 }
 
 // ── Story (M2a): chapters, beats, choices. Chapter keys: `main-<n>`, `route-<li>-<stage>`, `repair-<li>-<n>`,
 // `story-<itemId>`, `date-<n>`. ──
 
-export type ChapterKind = "main" | "route" | "repair" | "story" | "date";
+export type ChapterKind = "prologue" | "main" | "route" | "repair" | "story" | "date";
 export type NodeKind = "beat" | "moment" | "confrontation";
 /** A moment node's framing: reading his face, a phone call, a date gone wrong. Written as a beat until M2b/M5. */
 export type MomentKind = "read-him" | "call" | "date";
@@ -436,6 +762,11 @@ export interface Chapter {
   ledger: ChapterLedger;
   plannedAt: string;
   connectionId: string;
+  music?: ChapterMusic;
+  /** A Memory's Character Story (M4): the line its card voices, kept with the chapter so the item is always given it. */
+  voicedLine?: string;
+  /** A date's own plan (M5, SH/dates.ts); hidden from the chapter view. */
+  date?: DatePlan;
 }
 
 /** A segment of a beat: one line of dialogue, one thought, or one piece of narration. */
@@ -498,9 +829,15 @@ export interface Beat {
   effects: Record<string, Record<string, Effect[]>>;
   /** Picks whose effects were applied (hidden from the client). */
   applied: Record<string, true>;
+  /** A date's beat (M5): choiceId → optionId → how the date's love interest takes it (hidden from the client). */
+  scores?: Record<string, Record<string, DateScore>>;
   musicMood: MusicMood;
-  /** A key image's brief: `at` is the segment it opens on; `brief` is English. `art` is its paint (M2b, S/art/cg.ts). */
-  cg?: { at: number; brief: string; cast: string[]; art?: Paint };
+  /**
+   * A key image's brief: `at` is the segment it opens on; `brief` is English. `art` is its paint (M2b, S/art/cg.ts).
+   * `explicit`: the brief shows sex or nudity on the page; kept only when Heat and the image rating were both Explicit
+   * as it was written, and painted explicit only while they still are (S/content-contract.ts effectiveImageRating).
+   */
+  cg?: { at: number; brief: string; cast: string[]; explicit?: true; art?: Paint };
   /** The furthest mainline segment read (skip-read starts here). */
   readThrough: number;
   /** The player ended the scene at segment `at` (no model call); `veil` is what they chose to veil from then on. */
@@ -601,12 +938,16 @@ export type ChapterState = "unplanned" | "in-progress" | "done";
 export type BeatState = "unwritten" | "ready" | "read";
 
 /** A chapter as the client sees it: no guides and no ledger (the plan is the hidden story). */
-export type ChapterView = Omit<Chapter, "nodes" | "ledger" | "connectionId"> & {
+export type ChapterView = Omit<Chapter, "nodes" | "ledger" | "connectionId" | "date" | "music"> & {
+  music?: Pick<ChapterMusic, "track">;
   nodes: Array<Pick<ChapterNode, "i" | "kind" | "moment" | "cg" | "gate">>;
 };
 
-/** A beat as the client sees it: without its effects or its stored confrontation (POST .../beats/:i sends a view). */
-export type BeatView = Omit<Beat, "effects" | "applied" | "confrontation">;
+/**
+ * A beat as the client sees it: without its effects, its stored confrontation (POST .../beats/:i sends a view) or a
+ * date's scores.
+ */
+export type BeatView = Omit<Beat, "effects" | "applied" | "confrontation" | "scores">;
 
 /** GET /runs/:run/art/scene (M2b): what the reader polls while a beat's art is painting. */
 export interface SceneArt {
@@ -614,9 +955,9 @@ export interface SceneArt {
   places: PlaceArt[];
   /** The beat's key image with its paint, or null. */
   cg: NonNullable<BeatView["cg"]> | null;
-  /** Each love interest's faces for the look worn now, once the set is ready and expressions are on. */
+  /** Cleaned faces for the look worn now; originals awaiting or failing cleanup are never stage art. */
   faces: Record<LiId, Partial<Record<Face, string>>>;
-  /** The love interests whose faces are still being painted (a failed or stopped set never arrives on its own). */
+  /** Faces are still painting or being freely cleaned; failed/stopped work never keeps polling. */
   facesComing: LiId[];
 }
 
@@ -667,6 +1008,14 @@ export interface Grant {
   affection?: number;
 }
 
+/** What an activity (Read Him, a date, a Claw round) earned, within the day's caps. */
+export interface ActivityGrant {
+  source: "read-him" | "date" | "claw";
+  starlight?: number;
+  li?: LiId;
+  affection?: number;
+}
+
 /** POST .../beats/:i/read */
 export interface ReadResult {
   grants: Grant[];
@@ -709,10 +1058,18 @@ export interface RunLiView {
   voiceGender: Unit["voiceGender"];
   accent: string;
   portrait?: string;
+  /** Visual intent only, safe to read without opening a spoiler-heavy Bible. */
+  look?: Pick<Bible["look"], "identityLine" | "outfitLine">;
+  /** His look's paint record (the forge screen shows a failed paint's reason in debug mode). */
+  art?: Paint;
+  /** Which of this view's images are cut-outs (no backdrop): shown whole rather than cropped and faded. */
+  cut?: string[];
   level: number;
   stage: number;
   /** M2b: his painted faces for the current look, once the whole set is ready and expressions are on. */
   expressions?: Partial<Record<Face, string>>;
+  /** M4: the look he wears from His Wardrobe, when not his base portrait (its outfit id and image). */
+  worn?: { id: string; url: string };
 }
 
 /** GET /runs/:run, and the `view` of POST /runs. */
@@ -722,7 +1079,11 @@ export interface RunView {
   player: Player;
   lis: RunLiView[];
   forge: ForgeStatus;
+  /** Free sprite cleanup is still running; poll the run until the retained look's derivative is ready. */
+  cutoutsPending?: true;
   starlight: number;
+  /** GET /runs/:run: the prologue has been read to its end (Begin then goes straight Home). */
+  prologue?: boolean;
 }
 
 export type SetupLi =
@@ -734,17 +1095,19 @@ export interface SetupInput {
   title?: string;
   premise: string;
   language: string;
+  writingStyle?: string;
   protagonist: { personaId: string; pronouns: Pronouns; traits: string[]; goal: string };
   lis: SetupLi[];
   content: ContentSettings;
-  images: Pick<ImageSettings, "connectionId" | "rating" | "ask" | "expressions">;
+  images: Pick<ImageSettings, "connectionId" | "rating" | "ask" | "expressions" | "style">;
   connections: Connections;
 }
 
 /** POST /runs/:run/settings. Raising a gated setting needs the 18+ gate; lowering one never does. */
 export interface SettingsInput {
   content?: ContentSettings;
-  images?: Partial<Pick<ImageSettings, "connectionId" | "rating" | "ask" | "expressions" | "styleProfileId">>;
+  images?: Partial<Pick<ImageSettings, "connectionId" | "rating" | "ask" | "expressions" | "styleProfileId" | "style">>;
   connections?: Connections;
   language?: string;
+  writingStyle?: string;
 }

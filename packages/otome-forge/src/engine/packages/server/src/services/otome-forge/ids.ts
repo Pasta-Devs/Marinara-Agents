@@ -85,15 +85,17 @@ export const stateId = (runId: string) => `${runId}:state`;
 
 // ── The story (M2a). Kinds: "chapter", "beat", "memory". ──
 
-/** `main-<n>`, `route-<li>-<stage>`, `repair-<li>-<n>`, `story-<itemId>` or `date-<n>`. */
+/** `prologue`, `main-<n>`, `route-<li>-<stage>`, `repair-<li>-<n>`, `story-<itemId>` or `date-<n>`. */
 const CHAPTER_KEY =
-  /^(?:main-[1-9]\d{0,5}|route-li-[a-z0-9-]{3,40}-[1-6]|repair-li-[a-z0-9-]{3,40}-[1-9]\d{0,5}|story-[a-z0-9-]{1,60}|date-[1-9]\d{0,5})$/;
+  /^(?:prologue|main-[1-9]\d{0,5}|route-li-[a-z0-9-]{3,40}-[1-6]|repair-li-[a-z0-9-]{3,40}-[1-9]\d{0,5}|story-[a-z0-9-]{1,60}|date-[1-9]\d{0,5})$/;
 
 export function isChapterKey(value: unknown): value is string {
   return typeof value === "string" && CHAPTER_KEY.test(value);
 }
 
 export const mainChapterKey = (number: number) => `main-${number}`;
+/** The prologue's chapter key (S/story/prologue.ts). */
+export const PROLOGUE_KEY = "prologue";
 /** The main chapter's number, or null for any other key. */
 export function mainChapterNumber(key: string): number | null {
   const match = /^main-(\d+)$/.exec(key);
@@ -111,8 +113,44 @@ export const beatId = (runId: string, key: string, i: number) => `${runId}:beat:
 /** `${R}:memory`: the kit's story memory (summaries, overview, recall records). */
 export const memoryId = (runId: string) => `${runId}:memory`;
 
+// ── Home and phone (M3). Kinds: "note", "chat". ──
+
+const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** "YYYY-MM-DD", as the kit's forgeDayKey gives it. */
+export function isDayKey(value: unknown): value is string {
+  return typeof value === "string" && DAY_KEY.test(value);
+}
+
+/** `${R}:note:${dayKey}:${li}`: a love interest's message of the day for one local day (never a care note). */
+export const noteId = (runId: string, dayKey: string, li: string) => `${runId}:note:${dayKey}:${li}`;
+/** `${R}:chat:${li}`: a love interest's private phone thread (the shape the kit's forgeChatHistoryPage reads). */
+export const chatId = (runId: string, li: string) => `${runId}:chat:${li}`;
+
+// ── Wish (M4). Kinds: "banner", "item". Keys and item ids come from SH/wish.ts (bannerKey, itemIdOf). ──
+
+/** `${R}:banner:${kind}-${rotation}`: a banner and the ids of its items. */
+export const bannerId = (runId: string, key: string) => `${runId}:banner:${key}`;
+/** `${R}:item:${itemId}`: a Memory, a look or a Snapshot. */
+export const itemId = (runId: string, item: string) => `${runId}:item:${item}`;
+/** `story-<itemId>`: the chapter key of an item's Character Story, Moment or first-wear beat. */
+export const itemStoryKey = (item: string) => `story-${item}`;
+
 /** Every kind a run's documents have. Deleting a run removes each; a milestone that adds a kind adds it here. */
-export const RUN_DOC_KINDS = ["world", "player", "unit", "state", "chapter", "beat", "memory"] as const;
+export const RUN_DOC_KINDS = [
+  "world",
+  "player",
+  "unit",
+  "state",
+  "chapter",
+  "beat",
+  "memory",
+  "note",
+  "chat",
+  "banner",
+  "item",
+  "readhim",
+] as const;
 export type RunDocKind = (typeof RUN_DOC_KINDS)[number];
 /** The `{id, kind, name}` mutateDoc creates a run document with. */
 export const runDocTarget = (kind: RunDocKind, id: string) => ({ id, kind, name: `Otome Forge ${kind}` });

@@ -80,6 +80,8 @@ export function confrontationOpponent(
 
 /** How beats.ts normalizes one list of segments (its P6 rules), lent to P12's reply. */
 export interface SegmentLists {
+  /** A specific place-reference validation error, before list() reduces invalid input to null. */
+  placesProblem?(raw: unknown): string;
   /** The list in its saved shape from `start` (the place it opens in); null when nothing usable is left. */
   list(raw: unknown, start: string): { segments: Segment[]; places: Array<{ name: string; tags: string }> } | null;
   /**
@@ -104,9 +106,16 @@ const lastPlace = (segments: readonly Segment[], fallback: string) =>
 /** The reply as a confrontation, or the first rule it breaks (the repair turn names it). */
 export function normalizeConfrontationReply(
   reply: ConfrontationReply,
-  { li, node, cgOpen }: { li: LiId; node: Pick<ChapterNode, "place">; cgOpen: boolean },
+  {
+    li,
+    node,
+    cgOpen,
+    cgExplicit = false,
+  }: { li: LiId; node: Pick<ChapterNode, "place">; cgOpen: boolean; cgExplicit?: boolean },
   lists: SegmentLists,
 ): ConfrontationBody | string {
+  const placesProblem = lists.placesProblem?.(reply.places);
+  if (placesProblem) return placesProblem;
   const lengths = (name: string, items: unknown, max: number) =>
     Array.isArray(items) && items.length > max ? `${name} has more than ${max} segments` : "";
   // One thought per love interest in the whole scene, as P6 counts a beat: along the path with the most of them (the
@@ -231,6 +240,7 @@ export function normalizeConfrontationReply(
         .map((name) => str(name, NAME_MAX))
         .filter(Boolean)
         .slice(0, 3),
+      ...(cgExplicit && cg.explicit === true ? { explicit: true as const } : {}),
     };
   }
   return body;

@@ -13,15 +13,20 @@ const { activate, selfCheck } = await import(serverPath);
 async function activatePackage(fake = createFakeDocuments()) {
   const { runtime, logs } = createFakeRuntime({ documents: fake.documents });
   const routes = new Map();
+  // Fastify route options, as the Engine's collector takes them: (path, handler) or (path, options, handler).
+  const routeOptions = new Map();
   const prefixes = [];
+  const collect =
+    (method, prefix) =>
+    (path, ...rest) => {
+      routes.set(`${method} ${prefix}${path}`, rest.at(-1));
+      if (rest.length > 1) routeOptions.set(`${method} ${prefix}${path}`, rest[0]);
+    };
   const api = {
     runtime,
     async registerPrivilegedRoutes(register, options) {
       prefixes.push(options.prefix);
-      await register({
-        get: (path, handler) => routes.set(`GET ${options.prefix}${path}`, handler),
-        post: (path, handler) => routes.set(`POST ${options.prefix}${path}`, handler),
-      });
+      await register({ get: collect("GET", options.prefix), post: collect("POST", options.prefix) });
       return () => routes.clear();
     },
   };
@@ -44,7 +49,7 @@ async function activatePackage(fake = createFakeDocuments()) {
     const result = await handler({ method, url, params: {}, query: {}, body }, reply);
     return { status: reply.statusCode, body: result === reply ? reply.payload : result };
   };
-  return { fake, logs, routes, prefixes, cleanup, call };
+  return { fake, logs, routes, routeOptions, prefixes, cleanup, call };
 }
 
 test("the bundle registers its routes under /api/otome-forge, keeps the id prefix and cleans up", async () => {
@@ -55,11 +60,21 @@ test("the bundle registers its routes under /api/otome-forge, keeps the id prefi
   assert.deepEqual([...host.routes.keys()].sort(), [
     "GET /api/otome-forge/index",
     "GET /api/otome-forge/runs/:run",
+    "GET /api/otome-forge/runs/:run/album",
     "GET /api/otome-forge/runs/:run/art/scene",
+    "GET /api/otome-forge/runs/:run/calendar",
     "GET /api/otome-forge/runs/:run/chapters/:key",
+    "GET /api/otome-forge/runs/:run/dates",
+    "GET /api/otome-forge/runs/:run/home",
     "GET /api/otome-forge/runs/:run/lis/:li/bible",
+    "GET /api/otome-forge/runs/:run/lis/:li/lines",
     "GET /api/otome-forge/runs/:run/memory/status",
+    "GET /api/otome-forge/runs/:run/phone",
+    "GET /api/otome-forge/runs/:run/phone/:li",
+    "GET /api/otome-forge/runs/:run/play",
     "GET /api/otome-forge/runs/:run/story",
+    "GET /api/otome-forge/runs/:run/wardrobe",
+    "GET /api/otome-forge/runs/:run/wish",
     "POST /api/otome-forge/age-gate",
     "POST /api/otome-forge/age-gate/revoke",
     "POST /api/otome-forge/index/opened",
@@ -69,6 +84,10 @@ test("the bundle registers its routes under /api/otome-forge, keeps the id prefi
     "POST /api/otome-forge/runs/:run/art/cg",
     "POST /api/otome-forge/runs/:run/art/cg/prompt",
     "POST /api/otome-forge/runs/:run/art/cg/seen",
+    "POST /api/otome-forge/runs/:run/art/expressions",
+    "POST /api/otome-forge/runs/:run/art/expressions/prompt",
+    "POST /api/otome-forge/runs/:run/art/keepsake",
+    "POST /api/otome-forge/runs/:run/art/keepsake/prompt",
     "POST /api/otome-forge/runs/:run/art/paint",
     "POST /api/otome-forge/runs/:run/art/place",
     "POST /api/otome-forge/runs/:run/art/place/prompt",
@@ -77,24 +96,55 @@ test("the bundle registers its routes under /api/otome-forge, keeps the id prefi
     "POST /api/otome-forge/runs/:run/audio/settings",
     "POST /api/otome-forge/runs/:run/audio/track",
     "POST /api/otome-forge/runs/:run/cancel",
+    "POST /api/otome-forge/runs/:run/care-note",
     "POST /api/otome-forge/runs/:run/chapters/:key/beats/:i",
     "POST /api/otome-forge/runs/:run/chapters/:key/beats/:i/choose",
     "POST /api/otome-forge/runs/:run/chapters/:key/beats/:i/ease-off",
     "POST /api/otome-forge/runs/:run/chapters/:key/beats/:i/read",
     "POST /api/otome-forge/runs/:run/chapters/:key/beats/:i/stance",
     "POST /api/otome-forge/runs/:run/chapters/next",
+    "POST /api/otome-forge/runs/:run/claw/finish",
+    "POST /api/otome-forge/runs/:run/dates",
+    "POST /api/otome-forge/runs/:run/dates/:key/finish",
     "POST /api/otome-forge/runs/:run/delete",
     "POST /api/otome-forge/runs/:run/favorites",
     "POST /api/otome-forge/runs/:run/forge/consent",
     "POST /api/otome-forge/runs/:run/forge/retry",
+    "POST /api/otome-forge/runs/:run/home/note",
+    "POST /api/otome-forge/runs/:run/home/set",
+    "POST /api/otome-forge/runs/:run/items/:item/art",
+    "POST /api/otome-forge/runs/:run/items/:item/art/prompt",
+    "POST /api/otome-forge/runs/:run/items/:item/open",
     "POST /api/otome-forge/runs/:run/lis/:li/accent",
     "POST /api/otome-forge/runs/:run/lis/:li/bible",
+    "POST /api/otome-forge/runs/:run/lis/:li/card",
     "POST /api/otome-forge/runs/:run/memory/retry",
+    "POST /api/otome-forge/runs/:run/phone/:li/close",
+    "POST /api/otome-forge/runs/:run/phone/:li/seen",
+    "POST /api/otome-forge/runs/:run/phone/:li/send",
+    "POST /api/otome-forge/runs/:run/prologue",
+    "POST /api/otome-forge/runs/:run/read-him",
+    "POST /api/otome-forge/runs/:run/read-him/:set/answer",
+    "POST /api/otome-forge/runs/:run/read-him/:set/finish",
     "POST /api/otome-forge/runs/:run/repairs/:li",
     "POST /api/otome-forge/runs/:run/routes/:li/next",
+    "POST /api/otome-forge/runs/:run/selector/:li",
     "POST /api/otome-forge/runs/:run/settings",
     "POST /api/otome-forge/runs/:run/veil",
+    "POST /api/otome-forge/runs/:run/wardrobe/pair",
+    "POST /api/otome-forge/runs/:run/wardrobe/pair/prompt",
+    "POST /api/otome-forge/runs/:run/wardrobe/show",
+    "POST /api/otome-forge/runs/:run/wardrobe/wear",
+    "POST /api/otome-forge/runs/:run/wish/art",
+    "POST /api/otome-forge/runs/:run/wish/art/prompt",
+    "POST /api/otome-forge/runs/:run/wish/open",
+    "POST /api/otome-forge/runs/:run/wish/pull",
   ]);
+  // The Caring message is the one route the Engine writes no request line for (incoming request, request completed):
+  // its button shows only on a day the period tracker marks, so a timestamped line would date one.
+  assert.deepEqual(Object.fromEntries(host.routeOptions), {
+    "POST /api/otome-forge/runs/:run/care-note": { logLevel: "silent" },
+  });
 
   await selfCheck();
   assert.deepEqual([...fake.rows.keys()], ["index"], "selfCheck and reads create nothing");

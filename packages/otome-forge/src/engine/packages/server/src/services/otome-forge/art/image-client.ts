@@ -5,12 +5,12 @@
 // Engine has no server image API that takes a connection id, so the server calls its own HTTP routes on 127.0.0.1:
 // POST /api/characters/avatar-generation paints (with debugMode, so the Engine logs the prompt in debug mode), and
 // /api/global-gallery keeps the result. A loopback call is ordinary trusted server code and needs no permission.
-// The methods are named generatePortrait and generateBannerArt so the kit's forgeWrapImageReferenceClient adds each
-// subject's card or persona avatar (or saved portrait) as a reference; that wrapper also needs characterCard,
-// personaAvatar and cardAvatarImage. generateImage is one paid image with exactly the references it is given (a place
-// has none; an expression edit has its base) and saves nothing: uploadToGallery keeps it, in the shape the kit's
-// expressions module calls. Later milestones add generateOutfit (M4) and cutOut (M3) here.
-import { forgeWrapImageReferenceClient } from "@forge-kit/image-avatar-references.mjs";
+// The methods are named generatePortrait, generateOutfit (M4: a look won on Wish) and generateBannerArt so the kit's
+// forgeWrapImageReferenceClient adds each subject's card or persona avatar (or saved portrait) as a reference; that
+// wrapper also needs characterCard, personaAvatar and cardAvatarImage. generateImage is one paid image with exactly the
+// references it is given (a place has none; an expression edit has its base) and saves nothing: uploadToGallery keeps
+// it, in the shape the kit's expressions module calls.
+import { forgeSubjectReference, forgeWrapImageReferenceClient } from "@forge-kit/image-avatar-references.mjs";
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 
 /** Whose likeness a look keeps: the fields forgeWrapImageReferenceClient reads to find a reference image. */
@@ -20,6 +20,8 @@ export interface ImageSubject {
   personaId?: string;
   portrait?: string;
   outfits?: unknown[];
+  /** The look worn now: the kit sends its image after the faces for scene and banner art. */
+  wornOutfit?: string;
 }
 
 export interface PortraitRequest {
@@ -87,6 +89,8 @@ export interface StyleProfile {
 export interface ImageClient {
   /** Paints one image and uploads it to the Global Gallery. Throws on any failure; it never retries. */
   generatePortrait(request: PortraitRequest): Promise<PaintedImage>;
+  /** A new look for the same person (M4, S/art/outfits.ts): as generatePortrait, with the subject's likeness kept. */
+  generateOutfit(request: PortraitRequest): Promise<PaintedImage>;
   /** Paints a scene with its people (each one's reference added by the wrapper) and uploads it. Never retries. */
   generateBannerArt(request: SceneRequest): Promise<PaintedImage>;
   /** One paid image, not saved. Throws on any failure; it never retries. */
@@ -119,6 +123,19 @@ const IMAGE_TYPES: Record<string, string> = {
   "image/avif": ".avif",
 };
 
+/**
+ * The style every picture of a world is painted in: the Engine's style profile, with the player's own image style
+ * (Settings → Images) in place of the profile's style words when they have written one.
+ */
+export async function worldStyle(
+  images: Pick<ImageClient, "styleProfile">,
+  settings: { styleProfileId?: string; style?: string },
+): Promise<StyleProfile> {
+  const profile = await images.styleProfile(settings.styleProfileId);
+  const own = str(settings.style);
+  return own ? { ...profile, styleText: own } : profile;
+}
+
 /** The Engine sends at most this many references to the provider (characters.routes.ts avatar-generation). */
 export const REFERENCES_MAX = 4;
 
@@ -138,6 +155,40 @@ export function galleryRefIds(value: unknown): string[] {
 }
 
 const str = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+
+const DATA_URL = /^data:([^;,]+);base64,([\s\S]+)$/;
+
+/** The type the image's own first bytes say it is, or "" when they match none of IMAGE_TYPES. */
+function sniffImageType(bytes: Uint8Array): string {
+  const ascii = (from: number, to: number) => String.fromCharCode(...bytes.subarray(from, to));
+  if (bytes[0] === 0x89 && ascii(1, 4) === "PNG") return "image/png";
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+  if (ascii(0, 4) === "GIF8") return "image/gif";
+  if (ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP") return "image/webp";
+  if (ascii(4, 8) === "ftyp" && /^avi[fs]$/.test(ascii(8, 12))) return "image/avif";
+  return "";
+}
+
+/**
+ * The image in the Engine's data URL, typed by its bytes. A provider can answer with a data URL where the Engine
+ * expects bare base64: xAI's generations endpoint (a paint with no reference, such as an archetype's look) returns
+ * `data:image/jpeg;base64,…` as `b64_json`, which the Engine wraps again as image/png. Decoding that as it stands
+ * gives broken bytes, so an inner data URL is unwrapped and the bytes, not the label, give the type.
+ * ponytail: a shim for the Engine's xAI generation; once the Engine unwraps and types xAI's b64_json itself, only one
+ * data URL ever arrives here and the loop runs once.
+ */
+export function engineImage(value: string): { mime: string; base64: string } | null {
+  let mime = "";
+  let payload = value.trim();
+  for (let match = DATA_URL.exec(payload); match; match = DATA_URL.exec(payload)) {
+    mime = match[1]!.toLowerCase();
+    payload = match[2]!.trim();
+  }
+  const base64 = payload.replace(/\s+/g, "");
+  if (!mime || !base64) return null;
+  const sniffed = sniffImageType(Buffer.from(base64.slice(0, 32), "base64"));
+  return { mime: sniffed || mime, base64 };
+}
 
 /** The Engine's own address: http(s)://127.0.0.1:$PORT (7860 by default; https when SSL_CERT and SSL_KEY are set). */
 export function loopbackBaseUrl(env: Record<string, string | undefined> = process.env): string {
@@ -212,9 +263,7 @@ export function createImageClient({
           promptOverrides: [{ id: avatarOverrideId(name), prompt, negativePrompt }],
         }),
       })) as { image?: unknown; prompt?: unknown } | null;
-      const match = /^data:([^;,]+);base64,([\s\S]+)$/.exec(str(result?.image));
-      const mime = match?.[1].toLowerCase() ?? "";
-      const base64 = match?.[2].replace(/\s+/g, "") ?? "";
+      const { mime, base64 } = engineImage(str(result?.image)) ?? { mime: "", base64: "" };
       if (!IMAGE_TYPES[mime] || !base64) throw new Error("engine returned no usable image");
       const sent = str(result?.prompt);
       return {
@@ -266,6 +315,12 @@ export function createImageClient({
         referenceImages,
       });
       return client.uploadToGallery({ image, name, prompt });
+    },
+
+    async generateOutfit({ unit: _unit, ...request }) {
+      // `unit` only tells the wrapper whose likeness to keep; its reference is in `referenceImages` by now.
+      const image = await client.generateImage(request);
+      return client.uploadToGallery({ image, name: request.name, prompt: request.prompt });
     },
 
     async generateBannerArt({ units: _units, ...request }) {
@@ -346,7 +401,35 @@ export function createImageClient({
       }
     },
   };
-  return forgeWrapImageReferenceClient(client, logger, { logPrefix: "[otome-forge]" });
+  return forgeWrapImageReferenceClient(client, logger, {
+    logPrefix: "[otome-forge]",
+    async subjectReference(client, subject) {
+      const cardId = str(subject.cardId);
+      if (cardId && !cardId.includes("..") && !/[\\/]/u.test(cardId)) {
+        try {
+          const sprites: unknown = await request(`/api/sprites/${encodeURIComponent(cardId)}`);
+          // Only the selected card's exact neutral full-body raster is an identity reference. Never fetch a URL
+          // returned in metadata: derive its local file route from the selected id and a verified filename.
+          const neutral = Array.isArray(sprites)
+            ? sprites.find(
+                (sprite) =>
+                  str(sprite?.expression).toLowerCase() === "full_neutral" &&
+                  /^full_neutral\.(?:png|jpe?g|gif|webp|avif)$/iu.test(str(sprite?.filename)),
+              )
+            : undefined;
+          if (neutral) {
+            const image = await client.cardAvatarImage(
+              `/api/sprites/${encodeURIComponent(cardId)}/file/${encodeURIComponent(str(neutral.filename))}`,
+            );
+            if (image) return `data:${image.mime};base64,${image.base64}`;
+          }
+        } catch {
+          // A missing card or sprite does not prevent a paint with this love interest's other retained likenesses.
+        }
+      }
+      return forgeSubjectReference(client, subject);
+    },
+  });
 }
 
 const clients = new WeakMap<object, ImageClient>();

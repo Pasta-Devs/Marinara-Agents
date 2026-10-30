@@ -9,8 +9,9 @@ import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { Music, Volume2 } from "lucide-react";
-import { normalizeForgeAudio } from "@forge-kit/audio-settings.mjs";
+import { normalizeOtomeAudio } from "../../shared/audio";
 import { useOtomeApi } from "../../api";
+import { RetryNotice } from "../../components/RetryNotice";
 import { useConnections } from "../../hooks/use-engine-resources";
 import { useOtomeAudio } from "../../hooks/use-otome-audio";
 import { patchRun } from "../../hooks/use-run";
@@ -23,20 +24,28 @@ import { NoStory, SaveBar, storedKey } from "./ContentSettings";
 /** What this tab edits; the rest of the kit's audio shape is kept as it is. */
 type AudioForm = Pick<
   AudioSettings,
-  "tts" | "otherVoices" | "generate" | "audioConnectionId" | "muted" | "musicVolume" | "dialogueVolume"
+  | "tts"
+  | "otherVoices"
+  | "generate"
+  | "chapterThemes"
+  | "audioConnectionId"
+  | "muted"
+  | "musicVolume"
+  | "dialogueVolume"
 >;
 
 const toForm = (audio: AudioSettings): AudioForm => ({
   tts: audio.tts,
   otherVoices: audio.otherVoices,
   generate: audio.generate,
+  chapterThemes: audio.chapterThemes,
   audioConnectionId: audio.audioConnectionId,
   muted: audio.muted,
   musicVolume: audio.musicVolume,
   dialogueVolume: audio.dialogueVolume,
 });
 
-const storedAudio = (run: RunView) => normalizeForgeAudio(run.world.audio);
+const storedAudio = (run: RunView) => normalizeOtomeAudio(run.world.audio);
 
 interface VolumeProps {
   label: string;
@@ -92,7 +101,7 @@ function useSaveAudio(runKey: string | null) {
       const result = await otome.post<{ audio: AudioSettings }>(`/runs/${encodeURIComponent(runKey)}/audio/settings`, {
         audio,
       });
-      const stored = normalizeForgeAudio(result?.audio ?? audio);
+      const stored = normalizeOtomeAudio(result?.audio ?? audio);
       patchRun(queryClient, runKey, (view) => ({
         ...view,
         world: { ...view.world, audio: { ...view.world.audio, ...stored } },
@@ -147,7 +156,18 @@ function StoryAudio({ run, saving }: { run: RunView; saving: ReturnType<typeof u
       <Section title={t("ui.otomeForge.audio.voicesTitle")} hint={t("ui.otomeForge.audio.voicesHint")}>
         <Switch
           label={t("ui.otomeForge.audio.tts")}
-          hint={t("ui.otomeForge.audio.ttsHint")}
+          hint={
+            <>
+              {t("ui.otomeForge.audio.ttsHint")}
+              <span className="of-cost">
+                <Volume2 size={14} strokeWidth={2} aria-hidden="true" />
+                <span>
+                  {t("ui.otomeForge.audio.ttsCost")}
+                  <span className="of-cost-note"> · {t("ui.otomeForge.audio.ttsCostNote")}</span>
+                </span>
+              </span>
+            </>
+          }
           checked={form.tts}
           onChange={(tts) => set({ tts })}
         />
@@ -181,10 +201,25 @@ function StoryAudio({ run, saving }: { run: RunView; saving: ReturnType<typeof u
           onChange={(generate) => set({ generate })}
         />
         {form.generate ? (
+          <Switch
+            label={t("ui.otomeForge.audio.chapterThemes")}
+            hint={t("ui.otomeForge.audio.chapterThemesHint")}
+            checked={form.chapterThemes}
+            onChange={(chapterThemes) => set({ chapterThemes })}
+          />
+        ) : null}
+        {form.generate ? (
           connections.isLoading ? (
             <p className="of-hint" role="status">
               {t("ui.otomeForge.setup.loadingConnections")}
             </p>
+          ) : connections.isError && connections.music.length === 0 ? (
+            // A failed list is not an empty one: the player is not told to add a connection they may already have.
+            <RetryNotice
+              message={t("ui.otomeForge.setup.connectionsFailed")}
+              onRetry={() => void connections.refetch()}
+              retrying={connections.retrying}
+            />
           ) : (
             <ConnectionSelect
               label={t("ui.otomeForge.audio.connection")}

@@ -8,6 +8,7 @@ import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs"
 import { BANNED_PHRASES } from "../../../../client/src/features/otome-forge/shared/banned-phrases.js";
 
 export const WRITING_RULES = [
+  "Put on your I-Have-Good-Theory-Of-Mind Hat.",
   "An open grievance stays open until a scene resolves it.",
   "Before stage 4, tenderness costs a love interest something.",
   "A love interest wants something besides the protagonist in every scene.",
@@ -22,9 +23,22 @@ export const BANNED_PHRASES_RULE = `- Never use these overused phrases or patter
 
 /**
  * The WRITING RULES block. `story: true` (every prompt that writes story or a character's words) puts the kit's
- * knowledge boundary first; planners pass false.
+ * knowledge boundary first; planners pass false. `style` is the player's own instructions for how the story is
+ * written (setup's first step, Settings → Content), given whole after the rules.
  */
-export function otomeWritingRules({ story }: { story: boolean }): string {
-  const block = ["WRITING RULES", ...WRITING_RULES.map((rule) => `- ${rule}`), BANNED_PHRASES_RULE].join("\n");
+export function otomeWritingRules({ story, style }: { story: boolean; style?: string }): string {
+  const own = style?.trim();
+  const block = [
+    "WRITING RULES",
+    ...WRITING_RULES.map((rule) => `- ${rule}`),
+    BANNED_PHRASES_RULE,
+    ...(own
+      ? [
+          "",
+          "HOW THE PLAYER WANTS IT WRITTEN (follow it in every line you write; the content contract still holds):",
+          own,
+        ]
+      : []),
+  ].join("\n");
   return story ? `${forgeKnowledgeBoundary}\n\n${block}` : block;
 }

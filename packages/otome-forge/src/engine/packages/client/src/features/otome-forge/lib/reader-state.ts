@@ -25,6 +25,7 @@ import type {
 } from "../shared/api-types";
 import { STANCES } from "../shared/arcs";
 import { isFace, sameName, type Face } from "../shared/faces";
+import { placeKey } from "../shared/places";
 
 /** Milliseconds per character while a line types itself out (none under reduced motion). */
 export const TYPE_MS = 22;
@@ -172,8 +173,6 @@ export function readerBeat(response: BeatResponse): { beat: BeatView; confrontat
   throw new Error("The beat route answered without a beat");
 }
 
-const placeKey = (name: string) => name.normalize("NFKC").toLocaleLowerCase().replace(/\s+/gu, " ").trim();
-
 /** The record for a beat's place among `places`, matched by name (the server keys them by its own slug). */
 export function placeEntry(places: Iterable<PlaceArt> | null | undefined, name: string | undefined): PlaceArt | null {
   if (!name || !places) return null;
@@ -247,18 +246,14 @@ export interface OnStage {
 
 /**
  * Who is on stage at line `at`: the love interest who spoke last (his face from that line; an untagged line shows his
- * plain portrait). Before anyone has, the first one who speaks later in the beat, with his plain portrait: the
- * narrator voices only the love interests present, so a beat where none speaks shows nobody.
+ * plain portrait). Before a love interest's turn has been reached, show nobody: looking ahead would reveal a later
+ * arrival during the opening narration.
  */
 export function onStageAt(lines: readonly ReaderLine[], at: number, lis: readonly RunLiView[]): OnStage {
   for (let index = Math.min(at, lines.length - 1); index >= 0; index -= 1) {
     const segment = lines[index]!.segment;
     const li = speakerLi(segment, lis);
     if (li) return { li, face: isFace(segment.expression) ? segment.expression : "", speaking: index === at };
-  }
-  for (const line of lines.slice(Math.max(0, at + 1))) {
-    const li = speakerLi(line.segment, lis);
-    if (li) return { li, face: "", speaking: false };
   }
   return { li: null, face: "", speaking: false };
 }

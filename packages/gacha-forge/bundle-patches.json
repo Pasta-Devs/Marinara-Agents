@@ -2229,6 +2229,81 @@
               "replace": "pay:forgeSeasonalNodePay(this,this._nodePay&&this._nodePay[this._difficulty])"
             }
           ]
+        },
+        {
+          "version": "1.27.1",
+          "commits": [],
+          "edits": [
+            {
+              "find": "ds=\"1.27.0\"",
+              "replace": "ds=\"1.27.1\""
+            },
+            {
+              "find": "var oy=[{version:null,new:[",
+              "replace": "var oy=[{version:null,fixed:[\"Scene, banner and Bond art now sends each character's avatar and, when the picture shows them in the outfit they have on, that outfit too, faces first. Banners and Bond backgrounds now paint a unit in the outfit it has on while Outfits is on. A new portrait or outfit is painted from the face alone, so the outfit worn now no longer leaks into it.\"]},{version:\"1.27.0\",new:["
+            }
+          ]
+        },
+        {
+          "version": "1.27.2",
+          "commits": [],
+          "edits": [
+            {
+              "find": "ds=\"1.27.1\"",
+              "replace": "ds=\"1.27.2\""
+            },
+            {
+              "find": "var oy=[{version:null,fixed:[",
+              "replace": "var oy=[{version:null,new:[\"The narrator, chapter planners and characters writing messages now read every character's mind more carefully.\"]},{version:\"1.27.1\",fixed:["
+            }
+          ]
+        },
+        {
+          "version": "1.27.3",
+          "commits": [],
+          "edits": [
+            {
+              "find": "ds=\"1.27.2\"",
+              "replace": "ds=\"1.27.3\""
+            },
+            {
+              "find": "var oy=[{version:null,new:[",
+              "replace": "var oy=[{version:null,fixed:[\"Characters can equip their designated weapons even when an older weapon has a different type from their role. The signature skill still belongs only to its designated character. Gear controls also remain reachable by scrolling on short landscape screens.\"]},{version:\"1.27.2\",new:["
+            },
+            {
+              "find": ".gr-root.gear > .detail.wide { flex: 1 1 auto; min-height: 0; }",
+              "replace": ".gr-root.gear > .detail.wide { flex: 1 0 auto; min-height: min-content; }",
+              "reason": "Keep the Gear detail and its Choose/Change actions inside their clipped card; short landscape views scroll the containing panel instead of shrinking the card below its contents."
+            }
+          ]
+        },
+        {
+          "version": "1.27.4",
+          "commits": [],
+          "edits": [
+            {
+              "find": "ds=\"1.27.3\"",
+              "replace": "ds=\"1.27.4\""
+            },
+            {
+              "find": "var oy=[{version:null,fixed:[",
+              "replace": "var oy=[{version:null,fixed:[\"Maintenance rebuild for the shared image-reference helper. Gacha Forge keeps its existing avatar and outfit reference behavior.\"]},{version:\"1.27.3\",fixed:["
+            }
+          ]
+        },
+        {
+          "version": "1.27.5",
+          "commits": [],
+          "edits": [
+            {
+              "find": "ds=\"1.27.4\"",
+              "replace": "ds=\"1.27.5\""
+            },
+            {
+              "find": "var oy=[{version:null,fixed:[",
+              "replace": "var oy=[{version:null,fixed:[\"Maintenance rebuild for the shared expression-image lifecycle. Gacha Forge keeps its existing automatic expression behavior; the explicit repaint controls belong to Otome Hearth.\"]},{version:\"1.27.4\",fixed:["
+            }
+          ]
         }
       ]
     },
@@ -3941,6 +4016,81 @@
             {
               "find": "beats:yo(x,M),after:Math.max(0,Math.round(Number(x[M<=1?\"after\":\"after\"+M])||0))})",
               "replace": "beats:yo(x,M),after:Math.max(0,Math.round(Number(x[M<=1?\"after\":\"after\"+M])||0)),opened:Math.max(0,Number(x[M<=1?\"opened\":\"opened\"+M])||0)})"
+            }
+          ]
+        },
+        {
+          "version": "1.27.1",
+          "commits": [],
+          "edits": [
+            {
+              "find": "if(ma(s)&&k){let N=await Rw(s,c,d);if(N)return N}",
+              "replace": "if(ma(s)&&k){let N=await Rw(s,c,d);if(N)return{...N,worn:!0}}",
+              "reason": "Say when a scene subject is painted in its worn outfit"
+            },
+            {
+              "find": "appearance:re||l(N.appearance),identitySex:l(N.identitySex)}}",
+              "replace": "appearance:re||l(N.appearance),identitySex:l(N.identitySex),wornOutfit:K.worn?l(N.wornOutfit):\"\"}}",
+              "reason": "A scene subject keeps wornOutfit only when its clothes are that outfit, so the outfit reference never contradicts the prompt"
+            },
+            {
+              "find": "let Q=(await Promise.all(L.map(j=>ya(w,j)))).filter(Boolean);",
+              "replace": "let Q=(await Promise.all(L.map(async j=>{let N=await ya(w,j);return N&&l(N.wornOutfit)?ch(w,j,N,\"\",!1,!0):N}))).filter(Boolean);",
+              "reason": "A banner paints a unit that has an outfit on in that outfit, as a chat photo does, so its prompt and outfit reference agree; a unit without one keeps its whole look"
+            },
+            {
+              "find": "let re=await ya(c,d)||H,oe=",
+              "replace": "let re=await ya(c,d)||H;l(re.wornOutfit)&&(re=await ch(c,d,re,\"\",!1,!0));let oe=",
+              "reason": "A Bond background paints a unit that has an outfit on in that outfit, so its prompt and outfit reference agree"
+            }
+          ]
+        },
+        {
+          "version": "1.27.2",
+          "commits": [],
+          "edits": [
+            {
+              "find": "se=[\"You are the narrator of a gacha visual-novel story mode.\",",
+              "replace": "se=[\"You are the narrator of a gacha visual-novel story mode.\",\"Put on your I-Have-Good-Theory-Of-Mind Hat.\",",
+              "reason": "The narrator puts on the theory-of-mind hat"
+            },
+            {
+              "find": "te=[\"You are the chapter planner for a gacha story mode.\",",
+              "replace": "te=[\"You are the chapter planner for a gacha story mode.\",\"Put on your I-Have-Good-Theory-Of-Mind Hat.\",",
+              "reason": "The chapter planner puts on the theory-of-mind hat"
+            },
+            {
+              "find": "te=[\"You are the chapter planner for a gacha story mode, planning a BOND CHAPTER.\",",
+              "replace": "te=[\"You are the chapter planner for a gacha story mode, planning a BOND CHAPTER.\",\"Put on your I-Have-Good-Theory-Of-Mind Hat.\",",
+              "reason": "The bond chapter planner puts on the theory-of-mind hat"
+            },
+            {
+              "find": "W=[`You are ${l(I.name)}. You are writing to the player through ${n}: this is a MESSAGE, not a scene.`,",
+              "replace": "W=[`You are ${l(I.name)}. You are writing to the player through ${n}: this is a MESSAGE, not a scene.`,\"Put on your I-Have-Good-Theory-Of-Mind Hat.\",",
+              "reason": "A character writing a message puts on the theory-of-mind hat"
+            }
+          ]
+        },
+        {
+          "version": "1.27.3",
+          "commits": [],
+          "edits": [
+            {
+              "find": "function bc(e,t,n){",
+              "sourceId": "weapon-eligibility",
+              "replaceFrom": "src/weapon-eligibility.mjs"
+            },
+            {
+              "find": "function bc(e,t,n){if(!e||e.kind!==\"weapon\"||!e.grantedSkill||!t)return null;let r=String(e.dedicatedToId||\"\").trim();if(r)return r===String(n||\"\").trim()?e.grantedSkill:null;let a=String(e.dedicatedTo||\"\").trim().toLowerCase();return a&&a===String(t.name||\"\").trim().toLowerCase()?e.grantedSkill:null}",
+              "replace": "function bc(e,t,n){return e&&e.grantedSkill&&forgeWeaponIsForCharacter(e,t,n)?e.grantedSkill:null}"
+            },
+            {
+              "find": "v&&P.data.weaponType!==v)continue;",
+              "replace": "v&&P.data.weaponType!==v&&!forgeWeaponIsForCharacter(P.data,d,c))continue;"
+            },
+            {
+              "find": "if(U&&F.data.weaponType!==U)return",
+              "replace": "if(U&&F.data.weaponType!==U&&!forgeWeaponIsForCharacter(F.data,S.data,i))return"
             }
           ]
         }

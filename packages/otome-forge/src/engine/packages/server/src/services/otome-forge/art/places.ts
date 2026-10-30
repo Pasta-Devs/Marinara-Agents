@@ -9,9 +9,12 @@
 // gradient. Painting goes through paintRecord (art/paint.ts): one paid image at a time per connection, the record
 // re-checked right before the call, and the image saved only onto the record that asked for it.
 import type { Paint, PlaceArt, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import { placeKey } from "../../../../../client/src/features/otome-forge/shared/places.js";
+import { runForeground } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
 import { runDocTarget, worldId } from "../ids.js";
 import { PLACES_MAX, normalizeWorld } from "../schemas/world.js";
+import { worldStyle } from "./image-client.js";
 import { SCENE_SIZE, placePrompt, type ImagePrompt } from "./prompts.js";
 import {
   imagesOf,
@@ -25,22 +28,10 @@ import {
   type PaintOwner,
 } from "./paint.js";
 
-const KEY_MAX = 80;
 const NAME_MAX = 120;
 const TAGS_MAX = 600;
 
-/** A place's key in world.places: its name in lower case, letters and digits of any script joined by hyphens. */
-export function placeKey(name: string): string {
-  return (
-    name
-      .normalize("NFKC")
-      .toLocaleLowerCase()
-      .replace(/[^\p{L}\p{N}]+/gu, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, KEY_MAX)
-      .replace(/-+$/, "") || "place"
-  );
-}
+export { placeKey };
 
 const ownerOf = (key: string): PaintOwner => `place:${key}`;
 const worldTarget = (runId: string) => runDocTarget("world", worldId(runId));
@@ -75,6 +66,8 @@ export interface PaintOptions {
   review?: boolean;
   /** False once the art service is torn down (S/art/expressions.ts createOtomeArt). */
   active?: () => boolean;
+  /** Await only saved registration; paid images continue outside the run's foreground queue. */
+  registrationOnly?: boolean;
 }
 
 /** What an automatic paint does with a place's record: paint it, leave it waiting for the tap, or leave it be. */
@@ -138,22 +131,37 @@ export async function paintBeatPlaces(
   let claimed: string[] = [];
   let connectionId = "";
   try {
-    // Most beats revisit known places: then nothing is written.
-    const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
-    for (const [key, place] of wanted) {
-      if (!world || step(world, key, place, true).action === "keep") continue;
-      const release = startPaint(runId, ownerOf(key));
-      if (release) releases.set(key, release);
+    if (options.registrationOnly) {
+      const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
+      if (
+        world &&
+        [...wanted].every(([key, place]) => {
+          const { existing, retag, action } = step(world, key, place, true);
+          return !!existing && !retag && action === "keep";
+        })
+      )
+        return;
     }
-    if (world && plan(world)) {
-      const result = await updateIfChanged(deps.store, worldTarget(runId), normalizeWorld, (current) => {
-        const planned = plan(current);
-        claimed = planned?.paints ?? [];
-        return planned ? { ...current, places: planned.places } : undefined;
-      });
-      connectionId = result?.value.images.connectionId ?? "";
-      if (!result?.changed || !connectionId) claimed = [];
-    }
+    // The writer starts this without awaiting it inside its run queue. A served beat can then await registration
+    // outside that queue, including an earlier pass, without waiting for either pass's paid image.
+    await runForeground(runId, async () => {
+      // Most beats revisit known places: then nothing is written.
+      const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
+      for (const [key, place] of wanted) {
+        if (!world || step(world, key, place, true).action === "keep") continue;
+        const release = startPaint(runId, ownerOf(key));
+        if (release) releases.set(key, release);
+      }
+      if (world && plan(world)) {
+        const result = await updateIfChanged(deps.store, worldTarget(runId), normalizeWorld, (current) => {
+          const planned = plan(current);
+          claimed = planned?.paints ?? [];
+          return planned ? { ...current, places: planned.places } : undefined;
+        });
+        connectionId = result?.value.images.connectionId ?? "";
+        if (!result?.changed || !connectionId) claimed = [];
+      }
+    });
   } catch (error) {
     claimed = [];
     deps.runtime.logger.warn(
@@ -163,7 +171,7 @@ export async function paintBeatPlaces(
   } finally {
     for (const [key, release] of releases) if (!claimed.includes(key)) release();
   }
-  await Promise.all(
+  const painting = Promise.all(
     claimed.map((key) =>
       paintPlace(deps, runId, key, at, connectionId, { ...options, consent: false })
         .catch((error: unknown) =>
@@ -176,6 +184,7 @@ export async function paintBeatPlaces(
         .finally(() => releases.get(key)?.()),
     ),
   );
+  if (!options.registrationOnly) await painting;
 }
 
 /** The prompt a place's paint sends (the review dialog shows it), with `edited` text kept and made safe. */
@@ -189,7 +198,7 @@ export async function placePromptFor(
   if (!world) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
   const place = world.places[placeKey(name)];
   if (!place) throw notFound();
-  const style = await imagesOf(deps).styleProfile(world.images.styleProfileId);
+  const style = await worldStyle(imagesOf(deps), world.images);
   return placePrompt({ name: place.name, tags: place.tags, world, style }, edited);
 }
 
@@ -225,7 +234,7 @@ async function paintPlace(
       // Built now, so the rating and the 18+ gate are the ones in force at the paid call.
       const world = latest!;
       const place = world.places[key]!;
-      const style = await images.styleProfile(world.images.styleProfileId);
+      const style = await worldStyle(images, world.images);
       const { prompt, negativePrompt } = placePrompt(
         { name: place.name, tags: place.tags, world, style },
         options.edited,

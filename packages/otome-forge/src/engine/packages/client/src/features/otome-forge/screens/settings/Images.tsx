@@ -1,10 +1,11 @@
 // ──────────────────────────────────────────────
 // Otome Forge Settings → Images: the story's image connection (or none: the game is fully playable without one), its
-// rating (above SFW needs the 18+ confirmation), "Ask before painting" and expressions.
+// rating (above SFW needs the 18+ confirmation), its image style, "Ask before painting" and expressions.
 // ──────────────────────────────────────────────
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAgeGate } from "../../components/AgeGateDialog";
+import { RetryNotice } from "../../components/RetryNotice";
 import { useConnections } from "../../hooks/use-engine-resources";
 import { useSaveSettings, type SaveSettings } from "../../hooks/use-run";
 import type { ImageSettings, RunView } from "../../shared/api-types";
@@ -13,13 +14,14 @@ import { ImageRatingControl } from "../setup/ContentStep";
 import { Section } from "../setup/parts";
 import { NoStory, SaveBar, storedKey } from "./ContentSettings";
 
-type ImageForm = Pick<ImageSettings, "connectionId" | "rating" | "ask" | "expressions">;
+type ImageForm = Pick<ImageSettings, "connectionId" | "rating" | "ask" | "expressions"> & { style: string };
 
-const toForm = ({ connectionId, rating, ask, expressions }: ImageSettings): ImageForm => ({
+const toForm = ({ connectionId, rating, ask, expressions, style }: ImageSettings): ImageForm => ({
   connectionId,
   rating,
   ask,
   expressions,
+  style: style ?? "",
 });
 
 function StoryImages({ run, settings }: { run: RunView; settings: SaveSettings }) {
@@ -36,9 +38,11 @@ function StoryImages({ run, settings }: { run: RunView; settings: SaveSettings }
             {t("ui.otomeForge.setup.loadingConnections")}
           </p>
         ) : connections.isError && connections.image.length === 0 ? (
-          <p className="of-notice of-notice--error" role="alert">
-            {t("ui.otomeForge.setup.connectionsFailed")}
-          </p>
+          <RetryNotice
+            message={t("ui.otomeForge.setup.connectionsFailed")}
+            onRetry={() => void connections.refetch()}
+            retrying={connections.retrying}
+          />
         ) : (
           <ImageControls
             value={form}
@@ -54,6 +58,7 @@ function StoryImages({ run, settings }: { run: RunView; settings: SaveSettings }
         onChange={(rating) => setForm((current) => ({ ...current, rating }))}
       />
       <p className="of-hint">{t("ui.otomeForge.settings.imagesGallery")}</p>
+      <p className="of-hint">{t("ui.otomeForge.images.paintLater")}</p>
       <SaveBar
         changed={changed}
         busy={settings.busy}

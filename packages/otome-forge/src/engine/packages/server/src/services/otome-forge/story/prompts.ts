@@ -15,6 +15,11 @@
 // writes a whole Confrontation in one reply (the scene contract, scene cards). The game owns the stage: P10 is only told
 // the chapter MAY move him, and the gate scene's read moves it. A love interest may be any gender: prompts name him or
 // use the pronouns of his bible, never a fixed "he".
+// M4: P6 also writes a Character Story's nodes (P22, and P23 for a one-scene Moment or first-wear beat) with
+// storyFraming; its planner, P21, is S/items/prompts.ts, which reuses the blocks exported here.
+// 0.0.6 (NSFW mode): under NSFW Heat the planners may give a first night together a key image, and P6 and P12 tell the
+// cg brief what the image rating lets it show (content-contract.ts imageBriefRule); only under Explicit Heat and the
+// Explicit rating does the brief's shape carry "explicit". A world that raised nothing gets the prompts it got before.
 import { forgeChoiceMessages, forgeChoicePlanMessages } from "@forge-kit/player-choices-server.mjs";
 import { z, type ZodType } from "zod";
 import type {
@@ -35,14 +40,17 @@ import {
   ROUTE_NODES_MIN,
   stageRow,
 } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
+import { stillToMend } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { FACES, MUSIC_MOODS } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { LIMIT_IDS } from "../../../../../client/src/features/otome-forge/shared/content.js";
-import { otomeContentContract, otomeContractReminder } from "../content-contract.js";
+import { explicitCgAllowed, imageBriefRule, otomeContentContract, otomeContractReminder } from "../content-contract.js";
 import type { OtomeMessage } from "../generation.js";
 import { chapterOwner, mainChapterNumber } from "../ids.js";
 import { otomeSceneCard } from "../scene-card.js";
 import { defaultLiState } from "../schemas/state.js";
 import { otomeWritingRules } from "../writing-rules.js";
+import { prologueFraming } from "./prologue.js";
+import { aboutLine } from "../schemas/player.js";
 
 /** The sentence forgeChoiceMessages replaces when choices are on; P6's system text must contain it exactly. */
 export const NO_CHOICES_SENTENCE =
@@ -75,6 +83,29 @@ const TRUST_WORDS = ["cold", "wary", "uneasy", "neutral", "warm", "trusting", "d
 const TENSION_WORDS = ["calm", "charged", "strained", "breaking"] as const;
 
 const pronounText = (pronouns: Unit["pronouns"]) => `${pronouns.subject}/${pronouns.object}/${pronouns.possessive}`;
+
+/** Under NSFW Heat a planner may also give a first night together a key image (said only then: SFW stays as it was). */
+const firstNightCg = (world: Pick<World, "content">) => world.content.heat !== "sfw";
+
+/** P6's and P12's line on what the cg brief may show at this world's rating, when it has one. */
+const briefRule = (world: Pick<World, "content" | "images">) => {
+  const rule = imageBriefRule(world, "cg");
+  return rule ? [`- ${rule}`] : [];
+};
+
+/** The cg field of P6's and P12's shape: "explicit" only when the world allows an explicit key image. */
+const cgShape = (world: Pick<World, "content" | "images">) =>
+  `, "cg": {"at": 0, "brief": "...", "cast": ["..."]${explicitCgAllowed(world) ? ', "explicit": false' : ""}}`;
+
+const PLACE_REUSE_RULE =
+  '- Reuse a saved background only for the same physical location: add optional "reuse":"<saved key>" to its places entry, with the name used by this scene. Omit reuse for a new location. Never invent a key or add a scene/chapter number to a returning location. Real numbered rooms, wings and floors are distinct unless the scene explicitly establishes that they are the same place. Saved backgrounds are visual lookup records, not evidence of events or character knowledge.';
+
+/** No extra model lookup: the writer can select an existing background in its normal scene reply. */
+function savedBackgrounds(world: Pick<World, "places">): string {
+  const places = Object.entries(world.places).map(([key, place]) => ({ key, name: place.name, tags: place.tags }));
+  return places.length ? `SAVED BACKGROUNDS\n${JSON.stringify(places)}` : "";
+}
+
 const liStateOf = (state: RunState, li: LiId): LiState => state.lis[li] ?? defaultLiState();
 const stageOf = (state: RunState, li: LiId) => liStateOf(state, li).stage;
 
@@ -83,8 +114,9 @@ const stageOf = (state: RunState, li: LiId) => liStateOf(state, li).stage;
  * `${key}/${i}` as a grievance's `opened` and a disclosure's `ref` are. A main chapter is everyone's; a love interest's
  * own chapter only theirs, as recall keeps it (S/story/canon.ts mayKnow), so its ledger lines, conflicts, grievances
  * and disclosures never reach another love interest's plan. ponytail: a ref that does not name its love interest (a
- * story or date chapter, a phone session) is taken as private to `about`, the one it concerns; the upgrade path is a
- * ref that names its owner when those milestones write ledgers.
+ * story or date chapter, a phone session) is taken as private to `about`, the one it concerns. M4's Character Stories
+ * keep only their owner's rows and cast (S/items/character-story.ts), so for them `about` is the owner; the upgrade
+ * path is a ref that names its owner when the date chapters (M5) write ledgers.
  */
 function knownTo(knows: readonly LiId[], ref: string, about: LiId): boolean {
   const key = ref.split("/")[0] ?? "";
@@ -102,6 +134,21 @@ function seenBy(liState: LiState, li: LiId, knows: readonly LiId[]): LiState {
     ...liState,
     grievances: liState.grievances.filter((grievance) => knownTo(knows, grievance.opened, li)),
     disclosures: liState.disclosures.filter((disclosure) => knownTo(knows, disclosure.ref, li)),
+  };
+}
+
+/**
+ * What a love interest's own reader (M3's note P16 and chat reply P17) may know of the state, as a planner for them
+ * sees it: their state without another love interest's own chapter (seenBy), and their latest relationship and
+ * off-screen lines among the rows they may see (knownRows), "" for none.
+ */
+export function ownView(state: RunState, li: LiId): { liState: LiState; relationship: string; offscreen: string } {
+  const latest = (rows: RunState["ledgers"]["offscreen"]) =>
+    [...knownRows(rows, [li])].reverse().find((row) => row.li === li)?.line ?? "";
+  return {
+    liState: seenBy(liStateOf(state, li), li, [li]),
+    relationship: latest(state.ledgers.relationship),
+    offscreen: latest(state.ledgers.offscreen),
   };
 }
 
@@ -142,18 +189,20 @@ export function betweenYou(unit: Pick<Unit, "name">, liState: LiState, also: rea
   return lines.join("\n");
 }
 
-function protagonistBlock(player: Player): string {
+/** Who the protagonist is (name, pronouns, traits, goal), for every story prompt. */
+export function protagonistBlock(player: Player): string {
   return [
     `${player.name || "The protagonist"} (${pronounText(player.pronouns)}). Never assume a gender the pronouns do not state.`,
     player.traits.length ? `Traits: ${player.traits.join("; ")}` : "",
     player.goal.trim() ? `Their own goal: ${player.goal.trim()}` : "",
+    aboutLine(player),
   ]
     .filter(Boolean)
     .join("\n");
 }
 
 /** The ledgers a planner for `knows` may see (knownTo): no line or conflict of another love interest's own chapter. */
-function ledgerBlock(state: RunState, units: readonly Unit[], knows: readonly LiId[]): string {
+export function ledgerBlock(state: RunState, units: readonly Unit[], knows: readonly LiId[]): string {
   const name = (li: LiId) => units.find((unit) => unit.id === li)?.name ?? li;
   const relationship = knownRows(state.ledgers.relationship, knows);
   const offscreen = knownRows(state.ledgers.offscreen, knows);
@@ -183,7 +232,7 @@ function ledgerBlock(state: RunState, units: readonly Unit[], knows: readonly Li
  * A love interest's full bible for the planner (it authors the hidden truth), without the drawing and claw fields, and
  * what stands between them as a planner for `knows` may see it (seenBy).
  */
-function bibleBlock(unit: Unit, state: RunState, knows: readonly LiId[]): string {
+export function bibleBlock(unit: Unit, state: RunState, knows: readonly LiId[]): string {
   const liState = seenBy(liStateOf(state, unit.id), unit.id, knows);
   const { look: _look, play: _play, ...bible } = unit.bible ?? ({} as NonNullable<Unit["bible"]>);
   return [
@@ -206,7 +255,8 @@ function webBlock(world: World, units: readonly Unit[]): string {
     .join("\n");
 }
 
-function sceneCardBlock(unit: Unit, liState: LiState, resolves: readonly string[]): string {
+/** A love interest's scene card and what stands between them and the protagonist (every prompt but the planners'). */
+export function sceneCardBlock(unit: Unit, liState: LiState, resolves: readonly string[] = []): string {
   return [`id ${unit.id}:`, otomeSceneCard(unit, liState), betweenYou(unit, liState, resolves)].join("\n");
 }
 
@@ -307,8 +357,8 @@ export function chapterPlanMessages({
     "FIELDS",
     "- title: the chapter's name, 2 to 6 words. summary: one or two lines on what the chapter is about, without giving away its turns (the player reads it).",
     `- tags: content tags a reader should see before it starts, from: ${CHAPTER_TAGS.join(", ")}. Only what the chapter really holds; [] when none apply.`,
-    "- nodes: kind beat is an ordinary scene. kind moment is a scene with a special framing, set by moment: read-him (the protagonist reads one love interest's face to see what they really feel), call (a phone call), date (a date that goes wrong). kind confrontation is the climax: an argument in which something true comes out.",
-    "- guide: what happens in that node, 2 to 4 sentences, for the narrator: who wants what, what changes, where it leaves things. cast: the ids of the love interests present. place: where it opens (optional). cg: true only for a node holding a story-defining image (a confession, a revelation, a rescue). resolves: ids of open grievances this node may resolve.",
+    "- nodes: kind beat is an ordinary scene. kind moment is a scene with a special framing, set by moment: read-him (the protagonist reads one love interest's face to see what they really feel), call (a call from afar, only voices), date (a date that goes wrong). kind confrontation is the climax: an argument in which something true comes out.",
+    `- guide: what happens in that node, 2 to 4 sentences, for the narrator: who wants what, what changes, where it leaves things. cast: the ids of the love interests present. place: where it opens (optional). cg: true only for a node holding a story-defining image (a confession, a revelation, a rescue${firstNightCg(world) ? ", or under this Heat a first night together" : ""}). resolves: ids of open grievances this node may resolve.`,
     "- ledger.relationship: one line per love interest present on what moved between them and the protagonist. ledger.conflict: conflict seeds: plant a new one (type from: " +
       ANGST_TYPES.join(", ") +
       "), or escalate, complicate or resolve an open one by its id. ledger.offscreen: one line for every love interest NOT in this chapter: what they were doing meanwhile.",
@@ -325,7 +375,7 @@ export function chapterPlanMessages({
     `- Write every text field in ${world.language}.`,
     "- Omit an optional field rather than writing null.",
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: units.map((unit) => ({ name: unit.name })), kind: "planner" }),
   ].join("\n");
@@ -396,7 +446,7 @@ export const BeatReplySchema: ZodType<BeatReply> = z.object({
 const MOMENT_FRAMING: Record<NonNullable<ChapterNode["moment"]>, string> = {
   "read-him":
     "This node is a READ HIM moment: the protagonist studies one love interest's face and body to work out what they really feel. Linger on their tells; let their face contradict their words; leave the truth readable but unsaid.",
-  call: "This node is a PHONE CALL: only voices. Narrate what the protagonist hears and imagines; nobody else is in the room with the caller.",
+  call: "This node is a CALL FROM AFAR: only voices, carried by a phone where the world has them and otherwise by whatever carries voices there. Narrate what the protagonist hears and imagines; nobody else is in the room with the caller.",
   date: "This node is a DATE THAT GOES WRONG: it starts as time together and turns on something real between them.",
 };
 
@@ -413,6 +463,23 @@ CHOICE EFFECTS (extend each option above with an optional "effects" array):
 - resolve: only for a grievance id this node lists as resolvable.
 - Omit "effects" when nothing changes between them. Effects never change the story: every branch still reconverges.`;
 
+/**
+ * P6 on a date's beat (M5): exactly one small choice whose options carry a hidden score against the date's love
+ * interest's likes and dislikes (S/story/beats.ts checks it and reads it as `beat.scores`).
+ */
+export function dateChoiceInstruction(unit: Pick<Unit, "name" | "bible">, goesWrong: boolean): string {
+  const likes = unit.bible?.likes.filter((like) => like.trim()).slice(0, 6) ?? [];
+  const dislikes = unit.bible?.dislikes.filter((dislike) => dislike.trim()).slice(0, 6) ?? [];
+  return `
+
+DATE CHOICE (this node is one scene of a date with ${unit.name}):
+- Offer exactly ONE small choice in this node (2 to 4 options), at the moment where what the protagonist does matters to ${unit.name}. Never a big choice.
+- Give every option a "score" field beside its "text" and "selection" ("score": 1): 1 when ${unit.name} would love it, 0 when it passes without much, -1 when it grates against them. At least one option scores 1; let the options differ.
+- Judge by who ${unit.name} is, never by what is "nice" in general.${likes.length ? ` ${unit.name} likes: ${likes.join("; ")}.` : ""}${dislikes.length ? ` ${unit.name} dislikes: ${dislikes.join("; ")}.` : ""}
+- The labels, selections and prose never name or hint at a score; a good pick should feel right, not marked.
+- ${goesWrong ? `This evening is planned to stumble: an option may open a grievance, and on a date it is at most "minor".` : "Nothing on this date opens a grievance: leave grievance out of every option's effects."}`;
+}
+
 const VOICES_INSTRUCTION = `
 
 SPEAKER VOICES (extend the JSON shape above with an optional top-level "voices" object):
@@ -424,10 +491,15 @@ export interface BeatMessagesInput {
   /** Every love interest; the cast present is `node.cast`. */
   units: readonly Unit[];
   state: RunState;
-  chapter: Pick<Chapter, "kind" | "number" | "title" | "lead" | "foil" | "nodes" | "li" | "stage" | "grievance">;
+  chapter: Pick<
+    Chapter,
+    "kind" | "number" | "title" | "lead" | "foil" | "nodes" | "li" | "stage" | "grievance" | "date"
+  >;
   node: ChapterNode;
   /** The canonical story so far in this chapter, rendered (earlier beats), or "" for its first node. */
   storySoFar: string;
+  /** Chapter 1's first node only: the prologue's last lines (S/story/prologue.ts), or "" without one. */
+  prologue?: string;
   /** Recalled memory (the kit's text), or "". */
   memory: string;
 }
@@ -441,32 +513,41 @@ export function beatMessages({
   node,
   storySoFar,
   memory,
+  prologue = "",
 }: BeatMessagesInput): OtomeMessage[] {
+  const backgrounds = savedBackgrounds(world);
   const present = units.filter((unit) => node.cast.includes(unit.id));
   const thinkers = present.filter((unit) => stageOf(state, unit.id) >= 2).map((unit) => unit.name);
   const last = node.i === chapter.nodes.length - 1;
+  // A date (M5) is the protagonist and one love interest; it never ends on a big choice. It is their own evening, so
+  // their card holds only what they may know (ownView), as the date's plan did.
+  const date = chapter.kind === "date" ? chapter.date : undefined;
+  const partner = date ? units.find((unit) => unit.id === date.li) : undefined;
+  const cardState = (li: LiId) => (date ? ownView(state, li).liState : liStateOf(state, li));
   const system = [
     "You are the narrator of an otome visual novel: a character-driven romance mystery. Narrate ONE node of the chapter as a scene the player taps through, a short segment at a time.",
     NO_CHOICES_SENTENCE,
     `Write about ${BEAT_WORDS} words in total across the segments, and NEVER more than ${BEAT_WORDS_MAX}; use at most ${BEAT_SEGMENTS_MAX} segments.`,
     "Respond with ONLY a JSON object, no markdown, in this exact shape:",
-    `{"musicMood": "${MUSIC_MOODS.join("|")}", "places": [{"name": "...", "tags": "..."}], "segments": [{"speaker": "", "text": "...", "thought": false, "expression": "", "place": "..."}]${node.cg ? ', "cg": {"at": 0, "brief": "...", "cast": ["..."]}' : ""}}`,
+    `{"musicMood": "${MUSIC_MOODS.join("|")}", "places": [{"name": "...", "tags": "..."}], "segments": [{"speaker": "", "text": "...", "thought": false, "expression": "", "place": "..."}]${node.cg ? cgShape(world) : ""}}`,
     '- speaker: who speaks the segment, written as their exact name every time; "" for narration. When the protagonist speaks, write their exact name; the prose still addresses them as "you".',
     "- Each segment is one speaker's line or one piece of narration: a sentence or a few. Never put dialogue inside narration, and never mark it with dashes or quotes as prose.",
     `- thought: true for an inner line, in the thinker's own words, with "speaker" set to the thinker. The protagonist may think freely. A love interest gets at most ONE thought line in this node, and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
     `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}, when the face shows it. A face may contradict the words. Omit it for a neutral line and for narration.`,
     `- musicMood: the soundtrack cue for this node, one of ${MUSIC_MOODS.join(", ")}.`,
     `- places: every place the node happens in, in order (at most ${BEAT_PLACES_MAX}). A place is a room, a street, a garden: never the time of day or the mood. tags: the same place as 4-8 short comma-separated English tags for an image model, with "no humans". place on a segment: which place it happens in; omit it while the scene has not moved.`,
+    ...(backgrounds ? [PLACE_REUSE_RULE] : []),
     ...(node.cg
       ? [
           '- cg: this node MAY carry one key image, only when it holds a story-defining moment. at: the index of the segment it opens on. brief: one or two plain English sentences on where and how the moment is shot (place, light, framing, what the bodies do), never anyone\'s looks. cast: the exact names of at most 3 people in the frame. Omit "cg" when the node has no such moment.',
+          ...briefRule(world),
         ]
       : []),
     "- Honour the story so far: keep established names, facts and open threads; never contradict them, and never undo a choice already made.",
     "- Stay within this node's guide; do not skip ahead to later nodes.",
     `- Write every segment's text and every place name in ${world.language}; tags${node.cg ? " and the cg brief" : ""} in English.`,
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: present.map((unit) => ({ name: unit.name })), kind: "scene" }),
   ].join("\n");
@@ -476,16 +557,21 @@ export function beatMessages({
       : node.kind === "moment" && node.moment
         ? MOMENT_FRAMING[node.moment]
         : "";
-  const arc = arcFraming({ chapter, node, units, state });
+  const arc =
+    chapter.kind === "prologue"
+      ? prologueFraming(world.openingSituation, units)
+      : arcFraming({ chapter, node, units, state });
+  const dateFraming = date && partner ? dateFramingText(date, partner, state) : "";
   const user = [
     "WORLD",
     world.setting.trim() || world.premise.trim(),
     "",
+    ...(backgrounds ? [backgrounds, ""] : []),
     "PROTAGONIST",
     protagonistBlock(player),
     "",
     present.length ? "LOVE INTERESTS IN THIS NODE" : "No love interest is in this node.",
-    present.map((unit) => sceneCardBlock(unit, liStateOf(state, unit.id), node.resolves ?? [])).join("\n\n"),
+    present.map((unit) => sceneCardBlock(unit, cardState(unit.id), node.resolves ?? [])).join("\n\n"),
     "",
     memory.trim() ? `STORY MEMORY\n${memory.trim()}` : "",
     "",
@@ -495,12 +581,18 @@ export function beatMessages({
       : chapter.number === 1 && world.openingSituation
         ? `The story opens here: ${world.openingSituation}`
         : "(This is the chapter's first node.)",
+    ...(prologue.trim()
+      ? [
+          `The prologue, the protagonist alone before they meet anyone in this story, ended like this. Pick up from it; never tell it again:\n${prologue.trim()}`,
+        ]
+      : []),
     "",
     `Narrate node ${node.i + 1} of ${chapter.nodes.length}${last ? ", the chapter's last" : ""}:`,
     `What happens: ${node.guide}`,
     node.place ? `It opens here: ${node.place}` : "",
     framing,
     ...arc,
+    dateFraming,
     node.resolves?.length ? `Grievances this node may resolve: ${node.resolves.join(", ")}.` : "",
     otomeContractReminder("scene"),
   ]
@@ -511,12 +603,36 @@ export function beatMessages({
       { role: "system", content: system },
       { role: "user", content: user },
     ],
-    { enabled: true, terminal: last },
+    { enabled: true, terminal: last && !date },
   );
+  const dateChoice = date && partner ? dateChoiceInstruction(partner, date.goesWrong) : "";
   return [
-    { ...messages[0], content: messages[0].content + CHOICE_EFFECTS_INSTRUCTION + VOICES_INSTRUCTION },
+    { ...messages[0], content: messages[0].content + CHOICE_EFFECTS_INSTRUCTION + dateChoice + VOICES_INSTRUCTION },
     ...messages.slice(1),
   ];
+}
+
+/**
+ * The user turn's framing for a date's node: where they are, and what a Make it right date is for while its rupture
+ * still stands (stillToMend; mended elsewhere since, the scene is an ordinary date's), with who holds it. The rupture's
+ * grievance is named only when it came from what they may know (ownView), as on their card.
+ */
+function dateFramingText(date: NonNullable<Chapter["date"]>, partner: Unit, state: RunState): string {
+  const mending = stillToMend(date, state.lis);
+  const grievance = mending
+    ? ownView(state, partner.id).liState.grievances.find((item) => item.id === mending.id)
+    : undefined;
+  const named = grievance ? ` (${grievance.text})` : "";
+  return [
+    `This chapter is a DATE: an evening the protagonist and ${partner.name} spend together${date.placeName ? ` at ${date.placeName}` : ""}. Keep it to the two of them; anyone else passes at the edges.`,
+    !mending
+      ? ""
+      : mending.by === "protagonist"
+        ? `It is a MAKE IT RIGHT date: a rupture stands between them${named}. The protagonist is the one hurt, and ${partner.name} is trying to earn back the protagonist's trust. The protagonist's hurt is honest and does not melt for nothing; nothing in this scene resolves the rupture, and how the evening ends is decided by the protagonist's choices.`
+        : `It is a MAKE IT RIGHT date: a rupture stands between them${named}. The protagonist is trying to mend it. ${partner.name}'s hurt is honest and does not melt for nothing; nothing in this scene resolves the rupture, and how the evening ends is decided by the protagonist's choices.`,
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 // ── M2b: arcs. What each stage's route chapter is for, and the framing P6 adds to route and repair chapters ──
@@ -550,15 +666,31 @@ const secretsOf = (unit: Unit | undefined, ids: readonly string[] = []) =>
 
 function chapterLabel(chapter: BeatMessagesInput["chapter"], units: readonly Unit[]): string {
   const owner = units.find((unit) => unit.id === (chapter.li ?? chapter.lead))?.name ?? "";
+  if (chapter.kind === "prologue") return "the prologue, before chapter 1";
   if (chapter.kind === "main") return `main chapter ${chapter.number ?? ""}`.trim();
   if (chapter.kind === "route" && chapter.stage) {
     return `${owner}'s route chapter, toward stage ${chapter.stage} (${stageTitle(chapter.stage)})`;
   }
   if (chapter.kind === "repair") return `a repair chapter with ${owner}`;
+  if (chapter.kind === "story") return `${owner}'s Character Story`;
   return `${chapter.kind} chapter`;
 }
 
-/** The lines P6 adds to a node of a route or repair chapter: its gate, what it reveals, the repair's rule. */
+/**
+ * P22 and P23 (M4): what P6 adds to a node of a Character Story (`story-<itemId>`, S/items/character-story.ts): a side
+ * story of one love interest's, written against the canon of the day it was first opened. One node is a Moment or a
+ * first-wear beat, whose guide says which; more is a Memory's 3–5 scene story. Private to him, like his route.
+ */
+function storyFraming(name: string, nodes: number): string[] {
+  return [
+    nodes > 1
+      ? `This is ${name}'s CHARACTER STORY: a ${nodes}-scene side story between ${name} and the protagonist, outside the main plot. Each node is one of its scenes; it has its own small arc and ends on its last.`
+      : `This is a ONE-SCENE side story of ${name}'s: one complete scene between ${name} and the protagonist, outside the main plot, with its own small beginning and end.`,
+    `It is private: no other love interest appears in it or learns of it. It does not move ${name}'s stage: how close they are follows the scene card. It never resolves the mystery or reveals a secret before its stage, and it never contradicts the story so far.`,
+  ];
+}
+
+/** The lines P6 adds to a node of a route, repair or story chapter: its gate, what it reveals, the repair's rule. */
 function arcFraming({
   chapter,
   node,
@@ -590,6 +722,7 @@ function arcFraming({
       `This is a REPAIR chapter: a rupture stands between ${name} and the protagonist${grievance ? ` (${grievance.text})` : ""}. The repair costs ${name} something; it does not erase what happened, and nobody apologizes on the spot.`,
     );
   }
+  if (chapter.kind === "story") lines.push(...storyFraming(name, chapter.nodes.length));
   return lines;
 }
 
@@ -610,13 +743,13 @@ export interface ArcPlanInput {
 const PLAN_SHAPE =
   '{"title": "...", "tags": ["..."], "summary": "...", "nodes": [{"kind": "beat|moment|confrontation", "moment": "read-him|call|date", "guide": "...", "cast": ["<love interest id>"], "place": "...", "cg": true, "resolves": ["<grievance id>"]}], "ledger": {"relationship": [{"li": "<id>", "line": "..."}], "conflict": [{"id": "<conflict id>", "li": "<id>", "type": "...", "action": "plant|escalate|complicate|resolve"}], "offscreen": [{"li": "<id>", "line": "..."}]}}';
 
-function arcPlanFields(): string[] {
+function arcPlanFields(world: Pick<World, "content">): string[] {
   return [
     "FIELDS",
     "- title: the chapter's name, 2 to 6 words. summary: one or two lines on what the chapter is about, without giving away its turns (the player reads it).",
     `- tags: content tags a reader should see before it starts, from: ${CHAPTER_TAGS.join(", ")}. Only what the chapter really holds; [] when none apply.`,
-    "- nodes: kind beat is an ordinary scene. kind moment is a scene with a special framing, set by moment: read-him (the protagonist reads their face to see what they really feel), call (a phone call), date (a date that goes wrong). kind confrontation is an argument that comes to a head, played as three rounds of stances.",
-    "- guide: what happens in that node, 2 to 4 sentences, for the narrator: who wants what, what changes, where it leaves things. cast: the ids of the love interests present. place: where it opens (optional). cg: true only for a node holding a story-defining image. resolves: ids of open grievances this node may resolve.",
+    "- nodes: kind beat is an ordinary scene. kind moment is a scene with a special framing, set by moment: read-him (the protagonist reads their face to see what they really feel), call (a call from afar, only voices), date (a date that goes wrong). kind confrontation is an argument that comes to a head, played as three rounds of stances.",
+    `- guide: what happens in that node, 2 to 4 sentences, for the narrator: who wants what, what changes, where it leaves things. cast: the ids of the love interests present. place: where it opens (optional). cg: true only for a node holding a story-defining image${firstNightCg(world) ? " (under this Heat, a first night together counts)" : ""}. resolves: ids of open grievances this node may resolve.`,
     `- ledger.relationship: one line on what moved between them and the protagonist. ledger.conflict: plant a new conflict seed (type from: ${ANGST_TYPES.join(", ")}), or escalate, complicate or resolve an open one by its id. ledger.offscreen: optional lines for love interests not in this chapter.`,
   ];
 }
@@ -680,7 +813,7 @@ export function routePlanMessages(input: RoutePlanInput): OtomeMessage[] {
     `Plan one ROUTE CHAPTER of ${name}'s own story: a chapter for ${name} and the protagonist, told as ${ROUTE_NODES_MIN} to ${ROUTE_NODES_MAX} nodes in play order; a narrator writes each node later as one scene the player reads.`,
     "Reply with ONLY a JSON object of this shape:",
     PLAN_SHAPE,
-    ...arcPlanFields(),
+    ...arcPlanFields(world),
     "RULES",
     `- This chapter MAY move ${name} from stage ${from} (${stageTitle(from)}) to stage ${stage} (${stageTitle(stage)}): ${stageGoal(stage, name)} The game moves the stage only when the player reads the gate scene; plan toward it, never assume it.`,
     `- ${ROUTE_NODES_MIN} to ${ROUTE_NODES_MAX} nodes. The LAST node is the gate: the scene that completes the stage. ${name} is in every node, and nothing in it is anyone else's chapter.`,
@@ -697,7 +830,7 @@ export function routePlanMessages(input: RoutePlanInput): OtomeMessage[] {
     `- Write every text field in ${world.language}.`,
     "- Omit an optional field rather than writing null.",
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: units.map((item) => ({ name: item.name })), kind: "planner" }),
   ]
@@ -736,7 +869,7 @@ export function repairPlanMessages(input: RepairPlanInput): OtomeMessage[] {
     `Plan one REPAIR chapter between ${name} and the protagonist after a rupture, told as ${REPAIR_NODES_MIN} to ${REPAIR_NODES_MAX} nodes in play order; a narrator writes each node later as one scene the player reads.`,
     "Reply with ONLY a JSON object of this shape:",
     PLAN_SHAPE,
-    ...arcPlanFields(),
+    ...arcPlanFields(world),
     "RULES",
     `- ${REPAIR_NODES_MIN} to ${REPAIR_NODES_MAX} nodes of kind beat or moment (no confrontation). ${name} is in every node.`,
     `- The last node resolves the rupture: its resolves is ["${grievance.id}"].`,
@@ -746,7 +879,7 @@ export function repairPlanMessages(input: RepairPlanInput): OtomeMessage[] {
     `- Write every text field in ${world.language}.`,
     "- Omit an optional field rather than writing null.",
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: units.map((item) => ({ name: item.name })), kind: "planner" }),
   ].join("\n");
@@ -806,6 +939,7 @@ const SEGMENT_SHAPE = '{"speaker": "", "text": "...", "thought": false, "express
 /** P12: the opening, three rounds of four stances each, and the three endings, in one reply. */
 export function confrontationMessages(input: ConfrontationMessagesInput): OtomeMessage[] {
   const { world, player, units, state, chapter, node, storySoFar, memory, li } = input;
+  const backgrounds = savedBackgrounds(world);
   const present = units.filter((unit) => node.cast.includes(unit.id) || unit.id === li);
   const him = units.find((unit) => unit.id === li);
   const name = him?.name ?? "the love interest";
@@ -815,7 +949,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
   const system = [
     `You are the narrator of an otome visual novel's confrontation: the stance game at a chapter's climax, an argument between the protagonist and ${name} that comes to a head. Write the whole confrontation in ONE reply: an opening, ${CONFRONTATION_ROUNDS} rounds, and three endings.`,
     "Respond with ONLY a JSON object, no markdown, in this exact shape:",
-    `{"musicMood": "tense|angst", "places": [{"name": "...", "tags": "..."}], "opening": [${SEGMENT_SHAPE}], "rounds": [{"lines": [${SEGMENT_SHAPE}], "options": {"press": ${option}, "hold": ${option}, "yield": ${option}, "reveal": ${option}}}], "endings": {"truth": [${SEGMENT_SHAPE}], "walkout": [${SEGMENT_SHAPE}], "standoff": [${SEGMENT_SHAPE}]}, "grievance": {"text": "...", "severity": "major"}, "disclosure": "..."${node.cg ? ', "cg": {"at": 0, "brief": "...", "cast": ["..."]}' : ""}}`,
+    `{"musicMood": "tense|angst", "places": [{"name": "...", "tags": "..."}], "opening": [${SEGMENT_SHAPE}], "rounds": [{"lines": [${SEGMENT_SHAPE}], "options": {"press": ${option}, "hold": ${option}, "yield": ${option}, "reveal": ${option}}}], "endings": {"truth": [${SEGMENT_SHAPE}], "walkout": [${SEGMENT_SHAPE}], "standoff": [${SEGMENT_SHAPE}]}, "grievance": {"text": "...", "severity": "major"}, "disclosure": "..."${node.cg ? cgShape(world) : ""}}`,
     `- opening: up to ${CONFRONTATION_OPENING_MAX} segments that bring the argument to a head.`,
     `- rounds: exactly ${CONFRONTATION_ROUNDS}. lines: 1 to ${CONFRONTATION_HIS_MAX} segments of ${name} pressing the argument on. Round k's lines must follow naturally from ANY of the four stances the protagonist could have taken in round k-1.`,
     `- options: the four stances the protagonist may take, every round: press (push ${name}, accuse, demand), hold (stand firm without attacking), yield (give ground, soften), reveal (tell ${name} something true about the protagonist themselves). label: the pill's short intent, 2 to 6 words. selection: what ${protagonist} says (kind dialogue) or does (kind action), one or two sentences. segments: 1 to ${CONFRONTATION_ANSWER_MAX} segments of ${name}'s answer to that stance.`,
@@ -827,9 +961,11 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     `- thought: true for an inner line, with "speaker" set to the thinker. The protagonist may think freely. A love interest gets at most ONE thought line in the whole confrontation, on any path a player can take through it (the opening, the rounds' lines, the answers to the stances taken and the ending together), and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
     `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}. A face may contradict the words. Omit it for a neutral line and for narration.`,
     `- places: where it happens (at most ${BEAT_PLACES_MAX}); tags: 4-8 short comma-separated English tags for an image model, with "no humans".`,
+    ...(backgrounds ? [PLACE_REUSE_RULE] : []),
     ...(node.cg
       ? [
           '- cg: one key image of the opening, only when it holds a story-defining moment. at: the index of the opening segment it opens on. brief: one or two plain English sentences on where and how the moment is shot, never anyone\'s looks. cast: the exact names of at most 3 people in the frame. Omit "cg" otherwise.',
+          ...briefRule(world),
         ]
       : []),
     `- ${name}'s red lines hold whatever the protagonist does; every cruelty has a reason ${name} believes. Nobody apologizes on the spot.`,
@@ -839,7 +975,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     "- Honour the story so far; never contradict it or undo a choice already made. Stay within this node's guide.",
     `- Write every segment's text, label, selection, grievance and disclosure in ${world.language}; tags${node.cg ? " and the cg brief" : ""} in English.`,
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: present.map((unit) => ({ name: unit.name })), kind: "scene" }),
   ]
@@ -849,6 +985,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     "WORLD",
     world.setting.trim() || world.premise.trim(),
     "",
+    ...(backgrounds ? [backgrounds, ""] : []),
     "PROTAGONIST",
     protagonistBlock(player),
     "",

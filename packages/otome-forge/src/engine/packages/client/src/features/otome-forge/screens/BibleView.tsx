@@ -4,12 +4,15 @@
 // (SH/bible.ts: adults only, no school roles, a secret at stage 4…) before it saves, and names the one an edit breaks;
 // the server checks every save again.
 // ──────────────────────────────────────────────
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookLock, Eye, Heart, Info, PencilLine, Plus, RotateCcw, Save, Trash } from "lucide-react";
 import { otomeErrorCode, useOtomeApi } from "../api";
 import { Avatar } from "../components/Avatar";
+import { RetryNotice } from "../components/RetryNotice";
+import { useCharacterOptions } from "../hooks/use-engine-resources";
+import { patchRun } from "../hooks/use-run";
 import { accentOf } from "../lib/accent";
 import type { ArcStageKey, Bible, BibleSecret, RevealStage, RunLiView } from "../shared/api-types";
 import {
@@ -296,6 +299,123 @@ interface BibleViewProps {
   lis: RunLiView[];
 }
 
+function CardLink({ runKey, li, lis }: BibleViewProps) {
+  const { t } = useTranslation();
+  const otome = useOtomeApi();
+  const queryClient = useQueryClient();
+  const characters = useCharacterOptions();
+  const id = useId();
+  const [draft, setDraft] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [status, setStatus] = useState<{ error: boolean; text: string } | null>(null);
+  const saved = li.cardId ?? "";
+  const value = draft ?? saved;
+  const missing = !!value && !characters.items.some((card) => card.id === value);
+  const refresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await characters.refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+  const save = async () => {
+    if (busy || value === saved) return;
+    setBusy(true);
+    setStatus(null);
+    try {
+      const { cardId } = await otome.post<{ cardId: string | null }>(
+        `/runs/${encodeURIComponent(runKey)}/lis/${encodeURIComponent(li.id)}/card`,
+        { cardId: value || null },
+      );
+      patchRun(queryClient, runKey, (view) => ({
+        ...view,
+        lis: view.lis.map((item) => (item.id === li.id ? { ...item, cardId: cardId ?? undefined } : item)),
+      }));
+      setDraft(null);
+      setStatus({ error: false, text: t("ui.otomeForge.setup.cardLinkSaved") });
+    } catch (failure) {
+      setStatus({ error: true, text: otome.errorMessage(failure, "ui.otomeForge.setup.cardLinkFailed") });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form
+      className="of-section of-glass"
+      aria-label={t("ui.otomeForge.setup.cardLink")}
+      onSubmit={(event) => {
+        event.preventDefault();
+        void save();
+      }}
+    >
+      <div className="of-field">
+        <label className="of-label" htmlFor={id}>
+          {t("ui.otomeForge.setup.cardLink")}
+        </label>
+        <p id={`${id}-hint`} className="of-hint">
+          {t("ui.otomeForge.setup.cardLinkHint")}
+        </p>
+        <select
+          id={id}
+          className="of-input of-select"
+          value={value}
+          disabled={busy || characters.isLoading}
+          aria-describedby={`${id}-hint`}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            setStatus(null);
+          }}
+        >
+          <option value="">{t("ui.otomeForge.setup.cardLinkNone")}</option>
+          {missing ? <option value={value}>{t("ui.otomeForge.setup.cardLinkMissing")}</option> : null}
+          {characters.items.map((card) => (
+            <option
+              key={card.id}
+              value={card.id}
+              disabled={lis.some((other) => other.id !== li.id && other.cardId === card.id)}
+            >
+              {card.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      {characters.isError ? (
+        <RetryNotice
+          message={t("ui.otomeForge.setup.cardsFailed")}
+          onRetry={() => void refresh()}
+          retrying={refreshing}
+        />
+      ) : null}
+      <div className="of-actions">
+        <button
+          type="submit"
+          className="of-button of-button--primary of-button--small"
+          aria-disabled={busy || value === saved}
+        >
+          {t(busy ? "ui.otomeForge.settings.saving" : "ui.otomeForge.setup.cardLinkSave")}
+        </button>
+        <button
+          type="button"
+          className="of-button of-button--text"
+          aria-disabled={refreshing}
+          onClick={() => void refresh()}
+        >
+          <RotateCcw size={14} strokeWidth={2.2} aria-hidden="true" />
+          {t("ui.otomeForge.setup.cardLinkRefresh")}
+        </button>
+      </div>
+      {status ? (
+        <p className={status.error ? "of-error" : "of-hint"} role={status.error ? "alert" : "status"}>
+          {status.text}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
 export function BibleView({ runKey, li, lis }: BibleViewProps) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
@@ -369,6 +489,7 @@ export function BibleView({ runKey, li, lis }: BibleViewProps) {
           {t("ui.otomeForge.setup.bibleTitle", { name: li.name })}
         </h1>
       </div>
+      <CardLink key={li.id} runKey={runKey} li={li} lis={lis} />
       {!revealed ? (
         <section className="of-section of-glass of-spoiler">
           <BookLock size={26} strokeWidth={1.6} aria-hidden="true" />
