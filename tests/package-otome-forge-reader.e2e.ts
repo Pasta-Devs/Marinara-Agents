@@ -850,6 +850,262 @@ test("Otome Hearth named speakers hide unrelated sprites, require unique cards a
   expect(assets.paid).toEqual([]);
 });
 
+for (const colorScheme of ["dark", "light"] as const) {
+  test(`Otome Hearth story header describes scenes only while no character sprite is in use (${colorScheme})`, async ({
+    page,
+  }, testInfo) => {
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme });
+    const segments = [
+      seg("", "Rain reaches the empty observation room.", { place: "The Observation Room" }),
+      seg("Ilvar Thorne", "The love interest arrives.", { expression: "cold" }),
+      seg("", "The narrator keeps him on stage."),
+      seg("Mira Vale", "The protagonist thinks.", { thought: true }),
+      seg("Ilvar", "His own private thought.", { thought: true }),
+      seg("Arin Vale", "A matching character speaks."),
+      seg("No Matching Card", "A stranger has no sprite."),
+      seg("Cassian", "An unpainted love interest speaks."),
+      seg("Ilvar", "The painted love interest returns."),
+      seg("Ilvar", "The key moment replaces the character."),
+    ];
+    const fixture = createStoryStub({
+      done: true,
+      storyBeats: [
+        {
+          ...BEATS[0],
+          segments,
+          choices: [],
+          cg: {
+            at: 9,
+            brief: "Two figures under the glass dome.",
+            cast: ["Ilvar Thorne"],
+            art: { state: "ready", at: written.at, url: LI_SPEAKER_PORTRAIT },
+          },
+        },
+        ...BEATS.slice(1),
+      ],
+    });
+    await stubRoutes(page, {
+      ...fixture,
+      answer(call: Call) {
+        const reply = fixture.answer(call);
+        if (call.path === `/api/otome-forge/runs/${RUN}`) {
+          const view = (reply.json as Json).view;
+          // Neither image-generation availability nor the expression toggle disables retained sprites.
+          view.world.images.expressions = false;
+          view.world.places = {
+            "the-observation-room": { name: "The Observation Room", tags: "glass dome, night" },
+          };
+          view.lis[0].portrait = LI_SPEAKER_PORTRAIT;
+          view.lis[0].worn = { id: "his-wardrobe-0-f", url: LI_SPEAKER_PORTRAIT };
+          view.lis[0].cut = [LI_SPEAKER_PORTRAIT];
+        }
+        return reply;
+      },
+    });
+    const assets = await speakerRoutes(page);
+    const root = await openStory(page);
+    await expect(root).toHaveAttribute("data-look", colorScheme === "dark" ? "midnight" : "pearl");
+    await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+    await root.getByRole("button", { name: "Begin" }).click();
+    const description = root.locator(".of-reader-head .of-image-description");
+    await expect(line(root)).toContainText(segments[0]!.text);
+    await expect(root.locator(".of-reader-stage .of-face")).toHaveCount(0);
+    await expect(description).toContainText("glass dome, night");
+    for (const segment of segments.slice(1, 5)) {
+      await next(root);
+      await expect(line(root)).toContainText(segment.text);
+      await expect(root.locator('.of-face-img[data-front="true"]')).toHaveAttribute("src", LI_SPEAKER_PORTRAIT);
+      await expect(description).toHaveCount(0);
+    }
+    await page.screenshot({ path: testInfo.outputPath(`story-header-sprite-${colorScheme}.png`) });
+    const release = await hold(page, "**/api/characters/catalog?**");
+    try {
+      await next(root);
+      await expect(line(root)).toContainText(segments[5]!.text);
+      await expect(root.locator(".of-reader-stage .of-face")).toHaveCount(0);
+      await expect(description).toContainText("glass dome, night");
+    } finally {
+      release();
+    }
+    await expect(root.getByRole("img", { name: "Arin Vale", exact: true })).toBeVisible();
+    await expect(description).toHaveCount(0);
+    for (const segment of segments.slice(6, 8)) {
+      await next(root);
+      await expect(line(root)).toContainText(segment.text);
+      await expect(root.locator(".of-reader-stage .of-face-img")).toHaveCount(0);
+      await expect(description).toContainText("glass dome, night");
+    }
+    await next(root);
+    await expect(root.locator('.of-face-img[data-front="true"]')).toHaveAttribute("src", LI_SPEAKER_PORTRAIT);
+    await expect(description).toHaveCount(0);
+    await next(root);
+    await expect(root.getByRole("img", { name: "An illustration: Ilvar Thorne", exact: true })).toBeVisible();
+    await expect(root.locator(".of-reader-stage .of-face")).toHaveCount(0);
+    await expect(description).toContainText("Two figures under the glass dome.");
+    expect(assets.paid).toEqual([]);
+    expect(assets.cleanup).toEqual([]);
+  });
+}
+
+for (const failure of ["missing sprite", "failed cleanup"] as const) {
+  test(`Otome Hearth story header restores its description when NPC display fails (${failure})`, async ({
+    page,
+  }, testInfo) => {
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+    const fixture = namedSpeakerStub([
+      seg("Arin Vale", "The speaker's artwork cannot be displayed.", { place: "The Observation Room" }),
+    ]);
+    await stubRoutes(page, {
+      ...fixture,
+      answer(call: Call) {
+        const reply = fixture.answer(call);
+        if (call.path === `/api/otome-forge/runs/${RUN}`)
+          (reply.json as Json).view.world.places = {
+            "the-observation-room": { name: "The Observation Room", tags: "glass dome, night" },
+          };
+        return reply;
+      },
+    });
+    const assets = await speakerRoutes(page, {
+      broken: failure === "missing sprite",
+      opaque: failure === "failed cleanup",
+    });
+    if (failure === "failed cleanup")
+      await page.route("**/api/sprites/cleanup", (route) =>
+        route.fulfill({ status: 502, json: { error: "Free cleanup is unavailable." } }),
+      );
+    const failed = page.waitForResponse((response) =>
+      failure === "missing sprite"
+        ? response.url().includes("/sprites/card-arin/file/") && response.status() === 404
+        : response.url().endsWith("/sprites/cleanup") && response.status() === 502,
+    );
+    const root = await openStory(page);
+    await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+    await root.getByRole("button", { name: "Begin" }).click();
+    await (await failed).finished();
+    await expect(line(root)).toContainText("The speaker's artwork cannot be displayed.");
+    await expect(root.locator(".of-reader-stage .of-face")).toHaveCount(0);
+    await expect(root.locator(".of-reader-head .of-image-description")).toContainText("glass dome, night");
+    expect(assets.paid).toEqual([]);
+    await page.screenshot({ path: testInfo.outputPath(`story-header-${failure.replace(" ", "-")}.png`) });
+  });
+}
+
+for (const firstFailure of ["portrait", "expression"] as const) {
+  test(`Otome Hearth LI image failures retain prose across lines and recover without stale layers (${firstFailure})`, async ({
+    page,
+  }, testInfo) => {
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+    const good = "/api/global-gallery/file/otome-li-working.png";
+    const portrait = "/api/global-gallery/file/otome-li-missing-portrait.png";
+    const expression = "/api/global-gallery/file/otome-li-missing-expression.png";
+    const firstFace = firstFailure === "portrait" ? "" : "cold";
+    const secondFace = firstFailure === "portrait" ? "cold" : "";
+    const firstUrl = firstFailure === "portrait" ? portrait : expression;
+    const secondUrl = firstFailure === "portrait" ? expression : portrait;
+    const fixture = createStoryStub({
+      done: true,
+      storyBeats: [
+        {
+          ...BEATS[0],
+          choices: [],
+          segments: [
+            seg("Cassian", "An available portrait starts the scene.", { place: "The Observation Room" }),
+            seg("Ilvar", "His requested image cannot load.", { expression: firstFace }),
+            seg("", "He remains on stage with the same requested image."),
+            seg("Ilvar", "His next image also fails.", { expression: secondFace }),
+            seg("", "That failed image stays on the following line."),
+            seg("Ilvar", "An already failed image is requested again.", { expression: firstFace }),
+            seg("Ilvar", "An available expression returns.", { expression: "tender" }),
+            seg("", "His restored sprite remains."),
+            seg("Ilvar", "The recovered original image returns.", { expression: firstFace }),
+            seg("", "The recovered original remains on stage."),
+          ],
+        },
+        ...BEATS.slice(1),
+      ],
+    });
+    await stubRoutes(page, {
+      ...fixture,
+      answer(call: Call) {
+        const reply = fixture.answer(call);
+        if (call.path === `/api/otome-forge/runs/${RUN}`) {
+          const view = (reply.json as Json).view;
+          view.world.places = {
+            "the-observation-room": { name: "The Observation Room", tags: "glass dome, night" },
+          };
+          Object.assign(view.lis[0], {
+            portrait,
+            expressions: { cold: expression, tender: good },
+            cut: [portrait, expression, good],
+          });
+          Object.assign(view.lis[1], { portrait: good, cut: [good] });
+        }
+        return reply;
+      },
+    });
+    await page.route(`**${good}`, (route) =>
+      route.fulfill({ contentType: "image/png", body: Buffer.from(SPEAKER_PNG, "base64") }),
+    );
+    for (const missing of [portrait, expression])
+      await page.route(`**${missing}`, (route) => route.fulfill({ status: 404, body: "Missing LI art" }));
+    const root = await openStory(page);
+    await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+    await root.getByRole("button", { name: "Begin" }).click();
+    const front = root.locator('.of-face-img[data-front="true"]');
+    const description = root.locator(".of-reader-head .of-image-description");
+    await expect(front).toHaveAttribute("src", good);
+    await expect.poll(() => front.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+    await expect(description).toHaveCount(0);
+    const failed = page.waitForResponse((response) => response.url().endsWith(firstUrl) && response.status() === 404);
+    for (const url of [firstUrl, firstUrl, secondUrl, secondUrl, firstUrl]) {
+      await next(root);
+      await expect(front).toHaveAttribute("src", url);
+      await expect
+        .poll(() => front.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth === 0))
+        .toBe(true);
+      await expect(description).toBeVisible();
+      await expect(description).toContainText("glass dome, night");
+    }
+    await (await failed).finished();
+    // A successful load of the same URL clears its recorded failure, without changing the story line.
+    await page.unroute(`**${firstUrl}`);
+    await page.route(`**${firstUrl}`, (route) =>
+      route.fulfill({ contentType: "image/png", body: Buffer.from(SPEAKER_PNG, "base64") }),
+    );
+    const repaired = page.waitForResponse((response) => response.url().endsWith(firstUrl) && response.status() === 200);
+    await front.evaluate((img: HTMLImageElement) => {
+      img.src = img.src;
+    });
+    await (await repaired).finished();
+    await expect.poll(() => front.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+    await expect(description).toHaveCount(0);
+    await next(root);
+    await expect(front).toHaveAttribute("src", good);
+    await expect.poll(() => front.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+    await expect(description).toHaveCount(0);
+    await root.locator('.of-face-img[data-front="false"]').evaluate((img) => {
+      img.dispatchEvent(new Event("error", { bubbles: true }));
+    });
+    await expect(front).toHaveAttribute("src", good);
+    await expect.poll(() => front.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+    await expect(description).toHaveCount(0);
+    await next(root);
+    await expect(line(root)).toContainText("His restored sprite remains.");
+    await expect(front).toHaveAttribute("src", good);
+    await expect(description).toHaveCount(0);
+    await next(root);
+    await expect(line(root)).toContainText("The recovered original image returns.");
+    await expect(front).toHaveJSProperty("src", new URL(firstUrl, page.url()).href);
+    await expect.poll(() => front.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+    await expect(description).toHaveCount(0);
+    await next(root);
+    await expect(line(root)).toContainText("The recovered original remains on stage.");
+    await expect(description).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath(`li-${firstFailure}-recovered.png`) });
+  });
+}
+
 for (const revision of [2, 0]) {
   test(`Otome Hearth opaque speaker sprites wait for free cleanup and reuse it (revision ${revision})`, async ({
     page,

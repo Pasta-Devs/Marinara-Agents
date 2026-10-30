@@ -12,6 +12,7 @@
 // ──────────────────────────────────────────────
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
+import { forgeStoryExpressionArt } from "@forge-kit/story-expressions.mjs";
 import {
   BookHeart,
   Eye,
@@ -43,7 +44,7 @@ import { accentOf } from "../../lib/accent";
 import { canonOption, readyUrl, sumGrants, voiceOf, type Voice } from "../../lib/reader-state";
 import { useOtomeProps } from "../../props";
 import type { Grant, RunView } from "../../shared/api-types";
-import { MUSIC_MOODS, type MusicMood } from "../../shared/faces";
+import { FACES, MUSIC_MOODS, type MusicMood } from "../../shared/faces";
 import { Backlog } from "./Backlog";
 import { ChoicePills, RememberToast } from "./ChoicePills";
 import { ConfrontationEnd, StancePills } from "./Confrontation";
@@ -52,7 +53,7 @@ import { DialogueBox } from "./DialogueBox";
 import { EaseOffDialog } from "./EaseOffDialog";
 import { FACE_LABEL_KEYS, FacePlate, QuietCg } from "./FacePlate";
 import { ReaderControls } from "./ReaderControls";
-import { SpeakerPlate } from "./SpeakerPlate";
+import { SpeakerPlate, useSpeakerSprite } from "./SpeakerPlate";
 import { stageNameKey } from "../story/StoryHome";
 
 interface ReaderProps {
@@ -105,6 +106,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
   const [hidden, setHidden] = useState(false);
   // Story CGs whose pan has played in this visit (`${chapterKey}/${node}r${rewrites}`).
   const [cgShown, setCgShown] = useState<ReadonlySet<string>>(() => new Set());
+  const [failedStageArt, setFailedStageArt] = useState<ReadonlySet<string>>(() => new Set());
   // The last beat's music, kept while the next beat opens; none until the first beat is ready.
   const lastMood = useRef<MusicMood | undefined>(undefined);
   const [dialog, setDialog] = useState<"log" | "ease" | null>(null);
@@ -237,6 +239,13 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
       }
     : null;
   const otherSpeaker = voice?.kind === "other" && !voice.thought ? voice.name : null;
+  const speaker = useSpeakerSprite(cg ? null : otherSpeaker, reader.lineKey);
+  const stageArt = forgeStoryExpressionArt(
+    { art: onStageLi?.worn?.url ?? onStageLi?.portrait ?? "", expressions: onStageLi?.expressions ?? {} },
+    { expression: reader.onStage.face },
+    FACES,
+  ).art;
+  const usesCharacterSprite = !cg && (otherSpeaker ? !!speaker.url : !!stageArt && !failedStageArt.has(stageArt));
 
   // Each new line is voiced when the settings voice its speaker; leaving the line stops it. Narration, thoughts and
   // the aftermath line never are.
@@ -344,7 +353,9 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
           nodeCount={reader.nodeCount}
           replay={!!reader.position?.replay && reading}
           place={reading ? place : undefined}
-          imageDescription={reading ? [placeInfo?.tags, cg?.brief].filter(Boolean).join("\n") : undefined}
+          imageDescription={
+            reading && !usesCharacterSprite ? [placeInfo?.tags, cg?.brief].filter(Boolean).join("\n") : undefined
+          }
           placePaint={placePaint}
           tags={reader.tags}
           reading={reading}
@@ -376,9 +387,22 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
             onPaint={canPaint ? () => void reader.paintCg() : undefined}
           />
         ) : otherSpeaker ? (
-          <SpeakerPlate key={reader.lineKey} name={otherSpeaker} lineKey={reader.lineKey} />
+          <SpeakerPlate key={reader.lineKey} name={otherSpeaker} url={speaker.url} onError={speaker.onError} />
         ) : (
-          <FacePlate li={onStageLi} face={reader.onStage.face} speaking={reader.onStage.speaking} />
+          <FacePlate
+            li={onStageLi}
+            face={reader.onStage.face}
+            speaking={reader.onStage.speaking}
+            onArtStatus={(url, loaded) =>
+              setFailedStageArt((failed) => {
+                if (loaded ? !failed.has(url) : failed.has(url)) return failed;
+                const next = new Set(failed);
+                if (loaded) next.delete(url);
+                else next.add(url);
+                return next;
+              })
+            }
+          />
         )}
         <div className="of-toasts" aria-live="polite">
           {reader.toasts.map((toast) =>

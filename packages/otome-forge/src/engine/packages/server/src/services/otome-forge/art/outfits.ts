@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────
-// Otome Forge: the art of items won on Wish (plan M4 "First open", §1.8): Memory and Snapshot illustrations, every look, and a couple set's
+// Otome Forge: the art of items won on Wish (plan M4 "First open", §1.8): Memory, Moment and Snapshot illustrations, every look, and a couple set's
 // pair portrait
 // ──────────────────────────────────────────────
 // An item's art is painted once, on its first open (S/items/open.ts), and only under the player's image settings: with
@@ -11,6 +11,7 @@
 // kept and repainted only on a tap; a `pending` record with no live paint in this process reads as `stopped`.
 // - memory5: the CG from the item's English brief (P20), with each person in it as a reference (the protagonist's
 //   persona avatar when she is in it; art/cg.ts cgSubjects), 768×1344, through generateBannerArt.
+// - moment4: its saved premise (or title), with its own love interest and protagonist, without another text call.
 // - his-look5, his-look4: his new look (generateOutfit, 832×1216 full body on grey), keeping his card or portrait as
 //   the likeness reference. her-look5, her-look4: the protagonist's.
 // A look's image, once ready, is added to its wearer's `outfits` (the kit's outfit shape), which is what makes it
@@ -88,9 +89,10 @@ const isFeatured = (item: Pick<Item, "id" | "banner">) => item.id === itemIdOf(i
 const bannerPaints = (runId: string, item: Pick<Item, "id" | "banner">) =>
   isFeatured(item) && paintIsLive(runId, bannerArtOwner(item.banner));
 
-/** An illustrated reward or a look. Legacy Snapshots use their saved vignette without another planner call. */
-export const hasArt = (item: Pick<Item, "kind" | "cg" | "look" | "text">) =>
+/** An illustrated reward or a look. Moments and legacy Snapshots use their saved text without another planner call. */
+export const hasArt = (item: Pick<Item, "kind" | "cg" | "look" | "text" | "premise" | "title">) =>
   (item.kind === "snapshot3" && !!item.text?.trim()) ||
+  (item.kind === "moment4" && !!(item.premise?.trim() || item.title.trim())) ||
   (item.kind === "memory5" && !!item.cg?.brief.trim()) ||
   (isLookKind(item.kind) && !!item.look);
 
@@ -189,25 +191,27 @@ async function buildItemArt(
   run.player = await withPersonaImageAppearance(deps.runtime, run.player);
   const images = imagesOf(deps);
   const style = await worldStyle(images, run.world.images);
-  if (item.kind === "memory5" || item.kind === "snapshot3") {
-    const li = item.kind === "snapshot3" ? run.units.find((unit) => unit.id === item.li) : null;
-    if (item.kind === "snapshot3" && (!li || !item.text?.trim())) throw notFound("Snapshot vignette");
+  const privateScene = item.kind === "snapshot3" || item.kind === "moment4";
+  if (item.kind === "memory5" || privateScene) {
+    const li = privateScene ? run.units.find((unit) => unit.id === item.li) : null;
+    if (privateScene && !li) throw notFound("love interest");
     // Older rewards have no English art brief. Keep their saved text as scene context, never reroll the banner or
     // pay a text model to rewrite it. Only its own love interest and protagonist can enter this private picture.
-    const cg =
-      item.kind === "snapshot3"
-        ? {
-            brief:
-              item.cg?.brief ||
-              `Illustrate this saved everyday moment without adding events or people. Snapshot text: ${item.text}`,
-            cast: [
-              li!.name,
-              ...(run.player.name && (!item.cg || item.cg.cast.some((name) => name === run.player.name))
-                ? [run.player.name]
-                : []),
-            ],
-          }
-        : item.cg!;
+    const cg = privateScene
+      ? {
+          brief:
+            item.cg?.brief ||
+            (item.kind === "snapshot3"
+              ? `Illustrate this saved everyday moment without adding events or people. Snapshot text: ${item.text}`
+              : `Illustrate this saved Moment's premise without adding plot turns or people. Moment premise: ${item.premise?.trim() || item.title}`),
+          cast: [
+            li!.name,
+            ...(run.player.name && (!item.cg || item.cg.cast.some((name) => name === run.player.name))
+              ? [run.player.name]
+              : []),
+          ],
+        }
+      : item.cg!;
     const subjects = cgSubjects(cg.cast, li ? [li] : run.units, run.player);
     // Collectible illustrations stay clothed (at most Suggestive), independently of a later Character Story.
     const prompt = cgPrompt(

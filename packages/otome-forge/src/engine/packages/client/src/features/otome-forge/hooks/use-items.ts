@@ -39,7 +39,7 @@ export const writesOnOpen = (item: Pick<ItemView, "kind">) => WRITTEN_KINDS.has(
 
 /** An illustrated reward or look whose first open can paint, with images on. */
 export const paintsOnOpen = (item: Pick<ItemView, "kind">, images: boolean) =>
-  images && (item.kind === "memory5" || item.kind === "snapshot3" || isLookKind(item.kind));
+  images && (item.kind === "memory5" || item.kind === "moment4" || item.kind === "snapshot3" || isLookKind(item.kind));
 
 /**
  * True while an owned item's first open has not finished: its story is unwritten, or its art never started (as the

@@ -1,5 +1,11 @@
 # Otome Hearth release notes
 
+## 0.2.2 — 2026-10-30
+
+- In stories, hide the header's Image description panel while a character sprite is shown; keep the description available without a sprite.
+- Four-star memories include artwork through the existing painting flow alongside their playable memory.
+- Round every corner of story character nameplates.
+
 ## 0.2.1 — 2026-10-30
 
 - Make desktop fullscreen fill the available Otome Hearth area across its screens. Leaving fullscreen restores ordinary portrait layouts while preserving drafts and the current reader line.

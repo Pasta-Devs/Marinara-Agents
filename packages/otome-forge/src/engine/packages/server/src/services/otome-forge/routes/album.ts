@@ -64,7 +64,8 @@ export function albumCgs(run: Pick<RunDocuments, "state">, items: readonly Item[
       return { ...cg, source: cg.key.startsWith("pair:") ? "pair" : "story", ...(title ? { title } : {}) };
     }),
     ...owned.flatMap((item): AlbumImage[] => {
-      if (item.kind !== "memory5" || item.art?.state !== "ready" || !item.art.url) return [];
+      if ((item.kind !== "memory5" && item.kind !== "moment4") || item.art?.state !== "ready" || !item.art.url)
+        return [];
       const won = run.state.owned.at[item.id] ?? "";
       return [
         {

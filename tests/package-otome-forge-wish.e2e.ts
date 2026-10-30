@@ -1300,3 +1300,92 @@ test("Otome Hearth Snapshot: an owned vignette reviews one full image prompt and
     `/api/otome-forge/runs/${RUN}${artPath}`,
   ]);
 });
+
+for (const colorScheme of ["dark", "light"] as const) {
+  test(`Otome Hearth four-star memory: a saved Moment gains reviewed artwork without rewriting its story (${colorScheme})`, async ({
+    page,
+  }, testInfo) => {
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme });
+    const calls: Call[] = [];
+    const { stub, answer } = wishStub();
+    stub.view.world.images.ask = true;
+    const moment = item("memories-1-a1", "moment4", 4, ILVAR, "The Last Lantern", {
+      owned: true,
+      premise: "You and Ilvar share the last lantern on the canal.",
+      story: { key: "story-memories-1-a1" },
+      read: "done",
+    });
+    const savedStory = structuredClone(moment.story);
+    const album: Json = { ...albumView(), cgs: [], memories: [moment] };
+    const artPath = `/items/${moment.id}/art`;
+    const openPath = `/items/${moment.id}/open`;
+    const prompt = "Two adults sheltering the last canal lantern from the rain.";
+    let attempts = 0;
+    await stubRoutes(
+      page,
+      (call) => {
+        if (call.path.endsWith("/album")) return { status: 200, json: album };
+        if (call.path.endsWith(openPath) && call.method === "POST") {
+          moment.art = { state: "waiting-consent", at: now() };
+          return { status: 200, json: { item: moment, story: moment.story, art: moment.art } };
+        }
+        if (call.path.endsWith(`${artPath}/prompt`) && call.method === "POST")
+          return { status: 200, json: { prompt, negativePrompt: "text, watermark" } };
+        if (call.path.endsWith(artPath) && call.method === "POST") {
+          attempts += 1;
+          if (attempts === 1) return { status: 502, json: { error: "The image provider is unavailable." } };
+          moment.art = ready(CG);
+          album.cgs = [{ key: `item:${moment.id}`, source: "memory", li: ILVAR, title: moment.title, ...moment.art }];
+          return { status: 200, json: { art: moment.art } };
+        }
+        return answer(call);
+      },
+      calls,
+    );
+    const root = await openOtome(page, { review: true });
+    await expect(root).toHaveAttribute("data-look", colorScheme === "dark" ? "midnight" : "pearl");
+    const balance = await starlight(root).textContent();
+    await openDock(root, "Album");
+    await root.getByRole("tab", { name: "Memories", exact: true }).click();
+    await root.getByRole("button", { name: /The Last Lantern/u }).click();
+    const detail = root.getByRole("dialog", { name: "Memory", exact: true });
+    await expect(detail.getByRole("img", { name: "4 stars", exact: true })).toBeVisible();
+    await expect(detail.getByRole("button", { name: "Read the story", exact: true })).toBeVisible();
+    await expect(detail.getByText("Writes its story", { exact: true })).toHaveCount(0);
+    await expect(detail.getByText("Paints 1 image · after you tap Paint (Ask before painting)")).toBeVisible();
+    expect(calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"))).toEqual([]);
+    await detail.getByRole("button", { name: "Open it", exact: true }).click();
+    await expect(detail.getByRole("button", { name: "Paint it", exact: true })).toBeVisible();
+    expect(posts(calls, openPath)).toHaveLength(1);
+    expect(posts(calls, artPath)).toHaveLength(0);
+    await detail.getByRole("button", { name: "Paint it", exact: true }).click();
+    const review = root.getByRole("dialog", { name: "Paint: The Last Lantern", exact: true });
+    await expect(review.getByRole("textbox", { name: "Prompt", exact: true })).toHaveValue(prompt);
+    const reviewed = `${prompt} Blue hour, a close composition.`;
+    await review.getByRole("textbox", { name: "Prompt", exact: true }).fill(reviewed);
+    await review.getByRole("button", { name: "Paint", exact: true }).click();
+    await expect(review.getByRole("alert")).toContainText("Something went wrong. Try again.");
+    await expect(review.getByRole("textbox", { name: "Prompt", exact: true })).toHaveValue(reviewed);
+    await review.getByRole("button", { name: "Paint", exact: true }).click();
+    await expect(review).toHaveCount(0);
+    await expect(detail.locator(".of-item-art img")).toHaveAttribute("src", CG);
+    await expect(detail.getByRole("button", { name: "Read the story", exact: true })).toBeVisible();
+    await expect(detail.getByRole("button", { name: "Open it", exact: true })).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath(`four-star-memory-${colorScheme}.png`) });
+    await detail.getByRole("button", { name: "Close", exact: true }).click();
+    await openDock(root, "Story");
+    await openDock(root, "Album");
+    await root.getByRole("tab", { name: "Memories", exact: true }).click();
+    await root.getByRole("button", { name: /The Last Lantern/u }).click();
+    await expect(detail.locator(".of-item-art img")).toHaveAttribute("src", CG);
+    await expect(detail.getByRole("button", { name: "Open it", exact: true })).toHaveCount(0);
+    await expect(starlight(root)).toHaveText(balance!);
+    expect(moment.story).toEqual(savedStory);
+    expect(moment.read).toBe("done");
+    expect(posts(calls, openPath)).toHaveLength(1);
+    expect(posts(calls, artPath)).toHaveLength(2);
+    for (const paint of posts(calls, artPath))
+      expect(paint.body).toMatchObject({ prompt: reviewed, negativePrompt: "text, watermark" });
+    expect(calls.filter((call) => /\/chapters\/.*\/(?:beats|read)/u.test(call.path))).toEqual([]);
+  });
+}

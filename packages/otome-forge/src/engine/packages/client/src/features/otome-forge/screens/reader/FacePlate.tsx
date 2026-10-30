@@ -50,9 +50,11 @@ interface FacePlateProps {
   face: Face | "";
   /** The current line is his. */
   speaking: boolean;
+  /** The requested image loaded or failed; obsolete crossfade layers report nothing. */
+  onArtStatus?: (url: string, loaded: boolean) => void;
 }
 
-export function FacePlate({ li, face, speaking }: FacePlateProps) {
+export function FacePlate({ li, face, speaking, onArtStatus }: FacePlateProps) {
   const { t } = useTranslation();
   const expressions = li?.expressions;
   usePreloadedFaces(expressions);
@@ -78,7 +80,7 @@ export function FacePlate({ li, face, speaking }: FacePlateProps) {
       aria-label={label}
     >
       {shown.art ? (
-        <FaceLayers url={shown.art} cut={li.cut} />
+        <FaceLayers url={shown.art} cut={li.cut} onArtStatus={onArtStatus} />
       ) : (
         <div className="of-face-medallion" aria-hidden="true">
           <span className="of-face-aura" />
@@ -100,7 +102,15 @@ export function FacePlate({ li, face, speaking }: FacePlateProps) {
  * Two image layers: a new face decodes in the hidden one, then the two crossfade (instantly under reduced motion). A
  * cut-out (`cut`, no backdrop) stands whole on the stage's floor; an uncut look is cropped and faded at its edges.
  */
-export function FaceLayers({ url, cut = [] }: { url: string; cut?: readonly string[] }) {
+export function FaceLayers({
+  url,
+  cut = [],
+  onArtStatus,
+}: {
+  url: string;
+  cut?: readonly string[];
+  onArtStatus?: (url: string, loaded: boolean) => void;
+}) {
   const [layers, setLayers] = useState<{ a: string; b: string; front: "a" | "b" }>({ a: url, b: "", front: "a" });
   useEffect(() => {
     if (url === layers[layers.front]) return;
@@ -134,6 +144,12 @@ export function FaceLayers({ url, cut = [] }: { url: string; cut?: readonly stri
             alt=""
             data-front={layers.front === layer}
             data-cut={cut.includes(layers[layer])}
+            onLoad={() => {
+              if (layers[layer] === url) onArtStatus?.(url, true);
+            }}
+            onError={() => {
+              if (layers[layer] === url) onArtStatus?.(url, false);
+            }}
           />
         ) : null,
       )}
