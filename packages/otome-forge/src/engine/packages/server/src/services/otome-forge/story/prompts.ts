@@ -202,7 +202,8 @@ function romanceLine(name: string, stage: number): string {
   if (stage < LAST_STAGE) {
     return `The slow burn may break: when a scene has earned it, ${name} may confess what they feel, if they have not yet; by the finale of their route at the latest, they say it.`;
   }
-  return `What ${name} feels for the protagonist has been said; it is no longer hidden between them.`;
+  // The finale asks for the words, but Ease off can end it first, so the story so far says whether they were spoken.
+  return `${name} has chosen the protagonist. If the story has not yet shown ${name} saying what they feel, they may say it whenever a scene calls for it; once said, it is no longer hidden between them.`;
 }
 
 /**

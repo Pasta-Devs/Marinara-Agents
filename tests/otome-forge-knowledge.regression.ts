@@ -191,7 +191,9 @@ test("a slow burn through stage 2, a confession when earned from stage 3, by the
     assert.match(at(stage), MAY, `stage ${stage}`);
     assert.doesNotMatch(at(stage), SLOW);
   }
-  assert.match(at(6), /What Kai feels for the protagonist has been said/);
+  // Ease off can end the finale before the words, so stage 6 never claims they were said.
+  assert.match(at(6), /If the story has not yet shown Kai saying what they feel, they may say it/);
+  assert.doesNotMatch(at(6), /has been said/);
   assert.match(
     stageGoal(6, "Kai"),
     /Kai chooses the protagonist and, if they never have, says in words what they feel/,
