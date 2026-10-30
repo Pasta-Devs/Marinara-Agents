@@ -10,6 +10,9 @@
 // rating-independent adult/nonsexual face policy; the other image and content-policy expectations stay pinned.
 // 0.5.1 (#1949): the chapter plan and a chapter's last node ask for a closing decision unlike the recent ones, and the
 // Foil's rivalry not always for the protagonist, so the chapter plan and both beat digests moved (the beat is a last node).
+// 0.5.3 (#1955): the writing rules say the protagonist knows only what the story has shown them and that an existing
+// world's canon holds; P5 adds minor characters and time to rest, P10 and P11 time to rest. Every story and banner
+// digest carries the writing rules, so all of them moved once.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
@@ -226,28 +229,28 @@ test("chapter and scene prompts keep emotional payoffs occasional and permit cha
 });
 
 const EXPECTED_ANGST: Record<string, string> = {
-  bannerHis: "0ff02869d0a8f15d",
-  bannerMemories: "6606be1d1e145790",
-  bannerMine: "3aa9c508dbd5e8ef",
-  beat: "799373360dd228a1",
-  beatWithCg: "82d9fed31c043a2f",
-  chapterPlan: "9003162a6c9136de",
-  closer: "cc7586530c0b8111",
-  confrontation: "8921d7dca3aaa4cf",
-  repairPlan: "5df431b8e8cedfad",
-  routePlan: "4c9957bad818e866",
+  bannerHis: "eb31ab3aa2226d20",
+  bannerMemories: "a38fdfc269136b76",
+  bannerMine: "698522b696305334",
+  beat: "3312b5a192b2b331",
+  beatWithCg: "1d524d5318c6e30b",
+  chapterPlan: "f235036032689868",
+  closer: "e13fe5943bf58483",
+  confrontation: "600814dc2d71931a",
+  repairPlan: "eeea513706ae1c6b",
+  routePlan: "7145864d7f6a6286",
 };
 const EXPECTED_GENTLE: Record<string, string> = {
-  bannerHis: "b10456376418731c",
-  bannerMemories: "caf229a2f56c562f",
-  bannerMine: "07e86a49cb5d7bb8",
-  beat: "71bb805644734860",
-  beatWithCg: "5529e877c82e5a58",
-  chapterPlan: "505ec47785a60973",
-  closer: "a7253eea9b68a98d",
-  confrontation: "defb9eb10b493daa",
-  repairPlan: "e916ad6b80ed17fd",
-  routePlan: "25e005e445124f86",
+  bannerHis: "c1b5779b416b0ab3",
+  bannerMemories: "bf1aa69fa35917b7",
+  bannerMine: "c92dbe4ebd42661d",
+  beat: "a940801851855ea5",
+  beatWithCg: "51239a4b2ef40b5a",
+  chapterPlan: "f9780789ae435cc5",
+  closer: "58aa6484270abcff",
+  confrontation: "088b8b04fb6a3218",
+  repairPlan: "380f8395a2cb320d",
+  routePlan: "fcea5bf929eb38d3",
 };
 
 test("the SFW defaults pin scene pacing and earned character change in story and banner prompts", () => {

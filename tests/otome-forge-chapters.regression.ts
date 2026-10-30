@@ -135,6 +135,23 @@ test("a chapter plan keeps the shape: 6–9 nodes, 1–2 moments, one confrontat
   fails({ nodes: nodes.map((node, at) => (at === 4 ? { ...node, kind: "confrontation" } : node)) }, /exactly one/);
   fails({ nodes: nodes.map((node) => ({ ...node, cg: true })) }, /at most 2 nodes may have cg/);
   fails({ foil: KAI }, /other than the Lead/);
+  // A beat may be the protagonist's alone (#1955); a moment or the climax is played with a love interest.
+  const moment = nodes.findIndex((node) => node.kind === "moment");
+  const climax = nodes.findIndex((node) => node.kind === "confrontation");
+  fails(
+    { nodes: nodes.map((node, at) => (at === moment ? { ...node, cast: [] } : node)) },
+    /moment node \d+ needs a love interest/,
+  );
+  fails(
+    { nodes: nodes.map((node, at) => (at === climax ? { ...node, cast: [] } : node)) },
+    /confrontation node \d+ needs a love interest/,
+  );
+  const alone = nodes.findIndex((node, at) => node.kind === "beat" && at !== 0);
+  const plain = normalizeChapterPlan(
+    parse(planReply({ nodes: nodes.map((node, at) => (at === alone ? { ...node, cast: [] } : node)) })),
+    context(),
+  );
+  assert.equal(typeof plain, "object", `a beat with no love interest is kept: ${String(plain)}`);
   // A Foil who is never on stage would be paid for a chapter he was not in.
   const withoutMireille = (nodes as Array<{ cast: string[] }>).map((node) => ({
     ...node,
