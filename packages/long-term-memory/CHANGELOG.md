@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.5.17 — 2026-10-30
+
+- Other packages can no longer read Long-Term Memory's internal runtime service, which only Marinara itself uses. This needs a Marinara version with Capability API 1.388; on older versions nothing changes. Recall for Slurp and Noodle is unaffected.
+
 ## 1.5.16 — 2026-10-30
 
 - Review: a later chat piece's thread and relationship updates apply together with the rest of the draft instead of one at a time.
