@@ -470,9 +470,9 @@ async function commitPreparedLongTermMemorySource(
             rebuildIndexes: false,
             operationId: prepared.operationId,
           }).catch((error: unknown) => {
-            // A chat piece continues a listed thread, which rewrites it in place; apply refuses that beside other
-            // changes. It may also name a note only the previous piece's still-unapplied draft creates. The draft
-            // is already written, so it waits for review instead of failing the piece.
+            // Apply still refuses a status, title or subject change, or an anchor rewrite, beside other changes.
+            // It may also name a note only the previous piece's still-unapplied draft creates. The draft is
+            // already written, so it waits for review instead of failing the piece.
             if (
               error instanceof LtmDraftApplyError &&
               (error.code === "destructive_disposition_requires_explicit_review" ||

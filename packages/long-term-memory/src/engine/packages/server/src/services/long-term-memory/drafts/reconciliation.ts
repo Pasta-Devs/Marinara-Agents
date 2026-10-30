@@ -14,6 +14,7 @@ import {
   groupLtmDraftMutationsByNote,
   LtmDraftProjectionError,
   isAdditiveLtmSection,
+  isDestructiveLtmRewrite,
   projectLtmDraftMutationGroup,
   projectLtmDraftOntoNotes,
 } from "./draft-projector.js";
@@ -609,7 +610,7 @@ export async function preflightLongTermMemoryDraft(
     const projectedRow = projectionRows.get(mutation.id);
     const disposition = projectedRow?.disposition ?? fallbackDisposition(mutation, existing);
     const mutationBlockers = [...(blockers.get(mutation.id) ?? [])];
-    if (bulkApply && disposition === "rewrite")
+    if (bulkApply && isDestructiveLtmRewrite(existing.get(mutationTargetId(mutation)) ?? null, mutation, disposition))
       mutationBlockers.push({
         code: "destructive_disposition_requires_explicit_review",
         message: DESTRUCTIVE_DISPOSITION_MESSAGE,
@@ -951,9 +952,14 @@ async function applyInner(
     const userSelectedCount = selectedIds
       ? selected.filter((mutation) => selectedIds.has(mutation.id)).length
       : selected.length;
+    const selectedById = new Map(selected.map((mutation) => [mutation.id, mutation]));
     if (
       userSelectedCount > 1 &&
-      projection.projections.some((group) => group.mutations.some((mutation) => mutation.disposition === "rewrite"))
+      projection.projections.some((group) =>
+        group.mutations.some((row) =>
+          isDestructiveLtmRewrite(group.before, selectedById.get(row.mutationId)!, row.disposition),
+        ),
+      )
     )
       throw new LtmDraftApplyError(
         DESTRUCTIVE_DISPOSITION_MESSAGE,
