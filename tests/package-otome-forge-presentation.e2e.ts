@@ -1986,7 +1986,20 @@ test.describe("Otome Forge reader mobile", () => {
       await expect(line(root)).toHaveText(originalLine);
       await openTools();
       // Exercise the exposed stage background rather than an overlapping reader control.
-      await root.locator(".of-reader-stage").click({ position: { x: 20, y: 20 } });
+      const stage = root.locator(".of-reader-stage");
+      const stageTap = await stage.evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        const reader = element.closest(".of-reader")!;
+        const top = Math.max(box.top, reader.querySelector(".of-reader-head")!.getBoundingClientRect().bottom);
+        const bottom = Math.min(box.bottom, reader.querySelector(".of-reader-bottom")!.getBoundingClientRect().top);
+        const position = { x: 20, y: (top + bottom) / 2 - box.top };
+        const scope = element.getRootNode() as Document | ShadowRoot;
+        const hit = scope.elementFromPoint(box.left + position.x, box.top + position.y);
+        return { position, exposedHeight: bottom - top, hitStage: hit?.closest(".of-reader-stage") === element };
+      });
+      expect(stageTap.exposedHeight, "space remains between the header and dialogue panel").toBeGreaterThan(0);
+      expect(stageTap.hitStage, "the outside-dismiss tap targets exposed stage content").toBe(true);
+      await stage.click({ position: stageTap.position });
       await expect(more).toHaveAttribute("aria-expanded", "false");
       await expect(line(root)).toHaveText(originalLine);
 
