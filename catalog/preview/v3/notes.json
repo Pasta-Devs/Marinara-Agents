@@ -260,6 +260,12 @@
     "saucelings": {
       "versions": [
         {
+          "version": "0.23.2",
+          "date": "2026-10-30",
+          "notes": "- On a wide screen, an open Background, Caretaker, Looks or New egg panel no longer stretches the stage card beside it.",
+          "highlight": false
+        },
+        {
           "version": "0.23.1",
           "date": "2026-10-27",
           "notes": "- On a wide screen, Background, Caretaker, Looks and New egg open in their own box under the meters and care buttons, instead of across the bottom of the Nook.",
