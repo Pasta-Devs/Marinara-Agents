@@ -4207,6 +4207,7 @@
   "ui.slurp.wardrobe.sourceLorebook": "Lorebooks",
   "ui.slurp.wardrobe.sourceText": "Pasted text",
   "ui.slurp.wardrobe.sourceLegacy": "Legacy wardrobe note",
+  "ui.slurp.wardrobe.sourceLegacyEmpty": "Legacy wardrobe note (empty)",
   "ui.slurp.wardrobe.chooseLorebooks": "Choose lorebooks",
   "ui.slurp.wardrobe.lorebookScope": "What to scan",
   "ui.slurp.wardrobe.wholeLorebooks": "Every enabled entry in these books",
