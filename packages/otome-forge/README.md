@@ -30,7 +30,7 @@ On desktop, **Enter fullscreen** fills the Home browser panel across Otome Heart
 
 Choose **Begin a new story**. Setup has six steps, and an unfinished setup is kept in this browser until the story is made.
 
-1. **Story:** a premise, or **Surprise me** to have your model write one. Then the language the story is written in, **How it's written** (tense, point of view, pacing: anything you want every scene, message and note to follow; also in **Settings → Content**), and an optional title.
+1. **Story:** a premise, or **Surprise me** to have your model write one (an original world). A premise or a card set in an existing world, such as Teyvat from Genshin Impact, keeps that world and its canon. Then the language the story is written in, **How it's written** (tense, point of view, pacing: anything you want every scene, message and note to follow; also in **Settings → Content**), and an optional title.
 2. **You:** the persona you play, your pronouns, up to five traits, and a goal of your own that isn't romance. Your persona's **Description, Personality, Backstory and Appearance** reach story writing and personal interactions whole; see [What leaves your device](#what-leaves-your-device) for the prompt list and refresh behavior. Scenario, greetings and example dialogue are excluded. An unavailable persona keeps its own saved text as a fallback.
 3. **Cast:** two to five love interests. Pick them from your character cards or from six original archetypes: Brilliant Monster, Gilded Tyrant, Gentle Liar, Loyal Blade, Ruined Saint and Laughing Stranger. Love interests can be any gender and use the pronouns you pick. A card stays canon: the story never contradicts it.
 4. **Content:** Heat, Darkness, Lines & Veils and the image rating (see [Content settings](#content-settings-nsfw-mode-and-lines--veils)).
@@ -68,6 +68,8 @@ Each main chapter is led by one love interest. Otome Hearth offers two to choose
 
 - **Who speaks:** every line names its speaker. Each love interest's line shows one of five faces: tender, flustered, cold, hurt or angry. Your thoughts are set apart, and from the second stage of a love interest's story you may hear one of their thoughts too.
 - **Choices:** your first choice in a scene is canon. Replaying a chapter shows the other branches without changing anything. A choice that changes things between you names who will remember it, and the last scene may end on one lasting choice.
+- **What you know:** your protagonist knows only what the story has shown them. A love interest's past, habits and words for their world reach you when you are told, see or find them out, and a protagonist new to the world learns its people and customs as they go.
+- **A life of your own:** chapters have other people in them, scenes without any love interest, and time to rest and sleep after a long day or a night.
 - **Private memory:** each love interest remembers only what they saw, did or were told. A private moment is recalled only in scenes that love interest is in, and on their own Home and in their messages, never in the shared story summary. Private moments are their route and repair chapters, dates and message threads.
 - **Story memory:** finished chapters are summarized in the background. **Settings → Debug** shows the story memory's status, with Retry when a summary failed.
 - **Rewrite** writes the scene you are reading again, before you make any of its choices.

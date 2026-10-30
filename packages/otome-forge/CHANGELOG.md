@@ -4,6 +4,12 @@
 
 - Each love interest has their own Claw Machine plush: the animal that fits them best, in their colours (a cyan raven with red eyes, a black cat with violet eyes). Your Planning model draws it once, in the background, the first time you open Dates with them. Until then their plush wears their look, as before.
 
+## 0.5.3 — 2026-10-30
+
+- Your protagonist knows only what the story has shown them: love interests no longer talk as if you already know their past, their habits or the words of their world, and a newcomer learns this world as they go.
+- A story set in an existing world, such as Teyvat from Genshin Impact, stays that world and keeps its canon.
+- Chapters make room for other people, scenes without a love interest, and rest or sleep after a long day.
+
 ## 0.5.2 — 2026-10-30
 
 - Memories banners follow your Heat: under NSFW: Fade their Memories and Moments mix SFW and suggestive situations, and under NSFW: Explicit explicit ones too. Snapshots stay SFW.
