@@ -1985,6 +1985,7 @@ test.describe("Otome Forge reader mobile", () => {
       await root.getByRole("button", { name: "Show the text" }).click();
       await expect(line(root)).toHaveText(originalLine);
       await openTools();
+      // Exercise the exposed stage background rather than an overlapping reader control.
       await root.locator(".of-reader-stage").click({ position: { x: 20, y: 20 } });
       await expect(more).toHaveAttribute("aria-expanded", "false");
       await expect(line(root)).toHaveText(originalLine);
