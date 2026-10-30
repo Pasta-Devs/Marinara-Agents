@@ -1501,7 +1501,7 @@ export default function SourcesWorkspace({
   const renderFlatSourceRow = (row: PreviewRow) => {
     const ready = row.status === "pending" || retryableIdSet.has(row.sourceId);
     const selected = ready ? selectedIds.has(row.sourceId) : selectedImportedIds.has(row.sourceId);
-    const range = row.messageRange;
+    const range = row.messageRange ?? row.summaryRange;
     return (
       <ClickSurface
         key={row.sourceId}
@@ -1549,12 +1549,14 @@ export default function SourcesWorkspace({
                   className="shrink-0 whitespace-nowrap text-xs text-[var(--muted-foreground)]"
                   data-ltm-source-message-range
                 >
-                  {range.first === range.last
-                    ? localizeUi("ui.longTermMemory.sourcesworkspace.messageValue1", { value1: range.first })
-                    : localizeUi("ui.longTermMemory.sourcesworkspace.messagesValue1ToValue2", {
-                        value1: range.first,
-                        value2: range.last,
-                      })}
+                  {"label" in range
+                    ? range.label
+                    : range.first === range.last
+                      ? localizeUi("ui.longTermMemory.sourcesworkspace.messageValue1", { value1: range.first })
+                      : localizeUi("ui.longTermMemory.sourcesworkspace.messagesValue1ToValue2", {
+                          value1: range.first,
+                          value2: range.last,
+                        })}
                 </span>
               </>
             ) : (
