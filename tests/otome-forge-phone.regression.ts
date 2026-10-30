@@ -383,7 +383,7 @@ test("Close and remember: one session, P18 on the summary contract, the capped a
 
   const memoryCall = t.calls.find((call) => isMemoryPrompt(call.messages))!;
   const head = system(memoryCall.messages);
-  assert.ok(head.includes(SUMMARY_WORDING) && head.includes("Heat: SFW") && head.includes("Summarize in neutral"));
+  assert.ok(head.includes(SUMMARY_WORDING) && head.includes("Heat: SFW"), "an SFW story's summary contract");
   assert.ok(!head.includes(forgeKnowledgeBoundary), "the summarizer writes no one's words");
   assert.ok(memoryCall.messages.at(-1)!.content.includes("Kai: Awake. Unfortunately."));
   assert.ok(t.logs.some((entry) => entry.level === "debugOverride" && entry.args[0] === `phone-memory/${KAI}`));

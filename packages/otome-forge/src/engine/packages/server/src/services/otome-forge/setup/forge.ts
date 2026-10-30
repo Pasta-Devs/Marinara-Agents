@@ -40,6 +40,7 @@ import {
   WorldPlanSchema,
   type WorldPlan,
 } from "./prompts.js";
+import { intimacyOpen } from "../../../../../client/src/features/otome-forge/shared/content.js";
 
 export type ForgeDeps = ArtDeps;
 
@@ -302,7 +303,11 @@ async function writeBible(deps: ForgeDeps, runId: string, li: LiId, debugMode: b
   if (!unit) throw new OtomeForgeError(404, "No such love interest.", "not-found");
   const others = units.filter((candidate) => candidate.id !== li);
   const [member] = await castOf(deps.runtime, [unit]);
-  const context = { pronouns: unit.pronouns, others: others.map(({ id, name }) => ({ id, name })) };
+  const context = {
+    pronouns: unit.pronouns,
+    others: others.map(({ id, name }) => ({ id, name })),
+    intimacy: intimacyOpen(world.content),
+  };
   const { value } = await generateJson(deps, {
     runId,
     job: "structured",

@@ -1,7 +1,7 @@
 // Otome Forge's private memory (M2a): each love interest knows only what he saw or was told. A `chat` source (a date)
 // with audience [A] is recalled only for reader A or a scene whose cast includes A, never into the shared overview and
 // never by a call that names nobody; the latest chapter is left to the caller, who sends it in full. Summaries run on
-// the background lane with the `summary` contract and its neutral wording, never with the knowledge boundary, which
+// the background lane with the `summary` contract and its summary wording, never with the knowledge boundary, which
 // the story's own writers (P5, P6) carry. The Debug routes report the status and queue a Retry. A request in the
 // queue's release gap, or a job admission refuses before it starts, never leaves the status pending.
 import assert from "node:assert/strict";

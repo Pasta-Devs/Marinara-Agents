@@ -559,6 +559,216 @@ test("Otome Hearth expression repaint keeps reviewed edits after a concurrent re
   expect(posts(calls, "/api/audio/generate")).toEqual([]);
 });
 
+// ── Intimacy (#1936) ──
+
+/** An NSFW story whose cast is ready: Ilvar's bible has no intimacy block yet, Cassian's and Sora's have one. */
+function intimacyFixture({ heat = "explicit", confirmed = true } = {}) {
+  const fixture = expressionRepaintFixture();
+  const { view } = fixture;
+  view.world.content.heat = heat;
+  view.lis[1].intimacy = true;
+  view.lis[2].intimacy = true;
+  const ownIndex: Json = { ...index(), ageGate: confirmed ? { confirmedAt: now() } : null };
+  const bibles: Record<string, Json> = {
+    // Complete enough for the editor's rules (3 mask tells, a stage-4 secret), so a save goes through.
+    [ILVAR]: normalizeBible({
+      age: 29,
+      pronouns: HE,
+      publicFace: "A quiet adult cartographer.",
+      mask: { presents: "Unbothered", tells: ["folds maps twice", "counts the bells", "won't sit"] },
+      secrets: [
+        { id: "north-chart", truth: "He drew the chart that sank the fleet.", tells: [], revealAt: { stage: 4 } },
+      ],
+    })!,
+  };
+  const base = `/api/otome-forge/runs/${RUN}`;
+  const answer = (call: Call): Answer | undefined => {
+    if (call.path === "/api/otome-forge/index" || call.path === "/api/otome-forge/index/opened")
+      return { status: 200, json: { index: ownIndex } };
+    if (call.path === "/api/otome-forge/age-gate") {
+      ownIndex.ageGate = { confirmedAt: now() };
+      return { status: 200, json: { ageGate: ownIndex.ageGate } };
+    }
+    if (call.path === `${base}/settings`) {
+      if (call.body?.content) view.world.content = call.body.content;
+      return { status: 200, json: { world: view.world } };
+    }
+    const match = new RegExp(`^${base}/lis/([^/]+)/bible$`, "u").exec(call.path);
+    if (match) {
+      const id = match[1]!;
+      if (call.method === "POST") {
+        bibles[id] = call.body!.bible;
+        if (bibles[id]!.intimacy) view.lis.find((li: Json) => li.id === id).intimacy = true;
+      }
+      return { status: 200, json: { bible: bibles[id] ?? null } };
+    }
+    return fixture.answer(call);
+  };
+  return { answer, view, ownIndex, bibles, base };
+}
+
+/** After a reload, back to Your cast (openRepaintCast's handlers and init scripts are already in place). */
+async function reopenCast(page: Page) {
+  await page.reload();
+  await page.getByRole("tab", { name: "Open Otome Hearth", exact: true }).click();
+  const root = page.locator("marinara-capability-otome-forge .of-root");
+  await root.getByRole("button", { name: "Who’s home" }).click();
+  await page.getByRole("dialog", { name: "Who’s home" }).getByRole("button", { name: "Your cast" }).click();
+  await expect(root.getByRole("heading", { name: "Your story is ready", exact: true })).toBeVisible();
+  return root;
+}
+
+for (const theme of ["dark", "light"] as const) {
+  test(`Otome Hearth intimacy: the protagonist's role is optional and only for NSFW Heat (${theme})`, async ({
+    page,
+  }, testInfo) => {
+    const fixture = intimacyFixture({ heat: "sfw", confirmed: false });
+    const calls: Call[] = [];
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme: theme });
+    await stubRoutes(page, fixture.answer, calls);
+    const root = await openRepaintCast(page);
+    await expect(root.getByRole("button", { name: /intimacy preferences$/u })).toHaveCount(0);
+    await root.getByRole("button", { name: "Settings", exact: true }).click();
+    await root.getByRole("tab", { name: "Content", exact: true }).click();
+    const role = root.getByRole("group", { name: "Your role in intimacy", exact: true });
+    await expect(role).toHaveCount(0);
+    await root.getByText("NSFW: Fade", { exact: true }).click();
+    const gate = page.getByRole("dialog", { name: "Before we go further", exact: true });
+    await gate.getByRole("button", { name: "Not now", exact: true }).click();
+    await expect(role).toHaveCount(0);
+    await root.getByText("NSFW: Fade", { exact: true }).click();
+    await gate.getByRole("button", { name: "I confirm", exact: true }).click();
+    await expect(role.getByRole("radio", { name: "Unspecified", exact: true })).toBeChecked();
+    const save = root.getByRole("button", { name: "Save changes", exact: true });
+    await save.click();
+    await expect(save).toBeDisabled();
+    expect(posts(calls, "/settings").at(-1)!.body!.content).not.toHaveProperty("mcRole");
+    await role.getByText("Switch", { exact: true }).click();
+    await save.click();
+    await expect(save).toBeDisabled();
+    expect(posts(calls, "/settings").at(-1)!.body!.content.mcRole).toBe("switch");
+    await role.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: testInfo.outputPath(`intimacy-mc-role-${theme}.png`) });
+    // Back to SFW: the role goes with it.
+    await root.getByRole("group", { name: "Heat", exact: true }).getByText("SFW", { exact: true }).click();
+    await expect(role).toHaveCount(0);
+    await save.click();
+    await expect(save).toBeDisabled();
+    expect(posts(calls, "/settings").at(-1)!.body!.content).not.toHaveProperty("mcRole");
+    await root.locator(".of-topbar").getByRole("button", { name: "Back", exact: true }).click();
+    await expect(root.getByRole("button", { name: /intimacy preferences$/u })).toHaveCount(0);
+    expect(posts(calls, "/intimacy")).toEqual([]);
+  });
+
+  test(`Otome Hearth intimacy: an older bible gains its block from the cast, retried after a failure (${theme})`, async ({
+    page,
+  }, testInfo) => {
+    const fixture = intimacyFixture();
+    const calls: Call[] = [];
+    let attempts = 0;
+    let release!: () => void;
+    const wait = new Promise<void>((resolve) => (release = resolve));
+    const path = `${fixture.base}/lis/${ILVAR}/intimacy`;
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme: theme });
+    await stubRoutes(
+      page,
+      (call) => {
+        if (call.path !== path) return fixture.answer(call);
+        attempts += 1;
+        if (attempts === 1) return { status: 502, json: { error: "The model did not answer." } };
+        fixture.bibles[ILVAR]!.intimacy = { preferences: ["Being praised"], attractions: ["Ink-stained hands"] };
+        return { status: 200, json: { intimacy: true }, wait };
+      },
+      calls,
+    );
+    try {
+      const root = await openRepaintCast(page);
+      const card = root.locator(".of-cast-card").first();
+      const openBible = async () => {
+        await card.getByRole("button", { name: "Open Ilvar Thorne’s bible (spoilers)", exact: true }).click();
+        await root.getByRole("button", { name: "Show spoilers", exact: true }).click();
+        await expect(root.getByText("A quiet adult cartographer.", { exact: true })).toBeVisible();
+      };
+      // The bible read before the fill: the fill must refresh this copy, not leave it to go stale.
+      await openBible();
+      await expect(root.getByText("Intimacy", { exact: true })).toHaveCount(0);
+      await root.getByRole("button", { name: "Back", exact: true }).click();
+      const add = card.getByRole("button", { name: "Add Ilvar Thorne’s intimacy preferences", exact: true });
+      await expect(add).toBeVisible();
+      await expect(root.getByRole("button", { name: /intimacy preferences$/u })).toHaveCount(1);
+      await add.click();
+      await expect(card.locator(".of-intimacy-fill .of-notice--error")).toBeVisible();
+      await add.click();
+      await expect(add).toHaveAttribute("aria-disabled", "true");
+      await expect(add).toHaveText("Writing…");
+      await page.screenshot({ path: testInfo.outputPath(`intimacy-cast-busy-${theme}.png`) });
+      release();
+      // The button gives way to a status that takes its focus.
+      await expect(
+        card.getByText("Intimacy preferences added. Read them in the bible, behind Show spoilers.", { exact: true }),
+      ).toBeFocused();
+      await expect(add).toHaveCount(0);
+      expect(posts(calls, "/intimacy")).toHaveLength(2);
+      expect(calls.filter((call) => call.method === "POST" && /\/bible$/u.test(call.path))).toEqual([]);
+      // Its text stays behind the spoiler gate.
+      await expect(root.getByText("Being praised", { exact: true })).toHaveCount(0);
+      await openBible();
+      await expect(root.getByText("Being praised", { exact: true })).toBeVisible();
+      await expect(root.getByText("Ink-stained hands", { exact: true })).toBeVisible();
+      expect(posts(calls, "/art/paint")).toEqual([]);
+    } finally {
+      release();
+    }
+  });
+
+  test(`Otome Hearth intimacy: the bible shows and edits the block in NSFW stories only (${theme})`, async ({
+    page,
+  }, testInfo) => {
+    const fixture = intimacyFixture();
+    fixture.bibles[ILVAR]!.intimacy = { preferences: ["Slow undressing"], attractions: ["A low voice"] };
+    fixture.view.lis[0].intimacy = true;
+    const calls: Call[] = [];
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme: theme });
+    await stubRoutes(page, fixture.answer, calls);
+    let root = await openRepaintCast(page);
+    const openBible = async () => {
+      await root.getByRole("button", { name: "Open Ilvar Thorne’s bible (spoilers)", exact: true }).click();
+      await root.getByRole("button", { name: "Show spoilers", exact: true }).click();
+      await expect(root.getByText("A quiet adult cartographer.", { exact: true })).toBeVisible();
+    };
+    const saved = root.getByText("Saved. The story follows your edits from now on.", { exact: true });
+    await openBible();
+    const block = root.locator("details").filter({ has: page.locator("summary", { hasText: /^Intimacy$/u }) });
+    await expect(block.getByText("Slow undressing", { exact: true })).toBeVisible();
+    await expect(block.getByText("A low voice", { exact: true })).toBeVisible();
+    await root.getByRole("button", { name: "Edit", exact: true }).click();
+    await root.getByRole("textbox", { name: "Into", exact: true }).fill("  Slow undressing  \n\n  Being tied up  ");
+    await root.getByRole("textbox", { name: "Drawn to", exact: true }).fill("A low voice\nRough hands");
+    await root.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(saved).toBeVisible();
+    expect(posts(calls, "/bible").at(-1)!.body!.bible.intimacy).toEqual({
+      preferences: ["Slow undressing", "Being tied up"],
+      attractions: ["A low voice", "Rough hands"],
+    });
+    await block.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: testInfo.outputPath(`intimacy-bible-${theme}.png`) });
+
+    // Heat lowered to SFW: the block stays in the bible, out of sight.
+    fixture.view.world.content.heat = "sfw";
+    root = await reopenCast(page);
+    await openBible();
+    await expect(root.getByText("Intimacy", { exact: true })).toHaveCount(0);
+    await expect(root.getByText("Being tied up", { exact: true })).toHaveCount(0);
+    await root.getByRole("button", { name: "Edit", exact: true }).click();
+    await expect(root.getByRole("textbox", { name: "Into", exact: true })).toHaveCount(0);
+    await root.getByRole("textbox", { name: "Public face", exact: true }).fill("An unrelated SFW edit.");
+    await root.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(saved).toBeVisible();
+    expect(posts(calls, "/bible").at(-1)!.body!.bible.publicFace).toBe("An unrelated SFW edit.");
+    expect(posts(calls, "/intimacy")).toEqual([]);
+  });
+}
+
 // ── Arcs ──
 
 const ROUTE_KEY = `route-${CASSIAN}-3`;

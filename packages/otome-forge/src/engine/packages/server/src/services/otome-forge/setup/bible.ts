@@ -11,16 +11,19 @@ import {
   SCHOOL_ROLE,
   WOUND_STAGE,
 } from "../../../../../client/src/features/otome-forge/shared/bible.js";
+import { normalizeIntimacy } from "../schemas/unit.js";
 
 export interface BibleContext {
   /** The pronouns the player picked for him; the bible always carries these. */
   pronouns?: Pronouns;
   /** The run's other love interests: web rows are kept only for these, keyed by id (a row keyed by name is moved). */
   others?: ReadonlyArray<{ id: LiId; name: string }>;
+  /** False for a new bible in a story that may not have intimacy preferences (#1936): any the model wrote are dropped. */
+  intimacy?: boolean;
 }
 
 /** The bible made consistent with its love interest, or the reason it is refused (a string the model is shown). */
-export function checkBible(bible: Bible, { pronouns, others }: BibleContext = {}): Bible | string {
+export function checkBible(bible: Bible, { pronouns, others, intimacy = true }: BibleContext = {}): Bible | string {
   if (!(bible.age >= MIN_AGE)) return `age must be ${MIN_AGE} or older; this love interest is an adult`;
   if (SCHOOL_ROLE.test(bible.role)) {
     return `role must be an adult role, never a school or student role (got "${bible.role.slice(0, 80)}")`;
@@ -50,5 +53,15 @@ export function checkBible(bible: Bible, { pronouns, others }: BibleContext = {}
       if (id && !web[id]) web[id] = row;
     }
   }
-  return { ...bible, ...(pronouns ? { pronouns } : {}), mask: { ...bible.mask, tells }, secrets, web };
+  // Intimacy is optional: kept trimmed where the story may have it, dropped where it may not, or when nothing is left.
+  const { intimacy: written, ...rest } = bible;
+  const kept = intimacy && written ? normalizeIntimacy(written) : null;
+  return {
+    ...rest,
+    ...(pronouns ? { pronouns } : {}),
+    mask: { ...bible.mask, tells },
+    secrets,
+    web,
+    ...(kept && typeof kept !== "string" ? { intimacy: kept } : {}),
+  };
 }

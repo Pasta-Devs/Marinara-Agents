@@ -15,6 +15,8 @@ import { forgeIsWorking } from "../shared/forge";
 const POLL_MS = 2_000;
 
 export const runQueryKey = (runKey: string) => ["otome-forge", "run", runKey] as const;
+/** A love interest's spoiler-gated bible (BibleView); the cast's intimacy fill refreshes it too. */
+export const bibleQueryKey = (runKey: string, li: string) => ["otome-forge", "bible", runKey, li] as const;
 
 /** GET /runs/:run, for useRun and for opening a story, which loads it before showing it. */
 export const fetchRunView = async (otome: ReturnType<typeof useOtomeApi>, runKey: string) =>
