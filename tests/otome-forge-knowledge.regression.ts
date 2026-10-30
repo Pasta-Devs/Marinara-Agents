@@ -22,12 +22,14 @@ import {
   worldPlanMessages,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/setup/prompts.ts";
 import {
+  betweenYou,
   beatMessages,
   chapterPlanMessages,
   closerMessages,
   confrontationMessages,
   repairPlanMessages,
   routePlanMessages,
+  stageGoal,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/prompts.ts";
 import { bannerPlanMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/wish/prompts.ts";
 import { CAST, HE, KAI, MIR, SHE, at, bible } from "./fixtures/otome-forge-story.ts";
@@ -171,4 +173,34 @@ test("every scene writer asks the protagonist to sit with what matters to them, 
     closer: closerMessages({ ...input, chapter: chapter([close]), node: close, storySoFar: "", memory: "", li: KAI }),
   };
   for (const [kind, messages] of Object.entries(prompts)) assert.match(messages[0]!.content, THOUGHTS, kind);
+});
+
+test("a slow burn through stage 2, a confession when earned from stage 3, by the finale at the latest (#1960)", () => {
+  const kai = { name: "Kai" };
+  const at = (stage: number) => betweenYou(kai, { ...defaultLiState(), stage });
+  const SLOW = /Slow burn: Kai never says what they feel for the protagonist, and neither does the protagonist\./;
+  // Desire is not feeling: the burn holds back the words, never what the content contract allows.
+  const DESIRE = /Desire is not feeling: they may still act on desire, out of lust or to get what they want/;
+  const MAY = /The slow burn may break: when a scene has earned it, Kai may confess what they feel/;
+  for (const stage of [1, 2]) {
+    assert.match(at(stage), SLOW, `stage ${stage}`);
+    assert.match(at(stage), DESIRE, `stage ${stage}`);
+    assert.doesNotMatch(at(stage), MAY);
+  }
+  for (const stage of [3, 4, 5]) {
+    assert.match(at(stage), MAY, `stage ${stage}`);
+    assert.doesNotMatch(at(stage), SLOW);
+  }
+  assert.match(at(6), /What Kai feels for the protagonist has been said/);
+  assert.match(
+    stageGoal(6, "Kai"),
+    /Kai chooses the protagonist and, if they never have, says in words what they feel/,
+  );
+  // Every prompt about a love interest carries it beside their card: a scene, the planner, a Home note.
+  const input = inputs();
+  const node = { i: 0, kind: "beat" as const, guide: "Late in the lamp room.", cast: [KAI] };
+  const chapter = { kind: "main" as const, number: 2, title: "Rain", lead: KAI, foil: MIR, nodes: [node] };
+  const scene = beatMessages({ ...input, chapter, node, storySoFar: "", memory: "" });
+  assert.match(text(scene), SLOW);
+  assert.match(text(chapterPlanMessages({ ...input, number: 2, lead: KAI, memory: "" })), SLOW);
 });

@@ -48,6 +48,7 @@ import type {
 import {
   CONFRONTATION_ROUNDS,
   type ClimaxKind,
+  LAST_STAGE,
   REPAIR_NODES_MAX,
   REPAIR_NODES_MIN,
   ROUTE_NODES_MAX,
@@ -190,6 +191,21 @@ export function ownView(state: RunState, li: LiId): { liState: LiState; relation
 }
 
 /**
+ * Where the romance stands, by stage (#1960, the maintainer's calls): a slow burn through stage 2, where neither names
+ * what they feel; from stage 3 a confession may come when a scene has earned it, and by the finale at the latest. Desire
+ * is not feeling: the content contract alone decides what bodies may do, at any stage.
+ */
+function romanceLine(name: string, stage: number): string {
+  if (stage <= 2) {
+    return `Slow burn: ${name} never says what they feel for the protagonist, and neither does the protagonist. It shows in tension, glances, deflections and near misses, with no confession and no becoming a couple yet. Desire is not feeling: they may still act on desire, out of lust or to get what they want, as far as the content contract allows, and feelings may grow from it later.`;
+  }
+  if (stage < LAST_STAGE) {
+    return `The slow burn may break: when a scene has earned it, ${name} may confess what they feel, if they have not yet; by the finale of their route at the latest, they say it.`;
+  }
+  return `What ${name} feels for the protagonist has been said; it is no longer hidden between them.`;
+}
+
+/**
  * What stands between them and the protagonist: trust and tension in words, open grievances (with their ids, so a
  * node can resolve them), a rupture, and what the protagonist has told them. The grievances shown are the newest
  * three, the rupture's and those `also` names (the ones a node may resolve), or every one with "all" (the planner).
@@ -209,7 +225,10 @@ export function betweenYou(unit: Pick<Unit, "name">, liState: LiState, also: rea
       : open.filter(
           (grievance, index) => index >= open.length - 3 || grievance.id === ruptureId || also.includes(grievance.id),
         );
-  const lines = [`Between ${unit.name} and the protagonist: trust ${trust}, tension ${tension}.`];
+  const lines = [
+    `Between ${unit.name} and the protagonist: trust ${trust}, tension ${tension}.`,
+    romanceLine(unit.name, liState.stage),
+  ];
   for (const grievance of shown) {
     const holder = grievance.by === "li" ? unit.name : "the protagonist";
     lines.push(`Open grievance ${grievance.id} (${grievance.severity}, held by ${holder}): ${grievance.text}`);
@@ -780,7 +799,7 @@ export function stageGoal(stage: number, name: string): string {
     case "reckoning":
       return `${name} reckons with what they have done and what they want: a confrontation brings it to a head, and the protagonist makes a choice that cannot be undone.`;
     case "bond":
-      return `the finale of ${name}'s route: ${name} chooses the protagonist; any change must be earned and character-consistent, without automatic redemption or a replacement personality.`;
+      return `the finale of ${name}'s route: ${name} chooses the protagonist and, if they never have, says in words what they feel; any change must be earned and character-consistent, without automatic redemption or a replacement personality.`;
     default:
       return `${name} keeps the mask on.`;
   }
