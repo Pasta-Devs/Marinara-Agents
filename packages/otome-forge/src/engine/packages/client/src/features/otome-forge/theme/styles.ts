@@ -1748,13 +1748,12 @@ ${R} .of-dialogue::before {
 }
 ${R} .of-nameplate {
   position: absolute; top: -15px; inset-inline-start: 16px; display: inline-flex; align-items: center; gap: 8px;
-  max-width: calc(100% - 32px); margin: 0; padding: 6px 16px; border-radius: 999px 999px 999px 6px; overflow: hidden;
+  max-width: calc(100% - 32px); margin: 0; padding: 6px 16px; border-radius: 999px; overflow: hidden;
   white-space: nowrap; text-overflow: ellipsis; font-family: var(--of-font-display); font-weight: 600; font-size: 1.14rem;
   line-height: 1; color: ${PALETTE.ink};
   background: linear-gradient(135deg, color-mix(in srgb, var(--of-li-accent, ${PALETTE.rose}) 62%, white), var(--of-li-accent, ${PALETTE.rose}));
   box-shadow: 0 6px 16px rgb(0 0 0 / 0.2), inset 0 1px 0 rgb(255 255 255 / 0.6);
 }
-${R}[dir="rtl"] .of-nameplate { border-radius: 999px 999px 6px 999px; }
 ${R} .of-nameplate[data-voice="protagonist"] { background: linear-gradient(135deg, #f3dcaa, ${PALETTE.rose}); }
 ${R} .of-nameplate[data-voice="other"] { background: linear-gradient(135deg, #f6ecd6, ${PALETTE.champagne}); }
 ${R} .of-nameplate-tag {

@@ -106,6 +106,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
   const [hidden, setHidden] = useState(false);
   // Story CGs whose pan has played in this visit (`${chapterKey}/${node}r${rewrites}`).
   const [cgShown, setCgShown] = useState<ReadonlySet<string>>(() => new Set());
+  const [failedStageArt, setFailedStageArt] = useState<ReadonlySet<string>>(() => new Set());
   // The last beat's music, kept while the next beat opens; none until the first beat is ready.
   const lastMood = useRef<MusicMood | undefined>(undefined);
   const [dialog, setDialog] = useState<"log" | "ease" | null>(null);
@@ -244,7 +245,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
     { expression: reader.onStage.face },
     FACES,
   ).art;
-  const usesCharacterSprite = !cg && (otherSpeaker ? !!speaker.url : !!stageArt);
+  const usesCharacterSprite = !cg && (otherSpeaker ? !!speaker.url : !!stageArt && !failedStageArt.has(stageArt));
 
   // Each new line is voiced when the settings voice its speaker; leaving the line stops it. Narration, thoughts and
   // the aftermath line never are.
@@ -388,7 +389,20 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
         ) : otherSpeaker ? (
           <SpeakerPlate key={reader.lineKey} name={otherSpeaker} url={speaker.url} onError={speaker.onError} />
         ) : (
-          <FacePlate li={onStageLi} face={reader.onStage.face} speaking={reader.onStage.speaking} />
+          <FacePlate
+            li={onStageLi}
+            face={reader.onStage.face}
+            speaking={reader.onStage.speaking}
+            onArtStatus={(url, loaded) =>
+              setFailedStageArt((failed) => {
+                if (loaded ? !failed.has(url) : failed.has(url)) return failed;
+                const next = new Set(failed);
+                if (loaded) next.delete(url);
+                else next.add(url);
+                return next;
+              })
+            }
+          />
         )}
         <div className="of-toasts" aria-live="polite">
           {reader.toasts.map((toast) =>
