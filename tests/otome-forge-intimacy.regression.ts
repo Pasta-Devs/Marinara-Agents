@@ -25,7 +25,7 @@ import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/serve
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { checkBible } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/setup/bible.ts";
 import { bibleMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/setup/prompts.ts";
-import { KAI, bible, beatReply, json, planReply, storyWorld } from "./fixtures/otome-forge-story.ts";
+import { KAI, MIR, bible, beatReply, json, planReply, storyWorld } from "./fixtures/otome-forge-story.ts";
 
 const text = (messages: CapabilityLanguageModelMessage[]) => messages.map((message) => message.content).join("\n");
 const nsfw = (changes: Partial<ContentSettings> = {}): ContentSettings => ({
@@ -175,6 +175,19 @@ test("an older bible gains only its intimacy block, once, on request; the run vi
   );
   assert.equal(saved.status, 200, JSON.stringify(saved.body));
   assert.deepEqual((await t.store.readDoc(unitId(t.runId, KAI), normalizeUnit))!.bible!.intimacy, INTIMACY);
+
+  // Back to SFW: an edit cannot add or change the block, and the one written before is kept as it was.
+  await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+    ...world,
+    content: defaultContent(),
+  }));
+  const sneaked = { ...edited, intimacy: { preferences: ["SNEAKED"], attractions: [] } };
+  assert.equal((await call("POST", "/runs/:run/lis/:li/bible", { bible: sneaked }, { li: KAI })).status, 200);
+  assert.deepEqual((await t.store.readDoc(unitId(t.runId, KAI), normalizeUnit))!.bible!.intimacy, INTIMACY);
+  const mir = (await t.store.readDoc(unitId(t.runId, MIR), normalizeUnit))!;
+  const fresh = { ...mir.bible!, intimacy: { preferences: ["SNEAKED"], attractions: [] } };
+  assert.equal((await call("POST", "/runs/:run/lis/:li/bible", { bible: fresh }, { li: MIR })).status, 200);
+  assert.equal((await t.store.readDoc(unitId(t.runId, MIR), normalizeUnit))!.bible!.intimacy, undefined);
 });
 
 test("scenes draw on the block now and then in an NSFW story; an SFW story's prompts never carry it", async () => {

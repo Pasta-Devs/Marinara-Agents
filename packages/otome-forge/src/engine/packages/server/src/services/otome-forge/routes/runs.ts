@@ -29,6 +29,7 @@ import {
   contentNeedsAgeGate,
   enforceContent,
   imageRatingNeedsAgeGate,
+  intimacyOpen,
   raisesGatedSetting,
 } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import { galleryRefIds } from "../art/image-client.js";
@@ -512,8 +513,10 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       const others = (await store.listRun("unit", runId))
         .map((record) => normalizeUnit(record.data))
         .filter((unit) => unit.id !== li);
-      // The player is the authority on an edit: no `pronouns` here, so the ones they set are kept.
-      const bible = checkBible(body.bible, { others });
+      // The player is the authority on an edit: no `pronouns` here, so the ones they set are kept. An SFW story takes no
+      // intimacy block from an edit (#1936); one written before Heat was lowered is kept below.
+      const world = await store.readDoc(worldId(runId), normalizeWorld);
+      const bible = checkBible(body.bible, { others, intimacy: !!world && intimacyOpen(world.content) });
       if (typeof bible === "string") throw new OtomeForgeError(400, `Invalid bible: ${bible}`, "bad-request");
       let tellsBefore: readonly string[] = [];
       const unit = await store.updateDoc(runDocTarget("unit", unitId(runId, li)), normalizeUnit, (current) => {
