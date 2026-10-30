@@ -251,6 +251,7 @@ Each story has its own content settings:
 - What you set to Allow is told to the model, and your Lines and Veils always win. Non-consent can move off Line only under Dark romance with NSFW Heat.
 - The model never stops a scene to ask: **Ease off** is your stop.
 - Home, notes and Snapshots always stay SFW.
+- In an SFW story, and on Home, characters may still swear when it fits their voice; the explicit sexual words are NSFW mode's.
 - Story memory follows your settings: its summaries record intimacy and darkness as the story wrote them, never a Line, and a Veil only as having happened off the page. Nothing from the period tracker is ever remembered.
 
 **Intimacy preferences** (NSFW Heat only, Fade or Explicit, never SFW):

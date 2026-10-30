@@ -99,6 +99,9 @@ const ROMANCE =
   "Flirtation, desire, jealousy, possessiveness, seduction and messy attachment belong in this story and escalate naturally; a love interest may make the first move instead of waiting for the protagonist. Hand-holding, pinning, charged closeness, touches, kisses and holding never cause an out-of-character pause, a disclaimer or a consent check in the writing: the player has their own way to stop a scene. When a choice is about intimacy, one option lets the protagonist decline, and the story honours the pick.";
 const LANGUAGE =
   "Language is not sanitized: crude and vulgar words are fine in dialogue and narration alike (fuck, shit, cock, pussy and the like) whenever they fit the character's voice and the moment.";
+/** An SFW contract's language (the maintainer's call): swearing where it fits, the sexual words stay NSFW mode's. */
+const SFW_LANGUAGE =
+  "Characters may swear (fuck, shit, damn and the like) when it fits their voice; explicit sexual words are left out.";
 /** Only while dubious consent or non-consent is not a Line (SH/content.ts limitIsFixed: Dark, NSFW Heat, the gate). */
 const CONSENT =
   "The player agreed to this scenario outside the story. Within the Lines and Veils, a character may hesitate, struggle, resist or fight back as their personality would; that is part of the story, never an out-of-character stop. The only real stops are the player's own: Ease off, and their Lines. The protagonist's refusal is the protagonist's own: written as a refusal, never as secret wanting, and it has consequences between them.";
@@ -157,6 +160,7 @@ export function otomeContentContract({ world, lis, kind }: ContentContractInput)
     const darkness = DARKNESS_TEXT[content.darkness];
     if (nsfw) rules.push(NO_MINORS);
     rules.push(HEAT_TEXT[content.heat], nsfw && content.darkness === "angst" ? `${darkness} ${ANGST_NSFW}` : darkness);
+    if (!nsfw) rules.push(SFW_LANGUAGE);
     if (nsfw) {
       rules.push(ROMANCE, LANGUAGE);
       if (intimacyOpen(content) && content.mcRole) rules.push(MC_ROLE_TEXT[content.mcRole]);
@@ -181,6 +185,7 @@ export function otomeContentContract({ world, lis, kind }: ContentContractInput)
     }
   } else {
     rules.push(HEAT_TEXT.sfw);
+    if (kind === "home") rules.push(SFW_LANGUAGE);
     if (kind === "home" && content.darkness === "dark") {
       rules.push(
         "A love interest may be possessive or sharp about story events only; nothing here menaces the protagonist.",
