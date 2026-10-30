@@ -210,8 +210,12 @@ export interface Item {
   look?: ItemLook;
   /** her-look5: the item id of his look it pairs with (the his-wardrobe banner's 5★ of the same rotation). */
   coupleWith?: string;
-  /** memory5 and new snapshot3: the illustration's English brief and cast (at most 3), as a beat's `cg`. */
-  cg?: { brief: string; cast: string[] };
+  /**
+   * memory5 and new snapshot3: the illustration's English brief and cast (at most 3), as a beat's `cg`. `explicit`:
+   * a memory5 brief the banner plan marked explicit, painted so only under Explicit Heat and the Explicit rating;
+   * `clothed`, the same moment clothed, is painted in its place under lower settings.
+   */
+  cg?: { brief: string; cast: string[]; explicit?: true; clothed?: string };
   art: Paint | null;
   /** The Character Story (memory5), Moment (moment4) or first-wear beat (his-look5), once written. */
   story: { key: string } | null;
