@@ -102,7 +102,7 @@ const CHEAT_TEXT: Record<ClawCheat, string> = {
 };
 
 export interface LinePackInput {
-  world: Pick<World, "content" | "images" | "language" | "setting" | "premise" | "writingStyle">;
+  world: Pick<World, "content" | "images" | "language" | "setting" | "premise" | "writingStyle" | "bannedPhrases">;
   player: Pick<Player, "name" | "pronouns">;
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   stage: number;
@@ -140,7 +140,7 @@ export function linePackMessages({ world, player, unit, stage, withFixed }: Line
     "- No two lines alike.",
     `- Write every line in ${world.language}.`,
     "",
-    otomeWritingRules({ story: true, style: world.writingStyle }),
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
     otomeContentContract({ world, lis: [{ name }], kind: "home" }),
   ].join("\n");
@@ -200,7 +200,7 @@ export interface NoteDay {
 }
 
 export interface NoteInput {
-  world: Pick<World, "content" | "images" | "language" | "setting" | "premise" | "writingStyle">;
+  world: Pick<World, "content" | "images" | "language" | "setting" | "premise" | "writingStyle" | "bannedPhrases">;
   player: Pick<Player, "name" | "pronouns">;
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   liState: LiState;
@@ -251,7 +251,7 @@ export function noteMessages({
     "- Never repeat or closely echo one of the recent notes listed.",
     `- Write the note and the mood in ${world.language}.`,
     "",
-    otomeWritingRules({ story: true, style: world.writingStyle }),
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
     otomeContentContract({ world, lis: [{ name }], kind: "home" }),
   ].join("\n");

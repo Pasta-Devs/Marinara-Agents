@@ -66,7 +66,7 @@ In **Your cast**, open a love interest and choose their **Character card** to li
 
 Each main chapter is led by one love interest. Otome Hearth offers two to choose from: the one you have spent the least time with, and the one with the most unresolved between you. The chapter planner adds a second love interest whose goals get in the way, and writes six to nine scenes that build to a climax: a Confrontation, or a warm Closer. After two main chapters in a row end the same way, the next one ends with the other. Each scene is written when you reach it, and the next one is written ahead while you read.
 
-- **Who speaks:** every line names its speaker. Each love interest's line shows one of five faces: tender, flustered, cold, hurt or angry. Your thoughts are set apart, and from the second stage of a love interest's story you may hear one of their thoughts too.
+- **Who speaks:** every line names its speaker. Each love interest's line shows one of five faces: tender, flustered, cold, hurt or angry. Your thoughts are set apart, and after something that matters to you (a first kiss, a night together, a quarrel, a secret learned) your protagonist takes a moment to sit with it in their own voice, doubts and hopes included. From the second stage of a love interest's story you may hear one of their thoughts too.
 - **Choices:** your first choice in a scene is canon. Replaying a chapter shows the other branches without changing anything. A choice that changes things between you names who will remember it, and the last scene may end on one lasting choice.
 - **What you know:** your protagonist knows only what the story has shown them. A love interest's past, habits and words for their world reach you when you are told, see or find them out, and a protagonist new to the world learns its people and customs as they go.
 - **A life of your own:** chapters have other people in them, scenes without any love interest, and time to rest and sleep after a long day or a night.
@@ -85,6 +85,7 @@ Each love interest moves through six stages, from Mask to Bond.
 
 - **Affection progress:** **Story → Between you** shows the points earned within the current level beneath **Level**, out of the 300 needed for the next. Level 10 is the maximum and shows a complete counter. These levels unlock route chapters; completing their gates advances the relationship's six-stage arc.
 - **Route chapters are free.** The next one opens at an affection level (3, 5, 7, 8, then 10). It takes one model call to plan.
+- **Slow burn:** through the first two stages, neither of you says what you feel; it shows in tension, glances and near misses. Desire can still come first, out of lust or to get what they want, as your Heat allows, and feelings may grow from it. From the third stage a love interest may confess once the story has earned it, and by their route's finale at the latest they say it.
 - **The gate:** only a route chapter's last scene moves a love interest on a stage. The fourth stage's gate reveals one of their secrets. The fifth stage's chapter holds a confrontation, and its gate ends on a choice that cannot be undone.
 - **Rewards:** a route chapter earns 300 Starlight and 150 affection. A hostile first-play choice in the story or on a date, a Confrontation walkout, or being shut out of a Closer can cost 15 affection points per affected love interest for each chosen option. Points never fall below the start of the highest level you have reached, with a new level every 300 points. Replaying costs nothing, and losses never refund the daily earning cap.
 - **Confrontations:** a main chapter can build to one: three rounds in which you Press, Hold, Yield or Reveal. It ends in the truth, a walkout or a standoff, and what you reveal is something they know from then on. The whole confrontation is written in one model call, and your first play of it is canon. Route chapters keep theirs.
@@ -258,13 +259,15 @@ Each story has its own content settings:
 - you can add limits of your own;
 - changing Darkness keeps the levels you set yourself.
 
+**Banned phrases:** in **Settings → Content**, type the words and phrases you never want to read, separated by commas or one per line. Every scene, message and note avoids them, on top of the built-in list of overused phrases.
+
 **NSFW mode:** NSFW Heat or Dark romance turns it on for the story, its chapters and Messages.
 
 - Romance escalates without stopping to ask, love interests may make the first move, and language is not sanitized: swearing, dirty talk and crude words are fine wherever they fit a character's voice.
-- NSFW: Fade writes the build-up and cuts at the threshold; NSFW: Explicit writes sex on the page in full.
+- NSFW: Fade writes the build-up and cuts at the threshold; NSFW: Explicit writes sex on the page in full, unhurried, from the build-up to the aftermath, with the characters talking through it. A scene that reaches sex may run longer than other scenes.
 - Dark romance lets villains play dirty and aim menace at you, with graphic violence wherever your limits allow it. Its darkness has a reason, a hidden cost and lines they won't cross. Your choices always include refusing, and the story honours what you pick.
 - What you set to Allow is told to the model, and your Lines and Veils always win. Non-consent can move off Line only under Dark romance with NSFW Heat.
-- The model never stops a scene to ask: **Ease off** is your stop.
+- The model never stops a scene to ask, and no love interest checks in or offers to stop, sex included: **Ease off** is your stop.
 - Home, notes and Snapshots always stay SFW.
 - In an SFW story, and on Home, characters may still swear when it fits their voice; the explicit sexual words are NSFW mode's.
 - Story memory follows your settings: its summaries record intimacy and darkness as the story wrote them, never a Line, and a Veil only as having happened off the page. Nothing from the period tracker is ever remembered.

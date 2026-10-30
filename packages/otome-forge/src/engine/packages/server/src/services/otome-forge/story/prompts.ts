@@ -48,6 +48,7 @@ import type {
 import {
   CONFRONTATION_ROUNDS,
   type ClimaxKind,
+  LAST_STAGE,
   REPAIR_NODES_MAX,
   REPAIR_NODES_MIN,
   ROUTE_NODES_MAX,
@@ -70,6 +71,13 @@ import { STORY_PACING_INSTRUCTION, otomeWritingRules } from "../writing-rules.js
 import { prologueFraming } from "./prologue.js";
 import { aboutLine } from "../schemas/player.js";
 import { intimacyLine } from "../intimacy.js";
+
+/**
+ * P6's, P12's and P12c's line on the protagonist's inner life: they react to what happens to them, in thought, instead
+ * of the scene moving straight on (the maintainer's playtest: after a first night together she never mulled it over).
+ */
+const PROTAGONIST_THOUGHTS =
+  "They are a person, not a camera: when something that matters to them happens (a first kiss, sex, a quarrel, a secret learned), here or at the end of the node before, give them thought lines to sit with it before the story moves on, in their own voice, with their persona's doubts, insecurities and hopes showing through.";
 
 /** The sentence forgeChoiceMessages replaces when choices are on; P6's system text must contain it exactly. */
 export const NO_CHOICES_SENTENCE =
@@ -183,6 +191,21 @@ export function ownView(state: RunState, li: LiId): { liState: LiState; relation
 }
 
 /**
+ * Where the romance stands, by stage (#1960, the maintainer's calls): a slow burn through stage 2, where neither names
+ * what they feel; from stage 3 a confession may come when a scene has earned it, and by the finale at the latest. Desire
+ * is not feeling: the content contract alone decides what bodies may do, at any stage.
+ */
+function romanceLine(name: string, stage: number): string {
+  if (stage <= 2) {
+    return `Slow burn: ${name} never says what they feel for the protagonist, and neither does the protagonist. It shows in tension, glances, deflections and near misses, with no confession and no becoming a couple yet. Desire is not feeling: they may still act on desire, out of lust or to get what they want, as far as the content contract allows, and feelings may grow from it later.`;
+  }
+  if (stage < LAST_STAGE) {
+    return `The slow burn may break: when a scene has earned it, ${name} may confess what they feel, if they have not yet; by the finale of their route at the latest, they say it.`;
+  }
+  return `What ${name} feels for the protagonist has been said; it is no longer hidden between them.`;
+}
+
+/**
  * What stands between them and the protagonist: trust and tension in words, open grievances (with their ids, so a
  * node can resolve them), a rupture, and what the protagonist has told them. The grievances shown are the newest
  * three, the rupture's and those `also` names (the ones a node may resolve), or every one with "all" (the planner).
@@ -202,7 +225,10 @@ export function betweenYou(unit: Pick<Unit, "name">, liState: LiState, also: rea
       : open.filter(
           (grievance, index) => index >= open.length - 3 || grievance.id === ruptureId || also.includes(grievance.id),
         );
-  const lines = [`Between ${unit.name} and the protagonist: trust ${trust}, tension ${tension}.`];
+  const lines = [
+    `Between ${unit.name} and the protagonist: trust ${trust}, tension ${tension}.`,
+    romanceLine(unit.name, liState.stage),
+  ];
   for (const grievance of shown) {
     const holder = grievance.by === "li" ? unit.name : "the protagonist";
     lines.push(`Open grievance ${grievance.id} (${grievance.severity}, held by ${holder}): ${grievance.text}`);
@@ -457,7 +483,7 @@ export function chapterPlanMessages({
     "- Omit an optional field rather than writing null.",
     "",
     STORY_PACING_INSTRUCTION,
-    otomeWritingRules({ story: true, style: world.writingStyle }),
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
     otomeContentContract({ world, lis: units.map((unit) => ({ name: unit.name })), kind: "planner" }),
   ].join("\n");
@@ -512,6 +538,15 @@ export const BEAT_WORDS = 650;
 export const BEAT_WORDS_MAX = 950;
 export const BEAT_SEGMENTS_MAX = 40;
 export const BEAT_PLACES_MAX = 4;
+// Under NSFW: Explicit, sex is never rushed (content-contract.ts HEAT_TEXT), so a node or a Closer's opened ending that
+// reaches it gets more room. Each fits the reply's budget (generation.ts outputBudget: 8192 tokens at least, plus
+// reasoning headroom) and the segments normalizeBeatReply keeps (twice BEAT_SEGMENTS_MAX).
+/** The words a node that reaches sex may run to. */
+export const INTIMATE_BEAT_WORDS_MAX = 1500;
+/** The segments a node that reaches sex may hold. */
+export const INTIMATE_BEAT_SEGMENTS_MAX = 60;
+/** The segments a Closer's opened ending that reaches sex may hold (its other endings keep CONFRONTATION_ENDING_MAX). */
+export const CLOSER_INTIMATE_ENDING_MAX = 20;
 
 /** The reply's top level, kept whole for the kit's choice normalizer (zod drops keys a schema does not name). */
 export interface BeatReply {
@@ -619,12 +654,12 @@ export function beatMessages({
   const system = [
     "You are the narrator of an otome visual novel: a character-driven romance mystery. Narrate ONE node of the chapter as a scene the player taps through, a short segment at a time.",
     NO_CHOICES_SENTENCE,
-    `Write about ${BEAT_WORDS} words in total across the segments, and NEVER more than ${BEAT_WORDS_MAX}; use at most ${BEAT_SEGMENTS_MAX} segments.`,
+    `Write about ${BEAT_WORDS} words in total across the segments, and NEVER more than ${BEAT_WORDS_MAX}; use at most ${BEAT_SEGMENTS_MAX} segments.${world.content.heat === "explicit" ? ` A node that reaches sex is the exception: give it the room it needs, up to ${INTIMATE_BEAT_WORDS_MAX} words and ${INTIMATE_BEAT_SEGMENTS_MAX} segments, so it is never rushed.` : ""}`,
     "Respond with ONLY a JSON object, no markdown, in this exact shape:",
     `{"musicMood": "${MUSIC_MOODS.join("|")}", "places": [{"name": "...", "tags": "..."}], "segments": [{"speaker": "", "text": "...", "thought": false, "expression": "", "place": "..."}]${node.cg ? cgShape(world) : ""}}`,
     '- speaker: who speaks the segment, written as their exact name every time; "" for narration. When the protagonist speaks, write their exact name; the prose still addresses them as "you".',
     "- Each segment is one speaker's line or one piece of narration: a sentence or a few. Never put dialogue inside narration, and never mark it with dashes or quotes as prose.",
-    `- thought: true for an inner line, in the thinker's own words, with "speaker" set to the thinker. The protagonist may think freely. A love interest gets at most ONE thought line in this node, and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
+    `- thought: true for an inner line, in the thinker's own words, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in this node, and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
     `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}, when the face shows it. A face may contradict the words. Omit it for a neutral line and for narration.`,
     `- musicMood: the soundtrack cue for this node, one of ${MUSIC_MOODS.join(", ")}.`,
     `- places: every place the node happens in, in order (at most ${BEAT_PLACES_MAX}). A place is a room, a street, a garden: never the time of day or the mood. tags: the same place as 4-8 short comma-separated English tags for an image model, with "no humans". place on a segment: which place it happens in; omit it while the scene has not moved.`,
@@ -644,7 +679,7 @@ export function beatMessages({
     `- Write every segment's text and every place name in ${world.language}; tags${node.cg ? " and the cg brief" : ""} in English.`,
     "",
     STORY_PACING_INSTRUCTION,
-    otomeWritingRules({ story: true, style: world.writingStyle }),
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
     otomeContentContract({ world, lis: present.map((unit) => ({ name: unit.name })), kind: "scene" }),
   ].join("\n");
@@ -764,7 +799,7 @@ export function stageGoal(stage: number, name: string): string {
     case "reckoning":
       return `${name} reckons with what they have done and what they want: a confrontation brings it to a head, and the protagonist makes a choice that cannot be undone.`;
     case "bond":
-      return `the finale of ${name}'s route: ${name} chooses the protagonist; any change must be earned and character-consistent, without automatic redemption or a replacement personality.`;
+      return `the finale of ${name}'s route: ${name} chooses the protagonist and, if they never have, says in words what they feel; any change must be earned and character-consistent, without automatic redemption or a replacement personality.`;
     default:
       return `${name} keeps the mask on.`;
   }
@@ -947,7 +982,7 @@ export function routePlanMessages(input: RoutePlanInput): OtomeMessage[] {
     "- Omit an optional field rather than writing null.",
     "",
     STORY_PACING_INSTRUCTION,
-    otomeWritingRules({ story: true, style: world.writingStyle }),
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
     otomeContentContract({ world, lis: units.map((item) => ({ name: item.name })), kind: "planner" }),
   ]
@@ -998,7 +1033,7 @@ export function repairPlanMessages(input: RepairPlanInput): OtomeMessage[] {
     "- Omit an optional field rather than writing null.",
     "",
     STORY_PACING_INSTRUCTION,
-    otomeWritingRules({ story: true, style: world.writingStyle }),
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
     otomeContentContract({ world, lis: units.map((item) => ({ name: item.name })), kind: "planner" }),
   ].join("\n");
@@ -1077,7 +1112,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     `- grievance.text: what a walkout leaves ${name} holding against the protagonist, one short sentence. disclosure: what the protagonist tells ${name} in reveal, as one short third-person sentence ("The protagonist said their brother drowned here.").`,
     `- musicMood: tense or angst.`,
     '- speaker: who speaks the segment, written as their exact name every time; "" for narration. Each segment is one speaker\'s line or one piece of narration.',
-    `- thought: true for an inner line, with "speaker" set to the thinker. The protagonist may think freely. A love interest gets at most ONE thought line in the whole confrontation, on any path a player can take through it (the opening, the rounds' lines, the answers to the stances taken and the ending together), and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
+    `- thought: true for an inner line, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in the whole confrontation, on any path a player can take through it (the opening, the rounds' lines, the answers to the stances taken and the ending together), and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
     `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}. A face may contradict the words. Omit it for a neutral line and for narration.`,
     `- places: where it happens (at most ${BEAT_PLACES_MAX}); tags: 4-8 short comma-separated English tags for an image model, with "no humans".`,
     ...(backgrounds ? [PLACE_REUSE_RULE] : []),
@@ -1095,7 +1130,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     `- Write every segment's text, label, selection, grievance and disclosure in ${world.language}; tags${node.cg ? " and the cg brief" : ""} in English.`,
     "",
     STORY_PACING_INSTRUCTION,
-    otomeWritingRules({ story: true, style: world.writingStyle }),
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
     otomeContentContract({ world, lis: present.map((unit) => ({ name: unit.name })), kind: "scene" }),
   ]
@@ -1167,12 +1202,12 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
     `- guard: how that answer moves ${name}'s guard, from ${name}'s own character, wound and what stands between them: -1 when it reaches ${name} and the guard lowers, 1 when it lands wrong and ${name} closes off, 0 when it does neither. Not every reassure is -1 and not every ask is 1: a tease can be exactly right, and warmth at the wrong moment can feel like pity.`,
     `- endings: opened (${name}'s guard comes down and they let the protagonist in, the closest the two have been), almost (warm, but ${name} pulls back at the last second and something stays unsaid), shut (it went wrong: the mask goes back on and ${name} withdraws, hurt). Each 1 to ${CONFRONTATION_ENDING_MAX} segments that close the scene.`,
     intimacyOpen(world.content)
-      ? "- opened may turn intimate when the moment and where they stand call for it, written at the Heat the content contract sets."
+      ? `- opened may turn intimate when the moment and where they stand call for it, written at the Heat the content contract sets.${world.content.heat === "explicit" ? ` When it reaches sex, opened may run to ${CLOSER_INTIMATE_ENDING_MAX} segments, so it is never rushed.` : ""}`
       : "",
     `- grievance.text: what being shut out leaves ${name} holding against the protagonist, one short sentence. disclosure: what the protagonist tells ${name} in mirror, as one short third-person sentence ("The protagonist said they still sleep with a light on.").`,
     "- musicMood: tender or confession.",
     '- speaker: who speaks the segment, written as their exact name every time; "" for narration. Each segment is one speaker\'s line or one piece of narration.',
-    `- thought: true for an inner line, with "speaker" set to the thinker. The protagonist may think freely. A love interest gets at most ONE thought line in the whole closer, on any path a player can take through it (the opening, the rounds' lines, the answers given and the ending together), and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
+    `- thought: true for an inner line, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in the whole closer, on any path a player can take through it (the opening, the rounds' lines, the answers given and the ending together), and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
     `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}. A face may contradict the words. Omit it for a neutral line and for narration.`,
     `- places: where it happens (at most ${BEAT_PLACES_MAX}); tags: 4-8 short comma-separated English tags for an image model, with "no humans".`,
     ...(backgrounds ? [PLACE_REUSE_RULE] : []),
@@ -1187,7 +1222,7 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
     `- Write every segment's text, label, selection, grievance and disclosure in ${world.language}; tags${node.cg ? " and the cg brief" : ""} in English.`,
     "",
     STORY_PACING_INSTRUCTION,
-    otomeWritingRules({ story: true, style: world.writingStyle }),
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
     otomeContentContract({ world, lis: present.map((unit) => ({ name: unit.name })), kind: "scene" }),
   ]

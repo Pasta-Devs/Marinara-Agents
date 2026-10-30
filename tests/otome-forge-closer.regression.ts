@@ -52,7 +52,10 @@ import {
   applyConfrontation,
   normalizeConfrontationReply,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/confrontation.ts";
-import type { ConfrontationReply } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/prompts.ts";
+import {
+  CLOSER_INTIMATE_ENDING_MAX,
+  type ConfrontationReply,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/prompts.ts";
 import {
   normalizeRepairPlan,
   normalizeRoutePlan,
@@ -238,6 +241,19 @@ test("P12c's reply is normalized as P12's, with the Closer's answers, endings, g
   assert.match(String(normalize(confrontationReply())), /options\.reassure needs a label/, "a Confrontation's shape");
   assert.match(String(normalize({ ...closerReply(), grievance: {} })), /what being shut out leaves between them/);
   assert.match(String(normalize({ ...closerReply(), disclosure: "" })), /shares of themselves in mirror/);
+  // NSFW: Explicit (#1958): an opened ending that reaches sex may run to CLOSER_INTIMATE_ENDING_MAX; the others keep 6.
+  const ending = (count: number) => Array.from({ length: count }, (_, i) => ({ speaker: "", text: `Line ${i + 1}.` }));
+  const withEnding = (name: "opened" | "almost", count: number) => {
+    const reply = closerReply();
+    reply.endings[name] = ending(count);
+    return reply;
+  };
+  const room = (reply: Record<string, unknown>) =>
+    normalizeConfrontationReply(reply as unknown as ConfrontationReply, { ...shape, intimateRoom: true }, lists);
+  assert.match(String(normalize(withEnding("opened", 7))), /endings\.opened has more than 6 segments/, "no room: 6");
+  assert.equal(typeof room(withEnding("opened", CLOSER_INTIMATE_ENDING_MAX)), "object", "room: up to 20");
+  assert.match(String(room(withEnding("opened", CLOSER_INTIMATE_ENDING_MAX + 1))), /more than 20 segments/);
+  assert.match(String(room(withEnding("almost", 7))), /endings\.almost has more than 6 segments/, "only opened");
   // A Confrontation is read as before (no kind).
   const fight = normalizeConfrontationReply(
     confrontationReply() as unknown as ConfrontationReply,

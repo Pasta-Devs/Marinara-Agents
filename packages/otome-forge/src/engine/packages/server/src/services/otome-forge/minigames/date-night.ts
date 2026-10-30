@@ -241,7 +241,7 @@ export function datePlanMessages({
     "- Omit an optional field rather than writing null.",
     "",
     STORY_PACING_INSTRUCTION,
-    otomeWritingRules({ story: true, style: world.writingStyle }),
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
     otomeContentContract({ world, lis: [{ name }], kind: "planner" }),
   ].join("\n");

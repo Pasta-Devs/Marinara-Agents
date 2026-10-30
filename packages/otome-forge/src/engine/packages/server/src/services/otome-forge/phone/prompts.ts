@@ -99,7 +99,7 @@ const RUPTURE_LINE =
   "A rupture stands between you. Answer curt and cold, at a distance, within your red lines. Do not pretend it is fine, and do not mend it here.";
 
 export interface ChatReplyInput {
-  world: Pick<World, "language" | "content" | "images" | "writingStyle">;
+  world: Pick<World, "language" | "content" | "images" | "writingStyle" | "bannedPhrases">;
   player: Pick<Player, "name" | "pronouns" | "traits" | "about">;
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   liState: LiState;
@@ -148,7 +148,7 @@ export function chatReplyMessages({
     `- If ${them} says they feel unwell or had a hard day, answer with comfort only. ${COMFORT_RULE}`,
     "- Never repeat a line you already sent in this thread.",
     "",
-    otomeWritingRules({ story: true, style: world.writingStyle }),
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
     otomeContentContract({ world, lis: [{ name }], kind: "chat" }),
   ]
@@ -264,7 +264,7 @@ export function normalizeChatReply(raw: ChatReplyRaw, names: ThreadNames): ChatR
 // ── P18: chat memory (compress, summary contract) ──
 
 export interface ChatMemoryInput {
-  world: Pick<World, "language" | "content" | "images" | "writingStyle">;
+  world: Pick<World, "language" | "content" | "images" | "writingStyle" | "bannedPhrases">;
   names: ThreadNames;
   /** The closed conversation, rendered for the summarizer (renderThread with `"told"`). */
   conversation: string;

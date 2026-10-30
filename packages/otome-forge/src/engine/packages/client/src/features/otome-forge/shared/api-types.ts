@@ -191,6 +191,8 @@ export interface World {
   openingSituation: string;
   /** The player's own instructions for how the story is written (tense, voice, pacing…), whole; "" or absent: none. */
   writingStyle?: string;
+  /** The player's own banned phrases as typed (Settings → Content), added to the built-in list; "" or absent: none. */
+  bannedPhrases?: string;
   content: ContentSettings;
   images: ImageSettings;
   connections: Connections;
@@ -1167,4 +1169,5 @@ export interface SettingsInput {
   connections?: Connections;
   language?: string;
   writingStyle?: string;
+  bannedPhrases?: string;
 }

@@ -326,7 +326,7 @@ export function checkReadMeReply(reply: ReadMeReply): ReadMeReply | string {
 }
 
 export interface ReadMePromptInput {
-  world: Pick<World, "content" | "images" | "language" | "setting" | "premise" | "writingStyle">;
+  world: Pick<World, "content" | "images" | "language" | "setting" | "premise" | "writingStyle" | "bannedPhrases">;
   player: Player;
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   /** Their state as their own reader may know it (ownView), their own notebook with it. */
@@ -368,7 +368,7 @@ export function readMeMessages({ world, player, unit, liState, recalled, lately 
     `- ${NO_ABSENCE_RULE}`,
     `- Write every field but category in ${world.language}.`,
     "",
-    otomeWritingRules({ story: true, style: world.writingStyle }),
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
     otomeContentContract({ world, lis: [{ name }], kind: "chat" }),
   ].join("\n");

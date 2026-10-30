@@ -22,6 +22,7 @@
 // through enforceContent, so a limit that cannot apply is always a Line.
 import { z } from "zod";
 import { ARCHETYPE_IDS } from "../../../../../client/src/features/otome-forge/shared/archetypes.js";
+import { OWN_BANNED_PHRASES_MAX } from "../../../../../client/src/features/otome-forge/shared/banned-phrases.js";
 import {
   DEFAULT_IMAGE_RATING,
   IMAGE_RATINGS,
@@ -141,6 +142,7 @@ const SettingsBody = z.object({
   connections: ConnectionsSchema.optional(),
   language: z.string().min(1).max(LANGUAGE_MAX).optional(),
   writingStyle: z.string().optional(),
+  bannedPhrases: z.string().max(OWN_BANNED_PHRASES_MAX).optional(),
 });
 const BibleBody = z.object({ bible: BibleSchema });
 const AppearanceBody = z.object({ identityLine: z.string() });
@@ -410,6 +412,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
           ...current,
           language: body.language?.trim() || current.language,
           writingStyle: body.writingStyle !== undefined ? body.writingStyle.trim() : current.writingStyle,
+          bannedPhrases: body.bannedPhrases !== undefined ? body.bannedPhrases.trim() : current.bannedPhrases,
           connections: body.connections ? normalizeConnections(body.connections) : current.connections,
           content: enforceContent(content, ageGate),
           images: { ...images, rating: ageGate ? images.rating : DEFAULT_IMAGE_RATING },

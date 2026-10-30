@@ -59,6 +59,7 @@ import { applyChoiceEffects } from "../state/relationship.js";
 import {
   BEAT_PLACES_MAX,
   CONFRONTATION_ANSWER_MAX,
+  CLOSER_INTIMATE_ENDING_MAX,
   CONFRONTATION_ENDING_MAX,
   CONFRONTATION_HIS_MAX,
   CONFRONTATION_OPENING_MAX,
@@ -173,12 +174,15 @@ export function normalizeConfrontationReply(
     cgOpen,
     cgExplicit = false,
     climax = "confrontation",
+    intimateRoom = false,
   }: {
     li: LiId;
     node: Pick<ChapterNode, "place">;
     cgOpen: boolean;
     cgExplicit?: boolean;
     climax?: ClimaxKind;
+    /** NSFW: Explicit: a Closer's opened ending may run to CLOSER_INTIMATE_ENDING_MAX when it reaches sex. */
+    intimateRoom?: boolean;
   },
   lists: SegmentLists,
 ): ConfrontationBody | string {
@@ -276,7 +280,11 @@ export function normalizeConfrontationReply(
   const rawEndings = record(reply.endings);
   const endings: Confrontation["endings"] = {};
   for (const ending of spec.endings) {
-    const segments = list(`endings.${ending}`, rawEndings[ending], CONFRONTATION_ENDING_MAX, new Map(counts));
+    const max =
+      intimateRoom && climax === "closer" && ending === "opened"
+        ? CLOSER_INTIMATE_ENDING_MAX
+        : CONFRONTATION_ENDING_MAX;
+    const segments = list(`endings.${ending}`, rawEndings[ending], max, new Map(counts));
     if (typeof segments === "string") return segments;
     endings[ending] = segments;
   }

@@ -20,7 +20,7 @@ import { NOTE_TEXT_MAX } from "../../../../../client/src/features/otome-forge/sh
 import { COMFORT_RULE, otomeContentContract, otomeContractReminder } from "../content-contract.js";
 import type { OtomeMessage } from "../generation.js";
 import { NO_ABSENCE_RULE } from "../home/prompts.js";
-import { BANNED_PHRASES_RULE } from "../writing-rules.js";
+import { bannedPhrasesRule } from "../writing-rules.js";
 import { aboutLine } from "../schemas/player.js";
 
 // ── The care line ──
@@ -113,7 +113,7 @@ export function careCard(unit: Pick<Unit, "name" | "pronouns" | "bible">): strin
 }
 
 export interface CareNoteInput {
-  world: Pick<World, "content" | "images" | "language" | "setting" | "premise" | "writingStyle">;
+  world: Pick<World, "content" | "images" | "language" | "setting" | "premise" | "writingStyle" | "bannedPhrases">;
   player: Pick<Player, "name" | "pronouns" | "about">;
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   /** One of allowedCareLines(player), exactly. The caller redacts it from the logged prompt. */
@@ -137,7 +137,7 @@ export function careNoteMessages({ world, player, unit, careLine }: CareNoteInpu
     "- No question that demands an answer; the note needs no reply.",
     `- ${NO_ABSENCE_RULE}`,
     "- A note, not a scene: nothing happens in the story because of it.",
-    BANNED_PHRASES_RULE,
+    bannedPhrasesRule(world.bannedPhrases),
     `- Write the note in ${world.language}.`,
     // The player's own instructions, as every other prompt that writes carries them; the rules above still hold.
     ...(world.writingStyle?.trim()

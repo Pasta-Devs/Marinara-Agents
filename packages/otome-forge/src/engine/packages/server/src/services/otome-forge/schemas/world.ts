@@ -193,6 +193,7 @@ export function normalizeWorld(data: unknown): World {
       web: (value) => validItems(WebRowSchema, value),
       openingSituation: z.string(),
       writingStyle: z.string().optional(),
+      bannedPhrases: z.string().optional(),
       content: normalizeContent,
       images: normalizeImages,
       connections: normalizeConnections,

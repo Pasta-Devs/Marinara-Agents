@@ -41,3 +41,27 @@ export const ROMANCE_BANNED_PHRASES = [
 ] as const;
 
 export const BANNED_PHRASES: readonly string[] = [...ENGINE_BANNED_PHRASES, ...ROMANCE_BANNED_PHRASES];
+
+/** The longest list of the player's own banned phrases kept (Settings → Content), in characters. */
+export const OWN_BANNED_PHRASES_MAX = 2000;
+
+/**
+ * The player's own banned phrases as typed: split at commas, semicolons and line breaks, quotes and doubled spaces
+ * dropped, each kept once (case-insensitively). Story Writer's parseBannedPhrases, the same rule.
+ */
+export function parseBannedPhrases(value: string | undefined): string[] {
+  const seen = new Set<string>();
+  const phrases: string[] = [];
+  for (const raw of (value ?? "").split(/[,;\n]/)) {
+    const phrase = raw
+      .trim()
+      .replace(/^["'“”‘’]+|["'“”‘’]+$/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const lower = phrase.toLocaleLowerCase();
+    if (!phrase || seen.has(lower)) continue;
+    seen.add(lower);
+    phrases.push(phrase);
+  }
+  return phrases;
+}

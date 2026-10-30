@@ -73,7 +73,7 @@ const HEAT_TEXT: Record<Heat, string> = {
   sfw: "Heat: SFW. Romance goes as far as kisses, touch and closeness; anything sexual fades to black before it starts.",
   fade: "Heat: NSFW, fade to black. Desire, sexual tension, groping, undressing and the build-up are written openly in adult terms; the sex itself happens off the page: cut at the threshold and pick up in the aftermath, with what it changed between them.",
   explicit:
-    "Heat: NSFW, explicit. Desire, groping and undressing are written openly. When a scene reaches sex between the adult characters involved, it is written on the page: explicit, anatomically grounded, emotionally reactive and detailed, in each character's voice; never summarized or sanitized.",
+    "Heat: NSFW, explicit. Desire, groping and undressing are written openly. When a scene reaches sex between the adult characters involved, it is written on the page: explicit, anatomically grounded, emotionally reactive and detailed, in each character's voice; never summarized, sanitized or rushed. Give it room, from the build-up through the act to the aftermath, with dialogue woven through the intimate description: the characters are people who may talk throughout, ask for a change of position, say what they feel, or simply give in to the sensation.",
 };
 
 const DARKNESS_TEXT: Record<Darkness, string> = {
@@ -97,7 +97,7 @@ const DARK_ADDITION =
 // player's own Lines.
 const NO_MINORS = "Nothing sexual or romantic ever involves anyone under 18, in the story or in anyone's past.";
 const ROMANCE =
-  "Flirtation, desire, jealousy, possessiveness, seduction and messy attachment belong in this story and escalate naturally; a love interest may make the first move instead of waiting for the protagonist. Hand-holding, pinning, charged closeness, touches, kisses and holding never cause an out-of-character pause, a disclaimer or a consent check in the writing: the player has their own way to stop a scene. When a choice is about intimacy, one option lets the protagonist decline, and the story honours the pick.";
+  'Flirtation, desire, jealousy, possessiveness, seduction and messy attachment belong in this story and escalate naturally; a love interest may make the first move instead of waiting for the protagonist. Nothing intimate, from hand-holding, pinning and kisses to sex itself, causes an out-of-character pause, a disclaimer or a consent check in the writing: the player opted in through their content settings and has Ease off to stop a scene. A love interest never asks permission, checks in or offers to stop ("tell me to stop", "are you sure?", "we can stop whenever you want"). When a choice is about intimacy, one option lets the protagonist decline, and the story honours the pick.';
 const LANGUAGE =
   "Language is not sanitized: crude and vulgar words are fine in dialogue and narration alike (fuck, shit, cock, pussy and the like) whenever they fit the character's voice and the moment.";
 /** An SFW contract's language (the maintainer's call): swearing where it fits, the sexual words stay NSFW mode's. */

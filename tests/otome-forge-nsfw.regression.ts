@@ -58,6 +58,7 @@ import { normalizeBeatReply } from "../packages/otome-forge/src/engine/packages/
 import {
   beatMessages,
   chapterPlanMessages,
+  closerMessages,
   confrontationMessages,
   routePlanMessages,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/prompts.ts";
@@ -204,6 +205,46 @@ test("the consent framing appears only while dubious consent or non-consent is n
   assert.match(text, /The only real stops are the player's own: Ease off, and their Lines\./);
   assert.match(text, /written as a refusal, never as secret wanting/);
   assert.match(text, /When a choice is about intimacy, one option lets the protagonist decline/);
+});
+
+test("under NSFW: Explicit, sex is never rushed: room to unfold, dialogue throughout, a longer node", () => {
+  const explicit = beatPrompt(stored("explicit", "angst"), "sfw");
+  assert.match(explicit, /never summarized, sanitized or rushed\. Give it room, from the build-up through the act/);
+  assert.match(explicit, /may talk throughout, ask for a change of position, say what they feel, or simply give in/);
+  assert.match(explicit, /A node that reaches sex is the exception: [^\n]*up to 1500 words and 60 segments/);
+  // The planners read the same Heat line, so they plan the room too.
+  const plan = systemOf(
+    chapterPlanMessages({ ...storyInputs(stored("explicit", "angst")), number: 2, lead: KAI, memory: "" }),
+  );
+  assert.match(plan, /never summarized, sanitized or rushed/);
+  for (const content of [stored("fade", "angst"), defaultContent()]) {
+    const prompt = beatPrompt(content, "sfw");
+    assert.doesNotMatch(prompt, /A node that reaches sex is the exception|or rushed/, content.heat);
+  }
+  // A Closer's opened ending gets the room too, under Explicit Heat only (Dottore on #1959).
+  const closer = (content: ContentSettings) => {
+    const input = storyInputs(content);
+    const node = { ...cgNode("closer"), cg: false };
+    const chapter = { kind: "main" as const, number: 2, title: "Rain", lead: KAI, foil: MIR, nodes: [node] };
+    return systemOf(closerMessages({ ...input, chapter, node, storySoFar: "", memory: "", li: KAI }));
+  };
+  const ROOM = /When it reaches sex, opened may run to 20 segments, so it is never rushed\./;
+  assert.match(closer(stored("explicit", "angst")), ROOM);
+  assert.match(closer(stored("fade", "angst")), /- opened may turn intimate when the moment/);
+  assert.doesNotMatch(closer(stored("fade", "angst")), ROOM);
+  assert.doesNotMatch(closer(defaultContent()), /opened may turn intimate/);
+});
+
+test("no NSFW scene asks for consent or offers to stop, at any Darkness; an SFW story never says so", () => {
+  const CHECK_IN = /A love interest never asks permission, checks in or offers to stop \("tell me to stop"/;
+  for (const content of [stored("fade", "gentle"), stored("explicit", "angst"), stored("explicit", "dark")]) {
+    for (const kind of ["planner", "scene", "chat"] as const) {
+      const text = contract(content, kind);
+      assert.match(text, /from hand-holding, pinning and kisses to sex itself, causes an out-of-character pause/, kind);
+      assert.match(text, CHECK_IN, `${content.heat}/${content.darkness} ${kind}`);
+    }
+  }
+  assert.doesNotMatch(contract(defaultContent()), CHECK_IN);
 });
 
 test("NSFW mode names the crude words it allows; an SFW story allows swearing without the sexual words", () => {
