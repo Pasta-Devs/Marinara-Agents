@@ -210,6 +210,18 @@ test("a transient manifest failure retains the last usable folder without paid r
   assert.equal(f.calls.api.length + f.calls.brief.length, 0);
 });
 
+test("an unreadable first manifest is not reported as a missing music folder", async (t) => {
+  const f = fixture(() => Promise.reject(new Error("Controlled manifest read failure")));
+  t.after(() => f.controller.dispose());
+  f.controller.configure(f.settings({ musicFolder: "music/custom" }));
+  f.controller.setBaseCue("home");
+  await settle();
+  assert.equal(f.controller.getSnapshot().notice, null);
+  assert.deepEqual(f.calls.play, []);
+  assert.equal(f.calls.stop, 0);
+  assert.equal(f.calls.api.length + f.calls.brief.length, 0);
+});
+
 test("switching to a folder while a music brief is pending prevents the paid generation", async (t) => {
   const brief = deferred();
   const f = fixture(undefined, () => brief.promise);

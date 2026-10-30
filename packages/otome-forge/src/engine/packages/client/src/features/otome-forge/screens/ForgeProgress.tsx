@@ -5,7 +5,7 @@
 // its prompt first, so painting is offered once the world is ready and each look exists. Once the world is ready, the
 // cast is shown with their bibles behind a spoiler gate.
 // ──────────────────────────────────────────────
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -562,6 +562,16 @@ function ImageAppearanceEditor({ runKey, li }: { runKey: string; li: RunLiView }
   const latest = useRef(stored);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<{ error: boolean; text: string } | null>(null);
+  const previousStored = useRef(stored);
+  useEffect(() => {
+    const previous = previousStored.current;
+    previousStored.current = stored;
+    if (latest.current === previous) {
+      latest.current = stored;
+      setDraft(stored);
+      setStatus(null);
+    }
+  }, [stored]);
   const save = async () => {
     if (busy || draft === stored) return;
     const submitted = draft;

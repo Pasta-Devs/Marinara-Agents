@@ -385,7 +385,8 @@ export class OtomeAudioController {
     const manifest = await this.manifest;
     if (this.disposed || revision !== this.revision) return;
     if (!this.saved.generate && this.saved.musicFolder) {
-      const assets = musicAssetsInFolder(manifest?.assets, this.saved.musicFolder);
+      if (!manifest) return;
+      const assets = musicAssetsInFolder(manifest.assets, this.saved.musicFolder);
       const tags = Object.keys(assets);
       if (tags.length) {
         this.unavailableMusicFolder = "";

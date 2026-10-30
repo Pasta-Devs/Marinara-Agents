@@ -3119,7 +3119,9 @@ test("Otome Hearth Settings fills its frame and exposes every tab on desktop and
           await page.mouse.move(strip!.x + strip!.width / 2, strip!.y + strip!.height / 2);
           await page.mouse.wheel(bounds.scrollWidth, 0);
         }
-        await expect.poll(() => tabs.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+        await expect
+          .poll(() => tabs.evaluate((element) => element.scrollWidth - element.clientWidth - element.scrollLeft))
+          .toBeLessThanOrEqual(1);
         const debug = await tabs.getByRole("tab", { name: "Debug", exact: true }).boundingBox();
         expect(debug!.x).toBeGreaterThanOrEqual(strip!.x - 1);
         expect(debug!.x + debug!.width).toBeLessThanOrEqual(strip!.x + strip!.width + 1);
@@ -3316,7 +3318,9 @@ test("Otome Hearth affection shows per-level progress below Level beside its hea
       expect(Math.abs(counter!.x + counter!.width - level!.x - level!.width)).toBeLessThanOrEqual(1);
       expect(Math.abs(counter!.y + counter!.height / 2 - hearts!.y - hearts!.height / 2)).toBeLessThanOrEqual(2);
     }
-    await expect(section.getByRole("listitem").filter({ hasText: "Ren" }).getByRole("meter")).toHaveCount(0);
+    const legacy = section.getByRole("listitem").filter({ hasText: "Ren" });
+    await expect(legacy).toBeVisible();
+    await expect(legacy.getByRole("meter")).toHaveCount(0);
   }
   expect(
     calls.filter(
@@ -3355,7 +3359,8 @@ test("Otome Hearth edits image appearance above Bible without spoilers or painti
     const form = root.getByRole("form", { name: "Image appearance for Ilvar Thorne", exact: true });
     await expect(form).toBeVisible();
     const field = form.getByRole("textbox", { name: "Image appearance", exact: true });
-    const save = form.getByRole("button", { name: "Save changes", exact: true });
+    const save = form.getByRole("button");
+    await expect(save).toHaveAccessibleName("Save changes");
     await expect(field).toHaveValue(identityLine);
     await expect(save).toBeDisabled();
     const bible = root.getByRole("button", { name: "Open Ilvar Thorne’s bible (spoilers)", exact: true });
@@ -3369,6 +3374,8 @@ test("Otome Hearth edits image appearance above Bible without spoilers or painti
     await expect(field).toHaveValue(first);
     const pending = page.waitForResponse((response) => new URL(response.url()).pathname === path);
     await save.click();
+    await expect(save).toHaveAccessibleName("Saving…");
+    await expect(save).toHaveAttribute("aria-disabled", "true");
     await expect(save).toBeDisabled();
     const newer = "An adult cartographer with dark hair, round glasses and freckles.";
     await field.fill(newer);
@@ -3524,4 +3531,50 @@ test("Otome Hearth retains an unavailable saved music folder and uses stock with
   expect(calls.filter((call) => decodeURIComponent(call.path).includes(`/api/game-assets/file/${missing}/`))).toEqual(
     [],
   );
+});
+
+test("Otome Hearth appearance follows pristine same-LI refreshes and preserves dirty edits", async ({
+  page,
+  isMobile,
+}, testInfo) => {
+  await page.setViewportSize({ width: isMobile ? 390 : 1280, height: isMobile ? 844 : 720 });
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
+  const fixture = expressionRepaintFixture();
+  const original = "An adult cartographer with silver hair.";
+  fixture.view.lis[0].look = { identityLine: original, outfitLine: "A navy coat." };
+  fixture.view.cutoutsPending = true;
+  const calls: Call[] = [];
+  await stubRoutes(page, fixture.answer, calls);
+  const root = await openRepaintCast(page);
+  const form = root.getByRole("form", { name: "Image appearance for Ilvar Thorne", exact: true });
+  const field = form.getByRole("textbox", { name: "Image appearance", exact: true });
+  const save = form.getByRole("button", { name: "Save changes", exact: true });
+  await expect(field).toHaveValue(original);
+  await expect(save).toBeDisabled();
+  const refresh = (identityLine: string) =>
+    page.waitForResponse(
+      async (response) =>
+        new URL(response.url()).pathname === `/api/otome-forge/runs/${RUN}` &&
+        (await response.json()).view?.lis[0]?.look?.identityLine === identityLine,
+    );
+  const remote = "An adult cartographer with copper hair.";
+  const received = refresh(remote);
+  fixture.view.lis[0].look.identityLine = remote;
+  await (await received).finished();
+  await page.screenshot({ path: testInfo.outputPath("appearance-pristine-refetch.png") });
+  await expect(field).toHaveValue(remote);
+  await expect(save).toBeDisabled();
+  const draft = "My unsaved appearance, kept while the run refreshes.";
+  await field.fill(draft);
+  const latest = "Another saved appearance from the server.";
+  const again = refresh(latest);
+  fixture.view.lis[0].look.identityLine = latest;
+  await (await again).finished();
+  await expect(field).toHaveValue(draft);
+  await expect(save).toBeEnabled();
+  await page.screenshot({ path: testInfo.outputPath("appearance-dirty-refetch.png") });
+  expect(calls.filter((call) => call.method === "POST" && call.path.endsWith(`/lis/${ILVAR}/appearance`))).toEqual([]);
+  expect(posts(calls, "/art/paint")).toEqual([]);
+  expect(posts(calls, "/art/expressions")).toEqual([]);
+  delete fixture.view.cutoutsPending;
 });
