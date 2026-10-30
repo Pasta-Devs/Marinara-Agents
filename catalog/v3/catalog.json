@@ -2659,7 +2659,7 @@
         },
         "id": "long-term-memory",
         "name": "Long-Term Memory",
-        "version": "1.5.14",
+        "version": "1.5.15",
         "description": "Remembers important things from your chats, characters, and lorebooks, and brings them back when they matter. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
         "engine": {
           "min": "2.5.1",
@@ -2691,18 +2691,19 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "a2e8bccf5c5ea9494240e6488d517591158d36876b504ea2dfe51232c127c6fe",
-            "bytes": 497905
+            "sha256": "5f31953ce38416894d883a18d229e88dc1cf3b658bb484c9341b34b36f170d00",
+            "bytes": 501648
           },
           {
             "path": "client.js",
-            "sha256": "7194053ece148560c6d04a05871f00c98d73f2e36cacfb47d5325954c3709243",
-            "bytes": 909312
+            "sha256": "421596eef6ab2d6e1529631d456ad02bcd7bee92e2e0f49b015e4cd901279fd4",
+            "bytes": 912301
           }
         ],
         "permissions": [
           "agent-runtime",
           "chat-read",
+          "chat-write",
           "routes",
           "storage",
           "ui"
@@ -2712,9 +2713,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.5.14.zip",
-        "sha256": "41081b1525563acf788bf31da1ba40aee64fb1f3626bacafa1ee9b6534aac869",
-        "bytes": 1409682
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.5.15.zip",
+        "sha256": "878812becfb21a28f19135f2cd68cd0b761b3a57204edebcf21f4660e18d0e96",
+        "bytes": 1416432
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },

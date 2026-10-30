@@ -129,6 +129,8 @@ export interface AudioSettings {
   generate: boolean;
   /** Generate and retain one theme for each chapter, instead of changing music with every mood. */
   chapterThemes: boolean;
+  /** A Music asset folder (including its subfolders), or empty for Engine's mood library. */
+  musicFolder: string;
   homeMusic: string;
   audioConnectionId: string;
   muted: boolean;
@@ -1065,6 +1067,8 @@ export interface RunLiView {
   /** Which of this view's images are cut-outs (no backdrop): shown whole rather than cropped and faded. */
   cut?: string[];
   level: number;
+  /** Current-level progress only; optional while a pre-update run view remains cached. */
+  affectionProgress?: { current: number; required: number };
   stage: number;
   /** M2b: his painted faces for the current look, once the whole set is ready and expressions are on. */
   expressions?: Partial<Record<Face, string>>;

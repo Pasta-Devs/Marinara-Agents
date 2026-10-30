@@ -6,6 +6,7 @@
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client";
 import { avatarCropOf, type AvatarCrop } from "../components/Avatar";
+import { musicAssetFolders } from "../shared/audio";
 
 export interface ConnectionOption {
   id: string;
@@ -37,6 +38,7 @@ const AUDIO_PROVIDER = "audio_generation";
 
 export const engineResourceKeys = {
   connections: ["otome-forge", "engine", "connections"] as const,
+  musicFolders: ["otome-forge", "engine", "music-folders"] as const,
   characters: ["otome-forge", "engine", "characters"] as const,
   personas: ["otome-forge", "engine", "personas"] as const,
 };
@@ -91,6 +93,19 @@ function loadState(query: UseQueryResult<unknown>) {
     /** Asks the Engine again: after a failed load, or once the player has added one in the Engine. */
     refetch: query.refetch,
   };
+}
+
+/** Nonempty Music folders from the Engine's public, host-listed asset manifest. */
+export function useMusicFolders() {
+  const query = useQuery({
+    queryKey: engineResourceKeys.musicFolders,
+    queryFn: async () => {
+      const manifest = await api.get<unknown>("/game-assets/manifest");
+      return musicAssetFolders(isRecord(manifest) ? manifest.assets : undefined);
+    },
+    staleTime: STALE_TIME,
+  });
+  return { folders: query.data ?? [], ...loadState(query) };
 }
 
 // ── Connections ──

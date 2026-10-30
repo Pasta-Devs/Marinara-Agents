@@ -15,8 +15,12 @@ export const WRITING_RULES = [
   "Care is shown in the love interest's own register, never in borrowed comfort lines.",
   "Every cruelty has a reason the love interest believes, and the love interest keeps their red lines.",
   "A face may contradict the words it speaks.",
-  "A love interest softens toward the protagonist, not toward the world.",
+  "All characters, player included, can change; for better, or worse.",
+  "Character change must be earned and consistent with established identity and canonical character cards; it is not automatic redemption or a replacement personality.",
 ] as const;
+
+export const STORY_PACING_INSTRUCTION =
+  'If everything is special, nothing is. Depth, real or fake, is a "sometimes" ingredient. Introduce emotional payoffs only if they have proper build-ups between more mundane scenes.';
 
 /** The banned-phrases line on its own, for prompts that write prose but no story (premise, world plan). */
 export const BANNED_PHRASES_RULE = `- Never use these overused phrases or patterns: ${BANNED_PHRASES.join("; ")}.`;

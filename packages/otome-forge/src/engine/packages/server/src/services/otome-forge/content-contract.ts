@@ -183,7 +183,7 @@ export interface ImageTagsInput {
 }
 
 /**
- * Said in words to a sentence model above SFW. xAI (Grok) drops the negative prompt in the Engine, so there this and
+ * Said in words for an explicit story CG. xAI (Grok) drops the negative prompt in the Engine, so there this and
  * "adult <presentation>" are the adult guard that arrives. No commas: an edit keeps or restores it whole.
  */
 export const ADULT_SENTENCE = "Everyone shown is an adult over 18 with an adult face and body";
@@ -220,11 +220,9 @@ export function otomeImageTags(input: ImageTagsInput): string {
   // Above SFW a place is scenery only: "adults only" or a rating tag would put people or nudity into it.
   if (use === "place") return "";
   // A higher ceiling does not change an otherwise neutral image.
-  const rating =
-    effectiveImageRating(input) === "explicit"
-      ? [tagged ? "nsfw, explicit" : "explicit adult scene"]
-      : [use === "clothed" ? "clothed" : ""];
-  return [...rating, ...people, tagged ? "" : ADULT_SENTENCE].filter(Boolean).join(", ");
+  const explicit = effectiveImageRating(input) === "explicit";
+  const rating = explicit ? [tagged ? "nsfw, explicit" : "explicit adult scene"] : [use === "clothed" ? "clothed" : ""];
+  return [...rating, ...people, explicit && !tagged ? ADULT_SENTENCE : ""].filter(Boolean).join(", ");
 }
 
 const BRIEF_RATING: Record<ImageRating, string> = {

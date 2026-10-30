@@ -11,6 +11,7 @@
 //      connection, each paint step the world lacks is added, waiting for the tap
 // GET  /runs/:run/lis/:li/bible?spoilers=1 → {bible}
 // POST /runs/:run/lis/:li/bible {bible}    → {bible}
+// POST /runs/:run/lis/:li/appearance {identityLine} → {identityLine}; image-only, never paints
 // POST /runs/:run/lis/:li/accent {accent}  → {accent}
 // POST /runs/:run/lis/:li/card {cardId}    → {cardId}; null unlinks, keeping the same love interest
 //
@@ -137,6 +138,7 @@ const SettingsBody = z.object({
   writingStyle: z.string().optional(),
 });
 const BibleBody = z.object({ bible: BibleSchema });
+const AppearanceBody = z.object({ identityLine: z.string() });
 const AccentBody = z.object({ accent: z.string().regex(ACCENT_PATTERN) });
 const CardLinkBody = z.object({ cardId: z.string().trim().min(1).max(ID_MAX).nullable() });
 
@@ -450,6 +452,24 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
     }),
   );
 
+  router.post(
+    "/runs/:run/lis/:li/appearance",
+    handle(async (request) => {
+      const { identityLine } = parseBody(AppearanceBody, request.body);
+      const { runId } = runParam(request);
+      const li = liParam(request);
+      const run = await readRun(store, runId);
+      if (!run) throw runNotFound();
+      if (!run.units.some((unit) => unit.id === li)) throw liNotFound();
+      const unit = await store.updateDoc(runDocTarget("unit", unitId(runId, li)), normalizeUnit, (current) => ({
+        ...current,
+        identityLine: identityLine.trim() ? identityLine : "",
+      }));
+      if (!unit) throw liNotFound();
+      return { identityLine: unit.identityLine || unit.bible?.look.identityLine || "" };
+    }),
+  );
+
   router.get(
     "/runs/:run/lis/:li/bible",
     handle(async (request) => {
@@ -487,7 +507,10 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         return {
           ...current,
           pronouns: bible.pronouns,
-          identityLine: bible.look.identityLine,
+          identityLine:
+            bible.look.identityLine === current.bible.look.identityLine
+              ? current.identityLine
+              : bible.look.identityLine,
           outfitLine: bible.look.outfitLine,
           bible,
           bibleEdited: true,

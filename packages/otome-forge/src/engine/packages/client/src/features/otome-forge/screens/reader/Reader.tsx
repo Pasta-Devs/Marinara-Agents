@@ -85,6 +85,7 @@ const AUDIO_NOTICE_KEYS = {
   musicFailed: "ui.otomeForge.audio.musicFailed",
   chapterMusicFailed: "ui.otomeForge.audio.chapterMusicFailed",
   chapterMusicUnavailable: "ui.otomeForge.audio.chapterMusicUnavailable",
+  musicFolderUnavailable: "ui.otomeForge.audio.musicFolderUnavailable",
   voiceFailed: "ui.otomeForge.audio.voiceFailed",
 } as const;
 

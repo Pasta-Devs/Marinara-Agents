@@ -44,6 +44,7 @@ import {
   TENSION_MIN,
   TRUST_MAX,
   TRUST_MIN,
+  affectionProgressOf,
   levelOf,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import { FACES, type Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
@@ -526,6 +527,7 @@ export function toRunView(runKey: string, world: World, player: Player, units: U
           ...(portrait ? { portrait } : {}),
           ...(unit.art ? { art: unit.art } : {}),
           level: levelOf(progress.points),
+          affectionProgress: affectionProgressOf(progress.points),
           stage: progress.stage,
           ...(expressions ? { expressions } : {}),
           ...(worn && wornUrl ? { worn: { id: worn.id, url: wornUrl } } : {}),

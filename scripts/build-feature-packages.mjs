@@ -569,7 +569,7 @@ const features = [
   },
   {
     id: "long-term-memory",
-    version: "1.5.14",
+    version: "1.5.15",
     minEngineVersion: "2.5.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
@@ -578,7 +578,7 @@ const features = [
     category: "misc",
     kind: ["agent"],
     modes: ["conversation", "roleplay", "game"],
-    permissions: ["agent-runtime", "chat-read", "routes", "storage", "ui"],
+    permissions: ["agent-runtime", "chat-read", "chat-write", "routes", "storage", "ui"],
     serverImport: "packages/server/src/services/long-term-memory/server-entry.ts",
     serverEntry: true,
     clientImport: "packages/client/src/features/long-term-memory/client-entry.tsx",
@@ -865,7 +865,7 @@ const features = [
   },
   {
     id: "otome-forge",
-    version: "0.1.17",
+    version: "0.2.0",
     minEngineVersion: "2.5.1",
     // The browser tab's openConnection prop and the debugMode field of /generate/raw arrived in capability API 1.386.
     capabilityApi: Object.freeze({ major: 1, minor: 386 }),

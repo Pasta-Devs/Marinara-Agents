@@ -5,6 +5,7 @@ import test from "node:test";
 import type { Unit } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import { FACES } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/faces.ts";
 import { createOtomeArt } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/expressions.ts";
+import { expressionPrompt } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/prompts.ts";
 import {
   runDocTarget,
   unitId,
@@ -47,7 +48,84 @@ async function facesWorld(runKey: string, before?: (call: PaidCall, n: number) =
 
 const settled = (record: SetRecord | undefined) => !!record && record.state !== "pending";
 
-test("a speaking love interest gets his five faces once, edits of his look carrying the rating and an adult tag", async () => {
+test("expression assets stay adult nonsexual face edits at every global image ceiling", async (context) => {
+  const t = await facesWorld("r-exprpolicy-aaaaaa");
+  context.after(() => t.art.dispose());
+  const unit = await t.unit();
+  const world = (await t.store.readDoc(`${t.runId}:world`, normalizeWorld))!;
+  for (const tagged of [false, true]) {
+    const style = { tagged, styleText: "painted portrait", positiveTags: "soft light", negativeTags: "blur" };
+    for (const face of FACES) {
+      const samples = (["sfw", "suggestive", "explicit"] as const).map((rating) =>
+        expressionPrompt({
+          unit,
+          base: PORTRAIT,
+          face,
+          world: { ...world, images: { ...world.images, rating } },
+          style,
+        }),
+      );
+      for (const image of samples.slice(1))
+        assert.deepEqual(image, samples[0], "raising only a global ceiling does not change a face edit");
+      for (const image of samples) {
+        assert.match(image.prompt, /adult man/);
+        assert.match(image.prompt, tagged ? /safe for work/ : /nonsexual facial-expression edit/);
+        assert.match(image.prompt, /body/);
+        assert.match(image.prompt, /clothing coverage/);
+        assert.match(image.prompt, /art style/);
+        assert.match(image.prompt, /painted portrait/);
+        assert.match(image.prompt, /soft light/);
+        assert.match(image.negativePrompt, /child, childlike, minor, underage/);
+        assert.match(image.negativePrompt, /nudity, sexual content/);
+        assert.match(image.negativePrompt, /blur/);
+        assert.doesNotMatch(image.prompt, /suggestive|sensitive|adult face and body|over 18/);
+        assert.doesNotMatch(image.negativePrompt, /loli|shota|nipples|genitals|\bsex\b/);
+      }
+    }
+    const authored = "PLAYER REQUEST: nude adult subject, do not silently sanitize this request";
+    const edited = expressionPrompt({
+      unit,
+      base: PORTRAIT,
+      face: "tender",
+      world,
+      style,
+      edited: { prompt: authored, negativePrompt: "PLAYER NEGATIVE: explicit detail" },
+    });
+    assert.ok(edited.prompt.includes(authored), "provider safety sees the author's actual request unchanged");
+    assert.match(edited.negativePrompt, /PLAYER NEGATIVE: explicit detail/);
+    assert.match(edited.negativePrompt, /blur/);
+  }
+  assert.equal(t.paid.length, 0, "building or reviewing expression prompts never generates an image");
+});
+
+test("expression appearance prefers the Unit override and falls back to the Bible when it is blank", async (context) => {
+  const t = await facesWorld("r-exprfallback-aaaaaa");
+  context.after(() => t.art.dispose());
+  const stored = await t.unit();
+  const world = (await t.store.readDoc(`${t.runId}:world`, normalizeWorld))!;
+  const identity = "long black braid, deep green eyes";
+  for (const identityLine of ["", "  ", "short red hair, grey eyes"]) {
+    const unit = {
+      ...stored,
+      identityLine,
+      bible: { ...stored.bible!, look: { ...stored.bible!.look, identityLine: identity } },
+    };
+    const before = structuredClone(unit);
+    const image = expressionPrompt({
+      unit,
+      base: PORTRAIT,
+      face: "tender",
+      world,
+      style: { styleText: "", positiveTags: "", negativeTags: "" },
+    });
+    assert.ok(image.prompt.includes(identityLine.trim() ? identityLine : identity));
+    if (identityLine.trim()) assert.ok(!image.prompt.includes(identity), "the image override takes priority");
+    assert.deepEqual(unit, before, "prompt construction never changes the stored Unit or Bible");
+  }
+  assert.equal(t.paid.length, 0);
+});
+
+test("a speaking love interest gets his five faces once, nonsexual adult edits of his look", async () => {
   const t = await facesWorld("r-m2bexpr1-aaaaaa");
   t.art.queueExpressions(t.runId, beat(0), { debugMode: true });
   await until(async () => settled(await t.set()), "Kai's faces");
@@ -65,9 +143,9 @@ test("a speaking love interest gets his five faces once, edits of his look carry
     );
     assert.equal(call.request.debugMode, true, "the Engine logs each face's prompt in debug mode");
     assert.match(call.request.prompt, /change ONLY the facial expression/);
-    assert.match(call.request.prompt, /safe for work, fully clothed, adult man/);
+    assert.match(call.request.prompt, /nonsexual facial-expression edit of an adult man/);
     assert.match(call.request.negativePrompt, /child, childlike, minor, underage/);
-    assert.match(call.request.negativePrompt, /nudity, nsfw/);
+    assert.match(call.request.negativePrompt, /nudity, sexual content/);
   }
   assert.ok(
     t.paid.some((call) => call.request.prompt.includes("a hurt expression: drawn brows, glassy eyes")),
