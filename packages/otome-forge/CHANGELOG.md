@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.5.1 — 2026-10-30
+
+- Chapters no longer all end the same way. Each one builds differently, and its closing choice is a different kind of decision from the last few, not a love interest stepping in again to ask whom you'll go with. A rival love interest competes over more than just you, too.
+
 ## 0.5.0 — 2026-10-30
 
 - **Read Me**, a new game in Dates: a love interest studies you and makes four guesses about you. Answer Spot on, Close or Not at all, and tell them the truth in your own words if you like.

@@ -103,6 +103,7 @@ test("Begin's prologue is a scene of the protagonist's own, and chapter 1 opens 
   );
   assert.match(prompt, /CHAPTER: The Lantern Court \(the prologue, before chapter 1\)/);
   assert.doesNotMatch(prompt, /The story opens here:/, "the opening situation is where it ends, not where it starts");
+  assert.doesNotMatch(prompt, /This is the chapter's last node/, "the prologue keeps its own choices (#1949)");
   assert.deepEqual(
     served.body.beat.segments.map((segment: { speaker: string }) => segment.speaker),
     ["", "Ines", "Old Bren", ""],

@@ -8,6 +8,8 @@
 // The banner digests include the English Snapshot illustration fields. Story/banner hashes deliberately reflect
 // scene pacing and earned character change. Only the two face-edit image expectations change for the explicit,
 // rating-independent adult/nonsexual face policy; the other image and content-policy expectations stay pinned.
+// 0.5.1 (#1949): the chapter plan and a chapter's last node ask for a closing decision unlike the recent ones, and the
+// Foil's rivalry not always for the protagonist, so the chapter plan and both beat digests moved (the beat is a last node).
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
@@ -227,9 +229,9 @@ const EXPECTED_ANGST: Record<string, string> = {
   bannerHis: "0ff02869d0a8f15d",
   bannerMemories: "6606be1d1e145790",
   bannerMine: "3aa9c508dbd5e8ef",
-  beat: "ac62a578d72dd5be",
-  beatWithCg: "d85e409b9fa19c05",
-  chapterPlan: "e11717bdab551db0",
+  beat: "799373360dd228a1",
+  beatWithCg: "82d9fed31c043a2f",
+  chapterPlan: "9003162a6c9136de",
   closer: "cc7586530c0b8111",
   confrontation: "8921d7dca3aaa4cf",
   repairPlan: "5df431b8e8cedfad",
@@ -239,9 +241,9 @@ const EXPECTED_GENTLE: Record<string, string> = {
   bannerHis: "b10456376418731c",
   bannerMemories: "caf229a2f56c562f",
   bannerMine: "07e86a49cb5d7bb8",
-  beat: "259c53067f88b47d",
-  beatWithCg: "c5c73ee6c0e8acab",
-  chapterPlan: "fafabc6bb5f632f6",
+  beat: "71bb805644734860",
+  beatWithCg: "5529e877c82e5a58",
+  chapterPlan: "505ec47785a60973",
   closer: "a7253eea9b68a98d",
   confrontation: "defb9eb10b493daa",
   repairPlan: "e916ad6b80ed17fd",

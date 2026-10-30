@@ -408,6 +408,7 @@ test("a date is 4 model calls, pays once whatever the outcome, and keeps its ans
   // The last scene is never offered a big choice.
   const lastPrompt = t.calls.find((call) => nodeOf(call.messages) === 2 && !isDatePlanner(call.messages))!;
   assert.equal(system(lastPrompt.messages).includes("This is the LAST story beat"), false);
+  assert.equal(system(lastPrompt.messages).includes("This is the chapter's last node"), false, "nor #1949's rule");
 
   // The date is not in the story's chapter list.
   const story = await t.call("GET", "/runs/:run/story");
