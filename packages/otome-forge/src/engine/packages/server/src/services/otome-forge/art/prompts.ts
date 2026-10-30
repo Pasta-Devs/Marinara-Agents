@@ -14,7 +14,8 @@
 // raising a world's image ceiling never changes the requested face edit or its reference's clothing coverage.
 // 0.0.6: the tags follow what the image is for (content-contract.ts otomeImageTags). Looks, faces, outfits, the pair
 // portrait and Memory art stay clothed portraits at most Suggestive; above SFW a place carries no person or rating
-// tags; a story CG is explicit only when its brief set `explicit` under Explicit Heat and the Explicit rating, and then
+// tags; a story CG (or a Memory's art, 0.5.2) is explicit only when its brief set `explicit` under Explicit Heat and the
+// Explicit rating, and then
 // its people are drawn from their identity lines alone (an outfit line would dress the moment). The adult negatives
 // stay on every image, whatever the rating or the player's edit, and above SFW no part of a prompt names a minor
 // (adultsOnly). At SFW every prompt is what it was before.
@@ -250,7 +251,10 @@ export interface CgInput {
   people: readonly CgPerson[];
   world: Pick<World, "content" | "images">;
   style: StyleProfile;
-  /** cg: a story CG; clothed: the pair portrait and Memory or banner art, which stay clothed and at most Suggestive. */
+  /**
+   * cg: a story CG, or a Memory's art marked explicit while the world allows it; clothed: the pair portrait and any other
+   * Memory, banner, Moment or Snapshot art, which stay clothed and at most Suggestive.
+   */
   use: Extract<ImageUse, "cg" | "clothed">;
   /** The story CG's brief set `explicit` (beat.cg.explicit). */
   explicit?: boolean;

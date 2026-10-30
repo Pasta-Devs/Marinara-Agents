@@ -90,6 +90,10 @@ const PREMISE_HEAT: Partial<Record<World["content"]["heat"], string>> = {
 export const momentBriefs = (kind: BannerKind, world: Pick<World, "content">) =>
   kind === "memories" && world.content.heat !== "sfw";
 
+/** Whether a Memory's key image may be explicit: where a story CG may be (Explicit Heat and the Explicit rating). */
+export const explicitMemoryArt = (kind: BannerKind, world: Pick<World, "content" | "images">) =>
+  kind === "memories" && explicitCgAllowed(world);
+
 const pronounText = (pronouns: Unit["pronouns"]) => `${pronouns.subject}/${pronouns.object}/${pronouns.possessive}`;
 
 /** A contract block under its own heading (the contract's text starts with "CONTENT CONTRACT"). */
@@ -148,8 +152,7 @@ export function bannerPlanMessages(input: BannerPlanInput): OtomeMessage[] {
     lis: [...lis, { name: player.name, presentation: "person" as const }],
     kind: "image",
   });
-  // Memory art may be explicit only where a story CG may be (Explicit Heat and the Explicit rating).
-  const explicitArt = kind === "memories" && explicitCgAllowed(world);
+  const explicitArt = explicitMemoryArt(kind, world);
   const briefRule = kind === "memories" ? imageBriefRule(world, explicitArt ? "cg" : "clothed") : "";
   const moments = momentBriefs(kind, world);
   // A Moment's illustration stays clothed (at most Suggestive) whatever its premise holds.
@@ -309,7 +312,15 @@ export function normalizeBannerPlan(
     featured,
     playerName,
     moments = false,
-  }: { kind: BannerKind; units: readonly Unit[]; featured: Unit; playerName?: string; moments?: boolean },
+    explicitArt = false,
+  }: {
+    kind: BannerKind;
+    units: readonly Unit[];
+    featured: Unit;
+    playerName?: string;
+    moments?: boolean;
+    explicitArt?: boolean;
+  },
 ): BannerPlan | string {
   const liOf = (value: string | undefined) => {
     const named = (value ?? "").trim();
@@ -331,8 +342,9 @@ export function normalizeBannerPlan(
     plan.featured.cg = {
       brief: clip(top.cgBrief, ITEM_LIMITS.line),
       cast: [featured.name, ...new Set(others)].slice(0, 3),
-      // Kept as written: the art is painted explicit only while the world allows it (S/wish/banners.ts).
-      ...(top.explicit === true ? { explicit: true as const } : {}),
+      // Kept only when the plan was offered it (as a story CG's, S/story/beats.ts cgExplicit), and then painted
+      // explicit only while the world still allows it (S/wish/banners.ts).
+      ...(explicitArt && top.explicit === true ? { explicit: true as const } : {}),
     };
   } else {
     if (!top.look) return "featured.look is missing";

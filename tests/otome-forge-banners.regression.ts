@@ -198,10 +198,18 @@ test("an explicit Memory's art is painted explicit only under Explicit Heat and 
     }));
     return { ...reply, featured: { ...reply.featured, explicit }, four };
   };
-  const cgOf = (explicit: unknown) =>
-    (normalizeBannerPlan(marked(explicit), { kind: "memories", units: cast, featured: kai }) as BannerPlan).featured
-      .cg!;
+  // The plan keeps the mark only where it offered one (Explicit Heat and the Explicit rating), as a story CG's.
+  const cgOf = (explicit: unknown, offered = true) =>
+    (
+      normalizeBannerPlan(marked(explicit), {
+        kind: "memories",
+        units: cast,
+        featured: kai,
+        explicitArt: offered,
+      }) as BannerPlan
+    ).featured.cg!;
   assert.equal(cgOf(true).explicit, true);
+  assert.equal("explicit" in cgOf(true, false), false, "a mark the plan was never offered is dropped");
   assert.equal("explicit" in cgOf(false), false);
   assert.equal("explicit" in cgOf(null), false);
   const moments = (briefs: boolean, required: boolean) =>
@@ -220,19 +228,28 @@ test("an explicit Memory's art is painted explicit only under Explicit Heat and 
     cast: ["Mireille", "Ines"],
   });
 
-  const paint = async (runKey: string, heat: "explicit" | "fade", rating: "explicit" | "suggestive" | "sfw") => {
+  type Settings = readonly ["explicit" | "fade", "explicit" | "suggestive" | "sfw"];
+  // Plans the banner under `planned`, then paints it with a tap under `painted` (Ask before painting holds it).
+  const paint = async (runKey: string, planned: Settings, painted: Settings) => {
     const replies = [JSON.stringify(marked(true)), ...rotationReplies().slice(1)];
-    const t = await wishWorld({ runKey, images: { rating }, replies });
-    await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
-      ...world,
-      content: enforceContent({ ...world.content, heat }, true),
-    }));
+    const t = await wishWorld({ runKey, images: { rating: planned[1], ask: true }, replies });
+    const set = async ([heat, rating]: Settings) => {
+      await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+        ...world,
+        content: enforceContent({ ...world.content, heat }, true),
+      }));
+      await setImages(t.store, t.runId, { rating });
+    };
+    await set(planned);
     await t.call("POST", "/runs/:run/wish/open");
-    await paintsDone();
     const memories = ((await t.call("GET", "/runs/:run/wish")).body as wish.WishView).banners[0]!;
     assert.equal(memories.kind, "memories");
+    const offered = planned[0] === "explicit" && planned[1] === "explicit";
     const item = (await readItem(t.store, t.runId, memories.five.id))!;
-    assert.equal(item.cg?.explicit, true, "the item keeps the mark");
+    assert.equal(item.cg?.explicit === true, offered, "the item keeps the mark only where the plan offered it");
+    await set(painted);
+    await t.call("POST", "/runs/:run/wish/art", { banner: memories.key });
+    await paintsDone();
     // The Memory's own art (its first open, or Repaint) is built the same way as the banner's.
     const own = await itemArtPrompt(t.deps, t.runId, item);
     // A Moment's picture comes from its own brief, never its premise, and stays clothed.
@@ -243,18 +260,23 @@ test("an explicit Memory's art is painted explicit only under Explicit Heat and 
     assert.match(momentArt.prompt, /\bclothed\b/);
     return [t.paid.find((call) => call.method === "generateBannerArt")!.request, own] as const;
   };
-  for (const request of await paint("r-m4bann40-aaaaaa", "explicit", "explicit")) {
+  const top = ["explicit", "explicit"] as const;
+  for (const request of await paint("r-m4bann40-aaaaaa", top, top)) {
     assert.match(request.prompt, /explicit adult scene/);
     assert.match(request.negativePrompt, /child, childlike/);
   }
-  for (const [runKey, heat, rating] of [
-    ["r-m4bann41-bbbbbb", "explicit", "suggestive"],
-    ["r-m4bann42-cccccc", "fade", "explicit"],
-    ["r-m4bann43-dddddd", "explicit", "sfw"],
+  for (const [runKey, planned, painted] of [
+    // Lowered after the plan: the paid call checks again.
+    ["r-m4bann41-bbbbbb", top, ["explicit", "suggestive"]],
+    ["r-m4bann42-cccccc", top, ["fade", "explicit"]],
+    ["r-m4bann43-dddddd", top, ["explicit", "sfw"]],
+    // Raised after a plan that was never offered the mark: it was not kept.
+    ["r-m4bann44-eeeeee", ["fade", "explicit"], top],
   ] as const) {
-    for (const clothed of await paint(runKey, heat, rating)) {
-      assert.doesNotMatch(clothed.prompt, /explicit adult scene|nsfw/, `${heat} Heat at the ${rating} rating`);
-      assert.match(clothed.prompt, /\bclothed\b/, `${heat} Heat at the ${rating} rating`);
+    for (const clothed of await paint(runKey, planned, painted)) {
+      const at = `planned ${planned.join("/")}, painted ${painted.join("/")}`;
+      assert.doesNotMatch(clothed.prompt, /explicit adult scene|nsfw/, at);
+      assert.match(clothed.prompt, /\bclothed\b/, at);
     }
   }
 });

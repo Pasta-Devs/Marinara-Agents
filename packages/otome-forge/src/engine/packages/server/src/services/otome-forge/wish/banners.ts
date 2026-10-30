@@ -78,6 +78,7 @@ import {
   BANNER_PLAN_TOKENS,
   BannerPlanSchema,
   bannerPlanMessages,
+  explicitMemoryArt,
   momentBriefs,
   normalizeBannerPlan,
   type BannerPlan,
@@ -398,7 +399,14 @@ async function createBanner(
     const title = earlierItems.get(banner.items.five[0]!)?.title;
     if (title) earlierTitles.push(title);
   }
-  const context = { kind, units: cast, featured, playerName: run.player.name, moments: momentBriefs(kind, run.world) };
+  const context = {
+    kind,
+    units: cast,
+    featured,
+    playerName: run.player.name,
+    moments: momentBriefs(kind, run.world),
+    explicitArt: explicitMemoryArt(kind, run.world),
+  };
   const { value, connectionId, model } = await generateJson(deps, {
     runId,
     job: "structured",
