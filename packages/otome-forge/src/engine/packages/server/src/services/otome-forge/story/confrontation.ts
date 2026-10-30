@@ -508,8 +508,10 @@ export function applyConfrontation(
     const outcome = apply(endingEffects(confrontation, next.lis[confrontation.li] ?? { trust: 0 }), spec.noun);
     // In the same write as the ending's effects, so a replay or a retry never marks it twice.
     if (!outcome.replay && confrontation.ending === "opened") {
-      next = withOpenedUp(next, confrontation.li, chapter, at);
-      rememberedBy.add(confrontation.li);
+      const stamped = withOpenedUp(next, confrontation.li, chapter, at);
+      // Remembered only when the first is new; the trust +1 reports itself when it moves.
+      if (stamped !== next) rememberedBy.add(confrontation.li);
+      next = stamped;
     }
   }
   return { state: next, remembered: rememberedBy.size > 0, rememberedBy: [...rememberedBy] };

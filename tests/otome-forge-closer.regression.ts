@@ -99,7 +99,8 @@ async function closerWorld(
     return json(beatReply());
   });
   const t = await storyWorld({ runKey, replies, lis: { [KAI]: kai }, ...(content ? { content } : {}) });
-  if (content && content.heat !== "sfw") {
+  // Kai's bible holds tastes in every story: an SFW one must still never send them.
+  {
     await t.store.mutateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
       ...unit,
       bible: { ...unit.bible!, intimacy: INTIMACY },
@@ -338,7 +339,7 @@ test("Opened up earns trust and one Love Timeline first; Mirror is told once; re
   );
   assert.ok(state.chapters["main-1"]!.applied.includes("5/stance-1"));
   assert.ok(state.chapters["main-1"]!.applied.includes("5/closer"));
-  // Replaying every round, and reading it to its end, changes nothing more.
+  // Replaying every round changes nothing more.
   for (const [k, picked] of (["mirror", "reassure", "reassure"] as const).entries()) await answer(t, k + 1, picked);
   assert.deepEqual(await t.state(), state);
 
@@ -351,20 +352,27 @@ test("Opened up earns trust and one Love Timeline first; Mirror is told once; re
   await t.settle();
   assert.equal(labels(t, "beat/main-1/6"), 1, "the ending queued the next node");
 
-  // A second Opened up (another state, same love interest) never marks the first again.
+  // A second Opened up (another state, same love interest) never marks the first again, and when its trust +1 is
+  // clamped away nothing is remembered.
+  const capped = {
+    ...state,
+    lis: { ...state.lis, [KAI]: { ...kai, trust: 3 } },
+    chapters: { ...state.chapters, "main-1": { ...state.chapters["main-1"]!, applied: [] } },
+  };
   const again = applyConfrontation(
-    { ...state, chapters: { ...state.chapters, "main-1": { ...state.chapters["main-1"]!, applied: [] } } },
+    capped,
     { key: "main-1", nodes: [], title: "Another night" },
-    beat,
+    { ...beat, confrontation: { ...beat.confrontation!, picks: ["reassure", "reassure", "reassure"] } },
     "2026-11-01T00:00:00.000Z",
   );
   assert.equal(again.state.timeline.filter((entry) => entry.kind === "first-opened-up").length, 1);
   assert.equal(again.state.lis[KAI]!.firsts["opened-up"], kai.firsts["opened-up"]);
+  assert.deepEqual([again.remembered, again.rememberedBy], [false, []], "nothing changed, so nothing is remembered");
 });
 
 test("Shut out costs trust and leaves a minor grievance they hold; Almost changes nothing", async () => {
-  // Above the floor of his level, so being harmed can cost him affection.
-  const shut = await closerWorld("r-closershut-aaaaaa", { kai: { points: 40 } });
+  // Above the floor of his level, so being harmed can cost him affection; at the trust where a walkout ruptures.
+  const shut = await closerWorld("r-closershut-aaaaaa", { kai: { points: 40, trust: -2 } });
   const before = (await shut.state()).lis[KAI]!;
   const [, , last] = await play(shut, ["ask", "ask", "ask"]);
   assert.equal(last!.body.ending.kind, "shut");
@@ -393,6 +401,25 @@ test("Shut out costs trust and leaves a minor grievance they hold; Almost change
   );
 });
 
+test("a Closer's answer sent to a Confrontation is a 400 that saves nothing", async () => {
+  const replies = Array.from({ length: 60 }, () => (messages: Messages) => {
+    if (system(messages).includes("chapter planner")) return json(planReply());
+    if (isConfrontationPrompt(messages)) return json(confrontationReply());
+    return json(beatReply());
+  });
+  const t = await storyWorld({ runKey: "r-closerwrong-aaaaaa", replies });
+  assert.equal((await t.call("POST", "/runs/:run/chapters/next", { lead: KAI })).status, 200);
+  for (let i = 0; i < 5; i += 1) {
+    assert.equal((await t.call("POST", beatPath, {}, node(i))).status, 200);
+    assert.equal((await t.call("POST", `${beatPath}/read`, { segment: 99 }, node(i))).status, 200);
+  }
+  await t.settle();
+  assert.ok((await t.call("POST", beatPath, {}, node(5))).body.confrontation, "a Confrontation is served");
+  const wrong = await answer(t, 1, "mirror");
+  assert.equal(wrong.status, 400);
+  assert.deepEqual((await readBeat(t.store, t.runId, "main-1", 5))!.confrontation!.picks, []);
+});
+
 test("an NSFW story's P12c carries the partner's tastes and lets Opened up turn intimate; an SFW story's never", async () => {
   const nsfw = await closerWorld("r-closernsfw-aaaaaa", { content: { ...defaultContent(), heat: "fade" } });
   const [hot] = nsfw.calls.filter((entry) => isCloserPrompt(entry.messages));
@@ -405,5 +432,5 @@ test("an NSFW story's P12c carries the partner's tastes and lets Opened up turn 
   const sfw = await closerWorld("r-closersfw-aaaaaa");
   const [mild] = sfw.calls.filter((entry) => isCloserPrompt(entry.messages));
   const plain = mild!.messages.map((message) => message.content).join("\n");
-  assert.doesNotMatch(plain, /tastes in sex|turn intimate/);
+  assert.doesNotMatch(plain, /tastes in sex|turn intimate|PREF-MARK/);
 });
