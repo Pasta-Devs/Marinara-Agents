@@ -27,7 +27,10 @@ import { MUSIC_MOODS } from "../packages/otome-forge/src/engine/packages/client/
 import { musicBriefMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/audio/music.ts";
 import { worldId } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
 import { registerAudioRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/audio.ts";
-import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
+import {
+  normalizeWorld,
+  normalizeWorldAudio,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { routesOf } from "./fixtures/otome-forge-art.ts";
 import { HE, KAI, MIR, SHE, json, storyWorld } from "./fixtures/otome-forge-story.ts";
 
@@ -187,6 +190,38 @@ test("an uploaded music folder is saved without generation and survives unrelate
   ]) {
     assert.equal(normalizeOtomeAudio({ musicFolder: invalid }).musicFolder, "");
   }
+});
+
+test("music folder identifiers are bounded through saved worlds, settings and manifest selection", async () => {
+  const oversized = `music/${"a".repeat(2000)}`;
+  assert.equal(normalizeOtomeAudio({ musicFolder: oversized }).musicFolder, "");
+  const limit = `music/${"a".repeat(994)}`;
+  const overflow = `${limit}a`;
+  const nested = "music/My uploaded songs/Romance";
+  assert.equal(limit.length, 1000);
+  assert.equal(overflow.length, 1001);
+  const t = await audioWorld("r-folderbound-eeeeee");
+  for (const [musicFolder, expected] of [
+    [limit, limit],
+    [overflow, ""],
+    [oversized, ""],
+    [nested, nested],
+  ]) {
+    assert.equal(normalizeOtomeAudio({ musicFolder }).musicFolder, expected);
+    assert.equal(normalizeWorldAudio({ musicFolder }).musicFolder, expected);
+    assert.equal(normalizeWorld({ audio: { musicFolder } }).audio.musicFolder, expected);
+    const saved = await t.call("POST", "/runs/:run/audio/settings", { audio: { musicFolder } });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.body.audio.musicFolder, expected);
+    assert.equal((await t.world()).audio.musicFolder, expected);
+  }
+  assert.equal(t.calls.length, 0, "normalizing a folder never generates a brief or track");
+  const entry = (path: string) => [path.replace(/\.[^.]+$/u, "").replaceAll("/", ":"), { path }];
+  const valid = entry(`${nested}/song.mp3`);
+  const assets = Object.fromEntries([valid, entry(`${overflow}/song.mp3`), entry(`${oversized}/song.mp3`)]);
+  assert.deepEqual(musicAssetsInFolder(assets, "music"), Object.fromEntries([valid]));
+  assert.deepEqual(musicAssetsInFolder(assets, overflow), {});
+  assert.deepEqual(musicAssetFolders(assets), ["music", "music/My uploaded songs", nested]);
 });
 
 test("music folders contain only manifest-listed audio under that exact folder or its descendants", () => {

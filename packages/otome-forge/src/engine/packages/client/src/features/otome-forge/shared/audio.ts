@@ -16,6 +16,7 @@ export function normalizeOtomeAudio(value: unknown): AudioSettings {
 function isMusicFolder(value: unknown): value is string {
   return (
     typeof value === "string" &&
+    value.length <= 1000 &&
     (value === "music" || value.startsWith("music/")) &&
     !/[\\\p{Cc}]/u.test(value) &&
     value.split("/").every((part) => part !== "" && part !== "." && part !== "..")
