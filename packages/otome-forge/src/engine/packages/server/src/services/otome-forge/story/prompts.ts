@@ -20,6 +20,12 @@
 // 0.0.6 (NSFW mode): under NSFW Heat the planners may give a first night together a key image, and P6 and P12 tell the
 // cg brief what the image rating lets it show (content-contract.ts imageBriefRule); only under Explicit Heat and the
 // Explicit rating does the brief's shape carry "explicit". A world that raised nothing gets the prompts it got before.
+// 0.5.0 (Read Me, #1945): a love interest's notebook (knowsAboutYou) rides beside that love interest's own card only:
+// P5's Lead, P10/P11's owner, P12's opponent, and in P6 each love interest present (main chapters too: they act on
+// what they know in every scene they are in, and the others learn only what happens on the page). Never another's
+// card in a planner (P5's others, othersBlock). An empty notebook adds nothing, so those prompts stay byte for byte.
+// ponytail: a scene already written (the lookahead) keeps the notebook it was written with; an edit or delete reaches
+// the next one written. The upgrade path is dropping an unread lookahead beat when a notebook it carried is edited.
 import { forgeChoiceMessages, forgeChoicePlanMessages } from "@forge-kit/player-choices-server.mjs";
 import { sliceTextToTokenBudget } from "@forge-kit/shared-token-estimator.mjs";
 import { z, type ZodType } from "zod";
@@ -428,7 +434,14 @@ export function chapterPlanMessages({
     protagonistBlock(player),
     "",
     leadUnit
-      ? `THE LEAD (stage ${stageOf(state, lead)}; this chapter does not move the stage)\n${bibleBlock(leadUnit, state, [lead], world)}`
+      ? [
+          `THE LEAD (stage ${stageOf(state, lead)}; this chapter does not move the stage)`,
+          bibleBlock(leadUnit, state, [lead], world),
+          // The Lead's notebook only: never the Foil's or the others' (their bibles below are a planner's view).
+          knowsAboutYou(leadUnit, liStateOf(state, lead)),
+        ]
+          .filter(Boolean)
+          .join("\n")
       : "",
     "",
     "THE OTHERS (full bibles; pick the Foil from these)",
@@ -610,9 +623,14 @@ export function beatMessages({
     protagonistBlock(player),
     "",
     present.length ? "LOVE INTERESTS IN THIS NODE" : "No love interest is in this node.",
+    // Each one's own notebook beside their own card, named as theirs (knowsAboutYou), in a main chapter too.
     present
       .map((unit) =>
-        [sceneCardBlock(unit, cardState(unit.id), node.resolves ?? []), intimacyLine(world, unit)]
+        [
+          sceneCardBlock(unit, cardState(unit.id), node.resolves ?? []),
+          knowsAboutYou(unit, cardState(unit.id)),
+          intimacyLine(world, unit),
+        ]
           .filter(Boolean)
           .join("\n"),
       )
@@ -818,9 +836,14 @@ function arcPlanUser(input: ArcPlanInput, heading: string, task: string[]): stri
     "PROTAGONIST",
     protagonistBlock(player),
     "",
-    unit ? `${heading}\n${bibleBlock(unit, state, [li], input.world)}` : "",
+    unit
+      ? [heading, bibleBlock(unit, state, [li], input.world), knowsAboutYou(unit, liStateOf(state, li))]
+          .filter(Boolean)
+          .join("\n")
+      : "",
     "",
     units.length > 1 ? "THE OTHERS (scene cards; they may appear, but this chapter is not theirs)" : "",
+    // Their cards only: an other's notebook never reaches a plan that is not theirs.
     othersBlock(units, state, li),
     "",
     "LEDGERS",
@@ -1038,7 +1061,17 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     protagonistBlock(player),
     "",
     "LOVE INTERESTS IN THIS NODE",
-    present.map((unit) => sceneCardBlock(unit, liStateOf(state, unit.id), node.resolves ?? [])).join("\n\n"),
+    // The argument is theirs: only the opponent's notebook rides beside their card, never a bystander's.
+    present
+      .map((unit) =>
+        [
+          sceneCardBlock(unit, liStateOf(state, unit.id), node.resolves ?? []),
+          unit.id === li ? knowsAboutYou(unit, liStateOf(state, li)) : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      )
+      .join("\n\n"),
     "",
     memory.trim() ? `STORY MEMORY\n${memory.trim()}` : "",
     "",

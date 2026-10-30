@@ -19,9 +19,10 @@
 //   his own readers and scenes he is in, and titled private as a phone session is. An unfinished one is never a source.
 // P25 writes his words, so it carries the knowledge boundary and the writing rules, on the `home` contract (SFW wording
 // plus Lines and Veils, whatever the Heat). It sees his scene card (never an unrevealed secret's truth), his mask tells
-// by index, what stands between them, one thing he may know from his own recall, and the moments of his last sets so
-// none repeats. The state reaches it as his own reader may know it (story/prompts.ts ownView, M3's rule): no grievance,
-// disclosure or ledger line another love interest's own chapter left behind. Prompts are English and never localized;
+// by index, what stands between them, his own notebook (Read Me, #1945: what he has come to know about the
+// protagonist), one thing he may know from his own recall, and the moments of his last sets so none repeats. The state
+// reaches it as his own reader may know it (story/prompts.ts ownView, M3's rule): no grievance, disclosure or ledger
+// line another love interest's own chapter left behind. Prompts are English and never localized;
 // the set is written in the world's language.
 import { randomInt } from "node:crypto";
 import { sliceTextToTokenBudget } from "@forge-kit/shared-token-estimator.mjs";
@@ -65,7 +66,7 @@ import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { grant } from "../state/rewards.js";
 import type { OtomeStore } from "../store.js";
-import { betweenYou, ownView } from "../story/prompts.js";
+import { betweenYou, knowsAboutYou, ownView } from "../story/prompts.js";
 import { otomeWritingRules } from "../writing-rules.js";
 import { aboutLine } from "../schemas/player.js";
 
@@ -361,6 +362,7 @@ export function readHimMessages({
 }: ReadHimPromptInput): OtomeMessage[] {
   const name = unit.name;
   const tells = unit.bible?.mask.tells ?? [];
+  const known = knowsAboutYou(unit, liState);
   const system = [
     `You write one set of "Read ${name}", a mini-game in an otome visual novel. Each round is a small moment with ${name}: what ${name} says and the face ${name} wears saying it. The player picks which of three or four readings is what ${name} really feels; then ${name}'s private thought is revealed.`,
     "Reply with ONLY a JSON object of this shape:",
@@ -398,6 +400,7 @@ export function readHimMessages({
     "LOVE INTEREST",
     otomeSceneCard(unit, liState),
     betweenYou(unit, liState),
+    ...(known ? [known] : []),
     "",
     "MASK TELLS (by index)",
     ...tells.map((tell, index) => `${index}: ${tell}`),

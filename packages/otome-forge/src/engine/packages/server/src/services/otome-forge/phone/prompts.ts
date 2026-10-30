@@ -7,6 +7,8 @@
 // `chat` contract for him alone; the user turn holds his scene card with what stands between them, the story as he may
 // know it (recall with `reader: li`), the conversations that are over, the thread now, and the task, ending with the
 // contract reminder. The comfort rule applies whenever the protagonist says they are unwell or had a hard day.
+// Read Me (#1945): P17 carries his own notebook beside his card (story/prompts.ts knowsAboutYou), so a reply may show
+// what he has come to know about the protagonist; P18 writes no one's words and gets none.
 // P18 is GF's sv(): what he will remember of a closed conversation, on the `summary` contract with the summary wording
 // and no knowledge boundary (it writes no one's words). Its quote must be a line the conversation really holds.
 // Prompts are English and never localized; messages, suggestions and memories are written in the world's language.
@@ -24,7 +26,7 @@ import { NOTE_TEXT_MAX } from "../../../../../client/src/features/otome-forge/sh
 import { COMFORT_RULE, SUMMARY_WORDING, otomeContentContract, otomeContractReminder } from "../content-contract.js";
 import type { OtomeMessage } from "../generation.js";
 import { otomeSceneCard } from "../scene-card.js";
-import { betweenYou } from "../story/prompts.js";
+import { betweenYou, knowsAboutYou } from "../story/prompts.js";
 import { otomeWritingRules } from "../writing-rules.js";
 import { aboutLine } from "../schemas/player.js";
 
@@ -123,6 +125,7 @@ export function chatReplyMessages({
 }: ChatReplyInput): OtomeMessage[] {
   const name = unit.name;
   const them = player.name || "the protagonist";
+  const known = knowsAboutYou(unit, liState);
   const system = [
     `You are ${name} (${pronounText(unit.pronouns)}), a love interest in an otome visual novel: a character-driven romance. You are writing to ${them} in your private message thread, by whatever carries messages in this world (never a phone or a screen unless the world has them). This is a MESSAGE, not a scene: write as ${name}, in the first person, in your own voice.`,
     "Reply with ONLY a JSON object of this shape:",
@@ -155,6 +158,8 @@ export function chatReplyMessages({
     "WHO YOU ARE",
     otomeSceneCard(unit, liState),
     betweenYou(unit, liState),
+    // An empty notebook adds no line (a "" here would leave a blank one before the off-screen line).
+    ...(known ? [known] : []),
     offscreen.trim()
       ? `What you were doing lately, away from ${them}: ${offscreen.trim()} You may hint at it in your own way; never give away what you are hiding.`
       : "",

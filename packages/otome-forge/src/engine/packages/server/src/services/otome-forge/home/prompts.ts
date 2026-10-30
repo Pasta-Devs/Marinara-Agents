@@ -11,6 +11,9 @@
 // Order (plan §1.7): system (role, JSON shape, rules, boundary and writing rules, contract), then the user turn
 // (world, protagonist, his scene card, what he knows and remembers, the task, the contract reminder). Prompts are
 // English and never localized; the lines and the note are written in the world's language.
+// Read Me (#1945): P16 carries his own notebook beside his card (story/prompts.ts knowsAboutYou), so the note may
+// show what he has come to know about the protagonist. P15 does not: a pack is written once per stage and kept, so it
+// would outlive an edit or delete. Today's note keeps the notebook it was written with; the next day's reads it anew.
 import { z, type ZodType } from "zod";
 import type {
   ClawCheat,
@@ -33,7 +36,7 @@ import {
 import { COMFORT_RULE, otomeContentContract, otomeContractReminder } from "../content-contract.js";
 import type { OtomeMessage } from "../generation.js";
 import { otomeSceneCard } from "../scene-card.js";
-import { betweenYou } from "../story/prompts.js";
+import { betweenYou, knowsAboutYou } from "../story/prompts.js";
 import { otomeWritingRules } from "../writing-rules.js";
 import { aboutLine } from "../schemas/player.js";
 
@@ -229,6 +232,7 @@ export function noteMessages({
   curt,
 }: NoteInput): OtomeMessage[] {
   const name = unit.name;
+  const known = knowsAboutYou(unit, liState);
   const system = [
     `You write ${name}'s message of the day in an otome visual novel: a short handwritten note ${name} left for the protagonist today, in ${name}'s own voice. The player finds it on the Home screen.`,
     "Reply with ONLY a JSON object of this shape:",
@@ -261,6 +265,7 @@ export function noteMessages({
     "LOVE INTEREST",
     otomeSceneCard(unit, liState),
     betweenYou(unit, liState),
+    ...(known ? [known] : []),
     "",
     "TODAY",
     `${today.weekday} ${timeWords(today.hour)}.${today.special.length ? ` ${today.special.join(" ")}` : ""}`,
