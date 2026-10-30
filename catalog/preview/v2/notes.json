@@ -74,7 +74,7 @@
         {
           "version": "0.3.1",
           "date": "2026-10-30",
-          "notes": "- The story's **Image description** shows only for a picture that isn't on screen: a painted background or key image no longer has its description under the chapter title, and one whose file fails to load gets it back.",
+          "notes": "- The story's **Image description** shows only for a picture that isn't on screen: a painted background or key image no longer has its description under the chapter title, and one whose file fails to load gets it back.\n- A 5★ reveal with a long premise fits on a phone: the card never grows past the screen, so the title shows whole and the premise scrolls inside it.",
           "highlight": false
         },
         {

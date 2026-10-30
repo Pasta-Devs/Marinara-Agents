@@ -1136,6 +1136,53 @@ test("Otome Forge Album: a CG opens large and saves through the Engine; the Time
   await expect(page.getByRole("dialog").getByText("Writes its story")).toHaveCount(0);
 });
 
+test("Otome Hearth Wish: a long 5★ premise fits a phone: the title shows whole and Continue is reachable (#1944)", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 700 });
+  // The card's settled place, not its entrance slide.
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const { stub, answer } = wishStub();
+  const premise = `${"In the frost-lit observation gallery, the great clock stops and only one of you knows why. ".repeat(14)}PREMISE-END`;
+  const five = { ...memoriesBanner().five, premise };
+  // The reveal shows the banner's item.
+  stub.wish = {
+    ...stub.wish,
+    banners: stub.wish.banners.map((banner: Json) => (banner.five.id === five.id ? { ...banner, five } : banner)),
+  };
+  stub.pullResponse = { results: [{ item: five, rarity: 5, isNew: true, refund: 0 }], starlight: 1900, pity: PITY };
+  const calls: Call[] = [];
+  await stubRoutes(page, answer, calls);
+  const root = await openOtome(page);
+  await openDock(root, "Wish");
+  await root
+    .getByRole("region", { name: "Clockwork Hearts" })
+    .getByRole("button", { name: /^Wish ×1,/u })
+    .click();
+  const takeover = page.getByRole("dialog", { name: "Your wish" });
+  await expect(takeover.getByRole("button", { name: "Break the seal" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  const reveal = takeover.locator(".of-reveal");
+  const card = reveal.locator(".of-reveal-card");
+  const title = reveal.getByRole("heading", { name: "The Hour He Stopped" });
+  await expect(title).toBeInViewport({ ratio: 1 });
+  // Whole, inside the stage, and clear of Skip's row.
+  const stage = (await takeover.boundingBox())!;
+  const skip = (await takeover.getByRole("button", { name: "Skip" }).boundingBox())!;
+  const box = (await card.boundingBox())!;
+  expect(box.y).toBeGreaterThanOrEqual(skip.y + skip.height - 1);
+  expect(box.y + box.height).toBeLessThanOrEqual(stage.y + stage.height + 1);
+  // The premise scrolls inside the card, and Continue is there at its end.
+  expect(await card.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  const go = reveal.getByRole("button", { name: "Continue" });
+  await go.scrollIntoViewIfNeeded();
+  await expect(go).toBeInViewport();
+  await expect(reveal.getByText("PREMISE-END", { exact: false })).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath("reveal-long-premise-phone.png") });
+  await go.click();
+  await expect(reveal).toHaveCount(0);
+});
+
 test("Otome Forge Wish: an open on the 5★ reveal hands focus on, and the prompt review from the results is on top", async ({
   page,
 }) => {

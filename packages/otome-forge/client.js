@@ -1350,6 +1350,9 @@ ${n} .of-reveal-card {
   border: 1px solid rgb(230 201 138 / 0.4); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
   box-shadow: 0 0 40px rgb(230 201 138 / 0.25);
   opacity: 0; translate: 0 18px; transition: opacity 700ms var(--of-ease) 300ms, translate 700ms var(--of-ease) 300ms;
+  /* Never taller than the stage below Skip's row: a long premise scrolls inside it, title first (#1944). */
+  max-height: calc(100% - 64px - max(16px, env(safe-area-inset-bottom)));
+  overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
 }
 ${n} .of-reveal[data-shown="true"] .of-reveal-card { opacity: 1; translate: 0 0; }
 ${n} .of-reveal-count { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.1em; color: var(--of-text-faint); }
