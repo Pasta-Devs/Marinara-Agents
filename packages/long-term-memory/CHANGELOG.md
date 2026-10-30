@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.5.14 — 2026-10-30
 
 - Settings → Extraction adds Chat import detail. Detailed imports a chat's messages in pieces half the size (12,000 characters instead of 24,000), giving finer memories for about twice the extraction cost. It applies to chats imported from now on; a chat already imported keeps its size.
 
