@@ -54,6 +54,7 @@
   "permissions": [
     "agent-runtime",
     "chat-read",
+    "chat-write",
     "routes",
     "storage",
     "ui"

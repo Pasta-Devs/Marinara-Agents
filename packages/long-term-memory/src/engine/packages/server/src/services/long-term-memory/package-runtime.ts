@@ -113,6 +113,8 @@ export type CapabilityRuntimeHost = {
         agentContent?: string;
       }>
     >;
+    /** Engines that have it skip messages the user hid or showed by hand and return the ids actually changed. */
+    setMessagesHiddenFromAI?(chatId: string, messageIds: string[], hidden: boolean): Promise<string[]>;
   };
 };
 

@@ -170,7 +170,14 @@ async function main(routeScenario: RouteScenario) {
   let shortNameRosterEnabled = false;
   let scenarioError: unknown;
   try {
-    assert.deepEqual(installed.manifest.permissions, ["agent-runtime", "chat-read", "routes", "storage", "ui"]);
+    assert.deepEqual(installed.manifest.permissions, [
+      "agent-runtime",
+      "chat-read",
+      "chat-write",
+      "routes",
+      "storage",
+      "ui",
+    ]);
     assert.equal(installed.manifest.permissions.includes("network"), false);
     await assert.rejects(
       registerCapabilityPrivilegedRoutes(

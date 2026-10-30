@@ -36,6 +36,7 @@ type GlobalForm = {
   longTermMemoryRecallPreamble: string;
   longTermMemoryDebug: boolean;
   longTermMemoryShareWithPackages: boolean;
+  longTermMemoryHideImportedMessages: boolean;
   sourcesAvailabilityModes?: ("conversation" | "roleplay" | "game")[];
 };
 type ExtractionForm = Required<LtmExtractionSettingsPatch> & {
@@ -94,6 +95,7 @@ function settingsForm(settings: LtmGlobalSettings): GlobalForm {
     longTermMemoryRecallPreamble: settings.longTermMemoryRecallPreamble ?? "",
     longTermMemoryDebug: settings.longTermMemoryDebug ?? false,
     longTermMemoryShareWithPackages: settings.longTermMemoryShareWithPackages ?? true,
+    longTermMemoryHideImportedMessages: settings.longTermMemoryHideImportedMessages ?? false,
     ...(settings.sourcesAvailabilityModes ? { sourcesAvailabilityModes: settings.sourcesAvailabilityModes } : {}),
   };
 }
@@ -1115,6 +1117,19 @@ export default function MemorySettings({
               </option>
             </select>
           </div>
+          {globalForm ? (
+            <Toggle
+              label={localizeUi("ui.longTermMemory.memorysettings.hideImportedMessages")}
+              help={localizeUi(
+                global.data?.hideImportedMessagesAvailable === false
+                  ? "ui.longTermMemory.memorysettings.hideImportedMessagesUnavailable"
+                  : "ui.longTermMemory.memorysettings.hideImportedMessagesHelp",
+              )}
+              checked={globalForm.longTermMemoryHideImportedMessages}
+              disabled={global.data?.hideImportedMessagesAvailable === false}
+              onChange={(value) => setGlobalForm({ ...globalForm, longTermMemoryHideImportedMessages: value })}
+            />
+          ) : null}
           <NumberField
             label={localizeUi("ui.longTermMemory.memorysettings.temperature")}
             help={localizeUi(
