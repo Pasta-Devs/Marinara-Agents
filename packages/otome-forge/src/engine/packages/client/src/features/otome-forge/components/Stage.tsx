@@ -1,6 +1,6 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the portrait stage. A 9:16 stage centred over a blurred, dimmed copy of the scene; full-bleed at phone
-// width; never rotates. Fullscreen goes through the Home browser's own control (`browserFullscreen.setActive`).
+// width. User-selected fullscreen fills the Home browser's panel through its own control (`browserFullscreen.setActive`).
 // ──────────────────────────────────────────────
 import { createContext, useContext, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -27,6 +27,7 @@ export function useStageLayer(): StageLayer | null {
 
 export function Stage({ background, children }: StageProps) {
   const { t } = useTranslation();
+  const fullscreen = useOtomeProps().browserFullscreen?.active === true;
   const [body, setBody] = useState<HTMLDivElement | null>(null);
   const [layer, setLayer] = useState<HTMLDivElement | null>(null);
   // One value per pair of elements: a new object on every render would rerun each open dialog's mount effect (focus
@@ -34,7 +35,7 @@ export function Stage({ background, children }: StageProps) {
   const stageLayer = useMemo(() => (body && layer ? { body, layer } : null), [body, layer]);
   const style = background ? ({ "--of-bg": background } as CSSProperties) : undefined;
   return (
-    <div className="of-frame" style={style}>
+    <div className="of-frame" style={style} data-fullscreen={fullscreen ? "true" : undefined}>
       <div className="of-frame-blur" aria-hidden="true" />
       <section className="of-stage" aria-label={t("ui.otomeForge.common.title")}>
         <div className="of-scene" aria-hidden="true">

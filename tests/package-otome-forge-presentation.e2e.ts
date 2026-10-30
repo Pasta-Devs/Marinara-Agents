@@ -3181,3 +3181,179 @@ test("Otome Hearth Settings scrolls to the last control on long pages", async ({
   expect(scrolledPages).toBeGreaterThan(0);
   expect(calls.filter((call) => call.method === "POST" && call.path.endsWith("/settings"))).toEqual([]);
 });
+
+test("Otome Hearth fullscreen fills the whole mode across navigation and restores the portrait stage", async ({
+  page,
+  isMobile,
+}, testInfo) => {
+  const sizes = isMobile
+    ? [
+        { width: 390, height: 844 },
+        { width: 844, height: 390 },
+      ]
+    : [
+        { width: 1440, height: 900 },
+        { width: 961, height: 640 },
+      ];
+  await page.setViewportSize(sizes[0]!);
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+  const fixture = expressionRepaintFixture();
+  fixture.view.world.images.connectionId = null;
+  const original = JSON.stringify(fixture.view);
+  const calls: Call[] = [];
+  const answer = (call: Call): Answer | undefined => {
+    if (call.path.endsWith("/wish") && call.method === "GET")
+      return {
+        status: 200,
+        json: {
+          starlight: fixture.view.starlight,
+          banners: [],
+          echoes: [],
+          pity: Object.fromEntries(
+            ["memories", "his-wardrobe", "my-wardrobe"].map((kind) => [kind, { fiveIn: 60, fourIn: 10 }]),
+          ),
+          creating: false,
+          missing: [],
+          selectors: [],
+          rotation: { number: 1, startsDay: "2026-10-28", endsDay: "2026-11-10" },
+        },
+      };
+    if (call.path.endsWith("/wardrobe"))
+      return { status: 200, json: { him: {}, me: [], couples: [], noticed: null, noticing: false } };
+    if (call.path.endsWith("/album"))
+      return { status: 200, json: { cgs: [], memories: [], timeline: [], favorites: [], soundtrack: [], tells: {} } };
+    if (call.path.endsWith("/play"))
+      return {
+        status: 200,
+        json: {
+          dayKey: now().slice(0, 10),
+          starlight: { earned: 0, cap: 60 },
+          affection: { earned: {}, cap: 30 },
+          plush: {},
+          lis: {},
+        },
+      };
+    return fixture.answer(call);
+  };
+  await stubRoutes(page, answer, calls);
+  const root = await openStory(page);
+  const frame = root.locator(".of-frame");
+  const stage = root.locator(".of-stage");
+  const fullscreenHost = page.locator('[data-component="HomeBrowserHub"] [data-browser-fullscreen]');
+  const nativeFullscreen = await page.evaluate(() => document.fullscreenElement !== null);
+  if (!isMobile) {
+    const initial = await stage.boundingBox();
+    expect(Math.abs(initial!.width / initial!.height - 9 / 16)).toBeLessThan(0.01);
+  }
+  await root.getByRole("button", { name: "Enter fullscreen", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(fullscreenHost).toBeVisible();
+  await expect(root.getByRole("button", { name: "Exit fullscreen", exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("fullscreen-story.png") });
+  const fillsFrame = async () => {
+    await expect
+      .poll(async () => {
+        const [outer, inner] = await Promise.all([frame.boundingBox(), stage.boundingBox()]);
+        return Math.max(
+          Math.abs(inner!.x - outer!.x),
+          Math.abs(inner!.y - outer!.y),
+          Math.abs(inner!.width - outer!.width),
+          Math.abs(inner!.height - outer!.height),
+        );
+      })
+      .toBeLessThanOrEqual(1);
+  };
+  await fillsFrame();
+  for (const [index, size] of sizes.entries()) {
+    await page.setViewportSize(size);
+    const look = index === 0 ? "midnight" : "pearl";
+    await page.emulateMedia({ colorScheme: index === 0 ? "dark" : "light" });
+    await expect(root).toHaveAttribute("data-look", look);
+    for (const screen of ["Wish", "Wardrobe", "Album", "Dates", "Story"]) {
+      await root
+        .getByRole("navigation", { name: "Game menu" })
+        .getByRole("button", { name: screen, exact: true })
+        .click();
+      await expect(root.getByRole("heading", { name: screen, exact: true, level: 1 })).toBeVisible();
+      await expect(root.getByRole("alert")).toHaveCount(0);
+      await fillsFrame();
+      if (screen === "Wish")
+        await page.screenshot({ path: testInfo.outputPath(`fullscreen-wish-${size.width}-${look}.png`) });
+    }
+    await root.getByRole("button", { name: "Settings", exact: true }).click();
+    await expect(root.getByRole("heading", { name: "Settings", exact: true, level: 1 })).toBeVisible();
+    await fillsFrame();
+    await root.getByRole("button", { name: "Back", exact: true }).click();
+    await expect(root.getByRole("heading", { name: "Story", exact: true, level: 1 })).toBeVisible();
+    await expect(root.getByRole("button", { name: "Exit fullscreen", exact: true })).toBeVisible();
+    await fillsFrame();
+    await root.getByRole("button", { name: "Home with Ilvar Thorne", exact: true }).click();
+    await expect(root.getByText("Come inside.", { exact: true })).toBeVisible();
+    await fillsFrame();
+    await root
+      .getByRole("navigation", { name: "Game menu" })
+      .getByRole("button", { name: "Story", exact: true })
+      .click();
+  }
+  await page.setViewportSize(sizes[0]!);
+  await root.getByRole("button", { name: "Exit fullscreen", exact: true }).click();
+  await expect(fullscreenHost).toHaveCount(0);
+  if (!isMobile) {
+    const [outer, inner] = await Promise.all([frame.boundingBox(), stage.boundingBox()]);
+    expect(inner!.width).toBeLessThan(outer!.width);
+    expect(Math.abs(inner!.width / inner!.height - 9 / 16)).toBeLessThan(0.01);
+  }
+  await root.getByRole("button", { name: "Enter fullscreen", exact: true }).click();
+  await root.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(displayedLine(root)).toHaveText("Rain needles the glass dome.");
+  const readerLine = await displayedLine(root).innerText();
+  await fillsFrame();
+  await root.getByRole("button", { name: "Exit fullscreen", exact: true }).click();
+  await expect(displayedLine(root)).toHaveText(readerLine);
+  await root.getByRole("button", { name: "Enter fullscreen", exact: true }).click();
+  await expect(displayedLine(root)).toHaveText(readerLine);
+  await fillsFrame();
+  expect(JSON.stringify(fixture.view)).toBe(original);
+  expect(await page.evaluate(() => document.fullscreenElement !== null)).toBe(nativeFullscreen);
+  expect(
+    calls.filter((call) => call.method === "POST" && /\/art\/|\/wish\/pull|\/api\/audio\/generate/u.test(call.path)),
+  ).toEqual([]);
+});
+
+test("Otome Hearth fullscreen preserves setup drafts and native browser state", async ({
+  page,
+  isMobile,
+}, testInfo) => {
+  await page.setViewportSize({ width: isMobile ? 390 : 1440, height: isMobile ? 844 : 900 });
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
+  const calls: Call[] = [];
+  const fixture = createSceneStub({ images: false, audio: false });
+  await stubRoutes(
+    page,
+    (call) =>
+      call.path === "/api/otome-forge/index" || call.path === "/api/otome-forge/index/opened"
+        ? { status: 200, json: { index: { ...index(), runs: [], activeRun: null } } }
+        : fixture.answer(call),
+    calls,
+  );
+  const root = await openOtome(page);
+  await root.getByRole("button", { name: "Begin a new story", exact: true }).click();
+  const premise = root.getByRole("textbox", { name: "Premise", exact: true });
+  const text = "An adult cartographer follows a map through a city of clockwork canals.";
+  await premise.fill(text);
+  const draft = () => page.evaluate(() => localStorage.getItem("otome-forge:setup-draft:v1"));
+  await expect.poll(draft).toContain(text);
+  const before = await draft();
+  const nativeFullscreen = await page.evaluate(() => document.fullscreenElement !== null);
+  await root.getByRole("button", { name: "Enter fullscreen", exact: true }).click();
+  await expect(root.getByRole("button", { name: "Exit fullscreen", exact: true })).toBeVisible();
+  await expect(premise).toHaveValue(text);
+  expect(await draft()).toBe(before);
+  await page.screenshot({ path: testInfo.outputPath("fullscreen-setup-draft-pearl.png") });
+  await root.getByRole("button", { name: "Exit fullscreen", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(premise).toHaveValue(text);
+  expect(await draft()).toBe(before);
+  expect(await page.evaluate(() => document.fullscreenElement !== null)).toBe(nativeFullscreen);
+  expect(calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"))).toEqual([]);
+});
