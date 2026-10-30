@@ -7,6 +7,7 @@
 // stops under prefers-reduced-motion.
 import { DATE_NIGHT_RULES } from "../screens/dates/date-night-styles";
 import { READ_HIM_RULES } from "../screens/dates/ReadHim";
+import { READ_ME_RULES } from "../screens/dates/ReadMe";
 import { fontFaceCss, FONT_STACKS } from "./fonts";
 import { LOOK_TOKENS, PALETTE, RARITY, type Look } from "./tokens";
 
@@ -3288,6 +3289,7 @@ export function otomeForgeStyles(): string {
     DATES_RULES,
     DATE_NIGHT_RULES,
     READ_HIM_RULES,
+    READ_ME_RULES,
     CLAW_RULES,
     DIALOG_RULES,
     MOTION_RULES,

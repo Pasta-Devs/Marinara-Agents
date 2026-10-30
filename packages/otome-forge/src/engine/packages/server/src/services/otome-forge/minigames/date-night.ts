@@ -14,7 +14,9 @@
 //   date's. The place is one of the picker's, the love interest's own pick, or one the story has painted (M2b's
 //   world.places): the date then goes there under the name the story gave it, so its scenes open on that place's art.
 // - P26 and the date's scenes see the state as the date's love interest may know it (story/prompts.ts ownView, M3's
-//   rule): no grievance, disclosure or ledger line another love interest's own chapter left behind reaches them.
+//   rule): no grievance, disclosure or ledger line another love interest's own chapter left behind reaches them. Both
+//   carry that love interest's own notebook beside their bible or card (knowsAboutYou, Read Me #1945), so the evening
+//   can turn on what they have come to know about the protagonist.
 // - The scenes are written and read through the story routes (S/story/beats.ts): each date beat has one choice whose
 //   options carry hidden scores, and the client never sees them before the date ends. A date's beats pay nothing on
 //   their own; its chapter still counts as read once its last scene is.
@@ -91,7 +93,7 @@ import { grant } from "../state/rewards.js";
 import type { OtomeStore } from "../store.js";
 import { canonPicks, type BeatDeps } from "../story/beats.js";
 import { canonicalSegments, readBeat, readChapter, recallText } from "../story/canon.js";
-import { ANGST_TYPES, CHAPTER_TAGS, bibleBlock, ownView, protagonistBlock } from "../story/prompts.js";
+import { ANGST_TYPES, CHAPTER_TAGS, bibleBlock, knowsAboutYou, ownView, protagonistBlock } from "../story/prompts.js";
 import { withPersonaStoryAbout } from "../setup/prompts.js";
 import { STORY_PACING_INSTRUCTION, otomeWritingRules } from "../writing-rules.js";
 
@@ -206,6 +208,7 @@ export function datePlanMessages({
   const name = unit.name;
   const { liState } = ownView(state, unit.id);
   const recent = liState.angst.slice(-2);
+  const known = knowsAboutYou(unit, liState);
   // The rupture is always named (it is how they are now), with who holds it; its grievance only when it came from what
   // they may know.
   const mendText = makeItRight ? liState.grievances.find((item) => item.id === makeItRight.id)?.text : undefined;
@@ -253,6 +256,7 @@ export function datePlanMessages({
     "",
     `THE DATE'S LOVE INTEREST (full bible; this date does not move the stage)`,
     bibleBlock(unit, state, [unit.id], world),
+    ...(known ? [known] : []),
     "",
     "THE PLACE",
     place === PARTNER_CHOICE

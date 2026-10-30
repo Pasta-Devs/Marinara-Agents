@@ -8,6 +8,7 @@ import type { DatePlan, DateScore } from "./dates";
 import type { Face, MusicMood } from "./faces";
 import type { ClawRound } from "./claw";
 import type { ReadHimPaid } from "./read-him";
+import type { NotebookEntry, ReadMePaid } from "./read-me";
 import type { ClawLineKind, TapZone, TimeOfDay } from "./home";
 import type { BannerKind, PityCounter, Rarity } from "./wish";
 
@@ -634,6 +635,11 @@ export interface LiState {
   firsts: Record<string, string>;
   /** Indexes into his bible's `mask.tells` the protagonist has learned to read (Read Him, M5). */
   tellsLearned: number[];
+  /**
+   * What they have come to know about the protagonist (Read Me, #1945), newest last: theirs alone. Only prompts about
+   * them carry it (S/story/prompts.ts knowsAboutYou); the player reads, rewrites and deletes it.
+   */
+  known: NotebookEntry[];
 }
 
 /** A chapter's reading progress. `applied` holds `${i}/${choiceId}` for every pick whose effects reached the state. */
@@ -720,6 +726,8 @@ export interface RunState {
   claw: { rounds: ClawRound[] };
   /** The newest paid Read Him sets (M5): the finish's once-only mark, in the same write as its pay. */
   readHim: { paid: ReadHimPaid[] };
+  /** The newest paid Read Me sets (#1945): the once-only mark of the write that paid them and filled the notebook. */
+  readMe: { paid: ReadMePaid[] };
 }
 
 /** One pull as the state keeps it (S/wish/pull.ts), for answering a retried request. */
@@ -1046,7 +1054,7 @@ export interface Grant {
 
 /** What an activity (Read Him, a date, a Claw round) earned, within the day's caps. */
 export interface ActivityGrant {
-  source: "read-him" | "date" | "claw";
+  source: "read-him" | "read-me" | "date" | "claw";
   starlight?: number;
   li?: LiId;
   affection?: number;

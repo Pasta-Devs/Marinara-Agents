@@ -20,7 +20,14 @@
 // 0.0.6 (NSFW mode): under NSFW Heat the planners may give a first night together a key image, and P6 and P12 tell the
 // cg brief what the image rating lets it show (content-contract.ts imageBriefRule); only under Explicit Heat and the
 // Explicit rating does the brief's shape carry "explicit". A world that raised nothing gets the prompts it got before.
+// 0.5.0 (Read Me, #1945): a love interest's notebook (knowsAboutYou) rides beside that love interest's own card only:
+// P5's Lead, P10/P11's owner, P12's opponent, and in P6 each love interest present (main chapters too: they act on
+// what they know in every scene they are in, and the others learn only what happens on the page). Never another's
+// card in a planner (P5's others, othersBlock). An empty notebook adds nothing, so those prompts stay byte for byte.
+// ponytail: a scene already written (the lookahead) keeps the notebook it was written with; an edit or delete reaches
+// the next one written. The upgrade path is dropping an unread lookahead beat when a notebook it carried is edited.
 import { forgeChoiceMessages, forgeChoicePlanMessages } from "@forge-kit/player-choices-server.mjs";
+import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 import { z, type ZodType } from "zod";
 import type {
   Chapter,
@@ -45,6 +52,10 @@ import {
 import { stillToMend } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { FACES, MUSIC_MOODS } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { LIMIT_IDS, intimacyOpen } from "../../../../../client/src/features/otome-forge/shared/content.js";
+import {
+  NOTEBOOK_CATEGORIES,
+  type NotebookEntry,
+} from "../../../../../client/src/features/otome-forge/shared/read-me.js";
 import { explicitCgAllowed, imageBriefRule, otomeContentContract, otomeContractReminder } from "../content-contract.js";
 import type { OtomeMessage } from "../generation.js";
 import { chapterOwner, mainChapterNumber } from "../ids.js";
@@ -190,6 +201,43 @@ export function betweenYou(unit: Pick<Unit, "name">, liState: LiState, also: rea
   const told = liState.disclosures.slice(-3).map((item) => item.text);
   if (told.length) lines.push(`The protagonist has told ${unit.name}: ${told.join(" ")}`);
   return lines.join("\n");
+}
+
+/** The newest notebook entries a prompt may carry, and the line's budget. */
+const KNOWN_SHOWN = 8;
+export const KNOWN_TOKENS = 500;
+
+/**
+ * What this love interest has come to know about the protagonist: their notebook (Read Me, #1945), theirs alone. Only
+ * prompts about them carry it, beside their own card: never another love interest's card, a planner's view of the
+ * others, a banner or a care note. "" for an empty notebook, so a prompt without one is unchanged byte for byte. Told as
+ * context to use where it fits, never a checklist; the player's own words are quoted as data.
+ * Within KNOWN_TOKENS it keeps the newest entries whole, so the budget leaves out the oldest, never whichever category
+ * is listed last, and never cuts the quoted words open.
+ * ponytail: the newest entry is always kept whole. At the notebook's limits (a 300-character guess and 200 characters
+ * of words) it is about 375 tokens even in Han, so it fits unless the name runs past about 90 characters; the upgrade
+ * path is shortening that entry's words.
+ */
+export function knowsAboutYou(unit: Pick<Unit, "name">, liState: Pick<LiState, "known">): string {
+  const known = (liState.known ?? []).slice(-KNOWN_SHOWN);
+  if (!known.length) return "";
+  const item = (entry: NotebookEntry) => {
+    // JSON-quoted, so a quote mark the player typed cannot end their words early.
+    const words = entry.words ? ` (in the protagonist's own words: ${JSON.stringify(entry.words)})` : "";
+    const guess =
+      entry.verdict === "right" ? entry.text : `${entry.verdict === "close" ? "nearly" : "not so"}: ${entry.text}`;
+    return `${guess}${words}`;
+  };
+  const line = (entries: readonly NotebookEntry[]) => {
+    const sections = NOTEBOOK_CATEGORIES.flatMap((category) => {
+      const items = entries.filter((entry) => entry.category === category).map(item);
+      return items.length ? [`${category}: ${items.join("; ")}`] : [];
+    });
+    return `What ${unit.name} has come to know about the protagonist (${unit.name}'s alone; let it show where it fits, never recite it): ${sections.join(" | ")}`;
+  };
+  let count = 1;
+  while (count < known.length && estimateTextTokens(line(known.slice(-(count + 1)))) <= KNOWN_TOKENS) count += 1;
+  return line(known.slice(-count));
 }
 
 /** Who the protagonist is (name, pronouns, traits, goal), for every story prompt. */
@@ -405,7 +453,14 @@ export function chapterPlanMessages({
     protagonistBlock(player),
     "",
     leadUnit
-      ? `THE LEAD (stage ${stageOf(state, lead)}; this chapter does not move the stage)\n${bibleBlock(leadUnit, state, [lead], world)}`
+      ? [
+          `THE LEAD (stage ${stageOf(state, lead)}; this chapter does not move the stage)`,
+          bibleBlock(leadUnit, state, [lead], world),
+          // The Lead's notebook only: never the Foil's or the others' (their bibles below are a planner's view).
+          knowsAboutYou(leadUnit, liStateOf(state, lead)),
+        ]
+          .filter(Boolean)
+          .join("\n")
       : "",
     "",
     "THE OTHERS (full bibles; pick the Foil from these)",
@@ -592,9 +647,14 @@ export function beatMessages({
     protagonistBlock(player),
     "",
     present.length ? "LOVE INTERESTS IN THIS NODE" : "No love interest is in this node.",
+    // Each one's own notebook beside their own card, named as theirs (knowsAboutYou), in a main chapter too.
     present
       .map((unit) =>
-        [sceneCardBlock(unit, cardState(unit.id), node.resolves ?? []), intimacyLine(world, unit)]
+        [
+          sceneCardBlock(unit, cardState(unit.id), node.resolves ?? []),
+          knowsAboutYou(unit, cardState(unit.id)),
+          intimacyLine(world, unit),
+        ]
           .filter(Boolean)
           .join("\n"),
       )
@@ -800,9 +860,14 @@ function arcPlanUser(input: ArcPlanInput, heading: string, task: string[]): stri
     "PROTAGONIST",
     protagonistBlock(player),
     "",
-    unit ? `${heading}\n${bibleBlock(unit, state, [li], input.world)}` : "",
+    unit
+      ? [heading, bibleBlock(unit, state, [li], input.world), knowsAboutYou(unit, liStateOf(state, li))]
+          .filter(Boolean)
+          .join("\n")
+      : "",
     "",
     units.length > 1 ? "THE OTHERS (scene cards; they may appear, but this chapter is not theirs)" : "",
+    // Their cards only: an other's notebook never reaches a plan that is not theirs.
     othersBlock(units, state, li),
     "",
     "LEDGERS",
@@ -1020,7 +1085,17 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     protagonistBlock(player),
     "",
     "LOVE INTERESTS IN THIS NODE",
-    present.map((unit) => sceneCardBlock(unit, liStateOf(state, unit.id), node.resolves ?? [])).join("\n\n"),
+    // The argument is theirs: only the opponent's notebook rides beside their card, never a bystander's.
+    present
+      .map((unit) =>
+        [
+          sceneCardBlock(unit, liStateOf(state, unit.id), node.resolves ?? []),
+          unit.id === li ? knowsAboutYou(unit, liStateOf(state, li)) : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      )
+      .join("\n\n"),
     "",
     memory.trim() ? `STORY MEMORY\n${memory.trim()}` : "",
     "",
@@ -1104,7 +1179,12 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
     "LOVE INTERESTS IN THIS NODE",
     present
       .map((unit) =>
-        [sceneCardBlock(unit, liStateOf(state, unit.id), node.resolves ?? []), intimacyLine(world, unit)]
+        [
+          sceneCardBlock(unit, liStateOf(state, unit.id), node.resolves ?? []),
+          // The partner's notebook (#1945), as P12 gives the opponent theirs; a bystander's is never here.
+          unit.id === li ? knowsAboutYou(unit, liStateOf(state, li)) : "",
+          intimacyLine(world, unit),
+        ]
           .filter(Boolean)
           .join("\n"),
       )

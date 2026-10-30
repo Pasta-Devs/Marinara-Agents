@@ -21,6 +21,8 @@ export const STARLIGHT_EARNINGS = {
   routeChapter: 300,
   date: 120,
   readHim: 40,
+  /** A finished Read Me set, whatever was guessed (#1945, proposal). */
+  readMe: 40,
   /** proposal */
   clawRound: 20,
   /** Per plush caught (proposal). */
@@ -41,6 +43,10 @@ export const AFFECTION_EARNINGS = {
   foil: 60,
   date: 100,
   readHim: 40,
+  /** A finished Read Me set (#1945, proposal), plus readMeRight per guess they got right and readMeClose per close one. */
+  readMe: 20,
+  readMeRight: 10,
+  readMeClose: 5,
   /** proposal */
   clawRound: 30,
   /** A phone thread closed with "Close and remember" (proposal). */
@@ -77,6 +83,7 @@ export const REWARD_SOURCES = [
   "route-chapter",
   "date",
   "read-him",
+  "read-me",
   "claw",
   "close-and-remember",
   "show-him",

@@ -8,7 +8,7 @@
 //   alone may see it (S/story/prompts.ts bibleBlock and ledgerBlock keep the knowledge boundary), recall for [li], and
 //   the Memory's title and premise from P20. A premise is a situation; how close they are follows his stage on the day
 //   it is first opened. It is private: only he is in it. The narrator writes its nodes with P6's Character Story
-//   framing (P22, P23).
+//   framing (P22, P23). It carries his own notebook beside his bible (knowsAboutYou, Read Me #1945), as his scenes do.
 // - P19 (chat job, 0.9, `home`: SFW whatever the Heat) and P24 (chat job, 0.9, `chat` for that love interest) write
 //   one line about the protagonist's look, from his scene card as his own reader sees it (S/story/prompts.ts ownView,
 //   as M3's P16 and P17). Neither is a scene: nothing happens because of it.
@@ -34,6 +34,7 @@ import {
   CHAPTER_TAGS,
   ChapterPlanSchema,
   bibleBlock,
+  knowsAboutYou,
   ledgerBlock,
   ownView,
   protagonistBlock,
@@ -94,8 +95,10 @@ export interface StoryPlanInput {
 export function storyPlanMessages({ world, player, unit, state, item, memory }: StoryPlanInput): OtomeMessage[] {
   const name = unit.name;
   const li = unit.id;
-  const stage = (state.lis[li] ?? defaultLiState()).stage;
+  const liState = state.lis[li] ?? defaultLiState();
+  const stage = liState.stage;
   const row = stageRow(stage);
+  const known = knowsAboutYou(unit, liState);
   const system = [
     "You are the Character Story planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human, even if inside a monster, capable of earned, character-consistent change.",
     `Plan ${name}'s CHARACTER STORY "${item.title}": a private side story between ${name} and the protagonist, outside the main plot, told as ${STORY_NODES_MIN} to ${STORY_NODES_MAX} nodes in play order; a narrator writes each node later as one scene the player reads.`,
@@ -132,6 +135,7 @@ export function storyPlanMessages({ world, player, unit, state, item, memory }: 
     "",
     `${name.toUpperCase()} (stage ${stage}; whose Character Story this is)`,
     bibleBlock(unit, state, [li], world),
+    ...(known ? [known] : []),
     "",
     "LEDGERS",
     // As recall's cast [li]: no other love interest's own chapter reaches the plan.

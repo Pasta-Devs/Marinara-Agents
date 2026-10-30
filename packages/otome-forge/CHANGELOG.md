@@ -1,5 +1,11 @@
 # Otome Hearth release notes
 
+## 0.5.0 — 2026-10-30
+
+- **Read Me**, a new game in Dates: a love interest studies you and makes four guesses about you. Answer Spot on, Close or Not at all, and tell them the truth in your own words if you like.
+- They remember: each answer goes into their notebook of what they know about you (likes, dislikes, habits, fears, dreams), and they bring it up in scenes, Home notes, messages and dates. No other love interest ever sees it.
+- Open the notebook from Read Me to read it, rewrite your words or delete an entry. A delete is final.
+
 ## 0.4.2 — 2026-10-30
 
 - The Love Timeline shows every 4★ Moment and 5★ Memory you've won, on the day you won it, including ones won before this update. Each Snapshot, Moment and Memory says what it is and opens in the Album.

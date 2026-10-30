@@ -6,6 +6,8 @@
 // M5: each love interest's `tellsLearned`, the plush shelf (`owned.plush`), each love interest's newest Claw Machine
 // rounds (`claw.rounds`) and the newest paid Read Him sets (`readHim.paid`).
 // M6 adds none: the period tracker and caring messages never reach a server document (plan §1.9).
+// 0.5.0 (#1945): each love interest's notebook (`known`, what they know about the protagonist) and the newest paid
+// Read Me sets (`readMe.paid`), written in the same write.
 import { forgeStoryExpressionCast, forgeStoryExpressionsOn } from "@forge-kit/story-expressions-server.mjs";
 import { z, type ZodType } from "zod";
 import type {
@@ -38,6 +40,16 @@ import {
   READ_HIM_SET_ID,
   type ReadHimPaid,
 } from "../../../../../client/src/features/otome-forge/shared/read-him.js";
+import {
+  NOTEBOOK_CATEGORIES,
+  NOTEBOOK_MAX,
+  READ_ME_PAID_KEPT,
+  READ_ME_SET_ID,
+  READ_ME_VERDICTS,
+  READ_ME_WORDS_MAX,
+  type NotebookEntry,
+  type ReadMePaid,
+} from "../../../../../client/src/features/otome-forge/shared/read-me.js";
 import {
   STARTING_STARLIGHT,
   TENSION_MAX,
@@ -150,6 +162,21 @@ const ReadHimPaidSchema: ZodType<ReadHimPaid> = z.object({
   starlight: z.number().int().min(0),
   affection: z.number().int().min(0),
 });
+const ReadMePaidSchema: ZodType<ReadMePaid> = z.object({
+  setId: z.string().regex(READ_ME_SET_ID),
+  li: z.string(),
+  starlight: z.number().int().min(0),
+  affection: z.number().int().min(0),
+});
+/** One notebook entry (SH/read-me.ts); one damaged entry is dropped, never the notebook. */
+export const NotebookEntrySchema: ZodType<NotebookEntry> = z.object({
+  id: short(120),
+  category: z.enum(NOTEBOOK_CATEGORIES),
+  text: short(300),
+  verdict: z.enum(READ_ME_VERDICTS),
+  words: short(READ_ME_WORDS_MAX).optional(),
+  at: z.string(),
+});
 
 /** A plush id the shelf can hold: a series plush, or `li:<li id>`. */
 const isPlushId = (id: string) => isPlushSeries(id) || isLiId(plushLi(id));
@@ -203,6 +230,7 @@ export const defaultLiState = (): LiState => ({
   angst: [],
   firsts: {},
   tellsLearned: [],
+  known: [],
 });
 
 function normalizeLiState(raw: unknown): LiState {
@@ -221,6 +249,7 @@ function normalizeLiState(raw: unknown): LiState {
       angst: (value) => validItems(short(80), value, LIST_MAX),
       firsts: z.record(z.string(), z.string()),
       tellsLearned: normalizeTells,
+      known: (value) => keepNewest(validItems(NotebookEntrySchema, value), NOTEBOOK_MAX),
     },
     defaultLiState,
     isRecord(raw) ? raw : undefined,
@@ -359,6 +388,9 @@ export function normalizeState(data: unknown): RunState {
     claw: { rounds: keepClawRounds(validItems(ClawRoundSchema, field(field(data, "claw"), "rounds"))) },
     readHim: {
       paid: keepNewest(validItems(ReadHimPaidSchema, field(field(data, "readHim"), "paid")), READ_HIM_PAID_KEPT),
+    },
+    readMe: {
+      paid: keepNewest(validItems(ReadMePaidSchema, field(field(data, "readMe"), "paid")), READ_ME_PAID_KEPT),
     },
   };
 }
