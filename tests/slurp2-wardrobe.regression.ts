@@ -116,6 +116,34 @@ const imported = parseSlpWardrobeImportDrafts(
 );
 assert.equal(imported.length, 1, "existing names and descriptions are deduplicated before review");
 assert.deepEqual(imported[0]?.tags, ["black"]);
+const untidy = parseSlpWardrobeImportDrafts(
+  `<think>{"looks":[]}</think>\n{"outfits":[{"title":"Gala gown","description":"${"a long silk gown ".repeat(20)}","tags":"Formal, Evening","suitability":"Public","evidence":["wore a silk gown","to the gala"],"id":"x1"}]}`,
+);
+assert.equal(untidy.length, 1, "an untidy model reply still imports its look");
+assert.equal(untidy[0]?.name, "Gala gown");
+assert.deepEqual(untidy[0]?.tags, ["formal", "evening"]);
+assert.equal(untidy[0]?.suitability, "public");
+assert.ok((untidy[0]?.summary.length ?? 0) <= 180, "a long summary is clipped, not dropped");
+const cut = parseSlpWardrobeImportDrafts(
+  `{"looks":[{"name":"Gym set","summary":"grey {sports} set","description":"grey sports bra and shorts","tags":["gym"],"evidence":"her grey gym set"},{"name":"Rain coat","description":"a yellow rai`,
+);
+assert.deepEqual(
+  cut.map((look) => look.name),
+  ["Gym set"],
+  "a reply cut at the token budget keeps the looks finished before the cut",
+);
+assert.deepEqual(
+  parseSlpWardrobeImportDrafts(
+    `[{"name":"Gym set","description":"grey sports bra and shorts","evidence":"her grey gym set"},{"name":"Rain`,
+  ).map((look) => look.name),
+  ["Gym set"],
+  "a bare-array reply cut before its ] is salvaged too",
+);
+assert.deepEqual(
+  parseSlpWardrobeImportDrafts(`{"looks":[{"name":"A","description":"b"}]}`),
+  [],
+  "a look without source evidence stays out",
+);
 assert.match(buildSlpWardrobeImportMessages("Lore", "source clothes")[0]?.content ?? "", /Do not invent/u);
 
 const generation = slurp2Source(

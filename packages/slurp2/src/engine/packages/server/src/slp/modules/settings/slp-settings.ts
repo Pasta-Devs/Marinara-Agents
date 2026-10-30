@@ -571,7 +571,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   professorMariCreatorSource: true,
   enableLorebookContext: false,
   flavourFromAgents: true,
-  memoryRecall: "whole",
+  memoryRecall: "relevant",
   // Beats by default since 0.2.55: the fixes for same-y, canon-less, tame posts live there.
   postPlanner: "beats",
   lifeMomentRate: "sometimes",

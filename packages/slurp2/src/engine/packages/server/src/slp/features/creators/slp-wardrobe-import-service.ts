@@ -45,7 +45,8 @@ export async function previewSlpWardrobeImport(
       maxTokens: clampGenerationMaxOutputTokens({
         provider: input.connection.provider as APIProvider,
         model: input.connection.model,
-        maxTokens: resolveStoredMaxTokens(input.connection.defaultParameters, 2_048),
+        // Up to 64 looks plus a thinking model's reasoning; a stored chat-sized cap would cut the JSON.
+        maxTokens: Math.max(resolveStoredMaxTokens(input.connection.defaultParameters, 8_192), 8_192),
         maxTokensOverride: input.connection.maxTokensOverride,
       }),
       ...slpSamplingOptions(
