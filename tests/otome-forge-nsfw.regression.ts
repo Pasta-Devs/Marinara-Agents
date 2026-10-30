@@ -400,6 +400,15 @@ test("P20: premises span the Heat; Memory art may be explicit only under Explici
   );
   assert.doesNotMatch(suggestive, /set "explicit"|"explicit": false/, "no explicit art below the Explicit rating");
   assert.match(suggestive, /IMAGE TAGS every outfit line and key image brief must fit: clothed, adult/);
+  // Explicit Heat with the SFW rating: the premises still go explicit; the art stays SFW (Heat writes, the rating paints).
+  const sfwArt = banner("explicit", "sfw");
+  assert.match(sfwArt, /and explicit ones \(sex between the adults/);
+  assert.match(
+    sfwArt,
+    /The key image at this rating: everyone clothed; intimacy shown through faces, hands and closeness/,
+  );
+  assert.doesNotMatch(sfwArt, /set "explicit"|"explicit": false/);
+  assert.match(sfwArt, /IMAGE TAGS every outfit line and key image brief must fit: safe for work, fully clothed/);
   // Fade: SFW and suggestive premises, never explicit ones or explicit art, whatever the rating.
   const fade = banner("fade", "explicit");
   assert.match(fade, /Premises span the Heat across the featured Memory and the 4★s: SFW ones, and suggestive ones/);
