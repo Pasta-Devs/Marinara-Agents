@@ -9,9 +9,11 @@
 // - A banner (P20) and a caring message never carry any notebook.
 // - An empty notebook adds nothing, not even a blank line: a prompt with one is the prompt without it plus its line.
 // - The player's own words are quoted as data.
+// - Over its token budget the line keeps the newest entries whole, and one entry at the notebook's limits fits it.
 // - The real call sites (the story routes, the Home note and a Messages reply) pass the notebook through.
 import assert from "node:assert/strict";
 import test from "node:test";
+import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 import type { CapabilityLanguageModelMessage } from "@marinara-engine/shared";
 import type {
   ChapterNode,
@@ -20,7 +22,10 @@ import type {
   RunState,
   Unit,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
-import type { NotebookEntry } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/read-me.ts";
+import {
+  READ_ME_WORDS_MAX,
+  type NotebookEntry,
+} from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/read-me.ts";
 import { careNoteMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/care/prompts.ts";
 import { serveNote } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/home/note.ts";
 import { noteMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/home/prompts.ts";
@@ -41,6 +46,7 @@ import {
   chapterPlanMessages,
   closerMessages,
   confrontationMessages,
+  KNOWN_TOKENS,
   knowsAboutYou,
   ownView,
   repairPlanMessages,
@@ -310,6 +316,63 @@ test("the player's own words are quoted as data, under the love interest's noteb
   assert.ok(line.includes(`(in the protagonist's own words: "${KAI_WORDS}")`), "the words, quoted");
   assert.ok(line.includes("likes: KAI-NOTEBOOK-LIKE") && line.includes("fears: not so: KAI-NOTEBOOK-FEAR"));
   for (const prompt of Object.values(ownPrompts(KAI))) assert.ok(prompt.includes(line), "the same line everywhere");
+});
+
+/** Every quoted `words` value in a notebook line, each parsed whole (a cut one fails to). */
+function quotedWords(line: string): string[] {
+  const marker = "(in the protagonist's own words: ";
+  return line
+    .split(marker)
+    .slice(1)
+    .map((rest) => {
+      const quoted = /^"(?:[^"\\]|\\.)*"\)/.exec(rest)?.[0];
+      assert.ok(quoted, `the words are closed: ${rest.slice(0, 40)}`);
+      return JSON.parse(quoted.slice(0, -1)) as string;
+    });
+}
+
+test("over its budget, the notebook line keeps the newest entries whole, not the first categories", () => {
+  const { units } = inputs();
+  const kai = unitOf(units, KAI);
+  // Oldest first, as LiState.known keeps them: the oldest in likes, the newest in other.
+  const categories = ["likes", "dislikes", "habits", "fears", "dreams", "likes", "habits", "other"] as const;
+  const known: NotebookEntry[] = categories.map((category, i) => ({
+    id: `rm-kai0002-aaaaaa/${i}`,
+    category,
+    text: `ENTRY-${i}: ${"c".repeat(60)}.`,
+    verdict: "right",
+    // READ_ME_WORDS_MAX characters each, with a quote mark and a backslash to escape.
+    words: `WORDS-${i} "${"a".repeat(READ_ME_WORDS_MAX - 23)}" \\ ${"b".repeat(10)}`,
+    at,
+  }));
+  const line = knowsAboutYou(kai, { known });
+  assert.ok(estimateTextTokens(line) <= KNOWN_TOKENS, `within ${KNOWN_TOKENS} tokens: ${estimateTextTokens(line)}`);
+  assert.ok(line.includes("other: ENTRY-7"), "the newest entry, though its category is listed last");
+  assert.ok(!line.includes("ENTRY-0"), "the oldest entry is the one left out");
+  const kept = quotedWords(line);
+  assert.ok(kept.length >= 2, "more than the newest fit");
+  const shown = known.filter((entry) => line.includes(`${entry.text.split(":")[0]}:`));
+  assert.deepEqual(shown, known.slice(-shown.length), "the kept entries are the newest ones");
+  assert.deepEqual([...kept].sort(), shown.map((entry) => entry.words).sort(), "each kept entry's words, whole");
+  assert.equal(knowsAboutYou(kai, { known: [] }), "", "an empty notebook still renders nothing");
+});
+
+test("one entry at the notebook's limits fits the budget whole, even in Han", () => {
+  const kai = unitOf(inputs().units, KAI);
+  // The schema's longest guess (300 characters) and longest words, in the script that costs the most tokens.
+  const entry = (i: number, category: NotebookEntry["category"]): NotebookEntry => ({
+    id: `rm-kai0003-aaaaaa/${i}`,
+    category,
+    text: `${i}${"海".repeat(299)}`,
+    verdict: "wrong",
+    words: "海".repeat(READ_ME_WORDS_MAX),
+    at,
+  });
+  const newest = entry(1, "other");
+  const line = knowsAboutYou(kai, { known: [entry(0, "likes"), newest] });
+  assert.ok(estimateTextTokens(line) <= KNOWN_TOKENS, `within ${KNOWN_TOKENS} tokens: ${estimateTextTokens(line)}`);
+  assert.ok(line.endsWith(`other: not so: ${newest.text} (in the protagonist's own words: "${newest.words}")`));
+  assert.ok(!line.includes("likes:"), "the older one, which no longer fits beside it, is left out");
 });
 
 test("the story routes, the Home note and a Messages reply pass each love interest's own notebook through", async () => {

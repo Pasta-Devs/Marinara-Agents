@@ -27,7 +27,7 @@
 // ponytail: a scene already written (the lookahead) keeps the notebook it was written with; an edit or delete reaches
 // the next one written. The upgrade path is dropping an unread lookahead beat when a notebook it carried is edited.
 import { forgeChoiceMessages, forgeChoicePlanMessages } from "@forge-kit/player-choices-server.mjs";
-import { sliceTextToTokenBudget } from "@forge-kit/shared-token-estimator.mjs";
+import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 import { z, type ZodType } from "zod";
 import type {
   Chapter,
@@ -203,15 +203,20 @@ export function betweenYou(unit: Pick<Unit, "name">, liState: LiState, also: rea
   return lines.join("\n");
 }
 
-/** The newest notebook entries a prompt carries, and the line's budget. */
+/** The newest notebook entries a prompt may carry, and the line's budget. */
 const KNOWN_SHOWN = 8;
-const KNOWN_TOKENS = 220;
+export const KNOWN_TOKENS = 500;
 
 /**
  * What this love interest has come to know about the protagonist: their notebook (Read Me, #1945), theirs alone. Only
  * prompts about them carry it, beside their own card: never another love interest's card, a planner's view of the
  * others, a banner or a care note. "" for an empty notebook, so a prompt without one is unchanged byte for byte. Told as
  * context to use where it fits, never a checklist; the player's own words are quoted as data.
+ * Within KNOWN_TOKENS it keeps the newest entries whole, so the budget leaves out the oldest, never whichever category
+ * is listed last, and never cuts the quoted words open.
+ * ponytail: the newest entry is always kept whole. At the notebook's limits (a 300-character guess and 200 characters
+ * of words) it is about 375 tokens even in Han, so it fits unless the name runs past about 90 characters; the upgrade
+ * path is shortening that entry's words.
  */
 export function knowsAboutYou(unit: Pick<Unit, "name">, liState: Pick<LiState, "known">): string {
   const known = (liState.known ?? []).slice(-KNOWN_SHOWN);
@@ -223,14 +228,16 @@ export function knowsAboutYou(unit: Pick<Unit, "name">, liState: Pick<LiState, "
       entry.verdict === "right" ? entry.text : `${entry.verdict === "close" ? "nearly" : "not so"}: ${entry.text}`;
     return `${guess}${words}`;
   };
-  const sections = NOTEBOOK_CATEGORIES.flatMap((category) => {
-    const items = known.filter((entry) => entry.category === category).map(item);
-    return items.length ? [`${category}: ${items.join("; ")}`] : [];
-  });
-  return sliceTextToTokenBudget(
-    `What ${unit.name} has come to know about the protagonist (${unit.name}'s alone; let it show where it fits, never recite it): ${sections.join(" | ")}`,
-    KNOWN_TOKENS,
-  );
+  const line = (entries: readonly NotebookEntry[]) => {
+    const sections = NOTEBOOK_CATEGORIES.flatMap((category) => {
+      const items = entries.filter((entry) => entry.category === category).map(item);
+      return items.length ? [`${category}: ${items.join("; ")}`] : [];
+    });
+    return `What ${unit.name} has come to know about the protagonist (${unit.name}'s alone; let it show where it fits, never recite it): ${sections.join(" | ")}`;
+  };
+  let count = 1;
+  while (count < known.length && estimateTextTokens(line(known.slice(-(count + 1)))) <= KNOWN_TOKENS) count += 1;
+  return line(known.slice(-count));
 }
 
 /** Who the protagonist is (name, pronouns, traits, goal), for every story prompt. */
