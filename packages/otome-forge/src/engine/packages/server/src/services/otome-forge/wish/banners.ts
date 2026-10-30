@@ -60,7 +60,7 @@ import {
   type PaintCheck,
 } from "../art/paint.js";
 import { LOOK_SIZE, SCENE_SIZE, cgPrompt, lookPrompt, type ImagePrompt } from "../art/prompts.js";
-import { explicitCgAllowed } from "../content-contract.js";
+import { memoryArtBrief } from "../content-contract.js";
 import { generateJson, readOrGenerate } from "../generation.js";
 import { itemView } from "../items/open.js";
 import { OtomeForgeError, type RouteDeps } from "../http.js";
@@ -546,11 +546,12 @@ async function buildBannerArt(deps: WishDeps, runId: string, banner: Banner, edi
   const style = await worldStyle(images, run.world.images);
   if (banner.kind === "memories") {
     const subjects = cgSubjects(five.cg?.cast ?? [], run.units, run.player);
-    // Banner art stays clothed (at most Suggestive) unless its brief is marked explicit and the world allows that now.
-    const explicit = five.cg?.explicit === true && explicitCgAllowed(run.world);
+    // Banner art stays clothed (at most Suggestive) unless its brief is marked explicit and the world allows that now;
+    // a lowered world paints the clothed brief written beside it.
+    const { brief, explicit } = memoryArtBrief(five.cg, five.title, run.world);
     const prompt = cgPrompt(
       {
-        brief: five.cg?.brief ?? five.title,
+        brief,
         people: subjects.map((subject) => subject.person),
         world: run.world,
         style,

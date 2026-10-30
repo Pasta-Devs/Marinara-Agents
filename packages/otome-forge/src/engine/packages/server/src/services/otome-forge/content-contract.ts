@@ -229,6 +229,22 @@ export interface ImageTagsInput {
  */
 export const ADULT_SENTENCE = "Everyone shown is an adult over 18 with an adult face and body";
 
+/**
+ * A Memory's art brief as it is painted now (#1951): its explicit brief only while the world allows explicit art,
+ * otherwise the clothed brief the plan wrote beside it (or the title), so a lowered world never paints from text written
+ * for an explicit picture. A brief never marked explicit is painted as it is.
+ */
+export function memoryArtBrief(
+  cg: { brief: string; explicit?: true; clothed?: string } | undefined,
+  title: string,
+  world: Pick<World, "content" | "images">,
+): { brief: string; explicit: boolean } {
+  if (cg?.explicit !== true) return { brief: cg?.brief || title, explicit: false };
+  return explicitCgAllowed(world)
+    ? { brief: cg.brief, explicit: true }
+    : { brief: cg.clothed || title, explicit: false };
+}
+
 /** Explicit Heat and the Explicit rating: only then may a key image's brief be explicit. */
 export function explicitCgAllowed(world: Pick<World, "content" | "images">): boolean {
   return world.content.heat === "explicit" && world.images.rating === "explicit";

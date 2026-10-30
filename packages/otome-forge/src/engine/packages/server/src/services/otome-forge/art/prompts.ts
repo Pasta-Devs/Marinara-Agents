@@ -13,11 +13,11 @@
 // kit's edit instruction, which changes only the face). Expression edits use their own adult, nonsexual policy;
 // raising a world's image ceiling never changes the requested face edit or its reference's clothing coverage.
 // 0.0.6: the tags follow what the image is for (content-contract.ts otomeImageTags). Looks, faces, outfits, the pair
-// portrait and Memory art stay clothed portraits at most Suggestive; above SFW a place carries no person or rating
-// tags; a story CG (or a Memory's art, 0.5.2) is explicit only when its brief set `explicit` under Explicit Heat and the
-// Explicit rating, and then
-// its people are drawn from their identity lines alone (an outfit line would dress the moment). The adult negatives
-// stay on every image, whatever the rating or the player's edit, and above SFW no part of a prompt names a minor
+// portrait, Moment and Snapshot art, and Memory art not marked explicit stay clothed portraits at most Suggestive; above
+// SFW a place carries no person or rating tags; a story CG or a Memory's art (0.5.2, #1951) is explicit only when its
+// brief set `explicit` under Explicit Heat and the Explicit rating (a lowered Memory paints its clothed brief instead,
+// content-contract.ts memoryArtBrief), and then its people are drawn from their identity lines alone (an outfit line
+// would dress the moment). The adult negatives stay on every image, whatever the rating or the player's edit, and above SFW no part of a prompt names a minor
 // (adultsOnly). At SFW every prompt is what it was before.
 // M5 adds a date's keepsake: a story CG of the two of them (never explicit) with the keepsake's own framing.
 import { forgeStoryExpressionPrompt } from "@forge-kit/story-expressions-server.mjs";

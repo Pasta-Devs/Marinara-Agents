@@ -24,6 +24,8 @@ const CgSchema = z.object({
   brief: text(LINE_MAX),
   cast: z.array(z.string().max(120)).max(3),
   explicit: z.literal(true).optional(),
+  /** Beside an explicit brief: the same moment clothed, painted when the world is lowered (#1951). */
+  clothed: text(LINE_MAX).optional(),
 });
 const SnapshotCgSchema = CgSchema.extend({ brief: z.string() });
 

@@ -196,7 +196,14 @@ test("an explicit Memory's art is painted explicit only under Explicit Heat and 
       premise: "EXPLICIT-PREMISE: they end the night in bed together.",
       ...(briefs ? { cgBrief: "MOMENT-BRIEF: the quay at dusk, walking under the lanterns.", cgCast: ["Ines"] } : {}),
     }));
-    return { ...reply, featured: { ...reply.featured, explicit }, four };
+    // An explicit brief carries its clothed twin, which a lowered world paints instead.
+    const featured = {
+      ...reply.featured,
+      cgBrief: "EXPLICIT-BRIEF: undressed in the lamp room, bodies pressed together by the great lens.",
+      clothedBrief: "CLOTHED-BRIEF: the lamp room just after, both of them wrapped in one blanket by the great lens.",
+      explicit,
+    };
+    return { ...reply, featured, four };
   };
   // The plan keeps the mark only where it offered one (Explicit Heat and the Explicit rating), as a story CG's.
   const cgOf = (explicit: unknown, offered = true) =>
@@ -209,7 +216,15 @@ test("an explicit Memory's art is painted explicit only under Explicit Heat and 
       }) as BannerPlan
     ).featured.cg!;
   assert.equal(cgOf(true).explicit, true);
+  assert.match(cgOf(true).clothed ?? "", /^CLOTHED-BRIEF/, "the clothed twin is kept beside the mark");
   assert.equal("explicit" in cgOf(true, false), false, "a mark the plan was never offered is dropped");
+  assert.equal("clothed" in cgOf(true, false), false);
+  const twinless = { ...marked(true), featured: { ...marked(true).featured, clothedBrief: undefined } };
+  assert.match(
+    String(normalizeBannerPlan(twinless, { kind: "memories", units: cast, featured: kai, explicitArt: true })),
+    /featured\.clothedBrief is missing/,
+    "an explicit brief without its clothed twin is repaired",
+  );
   assert.equal("explicit" in cgOf(false), false);
   assert.equal("explicit" in cgOf(null), false);
   const moments = (briefs: boolean, required: boolean) =>
@@ -231,7 +246,12 @@ test("an explicit Memory's art is painted explicit only under Explicit Heat and 
   type Settings = readonly ["explicit" | "fade", "explicit" | "suggestive" | "sfw"];
   // Plans the banner under `planned`, then paints it with a tap under `painted` (Ask before painting holds it).
   const paint = async (runKey: string, planned: Settings, painted: Settings) => {
-    const replies = [JSON.stringify(marked(true)), ...rotationReplies().slice(1)];
+    const offered = planned[0] === "explicit" && planned[1] === "explicit";
+    // A plan offered explicit art writes an explicit brief and its clothed twin; one that was not writes a clothed brief.
+    const reply = offered
+      ? marked(true)
+      : { ...marked(true), featured: { ...marked(true).featured, cgBrief: "PLAIN-BRIEF: the lamp room at night." } };
+    const replies = [JSON.stringify(reply), ...rotationReplies().slice(1)];
     const t = await wishWorld({ runKey, images: { rating: planned[1], ask: true }, replies });
     const set = async ([heat, rating]: Settings) => {
       await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
@@ -244,7 +264,6 @@ test("an explicit Memory's art is painted explicit only under Explicit Heat and 
     await t.call("POST", "/runs/:run/wish/open");
     const memories = ((await t.call("GET", "/runs/:run/wish")).body as wish.WishView).banners[0]!;
     assert.equal(memories.kind, "memories");
-    const offered = planned[0] === "explicit" && planned[1] === "explicit";
     const item = (await readItem(t.store, t.runId, memories.five.id))!;
     assert.equal(item.cg?.explicit === true, offered, "the item keeps the mark only where the plan offered it");
     await set(painted);
@@ -263,6 +282,7 @@ test("an explicit Memory's art is painted explicit only under Explicit Heat and 
   const top = ["explicit", "explicit"] as const;
   for (const request of await paint("r-m4bann40-aaaaaa", top, top)) {
     assert.match(request.prompt, /explicit adult scene/);
+    assert.match(request.prompt, /EXPLICIT-BRIEF/);
     assert.match(request.negativePrompt, /child, childlike/);
   }
   for (const [runKey, planned, painted] of [
@@ -275,8 +295,10 @@ test("an explicit Memory's art is painted explicit only under Explicit Heat and 
   ] as const) {
     for (const clothed of await paint(runKey, planned, painted)) {
       const at = `planned ${planned.join("/")}, painted ${painted.join("/")}`;
-      assert.doesNotMatch(clothed.prompt, /explicit adult scene|nsfw/, at);
+      assert.doesNotMatch(clothed.prompt, /explicit adult scene|nsfw|EXPLICIT-BRIEF/, at);
       assert.match(clothed.prompt, /\bclothed\b/, at);
+      // A Memory marked explicit paints its clothed twin; one never marked paints its own (clothed) brief.
+      assert.match(clothed.prompt, planned === top ? /CLOTHED-BRIEF/ : /PLAIN-BRIEF/, at);
     }
   }
 });

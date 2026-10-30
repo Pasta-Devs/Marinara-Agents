@@ -381,7 +381,15 @@ test("P20: premises span the Heat; Memory art may be explicit only under Explici
     explicit,
     /The key image at this rating: when the moment shown is sex or nudity[^\n]*set "explicit": true/,
   );
-  assert.match(explicit, /"cgCast": \[[^\]]*\], "explicit": false\}, "four"/, "the shape carries the mark");
+  assert.match(
+    explicit,
+    /"cgCast": \[[^\]]*\], "explicit": false, "clothedBrief": "<English, 1–2 sentences, only when explicit is true>"\}, "four"/,
+    "the shape carries the mark and its clothed twin",
+  );
+  assert.match(
+    explicit,
+    /When "explicit" is true, also write clothedBrief: the same moment just before or after it, everyone clothed/,
+  );
   assert.match(
     explicit,
     /IMAGE TAGS every outfit line and 4★ brief must fit: [^\n]*\. The featured key image brief follows its rule above\./,
@@ -404,7 +412,11 @@ test("P20: premises span the Heat; Memory art may be explicit only under Explici
     suggestive,
     /allure, embraces, bare shoulders and implied intimacy are permitted only when the scene calls for them/,
   );
-  assert.doesNotMatch(suggestive, /set "explicit"|"explicit": false/, "no explicit art below the Explicit rating");
+  assert.doesNotMatch(
+    suggestive,
+    /set "explicit"|"explicit": false|clothedBrief/,
+    "no explicit art below the Explicit rating",
+  );
   assert.match(suggestive, /IMAGE TAGS every outfit line, key image brief and 4★ brief must fit: clothed, adult/);
   // Explicit Heat with the SFW rating: the premises still go explicit; the art stays SFW (Heat writes, the rating paints).
   const sfwArt = banner("explicit", "sfw");

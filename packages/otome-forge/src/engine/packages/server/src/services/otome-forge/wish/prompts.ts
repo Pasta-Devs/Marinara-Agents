@@ -66,7 +66,7 @@ const SNAPSHOT_SHAPE = `{"li": "<love interest id>", "title": "<2–5 words>", "
  * 4★ its own illustration brief (momentBriefs).
  */
 const memoriesShape = ({ explicit, moments }: { explicit: boolean; moments: boolean }) =>
-  `{"featured": {"title": "<title>", "premise": "<2–3 sentences>", "cgBrief": "<English, 1–2 sentences>", "cgCast": ["<names in the key image, the featured love interest first; the protagonist only if present>"]${explicit ? ', "explicit": false' : ""}}, "four": [{"li": "<love interest id>", "title": "<title>", "premise": "<1–2 sentences>"${moments ? `, "cgBrief": "<English, 1–2 sentences>", "cgCast": ["<this love interest's name; the protagonist only if present>"]` : ""}} ×3], "snapshots": [${SNAPSHOT_SHAPE} ×6]}`;
+  `{"featured": {"title": "<title>", "premise": "<2–3 sentences>", "cgBrief": "<English, 1–2 sentences>", "cgCast": ["<names in the key image, the featured love interest first; the protagonist only if present>"]${explicit ? ', "explicit": false, "clothedBrief": "<English, 1–2 sentences, only when explicit is true>"' : ""}}, "four": [{"li": "<love interest id>", "title": "<title>", "premise": "<1–2 sentences>"${moments ? `, "cgBrief": "<English, 1–2 sentences>", "cgCast": ["<this love interest's name; the protagonist only if present>"]` : ""}} ×3], "snapshots": [${SNAPSHOT_SHAPE} ×6]}`;
 const SHAPES: Record<BannerKind, string> = {
   memories: memoriesShape({ explicit: false, moments: false }),
   "his-wardrobe": `{"featured": {"title": "<title>", "look": ${LOOK_SHAPE}}, "four": [{"li": "<another love interest's id>", "title": "<title>", "look": ${LOOK_SHAPE}} ×3], "snapshots": [${SNAPSHOT_SHAPE} ×6]}`,
@@ -177,6 +177,9 @@ export function bannerPlanMessages(input: BannerPlanInput): OtomeMessage[] {
         : "- Every look stays a complete clothed look: it may be revealing (lingerie, swimwear), never nude.",
       "- The key image brief is one or two English sentences on where and how the moment is framed (place, light, what they are doing), never anyone's looks.",
       briefRule ? `- ${briefRule}` : "",
+      explicitArt
+        ? '- When "explicit" is true, also write clothedBrief: the same moment just before or after it, everyone clothed, in one or two English sentences. It is painted instead if the image settings are lowered first.'
+        : "",
       moments
         ? `- Each 4★'s cgBrief is one or two English sentences for its Moment's illustration: the place, light and what they are doing, never anyone's looks. Whatever its premise holds, the picture follows this: ${momentRule} cgCast names only that love interest and, when shown, the protagonist.`
         : "",
@@ -244,6 +247,7 @@ export const BannerPlanSchema = z.object({
     cgBrief: z.string().optional(),
     cgCast: z.array(z.string()).optional(),
     explicit: z.boolean().nullable().optional(),
+    clothedBrief: z.string().optional(),
   }),
   four: z.array(
     z.object({
@@ -273,7 +277,7 @@ export interface BannerPlan {
     title: string;
     premise?: string;
     look?: ItemLook;
-    cg?: { brief: string; cast: string[]; explicit?: true };
+    cg?: { brief: string; cast: string[]; explicit?: true; clothed?: string };
   };
   four: Array<{
     li: string | null;
@@ -334,6 +338,9 @@ export function normalizeBannerPlan(
   if (kind === "memories") {
     if (!top.premise?.trim()) return "featured.premise is missing";
     if (!top.cgBrief?.trim()) return "featured.cgBrief is missing";
+    const marked = explicitArt && top.explicit === true;
+    if (marked && !top.clothedBrief?.trim())
+      return "featured.clothedBrief is missing (it is needed when explicit is true)";
     // The featured love interest is always in the key image, first; anyone else only when the planner put them in.
     const others = (top.cgCast ?? [])
       .map((name) => name.trim())
@@ -344,7 +351,7 @@ export function normalizeBannerPlan(
       cast: [featured.name, ...new Set(others)].slice(0, 3),
       // Kept only when the plan was offered it (as a story CG's, S/story/beats.ts cgExplicit), and then painted
       // explicit only while the world still allows it (S/wish/banners.ts).
-      ...(explicitArt && top.explicit === true ? { explicit: true as const } : {}),
+      ...(marked ? { explicit: true as const, clothed: clip(top.clothedBrief!, ITEM_LIMITS.line) } : {}),
     };
   } else {
     if (!top.look) return "featured.look is missing";
