@@ -191,7 +191,7 @@ export function bannerPlanMessages(input: BannerPlanInput): OtomeMessage[] {
     ]
       .filter(Boolean)
       .join("\n"),
-    otomeWritingRules({ story: true, style: world.writingStyle }),
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     relabel(otomeContentContract({ world, lis, kind: "planner" }), "CONTENT CONTRACT (titles, premises and looks)"),
     relabel(
       otomeContentContract({ world, lis, kind: "home" }),

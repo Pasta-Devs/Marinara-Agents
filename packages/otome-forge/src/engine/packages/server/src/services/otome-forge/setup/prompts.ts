@@ -449,7 +449,7 @@ export function bibleMessages({
     `- Write every text field except look in ${world.language}.`,
     "- Omit an optional field rather than writing null.",
     "",
-    otomeWritingRules({ story: false, style: world.writingStyle }),
+    otomeWritingRules({ story: false, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
     otomeContentContract({ world, lis: [{ name: unit.name }], kind: "planner" }),
   ].join("\n");

@@ -457,7 +457,7 @@ export function chapterPlanMessages({
     "- Omit an optional field rather than writing null.",
     "",
     STORY_PACING_INSTRUCTION,
-    otomeWritingRules({ story: true, style: world.writingStyle }),
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
     otomeContentContract({ world, lis: units.map((unit) => ({ name: unit.name })), kind: "planner" }),
   ].join("\n");
@@ -644,7 +644,7 @@ export function beatMessages({
     `- Write every segment's text and every place name in ${world.language}; tags${node.cg ? " and the cg brief" : ""} in English.`,
     "",
     STORY_PACING_INSTRUCTION,
-    otomeWritingRules({ story: true, style: world.writingStyle }),
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
     otomeContentContract({ world, lis: present.map((unit) => ({ name: unit.name })), kind: "scene" }),
   ].join("\n");
@@ -947,7 +947,7 @@ export function routePlanMessages(input: RoutePlanInput): OtomeMessage[] {
     "- Omit an optional field rather than writing null.",
     "",
     STORY_PACING_INSTRUCTION,
-    otomeWritingRules({ story: true, style: world.writingStyle }),
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
     otomeContentContract({ world, lis: units.map((item) => ({ name: item.name })), kind: "planner" }),
   ]
@@ -998,7 +998,7 @@ export function repairPlanMessages(input: RepairPlanInput): OtomeMessage[] {
     "- Omit an optional field rather than writing null.",
     "",
     STORY_PACING_INSTRUCTION,
-    otomeWritingRules({ story: true, style: world.writingStyle }),
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
     otomeContentContract({ world, lis: units.map((item) => ({ name: item.name })), kind: "planner" }),
   ].join("\n");
@@ -1095,7 +1095,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     `- Write every segment's text, label, selection, grievance and disclosure in ${world.language}; tags${node.cg ? " and the cg brief" : ""} in English.`,
     "",
     STORY_PACING_INSTRUCTION,
-    otomeWritingRules({ story: true, style: world.writingStyle }),
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
     otomeContentContract({ world, lis: present.map((unit) => ({ name: unit.name })), kind: "scene" }),
   ]
@@ -1187,7 +1187,7 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
     `- Write every segment's text, label, selection, grievance and disclosure in ${world.language}; tags${node.cg ? " and the cg brief" : ""} in English.`,
     "",
     STORY_PACING_INSTRUCTION,
-    otomeWritingRules({ story: true, style: world.writingStyle }),
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
     otomeContentContract({ world, lis: present.map((unit) => ({ name: unit.name })), kind: "scene" }),
   ]

@@ -206,6 +206,18 @@ test("the consent framing appears only while dubious consent or non-consent is n
   assert.match(text, /When a choice is about intimacy, one option lets the protagonist decline/);
 });
 
+test("no NSFW scene asks for consent or offers to stop, at any Darkness; an SFW story never says so", () => {
+  const CHECK_IN = /A love interest never asks permission, checks in or offers to stop \("tell me to stop"/;
+  for (const content of [stored("fade", "gentle"), stored("explicit", "angst"), stored("explicit", "dark")]) {
+    for (const kind of ["planner", "scene", "chat"] as const) {
+      const text = contract(content, kind);
+      assert.match(text, /from hand-holding, pinning and kisses to sex itself, causes an out-of-character pause/, kind);
+      assert.match(text, CHECK_IN, `${content.heat}/${content.darkness} ${kind}`);
+    }
+  }
+  assert.doesNotMatch(contract(defaultContent()), CHECK_IN);
+});
+
 test("NSFW mode names the crude words it allows; an SFW story allows swearing without the sexual words", () => {
   for (const content of [stored("fade", "angst"), stored("explicit", "dark"), stored("sfw", "dark")]) {
     for (const kind of ["planner", "scene", "chat"] as const) {

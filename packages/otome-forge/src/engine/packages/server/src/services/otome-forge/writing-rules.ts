@@ -7,7 +7,10 @@
 // 0.5.3 (#1955): what the protagonist knows is only what the story has shown them, never a card or a bible, and an
 // existing world's canon holds (the world plan names that world, setup/prompts.ts P2).
 import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs";
-import { BANNED_PHRASES } from "../../../../client/src/features/otome-forge/shared/banned-phrases.js";
+import {
+  BANNED_PHRASES,
+  parseBannedPhrases,
+} from "../../../../client/src/features/otome-forge/shared/banned-phrases.js";
 
 export const WRITING_RULES = [
   "Put on your I-Have-Good-Theory-Of-Mind Hat.",
@@ -27,20 +30,38 @@ export const WRITING_RULES = [
 export const STORY_PACING_INSTRUCTION =
   'If everything is special, nothing is. Depth, real or fake, is a "sometimes" ingredient. Introduce emotional payoffs only if they have proper build-ups between more mundane scenes.';
 
+/**
+ * The banned-phrases line: the built-in list, then the player's own (Settings → Content), each quoted as typed. With no
+ * list of their own it is the line every prompt carried before, byte for byte.
+ */
+export function bannedPhrasesRule(own?: string): string {
+  const theirs = parseBannedPhrases(own).map((phrase) => JSON.stringify(phrase));
+  return `- Never use these overused phrases or patterns: ${[...BANNED_PHRASES, ...theirs].join("; ")}.`;
+}
+
 /** The banned-phrases line on its own, for prompts that write prose but no story (premise, world plan). */
-export const BANNED_PHRASES_RULE = `- Never use these overused phrases or patterns: ${BANNED_PHRASES.join("; ")}.`;
+export const BANNED_PHRASES_RULE = bannedPhrasesRule();
 
 /**
  * The WRITING RULES block. `story: true` (every prompt that writes story or a character's words) puts the kit's
  * knowledge boundary first; planners pass false. `style` is the player's own instructions for how the story is
  * written (setup's first step, Settings → Content), given whole after the rules.
  */
-export function otomeWritingRules({ story, style }: { story: boolean; style?: string }): string {
+export function otomeWritingRules({
+  story,
+  style,
+  banned,
+}: {
+  story: boolean;
+  style?: string;
+  /** The player's own banned phrases as typed (Settings → Content), added to the built-in list. */
+  banned?: string;
+}): string {
   const own = style?.trim();
   const block = [
     "WRITING RULES",
     ...WRITING_RULES.map((rule) => `- ${rule}`),
-    BANNED_PHRASES_RULE,
+    bannedPhrasesRule(banned),
     ...(own
       ? [
           "",

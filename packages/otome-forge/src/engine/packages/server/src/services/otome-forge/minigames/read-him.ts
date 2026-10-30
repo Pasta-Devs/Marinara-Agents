@@ -335,7 +335,7 @@ export function shuffleRound(round: ReadHimReplyRound, random: (below: number) =
 }
 
 export interface ReadHimPromptInput {
-  world: Pick<World, "content" | "images" | "language" | "setting" | "premise" | "writingStyle">;
+  world: Pick<World, "content" | "images" | "language" | "setting" | "premise" | "writingStyle" | "bannedPhrases">;
   player: Pick<Player, "name" | "pronouns" | "about">;
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   /** His state as his own reader may know it (ownView). */
@@ -385,7 +385,7 @@ export function readHimMessages({
     `- ${NO_ABSENCE_RULE}`,
     `- Write every field in ${world.language}.`,
     "",
-    otomeWritingRules({ story: true, style: world.writingStyle }),
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
     otomeContentContract({ world, lis: [{ name }], kind: "home" }),
   ].join("\n");
