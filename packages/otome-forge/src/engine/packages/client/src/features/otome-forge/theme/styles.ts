@@ -1338,6 +1338,16 @@ ${R} .of-love-dot {
 ${R} .of-love-when { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.04em; color: var(--of-champagne-text); }
 ${R} .of-love-who { color: var(--of-accent-text); }
 ${R} .of-love-text { font-family: var(--of-font-display); font-size: 1.08rem; line-height: 1.35; }
+${R} .of-love-kind {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--of-text-soft);
+}
+${R} .of-love-open {
+  display: block; padding: 0; border: 0; background: none; color: inherit; text-align: start; cursor: pointer;
+  text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--of-li-accent, currentColor) 45%, transparent);
+  text-underline-offset: 3px;
+}
+${R} .of-love-open:hover { text-decoration-color: var(--of-li-accent, currentColor); }
 ${R} .of-favorites { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
 ${R} .of-favorite {
   display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 18px;

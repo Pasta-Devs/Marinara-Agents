@@ -396,6 +396,8 @@ function albumView(): Json {
         kind: "first-meeting",
         text: "The first time Ilvar said your name.",
       },
+      // A Memory won (#1947): the Album lists it on the day it was won, and it opens from here.
+      { at: "2026-10-28T09:00:00.000Z", li: ILVAR, kind: "memory", text: "Ink and Rain", ref: "memories-0-f" },
     ],
     favorites: [],
     soundtrack: [{ cue: "home", track: null }],
@@ -1122,6 +1124,13 @@ test("Otome Forge Album: a CG opens large and saves through the Engine; the Time
   const tabs = root.getByRole("tablist", { name: "Album" });
   await tabs.getByRole("tab", { name: "Love Timeline" }).click();
   await expect(root.getByText("The first time Ilvar said your name.")).toBeVisible();
+  // A Memory won is on the timeline with what it is, and opens in the Album.
+  const line = root.locator(".of-love-line");
+  await expect(line.locator(".of-love-kind")).toContainText("Memory");
+  await line.getByRole("button", { name: "Ink and Rain", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Read the story" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Read the story" })).toHaveCount(0);
   await tabs.getByRole("tab", { name: "Love Timeline" }).focus();
   await page.keyboard.press("End");
   await expect(tabs.getByRole("tab", { name: "Tells" })).toHaveAttribute("aria-selected", "true");

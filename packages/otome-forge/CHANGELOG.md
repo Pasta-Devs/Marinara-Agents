@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.4.2 — 2026-10-30
+
+- The Love Timeline shows every 4★ Moment and 5★ Memory you've won, on the day you won it, including ones won before this update. Each Snapshot, Moment and Memory says what it is and opens in the Album.
+
 ## 0.4.1 — 2026-10-30
 
 - The story's **Image description** shows only for a picture that isn't on screen: a painted background or key image no longer has its description under the chapter title, and one whose file fails to load gets it back.
