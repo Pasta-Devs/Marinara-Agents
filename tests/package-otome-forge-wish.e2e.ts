@@ -487,6 +487,15 @@ function wishStub(starlight = 2000): { stub: WishStub; answer: (call: Call) => A
 }
 
 async function openOtome(page: Page, { review = false } = {}): Promise<Locator> {
+  // Engine's calendar greeting can appear after startup. Keep its theme through the normal, specific dialog action.
+  await page.addLocatorHandler(
+    page
+      .getByRole("dialog", { name: "Happy Halloween!", exact: true })
+      .filter({ has: page.getByRole("button", { name: "Keep it", exact: true }) }),
+    async (dialog) => {
+      await dialog.getByRole("button", { name: "Keep it", exact: true }).click();
+    },
+  );
   await page.addInitScript(
     ({ version, review }) => {
       localStorage.setItem("marinara:whats-new:seen-version", version);

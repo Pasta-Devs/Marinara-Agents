@@ -508,6 +508,15 @@ const engineStaleTime = (page: Page) =>
   });
 
 async function openHome(page: Page): Promise<Locator> {
+  // Engine's calendar greeting can appear after startup. Keep its theme through the normal, specific dialog action.
+  await page.addLocatorHandler(
+    page
+      .getByRole("dialog", { name: "Happy Halloween!", exact: true })
+      .filter({ has: page.getByRole("button", { name: "Keep it", exact: true }) }),
+    async (dialog) => {
+      await dialog.getByRole("button", { name: "Keep it", exact: true }).click();
+    },
+  );
   await page.route("**/api/app-settings/ui", (route) =>
     route.fulfill({ json: route.request().method() === "GET" ? { value: null } : { success: true } }),
   );
@@ -627,6 +636,8 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
   const heart = (await zones.getByRole("button", { name: "Heart" }).boundingBox())!;
   await page.mouse.click(heart.x + heart.width / 2, heart.y + heart.height / 2);
   await expect(bubble).toHaveText(anyOf(HIS_LINES.heart));
+  await zones.getByRole("button", { name: "Heart" }).focus();
+  await expect(zones.getByRole("button", { name: "Heart" })).toBeFocused();
   for (let tap = 0; tap < 4; tap++) await page.keyboard.press("Enter");
   await expect(bubble).toHaveAttribute("data-mode", "annoyed");
   expect(ANNOYED).toContain(await bubble.textContent());

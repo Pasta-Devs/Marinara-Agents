@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.2.1 — 2026-10-30
+
+- Make desktop fullscreen fill the available Otome Hearth area across its screens. Leaving fullscreen restores ordinary portrait layouts while preserving drafts and the current reader line.
+
 ## 0.2.0 — 2026-10-30
 
 - Restore the scrolling mobile Settings category strip, and keep each cast member's repaint actions together.
