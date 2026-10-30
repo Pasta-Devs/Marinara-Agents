@@ -414,7 +414,8 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
             title={addMemoriesLabel}
           >
             <Plus aria-hidden="true" size="0.75rem" />
-            <span data-ltm-add-label className="hidden">
+            {/* In the Engine header the panel container query cannot reach the label; use the viewport instead. */}
+            <span data-ltm-add-label className={props.engineHeader ? "hidden md:inline" : "hidden"}>
               {addMemoriesLabel}
             </span>
           </Button>
