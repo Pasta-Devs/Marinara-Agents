@@ -13,7 +13,8 @@ client  -> vault, review queue, sources, settings, and injection summary
 The server registers `long-term-memory:recall` (read-only memories for other
 packages, from `services/`; see Services for Other Packages) and
 `long-term-memory:runtime` (chat recall, receipts and the
-vault lock for the Engine) with the Engine and mounts
+vault lock for the Engine; registered host-only, so from Capability API 1.388
+other packages get `null` from `services.get`) with the Engine and mounts
 privileged routes under `/api/long-term-memory`. Registration is in
 `server-entry.ts`; `routes.ts` composes one file per area under `routes/`
 (notes, drafts, imports, maintenance, settings), with shared limits, errors and
