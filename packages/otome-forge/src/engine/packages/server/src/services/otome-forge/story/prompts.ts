@@ -26,10 +26,11 @@
 // card in a planner (P5's others, othersBlock). An empty notebook adds nothing, so those prompts stay byte for byte.
 // ponytail: a scene already written (the lookahead) keeps the notebook it was written with; an edit or delete reaches
 // the next one written. The upgrade path is dropping an unread lookahead beat when a notebook it carried is edited.
-// 0.5.3 (#1955): P5 gives minor characters real parts and lets a node go without any love interest; P5, P10 and P11
-// let time pass, with rest or sleep after a night, a long day or an exhausting stretch (TIME_RULE).
 // 0.5.1 (#1949): P5 plans no chapter on the template of the ones before it, and a chapter's closing decision (P5's
 // plan, P6's last node) is a different kind from the recent ones; the Foil's rivalry is not always for the protagonist.
+// 0.5.3 (#1955): P5 gives minor characters real parts and lets a node go without any love interest (never a moment or
+// the climax, S/story/chapters.ts); P5, P10 and P11 let time pass, with rest or sleep after a night, a long day or an
+// exhausting stretch (TIME_RULE).
 import { forgeChoiceMessages, forgeChoicePlanMessages } from "@forge-kit/player-choices-server.mjs";
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 import { z, type ZodType } from "zod";
@@ -443,7 +444,7 @@ export function chapterPlanMessages({
       : `- Choose the climax the story calls for: open grievances and strain lean toward a confrontation, trust and calm toward a closer.${lastClimax ? ` The last main chapter ended with a ${lastClimax}.` : ""}`,
     "- The Lead is in most nodes and in the climax; the Foil appears in at least one node. The Foil's goal competes with the protagonist's or the Lead's, and not always for the protagonist: a rivalry over a goal, a secret, a duty or the mystery counts too.",
     `- Never plan a chapter on the template of the ones before it: vary what drives it and where its turn falls. When its last node leaves a lasting decision open, make it ${VARIED_DECISION}.`,
-    "- The world has other people: give named minor characters (friends, family, rivals, officials, locals) real parts where the story calls for them; they speak and can matter. Not every node needs a love interest: the protagonist has a life of their own, and a node may be theirs alone or with others (cast []).",
+    "- The world has other people: give named minor characters (friends, family, rivals, officials, locals) real parts where the story calls for them; they speak and can matter. Not every node needs a love interest: the protagonist has a life of their own, and a node may be theirs alone or with others (cast []). A moment node and the climax always have their love interest in cast.",
     TIME_RULE,
     number === 1
       ? "- This is the first chapter: every love interest appears in at least one node, and it opens on the opening situation."

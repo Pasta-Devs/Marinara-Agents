@@ -271,6 +271,9 @@ export function normalizeChapterPlan(reply: ChapterPlanReply, context: PlanConte
   }
   // Its trust, first and grievance are the Lead's: a Closer is played with them.
   if (climax.kind === "closer" && !climax.cast.includes(lead)) return "the Lead must be in the closer node";
+  // A node may be the protagonist's alone (#1955), but a moment and the climax are played with a love interest.
+  const empty = nodes.find((node) => node.kind !== "beat" && !node.cast.length);
+  if (empty) return `the ${empty.kind} node ${empty.i + 1} needs a love interest in its cast`;
   if (nodes.filter((node) => node.cg).length > 2) return "at most 2 nodes may have cg";
   if (!nodes.some((node) => node.cast.includes(lead))) return "the Lead must appear in the chapter";
   if (!nodes.some((node) => node.cast.includes(foil))) return "the Foil must appear in at least one node";

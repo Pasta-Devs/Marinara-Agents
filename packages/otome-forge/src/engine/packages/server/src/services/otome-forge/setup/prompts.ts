@@ -347,7 +347,7 @@ export function worldPlanMessages({
     `- Write every text field in ${world.language}.`,
     "- Every love interest is an adult, written as an adult, in an adult role. No school or student roles.",
     "- Never contradict a love interest's CANONICAL CHARACTER CARD: the card wins over the premise and over this plan.",
-    "- In an existing world, the mystery, the pieces and the web fit its canon: they may add what canon leaves unsaid, never contradict it.",
+    "- In an existing world, the mystery, the pieces and the web fit its canon: they may add what canon leaves unsaid, never contradict it. The adult rule above still holds over canon.",
     "- Rivals still respect, owe or need each other; nobody is simply a villain.",
     "- The love interests' goals compete with the protagonist's own goal.",
     "- Never assume the protagonist's gender: use their pronouns.",
