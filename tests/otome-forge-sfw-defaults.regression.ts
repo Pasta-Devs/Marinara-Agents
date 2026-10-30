@@ -13,6 +13,8 @@
 // 0.5.3 (#1955): the writing rules say the protagonist knows only what the story has shown them and that an existing
 // world's canon holds; P5 adds minor characters and time to rest, P10 and P11 time to rest. Every story and banner
 // digest carries the writing rules, so all of them moved once.
+// 0.6.1: scenes, Confrontations and Closers ask the protagonist to sit with what matters to them in thought, so the
+// beat, CG beat, confrontation and closer digests moved.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
@@ -232,11 +234,11 @@ const EXPECTED_ANGST: Record<string, string> = {
   bannerHis: "eb31ab3aa2226d20",
   bannerMemories: "a38fdfc269136b76",
   bannerMine: "698522b696305334",
-  beat: "3312b5a192b2b331",
-  beatWithCg: "1d524d5318c6e30b",
+  beat: "9128becd9cd9cf64",
+  beatWithCg: "759596d8cb62686d",
   chapterPlan: "f235036032689868",
-  closer: "e13fe5943bf58483",
-  confrontation: "600814dc2d71931a",
+  closer: "5836c0998328547e",
+  confrontation: "818dbeecf94419c8",
   repairPlan: "eeea513706ae1c6b",
   routePlan: "7145864d7f6a6286",
 };
@@ -244,11 +246,11 @@ const EXPECTED_GENTLE: Record<string, string> = {
   bannerHis: "c1b5779b416b0ab3",
   bannerMemories: "bf1aa69fa35917b7",
   bannerMine: "c92dbe4ebd42661d",
-  beat: "a940801851855ea5",
-  beatWithCg: "51239a4b2ef40b5a",
+  beat: "142a6f60f9c33f34",
+  beatWithCg: "9bbfc487e6941248",
   chapterPlan: "f9780789ae435cc5",
-  closer: "58aa6484270abcff",
-  confrontation: "088b8b04fb6a3218",
+  closer: "a6c1534b72d47f51",
+  confrontation: "0d32836ce4af3b17",
   repairPlan: "380f8395a2cb320d",
   routePlan: "fcea5bf929eb38d3",
 };

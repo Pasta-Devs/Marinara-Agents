@@ -71,6 +71,13 @@ import { prologueFraming } from "./prologue.js";
 import { aboutLine } from "../schemas/player.js";
 import { intimacyLine } from "../intimacy.js";
 
+/**
+ * P6's, P12's and P12c's line on the protagonist's inner life: they react to what happens to them, in thought, instead
+ * of the scene moving straight on (the maintainer's playtest: after a first night together she never mulled it over).
+ */
+const PROTAGONIST_THOUGHTS =
+  "They are a person, not a camera: when something that matters to them happens (a first kiss, sex, a quarrel, a secret learned), here or at the end of the node before, give them thought lines to sit with it before the story moves on, in their own voice, with their persona's doubts, insecurities and hopes showing through.";
+
 /** The sentence forgeChoiceMessages replaces when choices are on; P6's system text must contain it exactly. */
 export const NO_CHOICES_SENTENCE =
   "NEVER offer choices; the player only advances. Do not ask the player to pick anything.";
@@ -627,7 +634,7 @@ export function beatMessages({
     `{"musicMood": "${MUSIC_MOODS.join("|")}", "places": [{"name": "...", "tags": "..."}], "segments": [{"speaker": "", "text": "...", "thought": false, "expression": "", "place": "..."}]${node.cg ? cgShape(world) : ""}}`,
     '- speaker: who speaks the segment, written as their exact name every time; "" for narration. When the protagonist speaks, write their exact name; the prose still addresses them as "you".',
     "- Each segment is one speaker's line or one piece of narration: a sentence or a few. Never put dialogue inside narration, and never mark it with dashes or quotes as prose.",
-    `- thought: true for an inner line, in the thinker's own words, with "speaker" set to the thinker. The protagonist may think freely. A love interest gets at most ONE thought line in this node, and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
+    `- thought: true for an inner line, in the thinker's own words, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in this node, and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
     `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}, when the face shows it. A face may contradict the words. Omit it for a neutral line and for narration.`,
     `- musicMood: the soundtrack cue for this node, one of ${MUSIC_MOODS.join(", ")}.`,
     `- places: every place the node happens in, in order (at most ${BEAT_PLACES_MAX}). A place is a room, a street, a garden: never the time of day or the mood. tags: the same place as 4-8 short comma-separated English tags for an image model, with "no humans". place on a segment: which place it happens in; omit it while the scene has not moved.`,
@@ -1080,7 +1087,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     `- grievance.text: what a walkout leaves ${name} holding against the protagonist, one short sentence. disclosure: what the protagonist tells ${name} in reveal, as one short third-person sentence ("The protagonist said their brother drowned here.").`,
     `- musicMood: tense or angst.`,
     '- speaker: who speaks the segment, written as their exact name every time; "" for narration. Each segment is one speaker\'s line or one piece of narration.',
-    `- thought: true for an inner line, with "speaker" set to the thinker. The protagonist may think freely. A love interest gets at most ONE thought line in the whole confrontation, on any path a player can take through it (the opening, the rounds' lines, the answers to the stances taken and the ending together), and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
+    `- thought: true for an inner line, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in the whole confrontation, on any path a player can take through it (the opening, the rounds' lines, the answers to the stances taken and the ending together), and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
     `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}. A face may contradict the words. Omit it for a neutral line and for narration.`,
     `- places: where it happens (at most ${BEAT_PLACES_MAX}); tags: 4-8 short comma-separated English tags for an image model, with "no humans".`,
     ...(backgrounds ? [PLACE_REUSE_RULE] : []),
@@ -1175,7 +1182,7 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
     `- grievance.text: what being shut out leaves ${name} holding against the protagonist, one short sentence. disclosure: what the protagonist tells ${name} in mirror, as one short third-person sentence ("The protagonist said they still sleep with a light on.").`,
     "- musicMood: tender or confession.",
     '- speaker: who speaks the segment, written as their exact name every time; "" for narration. Each segment is one speaker\'s line or one piece of narration.',
-    `- thought: true for an inner line, with "speaker" set to the thinker. The protagonist may think freely. A love interest gets at most ONE thought line in the whole closer, on any path a player can take through it (the opening, the rounds' lines, the answers given and the ending together), and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
+    `- thought: true for an inner line, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in the whole closer, on any path a player can take through it (the opening, the rounds' lines, the answers given and the ending together), and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
     `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}. A face may contradict the words. Omit it for a neutral line and for narration.`,
     `- places: where it happens (at most ${BEAT_PLACES_MAX}); tags: 4-8 short comma-separated English tags for an image model, with "no humans".`,
     ...(backgrounds ? [PLACE_REUSE_RULE] : []),

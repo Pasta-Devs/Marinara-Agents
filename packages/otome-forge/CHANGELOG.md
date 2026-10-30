@@ -4,6 +4,7 @@
 
 - **Banned phrases** in Settings → Content: type the words and phrases you never want to read, separated by commas or one per line, and every scene, message and note avoids them.
 - Love interests no longer stop an intimate scene to check in or offer to stop, sex included. Ease off is still yours.
+- Your protagonist takes a moment to sit with what matters to them, a first kiss, a night together, a quarrel, a secret learned, in thoughts in their own voice, with their doubts and hopes showing, before the story moves on.
 - Under NSFW: Explicit, sex scenes are no longer rushed: they take the room they need, from the build-up to the aftermath, with the characters talking, asking for what they want and saying what they feel along the way.
 
 ## 0.6.0 — 2026-10-30

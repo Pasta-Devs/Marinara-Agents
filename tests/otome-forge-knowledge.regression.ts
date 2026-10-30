@@ -24,6 +24,8 @@ import {
 import {
   beatMessages,
   chapterPlanMessages,
+  closerMessages,
+  confrontationMessages,
   repairPlanMessages,
   routePlanMessages,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/prompts.ts";
@@ -145,4 +147,28 @@ test("P5 gives minor characters parts and nodes without a love interest; P5, P10
     assert.ok(!prompt.includes(ALONE), `${kind} never plans a node without its love interest`);
     assert.match(prompt, /Kai is in every node/, kind);
   }
+});
+
+test("every scene writer asks the protagonist to sit with what matters to them, in thought", () => {
+  const input = inputs();
+  const THOUGHTS =
+    /The protagonist may think freely\. They are a person, not a camera: when something that matters to them happens \(a first kiss, sex, a quarrel, a secret learned\)[^\n]*with their persona's doubts, insecurities and hopes showing through\./;
+  const node = { i: 0, kind: "beat" as const, guide: "The morning after.", cast: [KAI] };
+  const fight = { i: 0, kind: "confrontation" as const, guide: "It comes out.", cast: [KAI] };
+  const close = { ...fight, kind: "closer" as const };
+  const chapter = (nodes: Array<typeof node | typeof fight | typeof close>) =>
+    ({ kind: "main", number: 2, title: "Rain", lead: KAI, foil: MIR, nodes }) as const;
+  const prompts = {
+    scene: beatMessages({ ...input, chapter: chapter([node]), node, storySoFar: "", memory: "" }),
+    confrontation: confrontationMessages({
+      ...input,
+      chapter: chapter([fight]),
+      node: fight,
+      storySoFar: "",
+      memory: "",
+      li: KAI,
+    }),
+    closer: closerMessages({ ...input, chapter: chapter([close]), node: close, storySoFar: "", memory: "", li: KAI }),
+  };
+  for (const [kind, messages] of Object.entries(prompts)) assert.match(messages[0]!.content, THOUGHTS, kind);
 });
