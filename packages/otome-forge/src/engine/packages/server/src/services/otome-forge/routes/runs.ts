@@ -516,8 +516,12 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       // The player is the authority on an edit: no `pronouns` here, so the ones they set are kept. An SFW story takes no
       // intimacy block from an edit (#1936); one written before Heat was lowered is kept below.
       const world = await store.readDoc(worldId(runId), normalizeWorld);
-      const bible = checkBible(body.bible, { others, intimacy: !!world && intimacyOpen(world.content) });
+      const open = !!world && intimacyOpen(world.content);
+      const bible = checkBible(body.bible, { others, intimacy: open });
       if (typeof bible === "string") throw new OtomeForgeError(400, `Invalid bible: ${bible}`, "bad-request");
+      // In an NSFW story, an edit that sends the block with nothing left in it clears it (checkBible drops an empty
+      // one, which alone would read as an edit that never carried it).
+      const cleared = open && body.bible.intimacy !== undefined && !bible.intimacy;
       let tellsBefore: readonly string[] = [];
       const unit = await store.updateDoc(runDocTarget("unit", unitId(runId, li)), normalizeUnit, (current) => {
         if (!current.bible) throw new OtomeForgeError(409, "This bible is still being written.", "conflict");
@@ -532,8 +536,11 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
               ? current.identityLine
               : bible.look.identityLine,
           outfitLine: bible.look.outfitLine,
-          // An edit that does not carry his intimacy block (#1936) keeps the one he has.
-          bible: bible.intimacy || !current.bible.intimacy ? bible : { ...bible, intimacy: current.bible.intimacy },
+          // An edit that does not carry his intimacy block (#1936), or any edit in an SFW story, keeps the one he has.
+          bible:
+            bible.intimacy || cleared || !current.bible.intimacy
+              ? bible
+              : { ...bible, intimacy: current.bible.intimacy },
           bibleEdited: true,
         };
       });

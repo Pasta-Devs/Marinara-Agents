@@ -21,7 +21,11 @@ import {
   worldId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
 import { registerRunRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/runs.ts";
-import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
+import {
+  BibleSchema,
+  INTIMACY_ITEMS_MAX,
+  normalizeUnit,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { checkBible } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/setup/bible.ts";
 import { bibleMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/setup/prompts.ts";
@@ -37,6 +41,8 @@ const INTIMACY = {
   preferences: ["PREF-MARK: being praised", "slow teasing"],
   attractions: ["ATTR-MARK: strong hands"],
 };
+/** More than the handful: a reply or edit that overshoots is trimmed to INTIMACY_ITEMS_MAX, never refused. */
+const OVERSHOOT = Array.from({ length: 6 }, (_, index) => `extra taste ${index + 1}`);
 const isIntimacy = (messages: CapabilityLanguageModelMessage[]) =>
   text(messages).includes("their own tastes in sex and intimacy");
 
@@ -117,6 +123,14 @@ test("a new bible is asked for intimacy only in an NSFW story, and checkBible ke
   assert.equal(dropped.intimacy, undefined);
   const empty = checkBible(bible({ intimacy: { preferences: [" "], attractions: [] } }), { intimacy: true });
   assert.ok(typeof empty !== "string" && empty.intimacy === undefined, "nothing usable is no block");
+
+  // The bible step's schema lets an overshoot through, and checkBible trims it to the handful.
+  const many = bible({ intimacy: { preferences: ["first", ...OVERSHOOT, "last"], attractions: OVERSHOOT } });
+  assert.ok(BibleSchema.safeParse(many).success, "an overshoot is not refused");
+  const trimmed = checkBible(many, { intimacy: true });
+  assert.ok(typeof trimmed !== "string");
+  assert.deepEqual(trimmed.intimacy!.preferences, ["first", ...OVERSHOOT.slice(0, INTIMACY_ITEMS_MAX - 1)]);
+  assert.equal(trimmed.intimacy!.attractions.length, INTIMACY_ITEMS_MAX);
 });
 
 test("an older bible gains only its intimacy block, once, on request; the run view never shows its text", async () => {
@@ -125,13 +139,18 @@ test("an older bible gains only its intimacy block, once, on request; the run vi
   const replies = Array.from({ length: 30 }, () => (messages: CapabilityLanguageModelMessage[]) => {
     if (isIntimacy(messages)) {
       calls += 1;
-      return json({ intimacy: INTIMACY });
+      return json({ intimacy: { ...INTIMACY, preferences: [...INTIMACY.preferences, ...OVERSHOOT] } });
     }
     return messages[0]!.content.includes("chapter planner") ? json(planReply()) : json(beatReply());
   });
   const t = await storyWorld({ runKey, replies });
   const call = runRoutes(t, runKey);
   const before = (await t.store.readDoc(unitId(t.runId, KAI), normalizeUnit))!;
+  // The reply overshoots; the block is trimmed to the handful.
+  const FILLED = {
+    ...INTIMACY,
+    preferences: [...INTIMACY.preferences, ...OVERSHOOT].slice(0, INTIMACY_ITEMS_MAX),
+  };
 
   // An SFW story never writes one.
   const refused = await call("POST", "/runs/:run/lis/:li/intimacy", {}, { li: KAI });
@@ -148,7 +167,7 @@ test("an older bible gains only its intimacy block, once, on request; the run vi
   assert.deepEqual(filled.body, { intimacy: true }, "the response carries no text either");
   assert.equal(calls, 1);
   const after = (await t.store.readDoc(unitId(t.runId, KAI), normalizeUnit))!;
-  assert.deepEqual(after.bible!.intimacy, INTIMACY);
+  assert.deepEqual(after.bible!.intimacy, FILLED);
   const { intimacy: _added, ...rest } = after.bible!;
   assert.deepEqual(rest, before.bible, "every other bible field is kept");
   assert.equal(after.bibleEdited, before.bibleEdited);
@@ -174,7 +193,7 @@ test("an older bible gains only its intimacy block, once, on request; the run vi
     { li: KAI },
   );
   assert.equal(saved.status, 200, JSON.stringify(saved.body));
-  assert.deepEqual((await t.store.readDoc(unitId(t.runId, KAI), normalizeUnit))!.bible!.intimacy, INTIMACY);
+  assert.deepEqual((await t.store.readDoc(unitId(t.runId, KAI), normalizeUnit))!.bible!.intimacy, FILLED);
 
   // Back to SFW: an edit cannot add or change the block, and the one written before is kept as it was.
   await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
@@ -183,11 +202,24 @@ test("an older bible gains only its intimacy block, once, on request; the run vi
   }));
   const sneaked = { ...edited, intimacy: { preferences: ["SNEAKED"], attractions: [] } };
   assert.equal((await call("POST", "/runs/:run/lis/:li/bible", { bible: sneaked }, { li: KAI })).status, 200);
-  assert.deepEqual((await t.store.readDoc(unitId(t.runId, KAI), normalizeUnit))!.bible!.intimacy, INTIMACY);
+  assert.deepEqual((await t.store.readDoc(unitId(t.runId, KAI), normalizeUnit))!.bible!.intimacy, FILLED);
   const mir = (await t.store.readDoc(unitId(t.runId, MIR), normalizeUnit))!;
   const fresh = { ...mir.bible!, intimacy: { preferences: ["SNEAKED"], attractions: [] } };
   assert.equal((await call("POST", "/runs/:run/lis/:li/bible", { bible: fresh }, { li: MIR })).status, 200);
   assert.equal((await t.store.readDoc(unitId(t.runId, MIR), normalizeUnit))!.bible!.intimacy, undefined);
+
+  // NSFW again: an edit that empties both lists clears the block, and the cast offers to add it again.
+  await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+    ...world,
+    content: nsfw(),
+  }));
+  const blank = { ...edited, intimacy: { preferences: [" "], attractions: [] } };
+  const cleared = await call("POST", "/runs/:run/lis/:li/bible", { bible: blank }, { li: KAI });
+  assert.equal(cleared.status, 200, JSON.stringify(cleared.body));
+  assert.equal(cleared.body.bible.intimacy, undefined, "the edit is not undone");
+  assert.equal((await t.store.readDoc(unitId(t.runId, KAI), normalizeUnit))!.bible!.intimacy, undefined);
+  const cleanView = (await call("GET", "/runs/:run")).body.view;
+  assert.equal(cleanView.lis.find((li: { id: string }) => li.id === KAI).intimacy, undefined);
 });
 
 test("scenes draw on the block now and then in an NSFW story; an SFW story's prompts never carry it", async () => {

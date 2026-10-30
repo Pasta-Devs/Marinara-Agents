@@ -570,7 +570,16 @@ function intimacyFixture({ heat = "explicit", confirmed = true } = {}) {
   view.lis[2].intimacy = true;
   const ownIndex: Json = { ...index(), ageGate: confirmed ? { confirmedAt: now() } : null };
   const bibles: Record<string, Json> = {
-    [ILVAR]: normalizeBible({ age: 29, pronouns: HE, publicFace: "A quiet adult cartographer." })!,
+    // Complete enough for the editor's rules (3 mask tells, a stage-4 secret), so a save goes through.
+    [ILVAR]: normalizeBible({
+      age: 29,
+      pronouns: HE,
+      publicFace: "A quiet adult cartographer.",
+      mask: { presents: "Unbothered", tells: ["folds maps twice", "counts the bells", "won't sit"] },
+      secrets: [
+        { id: "north-chart", truth: "He drew the chart that sank the fleet.", tells: [], revealAt: { stage: 4 } },
+      ],
+    })!,
   };
   const base = `/api/otome-forge/runs/${RUN}`;
   const answer = (call: Call): Answer | undefined => {
@@ -598,10 +607,15 @@ function intimacyFixture({ heat = "explicit", confirmed = true } = {}) {
   return { answer, view, ownIndex, bibles, base };
 }
 
+/** After a reload, back to Your cast (openRepaintCast's handlers and init scripts are already in place). */
 async function reopenCast(page: Page) {
   await page.reload();
   await page.getByRole("tab", { name: "Open Otome Hearth", exact: true }).click();
-  return openRepaintCast(page);
+  const root = page.locator("marinara-capability-otome-forge .of-root");
+  await root.getByRole("button", { name: "Who’s home" }).click();
+  await page.getByRole("dialog", { name: "Who’s home" }).getByRole("button", { name: "Your cast" }).click();
+  await expect(root.getByRole("heading", { name: "Your story is ready", exact: true })).toBeVisible();
+  return root;
 }
 
 for (const theme of ["dark", "light"] as const) {
@@ -712,7 +726,7 @@ for (const theme of ["dark", "light"] as const) {
     };
     const saved = root.getByText("Saved. The story follows your edits from now on.", { exact: true });
     await openBible();
-    const block = root.locator("details").filter({ has: root.getByText("Intimacy", { exact: true }) });
+    const block = root.locator("details").filter({ has: page.locator("summary", { hasText: /^Intimacy$/u }) });
     await expect(block.getByText("Slow undressing", { exact: true })).toBeVisible();
     await expect(block.getByText("A low voice", { exact: true })).toBeVisible();
     await root.getByRole("button", { name: "Edit", exact: true }).click();

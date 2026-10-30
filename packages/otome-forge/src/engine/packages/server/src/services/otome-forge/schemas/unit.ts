@@ -50,9 +50,10 @@ const ArcStepSchema = z.object({ wantsFromHer: text().optional(), seed: text().o
 
 /** How many preferences and attractions a bible's intimacy block holds: a handful, never an exhaustive list. */
 export const INTIMACY_ITEMS_MAX = 6;
+/** Bounded well above the handful, so a reply or edit that overshoots is trimmed by normalizeIntimacy, not refused. */
 export const IntimacySchema: ZodType<BibleIntimacy> = z.object({
-  preferences: textList(INTIMACY_ITEMS_MAX),
-  attractions: textList(INTIMACY_ITEMS_MAX),
+  preferences: textList(INTIMACY_ITEMS_MAX * 4),
+  attractions: textList(INTIMACY_ITEMS_MAX * 4),
 });
 
 const INTIMACY_ITEM_MAX = 120;
