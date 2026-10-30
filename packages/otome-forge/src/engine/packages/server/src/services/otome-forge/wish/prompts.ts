@@ -12,8 +12,11 @@
 //   without the secrets she learned in a route, the shared part of what stands between each of them and the
 //   protagonist, and recall as a scene with nobody in it (shared canon only). No love interest's own chapter reaches it.
 // - Outfit lines and key image briefs are English image text, held to the `image` contract's tags. Above SFW a look may
-//   be revealing but stays a complete clothed look, and Memory art stays at most Suggestive (it is painted before its
-//   Character Story exists; content-contract.ts imageBriefRule). A world that raised nothing gets the prompt it got before.
+//   be revealing but stays a complete clothed look. Memory art follows its premise: at most Suggestive, unless Explicit
+//   Heat and the Explicit rating both allow an explicit one and its brief sets `explicit` (content-contract.ts
+//   imageBriefRule, as a story CG). A world that raised nothing gets the prompt it got before.
+// - 0.5.2 (#1951): above SFW Heat a Memories banner's premises span the Heat: SFW and suggestive ones, and explicit ones
+//   at Explicit Heat. Snapshots stay SFW, and an SFW world's prompt is unchanged.
 // Prompts are English and never localized; titles, premises, look names and Snapshots are in the world's language. A
 // love interest may be any gender: the prompt names them or uses their bible's pronouns.
 import { z } from "zod";
@@ -30,7 +33,7 @@ import {
   type BannerKind,
   type ItemLook,
 } from "../../../../../client/src/features/otome-forge/shared/wish.js";
-import { imageBriefRule, otomeContentContract, otomeContractReminder } from "../content-contract.js";
+import { explicitCgAllowed, imageBriefRule, otomeContentContract, otomeContractReminder } from "../content-contract.js";
 import type { OtomeMessage } from "../generation.js";
 import { mainChapterNumber } from "../ids.js";
 import { otomeSceneCard } from "../scene-card.js";
@@ -56,10 +59,23 @@ const KIND_TEXT: Record<BannerKind, string> = {
 
 const LOOK_SHAPE = `{"name": "<look name>", "outfitLine": "<English outfit tags>"}`;
 const SNAPSHOT_SHAPE = `{"li": "<love interest id>", "title": "<2–5 words>", "text": "<2–3 sentences>", "cgBrief": "<English illustration of this vignette, 1–2 sentences>", "cgCast": ["<this love interest's name; the protagonist only if present>"]}`;
+/** The Memories shape; `explicit` adds the key image's mark where the world allows an explicit one. */
+const memoriesShape = (explicit: boolean) =>
+  `{"featured": {"title": "<title>", "premise": "<2–3 sentences>", "cgBrief": "<English, 1–2 sentences>", "cgCast": ["<names in the key image, the featured love interest first; the protagonist only if present>"]${explicit ? ', "explicit": false' : ""}}, "four": [{"li": "<love interest id>", "title": "<title>", "premise": "<1–2 sentences>"} ×3], "snapshots": [${SNAPSHOT_SHAPE} ×6]}`;
 const SHAPES: Record<BannerKind, string> = {
-  memories: `{"featured": {"title": "<title>", "premise": "<2–3 sentences>", "cgBrief": "<English, 1–2 sentences>", "cgCast": ["<names in the key image, the featured love interest first; the protagonist only if present>"]}, "four": [{"li": "<love interest id>", "title": "<title>", "premise": "<1–2 sentences>"} ×3], "snapshots": [${SNAPSHOT_SHAPE} ×6]}`,
+  memories: memoriesShape(false),
   "his-wardrobe": `{"featured": {"title": "<title>", "look": ${LOOK_SHAPE}}, "four": [{"li": "<another love interest's id>", "title": "<title>", "look": ${LOOK_SHAPE}} ×3], "snapshots": [${SNAPSHOT_SHAPE} ×6]}`,
   "my-wardrobe": `{"featured": {"title": "<title>", "look": ${LOOK_SHAPE}}, "four": [{"title": "<title>", "look": ${LOOK_SHAPE}} ×3], "snapshots": [${SNAPSHOT_SHAPE} ×6]}`,
+};
+
+/**
+ * Above SFW Heat, how far a Memories banner's premises may go, mixed across the featured Memory and the 4★ Moments
+ * (#1951). None under SFW Heat, whose prompt stays as it was.
+ */
+const PREMISE_HEAT: Partial<Record<World["content"]["heat"], string>> = {
+  fade: "- Premises span the Heat across the featured Memory and the 4★s: SFW ones, and suggestive ones (desire, tension, a night that fades to black).",
+  explicit:
+    "- Premises span the Heat across the featured Memory and the 4★s: SFW ones, suggestive ones (desire, tension, a near miss) and explicit ones (sex between the adults, written on the page when the scene is written).",
 };
 
 const pronounText = (pronouns: Unit["pronouns"]) => `${pronouns.subject}/${pronouns.object}/${pronouns.possessive}`;
@@ -120,14 +136,17 @@ export function bannerPlanMessages(input: BannerPlanInput): OtomeMessage[] {
     lis: [...lis, { name: player.name, presentation: "person" as const }],
     kind: "image",
   });
-  const briefRule = kind === "memories" ? imageBriefRule(world, "clothed") : "";
+  // Memory art may be explicit only where a story CG may be (Explicit Heat and the Explicit rating).
+  const explicitArt = kind === "memories" && explicitCgAllowed(world);
+  const briefRule = kind === "memories" ? imageBriefRule(world, explicitArt ? "cg" : "clothed") : "";
   const system = [
     "You plan one banner of Wish in an otome game: the collectible side stories, looks and Snapshots the player pulls for with Starlight they earned. Nothing on a banner changes the main story.",
     KIND_TEXT[kind],
-    `Reply with ONLY this JSON object:\n${SHAPES[kind]}`,
+    `Reply with ONLY this JSON object:\n${explicitArt ? memoriesShape(true) : SHAPES[kind]}`,
     [
       "RULES",
       "- A premise is a situation: where they are, what is happening, what each of them wants from it. Never a plot turn, a reveal, a confession or anything the main story has not reached. How close they are follows their current stage; the scene itself is written later, when the item is first opened.",
+      kind === "memories" ? (PREMISE_HEAT[world.content.heat] ?? "") : "",
       `- Titles, premises, look names and Snapshots are written in ${world.language || "English"}. Outfit lines and the key image brief are always English.`,
       "- An outfit line is English, visual-only, comma-separated tags for one complete look: clothes, shoes and accessories. Never the body, face, hair, pose, background or other people.",
       world.images.rating === "sfw"
@@ -149,7 +168,9 @@ export function bannerPlanMessages(input: BannerPlanInput): OtomeMessage[] {
       otomeContentContract({ world, lis, kind: "home" }),
       "CONTENT CONTRACT FOR SNAPSHOTS (they show on the Love Timeline)",
     ),
-    `IMAGE TAGS every outfit line and key image brief must fit: ${imageTags}.`,
+    explicitArt
+      ? `IMAGE TAGS every outfit line must fit: ${imageTags}. The key image brief follows its rule above.`
+      : `IMAGE TAGS every outfit line and key image brief must fit: ${imageTags}.`,
   ].join("\n\n");
 
   const cast = units.map((unit) => {
@@ -198,6 +219,7 @@ export const BannerPlanSchema = z.object({
     look: Look.optional(),
     cgBrief: z.string().optional(),
     cgCast: z.array(z.string()).optional(),
+    explicit: z.boolean().nullable().optional(),
   }),
   four: z.array(
     z.object({
@@ -221,7 +243,12 @@ export type BannerPlanReply = z.infer<typeof BannerPlanSchema>;
 
 /** The plan as the banner is written from it: love interests as ids, every text clipped to its document's limit. */
 export interface BannerPlan {
-  featured: { title: string; premise?: string; look?: ItemLook; cg?: { brief: string; cast: string[] } };
+  featured: {
+    title: string;
+    premise?: string;
+    look?: ItemLook;
+    cg?: { brief: string; cast: string[]; explicit?: true };
+  };
   four: Array<{ li: string | null; title: string; premise?: string; look?: ItemLook }>;
   snapshots: Array<{ li: string; title: string; text: string; cg?: { brief: string; cast: string[] } }>;
 }
@@ -274,6 +301,8 @@ export function normalizeBannerPlan(
     plan.featured.cg = {
       brief: clip(top.cgBrief, ITEM_LIMITS.line),
       cast: [featured.name, ...new Set(others)].slice(0, 3),
+      // Kept as written: the art is painted explicit only while the world allows it (S/wish/banners.ts).
+      ...(top.explicit === true ? { explicit: true as const } : {}),
     };
   } else {
     if (!top.look) return "featured.look is missing";

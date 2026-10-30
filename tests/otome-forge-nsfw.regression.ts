@@ -369,23 +369,46 @@ test("the cg brief learns what the rating lets it show; only Explicit Heat with 
   assert.doesNotMatch(plan(stored("sfw", "dark")), /first night/);
 });
 
-test("P20: Memory art stays at most Suggestive and every look a complete clothed look above SFW", () => {
-  const input = storyInputs(stored("explicit", "dark"), "explicit");
-  const banner = (kind: "memories" | "his-wardrobe") =>
-    systemOf(bannerPlanMessages({ kind, ...input, featured: input.units[0]!, earlierTitles: [], memory: "" }));
-  const memories = banner("memories");
-  assert.match(memories, /The key image at this rating: follow the actual scene; neutral moments stay neutral/);
+test("P20: premises span the Heat; Memory art may be explicit only under Explicit Heat and rating; looks stay clothed", () => {
+  const banner = (heat: Heat, rating: ImageRating, kind: "memories" | "his-wardrobe" = "memories") => {
+    const input = storyInputs(stored(heat, heat === "sfw" ? "angst" : "dark"), rating);
+    return systemOf(bannerPlanMessages({ kind, ...input, featured: input.units[0]!, earlierTitles: [], memory: "" }));
+  };
+  // #1951: Explicit Heat and the Explicit rating: explicit premises, and a key image the brief may mark explicit.
+  const explicit = banner("explicit", "explicit");
+  assert.match(explicit, /SFW ones, suggestive ones \(desire, tension, a near miss\) and explicit ones \(sex between/);
   assert.match(
-    memories,
-    /allure, embraces, bare shoulders and implied intimacy are permitted only when the scene calls for them/,
+    explicit,
+    /The key image at this rating: when the moment shown is sex or nudity[^\n]*set "explicit": true/,
   );
-  assert.doesNotMatch(memories, /set "explicit"/, "Memory art is painted before its story exists");
+  assert.match(explicit, /"cgCast": \[[^\]]*\], "explicit": false\}, "four"/, "the shape carries the mark");
   assert.match(
-    memories,
+    explicit,
+    /IMAGE TAGS every outfit line must fit: [^\n]*\. The key image brief follows its rule above\./,
+  );
+  assert.match(
+    explicit,
     /Every look stays a complete clothed look: it may be revealing \(lingerie, swimwear\), never nude\./,
   );
-  assert.match(memories, /IMAGE TAGS every outfit line and key image brief must fit: clothed, adult/);
-  assert.doesNotMatch(banner("his-wardrobe"), /The key image at this rating/, "a wardrobe banner has no key image");
+  // Explicit Heat at the Suggestive rating: explicit premises, Memory art at most Suggestive as before.
+  const suggestive = banner("explicit", "suggestive");
+  assert.match(suggestive, /and explicit ones \(sex between the adults/);
+  assert.match(suggestive, /The key image at this rating: follow the actual scene; neutral moments stay neutral/);
+  assert.match(
+    suggestive,
+    /allure, embraces, bare shoulders and implied intimacy are permitted only when the scene calls for them/,
+  );
+  assert.doesNotMatch(suggestive, /set "explicit"|"explicit": false/, "no explicit art below the Explicit rating");
+  assert.match(suggestive, /IMAGE TAGS every outfit line and key image brief must fit: clothed, adult/);
+  // Fade: SFW and suggestive premises, never explicit ones or explicit art, whatever the rating.
+  const fade = banner("fade", "explicit");
+  assert.match(fade, /Premises span the Heat across the featured Memory and the 4★s: SFW ones, and suggestive ones/);
+  assert.doesNotMatch(fade, /explicit ones|set "explicit"|"explicit": false/);
+  // SFW Heat and a wardrobe banner have no premise line (an SFW world's prompt is pinned in sfw-defaults).
+  assert.doesNotMatch(banner("sfw", "explicit"), /Premises span the Heat|"explicit": false/);
+  const wardrobe = banner("explicit", "explicit", "his-wardrobe");
+  assert.doesNotMatch(wardrobe, /Premises span the Heat|"explicit": false/);
+  assert.doesNotMatch(wardrobe, /The key image at this rating/, "a wardrobe banner has no key image");
 });
 
 test("a brief's explicit mark is kept only when the world allowed it as the beat was written", () => {
@@ -661,7 +684,7 @@ test("an explicit CG only when the brief, Heat and rating all say so; then its p
       }
     }
   }
-  // Memory art and the pair portrait never go explicit, even marked so.
+  // A clothed picture (the pair portrait, Memory art not marked explicit) never goes explicit, even marked so.
   const world = worldOf(stored("explicit", "dark"), "explicit");
   const memory = cgPrompt({ brief: "x", people: [KAI_LOOK], world, style: PLAIN, use: "clothed", explicit: true });
   assert.doesNotMatch(memory.prompt, /explicit/);

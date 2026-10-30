@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.5.2 — 2026-10-30
+
+- Memories banners follow your Heat: under NSFW: Fade their Memories and Moments mix SFW and suggestive situations, and under NSFW: Explicit explicit ones too. Snapshots stay SFW.
+- An explicit Memory's art can now be explicit under NSFW: Explicit with the Explicit image rating. Other Memory art stays clothed, as before.
+
 ## 0.5.1 — 2026-10-30
 
 - Chapters no longer all end the same way. Each one builds differently, and its closing choice is a different kind of decision from the last few, not a love interest stepping in again to ask whom you'll go with. A rival love interest competes over more than just you, too.

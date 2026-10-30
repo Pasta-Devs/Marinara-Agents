@@ -11,6 +11,7 @@ import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs"
 import type { Unit } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import * as wish from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/wish.ts";
 import {
+  itemArtPrompt,
   paintItemNow,
   queueItemArt,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/outfits.ts";
@@ -28,6 +29,7 @@ import {
   normalizeBanner,
   normalizeItem,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/wish.ts";
+import { enforceContent } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/content.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import {
   paintBannerArtNow,
@@ -180,6 +182,53 @@ test("every banner stores a Snapshot's optional English illustration brief witho
   await t.call("GET", "/runs/:run/wish");
   assert.deepEqual(t.paid, [], "wishes and list reads do not paint even with image generation enabled");
   assert.equal(t.calls.length, 3);
+});
+
+test("an explicit Memory's art is painted explicit only under Explicit Heat and the Explicit rating (#1951)", async () => {
+  // The plan keeps the key image's mark only when the reply set it.
+  const kai = { id: KAI, name: "Kai" } as Unit;
+  const cast = [kai, { id: MIR, name: "Mireille" } as Unit, { id: SOL, name: "Sol" } as Unit];
+  const marked = (explicit: unknown) => {
+    const reply = bannerReply("memories");
+    return { ...reply, featured: { ...reply.featured, explicit } };
+  };
+  const cgOf = (explicit: unknown) =>
+    (normalizeBannerPlan(marked(explicit), { kind: "memories", units: cast, featured: kai }) as BannerPlan).featured
+      .cg!;
+  assert.equal(cgOf(true).explicit, true);
+  assert.equal("explicit" in cgOf(false), false);
+  assert.equal("explicit" in cgOf(null), false);
+
+  const paint = async (runKey: string, heat: "explicit" | "fade", rating: "explicit" | "suggestive") => {
+    const replies = [JSON.stringify(marked(true)), ...rotationReplies().slice(1)];
+    const t = await wishWorld({ runKey, images: { rating }, replies });
+    await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+      ...world,
+      content: enforceContent({ ...world.content, heat }, true),
+    }));
+    await t.call("POST", "/runs/:run/wish/open");
+    await paintsDone();
+    const memories = ((await t.call("GET", "/runs/:run/wish")).body as wish.WishView).banners[0]!;
+    assert.equal(memories.kind, "memories");
+    const item = (await readItem(t.store, t.runId, memories.five.id))!;
+    assert.equal(item.cg?.explicit, true, "the item keeps the mark");
+    // The Memory's own art (its first open, or Repaint) is built the same way as the banner's.
+    const own = await itemArtPrompt(t.deps, t.runId, item);
+    return [t.paid.find((call) => call.method === "generateBannerArt")!.request, own] as const;
+  };
+  for (const request of await paint("r-m4bann40-aaaaaa", "explicit", "explicit")) {
+    assert.match(request.prompt, /explicit adult scene/);
+    assert.match(request.negativePrompt, /child, childlike/);
+  }
+  for (const [runKey, heat, rating] of [
+    ["r-m4bann41-bbbbbb", "explicit", "suggestive"],
+    ["r-m4bann42-cccccc", "fade", "explicit"],
+  ] as const) {
+    for (const clothed of await paint(runKey, heat, rating)) {
+      assert.doesNotMatch(clothed.prompt, /explicit adult scene|nsfw/, `${heat} Heat at the ${rating} rating`);
+      assert.match(clothed.prompt, /\bclothed\b/, `${heat} Heat at the ${rating} rating`);
+    }
+  }
 });
 
 test("a Snapshot planned without a title is named by its first words, or its first characters when it has no spaces", () => {

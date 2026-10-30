@@ -20,7 +20,11 @@ const SNAPSHOT_MAX = 600;
 const LINE_MAX = 600;
 
 const LookSchema: ZodType<ItemLook> = z.object({ name: text(TITLE_MAX), outfitLine: text(LINE_MAX) });
-const CgSchema = z.object({ brief: text(LINE_MAX), cast: z.array(z.string().max(120)).max(3) });
+const CgSchema = z.object({
+  brief: text(LINE_MAX),
+  cast: z.array(z.string().max(120)).max(3),
+  explicit: z.literal(true).optional(),
+});
 const SnapshotCgSchema = CgSchema.extend({ brief: z.string() });
 
 const defaultBanner = (): Banner => ({
