@@ -237,7 +237,7 @@
         },
         "id": "otome-forge",
         "name": "Otome Hearth",
-        "version": "0.1.17",
+        "version": "0.2.0",
         "description": "An otome game in its own Home tab, made from your own characters: love interests who remember what you chose, their messages to you, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn. Install it, restart Marinara Engine when prompted, then open Home → Otome Hearth.",
         "engine": {
           "min": "2.5.1",
@@ -271,13 +271,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "b02e55c469997e1b06931dcca49be3de5a893200b3d334e1c100ad735d408fd9",
-            "bytes": 400949
+            "sha256": "4daa30498e09a8eaf0d2bdfc3239eb506ae8f6f2b340495751559366d8a7f51f",
+            "bytes": 402454
           },
           {
             "path": "client.js",
-            "sha256": "f4af51637497ad8f73f6f4ff72e49596099f4161bb0689d097a602671b015a50",
-            "bytes": 1112023
+            "sha256": "5d187770152c7d03e7815608e1ef35da2675e2bce09b001274b505de8b3c04c8",
+            "bytes": 1119320
           },
           {
             "path": "otome-hearth-icon.png",
@@ -305,9 +305,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/otome-forge.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/otome-forge-0.1.17.zip",
-        "sha256": "cae217dc1ab7f1edd1524175b448c5fc57f931ebb26a521b2cfcf2ab0103a5c7",
-        "bytes": 1664624
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/otome-forge-0.2.0.zip",
+        "sha256": "c8ecdc827d6244f031e6e13313fe51cf79143976272fee2f40bc2bb7797a6d79",
+        "bytes": 1673425
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/otome-forge/README.md"
     },

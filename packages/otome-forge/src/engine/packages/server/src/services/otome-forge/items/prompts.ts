@@ -40,7 +40,7 @@ import {
   sceneCardBlock,
   type ChapterPlanReply,
 } from "../story/prompts.js";
-import { otomeWritingRules } from "../writing-rules.js";
+import { STORY_PACING_INSTRUCTION, otomeWritingRules } from "../writing-rules.js";
 
 export const STORY_NODES_MIN = 3;
 export const STORY_NODES_MAX = 5;
@@ -97,7 +97,7 @@ export function storyPlanMessages({ world, player, unit, state, item, memory }: 
   const stage = (state.lis[li] ?? defaultLiState()).stage;
   const row = stageRow(stage);
   const system = [
-    "You are the Character Story planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human inside a monster, who softens toward the protagonist and not toward the world.",
+    "You are the Character Story planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human inside a monster, capable of earned, character-consistent change.",
     `Plan ${name}'s CHARACTER STORY "${item.title}": a private side story between ${name} and the protagonist, outside the main plot, told as ${STORY_NODES_MIN} to ${STORY_NODES_MAX} nodes in play order; a narrator writes each node later as one scene the player reads.`,
     "Reply with ONLY a JSON object of this shape:",
     STORY_PLAN_SHAPE,
@@ -117,6 +117,7 @@ export function storyPlanMessages({ world, player, unit, state, item, memory }: 
     `- Write every text field in ${world.language}.`,
     "- Omit an optional field rather than writing null.",
     "",
+    STORY_PACING_INSTRUCTION,
     otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: [{ name }], kind: "planner" }),

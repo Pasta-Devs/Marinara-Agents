@@ -126,7 +126,7 @@ test("the card fits its token budget, in Latin and CJK text, and never leaks a t
 
 test("a love interest whose bible is still being written gets only a name line; the stage is clamped", () => {
   assert.equal(otomeSceneCard({ name: "Sol", pronouns: THEY, bible: null }, { stage: 1 }), "Sol (they/them).");
-  assert.match(otomeSceneCard(unit(), { stage: 9 }), /stage 6 \(Bond\)\. Changed toward the protagonist only\./);
+  assert.match(otomeSceneCard(unit(), { stage: 9 }), /stage 6 \(Bond\)\. Earned, character-consistent change\./);
   assert.match(otomeSceneCard(unit(), { stage: 0 }), /stage 1 \(Mask\)/);
 });
 
@@ -161,7 +161,10 @@ test("writing rules: story prompts get the knowledge boundary first, planners ne
   assert.ok(story.startsWith(forgeKnowledgeBoundary));
   assert.ok(!planner.includes(forgeKnowledgeBoundary));
   for (const rules of [story, planner]) {
-    assert.match(rules, /softens toward the protagonist, not toward the world/);
+    assert.ok(rules.includes("All characters, player included, can change; for better, or worse."));
+    assert.match(rules, /earned and consistent with established identity and canonical character cards/);
+    assert.match(rules, /not automatic redemption or a replacement personality/);
+    assert.doesNotMatch(rules, /softens toward the protagonist, not toward the world/);
     assert.match(rules, /I'll always protect you/);
     assert.match(rules, /practiced ease/);
   }

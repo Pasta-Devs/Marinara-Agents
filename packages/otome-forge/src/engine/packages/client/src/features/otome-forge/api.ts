@@ -107,6 +107,12 @@ export function useOtomeApi() {
     return {
       get: <T>(path: string, query?: QueryValues, init?: RequestInit) => otomeGet<T>(context, path, query, init),
       post: <T>(path: string, body?: RequestBody, init?: RequestInit) => otomePost<T>(context, path, body, init),
+      saveImageAppearance: (runKey: string, li: string, identityLine: string) =>
+        otomePost<{ identityLine: string }>(
+          context,
+          `/runs/${encodeURIComponent(runKey)}/lis/${encodeURIComponent(li)}/appearance`,
+          { identityLine },
+        ),
       errorMessage: (error: unknown, fallbackKey?: string) =>
         otomeErrorMessage((key) => t(key), error, { debugMode, fallbackKey }),
     };

@@ -184,7 +184,7 @@ test("the stage table, node counts and Confrontation numbers are pinned", () => 
       "Mask 60 / self 40",
       "The mask breaks",
       "Mask 40 / self 60",
-      "Changed toward the protagonist only",
+      "Earned, character-consistent change",
     ],
   );
   assert.deepEqual([ROUTE_NODES_MIN, ROUTE_NODES_MAX, REPAIR_NODES_MIN, REPAIR_NODES_MAX], [4, 6, 2, 3]);

@@ -145,7 +145,7 @@ test("expression preview and paid edits retain the complete configured style, pr
       assert.ok(prompt.prompt.includes(POSITIVE));
       assert.ok(!prompt.prompt.includes("PROFILE STYLE REPLACED BY SETTINGS"));
       assert.match(prompt.prompt, /adult man/);
-      assert.match(prompt.prompt, /fully clothed/);
+      assert.match(prompt.prompt, /clothing coverage/);
       assert.match(prompt.negativePrompt, /child, childlike, minor, underage/);
       assert.ok(prompt.negativePrompt.includes(NEGATIVE));
       assert.ok(prompt.prompt.includes(FACE_LOOKS[face][tagged ? 1 : 0]));
@@ -181,7 +181,7 @@ test("expression preview and paid edits retain the complete configured style, pr
       assert.ok(request.prompt.includes(STYLE));
       assert.ok(request.prompt.includes(POSITIVE));
       assert.ok(request.negativePrompt.includes(NEGATIVE));
-      assert.match(request.negativePrompt, /nudity, nsfw/);
+      assert.match(request.negativePrompt, /nudity, sexual content/);
       assert.equal(request.debugMode, true);
       assert.deepEqual(request.referenceImages, ["data:image/png;base64,iVBORw0KGgo="]);
     }
@@ -202,7 +202,9 @@ test("reviewed prose prompts keep one final safety sentence and preserve long qu
   context.after(() => t.art.dispose());
   const preview = await t.call("POST", PROMPT, { li: KAI });
   assert.equal(preview.status, 200);
-  const tail = "safe for work, fully clothed, adult man.";
+  const tail = preview.body.prompts.tender.prompt.match(/A nonsexual facial-expression edit[^.]+\.$/)?.[0];
+  assert.ok(tail);
+  assert.match(tail, /adult man.*clothing coverage.*art style/);
   const unchanged = await t.call("POST", REPAINT, { li: KAI, ...preview.body });
   assert.equal(unchanged.body.paint.state, "ready");
   for (const [index, face] of FACES.entries()) {

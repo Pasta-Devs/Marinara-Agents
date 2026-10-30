@@ -1192,7 +1192,7 @@ test("Otome Hearth imageless play: intended appearance is readable without Bible
 }, testInfo) => {
   const fixture = expressionRepaintFixture();
   fixture.view.world.images.connectionId = null;
-  const appearance = "adult man, silver hair, amber eyes\nnavy coat, brass buttons";
+  const appearance = "adult man, silver hair, amber eyes";
   fixture.view.lis[0].look = {
     identityLine: "adult man, silver hair, amber eyes",
     outfitLine: "navy coat, brass buttons",
@@ -1203,10 +1203,10 @@ test("Otome Hearth imageless play: intended appearance is readable without Bible
   await stubRoutes(page, fixture.answer, calls);
   const root = await openRepaintCast(page);
   const card = root.locator(".of-cast-card").filter({ hasText: "Ilvar Thorne" });
-  const disclosure = card.locator("summary").filter({ hasText: "Image description" });
-  await disclosure.focus();
-  await page.keyboard.press("Enter");
-  await expect(card.getByText(appearance, { exact: true })).toBeVisible();
+  const field = card.getByRole("textbox", { name: "Image appearance", exact: true });
+  await field.focus();
+  await expect(field).toBeFocused();
+  await expect(field).toHaveValue(appearance);
   expect(calls.filter((call) => /\/bible(?:$|\?)/u.test(call.path))).toEqual([]);
   expect(calls.filter((call) => call.method === "POST" && /\/art\/|\/api\/audio\/generate/u.test(call.path))).toEqual(
     [],
@@ -3049,10 +3049,12 @@ test("Otome Hearth card link: a generated LI keeps their story and art while an 
   expect(pageErrors).toEqual([]);
 });
 
-// Check bounds before clicking: Playwright otherwise scrolls clipped horizontal tabs into view for the test.
+// Desktop categories stay visible; phone categories deliberately use one native horizontal strip.
+// Prove its scroll before clicking: Playwright would otherwise reveal off-screen tabs for the test.
 test("Otome Hearth Settings fills its frame and exposes every tab on desktop and phone", async ({
   page,
   isMobile,
+  browserName,
 }, testInfo) => {
   const sizes = isMobile
     ? [
@@ -3097,15 +3099,37 @@ test("Otome Hearth Settings fills its frame and exposes every tab on desktop and
         scrollWidth: element.scrollWidth,
         tabs: [...element.querySelectorAll('[role="tab"]')].map((tab) => {
           const box = tab.getBoundingClientRect();
-          return { left: box.left - strip.left, right: box.right - strip.right };
+          return { left: box.left - strip.left, right: box.right - strip.right, top: box.top };
         }),
       };
     });
-    expect(bounds.scrollWidth).toBeLessThanOrEqual(bounds.clientWidth + 1);
+    await page.screenshot({ path: testInfo.outputPath(`settings-categories-${size.width}-${look.toLowerCase()}.png`) });
     expect(bounds.tabs).toHaveLength(names.length);
-    for (const tab of bounds.tabs) {
-      expect(tab.left).toBeGreaterThanOrEqual(-1);
-      expect(tab.right).toBeLessThanOrEqual(1);
+    if (isMobile) {
+      expect(
+        Math.max(...bounds.tabs.map((tab) => tab.top)) - Math.min(...bounds.tabs.map((tab) => tab.top)),
+      ).toBeLessThanOrEqual(1);
+      if (index === 0) expect(bounds.scrollWidth).toBeGreaterThan(bounds.clientWidth + 1);
+      if (bounds.scrollWidth > bounds.clientWidth + 1) {
+        const strip = await tabs.boundingBox();
+        if (browserName === "webkit") {
+          // Playwright has no mobile WebKit wheel input; CSSOM proves native overflow, not a physical swipe.
+          await tabs.evaluate((element) => element.scrollBy({ left: element.scrollWidth }));
+        } else {
+          await page.mouse.move(strip!.x + strip!.width / 2, strip!.y + strip!.height / 2);
+          await page.mouse.wheel(bounds.scrollWidth, 0);
+        }
+        await expect.poll(() => tabs.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+        const debug = await tabs.getByRole("tab", { name: "Debug", exact: true }).boundingBox();
+        expect(debug!.x).toBeGreaterThanOrEqual(strip!.x - 1);
+        expect(debug!.x + debug!.width).toBeLessThanOrEqual(strip!.x + strip!.width + 1);
+      }
+    } else {
+      expect(bounds.scrollWidth).toBeLessThanOrEqual(bounds.clientWidth + 1);
+      for (const tab of bounds.tabs) {
+        expect(tab.left).toBeGreaterThanOrEqual(-1);
+        expect(tab.right).toBeLessThanOrEqual(1);
+      }
     }
     for (const name of names) {
       const tab = tabs.getByRole("tab", { name, exact: true });
@@ -3180,4 +3204,324 @@ test("Otome Hearth Settings scrolls to the last control on long pages", async ({
   }
   expect(scrolledPages).toBeGreaterThan(0);
   expect(calls.filter((call) => call.method === "POST" && call.path.endsWith("/settings"))).toEqual([]);
+});
+
+test("Otome Hearth cast repaint actions share one row with separate image costs", async ({
+  page,
+  isMobile,
+}, testInfo) => {
+  const sizes = isMobile
+    ? [
+        { width: 390, height: 844 },
+        { width: 844, height: 390 },
+      ]
+    : [
+        { width: 1280, height: 720 },
+        { width: 961, height: 640 },
+      ];
+  await page.setViewportSize(sizes[0]!);
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+  const fixture = expressionRepaintFixture();
+  const calls: Call[] = [];
+  await stubRoutes(page, fixture.answer, calls);
+  const root = await openRepaintCast(page);
+  const actions = root.locator(".of-forge-retry--paints");
+  const repaint = actions.getByRole("button", { name: "Repaint Ilvar Thorne’s look", exact: true });
+  const expressions = actions.getByRole("button", { name: "Repaint expressions for Ilvar Thorne", exact: true });
+  for (const [index, size] of sizes.entries()) {
+    await page.setViewportSize(size);
+    await page.emulateMedia({ colorScheme: index === 0 ? "dark" : "light" });
+    const look = index === 0 ? "midnight" : "pearl";
+    await expect(root).toHaveAttribute("data-look", look);
+    await actions.scrollIntoViewIfNeeded();
+    await expect(repaint).toBeVisible();
+    await expect(expressions).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath(`cast-repaint-${size.width}-${look}.png`) });
+    const [one, five, group] = await Promise.all([
+      repaint.boundingBox(),
+      expressions.boundingBox(),
+      actions.boundingBox(),
+    ]);
+    expect(Math.abs(one!.y - five!.y)).toBeLessThanOrEqual(1);
+    expect(Math.abs(one!.width - five!.width)).toBeLessThanOrEqual(1);
+    for (const [button, box, cost] of [
+      [repaint, one!, "Paints 1 image"],
+      [expressions, five!, "Paints 5 images"],
+    ] as const) {
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+      expect(box.x).toBeGreaterThanOrEqual(group!.x - 1);
+      expect(box.x + box.width).toBeLessThanOrEqual(group!.x + group!.width + 1);
+      const hint = button.locator("..").getByText(cost, { exact: true });
+      await expect(hint).toBeVisible();
+      const hintBox = await hint.boundingBox();
+      expect(hintBox!.y).toBeGreaterThanOrEqual(box.y + box.height);
+      expect(hintBox!.x + hintBox!.width).toBeLessThanOrEqual(group!.x + group!.width + 1);
+    }
+  }
+  expect(posts(calls, "/art/paint")).toEqual([]);
+  expect(posts(calls, "/art/expressions")).toEqual([]);
+  expect(posts(calls, "/art/expressions/prompt")).toEqual([]);
+});
+
+test("Otome Hearth affection shows per-level progress below Level beside its hearts", async ({
+  page,
+  isMobile,
+}, testInfo) => {
+  await page.setViewportSize({ width: isMobile ? 390 : 1280, height: isMobile ? 844 : 720 });
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+  const fixture = createSceneStub({ images: false, audio: false });
+  const lis = fixture.stub.view.lis as Json[];
+  Object.assign(lis[0]!, { level: 1, affectionProgress: { current: 0, required: 300 } });
+  Object.assign(lis[1]!, { level: 1, affectionProgress: { current: 299, required: 300 } });
+  Object.assign(lis[2]!, { level: 2, affectionProgress: { current: 0, required: 300 } });
+  lis.push({
+    ...lis[2]!,
+    id: "li-max-0004",
+    name: "Marin",
+    level: 10,
+    affectionProgress: { current: 300, required: 300 },
+  });
+  lis.push({ ...lis[2]!, id: "li-legacy-0005", name: "Ren", level: 3 });
+  delete lis[4]!.affectionProgress;
+  const calls: Call[] = [];
+  await stubRoutes(page, fixture.answer, calls);
+  const root = await openStory(page);
+  const section = root.getByRole("region", { name: "Between you", exact: true });
+  for (const look of ["midnight", "pearl"] as const) {
+    await page.emulateMedia({ colorScheme: look === "midnight" ? "dark" : "light" });
+    await expect(root).toHaveAttribute("data-look", look);
+    await section.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: testInfo.outputPath(`affection-progress-${look}.png`) });
+    for (const li of lis.slice(0, 4)) {
+      const row = section.getByRole("listitem").filter({ hasText: li.name });
+      const meter = row.getByRole("meter", { name: `${li.name}: affection progress`, exact: true });
+      await expect(meter).toBeVisible();
+      await expect(meter).toHaveText(`${li.affectionProgress.current} / ${li.affectionProgress.required}`);
+      await expect(meter).toHaveAttribute("aria-valuemin", "0");
+      await expect(meter).toHaveAttribute("aria-valuemax", "300");
+      await expect(meter).toHaveAttribute("aria-valuenow", String(li.affectionProgress.current));
+      await expect(meter).toHaveAttribute(
+        "aria-valuetext",
+        li.level === 10
+          ? "Maximum affection level reached"
+          : `${li.affectionProgress.current} of 300 affection toward the next level`,
+      );
+      const [counter, level, hearts] = await Promise.all([
+        meter.boundingBox(),
+        row.locator(".of-affection-level").boundingBox(),
+        row.locator(".of-hearts").boundingBox(),
+      ]);
+      expect(counter!.y).toBeGreaterThanOrEqual(level!.y + level!.height);
+      expect(Math.abs(counter!.x + counter!.width - level!.x - level!.width)).toBeLessThanOrEqual(1);
+      expect(Math.abs(counter!.y + counter!.height / 2 - hearts!.y - hearts!.height / 2)).toBeLessThanOrEqual(2);
+    }
+    await expect(section.getByRole("listitem").filter({ hasText: "Ren" }).getByRole("meter")).toHaveCount(0);
+  }
+  expect(
+    calls.filter(
+      (call) =>
+        call.method === "POST" && call.path.startsWith("/api/otome-forge/") && !call.path.endsWith("/index/opened"),
+    ),
+  ).toEqual([]);
+});
+
+test("Otome Hearth edits image appearance above Bible without spoilers or painting", async ({
+  page,
+  isMobile,
+}, testInfo) => {
+  await page.setViewportSize({ width: isMobile ? 390 : 1280, height: isMobile ? 844 : 720 });
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+  const fixture = expressionRepaintFixture();
+  const identityLine = "An adult cartographer with silver hair and round glasses.";
+  fixture.view.lis[0].look = { identityLine, outfitLine: "A navy winter coat." };
+  const calls: Call[] = [];
+  const path = `/api/otome-forge/runs/${RUN}/lis/${ILVAR}/appearance`;
+  let attempts = 0;
+  let release!: () => void;
+  const wait = new Promise<void>((resolve) => (release = resolve));
+  const answer = (call: Call): Answer | undefined => {
+    if (call.path !== path || call.method !== "POST") return fixture.answer(call);
+    attempts += 1;
+    if (attempts === 1) return { status: 400, json: { error: "Controlled save rejection.", code: "bad-request" } };
+    const saved = String(call.body!.identityLine).trim() || identityLine;
+    fixture.view.lis[0].look.identityLine = saved;
+    return { status: 200, json: { identityLine: saved }, ...(attempts === 2 ? { wait } : {}) };
+  };
+  await stubRoutes(page, answer, calls);
+  try {
+    const root = await openRepaintCast(page);
+    await page.screenshot({ path: testInfo.outputPath("cast-before-appearance-editor.png") });
+    const form = root.getByRole("form", { name: "Image appearance for Ilvar Thorne", exact: true });
+    await expect(form).toBeVisible();
+    const field = form.getByRole("textbox", { name: "Image appearance", exact: true });
+    const save = form.getByRole("button", { name: "Save changes", exact: true });
+    await expect(field).toHaveValue(identityLine);
+    await expect(save).toBeDisabled();
+    const bible = root.getByRole("button", { name: "Open Ilvar Thorne’s bible (spoilers)", exact: true });
+    const [editor, bibleBox] = await Promise.all([form.boundingBox(), bible.boundingBox()]);
+    expect(editor!.y + editor!.height).toBeLessThanOrEqual(bibleBox!.y);
+    const portrait = await root.locator(".of-cast-card").first().locator("img").getAttribute("src");
+    const first = "An adult cartographer with dark hair and round glasses.";
+    await field.fill(first);
+    await save.click();
+    await expect(form.locator(".of-notice--error")).toBeVisible();
+    await expect(field).toHaveValue(first);
+    const pending = page.waitForResponse((response) => new URL(response.url()).pathname === path);
+    await save.click();
+    await expect(save).toBeDisabled();
+    const newer = "An adult cartographer with dark hair, round glasses and freckles.";
+    await field.fill(newer);
+    release();
+    await (await pending).finished();
+    await expect(field).toHaveValue(newer);
+    await expect(save).toBeEnabled();
+    const success = page.waitForResponse((response) => new URL(response.url()).pathname === path);
+    await save.click();
+    await (await success).finished();
+    await expect(form.getByRole("status")).toContainText("Image appearance saved.");
+    await expect(save).toBeDisabled();
+    await expect(field).toHaveValue(newer);
+    await field.fill("");
+    const restored = page.waitForResponse((response) => new URL(response.url()).pathname === path);
+    await save.click();
+    await (await restored).finished();
+    await expect(field).toHaveValue(identityLine);
+    await expect(root.locator(".of-cast-card").first().locator("img")).toHaveAttribute("src", portrait!);
+    expect(fixture.view.lis[0].look.outfitLine).toBe("A navy winter coat.");
+    expect(
+      calls.filter((call) => call.method === "POST" && call.path === path).map((call) => call.body!.identityLine),
+    ).toEqual([first, first, newer, ""]);
+    await field.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: testInfo.outputPath("cast-appearance-saved-midnight.png") });
+    await page.reload();
+    const reopened = await openRepaintCast(page);
+    await expect(
+      reopened
+        .getByRole("form", { name: "Image appearance for Ilvar Thorne", exact: true })
+        .getByRole("textbox", { name: "Image appearance", exact: true }),
+    ).toHaveValue(identityLine);
+    expect(calls.filter((call) => /\/bible(?:\/|$)/u.test(call.path))).toEqual([]);
+    expect(posts(calls, "/art/paint")).toEqual([]);
+    expect(posts(calls, "/art/expressions")).toEqual([]);
+  } finally {
+    release();
+  }
+});
+
+test("Otome Hearth selects a saved music folder without generating music", async ({ page, isMobile }, testInfo) => {
+  await page.setViewportSize({ width: isMobile ? 390 : 1280, height: isMobile ? 844 : 720 });
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
+  const fixture = expressionRepaintFixture();
+  Object.assign(fixture.view.world.audio, { tts: false, generate: false, chapterThemes: false, musicFolder: "" });
+  fixture.view.world.images.connectionId = null;
+  const folder = "music/custom/romance";
+  const musicPath = `${folder}/summer.mp3`;
+  const assets = {
+    "music:dialogue:slice_of_life:calm:morning-tea": { path: "music/dialogue/slice_of_life/calm/morning-tea.mp3" },
+    "music:custom:romance:summer": { path: musicPath },
+    "backgrounds:room": { path: "backgrounds/room.png" },
+  };
+  const calls: Call[] = [];
+  const answer = (call: Call): Answer | undefined =>
+    call.path === "/api/game-assets/manifest"
+      ? { status: 200, json: { scannedAt: now(), count: Object.keys(assets).length, assets, byCategory: {} } }
+      : fixture.answer(call);
+  await stubRoutes(page, answer, calls);
+  const root = await openStory(page, { recordMusic: true });
+  await root.getByRole("button", { name: "Settings", exact: true }).click();
+  await root.getByRole("tab", { name: "Audio", exact: true }).click();
+  await page.screenshot({ path: testInfo.outputPath("audio-before-folder-selector.png") });
+  const select = root.getByRole("combobox", { name: "Music folder", exact: true });
+  await expect(select).toBeVisible();
+  await expect(select).toHaveValue("");
+  await expect(select.getByRole("option", { name: folder, exact: true })).toHaveCount(1);
+  await expect(select.getByRole("option", { name: "music", exact: true })).toHaveCount(1);
+  await expect(select.getByRole("option", { name: "backgrounds", exact: true })).toHaveCount(0);
+  await select.selectOption(folder);
+  expect(posts(calls, "/audio/settings")).toEqual([]);
+  const saved = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/audio/settings"));
+  await root.getByRole("button", { name: "Save changes", exact: true }).click();
+  await (await saved).finished();
+  expect(posts(calls, "/audio/settings")).toHaveLength(1);
+  expect(posts(calls, "/audio/settings")[0]!.body!.audio).toMatchObject({ generate: false, musicFolder: folder });
+  await root.getByRole("button", { name: "Back", exact: true }).click();
+  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Home", exact: true }).click();
+  await expect
+    .poll(
+      () =>
+        calls.filter(
+          (call) =>
+            call.method === "GET" && decodeURIComponent(call.path).endsWith(`/api/game-assets/file/${musicPath}`),
+        ).length,
+    )
+    .toBeGreaterThan(0);
+  await root.getByRole("button", { name: "Settings", exact: true }).click();
+  await root.getByRole("tab", { name: "Audio", exact: true }).click();
+  await expect(root.getByRole("combobox", { name: "Music folder", exact: true })).toHaveValue(folder);
+  await page.screenshot({ path: testInfo.outputPath("audio-folder-saved-pearl.png") });
+  expect(posts(calls, "/api/audio/generate")).toEqual([]);
+  expect(posts(calls, "/audio/brief")).toEqual([]);
+  expect(posts(calls, "/audio/track")).toEqual([]);
+});
+
+test("Otome Hearth retains an unavailable saved music folder and uses stock without paying", async ({
+  page,
+  isMobile,
+}, testInfo) => {
+  await page.setViewportSize({ width: isMobile ? 390 : 1280, height: isMobile ? 844 : 720 });
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+  const fixture = expressionRepaintFixture();
+  const missing = "music/deleted/romance";
+  Object.assign(fixture.view.world.audio, { tts: false, generate: false, chapterThemes: false, musicFolder: missing });
+  fixture.view.world.images.connectionId = null;
+  const stock = "music/dialogue/slice_of_life/calm/morning-tea.mp3";
+  const calls: Call[] = [];
+  const answer = (call: Call): Answer | undefined =>
+    call.path === "/api/game-assets/manifest"
+      ? {
+          status: 200,
+          json: {
+            scannedAt: now(),
+            count: 1,
+            assets: { "music:dialogue:slice_of_life:calm:morning-tea": { path: stock } },
+            byCategory: {},
+          },
+        }
+      : fixture.answer(call);
+  await stubRoutes(page, answer, calls);
+  const root = await openStory(page, { recordMusic: true });
+  await root.getByRole("button", { name: "Settings", exact: true }).click();
+  await root.getByRole("tab", { name: "Audio", exact: true }).click();
+  const folder = root.getByRole("combobox", { name: "Music folder", exact: true });
+  await expect(folder).toHaveValue(missing);
+  await expect(folder.getByRole("option", { name: missing, exact: true })).toHaveCount(1);
+  await expect(
+    root.getByText("The selected folder is unavailable. Engine library music will play instead.", { exact: true }),
+  ).toBeVisible();
+  await root.getByText("Generate music", { exact: true }).click();
+  await expect(root.getByRole("switch", { name: "Generate music", exact: true })).toBeChecked();
+  await expect(folder).toHaveCount(0);
+  expect(posts(calls, "/audio/settings")).toEqual([]);
+  await root.getByRole("button", { name: "Back", exact: true }).click();
+  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Home", exact: true }).click();
+  await expect
+    .poll(
+      () =>
+        calls.filter(
+          (call) => call.method === "GET" && decodeURIComponent(call.path).endsWith(`/api/game-assets/file/${stock}`),
+        ).length,
+    )
+    .toBeGreaterThan(0);
+  await root.getByRole("button", { name: "Settings", exact: true }).click();
+  await root.getByRole("tab", { name: "Audio", exact: true }).click();
+  await expect(root.getByRole("switch", { name: "Generate music", exact: true })).not.toBeChecked();
+  await expect(root.getByRole("combobox", { name: "Music folder", exact: true })).toHaveValue(missing);
+  await page.screenshot({ path: testInfo.outputPath("audio-missing-folder-midnight.png") });
+  expect(posts(calls, "/api/audio/generate")).toEqual([]);
+  expect(posts(calls, "/audio/brief")).toEqual([]);
+  expect(posts(calls, "/audio/track")).toEqual([]);
+  expect(calls.filter((call) => decodeURIComponent(call.path).includes(`/api/game-assets/file/${missing}/`))).toEqual(
+    [],
+  );
 });

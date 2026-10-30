@@ -30,6 +30,7 @@ import { cgPromptFor } from "../packages/otome-forge/src/engine/packages/server/
 import {
   cgPrompt,
   expressionPrompt,
+  keepsakePrompt,
   lookPrompt,
   placePrompt,
   type ImagePrompt,
@@ -400,21 +401,58 @@ const FACE_UNIT = {
   bible: bible({ look: { identityLine: "tall man", outfitLine: "keeper's coat", presentation: "man" } }),
 };
 
+test("non-explicit assets retain adult romance and lingerie without graphic policy enumeration", () => {
+  const world = worldOf(stored("sfw", "gentle"), "suggestive");
+  for (const style of [PLAIN, TAGGED]) {
+    const look = lookPrompt({ ...KAI_LOOK, outfitLine: "silk lingerie, sheer robe", world, style });
+    const scene = {
+      brief: "Two adults embrace romantically beside a fountain",
+      people: [KAI_LOOK, INES_LOOK],
+      world,
+      style,
+    };
+    const images = [
+      look,
+      placePrompt({ name: "Garden", tags: "rose garden, fountain, sunset", world, style }),
+      cgPrompt({ ...scene, use: "clothed" }),
+      cgPrompt({ ...scene, use: "cg" }),
+      keepsakePrompt(scene),
+    ];
+    for (const image of images) {
+      assert.match(image.negativePrompt, /child, childlike, minor, underage, school uniform/);
+      assert.match(image.negativePrompt, /nudity, explicit sexual activity/);
+      assert.doesNotMatch(image.negativePrompt, /loli|shota|nipples|genitals|\bsex\b|lingerie|sexual content/);
+      assert.doesNotMatch(image.prompt, /safe for work|adult face and body|over 18/);
+    }
+    assert.match(look.prompt, /silk lingerie, sheer robe/);
+    assert.match(images[2]!.prompt, /embrace romantically/);
+  }
+});
+
 test("a Suggestive ceiling leaves neutral looks and expression edits neutral in prose and tags", () => {
   const world = worldOf(stored("sfw", "gentle"), "suggestive");
   const neutralEdit = { prompt: "Neutral expression, blue coat", negativePrompt: "blurry" };
   for (const style of [PLAIN, TAGGED]) {
     for (const edited of [undefined, neutralEdit]) {
       const images = [
-        lookPrompt({ ...KAI_LOOK, world, style }, edited),
-        expressionPrompt({ unit: FACE_UNIT, base: "/kai.png", face: "cold", world, style, edited }),
+        { kind: "look", image: lookPrompt({ ...KAI_LOOK, world, style }, edited) },
+        {
+          kind: "face",
+          image: expressionPrompt({ unit: FACE_UNIT, base: "/kai.png", face: "cold", world, style, edited }),
+        },
       ];
-      for (const image of images) {
+      for (const { kind, image } of images) {
         assert.doesNotMatch(image.prompt, /\b(?:suggestive|tasteful|sensitive|nsfw|explicit)\b/i);
-        assert.match(image.prompt, /clothed, adult man/);
+        assert.match(image.prompt, /adult man/);
         assert.match(image.negativePrompt, /child, childlike, minor, underage, school uniform/);
-        assert.match(image.negativePrompt, /loli, shota, teenager/);
-        assert.match(image.negativePrompt, /nude, nudity, nipples, genitals, sex, explicit/);
+        if (kind === "look") {
+          assert.match(image.prompt, /clothed, adult man/);
+          assert.match(image.negativePrompt, /nudity, explicit sexual activity/);
+        } else {
+          assert.match(image.prompt, /clothing coverage/);
+          assert.match(image.negativePrompt, /nudity, sexual content/);
+          assert.doesNotMatch(image.negativePrompt, /loli|shota|nipples|genitals|\bsex\b/);
+        }
         if (edited) assert.ok(image.prompt.includes(neutralEdit.prompt), "the reviewed neutral words stay whole");
       }
     }
@@ -492,14 +530,13 @@ test("the adult-only negatives stay on every image, at every rating and after an
     const at = `${builder.name} ${heat} ${rating} ${style.tagged ? "tagged" : "plain"} ${JSON.stringify(edited)}`;
     const negative = tags(image.negativePrompt);
     for (const term of ADULT_TERMS) assert.ok(negative.includes(term), `${at}: ${term}`);
-    if (rating !== "sfw")
+    const explicit = builder.name === "explicit cg" && heat === "explicit" && rating === "explicit";
+    if (explicit)
       for (const term of ["loli", "shota", "teenager"]) assert.ok(negative.includes(term), `${at}: ${term}`);
     // Everyone drawn is tagged an adult (a place draws nobody).
     if (builder.name !== "place") assert.match(image.prompt, /adult man/, at);
-    // A sentence model (Grok drops negatives) is told in words above SFW.
-    if (builder.name !== "place" && rating !== "sfw") {
-      assert.equal(image.prompt.includes(ADULT_SENTENCE), !style.tagged, at);
-    }
+    // Only an actual explicit CG carries the additional whole-body adult sentence.
+    assert.equal(image.prompt.includes(ADULT_SENTENCE), explicit && !style.tagged, at);
     // Above SFW an edit that names a minor loses that part (a face takes no edit).
     if (edited.prompt?.includes("teenager") && builder.name !== "face") {
       assert.equal(image.prompt.includes("teenager"), rating === "sfw", at);
@@ -532,12 +569,15 @@ test("base looks, faces, outfits and the pair portrait stay clothed portraits at
     if (!builder.clothed) continue;
     const at = `${builder.name} ${rating} ${style.tagged ? "tagged" : "plain"} ${JSON.stringify(edited)}`;
     const positive = tags(image.prompt.replace(/\.\s/g, ", ").replace(/\.$/, ""));
-    assert.ok(positive.includes(rating === "sfw" ? "fully clothed" : "clothed"), at);
+    if (builder.name === "face") assert.match(image.prompt, /clothing coverage/, at);
+    else assert.ok(positive.includes(rating === "sfw" ? "fully clothed" : "clothed"), at);
     if (!edited.prompt) assert.doesNotMatch(image.prompt, /\bnsfw\b|\bexplicit\b|\bnude\b/, at);
     const negative = tags(image.negativePrompt);
-    for (const term of rating === "sfw"
-      ? ["nudity", "nsfw", "sexual content"]
-      : ["nude", "nudity", "nipples", "genitals", "sex", "explicit"]) {
+    for (const term of builder.name === "face"
+      ? ["nudity", "sexual content"]
+      : rating === "sfw"
+        ? ["nudity", "nsfw", "sexual content"]
+        : ["nudity", "explicit sexual activity"]) {
       assert.ok(negative.includes(term), `${at}: ${term}`);
     }
   }
@@ -548,7 +588,7 @@ test("base looks, faces, outfits and the pair portrait stay clothed portraits at
   );
 });
 
-test("a place carries no person or rating tags above SFW, and keeps the people and SFW negatives", () => {
+test("a place carries no person or rating tags above SFW, and keeps the people and non-explicit exclusions", () => {
   for (const rating of ["suggestive", "explicit"] as const) {
     for (const style of [PLAIN, TAGGED]) {
       const { prompt, negativePrompt } = placePrompt({
@@ -559,7 +599,7 @@ test("a place carries no person or rating tags above SFW, and keeps the people a
       });
       assert.doesNotMatch(prompt, /adult|suggestive|explicit|clothed|safe for work|nsfw/, rating);
       assert.match(prompt, /no humans, scenery/);
-      for (const term of ["people", "humans", "child", "loli", "nudity", "nsfw", "sexual content"]) {
+      for (const term of ["people", "humans", "child", "nudity", "explicit sexual activity"]) {
         assert.ok(tags(negativePrompt).includes(term), `${rating}: ${term}`);
       }
     }
@@ -619,5 +659,5 @@ test("a stored CG is painted explicit only while Heat and the rating are both Ex
   const lowered = await cgPromptFor(t.deps, t.runId, KEY, 1);
   assert.doesNotMatch(lowered.prompt, /\b(?:suggestive|tasteful|sensitive|explicit|nsfw)\b/);
   assert.match(lowered.prompt, /keeper's coat/);
-  assert.match(lowered.negativePrompt, /explicit, nude, nudity, nipples, genitals, sex/);
+  assert.match(lowered.negativePrompt, /nudity, explicit sexual activity/);
 });

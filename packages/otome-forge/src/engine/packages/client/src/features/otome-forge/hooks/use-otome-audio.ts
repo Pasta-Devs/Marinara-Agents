@@ -31,7 +31,7 @@ import {
 import type { ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { forgeSoundtrackContextKey } from "@forge-kit/audio-settings.mjs";
-import { chapterMusicCue, normalizeOtomeAudio } from "../shared/audio";
+import { chapterMusicCue, musicAssetsInFolder, normalizeOtomeAudio } from "../shared/audio";
 import { forgeSpeakerVoice } from "@forge-kit/voice-picking.mjs";
 import { host } from "marinara:host";
 import { api } from "../../../lib/api-client";
@@ -105,7 +105,8 @@ const PROBE_MS = 60_000;
 const TTS_CONFIG_MS = 30_000;
 
 export type SpeakOutcome = "spoken" | "silent" | "failed" | "stopped";
-export type AudioNoticeKind = "musicFailed" | "chapterMusicFailed" | "chapterMusicUnavailable" | "voiceFailed";
+export type AudioNoticeKind =
+  "musicFailed" | "chapterMusicFailed" | "chapterMusicUnavailable" | "musicFolderUnavailable" | "voiceFailed";
 
 interface AudioSnapshot {
   /** The newest notice; `id` changes with each one. */
@@ -141,7 +142,8 @@ export class OtomeAudioController {
   readonly runKey: string;
   private readonly audio = hostAudio();
   private readonly player: HostPlayer | null;
-  private readonly manifest: Promise<AssetManifest | null>;
+  private manifest: Promise<AssetManifest | null>;
+  private unavailableMusicFolder = "";
   private deps: ControllerDeps | null = null;
   private settings: AudioSettings = normalizeOtomeAudio({});
   /** The story's saved settings: only these start or stop music generation (`settings` may be a preview). */
@@ -176,7 +178,11 @@ export class OtomeAudioController {
     this.runKey = runKey;
     this.player = this.audio?.createPlayer() ?? null;
     // A manifest that cannot be read (or reads oddly) is no manifest: stock music is then simply not played.
-    this.manifest = this.audio
+    this.manifest = this.readManifest();
+  }
+
+  private readManifest(): Promise<AssetManifest | null> {
+    return this.audio
       ? this.audio
           .getAssetManifest()
           .then((manifest) => (isRecord(manifest) && isRecord(manifest.assets) ? manifest : null))
@@ -232,7 +238,11 @@ export class OtomeAudioController {
     const source =
       before.generate !== saved.generate ||
       before.chapterThemes !== saved.chapterThemes ||
+      before.musicFolder !== saved.musicFolder ||
       before.audioConnectionId !== saved.audioConnectionId;
+    if (before.musicFolder !== saved.musicFolder) {
+      this.unavailableMusicFolder = "";
+    }
     if (source) {
       // A new source starts clean: what failed on the old one may work now (the player changed it, never a timer).
       this.abortGeneration();
@@ -365,8 +375,42 @@ export class OtomeAudioController {
       this.currentTag = null;
       return;
     }
+    // Folder contents can change in Assets during this visit. Refresh on an actual cue/source change, not renders;
+    // an offline read keeps the last usable manifest instead of interrupting already available music.
+    if (!this.saved.generate && this.saved.musicFolder) {
+      const refreshed = await this.readManifest();
+      if (this.disposed || revision !== this.revision) return;
+      if (refreshed) this.manifest = Promise.resolve(refreshed);
+    }
     const manifest = await this.manifest;
     if (this.disposed || revision !== this.revision) return;
+    if (!this.saved.generate && this.saved.musicFolder) {
+      const assets = musicAssetsInFolder(manifest?.assets, this.saved.musicFolder);
+      const tags = Object.keys(assets);
+      if (tags.length) {
+        this.unavailableMusicFolder = "";
+        const fitting = this.audio?.selectDefaultMusic(
+          ENGINE_MUSIC_CUE[cue],
+          { assets },
+          { currentTag: this.currentTag },
+        );
+        const others = tags.filter((tag) => tag !== this.currentTag);
+        const choices = others.length ? others : tags;
+        this.play(fitting || choices[Math.floor(Math.random() * choices.length)]!, assets);
+        return;
+      }
+      if (this.unavailableMusicFolder !== this.saved.musicFolder) {
+        this.unavailableMusicFolder = this.saved.musicFolder;
+        this.notify("musicFolderUnavailable");
+      }
+      const stock = manifest ? this.audio?.selectDefaultMusic(ENGINE_MUSIC_CUE[cue], manifest) : null;
+      if (stock && manifest) this.play(stock, manifest.assets);
+      else {
+        this.player.stopMusic();
+        this.currentTag = null;
+      }
+      return;
+    }
     if (chapter) {
       const track = this.chapterTracks.get(chapter.chapterKey) ?? chapter.track;
       if (track && this.listed(track, manifest)) {

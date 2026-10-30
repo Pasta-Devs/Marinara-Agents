@@ -13,7 +13,13 @@ import type {
   RunState,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import * as economy from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/economy.ts";
-import { normalizeState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
+import {
+  normalizeState,
+  toRunView,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
+import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
+import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
+import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import {
   applyChoiceEffects,
   type ChoiceContext,
@@ -76,6 +82,32 @@ test("the economy's numbers are pinned", () => {
     [0, 299, 300, 599, 600, 2699, 2700, 99_999, -50, Number.NaN].map(economy.levelOf),
     [1, 1, 2, 2, 3, 9, 10, 10, 1, 1],
   );
+});
+
+test("the public run projects current-level affection without exposing private relationship state", () => {
+  const world = normalizeWorld({});
+  const player = normalizePlayer({});
+  const unit = normalizeUnit({ id: KAI, name: "Kai", source: "archetype" });
+  assert.ok(unit);
+  for (const [points, level, current] of [
+    [0, 1, 0],
+    [299, 1, 299],
+    [300, 2, 0],
+    [599, 2, 299],
+    [2699, 9, 299],
+    [2700, 10, 300],
+    [99_999, 10, 300],
+  ]) {
+    const state = normalizeState({ lis: { [KAI]: { points, trust: -2, tension: 3 } } });
+    const before = structuredClone(state);
+    const view = JSON.parse(JSON.stringify(toRunView("r-affection-abcdef", world, player, [unit], state)));
+    assert.equal(view.lis[0].level, level);
+    assert.deepEqual(view.lis[0].affectionProgress, { current, required: 300 });
+    for (const hidden of ["points", "trust", "tension", "grievances", "disclosures", "bible"]) {
+      assert.equal(hidden in view.lis[0], false, `${hidden} remains private`);
+    }
+    assert.deepEqual(state, before, "a view does not change earned affection or relationship state");
+  }
 });
 
 test("trust and tension stay in their ranges however many chapters push them", () => {

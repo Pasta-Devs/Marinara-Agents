@@ -2,9 +2,12 @@
 
 ## 0.2.0 — 2026-10-30
 
-- Restore mobile Settings scrolling and compact category navigation, and keep each cast member's repaint actions together.
+- Restore the scrolling mobile Settings category strip, and keep each cast member's repaint actions together.
 - Show progress toward the next Affection level in Between you.
-- Keep benign image tasks focused on the requested asset, and give chapters and scenes room for ordinary moments, earned emotional payoffs, and character change.
+- Facial expression edits use an adult, nonsexual face-edit policy while preserving the current look, clothing and style. Non-explicit Suggestive images keep concise content exclusions without unrelated graphic boilerplate.
+- Edit a love interest’s image appearance above their spoiler Bible without repainting or changing their story.
+- Choose an existing Assets Music folder in Audio settings when music generation is off.
+- Give chapters and scenes room for ordinary moments, earned emotional payoffs, and character change.
 
 ## 0.1.17 — 2026-10-30
 

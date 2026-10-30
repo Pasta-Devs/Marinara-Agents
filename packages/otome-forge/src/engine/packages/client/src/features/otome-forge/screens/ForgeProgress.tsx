@@ -5,7 +5,7 @@
 // its prompt first, so painting is offered once the world is ready and each look exists. Once the world is ready, the
 // cast is shown with their bibles behind a spoiler gate.
 // ──────────────────────────────────────────────
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -24,13 +24,14 @@ import {
 import { forgeStepErrorKey, useOtomeApi } from "../api";
 import { Avatar } from "../components/Avatar";
 import { CostHint } from "../components/CostHint";
-import { ImageDescription } from "../components/ImageDescription";
 import { PromptReviewDialog, type ImagePrompt } from "../components/PromptReviewDialog";
 import { patchRun, runQueryKey, useRun, useSampledAccents } from "../hooks/use-run";
 import { accentOf } from "../lib/accent";
 import { useOtomeProps } from "../props";
-import type { ForgeStatus, ForgeStep, ForgeStepState, Paint, RunView } from "../shared/api-types";
+import type { ForgeStatus, ForgeStep, ForgeStepState, Paint, RunLiView, RunView } from "../shared/api-types";
 import { FACES, type Face } from "../shared/faces";
+import { TextField } from "./setup/parts";
+import { SaveBar } from "./settings/ContentSettings";
 
 const FACE_LABELS: Record<Face, string> = {
   tender: "ui.otomeForge.reader.faceTender",
@@ -533,7 +534,7 @@ function CastList({ view, onOpenBible }: { view: RunView; onOpenBible: (li: stri
               <Avatar name={li.name} url={li.portrait} accent={accent} size={64} />
               <span className="of-cast-name">{li.name}</span>
               <span className="of-hint">{`${li.pronouns.subject}/${li.pronouns.object}`}</span>
-              <ImageDescription text={[li.look?.identityLine, li.look?.outfitLine].filter(Boolean).join("\n")} />
+              <ImageAppearanceEditor key={`${view.runKey}:${li.id}`} runKey={view.runKey} li={li} />
               <button
                 type="button"
                 className="of-button of-button--text of-button--small"
@@ -548,5 +549,74 @@ function CastList({ view, onOpenBible }: { view: RunView; onOpenBible: (li: stri
         })}
       </ul>
     </section>
+  );
+}
+
+/** The public visual description, edited without opening the spoiler-heavy Bible or painting anything. */
+function ImageAppearanceEditor({ runKey, li }: { runKey: string; li: RunLiView }) {
+  const { t } = useTranslation();
+  const otome = useOtomeApi();
+  const queryClient = useQueryClient();
+  const stored = li.look?.identityLine ?? "";
+  const [draft, setDraft] = useState(stored);
+  const latest = useRef(stored);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<{ error: boolean; text: string } | null>(null);
+  const save = async () => {
+    if (busy || draft === stored) return;
+    const submitted = draft;
+    setBusy(true);
+    setStatus(null);
+    try {
+      const result = await otome.saveImageAppearance(runKey, li.id, submitted);
+      patchRun(queryClient, runKey, (view) => ({
+        ...view,
+        lis: view.lis.map((current) =>
+          current.id === li.id
+            ? {
+                ...current,
+                look: {
+                  ...current.look,
+                  outfitLine: current.look?.outfitLine ?? "",
+                  identityLine: result.identityLine,
+                },
+              }
+            : current,
+        ),
+      }));
+      // A save must not replace text typed while its request was pending.
+      if (latest.current === submitted) {
+        latest.current = result.identityLine;
+        setDraft(result.identityLine);
+        setStatus({ error: false, text: t("ui.otomeForge.setup.imageAppearanceSaved") });
+      }
+    } catch (failure) {
+      setStatus({ error: true, text: otome.errorMessage(failure) });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form
+      className="of-cast-appearance"
+      aria-label={t("ui.otomeForge.setup.imageAppearanceOf", { name: li.name })}
+      onSubmit={(event) => {
+        event.preventDefault();
+        void save();
+      }}
+    >
+      <TextField
+        label={t("ui.otomeForge.setup.imageAppearance")}
+        hint={t("ui.otomeForge.setup.imageAppearanceHint")}
+        rows={3}
+        value={draft}
+        onChange={(value) => {
+          latest.current = value;
+          setDraft(value);
+          setStatus(null);
+        }}
+      />
+      <SaveBar changed={draft !== stored} busy={busy} status={status} onSave={() => void save()} />
+    </form>
   );
 }
