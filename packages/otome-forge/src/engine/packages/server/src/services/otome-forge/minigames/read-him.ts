@@ -263,7 +263,8 @@ export const ReadHimReplySchema: ZodType<ReadHimReply> = z.object({
     .max(READ_HIM_ROUNDS + 3),
 });
 
-const clean = (value: string) =>
+/** Collapses whitespace and strips wrapping quotes (Read Me uses it too). */
+export const clean = (value: string) =>
   value
     .replace(/\s+/g, " ")
     .trim()
@@ -438,8 +439,8 @@ async function listSets(store: Pick<OtomeStore, "listRun">, runId: string): Prom
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-/** One thing he may know, from his own recall; "" when memory has nothing ready or fails. */
-async function recalledLine(
+/** One thing he may know, from his own recall; "" when memory has nothing ready or fails (Read Me uses it too). */
+export async function recalledLine(
   memory: ReadHimDeps["memory"],
   runId: string,
   unit: Pick<Unit, "id" | "name">,

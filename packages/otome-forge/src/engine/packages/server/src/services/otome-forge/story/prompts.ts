@@ -21,6 +21,7 @@
 // cg brief what the image rating lets it show (content-contract.ts imageBriefRule); only under Explicit Heat and the
 // Explicit rating does the brief's shape carry "explicit". A world that raised nothing gets the prompts it got before.
 import { forgeChoiceMessages, forgeChoicePlanMessages } from "@forge-kit/player-choices-server.mjs";
+import { sliceTextToTokenBudget } from "@forge-kit/shared-token-estimator.mjs";
 import { z, type ZodType } from "zod";
 import type {
   Chapter,
@@ -43,6 +44,10 @@ import {
 import { stillToMend } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { FACES, MUSIC_MOODS } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { LIMIT_IDS } from "../../../../../client/src/features/otome-forge/shared/content.js";
+import {
+  NOTEBOOK_CATEGORIES,
+  type NotebookEntry,
+} from "../../../../../client/src/features/otome-forge/shared/read-me.js";
 import { explicitCgAllowed, imageBriefRule, otomeContentContract, otomeContractReminder } from "../content-contract.js";
 import type { OtomeMessage } from "../generation.js";
 import { chapterOwner, mainChapterNumber } from "../ids.js";
@@ -188,6 +193,35 @@ export function betweenYou(unit: Pick<Unit, "name">, liState: LiState, also: rea
   const told = liState.disclosures.slice(-3).map((item) => item.text);
   if (told.length) lines.push(`The protagonist has told ${unit.name}: ${told.join(" ")}`);
   return lines.join("\n");
+}
+
+/** The newest notebook entries a prompt carries, and the line's budget. */
+const KNOWN_SHOWN = 8;
+const KNOWN_TOKENS = 220;
+
+/**
+ * What this love interest has come to know about the protagonist: their notebook (Read Me, #1945), theirs alone. Only
+ * prompts about them carry it, beside their own card: never another love interest's card, a planner's view of the
+ * others, a banner or a care note. "" for an empty notebook, so a prompt without one is unchanged byte for byte. Told as
+ * context to use where it fits, never a checklist; the player's own words are quoted as data.
+ */
+export function knowsAboutYou(unit: Pick<Unit, "name">, liState: Pick<LiState, "known">): string {
+  const known = (liState.known ?? []).slice(-KNOWN_SHOWN);
+  if (!known.length) return "";
+  const item = (entry: NotebookEntry) => {
+    const words = entry.words ? ` (in the protagonist's own words: "${entry.words}")` : "";
+    const guess =
+      entry.verdict === "right" ? entry.text : `${entry.verdict === "close" ? "nearly" : "not so"}: ${entry.text}`;
+    return `${guess}${words}`;
+  };
+  const sections = NOTEBOOK_CATEGORIES.flatMap((category) => {
+    const items = known.filter((entry) => entry.category === category).map(item);
+    return items.length ? [`${category}: ${items.join("; ")}`] : [];
+  });
+  return sliceTextToTokenBudget(
+    `What ${unit.name} has come to know about the protagonist (${unit.name}'s alone; let it show where it fits, never recite it): ${sections.join(" | ")}`,
+    KNOWN_TOKENS,
+  );
 }
 
 /** Who the protagonist is (name, pronouns, traits, goal), for every story prompt. */
