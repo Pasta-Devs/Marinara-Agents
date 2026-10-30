@@ -188,9 +188,15 @@ test("an explicit Memory's art is painted explicit only under Explicit Heat and 
   // The plan keeps the key image's mark only when the reply set it.
   const kai = { id: KAI, name: "Kai" } as Unit;
   const cast = [kai, { id: MIR, name: "Mireille" } as Unit, { id: SOL, name: "Sol" } as Unit];
-  const marked = (explicit: unknown) => {
+  // Above SFW Heat each 4★ Moment carries its own brief, so an explicit premise never reaches its picture.
+  const marked = (explicit: unknown, briefs = true) => {
     const reply = bannerReply("memories");
-    return { ...reply, featured: { ...reply.featured, explicit } };
+    const four = reply.four.map((entry) => ({
+      ...entry,
+      premise: "EXPLICIT-PREMISE: they end the night in bed together.",
+      ...(briefs ? { cgBrief: "MOMENT-BRIEF: the quay at dusk, walking under the lanterns.", cgCast: ["Ines"] } : {}),
+    }));
+    return { ...reply, featured: { ...reply.featured, explicit }, four };
   };
   const cgOf = (explicit: unknown) =>
     (normalizeBannerPlan(marked(explicit), { kind: "memories", units: cast, featured: kai }) as BannerPlan).featured
@@ -198,8 +204,23 @@ test("an explicit Memory's art is painted explicit only under Explicit Heat and 
   assert.equal(cgOf(true).explicit, true);
   assert.equal("explicit" in cgOf(false), false);
   assert.equal("explicit" in cgOf(null), false);
+  const moments = (briefs: boolean, required: boolean) =>
+    normalizeBannerPlan(marked(true, briefs), {
+      kind: "memories",
+      units: cast,
+      featured: kai,
+      playerName: "Ines",
+      moments: required,
+    });
+  assert.equal(moments(false, true), "four[0].cgBrief is missing", "required above SFW Heat");
+  assert.equal(typeof moments(false, false), "object", "not asked for under SFW Heat");
+  // The Moment's own love interest, and the protagonist when its cast names them.
+  assert.deepEqual((moments(true, true) as BannerPlan).four[0]!.cg, {
+    brief: "MOMENT-BRIEF: the quay at dusk, walking under the lanterns.",
+    cast: ["Mireille", "Ines"],
+  });
 
-  const paint = async (runKey: string, heat: "explicit" | "fade", rating: "explicit" | "suggestive") => {
+  const paint = async (runKey: string, heat: "explicit" | "fade", rating: "explicit" | "suggestive" | "sfw") => {
     const replies = [JSON.stringify(marked(true)), ...rotationReplies().slice(1)];
     const t = await wishWorld({ runKey, images: { rating }, replies });
     await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
@@ -214,6 +235,12 @@ test("an explicit Memory's art is painted explicit only under Explicit Heat and 
     assert.equal(item.cg?.explicit, true, "the item keeps the mark");
     // The Memory's own art (its first open, or Repaint) is built the same way as the banner's.
     const own = await itemArtPrompt(t.deps, t.runId, item);
+    // A Moment's picture comes from its own brief, never its premise, and stays clothed.
+    const moment = (await readItem(t.store, t.runId, memories.four[0]!.id))!;
+    const momentArt = await itemArtPrompt(t.deps, t.runId, moment);
+    assert.match(momentArt.prompt, /MOMENT-BRIEF/);
+    assert.doesNotMatch(momentArt.prompt, /EXPLICIT-PREMISE|explicit adult scene|nsfw/);
+    assert.match(momentArt.prompt, /\bclothed\b/);
     return [t.paid.find((call) => call.method === "generateBannerArt")!.request, own] as const;
   };
   for (const request of await paint("r-m4bann40-aaaaaa", "explicit", "explicit")) {
@@ -223,6 +250,7 @@ test("an explicit Memory's art is painted explicit only under Explicit Heat and 
   for (const [runKey, heat, rating] of [
     ["r-m4bann41-bbbbbb", "explicit", "suggestive"],
     ["r-m4bann42-cccccc", "fade", "explicit"],
+    ["r-m4bann43-dddddd", "explicit", "sfw"],
   ] as const) {
     for (const clothed of await paint(runKey, heat, rating)) {
       assert.doesNotMatch(clothed.prompt, /explicit adult scene|nsfw/, `${heat} Heat at the ${rating} rating`);

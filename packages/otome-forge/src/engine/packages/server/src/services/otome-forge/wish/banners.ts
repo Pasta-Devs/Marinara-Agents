@@ -78,6 +78,7 @@ import {
   BANNER_PLAN_TOKENS,
   BannerPlanSchema,
   bannerPlanMessages,
+  momentBriefs,
   normalizeBannerPlan,
   type BannerPlan,
 } from "./prompts.js";
@@ -315,6 +316,7 @@ function itemsOf(
     ...base(`a${index + 1}` as ItemSlot, kinds.four, entry.li, entry.title),
     ...(entry.premise ? { premise: entry.premise } : {}),
     ...(entry.look ? { look: entry.look } : {}),
+    ...(entry.cg ? { cg: entry.cg } : {}),
   }));
   const three = plan.snapshots.map((entry, index): Item => ({
     ...base(`s${index + 1}` as ItemSlot, kinds.three, entry.li, entry.title),
@@ -396,7 +398,7 @@ async function createBanner(
     const title = earlierItems.get(banner.items.five[0]!)?.title;
     if (title) earlierTitles.push(title);
   }
-  const context = { kind, units: cast, featured, playerName: run.player.name };
+  const context = { kind, units: cast, featured, playerName: run.player.name, moments: momentBriefs(kind, run.world) };
   const { value, connectionId, model } = await generateJson(deps, {
     runId,
     job: "structured",

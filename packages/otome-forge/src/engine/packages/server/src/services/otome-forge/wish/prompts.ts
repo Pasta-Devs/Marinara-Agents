@@ -16,7 +16,9 @@
 //   Heat and the Explicit rating both allow an explicit one and its brief sets `explicit` (content-contract.ts
 //   imageBriefRule, as a story CG). A world that raised nothing gets the prompt it got before.
 // - 0.5.2 (#1951): above SFW Heat a Memories banner's premises span the Heat: SFW and suggestive ones, and explicit ones
-//   at Explicit Heat. Snapshots stay SFW, and an SFW world's prompt is unchanged.
+//   at Explicit Heat. Each 4★ Moment then gets its own English brief within the image rating (momentBriefs), since its
+//   illustration would otherwise be painted from a premise that may go further. Snapshots stay SFW, and an SFW world's
+//   prompt is unchanged.
 // Prompts are English and never localized; titles, premises, look names and Snapshots are in the world's language. A
 // love interest may be any gender: the prompt names them or uses their bible's pronouns.
 import { z } from "zod";
@@ -59,11 +61,14 @@ const KIND_TEXT: Record<BannerKind, string> = {
 
 const LOOK_SHAPE = `{"name": "<look name>", "outfitLine": "<English outfit tags>"}`;
 const SNAPSHOT_SHAPE = `{"li": "<love interest id>", "title": "<2–5 words>", "text": "<2–3 sentences>", "cgBrief": "<English illustration of this vignette, 1–2 sentences>", "cgCast": ["<this love interest's name; the protagonist only if present>"]}`;
-/** The Memories shape; `explicit` adds the key image's mark where the world allows an explicit one. */
-const memoriesShape = (explicit: boolean) =>
-  `{"featured": {"title": "<title>", "premise": "<2–3 sentences>", "cgBrief": "<English, 1–2 sentences>", "cgCast": ["<names in the key image, the featured love interest first; the protagonist only if present>"]${explicit ? ', "explicit": false' : ""}}, "four": [{"li": "<love interest id>", "title": "<title>", "premise": "<1–2 sentences>"} ×3], "snapshots": [${SNAPSHOT_SHAPE} ×6]}`;
+/**
+ * The Memories shape. `explicit` adds the key image's mark where the world allows an explicit one; `moments` gives each
+ * 4★ its own illustration brief (momentBriefs).
+ */
+const memoriesShape = ({ explicit, moments }: { explicit: boolean; moments: boolean }) =>
+  `{"featured": {"title": "<title>", "premise": "<2–3 sentences>", "cgBrief": "<English, 1–2 sentences>", "cgCast": ["<names in the key image, the featured love interest first; the protagonist only if present>"]${explicit ? ', "explicit": false' : ""}}, "four": [{"li": "<love interest id>", "title": "<title>", "premise": "<1–2 sentences>"${moments ? `, "cgBrief": "<English, 1–2 sentences>", "cgCast": ["<this love interest's name; the protagonist only if present>"]` : ""}} ×3], "snapshots": [${SNAPSHOT_SHAPE} ×6]}`;
 const SHAPES: Record<BannerKind, string> = {
-  memories: memoriesShape(false),
+  memories: memoriesShape({ explicit: false, moments: false }),
   "his-wardrobe": `{"featured": {"title": "<title>", "look": ${LOOK_SHAPE}}, "four": [{"li": "<another love interest's id>", "title": "<title>", "look": ${LOOK_SHAPE}} ×3], "snapshots": [${SNAPSHOT_SHAPE} ×6]}`,
   "my-wardrobe": `{"featured": {"title": "<title>", "look": ${LOOK_SHAPE}}, "four": [{"title": "<title>", "look": ${LOOK_SHAPE}} ×3], "snapshots": [${SNAPSHOT_SHAPE} ×6]}`,
 };
@@ -77,6 +82,13 @@ const PREMISE_HEAT: Partial<Record<World["content"]["heat"], string>> = {
   explicit:
     "- Premises span the Heat across the featured Memory and the 4★s: SFW ones, suggestive ones (desire, tension, a near miss) and explicit ones (sex between the adults, written on the page when the scene is written).",
 };
+
+/**
+ * Whether each 4★ Moment gets its own illustration brief: above SFW Heat its premise may go further than the image
+ * rating, and its art is otherwise painted from the premise (S/art/outfits.ts).
+ */
+export const momentBriefs = (kind: BannerKind, world: Pick<World, "content">) =>
+  kind === "memories" && world.content.heat !== "sfw";
 
 const pronounText = (pronouns: Unit["pronouns"]) => `${pronouns.subject}/${pronouns.object}/${pronouns.possessive}`;
 
@@ -139,10 +151,18 @@ export function bannerPlanMessages(input: BannerPlanInput): OtomeMessage[] {
   // Memory art may be explicit only where a story CG may be (Explicit Heat and the Explicit rating).
   const explicitArt = kind === "memories" && explicitCgAllowed(world);
   const briefRule = kind === "memories" ? imageBriefRule(world, explicitArt ? "cg" : "clothed") : "";
+  const moments = momentBriefs(kind, world);
+  // A Moment's illustration stays clothed (at most Suggestive) whatever its premise holds.
+  const momentRule = moments ? imageBriefRule(world, "clothed").replace(/^The key image at this rating: /, "") : "";
+  const tagged = explicitArt
+    ? "every outfit line and 4★ brief must fit"
+    : moments
+      ? "every outfit line, key image brief and 4★ brief must fit"
+      : "every outfit line and key image brief must fit";
   const system = [
     "You plan one banner of Wish in an otome game: the collectible side stories, looks and Snapshots the player pulls for with Starlight they earned. Nothing on a banner changes the main story.",
     KIND_TEXT[kind],
-    `Reply with ONLY this JSON object:\n${explicitArt ? memoriesShape(true) : SHAPES[kind]}`,
+    `Reply with ONLY this JSON object:\n${kind === "memories" ? memoriesShape({ explicit: explicitArt, moments }) : SHAPES[kind]}`,
     [
       "RULES",
       "- A premise is a situation: where they are, what is happening, what each of them wants from it. Never a plot turn, a reveal, a confession or anything the main story has not reached. How close they are follows their current stage; the scene itself is written later, when the item is first opened.",
@@ -154,6 +174,9 @@ export function bannerPlanMessages(input: BannerPlanInput): OtomeMessage[] {
         : "- Every look stays a complete clothed look: it may be revealing (lingerie, swimwear), never nude.",
       "- The key image brief is one or two English sentences on where and how the moment is framed (place, light, what they are doing), never anyone's looks.",
       briefRule ? `- ${briefRule}` : "",
+      moments
+        ? `- Each 4★'s cgBrief is one or two English sentences for its Moment's illustration: the place, light and what they are doing, never anyone's looks. Whatever its premise holds, the picture follows this: ${momentRule} cgCast names only that love interest and, when shown, the protagonist.`
+        : "",
       `- Exactly ${BANNER_SIZES.four} entries in "four" and ${BANNER_SIZES.three} in "snapshots". Use the love interest ids given below for "li".`,
       `- Snapshots: 2–3 sentences each, a small everyday moment between one love interest and the protagonist, in the third person. Spread them across the cast, at least two with ${featured.name}. Each one stays within what that love interest has seen or been told.`,
       "- Each Snapshot's cgBrief illustrates its saved vignette: the actual place, light and action, never an invented plot turn or anyone's looks. Write the brief in English; cgCast names only that love interest and, when shown, the protagonist. Its picture stays clothed and within the Snapshot's SFW contract.",
@@ -168,9 +191,7 @@ export function bannerPlanMessages(input: BannerPlanInput): OtomeMessage[] {
       otomeContentContract({ world, lis, kind: "home" }),
       "CONTENT CONTRACT FOR SNAPSHOTS (they show on the Love Timeline)",
     ),
-    explicitArt
-      ? `IMAGE TAGS every outfit line must fit: ${imageTags}. The key image brief follows its rule above.`
-      : `IMAGE TAGS every outfit line and key image brief must fit: ${imageTags}.`,
+    `IMAGE TAGS ${tagged}: ${imageTags}.${explicitArt ? " The featured key image brief follows its rule above." : ""}`,
   ].join("\n\n");
 
   const cast = units.map((unit) => {
@@ -227,6 +248,8 @@ export const BannerPlanSchema = z.object({
       title: z.string().min(1),
       premise: z.string().optional(),
       look: Look.optional(),
+      cgBrief: z.string().optional(),
+      cgCast: z.array(z.string()).optional(),
     }),
   ),
   snapshots: z.array(
@@ -249,7 +272,13 @@ export interface BannerPlan {
     look?: ItemLook;
     cg?: { brief: string; cast: string[]; explicit?: true };
   };
-  four: Array<{ li: string | null; title: string; premise?: string; look?: ItemLook }>;
+  four: Array<{
+    li: string | null;
+    title: string;
+    premise?: string;
+    look?: ItemLook;
+    cg?: { brief: string; cast: string[] };
+  }>;
   snapshots: Array<{ li: string; title: string; text: string; cg?: { brief: string; cast: string[] } }>;
 }
 
@@ -279,7 +308,8 @@ export function normalizeBannerPlan(
     units,
     featured,
     playerName,
-  }: { kind: BannerKind; units: readonly Unit[]; featured: Unit; playerName?: string },
+    moments = false,
+  }: { kind: BannerKind; units: readonly Unit[]; featured: Unit; playerName?: string; moments?: boolean },
 ): BannerPlan | string {
   const liOf = (value: string | undefined) => {
     const named = (value ?? "").trim();
@@ -323,10 +353,22 @@ export function normalizeBannerPlan(
       plan.four.push({ li: li.id, title: clip(entry.title, ITEM_LIMITS.title), look: cleanLook(entry.look) });
     } else {
       if (!entry.premise?.trim()) return `four[${index}].premise is missing`;
+      if (moments && !entry.cgBrief?.trim()) return `four[${index}].cgBrief is missing`;
       plan.four.push({
         li: li.id,
         title: clip(entry.title, ITEM_LIMITS.title),
         premise: clip(entry.premise, ITEM_LIMITS.premise),
+        ...(entry.cgBrief?.trim()
+          ? {
+              cg: {
+                brief: clip(entry.cgBrief, ITEM_LIMITS.line),
+                cast: [
+                  li.name,
+                  ...(playerName && entry.cgCast?.some((name) => sameName(name, playerName)) ? [playerName] : []),
+                ],
+              },
+            }
+          : {}),
       });
     }
   }
