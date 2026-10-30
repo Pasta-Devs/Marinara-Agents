@@ -3503,8 +3503,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "77a1dfe7945c380ca356e8357956a1084fc4daa5ab418e88a6b05dda0e5d6785",
-            "bytes": 89043
+            "sha256": "7fad5a6bdb3b48a6241c4089b915c65f387fb295b45d5d8054413c915a774738",
+            "bytes": 89538
           },
           {
             "path": "contracts/relationship-state-v1.schema.json",
@@ -3536,8 +3536,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/relationship-tracker.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/relationship-tracker-0.7.3.zip",
-        "sha256": "9a244570ec80b37dba2a65142eb074675196ba6596dc5d1d1a1ea2773479a610",
-        "bytes": 255459
+        "sha256": "0bebbceccb3ff3068d99e9a8bc62f9e8302223d2c23b43f73e265a89b0e08dd2",
+        "bytes": 255954
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/relationship-tracker/README.md"
     },

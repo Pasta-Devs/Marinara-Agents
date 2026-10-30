@@ -78,8 +78,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "77a1dfe7945c380ca356e8357956a1084fc4daa5ab418e88a6b05dda0e5d6785",
-      "bytes": 89043
+      "sha256": "7fad5a6bdb3b48a6241c4089b915c65f387fb295b45d5d8054413c915a774738",
+      "bytes": 89538
     },
     {
       "path": "contracts/relationship-state-v1.schema.json",

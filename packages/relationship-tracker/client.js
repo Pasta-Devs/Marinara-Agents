@@ -1452,12 +1452,9 @@
     openMobileTracker() {
       if (this._mobileDialog || !this.isConnected || !this._props?.mobileCompact) return;
       const dialog = document.createElement("dialog");
+      if (typeof dialog.showModal !== "function") return;
       dialog.setAttribute("aria-labelledby", "mobile-tracker-title");
       dialog.innerHTML = `<div class="mobile-header"><h2 id="mobile-tracker-title">${SECTION_TITLE}</h2><button type="button" class="mobile-close" aria-label="${escapeHtml(UI_TEXT["ui.relationshipTracker.close"])}" autofocus>×</button></div><div class="mobile-body" data-relationship-sheet-body></div>`;
-      const tracker = document.createElement(TAG_NAME);
-      tracker.setAttribute("view", "tracker");
-      tracker.capabilityProps = this._props;
-      dialog.querySelector(".mobile-body").append(tracker);
       dialog.querySelector(".mobile-close").addEventListener("click", () => this.closeMobileTracker());
       dialog.addEventListener("close", () => {
         if (this._mobileDialog === dialog) this.closeMobileTracker();
@@ -1468,16 +1465,34 @@
         if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) this.closeMobileTracker();
       });
       this.shadowRoot.append(dialog);
+      try {
+        dialog.showModal();
+      } catch {
+        dialog.remove();
+        return;
+      }
+      if (!dialog.isConnected || !dialog.open) {
+        dialog.remove();
+        return;
+      }
+      // Do not connect a polling tracker or commit launcher state until presentation succeeds.
       this._mobileDialog = dialog;
+      const tracker = document.createElement(TAG_NAME);
+      tracker.setAttribute("view", "tracker");
+      tracker.capabilityProps = this._props;
+      dialog.querySelector(".mobile-body").append(tracker);
       this.querySelector("[data-mobile-tracker]").setAttribute("aria-expanded", "true");
-      dialog.showModal();
     }
 
     closeMobileTracker(restoreFocus = true) {
       const dialog = this._mobileDialog;
       if (!dialog) return;
       this._mobileDialog = null;
-      dialog.close();
+      try {
+        if (typeof dialog.close === "function") dialog.close();
+      } catch {
+        // A platform failure must not leave the child view or its polling connected.
+      }
       dialog.remove(); // Disconnect the existing tracker view and its status polling too.
       const launcher = this.querySelector("[data-mobile-tracker]");
       launcher?.setAttribute("aria-expanded", "false");

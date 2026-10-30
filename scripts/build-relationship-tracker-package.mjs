@@ -1,9 +1,8 @@
 // Build the Relationship Tracker package: re-derive its manifest hashes and
 // English locale from the committed sources, write a reproducible artifact
-// zip, and update the catalog family. The runtime payloads (client.js,
-// server.mjs, and its modules) are maintained and validated in a separate
-// Relationship Tracker source tree. The client template embeds its canonical
-// UI English catalog; the remaining payloads are committed runtime modules.
+// zip, and update the catalog family. client.js is generated from this package's
+// src/client.js.template and canonical UI English catalog; the remaining
+// payloads are committed runtime modules maintained inside this package.
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
