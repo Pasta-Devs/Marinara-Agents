@@ -453,7 +453,8 @@ async function main() {
     ],
     existingNotes: [],
   });
-  assert.notEqual(shortNameContext.units[0]!.subjects?.[0]?.key, shortNameContext.units[1]!.subjects?.[0]?.key);
+  // A short and a full name new in one batch are one of LTM's own characters (#1905).
+  assert.equal(shortNameContext.units[0]!.subjects?.[0]?.key, shortNameContext.units[1]!.subjects?.[0]?.key);
 
   const compiled = compileLtmEvidenceUnits({
     units: resolved.units,
@@ -499,10 +500,10 @@ async function main() {
     ],
     existingNotes: [],
   });
-  assert.notEqual(
+  assert.equal(
     onDemandFullName.units[0]!.subjects?.[0]?.key,
     validSubject.key,
-    "a longer name is not evidence of the same identity",
+    "a longer name relates to LTM's own character with the shorter name (#1905)",
   );
   assert.notEqual(
     localCharacterScopeError([localCharacterSubjectForName({ chatId: "chat-b", chatIds: ["chat-b"] }, "Mara")!], scope),
@@ -1932,6 +1933,29 @@ async function main() {
     "source co-occurrence cannot prove short/full-name identity",
   );
   assert.equal(new Set(unrosteredResolution.units.map((resolvedUnit) => resolvedUnit.subjectId)).size, 3);
+
+  // A capitalized word before a name ("When Preston Farraday") never takes over the name (#1905).
+  const strayWordText = "When Preston Farraday arrived. Preston smiled.";
+  const strayWordNote = { ...importedSourceNote, sections: { source: { text: strayWordText, updatedAt: timestamp } } };
+  const strayWordUnits = ["Preston Farraday", "Preston"].map((name) =>
+    unit({
+      bucket: "character_fact",
+      subjectId: name.toLowerCase().replaceAll(" ", "_"),
+      subjectNames: [name],
+      text: `${name} knows navigation.`,
+    }),
+  );
+  const strayWordResolution = prepareLtmSubjectIdentityContext({
+    units: strayWordUnits,
+    catalog: buildTrustedLtmSubjectCatalog({ roster: [], notes: [strayWordNote], localSourceNotes: [strayWordNote] }),
+    scope,
+    sourceBackedNpcSourceText: strayWordText,
+    sourceBackedNpcSourceTitle: strayWordNote.title,
+  }).resolve({ units: strayWordUnits, existingNotes: [] });
+  assert.deepEqual(
+    strayWordResolution.units.map((resolvedUnit) => resolvedUnit.subjects?.[0]?.key),
+    ["Preston Farraday", "Preston"].map((name) => localCharacterSubjectForName(scope, name)!.key),
+  );
   assert.ok(unrosteredResolution.units[0]!.subjects?.[0]?.key.startsWith("local_character:"));
 
   // 4h. Separate source names stay distinct, regardless of note order.

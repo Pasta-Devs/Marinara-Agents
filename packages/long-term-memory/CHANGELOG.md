@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- When a chat calls one of Long-Term Memory's own characters by part of their name ("Preston" for "Preston Farraday", or the other way round), the memory joins that character's note instead of starting a second one. If the name fits more than one character, it waits for you in review.
+
 ## 1.5.11 — 2026-10-30
 
 - A memory whose score (salience or confidence) the model writes in quotes ("0.5") is kept instead of dropped, and a chat piece whose every memory is malformed fails with Retry instead of reporting success with nothing kept.

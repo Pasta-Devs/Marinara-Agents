@@ -208,6 +208,12 @@ export function partialNameTokensMatch(name: string, entryName: string) {
   return tokenTokens.every((part) => entryTokens.includes(part));
 }
 
+// LTM's own characters relate in either direction: a new "Preston" to a saved "Preston Farraday",
+// and a new "Preston Farraday" to a saved "Preston", on the same whole-token rule.
+export function nameTokensRelated(name: string, entryName: string) {
+  return partialNameTokensMatch(name, entryName) || partialNameTokensMatch(entryName, name);
+}
+
 export function sourceBackedNpcNames(sources: Array<string | undefined>) {
   const names = new Map<string, string>();
   for (const source of sources) {
