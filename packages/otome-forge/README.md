@@ -250,13 +250,15 @@ Each story has its own content settings:
 - Dark romance lets villains play dirty and aim menace at you, with graphic violence wherever your limits allow it. Its darkness has a reason, a hidden cost and lines they won't cross. Your choices always include refusing, and the story honours what you pick.
 - What you set to Allow is told to the model, and your Lines and Veils always win. Non-consent can move off Line only under Dark romance with NSFW Heat.
 - The model never stops a scene to ask: **Ease off** is your stop.
-- Home, notes, Snapshots and memory summaries always stay SFW.
+- Home, notes and Snapshots always stay SFW.
+- Story memory follows your settings: its summaries record intimacy and darkness as the story wrote them, never a Line, and a Veil only as having happened off the page. Nothing from the period tracker is ever remembered.
 
 **Intimacy preferences** (NSFW Heat only, Fade or Explicit, never SFW):
 
 - **Your role:** an optional Sub, Dom or Switch beside the Heat setting, in setup and **Settings → Content**. It is unspecified by default. It colours intimate scenes when they come, never every scene, and never decides what a love interest is like. Lowering Heat to SFW, or withdrawing the 18+ confirmation, clears it.
 - **Love interests' own tastes:** a new bible in an NSFW story gets a short intimacy part: what they are into, kinks included, and what draws them. They are tastes, not a checklist, and scenes and banner stories bring them in when a scene turns intimate, not in every scene. What a scene may hold is still up to your Heat, Darkness and Lines & Veils, consent toggles included.
 - **Older casts:** a love interest whose bible has none gets **Add intimacy preferences** on the forge's cast list (Home → **Who's home** → **Your cast**). It costs 1 call on the Planning connection, writes only that part, and keeps the rest of the bible, your story and your progress as they are. The text stays in the spoiler-gated bible.
+- **In the bible:** behind **Show spoilers**, an **Intimacy** part lists them as **Into** and **Drawn to**. Edit them there, or empty both to remove them; the cast then offers to add them again.
 - An SFW story never writes or sends any of it, even for a bible that kept it from before Heat was lowered.
 
 **Images** follow their own rating.

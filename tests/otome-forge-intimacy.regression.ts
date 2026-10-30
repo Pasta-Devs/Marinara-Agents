@@ -26,9 +26,11 @@ import {
   INTIMACY_ITEMS_MAX,
   normalizeUnit,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
+import { readRun } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { checkBible } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/setup/bible.ts";
 import { bibleMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/setup/prompts.ts";
+import { bannerPlanMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/wish/prompts.ts";
 import { KAI, MIR, bible, beatReply, json, planReply, storyWorld } from "./fixtures/otome-forge-story.ts";
 
 const text = (messages: CapabilityLanguageModelMessage[]) => messages.map((message) => message.content).join("\n");
@@ -125,7 +127,9 @@ test("a new bible is asked for intimacy only in an NSFW story, and checkBible ke
   assert.ok(typeof empty !== "string" && empty.intimacy === undefined, "nothing usable is no block");
 
   // The bible step's schema lets an overshoot through, and checkBible trims it to the handful.
-  const many = bible({ intimacy: { preferences: ["first", ...OVERSHOOT, "last"], attractions: OVERSHOOT } });
+  const many = bible({
+    intimacy: { preferences: ["first", ...OVERSHOOT, "last"], attractions: [...OVERSHOOT, "7th"] },
+  });
   assert.ok(BibleSchema.safeParse(many).success, "an overshoot is not refused");
   const trimmed = checkBible(many, { intimacy: true });
   assert.ok(typeof trimmed !== "string");
@@ -243,9 +247,25 @@ test("scenes draw on the block now and then in an NSFW story; an SFW story's pro
     );
     const plan = text(t.calls[0]!.messages);
     const scene = text(t.calls.find((entry) => text(entry.messages).includes("Narrate node 1 of"))!.messages);
+    const run = (await readRun(t.store, t.runId))!;
+    const banner = (kind: "memories" | "his-wardrobe") =>
+      text(
+        bannerPlanMessages({
+          ...run,
+          kind,
+          featured: run.units.find((unit) => unit.id === KAI)!,
+          earlierTitles: [],
+          memory: "",
+        }),
+      );
+    // A wardrobe banner plans looks only: never their tastes (its Snapshots share the call).
+    assert.ok(!banner("his-wardrobe").includes("PREF-MARK"));
     if (content.heat === "sfw") {
-      for (const prompt of [plan, scene]) assert.ok(!prompt.includes("PREF-MARK") && !/intimacy/i.test(prompt));
+      for (const prompt of [plan, scene, banner("memories")]) {
+        assert.ok(!prompt.includes("PREF-MARK") && !/intimacy/i.test(prompt));
+      }
     } else {
+      assert.ok(banner("memories").includes("Kai's tastes in sex and intimacy:"), "a Character Story may draw on it");
       assert.match(
         scene,
         /Kai's tastes in sex and intimacy: into PREF-MARK: being praised; slow teasing; drawn to ATTR-MARK: strong hands\. Bring them in when a scene turns intimate and they fit; not every intimate scene needs them, and Kai can want other things too\./,

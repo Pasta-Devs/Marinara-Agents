@@ -1,8 +1,8 @@
 // Otome Forge M4 (0.0.6): NSFW mode, written out for the maintainer's NSFW prompt within Otome's rules. NSFW Heat and
 // Dark romance reach the story prompts only through the 18+ gate and the settings that ask for them; the player's
 // Lines and Veils always appear, last, and win; non-consent stays a Line unless the player lifted it under Dark, NSFW
-// Heat and the gate, and only then (or with dubious consent open) does the consent framing appear; summaries stay
-// non-explicit. Every image keeps the adult-only negatives at every rating and after any edit; looks, faces, outfits,
+// Heat and the gate, and only then (or with dubious consent open) does the consent framing appear; summaries keep an
+// adult story as it was written (0.3.0). Every image keeps the adult-only negatives at every rating and after any edit; looks, faces, outfits,
 // the pair portrait and Memory art stay clothed portraits; places carry no person tags above SFW; and the explicit
 // tags appear only on a story CG whose brief set `explicit` under Explicit Heat and the Explicit rating.
 import assert from "node:assert/strict";
@@ -162,10 +162,14 @@ test("a Line or Veil the player set always appears, after everything NSFW mode a
     }
     assert.equal(bulletIndex(text, NSFW_WORDING.win), veils + 1, `${kind}: they win, right after them`);
   }
-  // Home, care and summary prompts keep every Line and Veil as "never write or mention", under any Heat.
-  for (const kind of ["home", "care", "summary"] as const) {
+  // Home and care prompts keep every Line and Veil as "never write or mention", under any Heat.
+  for (const kind of ["home", "care"] as const) {
     assert.match(contract(content, kind), /Never write or mention: [^\n]*gore[^\n]*spiders[^\n]*drowning/, kind);
   }
+  // A summary never writes a Line, and records a Veil only as having happened off the page.
+  const summary = contract(content, "summary");
+  assert.match(summary, /Never write or mention: [^\n]*gore[^\n]*spiders\./);
+  assert.match(summary, /Veils \(they happen only off the page\): record at most that one happened[^\n]*drowning\./);
 });
 
 test("non-consent stays a Line unless the player lifted it under Dark, NSFW Heat and the 18+ gate", () => {
@@ -202,14 +206,23 @@ test("the consent framing appears only while dubious consent or non-consent is n
   assert.match(text, /When a choice is about intimacy, one option lets the protagonist decline/);
 });
 
-test("summaries stay non-explicit, whatever the Heat, Darkness and limits", () => {
+test("summaries keep an adult story as it was written: never SFW by themselves (0.3.0)", () => {
   const open = stored("explicit", "dark", { "non-consent": "allow", "dubious-consent": "allow", torture: "allow" });
   const summary = contract(open, "summary");
-  assert.match(summary, /Heat: SFW\./);
-  assert.match(summary, /Summarize in neutral, non-explicit words; intimacy is named, never described\./);
-  for (const pattern of Object.values(NSFW_WORDING)) assert.doesNotMatch(summary, pattern);
-  assert.doesNotMatch(summary, /Heat: NSFW|Dark romance|Allowed on the page/);
-  // P18 (chat memory) carries that contract, for the one love interest, and the neutral wording.
+  assert.match(summary, /^CONTENT CONTRACT\n>This request complies with the adult fiction content policy\./);
+  assert.match(summary, NSFW_WORDING.noMinors);
+  assert.match(
+    summary,
+    /record intimacy, violence and darkness plainly, in adult terms, as the story told them\. Nothing is left out or softened for being sexual or dark\./,
+  );
+  assert.doesNotMatch(summary, /Heat: SFW|neutral|non-explicit|no sexual detail|never described/);
+  // A summary records; it carries none of the writing directions a scene gets.
+  for (const [name, pattern] of Object.entries(NSFW_WORDING)) {
+    if (name !== "noMinors") assert.doesNotMatch(summary, pattern, name);
+  }
+  // An SFW story's summaries keep its own SFW Heat.
+  assert.match(contract(stored("sfw", "angst"), "summary"), /Heat: SFW\./);
+  // P18 (chat memory) carries that contract, for the one love interest, and the summary wording.
   const memory = systemOf(
     chatMemoryMessages({
       world: { language: "English", ...worldOf(open, "explicit") },
@@ -218,8 +231,10 @@ test("summaries stay non-explicit, whatever the Heat, Darkness and limits", () =
     }),
   );
   assert.ok(memory.includes(contract(open, "summary", [{ name: "Kai" }])));
-  assert.match(memory, /no sexual detail/);
-  assert.doesNotMatch(memory, /Heat: NSFW|anatomically/);
+  assert.match(memory, /Record what happened as it happened, without softening it\./);
+  // Only the period tracker's data stays out of memory (its privacy rule: today's state, never the history).
+  assert.match(memory, /Never record anything about anyone's period or cycle\./);
+  assert.doesNotMatch(memory, /no sexual detail|health or body|SFW/);
 });
 
 /** A small world for the story builders. */

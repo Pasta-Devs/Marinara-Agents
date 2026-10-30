@@ -12,7 +12,7 @@ import { otomeErrorCode, useOtomeApi } from "../api";
 import { Avatar } from "../components/Avatar";
 import { RetryNotice } from "../components/RetryNotice";
 import { useCharacterOptions } from "../hooks/use-engine-resources";
-import { patchRun, runQueryKey, useRun } from "../hooks/use-run";
+import { bibleQueryKey, patchRun, runQueryKey, useRun } from "../hooks/use-run";
 import { accentOf } from "../lib/accent";
 import type { ArcStageKey, Bible, BibleSecret, RevealStage, RunLiView } from "../shared/api-types";
 import {
@@ -436,7 +436,7 @@ export function BibleView({ runKey, li, lis }: BibleViewProps) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<{ error: boolean; text: string } | null>(null);
   const path = `/runs/${encodeURIComponent(runKey)}/lis/${encodeURIComponent(li.id)}/bible`;
-  const queryKey = ["otome-forge", "bible", runKey, li.id] as const;
+  const queryKey = bibleQueryKey(runKey, li.id);
   const bible = useQuery({
     queryKey,
     enabled: revealed,

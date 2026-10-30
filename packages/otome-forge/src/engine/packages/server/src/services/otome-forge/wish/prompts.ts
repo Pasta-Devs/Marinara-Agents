@@ -150,7 +150,9 @@ export function bannerPlanMessages(input: BannerPlanInput): OtomeMessage[] {
 
   const cast = units.map((unit) => {
     const liState = sharedState(state.lis[unit.id] ?? defaultLiState());
-    return [`id ${unit.id}: ${sharedCard(unit, liState)}`, intimacyLine(world, unit), betweenYou(unit, liState)]
+    // Their tastes can shape a Character Story's premise; a wardrobe banner plans looks, which they have no part in.
+    const tastes = kind === "memories" ? intimacyLine(world, unit) : "";
+    return [`id ${unit.id}: ${sharedCard(unit, liState)}`, tastes, betweenYou(unit, liState)]
       .filter(Boolean)
       .join("\n");
   });

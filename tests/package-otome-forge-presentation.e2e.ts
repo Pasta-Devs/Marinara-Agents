@@ -684,6 +684,15 @@ for (const theme of ["dark", "light"] as const) {
     try {
       const root = await openRepaintCast(page);
       const card = root.locator(".of-cast-card").first();
+      const openBible = async () => {
+        await card.getByRole("button", { name: "Open Ilvar Thorne’s bible (spoilers)", exact: true }).click();
+        await root.getByRole("button", { name: "Show spoilers", exact: true }).click();
+        await expect(root.getByText("A quiet adult cartographer.", { exact: true })).toBeVisible();
+      };
+      // The bible read before the fill: the fill must refresh this copy, not leave it to go stale.
+      await openBible();
+      await expect(root.getByText("Intimacy", { exact: true })).toHaveCount(0);
+      await root.getByRole("button", { name: "Back", exact: true }).click();
       const add = card.getByRole("button", { name: "Add Ilvar Thorne’s intimacy preferences", exact: true });
       await expect(add).toBeVisible();
       await expect(root.getByRole("button", { name: /intimacy preferences$/u })).toHaveCount(1);
@@ -694,13 +703,16 @@ for (const theme of ["dark", "light"] as const) {
       await expect(add).toHaveText("Writing…");
       await page.screenshot({ path: testInfo.outputPath(`intimacy-cast-busy-${theme}.png`) });
       release();
+      // The button gives way to a status that takes its focus.
+      await expect(
+        card.getByText("Intimacy preferences added. Read them in the bible, behind Show spoilers.", { exact: true }),
+      ).toBeFocused();
       await expect(add).toHaveCount(0);
       expect(posts(calls, "/intimacy")).toHaveLength(2);
       expect(calls.filter((call) => call.method === "POST" && /\/bible$/u.test(call.path))).toEqual([]);
       // Its text stays behind the spoiler gate.
       await expect(root.getByText("Being praised", { exact: true })).toHaveCount(0);
-      await card.getByRole("button", { name: "Open Ilvar Thorne’s bible (spoilers)", exact: true }).click();
-      await root.getByRole("button", { name: "Show spoilers", exact: true }).click();
+      await openBible();
       await expect(root.getByText("Being praised", { exact: true })).toBeVisible();
       await expect(root.getByText("Ink-stained hands", { exact: true })).toBeVisible();
       expect(posts(calls, "/art/paint")).toEqual([]);

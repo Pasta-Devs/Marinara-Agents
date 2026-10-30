@@ -267,9 +267,13 @@ test("the SFW defaults' content contracts are the ones every prompt carried befo
     ),
   );
   assert.equal(contract(defaultContent(), "home"), lines(ANGST_NEVER));
+  // 0.3.0: a summary records a Veil as having happened off the page, so the story does not forget it.
   assert.equal(
     contract(defaultContent(), "summary"),
-    lines("- Summarize in neutral, non-explicit words; intimacy is named, never described.", ANGST_NEVER),
+    lines(
+      "- Never write or mention: a love interest's violence toward the protagonist; dubious consent; non-consent; pregnancy.",
+      "- Veils (they happen only off the page): record at most that one happened and what it left behind, never its detail: gore; captivity; stalking; torture; self-harm.",
+    ),
   );
   assert.equal(
     contract(defaultContent(), "care"),
