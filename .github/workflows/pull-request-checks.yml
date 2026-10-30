@@ -202,6 +202,7 @@ jobs:
           # Catalog generatedAt determinism and package release notes.
           node scripts/tests/catalog-generatedat-determinism.regression.mjs
           node scripts/tests/catalog-release-notes.regression.mjs
+          node scripts/tests/catalog-store.regression.mjs
 
           # Package browser runs decline the live catalog's newer versions of the packages they install.
           node scripts/tests/package-browser-update-prompt.regression.mjs

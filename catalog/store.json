@@ -1,0 +1,355 @@
+{
+  "schemaVersion": 1,
+  "packages": {
+    "2d-avatars": {
+      "section": "alive",
+      "tagline": "Animated 2D faces that blink and talk.",
+      "iconPath": "../store/icons/2d-avatars.webp",
+      "bannerPath": "../store/banners/2d-avatars.webp",
+      "bannerSmallPath": "../store/banners/2d-avatars-1200.webp"
+    },
+    "3d-avatars": {
+      "section": "alive",
+      "tagline": "3D models that move and talk.",
+      "iconPath": "../store/icons/3d-avatars.webp",
+      "bannerPath": "../store/banners/3d-avatars.webp",
+      "bannerSmallPath": "../store/banners/3d-avatars-1200.webp"
+    },
+    "background": {
+      "section": "media",
+      "tagline": "Picks a background for each scene.",
+      "iconPath": "../store/icons/background.webp",
+      "bannerPath": "../store/banners/background.webp",
+      "bannerSmallPath": "../store/banners/background-1200.webp"
+    },
+    "beholder": {
+      "section": "trackers",
+      "tagline": "What each character wears and holds.",
+      "iconPath": "../store/icons/beholder.webp",
+      "bannerPath": "../store/banners/beholder.webp",
+      "bannerSmallPath": "../store/banners/beholder-1200.webp"
+    },
+    "card-evolution-auditor": {
+      "section": "writing",
+      "tagline": "Suggests card updates as characters change.",
+      "iconPath": "../store/icons/card-evolution-auditor.webp",
+      "bannerPath": "../store/banners/card-evolution-auditor.webp",
+      "bannerSmallPath": "../store/banners/card-evolution-auditor-1200.webp"
+    },
+    "character-tracker": {
+      "section": "trackers",
+      "tagline": "Who is here, and how they look and feel.",
+      "iconPath": "../store/icons/character-tracker.webp",
+      "bannerPath": "../store/banners/character-tracker.webp",
+      "bannerSmallPath": "../store/banners/character-tracker-1200.webp"
+    },
+    "chess": {
+      "section": "games",
+      "tagline": "Play chess against your characters.",
+      "featured": 4,
+      "iconPath": "../store/icons/chess.webp",
+      "bannerPath": "../store/banners/chess.webp",
+      "bannerSmallPath": "../store/banners/chess-1200.webp"
+    },
+    "combat": {
+      "section": "adventure",
+      "tagline": "Turn-based fights with initiative and HP.",
+      "iconPath": "../store/icons/combat.webp",
+      "bannerPath": "../store/banners/combat.webp",
+      "bannerSmallPath": "../store/banners/combat-1200.webp"
+    },
+    "continuity": {
+      "section": "writing",
+      "tagline": "Fixes mistakes about places and time.",
+      "iconPath": "../store/icons/continuity.webp",
+      "bannerPath": "../store/banners/continuity.webp",
+      "bannerSmallPath": "../store/banners/continuity-1200.webp"
+    },
+    "conversation-calls": {
+      "section": "alive",
+      "tagline": "Voice and video calls with characters.",
+      "iconPath": "../store/icons/conversation-calls.webp",
+      "bannerPath": "../store/banners/conversation-calls.webp",
+      "bannerSmallPath": "../store/banners/conversation-calls-1200.webp"
+    },
+    "custom-tracker": {
+      "section": "trackers",
+      "tagline": "Track anything you want.",
+      "iconPath": "../store/icons/custom-tracker.webp",
+      "bannerPath": "../store/banners/custom-tracker.webp",
+      "bannerSmallPath": "../store/banners/custom-tracker-1200.webp"
+    },
+    "cyoa": {
+      "section": "adventure",
+      "tagline": "A few choices after each reply.",
+      "iconPath": "../store/icons/cyoa.webp",
+      "bannerPath": "../store/banners/cyoa.webp",
+      "bannerSmallPath": "../store/banners/cyoa-1200.webp"
+    },
+    "director": {
+      "section": "writing",
+      "tagline": "Pushes the story in a new direction.",
+      "iconPath": "../store/icons/director.webp",
+      "bannerPath": "../store/banners/director.webp",
+      "bannerSmallPath": "../store/banners/director-1200.webp"
+    },
+    "echo-chamber": {
+      "section": "alive",
+      "tagline": "A live stream chat reacts to your roleplay.",
+      "iconPath": "../store/icons/echo-chamber.webp",
+      "bannerPath": "../store/banners/echo-chamber.webp",
+      "bannerSmallPath": "../store/banners/echo-chamber-1200.webp"
+    },
+    "eightball": {
+      "section": "games",
+      "tagline": "8-Ball Pool in a chat.",
+      "iconPath": "../store/icons/eightball.webp",
+      "bannerPath": "../store/banners/eightball.webp",
+      "bannerSmallPath": "../store/banners/eightball-1200.webp"
+    },
+    "expression": {
+      "section": "alive",
+      "tagline": "Sprites that match the mood.",
+      "iconPath": "../store/icons/expression.webp",
+      "bannerPath": "../store/banners/expression.webp",
+      "bannerSmallPath": "../store/banners/expression-1200.webp"
+    },
+    "gacha-forge": {
+      "section": "apps",
+      "tagline": "Turn any world into a gacha game.",
+      "iconPath": "../store/icons/gacha-forge.webp",
+      "bannerPath": "../store/banners/gacha-forge.webp",
+      "bannerSmallPath": "../store/banners/gacha-forge-1200.webp"
+    },
+    "haptic": {
+      "section": "alive",
+      "tagline": "Connected toys that follow the story.",
+      "iconPath": "../store/icons/haptic.webp",
+      "bannerPath": "../store/banners/haptic.webp",
+      "bannerSmallPath": "../store/banners/haptic-1200.webp"
+    },
+    "hierarchical-maps": {
+      "section": "adventure",
+      "tagline": "World maps from regions to rooms.",
+      "iconPath": "../store/icons/hierarchical-maps.webp",
+      "bannerPath": "../store/banners/hierarchical-maps.webp",
+      "bannerSmallPath": "../store/banners/hierarchical-maps-1200.webp"
+    },
+    "html": {
+      "section": "media",
+      "tagline": "Adds visual effects to messages.",
+      "iconPath": "../store/icons/html.webp",
+      "bannerPath": "../store/banners/html.webp",
+      "bannerSmallPath": "../store/banners/html-1200.webp"
+    },
+    "illustrator": {
+      "section": "media",
+      "tagline": "Paints scenes from your story as you play.",
+      "featured": 5,
+      "iconPath": "../store/icons/illustrator.webp",
+      "bannerPath": "../store/banners/illustrator.webp",
+      "bannerSmallPath": "../store/banners/illustrator-1200.webp"
+    },
+    "inventory-tracker": {
+      "section": "trackers",
+      "tagline": "Money, gear and what you carry.",
+      "iconPath": "../store/icons/inventory-tracker.webp",
+      "bannerPath": "../store/banners/inventory-tracker.webp",
+      "bannerSmallPath": "../store/banners/inventory-tracker-1200.webp"
+    },
+    "knowledge-retrieval": {
+      "section": "memory",
+      "tagline": "Finds the lore that matters right now.",
+      "iconPath": "../store/icons/knowledge-retrieval.webp",
+      "bannerPath": "../store/banners/knowledge-retrieval.webp",
+      "bannerSmallPath": "../store/banners/knowledge-retrieval-1200.webp"
+    },
+    "knowledge-router": {
+      "section": "memory",
+      "tagline": "Picks lorebook entries, cheaper.",
+      "iconPath": "../store/icons/knowledge-router.webp",
+      "bannerPath": "../store/banners/knowledge-router.webp",
+      "bannerSmallPath": "../store/banners/knowledge-router-1200.webp"
+    },
+    "long-term-memory": {
+      "section": "memory",
+      "tagline": "Remembers things across all your chats.",
+      "iconPath": "../store/icons/long-term-memory.webp",
+      "bannerPath": "../store/banners/long-term-memory.webp",
+      "bannerSmallPath": "../store/banners/long-term-memory-1200.webp"
+    },
+    "lorebook-keeper": {
+      "section": "memory",
+      "tagline": "Keeps your lorebooks in sync with the story.",
+      "featured": 6,
+      "iconPath": "../store/icons/lorebook-keeper.webp",
+      "bannerPath": "../store/banners/lorebook-keeper.webp",
+      "bannerSmallPath": "../store/banners/lorebook-keeper-1200.webp"
+    },
+    "memory-nag": {
+      "section": "memory",
+      "tagline": "Reminds the AI of loose ends.",
+      "iconPath": "../store/icons/memory-nag.webp",
+      "bannerPath": "../store/banners/memory-nag.webp",
+      "bannerSmallPath": "../store/banners/memory-nag-1200.webp"
+    },
+    "noodle": {
+      "section": "apps",
+      "tagline": "A pretend social network for your characters.",
+      "featured": 1,
+      "iconPath": "../store/icons/noodle.webp",
+      "bannerPath": "../store/banners/noodle.webp",
+      "bannerSmallPath": "../store/banners/noodle-1200.webp",
+      "previews": [
+        "../store/previews/noodle-1.webp",
+        "../store/previews/noodle-2.webp",
+        "../store/previews/noodle-3.webp"
+      ]
+    },
+    "persona-stats": {
+      "section": "trackers",
+      "tagline": "Hunger, energy and hygiene.",
+      "iconPath": "../store/icons/persona-stats.webp",
+      "bannerPath": "../store/banners/persona-stats.webp",
+      "bannerSmallPath": "../store/banners/persona-stats-1200.webp"
+    },
+    "poker": {
+      "section": "games",
+      "tagline": "Texas Hold'em with your characters.",
+      "iconPath": "../store/icons/poker.webp",
+      "bannerPath": "../store/banners/poker.webp",
+      "bannerSmallPath": "../store/banners/poker-1200.webp"
+    },
+    "prose-guardian": {
+      "section": "writing",
+      "tagline": "Removes repetition and banned words.",
+      "iconPath": "../store/icons/prose-guardian.webp",
+      "bannerPath": "../store/banners/prose-guardian.webp",
+      "bannerSmallPath": "../store/banners/prose-guardian-1200.webp"
+    },
+    "quartermaster": {
+      "section": "trackers",
+      "tagline": "An RPG sheet with gear and outfits.",
+      "iconPath": "../store/icons/quartermaster.webp",
+      "bannerPath": "../store/banners/quartermaster.webp",
+      "bannerSmallPath": "../store/banners/quartermaster-1200.webp"
+    },
+    "quest": {
+      "section": "trackers",
+      "tagline": "A quest log with goals and rewards.",
+      "iconPath": "../store/icons/quest.webp",
+      "bannerPath": "../store/banners/quest.webp",
+      "bannerSmallPath": "../store/banners/quest-1200.webp"
+    },
+    "relationship-tracker": {
+      "section": "trackers",
+      "tagline": "How everyone feels about each other.",
+      "iconPath": "../store/icons/relationship-tracker.webp",
+      "bannerPath": "../store/banners/relationship-tracker.webp",
+      "bannerSmallPath": "../store/banners/relationship-tracker-1200.webp"
+    },
+    "rock-paper-scissors": {
+      "section": "games",
+      "tagline": "Best of three, any time.",
+      "iconPath": "../store/icons/rock-paper-scissors.webp",
+      "bannerPath": "../store/banners/rock-paper-scissors.webp",
+      "bannerSmallPath": "../store/banners/rock-paper-scissors-1200.webp"
+    },
+    "slurp2": {
+      "section": "apps",
+      "tagline": "A private creator app for your characters.",
+      "featured": 2,
+      "iconPath": "../store/icons/slurp2.webp",
+      "bannerPath": "../store/banners/slurp2.webp",
+      "bannerSmallPath": "../store/banners/slurp2-1200.webp",
+      "previews": [
+        "../store/previews/slurp2-1.webp",
+        "../store/previews/slurp2-2.webp",
+        "../store/previews/slurp2-3.webp"
+      ]
+    },
+    "spotify": {
+      "section": "media",
+      "tagline": "Music that fits the mood.",
+      "iconPath": "../store/icons/spotify.webp",
+      "bannerPath": "../store/banners/spotify.webp",
+      "bannerSmallPath": "../store/banners/spotify-1200.webp"
+    },
+    "story-writer": {
+      "section": "apps",
+      "tagline": "Co-write a book with your characters.",
+      "featured": 3,
+      "iconPath": "../store/icons/story-writer.webp",
+      "bannerPath": "../store/banners/story-writer.webp",
+      "bannerSmallPath": "../store/banners/story-writer-1200.webp",
+      "previews": [
+        "../store/previews/story-writer-1.webp",
+        "../store/previews/story-writer-2.webp",
+        "../store/previews/story-writer-3.webp"
+      ]
+    },
+    "storyboard": {
+      "section": "media",
+      "tagline": "Turns scenes into comic panels.",
+      "iconPath": "../store/icons/storyboard.webp",
+      "bannerPath": "../store/banners/storyboard.webp",
+      "bannerSmallPath": "../store/banners/storyboard-1200.webp"
+    },
+    "tic-tac-toe": {
+      "section": "games",
+      "tagline": "A quick game of X and O.",
+      "iconPath": "../store/icons/tic-tac-toe.webp",
+      "bannerPath": "../store/banners/tic-tac-toe.webp",
+      "bannerSmallPath": "../store/banners/tic-tac-toe-1200.webp"
+    },
+    "uno": {
+      "section": "games",
+      "tagline": "Play UNO with your characters.",
+      "iconPath": "../store/icons/uno.webp",
+      "bannerPath": "../store/banners/uno.webp",
+      "bannerSmallPath": "../store/banners/uno-1200.webp"
+    },
+    "world-state": {
+      "section": "trackers",
+      "tagline": "Date, time, weather and place.",
+      "iconPath": "../store/icons/world-state.webp",
+      "bannerPath": "../store/banners/world-state.webp",
+      "bannerSmallPath": "../store/banners/world-state-1200.webp"
+    }
+  },
+  "kits": [
+    {
+      "id": "roleplay-starter",
+      "name": "Roleplay starter",
+      "tagline": "World, people, faces and lore for a roleplay.",
+      "packages": [
+        "world-state",
+        "character-tracker",
+        "expression",
+        "background",
+        "lorebook-keeper"
+      ]
+    },
+    {
+      "id": "story-writer",
+      "name": "Story writer",
+      "tagline": "Cleaner prose and a story that stays on track.",
+      "packages": [
+        "prose-guardian",
+        "continuity",
+        "director",
+        "long-term-memory"
+      ]
+    },
+    {
+      "id": "game-night",
+      "name": "Game night",
+      "tagline": "Card and board games to play in chat.",
+      "packages": [
+        "chess",
+        "poker",
+        "uno"
+      ]
+    }
+  ]
+}

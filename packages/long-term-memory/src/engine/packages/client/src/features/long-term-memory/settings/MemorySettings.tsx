@@ -164,6 +164,7 @@ function extractionForm(settings: LtmExtractionSettingsPatch): ExtractionForm {
     activePromptTemplateIdsByMode: resolved.activePromptTemplateIdsByMode ?? {},
     aiKeywordExtraction: resolved.aiKeywordExtraction ?? false,
     finishCutOffAnswers: resolved.finishCutOffAnswers ?? false,
+    chatImportDetail: resolved.chatImportDetail ?? "standard",
     useExtractionAgentOnGameMode: resolved.useExtractionAgentOnGameMode ?? false,
     ...(resolved.systemPrompt === undefined ? {} : { systemPrompt: resolved.systemPrompt }),
     ...(resolved.activePromptTemplateId === undefined
@@ -197,6 +198,7 @@ export default function MemorySettings({
   const memoryStopWordsLabelId = useId();
   const reasoningEffortLabelId = useId();
   const verbosityLabelId = useId();
+  const chatImportDetailLabelId = useId();
   const extractionConnectionLabelId = useId();
   const queryClient = useQueryClient();
   const global = useQuery(settingsQueryOptions);
@@ -1086,6 +1088,33 @@ export default function MemorySettings({
               })
             }
           />
+          <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+            <span id={chatImportDetailLabelId} className="flex items-center gap-1">
+              {localizeUi("ui.longTermMemory.memorysettings.chatImportDetail")}
+              <InfoPopover
+                label={localizeUi("ui.longTermMemory.memorysettings.chatImportDetail")}
+                content={localizeUi("ui.longTermMemory.memorysettings.chatImportDetailHelp")}
+              />
+            </span>
+            <select
+              aria-labelledby={chatImportDetailLabelId}
+              className={inputClass}
+              value={extractionFormState.chatImportDetail}
+              onChange={(event) =>
+                setExtractionFormState({
+                  ...extractionFormState,
+                  chatImportDetail: event.target.value as ExtractionForm["chatImportDetail"],
+                })
+              }
+            >
+              <option value="standard">
+                {localizeUi("ui.longTermMemory.memorysettings.chatImportDetailStandard")}
+              </option>
+              <option value="detailed">
+                {localizeUi("ui.longTermMemory.memorysettings.chatImportDetailDetailed")}
+              </option>
+            </select>
+          </div>
           <NumberField
             label={localizeUi("ui.longTermMemory.memorysettings.temperature")}
             help={localizeUi(

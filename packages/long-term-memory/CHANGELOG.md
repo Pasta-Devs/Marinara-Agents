@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.5.14 — 2026-10-30
+
+- Settings → Extraction adds Chat import detail. Detailed imports a chat's messages in pieces half the size (12,000 characters instead of 24,000), giving finer memories for about twice the extraction cost. It applies to chats imported from now on; a chat already imported keeps its size.
+
 ## 1.5.13 — 2026-10-30
 
 - When a chat calls one of Long-Term Memory's own characters by part of their name ("Preston" for "Preston Farraday", or the other way round), the memory joins that character's note instead of starting a second one. If the name fits more than one character, it waits for you in review.
