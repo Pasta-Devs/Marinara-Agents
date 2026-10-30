@@ -23,7 +23,7 @@ function parseImportJson(content: string): unknown {
     const arrayEnd = trimmed.lastIndexOf("]");
     const start = objectStart >= 0 && (arrayStart < 0 || objectStart < arrayStart) ? objectStart : arrayStart;
     const end = start === objectStart ? objectEnd : arrayEnd;
-    if (start < 0 || end <= start) return null;
+    if (start < 0 || end <= start) return salvageCutLooks(trimmed);
     try {
       return JSON.parse(trimmed.slice(start, end + 1));
     } catch {
@@ -33,27 +33,34 @@ function parseImportJson(content: string): unknown {
 }
 
 /** A reply cut at the token budget: keep the looks that closed before the cut. */
-function salvageCutLooks(text: string): unknown[] | null {
+function salvageCutLooks(reply: string): unknown[] | null {
   const looks: unknown[] = [];
   let depth = 0;
   let from = -1;
   let inString = false;
   let escaped = false;
-  for (let index = text.indexOf("[") + 1; index > 0 && index < text.length; index += 1) {
-    const char = text[index];
+  for (let index = reply.indexOf("[") + 1; index > 0 && index < reply.length; index += 1) {
+    const char = reply[index];
     if (inString) {
       if (escaped) escaped = false;
       else if (char === "\\") escaped = true;
       else if (char === '"') inString = false;
-    } else if (char === '"') inString = true;
-    else if (char === "{" && depth++ === 0) from = index;
-    else if (char === "}" && depth > 0 && --depth === 0) {
+    } else if (char === '"') {
+      inString = true;
+    } else if (char === "{") {
+      if (depth === 0) from = index;
+      depth += 1;
+    } else if (char === "}" && depth > 0) {
+      depth -= 1;
+      if (depth > 0) continue;
       try {
-        looks.push(JSON.parse(text.slice(from, index + 1)));
+        looks.push(JSON.parse(reply.slice(from, index + 1)));
       } catch {
         // One broken look does not cost the others.
       }
-    } else if (char === "]" && depth === 0) break;
+    } else if (char === "]" && depth === 0) {
+      break;
+    }
   }
   return looks.length > 0 ? looks : null;
 }

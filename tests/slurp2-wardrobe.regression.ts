@@ -133,6 +133,13 @@ assert.deepEqual(
   "a reply cut at the token budget keeps the looks finished before the cut",
 );
 assert.deepEqual(
+  parseSlpWardrobeImportDrafts(
+    `[{"name":"Gym set","description":"grey sports bra and shorts","evidence":"her grey gym set"},{"name":"Rain`,
+  ).map((look) => look.name),
+  ["Gym set"],
+  "a bare-array reply cut before its ] is salvaged too",
+);
+assert.deepEqual(
   parseSlpWardrobeImportDrafts(`{"looks":[{"name":"A","description":"b"}]}`),
   [],
   "a look without source evidence stays out",
