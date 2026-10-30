@@ -3496,6 +3496,8 @@ async function main() {
     },
     { label: "Hangul given name of a saved full name", saved: ["도진욱"], names: ["진욱"], expect: ["도진욱"] },
     { label: "Hangul full name of a saved given name", saved: ["진욱"], names: ["도진욱"], expect: ["진욱"] },
+    { label: "a camel-case part is not a name part", saved: ["JoAnn"], names: ["Ann"], expect: ["Ann"] },
+    { label: "a name is not a camel-case part of a saved name", saved: ["Ann"], names: ["JoAnn"], expect: ["JoAnn"] },
     {
       label: "card outranks a local character",
       roster: ["Preston Farraday"],

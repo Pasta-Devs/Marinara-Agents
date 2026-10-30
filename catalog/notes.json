@@ -364,6 +364,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.5.13",
+          "date": "2026-10-30",
+          "notes": "- When a chat calls one of Long-Term Memory's own characters by part of their name (\"Preston\" for \"Preston Farraday\", or the other way round), the memory joins that character's note instead of starting a second one. If the name fits more than one character, it waits for you in review.",
+          "highlight": false
+        },
+        {
           "version": "1.5.12",
           "date": "2026-10-30",
           "notes": "- Sources → Chat Summaries keeps the range visible when a chat has a long name: the name is cut, and the message range, day, week or game session stays whole beside it.",
@@ -475,12 +481,6 @@
           "version": "1.4.90",
           "date": "2026-10-24",
           "notes": "- The Undo banner after archiving keeps saying how many memories it will restore, even when you save another memory while it is showing.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.89",
-          "date": "2026-10-24",
-          "notes": "- The Memory Vault shows your memories sooner: rarer filters sit under Refine and open by themselves while in use, and changing several memories happens in one Edit selected sheet, with Archive and Delete kept apart.\n- Changing availability for several memories now says how many will change, stay the same or be blocked, explains why Apply is off, and repeats Apply under the list.\n- Saving a memory now confirms beside the Save button, and a save that waits on a recall rebuild says so as a warning instead of an error.\n- The memory you have open is now marked with an edge bar and announced to screen readers, not only by a tint.\n- The memory info panel now has one name everywhere you open it.",
           "highlight": false
         }
       ]
