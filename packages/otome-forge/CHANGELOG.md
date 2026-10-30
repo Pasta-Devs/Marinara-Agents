@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.6.1 — 2026-10-30
+
+- **Banned phrases** in Settings → Content: type the words and phrases you never want to read, separated by commas or one per line, and every scene, message and note avoids them.
+- Love interests no longer stop an intimate scene to check in or offer to stop, sex included. Ease off is still yours.
+
 ## 0.6.0 — 2026-10-30
 
 - Each love interest has their own Claw Machine plush: the animal that fits them best, in their colours (a cyan raven with red eyes, a black cat with violet eyes). Your Planning model draws it once, in the background, the first time you open Dates. Until then their plush wears their look, as before.
