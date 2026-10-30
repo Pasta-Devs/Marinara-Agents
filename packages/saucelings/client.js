@@ -1362,6 +1362,7 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
     grid-template-columns: minmax(0, 1fr) 17rem;
     grid-template-areas: "stage care";
   }
+  .sl-stage-card { align-self: start; }
   .sl-nook-side { position: sticky; top: 0; align-self: start; }
   .sl-nook-side:has(> .sl-panel, > .sl-picker) { position: static; }
   .sl-care-card .sl-meters--strip { grid-template-columns: minmax(0, 1fr); }

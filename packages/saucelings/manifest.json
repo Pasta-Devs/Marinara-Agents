@@ -10,7 +10,7 @@
   },
   "id": "saucelings",
   "name": "Saucelings",
-  "version": "0.23.1",
+  "version": "0.23.2",
   "description": "A Tamagotchi-style pet in Home: pick a character to look after an egg, let their personality drive their care schedule, cover the gaps they miss, watch its sauce temperament shift, retire elders to a Menagerie, and let the caretaker find eggs of their own invention while you chat. Install it, restart Marinara Engine when prompted, then open Home → Saucelings.",
   "engine": {
     "min": "2.5.0",
@@ -124,8 +124,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "fdeb4f4816ba1269a9e56d8ab543ad5a291e1f8e166a9d10a6a1412d1a47c916",
-      "bytes": 256578
+      "sha256": "acb4e38ec88c1d0929920ee4974af175cb1df4679aea9c13ff794b37bf0c5433",
+      "bytes": 256618
     },
     {
       "path": "saucelings-icon.png",

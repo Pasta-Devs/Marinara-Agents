@@ -3969,4 +3969,9 @@ async function testBundledServer() {
   console.log("saucelings simulation regression: OK");
 }
 
+// On a wide panel the stage card and the care column share one grid row; an open Nook panel makes the column taller,
+// so the stage card keeps its own height instead of stretching to match
+const widePanelStyles = SAUCELINGS_STYLES.slice(SAUCELINGS_STYLES.indexOf("@container sl-shell (min-width: 48rem)"));
+assert.match(widePanelStyles.slice(0, widePanelStyles.indexOf("\n}\n")), /\.sl-stage-card \{ align-self: start; \}/u);
+
 void testBundledServer();
