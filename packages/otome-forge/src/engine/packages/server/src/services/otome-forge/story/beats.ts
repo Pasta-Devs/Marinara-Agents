@@ -57,7 +57,7 @@ import type {
   Unit,
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
-import { stageRow, type Stance } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
+import { stageRow, type ClimaxMove } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import type { DateScore } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { LIMIT_IDS, type LimitId } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import {
@@ -89,6 +89,7 @@ import {
   confrontationMainline,
   confrontationOpponent,
   endingOf,
+  climaxSpec,
   normalizeConfrontationReply,
   toConfrontationView,
   type SegmentLists,
@@ -99,6 +100,7 @@ import {
   BeatReplySchema,
   ConfrontationReplySchema,
   beatMessages,
+  closerMessages,
   confrontationMessages,
   type BeatReply,
 } from "./prompts.js";
@@ -573,14 +575,15 @@ async function generateBeat(
   let body: Omit<Beat, "key" | "i" | "kind" | "choiceCanon" | "applied" | "readThrough" | "written" | "rewrites">;
   let written: { connectionId: string; model: string };
   if (opponent) {
-    // P12: the whole stance game in one call; its opening is the beat's segments.
+    // P12 (a Closer's P12c): the whole game in one call; its opening is the beat's segments.
+    const climax = node.kind === "closer" ? "closer" : "confrontation";
     const lists = segmentLists(context);
-    const shape = { li: opponent, node, cgOpen: !!node.cg, cgExplicit };
+    const shape = { li: opponent, node, cgOpen: !!node.cg, cgExplicit, climax } as const;
     const { value, connectionId, model } = await generateJson(deps, {
       runId,
       job: "narration",
-      label: `confrontation/${key}/${i}`,
-      messages: confrontationMessages({ ...input, li: opponent }),
+      label: `${climax}/${key}/${i}`,
+      messages: (climax === "closer" ? closerMessages : confrontationMessages)({ ...input, li: opponent }),
       schema: ConfrontationReplySchema,
       normalize: (reply) => {
         const game = normalizeConfrontationReply(reply, shape, lists);
@@ -981,13 +984,16 @@ async function applyStances(deps: BeatDeps, runId: string, chapter: Chapter, bea
   return outcome;
 }
 
-/** The `applied` entries the saved stances earn: each Reveal's, and the ending's once reached. */
-const stanceEffectKeys = (beat: Beat) => [
-  ...(beat.confrontation?.picks ?? []).flatMap((stance, k) =>
-    stance === "reveal" ? [`${beat.i}/stance-${k + 1}`] : [],
-  ),
-  ...(beat.confrontation?.ending ? [`${beat.i}/confrontation`] : []),
-];
+/** The `applied` entries the saved moves earn: each Reveal's (Mirror's), and the ending's once reached. */
+const stanceEffectKeys = (beat: Beat) => {
+  const game = beat.confrontation;
+  if (!game) return [];
+  const spec = climaxSpec(game);
+  return [
+    ...game.picks.flatMap((stance, k) => (stance === spec.discloses ? [`${beat.i}/stance-${k + 1}`] : [])),
+    ...(game.ending ? [`${beat.i}/${spec.noun}`] : []),
+  ];
+};
 
 /** The stance result for round `round` of the saved game. */
 function stanceResult(beat: Beat, round: number, outcome: Remembered): StanceResult {
@@ -995,10 +1001,11 @@ function stanceResult(beat: Beat, round: number, outcome: Remembered): StanceRes
 }
 
 /**
- * POST .../beats/:i/stance {round, stance}: the first-play stance of round `round` (1–3) on the Confrontation being
- * read. It is saved on the beat once (the third with the ending its picks reach), then its effects reach the state
- * once. The same stance again returns what it did; another stance for a round already played is a 409 `locked`. The
- * ending queues the next node.
+ * POST .../beats/:i/stance {round, stance}: the first-play move of round `round` (1–3) on the climax game being read
+ * (a Confrontation's stance, a Closer's answer). It is saved on the beat once (the third with the ending its picks
+ * reach), then its effects reach the state once. The same move again returns what it did; another move for a round
+ * already played is a 409 `locked`; a move of the other game is a 400 that saves nothing. The ending queues the next
+ * node.
  */
 export async function chooseStance(
   deps: BeatDeps,
@@ -1006,13 +1013,21 @@ export async function chooseStance(
   key: string,
   i: number,
   round: number,
-  stance: Stance,
+  stance: ClimaxMove,
   mode: PaintMode,
 ): Promise<StanceResult> {
   const { run, chapter } = await load(deps, runId, key);
   const beat = await readBeat(deps.store, runId, key, i);
   const confrontation = beat?.confrontation;
   if (!beat || !confrontation) throw new OtomeForgeError(404, "No such confrontation.", "not-found");
+  // Before anything is saved: a move of the other game would make the stored game unreadable.
+  if (!climaxSpec(confrontation).moves.includes(stance)) {
+    throw new OtomeForgeError(
+      400,
+      `"${stance}" is not a move of this ${climaxSpec(confrontation).noun}.`,
+      "bad-request",
+    );
+  }
   const taken = confrontation.picks[round - 1];
   if (taken) {
     if (taken !== stance) throw locked("That round is played.");

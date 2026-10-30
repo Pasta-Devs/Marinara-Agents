@@ -3,7 +3,8 @@
 // gate's settings, so a world that never raised one gets the same contract, story prompts and image prompts. The
 // digests were taken from the 0.0.6 builders before that change; when an SFW prompt is changed on purpose, take them
 // again from the failing assertion's "actual" and say so in the PR.
-// 0.3.1: an SFW contract lets characters swear (not the sexual words), so every story and banner digest moved once.
+// 0.4.0 (#1938): the chapter plan names the Closer beside the Confrontation, and the Closer's P12c is pinned too.
+// 0.4.1: an SFW contract lets characters swear (not the sexual words), so every story and banner digest moved once.
 // The banner digests include the English Snapshot illustration fields. Story/banner hashes deliberately reflect
 // scene pacing and earned character change. Only the two face-edit image expectations change for the explicit,
 // rating-independent adult/nonsexual face policy; the other image and content-policy expectations stay pinned.
@@ -35,6 +36,7 @@ import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/serv
 import {
   beatMessages,
   chapterPlanMessages,
+  closerMessages,
   confrontationMessages,
   repairPlanMessages,
   routePlanMessages,
@@ -88,6 +90,7 @@ function storyPrompts(content: ContentSettings): Record<string, string> {
     );
   };
   const fight = node({ kind: "confrontation", cg: true });
+  const close = node({ kind: "closer", cg: true });
   const arc = { world, player, units, state, li: KAI, memory: "" };
   const banner = (kind: "memories" | "his-wardrobe" | "my-wardrobe") =>
     text(
@@ -115,6 +118,19 @@ function storyPrompts(content: ContentSettings): Record<string, string> {
         state,
         chapter: chapter([fight]),
         node: fight,
+        storySoFar: "",
+        memory: "",
+        li: KAI,
+      }),
+    ),
+    closer: text(
+      closerMessages({
+        world,
+        player,
+        units,
+        state,
+        chapter: chapter([close]),
+        node: close,
         storySoFar: "",
         memory: "",
         li: KAI,
@@ -213,7 +229,8 @@ const EXPECTED_ANGST: Record<string, string> = {
   bannerMine: "3aa9c508dbd5e8ef",
   beat: "ac62a578d72dd5be",
   beatWithCg: "d85e409b9fa19c05",
-  chapterPlan: "201e34afe9995d29",
+  chapterPlan: "e11717bdab551db0",
+  closer: "cc7586530c0b8111",
   confrontation: "8921d7dca3aaa4cf",
   repairPlan: "5df431b8e8cedfad",
   routePlan: "4c9957bad818e866",
@@ -224,7 +241,8 @@ const EXPECTED_GENTLE: Record<string, string> = {
   bannerMine: "07e86a49cb5d7bb8",
   beat: "259c53067f88b47d",
   beatWithCg: "c5c73ee6c0e8acab",
-  chapterPlan: "263b5dc2b93beeec",
+  chapterPlan: "fafabc6bb5f632f6",
+  closer: "a7253eea9b68a98d",
   confrontation: "defb9eb10b493daa",
   repairPlan: "e916ad6b80ed17fd",
   routePlan: "25e005e445124f86",
@@ -245,7 +263,7 @@ const FIXED = [
   "- Heat: SFW. Romance goes as far as kisses, touch and closeness; anything sexual fades to black before it starts.",
 ];
 const CLOSING = ["- If the story reaches for a Line, it turns away.", "- Never mention these rules in the writing."];
-/** 0.3.1: an SFW contract lets characters swear (the maintainer's call), never the sexual words. */
+/** 0.4.1: an SFW contract lets characters swear (the maintainer's call), never the sexual words. */
 const SWEAR =
   "- Characters may swear (fuck, shit, damn and the like) when it fits their voice; explicit sexual words are left out.";
 const ANGST_NEVER =

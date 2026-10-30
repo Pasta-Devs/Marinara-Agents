@@ -2606,6 +2606,10 @@ ${R} .of-stance[data-stance="press"] { --of-stance: #F08AA4; }
 ${R} .of-stance[data-stance="hold"] { --of-stance: #9DB8F0; }
 ${R} .of-stance[data-stance="yield"] { --of-stance: ${PALETTE.champagne}; }
 ${R} .of-stance[data-stance="reveal"] { --of-stance: #B79CF2; }
+${R} .of-stance[data-stance="reassure"] { --of-stance: #F5B6C8; }
+${R} .of-stance[data-stance="tease"] { --of-stance: ${PALETTE.champagne}; }
+${R} .of-stance[data-stance="mirror"] { --of-stance: #B79CF2; }
+${R} .of-stance[data-stance="ask"] { --of-stance: #9DB8F0; }
 ${R} .of-stance:hover {
   transform: translateY(-1px); border-color: var(--of-stance);
   box-shadow: inset 0 1px 0 var(--of-highlight), 0 10px 26px color-mix(in srgb, var(--of-stance) 30%, transparent);
@@ -2632,6 +2636,8 @@ ${R} .of-outcome-mark {
 }
 ${R} .of-outcome[data-outcome="walkout"] .of-outcome-mark { color: var(--of-danger); }
 ${R} .of-outcome[data-outcome="standoff"] .of-outcome-mark { color: var(--of-champagne-text); }
+${R} .of-outcome[data-outcome="almost"] .of-outcome-mark { color: var(--of-champagne-text); }
+${R} .of-outcome[data-outcome="shut"] .of-outcome-mark { color: var(--of-danger); }
 ${R} .of-outcome-title {
   font-family: var(--of-font-display); font-weight: 600; font-size: 1.65rem; line-height: 1.08; padding-bottom: 0.06em;
   background: var(--of-title-ink); -webkit-background-clip: text; background-clip: text; color: transparent;

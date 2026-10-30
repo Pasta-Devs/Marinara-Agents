@@ -6,8 +6,9 @@
 // ripeness above 0: tension + 2 × unresolved grievances + 3 for a rupture; ties by cast order). When nobody's conflict
 // is ripe, or the ripest is also the least recent, the second candidate is the next least recent. The player picks
 // one; the planner picks the Foil.
-// A plan is checked before it is saved (normalizeChapterPlan): 6–9 nodes, 1–2 moments, exactly one confrontation as
-// the climax, at most two CG nodes, the Lead and the Foil each in at least one node, every love interest in chapter 1,
+// A plan is checked before it is saved (normalizeChapterPlan): 6–9 nodes, 1–2 moments, exactly one climax node (a
+// Confrontation, or a Closer with the Lead in it: #1938) as the second-to-last or last node, the other kind after two
+// main chapters in a row ended with the same one (requiredClimax), at most two CG nodes, the Lead and the Foil each in at least one node, every love interest in chapter 1,
 // an off-screen line for each absent one, no tag for a Line, and conflict seeds that never repeat that love interest's
 // last two kinds of angst, counting the seeds planted earlier in the same plan (at most one open misunderstanding
 // each, resolved within two chapters). A failed check is the generation core's one repair turn.
@@ -26,6 +27,7 @@ import type {
   Unit,
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import type { ClimaxKind } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { LIMIT_IDS, type LimitId } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import { generateJson, readOrGenerate, type GenerationDeps } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
@@ -98,6 +100,26 @@ export interface PlanContext {
   world: Pick<World, "content">;
   number: number;
   lead: LiId;
+  /** The climax this chapter must use, after CLIMAX_STREAK main chapters alike; absent, the planner picks. */
+  climax?: ClimaxKind;
+}
+
+/** How many main chapters in a row may end with the same climax (the maintainer's 2, so the two alternate often). */
+export const CLIMAX_STREAK = 2;
+
+/** A chapter's climax: the kind of its confrontation or closer node, or null when it has none. */
+export function climaxOfChapter(chapter: Pick<Chapter, "nodes"> | undefined): ClimaxKind | null {
+  const node = chapter?.nodes.find((candidate) => candidate.kind === "confrontation" || candidate.kind === "closer");
+  return node?.kind === "confrontation" || node?.kind === "closer" ? node.kind : null;
+}
+
+/** The climax the next main chapter must use: the other kind once the last CLIMAX_STREAK all ended alike, else null. */
+export function requiredClimax(mains: ReadonlyArray<Pick<Chapter, "nodes">>): ClimaxKind | null {
+  if (mains.length < CLIMAX_STREAK) return null;
+  const last = mains.slice(-CLIMAX_STREAK).map(climaxOfChapter);
+  const first = last[0];
+  if (!first || last.some((kind) => kind !== first)) return null;
+  return first === "closer" ? "confrontation" : "closer";
 }
 
 /** A love interest named by id or, failing that, by exact name (case-insensitive). */
@@ -238,10 +260,17 @@ export function normalizeChapterPlan(reply: ChapterPlanReply, context: PlanConte
   const nodes = planNodes(reply, context);
   const moments = nodes.filter((node) => node.kind === "moment").length;
   if (moments < 1 || moments > 2) return `the chapter needs 1 or 2 moment nodes, not ${moments}`;
-  const confrontations = nodes.flatMap((node) => (node.kind === "confrontation" ? [node.i] : []));
-  if (confrontations.length !== 1)
-    return `the chapter needs exactly one confrontation node, not ${confrontations.length}`;
-  if (confrontations[0]! < nodes.length - 2) return "the confrontation must be the second-to-last or last node";
+  const climaxes = nodes.filter((node) => node.kind === "confrontation" || node.kind === "closer");
+  if (climaxes.length !== 1) {
+    return `the chapter needs exactly one climax node (a confrontation or a closer), not ${climaxes.length}`;
+  }
+  const climax = climaxes[0]!;
+  if (climax.i < nodes.length - 2) return `the ${climax.kind} must be the second-to-last or last node`;
+  if (context.climax && climax.kind !== context.climax) {
+    return `this chapter's climax must be a ${context.climax} node, not a ${climax.kind}: the last two main chapters both ended with a ${climax.kind}`;
+  }
+  // Its trust, first and grievance are the Lead's: a Closer is played with them.
+  if (climax.kind === "closer" && !climax.cast.includes(lead)) return "the Lead must be in the closer node";
   if (nodes.filter((node) => node.cg).length > 2) return "at most 2 nodes may have cg";
   if (!nodes.some((node) => node.cast.includes(lead))) return "the Lead must appear in the chapter";
   if (!nodes.some((node) => node.cast.includes(foil))) return "the Foil must appear in at least one node";
@@ -289,7 +318,8 @@ export async function planNextChapter(
   if (run.world.forge.phase !== "ready") throw new OtomeForgeError(409, "The world is still being forged.", "conflict");
   const cast = Object.keys(run.state.lis).filter((li) => run.units.some((unit) => unit.id === li && unit.bible));
   if (!cast.includes(lead)) throw notFound("love interest");
-  const { number, open } = nextMain(await mainChapters(deps.store, runId), run.state);
+  const mains = await mainChapters(deps.store, runId);
+  const { number, open } = nextMain(mains, run.state);
   const key = mainChapterKey(number);
   if (!open) {
     throw new OtomeForgeError(409, "Finish the current chapter before starting the next one.", "conflict");
@@ -309,7 +339,15 @@ export async function planNextChapter(
       signal,
       debugMode,
     });
-    const context: PlanContext = { units, state: run.state, world: run.world, number, lead };
+    const climax = requiredClimax(mains);
+    const context: PlanContext = {
+      units,
+      state: run.state,
+      world: run.world,
+      number,
+      lead,
+      ...(climax ? { climax } : {}),
+    };
     const { value, connectionId } = await generateJson(deps, {
       runId,
       job: "structured",
@@ -322,6 +360,8 @@ export async function planNextChapter(
         number,
         lead,
         memory,
+        climax,
+        lastClimax: climaxOfChapter(mains.at(-1)),
       }),
       schema: ChapterPlanSchema,
       normalize: (reply) => {

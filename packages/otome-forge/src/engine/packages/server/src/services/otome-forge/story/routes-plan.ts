@@ -66,7 +66,10 @@ export interface ArcPlanContext extends Omit<PlanContext, "lead"> {
   li: LiId;
 }
 
-/** What both plans check: node count, him in every node, at most two CGs, the tags and the ledger. */
+/**
+ * What both plans check: node count, no Closer (a main chapter's warm climax; a route keeps its Confrontation), him in
+ * every node, at most two CGs, the tags and the ledger.
+ */
 function planArc(
   reply: ChapterPlanReply,
   context: ArcPlanContext,
@@ -76,6 +79,7 @@ function planArc(
     return `the chapter needs ${min} to ${max} nodes, not ${reply.nodes.length}`;
   }
   const nodes = planNodes(reply, context);
+  if (nodes.some((node) => node.kind === "closer")) return "a route or repair chapter has no closer node";
   const away = nodes.find((node) => !node.cast.includes(context.li));
   if (away) return `${context.li} must be in every node; node ${away.i + 1} leaves them out`;
   if (nodes.filter((node) => node.cg).length > 2) return "at most 2 nodes may have cg";

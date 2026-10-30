@@ -2,17 +2,36 @@
 // Otome Forge: the Confrontation, a three-round argument at a chapter's climax (plan M2b). Each round she answers
 // with a stance, Press, Hold, Yield or Reveal, each carrying the line she would say; his face swaps with his answer.
 // Composure decides the ending and is never shown: the round ends on his lines, and the ending on its own card.
+// The Closer (#1938), the warm climax, plays on the same pills and card with its own answers (Reassure, Tease, Mirror,
+// Ask) and endings (Opened up, Almost, Shut out); its guard is never shown either.
 // ──────────────────────────────────────────────
 // The reader plays it as a beat (lib/reader-state.ts confrontationBeat), so typing, Auto, the backlog, voices and Ease
 // off work as in any scene; this file draws the stance pills that stand in for the choice, and the ending's card.
 import { forwardRef, useId, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
-import { DoorOpen, Hand, HandHeart, KeyRound, Scale, Shield, Swords, Sparkles, type LucideIcon } from "lucide-react";
+import {
+  DoorClosed,
+  DoorOpen,
+  Hand,
+  HandHeart,
+  HeartHandshake,
+  Hourglass,
+  KeyRound,
+  Laugh,
+  MessageCircleHeart,
+  MessageCircleQuestionMark,
+  Scale,
+  Shield,
+  Sparkles,
+  Sunrise,
+  Swords,
+  type LucideIcon,
+} from "lucide-react";
 import { accentOf } from "../../lib/accent";
-import type { ChoiceOption, ConfrontationEnding, ForgeChoice, RunLiView } from "../../shared/api-types";
-import { CONFRONTATION_ROUNDS, STANCES, type Stance } from "../../shared/arcs";
+import type { ChoiceOption, ForgeChoice, RunLiView } from "../../shared/api-types";
+import { ALL_CLIMAX_MOVES, CONFRONTATION_ROUNDS, type ClimaxEnding, type ClimaxMove } from "../../shared/arcs";
 
-const STANCE_META: Record<Stance, { nameKey: string; hintKey: string; Icon: LucideIcon }> = {
+const STANCE_META: Record<ClimaxMove, { nameKey: string; hintKey: string; Icon: LucideIcon }> = {
   press: {
     nameKey: "ui.otomeForge.confrontation.press",
     hintKey: "ui.otomeForge.confrontation.pressHint",
@@ -25,23 +44,60 @@ const STANCE_META: Record<Stance, { nameKey: string; hintKey: string; Icon: Luci
     hintKey: "ui.otomeForge.confrontation.revealHint",
     Icon: KeyRound,
   },
+  reassure: {
+    nameKey: "ui.otomeForge.closer.reassure",
+    hintKey: "ui.otomeForge.closer.reassureHint",
+    Icon: HeartHandshake,
+  },
+  tease: { nameKey: "ui.otomeForge.closer.tease", hintKey: "ui.otomeForge.closer.teaseHint", Icon: Laugh },
+  mirror: {
+    nameKey: "ui.otomeForge.closer.mirror",
+    hintKey: "ui.otomeForge.closer.mirrorHint",
+    Icon: MessageCircleHeart,
+  },
+  ask: {
+    nameKey: "ui.otomeForge.closer.ask",
+    hintKey: "ui.otomeForge.closer.askHint",
+    Icon: MessageCircleQuestionMark,
+  },
 };
 
-const OUTCOME_META: Record<ConfrontationEnding, { titleKey: string; textKey: string; Icon: LucideIcon }> = {
+const OUTCOME_META: Record<ClimaxEnding, { titleKey: string; textKey: string; endedKey: string; Icon: LucideIcon }> = {
   truth: {
     titleKey: "ui.otomeForge.confrontation.truthTitle",
     textKey: "ui.otomeForge.confrontation.truthText",
+    endedKey: "ui.otomeForge.confrontation.ended",
     Icon: HandHeart,
   },
   walkout: {
     titleKey: "ui.otomeForge.confrontation.walkoutTitle",
     textKey: "ui.otomeForge.confrontation.walkoutText",
+    endedKey: "ui.otomeForge.confrontation.ended",
     Icon: DoorOpen,
   },
   standoff: {
     titleKey: "ui.otomeForge.confrontation.standoffTitle",
     textKey: "ui.otomeForge.confrontation.standoffText",
+    endedKey: "ui.otomeForge.confrontation.ended",
     Icon: Scale,
+  },
+  opened: {
+    titleKey: "ui.otomeForge.closer.openedTitle",
+    textKey: "ui.otomeForge.closer.openedText",
+    endedKey: "ui.otomeForge.closer.ended",
+    Icon: Sunrise,
+  },
+  almost: {
+    titleKey: "ui.otomeForge.closer.almostTitle",
+    textKey: "ui.otomeForge.closer.almostText",
+    endedKey: "ui.otomeForge.closer.ended",
+    Icon: Hourglass,
+  },
+  shut: {
+    titleKey: "ui.otomeForge.closer.shutTitle",
+    textKey: "ui.otomeForge.closer.shutText",
+    endedKey: "ui.otomeForge.closer.ended",
+    Icon: DoorClosed,
   },
 };
 
@@ -65,7 +121,7 @@ export const StancePills = forwardRef<HTMLButtonElement, StancePillsProps>(funct
   const { t } = useTranslation();
   const id = useId();
   const round = roundOf(choice);
-  const options = STANCES.flatMap((stance) => {
+  const options = ALL_CLIMAX_MOVES.flatMap((stance) => {
     const option = choice.options.find((item) => item.id === stance);
     return option ? [{ stance, option }] : [];
   });
@@ -122,7 +178,7 @@ export const StancePills = forwardRef<HTMLButtonElement, StancePillsProps>(funct
 });
 
 interface ConfrontationEndProps {
-  outcome: ConfrontationEnding;
+  outcome: ClimaxEnding;
   /** The love interest she faced; the card names him. */
   li: RunLiView | null;
   onGoOn: () => void;
@@ -132,7 +188,7 @@ interface ConfrontationEndProps {
 export function ConfrontationEnd({ outcome, li, onGoOn }: ConfrontationEndProps) {
   const { t } = useTranslation();
   const id = useId();
-  const { titleKey, textKey, Icon } = OUTCOME_META[outcome];
+  const { titleKey, textKey, endedKey, Icon } = OUTCOME_META[outcome];
   const name = li?.name ?? t("ui.otomeForge.confrontation.someone");
   const style = li ? ({ "--of-li-accent": accentOf(li) } as CSSProperties) : undefined;
   return (
@@ -145,7 +201,7 @@ export function ConfrontationEnd({ outcome, li, onGoOn }: ConfrontationEndProps)
       <span className="of-outcome-mark" aria-hidden="true">
         <Icon size={22} strokeWidth={1.7} />
       </span>
-      <p className="of-eyebrow">{t("ui.otomeForge.confrontation.ended")}</p>
+      <p className="of-eyebrow">{t(endedKey)}</p>
       <h2 id={id} className="of-outcome-title" tabIndex={-1} data-autofocus="">
         {t(titleKey, { name })}
       </h2>
