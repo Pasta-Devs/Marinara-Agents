@@ -53,6 +53,8 @@ type Candidate = {
   title: string;
   // Chat Messages pieces only; the title string stays the source note title.
   messageRange?: { chatName: string; first: number; last: number };
+  // Chat Summaries without a numbered range: the label is the range text from the title.
+  summaryRange?: { chatName: string; label: string };
   sourceText: string;
   sourceNoteId: string;
   legacySourceNoteIds: string[];
@@ -257,7 +259,15 @@ function conversationSummaries(metadata: Record<string, unknown>) {
 export function summaries(
   metadata: Record<string, unknown>,
   chatMode: LtmMode,
-): Array<{ id: string; content: string; range: string; origin: string; deterministicSourceText?: string }> {
+): Array<{
+  id: string;
+  content: string;
+  range: string;
+  first?: number;
+  last?: number;
+  origin: string;
+  deterministicSourceText?: string;
+}> {
   if (chatMode === "conversation") return conversationSummaries(metadata);
   const raw = Array.isArray(metadata.summaryEntries) ? metadata.summaryEntries.map(object) : [],
     entries = raw.flatMap((entry, index) => {
@@ -277,6 +287,9 @@ export function summaries(
                 : text(entry.sourceMode) === "agent"
                   ? "agent summary"
                   : "last messages",
+          ...(start && end && Number.isInteger(start) && Number.isInteger(end) && start >= 1 && end >= start
+            ? { first: start, last: end }
+            : {}),
           origin: text(entry.origin),
         },
       ];
@@ -628,6 +641,9 @@ async function candidates(
             ? { previewOrder: `${chat.id}\0${entry.range.split(".").reverse().join("-")}\0${entry.id}` }
             : {}),
           title,
+          ...(entry.first !== undefined && entry.last !== undefined
+            ? { messageRange: { chatName: chatDisplayName.slice(0, 240), first: entry.first, last: entry.last } }
+            : { summaryRange: { chatName: chatDisplayName.slice(0, 240), label: entry.range.slice(0, 80) } }),
           sourceText: entry.content,
           sourceNoteId: sourceNoteIdForProvenance(provenance),
           legacySourceNoteIds: legacy,
@@ -836,6 +852,7 @@ function previewSample(row: Candidate, note: LtmNote | undefined) {
     summary: row.summary,
     snippet: row.sourceText.length > 200 ? `${row.sourceText.slice(0, 200)}...` : row.sourceText,
     ...(row.messageRange ? { messageRange: row.messageRange } : {}),
+    ...(row.summaryRange ? { summaryRange: row.summaryRange } : {}),
   };
   return note
     ? {

@@ -93,6 +93,7 @@ async function main() {
     {
       ltmImportSourceNotesResponseSchema,
       ltmInteropPreviewRequestSchema,
+      ltmInteropPreviewSampleSchema,
       ltmLorebookPreviewResponseSchema,
       ltmSourceDetailsRequestSchema,
     },
@@ -309,10 +310,72 @@ async function main() {
         join(dataDir, "long-term-memory"),
       );
       assert.equal(characterPreview.samples[0]?.importMode, "roleplay");
-      assert.ok(
-        [...searchedCandidates.samples, ...characterPreview.samples].every((sample) => !("messageRange" in sample)),
-        "only Chat Messages samples carry a message range",
+      // #1910: a Chat Summaries row keeps its range visible when the chat name is cut; titles stay the source note titles.
+      assert.deepEqual(
+        searchedCandidates.samples.map(({ title, messageRange, summaryRange }) => ({
+          title,
+          messageRange,
+          summaryRange,
+        })),
+        [
+          {
+            title: "Kirei, msgs 27.07.2026",
+            messageRange: undefined,
+            summaryRange: { chatName: "Kirei", label: "27.07.2026" },
+          },
+        ],
       );
+      assert.ok(
+        characterPreview.samples.every((sample) => !("messageRange" in sample) && !("summaryRange" in sample)),
+        "character samples carry neither range field",
+      );
+      const rangeChat = {
+        ...roleplayChat,
+        id: "chat-summary-ranges",
+        name: "Ranges",
+        metadata: {
+          summaryEntries: [
+            { id: "numbered", content: "A numbered summary.", rangeStartIndex: 241, rangeEndIndex: 300 },
+            { id: "reversed", content: "A reversed range.", rangeStartIndex: 9, rangeEndIndex: 3 },
+            { id: "last", content: "A last-N summary.", messageCount: 40 },
+            { id: "negative", content: "A corrupt range.", rangeStartIndex: -5, rangeEndIndex: -1 },
+          ],
+          gamePreviousSessionSummaries: [{ sessionNumber: 3, summary: "Session three." }],
+        },
+      };
+      chats.push(rangeChat);
+      try {
+        const rangePreview = await previewPackageInterop(
+          { source: "chats", chatId: rangeChat.id, limit: 100 },
+          join(dataDir, "long-term-memory"),
+        );
+        const byTitle = new Map(rangePreview.samples.map((sample) => [sample.title, sample]));
+        assert.equal(rangePreview.samples.length, 5);
+        assert.deepEqual(byTitle.get("Ranges, msgs 241-300")?.messageRange, {
+          chatName: "Ranges",
+          first: 241,
+          last: 300,
+        });
+        for (const [title, label] of [
+          ["Ranges, msgs last 40", "last 40"],
+          ["Ranges, msgs 9-3", "9-3"],
+          ["Ranges, msgs -5--1", "-5--1"],
+          ["Ranges, msgs game session 3", "game session 3"],
+        ] as const)
+          assert.deepEqual(byTitle.get(title)?.summaryRange, { chatName: "Ranges", label }, title);
+        for (const sample of rangePreview.samples)
+          assert.ok(
+            Boolean(sample.messageRange) !== Boolean(sample.summaryRange),
+            `${sample.title}: a sample sets one range field`,
+          );
+        for (const sample of rangePreview.samples)
+          assert.ok(
+            ltmInteropPreviewSampleSchema.safeParse(sample).success,
+            `${sample.sourceId}: the sample matches the response schema`,
+          );
+      } finally {
+        chats.pop();
+      }
       const scopedCharacterPreview = await previewPackageInterop(
         { source: "characters", sourceScope: unrelatedScope, limit: 100 },
         join(dataDir, "long-term-memory"),
