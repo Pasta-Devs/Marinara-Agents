@@ -2,7 +2,7 @@
 
 ## 0.2.1 — 2026-10-30
 
-- Make desktop fullscreen use the available Otome Hearth area across the mode instead of retaining the portrait stage.
+- Make desktop fullscreen fill the available Otome Hearth area across its screens. Leaving fullscreen restores ordinary portrait layouts while preserving drafts and the current reader line.
 
 ## 0.2.0 — 2026-10-30
 

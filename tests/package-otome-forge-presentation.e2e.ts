@@ -3622,7 +3622,7 @@ test("Otome Hearth fullscreen fills the whole mode across navigation and restore
       ]
     : [
         { width: 1440, height: 900 },
-        { width: 961, height: 640 },
+        { width: 961, height: 480 },
       ];
   await page.setViewportSize(sizes[0]!);
   await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
@@ -3717,8 +3717,26 @@ test("Otome Hearth fullscreen fills the whole mode across navigation and restore
     await expect(root.getByRole("button", { name: "Exit fullscreen", exact: true })).toBeVisible();
     await fillsFrame();
     await root.getByRole("button", { name: "Home with Ilvar Thorne", exact: true }).click();
-    await expect(root.getByText("Come inside.", { exact: true })).toBeVisible();
+    await expect(root.getByRole("heading", { name: "Ilvar Thorne", exact: true, level: 1 })).toBeVisible();
+    await expect(root.getByRole("article", { name: "A note from Ilvar Thorne", exact: true })).toContainText(
+      "Come inside.",
+    );
     await fillsFrame();
+    if (index === 1) {
+      await root.getByRole("button", { name: "Who’s home", exact: true }).click();
+      await page
+        .getByRole("dialog", { name: "Who’s home", exact: true })
+        .getByRole("button", { name: "Your cast", exact: true })
+        .click();
+      await expect(root.getByRole("heading", { name: "Your story is ready", exact: true })).toBeVisible();
+      await fillsFrame();
+      await page.screenshot({ path: testInfo.outputPath(`fullscreen-cast-${size.width}-${look}.png`) });
+      await root.getByRole("button", { name: "Back", exact: true }).click();
+      await expect(root.getByRole("heading", { name: "Ilvar Thorne", exact: true, level: 1 })).toBeVisible();
+      await expect(root.getByRole("article", { name: "A note from Ilvar Thorne", exact: true })).toContainText(
+        "Come inside.",
+      );
+    }
     await root
       .getByRole("navigation", { name: "Game menu" })
       .getByRole("button", { name: "Story", exact: true })
