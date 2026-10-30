@@ -206,6 +206,22 @@ test("the consent framing appears only while dubious consent or non-consent is n
   assert.match(text, /When a choice is about intimacy, one option lets the protagonist decline/);
 });
 
+test("under NSFW: Explicit, sex is never rushed: room to unfold, dialogue throughout, a longer node", () => {
+  const explicit = beatPrompt(stored("explicit", "angst"), "sfw");
+  assert.match(explicit, /never summarized, sanitized or rushed\. Give it room, from the build-up through the act/);
+  assert.match(explicit, /may talk throughout, ask for a change of position, say what they feel, or simply give in/);
+  assert.match(explicit, /A node that reaches sex is the exception: [^\n]*up to 1500 words and 60 segments/);
+  // The planners read the same Heat line, so they plan the room too.
+  const plan = systemOf(
+    chapterPlanMessages({ ...storyInputs(stored("explicit", "angst")), number: 2, lead: KAI, memory: "" }),
+  );
+  assert.match(plan, /never summarized, sanitized or rushed/);
+  for (const content of [stored("fade", "angst"), defaultContent()]) {
+    const prompt = beatPrompt(content, "sfw");
+    assert.doesNotMatch(prompt, /A node that reaches sex is the exception|or rushed/, content.heat);
+  }
+});
+
 test("no NSFW scene asks for consent or offers to stop, at any Darkness; an SFW story never says so", () => {
   const CHECK_IN = /A love interest never asks permission, checks in or offers to stop \("tell me to stop"/;
   for (const content of [stored("fade", "gentle"), stored("explicit", "angst"), stored("explicit", "dark")]) {

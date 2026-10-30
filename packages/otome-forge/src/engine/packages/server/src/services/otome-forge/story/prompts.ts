@@ -512,6 +512,9 @@ export const BEAT_WORDS = 650;
 export const BEAT_WORDS_MAX = 950;
 export const BEAT_SEGMENTS_MAX = 40;
 export const BEAT_PLACES_MAX = 4;
+/** Under NSFW: Explicit, a node that reaches sex may run this long, so it is never rushed (within the reply's 7000 tokens and normalizeBeatReply's twice BEAT_SEGMENTS_MAX). */
+export const INTIMATE_BEAT_WORDS_MAX = 1500;
+export const INTIMATE_BEAT_SEGMENTS_MAX = 60;
 
 /** The reply's top level, kept whole for the kit's choice normalizer (zod drops keys a schema does not name). */
 export interface BeatReply {
@@ -619,7 +622,7 @@ export function beatMessages({
   const system = [
     "You are the narrator of an otome visual novel: a character-driven romance mystery. Narrate ONE node of the chapter as a scene the player taps through, a short segment at a time.",
     NO_CHOICES_SENTENCE,
-    `Write about ${BEAT_WORDS} words in total across the segments, and NEVER more than ${BEAT_WORDS_MAX}; use at most ${BEAT_SEGMENTS_MAX} segments.`,
+    `Write about ${BEAT_WORDS} words in total across the segments, and NEVER more than ${BEAT_WORDS_MAX}; use at most ${BEAT_SEGMENTS_MAX} segments.${world.content.heat === "explicit" ? ` A node that reaches sex is the exception: give it the room it needs, up to ${INTIMATE_BEAT_WORDS_MAX} words and ${INTIMATE_BEAT_SEGMENTS_MAX} segments, so it is never rushed.` : ""}`,
     "Respond with ONLY a JSON object, no markdown, in this exact shape:",
     `{"musicMood": "${MUSIC_MOODS.join("|")}", "places": [{"name": "...", "tags": "..."}], "segments": [{"speaker": "", "text": "...", "thought": false, "expression": "", "place": "..."}]${node.cg ? cgShape(world) : ""}}`,
     '- speaker: who speaks the segment, written as their exact name every time; "" for narration. When the protagonist speaks, write their exact name; the prose still addresses them as "you".',

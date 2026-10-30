@@ -73,7 +73,7 @@ const HEAT_TEXT: Record<Heat, string> = {
   sfw: "Heat: SFW. Romance goes as far as kisses, touch and closeness; anything sexual fades to black before it starts.",
   fade: "Heat: NSFW, fade to black. Desire, sexual tension, groping, undressing and the build-up are written openly in adult terms; the sex itself happens off the page: cut at the threshold and pick up in the aftermath, with what it changed between them.",
   explicit:
-    "Heat: NSFW, explicit. Desire, groping and undressing are written openly. When a scene reaches sex between the adult characters involved, it is written on the page: explicit, anatomically grounded, emotionally reactive and detailed, in each character's voice; never summarized or sanitized.",
+    "Heat: NSFW, explicit. Desire, groping and undressing are written openly. When a scene reaches sex between the adult characters involved, it is written on the page: explicit, anatomically grounded, emotionally reactive and detailed, in each character's voice; never summarized, sanitized or rushed. Give it room, from the build-up through the act to the aftermath, with dialogue woven through the intimate description: the characters are people who may talk throughout, ask for a change of position, say what they feel, or simply give in to the sensation.",
 };
 
 const DARKNESS_TEXT: Record<Darkness, string> = {
