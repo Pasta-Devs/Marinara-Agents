@@ -552,6 +552,7 @@ type MutableCatalogIdentity = {
   aliases: Set<string>;
   familyId?: string;
   subject?: LtmSubject;
+  sourceScope?: "direct" | "group" | "local_note" | "local_source";
 };
 
 function mutableHasRelatedIdentity(mutable: Map<string, MutableCatalogIdentity>, name: string, familyId: string) {
