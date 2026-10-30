@@ -3,6 +3,7 @@
 // gate's settings, so a world that never raised one gets the same contract, story prompts and image prompts. The
 // digests were taken from the 0.0.6 builders before that change; when an SFW prompt is changed on purpose, take them
 // again from the failing assertion's "actual" and say so in the PR.
+// 0.4.0 (#1938): the chapter plan names the Closer beside the Confrontation, and the Closer's P12c is pinned too.
 // The banner digests include the English Snapshot illustration fields. Story/banner hashes deliberately reflect
 // scene pacing and earned character change. Only the two face-edit image expectations change for the explicit,
 // rating-independent adult/nonsexual face policy; the other image and content-policy expectations stay pinned.
@@ -34,6 +35,7 @@ import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/serv
 import {
   beatMessages,
   chapterPlanMessages,
+  closerMessages,
   confrontationMessages,
   repairPlanMessages,
   routePlanMessages,
@@ -87,6 +89,7 @@ function storyPrompts(content: ContentSettings): Record<string, string> {
     );
   };
   const fight = node({ kind: "confrontation", cg: true });
+  const close = node({ kind: "closer", cg: true });
   const arc = { world, player, units, state, li: KAI, memory: "" };
   const banner = (kind: "memories" | "his-wardrobe" | "my-wardrobe") =>
     text(
@@ -114,6 +117,19 @@ function storyPrompts(content: ContentSettings): Record<string, string> {
         state,
         chapter: chapter([fight]),
         node: fight,
+        storySoFar: "",
+        memory: "",
+        li: KAI,
+      }),
+    ),
+    closer: text(
+      closerMessages({
+        world,
+        player,
+        units,
+        state,
+        chapter: chapter([close]),
+        node: close,
         storySoFar: "",
         memory: "",
         li: KAI,
@@ -212,7 +228,8 @@ const EXPECTED_ANGST: Record<string, string> = {
   bannerMine: "5ec68de81c60d074",
   beat: "4f71c89d47d5ab91",
   beatWithCg: "6468607ee6384354",
-  chapterPlan: "e247cd6c087f3c3b",
+  chapterPlan: "461feb5407b854e3",
+  closer: "b7f4c8c86670bf46",
   confrontation: "539a0354bbc57bc9",
   repairPlan: "45d97fe0e3e43623",
   routePlan: "cabb316844b674b0",
@@ -223,7 +240,8 @@ const EXPECTED_GENTLE: Record<string, string> = {
   bannerMine: "25dd3a4ee7cad777",
   beat: "095d7017e0ca00a1",
   beatWithCg: "9d782bb3221f2bdd",
-  chapterPlan: "64a36e6a672c7b90",
+  chapterPlan: "7c2ac0f2433b8321",
+  closer: "ffe5178c0fc8336b",
   confrontation: "78341b0900d2045f",
   repairPlan: "4abee1195a5f1709",
   routePlan: "c606957372b61d77",

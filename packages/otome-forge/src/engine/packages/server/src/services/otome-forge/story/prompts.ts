@@ -27,6 +27,7 @@ import type {
   ChapterNode,
   LiId,
   LiState,
+  NodeKind,
   Player,
   RunState,
   Unit,
@@ -34,6 +35,7 @@ import type {
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import {
   CONFRONTATION_ROUNDS,
+  type ClimaxKind,
   REPAIR_NODES_MAX,
   REPAIR_NODES_MIN,
   ROUTE_NODES_MAX,
@@ -42,7 +44,7 @@ import {
 } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { stillToMend } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { FACES, MUSIC_MOODS } from "../../../../../client/src/features/otome-forge/shared/faces.js";
-import { LIMIT_IDS } from "../../../../../client/src/features/otome-forge/shared/content.js";
+import { LIMIT_IDS, intimacyOpen } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import { explicitCgAllowed, imageBriefRule, otomeContentContract, otomeContractReminder } from "../content-contract.js";
 import type { OtomeMessage } from "../generation.js";
 import { chapterOwner, mainChapterNumber } from "../ids.js";
@@ -272,7 +274,7 @@ export interface ChapterPlanReply {
   foil?: string;
   summary: string;
   nodes: Array<{
-    kind: "beat" | "moment" | "confrontation";
+    kind: NodeKind;
     moment?: "read-him" | "call" | "date" | null;
     guide: string;
     cast: string[];
@@ -302,7 +304,7 @@ export const ChapterPlanSchema: ZodType<ChapterPlanReply> = z.object({
   nodes: z
     .array(
       z.object({
-        kind: z.enum(["beat", "moment", "confrontation"]),
+        kind: z.enum(["beat", "moment", "confrontation", "closer"]),
         moment: z.enum(["read-him", "call", "date"]).nullable().optional(),
         guide: text(4000).min(1),
         cast: z.array(text(120)).max(6),
@@ -339,6 +341,10 @@ export interface ChapterPlanInput {
   lead: LiId;
   /** Recalled memory (the kit's text), or "". */
   memory: string;
+  /** The climax this chapter must use (S/story/chapters.ts requiredClimax), or null when the planner picks. */
+  climax?: ClimaxKind | null;
+  /** The last main chapter's climax, for a free pick. */
+  lastClimax?: ClimaxKind | null;
 }
 
 export function chapterPlanMessages({
@@ -349,6 +355,8 @@ export function chapterPlanMessages({
   number,
   lead,
   memory,
+  climax = null,
+  lastClimax = null,
 }: ChapterPlanInput): OtomeMessage[] {
   const leadUnit = units.find((unit) => unit.id === lead);
   const others = units.filter((unit) => unit.id !== lead);
@@ -356,18 +364,21 @@ export function chapterPlanMessages({
     "You are the chapter planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human, even if inside a monster, capable of earned, character-consistent change.",
     `Plan main chapter ${number}: one Lead love interest (given) and one Foil you pick from the others. The chapter is told as ${NODES_MIN} to ${NODES_MAX} nodes in play order; a narrator writes each node later as one scene the player reads.`,
     "Reply with ONLY a JSON object of this shape:",
-    '{"title": "...", "tags": ["..."], "foil": "<love interest id>", "summary": "...", "nodes": [{"kind": "beat|moment|confrontation", "moment": "read-him|call|date", "guide": "...", "cast": ["<love interest id>"], "place": "...", "cg": true, "resolves": ["<grievance id>"]}], "ledger": {"relationship": [{"li": "<id>", "line": "..."}], "conflict": [{"id": "<conflict id>", "li": "<id>", "type": "...", "action": "plant|escalate|complicate|resolve"}], "offscreen": [{"li": "<id>", "line": "..."}]}}',
+    '{"title": "...", "tags": ["..."], "foil": "<love interest id>", "summary": "...", "nodes": [{"kind": "beat|moment|confrontation|closer", "moment": "read-him|call|date", "guide": "...", "cast": ["<love interest id>"], "place": "...", "cg": true, "resolves": ["<grievance id>"]}], "ledger": {"relationship": [{"li": "<id>", "line": "..."}], "conflict": [{"id": "<conflict id>", "li": "<id>", "type": "...", "action": "plant|escalate|complicate|resolve"}], "offscreen": [{"li": "<id>", "line": "..."}]}}',
     "FIELDS",
     "- title: the chapter's name, 2 to 6 words. summary: one or two lines on what the chapter is about, without giving away its turns (the player reads it).",
     `- tags: content tags a reader should see before it starts, from: ${CHAPTER_TAGS.join(", ")}. Only what the chapter really holds; [] when none apply.`,
-    "- nodes: kind beat is an ordinary scene. Kind moment is a scene with a special framing, set by moment: read-him (the protagonist reads one love interest's face to see what they really feel), call (a call from afar, only voices), date (time together that may go as hoped, or stumble on something real when the story gives it a reason). Kind confrontation is the climax: an argument in which something true comes out.",
+    "- nodes: kind beat is an ordinary scene. Kind moment is a scene with a special framing, set by moment: read-him (the protagonist reads one love interest's face to see what they really feel), call (a call from afar, only voices), date (time together that may go as hoped, or stumble on something real when the story gives it a reason). Kind confrontation is a climax: an argument in which something true comes out. Kind closer is a warm climax: a quiet moment in which the Lead offers something of themselves and lets the protagonist close, or almost does; it can end well, or go wrong.",
     `- guide: what happens in that node, 2 to 4 sentences, for the narrator: who wants what, what changes, where it leaves things. cast: the ids of the love interests present. place: where it opens (optional). cg: true only for a node holding a story-defining image (a confession, a revelation, a rescue${firstNightCg(world) ? ", or under this Heat a first night together" : ""}). resolves: ids of open grievances this node may resolve.`,
     "- ledger.relationship: one line per love interest present on what moved between them and the protagonist. ledger.conflict: conflict seeds: plant a new one (type from: " +
       ANGST_TYPES.join(", ") +
       "), or escalate, complicate or resolve an open one by its id. ledger.offscreen: one line for every love interest NOT in this chapter: what they were doing meanwhile.",
     "RULES",
-    `- ${NODES_MIN} to ${NODES_MAX} nodes; 1 or 2 moment nodes; exactly one confrontation, as the second-to-last or last node; at most 2 nodes with cg.`,
-    "- The Lead is in most nodes and in the confrontation; the Foil appears in at least one node. The Foil's goal competes with the protagonist's or the Lead's.",
+    `- ${NODES_MIN} to ${NODES_MAX} nodes; 1 or 2 moment nodes; exactly one climax node, a confrontation or a closer, as the second-to-last or last node; at most 2 nodes with cg.`,
+    climax
+      ? `- This chapter's climax is a ${climax}: the last two main chapters both ended with a ${climax === "closer" ? "confrontation" : "closer"}.`
+      : `- Choose the climax the story calls for: open grievances and strain lean toward a confrontation, trust and calm toward a closer.${lastClimax ? ` The last main chapter ended with a ${lastClimax}.` : ""}`,
+    "- The Lead is in most nodes and in the climax; the Foil appears in at least one node. The Foil's goal competes with the protagonist's or the Lead's.",
     number === 1
       ? "- This is the first chapter: every love interest appears in at least one node, and it opens on the opening situation."
       : "- Continue from the story so far; everything already played is canon and is never undone or staged again.",
@@ -456,6 +467,9 @@ const MOMENT_FRAMING: Record<NonNullable<ChapterNode["moment"]>, string> = {
 
 const CONFRONTATION_FRAMING =
   "This node is the CONFRONTATION, the chapter's climax: an argument that comes to a head. Both sides press; something true comes out; it does not resolve neatly, and no one apologizes on the spot.";
+
+const CLOSER_FRAMING =
+  "This node is the CLOSER, the chapter's warm climax: a quiet moment in which a love interest lets the protagonist close, or almost does. Something true is offered; it may be taken or missed.";
 
 export const CHOICE_EFFECTS_INSTRUCTION = `
 
@@ -559,9 +573,11 @@ export function beatMessages({
   const framing =
     node.kind === "confrontation"
       ? CONFRONTATION_FRAMING
-      : node.kind === "moment" && node.moment
-        ? MOMENT_FRAMING[node.moment]
-        : "";
+      : node.kind === "closer"
+        ? CLOSER_FRAMING
+        : node.kind === "moment" && node.moment
+          ? MOMENT_FRAMING[node.moment]
+          : "";
   const arc =
     chapter.kind === "prologue"
       ? prologueFraming(world.openingSituation, units)
@@ -1012,6 +1028,94 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     storySoFar.trim() ? `The chapter so far:\n${storySoFar.trim()}` : "(This is the chapter's first node.)",
     "",
     `Write the confrontation of node ${node.i + 1} of ${chapter.nodes.length}, between ${protagonist} and ${name} (id ${li}):`,
+    `What happens: ${node.guide}`,
+    node.place ? `It opens here: ${node.place}` : "",
+    ...arcFraming({ chapter, node, units, state }),
+    otomeContractReminder("scene"),
+  ]
+    .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
+    .join("\n");
+  return [
+    { role: "system", content: system + VOICES_INSTRUCTION },
+    { role: "user", content: user },
+  ];
+}
+
+// ── P12c: the Closer (#1938; narration, 0.9, scene contract, one call) ──
+
+/**
+ * P12c: the Closer, the warm climax: an opening, three rounds of four answers each (reassure, tease, mirror, ask) and
+ * the three endings (opened, almost, shut), in one reply shaped as P12's. In an NSFW story the partner's card carries
+ * their tastes (#1936), and Opened up may turn intimate; the content contract decides how far.
+ */
+export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[] {
+  const { world, player, units, state, chapter, node, storySoFar, memory, li } = input;
+  const backgrounds = savedBackgrounds(world);
+  const present = units.filter((unit) => node.cast.includes(unit.id) || unit.id === li);
+  const partner = units.find((unit) => unit.id === li);
+  const name = partner?.name ?? "the love interest";
+  const protagonist = player.name || "the protagonist";
+  const thinkers = present.filter((unit) => stageOf(state, unit.id) >= 2).map((unit) => unit.name);
+  const option = `{"label": "...", "selection": {"kind": "dialogue|action", "text": "..."}, "segments": [${SEGMENT_SHAPE}], "guard": 0}`;
+  const system = [
+    `You are the narrator of an otome visual novel's closer: the warm climax of a chapter, a quiet moment in which ${name} lets the protagonist come close, or almost does. Write the whole closer in ONE reply: an opening, ${CONFRONTATION_ROUNDS} rounds, and three endings.`,
+    "Respond with ONLY a JSON object, no markdown, in this exact shape:",
+    `{"musicMood": "tender|confession", "places": [{"name": "...", "tags": "..."}], "opening": [${SEGMENT_SHAPE}], "rounds": [{"lines": [${SEGMENT_SHAPE}], "options": {"reassure": ${option}, "tease": ${option}, "mirror": ${option}, "ask": ${option}}}], "endings": {"opened": [${SEGMENT_SHAPE}], "almost": [${SEGMENT_SHAPE}], "shut": [${SEGMENT_SHAPE}]}, "grievance": {"text": "...", "severity": "minor"}, "disclosure": "..."${node.cg ? cgShape(world) : ""}}`,
+    `- opening: up to ${CONFRONTATION_OPENING_MAX} segments that bring the two of them somewhere they could let their guard down.`,
+    `- rounds: exactly ${CONFRONTATION_ROUNDS}. lines: 1 to ${CONFRONTATION_HIS_MAX} segments in which ${name} offers something of themselves: a memory, a fear, a wish, a touch. Round k's lines must follow naturally from ANY of the four answers the protagonist could have given in round k-1.`,
+    `- options: the four answers the protagonist may give, every round: reassure (steady warmth), tease (playful; it may lighten the moment or slip past it), mirror (the protagonist opens up in return and tells ${name} something true about themselves), ask (a gentle question that may push). label: the pill's short intent, 2 to 6 words. selection: what ${protagonist} says (kind dialogue) or does (kind action), one or two sentences. segments: 1 to ${CONFRONTATION_ANSWER_MAX} segments of ${name}'s answer to it.`,
+    `- guard: how that answer moves ${name}'s guard, from ${name}'s own character, wound and what stands between them: -1 when it reaches ${name} and the guard lowers, 1 when it lands wrong and ${name} closes off, 0 when it does neither. Not every reassure is -1 and not every ask is 1: a tease can be exactly right, and warmth at the wrong moment can feel like pity.`,
+    `- endings: opened (${name}'s guard comes down and they let the protagonist in, the closest the two have been), almost (warm, but ${name} pulls back at the last second and something stays unsaid), shut (it went wrong: the mask goes back on and ${name} withdraws, hurt). Each 1 to ${CONFRONTATION_ENDING_MAX} segments that close the scene.`,
+    intimacyOpen(world.content)
+      ? "- opened may turn intimate when the moment and where they stand call for it, written at the Heat the content contract sets."
+      : "",
+    `- grievance.text: what being shut out leaves ${name} holding against the protagonist, one short sentence. disclosure: what the protagonist tells ${name} in mirror, as one short third-person sentence ("The protagonist said they still sleep with a light on.").`,
+    "- musicMood: tender or confession.",
+    '- speaker: who speaks the segment, written as their exact name every time; "" for narration. Each segment is one speaker\'s line or one piece of narration.',
+    `- thought: true for an inner line, with "speaker" set to the thinker. The protagonist may think freely. A love interest gets at most ONE thought line in the whole closer, on any path a player can take through it (the opening, the rounds' lines, the answers given and the ending together), and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
+    `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}. A face may contradict the words. Omit it for a neutral line and for narration.`,
+    `- places: where it happens (at most ${BEAT_PLACES_MAX}); tags: 4-8 short comma-separated English tags for an image model, with "no humans".`,
+    ...(backgrounds ? [PLACE_REUSE_RULE] : []),
+    ...(node.cg
+      ? [
+          '- cg: one key image of the opening, only when it holds a story-defining moment. at: the index of the opening segment it opens on. brief: one or two plain English sentences on where and how the moment is shot, never anyone\'s looks. cast: the exact names of at most 3 people in the frame. Omit "cg" otherwise.',
+          ...briefRule(world),
+        ]
+      : []),
+    `- ${name} keeps their own voice, red lines and mask; letting someone in costs ${name} something, and nothing is fixed in one night.`,
+    "- Honour the story so far; never contradict it or undo a choice already made. Stay within this node's guide.",
+    `- Write every segment's text, label, selection, grievance and disclosure in ${world.language}; tags${node.cg ? " and the cg brief" : ""} in English.`,
+    "",
+    STORY_PACING_INSTRUCTION,
+    otomeWritingRules({ story: true, style: world.writingStyle }),
+    "",
+    otomeContentContract({ world, lis: present.map((unit) => ({ name: unit.name })), kind: "scene" }),
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const user = [
+    "WORLD",
+    world.setting.trim() || world.premise.trim(),
+    "",
+    ...(backgrounds ? [backgrounds, ""] : []),
+    "PROTAGONIST",
+    protagonistBlock(player),
+    "",
+    "LOVE INTERESTS IN THIS NODE",
+    present
+      .map((unit) =>
+        [sceneCardBlock(unit, liStateOf(state, unit.id), node.resolves ?? []), intimacyLine(world, unit)]
+          .filter(Boolean)
+          .join("\n"),
+      )
+      .join("\n\n"),
+    "",
+    memory.trim() ? `STORY MEMORY\n${memory.trim()}` : "",
+    "",
+    `CHAPTER: ${chapter.title} (${chapterLabel(chapter, units)})`,
+    storySoFar.trim() ? `The chapter so far:\n${storySoFar.trim()}` : "(This is the chapter's first node.)",
+    "",
+    `Write the closer of node ${node.i + 1} of ${chapter.nodes.length}, between ${protagonist} and ${name} (id ${li}):`,
     `What happens: ${node.guide}`,
     node.place ? `It opens here: ${node.place}` : "",
     ...arcFraming({ chapter, node, units, state }),

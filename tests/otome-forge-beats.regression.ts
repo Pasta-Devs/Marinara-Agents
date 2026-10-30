@@ -65,6 +65,7 @@ import {
   confrontationReply,
   isConfrontationPrompt,
   json,
+  closerPlanReply,
   planReply,
   storyWorld,
 } from "./fixtures/otome-forge-story.ts";
@@ -676,7 +677,9 @@ test("every story prompt keeps the earlier chapters and their big choices when m
     if (isConfrontationPrompt(messages)) return json(confrontationReply());
     const number = Number(/main chapter (\d+)/.exec(messages.at(-1)!.content)?.[1] ?? 1);
     if (isPlanner(messages)) {
-      return json(planReply({ title: `Night ${number}`, ledger: { relationship: [], conflict: [], offscreen: [] } }));
+      // Main chapter 3 follows two Confrontations: the planner is told to end it with a Closer (#1938).
+      const plan = /This chapter's climax is a closer/.test(system(messages)) ? closerPlanReply : planReply;
+      return json(plan({ title: `Night ${number}`, ledger: { relationship: [], conflict: [], offscreen: [] } }));
     }
     const i = Number(/Narrate node (\d+) of/.exec(messages.at(-1)!.content)?.[1] ?? 1) - 1;
     return json(markedBeat(number, i, i === 6));
