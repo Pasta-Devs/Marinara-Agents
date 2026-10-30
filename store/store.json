@@ -3,7 +3,8 @@
   "packages": {
     "2d-avatars": {
       "section": "alive",
-      "tagline": "Animated 2D faces that blink and talk."
+      "tagline": "Animated 2D faces that blink and talk.",
+      "featured": 3
     },
     "3d-avatars": {
       "section": "alive",
@@ -31,8 +32,7 @@
     },
     "chess": {
       "section": "games",
-      "tagline": "Play chess against your characters.",
-      "featured": 4
+      "tagline": "Play chess against your characters."
     },
     "combat": {
       "section": "adventure",
@@ -88,8 +88,7 @@
     },
     "illustrator": {
       "section": "media",
-      "tagline": "Paints scenes from your story as you play.",
-      "featured": 5
+      "tagline": "Paints scenes from your story as you play."
     },
     "inventory-tracker": {
       "section": "trackers",
@@ -105,12 +104,12 @@
     },
     "long-term-memory": {
       "section": "memory",
-      "tagline": "Remembers things across all your chats."
+      "tagline": "Remembers things across all your chats.",
+      "featured": 2
     },
     "lorebook-keeper": {
       "section": "memory",
-      "tagline": "Keeps your lorebooks in sync with the story.",
-      "featured": 6
+      "tagline": "Keeps your lorebooks in sync with the story."
     },
     "memory-nag": {
       "section": "memory",
@@ -122,12 +121,12 @@
     },
     "noodle": {
       "section": "apps",
-      "tagline": "A pretend social network for your characters.",
-      "featured": 1
+      "tagline": "A pretend social network for your characters."
     },
     "otome-forge": {
       "section": "apps",
-      "tagline": "An otome game made from your characters."
+      "tagline": "An otome game made from your characters.",
+      "featured": 1
     },
     "persona-stats": {
       "section": "trackers",
@@ -171,8 +170,7 @@
     },
     "slurp2": {
       "section": "apps",
-      "tagline": "A private creator app for your characters.",
-      "featured": 2
+      "tagline": "A private creator app for your characters."
     },
     "spotify": {
       "section": "media",
@@ -180,8 +178,7 @@
     },
     "story-writer": {
       "section": "apps",
-      "tagline": "Co-write a book with your characters.",
-      "featured": 3
+      "tagline": "Co-write a book with your characters."
     },
     "storyboard": {
       "section": "media",

@@ -4,6 +4,7 @@
     "2d-avatars": {
       "section": "alive",
       "tagline": "Animated 2D faces that blink and talk.",
+      "featured": 3,
       "iconPath": "../../store/icons/2d-avatars.webp",
       "bannerPath": "../../store/banners/2d-avatars.webp",
       "bannerSmallPath": "../../store/banners/2d-avatars-1200.webp"
@@ -46,7 +47,6 @@
     "chess": {
       "section": "games",
       "tagline": "Play chess against your characters.",
-      "featured": 4,
       "iconPath": "../../store/icons/chess.webp",
       "bannerPath": "../../store/banners/chess.webp",
       "bannerSmallPath": "../../store/banners/chess-1200.webp"
@@ -145,7 +145,6 @@
     "illustrator": {
       "section": "media",
       "tagline": "Paints scenes from your story as you play.",
-      "featured": 5,
       "iconPath": "../../store/icons/illustrator.webp",
       "bannerPath": "../../store/banners/illustrator.webp",
       "bannerSmallPath": "../../store/banners/illustrator-1200.webp"
@@ -174,6 +173,7 @@
     "long-term-memory": {
       "section": "memory",
       "tagline": "Remembers things across all your chats.",
+      "featured": 2,
       "iconPath": "../../store/icons/long-term-memory.webp",
       "bannerPath": "../../store/banners/long-term-memory.webp",
       "bannerSmallPath": "../../store/banners/long-term-memory-1200.webp"
@@ -181,7 +181,6 @@
     "lorebook-keeper": {
       "section": "memory",
       "tagline": "Keeps your lorebooks in sync with the story.",
-      "featured": 6,
       "iconPath": "../../store/icons/lorebook-keeper.webp",
       "bannerPath": "../../store/banners/lorebook-keeper.webp",
       "bannerSmallPath": "../../store/banners/lorebook-keeper-1200.webp"
@@ -196,7 +195,6 @@
     "noodle": {
       "section": "apps",
       "tagline": "A pretend social network for your characters.",
-      "featured": 1,
       "iconPath": "../../store/icons/noodle.webp",
       "bannerPath": "../../store/banners/noodle.webp",
       "bannerSmallPath": "../../store/banners/noodle-1200.webp",
@@ -258,7 +256,6 @@
     "slurp2": {
       "section": "apps",
       "tagline": "A private creator app for your characters.",
-      "featured": 2,
       "iconPath": "../../store/icons/slurp2.webp",
       "bannerPath": "../../store/banners/slurp2.webp",
       "bannerSmallPath": "../../store/banners/slurp2-1200.webp",
@@ -278,7 +275,6 @@
     "story-writer": {
       "section": "apps",
       "tagline": "Co-write a book with your characters.",
-      "featured": 3,
       "iconPath": "../../store/icons/story-writer.webp",
       "bannerPath": "../../store/banners/story-writer.webp",
       "bannerSmallPath": "../../store/banners/story-writer-1200.webp",

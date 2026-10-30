@@ -18,6 +18,7 @@
     "otome-forge": {
       "section": "apps",
       "tagline": "An otome game made from your characters.",
+      "featured": 1,
       "iconPath": "../../store/icons/otome-forge.webp",
       "bannerPath": "../../store/banners/otome-forge.webp",
       "bannerSmallPath": "../../store/banners/otome-forge-1200.webp"
