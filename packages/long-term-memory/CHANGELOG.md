@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.5.13 — 2026-10-30
+
+- When a chat calls one of Long-Term Memory's own characters by part of their name ("Preston" for "Preston Farraday", or the other way round), the memory joins that character's note instead of starting a second one. If the name fits more than one character, it waits for you in review.
+
 ## 1.5.12 — 2026-10-30
 
 - Sources → Chat Summaries keeps the range visible when a chat has a long name: the name is cut, and the message range, day, week or game session stays whole beside it.
