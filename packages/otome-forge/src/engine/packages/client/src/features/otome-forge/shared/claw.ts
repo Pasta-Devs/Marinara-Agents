@@ -2,9 +2,9 @@
 // Otome Forge: the Claw Machine's prizes, numbers and wire shapes, shared by both bundles (plan M5 "Claw Machine")
 // ──────────────────────────────────────────────
 // Pure TypeScript. The client plays the round (C/lib/claw-physics.ts) and the server checks the catch list and pays it
-// (S/minigames/claw.ts). Nothing here, and nothing in the game, calls a model or paints an image: the prizes are six
-// drawn plushes plus each love interest's own, which is his look (cut out once Home has made it) or his initials in a
-// round plush frame.
+// (S/minigames/claw.ts). Nothing here, and nothing in a round, calls a model or paints an image: the prizes are six
+// drawn plushes plus each love interest's own, the animal that fits them, drawn once in the background (#1954,
+// S/minigames/plush.ts), or until then their look (cut out once Home has made it) or their initials in a round frame.
 import type { ActivityGrant, ClawCheat, LiId, LinesView } from "./api-types";
 
 /** The outline every plush is drawn with, the series' and the love interests' own (S/minigames/plush.ts). */

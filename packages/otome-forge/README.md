@@ -210,7 +210,7 @@ A round makes no model calls and paints no images. You get six drops, and you ta
   - or showing you where to drop.
 - **Rewards:** a round pays 20 Starlight, 30 more for each plush, and 30 affection.
 - **The shelf:** every plush either of you wins goes on your shelf. There are six series plushies, and one of each love interest.
-- **Their own plush:** each love interest's plush is the animal that fits them best, in their colours: a raven, a black cat, a fox. Your Planning model draws it once, in the background, the first time you open Dates with them. Until then, or if it can't draw one, their plush wears their look (cut out once Home has cut it out) or shows their initials. The drawing is kept as a checked SVG with shapes only, never a script or a link.
+- **Their own plush:** each love interest's plush is the animal that fits them best, in their colours: a raven, a black cat, a fox. Your Planning model draws it once, in the background, the first time you open Dates. Until then, or if it can't draw one, their plush wears their look (cut out once Home has cut it out) or shows their initials. The drawing is kept as a checked SVG with shapes only, never a script or a link.
 - **Sound:** with voices on and the machine's sound on, their lines are read aloud.
 - **Controls:** it plays by keyboard (arrows to move; Space to drop, or held down to cheer). Under reduced motion it resolves each drop at once. Its sounds and vibration can be turned off, and **Mute everything** in **Settings → Audio** silences them too.
 
@@ -291,7 +291,7 @@ Each story has its own content settings:
 
 ## What costs what
 
-Anything that costs money to generate is labelled where you start it, and almost nothing paid is retried by itself. Text gets at most one automatic repair turn when a reply comes back in the wrong format, and a love interest's lines written ahead that failed are tried again on a Home visit at least 10 minutes later. Images, music and voices never retry without a tap. "Call" means one request to a text connection.
+Anything that costs money to generate is labelled where you start it, and almost nothing paid is retried by itself. Text gets at most one automatic repair turn when a reply comes back in the wrong format, a love interest's lines written ahead that failed are tried again on a Home visit at least 10 minutes later, and a love interest's plush that failed is drawn again on a visit to Dates at least 10 minutes later. Images, music and voices never retry without a tap. "Call" means one request to a text connection.
 
 If a text endpoint rejects the optional JSON-format parameter, Otome Hearth can make one additional request without that parameter. The reply still has to pass the same validation, and any content repair keeps that compatible request format. Authentication, rate-limit, server and network failures do not trigger this compatibility retry.
 
@@ -333,7 +333,7 @@ If a text endpoint rejects the optional JSON-format parameter, Otome Hearth can 
 These never call a model or paint anything. With voices on, their lines are voiced: Claw Machine lines once each, comfort lines every time.
 
 - a wish, single or ten;
-- the Claw Machine;
+- a Claw Machine round (each love interest's plush is drawn once, in the background; see What costs what);
 - **Ease off**;
 - a tap on Home and **Rough day?** (they speak lines already written);
 - Remind Me and the period tracker;

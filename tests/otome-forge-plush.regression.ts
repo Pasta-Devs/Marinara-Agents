@@ -50,6 +50,19 @@ test("the allow-list rebuilds a plush from shapes only, with its own root", () =
   assert.equal(decodeURIComponent(url.slice("data:image/svg+xml,".length)), clean.svg);
 });
 
+test("what the allow-list keeps fits the cap as rebuilt, so every read keeps it too", () => {
+  const body = (n: number) => `<path d="M0 0${" L1 1".repeat(n)}"/>`;
+  // Sized so the source fits PLUSH_SVG_MAX but the rebuilt root's namespace and box take it over.
+  const paths = [body(1150), body(1150)];
+  const filler = PLUSH_SVG_MAX - "<svg></svg>".length - paths.join("").length - 20;
+  const svg = `<svg>${paths.join("")}<path d="M0 0${" L1 1".repeat(Math.floor(filler / 5))}"/></svg>`;
+  assert.ok(svg.length <= PLUSH_SVG_MAX && svg.length > PLUSH_SVG_MAX - 60, `source ${svg.length}`);
+  assert.match(String((sanitizePlushSvg(svg) as { error?: string }).error), /longer than 12000/);
+  // A kept plush always passes again, so a read never drops what a write kept.
+  const kept = sanitizePlushSvg(`<!-- note --><svg>${body(10)}${body(10)}</svg>`);
+  assert.ok("svg" in kept && sanitizePlushSvg(kept.svg).svg === kept.svg);
+});
+
 test("the allow-list refuses anything that is not a plain shape, with a reason", () => {
   const wrap = (inner: string) => `<svg viewBox="0 0 64 64"><circle cx="1" cy="1" r="1"/>${inner}</svg>`;
   const refused: Record<string, string> = {
@@ -79,12 +92,20 @@ test("the allow-list refuses anything that is not a plain shape, with a reason",
     twoRoots: `${wrap("")}${wrap("")}`,
     noRoot: '<circle cx="1" cy="1" r="1"/>',
     empty: "<svg></svg>",
-    tooLong: wrap(`<path d="M0 0${" L1 1".repeat(PLUSH_SVG_MAX / 5)}"/>`),
+    // Two paths each within their own limit, together over the plush's.
+    tooLong: wrap(`<path d="M0 0${" L1 1".repeat(1100)}"/>`.repeat(3)),
     tooMany: wrap('<circle cx="1" cy="1" r="1"/>'.repeat(PLUSH_ELEMENTS_MAX)),
     badNumber: wrap('<circle cx="1px" cy="1" r="1"/>'),
     inherited: wrap('<circle constructor="1" cx="1" cy="1" r="1"/>'),
     inheritedToString: wrap('<circle toString="1" cx="1" cy="1" r="1"/>'),
+    repeated: wrap('<circle cx="1" cy="1" r="1" fill="#00ff00" fill="#ff0000"/>'),
+    // A comment is skipped where it stands, never cut out: halves around one cannot join into new markup.
+    splicedComment: wrap("<scr<!-- -->ipt>alert(1)</script>"),
+    commentHalf: wrap("<!<!-- -->-- x -->"),
+    laterDeclaration: `${wrap("")}<?xml version="1.0"?>`,
   };
+  assert.match(String((sanitizePlushSvg(refused.tooLong!) as { error: string }).error), /longer than 12000/);
+  assert.match(String((sanitizePlushSvg(refused.repeated!) as { error: string }).error), /repeats the attribute fill/);
   for (const [kind, svg] of Object.entries(refused)) {
     const result = sanitizePlushSvg(svg);
     assert.ok("error" in result && result.error.startsWith("svg "), `${kind} is refused: ${JSON.stringify(result)}`);
@@ -146,8 +167,15 @@ test("GET /play draws each love interest's plush once, in the background, and sh
     accent: "#2EC4C4",
     identityLine: "tall man, cyan hair, red eyes",
   }));
+  // Hold the lane: GET /play still answers at once, and no plush is drawn until the lane is free.
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  t.background.ensure({ key: "blocker", connectionId: "conn-text", run: () => gate });
   const first = await t.play();
   assert.equal(first.lis[KAI]!.animal, undefined, "the play view never waits for a plush");
+  await t.settle();
+  assert.equal(t.plushCalls().length, 0, "nothing is drawn while the lane is held");
+  release();
   await t.settle();
   assert.equal(t.plushCalls().length, 3, "one call per love interest");
   const prompt = t.plushCalls().find((call) => call.messages[1]!.content.includes("LOVE INTEREST: Kai"))!.messages;

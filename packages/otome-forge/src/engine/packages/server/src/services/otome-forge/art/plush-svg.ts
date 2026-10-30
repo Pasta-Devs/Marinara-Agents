@@ -4,8 +4,9 @@
 // A model writes the SVG (S/minigames/plush.ts), so it never reaches a browser as written. sanitizePlushSvg rebuilds it
 // from tokens: only the shapes in ELEMENTS, only the attributes in ATTRIBUTES, each value matching its pattern (numbers,
 // path data, #rrggbb or a colour name, translate/rotate/scale), with no text, entities, URLs, ids, styles, scripts,
-// links or images, and well nested under one <svg> root whose own attributes are ours. Anything else is refused with a
-// reason the repair turn can send back. The client shows the result as an <image> from a data URL, where a browser runs
+// links or images, each attribute at most once per tag, and well nested under one <svg> root whose own attributes are
+// ours. Comments and a leading XML declaration are skipped as tokens; the text is never rewritten. Anything else is
+// refused with a reason the repair turn can send back, and what is kept fits PLUSH_SVG_MAX as rebuilt. The client shows the result as an <image> from a data URL, where a browser runs
 // nothing (C/components/PlushShelf.tsx), and every read checks it again (S/schemas/unit.ts).
 // No dependencies: the server bundle has no XML parser, and Node has no DOMParser.
 
@@ -55,30 +56,35 @@ export const PLUSH_ATTRIBUTES: Readonly<Record<string, RegExp>> = {
 };
 
 const ELEMENT_SET: ReadonlySet<string> = new Set(PLUSH_ELEMENTS);
-/** A closing tag, an opening or self-closing tag with quoted attributes (no `<`, `>` or `&` inside), or text. */
-const TOKEN = /<\/([a-zA-Z]+)\s*>|<([a-zA-Z]+)((?:\s+[a-zA-Z:-]+\s*=\s*(?:"[^"<>&]*"|'[^'<>&]*'))*)\s*(\/?)>|([^<]+)/y;
+/**
+ * A comment, a closing tag, an opening or self-closing tag with quoted attributes (no `<`, `>` or `&` inside), or text.
+ * Comments are tokens skipped in order, never cut out of the text, so no two halves can join into new markup.
+ */
+const TOKEN =
+  /(<!--[\s\S]*?-->)|<\/([a-zA-Z]+)\s*>|<([a-zA-Z]+)((?:\s+[a-zA-Z:-]+\s*=\s*(?:"[^"<>&]*"|'[^'<>&]*'))*)\s*(\/?)>|([^<]+)/y;
+/** An XML declaration, allowed only at the very start. */
+const DECLARATION = /<\?xml[^<>]*\?>/y;
 const ATTRIBUTE = /([a-zA-Z:-]+)\s*=\s*(?:"([^"<>&]*)"|'([^'<>&]*)')/g;
 
 /** The plush SVG rebuilt from the allow-list, or why it was refused. */
 export function sanitizePlushSvg(raw: string): { svg: string } | { error: string } {
-  // An XML declaration and comments carry nothing a plush needs; anything else outside the grammar is refused.
-  const source = raw
-    .trim()
-    .replace(/^<\?xml[^>]*\?>\s*/u, "")
-    .replace(/<!--[\s\S]*?-->/gu, "")
-    .trim();
+  // An XML declaration and comments carry nothing a plush needs, so they are skipped; anything else outside the
+  // grammar is refused. The text itself is never rewritten.
+  const source = raw.trim();
   if (!source) return { error: "svg is empty" };
   if (source.length > PLUSH_SVG_MAX) return { error: `svg is longer than ${PLUSH_SVG_MAX} characters` };
   const out: string[] = [];
   const open: string[] = [];
   let elements = 0;
   let done = false;
-  TOKEN.lastIndex = 0;
+  DECLARATION.lastIndex = 0;
+  TOKEN.lastIndex = DECLARATION.test(source) ? DECLARATION.lastIndex : 0;
   while (TOKEN.lastIndex < source.length) {
     const at = TOKEN.lastIndex;
     const match = TOKEN.exec(source);
     if (!match) return { error: `svg has markup that is not allowed near "${source.slice(at, at + 24)}"` };
-    const [, closing, name, attributes = "", selfClosing, text] = match;
+    const [, comment, closing, name, attributes = "", selfClosing, text] = match;
+    if (comment !== undefined) continue;
     if (text !== undefined) {
       if (text.trim()) return { error: "svg holds text; draw with shapes only" };
       continue;
@@ -98,8 +104,12 @@ export function sanitizePlushSvg(raw: string): { svg: string } | { error: string
     }
     if (++elements > PLUSH_ELEMENTS_MAX) return { error: `svg has more than ${PLUSH_ELEMENTS_MAX} shapes` };
     const kept: string[] = [];
+    const seen = new Set<string>();
     let viewBox = "0 0 64 64";
     for (const [, attribute, double, single] of attributes.matchAll(ATTRIBUTE)) {
+      // XML allows each attribute once on a tag: a repeat would make the whole picture fail to load.
+      if (seen.has(attribute!)) return { error: `svg repeats the attribute ${attribute} on one <${name}>` };
+      seen.add(attribute!);
       const value = (double ?? single ?? "").trim();
       // The root's own attributes are ours: the namespace and its box (the model's box, when it gives a sound one).
       if (name === "svg") {
@@ -123,6 +133,8 @@ export function sanitizePlushSvg(raw: string): { svg: string } | { error: string
     if (!selfClosing) open.push(name!);
   }
   if (!done || open.length) return { error: "svg is not closed with </svg>" };
+  // The rebuilt plush carries our own root attributes, so it is measured again: what is kept must pass every read.
+  if (out.join("").length > PLUSH_SVG_MAX) return { error: `svg is longer than ${PLUSH_SVG_MAX} characters` };
   if (elements < 2) return { error: "svg has no shapes" };
   return { svg: out.join("") };
 }
