@@ -35,14 +35,17 @@ const RAVEN =
   '<circle cx="32" cy="24" r="14" fill="#2ec4c4" stroke="#3b2a40" stroke-width="1.2"/>' +
   '<circle cx="27" cy="23" r="2.4" fill="#d81b3c"/><circle cx="37" cy="23" r="2.4" fill="#d81b3c"/>' +
   '<path d="M29 28 L32 33 L35 28 Z" fill="#3b2a40"/>' +
-  '<path d="M20 40 Q32 48 44 40" fill="none" stroke="#3b2a40" stroke-dasharray="1.5 1.5"/></g></svg>';
+  '<path d="M20 40 Q32 48 44 40" fill="none" stroke="#3b2a40" stroke-dasharray="1.5 1.5"/>' +
+  '<line x1="22" y1="12" x2="27" y2="16" stroke="#3b2a40" stroke-width="1.2"/></g></svg>';
 
 test("the allow-list rebuilds a plush from shapes only, with its own root", () => {
-  const clean = sanitizePlushSvg(`<?xml version="1.0"?>\n<!-- a raven -->\n${RAVEN}`);
+  const clean = sanitizePlushSvg(`<?xml version="1.0"?>\n${RAVEN}`);
   assert.ok("svg" in clean, JSON.stringify(clean));
   assert.ok(clean.svg.startsWith('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><g transform='));
   assert.ok(!clean.svg.includes('width="256"'), "the root's own attributes are ours");
   assert.ok(clean.svg.includes('<circle cx="27" cy="23" r="2.4" fill="#d81b3c"/>'));
+  // Attribute names with digits read as names: a line keeps all four of its points.
+  assert.ok(clean.svg.includes('<line x1="22" y1="12" x2="27" y2="16" stroke="#3b2a40" stroke-width="1.2"/>'));
   assert.ok(clean.svg.endsWith("</g></svg>"));
   assert.equal(sanitizePlushSvg(clean.svg).svg, clean.svg, "a clean plush passes again unchanged");
   const url = plushSvgUrl(clean.svg)!;
@@ -59,7 +62,7 @@ test("what the allow-list keeps fits the cap as rebuilt, so every read keeps it 
   assert.ok(svg.length <= PLUSH_SVG_MAX && svg.length > PLUSH_SVG_MAX - 60, `source ${svg.length}`);
   assert.match(String((sanitizePlushSvg(svg) as { error?: string }).error), /longer than 12000/);
   // A kept plush always passes again, so a read never drops what a write kept.
-  const kept = sanitizePlushSvg(`<!-- note --><svg>${body(10)}${body(10)}</svg>`);
+  const kept = sanitizePlushSvg(`<?xml version="1.0"?><svg>${body(10)}${body(10)}</svg>`);
   assert.ok("svg" in kept && sanitizePlushSvg(kept.svg).svg === kept.svg);
 });
 
@@ -100,12 +103,18 @@ test("the allow-list refuses anything that is not a plain shape, with a reason",
     inheritedToString: wrap('<circle toString="1" cx="1" cy="1" r="1"/>'),
     repeated: wrap('<circle cx="1" cy="1" r="1" fill="#00ff00" fill="#ff0000"/>'),
     // A comment is skipped where it stands, never cut out: halves around one cannot join into new markup.
+    // No comment is taken in any form, so none can end early (`--!>`) or splice two halves into a tag.
+    comment: wrap("<!-- a raven -->"),
+    commentBangEnd: wrap("<!-- --!><script>alert(1)</script> -->"),
     splicedComment: wrap("<scr<!-- -->ipt>alert(1)</script>"),
     commentHalf: wrap("<!<!-- -->-- x -->"),
+    digitName: wrap('<circle cx="1" cy="1" r="1" x3="1"/>'),
     laterDeclaration: `${wrap("")}<?xml version="1.0"?>`,
   };
   assert.match(String((sanitizePlushSvg(refused.tooLong!) as { error: string }).error), /longer than 12000/);
   assert.match(String((sanitizePlushSvg(refused.repeated!) as { error: string }).error), /repeats the attribute fill/);
+  assert.match(String((sanitizePlushSvg(refused.comment!) as { error: string }).error), /has a comment/);
+  assert.match(String((sanitizePlushSvg(refused.digitName!) as { error: string }).error), /attribute x3, which is not/);
   for (const [kind, svg] of Object.entries(refused)) {
     const result = sanitizePlushSvg(svg);
     assert.ok("error" in result && result.error.startsWith("svg "), `${kind} is refused: ${JSON.stringify(result)}`);

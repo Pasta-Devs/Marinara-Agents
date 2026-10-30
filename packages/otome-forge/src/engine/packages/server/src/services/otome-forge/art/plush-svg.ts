@@ -4,10 +4,11 @@
 // A model writes the SVG (S/minigames/plush.ts), so it never reaches a browser as written. sanitizePlushSvg rebuilds it
 // from tokens: only the shapes in ELEMENTS, only the attributes in ATTRIBUTES, each value matching its pattern (numbers,
 // path data, #rrggbb or a colour name, translate/rotate/scale), with no text, entities, URLs, ids, styles, scripts,
-// links or images, each attribute at most once per tag, and well nested under one <svg> root whose own attributes are
-// ours. Comments and a leading XML declaration are skipped as tokens; the text is never rewritten. Anything else is
-// refused with a reason the repair turn can send back, and what is kept fits PLUSH_SVG_MAX as rebuilt. The client shows the result as an <image> from a data URL, where a browser runs
-// nothing (C/components/PlushShelf.tsx), and every read checks it again (S/schemas/unit.ts).
+// links, images or comments, each attribute at most once per tag, and well nested under one <svg> root whose own
+// attributes are ours. Only a leading XML declaration is skipped; the text is never rewritten. Anything else is refused
+// with a reason the repair turn can send back, and what is kept fits PLUSH_SVG_MAX as rebuilt. The client shows the
+// result as an <image> from a data URL, where a browser runs nothing (C/components/PlushShelf.tsx), and every read
+// checks it again (S/schemas/unit.ts).
 // No dependencies: the server bundle has no XML parser, and Node has no DOMParser.
 
 /** The longest SVG kept, in characters. */
@@ -56,23 +57,28 @@ export const PLUSH_ATTRIBUTES: Readonly<Record<string, RegExp>> = {
 };
 
 const ELEMENT_SET: ReadonlySet<string> = new Set(PLUSH_ELEMENTS);
+/** An attribute name: a letter, then letters, digits, `:` or `-` (so `x1` and `stroke-width` read as names). */
+const NAME = "[a-zA-Z][a-zA-Z0-9:-]*";
 /**
- * A comment, a closing tag, an opening or self-closing tag with quoted attributes (no `<`, `>` or `&` inside), or text.
- * Comments are tokens skipped in order, never cut out of the text, so no two halves can join into new markup.
+ * A closing tag, an opening or self-closing tag with quoted attributes (no `<`, `>` or `&` inside), or text. Anything
+ * else, a comment included, matches nothing and is refused: the text is never rewritten.
  */
-const TOKEN =
-  /(<!--[\s\S]*?-->)|<\/([a-zA-Z]+)\s*>|<([a-zA-Z]+)((?:\s+[a-zA-Z:-]+\s*=\s*(?:"[^"<>&]*"|'[^'<>&]*'))*)\s*(\/?)>|([^<]+)/y;
+const TOKEN = new RegExp(
+  `<\\/([a-zA-Z]+)\\s*>|<([a-zA-Z]+)((?:\\s+${NAME}\\s*=\\s*(?:"[^"<>&]*"|'[^'<>&]*'))*)\\s*(\\/?)>|([^<]+)`,
+  "y",
+);
 /** An XML declaration, allowed only at the very start. */
 const DECLARATION = /<\?xml[^<>]*\?>/y;
-const ATTRIBUTE = /([a-zA-Z:-]+)\s*=\s*(?:"([^"<>&]*)"|'([^'<>&]*)')/g;
+const ATTRIBUTE = new RegExp(`(${NAME})\\s*=\\s*(?:"([^"<>&]*)"|'([^'<>&]*)')`, "g");
 
 /** The plush SVG rebuilt from the allow-list, or why it was refused. */
 export function sanitizePlushSvg(raw: string): { svg: string } | { error: string } {
-  // An XML declaration and comments carry nothing a plush needs, so they are skipped; anything else outside the
-  // grammar is refused. The text itself is never rewritten.
+  // A leading XML declaration carries nothing a plush needs, so it is skipped; anything else outside the grammar is
+  // refused. The text itself is never rewritten.
   const source = raw.trim();
   if (!source) return { error: "svg is empty" };
   if (source.length > PLUSH_SVG_MAX) return { error: `svg is longer than ${PLUSH_SVG_MAX} characters` };
+  if (source.includes("<!")) return { error: "svg has a comment, CDATA or doctype; leave them out" };
   const out: string[] = [];
   const open: string[] = [];
   let elements = 0;
@@ -83,8 +89,7 @@ export function sanitizePlushSvg(raw: string): { svg: string } | { error: string
     const at = TOKEN.lastIndex;
     const match = TOKEN.exec(source);
     if (!match) return { error: `svg has markup that is not allowed near "${source.slice(at, at + 24)}"` };
-    const [, comment, closing, name, attributes = "", selfClosing, text] = match;
-    if (comment !== undefined) continue;
+    const [, closing, name, attributes = "", selfClosing, text] = match;
     if (text !== undefined) {
       if (text.trim()) return { error: "svg holds text; draw with shapes only" };
       continue;

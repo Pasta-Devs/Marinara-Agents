@@ -333,7 +333,7 @@ If a text endpoint rejects the optional JSON-format parameter, Otome Hearth can 
 These never call a model or paint anything. With voices on, their lines are voiced: Claw Machine lines once each, comfort lines every time.
 
 - a wish, single or ten;
-- a Claw Machine round (each love interest's plush is drawn once, in the background; see What costs what);
+- a Claw Machine round;
 - **Ease off**;
 - a tap on Home and **Rough day?** (they speak lines already written);
 - Remind Me and the period tracker;
