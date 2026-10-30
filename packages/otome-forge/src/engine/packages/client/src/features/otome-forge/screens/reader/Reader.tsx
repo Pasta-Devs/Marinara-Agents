@@ -40,7 +40,7 @@ import {
 } from "../../hooks/use-otome-audio";
 import { useReader, useReducedMotion, type ReaderState } from "../../hooks/use-reader";
 import { accentOf } from "../../lib/accent";
-import { canonOption, placeEntry, readyUrl, sumGrants, voiceOf, worldPlaces, type Voice } from "../../lib/reader-state";
+import { canonOption, readyUrl, sumGrants, voiceOf, type Voice } from "../../lib/reader-state";
 import { useOtomeProps } from "../../props";
 import type { Grant, RunView } from "../../shared/api-types";
 import { MUSIC_MOODS, type MusicMood } from "../../shared/faces";
@@ -187,27 +187,15 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
 
   // The scene keeps the last beat's music while the next one is opened or written; before the first one, whatever was
   // playing (Home's cue) plays on, and a mood the player never hears is never generated.
-  if (beat?.musicMood) lastMood.current = beat.musicMood;
-  const mood = beat?.musicMood ?? lastMood.current;
+  if (beat?.musicMood && !reader.preparingBackground) lastMood.current = beat.musicMood;
+  const mood = (!reader.preparingBackground && beat?.musicMood) || lastMood.current;
   useMusicCue(
     chapter && mood && view.world.audio.generate && view.world.audio.chapterThemes
       ? { chapterKey: chapter.key, mood, track: chapter.music?.track }
       : mood,
   );
-  const lines = reader.timeline?.lines ?? [];
-  const place = lines
-    .slice(0, reader.lineIndex + 1)
-    .reverse()
-    .find((line) => line.segment.place)?.segment.place;
-  // The scene's record and the world's: whichever has its picture (a paint lands in one before the other is read).
-  const scenePlace = reading ? placeEntry(reader.sceneArt?.places, place) : null;
-  const worldPlace = reading ? placeEntry(worldPlaces(view.world), place) : null;
-  const placeInfo = readyUrl(scenePlace?.art)
-    ? scenePlace
-    : readyUrl(worldPlace?.art)
-      ? worldPlace
-      : (scenePlace ?? worldPlace);
-  const placeUrl = readyUrl(placeInfo?.art);
+  // The target place stays mounted while its image decodes, before any of its lines are exposed.
+  const { place, placeInfo, placeUrl } = reader;
   const canPaint = !!view.world.images.connectionId;
   const paintsByItself = usePaintsByItself(view.world.images);
   const placeState = placeInfo?.art?.state;
@@ -325,7 +313,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
         {MUSIC_MOODS.map((name) => (
           <div key={name} className="of-mood" data-mood={name} data-on={name === (mood ?? "tender")} />
         ))}
-        <PlaceBackdrop url={placeUrl} />
+        <PlaceBackdrop id={reader.backgroundKey} url={placeUrl} onSettled={reader.backgroundSettled} />
         <div className="of-reader-motes" />
         <div className="of-reader-vignette" />
       </div>
@@ -610,6 +598,24 @@ function BottomPanel(props: BottomPanelProps) {
       </section>
     );
   }
+  if (reader.preparingBackground) {
+    return (
+      <section className="of-reader-panel of-writing of-glass of-glass--strong" role="status">
+        <span className="of-quill" aria-hidden="true">
+          <Images size={22} strokeWidth={1.7} />
+        </span>
+        <p className="of-section-title">{t("ui.otomeForge.reader.preparingBackground")}</p>
+        <button
+          type="button"
+          className="of-button of-button--quiet of-glass of-button--small"
+          onClick={reader.continueWithoutBackground}
+          data-autofocus=""
+        >
+          {t("ui.otomeForge.reader.continueWithoutBackground")}
+        </button>
+      </section>
+    );
+  }
   if (!beat || !current || !props.voice || load?.status !== "ready") {
     const writing = load?.status === "loading" && load.writing;
     return (
@@ -801,7 +807,15 @@ function ChapterEnd({
 }
 
 /** The painted place behind the scene: a new picture decodes, then crossfades over the last one. */
-function PlaceBackdrop({ url }: { url: string | null }) {
+function PlaceBackdrop({
+  id,
+  url,
+  onSettled,
+}: {
+  id: string;
+  url: string | null;
+  onSettled: (id: string, url: string) => void;
+}) {
   const [layers, setLayers] = useState<{ a: string; b: string; front: "a" | "b" | null }>({
     a: "",
     b: "",
@@ -817,19 +831,24 @@ function PlaceBackdrop({ url }: { url: string | null }) {
     image.src = url;
     image
       .decode()
-      .catch(() => undefined)
-      .finally(() => {
+      .then(() => {
         if (!live) return;
         setLayers((current) => {
           if (current.front && current[current.front] === url) return current;
           const back = current.front === "a" ? "b" : "a";
           return { ...current, [back]: url, front: back };
         });
+      })
+      .catch(() => {
+        if (live) setLayers((current) => (current.front ? { ...current, front: null } : current));
+      })
+      .finally(() => {
+        if (live) onSettled(id, url);
       });
     return () => {
       live = false;
     };
-  }, [url]);
+  }, [id, onSettled, url]);
   return (
     <>
       {(["a", "b"] as const).map((layer) =>

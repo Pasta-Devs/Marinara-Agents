@@ -25,6 +25,7 @@ import type {
 } from "../shared/api-types";
 import { STANCES } from "../shared/arcs";
 import { isFace, sameName, type Face } from "../shared/faces";
+import { placeKey } from "../shared/places";
 
 /** Milliseconds per character while a line types itself out (none under reduced motion). */
 export const TYPE_MS = 22;
@@ -171,8 +172,6 @@ export function readerBeat(response: BeatResponse): { beat: BeatView; confrontat
   if (response?.beat) return { beat: response.beat };
   throw new Error("The beat route answered without a beat");
 }
-
-const placeKey = (name: string) => name.normalize("NFKC").toLocaleLowerCase().replace(/\s+/gu, " ").trim();
 
 /** The record for a beat's place among `places`, matched by name (the server keys them by its own slug). */
 export function placeEntry(places: Iterable<PlaceArt> | null | undefined, name: string | undefined): PlaceArt | null {

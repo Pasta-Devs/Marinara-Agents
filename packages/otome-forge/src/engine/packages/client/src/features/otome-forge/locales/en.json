@@ -646,6 +646,8 @@
   "ui.otomeForge.reader.noOtherConnection": "There’s no other text connection. Add one in the Engine’s Connections panel.",
   "ui.otomeForge.reader.notNow": "Not now",
   "ui.otomeForge.reader.opening": "Turning the page…",
+  "ui.otomeForge.reader.preparingBackground": "Preparing the background…",
+  "ui.otomeForge.reader.continueWithoutBackground": "Continue without background",
   "ui.otomeForge.reader.placePaint": "Paint · 1 image",
   "ui.otomeForge.reader.placePaintLabel": "Paint {{place}} (1 image)",
   "ui.otomeForge.reader.placeRetry": "Paint again · 1 image",
