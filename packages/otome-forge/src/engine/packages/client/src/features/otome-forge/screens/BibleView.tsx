@@ -592,7 +592,9 @@ export function BibleView({ runKey, li, lis }: BibleViewProps) {
 
           {sections.map((section) => (
             <Block key={section.titleKey} title={t(section.titleKey)}>
-              {section === INTIMACY_SECTION ? <p className="of-hint">{t("ui.otomeForge.setup.bibleIntimacyHint")}</p> : null}
+              {section === INTIMACY_SECTION ? (
+                <p className="of-hint">{t("ui.otomeForge.setup.bibleIntimacyHint")}</p>
+              ) : null}
               {editing ? (
                 section.fields.map((spec) => (
                   <Field key={spec.path} spec={spec} bible={shown} editing onChange={setDraft} />
