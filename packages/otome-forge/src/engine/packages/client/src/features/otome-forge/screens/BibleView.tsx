@@ -12,7 +12,7 @@ import { otomeErrorCode, useOtomeApi } from "../api";
 import { Avatar } from "../components/Avatar";
 import { RetryNotice } from "../components/RetryNotice";
 import { useCharacterOptions } from "../hooks/use-engine-resources";
-import { patchRun } from "../hooks/use-run";
+import { patchRun, runQueryKey, useRun } from "../hooks/use-run";
 import { accentOf } from "../lib/accent";
 import type { ArcStageKey, Bible, BibleSecret, RevealStage, RunLiView } from "../shared/api-types";
 import {
@@ -24,6 +24,7 @@ import {
   SECRETS_MIN,
   type BibleProblem,
 } from "../shared/bible";
+import { intimacyOpen } from "../shared/content";
 import { TextField } from "./setup/parts";
 
 type FieldKind = "text" | "long" | "lines" | "number" | "choice";
@@ -137,6 +138,15 @@ const SECTIONS: readonly { titleKey: string; fields: readonly FieldSpec[] }[] = 
     ],
   },
 ];
+
+/** His tastes in sex and intimacy (#1936): shown and edited only in a story with NSFW Heat that has the block. */
+const INTIMACY_SECTION = {
+  titleKey: "ui.otomeForge.setup.bibleIntimacy",
+  fields: [
+    { path: "intimacy.preferences", labelKey: "ui.otomeForge.setup.bibleIntimacyPreferences", kind: "lines" },
+    { path: "intimacy.attractions", labelKey: "ui.otomeForge.setup.bibleIntimacyAttractions", kind: "lines" },
+  ],
+} as const satisfies { titleKey: string; fields: readonly FieldSpec[] };
 
 /** Why a bible cannot be saved, one message per rule (literal keys). */
 const PROBLEM_KEYS: Record<BibleProblem, string> = {
@@ -273,7 +283,7 @@ function Field({
 /** Lines are kept as typed while editing (blank lines included) and trimmed when saved. */
 function cleanLines(bible: Bible): Bible {
   let next = bible;
-  for (const section of SECTIONS) {
+  for (const section of bible.intimacy ? [...SECTIONS, INTIMACY_SECTION] : SECTIONS) {
     for (const spec of section.fields) {
       if (spec.kind === "lines") next = setAt(next, spec.path, fromLines(toLines(getAt(next, spec.path))));
     }
@@ -420,6 +430,7 @@ export function BibleView({ runKey, li, lis }: BibleViewProps) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const queryClient = useQueryClient();
+  const run = useRun(runKey);
   const [revealed, setRevealed] = useState(false);
   const [draft, setDraft] = useState<Bible | null>(null);
   const [busy, setBusy] = useState(false);
@@ -434,6 +445,9 @@ export function BibleView({ runKey, li, lis }: BibleViewProps) {
   const accent = accentOf(li);
   const editing = draft !== null;
   const shown = draft ?? bible.data ?? null;
+  // An SFW story never shows the block; a save there keeps one written before Heat was lowered (the server's rule).
+  const sections =
+    shown?.intimacy && run.data && intimacyOpen(run.data.world.content) ? [...SECTIONS, INTIMACY_SECTION] : SECTIONS;
   const headingRef = useRef<HTMLHeadingElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   // Edit, Cancel and Save replace themselves: focus goes to the toolbar's new first button, not to the page.
@@ -461,6 +475,8 @@ export function BibleView({ runKey, li, lis }: BibleViewProps) {
     try {
       const saved = await otome.post<{ bible: Bible }>(path, { bible: bibleToSave });
       queryClient.setQueryData(queryKey, saved.bible);
+      // The cast's "Add intimacy preferences" follows whether the block is there.
+      void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
       setEditing(null);
       setStatus({ error: false, text: t("ui.otomeForge.setup.bibleSaved") });
     } catch (failure) {
@@ -574,8 +590,9 @@ export function BibleView({ runKey, li, lis }: BibleViewProps) {
             {status ? <p className={status.error ? "of-notice of-notice--error" : "of-notice"}>{status.text}</p> : null}
           </div>
 
-          {SECTIONS.map((section) => (
+          {sections.map((section) => (
             <Block key={section.titleKey} title={t(section.titleKey)}>
+              {section === INTIMACY_SECTION ? <p className="of-hint">{t("ui.otomeForge.setup.bibleIntimacyHint")}</p> : null}
               {editing ? (
                 section.fields.map((spec) => (
                   <Field key={spec.path} spec={spec} bible={shown} editing onChange={setDraft} />
