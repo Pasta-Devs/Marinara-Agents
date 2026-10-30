@@ -533,6 +533,8 @@ test("Otome Forge Dates and a Claw round at phone width: the cheer meter, his ch
   await root.locator("label.of-partner", { hasText: "Mireille" }).click();
   await expect(root.getByRole("radio", { name: /Mireille/ })).toBeChecked();
   await expect(root.getByRole("list", { name: "Things to do with Mireille" })).toBeVisible();
+  await root.getByRole("radio", { name: /Mireille/ }).focus();
+  await expect(root.getByRole("radio", { name: /Mireille/ })).toBeFocused();
   await page.keyboard.press("ArrowLeft");
   await expect(root.getByRole("radio", { name: /Kai Ardent/ })).toBeChecked();
 
