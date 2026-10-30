@@ -5,7 +5,7 @@ Otome Hearth is a single-player otome game made from your own characters. Its lo
 Release 1, **0.1.0 "First Date"**, holds the whole first loop:
 
 - story setup with hidden character bibles;
-- main chapters and a route for each love interest, with confrontations and rifts;
+- main chapters and a route for each love interest, with confrontations, warm Closers and rifts;
 - Home and Messages;
 - Wish, the Wardrobe and the Album;
 - three games in Dates;
@@ -64,7 +64,7 @@ In **Your cast**, open a love interest and choose their **Character card** to li
 
 ## The story
 
-Each main chapter is led by one love interest. Otome Hearth offers two to choose from: the one you have spent the least time with, and the one with the most unresolved between you. The chapter planner adds a second love interest whose goals get in the way, and writes six to nine scenes that build to a confrontation. Each scene is written when you reach it, and the next one is written ahead while you read.
+Each main chapter is led by one love interest. Otome Hearth offers two to choose from: the one you have spent the least time with, and the one with the most unresolved between you. The chapter planner adds a second love interest whose goals get in the way, and writes six to nine scenes that build to a climax: a Confrontation, or a warm Closer. After two main chapters in a row end the same way, the next one ends with the other. Each scene is written when you reach it, and the next one is written ahead while you read.
 
 - **Who speaks:** every line names its speaker. Each love interest's line shows one of five faces: tender, flustered, cold, hurt or angry. Your thoughts are set apart, and from the second stage of a love interest's story you may hear one of their thoughts too.
 - **Choices:** your first choice in a scene is canon. Replaying a chapter shows the other branches without changing anything. A choice that changes things between you names who will remember it, and the last scene may end on one lasting choice.
@@ -77,15 +77,16 @@ Each main chapter is led by one love interest. Otome Hearth offers two to choose
 - **Reader controls:** Auto, Skip what you've read, the Backlog (which can play a line again), Hide the text and Cancel.
 - **On mobile:** the three-dot button opens the secondary controls in a vertical list. The audio button mutes or unmutes music and voices, and the fullscreen button stays beside it. Chapter cutouts continue behind the dialogue panel.
 
-## Routes, confrontations and rifts
+## Routes, confrontations, Closers and rifts
 
 Each love interest moves through six stages, from Mask to Bond.
 
 - **Affection progress:** **Story → Between you** shows the points earned within the current level beneath **Level**, out of the 300 needed for the next. Level 10 is the maximum and shows a complete counter. These levels unlock route chapters; completing their gates advances the relationship's six-stage arc.
 - **Route chapters are free.** The next one opens at an affection level (3, 5, 7, 8, then 10). It takes one model call to plan.
 - **The gate:** only a route chapter's last scene moves a love interest on a stage. The fourth stage's gate reveals one of their secrets. The fifth stage's chapter holds a confrontation, and its gate ends on a choice that cannot be undone.
-- **Rewards:** a route chapter earns 300 Starlight and 150 affection. A hostile first-play choice in the story or on a date, or a Confrontation walkout, can cost 15 affection points per affected love interest for each chosen option. Points never fall below the start of the highest level you have reached, with a new level every 300 points. Replaying costs nothing, and losses never refund the daily earning cap.
-- **Confrontations:** every main chapter builds to one: three rounds in which you Press, Hold, Yield or Reveal. It ends in the truth, a walkout or a standoff, and what you reveal is something they know from then on. The whole confrontation is written in one model call, and your first play of it is canon.
+- **Rewards:** a route chapter earns 300 Starlight and 150 affection. A hostile first-play choice in the story or on a date, a Confrontation walkout, or being shut out of a Closer can cost 15 affection points per affected love interest for each chosen option. Points never fall below the start of the highest level you have reached, with a new level every 300 points. Replaying costs nothing, and losses never refund the daily earning cap.
+- **Confrontations:** a main chapter can build to one: three rounds in which you Press, Hold, Yield or Reveal. It ends in the truth, a walkout or a standoff, and what you reveal is something they know from then on. The whole confrontation is written in one model call, and your first play of it is canon. Route chapters keep theirs.
+- **Closers:** the warm climax a main chapter can end with instead. Over three rounds the Lead offers something of themselves, and you answer: Reassure, Tease, Mirror (share something of your own, which they know from then on) or Ask. They end **Opened up** (trust grows, and the first time it's a first on your Love Timeline), **Almost** (nothing changes) or **Shut out** if it goes wrong (trust falls, and they hold a minor grievance). In an NSFW story, Opened up can turn intimate, drawing on their tastes and your role, within your content settings. Like a confrontation, it is one model call, and your first play is canon.
 - **Rifts:** a walkout can leave a rift. While it stands, that love interest's route chapters stay shut (you can still finish the scene on screen), and **Make it right** offers a short repair chapter. Reading its last scene closes the rift.
 - **Nothing is taken back:** a rift never removes anything you have unlocked.
 
@@ -207,7 +208,7 @@ Each love interest alone remembers the games you played together, as they rememb
 
 - each love interest's birthday;
 - the day your story began;
-- the firsts of your Love Timeline, such as each stage you reach with a love interest (Snapshots and couple sets stay in the Album);
+- the firsts of your Love Timeline, such as each stage you reach with a love interest, or the first time one opens up in a Closer (Snapshots and couple sets stay in the Album);
 - the last day of each running Wish banner;
 - your own birthday, if you add it. It stays on this device and is never sent with a prompt.
 
@@ -290,7 +291,7 @@ If a text endpoint rejects the optional JSON-format parameter, Otome Hearth can 
 | **Repaint expressions**                             | —                                                                                                                                                                                 | 5, on your confirmation, for the current look                                                                              | —                                     | —                                                          |
 | Start a main chapter                                | 1 call to plan it                                                                                                                                                                 | —                                                                                                                          | —                                     | —                                                          |
 | Read a scene                                        | 1 call per scene (the next one is written ahead)                                                                                                                                  | 1 per new place and per key moment (with **Ask before painting**, on your tap)                                             | —                                     | each voiced line, once                                     |
-| A confrontation                                     | 1 call for all three rounds                                                                                                                                                       | —                                                                                                                          | —                                     | each voiced line, once                                     |
+| A confrontation or a Closer                         | 1 call for all three rounds                                                                                                                                                       | —                                                                                                                          | —                                     | each voiced line, once                                     |
 | **Rewrite**                                         | 1 call, plus 1 to write the next scene again when it was already written ahead                                                                                                    | this scene's key moment and the next scene's, painted again when they have one (with **Ask before painting**, on your tap) | —                                     | as any scene                                               |
 | A route or repair chapter                           | 1 call to plan, then 1 per scene                                                                                                                                                  | as any scene                                                                                                               | —                                     | as any scene                                               |
 | Story memory                                        | background summaries of finished chapters                                                                                                                                         | —                                                                                                                          | —                                     | —                                                          |

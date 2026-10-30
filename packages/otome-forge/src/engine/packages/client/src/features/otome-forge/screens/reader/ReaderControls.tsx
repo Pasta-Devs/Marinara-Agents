@@ -49,10 +49,11 @@ const MOMENT_KEYS: Record<MomentKind, string> = {
   date: "ui.otomeForge.reader.momentDate",
 };
 
-/** The small frame label a node's kind earns (moments and the Confrontation), or null for a plain beat. */
+/** The small frame label a node's kind earns (moments, the Confrontation, the Closer), or null for a plain beat. */
 export function frameLabelKey(node: { kind: NodeKind; moment?: MomentKind } | null | undefined): string | null {
   if (!node) return null;
   if (node.kind === "confrontation") return "ui.otomeForge.reader.frameConfrontation";
+  if (node.kind === "closer") return "ui.otomeForge.reader.frameCloser";
   if (node.kind === "moment") return node.moment ? MOMENT_KEYS[node.moment] : "ui.otomeForge.reader.frameMoment";
   return null;
 }

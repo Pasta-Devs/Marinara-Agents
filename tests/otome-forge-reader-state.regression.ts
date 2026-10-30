@@ -360,6 +360,28 @@ test("a Confrontation is a beat of stances: its mainline is the opening, each ro
   assert.throws(() => readerBeat({}));
 });
 
+test("a Closer is a beat of its own four answers, in their order, with the same mainline (#1938)", () => {
+  const answers = {
+    // Out of order on the wire: the reader keeps the Closer's own order, and never offers a stance.
+    ask: option("Ask why.", "Why here?"),
+    mirror: option("Tell your own.", "Me too."),
+    tease: option("Tease.", "You're blushing."),
+    reassure: option("Stay close.", "I'm here."),
+    press: option("A stance.", "Not a Closer's."),
+  } as ConfrontationView["rounds"][number]["options"];
+  const view = confrontation({
+    kind: "closer",
+    rounds: [{ round: 1, his: [{ speaker: "Ilvar", text: "I used to come here alone." }], options: answers }],
+  });
+  const served = readerBeat({ beat: beat(), confrontation: view }).beat;
+  const open = buildTimeline(served, initialPicks(served, false), "Mira");
+  assert.deepEqual(texts(open), ["The dome again.", "I used to come here alone."]);
+  assert.deepEqual(
+    open.pending.get(1)!.options.map((item) => item.id),
+    ["reassure", "tease", "mirror", "ask"],
+  );
+});
+
 test("a round with no lines of its own still gets a line for its stances, so no two rounds share one", () => {
   const read = confrontationBeat(
     confrontation({

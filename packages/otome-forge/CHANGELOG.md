@@ -1,5 +1,12 @@
 # Otome Hearth release notes
 
+## 0.4.0 — 2026-10-30
+
+- **The Closer:** a main chapter can now end on a warm climax instead of a Confrontation. Over three rounds the love interest offers something of themselves, and you answer: **Reassure**, **Tease**, **Mirror** (share something of your own) or **Ask**.
+- It ends **Opened up** (trust grows, and it's a first on your Love Timeline), **Almost** (nothing changes) or **Shut out** if it goes wrong (trust falls, and they hold it against you).
+- In NSFW stories, Opened up can turn intimate, drawing on their tastes and your role.
+- After two main chapters end the same way, the next ends with the other, so a story in progress gets its first Closer soon. Route chapters keep their Confrontations.
+
 ## 0.3.0 — 2026-10-30
 
 - NSFW stories give each new love interest's bible their tastes in sex and intimacy: what they're into, kinks included, and what draws them. Intimate scenes bring them in when they fit; your content settings still decide what a scene may hold.

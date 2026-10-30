@@ -23,7 +23,7 @@ import type {
   Segment,
   WorldView,
 } from "../shared/api-types";
-import { STANCES } from "../shared/arcs";
+import { CLIMAX_MOVES } from "../shared/arcs";
 import { isFace, sameName, type Face } from "../shared/faces";
 import { placeKey } from "../shared/places";
 
@@ -133,11 +133,13 @@ export function lineRef(timeline: Timeline, index: number, base: string): string
 export const stanceChoiceId = (round: number) => `round-${round}`;
 
 /**
- * A Confrontation as a beat the reader plays like any other: its mainline is the opening, each revealed round's lines,
- * then the ending; each round ends on a choice of the four stances, kept on every read once picked (first play is
- * canon), so its stance line and his answer follow it. Rounds and the ending are added as the server reveals them.
+ * A climax game (a Confrontation, or a Closer: its view's `kind`) as a beat the reader plays like any other: its
+ * mainline is the opening, each revealed round's lines, then the ending; each round ends on a choice of the game's four
+ * moves, kept on every read once picked (first play is canon), so its line and the answer follow it. Rounds and the
+ * ending are added as the server reveals them.
  */
 export function confrontationBeat(view: ConfrontationView): BeatView {
+  const moves = CLIMAX_MOVES[view.kind === "closer" ? "closer" : "confrontation"];
   const { li: _li, opening, rounds, ending, ...beat } = view;
   const segments: Segment[] = [...(Array.isArray(opening) ? opening : [])];
   const choices: ForgeChoice[] = [];
@@ -149,7 +151,7 @@ export function confrontationBeat(view: ConfrontationView): BeatView {
       segments.push({ speaker: "", text: "…" });
     }
     const id = stanceChoiceId(round.round);
-    const options: ChoiceOption[] = STANCES.flatMap((stance) => {
+    const options: ChoiceOption[] = moves.flatMap((stance) => {
       const option = round.options?.[stance];
       return option
         ? [{ id: stance, text: option.label, selection: option.selection, segments: option.segments ?? [] }]
