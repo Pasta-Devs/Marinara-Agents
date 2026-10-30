@@ -33,14 +33,19 @@ export function registerSettingsRoutes(app: FastifyInstance, runtime: LtmRouteRu
     hideImportedMessagesAvailable: ltmSetMessagesHiddenFromAI() !== null,
   });
   // Turning it on hides imported pieces now. While it is off, a save shows whatever it hid, so a failed show can
-  // be retried by saving again.
+  // be retried by saving again. The setting is saved either way, so a failure is logged and the save goes on to its
+  // index rebuild; a failed hide leaves the rest visible until each chat's next import.
   const applyHideImportedMessages = async (wasOn: boolean, settings: LtmResolvedGlobalSettings) => {
-    if (!settings.longTermMemoryHideImportedMessages) await showLtmHiddenMessages(root);
-    // The setting is saved either way; a failed pass leaves the rest visible until each chat's next import.
-    else if (!wasOn)
-      await hideImportedChatMessages(root).catch((error) =>
-        logger.warn(error, "[ltm] Could not hide imported chat messages from the AI"),
-      );
+    const on = settings.longTermMemoryHideImportedMessages;
+    if (on && wasOn) return;
+    await (on ? hideImportedChatMessages(root) : showLtmHiddenMessages(root)).catch((error) =>
+      logger.warn(
+        error,
+        on
+          ? "[ltm] Could not hide imported chat messages from the AI"
+          : "[ltm] Could not show hidden messages to the AI",
+      ),
+    );
   };
   app.get("/settings", async () => withHideAvailability(await getLtmGlobalSettings(root)));
   app.get("/settings/package-readers", async () => ({ readers: await listLtmPackageReaders(root) }));
