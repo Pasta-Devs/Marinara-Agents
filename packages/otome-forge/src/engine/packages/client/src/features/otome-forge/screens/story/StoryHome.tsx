@@ -351,6 +351,23 @@ function Affection({ lis }: { lis: RunLiView[] }) {
               <span className="of-affection-level" aria-hidden="true">
                 {t("ui.otomeForge.story.level", { level })}
               </span>
+              {li.affectionProgress ? (
+                <span
+                  className="of-affection-progress"
+                  role="meter"
+                  aria-label={t("ui.otomeForge.story.affectionProgress", { name: li.name })}
+                  aria-valuemin={0}
+                  aria-valuemax={li.affectionProgress.required}
+                  aria-valuenow={li.affectionProgress.current}
+                  aria-valuetext={
+                    level === MAX_LEVEL
+                      ? t("ui.otomeForge.story.affectionProgressMax")
+                      : t("ui.otomeForge.story.affectionProgressValue", li.affectionProgress)
+                  }
+                >
+                  {t("ui.otomeForge.story.affectionProgressCount", li.affectionProgress)}
+                </span>
+              ) : null}
             </li>
           );
         })}

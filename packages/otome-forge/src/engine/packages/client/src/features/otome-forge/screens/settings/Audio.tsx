@@ -12,7 +12,7 @@ import { Music, Volume2 } from "lucide-react";
 import { normalizeOtomeAudio } from "../../shared/audio";
 import { useOtomeApi } from "../../api";
 import { RetryNotice } from "../../components/RetryNotice";
-import { useConnections } from "../../hooks/use-engine-resources";
+import { useConnections, useMusicFolders } from "../../hooks/use-engine-resources";
 import { useOtomeAudio } from "../../hooks/use-otome-audio";
 import { patchRun } from "../../hooks/use-run";
 import { useOtomeProps } from "../../props";
@@ -28,6 +28,7 @@ type AudioForm = Pick<
   | "otherVoices"
   | "generate"
   | "chapterThemes"
+  | "musicFolder"
   | "audioConnectionId"
   | "muted"
   | "musicVolume"
@@ -39,6 +40,7 @@ const toForm = (audio: AudioSettings): AudioForm => ({
   otherVoices: audio.otherVoices,
   generate: audio.generate,
   chapterThemes: audio.chapterThemes,
+  musicFolder: audio.musicFolder,
   audioConnectionId: audio.audioConnectionId,
   muted: audio.muted,
   musicVolume: audio.musicVolume,
@@ -114,6 +116,56 @@ function useSaveAudio(runKey: string | null) {
     }
   };
   return { save, busy, status };
+}
+
+function MusicFolderSelect({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const { t } = useTranslation();
+  const id = useId();
+  const folders = useMusicFolders();
+  const absent = !!value && !folders.folders.includes(value);
+  const unavailable = absent && !folders.isLoading && !folders.isError;
+  return (
+    <>
+      {folders.isLoading ? (
+        <p className="of-hint" role="status">
+          {t("ui.otomeForge.audio.musicFolderLoading")}
+        </p>
+      ) : folders.isError ? (
+        <RetryNotice
+          message={t("ui.otomeForge.audio.musicFolderFailed")}
+          onRetry={() => void folders.refetch()}
+          retrying={folders.retrying}
+        />
+      ) : null}
+      <div className="of-field">
+        <label className="of-label" htmlFor={id}>
+          {t("ui.otomeForge.audio.musicFolder")}
+        </label>
+        <select
+          id={id}
+          className="of-input of-select"
+          value={value}
+          disabled={folders.isLoading || folders.isError}
+          aria-describedby={`${id}-hint`}
+          onChange={(event) => onChange(event.target.value)}
+        >
+          <option value="">{t("ui.otomeForge.audio.musicFolderDefault")}</option>
+          {absent ? <option value={value}>{value}</option> : null}
+          {folders.folders.map((folder) => (
+            <option key={folder} value={folder}>
+              {folder}
+            </option>
+          ))}
+        </select>
+        <p id={`${id}-hint`} className="of-hint">
+          {t(unavailable ? "ui.otomeForge.audio.musicFolderUnavailable" : "ui.otomeForge.audio.musicFolderHint")}
+        </p>
+      </div>
+      {!folders.isLoading && !folders.isError && folders.folders.length === 0 ? (
+        <p className="of-hint">{t("ui.otomeForge.audio.musicFolderEmpty")}</p>
+      ) : null}
+    </>
+  );
 }
 
 function StoryAudio({ run, saving }: { run: RunView; saving: ReturnType<typeof useSaveAudio> }) {
@@ -234,6 +286,9 @@ function StoryAudio({ run, saving }: { run: RunView; saving: ReturnType<typeof u
               onChange={(audioConnectionId) => set({ audioConnectionId })}
             />
           )
+        ) : null}
+        {!form.generate ? (
+          <MusicFolderSelect value={form.musicFolder} onChange={(musicFolder) => set({ musicFolder })} />
         ) : null}
       </Section>
       <Section title={t("ui.otomeForge.audio.levelsTitle")}>
