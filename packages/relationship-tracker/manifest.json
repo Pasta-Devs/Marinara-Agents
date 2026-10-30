@@ -10,7 +10,7 @@
   },
   "id": "relationship-tracker",
   "name": "Relationship Tracker",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "description": "Tracks how the characters and your persona feel about each other. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
   "engine": {
     "min": "2.4.4",
@@ -78,8 +78,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "a76ba1a1284fe7516447a74b0e9336d752c142fb4e15f50708a2985906abb3e8",
-      "bytes": 84902
+      "sha256": "77a1dfe7945c380ca356e8357956a1084fc4daa5ab418e88a6b05dda0e5d6785",
+      "bytes": 89043
     },
     {
       "path": "contracts/relationship-state-v1.schema.json",
