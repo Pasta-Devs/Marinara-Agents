@@ -850,6 +850,103 @@ test("Otome Hearth named speakers hide unrelated sprites, require unique cards a
   expect(assets.paid).toEqual([]);
 });
 
+for (const colorScheme of ["dark", "light"] as const) {
+  test(`Otome Hearth story header describes scenes only while no character sprite is in use (${colorScheme})`, async ({
+    page,
+  }, testInfo) => {
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme });
+    const segments = [
+      seg("", "Rain reaches the empty observation room.", { place: "The Observation Room" }),
+      seg("Ilvar Thorne", "The love interest arrives.", { expression: "cold" }),
+      seg("", "The narrator keeps him on stage."),
+      seg("Mira Vale", "The protagonist thinks.", { thought: true }),
+      seg("Ilvar", "His own private thought.", { thought: true }),
+      seg("Arin Vale", "A matching character speaks."),
+      seg("No Matching Card", "A stranger has no sprite."),
+      seg("Cassian", "An unpainted love interest speaks."),
+      seg("Ilvar", "The painted love interest returns."),
+      seg("Ilvar", "The key moment replaces the character."),
+    ];
+    const fixture = createStoryStub({
+      done: true,
+      storyBeats: [
+        {
+          ...BEATS[0],
+          segments,
+          choices: [],
+          cg: {
+            at: 9,
+            brief: "Two figures under the glass dome.",
+            cast: ["Ilvar Thorne"],
+            art: { state: "ready", at: written.at, url: LI_SPEAKER_PORTRAIT },
+          },
+        },
+        ...BEATS.slice(1),
+      ],
+    });
+    await stubRoutes(page, {
+      ...fixture,
+      answer(call: Call) {
+        const reply = fixture.answer(call);
+        if (call.path === `/api/otome-forge/runs/${RUN}`) {
+          const view = (reply.json as Json).view;
+          // Neither image-generation availability nor the expression toggle disables retained sprites.
+          view.world.images.expressions = false;
+          view.world.places = {
+            "the-observation-room": { name: "The Observation Room", tags: "glass dome, night" },
+          };
+          view.lis[0].portrait = LI_SPEAKER_PORTRAIT;
+          view.lis[0].worn = { id: "his-wardrobe-0-f", url: LI_SPEAKER_PORTRAIT };
+          view.lis[0].cut = [LI_SPEAKER_PORTRAIT];
+        }
+        return reply;
+      },
+    });
+    const assets = await speakerRoutes(page);
+    const root = await openStory(page);
+    await expect(root).toHaveAttribute("data-look", colorScheme === "dark" ? "midnight" : "pearl");
+    await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+    await root.getByRole("button", { name: "Begin" }).click();
+    const description = root.locator(".of-reader-head .of-image-description");
+    await expect(line(root)).toContainText(segments[0]!.text);
+    await expect(root.locator(".of-reader-stage .of-face")).toHaveCount(0);
+    await expect(description).toContainText("glass dome, night");
+    for (const segment of segments.slice(1, 5)) {
+      await next(root);
+      await expect(line(root)).toContainText(segment.text);
+      await expect(root.locator('.of-face-img[data-front="true"]')).toHaveAttribute("src", LI_SPEAKER_PORTRAIT);
+      await expect(description).toHaveCount(0);
+    }
+    await page.screenshot({ path: testInfo.outputPath(`story-header-sprite-${colorScheme}.png`) });
+    const release = await hold(page, "**/api/characters/catalog?**");
+    try {
+      await next(root);
+      await expect(line(root)).toContainText(segments[5]!.text);
+      await expect(root.locator(".of-reader-stage .of-face")).toHaveCount(0);
+      await expect(description).toHaveCount(0);
+    } finally {
+      release();
+    }
+    await expect(root.getByRole("img", { name: "Arin Vale", exact: true })).toBeVisible();
+    await expect(description).toHaveCount(0);
+    for (const segment of segments.slice(6, 8)) {
+      await next(root);
+      await expect(line(root)).toContainText(segment.text);
+      await expect(root.locator(".of-reader-stage .of-face-img")).toHaveCount(0);
+      await expect(description).toContainText("glass dome, night");
+    }
+    await next(root);
+    await expect(root.locator('.of-face-img[data-front="true"]')).toHaveAttribute("src", LI_SPEAKER_PORTRAIT);
+    await expect(description).toHaveCount(0);
+    await next(root);
+    await expect(root.getByRole("img", { name: "An illustration: Ilvar Thorne", exact: true })).toBeVisible();
+    await expect(root.locator(".of-reader-stage .of-face")).toHaveCount(0);
+    await expect(description).toContainText("Two figures under the glass dome.");
+    expect(assets.paid).toEqual([]);
+    expect(assets.cleanup).toEqual([]);
+  });
+}
+
 for (const revision of [2, 0]) {
   test(`Otome Hearth opaque speaker sprites wait for free cleanup and reuse it (revision ${revision})`, async ({
     page,

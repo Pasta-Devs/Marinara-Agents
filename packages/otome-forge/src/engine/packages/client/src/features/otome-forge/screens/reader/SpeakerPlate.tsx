@@ -5,16 +5,20 @@ import { findSpeakerSprite, speakerNameKey } from "../../lib/speaker-sprites";
 import { useSpriteDisplay } from "../../hooks/use-sprite-display";
 import { FaceLayers } from "./FacePlate";
 
-/** A fresh named line begins empty; no state or crossfade layer belongs to the previous speaker. */
-export function SpeakerPlate({ name, lineKey }: { name: string; lineKey: string }) {
-  const selected = useQuery({
-    queryKey: ["otome-forge", "speaker-card", speakerNameKey(name), lineKey],
-    queryFn: ({ signal }) => findSpeakerSprite(name, (path) => api.get<unknown>(path, { signal })),
+/** The reader shares this selection so descriptions and the stage follow the same speaker. */
+export function useSpeakerSprite(name: string | null, lineKey: string) {
+  return useQuery({
+    queryKey: ["otome-forge", "speaker-card", speakerNameKey(name ?? ""), lineKey],
+    queryFn: ({ signal }) => findSpeakerSprite(name!, (path) => api.get<unknown>(path, { signal })),
+    enabled: !!name,
     staleTime: 0,
     gcTime: 0,
     retry: false,
   });
-  const source = selected.isSuccess && !selected.isFetching ? selected.data : null;
+}
+
+/** A fresh named line begins empty; no state or crossfade layer belongs to the previous speaker. */
+export function SpeakerPlate({ name, source }: { name: string; source: string | null }) {
   const url = useSpriteDisplay(source);
   const [broken, setBroken] = useState<string | null>(null);
   if (!url || broken === url) return null;

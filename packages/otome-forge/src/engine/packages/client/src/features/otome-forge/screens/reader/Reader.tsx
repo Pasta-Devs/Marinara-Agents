@@ -12,6 +12,7 @@
 // ──────────────────────────────────────────────
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
+import { forgeStoryExpressionArt } from "@forge-kit/story-expressions.mjs";
 import {
   BookHeart,
   Eye,
@@ -43,7 +44,7 @@ import { accentOf } from "../../lib/accent";
 import { canonOption, readyUrl, sumGrants, voiceOf, type Voice } from "../../lib/reader-state";
 import { useOtomeProps } from "../../props";
 import type { Grant, RunView } from "../../shared/api-types";
-import { MUSIC_MOODS, type MusicMood } from "../../shared/faces";
+import { FACES, MUSIC_MOODS, type MusicMood } from "../../shared/faces";
 import { Backlog } from "./Backlog";
 import { ChoicePills, RememberToast } from "./ChoicePills";
 import { ConfrontationEnd, StancePills } from "./Confrontation";
@@ -52,7 +53,7 @@ import { DialogueBox } from "./DialogueBox";
 import { EaseOffDialog } from "./EaseOffDialog";
 import { FACE_LABEL_KEYS, FacePlate, QuietCg } from "./FacePlate";
 import { ReaderControls } from "./ReaderControls";
-import { SpeakerPlate } from "./SpeakerPlate";
+import { SpeakerPlate, useSpeakerSprite } from "./SpeakerPlate";
 import { stageNameKey } from "../story/StoryHome";
 
 interface ReaderProps {
@@ -237,6 +238,16 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
       }
     : null;
   const otherSpeaker = voice?.kind === "other" && !voice.thought ? voice.name : null;
+  const selectedSpeaker = useSpeakerSprite(cg ? null : otherSpeaker, reader.lineKey);
+  const speakerSource = selectedSpeaker.isSuccess && !selectedSpeaker.isFetching ? selectedSpeaker.data : null;
+  const stageArt = forgeStoryExpressionArt(
+    { art: onStageLi?.worn?.url ?? onStageLi?.portrait ?? "", expressions: onStageLi?.expressions ?? {} },
+    { expression: reader.onStage.face },
+    FACES,
+  ).art;
+  // A selected sprite stays the presentation while it loads or is cleaned; only an absent sprite uses prose.
+  const usesCharacterSprite =
+    !cg && (otherSpeaker ? selectedSpeaker.isPending || selectedSpeaker.isFetching || !!speakerSource : !!stageArt);
 
   // Each new line is voiced when the settings voice its speaker; leaving the line stops it. Narration, thoughts and
   // the aftermath line never are.
@@ -344,7 +355,9 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
           nodeCount={reader.nodeCount}
           replay={!!reader.position?.replay && reading}
           place={reading ? place : undefined}
-          imageDescription={reading ? [placeInfo?.tags, cg?.brief].filter(Boolean).join("\n") : undefined}
+          imageDescription={
+            reading && !usesCharacterSprite ? [placeInfo?.tags, cg?.brief].filter(Boolean).join("\n") : undefined
+          }
           placePaint={placePaint}
           tags={reader.tags}
           reading={reading}
@@ -376,7 +389,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
             onPaint={canPaint ? () => void reader.paintCg() : undefined}
           />
         ) : otherSpeaker ? (
-          <SpeakerPlate key={reader.lineKey} name={otherSpeaker} lineKey={reader.lineKey} />
+          <SpeakerPlate key={reader.lineKey} name={otherSpeaker} source={speakerSource} />
         ) : (
           <FacePlate li={onStageLi} face={reader.onStage.face} speaking={reader.onStage.speaking} />
         )}
