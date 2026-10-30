@@ -1,14 +1,25 @@
 // ──────────────────────────────────────────────
-// Otome Forge: Dates. Pick who to spend time with, then one of the three activities: Read {{name}}, Date Night (Make
-// it right during a rupture) and the Claw Machine, each with what it pays and what it costs; today's capped rewards;
-// and the plush shelf. Play is never limited, only the day's rewards are (plan M5, design: Mini-games).
+// Otome Forge: Dates. Pick who to spend time with, then one of the four activities: Read {{name}}, Read Me (#1945),
+// Date Night (Make it right during a rupture) and the Claw Machine, each with what it pays and what it costs; today's
+// capped rewards; and the plush shelf. Play is never limited, only the day's rewards are (plan M5, design: Mini-games).
 // ──────────────────────────────────────────────
 // GET /runs/:run/play → PlayView (S/routes/claw.ts). Each activity is a screen of its own that OtomeForgeView opens
 // with ActivityScreenProps; one that has not arrived yet in this build shows its card without a Play button.
 import { useEffect, useId, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
-import { CalendarHeart, Eye, Feather, Heart, RotateCcw, Sparkles, Star, Wine, type LucideIcon } from "lucide-react";
+import {
+  CalendarHeart,
+  Eye,
+  Feather,
+  Heart,
+  NotebookPen,
+  RotateCcw,
+  Sparkles,
+  Star,
+  Wine,
+  type LucideIcon,
+} from "lucide-react";
 import { useOtomeApi } from "../../api";
 import { Avatar } from "../../components/Avatar";
 import { PlushShelf, withPlush } from "../../components/PlushShelf";
@@ -18,7 +29,7 @@ import type { RunLiView, RunView } from "../../shared/api-types";
 import { PLUSH_SERIES, liPlushId, type PlayView } from "../../shared/claw";
 import { AFFECTION_EARNINGS, STARLIGHT_EARNINGS } from "../../shared/economy";
 
-export const DATE_ACTIVITIES = ["read-him", "date-night", "claw"] as const;
+export const DATE_ACTIVITIES = ["read-him", "read-me", "date-night", "claw"] as const;
 export type DateActivity = (typeof DATE_ACTIVITIES)[number];
 
 /** What OtomeForgeView gives each activity's screen: the run, the love interest it is played with, and the way back. */
@@ -60,6 +71,13 @@ const ACTIVITY_COPY: Record<DateActivity, ActivityCopy> = {
     cost: "ui.otomeForge.dates.readCost",
     CostIcon: Feather,
   },
+  "read-me": {
+    Icon: NotebookPen,
+    title: "ui.otomeForge.dates.readMeTitle",
+    text: "ui.otomeForge.dates.readMeText",
+    cost: "ui.otomeForge.dates.readMeCost",
+    CostIcon: Feather,
+  },
   "date-night": {
     Icon: Wine,
     title: "ui.otomeForge.dates.dateTitle",
@@ -83,6 +101,16 @@ const REWARDS: Record<DateActivity, { key: string; values: Record<string, number
   "read-him": {
     key: "ui.otomeForge.dates.rewardFlat",
     values: { starlight: STARLIGHT_EARNINGS.readHim, affection: AFFECTION_EARNINGS.readHim },
+  },
+  // A set's pay, and more affection for each guess spot on or close.
+  "read-me": {
+    key: "ui.otomeForge.dates.rewardReadMe",
+    values: {
+      starlight: STARLIGHT_EARNINGS.readMe,
+      affection: AFFECTION_EARNINGS.readMe,
+      right: AFFECTION_EARNINGS.readMeRight,
+      close: AFFECTION_EARNINGS.readMeClose,
+    },
   },
   "date-night": {
     key: "ui.otomeForge.dates.rewardFlat",
