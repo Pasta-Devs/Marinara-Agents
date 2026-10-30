@@ -1,9 +1,10 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the Claw Machine. Six drops, taking turns with the love interest you picked: steer the claw (it swings
 // on its cable), drop it before the timer runs out, and cheer on their turns until they cheat in their own way. Every
-// plush won lines the shelf. No model call and no image of any kind: the plushies are drawn, and the lines are the
-// love interest's own pack written ahead, or the catalog's until it exists. They come with GET /play, never from
-// GET .../lis/:li/lines, which queues a missing pack's write (a model call).
+// plush won lines the shelf. A round makes no model call and paints no image: the plushies are drawn (a love
+// interest's own drawn once in the background, #1954), and the lines are the love interest's own pack written ahead,
+// or the catalog's until it exists. Both come with GET /play, never from GET .../lis/:li/lines, which queues a missing
+// pack's write (a model call).
 // ──────────────────────────────────────────────
 // The rules are C/lib/claw-physics.ts (pure, seeded per round). This screen runs them: one requestAnimationFrame loop
 // steps the claw and plays each drop's animation by writing CSS custom properties straight onto the glass, and React
@@ -16,8 +17,9 @@
 // POST /runs/:run/claw/finish {li, round, first, caught, cheered} pays the round once: the round id is made when the
 // round starts, so Try again after a lost answer sends the same round and is never paid twice.
 // His lines are voiced as Home's tap lines are (M2b's audio, with the kit's voice picking), while this screen's Sound is
-// on; during a rupture they are Home's own cold lines, voiced under Home's ref so one clip serves both screens. His
-// plush wears his look, cut out once Home has made the cut-out (GET /play's `plush`).
+// on; during a rupture they are Home's own cold lines, voiced under Home's ref so one clip serves both screens. Their
+// plush is the animal drawn for them (GET /play's `animal`), else their look, cut out once Home has made the cut-out
+// (GET /play's `plush`).
 // ponytail: his reactions show his base look (or initials); the ceiling is one face for every line, and the upgrade
 // path is M2b's painted faces (a win tender, a miss flustered).
 // ponytail: this screen's Sound and Vibration toggles last for this screen only (the world's audio settings still apply
@@ -60,7 +62,7 @@ import {
 } from "lucide-react";
 import { useOtomeApi } from "../../api";
 import { Avatar } from "../../components/Avatar";
-import { PlushArt, PlushShelf, usePlushName, withPlush } from "../../components/PlushShelf";
+import { PlushArt, PlushShelf, usePlushName, withPlush, type PlushPictures } from "../../components/PlushShelf";
 import { useOtomeAudio } from "../../hooks/use-otome-audio";
 import { runPath, useReducedMotion } from "../../hooks/use-reader";
 import { patchRun, runQueryKey } from "../../hooks/use-run";
@@ -411,7 +413,7 @@ interface CabinetProps {
   prizes: readonly Prize[];
   leaving?: readonly Prize[];
   /** With the picture their plush wears (withPlush). */
-  li: RunLiView & { plush?: string };
+  li: RunLiView & PlushPictures;
   accent: string;
   label: string;
   glassRef?: (element: HTMLDivElement | null) => void;
@@ -567,7 +569,7 @@ interface Game {
 
 interface ClawGameProps {
   /** With the picture their plush wears (withPlush). */
-  li: RunLiView & { plush?: string };
+  li: RunLiView & PlushPictures;
   accent: string;
   seed: number;
   first: ClawPlayer;

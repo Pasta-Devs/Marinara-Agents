@@ -72,6 +72,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.6.0",
+          "date": "2026-10-30",
+          "notes": "- Each love interest has their own Claw Machine plush: the animal that fits them best, in their colours (a cyan raven with red eyes, a black cat with violet eyes). Your Planning model draws it once, in the background, the first time you open Dates with them. Until then their plush wears their look, as before.",
+          "highlight": true
+        },
+        {
           "version": "0.5.1",
           "date": "2026-10-30",
           "notes": "- Chapters no longer all end the same way. Each one builds differently, and its closing choice is a different kind of decision from the last few, not a love interest stepping in again to ask whom you'll go with. A rival love interest competes over more than just you, too.",
@@ -183,12 +189,6 @@
           "version": "0.1.8",
           "date": "2026-10-29",
           "notes": "- Music settings can give every chapter its own saved theme. Enable chapter themes with music generation on; each theme is generated when reading starts and reused on replay.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.7",
-          "date": "2026-10-29",
-          "notes": "- Chapter and Home expressions keep the clean neutral sprite visible until free background cleanup is ready, instead of showing a green original. Saved and newly painted expressions share the repair, with their originals, outfits and story progress retained.",
           "highlight": false
         }
       ]

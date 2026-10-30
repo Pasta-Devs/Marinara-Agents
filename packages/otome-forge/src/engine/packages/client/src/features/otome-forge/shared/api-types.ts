@@ -354,6 +354,15 @@ export interface Unit {
   lines?: LinePacks;
   /** Home cut-outs, keyed by the look's URL: `ready` carries the cut-out; `failed` means pan over the uncut look. */
   cutouts: Record<string, Cutout>;
+  /** Their Claw Machine plush (#1954): the animal that fits them, drawn as SVG in the background; absent until then. */
+  plushArt?: PlushArt;
+}
+
+/** A love interest's own plush: the animal (English, one or two words) and its sanitized SVG (S/art/plush-svg.ts). */
+export interface PlushArt {
+  animal: string;
+  svg: string;
+  at: string;
 }
 
 // ── Home (M3): line packs, the message of the day, and what Home shows ──
