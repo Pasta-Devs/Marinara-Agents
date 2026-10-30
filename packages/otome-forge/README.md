@@ -8,7 +8,7 @@ Release 1, **0.1.0 "First Date"**, holds the whole first loop:
 - main chapters and a route for each love interest, with confrontations, warm Closers and rifts;
 - Home and Messages;
 - Wish, the Wardrobe and the Album;
-- three games in Dates;
+- four games in Dates, among them Read Me, where a love interest learns about you;
 - Remind Me with an opt-in period tracker;
 - content settings with Lines & Veils and an 18+ gate.
 
@@ -165,7 +165,7 @@ Wishes cost Starlight you earn by playing: 100 each, or 1,000 for ten. There is 
 
   It saves an image through the Engine's own image saving.
 
-## Dates: Read Them, Date Night and the Claw Machine
+## Dates: Read Them, Read Me, Date Night and the Claw Machine
 
 Dates is where you spend time with one love interest at a time. Every activity pays even when it goes badly. Only the rewards are capped each day: 400 Starlight from activities in all, and 300 affection per love interest from outside the story. Play is never capped, and the day ends at your own midnight.
 
@@ -175,6 +175,16 @@ Over five moments, pick what your love interest really feels from three or four 
 
 - Each moment shows the face it names, once their five faces are painted. With voices on, their line is read aloud.
 - The tells you learn reach later scenes.
+
+### Read Me
+
+Read Them in reverse: your love interest studies you and makes four guesses about you, from what you like and dislike to your habits, fears and dreams. Answer each with **Spot on**, **Close** or **Not at all**, and tell them the truth in your own words if you like.
+
+- It pays 40 Starlight and 20 affection, plus 10 for each guess they get spot on and 5 for each close one, within the day's caps. It is 1 model call, and it follows your story's Heat.
+- **What they know about you:** every answer goes into that love interest's notebook. Open it from Read Me to read it, rewrite your own words or delete an entry.
+- Only that love interest knows it. It reaches the scenes they're in, their Home notes and messages, and dates and stories with them, never another love interest's prompts. Others in a scene only learn what happens on the page.
+- It is never part of story memory, so a delete is final. A scene already written ahead keeps the notebook it was written with; your change reaches the next one.
+- Guesses never touch your health, medication or cycle, and words about them can't be kept.
 
 ### Date Night
 
@@ -311,6 +321,7 @@ If a text endpoint rejects the optional JSON-format parameter, Otome Hearth can 
 | **Show them**                                       | 1 call each time                                                                                                                                                                  | —                                                                                                                          | —                                     | its line, every time, never cached                         |
 | A couple set's portrait                             | —                                                                                                                                                                                 | 1, on your tap                                                                                                             | —                                     | —                                                          |
 | Read Them                                           | 1 call                                                                                                                                                                            | —                                                                                                                          | —                                     | each voiced line, once                                     |
+| Read Me                                             | 1 call                                                                                                                                                                            | —                                                                                                                          | —                                     | each voiced line, once                                     |
 | Date Night                                          | 4 calls                                                                                                                                                                           | new places and missing faces as in any scene, and 1 for a keepsake if you ask                                              | —                                     | as any scene                                               |
 | **Caring message**                                  | 1 call, or none with **Keep it off the model** or a debug condition on                                                                                                            | —                                                                                                                          | —                                     | **Play**: every time, never cached                         |
 
@@ -330,7 +341,7 @@ These never call a model or paint anything. With voices on, their lines are voic
 
 ### Where your stories live
 
-- **Package documents:** stories are kept in Marinara Engine's own database, on the computer that runs it, as documents whose ids start with `otome-forge:`. This covers the world, the cast and their bibles, chapters and scenes, progress, messages of the day, message threads, lines written ahead, banners, the items you win, the plush shelf and your latest Claw Machine rounds.
+- **Package documents:** stories are kept in Marinara Engine's own database, on the computer that runs it, as documents whose ids start with `otome-forge:`. This covers the world, the cast and their bibles, chapters and scenes, progress, messages of the day, message threads, lines written ahead, banners, the items you win, the plush shelf, your latest Claw Machine rounds, your Read Me games, and each love interest's notebook of what they know about you, your own words included.
   - They travel with Engine backups and profile exports.
   - Package documents aren't isolated per package, so other installed packages could read them.
 - **The Global Gallery:** painted looks, places, faces, CGs, banner art and Home cut-outs are saved there, and deleting a story deletes them too.
@@ -350,7 +361,7 @@ These never call a model or paint anything. With voices on, their lines are voic
 ### What leaves your device
 
 - **Prompts:** prompts go to the model provider of the connection that writes them, with your writing style. With a cloud provider, that text leaves your device.
-- **Persona grounding:** prompts that describe your protagonist include their whole **Description, Personality, Backstory and authored Appearance**. This covers world/cast setup, chapter and scene writing, routes and repairs, dates, item stories and outfit reactions, phone replies, Home notes and touch lines, Caring messages, and Read Him. Scenario, greetings and example dialogue are excluded; an image-only Appearance Override is not story appearance. The fields refresh when you open a story and before setup, main-chapter planning, scene writing, route/repair planning and date planning. Other prompts use the story's last saved copy.
+- **Persona grounding:** prompts that describe your protagonist include their whole **Description, Personality, Backstory and authored Appearance**. This covers world/cast setup, chapter and scene writing, routes and repairs, dates, item stories and outfit reactions, phone replies, Home notes and touch lines, Caring messages, Read Him and Read Me. Scenario, greetings and example dialogue are excluded; an image-only Appearance Override is not story appearance. The fields refresh when you open a story and before setup, main-chapter planning, scene writing, route/repair planning and date planning. Other prompts use the story's last saved copy.
 - **Other providers:** image prompts go to your image connection. Every image of your persona uses their current **Appearance**, whole, or **Image Appearance Override** while you have it enabled; an outfit's clothing changes are added to it. An empty Appearance uses your avatar reference and the requested clothing without an invented body description or extra model call. An unavailable persona keeps its own saved look as a fallback. A linked love interest's likeness reference is their card's **Full Body → Neutral** sprite when available, then the current card avatar, then their retained Otome look. Your persona keeps their avatar reference. Scenes add the outfits people wear after their identity references, within the Engine's four-image limit. Music briefs go to your audio connection, and voiced lines to your voice provider.
 - **Debug mode:** with the Engine's Debug mode or `DEBUG_AGENTS` on, every prompt Otome Hearth sends is written to the Engine's server log as `[debug/otome-forge/…]`, and the Engine logs image prompts too. In debug mode, and at a debug log level, the Engine's model providers also log whole requests.
 

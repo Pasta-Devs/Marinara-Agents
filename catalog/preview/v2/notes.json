@@ -72,6 +72,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.5.0",
+          "date": "2026-10-30",
+          "notes": "- **Read Me**, a new game in Dates: a love interest studies you and makes four guesses about you. Answer Spot on, Close or Not at all, and tell them the truth in your own words if you like.\n- They remember: each answer goes into their notebook of what they know about you (likes, dislikes, habits, fears, dreams), and they bring it up in scenes, Home notes, messages and dates. No other love interest ever sees it.\n- Open the notebook from Read Me to read it, rewrite your words or delete an entry. A delete is final.",
+          "highlight": true
+        },
+        {
           "version": "0.4.2",
           "date": "2026-10-30",
           "notes": "- The Love Timeline shows every 4★ Moment and 5★ Memory you've won, on the day you won it, including ones won before this update. Each Snapshot, Moment and Memory says what it is and opens in the Album.",
@@ -183,12 +189,6 @@
           "version": "0.1.6",
           "date": "2026-10-29",
           "notes": "- Mobile reader controls now show mute, fullscreen, then More, with centered icons and the secondary controls aligned directly below More.\n- A thought's closing parenthesis now appears when the line finishes typing.\n- Removed the daily-storage caption beneath a generated period-day caring message.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.5",
-          "date": "2026-10-29",
-          "notes": "- The downloadable package now includes the merged reader resize repair: switching from a phone-sized reader to desktop no longer leaves a hidden mobile menu consuming the next story action.\n- Linking a generated love interest to a card keeps their existing story bible, without showing the imported-card canon notice.",
           "highlight": false
         }
       ]

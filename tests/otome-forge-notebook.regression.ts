@@ -2,7 +2,7 @@
 // (LiState.known) rides beside that love interest's own card and nowhere else.
 // - Their own prompts carry it: the Home note (P16), a Messages reply (P17), Read Him (P25), the date plan (P26) and
 //   date scenes, the Character Story plan (P21) and its scenes, the chapter plan they lead (P5), their route and repair
-//   plans (P10/P11) and a Confrontation against them (P12). Another love interest's notebook never reaches those: not
+//   plans (P10/P11), a Confrontation against them (P12) and a Closer with them (P12c). Another love interest's notebook never reaches those: not
 //   through P5's others, othersBlock or a bystander in P12.
 // - A main-chapter scene carries each present love interest's own notebook beside their own card, named as theirs, and
 //   never the notebook of one who is not in it.
@@ -39,6 +39,7 @@ import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/serv
 import {
   beatMessages,
   chapterPlanMessages,
+  closerMessages,
   confrontationMessages,
   knowsAboutYou,
   ownView,
@@ -189,6 +190,24 @@ function ownPrompts(li: LiId, notebooks?: Partial<Record<LiId, NotebookEntry[]>>
         ...input,
         chapter: { kind: "main", number: 2, title: "Rain", lead: li, foil: li === KAI ? MIR : KAI, nodes: [fight] },
         node: fight,
+        storySoFar: "",
+        memory: "",
+        li,
+      }),
+    ),
+    // The Closer (P12c, #1938): its partner's notebook, as P12's opponent's.
+    closer: text(
+      closerMessages({
+        ...input,
+        chapter: {
+          kind: "main",
+          number: 2,
+          title: "Rain",
+          lead: li,
+          foil: li === KAI ? MIR : KAI,
+          nodes: [{ ...fight, kind: "closer" }],
+        },
+        node: { ...fight, kind: "closer" },
         storySoFar: "",
         memory: "",
         li,
