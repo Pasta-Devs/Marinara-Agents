@@ -54,11 +54,13 @@ async function main() {
     { previewPackageInterop, sourcePackageDetails, importPackageInterop, transcriptPieces },
     { ltmImportSourceNotesResponseSchema, ltmInteropPreviewRequestSchema, ltmInteropPreviewResponseSchema },
     { LongTermMemoryStorage },
+    { updateLtmExtractionConfig },
   ] = await Promise.all([
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/package-runtime.ts"),
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/sources/interop.ts"),
     import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts"),
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/persistence/storage.ts"),
+    import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/extraction/extraction-config.ts"),
   ]);
 
   const speaker = (row: FixtureMessage) => row.role;
@@ -121,6 +123,25 @@ async function main() {
       { entryId: "s2", first: 3, last: 3 },
     ],
     "a hidden first message still names the piece its next visible message starts",
+  );
+  const detailedPieces = transcriptPieces(
+    [
+      message("c", "h1", "user", "Hello."),
+      message("c", "h2", "user", "x".repeat(11_990)),
+      message("c", "h3", "user", "y".repeat(30_000)),
+    ],
+    speaker,
+    () => false,
+    12_000,
+  );
+  assert.deepEqual(
+    detailedPieces.map(({ entryId }) => entryId),
+    ["h1", "h2", "h3", "h3:part:2", "h3:part:3"],
+    "a 12,000 cap starts pieces sooner and splits an oversized message into parts",
+  );
+  assert.ok(
+    detailedPieces.every((piece) => piece.content.length <= 12_000),
+    "no piece exceeds the 12,000 character cap",
   );
 
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-chat-transcript-"));
@@ -351,6 +372,10 @@ async function main() {
       assert.ok(note.scope.chatIds?.includes(roleplayChat.id), "the source note stays attached to its chat");
       assert.ok(note.scope.characterIds?.includes("character-kirei"), "the destination scope is linked");
       assert.ok(note.tags.includes("imported_chat_messages"));
+      assert.ok(
+        !note.sections.source?.evidence?.some((item) => item.startsWith("piece_size:")),
+        "a Standard piece records no size, so its evidence and fingerprint stay as before",
+      );
 
       const roleplayMessages = messages.get(roleplayChat.id)!;
       roleplayMessages.push(message(roleplayChat.id, "r5", "user", "z".repeat(23_960)));
@@ -575,11 +600,101 @@ async function main() {
         [["update_section", listedThread]],
         "reusing the listed subjectId updates that thread instead of adding another",
       );
+
+      // Chat import detail: each chat keeps the piece size of its first import.
+      respond = () => [];
+      const half = (id: string, chatId: string, letter: string) => message(chatId, id, "user", letter.repeat(11_000));
+      const importChat = (chatId: string, sourceIds: string[]) =>
+        importPackageInterop(
+          { source: "messages", chatId, sourceIds, extract: true, limit: 100 },
+          root,
+          new AbortController().signal,
+        );
+      const rows = async (request: Record<string, unknown>) =>
+        (await previewPackageInterop({ source: "messages", limit: 100, ...request } as any, root)).samples.map(
+          ({ sourceId, status, freshness }) => ({ sourceId, status, freshness }),
+        );
+      const standardChat = { ...roleplayChat, id: "chat-standard", name: "Standard", groupId: "group-standard" };
+      const detailedChat = { ...roleplayChat, id: "chat-detailed", name: "Detailed", groupId: "group-detailed" };
+      chats.push(standardChat, detailedChat);
+      messages.set(standardChat.id, [half("a1", standardChat.id, "a"), half("a2", standardChat.id, "b")]);
+      messages.set(detailedChat.id, [half("d1", detailedChat.id, "a"), half("d2", detailedChat.id, "b")]);
+      await importChat(standardChat.id, ["chat-standard:messages:a1"]);
+
+      await updateLtmExtractionConfig({ chatImportDetail: "detailed" }, root);
+      assert.deepEqual(
+        await rows({ chatId: detailedChat.id }),
+        [
+          { sourceId: "chat-detailed:messages:d1", status: "pending", freshness: "new" },
+          { sourceId: "chat-detailed:messages:d2", status: "pending", freshness: "new" },
+        ],
+        "Detailed cuts a new chat at 12,000 characters",
+      );
+      const detailedImport = ltmImportSourceNotesResponseSchema.parse(
+        await importChat(detailedChat.id, ["chat-detailed:messages:d1", "chat-detailed:messages:d2"]),
+      );
+      assert.ok(
+        detailedImport.imported.every((row) => row.note?.sections.source?.evidence?.includes("piece_size:12000")),
+        "a Detailed piece records its size",
+      );
+
+      messages.get(standardChat.id)!.push(half("a3", standardChat.id, "c"), half("a4", standardChat.id, "d"));
+      assert.deepEqual(
+        await rows({ chatId: standardChat.id }),
+        [
+          { sourceId: "chat-standard:messages:a1", status: "imported", freshness: "current" },
+          { sourceId: "chat-standard:messages:a3", status: "pending", freshness: "new" },
+        ],
+        "a chat imported at Standard keeps its pieces current after the setting changes, and new messages extend at 24,000",
+      );
+      const standardBranch = { ...standardChat, id: "chat-standard-branch", name: "Standard branch" };
+      chats.push(standardBranch);
+      messages.set(
+        standardBranch.id,
+        ["a", "b", "c", "d"].map((letter, index) => half(`a${index + 1}-copy`, standardBranch.id, letter)),
+      );
+      assert.deepEqual(
+        await rows({ sourceScope: { groupIds: ["group-standard"] }, branchChatId: standardBranch.id }),
+        [
+          { sourceId: "chat-standard:messages:a1", status: "imported", freshness: "current" },
+          { sourceId: "chat-standard:messages:a3", status: "pending", freshness: "new" },
+        ],
+        "a never-imported branch of a Standard chat cuts at 24,000 under Detailed, so its pieces merge with the parent's",
+      );
+
+      await updateLtmExtractionConfig({ chatImportDetail: "standard" }, root);
+      messages.get(detailedChat.id)!.push(half("d3", detailedChat.id, "e"));
+      assert.deepEqual(
+        await rows({ chatId: detailedChat.id }),
+        [
+          { sourceId: "chat-detailed:messages:d1", status: "imported", freshness: "current" },
+          { sourceId: "chat-detailed:messages:d2", status: "imported", freshness: "current" },
+          { sourceId: "chat-detailed:messages:d3", status: "pending", freshness: "new" },
+        ],
+        "a chat imported at Detailed stays at 12,000 after the setting changes back",
+      );
+
+      const detailedBranch = { ...detailedChat, id: "chat-detailed-branch", name: "Detailed branch" };
+      chats.push(detailedBranch);
+      messages.set(detailedBranch.id, [
+        half("d1-copy", detailedBranch.id, "a"),
+        half("d2-copy", detailedBranch.id, "b"),
+        half("f1", detailedBranch.id, "f"),
+      ]);
+      assert.deepEqual(
+        await rows({ sourceScope: { groupIds: ["group-detailed"] }, branchChatId: detailedBranch.id }),
+        [
+          { sourceId: "chat-detailed:messages:d1", status: "imported", freshness: "current" },
+          { sourceId: "chat-detailed:messages:d2", status: "imported", freshness: "current" },
+          { sourceId: "chat-detailed-branch:messages:f1", status: "pending", freshness: "new" },
+        ],
+        "a never-imported branch cuts at its chat's 12,000, so its shared pieces merge with the parent's",
+      );
     },
     [() => releaseRuntime?.(), () => rm(dataDir, { recursive: true, force: true })],
   );
   process.stdout.write(
-    "Long-Term Memory chat transcript import regression: pieces, speakers, scope, mode, branches, append freshness, kept piece cuts, and previous-piece context ok\n",
+    "Long-Term Memory chat transcript import regression: pieces, speakers, scope, mode, branches, append freshness, kept piece cuts, previous-piece context, and chat import detail ok\n",
   );
 }
 
