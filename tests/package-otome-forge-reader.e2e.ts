@@ -1096,7 +1096,7 @@ for (const firstFailure of ["portrait", "expression"] as const) {
     await expect(description).toHaveCount(0);
     await next(root);
     await expect(line(root)).toContainText("The recovered original image returns.");
-    await expect(front).toHaveAttribute("src", firstUrl);
+    await expect(front).toHaveJSProperty("src", new URL(firstUrl, page.url()).href);
     await expect.poll(() => front.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
     await expect(description).toHaveCount(0);
     await next(root);
