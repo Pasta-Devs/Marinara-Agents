@@ -94,7 +94,7 @@ Each love interest moves through six stages, from Mask to Bond.
 
 Everything works without images or sound: a place without art shows a gradient for its mood, a love interest without a portrait shows their initials in their own colour, and a key moment without a painting shows a quiet card.
 
-In **Your cast**, edit **Image appearance** above each love interest’s spoiler Bible to change their image description. Saving paints nothing and leaves their story Bible unchanged; explicit future painting uses the saved description. Clear the field and save to restore the Bible’s original image description. Open **Image description** in **Who’s home** or an owned Wardrobe look to read its intended appearance without opening Bible spoilers. The reader also offers the current location’s description and a key moment’s brief once you reach it. These are the existing visual instructions, not a new generated caption; opening them makes no model calls.
+In **Your cast**, edit **Image appearance** above each love interest’s spoiler Bible to change their image description. Saving paints nothing and leaves their story Bible unchanged; explicit future painting uses the saved description. Clear the field and save to restore the Bible’s original image description. Open **Image description** in **Who’s home** or an owned Wardrobe look to read its intended appearance without opening Bible spoilers. The reader also offers the current location’s description while it has no painted background, and a key moment’s brief once you reach it, until its image is painted. These are the existing visual instructions, not a new generated caption; opening them makes no model calls.
 
 You can add an image connection later in **Settings → Images**. Saving it paints nothing. Open **Your cast** to paint missing base portraits, open owned items from **Wardrobe** or **Album** to add their missing artwork, or use **Paint** beside a reached story location or key moment. Each action shows its image cost and uses the existing prompt-review setting. Existing artwork, story text, progress and Starlight stay intact.
 
@@ -110,7 +110,7 @@ You can add an image connection later in **Settings → Images**. Saving it pain
 - **Uploaded music:** with **Generate music** off, choose **Music folder** in **Settings → Audio → Music**. Nonempty Music folders from Engine’s Assets library are listed, including subfolders. Save to use their tracks instead of generated music. Automatic music uses previously saved tracks or Engine’s mood library; a missing or empty chosen folder falls back to that library. Music keeps the same mute, volume and tap-to-start behavior on mobile.
 - **Chapter themes:** with **Generate music** enabled, **Settings → Audio → Generate a theme for each chapter** optionally gives each chapter its own instrumental theme. It starts generating after you begin reading, using the chapter's public title and summary. The saved theme is reused on replay. Current music keeps playing while a new theme is being made or if it fails. If a saved theme's file is unavailable, it is not generated or paid for again. This option starts off.
 - **Other speakers:** when a named character outside your love-interest cast speaks, the previous character's sprite is hidden. An exact, unique matching character card can supply an existing Full Body sprite, with Neutral preferred. Without one, the scene shows no character sprite. Opaque sprites wait for free background cleanup; the card's original stays untouched. This never links cards to love interests or generates paid artwork. The background check uses a transparency heuristic: clear outer padding, faint noise and isolated clear pixels are insufficient, but a silhouette-shaped opaque mask can share the same alpha pattern as a genuine cut-out.
-- **Story image descriptions:** the header's **Image description** panel is hidden while a character sprite is shown. Scenes without a sprite, including an unavailable portrait or expression, and key-moment views keep their scene description.
+- **Story image descriptions:** the header's **Image description** panel stands in for a picture that isn't there. It shows the location's description only while no painted background (or painted key image) is on screen, and a key moment's brief only until that image shows. A painted picture that fails to load counts as missing, so its description shows. The panel is hidden while a character sprite is shown, and when every picture shows.
 - **Character nameplates:** story speaker names use the same rounded shape on every corner.
 - **Voices:** with **Voice the dialogue** on in **Settings → Audio**, a love interest from a card speaks with the voice assigned to that card, the others with a default voice, and you with your persona's voice. Narration and thoughts stay silent.
 
@@ -246,12 +246,13 @@ Each story has its own content settings:
 
 **NSFW mode:** NSFW Heat or Dark romance turns it on for the story, its chapters and Messages.
 
-- Romance escalates without stopping to ask, love interests may make the first move, and language is not sanitized.
+- Romance escalates without stopping to ask, love interests may make the first move, and language is not sanitized: swearing, dirty talk and crude words are fine wherever they fit a character's voice.
 - NSFW: Fade writes the build-up and cuts at the threshold; NSFW: Explicit writes sex on the page in full.
 - Dark romance lets villains play dirty and aim menace at you, with graphic violence wherever your limits allow it. Its darkness has a reason, a hidden cost and lines they won't cross. Your choices always include refusing, and the story honours what you pick.
 - What you set to Allow is told to the model, and your Lines and Veils always win. Non-consent can move off Line only under Dark romance with NSFW Heat.
 - The model never stops a scene to ask: **Ease off** is your stop.
 - Home, notes and Snapshots always stay SFW.
+- In an SFW story, and on Home, characters may still swear when it fits their voice; the explicit sexual words are NSFW mode's.
 - Story memory follows your settings: its summaries record intimacy and darkness as the story wrote them, never a Line, and a Veil only as having happened off the page. Nothing from the period tracker is ever remembered.
 
 **Intimacy preferences** (NSFW Heat only, Fade or Explicit, never SFW):

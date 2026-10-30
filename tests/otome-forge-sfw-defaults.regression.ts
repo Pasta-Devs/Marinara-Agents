@@ -4,6 +4,7 @@
 // digests were taken from the 0.0.6 builders before that change; when an SFW prompt is changed on purpose, take them
 // again from the failing assertion's "actual" and say so in the PR.
 // 0.4.0 (#1938): the chapter plan names the Closer beside the Confrontation, and the Closer's P12c is pinned too.
+// 0.4.1: an SFW contract lets characters swear (not the sexual words), so every story and banner digest moved once.
 // The banner digests include the English Snapshot illustration fields. Story/banner hashes deliberately reflect
 // scene pacing and earned character change. Only the two face-edit image expectations change for the explicit,
 // rating-independent adult/nonsexual face policy; the other image and content-policy expectations stay pinned.
@@ -223,28 +224,28 @@ test("chapter and scene prompts keep emotional payoffs occasional and permit cha
 });
 
 const EXPECTED_ANGST: Record<string, string> = {
-  bannerHis: "392c0fb9b97e8089",
-  bannerMemories: "1f74d93e91637571",
-  bannerMine: "5ec68de81c60d074",
-  beat: "4f71c89d47d5ab91",
-  beatWithCg: "6468607ee6384354",
-  chapterPlan: "461feb5407b854e3",
-  closer: "b7f4c8c86670bf46",
-  confrontation: "539a0354bbc57bc9",
-  repairPlan: "45d97fe0e3e43623",
-  routePlan: "cabb316844b674b0",
+  bannerHis: "0ff02869d0a8f15d",
+  bannerMemories: "6606be1d1e145790",
+  bannerMine: "3aa9c508dbd5e8ef",
+  beat: "ac62a578d72dd5be",
+  beatWithCg: "d85e409b9fa19c05",
+  chapterPlan: "e11717bdab551db0",
+  closer: "cc7586530c0b8111",
+  confrontation: "8921d7dca3aaa4cf",
+  repairPlan: "5df431b8e8cedfad",
+  routePlan: "4c9957bad818e866",
 };
 const EXPECTED_GENTLE: Record<string, string> = {
-  bannerHis: "45088b187fb06ac3",
-  bannerMemories: "45a4b8afd5f5915d",
-  bannerMine: "25dd3a4ee7cad777",
-  beat: "095d7017e0ca00a1",
-  beatWithCg: "9d782bb3221f2bdd",
-  chapterPlan: "7c2ac0f2433b8321",
-  closer: "ffe5178c0fc8336b",
-  confrontation: "78341b0900d2045f",
-  repairPlan: "4abee1195a5f1709",
-  routePlan: "c606957372b61d77",
+  bannerHis: "b10456376418731c",
+  bannerMemories: "caf229a2f56c562f",
+  bannerMine: "07e86a49cb5d7bb8",
+  beat: "259c53067f88b47d",
+  beatWithCg: "c5c73ee6c0e8acab",
+  chapterPlan: "fafabc6bb5f632f6",
+  closer: "a7253eea9b68a98d",
+  confrontation: "defb9eb10b493daa",
+  repairPlan: "e916ad6b80ed17fd",
+  routePlan: "25e005e445124f86",
 };
 
 test("the SFW defaults pin scene pacing and earned character change in story and banner prompts", () => {
@@ -262,6 +263,9 @@ const FIXED = [
   "- Heat: SFW. Romance goes as far as kisses, touch and closeness; anything sexual fades to black before it starts.",
 ];
 const CLOSING = ["- If the story reaches for a Line, it turns away.", "- Never mention these rules in the writing."];
+/** 0.4.1: an SFW contract lets characters swear (the maintainer's call), never the sexual words. */
+const SWEAR =
+  "- Characters may swear (fuck, shit, damn and the like) when it fits their voice; explicit sexual words are left out.";
 const ANGST_NEVER =
   "- Never write or mention: a love interest's violence toward the protagonist; dubious consent; non-consent; pregnancy; gore; captivity; stalking; torture; self-harm.";
 
@@ -272,6 +276,7 @@ test("the SFW defaults' content contracts are the ones every prompt carried befo
   const lines = (...rules: string[]) => [...FIXED, ...rules, ...CLOSING].join("\n");
   const angst = lines(
     "- Darkness: Angst. Danger is aimed at the world, at the love interests' pasts and at their enemies, never at the protagonist. A love interest may be cold, ruthless with others or frightening, but never threatens or harms the protagonist.",
+    SWEAR,
     "- Lines (never written, not even implied): a love interest's violence toward the protagonist; dubious consent; non-consent; pregnancy.",
     "- Veils (may happen only off the page; cut away and show at most the aftermath): gore; captivity; stalking; torture; self-harm.",
   );
@@ -280,11 +285,12 @@ test("the SFW defaults' content contracts are the ones every prompt carried befo
     contract(gentle, "scene"),
     lines(
       "- Darkness: Gentle. Conflict is interpersonal: pride, misunderstanding, old hurts, rivalry. No menace on the page.",
+      SWEAR,
       "- Lines (never written, not even implied): gore; captivity; stalking; a love interest's violence toward the protagonist; torture; self-harm; dubious consent; non-consent; pregnancy.",
       "- Veils (may happen only off the page; cut away and show at most the aftermath): violence toward other people; threats; manipulation.",
     ),
   );
-  assert.equal(contract(defaultContent(), "home"), lines(ANGST_NEVER));
+  assert.equal(contract(defaultContent(), "home"), lines(SWEAR, ANGST_NEVER));
   // 0.3.0: a summary records a Veil as having happened off the page, so the story does not forget it.
   assert.equal(
     contract(defaultContent(), "summary"),
@@ -303,6 +309,7 @@ test("the SFW defaults' content contracts are the ones every prompt carried befo
   assert.equal(
     contract(gentle, "home"),
     lines(
+      SWEAR,
       "- Never write or mention: gore; captivity; stalking; a love interest's violence toward the protagonist; torture; self-harm; dubious consent; non-consent; pregnancy; violence toward other people; threats; manipulation.",
     ),
   );

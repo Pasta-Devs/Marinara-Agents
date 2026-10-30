@@ -941,7 +941,8 @@ for (const colorScheme of ["dark", "light"] as const) {
     await next(root);
     await expect(root.getByRole("img", { name: "An illustration: Ilvar Thorne", exact: true })).toBeVisible();
     await expect(root.locator(".of-reader-stage .of-face")).toHaveCount(0);
-    await expect(description).toContainText("Two figures under the glass dome.");
+    // The key image is painted: no description stands in for it (#1941).
+    await expect(description).toHaveCount(0);
     expect(assets.paid).toEqual([]);
     expect(assets.cleanup).toEqual([]);
   });

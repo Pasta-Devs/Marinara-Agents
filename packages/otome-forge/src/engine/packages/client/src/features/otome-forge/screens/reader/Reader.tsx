@@ -10,7 +10,15 @@
 // plays and each spoken line is voiced (hooks/use-otome-audio.ts), and Auto waits for the voice. Everything works the
 // same with no image, music or voice connection.
 // ──────────────────────────────────────────────
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type RefObject,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { forgeStoryExpressionArt } from "@forge-kit/story-expressions.mjs";
 import {
@@ -106,7 +114,19 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
   const [hidden, setHidden] = useState(false);
   // Story CGs whose pan has played in this visit (`${chapterKey}/${node}r${rewrites}`).
   const [cgShown, setCgShown] = useState<ReadonlySet<string>>(() => new Set());
-  const [failedStageArt, setFailedStageArt] = useState<ReadonlySet<string>>(() => new Set());
+  // Art that failed to load, by URL (sprites, the place, the key image): its description stands in for it.
+  const [failedArt, setFailedArt] = useState<ReadonlySet<string>>(() => new Set());
+  const artStatus = useCallback(
+    (url: string, loaded: boolean) =>
+      setFailedArt((failed) => {
+        if (loaded ? !failed.has(url) : failed.has(url)) return failed;
+        const next = new Set(failed);
+        if (loaded) next.delete(url);
+        else next.add(url);
+        return next;
+      }),
+    [],
+  );
   // The last beat's music, kept while the next beat opens; none until the first beat is ready.
   const lastMood = useRef<MusicMood | undefined>(undefined);
   const [dialog, setDialog] = useState<"log" | "ease" | null>(null);
@@ -245,7 +265,9 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
     { expression: reader.onStage.face },
     FACES,
   ).art;
-  const usesCharacterSprite = !cg && (otherSpeaker ? !!speaker.url : !!stageArt && !failedStageArt.has(stageArt));
+  const usesCharacterSprite = !cg && (otherSpeaker ? !!speaker.url : !!stageArt && !failedArt.has(stageArt));
+  const placeOnScreen = !!placeUrl && !failedArt.has(placeUrl);
+  const cgOnScreen = !!cgUrl && !failedArt.has(cgUrl);
 
   // Each new line is voiced when the settings voice its speaker; leaving the line stops it. Narration, thoughts and
   // the aftermath line never are.
@@ -330,7 +352,12 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
         {MUSIC_MOODS.map((name) => (
           <div key={name} className="of-mood" data-mood={name} data-on={name === (mood ?? "tender")} />
         ))}
-        <PlaceBackdrop id={reader.backgroundKey} url={placeUrl} onSettled={reader.backgroundSettled} />
+        <PlaceBackdrop
+          id={reader.backgroundKey}
+          url={placeUrl}
+          onSettled={reader.backgroundSettled}
+          onArtStatus={artStatus}
+        />
         <div className="of-reader-motes" />
         <div className="of-reader-vignette" />
       </div>
@@ -343,6 +370,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
           intro={cgIntro}
           reducedMotion={reducedMotion}
           onIntroEnd={endCgIntro}
+          onArtStatus={artStatus}
         />
       ) : null}
 
@@ -354,7 +382,13 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
           replay={!!reader.position?.replay && reading}
           place={reading ? place : undefined}
           imageDescription={
-            reading && !usesCharacterSprite ? [placeInfo?.tags, cg?.brief].filter(Boolean).join("\n") : undefined
+            // It stands in for a picture that isn't there: the place's tags without a background on screen (a key image
+            // on screen covers it too), a key image's brief until its picture shows. Art that failed to load is none.
+            reading && !usesCharacterSprite
+              ? [!placeOnScreen && !cgOnScreen ? placeInfo?.tags : "", cg && !cgOnScreen ? cg.brief : ""]
+                  .filter(Boolean)
+                  .join("\n")
+              : undefined
           }
           placePaint={placePaint}
           tags={reader.tags}
@@ -393,15 +427,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
             li={onStageLi}
             face={reader.onStage.face}
             speaking={reader.onStage.speaking}
-            onArtStatus={(url, loaded) =>
-              setFailedStageArt((failed) => {
-                if (loaded ? !failed.has(url) : failed.has(url)) return failed;
-                const next = new Set(failed);
-                if (loaded) next.delete(url);
-                else next.add(url);
-                return next;
-              })
-            }
+            onArtStatus={artStatus}
           />
         )}
         <div className="of-toasts" aria-live="polite">
@@ -844,10 +870,13 @@ function PlaceBackdrop({
   id,
   url,
   onSettled,
+  onArtStatus,
 }: {
   id: string;
   url: string | null;
   onSettled: (id: string, url: string) => void;
+  /** Whether the picture decoded (the reader shows the place's description in place of one that failed). */
+  onArtStatus: (url: string, loaded: boolean) => void;
 }) {
   const [layers, setLayers] = useState<{ a: string; b: string; front: "a" | "b" | null }>({
     a: "",
@@ -866,6 +895,7 @@ function PlaceBackdrop({
       .decode()
       .then(() => {
         if (!live) return;
+        onArtStatus(url, true);
         setLayers((current) => {
           if (current.front && current[current.front] === url) return current;
           const back = current.front === "a" ? "b" : "a";
@@ -873,7 +903,9 @@ function PlaceBackdrop({
         });
       })
       .catch(() => {
-        if (live) setLayers((current) => (current.front ? { ...current, front: null } : current));
+        if (!live) return;
+        onArtStatus(url, false);
+        setLayers((current) => (current.front ? { ...current, front: null } : current));
       })
       .finally(() => {
         if (live) onSettled(id, url);
@@ -881,7 +913,7 @@ function PlaceBackdrop({
     return () => {
       live = false;
     };
-  }, [id, onSettled, url]);
+  }, [id, onArtStatus, onSettled, url]);
   return (
     <>
       {(["a", "b"] as const).map((layer) =>
