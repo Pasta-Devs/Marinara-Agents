@@ -59,6 +59,7 @@ import {
   type PaintOwner,
 } from "./paint.js";
 import { LOOK_SIZE, SCENE_SIZE, cgPrompt, lookPrompt, type CgPerson, type ImagePrompt } from "./prompts.js";
+import { memoryArtBrief } from "../content-contract.js";
 
 export interface ItemArtDeps extends ArtDeps {
   /** The activation's art service: once torn down, nothing more is paid for. */
@@ -213,14 +214,20 @@ async function buildItemArt(
         }
       : item.cg!;
     const subjects = cgSubjects(cg.cast, li ? [li] : run.units, run.player);
-    // Collectible illustrations stay clothed (at most Suggestive), independently of a later Character Story.
+    // Collectible illustrations stay clothed (at most Suggestive), independently of a later Character Story; only a
+    // Memory whose brief the banner plan marked explicit goes further, while the world allows it (as banner art does),
+    // and a lowered one paints the clothed brief written beside it.
+    const { brief, explicit } = privateScene
+      ? { brief: cg.brief, explicit: false }
+      : memoryArtBrief(item.cg, item.title, run.world);
     const prompt = cgPrompt(
       {
-        brief: cg.brief,
+        brief,
         people: subjects.map((subject) => subject.person),
         world: run.world,
         style,
-        use: "clothed",
+        use: explicit ? "cg" : "clothed",
+        explicit,
       },
       edited,
     );

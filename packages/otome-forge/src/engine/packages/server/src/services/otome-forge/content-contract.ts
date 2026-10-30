@@ -24,7 +24,8 @@
 // too, so a document written past those rules still never lifts one.
 // Images (0.0.6): otomeImageTags gives an image its rating and adult tags for what it is for (ImageUse). Looks, faces,
 // outfits, the pair portrait and Memory art stay clothed and at most Suggestive; above SFW a place carries no person or
-// rating tags; only a story CG whose brief set `explicit`, under Explicit Heat and the Explicit rating, is explicit.
+// rating tags; only a story CG or a Memory's art (0.5.2, #1951) whose brief set `explicit`, under Explicit Heat and the
+// Explicit rating, is explicit.
 import type { Presentation, World } from "../../../../client/src/features/otome-forge/shared/api-types.js";
 import {
   LIMIT_IDS,
@@ -205,8 +206,9 @@ export function otomeContentContract({ world, lis, kind }: ContentContractInput)
 // ── Images ──
 
 /**
- * What an image is for. clothed: looks, faces, outfits, the pair portrait, Memory and banner art (painted before any
- * story exists); place: scenery with nobody in it; cg: a story CG, painted from the brief its scene wrote.
+ * What an image is for. clothed: looks, faces, outfits, the pair portrait, Moment and Snapshot art, and Memory and
+ * banner art (painted before any story exists); place: scenery with nobody in it; cg: a story CG, painted from the brief
+ * its scene wrote, or a Memory's art whose brief P20 marked explicit (only where explicitCgAllowed).
  */
 export type ImageUse = "clothed" | "place" | "cg";
 
@@ -226,6 +228,22 @@ export interface ImageTagsInput {
  * "adult <presentation>" are the adult guard that arrives. No commas: an edit keeps or restores it whole.
  */
 export const ADULT_SENTENCE = "Everyone shown is an adult over 18 with an adult face and body";
+
+/**
+ * A Memory's art brief as it is painted now (#1951): its explicit brief only while the world allows explicit art,
+ * otherwise the clothed brief the plan wrote beside it (or the title), so a lowered world never paints from text written
+ * for an explicit picture. A brief never marked explicit is painted as it is.
+ */
+export function memoryArtBrief(
+  cg: { brief: string; explicit?: true; clothed?: string } | undefined,
+  title: string,
+  world: Pick<World, "content" | "images">,
+): { brief: string; explicit: boolean } {
+  if (cg?.explicit !== true) return { brief: cg?.brief || title, explicit: false };
+  return explicitCgAllowed(world)
+    ? { brief: cg.brief, explicit: true }
+    : { brief: cg.clothed || title, explicit: false };
+}
 
 /** Explicit Heat and the Explicit rating: only then may a key image's brief be explicit. */
 export function explicitCgAllowed(world: Pick<World, "content" | "images">): boolean {
@@ -273,8 +291,9 @@ const BRIEF_RATING: Record<ImageRating, string> = {
 };
 
 /**
- * What a key image's brief may show (P6 and P12 for a story CG, P20 for Memory art, which stays at most Suggestive),
- * or "" for a world that raised nothing, whose prompts stay as they were.
+ * What a key image's brief may show (P6 and P12 for a story CG; P20 for Memory art, `cg` only where explicitCgAllowed
+ * and otherwise `clothed`, at most Suggestive, as for each 4★ Moment's brief), or "" for a world that raised nothing,
+ * whose prompts stay as they were.
  */
 export function imageBriefRule(world: Pick<World, "content" | "images">, use: "cg" | "clothed"): string {
   if (!contentNeedsAgeGate(world.content) && world.images.rating === "sfw") return "";

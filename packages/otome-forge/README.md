@@ -141,6 +141,7 @@ Wishes cost Starlight you earn by playing: 100 each, or 1,000 for ten. There is 
   - A **Moment** (4★) is one playable scene and an illustration.
   - A **look** (5★ or 4★) is a complete outfit.
   - A **Snapshot** (3★ on every banner, including Memories) is a short vignette with a saved illustration. The vignette joins that love interest's Love Timeline, and only they remember it.
+- **Heat:** a Memories banner's Memory and Moments follow your story's Heat. Under SFW they are SFW. Under NSFW: Fade they mix SFW and suggestive situations, and under NSFW: Explicit explicit ones too. Snapshots always stay SFW.
 - **Pity:** the count is exact and shown as "5★ in 23".
   - A 5★ starts at 1.5% a wish, rises from the 46th wish without one, and the 60th is always one.
   - Every 10th wish is at least a 4★.
@@ -277,8 +278,8 @@ Each story has its own content settings:
 
 - Suggestive is a ceiling, not an instruction to make every image suggestive. Neutral portraits and expression edits stay neutral; romantic image briefs follow the actual moment.
 - Facial expression edits use the same adult, nonsexual face-edit policy at every rating, preserving the current look's body, clothing coverage, pose and style. A provider may still refuse the reference image or request; retry remains explicit.
-- Looks, faces, outfits, couple portraits and Memory art always stay clothed (at most Suggestive), and places never show people.
-- Only a story CG of an explicit scene, under NSFW: Explicit Heat and the Explicit image rating, may show nudity or sex.
+- Looks, faces, outfits, couple portraits, Moment and Snapshot illustrations always stay clothed (at most Suggestive), and places never show people.
+- Only a story CG of an explicit scene, or the art of an explicit Memory, under NSFW: Explicit Heat and the Explicit image rating, may show nudity or sex. Other Memory art stays clothed, and an explicit Memory painted after you lower either setting shows the same moment clothed.
 - Every image prompt says everyone is an adult, and its negative prompt keeps the child terms whatever you edit. Above SFW, any part of a prompt that names a minor is dropped.
 - Your image connection decides the rest:
   - Grok (xAI) ignores negative prompts, uses at most three reference images, and may refuse an image.
