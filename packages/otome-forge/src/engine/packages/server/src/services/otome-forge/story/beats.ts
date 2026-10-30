@@ -578,7 +578,8 @@ async function generateBeat(
     // P12 (a Closer's P12c): the whole game in one call; its opening is the beat's segments.
     const climax = node.kind === "closer" ? "closer" : "confrontation";
     const lists = segmentLists(context);
-    const shape = { li: opponent, node, cgOpen: !!node.cg, cgExplicit, climax } as const;
+    const intimateRoom = run.world.content.heat === "explicit";
+    const shape = { li: opponent, node, cgOpen: !!node.cg, cgExplicit, climax, intimateRoom } as const;
     const { value, connectionId, model } = await generateJson(deps, {
       runId,
       job: "narration",

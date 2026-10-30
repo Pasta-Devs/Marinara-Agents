@@ -169,6 +169,7 @@ function StoryContent({ run, settings }: { run: RunView; settings: SaveSettings 
         placeholder={t("ui.otomeForge.settings.bannedPhrasesPlaceholder")}
         rows={3}
         max={OWN_BANNED_PHRASES_MAX}
+        counter
         value={bannedPhrases}
         onChange={setBannedPhrases}
       />

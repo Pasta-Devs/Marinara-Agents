@@ -519,9 +519,15 @@ export const BEAT_WORDS = 650;
 export const BEAT_WORDS_MAX = 950;
 export const BEAT_SEGMENTS_MAX = 40;
 export const BEAT_PLACES_MAX = 4;
-/** Under NSFW: Explicit, a node that reaches sex may run this long, so it is never rushed (within the reply's 7000 tokens and normalizeBeatReply's twice BEAT_SEGMENTS_MAX). */
+// Under NSFW: Explicit, sex is never rushed (content-contract.ts HEAT_TEXT), so a node or a Closer's opened ending that
+// reaches it gets more room. Each fits the reply's budget (generation.ts outputBudget: 8192 tokens at least, plus
+// reasoning headroom) and the segments normalizeBeatReply keeps (twice BEAT_SEGMENTS_MAX).
+/** The words a node that reaches sex may run to. */
 export const INTIMATE_BEAT_WORDS_MAX = 1500;
+/** The segments a node that reaches sex may hold. */
 export const INTIMATE_BEAT_SEGMENTS_MAX = 60;
+/** The segments a Closer's opened ending that reaches sex may hold (its other endings keep CONFRONTATION_ENDING_MAX). */
+export const CLOSER_INTIMATE_ENDING_MAX = 20;
 
 /** The reply's top level, kept whole for the kit's choice normalizer (zod drops keys a schema does not name). */
 export interface BeatReply {
@@ -1177,7 +1183,7 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
     `- guard: how that answer moves ${name}'s guard, from ${name}'s own character, wound and what stands between them: -1 when it reaches ${name} and the guard lowers, 1 when it lands wrong and ${name} closes off, 0 when it does neither. Not every reassure is -1 and not every ask is 1: a tease can be exactly right, and warmth at the wrong moment can feel like pity.`,
     `- endings: opened (${name}'s guard comes down and they let the protagonist in, the closest the two have been), almost (warm, but ${name} pulls back at the last second and something stays unsaid), shut (it went wrong: the mask goes back on and ${name} withdraws, hurt). Each 1 to ${CONFRONTATION_ENDING_MAX} segments that close the scene.`,
     intimacyOpen(world.content)
-      ? "- opened may turn intimate when the moment and where they stand call for it, written at the Heat the content contract sets."
+      ? `- opened may turn intimate when the moment and where they stand call for it, written at the Heat the content contract sets.${world.content.heat === "explicit" ? ` When it reaches sex, opened may run to ${CLOSER_INTIMATE_ENDING_MAX} segments, so it is never rushed.` : ""}`
       : "",
     `- grievance.text: what being shut out leaves ${name} holding against the protagonist, one short sentence. disclosure: what the protagonist tells ${name} in mirror, as one short third-person sentence ("The protagonist said they still sleep with a light on.").`,
     "- musicMood: tender or confession.",
