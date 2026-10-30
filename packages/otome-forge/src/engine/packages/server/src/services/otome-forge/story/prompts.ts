@@ -26,6 +26,8 @@
 // card in a planner (P5's others, othersBlock). An empty notebook adds nothing, so those prompts stay byte for byte.
 // ponytail: a scene already written (the lookahead) keeps the notebook it was written with; an edit or delete reaches
 // the next one written. The upgrade path is dropping an unread lookahead beat when a notebook it carried is edited.
+// 0.5.3 (#1955): P5 gives minor characters real parts and lets a node go without any love interest; P5, P10 and P11
+// let time pass, with rest or sleep after a night, a long day or an exhausting stretch (TIME_RULE).
 // 0.5.1 (#1949): P5 plans no chapter on the template of the ones before it, and a chapter's closing decision (P5's
 // plan, P6's last node) is a different kind from the recent ones; the Foil's rivalry is not always for the protagonist.
 import { forgeChoiceMessages, forgeChoicePlanMessages } from "@forge-kit/player-choices-server.mjs";
@@ -101,6 +103,10 @@ const RECENT_LEDGER = 8;
  */
 const VARIED_DECISION =
   "a different kind of decision from the recent chapters' (the irrevocable player decisions in story memory list them): not always whom the protagonist goes with, and never a choice between love interests two chapters running";
+
+/** P5's, P10's and P11's line on time passing (#1955): the protagonist rests and sleeps, as people do. */
+const TIME_RULE =
+  "- Time passes as in a life: the protagonist eats, rests and sleeps. When a chapter runs through a night, a long day or an exhausting stretch, give a node, or part of one, to rest: settling down, sleep, waking up. It may be shared or interrupted.";
 
 const TRUST_WORDS = ["cold", "wary", "uneasy", "neutral", "warm", "trusting", "devoted"] as const;
 const TENSION_WORDS = ["calm", "charged", "strained", "breaking"] as const;
@@ -437,6 +443,8 @@ export function chapterPlanMessages({
       : `- Choose the climax the story calls for: open grievances and strain lean toward a confrontation, trust and calm toward a closer.${lastClimax ? ` The last main chapter ended with a ${lastClimax}.` : ""}`,
     "- The Lead is in most nodes and in the climax; the Foil appears in at least one node. The Foil's goal competes with the protagonist's or the Lead's, and not always for the protagonist: a rivalry over a goal, a secret, a duty or the mystery counts too.",
     `- Never plan a chapter on the template of the ones before it: vary what drives it and where its turn falls. When its last node leaves a lasting decision open, make it ${VARIED_DECISION}.`,
+    "- The world has other people: give named minor characters (friends, family, rivals, officials, locals) real parts where the story calls for them; they speak and can matter. Not every node needs a love interest: the protagonist has a life of their own, and a node may be theirs alone or with others (cast []).",
+    TIME_RULE,
     number === 1
       ? "- This is the first chapter: every love interest appears in at least one node, and it opens on the opening situation."
       : "- Continue from the story so far; everything already played is canon and is never undone or staged again.",
@@ -930,6 +938,7 @@ export function routePlanMessages(input: RoutePlanInput): OtomeMessage[] {
       ? `- This is the finale of ${name}'s route: everything between them comes due, and the gate is where ${name} chooses the protagonist.`
       : "",
     "- 0 to 2 moment nodes; at most 2 nodes with cg.",
+    TIME_RULE,
     "- A new conflict seed never repeats one of that love interest's last two kinds of angst (listed below), and a love interest has at most one open misunderstanding.",
     "- An open grievance stays open until a node that lists it in resolves; never resolve one in passing.",
     "- Never reveal a secret before its stage.",
@@ -983,6 +992,7 @@ export function repairPlanMessages(input: RepairPlanInput): OtomeMessage[] {
     `- The repair costs ${name} something; it doesn't erase what happened. No instant apologies, no speeches that make it all right.`,
     "- This chapter does not move any love interest's stage.",
     "- A new conflict seed never repeats one of that love interest's last two kinds of angst (listed below).",
+    TIME_RULE,
     `- Write every text field in ${world.language}.`,
     "- Omit an optional field rather than writing null.",
     "",

@@ -1,5 +1,11 @@
 # Otome Hearth release notes
 
+## 0.5.3 — 2026-10-30
+
+- Your protagonist knows only what the story has shown them: love interests no longer talk as if you already know their past, their habits or the words of their world, and a newcomer learns this world as they go.
+- A story set in an existing world, such as Teyvat from Genshin Impact, stays that world and keeps its canon.
+- Chapters make room for other people, scenes without a love interest, and rest or sleep after a long day.
+
 ## 0.5.1 — 2026-10-30
 
 - Chapters no longer all end the same way. Each one builds differently, and its closing choice is a different kind of decision from the last few, not a love interest stepping in again to ask whom you'll go with. A rival love interest competes over more than just you, too.
