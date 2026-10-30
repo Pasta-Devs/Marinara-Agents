@@ -3239,6 +3239,17 @@ test("Otome Hearth cast repaint actions share one row with separate image costs"
     await expect(repaint).toBeVisible();
     await expect(expressions).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath(`cast-repaint-${size.width}-${look}.png`) });
+    const expressionLines = await expressions.evaluate((element) => {
+      const text = [...element.childNodes].find(
+        (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.includes("expressions"),
+      )!;
+      const start = text.textContent!.indexOf("expressions");
+      const range = document.createRange();
+      range.setStart(text, start);
+      range.setEnd(text, start + "expressions".length);
+      return range.getClientRects().length;
+    });
+    expect(expressionLines).toBe(1);
     const [one, five, group] = await Promise.all([
       repaint.boundingBox(),
       expressions.boundingBox(),
@@ -3453,7 +3464,7 @@ test("Otome Hearth selects a saved music folder without generating music", async
   expect(posts(calls, "/audio/settings")).toHaveLength(1);
   expect(posts(calls, "/audio/settings")[0]!.body!.audio).toMatchObject({ generate: false, musicFolder: folder });
   await root.getByRole("button", { name: "Back", exact: true }).click();
-  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Home", exact: true }).click();
+  await root.getByRole("button", { name: "Home with Ilvar Thorne", exact: true }).click();
   await expect
     .poll(
       () =>
@@ -3511,7 +3522,7 @@ test("Otome Hearth retains an unavailable saved music folder and uses stock with
   await expect(folder).toHaveCount(0);
   expect(posts(calls, "/audio/settings")).toEqual([]);
   await root.getByRole("button", { name: "Back", exact: true }).click();
-  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Home", exact: true }).click();
+  await root.getByRole("button", { name: "Home with Ilvar Thorne", exact: true }).click();
   await expect
     .poll(
       () =>

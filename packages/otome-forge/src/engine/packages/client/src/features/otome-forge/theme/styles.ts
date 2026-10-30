@@ -686,6 +686,9 @@ ${R} .of-forge-retry--paints {
 }
 ${R} .of-forge-retry--paints > .of-forge-retry { min-width: 0; display: grid; grid-template-rows: 1fr auto; align-items: stretch; }
 ${R} .of-forge-retry--paints .of-button { min-height: 44px; min-width: 0; padding: 8px 10px; white-space: normal; overflow-wrap: anywhere; }
+@container of-stage (max-width: 360px) {
+  ${R} .of-forge-retry--paints .of-button { flex-direction: column; gap: 4px; padding-inline: 4px; overflow-wrap: normal; }
+}
 ${R} .of-forge-retry--paints .of-cost { min-width: 0; justify-content: center; text-align: center; }
 ${R} .of-forge-retry--paints .of-cost > span { min-width: 0; overflow-wrap: anywhere; }
 ${R} .of-paint-offer { align-items: center; text-align: center; }
