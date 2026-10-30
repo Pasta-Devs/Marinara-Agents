@@ -3239,7 +3239,7 @@ test("Otome Hearth cast repaint actions share one row with separate image costs"
     await expect(repaint).toBeVisible();
     await expect(expressions).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath(`cast-repaint-${size.width}-${look}.png`) });
-    const expressionLines = await expressions.evaluate((element) => {
+    const expressionRects = await expressions.evaluate((element) => {
       const text = [...element.childNodes].find(
         (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.includes("expressions"),
       )!;
@@ -3247,9 +3247,9 @@ test("Otome Hearth cast repaint actions share one row with separate image costs"
       const range = document.createRange();
       range.setStart(text, start);
       range.setEnd(text, start + "expressions".length);
-      return range.getClientRects().length;
+      return [...range.getClientRects()].map((rect) => ({ left: rect.left, right: rect.right }));
     });
-    expect(expressionLines).toBe(1);
+    expect(expressionRects).toHaveLength(1);
     const [one, five, group] = await Promise.all([
       repaint.boundingBox(),
       expressions.boundingBox(),
@@ -3257,6 +3257,8 @@ test("Otome Hearth cast repaint actions share one row with separate image costs"
     ]);
     expect(Math.abs(one!.y - five!.y)).toBeLessThanOrEqual(1);
     expect(Math.abs(one!.width - five!.width)).toBeLessThanOrEqual(1);
+    expect(expressionRects[0]!.left).toBeGreaterThanOrEqual(five!.x);
+    expect(expressionRects[0]!.right).toBeLessThanOrEqual(five!.x + five!.width);
     for (const [button, box, cost] of [
       [repaint, one!, "Paints 1 image"],
       [expressions, five!, "Paints 5 images"],
@@ -3270,6 +3272,25 @@ test("Otome Hearth cast repaint actions share one row with separate image costs"
       const hintBox = await hint.boundingBox();
       expect(hintBox!.y).toBeGreaterThanOrEqual(box.y + box.height);
       expect(hintBox!.x + hintBox!.width).toBeLessThanOrEqual(group!.x + group!.width + 1);
+      const costWords = await hint.evaluate((element) => {
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+        const words = [];
+        for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+          for (const match of text.textContent!.matchAll(/\S+/gu)) {
+            const range = document.createRange();
+            range.setStart(text, match.index);
+            range.setEnd(text, match.index + match[0].length);
+            words.push([...range.getClientRects()].map((rect) => ({ left: rect.left, right: rect.right })));
+          }
+        }
+        return words;
+      });
+      expect(costWords.length).toBeGreaterThan(0);
+      for (const rects of costWords) {
+        expect(rects).toHaveLength(1);
+        expect(rects[0]!.left).toBeGreaterThanOrEqual(box.x - 1);
+        expect(rects[0]!.right).toBeLessThanOrEqual(box.x + box.width + 1);
+      }
     }
   }
   expect(posts(calls, "/art/paint")).toEqual([]);

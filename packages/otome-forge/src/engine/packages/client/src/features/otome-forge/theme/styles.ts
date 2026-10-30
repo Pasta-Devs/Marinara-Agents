@@ -80,11 +80,15 @@ ${R} .of-stage::after {
   ${R} .of-stage { width: 100cqw; height: 100cqh; aspect-ratio: auto; border-radius: 0; box-shadow: none; }
   ${R} .of-stage::after { display: none; }
 }
-/* Settings uses the available host panel; the other screens retain their portrait stage. */
+/* Settings uses the available host panel. */
 ${R} .of-stage:has(.of-settings) {
   width: 100%; height: 100%; min-width: 0; min-height: 0; aspect-ratio: auto; border-radius: 0; box-shadow: none;
 }
 ${R} .of-stage:has(.of-settings)::after { display: none; }
+/* Keep the ready cast form readable in a short landscape panel. */
+@container of-frame (max-height: 500px) {
+  ${R} .of-stage:has(.of-cast) { width: min(360px, 100cqw); height: 100cqh; aspect-ratio: auto; }
+}
 ${R} .of-scene { position: absolute; inset: 0; z-index: 0; overflow: clip; pointer-events: none; }
 ${R} .of-scene-bg {
   position: absolute; inset: 0; background: var(--of-bg); background-size: cover; background-position: center;
