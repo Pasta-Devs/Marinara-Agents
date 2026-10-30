@@ -24,6 +24,7 @@ import {
 import { forgeStepErrorKey, useOtomeApi } from "../api";
 import { Avatar } from "../components/Avatar";
 import { CostHint } from "../components/CostHint";
+import { ImageDescription } from "../components/ImageDescription";
 import { PromptReviewDialog, type ImagePrompt } from "../components/PromptReviewDialog";
 import { patchRun, runQueryKey, useRun, useSampledAccents } from "../hooks/use-run";
 import { accentOf } from "../lib/accent";
@@ -532,6 +533,7 @@ function CastList({ view, onOpenBible }: { view: RunView; onOpenBible: (li: stri
               <Avatar name={li.name} url={li.portrait} accent={accent} size={64} />
               <span className="of-cast-name">{li.name}</span>
               <span className="of-hint">{`${li.pronouns.subject}/${li.pronouns.object}`}</span>
+              <ImageDescription text={[li.look?.identityLine, li.look?.outfitLine].filter(Boolean).join("\n")} />
               <button
                 type="button"
                 className="of-button of-button--text of-button--small"

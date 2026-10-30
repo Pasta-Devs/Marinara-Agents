@@ -175,6 +175,8 @@ test("GET run exposes intended appearance without opening spoiler-heavy bibles o
     identityLine: "adult man, silver hair, amber eyes",
     outfitLine: "navy coat, brass buttons",
   }));
+  // The normal first run read refreshes the legacy persona fallback; measure descriptions after that migration.
+  await call("GET", "/runs/:run", { params: run });
   const before = structuredClone([...fake.rows]);
   const response = await call("GET", "/runs/:run", { params: run });
   assert.equal(response.status, 200);

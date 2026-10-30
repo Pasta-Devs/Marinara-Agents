@@ -236,6 +236,29 @@ async function itemsWorld(
   return { ...t, deps, art, call, outfitCalls, faces, stored, player, unit, open, painted };
 }
 
+test("imageless Wardrobe describes owned looks without reading stories, secrets or paying for images", async () => {
+  const t = await itemsWorld("r-looktext-dddddd", {
+    images: { connectionId: null },
+    owned: OWNED.filter((id) => id !== ITEMS.herLook.id),
+  });
+  const before = await t.store.readDoc(stateId(t.runId), normalizeState);
+  const response = await t.call("GET", "/runs/:run/wardrobe");
+  assert.equal(response.status, 200);
+  assert.equal(response.body.me[0].description, "short dark hair, freckles\ngrey wool coat");
+  assert.equal(
+    response.body.me.find((look: { id: string }) => look.id === ITEMS.herFour.id).description,
+    ITEMS.herFour.look!.outfitLine,
+  );
+  assert.equal(
+    response.body.him[KAI].find((look: { id: string }) => look.id === ITEMS.hisLook.id).description,
+    ITEMS.hisLook.look!.outfitLine,
+  );
+  assert.ok(!JSON.stringify(response.body).includes(ITEMS.herLook.look!.outfitLine), "an unowned look stays hidden");
+  assert.equal(t.paid.length, 0);
+  assert.deepEqual(t.calls, [], "descriptions need no model calls");
+  assert.deepEqual(await t.store.readDoc(stateId(t.runId), normalizeState), before);
+});
+
 test("a Memory's first open paints its CG once and writes its Character Story once, even when opened twice at once", async () => {
   const t = await itemsWorld("r-m4bopen-aaaaaa", { replies: [json(storyPlan())] });
   const [a, b] = await Promise.all([t.open(ITEMS.memory.id), t.open(ITEMS.memory.id)]);

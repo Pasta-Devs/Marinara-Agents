@@ -163,7 +163,7 @@ interface QuietCgProps {
 export function QuietCg({ names, state, onPaint, busy = false }: QuietCgProps) {
   const { t } = useTranslation();
   const statusKey = state ? QUIET_STATUS_KEYS[state] : undefined;
-  const offer = onPaint && (state === "waiting-consent" || state === "failed" || state === "stopped");
+  const offer = onPaint && (!state || state === "waiting-consent" || state === "failed" || state === "stopped");
   const retry = state === "failed" || state === "stopped";
   return (
     <figure className="of-cg-quiet of-glass" data-state={state ?? "none"}>

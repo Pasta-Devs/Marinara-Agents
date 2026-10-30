@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.1.17 — 2026-10-30
+
+- Read a love interest’s intended appearance from Your cast or Who’s home without opening Bible spoilers. Wardrobe looks and reached story illustrations also expose their existing visual descriptions, including when no image was painted.
+- After adding an image connection, missing story locations and key moments offer the existing explicit Paint action with its image cost and prompt review. Reading descriptions and saving image settings paint nothing.
+
 ## 0.1.16 — 2026-10-30
 
 - Automatically painted current-location backgrounds prepare before reading begins, with the existing manual-paint and failure paths retained.
