@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.3 — 2026-10-30
+
+- The Relationship Tracker button now opens its relationship web on phones. Close the sheet with its close button, Escape, or a tap outside; focus returns to the button. Changing chats or removing the tracker closes the old sheet.
+- Desktop keeps its existing Trackers drawer and passive preview. Opening the web reads saved relationships without running a model.
+
 ## 0.7.2 — 2026-10-23 [highlight]
 
 - Korean, Japanese and Chinese now work. A name followed directly by a Korean particle (김민수는) or written without spaces in Japanese (アリスは) or Chinese (张三很信任李四) now counts as naming that character. Before, Update from History and automatic updates rejected these sentences, and Scene-only couldn't tell who was present.
