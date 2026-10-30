@@ -124,6 +124,14 @@ assert.equal(untidy[0]?.name, "Gala gown");
 assert.deepEqual(untidy[0]?.tags, ["formal", "evening"]);
 assert.equal(untidy[0]?.suitability, "public");
 assert.ok((untidy[0]?.summary.length ?? 0) <= 180, "a long summary is clipped, not dropped");
+const cut = parseSlpWardrobeImportDrafts(
+  `{"looks":[{"name":"Gym set","summary":"grey {sports} set","description":"grey sports bra and shorts","tags":["gym"],"evidence":"her grey gym set"},{"name":"Rain coat","description":"a yellow rai`,
+);
+assert.deepEqual(
+  cut.map((look) => look.name),
+  ["Gym set"],
+  "a reply cut at the token budget keeps the looks finished before the cut",
+);
 assert.deepEqual(
   parseSlpWardrobeImportDrafts(`{"looks":[{"name":"A","description":"b"}]}`),
   [],

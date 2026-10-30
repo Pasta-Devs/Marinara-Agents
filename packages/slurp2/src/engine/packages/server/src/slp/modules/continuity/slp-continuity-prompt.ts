@@ -95,10 +95,12 @@ export function slurpContinuityInstruction(input: {
       (event) =>
         `- ${SLURP_CONTINUITY_EVENT_LABELS[event.eventType] ?? event.eventType}${own(event)}${eventDetail(event)}.`,
     ),
-    ...(memories.length > 0 ? [
+    ...(memories.length > 0
+      ? [
           "People named in your memory are from your life off Slurp: never make them a collab, a tag or a guest in what you write now unless your brief names them.",
           "From your memory:",
-        ] : []),
+        ]
+      : []),
     ...memories.map((memory) => `- ${memory}`),
   ].join("\n");
 }

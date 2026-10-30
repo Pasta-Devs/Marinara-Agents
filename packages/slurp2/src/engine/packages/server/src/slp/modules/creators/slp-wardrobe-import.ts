@@ -27,9 +27,35 @@ function parseImportJson(content: string): unknown {
     try {
       return JSON.parse(trimmed.slice(start, end + 1));
     } catch {
-      return null;
+      return salvageCutLooks(trimmed);
     }
   }
+}
+
+/** A reply cut at the token budget: keep the looks that closed before the cut. */
+function salvageCutLooks(text: string): unknown[] | null {
+  const looks: unknown[] = [];
+  let depth = 0;
+  let from = -1;
+  let inString = false;
+  let escaped = false;
+  for (let index = text.indexOf("[") + 1; index > 0 && index < text.length; index += 1) {
+    const char = text[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') inString = false;
+    } else if (char === '"') inString = true;
+    else if (char === "{" && depth++ === 0) from = index;
+    else if (char === "}" && depth > 0 && --depth === 0) {
+      try {
+        looks.push(JSON.parse(text.slice(from, index + 1)));
+      } catch {
+        // One broken look does not cost the others.
+      }
+    } else if (char === "]" && depth === 0) break;
+  }
+  return looks.length > 0 ? looks : null;
 }
 
 const key = (value: string) =>
@@ -55,7 +81,10 @@ const text = (value: unknown): string =>
   typeof value === "string"
     ? value.trim()
     : Array.isArray(value)
-      ? value.filter((part) => typeof part === "string").join(" … ").trim()
+      ? value
+          .filter((part) => typeof part === "string")
+          .join(" … ")
+          .trim()
       : "";
 
 /** Cut at a word end, not mid-word. */
