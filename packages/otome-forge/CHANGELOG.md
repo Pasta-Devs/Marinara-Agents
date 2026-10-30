@@ -1,5 +1,11 @@
 # Otome Hearth release notes
 
+## 0.2.0 — 2026-10-30
+
+- Restore mobile Settings scrolling and compact category navigation, and keep each cast member's repaint actions together.
+- Show progress toward the next Affection level in Between you.
+- Keep benign image tasks focused on the requested asset, and give chapters and scenes room for ordinary moments, earned emotional payoffs, and character change.
+
 ## 0.1.17 — 2026-10-30
 
 - Read a love interest’s intended appearance from Your cast or Who’s home without opening Bible spoilers. Wardrobe looks and reached story illustrations also expose their existing visual descriptions, including when no image was painted.
