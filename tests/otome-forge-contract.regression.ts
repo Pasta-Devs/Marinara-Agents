@@ -118,7 +118,7 @@ test("image prompts carry clothing limits and an adult tag without requiring the
     "safe for work, fully clothed, adult man, adult woman",
   );
   // The `image` contract is a clothed portrait's (P20's looks and Memory art): at most Suggestive, never required.
-  const clothed = "clothed, adult man, adult woman, Everyone shown is an adult over 18 with an adult face and body";
+  const clothed = "clothed, adult man, adult woman";
   assert.equal(contract("image", {}, "suggestive"), clothed);
   assert.equal(contract("image", { heat: "explicit" }, "explicit"), clothed);
   const protagonist = otomeContentContract({ world: world(), lis: [{ name: "Her" }, ...LIS], kind: "image" });

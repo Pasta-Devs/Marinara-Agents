@@ -38,7 +38,7 @@ export const STAGES: readonly StageRow[] = [
   { stage: 4, name: "wound", balance: "The mask breaks", unlockLevel: 7, gate: "reveal" },
   // A Confrontation node, then a big choice before the gate completes.
   { stage: 5, name: "reckoning", balance: "Mask 40 / self 60", unlockLevel: 8, gate: "confrontation" },
-  { stage: 6, name: "bond", balance: "Changed toward the protagonist only", unlockLevel: 10, gate: "finale" },
+  { stage: 6, name: "bond", balance: "Earned, character-consistent change", unlockLevel: 10, gate: "finale" },
 ];
 
 /** The row for `stage`, clamped into 1–6 (a damaged value reads as the nearest stage). */

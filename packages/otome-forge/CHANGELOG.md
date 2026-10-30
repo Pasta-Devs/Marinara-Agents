@@ -4,6 +4,15 @@
 
 - Make desktop fullscreen use the available Otome Hearth area across the mode instead of retaining the portrait stage.
 
+## 0.2.0 — 2026-10-30
+
+- Restore the scrolling mobile Settings category strip, and keep each cast member's repaint actions together.
+- Show progress toward the next Affection level in Between you.
+- Facial expression edits use an adult, nonsexual face-edit policy while preserving the current look, clothing and style. Non-explicit Suggestive images keep concise content exclusions without unrelated graphic boilerplate.
+- Edit a love interest’s image appearance above their spoiler Bible without repainting or changing their story.
+- Choose an existing Assets Music folder in Audio settings when music generation is off.
+- Give chapters and scenes room for ordinary moments, earned emotional payoffs, and character change.
+
 ## 0.1.17 — 2026-10-30
 
 - Read a love interest’s intended appearance from Your cast or Who’s home without opening Bible spoilers. Wardrobe looks and reached story illustrations also expose their existing visual descriptions, including when no image was painted.

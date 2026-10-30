@@ -3,7 +3,9 @@
 // gate's settings, so a world that never raised one gets the same contract, story prompts and image prompts. The
 // digests were taken from the 0.0.6 builders before that change; when an SFW prompt is changed on purpose, take them
 // again from the failing assertion's "actual" and say so in the PR.
-// The banner digests deliberately include 0.1.14's English Snapshot illustration fields; story and image contracts stay pinned.
+// The banner digests include the English Snapshot illustration fields. Story/banner hashes deliberately reflect
+// scene pacing and earned character change. Only the two face-edit image expectations change for the explicit,
+// rating-independent adult/nonsexual face policy; the other image and content-policy expectations stay pinned.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
@@ -23,6 +25,8 @@ import {
   placePrompt,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/prompts.ts";
 import { otomeContentContract } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/content-contract.ts";
+import { storyPlanMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/items/prompts.ts";
+import { datePlanMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/minigames/date-night.ts";
 import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
 import { normalizeState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
@@ -33,6 +37,7 @@ import {
   confrontationMessages,
   repairPlanMessages,
   routePlanMessages,
+  type BeatMessagesInput,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/prompts.ts";
 import { bannerPlanMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/wish/prompts.ts";
 import { CAST, HE, KAI, MIR, SHE, bible } from "./fixtures/otome-forge-story.ts";
@@ -124,30 +129,107 @@ function storyPrompts(content: ContentSettings): Record<string, string> {
   };
 }
 
+test("chapter and scene prompts keep emotional payoffs occasional and permit character change", () => {
+  const instructions = [
+    'If everything is special, nothing is. Depth, real or fake, is a "sometimes" ingredient. Introduce emotional payoffs only if they have proper build-ups between more mundane scenes.',
+    "All characters, player included, can change; for better, or worse.",
+  ];
+  for (const content of [defaultContent(), gentle]) {
+    const input = inputs(content);
+    const unit = input.units[0]!;
+    const nodes: ChapterNode[] = [0, 1, 2].map((i) => ({
+      i,
+      kind: "beat",
+      guide: "An ordinary afternoon on the quay.",
+      cast: [KAI],
+    }));
+    const scene = (chapter: BeatMessagesInput["chapter"]) =>
+      text(beatMessages({ ...input, chapter, node: chapter.nodes[0]!, storySoFar: "", memory: "" }));
+    const sideStory = { kind: "story" as const, li: KAI, lead: KAI, title: "Rain", nodes };
+    const prompts = {
+      ...storyPrompts(content),
+      characterStoryPlan: text(
+        storyPlanMessages({
+          ...input,
+          unit,
+          item: { title: "Rain", premise: "A quiet afternoon on the quay." },
+          memory: "",
+        }),
+      ),
+      datePlan: text(datePlanMessages({ ...input, unit, place: "cafe", makeItRight: null, memory: "" })),
+      prologue: scene({
+        kind: "prologue",
+        lead: "",
+        title: "Before the rain",
+        nodes: [{ ...nodes[0]!, cast: [] }],
+      }),
+      memoryScene: scene(sideStory),
+      momentScene: scene({ ...sideStory, nodes: [{ ...nodes[0]!, guide: "A MOMENT: sheltering from the rain." }] }),
+      firstWearScene: scene({
+        ...sideStory,
+        nodes: [{ ...nodes[0]!, guide: "Kai wears a new coat for the first time on the quay." }],
+      }),
+      dateScene: scene({
+        kind: "date",
+        li: KAI,
+        lead: KAI,
+        title: "Rain",
+        nodes,
+        date: {
+          li: KAI,
+          place: "cafe",
+          placeName: "The old café",
+          herLook: "base",
+          hisLook: "base",
+          goesWrong: false,
+          makeItRight: null,
+          keepsake: { brief: "Two adults at a café table." },
+        },
+      }),
+    };
+    for (const [kind, prompt] of Object.entries(prompts)) {
+      if (kind.startsWith("banner")) {
+        assert.ok(!prompt.includes(instructions[0]!), "banner planning does not receive scene-pacing instructions");
+        continue;
+      }
+      for (const instruction of instructions) {
+        assert.equal(
+          prompt.split(instruction).length - 1,
+          1,
+          `${kind} carries the exact instruction once under ${content.darkness}: ${instruction}`,
+        );
+      }
+      assert.doesNotMatch(prompt, /softens toward the protagonist(?: and)?[,:]? not toward the world/);
+      assert.doesNotMatch(prompt, /[Cc]hanged toward the protagonist only/);
+      assert.match(prompt, /not automatic redemption or a replacement personality/);
+    }
+  }
+});
+
 const EXPECTED_ANGST: Record<string, string> = {
-  bannerHis: "1d2c8600411d2af9",
-  bannerMemories: "7a04b33eb4e2b365",
-  bannerMine: "52338d5833c88c8e",
-  beat: "26ae7c03c6477077",
-  beatWithCg: "e4c9fb19f55a5c0c",
-  chapterPlan: "2572bb939ea6fcda",
-  confrontation: "e884776c61d0e05d",
-  repairPlan: "5f1b9a89a339fa9e",
-  routePlan: "1325f711ec46c669",
+  bannerHis: "392c0fb9b97e8089",
+  bannerMemories: "1f74d93e91637571",
+  bannerMine: "5ec68de81c60d074",
+  beat: "4f71c89d47d5ab91",
+  beatWithCg: "6468607ee6384354",
+  chapterPlan: "4cd817734251fe93",
+  confrontation: "539a0354bbc57bc9",
+  repairPlan: "0baf875ff4ff8270",
+  routePlan: "788c8d25b954b2e7",
 };
 const EXPECTED_GENTLE: Record<string, string> = {
-  bannerHis: "0e140edf10682d9b",
-  bannerMemories: "f8ffc60ebb595cc8",
-  bannerMine: "59e19603aa991c55",
-  beat: "7bcc1b345f2c3094",
-  beatWithCg: "54c95d13ff323ecc",
-  chapterPlan: "f28fb5dccb0eb467",
-  confrontation: "39f5ad1acb0a4d09",
-  repairPlan: "377005a15d1031cf",
-  routePlan: "94e8923f9c8c97d7",
+  bannerHis: "45088b187fb06ac3",
+  bannerMemories: "45a4b8afd5f5915d",
+  bannerMine: "25dd3a4ee7cad777",
+  beat: "095d7017e0ca00a1",
+  beatWithCg: "9d782bb3221f2bdd",
+  chapterPlan: "d73864ed4ceb0891",
+  confrontation: "78341b0900d2045f",
+  repairPlan: "f9290ed9555ab18d",
+  routePlan: "0519cc198549c0c8",
 };
 
-test("the SFW defaults pin unchanged story prompts and banner prompts with Snapshot illustration planning", () => {
+test("the SFW defaults pin scene pacing and earned character change in story and banner prompts", () => {
   const digests = (content: ContentSettings) =>
     Object.fromEntries(Object.entries(storyPrompts(content)).map(([key, value]) => [key, digest(value)]));
   assert.deepEqual(digests(defaultContent()), EXPECTED_ANGST, "Heat SFW, Darkness Angst, images SFW");
@@ -287,11 +369,14 @@ test("SFW images keep their safety prompts and negatives, and tagged faces retai
         prompt: `A couple portrait. ${two} ${cgTail}, adult man, adult person`,
         negativePrompt: `${CG_NEGATIVE}, ${SAFE}`,
       },
-      face: { prompt: `${FACE} safe for work, fully clothed, adult man.`, negativePrompt: SAFE },
+      face: {
+        prompt: `${FACE} A nonsexual facial-expression edit of an adult man; preserve the reference image's body, clothing coverage, pose, framing, background, lighting and art style.`,
+        negativePrompt: "child, childlike, minor, underage, school uniform, nudity, sexual content",
+      },
       faceTagged: {
         prompt:
-          "anime screencap, masterpiece, tall man, grey eyes, gentle smile, soft eyes, same character, same outfit, same pose, same framing, same background, same lighting, safe for work, fully clothed, adult man",
-        negativePrompt: `${SAFE}, lowres`,
+          "anime screencap, masterpiece, tall man, grey eyes, gentle smile, soft eyes, same character, same outfit, same pose, same framing, same background, same lighting, safe for work, adult man, facial expression edit, same body, same clothing coverage, same art style",
+        negativePrompt: "child, childlike, minor, underage, school uniform, nudity, sexual content, lowres",
       },
     },
   );

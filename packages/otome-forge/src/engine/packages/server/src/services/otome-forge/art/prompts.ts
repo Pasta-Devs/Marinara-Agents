@@ -10,7 +10,8 @@
 // offset 574915) is the reference for the wording.
 // M2b adds a place (scenery from the beat's English tags, no people), a story CG (the narrator's English brief, then
 // each person's identity and outfit lines; at most 4 people, matching the references) and an expression edit (the
-// kit's edit instruction, which changes only the face). Each one carries the rating and adult tags the same way.
+// kit's edit instruction, which changes only the face). Expression edits use their own adult, nonsexual policy;
+// raising a world's image ceiling never changes the requested face edit or its reference's clothing coverage.
 // 0.0.6: the tags follow what the image is for (content-contract.ts otomeImageTags). Looks, faces, outfits, the pair
 // portrait and Memory art stay clothed portraits at most Suggestive; above SFW a place carries no person or rating
 // tags; a story CG is explicit only when its brief set `explicit` under Explicit Heat and the Explicit rating, and then
@@ -67,17 +68,14 @@ const LOOK_NEGATIVE =
   "text, captions, logos, watermarks, borders, UI, collage layouts, duplicate faces, extra people, cropped-off heads, cropped feet, busy background, scenery";
 /** Kept on every image, whatever the settings or the player's edits. */
 const ADULT_NEGATIVE = "child, childlike, minor, underage, school uniform";
-/** Added to the adult negatives on every image above SFW. */
+/** Explicit story CGs retain these additional adult exclusions. */
 const ADULT_NEGATIVE_ABOVE_SFW = "loli, shota, teenager";
-/** What each rating rules out: at SFW on every image, as before 0.0.6; above SFW on a story CG (a place keeps SFW's). */
+/** Content exclusions: non-explicit adult assets allow romance and revealing clothing, never nudity or sex acts. */
 const RATING_NEGATIVE: Record<ImageRating, string> = {
   sfw: "nudity, nsfw, sexual content, lingerie",
-  suggestive: "explicit, nude, nudity, nipples, genitals, sex",
+  suggestive: "nudity, explicit sexual activity",
   explicit: "",
 };
-/** Above SFW, a clothed portrait (a look, a face, an outfit, the pair portrait, Memory art) may be revealing, never bare. */
-const CLOTHED_NEGATIVE = "nude, nudity, nipples, genitals, sex, explicit";
-
 /** A part of a prompt that names or describes a minor (English: image prompts are always English). */
 const MINOR_TERMS =
   /\b(child|children|childlike|kids?|minors?|underage|preteens?|teens?|teenagers?|teenage|loli|lolita|shota|schoolgirls?|schoolboys?|school uniform|toddlers?|infants?)\b|\b([1-9]|1[0-7])[- ]?(years?|yrs?)[- ]?old\b/i;
@@ -100,9 +98,9 @@ function adultsOnly(world: Pick<World, "images">, prompt: string): string {
 /** The negatives an image of this use always keeps: adults only, then what its rating rules out. */
 function requiredNegative(world: Pick<World, "content" | "images">, use: ImageUse, explicitScene = false): string {
   if (world.images.rating === "sfw") return mergeTags(ADULT_NEGATIVE, RATING_NEGATIVE.sfw);
-  const ruledOut =
-    use === "clothed" ? CLOTHED_NEGATIVE : RATING_NEGATIVE[effectiveImageRating({ world, use, explicitScene })];
-  return mergeTags(ADULT_NEGATIVE, ADULT_NEGATIVE_ABOVE_SFW, ruledOut);
+  return effectiveImageRating({ world, use, explicitScene }) === "explicit"
+    ? mergeTags(ADULT_NEGATIVE, ADULT_NEGATIVE_ABOVE_SFW, RATING_NEGATIVE.explicit)
+    : mergeTags(ADULT_NEGATIVE, RATING_NEGATIVE.suggestive);
 }
 
 export interface LookInput {
@@ -324,20 +322,28 @@ export interface ExpressionInput {
 }
 
 /**
- * An expression: the kit's edit instruction (change only the face, from SH/faces.ts FACE_LOOKS, as a sentence or as
- * tags for a tag profile), with the rating and adult tags appended and the safety negatives. A face is a clothed
- * portrait at any rating: it is the base of every Home cut-out and story reference after it.
+ * An expression changes only the face (SH/faces.ts FACE_LOOKS), keeping the adult reference's body, clothing and
+ * style. Its nonsexual edit policy is independent of a world's image ceiling; authored text and the existing
+ * adult-only guard are retained.
  */
 export function expressionPrompt(input: ExpressionInput): ImagePrompt {
   const { world, style, unit } = input;
   const presentation = unit.bible?.look.presentation ?? "person";
   const tagged = style.tagged === true;
-  const required = otomeImageTags({ world, people: [{ name: unit.name, presentation }], use: "clothed", tagged });
+  const required = tagged
+    ? `safe for work, adult ${presentation}, facial expression edit, same body, same clothing coverage, same pose, same framing, same background, same lighting, same art style`
+    : `A nonsexual facial-expression edit of an adult ${presentation}; preserve the reference image's body, clothing coverage, pose, framing, background, lighting and art style`;
   // The shared tagged helper reads positiveTags only. Otome's configured style is prose too, so keep it whole.
   const profile = tagged
     ? { ...style, positiveTags: [style.styleText, style.positiveTags].filter(Boolean).join(", ") }
     : style;
-  const { prompt } = forgeStoryExpressionPrompt(unit, input.base, input.face, profile, { tagged, looks: FACE_LOOKS });
+  const expressionUnit = unit.identityLine.trim()
+    ? unit
+    : { ...unit, identityLine: unit.bible?.look.identityLine ?? "" };
+  const { prompt } = forgeStoryExpressionPrompt(expressionUnit, input.base, input.face, profile, {
+    tagged,
+    looks: FACE_LOOKS,
+  });
   const prose = sentence(input.edited?.prompt ?? prompt);
   const safetyTail = sentence(required);
   const hasSafetyTail =
@@ -349,7 +355,8 @@ export function expressionPrompt(input: ExpressionInput): ImagePrompt {
       tagged ? withTags(input.edited?.prompt ?? prompt, required) : hasSafetyTail ? prose : `${prose} ${safetyTail}`,
     ),
     negativePrompt: mergeTags(
-      requiredNegative(world, "clothed"),
+      ADULT_NEGATIVE,
+      "nudity, sexual content",
       style.negativeTags,
       input.edited?.negativePrompt ?? "",
     ),

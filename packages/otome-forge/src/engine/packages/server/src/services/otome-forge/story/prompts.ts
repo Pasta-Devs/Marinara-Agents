@@ -48,7 +48,7 @@ import type { OtomeMessage } from "../generation.js";
 import { chapterOwner, mainChapterNumber } from "../ids.js";
 import { otomeSceneCard } from "../scene-card.js";
 import { defaultLiState } from "../schemas/state.js";
-import { otomeWritingRules } from "../writing-rules.js";
+import { STORY_PACING_INSTRUCTION, otomeWritingRules } from "../writing-rules.js";
 import { prologueFraming } from "./prologue.js";
 import { aboutLine } from "../schemas/player.js";
 
@@ -350,7 +350,7 @@ export function chapterPlanMessages({
   const leadUnit = units.find((unit) => unit.id === lead);
   const others = units.filter((unit) => unit.id !== lead);
   const system = [
-    "You are the chapter planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human inside a monster, who softens toward the protagonist and not toward the world.",
+    "You are the chapter planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human inside a monster, capable of earned, character-consistent change.",
     `Plan main chapter ${number}: one Lead love interest (given) and one Foil you pick from the others. The chapter is told as ${NODES_MIN} to ${NODES_MAX} nodes in play order; a narrator writes each node later as one scene the player reads.`,
     "Reply with ONLY a JSON object of this shape:",
     '{"title": "...", "tags": ["..."], "foil": "<love interest id>", "summary": "...", "nodes": [{"kind": "beat|moment|confrontation", "moment": "read-him|call|date", "guide": "...", "cast": ["<love interest id>"], "place": "...", "cg": true, "resolves": ["<grievance id>"]}], "ledger": {"relationship": [{"li": "<id>", "line": "..."}], "conflict": [{"id": "<conflict id>", "li": "<id>", "type": "...", "action": "plant|escalate|complicate|resolve"}], "offscreen": [{"li": "<id>", "line": "..."}]}}',
@@ -375,6 +375,7 @@ export function chapterPlanMessages({
     `- Write every text field in ${world.language}.`,
     "- Omit an optional field rather than writing null.",
     "",
+    STORY_PACING_INSTRUCTION,
     otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: units.map((unit) => ({ name: unit.name })), kind: "planner" }),
@@ -547,6 +548,7 @@ export function beatMessages({
     "- Stay within this node's guide; do not skip ahead to later nodes.",
     `- Write every segment's text and every place name in ${world.language}; tags${node.cg ? " and the cg brief" : ""} in English.`,
     "",
+    STORY_PACING_INSTRUCTION,
     otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: present.map((unit) => ({ name: unit.name })), kind: "scene" }),
@@ -654,7 +656,7 @@ export function stageGoal(stage: number, name: string): string {
     case "reckoning":
       return `${name} reckons with what they have done and what they want: a confrontation brings it to a head, and the protagonist makes a choice that cannot be undone.`;
     case "bond":
-      return `the finale of ${name}'s route: ${name} chooses the protagonist, changed toward the protagonist only, and still themselves toward the world.`;
+      return `the finale of ${name}'s route: ${name} chooses the protagonist; any change must be earned and character-consistent, without automatic redemption or a replacement personality.`;
     default:
       return `${name} keeps the mask on.`;
   }
@@ -809,7 +811,7 @@ export function routePlanMessages(input: RoutePlanInput): OtomeMessage[] {
     (unit?.bible?.secrets ?? []).filter((secret) => secret.revealAt.stage === stage).map((secret) => secret.id),
   );
   const system = [
-    "You are the route planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human inside a monster, who softens toward the protagonist and not toward the world.",
+    "You are the route planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human inside a monster, capable of earned, character-consistent change.",
     `Plan one ROUTE CHAPTER of ${name}'s own story: a chapter for ${name} and the protagonist, told as ${ROUTE_NODES_MIN} to ${ROUTE_NODES_MAX} nodes in play order; a narrator writes each node later as one scene the player reads.`,
     "Reply with ONLY a JSON object of this shape:",
     PLAN_SHAPE,
@@ -830,6 +832,7 @@ export function routePlanMessages(input: RoutePlanInput): OtomeMessage[] {
     `- Write every text field in ${world.language}.`,
     "- Omit an optional field rather than writing null.",
     "",
+    STORY_PACING_INSTRUCTION,
     otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: units.map((item) => ({ name: item.name })), kind: "planner" }),
@@ -865,7 +868,7 @@ export function repairPlanMessages(input: RepairPlanInput): OtomeMessage[] {
   const name = units.find((item) => item.id === li)?.name ?? li;
   const holder = grievance.by === "li" ? name : "the protagonist";
   const system = [
-    "You are the repair planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human inside a monster, who softens toward the protagonist and not toward the world.",
+    "You are the repair planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human inside a monster, capable of earned, character-consistent change.",
     `Plan one REPAIR chapter between ${name} and the protagonist after a rupture, told as ${REPAIR_NODES_MIN} to ${REPAIR_NODES_MAX} nodes in play order; a narrator writes each node later as one scene the player reads.`,
     "Reply with ONLY a JSON object of this shape:",
     PLAN_SHAPE,
@@ -879,6 +882,7 @@ export function repairPlanMessages(input: RepairPlanInput): OtomeMessage[] {
     `- Write every text field in ${world.language}.`,
     "- Omit an optional field rather than writing null.",
     "",
+    STORY_PACING_INSTRUCTION,
     otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: units.map((item) => ({ name: item.name })), kind: "planner" }),
@@ -975,6 +979,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     "- Honour the story so far; never contradict it or undo a choice already made. Stay within this node's guide.",
     `- Write every segment's text, label, selection, grievance and disclosure in ${world.language}; tags${node.cg ? " and the cg brief" : ""} in English.`,
     "",
+    STORY_PACING_INSTRUCTION,
     otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: present.map((unit) => ({ name: unit.name })), kind: "scene" }),

@@ -80,11 +80,15 @@ ${R} .of-stage::after {
   ${R} .of-stage { width: 100cqw; height: 100cqh; aspect-ratio: auto; border-radius: 0; box-shadow: none; }
   ${R} .of-stage::after { display: none; }
 }
-/* Settings uses the available host panel; the other screens retain their portrait stage. */
+/* Settings uses the available host panel. */
 ${R} .of-stage:has(.of-settings) {
   width: 100%; height: 100%; min-width: 0; min-height: 0; aspect-ratio: auto; border-radius: 0; box-shadow: none;
 }
 ${R} .of-stage:has(.of-settings)::after { display: none; }
+/* Keep the ready cast form readable in a short landscape panel. */
+@container of-frame (max-height: 500px) {
+  ${R} .of-stage:has(.of-cast) { width: min(360px, 100cqw); height: 100cqh; aspect-ratio: auto; }
+}
 ${R} .of-frame[data-fullscreen="true"] .of-stage {
   width: 100%; height: 100%; min-width: 0; min-height: 0; aspect-ratio: auto; border-radius: 0; box-shadow: none;
 }
@@ -685,11 +689,20 @@ ${R} .of-forge-step[data-state="failed"] .of-forge-state { color: var(--of-dange
 ${R} .of-forge-why { font-size: 0.78rem; color: var(--of-text-soft); }
 ${R} .of-forge-error { font-family: ui-monospace, Menlo, monospace; font-size: 0.7rem; color: var(--of-text-faint); overflow-wrap: anywhere; }
 ${R} .of-forge-retry { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
-${R} .of-forge-retry--paints { grid-column: 2 / -1; flex-direction: row; flex-wrap: wrap; align-items: flex-start; justify-content: flex-end; gap: 10px; }
+${R} .of-forge-retry--paints {
+  grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; gap: 10px;
+}
+${R} .of-forge-retry--paints > .of-forge-retry { min-width: 0; display: grid; grid-template-rows: 1fr auto; align-items: stretch; }
+${R} .of-forge-retry--paints .of-button { min-height: 44px; min-width: 0; padding: 8px 10px; white-space: normal; overflow-wrap: anywhere; }
+@container of-stage (max-width: 360px) {
+  ${R} .of-forge-retry--paints .of-button { flex-direction: column; gap: 4px; padding-inline: 4px; overflow-wrap: normal; }
+}
+${R} .of-forge-retry--paints .of-cost { min-width: 0; justify-content: center; text-align: center; }
+${R} .of-forge-retry--paints .of-cost > span { min-width: 0; overflow-wrap: anywhere; }
 ${R} .of-paint-offer { align-items: center; text-align: center; }
 ${R} .of-paint-offer > .of-button { align-self: center; }
 ${R} .of-cast {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: 8px; margin: 0; padding: 0;
   list-style: none;
 }
 ${R} .of-cast-card {
@@ -697,6 +710,7 @@ ${R} .of-cast-card {
   text-align: center; background: linear-gradient(180deg, color-mix(in srgb, var(--of-li-accent) 22%, transparent), transparent 70%), var(--of-surface);
   border: 1px solid var(--of-border); border-top: 3px solid var(--of-li-accent, var(--of-rose));
 }
+${R} .of-cast-appearance { width: 100%; min-width: 0; display: flex; flex-direction: column; gap: 8px; margin-top: 8px; text-align: start; }
 ${R} .of-cast-name { margin-top: 4px; font-family: var(--of-font-display); font-weight: 600; font-size: 1.15rem; line-height: 1.1; }
 /* The story list. */
 ${R} .of-runs { display: flex; flex-direction: column; gap: 10px; width: 100%; margin: 0; padding: 0; list-style: none; }
@@ -733,7 +747,11 @@ ${R} .of-bible-secret, ${R} .of-bible-stage {
 ${R} .of-tabs {
   display: flex; gap: 4px; padding: 4px; border-radius: 18px; overflow-x: auto; scrollbar-width: none; flex: none;
 }
-${R} .of-settings .of-tabs { flex-wrap: wrap; overflow: visible; }
+/* Keep the phone's categories in one scrolling strip; wide Settings can show them all at once. */
+@container of-stage (min-width: 960px) {
+  ${R} .of-settings .of-tabs { flex-wrap: wrap; overflow: visible; }
+}
+${R} .of-settings .of-tab { min-height: 44px; }
 ${R} .of-tabs::-webkit-scrollbar { display: none; }
 ${R} .of-tab {
   flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border: 0; border-radius: 14px;
@@ -1428,12 +1446,17 @@ ${R} .of-affection {
   display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "avatar name level" "avatar hearts hearts";
   align-items: center; column-gap: 10px; row-gap: 3px;
 }
+${R} .of-affection:has(.of-affection-progress) { grid-template-areas: "avatar name level" "avatar hearts progress"; }
 ${R} .of-affection > .of-avatar { grid-area: avatar; }
 ${R} .of-affection-name {
   grid-area: name; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
   font-family: var(--of-font-display); font-weight: 600; font-size: 1.12rem; line-height: 1.1;
 }
-${R} .of-affection-level { grid-area: level; font-size: 0.74rem; font-weight: 800; color: var(--of-accent-text); }
+${R} .of-affection-level { grid-area: level; justify-self: end; font-size: 0.74rem; font-weight: 800; color: var(--of-accent-text); }
+${R} .of-affection-progress {
+  grid-area: progress; justify-self: end; font-size: 0.7rem; line-height: 1.2; font-weight: 600;
+  font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--of-text-soft);
+}
 ${R} .of-hearts { grid-area: hearts; display: flex; flex-wrap: wrap; gap: 3px; color: var(--of-li-accent, var(--of-rose)); }
 ${R} .of-hearts svg[data-on="false"] { color: var(--of-border-strong); }
 ${R}[data-look="pearl"] .of-hearts { filter: brightness(0.8) saturate(1.35); }

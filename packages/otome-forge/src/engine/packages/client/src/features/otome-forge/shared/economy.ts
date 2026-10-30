@@ -57,6 +57,16 @@ export function levelOf(points: number): number {
   return Math.min(MAX_LEVEL, MIN_LEVEL + Math.floor(safe / POINTS_PER_LEVEL));
 }
 
+/** Public progress within the current level; the maximum level is complete, with no level 11 implied. */
+export function affectionProgressOf(points: number): { current: number; required: number } {
+  const safe = Number.isFinite(points) ? Math.max(0, points) : 0;
+  const level = levelOf(safe);
+  return {
+    current: level === MAX_LEVEL ? POINTS_PER_LEVEL : safe - (level - MIN_LEVEL) * POINTS_PER_LEVEL,
+    required: POINTS_PER_LEVEL,
+  };
+}
+
 /**
  * Where an earning comes from. Story sources (a beat, a chapter, a route chapter, and its Lead and Foil affection) are
  * never capped; every other source is an activity, capped per local day.

@@ -93,7 +93,7 @@ import { canonPicks, type BeatDeps } from "../story/beats.js";
 import { canonicalSegments, readBeat, readChapter, recallText } from "../story/canon.js";
 import { ANGST_TYPES, CHAPTER_TAGS, bibleBlock, ownView, protagonistBlock } from "../story/prompts.js";
 import { withPersonaStoryAbout } from "../setup/prompts.js";
-import { otomeWritingRules } from "../writing-rules.js";
+import { STORY_PACING_INSTRUCTION, otomeWritingRules } from "../writing-rules.js";
 
 export type DateDeps = BeatDeps & {
   runtime: ArtDeps["runtime"];
@@ -237,6 +237,7 @@ export function datePlanMessages({
     `- Write the title, the place and every guide in ${world.language}; the keepsake brief in English.`,
     "- Omit an optional field rather than writing null.",
     "",
+    STORY_PACING_INSTRUCTION,
     otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: [{ name }], kind: "planner" }),
