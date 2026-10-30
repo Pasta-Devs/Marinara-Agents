@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.6.2 — 2026-10-31
+
+- After a love interest's finale, the story no longer assumes they already confessed: if you eased off before the words came, they can still say it later.
+
 ## 0.6.1 — 2026-10-30
 
 - **Banned phrases** in Settings → Content: type the words and phrases you never want to read, separated by commas or one per line, and every scene, message and note avoids them.
