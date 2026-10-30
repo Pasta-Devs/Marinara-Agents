@@ -350,6 +350,15 @@ async function recordSpeech(page: Page) {
 const voiced = (page: Page) => page.evaluate(() => ((window as any).__spoken ?? []) as Json[]);
 
 async function openOtome(page: Page): Promise<Locator> {
+  // Engine's calendar greeting can appear after startup. Keep its theme through the normal, specific dialog action.
+  await page.addLocatorHandler(
+    page
+      .getByRole("dialog", { name: "Happy Halloween!", exact: true })
+      .filter({ has: page.getByRole("button", { name: "Keep it", exact: true }) }),
+    async (dialog) => {
+      await dialog.getByRole("button", { name: "Keep it", exact: true }).click();
+    },
+  );
   await page.route("**/api/app-settings/ui", (route) =>
     route.fulfill({ json: route.request().method() === "GET" ? { value: null } : { success: true } }),
   );
@@ -524,6 +533,8 @@ test("Otome Forge Dates and a Claw round at phone width: the cheer meter, his ch
   await root.locator("label.of-partner", { hasText: "Mireille" }).click();
   await expect(root.getByRole("radio", { name: /Mireille/ })).toBeChecked();
   await expect(root.getByRole("list", { name: "Things to do with Mireille" })).toBeVisible();
+  await root.getByRole("radio", { name: /Mireille/ }).focus();
+  await expect(root.getByRole("radio", { name: /Mireille/ })).toBeFocused();
   await page.keyboard.press("ArrowLeft");
   await expect(root.getByRole("radio", { name: /Kai Ardent/ })).toBeChecked();
 
