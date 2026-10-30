@@ -49,6 +49,8 @@ export interface LookView {
   owner: WardrobeOwner;
   /** The look's name in the world's language; "" for the base look (the client labels it). */
   name: string;
+  /** Existing visual intent for this owned look, without story or Bible secrets. */
+  description?: string;
   /** The item it was won as; absent for the base look. */
   item?: { kind: ItemKind; rarity: Rarity; title: string };
   /** The painted full-body image, once there is one. */

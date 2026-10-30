@@ -1058,6 +1058,8 @@ export interface RunLiView {
   voiceGender: Unit["voiceGender"];
   accent: string;
   portrait?: string;
+  /** Visual intent only, safe to read without opening a spoiler-heavy Bible. */
+  look?: Pick<Bible["look"], "identityLine" | "outfitLine">;
   /** His look's paint record (the forge screen shows a failed paint's reason in debug mode). */
   art?: Paint;
   /** Which of this view's images are cut-outs (no backdrop): shown whole rather than cropped and faded. */

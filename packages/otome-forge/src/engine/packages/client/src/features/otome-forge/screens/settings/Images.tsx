@@ -58,6 +58,7 @@ function StoryImages({ run, settings }: { run: RunView; settings: SaveSettings }
         onChange={(rating) => setForm((current) => ({ ...current, rating }))}
       />
       <p className="of-hint">{t("ui.otomeForge.settings.imagesGallery")}</p>
+      <p className="of-hint">{t("ui.otomeForge.images.paintLater")}</p>
       <SaveBar
         changed={changed}
         busy={settings.busy}

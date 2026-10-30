@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import type { ChapterKind, ChapterView, MomentKind, NodeKind } from "../../shared/api-types";
 import { FullscreenButton } from "../../components/Stage";
+import { ImageDescription } from "../../components/ImageDescription";
 import { useAudioSnapshot, useOtomeAudio } from "../../hooks/use-otome-audio";
 import { tagLabelKey } from "./ContentTagsCard";
 
@@ -91,6 +92,7 @@ interface ReaderControlsProps {
   replay: boolean;
   /** Where the current line takes place. */
   place?: string;
+  imageDescription?: string;
   /** The place's picture waits for a tap (consent, or a retry after a failure). */
   placePaint?: { retry: boolean; busy: boolean; onPaint: () => void };
   tags: string[];
@@ -322,6 +324,7 @@ export function ReaderControls(props: ReaderControlsProps) {
           {ease}
         </div>
       </div>
+      <ImageDescription text={props.imageDescription} />
     </header>
   );
 }

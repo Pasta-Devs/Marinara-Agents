@@ -17,6 +17,7 @@ import { CostHint } from "../../components/CostHint";
 import { Dialog } from "../../components/Dialog";
 import { HeNoticed } from "../../components/HeNoticed";
 import { LookImage } from "../../components/LookImage";
+import { ImageDescription } from "../../components/ImageDescription";
 import {
   imagesOn,
   invalidateCollection,
@@ -345,6 +346,7 @@ function LookCard({ view, look, person, actions, wearing, wearBusy, onWear, onSh
           {name}
         </h3>
         {look.item ? <RarityStars rarity={look.item.rarity} /> : null}
+        <ImageDescription text={look.description} />
         {look.worn ? (
           <p ref={wornRef} className="of-ward-look-state" tabIndex={-1}>
             {t("ui.otomeForge.wardrobe.worn")}

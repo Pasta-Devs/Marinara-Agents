@@ -519,6 +519,10 @@ export function toRunView(runKey: string, world: World, player: Player, units: U
           ...(unit.cardId ? { cardId: unit.cardId } : {}),
           voiceGender: unit.voiceGender,
           accent: unit.accent,
+          look: {
+            identityLine: unit.identityLine || unit.bible?.look.identityLine || "",
+            outfitLine: unit.outfitLine || unit.bible?.look.outfitLine || "",
+          },
           ...(portrait ? { portrait } : {}),
           ...(unit.art ? { art: unit.art } : {}),
           level: levelOf(progress.points),

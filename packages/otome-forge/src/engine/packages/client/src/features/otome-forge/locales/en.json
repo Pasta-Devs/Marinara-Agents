@@ -508,6 +508,8 @@
   "ui.otomeForge.home.unread_other": "{{count}} unread messages",
   "ui.otomeForge.home.voiceFailed": "The voice could not play.",
   "ui.otomeForge.home.whoIsHome": "Who’s home",
+  "ui.otomeForge.images.description": "Image description",
+  "ui.otomeForge.images.paintLater": "You can play without images. After saving an image connection, open Cast to paint missing portraits, open owned items in Wardrobe or Album, or use Paint beside a story location or key moment. Each action shows its image cost; saving settings paints nothing.",
   "ui.otomeForge.phone.affection": "+{{amount}} affection",
   "ui.otomeForge.phone.allMessages": "All messages",
   "ui.otomeForge.phone.askAgain": "Ask again",

@@ -200,8 +200,15 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
   const paintsByItself = usePaintsByItself(view.world.images);
   const placeState = placeInfo?.art?.state;
   const placePaint =
-    canPaint && place && (placeState === "waiting-consent" || placeState === "failed" || placeState === "stopped")
-      ? { retry: placeState !== "waiting-consent", busy: reader.painting, onPaint: () => void reader.paintPlace(place) }
+    canPaint &&
+    placeInfo?.tags.trim() &&
+    place &&
+    (!placeState || placeState === "waiting-consent" || placeState === "failed" || placeState === "stopped")
+      ? {
+          retry: placeState === "failed" || placeState === "stopped",
+          busy: reader.painting,
+          onPaint: () => void reader.paintPlace(place),
+        }
       : undefined;
   const cg = reader.cg && current && current.main >= reader.cg.at ? reader.cg : null;
   const cgUrl = readyUrl(cg?.art);
@@ -336,6 +343,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
           nodeCount={reader.nodeCount}
           replay={!!reader.position?.replay && reading}
           place={reading ? place : undefined}
+          imageDescription={reading ? [placeInfo?.tags, cg?.brief].filter(Boolean).join("\n") : undefined}
           placePaint={placePaint}
           tags={reader.tags}
           reading={reading}
