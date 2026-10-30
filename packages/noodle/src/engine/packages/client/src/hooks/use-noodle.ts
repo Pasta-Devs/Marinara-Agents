@@ -26,6 +26,7 @@ import type {
 import { countNoodlePostsSince, mergeNoodlePollVoteInteractions } from "@marinara-engine/shared";
 import type { ImagePromptOverride, ImagePromptReviewItem } from "../components/ui/ImagePromptReviewModal";
 import type { PackageNoodleSettingsUpdateInput } from "../components/noodle/noodle-settings-defaults";
+import { currentMemoryStatus, type NoodleMemoryStatus } from "../components/noodle/noodle-ltm-sharing";
 
 export type NoodleRefreshResult = {
   bootstrap: NoodleBootstrap;
@@ -149,9 +150,15 @@ export function useNoodleUnseenCount(personaAccount: NoodleAccount | null, enabl
 export function useNoodleMemoryStatus(enabled: boolean) {
   return useQuery({
     queryKey: noodleKeys.memoryStatus(),
-    queryFn: () => api.get<{ status: "ok" | "missing" | "off" | "error" | null }>("/noodle/memory-status"),
+    queryFn: () =>
+      currentMemoryStatus({
+        read: () => api.get<{ status: NoodleMemoryStatus }>("/noodle/memory-status"),
+        readLtm: () => api.get<{ longTermMemoryShareWithPackages?: boolean }>("/long-term-memory/settings"),
+      }),
     enabled,
     staleTime: 10_000,
+    // Long-Term Memory's own settings can turn sharing on without telling Noodle, so ask again on every open.
+    refetchOnMount: "always",
   });
 }
 

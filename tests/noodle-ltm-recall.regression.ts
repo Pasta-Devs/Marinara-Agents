@@ -220,6 +220,118 @@ async function main() {
     ),
     /app\.get\("\/memory-status"/,
   );
+
+  // The recorded "off" outlives the switch that caused it, so the status the screen shows is checked
+  // against Long-Term Memory's current setting. Only "off" costs that read; a read that fails keeps "off".
+  const clientDir = "../packages/noodle/src/engine/packages/client/src";
+  const readClient = (path: string) => readFileSync(new URL(`${clientDir}/${path}`, import.meta.url), "utf8");
+  const sharing = runInNewContext(
+    `${stripTypeScriptTypes(readClient("components/noodle/noodle-ltm-sharing.ts").replace(/^export /gm, ""))}\n({ currentMemoryStatus, offerLtmSharing });`,
+  ) as {
+    currentMemoryStatus: (deps: {
+      read: () => Promise<{ status: Status }>;
+      readLtm: () => Promise<{ longTermMemoryShareWithPackages?: boolean }>;
+    }) => Promise<{ status: Status }>;
+    offerLtmSharing: (deps: {
+      read: () => Promise<{ longTermMemoryShareWithPackages?: boolean }>;
+      confirm: () => Promise<boolean>;
+      save: () => Promise<unknown>;
+    }) => Promise<"skipped" | "declined" | "enabled">;
+  };
+  const statusFor = async (status: Status, ltm: { longTermMemoryShareWithPackages?: boolean } | Error) => {
+    let ltmReads = 0;
+    const result = await sharing.currentMemoryStatus({
+      read: async () => ({ status }),
+      readLtm: async () => {
+        ltmReads += 1;
+        if (ltm instanceof Error) throw ltm;
+        return ltm;
+      },
+    });
+    return { status: result.status, ltmReads };
+  };
+  assert.deepEqual(await statusFor("off", { longTermMemoryShareWithPackages: true }), { status: null, ltmReads: 1 });
+  assert.deepEqual(await statusFor("off", {}), { status: null, ltmReads: 1 }, "an unset switch is on");
+  assert.deepEqual(await statusFor("off", { longTermMemoryShareWithPackages: false }), { status: "off", ltmReads: 1 });
+  assert.deepEqual(await statusFor("off", new Error("unreadable")), { status: "off", ltmReads: 1 });
+  for (const status of ["ok", "missing", "error", null] as const) {
+    assert.deepEqual(await statusFor(status, { longTermMemoryShareWithPackages: false }), { status, ltmReads: 0 });
+  }
+  const hookSource = readClient("hooks/use-noodle.ts");
+  assert.match(hookSource, /queryFn: \(\) =>\s+currentMemoryStatus\(\{[\s\S]*?"\/noodle\/memory-status"/);
+  assert.match(hookSource, /"\/long-term-memory\/settings"/);
+  assert.match(hookSource, /refetchOnMount: "always"/);
+
+  // Turning the switch on while Long-Term Memory sharing is off asks once, and only a yes writes that
+  // one setting. A read that fails, or sharing already on, never asks.
+  const offerFor = async (ltm: { longTermMemoryShareWithPackages?: boolean } | Error, answer: boolean) => {
+    const calls = { confirm: 0, save: 0 };
+    const result = await sharing.offerLtmSharing({
+      read: async () => {
+        if (ltm instanceof Error) throw ltm;
+        return ltm;
+      },
+      confirm: async () => {
+        calls.confirm += 1;
+        return answer;
+      },
+      save: async () => {
+        calls.save += 1;
+      },
+    });
+    return { result, ...calls };
+  };
+  assert.deepEqual(await offerFor({ longTermMemoryShareWithPackages: false }, true), {
+    result: "enabled",
+    confirm: 1,
+    save: 1,
+  });
+  assert.deepEqual(await offerFor({ longTermMemoryShareWithPackages: false }, false), {
+    result: "declined",
+    confirm: 1,
+    save: 0,
+  });
+  for (const on of [{ longTermMemoryShareWithPackages: true }, {}]) {
+    assert.deepEqual(await offerFor(on, true), { result: "skipped", confirm: 0, save: 0 });
+  }
+  assert.deepEqual(await offerFor(new Error("unreadable"), true), { result: "skipped", confirm: 0, save: 0 });
+  // The save writes only the sharing switch, and a failed save reaches the caller for the toast.
+  const homeSource = readClient("components/noodle/NoodleHome.tsx");
+  assert.match(
+    homeSource,
+    /save: \(\) => api\.put\("\/long-term-memory\/settings", \{ longTermMemoryShareWithPackages: true \}\)/,
+  );
+  assert.match(
+    homeSource,
+    /\.catch\(\(\) => toast\.error\(localizeUi\("ui\.noodle\.noodlehome\.ltmSharingOfferFailed"\)\)\)/,
+  );
+  // The offer follows Noodle's own save, after the first-time confirmation is accepted, and never runs
+  // when the switch is turned off.
+  const toggle = homeSource.slice(homeSource.indexOf("const toggleLtmMemories"));
+  const toggleBody = toggle.slice(0, toggle.indexOf("\n  };"));
+  assert.match(
+    toggleBody,
+    /if \(!confirmed\) return;\s+saveSettings\(\{ useLtmMemories: true, ltmMemoriesConfirmed: true \}, offerSharing\);/,
+  );
+  assert.match(toggleBody, /saveSettings\(\{ useLtmMemories: checked \}, checked \? offerSharing : undefined\);/);
+  assert.equal(
+    toggleBody.match(/offerSharing/g)?.length,
+    2,
+    "the offer is only reachable from the two switch-on saves",
+  );
+  assert.match(homeSource, /onSuccess: onSaved,/);
+  assert.match(homeSource, /if \(result === "enabled"\) void memoryStatusQuery\.refetch\(\);/);
+  // The five strings exist in every locale.
+  for (const locale of ["en", "de", "ko", "pl"]) {
+    const strings = JSON.parse(readClient(`localization/locales/${locale}.json`)) as Record<string, string>;
+    for (const key of ["Title", "Message", "Confirm", "Cancel", "Failed"]) {
+      assert.ok(
+        strings[`ui.noodle.noodlehome.ltmSharingOffer${key}`]?.trim(),
+        `${locale} is missing ltmSharingOffer${key}`,
+      );
+    }
+  }
+
   console.log("noodle-ltm-recall regression: OK");
 }
 
