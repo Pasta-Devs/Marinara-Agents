@@ -1,5 +1,11 @@
 # Otome Hearth release notes
 
+## 0.3.0 — 2026-10-30
+
+- Add optional adult intimacy preferences to love-interest Bibles, with an explicit action to fill missing details in existing casts.
+- Add an optional Sub, Dom or Switch preference for the protagonist beside the NSFW Content controls.
+- Keep these preferences occasional and flexible, preserving vanilla intimacy and wholesome scenes.
+
 ## 0.2.2 — 2026-10-30
 
 - In stories, hide the header's Image description panel while a character sprite is shown; keep the description available without a sprite.
