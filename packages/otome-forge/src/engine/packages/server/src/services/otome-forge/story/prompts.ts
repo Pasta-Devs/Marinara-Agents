@@ -26,6 +26,8 @@
 // card in a planner (P5's others, othersBlock). An empty notebook adds nothing, so those prompts stay byte for byte.
 // ponytail: a scene already written (the lookahead) keeps the notebook it was written with; an edit or delete reaches
 // the next one written. The upgrade path is dropping an unread lookahead beat when a notebook it carried is edited.
+// 0.5.1 (#1949): P5 plans no chapter on the template of the ones before it, and a chapter's closing decision (P5's
+// plan, P6's last node) is a different kind from the recent ones; the Foil's rivalry is not always for the protagonist.
 import { forgeChoiceMessages, forgeChoicePlanMessages } from "@forge-kit/player-choices-server.mjs";
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 import { z, type ZodType } from "zod";
@@ -92,6 +94,13 @@ export const CHAPTER_TAGS: readonly string[] = [...LIMIT_IDS, ...STORY_TAGS];
 export const NODES_MIN = 6;
 export const NODES_MAX = 9;
 const RECENT_LEDGER = 8;
+
+/**
+ * What a chapter's closing decision must be, for P5's plan and P6's last node (#1949): unlike the recent ones, which
+ * story memory lists among the irrevocable player decisions, so chapters do not all end on whom the protagonist goes with.
+ */
+const VARIED_DECISION =
+  "a different kind of decision from the recent chapters' (the irrevocable player decisions in story memory list them): not always whom the protagonist goes with, and never a choice between love interests two chapters running";
 
 const TRUST_WORDS = ["cold", "wary", "uneasy", "neutral", "warm", "trusting", "devoted"] as const;
 const TENSION_WORDS = ["calm", "charged", "strained", "breaking"] as const;
@@ -426,7 +435,8 @@ export function chapterPlanMessages({
     climax
       ? `- This chapter's climax is a ${climax}: the last two main chapters both ended with a ${climax === "closer" ? "confrontation" : "closer"}.`
       : `- Choose the climax the story calls for: open grievances and strain lean toward a confrontation, trust and calm toward a closer.${lastClimax ? ` The last main chapter ended with a ${lastClimax}.` : ""}`,
-    "- The Lead is in most nodes and in the climax; the Foil appears in at least one node. The Foil's goal competes with the protagonist's or the Lead's.",
+    "- The Lead is in most nodes and in the climax; the Foil appears in at least one node. The Foil's goal competes with the protagonist's or the Lead's, and not always for the protagonist: a rivalry over a goal, a secret, a duty or the mystery counts too.",
+    `- Never plan a chapter on the template of the ones before it: vary what drives it and where its turn falls. When its last node leaves a lasting decision open, make it ${VARIED_DECISION}.`,
     number === 1
       ? "- This is the first chapter: every love interest appears in at least one node, and it opens on the opening situation."
       : "- Continue from the story so far; everything already played is canon and is never undone or staged again.",
@@ -618,6 +628,10 @@ export function beatMessages({
       : []),
     "- Honour the story so far: keep established names, facts and open threads; never contradict them, and never undo a choice already made.",
     "- Stay within this node's guide; do not skip ahead to later nodes.",
+    // A planned chapter's last node; the prologue offers its own choices, and a date never ends on a big one.
+    ...(last && !date && chapter.kind !== "prologue"
+      ? [`- This is the chapter's last node: if it ends on a big choice, make it ${VARIED_DECISION}.`]
+      : []),
     `- Write every segment's text and every place name in ${world.language}; tags${node.cg ? " and the cg brief" : ""} in English.`,
     "",
     STORY_PACING_INSTRUCTION,

@@ -213,6 +213,19 @@ test("moment nodes are written as beats with their framing; a confrontation node
   assert.match(prompt(6), /the chapter's last/);
   assert.match(prompt(6), /ONE BIG choice/, "the last node may end on a big choice");
   assert.doesNotMatch(prompt(5), /ONE BIG choice/);
+  // #1949: the closing decision differs from the recent ones, in the plan and on the last node only.
+  const varied =
+    "not always whom the protagonist goes with, and never a choice between love interests two chapters running";
+  assert.ok(
+    prompt(6).includes(`This is the chapter's last node: if it ends on a big choice, make it a different kind`),
+  );
+  assert.ok(prompt(6).includes(varied) && !prompt(5).includes(varied), "the last node only");
+  const plan = system(t.calls.find((entry) => isPlanner(entry.messages))!.messages);
+  assert.ok(plan.includes("Never plan a chapter on the template of the ones before it") && plan.includes(varied));
+  assert.match(
+    plan,
+    /The Foil's goal competes with the protagonist's or the Lead's, and not always for the protagonist/,
+  );
   await readThrough(t, 0, 1);
   const moment = await t.call("POST", beatPath, {}, node(2));
   assert.equal(moment.body.beat.kind, "moment");

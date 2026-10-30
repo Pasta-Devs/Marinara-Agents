@@ -72,6 +72,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.5.1",
+          "date": "2026-10-30",
+          "notes": "- Chapters no longer all end the same way. Each one builds differently, and its closing choice is a different kind of decision from the last few, not a love interest stepping in again to ask whom you'll go with. A rival love interest competes over more than just you, too.",
+          "highlight": false
+        },
+        {
           "version": "0.5.0",
           "date": "2026-10-30",
           "notes": "- **Read Me**, a new game in Dates: a love interest studies you and makes four guesses about you. Answer Spot on, Close or Not at all, and tell them the truth in your own words if you like.\n- They remember: each answer goes into their notebook of what they know about you (likes, dislikes, habits, fears, dreams), and they bring it up in scenes, Home notes, messages and dates. No other love interest ever sees it.\n- Open the notebook from Read Me to read it, rewrite your words or delete an entry. A delete is final.",
@@ -183,12 +189,6 @@
           "version": "0.1.7",
           "date": "2026-10-29",
           "notes": "- Chapter and Home expressions keep the clean neutral sprite visible until free background cleanup is ready, instead of showing a green original. Saved and newly painted expressions share the repair, with their originals, outfits and story progress retained.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.6",
-          "date": "2026-10-29",
-          "notes": "- Mobile reader controls now show mute, fullscreen, then More, with centered icons and the secondary controls aligned directly below More.\n- A thought's closing parenthesis now appears when the line finishes typing.\n- Removed the daily-storage caption beneath a generated period-day caring message.",
           "highlight": false
         }
       ]
