@@ -67,13 +67,17 @@ const pronounText = (pronouns: Unit["pronouns"]) => `${pronouns.subject}/${prono
 /** A contract block under its own heading (the contract's text starts with "CONTENT CONTRACT"). */
 const relabel = (contract: string, heading: string) => contract.replace(/^CONTENT CONTRACT/, heading);
 
-/** What stands between them that the whole cast may know: grievances and disclosures from main chapters only. */
+/**
+ * What stands between them that the whole cast may know: grievances and disclosures from main chapters only, and never
+ * a notebook (Read Me, #1945): what one love interest has come to know is theirs alone, and a banner plans for all.
+ */
 function sharedState(liState: LiState): LiState {
   const shared = (ref: string) => mainChapterNumber(ref.split("/")[0] ?? "") !== null;
   return {
     ...liState,
     grievances: liState.grievances.filter((grievance) => shared(grievance.opened)),
     disclosures: liState.disclosures.filter((disclosure) => shared(disclosure.ref)),
+    known: [],
   };
 }
 
