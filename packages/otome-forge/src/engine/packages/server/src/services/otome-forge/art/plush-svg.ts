@@ -106,7 +106,10 @@ export function sanitizePlushSvg(raw: string): { svg: string } | { error: string
         if (attribute === "viewBox" && VIEW_BOX.test(value)) viewBox = value.replace(/[\s,]+/gu, " ");
         continue;
       }
-      const pattern = PLUSH_ATTRIBUTES[attribute!];
+      // An own key only: a name like `constructor` must be refused, not read off Object.prototype.
+      const pattern = Object.prototype.hasOwnProperty.call(PLUSH_ATTRIBUTES, attribute!)
+        ? PLUSH_ATTRIBUTES[attribute!]
+        : undefined;
       if (!pattern) return { error: `svg uses the attribute ${attribute}, which is not allowed` };
       if (!pattern.test(value))
         return { error: `svg has a ${attribute} value that is not allowed: "${value.slice(0, 24)}"` };

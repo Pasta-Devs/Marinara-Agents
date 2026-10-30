@@ -82,6 +82,8 @@ test("the allow-list refuses anything that is not a plain shape, with a reason",
     tooLong: wrap(`<path d="M0 0${" L1 1".repeat(PLUSH_SVG_MAX / 5)}"/>`),
     tooMany: wrap('<circle cx="1" cy="1" r="1"/>'.repeat(PLUSH_ELEMENTS_MAX)),
     badNumber: wrap('<circle cx="1px" cy="1" r="1"/>'),
+    inherited: wrap('<circle constructor="1" cx="1" cy="1" r="1"/>'),
+    inheritedToString: wrap('<circle toString="1" cx="1" cy="1" r="1"/>'),
   };
   for (const [kind, svg] of Object.entries(refused)) {
     const result = sanitizePlushSvg(svg);
@@ -96,6 +98,7 @@ test("a stored plush is checked again on every read; a damaged one is dropped", 
   assert.deepEqual(unit({ animal: " raven ", svg, at: "t" }).plushArt, { animal: "raven", svg, at: "t" });
   for (const damaged of [
     { animal: "raven", svg: `${svg}<script>alert(1)</script>`, at: "t" },
+    { animal: "raven", svg: svg.replace("<circle ", '<circle constructor="1" '), at: "t" },
     { animal: "", svg, at: "t" },
     { animal: "raven", at: "t" },
     "raven",
