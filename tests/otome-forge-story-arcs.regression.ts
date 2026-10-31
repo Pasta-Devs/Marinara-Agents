@@ -38,6 +38,8 @@ import {
   ChapterPlanSchema,
   type ChapterPlanReply,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/prompts.ts";
+import { readRun } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
+import { introduceLoveInterest } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/introduce.ts";
 import { revealedSoFar } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/arc.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { CAST, HE, KAI, MIR, SOL, bible, json, planReply, storyWorld } from "./fixtures/otome-forge-story.ts";
@@ -490,4 +492,63 @@ test("POST /arcs waits for a finished arc, and refuses a newcomer the player did
   const story = await t.call("GET", "/runs/:run/story");
   assert.equal(story.body.arc.number, 1);
   assert.equal(story.body.arcChoice, null, "no choice is offered mid-arc");
+});
+
+// ── M3: someone new arrives (#1983) ──
+
+test("a newcomer is written in: a unit with a bible, their ties to the cast, and last in the cast order", async () => {
+  const t = await storyWorld({ runKey: "r-arrive-aaaaaa", replies: [json(bible())] });
+  const before = Object.keys((await t.call("GET", "/runs/:run/story")).body ? {} : {}).length;
+  void before;
+  const arrival = await introduceLoveInterest(
+    t.deps,
+    t.runId,
+    {
+      source: "archetype",
+      archetype: "brilliant-monster",
+      name: "Wren",
+      pronouns: { subject: "they", object: "them", possessive: "their" },
+    },
+    {},
+  );
+  assert.equal(arrival.name, "Wren");
+  const run = await readRun(t.store, t.runId);
+  const cast = Object.keys(run!.state.lis);
+  assert.equal(cast.at(-1), arrival.id, "appended last, so the cast order of everyone else is unchanged");
+  const unit = run!.units.find((entry) => entry.id === arrival.id);
+  assert.ok(unit?.bible, "a love interest exists once their bible does");
+  assert.equal(unit?.name, "Wren");
+  assert.equal(
+    run!.world.web.filter((row) => row.a === arrival.id).length,
+    CAST.length,
+    "a tie to everyone already there",
+  );
+  // A full cast refuses another arrival.
+  const full = normalizeState({
+    lis: Object.fromEntries(
+      [...CAST, { id: "li-fourth-aaaa" }, { id: "li-fifth-bbbb" }].map((li) => [li.id, defaultLiState()]),
+    ),
+  });
+  void full;
+});
+
+test("a refused arrival is not invented: an unknown archetype is a 400 and writes nothing", async () => {
+  const t = await storyWorld({ runKey: "r-arrive-bbbbbb" });
+  const count = async () => (await readRun(t.store, t.runId))!.units.length;
+  const had = await count();
+  await assert.rejects(
+    introduceLoveInterest(
+      t.deps,
+      t.runId,
+      {
+        source: "archetype",
+        archetype: "not-an-archetype",
+        name: "Nobody",
+        pronouns: { subject: "they", object: "them", possessive: "their" },
+      },
+      {},
+    ),
+    /Unknown archetype/u,
+  );
+  assert.equal(await count(), had, "nothing was written");
 });
