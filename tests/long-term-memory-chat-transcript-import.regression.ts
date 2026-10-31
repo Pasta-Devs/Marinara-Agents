@@ -820,6 +820,38 @@ async function main() {
       assert.deepEqual(await autoEvents(autoBranch.id), [], "a sibling's summary is not imported into the branch");
       assert.equal(prompts.length, 0);
 
+      // An extraction that drops units leaves its source unfinished, so the next reply does not extract it again.
+      const droppingChat = { ...roleplayChat, id: "chat-auto-dropping", name: "Dropping" };
+      chats.push(droppingChat);
+      messages.set(droppingChat.id, [
+        message(droppingChat.id, "p1", "user", "x".repeat(23_990)),
+        message(droppingChat.id, "p2", "user", "The tail."),
+      ]);
+      respond = (prompt) => [
+        unit({
+          bucket: "timeline_event",
+          subjectId: "vault_opens",
+          sectionKey: "event",
+          title: "The vault opens",
+          text: "The vault opens.",
+          claimKind: "change",
+          links: [{ target: prompt.sourceNote.id, relation: "extracted_from" }],
+        }),
+        { bucket: "not_a_bucket" },
+      ];
+      prompts.length = 0;
+      await autoImport(droppingChat.id);
+      assert.equal(prompts.length, 1, "the closed piece is extracted");
+      assert.equal(
+        (await autoEvents(droppingChat.id)).at(-1)?.status,
+        "error",
+        "a dropped unit is logged as unfinished",
+      );
+      await autoImport(droppingChat.id);
+      assert.equal(prompts.length, 1, "the unfinished selection is not extracted on every reply");
+      respond = () => [];
+      prompts.length = 0;
+
       // Turning the setting off cancels a run that is already waiting.
       messages.get(failingChat.id)!.push(message(failingChat.id, "f3", "user", "y".repeat(23_990)));
       const failingEvents = (await autoEvents(failingChat.id)).length;
