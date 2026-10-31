@@ -21,6 +21,7 @@
 // image rating, or picking Dark romance, needs it (403 `age-gate`), lowering never does, and every stored content goes
 // through enforceContent, so a limit that cannot apply is always a Line.
 import { z } from "zod";
+import { LIS_MAX, LIS_MIN } from "../../../../../client/src/features/otome-forge/shared/cast.js";
 import { ARCHETYPE_IDS } from "../../../../../client/src/features/otome-forge/shared/archetypes.js";
 import { OWN_BANNED_PHRASES_MAX } from "../../../../../client/src/features/otome-forge/shared/banned-phrases.js";
 import {
@@ -83,8 +84,6 @@ import { fillIntimacy } from "../intimacy.js";
 import { cancellable } from "../story/beats.js";
 
 const NoFields = z.object({});
-const LIS_MIN = 2;
-const LIS_MAX = 5;
 const ID_MAX = 200;
 const SetupLiSchema = z.union([
   z.object({ source: z.literal("card"), cardId: z.string().min(1).max(ID_MAX), pronouns: PronounsSchema }),
