@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.5.22 — 2026-10-31
 
 - Slurp can add memories when you allow it in Memory Settings → Sharing. Off by default.
 

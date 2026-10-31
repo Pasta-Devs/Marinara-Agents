@@ -13,6 +13,10 @@ import {
   buildSlpWardrobeImportMessages,
   parseSlpWardrobeImportDrafts,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/creators/slp-wardrobe-import";
+import {
+  buildSlpWardrobeJson,
+  parseSlpWardrobeJson,
+} from "../packages/slurp2/src/engine/packages/client/src/slp/features/creators/slp-wardrobe-json";
 import { slurp2Source } from "./slurp2-source";
 
 const look = (
@@ -172,5 +176,19 @@ const manager = slurp2Source(
 );
 assert.match(manager, /Only selected entries/u);
 assert.match(manager, /entryIds: lorebookEntryIds/u);
+
+const randomLook = {
+  ...look("rnd", "both", "2026-01-01T00:00:00.000Z"),
+  description: "wears {{random: red, blue}} boots",
+};
+const exported = buildSlpWardrobeJson([randomLook]);
+const roundTrip = parseSlpWardrobeJson(exported);
+assert.deepEqual(roundTrip.errors, []);
+assert.equal(roundTrip.looks[0]?.description, randomLook.description);
+assert.equal(roundTrip.looks[0] && "id" in roundTrip.looks[0], false);
+assert.equal(parseSlpWardrobeJson(JSON.stringify(roundTrip.looks[0])).looks.length, 1);
+assert.equal(parseSlpWardrobeJson(JSON.stringify([roundTrip.looks[0], { name: "x" }])).errors.length, 1);
+assert.equal(parseSlpWardrobeJson("nope").looks.length, 0);
+assert.equal(parseSlpWardrobeJson("5").errors.length, 1);
 
 console.log("slurp2 wardrobe regression checks passed");

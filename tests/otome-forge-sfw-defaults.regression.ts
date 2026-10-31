@@ -17,6 +17,8 @@
 // beat, CG beat, confrontation and closer digests moved.
 // 0.6.1 (#1960): what stands between each love interest and the protagonist names the slow burn of their stage, so
 // every story and banner digest moved once.
+// 0.6.7 (#1980): the chapter planner reads its story arc, and the mystery's truth leaves it except on a scheduled page,
+// so the chapter plan digest moved (the other prompts are untouched: the arc block reaches P5 alone).
 // 0.6.6: the shared writing rules ask for what the protagonist feels in their body, so every story and banner digest
 // moved once (the new line rides in the rules block of each prompt).
 // 0.6.3 (#1965): each love interest's card and bible carry how they look now (their Image appearance and worn outfit),
@@ -242,7 +244,7 @@ const EXPECTED_ANGST: Record<string, string> = {
   bannerMine: "a2a84917627d0a0e",
   beat: "892e87bd6b552fda",
   beatWithCg: "63f50919b26d7efd",
-  chapterPlan: "edc34144598f544c",
+  chapterPlan: "74761bd5e5df5cd5",
   closer: "3b178308331e7820",
   confrontation: "bdd9f6254055ad7d",
   repairPlan: "d7ab0afffa32c5c2",
@@ -254,7 +256,7 @@ const EXPECTED_GENTLE: Record<string, string> = {
   bannerMine: "9e5c84b88c22c555",
   beat: "eff6921d2700cc81",
   beatWithCg: "be43bd2b4a87748d",
-  chapterPlan: "3d0fe13f4a46bece",
+  chapterPlan: "6bcb0a19cd26c4fe",
   closer: "d5b9e340c6de12c8",
   confrontation: "aa0e05b2f50036c9",
   repairPlan: "2b00d0b73698377e",

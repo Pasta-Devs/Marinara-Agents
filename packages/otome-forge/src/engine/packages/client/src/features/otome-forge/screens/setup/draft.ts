@@ -50,8 +50,8 @@ export const LANGUAGE_SUGGESTIONS = [
   "Arabic",
   "Hebrew",
 ] as const;
-export const LIS_MIN = 2;
-export const LIS_MAX = 5;
+import { LIS_MAX, LIS_MIN } from "../../shared/cast";
+export { LIS_MIN, LIS_MAX };
 /** Expressions are painted for love interests only in this release: five faces per look. */
 export const FACES_PER_LOOK = 5;
 
@@ -120,7 +120,11 @@ export interface SetupDraft {
   connections: DraftConnections;
 }
 
-const emptyPronouns = (): PronounChoice => ({ preset: null, custom: { subject: "", object: "", possessive: "" } });
+/** A pronoun choice nobody made yet: the picker starts blank. */
+export const emptyPronouns = (): PronounChoice => ({
+  preset: null,
+  custom: { subject: "", object: "", possessive: "" },
+});
 
 export function emptyDraft(): SetupDraft {
   return {

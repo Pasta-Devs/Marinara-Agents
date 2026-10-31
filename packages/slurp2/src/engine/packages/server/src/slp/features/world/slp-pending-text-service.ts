@@ -64,7 +64,7 @@ const JOB_TTL_MS = 7 * 86_400_000;
 
 /** Longest a rewrite may be. These are one-liners; a paragraph would not fit where they render. */
 const MAX_LENGTH: Record<SlurpPendingKind, number> = {
-  commission: 400,
+  commission: 1000,
   question: 180,
   opener: 240,
   delivery: 240,
