@@ -1667,11 +1667,12 @@ ${R} .of-face {
 }
 ${R} .of-face[data-speaking="false"] { filter: saturate(0.82) brightness(0.86); transform: scale(0.985); }
 ${R}[data-look="pearl"] .of-face[data-speaking="false"] { filter: saturate(0.8) brightness(0.97); }
-${R} .of-face[data-face="tender"] { --of-face-aura: rgb(255 182 202 / 0.95); }
-${R} .of-face[data-face="flustered"] { --of-face-aura: rgb(255 128 166 / 0.95); }
-${R} .of-face[data-face="cold"] { --of-face-aura: rgb(150 192 244 / 0.95); }
-${R} .of-face[data-face="hurt"] { --of-face-aura: rgb(164 142 222 / 0.95); }
-${R} .of-face[data-face="angry"] { --of-face-aura: rgb(244 92 92 / 0.95); }
+/* The glow behind his art is his own colour, and his face only warms or cools it: a blush is not a different person. */
+${R} .of-face[data-face="tender"] { --of-face-aura: color-mix(in srgb, rgb(255 182 202) 45%, var(--of-li-accent)); }
+${R} .of-face[data-face="flustered"] { --of-face-aura: color-mix(in srgb, rgb(255 128 166) 45%, var(--of-li-accent)); }
+${R} .of-face[data-face="cold"] { --of-face-aura: color-mix(in srgb, rgb(150 192 244) 45%, var(--of-li-accent)); }
+${R} .of-face[data-face="hurt"] { --of-face-aura: color-mix(in srgb, rgb(164 142 222) 45%, var(--of-li-accent)); }
+${R} .of-face[data-face="angry"] { --of-face-aura: color-mix(in srgb, rgb(244 92 92) 45%, var(--of-li-accent)); }
 ${R} .of-face-art { position: relative; flex: 1; min-height: 0; width: min(82%, 380px); }
 ${R} .of-face-art::before {
   content: ""; position: absolute; inset: 10% 6% 0; border-radius: 50%; filter: blur(30px); opacity: 0.55;
