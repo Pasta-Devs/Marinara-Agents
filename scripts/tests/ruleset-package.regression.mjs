@@ -658,6 +658,14 @@ assert.equal(pactLevel({ level_warlock: 1, pact_slot_level: 4 }), 4);
     "remarkable_athlete_add",
     "physical_check_add",
   ];
+  {
+    // As it stood before 1.0.1: prof_shortsword read the weapon training alone, with no helpers above it.
+    const training = fewer.sheet.derived.find((one) => one.id === "prof_shortsword_training");
+    fewer.sheet.derived = fewer.sheet.derived.filter((one) => !one.id.startsWith("prof_shortsword_"));
+    const sword = fewer.sheet.derived.find((one) => one.id === "prof_shortsword");
+    delete sword.of;
+    Object.assign(sword, { op: "enumTable", from: training.from, table: training.table, default: training.default });
+  }
   fewer.sheet.derived = fewer.sheet.derived.filter((one) => !untrainedAdds.includes(one.id)).slice(0, 60);
   const initiative = fewer.sheet.derived.find((one) => one.id === "initiative");
   initiative.of = initiative.of.filter((one) => one.derived !== "physical_check_add");
@@ -908,7 +916,7 @@ assert.equal(pactLevel({ level_warlock: 1, pact_slot_level: 4 }), 4);
   // 0.292.0: the wind instruments a piper may play.
   // And a rider's body and weight (0.295.0).
   // Witch Sight (0.300.0) and heavy armor proficiency's two (0.301.0).
-  assert.equal(parsedAsset.sheet.derived.length, 454); // 0.432.0 twenty-six for spotting fakes, 0.425.0 one for the druid's scimitar, 0.424.0 two for the guided hit point rolls, 0.423.0 two for the ranger's pick counts, 0.378.0 three for the subclass spell levels, 0.302.0 added ten (six attunements, Use Magic Device, three thieves' tools), 0.305.0 the alignment's words, 0.307.0 four for the talismans and the Sphere, 0.317.0 eight for armor training, 0.320.0 Magical Secrets, 0.343.0 eight for the Dancing Sword (1.729 allows up to 800), 0.346.0 the dwarf
+  assert.equal(parsedAsset.sheet.derived.length, 456); // 1.0.1 two above prof_shortsword for a monk taken later, 0.432.0 twenty-six for spotting fakes, 0.425.0 one for the druid's scimitar, 0.424.0 two for the guided hit point rolls, 0.423.0 two for the ranger's pick counts, 0.378.0 three for the subclass spell levels, 0.302.0 added ten (six attunements, Use Magic Device, three thieves' tools), 0.305.0 the alignment's words, 0.307.0 four for the talismans and the Sphere, 0.317.0 eight for armor training, 0.320.0 Magical Secrets, 0.343.0 eight for the Dancing Sword (1.729 allows up to 800), 0.346.0 the dwarf
   const many = (count) => ({
     sheet: { derived: Array.from({ length: count }, (_, i) => ({ id: `value_${i}`, op: "max", of: [{ const: 1 }] })) },
   });
@@ -1169,6 +1177,11 @@ assert.equal(pactLevel({ level_warlock: 1, pact_slot_level: 4 }), 4);
     "simple_shortsword",
   );
   assert.equal(count({ weapon_training: "simple_shortsword" }).derived("prof_shortsword"), 1);
+  // SRD 5.1 Multiclassing Proficiencies, Monk: "Simple weapons, shortswords", so a monk taken after a
+  // simple-weapons class is proficient with shortswords too (1.0.1).
+  assert.equal(count({ weapon_training: "simple", level_monk: 1 }).derived("prof_shortsword"), 1);
+  assert.equal(count({ weapon_training: "simple", level_monk: 0 }).derived("prof_shortsword"), 0);
+  assert.equal(count({ weapon_training: "simple" }).derived("prof_shortsword"), 0);
   assert.equal(
     count({ weapon_training: "simple_shortsword" }).derived("prof_named_weapons"),
     0,
@@ -15572,6 +15585,15 @@ console.log("ruleset 0.192.0 ally and hurt-target regression checks passed");
 // The shipped package without what an Engine newer than `minor` reads, so a gate is checked on its own:
 // each check stops at the first gate it meets, which may be a newer one.
 function shippedUpTo(minor) {
+  /** The sheet's derived values as they stood before 1.0.1 gave shortswords to any Monk level. */
+  function withoutShortswordHelpers(sheet) {
+    const training = sheet.derived.find((one) => one.id === "prof_shortsword_training");
+    if (!training) return;
+    sheet.derived = sheet.derived.filter((one) => !one.id.startsWith("prof_shortsword_"));
+    const sword = sheet.derived.find((one) => one.id === "prof_shortsword");
+    for (const key of ["op", "of"]) delete sword[key];
+    Object.assign(sword, { op: "enumTable", from: training.from, table: training.table, default: training.default });
+  }
   // 0.296.0 keeps Capability API 1.641: below it, its additions go as one.
   const SHIPPED_296_CONDITIONS = [
     "polymorphed_object",
@@ -18503,6 +18525,9 @@ function shippedUpTo(minor) {
       return true;
     });
   }
+  // 1.0.1's shortswords from any Monk level ride the newest minor: below it, prof_shortsword reads the
+  // weapon training alone, as it did, and its two helpers go.
+  if (minor < 812) withoutShortswordHelpers(doc.sheet);
   // 0.414.0's roped erinyes throws the Rope of Entanglement's own Entangle as that minor has it, and has no
   // rope where the minor has no Entangle.
   {
@@ -19023,7 +19048,7 @@ console.log("ruleset 0.197.0 regurgitating, climbing out and room inside regress
   assert.deepEqual(derived.of[0], { const: 13 });
   assert.equal(
     parsedAsset.sheet.derived.findIndex((one) => one.id === "ac_mage_armor"),
-    346,
+    348,
     "new derived values go at the end",
   );
   const spells = new Map(
@@ -19251,7 +19276,7 @@ console.log("ruleset 0.201.0 Warding Bond regression checks passed");
     assert.deepEqual([one.op, one.of, one.multiplier, one.round], ["scale", { field: `level_${cls}` }, 0.5, "up"]);
   }
   assert.deepEqual(
-    parsedAsset.sheet.derived.slice(347, 349).map((one) => one.id),
+    parsedAsset.sheet.derived.slice(349, 351).map((one) => one.id),
     ["arcane_recovery_levels", "natural_recovery_levels"],
     "new derived values go at the end",
   );
@@ -19376,7 +19401,7 @@ console.log("ruleset 0.203.0 Font of Inspiration, Superior Inspiration and Perfe
     ["max", [{ const: 1 }, { derived: "dark_ones_blessing_sum" }]],
   );
   assert.deepEqual(
-    parsedAsset.sheet.derived.slice(349, 351).map((one) => one.id),
+    parsedAsset.sheet.derived.slice(351, 353).map((one) => one.id),
     ["dark_ones_blessing_sum", "dark_ones_blessing"],
     "new derived values go at the end",
   );
@@ -27585,7 +27610,7 @@ console.log(
     toHit: { derived: "dancing_sword_hit_finesse" },
     adds: { derived: "dancing_sword_finesse_mod" },
   });
-  assert.equal(parsedAsset.sheet.derived.length, 454);
+  assert.equal(parsedAsset.sheet.derived.length, 456);
   assert.deepEqual(creatures.get("ghoul").creature.actions.find((one) => one.id === "claws").ridersIs, {
     except: { types: ["undead"], tags: ["elf"] },
   });

@@ -6,7 +6,7 @@ slots, hit dice, class resources, conditions, rests, a full character sheet, and
 a battle in a game on this ruleset is fought by these rules, on screen, against the SRD's own
 monsters.
 
-Requires **Marinara Engine 2.4.6+ with Capability API 1.274** (the ruleset seam, catalogs, the
+Requires **Marinara Engine 2.5.1+ with Capability API 1.812** (the ruleset seam, catalogs, the
 battle block, scaled catalog columns, the combat block, bestiaries, a fight with positions, what
 one TURN of that fight can do, a weapon that caps its own strikes, the moment a reaction waits for,
 creatures written as sheets, contests, a reaction to something being used, conditions that change
@@ -72,7 +72,8 @@ type a spell list or a page of class features row by row. This package ships twe
 | Creatures       | 323     | nothing: it is a bestiary                                   | `catalogs/creatures.json`       |
 
 Every catalog is its own file, and `ruleset.json` holds only each one's header. The Engine drops a
-`ruleset.json` over 256 KB (262,144 bytes, spaces and `$comment` text included), so since 0.187.0 the
+`ruleset.json` over 512 KB (524,288 bytes, spaces and `$comment` text included, since Capability API
+1.340; it was 256 KB before), so since 0.187.0 the
 file is written compact, one line per derived value, condition or builder step, and `validate-catalog`
 refuses a build that grows past the cap.
 
@@ -240,8 +241,9 @@ choices it still waits on, and none of them blocks the next.
   1.100). Take it once; picked at two levels it writes its row twice. The catalog picker in **All
   fields** offers it on its own, to anyone.
 - **Cantrips** asks for the class's cantrips known at its level. **Spells** asks for its spells known
-  (bard, ranger, sorcerer, warlock), the spells it prepares (cleric, druid, paladin), or a wizard's
-  spellbook: six at 1st level and two more each level after. A level lowered later keeps the picks
+  (bard, ranger, sorcerer, warlock) or the spells it prepares (cleric, druid, paladin). A wizard fills
+  **Spellbook** instead, up to 44 picks: six at 1st level and two more each level after, so 32 to 44
+  from 14th to 20th level; **Prepared spells** then ticks the ones prepared. A level lowered later keeps the picks
   past the new count but they count for nothing until the level comes back.
 - **Racial cantrip**: a high elf picks one wizard cantrip. A tiefling's thaumaturgy comes with the race.
   Either race sets **Racial spells ability** (Intelligence or Charisma), and the sheet shows a racial
@@ -263,10 +265,10 @@ choices it still waits on, and none of them blocks the next.
   armor, one skill and thieves' tools), never saving throws; its features and spells are offered as
   the first class's are. Raise their levels on **Levels and hit points**. A fourth class is typed there
   and picked in **All fields**. A monk or warlock taken second keeps the first class's weapon
-  training on the sheet; a class with martial weapons widens it.
+  training on the sheet; a class with martial weapons widens it, and any Monk level adds shortswords.
 - **Class features** take up to 20 picks, **Spells** up to 30 and **Cantrips** up to 12 (0.431.0, enough
-  for any SRD count); a higher-level monk adds the rest of its features in **All fields**. A wizard's spellbook passes 20 at
-  9th level. The paladin's spells are the SRD's
+  for any SRD count); a higher-level monk adds the rest of its features in **All fields**. A wizard's
+  spellbook has its own step of up to 44. The paladin's spells are the SRD's
   Paladin Spells list, which the Open5e data leaves untagged.
 - Where a background and a class give the same skill, pick another one yourself (the SRD lets you).
   The Acolyte's languages may repeat one the race speaks; pick another in **All fields**.

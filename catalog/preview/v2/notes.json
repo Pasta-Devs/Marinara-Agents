@@ -198,8 +198,8 @@
         {
           "version": "1.0.1",
           "date": "2026-10-31",
-          "notes": "- Capability API numbers follow the Engine's once more: upstream took 1.391, so the 5e minors move up one, to 1.392-1.812, and the package declares 1.812. Nothing plays differently.",
-          "highlight": false
+          "notes": "- The whole SRD 5.1 in Game Mode: build a character from any SRD race, class, background and subclass, up to 20th level, and fight on screen by the SRD's rules against its 323 monsters, with its 325 spells, 966 magic items and every piece of equipment. It ships with 11 translations as language packs beside the English ruleset, and the Engine downloads only the one it is set to. It needs Capability API 1.812, whose numbers it now follows, upstream having taken 1.391 (the 5e minors move up one, to 1.392-1.812). A monk taken as a second or third class is proficient with shortswords, as the SRD's Multiclassing Proficiencies say.",
+          "highlight": true
         },
         {
           "version": "1.0.0",
@@ -216,7 +216,7 @@
         {
           "version": "0.450.0",
           "date": "2026-10-31",
-          "notes": "- Capability API numbers follow the Engine's renumbering after it merged upstream staging (1.379-1.390 are upstream's): the 5e minors move from 1.379-1.805 to 1.392-1.812, and the package declares 1.812. Nothing plays differently.",
+          "notes": "- Capability API numbers follow the Engine's renumbering after it merged upstream staging (1.379-1.390 are upstream's): the 5e minors move from 1.379-1.804 to 1.391-1.811, and the package declares 1.811. Nothing plays differently.",
           "highlight": true
         },
         {
