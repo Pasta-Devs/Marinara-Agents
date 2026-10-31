@@ -5,6 +5,9 @@
 // (Memories, His Wardrobe, My Wardrobe) are created only on POST .../wish/open, never by a read: GET .../wish lists
 // what exists and which kinds are missing. Past banners stay as Echoes, pullable with the same pity, and nothing
 // expires. A rotation nobody opened is never created.
+// A month's first rotation (its start day the 1st to the 14th, SH/wish.ts rotationSeason) is seasonal: its three banners
+// are planned on that month's theme and keep it as `season`, which their views (Echoes too) carry for the badge. Any
+// later rotation that month is the planner's free choice, as before; a banner written before 0.6.5 has no season.
 // Creating a banner is one P20 call (S/wish/prompts.ts) in the run's foreground queue (readOrGenerate), so two opens at
 // once write it once: the second finds it stored. Its items are written first and the banner last, so a banner that
 // exists always has its items; ids follow the banner (`memories-3-f`), so a retry after a failed write rewrites the
@@ -34,6 +37,7 @@ import {
   parseBannerKey,
   pityView,
   rotationOf,
+  rotationSeason,
   rotationWindow,
   type Banner,
   type BannerKind,
@@ -180,6 +184,7 @@ export function toBannerView(
     rotation: banner.rotation,
     startsDay: banner.startsDay,
     endsDay: banner.endsDay,
+    ...(banner.season ? { season: banner.season } : {}),
     featuredLi: banner.featuredLi,
     title: five.title,
     echo: banner.rotation < rotation,
@@ -388,7 +393,10 @@ async function createBanner(
     debugMode: options.debugMode,
     signal: options.signal,
   });
+  const window = rotationWindow(currentRotation(run.world).createdDay, rotation);
+  const season = rotationSeason(window.startsDay);
   const earlierTitles: string[] = [];
+  const seasonTitles: string[] = [];
   const earlier = banners.filter((banner) => banner.kind === kind);
   const earlierItems = await readItems(
     store,
@@ -398,6 +406,7 @@ async function createBanner(
   for (const banner of earlier) {
     const title = earlierItems.get(banner.items.five[0]!)?.title;
     if (title) earlierTitles.push(title);
+    if (title && season && banner.season === season) seasonTitles.push(title);
   }
   const context = {
     kind,
@@ -421,6 +430,7 @@ async function createBanner(
       ...(partner?.look ? { partnerLook: { ...partner.look, title: partner.title } } : {}),
       earlierTitles,
       memory,
+      ...(season ? { season: { id: season, earlierTitles: seasonTitles } } : {}),
     }),
     schema: BannerPlanSchema,
     normalize: (reply) => {
@@ -437,7 +447,6 @@ async function createBanner(
   const plan = normalizeBannerPlan(value, context) as BannerPlan;
   const at = new Date().toISOString();
   const { five, four, three } = itemsOf(key, kind, plan, featured, partner?.id, at);
-  const window = rotationWindow(currentRotation(run.world).createdDay, rotation);
   const imageConnection = run.world.images.connectionId;
   const wait = run.world.images.ask || options.review;
   const banner: Banner = {
@@ -445,6 +454,7 @@ async function createBanner(
     kind,
     rotation,
     ...window,
+    ...(season ? { season } : {}),
     featuredLi: featured.id,
     items: { five: [five.id], four: four.map((item) => item.id), three: three.map((item) => item.id) },
     art: imageConnection ? { state: wait ? "waiting-consent" : "pending", at } : null,
