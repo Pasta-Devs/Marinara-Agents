@@ -379,6 +379,7 @@ export function readHimMessages({
     "RULES",
     "- The decoys are believable: a player who reads the moment closely can find the truth, and one who skims cannot.",
     "- Vary the truths: in at least one round the plain meaning of the words is the true one, and in another the face is what lies.",
+    `- The truth is a feeling of this moment, never a fact the card or the bible already states: a round the player can answer from what was already said about ${name} is a bad round.`,
     `- Fit stage ${liState.stage}: only what ${name} lets show at this stage, and only feelings ${name} would have.`,
     "- No spoilers: a thought never states a hidden secret or anything the protagonist has not learned; a hidden secret may show only as a tell.",
     "- Small moments only: nothing in a round changes the story, and no new event happens because of it.",

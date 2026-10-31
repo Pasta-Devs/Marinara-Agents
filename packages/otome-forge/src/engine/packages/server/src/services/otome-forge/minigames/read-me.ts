@@ -359,9 +359,14 @@ export function readMeMessages({ world, player, unit, liState, recalled, lately 
     `- fact: what the guess claims, as one short sentence in the third person about ${them} by name, at most ${READ_ME_WORDS.fact} words (for example "${them} takes ${player.pronouns.possessive} tea bitter.").`,
     `- reactions: ${name}'s reaction to each answer: right (the guess was right), close (nearly right) and wrong (not at all). Each line at most ${READ_ME_WORDS.reaction} words, in ${voice}; each face as above.`,
     "RULES",
-    `- Read the protagonist the way ${name} reads people: each guess comes from their persona, from what ${name} has been told and has seen, and from ${name}'s own way of reading people. A guess may be bold, never baseless.`,
-    "- Vary the guesses: different categories where you can, some safe and some daring.",
-    ...(known ? [`- Never guess again what ${name} already knows (ALREADY KNOWN); a new guess may build on it.`] : []),
+    `- Read the protagonist the way ${name} reads people, but guess past what is already known. What the persona states and what ${name} has been told or seen are where a guess starts, never the guess itself: a persona who loves sweets is never answered with "you like sweets", but with "your favourite sweet is the dark chocolate you do not admit to".`,
+    `- One step further: every guess claims something specific and checkable that ${name} does not know yet, so the answer teaches ${name} something new.`,
+    `- Vary the angle: what the protagonist wants right now, what they are thinking, what they like or dislike, a habit, a fear, a memory, something they would rather not admit. Different categories where you can, some safe and some daring.`,
+    ...(known
+      ? [
+          `- Never guess again what ${name} already knows (ALREADY KNOWN); if a fact is already there, guess something else. A new guess may build on it.`,
+        ]
+      : []),
     `- Fit stage ${liState.stage}: only what ${name} would say to the protagonist at this stage.`,
     "- Small moments only: nothing in the set changes the story, and no new event happens because of it.",
     "- Never guess about the protagonist's health, illness or medication, or about anyone's period or cycle.",

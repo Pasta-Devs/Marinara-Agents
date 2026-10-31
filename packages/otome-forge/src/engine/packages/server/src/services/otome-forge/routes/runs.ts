@@ -107,6 +107,7 @@ const SetupBody = z.object({
     language: z.string().min(1).max(LANGUAGE_MAX),
     // The player wrote it: no cap.
     writingStyle: z.string().optional(),
+    bannedPhrases: z.string().max(OWN_BANNED_PHRASES_MAX).optional(),
     protagonist: z.object({
       personaId: z.string().min(1).max(ID_MAX),
       pronouns: PronounsSchema,
@@ -242,6 +243,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         premise,
         language: setup.language.trim() || DEFAULT_LANGUAGE,
         ...(setup.writingStyle?.trim() ? { writingStyle: setup.writingStyle.trim() } : {}),
+        ...(setup.bannedPhrases?.trim() ? { bannedPhrases: setup.bannedPhrases.trim() } : {}),
         createdAt: at,
         content: enforceContent(setup.content, ageGate),
         images: { ...current.images, ...setup.images },

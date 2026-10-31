@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.5.22 — 2026-10-31
 
 - Clearer hands-off wording: the background import help says it covers every chat, intro and re-extract text is right when safe changes are accepted automatically, and Advanced Memory scene recaps are disabled with a note on Engines that cannot provide them.
 - Chat Settings shows what background import did today and what waits for review, and both Chat Settings and Extraction warn with a "Choose" button when background import has no extraction connection.

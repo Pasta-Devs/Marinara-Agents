@@ -14,6 +14,7 @@ import {
 } from "../../shared/content";
 import type { Pronouns, SetupInput } from "../../shared/api-types";
 import { ARCHETYPE_IDS, type ArchetypeId } from "../../shared/archetypes";
+import { OWN_BANNED_PHRASES_MAX } from "../../shared/banned-phrases";
 
 export const SETUP_DRAFT_KEY = "otome-forge:setup-draft:v1";
 
@@ -108,6 +109,8 @@ export interface SetupDraft {
   title: string;
   /** How the player wants the story written (tense, voice, pacing…): theirs, so never clipped. */
   writingStyle: string;
+  /** The player's own banned phrases as typed, added to the built-in list (also in Settings → Content). */
+  bannedPhrases: string;
   premise: string;
   language: string;
   protagonist: { personaId: string; name: string; pronouns: PronounChoice; traits: string[]; goal: string };
@@ -126,6 +129,7 @@ export function emptyDraft(): SetupDraft {
     reached: "premise",
     title: "",
     writingStyle: "",
+    bannedPhrases: "",
     premise: "",
     language: "English",
     protagonist: { personaId: "", name: "", pronouns: emptyPronouns(), traits: [], goal: "" },
@@ -197,6 +201,7 @@ export function readDraft(value: unknown): SetupDraft {
       SETUP_STEPS[Math.max(SETUP_STEPS.indexOf(step), SETUP_STEPS.indexOf(oneOf(SETUP_STEPS, value.reached, step)))]!,
     title: str(value.title, TITLE_MAX),
     writingStyle: typeof value.writingStyle === "string" ? value.writingStyle : "",
+    bannedPhrases: str(value.bannedPhrases, OWN_BANNED_PHRASES_MAX),
     premise: str(value.premise, PREMISE_MAX),
     language: str(value.language, LANGUAGE_MAX, draft.language),
     protagonist: {
@@ -356,6 +361,7 @@ export function toSetupInput(draft: SetupDraft): SetupInput {
   return {
     ...(draft.title.trim() ? { title: draft.title.trim() } : {}),
     ...(draft.writingStyle.trim() ? { writingStyle: draft.writingStyle.trim() } : {}),
+    ...(draft.bannedPhrases.trim() ? { bannedPhrases: draft.bannedPhrases.trim() } : {}),
     premise: draft.premise.trim(),
     language: draft.language.trim(),
     protagonist: {

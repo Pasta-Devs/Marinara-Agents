@@ -1149,12 +1149,13 @@ export type SetupLi =
   | { source: "card"; cardId: string; pronouns: Pronouns }
   | { source: "archetype"; archetype: string; name: string; pronouns: Pronouns; notes?: string };
 
-/** POST /runs {setup}. Limits: premise ≤2000, traits ≤5, goal ≤300, notes ≤500, 2–5 LIs. */
+/** POST /runs {setup}. Limits: premise ≤2000, traits ≤5, goal ≤300, notes ≤500, banned phrases ≤2000, 2–5 LIs. */
 export interface SetupInput {
   title?: string;
   premise: string;
   language: string;
   writingStyle?: string;
+  bannedPhrases?: string;
   protagonist: { personaId: string; pronouns: Pronouns; traits: string[]; goal: string };
   lis: SetupLi[];
   content: ContentSettings;

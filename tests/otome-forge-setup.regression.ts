@@ -15,12 +15,16 @@ import type {
   Unit,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import { ARCHETYPE_IDS } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/archetypes.ts";
+import { OWN_BANNED_PHRASES_MAX } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/banned-phrases.ts";
 import { bibleProblem } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/bible.ts";
 import { defaultContent } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/content.ts";
 import { forgeIsWorking } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/forge.ts";
 import {
   dropMissingPicks,
   emptyDraft,
+  isBlankDraft,
+  readDraft,
+  toSetupInput,
   type DraftLi,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/screens/setup/draft.ts";
 import type {
@@ -58,6 +62,7 @@ import {
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { checkBible } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/setup/bible.ts";
 import { WorldPlanSchema } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/setup/prompts.ts";
+import { bannedPhrasesRule } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/writing-rules.ts";
 import {
   forgeSettled,
   initialForge,
@@ -755,7 +760,7 @@ test("an archetype's look painted with no reference keeps xAI's JPEG, which the 
   assert.deepEqual(Buffer.from(await file.arrayBuffer()), jpeg, "the gallery keeps the real image bytes");
 });
 
-test("POST /runs takes 2–5 love interests, enforces the 18+ gate, and its forge reaches ready", async () => {
+test("POST /runs takes 2–5 love interests, enforces the 18+ gate, keeps the player's banned phrases, and its forge reaches ready", async () => {
   const fake = createFakeDocuments();
   fake.seedGachaForgeIndex();
   const store = createOtomeStore(fake.documents);
@@ -816,12 +821,18 @@ test("POST /runs takes 2–5 love interests, enforces the 18+ gate, and its forg
     assert.equal(refused.status, 403);
     assert.equal(refused.body.code, "age-gate");
   }
+  const tooLong = await call("POST", "/runs", setupInput({ bannedPhrases: "x".repeat(OWN_BANNED_PHRASES_MAX + 1) }));
+  assert.equal(tooLong.status, 400, "banned phrases over the Settings limit");
   assert.equal(calls.length, 0, "a refused setup never reaches the model");
 
-  const created = await call("POST", "/runs", setupInput());
+  const banned = ' "wet heat", slick folds;\nWet Heat ';
+  const created = await call("POST", "/runs", setupInput({ bannedPhrases: `  ${banned}  ` }));
   assert.equal(created.status, 200);
   const runKey = String(created.body.run);
   const view = created.body.view as RunView;
+  assert.equal(view.world.bannedPhrases, banned.trim(), "kept as typed, trimmed, for Settings → Content");
+  const stored = async (key: string) => (await store.readDoc(worldId(runIdOf(key)), normalizeWorld))!.bannedPhrases;
+  assert.equal(await stored(runKey), banned.trim());
   assert.deepEqual(
     view.lis.map((li) => [li.name, li.pronouns.subject]),
     [
@@ -837,6 +848,10 @@ test("POST /runs takes 2–5 love interests, enforces the 18+ gate, and its forg
   assert.ok(!("truth" in ready.world.mystery), "the run view never carries the hidden truth");
   assert.match(text(calls[0].messages), /The player's notes: Plays the accordion\./);
   assert.match(text(calls[0].messages), /CARD-DESCRIPTION/);
+  // The world plan and every bible avoid them, beside the built-in list.
+  assert.equal(calls.length, 4);
+  for (const forged of calls) assert.ok(text(forged.messages).includes(bannedPhrasesRule(banned)));
+  assert.match(bannedPhrasesRule(banned), /; "wet heat"; "slick folds"\.$/);
 
   // With the gate confirmed, the same NSFW setup is accepted.
   assert.equal((await call("POST", "/age-gate", { confirm: true })).status, 200);
@@ -847,6 +862,7 @@ test("POST /runs takes 2–5 love interests, enforces the 18+ gate, and its forg
   );
   assert.equal(nsfw.status, 200);
   assert.equal((nsfw.body.view as RunView).world.content.heat, "explicit");
+  assert.equal(await stored(String(nsfw.body.run)), undefined, "none given, none stored");
   await forgeSettled(runIdOf(String(nsfw.body.run))).catch(() => undefined);
 });
 
@@ -1012,4 +1028,14 @@ test("a kept draft drops a persona or card the Engine no longer has, and keeps e
   assert.equal(dropMissingPicks(draft, null, null), draft, "lists still loading, failed or cut off change nothing");
   const kept = dropMissingPicks(draft, [{ id: "persona-gone" }], [{ id: "card-kai" }, { id: "card-gone" }]);
   assert.equal(kept, draft, "nothing missing returns the same draft, so the wizard does not re-render");
+});
+
+test("a draft keeps the player's banned phrases on this device and sends them trimmed; none sends nothing", () => {
+  const draft = { ...emptyDraft(), bannedPhrases: "  wet heat, slick folds  " };
+  assert.equal(isBlankDraft(draft), false, "typed phrases are the player's work, so the draft is kept");
+  assert.equal(readDraft(JSON.parse(JSON.stringify(draft))).bannedPhrases, draft.bannedPhrases);
+  assert.equal(readDraft({ ...draft, bannedPhrases: undefined }).bannedPhrases, "", "a draft from before has none");
+  assert.equal(readDraft({ ...draft, bannedPhrases: "x".repeat(3000) }).bannedPhrases.length, OWN_BANNED_PHRASES_MAX);
+  assert.equal(toSetupInput(draft).bannedPhrases, "wet heat, slick folds");
+  assert.ok(!("bannedPhrases" in toSetupInput({ ...draft, bannedPhrases: "   " })));
 });

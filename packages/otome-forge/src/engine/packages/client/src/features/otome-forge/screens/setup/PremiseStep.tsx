@@ -1,11 +1,12 @@
 // ──────────────────────────────────────────────
-// Otome Forge setup, step 1: the premise, the story's language and an optional title. "Surprise me" asks the model
-// for a premise (POST /premise/suggest) and can be undone.
+// Otome Forge setup, step 1: the premise, the story's language, how it's written, banned phrases and an optional
+// title. "Surprise me" asks the model for a premise (POST /premise/suggest) and can be undone.
 // ──────────────────────────────────────────────
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Dices, Undo2 } from "lucide-react";
 import { useOtomeApi } from "../../api";
+import { OWN_BANNED_PHRASES_MAX } from "../../shared/banned-phrases";
 import { LANGUAGE_MAX, LANGUAGE_SUGGESTIONS, PREMISE_MAX, TITLE_MAX, type SetupDraft } from "./draft";
 import { TextField } from "./parts";
 
@@ -123,6 +124,16 @@ export function PremiseStep({ draft, update, connectionId }: PremiseStepProps) {
         rows={3}
         value={draft.writingStyle}
         onChange={(writingStyle) => update((current) => ({ ...current, writingStyle }))}
+      />
+      <TextField
+        label={t("ui.otomeForge.settings.bannedPhrasesLabel")}
+        hint={t("ui.otomeForge.settings.bannedPhrasesHint")}
+        placeholder={t("ui.otomeForge.settings.bannedPhrasesPlaceholder")}
+        rows={3}
+        max={OWN_BANNED_PHRASES_MAX}
+        counter
+        value={draft.bannedPhrases}
+        onChange={(bannedPhrases) => update((current) => ({ ...current, bannedPhrases }))}
       />
       <TextField
         label={t("ui.otomeForge.setup.titleLabel")}
