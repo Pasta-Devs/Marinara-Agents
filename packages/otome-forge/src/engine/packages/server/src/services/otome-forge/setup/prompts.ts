@@ -7,8 +7,8 @@
 // (forgeHydrateStoryCharacters + forgeFormatCharacterCardReference); archetype ones carry the archetype seed and the
 // player's notes. The world plan and the bible author the hidden truth, so they never get the knowledge boundary
 // (plan §1.7). P1 and P2 write prose the player reads but no story, so of the writing rules
-// they get only the banned-phrases line. Prompts are English and never localized; prose fields are written in the
-// world's language, model-written look tags always in English.
+// they get only the banned-phrases line (P2 with the player's own, from setup). Prompts are English and never
+// localized; prose fields are written in the world's language, model-written look tags always in English.
 import {
   forgeFormatCharacterCardReference,
   forgeHydrateStoryCharacters,
@@ -30,7 +30,7 @@ import { otomeContentContract, otomeContractReminder } from "../content-contract
 import type { OtomeMessage } from "../generation.js";
 import { MIN_AGE } from "../../../../../client/src/features/otome-forge/shared/bible.js";
 import { text } from "../schemas/common.js";
-import { BANNED_PHRASES_RULE, otomeWritingRules } from "../writing-rules.js";
+import { BANNED_PHRASES_RULE, bannedPhrasesRule, otomeWritingRules } from "../writing-rules.js";
 import { aboutLine } from "../schemas/player.js";
 import { intimacyOpen } from "../../../../../client/src/features/otome-forge/shared/content.js";
 
@@ -352,7 +352,7 @@ export function worldPlanMessages({
     "- The love interests' goals compete with the protagonist's own goal.",
     "- Never assume the protagonist's gender: use their pronouns.",
     "- Omit an optional field rather than writing null.",
-    BANNED_PHRASES_RULE,
+    bannedPhrasesRule(world.bannedPhrases),
     "",
     otomeContentContract({ world, lis: contractPeople(cast), kind: "planner" }),
   ].join("\n");

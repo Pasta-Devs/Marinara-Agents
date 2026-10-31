@@ -30,7 +30,7 @@ On desktop, **Enter fullscreen** fills the Home browser panel across Otome Heart
 
 Choose **Begin a new story**. Setup has six steps, and an unfinished setup is kept in this browser until the story is made.
 
-1. **Story:** a premise, or **Surprise me** to have your model write one (an original world). A premise or a card set in an existing world, such as Teyvat from Genshin Impact, keeps that world and its canon. Then the language the story is written in, **How it's written** (tense, point of view, pacing: anything you want every scene, message and note to follow; also in **Settings → Content**), and an optional title.
+1. **Story:** a premise, or **Surprise me** to have your model write one (an original world). A premise or a card set in an existing world, such as Teyvat from Genshin Impact, keeps that world and its canon. Then the language the story is written in, **How it's written** (tense, point of view, pacing: anything you want every scene, message and note to follow; also in **Settings → Content**), **Banned phrases** (words and phrases you never want to read; also in **Settings → Content**), and an optional title.
 2. **You:** the persona you play, your pronouns, up to five traits, and a goal of your own that isn't romance. Your persona's **Description, Personality, Backstory and Appearance** reach story writing and personal interactions whole; see [What leaves your device](#what-leaves-your-device) for the prompt list and refresh behavior. Scenario, greetings and example dialogue are excluded. An unavailable persona keeps its own saved text as a fallback.
 3. **Cast:** two to five love interests. Pick them from your character cards or from six original archetypes: Brilliant Monster, Gilded Tyrant, Gentle Liar, Loyal Blade, Ruined Saint and Laughing Stranger. Love interests can be any gender and use the pronouns you pick. A card stays canon: the story never contradicts it.
 4. **Content:** Heat, Darkness, Lines & Veils and the image rating (see [Content settings](#content-settings-nsfw-mode-and-lines--veils)).
@@ -183,10 +183,10 @@ Over five moments, pick what your love interest really feels from three or four 
 
 ### Read Me
 
-Read Them in reverse: your love interest studies you and makes four guesses about you, from what you like and dislike to your habits, fears and dreams. Answer each with **Spot on**, **Close** or **Not at all**, and tell them the truth in your own words if you like.
+Read Them in reverse: your love interest studies you and makes four guesses about you, from what you want right now and what you think to your likes, dislikes, habits, fears, memories and things you would rather not admit. A guess is never what your persona already states: from a persona who loves sweets he guesses the sweet, not the liking, so every answer teaches him something new. Answer each with **Spot on**, **Close** or **Not at all**, and tell them the truth in your own words if you like.
 
 - It pays 40 Starlight and 20 affection, plus 10 for each guess they get spot on and 5 for each close one, within the day's caps. It is 1 model call, and it follows your story's Heat.
-- **What they know about you:** every answer goes into that love interest's notebook. Open it from Read Me to read it, rewrite your own words or delete an entry.
+- **What they know about you:** every answer goes into that love interest's notebook, and he never guesses it again. Open it from Read Me to read it, rewrite your own words or delete an entry.
 - Only that love interest knows it. It reaches the scenes they're in, their Home notes and messages, and dates and stories with them, never another love interest's prompts. Others in a scene only learn what happens on the page.
 - It is never part of story memory, so a delete is final. A scene already written ahead keeps the notebook it was written with; your change reaches the next one.
 - Guesses never touch your health, medication or cycle, and words about them can't be kept.
@@ -260,7 +260,7 @@ Each story has its own content settings:
 - you can add limits of your own;
 - changing Darkness keeps the levels you set yourself.
 
-**Banned phrases:** in **Settings → Content**, type the words and phrases you never want to read, separated by commas or one per line. Every scene, message and note avoids them, on top of the built-in list of overused phrases.
+**Banned phrases:** when you set up a story or later in **Settings → Content**, type the words and phrases you never want to read, separated by commas or one per line. Every scene, message and note avoids them, on top of the built-in list of overused phrases. Set during setup, they also apply to the world and every love interest’s Bible as they are forged.
 
 **NSFW mode:** NSFW Heat or Dark romance turns it on for the story, its chapters and Messages.
 

@@ -32,6 +32,7 @@ const ROS = "li-rosalind-0002";
 const HE = { subject: "he", object: "him", possessive: "his" };
 const SHE = { subject: "she", object: "her", possessive: "her" };
 const PREMISE = "In a city of clockwork canals, an apprentice sees a murder at the masked ball.";
+const BANNED = "wet heat, slick folds";
 const NOTE = "You left the lab light on again. I turned it off. Don’t thank me.";
 const REPLY = "Barely. The data kept me company.";
 const CARE_NOTE = "Blanket, tea, and no arguments tonight. I’ll keep the kettle warm.";
@@ -340,6 +341,8 @@ function createLoopStub({ seeded = false } = {}) {
       mystery: { question: "Who killed the duke?" },
       web: [],
       openingSituation: "",
+      // As the server keeps them: only when there are some.
+      ...(setup.bannedPhrases ? { bannedPhrases: setup.bannedPhrases } : {}),
       content: setup.content,
       images: { ...setup.images, connectionId: null },
       connections: setup.connections,
@@ -1227,6 +1230,7 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await auditScreen(page, root, "setup: story");
     await root.getByRole("button", { name: "Surprise me" }).click();
     await expect(root.getByLabel("Premise")).toHaveValue(PREMISE);
+    await root.getByLabel("Banned phrases").fill(` ${BANNED} `);
     await root.getByRole("button", { name: "Next" }).click();
 
     await expect(root.getByRole("heading", { name: "Who are you here?" })).toBeFocused();
@@ -1256,6 +1260,7 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     const created = posts(stub, "/runs")[0]!.body!.setup;
     expect(created).toMatchObject({
       premise: PREMISE,
+      bannedPhrases: BANNED,
       protagonist: { personaId: "persona-mira", pronouns: SHE },
       lis: [
         { source: "card", cardId: "card-ilvar", pronouns: HE },
@@ -1285,6 +1290,12 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await expect(root.getByRole("heading", { name: "Prologue complete" })).toBeFocused();
     await expect(root.getByText("+30 Starlight")).toBeVisible();
     await root.getByRole("button", { name: "Back to Home" }).click();
+    await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeFocused();
+    // The banned phrases typed in setup are the story's, in Settings → Content.
+    await root.getByRole("button", { name: "Settings", exact: true }).click();
+    await root.getByRole("tablist").getByRole("tab", { name: "Content", exact: true }).click();
+    await expect(root.getByLabel("Banned phrases")).toHaveValue(BANNED);
+    await root.getByRole("button", { name: "Back", exact: true }).click();
     await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeFocused();
   });
 
