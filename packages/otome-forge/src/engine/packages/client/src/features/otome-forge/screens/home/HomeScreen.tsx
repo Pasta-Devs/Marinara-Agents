@@ -228,12 +228,10 @@ interface HomeScreenProps {
   view: RunView;
   /** Opens the phone: a thread (Reply quotes the note), or null for the thread list. */
   onOpenPhone: (open: PhoneOpen | null) => void;
-  onOpenCast: () => void;
-  onOpenStories: () => void;
   onOpenRemind: () => void;
 }
 
-export function HomeScreen({ runKey, view, onOpenPhone, onOpenCast, onOpenStories, onOpenRemind }: HomeScreenProps) {
+export function HomeScreen({ runKey, view, onOpenPhone, onOpenRemind }: HomeScreenProps) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const queryClient = useQueryClient();
@@ -629,8 +627,6 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenCast, onOpenStorie
           lis={view.lis}
           current={li.id}
           onClose={() => setSheet(null)}
-          onOpenCast={onOpenCast}
-          onOpenStories={onOpenStories}
           onPick={(picked) => {
             setSheet(null);
             if (picked !== li.id) void save({ li: picked });

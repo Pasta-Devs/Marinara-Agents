@@ -25,6 +25,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import type {
+  LtmAdvancedMemoryBackfillResponse,
+  LtmExtractionSettingsPatch,
   LtmImportSourceNotesResponse,
   LtmInteropPreviewResponse,
   LtmInteropPreviewSample,
@@ -275,6 +277,9 @@ function handleTabKey<T extends string>(
   });
 }
 
+// Recaps per request of the Advanced Memory backfill loop (the route accepts 1-100).
+const ADVANCED_MEMORY_BACKFILL_BATCH = 10;
+
 export default function SourcesWorkspace({
   props,
   onOpenMemory,
@@ -455,6 +460,15 @@ export default function SourcesWorkspace({
 
   const scopeTargets = useQuery(scopeTargetsQueryOptions(props.chatId));
   const settingsQuery = useQuery(settingsQueryOptions);
+  const extractionSettings = useQuery({
+    queryKey: queryKeys.extractionSettings,
+    queryFn: () => request<LtmExtractionSettingsPatch>("/extraction-settings"),
+  });
+  const [advancedMemoryBackfillMessage, setAdvancedMemoryBackfillMessage] = useState("");
+  // Set while the loop runs, so the progress and Stop show between batches too, when no import task is active.
+  const [advancedMemoryProgress, setAdvancedMemoryProgress] = useState<{ read: number; total: number } | null>(null);
+  const advancedMemoryBackfillRef = useRef(false);
+  const advancedMemoryStopRef = useRef<AbortController | null>(null);
 
   const defaultAvailabilityMode: LtmMode =
     modeFilter !== "all"
@@ -739,6 +753,25 @@ export default function SourcesWorkspace({
       ),
     enabled: previewEnabled && source === "messages" && previewScope !== undefined,
   });
+  // How many scene recaps the backfill button would read. The batch route answers with one id plus the rest, so the
+  // count needs no route of its own; an import refreshes it through the preview key.
+  const advancedMemoryPending = useQuery({
+    queryKey: [...queryKeys.preview, "advanced-memory-backfill", previewScope, props.chatId],
+    queryFn: async ({ signal }) => {
+      const batch = await request<LtmAdvancedMemoryBackfillResponse>(
+        "/import/advanced-memory/backfill-batch",
+        "POST",
+        {
+          ...(previewScope ? { sourceScope: previewScope } : {}),
+          ...(props.chatId ? { chatId: props.chatId } : {}),
+          limit: 1,
+        },
+        signal,
+      );
+      return batch.sourceIds.length + batch.remaining;
+    },
+    enabled: previewEnabled && source === "chats" && extractionSettings.data?.useAdvancedMemory === true,
+  });
   const sourceDetails = useQuery({
     queryKey: [...queryKeys.preview, "details", source, previewScope, modeFilter, focusedFlatSourceId],
     queryFn: () =>
@@ -850,6 +883,12 @@ export default function SourcesWorkspace({
   );
   const proposalCount =
     importResult?.imported.reduce((count, item) => count + (item.draft?.mutations.length ?? 0), 0) ?? 0;
+  const appliedCount = importResult?.imported.reduce((count, item) => count + item.appliedMutationIds.length, 0) ?? 0;
+  const pendingProposalCount =
+    importResult?.imported.reduce(
+      (count, item) => count + (item.draft?.status === "pending" ? item.draft.mutations.length : 0),
+      0,
+    ) ?? 0;
   const importResultMessage = !importResult
     ? ""
     : importResult.counts.sourceNotesWritten === 0
@@ -864,11 +903,18 @@ export default function SourcesWorkspace({
           ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceRefreshCompletedWithFailures")
           : importResult.counts.failed || importResult.counts.cancelled
             ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceSavedExtractionFailed")
-            : proposalCount
-              ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceSavedProposalsReady", {
-                  count: proposalCount,
-                })
-              : localizeUi("ui.longTermMemory.sourcesworkspace.sourceSavedNoProposals");
+            : appliedCount
+              ? localizeUi(
+                  pendingProposalCount
+                    ? "ui.longTermMemory.sourcesworkspace.sourceSavedProposalsAccepted"
+                    : "ui.longTermMemory.sourcesworkspace.sourceSavedAllProposalsAccepted",
+                  { applied: appliedCount, count: pendingProposalCount },
+                )
+              : proposalCount
+                ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceSavedProposalsReady", {
+                    count: proposalCount,
+                  })
+                : localizeUi("ui.longTermMemory.sourcesworkspace.sourceSavedNoProposals");
   const importResultHeading = importResult
     ? localizeUi(
         importResultHeadingKeys[importResultContract?.action === "refresh" ? "refresh" : "import"][
@@ -1346,6 +1392,9 @@ export default function SourcesWorkspace({
           !result.counts.sourceWriteFailed
         )
           setReviewMessage(localizeUi("ui.longTermMemory.sourcesworkspace.sourceRefreshedRerunExtraction"));
+        // A batch where some sources failed is not done; its result panel already lists the failures.
+        if (result.counts.failed || result.counts.cancelled || result.counts.missing || result.counts.sourceWriteFailed)
+          return "partial" as const;
       } else if (task.status === "cancelled" || task.status === "failed") {
         setImportError(
           task.status === "cancelled"
@@ -1353,6 +1402,7 @@ export default function SourcesWorkspace({
             : task.error?.message || localizeUi("ui.longTermMemory.sourcesworkspace.sourcesCouldNotBeImported"),
         );
       }
+      return task.status;
     } catch (error) {
       setImportError(errorMessage(error, localizeUi("ui.longTermMemory.sourcesworkspace.sourcesCouldNotBeImported")));
     }
@@ -1590,6 +1640,169 @@ export default function SourcesWorkspace({
 
   // Notes whose source is gone. Keeping one needs no action; Remove goes through the delete workbench.
   const outdatedNotes = (source === "lorebooks" ? lorebookPreviewData?.outdated : previewData?.outdated) ?? [];
+  // Issue #1964: scene recaps without a memory block are read by the summary extractor in batches. One press loops
+  // the batch route until nothing is left; the route leaves out recaps already imported or covered by an earlier
+  // chat import, so its remaining count is the cursor and a later press resumes from what is left.
+  // Leaving the Chats tab or the workspace ends the loop after the batch being read; nothing else could stop it.
+  useEffect(() => {
+    if (source !== "chats") advancedMemoryStopRef.current?.abort();
+  }, [source]);
+  useEffect(() => () => advancedMemoryStopRef.current?.abort(), []);
+  const backfillAdvancedMemory = async () => {
+    // The batch request runs before the import task exists, so a second click must not start another.
+    if (importing || advancedMemoryBackfillRef.current) return;
+    advancedMemoryBackfillRef.current = true;
+    const stop = new AbortController();
+    advancedMemoryStopRef.current = stop;
+    setImportError("");
+    setAdvancedMemoryBackfillMessage("");
+    let read = 0,
+      total = 0,
+      previousRemaining = Number.POSITIVE_INFINITY,
+      ended: "stopped" | "done" | "stalled" | "failed" = "stopped";
+    // Shown at once, so Stop and the progress line exist while the first listing is still loading.
+    setAdvancedMemoryProgress({ read: 0, total: 0 });
+    try {
+      while (!stop.signal.aborted) {
+        const batch = await request<LtmAdvancedMemoryBackfillResponse>(
+          "/import/advanced-memory/backfill-batch",
+          "POST",
+          {
+            ...(previewScope ? { sourceScope: previewScope } : {}),
+            ...(props.chatId ? { chatId: props.chatId } : {}),
+            limit: ADVANCED_MEMORY_BACKFILL_BATCH,
+          },
+          stop.signal,
+        );
+        if (!batch.sourceIds.length) {
+          ended = "done";
+          break;
+        }
+        // Recaps that stay pending after a completed batch would repeat forever, so the count must shrink.
+        if (batch.remaining >= previousRemaining) {
+          ended = "stalled";
+          break;
+        }
+        previousRemaining = batch.remaining;
+        if (!total) total = batch.sourceIds.length + batch.remaining;
+        setAdvancedMemoryProgress({ read, total });
+        // A failed or cancelled batch, or another import taking the lock, ends the loop; the result panel says why.
+        if ((await runImport(batch.sourceIds)) !== "completed") {
+          ended = "failed";
+          break;
+        }
+        read += batch.sourceIds.length;
+        setAdvancedMemoryProgress({ read, total });
+      }
+      if (ended === "stopped" && total > 0 && read >= total) ended = "done";
+      setAdvancedMemoryBackfillMessage(
+        ended === "done"
+          ? localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillDone")
+          : ended === "stalled"
+            ? localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillStalled")
+            : ended === "stopped"
+              ? localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillStopped", {
+                  value1: Math.max(0, total - read),
+                })
+              : "",
+      );
+    } catch (error) {
+      if (stop.signal.aborted)
+        setAdvancedMemoryBackfillMessage(
+          localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillStopped", {
+            // Stopped before the first listing came back: the count the button showed is the only one known.
+            value1: total ? Math.max(0, total - read) : (advancedMemoryPending.data ?? 0),
+          }),
+        );
+      else
+        setImportError(
+          errorMessage(error, localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillFailed")),
+        );
+    } finally {
+      advancedMemoryBackfillRef.current = false;
+      advancedMemoryStopRef.current = null;
+      setAdvancedMemoryProgress(null);
+    }
+  };
+  const pendingRecaps = advancedMemoryPending.data;
+  const allRecapsRead = pendingRecaps === 0 && !advancedMemoryProgress;
+  const advancedMemoryBackfillGroup =
+    source === "chats" && extractionSettings.data?.useAdvancedMemory ? (
+      <section className="space-y-2 rounded-md border border-[var(--border)] p-2" data-ltm-advanced-memory-backfill>
+        <h3 className="text-xs font-semibold">
+          {localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfill")}
+        </h3>
+        <p className="text-xs text-[var(--muted-foreground)]">
+          {localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillHelp")}
+        </p>
+        {advancedMemoryProgress ? (
+          <div className="space-y-1" data-ltm-advanced-memory-progress>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs" role="status">
+                {advancedMemoryProgress.total
+                  ? localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillProgress", {
+                      value1: advancedMemoryProgress.read,
+                      value2: advancedMemoryProgress.total,
+                    })
+                  : localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillStarting")}
+              </span>
+              <Button
+                destructive
+                onClick={() => advancedMemoryStopRef.current?.abort()}
+                data-ltm-source-action="stop-backfill"
+              >
+                {localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillStop")}
+              </Button>
+            </div>
+            {advancedMemoryProgress.total ? (
+              <progress
+                className="w-full"
+                max={advancedMemoryProgress.total}
+                value={advancedMemoryProgress.read}
+                aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfill")}
+              />
+            ) : null}
+          </div>
+        ) : allRecapsRead ? (
+          <p
+            role="status"
+            className="text-xs"
+            style={{ color: "var(--ltm-success, var(--marinara-editor-text))" }}
+            data-ltm-advanced-memory-done
+          >
+            <Check aria-hidden="true" size="0.75rem" className="mr-1 inline" />
+            {localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillDone")}
+          </p>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              {...importActionProps}
+              {...destinationWait(`${importReasonId}-backfill`)}
+              onClick={() => {
+                if (currentDestinationScope) void backfillAdvancedMemory();
+              }}
+              data-ltm-source-action="advanced-memory-backfill"
+            >
+              <RefreshCw aria-hidden="true" size="0.75rem" />
+              {pendingRecaps
+                ? localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillRead", { value1: pendingRecaps })
+                : localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillReadOlder")}
+            </Button>
+            {importing ? (
+              <Button destructive onClick={cancelLtmSourceTask} data-ltm-source-action="cancel-backfill">
+                {localizeUi("ui.longTermMemory.memoryvault.cancel")}
+              </Button>
+            ) : null}
+            {importReason(`${importReasonId}-backfill`)}
+          </div>
+        )}
+        {advancedMemoryBackfillMessage && !allRecapsRead ? (
+          <p role="status" className="text-xs text-[var(--muted-foreground)]">
+            {advancedMemoryBackfillMessage}
+          </p>
+        ) : null}
+      </section>
+    ) : null;
   const outdatedSourcesGroup = outdatedNotes.length ? (
     <section className="space-y-2 rounded-md border border-[var(--border)] p-2" data-ltm-source-outdated>
       <h3 className="text-xs font-semibold">
@@ -2080,6 +2293,7 @@ export default function SourcesWorkspace({
                       </Button>
                     </div>
                     {outdatedSourcesGroup}
+                    {advancedMemoryBackfillGroup}
                     <div
                       role="tablist"
                       aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.sourceStatus")}
@@ -2615,6 +2829,7 @@ export default function SourcesWorkspace({
                       </Button>
                     </div>
                     {outdatedSourcesGroup}
+                    {advancedMemoryBackfillGroup}
                     <div
                       role="tablist"
                       aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.sourceStatus")}

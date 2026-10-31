@@ -180,7 +180,8 @@ ${R} .of-date-pick-text { flex: 1; min-width: 0; font-weight: 600; font-size: 0.
 ${R}[data-look="pearl"] .of-date-pick[data-score="1"] .of-date-pick-mark { filter: brightness(0.82) saturate(1.3); }
 
 /* The keepsake: a polaroid, tilted a little. */
-${R} .of-keepsake > .of-button { align-self: flex-start; }
+/* Its own class: the Album's .of-keepsake is a three-column row, which squeezed this card on a phone. */
+${R} .of-date-keepsake > .of-button { align-self: flex-start; }
 ${R} .of-keepsake-busy { display: flex; align-items: center; gap: 6px; }
 ${R} .of-keepsake-photo {
   align-self: center; width: min(100%, 280px); margin: 4px 0 6px; padding: 10px 10px 14px; border-radius: 6px;

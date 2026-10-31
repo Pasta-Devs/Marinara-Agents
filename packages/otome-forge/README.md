@@ -30,7 +30,7 @@ On desktop, **Enter fullscreen** fills the Home browser panel across Otome Heart
 
 Choose **Begin a new story**. Setup has six steps, and an unfinished setup is kept in this browser until the story is made.
 
-1. **Story:** a premise, or **Surprise me** to have your model write one (an original world). A premise or a card set in an existing world, such as Teyvat from Genshin Impact, keeps that world and its canon. Then the language the story is written in, **How it's written** (tense, point of view, pacing: anything you want every scene, message and note to follow; also in **Settings → Content**), and an optional title.
+1. **Story:** a premise, or **Surprise me** to have your model write one (an original world). A premise or a card set in an existing world, such as Teyvat from Genshin Impact, keeps that world and its canon. Then the language the story is written in, **How it's written** (tense, point of view, pacing: anything you want every scene, message and note to follow; also in **Settings → Content**), **Banned phrases** (words and phrases you never want to read; also in **Settings → Content**), and an optional title.
 2. **You:** the persona you play, your pronouns, up to five traits, and a goal of your own that isn't romance. Your persona's **Description, Personality, Backstory and Appearance** reach story writing and personal interactions whole; see [What leaves your device](#what-leaves-your-device) for the prompt list and refresh behavior. Scenario, greetings and example dialogue are excluded. An unavailable persona keeps its own saved text as a fallback.
 3. **Cast:** two to five love interests. Pick them from your character cards or from six original archetypes: Brilliant Monster, Gilded Tyrant, Gentle Liar, Loyal Blade, Ruined Saint and Laughing Stranger. Love interests can be any gender and use the pronouns you pick. A card stays canon: the story never contradicts it.
 4. **Content:** Heat, Darkness, Lines & Veils and the image rating (see [Content settings](#content-settings-nsfw-mode-and-lines--veils)).
@@ -52,17 +52,21 @@ Forging writes the world and its central mystery: each love interest holds one p
 - how they stand with each of the others;
 - secrets that come out stage by stage.
 
-Bibles sit behind a spoiler gate, and you can edit them. A step that fails or is stopped waits for you to try it again. Base looks are painted only when you tap **Paint the cast**. To paint one again later, open **Your cast** from Home's **Who's home** and choose **Repaint**. Then choose **Begin**.
+Bibles sit behind a spoiler gate, and you can edit them. A step that fails or is stopped waits for you to try it again. Base looks are painted only when you tap **Paint the cast**. To paint one again later, open **Your cast** from **Settings → Stories** and choose **Repaint**. Then choose **Begin**.
 
 With **Expressions** on, **Repaint expressions** beside a love interest's repaint action replaces the five faces for the look they currently wear. It uses that look as the image reference and your configured image style. The current set stays available while replacements paint, and a failed replacement keeps it. With prompt review on, review all five prompts first; the last confirmation starts the five paid images. Canceling the review paints nothing. Reading or replaying a scene never triggers this replacement.
 
 **Begin** plays the **prologue** first: one short scene of your protagonist's own life, just before the story opens. No love interest is in it; you meet them in chapter 1, which picks up where the prologue ends. It is written once, and the Story screen offers it again. **Skip** goes straight Home.
 
-You can keep several stories. **Your stories** lists them, and deleting one asks you to type its title. **Settings** changes a story's content, connections, images and audio later. On desktop, Settings uses the available stage space. On phones, its categories form one horizontally scrolling row, and long settings pages remain vertically scrollable.
+You can keep several stories. **Your stories** lists them, and deleting one asks you to type its title; open it from **Settings → Stories**. **Settings** changes a story's content, connections, images and audio later. On desktop, Settings uses the available stage space. On phones, its categories form one horizontally scrolling row, and long settings pages remain vertically scrollable.
 
 In **Your cast**, open a love interest and choose their **Character card** to link an Engine card explicitly. Its assigned voice and image references apply without replacing the love interest's story, progress or saved pictures. **No linked card** removes the association. Future paints prefer the card's **Full Body → Neutral** sprite, then its current avatar, then the retained Otome look; linking never paints automatically.
 
 ## The story
+
+Main chapters come in **arcs**. Before an arc's first chapter is planned, the arc planner sets a goal, a big event near its end, and where the mystery's answers come out, and plans eight to twelve chapters toward it in one short line each. It is the only planner that sees the mystery's whole answer. A chapter sees it only in the chapter scheduled to reveal it, and must put it on the page there; a chapter that reveals nothing never touches it. The Story screen shows the arc's name and how far in you are. Its chapter list is grouped under each arc, a chapter's reader says which arc it belongs to, and a breathing-room arc carries a quiet-stretch badge. A story that began before arcs keeps its chapters as they are, and its first arc starts at the next chapter.
+
+When an arc closes, the story asks how it goes on. **Take a breath** plans three to five chapters with the people you love, no plot in them, and its last one lands warm. **Go on with the story** plans another arc, with a new threat and a new question. **Meet someone new** brings in one of your character cards or someone invented, and writes them in: their bible, their ties to everyone already there, and an arc whose first chapter puts them in a room with at least one of the others. The cast holds five love interests; at five the option is gone.
 
 Each main chapter is led by one love interest. Otome Hearth offers two to choose from: the one you have spent the least time with, and the one with the most unresolved between you. The chapter planner adds a second love interest whose goals get in the way, and writes six to nine scenes that build to a climax: a Confrontation, or a warm Closer. After two main chapters in a row end the same way, the next one ends with the other. Each scene is written when you reach it, and the next one is written ahead while you read.
 
@@ -97,7 +101,7 @@ Each love interest moves through six stages, from Mask to Bond.
 
 Everything works without images or sound: a place without art shows a gradient for its mood, a love interest without a portrait shows their initials in their own colour, and a key moment without a painting shows a quiet card.
 
-In **Your cast**, edit **Image appearance** above each love interest’s spoiler Bible to change their image description. Saving paints nothing and leaves their story Bible unchanged; explicit future painting uses the saved description. Clear the field and save to restore the Bible’s original image description. Open **Image description** in **Who’s home** or an owned Wardrobe look to read its intended appearance without opening Bible spoilers. The reader also offers the current location’s description while it has no painted background, and a key moment’s brief once you reach it, until its image is painted. These are the existing visual instructions, not a new generated caption; opening them makes no model calls.
+In **Your cast**, edit **Image appearance** above each love interest’s spoiler Bible to change how they look. Saving paints nothing and leaves the rest of their story Bible unchanged; future paintings and the story itself use the saved description from the next scene on, with the look they wear. Clear the field and save to restore the Bible’s original image description. Open **Image description** in **Who’s home** or an owned Wardrobe look to read its intended appearance without opening Bible spoilers. The reader also offers the current location’s description while it has no painted background, and a key moment’s brief once you reach it, until its image is painted. These are the existing visual instructions, not a new generated caption; opening them makes no model calls.
 
 You can add an image connection later in **Settings → Images**. Saving it paints nothing. Open **Your cast** to paint missing base portraits, open owned items from **Wardrobe** or **Album** to add their missing artwork, or use **Paint** beside a reached story location or key moment. Each action shows its image cost and uses the existing prompt-review setting. Existing artwork, story text, progress and Starlight stay intact.
 
@@ -138,7 +142,8 @@ Each love interest has one private thread, written in whatever carries messages 
 Wishes cost Starlight you earn by playing: 100 each, or 1,000 for ten. There is no real money, and a new story starts with 2,000.
 
 - **Banners:** every 14 days, counted from the day the story began, opening Wish creates three banners: **Memories**, a love interest's **wardrobe**, and **yours**. Each features the love interest featured least recently.
-- **Echoes:** banners never expire. Past ones wait in **Echoes**, and you can still wish on them.
+- **Seasonal banners:** the first fortnight that starts in each month (on the 1st to the 14th) is that month's seasonal one: all three of its banners follow the month's theme, and a badge names it, such as **October · Halloween**. Any later fortnight that month is your model's free choice, as before. A story set in the real world gets the holiday itself; a world without it gets its own version, such as a winter festival of gifts and lights in December or a night of masks and spirits in October. The themes, January to December: New Year, Valentine's Day, White Day, cherry blossoms, gardens in bloom, June bride, summer festival, summer nights, harvest moon, Halloween, autumn and Christmas. Next year's seasonal banner knows the titles of earlier ones from the same month, so it does not repeat them. Banners made before 0.6.5 have no season.
+- **Echoes:** banners never expire. Past ones wait in **Echoes**, and you can still wish on them; a seasonal one keeps its badge.
 - **What a banner holds:** one featured 5★, three 4★s and six 3★ Snapshots.
   - A **Memory** (5★) is a key image, a short Character Story and a voiced line.
   - A **Moment** (4★) is one playable scene and an illustration.
@@ -182,10 +187,10 @@ Over five moments, pick what your love interest really feels from three or four 
 
 ### Read Me
 
-Read Them in reverse: your love interest studies you and makes four guesses about you, from what you like and dislike to your habits, fears and dreams. Answer each with **Spot on**, **Close** or **Not at all**, and tell them the truth in your own words if you like.
+Read Them in reverse: your love interest studies you and makes four guesses about you, from what you want right now and what you think to your likes, dislikes, habits, fears, memories and things you would rather not admit. A guess is never what your persona already states: from a persona who loves sweets he guesses the sweet, not the liking, so every answer teaches him something new. Answer each with **Spot on**, **Close** or **Not at all**, and tell them the truth in your own words if you like.
 
 - It pays 40 Starlight and 20 affection, plus 10 for each guess they get spot on and 5 for each close one, within the day's caps. It is 1 model call, and it follows your story's Heat.
-- **What they know about you:** every answer goes into that love interest's notebook. Open it from Read Me to read it, rewrite your own words or delete an entry.
+- **What they know about you:** every answer goes into that love interest's notebook, and he never guesses it again. Open it from Read Me to read it, rewrite your own words or delete an entry.
 - Only that love interest knows it. It reaches the scenes they're in, their Home notes and messages, and dates and stories with them, never another love interest's prompts. Others in a scene only learn what happens on the page.
 - It is never part of story memory, so a delete is final. A scene already written ahead keeps the notebook it was written with; your change reaches the next one.
 - Guesses never touch your health, medication or cycle, and words about them can't be kept.
@@ -193,7 +198,7 @@ Read Them in reverse: your love interest studies you and makes four guesses abou
 ### Date Night
 
 1. **Pick a place:** one of eight, one your love interest chooses, or a place your story has painted (shown with its picture).
-2. **Pick what you both wear:** your base looks. A date does not offer Wardrobe looks yet.
+2. **Pick what you both wear:** your everyday looks, or any painted look either of you owns in the Wardrobe (4★ and 5★). The date's scenes, key images and keepsake dress you both in them, each look worn over that person's own appearance, and the looks stay on at Home afterwards. A look you own appears once it is painted: open it in the Wardrobe.
 3. **Play three scenes of choices,** judged by what they like and voiced like any scene. You can ask for a keepsake image at the end.
 
 During a rift, Date Night becomes **Make it right**.
@@ -259,7 +264,7 @@ Each story has its own content settings:
 - you can add limits of your own;
 - changing Darkness keeps the levels you set yourself.
 
-**Banned phrases:** in **Settings → Content**, type the words and phrases you never want to read, separated by commas or one per line. Every scene, message and note avoids them, on top of the built-in list of overused phrases.
+**Banned phrases:** when you set up a story or later in **Settings → Content**, type the words and phrases you never want to read, separated by commas or one per line. Every scene, message and note avoids them, on top of the built-in list of overused phrases. Set during setup, they also apply to the world and every love interest’s Bible as they are forged.
 
 **NSFW mode:** NSFW Heat or Dark romance turns it on for the story, its chapters and Messages.
 
@@ -276,7 +281,7 @@ Each story has its own content settings:
 
 - **Your role:** an optional Sub, Dom or Switch beside the Heat setting, in setup and **Settings → Content**. It is unspecified by default. It colours intimate scenes when they come, never every scene, and never decides what a love interest is like. Lowering Heat to SFW, or withdrawing the 18+ confirmation, clears it.
 - **Love interests' own tastes:** a new bible in an NSFW story gets a short intimacy part: what they are into, kinks included, and what draws them. They are tastes, not a checklist, and scenes and banner stories bring them in when a scene turns intimate, not in every scene. What a scene may hold is still up to your Heat, Darkness and Lines & Veils, consent toggles included.
-- **Older casts:** a love interest whose bible has none gets **Add intimacy preferences** on the forge's cast list (Home → **Who's home** → **Your cast**). It costs 1 call on the Planning connection, writes only that part, and keeps the rest of the bible, your story and your progress as they are. The text stays in the spoiler-gated bible.
+- **Older casts:** a love interest whose bible has none gets **Add intimacy preferences** on the forge's cast list (**Settings → Stories → Your cast**). It costs 1 call on the Planning connection, writes only that part, and keeps the rest of the bible, your story and your progress as they are. The text stays in the spoiler-gated bible.
 - **In the bible:** behind **Show spoilers**, an **Intimacy** part lists them as **Into** and **Drawn to**. Edit them there, or empty both to remove them; the cast then offers to add them again.
 - An SFW story never writes or sends any of it, even for a bible that kept it from before Heat was lowered.
 

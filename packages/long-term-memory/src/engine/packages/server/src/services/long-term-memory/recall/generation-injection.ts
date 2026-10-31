@@ -4,8 +4,12 @@ import type {
   LtmRecallAttempt,
   LtmRecallAttemptOutcome,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { resolveLongTermMemoryRecallSettings } from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
 import {
+  resolveLongTermMemoryRecallSettings,
+  resolveLtmChatMemories,
+} from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
+import {
+  advancedMemoryEchoNoteIds,
   inheritedBranchLtmNoteIds,
   ltmModeForChatMode,
   parseLtmChatMetadata,
@@ -25,7 +29,9 @@ import { uniqueStrings } from "../ltm-utils.js";
 import { recordLongTermMemoryAttempt, recordLongTermMemoryInjection, recordLongTermMemoryZeroMatch } from "./usage.js";
 import { recordLtmDebugEvent } from "../maintenance/debug-log.js";
 import { getPackagePersistence, logger, withKeyedLock } from "../package-runtime.js";
-import { summaries } from "../sources/interop.js";
+import { advancedMemoryRecords, summaries } from "../sources/interop.js";
+import { armLtmAutoImport } from "../sources/auto-import-job.js";
+import { getLtmExtractionConfig } from "../extraction/extraction-config.js";
 import { LongTermMemoryStorage } from "../persistence/storage.js";
 
 export type LongTermMemoryRecallReceipt = {
@@ -88,6 +94,24 @@ export async function branchInheritedNoteIds(
   } catch (error) {
     if (signal?.aborted) throw error;
     logger.warn(error, "[ltm] Shared-history lookup failed for chat %s; recalling its own memories", chat.id);
+    return undefined;
+  }
+}
+
+// Issue #1964: with "Use Advanced Memory recaps" on, the host already prompts this chat's scene recaps, so their notes
+// stay out of its recall. A failed lookup recalls them rather than failing the recall, unless the request was aborted.
+async function advancedMemoryEchoes(root: string, chatId: string, signal?: AbortSignal) {
+  try {
+    if (!(await getLtmExtractionConfig(root)).useAdvancedMemory) return undefined;
+    // An older host or a chat without scene recaps has nothing to echo, so it never reads the vault.
+    if (!(await advancedMemoryRecords(chatId)).length) return undefined;
+    // ponytail: a chat with scene recaps lists every note once per generation; cache by vault revision if that shows.
+    const notes = await new LongTermMemoryStorage(root).listNotes({ skipInvalid: true });
+    const echoes = advancedMemoryEchoNoteIds({ chatId, notes });
+    return echoes.size ? echoes : undefined;
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    logger.warn(error, "[ltm] Advanced Memory echo lookup failed for chat %s", chatId);
     return undefined;
   }
 }
@@ -197,6 +221,7 @@ export async function prepareGenerationLongTermMemory(input: {
   let retrieval;
   try {
     const inheritedNoteIds = await branchInheritedNoteIds(input.root, chat, mode, input.signal);
+    const excludedNoteIds = await advancedMemoryEchoes(input.root, chat.id, input.signal);
     retrieval = await retrieveLongTermMemory({
       root: input.root,
       mode,
@@ -216,12 +241,20 @@ export async function prepareGenerationLongTermMemory(input: {
       explain: recall.debugEnabled,
       rejectedLimit,
       inheritedNoteIds,
+      excludedNoteIds,
       signal: input.signal,
     });
   } catch (error) {
     await recordAttempt(input.signal?.aborted ? "cancelled" : "failed", { debugEnabled });
     throw error;
   }
+  // Hands-off import runs after the reply's recall and never delays or fails it.
+  void getLtmExtractionConfig(input.root)
+    .then((config) => {
+      if (resolveLtmChatMemories(parseLtmChatMetadata(chat.metadata), config).autoImport)
+        armLtmAutoImport(input.root, input.chatId, mode);
+    })
+    .catch((error) => logger.warn(error, "[ltm] Could not schedule background import for chat %s", input.chatId));
   const artifact = serializeLongTermMemoryPrompt(retrieval.chunks, {
     preamble: recall.recallPreamble,
     maxTokens: budgetTokens,

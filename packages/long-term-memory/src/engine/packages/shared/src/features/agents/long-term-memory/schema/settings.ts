@@ -303,6 +303,9 @@ const ltmExtractionSettingsFields = {
   activePromptTemplateIdsByMode: ltmActivePromptTemplateIdsByModeSchema.optional(),
   aiKeywordExtraction: z.boolean().optional(),
   finishCutOffAnswers: z.boolean().optional(),
+  autoAcceptSafeChanges: z.boolean().optional(),
+  autoImportChatSources: z.boolean().optional(),
+  useAdvancedMemory: z.boolean().optional(),
   chatImportDetail: ltmChatImportDetailSchema.optional(),
   useExtractionAgentOnGameMode: z.boolean().optional(),
 };
@@ -351,6 +354,9 @@ export const ltmResolvedExtractionSettingsSchema = z
     activePromptTemplateIdsByMode: ltmActivePromptTemplateIdsByModeSchema,
     aiKeywordExtraction: z.boolean(),
     finishCutOffAnswers: z.boolean(),
+    autoAcceptSafeChanges: z.boolean(),
+    autoImportChatSources: z.boolean(),
+    useAdvancedMemory: z.boolean(),
     chatImportDetail: ltmChatImportDetailSchema,
     useExtractionAgentOnGameMode: z.boolean(),
   })

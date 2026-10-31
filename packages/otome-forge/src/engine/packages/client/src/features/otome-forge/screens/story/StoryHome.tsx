@@ -6,7 +6,7 @@
 // and shut while a rupture is open), each one's affection, and every chapter so far as a path of its scenes.
 // Planning a chapter is one model call with Cancel while it runs; a chapter already planned opens with none.
 // ──────────────────────────────────────────────
-import { useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { Fragment, useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -34,9 +34,14 @@ import { Avatar } from "../../components/Avatar";
 import { ChapterPaintCost } from "../../components/CostHint";
 import { DeclinedPanel } from "../../components/DeclinedPanel";
 import { Dialog } from "../../components/Dialog";
+import { useCharacterOptions } from "../../hooks/use-engine-resources";
 import { cancelStoryWork, runPath, storyQueryKey, useChapter, useStory } from "../../hooks/use-reader";
 import { accentOf } from "../../lib/accent";
+import { emptyPronouns, resolvePronouns, type PronounChoice } from "../setup/draft";
+import { PronounPicker } from "../setup/parts";
+import { ARCHETYPES, ARCHETYPE_IDS } from "../../shared/archetypes";
 import type {
+  ArcChoice,
   ChapterView,
   LeadReason,
   RepairEntry,
@@ -164,7 +169,21 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
           onMakeItRight={() => openArc({ kind: "repair", li: repair.li, key: repair.key })}
         />
       ))}
+      {story.data.arc ? (
+        <p className="of-eyebrow of-story-arc" title={story.data.arc.label}>
+          {t("ui.otomeForge.story.arcLine", {
+            chapter: Math.min(story.data.arc.read + 1, story.data.arc.endsAt - story.data.arc.from + 1),
+            total: story.data.arc.endsAt - story.data.arc.from + 1,
+            label: story.data.arc.label,
+          })}
+          {/* #1983 M4: a breathing arc says what it is. */}
+          {story.data.arc.kind === "breathing" ? (
+            <span className="of-badge of-badge--soft of-story-arc-kind">{t("ui.otomeForge.story.arcQuiet")}</span>
+          ) : null}
+        </p>
+      ) : null}
       {reading ? <ContinueCard runKey={runKey} entry={reading} view={view} onOpen={onOpenChapter} /> : null}
+      {story.data.arcChoice && !reading ? <ArcChoiceCard runKey={runKey} options={story.data.arcChoice} /> : null}
       {next ? (
         <section className="of-section of-glass of-story-next" aria-labelledby="of-story-next">
           <p className="of-eyebrow">{t("ui.otomeForge.story.chapterNumber", { number: next.number })}</p>
@@ -394,7 +413,7 @@ function ChapterList({
         {t("ui.otomeForge.story.chaptersTitle")}
       </h2>
       <ol className="of-chapters">
-        {chapters.map((entry) => {
+        {chapters.map((entry, index) => {
           const lead = view.lis.find((li) => li.id === (entry.li ?? entry.lead)) ?? null;
           const title = entry.title || t("ui.otomeForge.story.untitled");
           const action =
@@ -403,38 +422,56 @@ function ChapterList({
               : entry.state === "in-progress"
                 ? { key: "ui.otomeForge.story.continue", Icon: BookOpen, primary: true }
                 : null;
-          return (
-            <li
-              key={entry.key}
-              className="of-chapter"
-              data-state={entry.state}
-              style={lead ? ({ "--of-li-accent": accentOf(lead) } as CSSProperties) : undefined}
-            >
-              <div className="of-chapter-head">
-                {lead ? <Avatar name={lead.name} url={lead.portrait} accent={accentOf(lead)} size={34} /> : null}
-                <div className="of-chapter-heading">
-                  <p className="of-chapter-eyebrow">{eyebrow(t, entry, lead)}</p>
-                  <h3 className="of-chapter-title">{title}</h3>
-                </div>
-                <span className="of-badge of-badge--soft">{t(STATE_KEYS[entry.state])}</span>
-              </div>
-              <NodePath count={entry.nodes} read={entry.beatsRead} current={entry.state === "in-progress"} />
-              {action ? (
-                <button
-                  type="button"
-                  className={
-                    action.primary
-                      ? "of-button of-button--primary of-button--small"
-                      : "of-button of-button--quiet of-glass of-button--small"
-                  }
-                  aria-label={`${t(action.key)}: ${title}`}
-                  onClick={() => onOpen(entry.key)}
-                >
-                  <action.Icon size={14} strokeWidth={2} aria-hidden="true" />
-                  {t(action.key)}
-                </button>
-              ) : null}
+          // #1983 M4: a heading where a new arc's chapters begin, and where the ones from before arcs do. Only the
+          // prologue and main chapters belong to an arc: route, repair and story chapters get no heading of their own
+          // and never open a second "before the arcs" one (Dottore on #1991).
+          const inArc = entry.kind === "prologue" || entry.kind === "main";
+          const previous = chapters
+            .slice(0, index)
+            .reverse()
+            .find((other) => other.kind === "prologue" || other.kind === "main");
+          const startsArc = inArc && (index === 0 || previous?.arc !== entry.arc);
+          const heading = startsArc ? (
+            <li key={`arc-${entry.arc ?? "none"}`} className="of-chapter-arc" aria-hidden="true">
+              {entry.arc
+                ? t("ui.otomeForge.story.arcHeading", { number: entry.arc })
+                : t("ui.otomeForge.story.arcHeadingBefore")}
             </li>
+          ) : null;
+          return (
+            <Fragment key={entry.key}>
+              {heading}
+              <li
+                className="of-chapter"
+                data-state={entry.state}
+                style={lead ? ({ "--of-li-accent": accentOf(lead) } as CSSProperties) : undefined}
+              >
+                <div className="of-chapter-head">
+                  {lead ? <Avatar name={lead.name} url={lead.portrait} accent={accentOf(lead)} size={34} /> : null}
+                  <div className="of-chapter-heading">
+                    <p className="of-chapter-eyebrow">{eyebrow(t, entry, lead)}</p>
+                    <h3 className="of-chapter-title">{title}</h3>
+                  </div>
+                  <span className="of-badge of-badge--soft">{t(STATE_KEYS[entry.state])}</span>
+                </div>
+                <NodePath count={entry.nodes} read={entry.beatsRead} current={entry.state === "in-progress"} />
+                {action ? (
+                  <button
+                    type="button"
+                    className={
+                      action.primary
+                        ? "of-button of-button--primary of-button--small"
+                        : "of-button of-button--quiet of-glass of-button--small"
+                    }
+                    aria-label={`${t(action.key)}: ${title}`}
+                    onClick={() => onOpen(entry.key)}
+                  >
+                    <action.Icon size={14} strokeWidth={2} aria-hidden="true" />
+                    {t(action.key)}
+                  </button>
+                ) : null}
+              </li>
+            </Fragment>
           );
         })}
       </ol>
@@ -548,6 +585,185 @@ function LeadDialog({ runKey, view, next, onClose, onPlanned }: LeadDialogProps)
  * Plans a chapter: one model call at a time, with Cancel (the server stops the write; the request is dropped). A
  * second press while one runs does nothing. The story list is refreshed once the plan lands.
  */
+/**
+ * The end of an arc (#1983 M2/M3): three ways on, each explained, and the cost before the tap. Breathing room and the
+ * story going on plan the next arc; someone new first writes them, then the arc that brings them in.
+ */
+function ArcChoiceCard({ runKey, options }: { runKey: string; options: { options: ArcChoice[]; castFull: boolean } }) {
+  const { t } = useTranslation();
+  const otome = useOtomeApi();
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState<ArcChoice | null>(null);
+  const [failed, setFailed] = useState<unknown>(null);
+  const [arriving, setArriving] = useState(false);
+  const plan = async (choice: ArcChoice, newcomer?: Record<string, unknown>) => {
+    if (busy) return;
+    setBusy(choice);
+    setFailed(null);
+    try {
+      await otome.post(`${runPath(runKey)}/arcs`, { choice, ...(newcomer ? { newcomer } : {}) });
+      void queryClient.invalidateQueries({ queryKey: storyQueryKey(runKey) });
+      setArriving(false);
+    } catch (error) {
+      setFailed(error);
+      void queryClient.invalidateQueries({ queryKey: storyQueryKey(runKey) });
+    } finally {
+      setBusy(null);
+    }
+  };
+  const ways: Array<{ choice: ArcChoice; title: string; hint: string }> = [
+    { choice: "breathe", title: t("ui.otomeForge.story.arcBreathe"), hint: t("ui.otomeForge.story.arcBreatheHint") },
+    { choice: "continue", title: t("ui.otomeForge.story.arcContinue"), hint: t("ui.otomeForge.story.arcContinueHint") },
+    ...(options.options.includes("newcomer")
+      ? [
+          {
+            choice: "newcomer" as const,
+            title: t("ui.otomeForge.story.arcNewcomer"),
+            hint: t("ui.otomeForge.story.arcNewcomerHint"),
+          },
+        ]
+      : []),
+  ];
+  return (
+    <section className="of-section of-glass of-story-next" aria-labelledby="of-arc-choice">
+      <p className="of-eyebrow">{t("ui.otomeForge.story.arcChoiceTitle")}</p>
+      <h2 id="of-arc-choice" className="of-section-title">
+        {t("ui.otomeForge.story.arcChoiceText")}
+      </h2>
+      <p className="of-hint">{t("ui.otomeForge.story.arcChoiceCost")}</p>
+      {failed ? <p className="of-notice of-notice--error">{otome.errorMessage(failed)}</p> : null}
+      <div className="of-choices">
+        {ways.map((way) => (
+          <button
+            key={way.choice}
+            type="button"
+            className="of-button of-button--quiet of-glass of-arc-way"
+            disabled={busy !== null}
+            onClick={() => (way.choice === "newcomer" ? setArriving(true) : void plan(way.choice))}
+          >
+            <strong>{way.title}</strong>
+            <span className="of-hint">{way.hint}</span>
+          </button>
+        ))}
+      </div>
+      {busy ? <p className="of-hint of-planning">{t("ui.otomeForge.story.arcPlanning")}</p> : null}
+      {arriving ? (
+        <NewcomerDialog
+          runKey={runKey}
+          busy={busy === "newcomer"}
+          onClose={() => setArriving(false)}
+          onArrive={(newcomer) => void plan("newcomer", newcomer)}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+/** Who arrives (#1983 M3): one of the player's cards, or someone invented. */
+function NewcomerDialog({
+  runKey,
+  busy,
+  onClose,
+  onArrive,
+}: {
+  runKey: string;
+  busy: boolean;
+  onClose: () => void;
+  onArrive: (newcomer: Record<string, unknown>) => void;
+}) {
+  const { t } = useTranslation();
+  const cards = useCharacterOptions();
+  const [mode, setMode] = useState<"card" | "archetype">("card");
+  const [cardId, setCardId] = useState("");
+  const [name, setName] = useState("");
+  const [archetype, setArchetype] = useState(ARCHETYPE_IDS[0]);
+  // A card carries no pronouns of its own: the player picks them, as setup asks (#1985 review).
+  const [pronouns, setPronouns] = useState<PronounChoice>(emptyPronouns());
+  const resolved = resolvePronouns(pronouns);
+  void runKey;
+  return (
+    <Dialog
+      title={t("ui.otomeForge.story.newcomerTitle")}
+      onClose={busy ? undefined : onClose}
+      actions={
+        <>
+          <button type="button" className="of-button of-button--quiet of-glass" onClick={onClose} disabled={busy}>
+            {t("ui.otomeForge.home.close")}
+          </button>
+          <button
+            type="button"
+            className="of-button of-button--primary"
+            disabled={busy || !resolved || (mode === "card" ? !cardId : !name.trim())}
+            onClick={() =>
+              onArrive(
+                mode === "card"
+                  ? { source: "card", cardId, pronouns: resolved }
+                  : {
+                      source: "archetype",
+                      archetype,
+                      name: name.trim(),
+                      pronouns: resolved,
+                    },
+              )
+            }
+          >
+            {t("ui.otomeForge.story.newcomerConfirm")}
+          </button>
+        </>
+      }
+    >
+      <p className="of-hint">{t("ui.otomeForge.story.newcomerCost")}</p>
+      <fieldset className="of-field">
+        <label>
+          <input type="radio" checked={mode === "card"} onChange={() => setMode("card")} />{" "}
+          {t("ui.otomeForge.story.newcomerCard")}
+        </label>
+        <label>
+          <input type="radio" checked={mode === "archetype"} onChange={() => setMode("archetype")} />{" "}
+          {t("ui.otomeForge.story.newcomerScratch")}
+        </label>
+      </fieldset>
+      <PronounPicker legend={t("ui.otomeForge.story.newcomerPronouns")} value={pronouns} onChange={setPronouns} />
+      {mode === "card" ? (
+        <ul className="of-cast-picks">
+          {cards.items.map((card) => (
+            <li key={card.id}>
+              <button
+                type="button"
+                className="of-cast-pick of-glass"
+                aria-pressed={cardId === card.id}
+                data-chosen={cardId === card.id}
+                onClick={() => setCardId(card.id)}
+              >
+                <Avatar name={card.name} url={card.avatarUrl} accent="var(--of-champagne)" size={32} />
+                <span>{card.name}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <>
+          <label className="of-field">
+            <span>{t("ui.otomeForge.story.newcomerName")}</span>
+            <input value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />
+            <span className="of-hint">{t("ui.otomeForge.story.newcomerNameHint")}</span>
+          </label>
+          <label className="of-field">
+            <span>{t("ui.otomeForge.story.newcomerArchetype")}</span>
+            <select value={archetype} onChange={(event) => setArchetype(event.target.value as typeof archetype)}>
+              {ARCHETYPE_IDS.map((id) => (
+                <option key={id} value={id}>
+                  {ARCHETYPES[id].name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </>
+      )}
+    </Dialog>
+  );
+}
+
 function usePlanChapter(runKey: string) {
   const otome = useOtomeApi();
   const queryClient = useQueryClient();

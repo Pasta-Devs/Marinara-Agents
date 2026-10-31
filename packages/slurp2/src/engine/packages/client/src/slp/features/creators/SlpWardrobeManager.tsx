@@ -1,9 +1,13 @@
-import { Check, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { Check, Download, Loader2, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { SlpSparkleGlyph } from "../../base/chrome/SlpGlyphs";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import type { SlpWardrobeImportDraft, SlpWardrobeLookInput } from "../../../../../shared/src/slp/slp-wardrobe.js";
+import type {
+  SlpWardrobeImportDraft,
+  SlpWardrobeLook,
+  SlpWardrobeLookInput,
+} from "../../../../../shared/src/slp/slp-wardrobe.js";
 import { showConfirmDialog } from "../../../lib/app-dialogs";
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import { fieldClass, textareaClass } from "../../modules/post/SlpPostHelpers";
@@ -14,6 +18,7 @@ import {
   useSlurpWardrobeLorebooks,
   useSlurpWardrobeMutations,
 } from "./slp-wardrobe-hooks";
+import { buildSlpWardrobeJson, downloadSlpWardrobeJson, parseSlpWardrobeJson } from "./slp-wardrobe-json";
 
 type ImportKind = "character" | "lorebook" | "text" | "legacy";
 type ReviewLook = SlpWardrobeImportDraft & { selected: boolean };
@@ -151,6 +156,35 @@ export function SlpWardrobeManager({ creatorId, legacyWardrobe }: { creatorId: s
   const fail = (error: unknown) =>
     toast.error(errorMessage(error, t("ui.slurp.wardrobe.error", { defaultValue: "Could not update the wardrobe." })));
 
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const slugName = (name: string) =>
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 40) || "look";
+
+  const exportJson = (subset: readonly SlpWardrobeLook[], name: string) =>
+    downloadSlpWardrobeJson(buildSlpWardrobeJson(subset), `slurp-wardrobe-${name}.json`);
+
+  const importJson = async (file: File) => {
+    let raw: string;
+    try {
+      raw = await file.text();
+    } catch (error) {
+      fail(error);
+      return;
+    }
+    const { looks: drafts, errors } = parseSlpWardrobeJson(raw);
+    if (errors.length > 0) toast.error(errors.slice(0, 3).join(" "));
+    else if (drafts.length === 0)
+      toast.info(t("ui.slurp.wardrobe.noneFound", { defaultValue: "No complete clothing looks were found." }));
+    if (drafts.length === 0) return;
+    setReviewSource({ kind: "text", label: `JSON file: ${file.name}`.slice(0, 160) });
+    setReview(drafts.map((look) => ({ ...look, evidence: "", selected: true })));
+  };
+
   const saveEditor = () => {
     if (!editor) return;
     const mutation = editingId ? mutations.update : mutations.create;
@@ -223,17 +257,46 @@ export function SlpWardrobeManager({ creatorId, legacyWardrobe }: { creatorId: s
             })}
           </p>
         </div>
-        <button
-          type="button"
-          className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--slurp-canvas)] px-3 text-xs font-bold ring-1 ring-inset ring-[var(--slurp-outline)] focus-visible:outline focus-visible:outline-2"
-          onClick={() => {
-            setEditingId(null);
-            setEditor(blankLook());
-          }}
-          disabled={looks.length >= (wardrobe.data?.limit ?? 64)}
-        >
-          <Plus size={15} /> {t("ui.slurp.wardrobe.add", { defaultValue: "Add look" })}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <input
+            ref={fileInput}
+            type="file"
+            accept="application/json,.json"
+            className="sr-only"
+            tabIndex={-1}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (file) void importJson(file);
+            }}
+          />
+          <button
+            type="button"
+            className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--slurp-canvas)] px-3 text-xs font-bold ring-1 ring-inset ring-[var(--slurp-outline)] focus-visible:outline focus-visible:outline-2 disabled:opacity-50"
+            onClick={() => fileInput.current?.click()}
+          >
+            <Upload size={15} /> {t("ui.slurp.wardrobe.importJson", { defaultValue: "Import JSON" })}
+          </button>
+          <button
+            type="button"
+            className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--slurp-canvas)] px-3 text-xs font-bold ring-1 ring-inset ring-[var(--slurp-outline)] focus-visible:outline focus-visible:outline-2 disabled:opacity-50"
+            onClick={() => exportJson(looks, creatorId.slice(0, 8))}
+            disabled={looks.length === 0}
+          >
+            <Download size={15} /> {t("ui.slurp.wardrobe.exportJson", { defaultValue: "Export JSON" })}
+          </button>
+          <button
+            type="button"
+            className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--slurp-canvas)] px-3 text-xs font-bold ring-1 ring-inset ring-[var(--slurp-outline)] focus-visible:outline focus-visible:outline-2"
+            onClick={() => {
+              setEditingId(null);
+              setEditor(blankLook());
+            }}
+            disabled={looks.length >= (wardrobe.data?.limit ?? 64)}
+          >
+            <Plus size={15} /> {t("ui.slurp.wardrobe.add", { defaultValue: "Add look" })}
+          </button>
+        </div>
       </div>
 
       {wardrobe.isLoading ? (
@@ -284,6 +347,14 @@ export function SlpWardrobeManager({ creatorId, legacyWardrobe }: { creatorId: s
                     }}
                   >
                     <Pencil size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    className="grid size-11 place-items-center rounded-lg hover:bg-[var(--slurp-surface-raised)] focus-visible:outline focus-visible:outline-2"
+                    aria-label={t("ui.slurp.wardrobe.exportLook", { defaultValue: "Export look as JSON" })}
+                    onClick={() => exportJson([look], slugName(look.name))}
+                  >
+                    <Download size={15} />
                   </button>
                   <button
                     type="button"
@@ -339,7 +410,7 @@ export function SlpWardrobeManager({ creatorId, legacyWardrobe }: { creatorId: s
         </div>
       )}
 
-      <details className="rounded-lg border border-[var(--slurp-outline)] p-3">
+      <details className="rounded-lg border border-[var(--slurp-outline)] p-3" open={review.length > 0 || undefined}>
         <summary className="cursor-pointer text-sm font-bold focus-visible:outline focus-visible:outline-2">
           {t("ui.slurp.wardrobe.importTitle", { defaultValue: "Import looks with AI" })}
         </summary>
@@ -514,10 +585,12 @@ export function SlpWardrobeManager({ creatorId, legacyWardrobe }: { creatorId: s
                       )
                     }
                   />
-                  <p className="rounded-md bg-[var(--slurp-surface-raised)] p-2 text-xs leading-5 text-[var(--muted-foreground)]">
-                    <strong>{t("ui.slurp.wardrobe.evidence", { defaultValue: "Source evidence:" })}</strong>{" "}
-                    {look.evidence}
-                  </p>
+                  {look.evidence && (
+                    <p className="rounded-md bg-[var(--slurp-surface-raised)] p-2 text-xs leading-5 text-[var(--muted-foreground)]">
+                      <strong>{t("ui.slurp.wardrobe.evidence", { defaultValue: "Source evidence:" })}</strong>{" "}
+                      {look.evidence}
+                    </p>
+                  )}
                 </div>
               ))}
               <button

@@ -1,3 +1,10 @@
+import {
+  assertRulesetFileCapability,
+  isRulesetManifest,
+  packageFileBuffer,
+  RULESET_FILE_FORMAT,
+  rulesetArtifactName,
+} from "./package-file.mjs";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
@@ -37,15 +44,26 @@ import {
 import {
   RULESET_ASSET_PATH,
   assertRulesetApplies,
+  assertRulesetSheetMigrations,
+  assertRulesetPoses,
+  assertRulesetStartingGear,
+  assertRulesetSellerHonesty,
+  assertRulesetSheetHooks,
   assertRulesetAssetDocument,
   assertRulesetBattle,
   assertRulesetCatalogs,
   assertRulesetCombat,
   assertRulesetCreatures,
+  assertRulesetItems,
   assertRulesetPackageContract,
+  assertRulesetCoverlessSaves,
   assertRulesetReactions,
   assertRulesetScaled,
   isRulesetPackage,
+  assertRulesetLanguagePacks,
+  RULESET_LANGUAGE_PACK_DESCRIPTION_MAX,
+  RULESET_LANGUAGE_PACK_NAME_MAX,
+  rulesetLanguagePackName,
   rulesetCatalogAssetPaths,
 } from "./ruleset-package-checks.mjs";
 
@@ -579,7 +597,12 @@ for (const entry of catalog.packages) {
   if (iconUrl !== catalogArtworkUrl(manifest.id)) {
     throw new Error(`Missing or invalid catalog artwork URL for ${manifest.id}`);
   }
-  const expectedArtifactName = packageArtifactName(manifest.id, manifest.version);
+  // A ruleset ships as a ruleset file (held Engine catalog work, number given when it lands upstream), never a package zip.
+  const isRuleset = isRulesetManifest(manifest);
+  if (isRuleset) assertRulesetFileCapability(manifest);
+  const expectedArtifactName = isRuleset
+    ? rulesetArtifactName(manifest.id, manifest.version)
+    : packageArtifactName(manifest.id, manifest.version);
   const expectedArtifactUrl = `https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/${expectedArtifactName}`;
   if (artifact.url !== expectedArtifactUrl) {
     throw new Error(`Artifact URL for ${manifest.id} must be ${expectedArtifactUrl}`);
@@ -625,30 +648,95 @@ for (const entry of catalog.packages) {
   if (createHash("sha256").update(archive).digest("hex") !== artifact.sha256) {
     throw new Error(`Artifact checksum mismatch for ${manifest.id}`);
   }
-  const listed = readZip(["-Z1", artifactPath], {
-    packageId: manifest.id,
-    artifactPath,
-    purpose: "inspect",
-  });
-  const actualFiles = listed.stdout
-    .trim()
-    .split("\n")
-    .filter(Boolean)
-    .map((path) => assertPortableRelativePath(path, `Archived file for ${manifest.id}`))
-    .sort();
-  const declaredFiles = ["manifest.json", ...manifest.files.map((file) => file.path)].sort();
-  if (JSON.stringify(actualFiles) !== JSON.stringify(declaredFiles)) {
-    throw new Error(`Artifact file list mismatch for ${manifest.id}`);
-  }
+  if (isRuleset) {
+    // The file must be exactly what the build writes from the package source: its manifest, then every
+    // declared file in order, so its file list, manifest and bytes are all checked at once.
+    const sources = [];
+    for (const declared of manifest.files) {
+      sources.push({
+        path: declared.path,
+        data: await readFile(
+          await resolveContainedPortablePath(packageRoot, declared.path, `Declared file for ${manifest.id}`),
+        ),
+      });
+    }
+    if (!packageFileBuffer(RULESET_FILE_FORMAT, manifest, sources).equals(archive)) {
+      throw new Error(`Ruleset file for ${manifest.id} is not the one its package source builds`);
+    }
+    // Its language packs (Capability API 1.803): each the package's own locales/<language>.json byte for
+    // byte, committed beside the ruleset file, its size and checksum as the entry lists them, and its store
+    // card text the pack's own.
+    const locales = entry.locales ?? {};
+    if (!locales || typeof locales !== "object" || Array.isArray(locales))
+      throw new Error(`Language packs for ${manifest.id} are not a map`);
+    const packTexts = new Map();
+    for (const [locale, pack] of Object.entries(locales)) {
+      const packName = rulesetLanguagePackName(manifest.id, manifest.version, locale);
+      const extraKeys = Object.keys(pack ?? {}).filter(
+        (key) => !["url", "sha256", "bytes", "name", "description"].includes(key),
+      );
+      if (extraKeys.length) throw new Error(`Language pack ${locale} for ${manifest.id} holds "${extraKeys[0]}"`);
+      if (pack.url !== `https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/${packName}`) {
+        throw new Error(`Language pack URL for ${manifest.id} ${locale} must name artifacts/${packName}`);
+      }
+      const packBytes = await readFile(
+        await resolveContainedPortablePath(join(repoRoot, "artifacts"), packName, `Language pack for ${manifest.id}`),
+      );
+      if (packBytes.byteLength !== pack.bytes)
+        throw new Error(`Language pack size mismatch for ${manifest.id} ${locale}`);
+      if (createHash("sha256").update(packBytes).digest("hex") !== pack.sha256) {
+        throw new Error(`Language pack checksum mismatch for ${manifest.id} ${locale}`);
+      }
+      const source = await readFile(
+        await resolveContainedPortablePath(packageRoot, `locales/${locale}.json`, `Translation for ${manifest.id}`),
+      );
+      if (!source.equals(packBytes))
+        throw new Error(`Language pack ${packName} is not packages/${manifest.id}/locales/${locale}.json`);
+      const listing = JSON.parse(packBytes.toString("utf8")).package ?? {};
+      if (pack.name !== listing.name || pack.description !== listing.description) {
+        throw new Error(
+          `Language pack ${locale} for ${manifest.id} lists a name or description its pack does not hold`,
+        );
+      }
+      if (typeof pack.name !== "string" || pack.name.length < 1 || pack.name.length > RULESET_LANGUAGE_PACK_NAME_MAX) {
+        throw new Error(
+          `Language pack ${locale} for ${manifest.id} has a name the Engine refuses (1 to ${RULESET_LANGUAGE_PACK_NAME_MAX} characters)`,
+        );
+      }
+      if (typeof pack.description !== "string" || pack.description.length > RULESET_LANGUAGE_PACK_DESCRIPTION_MAX) {
+        throw new Error(
+          `Language pack ${locale} for ${manifest.id} has a ${pack.description?.length}-character description, over the Engine's ${RULESET_LANGUAGE_PACK_DESCRIPTION_MAX}: the Engine would drop the ruleset from the catalog`,
+        );
+      }
+      packTexts.set(locale, packBytes.toString("utf8"));
+    }
+    assertRulesetLanguagePacks(manifest, packTexts);
+  } else {
+    const listed = readZip(["-Z1", artifactPath], {
+      packageId: manifest.id,
+      artifactPath,
+      purpose: "inspect",
+    });
+    const actualFiles = listed.stdout
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((path) => assertPortableRelativePath(path, `Archived file for ${manifest.id}`))
+      .sort();
+    const declaredFiles = ["manifest.json", ...manifest.files.map((file) => file.path)].sort();
+    if (JSON.stringify(actualFiles) !== JSON.stringify(declaredFiles)) {
+      throw new Error(`Artifact file list mismatch for ${manifest.id}`);
+    }
 
-  const archivedManifest = readZip(["-p", artifactPath, "manifest.json"], {
-    packageId: manifest.id,
-    artifactPath,
-    member: "manifest.json",
-    purpose: "read",
-  });
-  if (JSON.stringify(JSON.parse(archivedManifest.stdout.toString("utf8"))) !== JSON.stringify(manifest)) {
-    throw new Error(`Archived manifest does not match the catalog for ${manifest.id}`);
+    const archivedManifest = readZip(["-p", artifactPath, "manifest.json"], {
+      packageId: manifest.id,
+      artifactPath,
+      member: "manifest.json",
+      purpose: "read",
+    });
+    if (JSON.stringify(JSON.parse(archivedManifest.stdout.toString("utf8"))) !== JSON.stringify(manifest)) {
+      throw new Error(`Archived manifest does not match the catalog for ${manifest.id}`);
+    }
   }
 
   for (const entrypoint of Object.values(manifest.entrypoints)) {
@@ -713,8 +801,18 @@ for (const entry of catalog.packages) {
     // So does the combat block, and the bestiary whose creatures are written in its own names.
     assertRulesetCombat(manifest, document);
     assertRulesetCreatures(manifest, document, catalogSources);
+    assertRulesetItems(manifest, document, catalogSources);
     assertRulesetReactions(manifest, document, catalogSources);
+    assertRulesetCoverlessSaves(manifest, document, catalogSources);
     assertRulesetApplies(manifest, document, catalogSources);
+    // And how an older sheet layout reads on this one, with the rest that shares hit dice: 1.77's.
+    assertRulesetSheetMigrations(manifest, document);
+    assertRulesetPoses(manifest, document);
+    // And the starting gear, whose items are read in the catalog files: 1.78's.
+    assertRulesetStartingGear(manifest, document, catalogSources);
+    // And seller honesty: risky items, fakes and their targets across the catalog files: 1.79's.
+    assertRulesetSellerHonesty(manifest, document, catalogSources);
+    assertRulesetSheetHooks(manifest, document, catalogSources);
   } else {
     if (!manifest.entrypoints.agents) throw new Error(`Missing agent definition entrypoint for ${manifest.id}`);
     const agentDefinitions = JSON.parse(

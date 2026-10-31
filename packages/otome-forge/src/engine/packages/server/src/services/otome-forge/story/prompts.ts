@@ -42,6 +42,7 @@ import type {
   NodeKind,
   Player,
   RunState,
+  StoryArc,
   Unit,
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
@@ -56,6 +57,7 @@ import {
   stageRow,
 } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { stillToMend } from "../../../../../client/src/features/otome-forge/shared/dates.js";
+import { revealAt } from "../schemas/story-arc.js";
 import { FACES, MUSIC_MOODS } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { LIMIT_IDS, intimacyOpen } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import {
@@ -70,7 +72,7 @@ import { defaultLiState } from "../schemas/state.js";
 import { STORY_PACING_INSTRUCTION, otomeWritingRules } from "../writing-rules.js";
 import { prologueFraming } from "./prologue.js";
 import { aboutLine } from "../schemas/player.js";
-import { intimacyLine } from "../intimacy.js";
+import { groupIntimacyLine, intimacyLine } from "../intimacy.js";
 
 /**
  * P6's, P12's and P12c's line on the protagonist's inner life: they react to what happens to them, in thought, instead
@@ -326,6 +328,28 @@ export function ledgerBlock(state: RunState, units: readonly Unit[], knows: read
  * A love interest's full bible for the planner (it authors the hidden truth), without the drawing and claw fields, and
  * what stands between them as a planner for `knows` may see it (seenBy).
  */
+/**
+ * How a love interest looks now (#1965): their Image appearance (the player's edit wins over the bible's look) and the
+ * outfit they wear (a worn Wardrobe look, else their everyday clothes). The story describes them from this, so an edit
+ * to Image appearance reaches the next scene, not only the next image. "" with nothing to say.
+ */
+export function appearanceLine(
+  unit: Pick<Unit, "name" | "identityLine" | "outfitLine" | "outfits" | "wornOutfit" | "bible">,
+) {
+  const identity = (unit.identityLine || unit.bible?.look.identityLine || "").trim();
+  const worn = unit.wornOutfit ? unit.outfits.find((outfit) => outfit.id === unit.wornOutfit) : undefined;
+  const outfit = (worn?.outfitLine || unit.outfitLine || unit.bible?.look.outfitLine || "").trim();
+  if (!identity && !outfit) return "";
+  const parts = [identity, outfit ? `wearing ${outfit}` : ""].filter(Boolean).join("; ");
+  return `How ${unit.name} looks now (English image tags; describe them from this, in the story's language, whenever their looks come up): ${parts}.`;
+}
+
+/** The group-intimacy line for the love interests present in a scene, with their own state's stage (#1975). */
+function groupIntimacyFor(world: Pick<World, "content">, present: readonly Unit[], state: RunState): string {
+  const stages = new Map(present.map((unit) => [unit.id, liStateOf(state, unit.id).stage]));
+  return groupIntimacyLine(world, present, (unit) => (unit.id ? (stages.get(unit.id) ?? 1) : 1));
+}
+
 export function bibleBlock(unit: Unit, state: RunState, knows: readonly LiId[], world: Pick<World, "content">): string {
   const liState = seenBy(liStateOf(state, unit.id), unit.id, knows);
   // Intimacy (#1936) never rides in the bible's JSON: only an NSFW story gets it, as its own guarded line.
@@ -333,7 +357,7 @@ export function bibleBlock(unit: Unit, state: RunState, knows: readonly LiId[], 
   return [
     `id ${unit.id}: ${unit.name} (${pronounText(unit.pronouns)}), stage ${liState.stage}.`,
     `BIBLE: ${JSON.stringify(bible)}`,
-    ...[intimacyLine(world, unit)].filter(Boolean),
+    ...[appearanceLine(unit), intimacyLine(world, unit)].filter(Boolean),
     // Every unresolved grievance, so a node may resolve any of them. ponytail: the ceiling is GRIEVANCES_MAX (60) at
     // up to 300 characters each; the upgrade path is clipping those older than the newest three to an id and excerpt.
     betweenYou(unit, liState, "all"),
@@ -353,7 +377,9 @@ function webBlock(world: World, units: readonly Unit[]): string {
 
 /** A love interest's scene card and what stands between them and the protagonist (every prompt but the planners'). */
 export function sceneCardBlock(unit: Unit, liState: LiState, resolves: readonly string[] = []): string {
-  return [`id ${unit.id}:`, otomeSceneCard(unit, liState), betweenYou(unit, liState, resolves)].join("\n");
+  return [`id ${unit.id}:`, otomeSceneCard(unit, liState), appearanceLine(unit), betweenYou(unit, liState, resolves)]
+    .filter(Boolean)
+    .join("\n");
 }
 
 // ── P5: chapter plan (structured, 0.8, planner contract) ──
@@ -373,6 +399,10 @@ export interface ChapterPlanReply {
     cg?: boolean | null;
     resolves?: string[] | null;
   }>;
+  /** The node that carries this chapter's scheduled reveal (#1980), when the arc schedules one here. */
+  revealNode?: number | null;
+  /** The node that carries the arc's big event, on the arc's last chapter. */
+  eventNode?: number | null;
   ledger: {
     relationship: Array<{ li: string; line: string }>;
     conflict: Array<{
@@ -392,6 +422,8 @@ export const ChapterPlanSchema: ZodType<ChapterPlanReply> = z.object({
   tags: z.array(text(40)).max(12),
   foil: text(120).optional(),
   summary: text(1200).min(1),
+  revealNode: z.number().int().min(0).max(11).nullable().optional(),
+  eventNode: z.number().int().min(0).max(11).nullable().optional(),
   nodes: z
     .array(
       z.object({
@@ -434,6 +466,8 @@ export interface ChapterPlanInput {
   memory: string;
   /** The climax this chapter must use (S/story/chapters.ts requiredClimax), or null when the planner picks. */
   climax?: ClimaxKind | null;
+  /** The story arc this chapter belongs to (#1980); its scheduled reveal for this chapter is the only mystery text a planner sees. */
+  arc?: StoryArc | null;
   /** The last main chapter's climax, for a free pick. */
   lastClimax?: ClimaxKind | null;
 }
@@ -448,9 +482,22 @@ export function chapterPlanMessages({
   memory,
   climax = null,
   lastClimax = null,
+  arc: plannedArc = null,
 }: ChapterPlanInput): OtomeMessage[] {
   const leadUnit = units.find((unit) => unit.id === lead);
   const others = units.filter((unit) => unit.id !== lead);
+  const arc = plannedArc;
+  const scheduled = arc ? revealAt(arc, number) : undefined;
+  const holder = scheduled?.li ? units.find((unit) => unit.id === scheduled.li) : undefined;
+  const lastChapter = !!arc && number === arc.endsAt;
+  const reveal = scheduled
+    ? {
+        kind: scheduled.kind,
+        name: holder?.name ?? "",
+        what: scheduled.what,
+      }
+    : null;
+
   const system = [
     "You are the chapter planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human, even if inside a monster, capable of earned, character-consistent change.",
     `Plan main chapter ${number}: one Lead love interest (given) and one Foil you pick from the others. The chapter is told as ${NODES_MIN} to ${NODES_MAX} nodes in play order; a narrator writes each node later as one scene the player reads.`,
@@ -472,6 +519,7 @@ export function chapterPlanMessages({
     "- The Lead is in most nodes and in the climax; the Foil appears in at least one node. The Foil's goal competes with the protagonist's or the Lead's, and not always for the protagonist: a rivalry over a goal, a secret, a duty or the mystery counts too.",
     `- Never plan a chapter on the template of the ones before it: vary what drives it and where its turn falls. When its last node leaves a lasting decision open, make it ${VARIED_DECISION}.`,
     "- The world has other people: give named minor characters (friends, family, rivals, officials, locals) real parts where the story calls for them; they speak and can matter. Not every node needs a love interest: the protagonist has a life of their own, and a node may be theirs alone or with others (cast []). A moment node and the climax always have their love interest in cast.",
+    "- No cap on the cast: when the beat needs everyone (a rescue, a party, a confrontation), a node may hold the whole cast, each with their own stake.",
     TIME_RULE,
     number === 1
       ? "- This is the first chapter: every love interest appears in at least one node, and it opens on the opening situation."
@@ -479,7 +527,11 @@ export function chapterPlanMessages({
     "- The chapter does not move any love interest's stage: it may deepen the bond, but the stage moves only through a route chapter's gate scene.",
     "- A new conflict seed never repeats one of that love interest's last two kinds of angst (listed below), and a love interest has at most one open misunderstanding, resolved within two chapters.",
     "- An open grievance stays open until a node that lists it in resolves; never resolve one in passing.",
-    "- Let at most one piece of the mystery surface in a chapter; never reveal a secret before its stage.",
+    reveal
+      ? `- This chapter is scheduled to reveal one thing of the mystery (see THE ARC). Put it in one node and set "revealNode" to that node's index; ${
+          reveal.kind === "truth" ? "the Lead" : reveal.name
+        } must be in that node's cast. Nothing else of the mystery surfaces here.`
+      : "- Nothing of the mystery is revealed in this chapter: never state or imply its answer, and never reveal a secret before its stage.",
     `- Write every text field in ${world.language}.`,
     "- Omit an optional field rather than writing null.",
     "",
@@ -492,7 +544,31 @@ export function chapterPlanMessages({
     "WORLD",
     world.setting.trim() || world.premise.trim(),
     world.mystery.question ? `The mystery: ${world.mystery.question}` : "",
-    world.mystery.truth ? `The hidden truth (never stated outright): ${world.mystery.truth}` : "",
+    "THE ARC",
+    arc
+      ? [
+          `Arc ${arc.number} "${arc.label}" (chapters ${arc.from}–${arc.endsAt}; this is chapter ${number}).`,
+          `Goal: ${arc.goal}`,
+          `This chapter's purpose: ${arc.plan.find((entry) => entry.n === number)?.purpose ?? arc.goal}`,
+          "Later purposes (do not play them yet): " +
+            arc.plan
+              .filter((entry) => entry.n > number)
+              .map((entry) => `${entry.n} — ${entry.purpose}`)
+              .join("; "),
+          lastChapter
+            ? `THIS IS THE ARC'S LAST CHAPTER. Its big event is this chapter's climax: ${arc.endsWith?.what ?? arc.goal} Set "eventNode" to the climax node's index.`
+            : arc.endsWith
+              ? `Chapter ${arc.endsAt} ends the arc: ${arc.endsWith.what}`
+              : "",
+          reveal
+            ? `THIS CHAPTER REVEALS: ${reveal.what} Write the node's guide so it comes out there, on the page${
+                holder ? `, in ${holder.name}'s own way` : ""
+              }, and set "revealNode" to that node's index.`
+            : "Nothing of the mystery is revealed in this chapter.",
+        ]
+          .filter(Boolean)
+          .join("\n")
+      : "(no arc yet: this chapter is planned on its own; nothing of the mystery is revealed here.)",
     number === 1 && world.openingSituation ? `Opening situation: ${world.openingSituation}` : "",
     "",
     "PROTAGONIST",
@@ -695,7 +771,7 @@ export function beatMessages({
   const arc =
     chapter.kind === "prologue"
       ? prologueFraming(world.openingSituation, units)
-      : arcFraming({ chapter, node, units, state });
+      : arcFraming({ chapter, node, units, state, world });
   const dateFraming = date && partner ? dateFramingText(date, partner, state) : "";
   const user = [
     "WORLD",
@@ -718,6 +794,8 @@ export function beatMessages({
           .join("\n"),
       )
       .join("\n\n"),
+    "",
+    groupIntimacyFor(world, present, state),
     "",
     memory.trim() ? `STORY MEMORY\n${memory.trim()}` : "",
     "",
@@ -842,7 +920,8 @@ function arcFraming({
   node,
   units,
   state,
-}: Pick<BeatMessagesInput, "chapter" | "node" | "units" | "state">): string[] {
+  world,
+}: Pick<BeatMessagesInput, "chapter" | "node" | "units" | "state" | "world">): string[] {
   const owner = units.find((unit) => unit.id === (chapter.li ?? chapter.lead));
   const name = owner?.name ?? "the love interest";
   const lines: string[] = [];
@@ -869,6 +948,26 @@ function arcFraming({
     );
   }
   if (chapter.kind === "story") lines.push(...storyFraming(name, chapter.nodes.length));
+  // #1980: the arc's planned reveal, and its big event on the last chapter. Only a stamped node gets a reveal, so the
+  // planner's schedule (normalizeChapterPlan) decides what may come out here; everything else stays hidden.
+  if (node.reveal?.kind === "truth") {
+    lines.push(
+      `In this node the protagonist learns the hidden truth of the mystery, and the scene card's Hidden line no longer applies to anything that contradicts it: ${world.mystery.truth} Let it come out in the scene, in the way this arc's event makes it come out.`,
+    );
+  } else if (node.reveal?.kind === "piece" && "li" in node.reveal) {
+    const piece = world.mystery.pieces[node.reveal.li];
+    const holder = units.find((unit) => unit.id === (node.reveal as { li: string }).li);
+    if (piece) {
+      lines.push(
+        `In this node the protagonist learns this part of the mystery (${holder?.name ?? "a love interest"}'s), and the scene card's Hidden line no longer applies to it: ${piece.piece} Let ${holder?.name ?? "them"} give it away, in their own way.`,
+      );
+    }
+  }
+  if (node.arcEvent) {
+    lines.push(
+      `This is the last node of the story arc: what it has built toward pays off here. Nothing after it in this arc.`,
+    );
+  }
   return lines;
 }
 
@@ -1158,6 +1257,8 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
       )
       .join("\n\n"),
     "",
+    groupIntimacyFor(world, present, state),
+    "",
     memory.trim() ? `STORY MEMORY\n${memory.trim()}` : "",
     "",
     `CHAPTER: ${chapter.title} (${chapterLabel(chapter, units)})`,
@@ -1166,7 +1267,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     `Write the confrontation of node ${node.i + 1} of ${chapter.nodes.length}, between ${protagonist} and ${name} (id ${li}):`,
     `What happens: ${node.guide}`,
     node.place ? `It opens here: ${node.place}` : "",
-    ...arcFraming({ chapter, node, units, state }),
+    ...arcFraming({ chapter, node, units, state, world }),
     otomeContractReminder("scene"),
   ]
     .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
@@ -1251,6 +1352,8 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
       )
       .join("\n\n"),
     "",
+    groupIntimacyFor(world, present, state),
+    "",
     memory.trim() ? `STORY MEMORY\n${memory.trim()}` : "",
     "",
     `CHAPTER: ${chapter.title} (${chapterLabel(chapter, units)})`,
@@ -1259,7 +1362,7 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
     `Write the closer of node ${node.i + 1} of ${chapter.nodes.length}, between ${protagonist} and ${name} (id ${li}):`,
     `What happens: ${node.guide}`,
     node.place ? `It opens here: ${node.place}` : "",
-    ...arcFraming({ chapter, node, units, state }),
+    ...arcFraming({ chapter, node, units, state, world }),
     otomeContractReminder("scene"),
   ]
     .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")

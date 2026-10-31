@@ -35,10 +35,10 @@ export const slpWardrobeImportDraftSchema = slpWardrobeLookInputSchema.extend({
 export const slpWardrobeSceneSchema = z
   .object({
     wardrobeId: z.string().trim().max(80).nullable().optional(),
-    setting: z.string().trim().max(500),
-    action: z.string().trim().max(500),
+    setting: z.string().trim().max(1500),
+    action: z.string().trim().max(1500),
     expression: z.string().trim().max(300),
-    visualDirection: z.string().trim().max(500),
+    visualDirection: z.string().trim().max(1500),
     /** What they wear in this photo. Optional so scenes stored before it existed still parse. */
     outfit: z.string().trim().max(300).optional(),
     /**

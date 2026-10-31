@@ -148,6 +148,8 @@ export type FakeReply =
 export interface FakeRuntimeOptions {
   documents?: CapabilityDocumentStore;
   replies?: FakeReply[];
+  /** The arc plan the fake writes for the arc planner's calls (#1980); the default is fakeArcReply. */
+  arcReply?: (prompt: string) => string;
   debugAgents?: boolean;
   /** Levels the logger reports as enabled through isLevelEnabled; default none. */
   enabledLevels?: string[];
@@ -159,6 +161,37 @@ export interface FakeRuntimeOptions {
   personas?: Array<{ id: string; data: unknown }>;
   /** The connection's own output cap (the resolved model's maxOutputTokens); 4096 by default, null for none. */
   maxOutputTokens?: number | null;
+}
+
+/**
+ * The arc plan the fake model writes when a chapter plan asks for one (#1980): ten short chapters, a piece in the fifth
+ * and the truth in the last. A test that wants a different arc can script its own reply.
+ */
+export function fakeArcReply(prompt = ""): string {
+  // The arc planner's prompt says which kind it was asked for; a breathing arc is four chapters, no plot.
+  const breathing = prompt.includes("BREATHING arc");
+  const purposes = Array.from({ length: breathing ? 4 : 10 }, (_, index) =>
+    breathing
+      ? `A quiet day with someone, the ${index + 1}th of the arc.`
+      : `The quay darkens on day ${index + 1} and someone lies about it.`,
+  );
+  return JSON.stringify({
+    kind: breathing ? "breathing" : "story",
+    label: "The drowned bell",
+    theme: "trust paid for in secrets",
+    goal: "The protagonist learns who rang the bell.",
+    chapters: purposes,
+    endsWith: breathing ? null : { what: "The bell is raised and the one who rang it is named.", chapter: 10 },
+    reveals: breathing
+      ? []
+      : [
+          { chapter: 5, kind: "piece", li: "li-kai-ab12", what: "Kai knew it was rung on purpose." },
+          { chapter: 10, kind: "truth", what: "The harbour master gave the order." },
+        ],
+    antagonist: breathing
+      ? null
+      : { name: "The harbour master", want: "The town stays quiet.", whyNow: "The bell has started again." },
+  });
 }
 
 /** A runtime typed as the Engine's CapabilityRuntimeHost, with the parts Otome uses scripted and recorded. */
@@ -182,6 +215,13 @@ export function createFakeRuntime(options: FakeRuntimeOptions = {}) {
     maxOutputTokens: options.maxOutputTokens === undefined ? 4096 : options.maxOutputTokens,
     async chatComplete(messages, completionOptions) {
       calls.push({ connectionId, messages: structuredClone(messages), options: completionOptions });
+      // #1980: the chapter planner now plans its arc first (story/arc.ts). The fake answers that call itself, so every
+      // test's scripted replies still line up with the calls it really cares about.
+      const arcCall = messages.some((message) => message.content.includes("You are the arc planner"));
+      if (arcCall) {
+        const prompt = messages.map((message) => message.content).join("\n");
+        return { content: (options.arcReply ?? fakeArcReply)(prompt), finishReason: "stop" };
+      }
       const reply = replies.shift();
       if (reply === undefined) throw new Error("The Otome Forge fake model has no scripted reply left");
       if (reply instanceof Error) throw reply;

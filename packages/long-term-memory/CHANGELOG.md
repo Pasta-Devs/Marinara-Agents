@@ -1,5 +1,25 @@
 # Long-Term Memory changelog
 
+## 1.5.22 — 2026-10-31
+
+- Clearer hands-off wording: the background import help says it covers every chat, intro and re-extract text is right when safe changes are accepted automatically, and Advanced Memory scene recaps are disabled with a note on Engines that cannot provide them.
+- Chat Settings shows what background import did today and what waits for review, and both Chat Settings and Extraction warn with a "Choose" button when background import has no extraction connection.
+- Reading older Advanced Memory recaps is one button with progress, Stop and resume, instead of a batch-size field and repeated presses.
+- Memory Settings, Chat Settings and the setup guide offer one "Memories from chats" choice (I add them myself; Collect them, I'll review; Save them for me) with a per-chat override, and Hide imported messages now waits until a message's memories are saved.
+
+## 1.5.21 — 2026-10-31
+
+- Whole-number settings (memory budget, maximum memories, recall context messages and the Extraction token and note limits, including the per-chat budget and maximum memories) now round a typed decimal like `2.5` instead of failing to save.
+
+## 1.5.20 — 2026-10-31
+
+- Memory Settings → Extraction gains "Use Advanced Memory recaps". A chat that uses Advanced Memory is imported from its scene recaps instead of its summaries and messages, without an AI call, and with "Import new chat sources automatically" on this happens while you chat. A recap reaches only the characters who were in that scene, and a chat does not recall memories made from its own recaps. Import → Chats gains "Backfill Advanced Memory" for older recaps: it reads them in batches and skips recaps an earlier chat import already covers. This needs a Marinara version with Capability API 1.391; on older versions nothing changes.
+
+## 1.5.19 — 2026-10-31
+
+- Memory Settings → Extraction gains "Accept safe changes automatically", which accepts low-risk proposed memories after an import or extraction and now applies the safe part of a draft that also holds a rewrite.
+- Memory Settings → Extraction gains "Import new chat sources automatically", which imports a chat's new summaries and finished message stretches in the background while you chat.
+
 ## 1.5.18 — 2026-10-30
 
 - The memory page now uses the same header as every other agent page: store banner, logo, name, the Active switch for the open chat and Manage package. Add memories and the setup guide stay in that header. This needs a Marinara version with Capability API 1.390; on older versions nothing changes.

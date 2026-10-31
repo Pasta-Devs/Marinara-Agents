@@ -7,18 +7,18 @@
         "schemaVersion": 2,
         "capabilityApi": {
           "major": 1,
-          "minor": 46
+          "minor": 812
         },
         "builtAgainst": {
-          "engineVersion": "2.4.6",
-          "engineCommit": "bd6464e61f03ad7d7743f2986f1371d0280c7c85"
+          "engineVersion": "2.5.1",
+          "engineCommit": "262ef5d131553ae5b64ad66a9f6800f83526f27f"
         },
         "id": "ruleset-5e-2014",
         "name": "5e (SRD 5.1)",
-        "version": "0.9.1",
-        "description": "Play Game Mode by the 5e rules (SRD 5.1): ability checks, saving throws, a full character sheet with spells and class features, and 5e combat against 319 monsters, on a battle board or without positions. After installing, choose it under Rules in the Game Mode setup wizard when you create a new game.",
+        "version": "1.0.1",
+        "description": "Play Game Mode by the 5e rules (SRD 5.1): ability checks, saving throws, a full character sheet with spells and class features, and 5e combat against 323 monsters, on a battle board or without positions. Its Equipment catalog puts the SRD's armor, weapons, gear and tools in your bag, and what you wear sets your Armor Class. Its Magic items catalog holds every SRD magic item and a spell scroll of every spell, and they work as printed: a potion of healing heals, a scroll casts its spell, and a +1 sword hits harder. Every item has a price, and a beaten creature can drop coins and, now and then, a potion, a scroll or a magic item. The Game Master buys and sells for you at the market, from a hamlet's general store to a city's magic dealer. Honest sellers warn before selling a wild chance item, and a town's fence may pass off a fake as the real thing. Its Races catalog has the SRD's nine races and their subraces, with your speed from the race you pick. A guided builder makes a character in steps: race, class, ability scores, background, proficiencies, features, spells and gear. Includes material from the System Reference Document 5.1 and 5.2.1 by Wizards of the Coast LLC (https://www.dndbeyond.com/srd), licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/legalcode). Not affiliated with or endorsed by Wizards of the Coast. After installing, choose it under Rules in the Game Mode setup wizard when you create a new game.",
         "engine": {
-          "min": "2.4.6",
+          "min": "2.5.1",
           "maxExclusive": "4.0.0"
         },
         "kind": [
@@ -31,30 +31,84 @@
               "ruleset.json",
               "catalogs/spells.json",
               "catalogs/features.json",
-              "catalogs/creatures.json"
+              "catalogs/races.json",
+              "catalogs/creatures.json",
+              "catalogs/equipment.json",
+              "catalogs/magic_items.json",
+              "catalogs/classes.json",
+              "catalogs/backgrounds.json",
+              "catalogs/languages.json",
+              "catalogs/tools.json",
+              "catalogs/fighting_styles.json",
+              "catalogs/weapons.json"
             ]
           }
         },
         "files": [
           {
             "path": "ruleset.json",
-            "sha256": "154fbae80ed86286a29ac1629f550dd052baf0f33ed0012d4a406a4ecf1202c0",
-            "bytes": 93257
+            "sha256": "c0ebf19d7e9fa933cdd15a12b5a33834cc98594e92184be1a2433876f7786839",
+            "bytes": 402156
           },
           {
             "path": "catalogs/spells.json",
-            "sha256": "5073dbe894c942d752bb29df18440d47d4e4366f2aba12915905f86405018284",
-            "bytes": 314974
+            "sha256": "f06cf1c2a3c7752551be8ec76da27ae94463e0bc0a2139266c45781351029cfb",
+            "bytes": 858784
           },
           {
             "path": "catalogs/features.json",
-            "sha256": "3970e951d5c1a477334f225b1831b8ea2f7b9ce02e7488aa011a8e14edd537e9",
-            "bytes": 199372
+            "sha256": "d70b406c4eb22129ade4ef524bde839b4fd96785b34cf6fabd42b5e031ecd54a",
+            "bytes": 722138
+          },
+          {
+            "path": "catalogs/races.json",
+            "sha256": "727848a2493c33268086d5659d4bb193f23822e5a7e1ed0a25ce9f00e37a6e4f",
+            "bytes": 42859
           },
           {
             "path": "catalogs/creatures.json",
-            "sha256": "621feee41734fc0441c0edd6ddd01b47d3d79ea517a3a35c0aaae47076285246",
-            "bytes": 779881
+            "sha256": "e74e193d232e1d70e36c57bcc382d776ec9b8232df21c9a455c348faf96b328a",
+            "bytes": 1519653
+          },
+          {
+            "path": "catalogs/equipment.json",
+            "sha256": "f01684b10516c45446972140757987036fa8c8bfb94a0f4c00ffcdfe9fe6cbaa",
+            "bytes": 140900
+          },
+          {
+            "path": "catalogs/magic_items.json",
+            "sha256": "9d862f7188c379a57fce09b586feb635f7aea07788a338b1cc0177982025ad94",
+            "bytes": 1432838
+          },
+          {
+            "path": "catalogs/classes.json",
+            "sha256": "3a28073a38e04c033a29a7ba9b6a4a6d16314c1e88f21e2a7ea8a71d04380b12",
+            "bytes": 37015
+          },
+          {
+            "path": "catalogs/backgrounds.json",
+            "sha256": "fc3dfb43f46446642cdb95157b66fc07e8c47c59a884d6f83533ba81879533d2",
+            "bytes": 2114
+          },
+          {
+            "path": "catalogs/languages.json",
+            "sha256": "a46214463c32f7c18c6146e169f6ccf68bf79d623abdd4a346ebd94fccb2136f",
+            "bytes": 2751
+          },
+          {
+            "path": "catalogs/tools.json",
+            "sha256": "26e1cf9a7958bba0a58edb8689c1adf967b4f6a55d4557c46d821491a9c3ddf8",
+            "bytes": 7445
+          },
+          {
+            "path": "catalogs/fighting_styles.json",
+            "sha256": "1471228a203518e39a10edcd9601358874bc83c2bda18a55cbda8caf073ba208",
+            "bytes": 4752
+          },
+          {
+            "path": "catalogs/weapons.json",
+            "sha256": "9ecd2fb6026ed674f4d732e08ab8a2e5239666b10120a9940d1a385a79ca71a0",
+            "bytes": 31058
           }
         ],
         "permissions": [],
@@ -63,9 +117,88 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/ruleset-5e-2014.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/ruleset-5e-2014-0.9.1.zip",
-        "sha256": "c9b45dc9087608aebca420d65966ffbcfa7557cdf6ae382eb8da4aa91eed9365",
-        "bytes": 1389670
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/ruleset-5e-2014-1.0.1.ruleset.json",
+        "sha256": "87870ad60e982bfd567745b9f91c24873cd06d248c3ebb983ffb5784a5305a54",
+        "bytes": 6944239
+      },
+      "locales": {
+        "ar": {
+          "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/ruleset-5e-2014-1.0.1.ar.json",
+          "sha256": "acfebb502956c33e13da0cf1232094c6ab784edc38f68a3394f26bb7030808e9",
+          "bytes": 1949908,
+          "name": "5e (SRD 5.1)",
+          "description": "العب في وضع اللعب وفق قواعد 5e (SRD 5.1): اختبارات القدرات، ورميات الإنقاذ، وورقة شخصية كاملة تتضمن التعاويذ وميزات الفئات، وقتال بقواعد 5e ضد 323 وحشًا، على لوحة معركة أو دون تحديد المواقع. يضع كتالوج المعدات الدروع والأسلحة والعتاد والأدوات الواردة في SRD في حقيبتك، ويحدد ما ترتديه فئة درعك. يضم كتالوج العناصر السحرية جميع العناصر السحرية الواردة في SRD ولفافة تعويذة لكل تعويذة، وتعمل كما تنص أوصافها: جرعة الشفاء تشفي، واللفافة تلقي تعويذتها، وسيف +1 يضرب بقوة أكبر. لكل عنصر ثمن، وقد تترك المخلوقات المهزومة عملات، وأحيانًا جرعة أو لفافة أو عنصرًا سحريًا. يتولى سيد اللعبة الشراء والبيع نيابةً عنك في السوق، من متجر قرية صغيرة إلى تاجر سحر في مدينة. يحذرك الباعة الأمناء قبل بيع عنصر ذي تأثيرات عشوائية غير متوقعة، وقد يبيعك تاجر مسروقات في بلدة قطعة مزيفة على أنها أصلية. يضم كتالوج الأعراق الأعراق التسعة الواردة في SRD وأعراقها الفرعية، ويحدد العرق الذي تختاره سرعتك. يساعدك معالج إرشادي على إنشاء شخصية خطوة بخطوة: العرق، والفئة، وقيم القدرات، والخلفية، والإتقان، والميزات، والتعاويذ، والعتاد. يتضمن مواد من الوثيقة المرجعية للنظام 5.1 و5.2.1 الصادرة عن Wizards of the Coast LLC (https://www.dndbeyond.com/srd)، والمرخصة بموجب CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/legalcode). لا تربطه صلة بشركة Wizards of the Coast ولا يحظى بتأييدها. بعد التثبيت، اختر هذه القواعد ضمن «القواعد» في معالج إعداد وضع اللعب عند إنشاء لعبة جديدة."
+        },
+        "de": {
+          "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/ruleset-5e-2014-1.0.1.de.json",
+          "sha256": "0135d45a393fba0b97659e39a366674d523b42fb7f82b95e9378089e55cb0358",
+          "bytes": 1702865,
+          "name": "5e (SRD 5.1)",
+          "description": "Spiele im Spielmodus nach den Regeln von 5e (SRD 5.1): Attributswürfe, Rettungswürfe, ein vollständiger Charakterbogen mit Zaubern und Klassenmerkmalen sowie Kämpfe nach 5e gegen 323 Monster, auf einem Schlachtfeld oder ohne Positionen. Der Ausrüstungskatalog legt dir Rüstungen, Waffen, Abenteurerausrüstung und Werkzeuge aus dem SRD in die Tasche, und deine getragene Ausrüstung bestimmt deine Rüstungsklasse. Der Katalog magischer Gegenstände enthält jeden magischen Gegenstand des SRD und für jeden Zauber eine Zauberschriftrolle. Sie funktionieren wie beschrieben: Ein Heiltrank heilt, eine Schriftrolle wirkt ihren Zauber und ein Schwert +1 schlägt kräftiger zu. Jeder Gegenstand hat einen Preis, und besiegte Kreaturen können Münzen und gelegentlich einen Trank, eine Schriftrolle oder einen magischen Gegenstand hinterlassen. Der Spielleiter kauft und verkauft für dich auf dem Markt, vom Gemischtwarenladen eines Weilers bis zum Magiehändler einer Stadt. Ehrliche Händler warnen dich vor dem Kauf eines Gegenstands mit unberechenbaren Zufallseffekten, während ein Hehler in der Stadt dir eine Fälschung als echt andrehen kann. Der Völkerkatalog enthält die neun Völker des SRD und ihre Unterarten. Deine Bewegungsrate ergibt sich aus dem gewählten Volk. Ein Assistent führt dich schrittweise durch die Charaktererschaffung: Volk, Klasse, Attributswerte, Hintergrund, Übung, Merkmale, Zauber und Ausrüstung. Enthält Material aus dem Systemreferenzdokument 5.1 und 5.2.1 von Wizards of the Coast LLC (https://www.dndbeyond.com/srd), lizenziert unter CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/legalcode). Es besteht keine Verbindung zu Wizards of the Coast und keine Unterstützung durch das Unternehmen. Wähle dieses Regelwerk nach der Installation unter „Regeln“ im Einrichtungsassistenten des Spielmodus aus, wenn du ein neues Spiel erstellst."
+        },
+        "es": {
+          "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/ruleset-5e-2014-1.0.1.es.json",
+          "sha256": "d3002bc6b444dd98dc63f1f79547cc25b70efa888b2189621dd5550c877e52db",
+          "bytes": 1675878,
+          "name": "5e (SRD 5.1)",
+          "description": "Juega en el modo de juego con las reglas de 5e (SRD 5.1): pruebas de característica, tiradas de salvación, una ficha de personaje completa con conjuros y rasgos de clase, y combates de 5e contra 323 monstruos, en un tablero de batalla o sin posiciones. Su catálogo de equipo pone en tu bolsa las armaduras, armas, equipo de aventuras y herramientas del SRD, y lo que llevas puesto determina tu Clase de Armadura. Su catálogo de objetos mágicos contiene todos los objetos mágicos del SRD y un pergamino de conjuro de cada conjuro, y funcionan tal como indican sus descripciones: una poción de curación cura, un pergamino lanza su conjuro y una espada +1 golpea más fuerte. Cada objeto tiene un precio, y una criatura derrotada puede dejar monedas y, de vez en cuando, una poción, un pergamino o un objeto mágico. El director de juego compra y vende por ti en el mercado, desde la tienda de una aldea hasta el mercader de objetos mágicos de una ciudad. Los vendedores honrados te avisan antes de venderte un objeto con efectos aleatorios impredecibles, y un perista de la localidad puede hacer pasar una falsificación por un objeto auténtico. Su catálogo de razas contiene las nueve razas del SRD y sus subrazas, y tu velocidad depende de la raza que elijas. Un asistente te guía paso a paso para crear un personaje: raza, clase, puntuaciones de característica, trasfondo, competencias, rasgos, conjuros y equipo. Incluye material del Documento de Referencia del Sistema 5.1 y 5.2.1 de Wizards of the Coast LLC (https://www.dndbeyond.com/srd), bajo la licencia CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/legalcode). No está afiliado a Wizards of the Coast ni cuenta con su respaldo. Tras instalarlo, selecciónalo en «Reglas» en el asistente de configuración del modo de juego al crear una partida nueva."
+        },
+        "fr": {
+          "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/ruleset-5e-2014-1.0.1.fr.json",
+          "sha256": "4f997d13ac7df4b6a715905825989995b594b13d8a4365cb2ca6542e76acc9b6",
+          "bytes": 1712711,
+          "name": "5e (SRD 5.1)",
+          "description": "Jouez en mode Jeu selon les règles de 5e (SRD 5.1) : tests de caractéristique, jets de sauvegarde, fiche de personnage complète avec sorts et capacités de classe, et combats de 5e contre 323 monstres, sur un plateau de combat ou sans positions. Son catalogue d’équipement place dans votre sac les armures, armes, matériel d’aventurier et outils du SRD, et ce que vous portez détermine votre classe d’armure. Son catalogue d’objets magiques contient tous les objets magiques du SRD ainsi qu’un parchemin de sort pour chaque sort, et ils fonctionnent conformément à leur description : une potion de soins soigne, un parchemin lance son sort et une épée +1 frappe plus fort. Chaque objet a un prix, et une créature vaincue peut laisser des pièces et, de temps à autre, une potion, un parchemin ou un objet magique. Le maître du jeu achète et vend pour vous au marché, de l’échoppe d’un hameau au marchand d’objets magiques d’une ville. Les vendeurs honnêtes vous avertissent avant de vous vendre un objet aux effets aléatoires imprévisibles, tandis qu’un receleur local peut faire passer une contrefaçon pour un objet authentique. Son catalogue de races contient les neuf races du SRD et leurs sous-races, et votre vitesse dépend de la race choisie. Un assistant vous guide dans la création d’un personnage, étape par étape : race, classe, valeurs de caractéristique, historique, maîtrises, capacités, sorts et équipement. Comprend du contenu du Document de référence du système 5.1 et 5.2.1 de Wizards of the Coast LLC (https://www.dndbeyond.com/srd), sous licence CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/legalcode). Ce produit n’est ni affilié à Wizards of the Coast ni approuvé par cette société. Après l’installation, sélectionnez ce système dans « Règles » dans l’assistant de configuration du mode Jeu lorsque vous créez une nouvelle partie."
+        },
+        "hi": {
+          "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/ruleset-5e-2014-1.0.1.hi.json",
+          "sha256": "29ca87a665aa8d9f8228e4e281c5d0640007c24ab7fb1457826aaddff889ee24",
+          "bytes": 2629992,
+          "name": "5e (SRD 5.1)",
+          "description": "खेल मोड में 5e के नियमों (SRD 5.1) के अनुसार खेलें: क्षमता जाँच, बचाव फेंक, मंत्रों और वर्ग विशेषताओं सहित पूरा चरित्र पत्रक, और 323 राक्षसों के विरुद्ध 5e की युद्ध प्रणाली—युद्ध-पटल पर या बिना स्थान निर्धारित किए। इसकी उपकरण सूची से SRD के कवच, हथियार, साज-सामान और औज़ार आपके थैले में आते हैं, और आप जो पहनते हैं, उससे आपका कवच वर्ग तय होता है। इसकी जादुई वस्तुओं की सूची में SRD की हर जादुई वस्तु और प्रत्येक मंत्र का एक मंत्रपत्र है, और वे अपने विवरण के अनुसार काम करते हैं: उपचार का औषधि-पेय घाव भरता है, मंत्रपत्र अपना मंत्र चलाता है और +1 तलवार अधिक ज़ोर से वार करती है। हर वस्तु की एक कीमत है, और पराजित प्राणी से सिक्के तथा कभी-कभी कोई औषधि-पेय, मंत्रपत्र या जादुई वस्तु मिल सकती है। खेल संचालक बाज़ार में आपके लिए खरीद-बिक्री करता है, चाहे वह छोटे गाँव की परचून की दुकान हो या किसी शहर का जादुई वस्तुओं का व्यापारी। ईमानदार विक्रेता अनिश्चित और अप्रत्याशित प्रभावों वाली वस्तु बेचने से पहले चेतावनी देते हैं, और कस्बे का कोई चोरी का माल बेचने वाला व्यापारी नकली वस्तु को असली बताकर बेच सकता है। इसकी जातियों की सूची में SRD की नौ जातियाँ और उनकी उपजातियाँ हैं, और आपकी गति चुनी गई जाति से तय होती है। एक मार्गदर्शक आपको चरण-दर-चरण चरित्र बनाने में मदद करता है: जाति, वर्ग, क्षमता अंक, पृष्ठभूमि, प्रवीणताएँ, विशेषताएँ, मंत्र और साज-सामान। इसमें Wizards of the Coast LLC के सिस्टम रेफ़रेंस डॉक्यूमेंट 5.1 और 5.2.1 (https://www.dndbeyond.com/srd) की सामग्री शामिल है, जो CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/legalcode) के तहत लाइसेंस प्राप्त है। यह Wizards of the Coast से संबद्ध नहीं है और न ही उसके द्वारा अनुमोदित है। इंस्टॉल करने के बाद, नया खेल बनाते समय खेल मोड के सेटअप विज़ार्ड में «नियम» के अंतर्गत इसे चुनें।"
+        },
+        "ja": {
+          "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/ruleset-5e-2014-1.0.1.ja.json",
+          "sha256": "099fd9e45bffba8f483c2c00561f32cf066b96142a301c41c1917579cc86e59b",
+          "bytes": 1810740,
+          "name": "5e (SRD 5.1)",
+          "description": "ゲームモードを5eのルール（SRD 5.1）でプレイできます。能力値判定、セーヴィング・スロー、呪文やクラス特徴を備えた完全なキャラクター・シートに対応し、323体のモンスターを相手に、戦闘ボード上でも位置を使わずにも5eの戦闘を楽しめます。「装備品」カタログからSRDの鎧、武器、冒険用具、道具類をバッグに入れることができ、身に着けた装備によってアーマー・クラスが決まります。「魔法のアイテム」カタログにはSRDのすべての魔法のアイテムと、すべての呪文に対応する呪文の巻物が収録されており、それぞれ記載どおりに機能します。ポーション・オヴ・ヒーリングは回復を行い、巻物はその呪文を発動し、+1の剣はより強い打撃を与えます。どのアイテムにも価格があり、倒したクリーチャーは硬貨を落とすほか、ときにはポーション、巻物、魔法のアイテムを落とすこともあります。小さな村の雑貨屋から都市の魔法の品を扱う商人まで、ゲーム・マスターが市場での売買を代行します。正直な商人は、効果が予測できず運任せとなる品を売る前に警告してくれますが、町の盗品商は偽物を本物と偽って売ることがあります。「種族」カタログにはSRDの九種族とその亜種族が収録され、選んだ種族によって移動速度が決まります。作成ガイドに従い、種族、クラス、能力値、背景、習熟、特徴、呪文、装備の順にキャラクターを作成できます。Wizards of the Coast LLCによるシステム・リファレンス・ドキュメント5.1および5.2.1（https://www.dndbeyond.com/srd）の内容を含み、CC BY 4.0（https://creativecommons.org/licenses/by/4.0/legalcode）に基づいて使用しています。Wizards of the Coastとの提携関係はなく、同社の承認を受けたものではありません。インストール後、新しいゲームを作成する際に、ゲームモードのセットアップ・ウィザードの「ルール」でこのルールセットを選択してください。"
+        },
+        "ko": {
+          "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/ruleset-5e-2014-1.0.1.ko.json",
+          "sha256": "804481faa36119ccd98cd25316ab9361791cee367ffd96780b9da7163f4dabe0",
+          "bytes": 1674020,
+          "name": "5e (SRD 5.1)",
+          "description": "게임 모드에서 5e 규칙(SRD 5.1)으로 플레이하세요. 능력치 판정, 내성 굴림, 주문과 클래스 특성이 포함된 완전한 캐릭터 시트를 제공하며, 전투 보드를 사용하거나 위치 없이 323종의 몬스터와 5e 전투를 벌일 수 있습니다. 장비 목록에서 SRD의 갑옷, 무기, 모험 장비와 도구를 가방에 넣을 수 있으며, 착용한 장비에 따라 방어도가 정해집니다. 마법 아이템 목록에는 SRD의 모든 마법 아이템과 각 주문에 해당하는 주문 두루마리가 들어 있으며, 모두 설명대로 작동합니다. 치유의 물약은 치유하고, 두루마리는 해당 주문을 시전하며, +1 검은 더 강하게 공격합니다. 모든 아이템에는 가격이 있으며, 쓰러뜨린 크리처에게서 동전과 함께 때때로 물약, 두루마리 또는 마법 아이템을 얻을 수 있습니다. 작은 마을의 잡화점부터 도시의 마법 상인까지, 게임 마스터가 시장에서 여러분 대신 물건을 사고팝니다. 정직한 상인은 효과가 종잡을 수 없이 무작위로 나타나는 아이템을 팔기 전에 경고하지만, 마을의 장물아비는 가짜를 진품으로 속여 팔기도 합니다. 종족 목록에는 SRD의 아홉 종족과 그 하위 종족이 포함되어 있으며, 선택한 종족에 따라 이동속도가 정해집니다. 생성 도우미를 따라 종족, 클래스, 능력치, 배경, 숙련, 특성, 주문, 장비를 차례로 선택하여 캐릭터를 만들 수 있습니다. Wizards of the Coast LLC의 시스템 참조 문서 5.1 및 5.2.1(https://www.dndbeyond.com/srd)의 자료를 포함하며, CC BY 4.0(https://creativecommons.org/licenses/by/4.0/legalcode) 라이선스에 따라 사용합니다. Wizards of the Coast와 제휴 관계가 없으며 해당 회사의 보증을 받지 않았습니다. 설치 후 새 게임을 만들 때 게임 모드 설정 마법사의 «규칙»에서 이 규칙 세트를 선택하세요."
+        },
+        "pl": {
+          "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/ruleset-5e-2014-1.0.1.pl.json",
+          "sha256": "674abd294e62d4817de5ad9e34c22031bb7fc895c00e71c4bb1f6a0b299cf41b",
+          "bytes": 1642279,
+          "name": "5e (SRD 5.1)",
+          "description": "Graj w trybie gry według zasad 5e (SRD 5.1): testy cech, rzuty obronne, pełna karta postaci z zaklęciami i zdolnościami klasowymi oraz walka według zasad 5e z 323 potworami, na planszy bitewnej lub bez określania pozycji. Katalog wyposażenia pozwala dodawać do torby pancerze, broń, ekwipunek i narzędzia z SRD, a noszone wyposażenie określa twoją Klasę Pancerza. Katalog magicznych przedmiotów zawiera wszystkie magiczne przedmioty z SRD oraz zwój każdego zaklęcia. Działają zgodnie z opisem: mikstura leczenia leczy, zwój rzuca zapisane na nim zaklęcie, a miecz +1 uderza mocniej. Każdy przedmiot ma cenę, a pokonana istota może pozostawić monety, a od czasu do czasu także miksturę, zwój lub magiczny przedmiot. Mistrz Gry kupuje i sprzedaje za ciebie na targu, od wiejskiego sklepu wielobranżowego po miejskiego handlarza magicznymi przedmiotami. Uczciwi sprzedawcy ostrzegają przed zakupem przedmiotów o nieprzewidywalnych, losowych efektach, a miejscowy paser może sprzedać podróbkę jako oryginał. Katalog ras zawiera dziewięć ras z SRD i ich podrasy, a twoja szybkość zależy od wybranej rasy. Kreator prowadzi cię przez kolejne etapy tworzenia postaci: rasę, klasę, wartości cech, pochodzenie, biegłości, zdolności, zaklęcia i wyposażenie. Zawiera materiały z Dokumentu Referencyjnego Systemu 5.1 i 5.2.1 firmy Wizards of the Coast LLC (https://www.dndbeyond.com/srd), udostępnione na licencji CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/legalcode). Nie jest powiązany z Wizards of the Coast ani nie uzyskał aprobaty tej firmy. Po instalacji wybierz ten zestaw w sekcji „Zasady” kreatora konfiguracji trybu gry podczas tworzenia nowej rozgrywki."
+        },
+        "pt-BR": {
+          "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/ruleset-5e-2014-1.0.1.pt-BR.json",
+          "sha256": "3686225c389477fd57bfa244166a0ac6f3ae4de90d2a5145e5d26a8e04cec1ed",
+          "bytes": 1664214,
+          "name": "5e (SRD 5.1)",
+          "description": "Jogue no Modo de Jogo com as regras de 5e (SRD 5.1): testes de atributo, salvaguardas, uma ficha de personagem completa com magias e características de classe, e combates de 5e contra 323 monstros, em um tabuleiro de batalha ou sem posições. O catálogo de Equipamento coloca na sua bolsa as armaduras, armas, equipamentos de aventura e ferramentas do SRD, e o que você veste determina sua Classe de Armadura. O catálogo de Itens Mágicos contém todos os itens mágicos do SRD e um pergaminho de magia para cada magia, e eles funcionam conforme suas descrições: uma poção de cura cura, um pergaminho conjura sua magia e uma espada +1 golpeia com mais força. Todo item tem um preço, e uma criatura derrotada pode deixar moedas e, de vez em quando, uma poção, um pergaminho ou um item mágico. O Mestre compra e vende para você no mercado, do armazém de um povoado ao comerciante de itens mágicos de uma cidade. Vendedores honestos avisam antes de vender um item com efeitos aleatórios imprevisíveis, e um receptador local pode vender uma falsificação como se fosse autêntica. O catálogo de Raças contém as nove raças do SRD e suas sub-raças, e seu deslocamento depende da raça escolhida. Um assistente orienta a criação do personagem em etapas: raça, classe, valores de atributo, antecedente, proficiências, características, magias e equipamento. Inclui material do Documento de Referência do Sistema 5.1 e 5.2.1 da Wizards of the Coast LLC (https://www.dndbeyond.com/srd), licenciado sob CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/legalcode). Não é afiliado à Wizards of the Coast nem endossado por ela. Após instalar, selecione este conjunto em «Regras» no assistente de configuração do Modo de Jogo ao criar uma nova partida."
+        },
+        "ru": {
+          "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/ruleset-5e-2014-1.0.1.ru.json",
+          "sha256": "a8816bee1c14d1dc8944a0684a5aad299b735c79e63b6c15bc2a2d7166c998a2",
+          "bytes": 2264645,
+          "name": "5e (SRD 5.1)",
+          "description": "Играйте в игровом режиме по правилам 5e (SRD 5.1): проверки характеристик, спасброски, полноценный лист персонажа с заклинаниями и классовыми умениями, а также бои по правилам 5e против 323 чудовищ — на поле боя или без учёта позиций. Каталог снаряжения позволяет положить в сумку доспехи, оружие, снаряжение и инструменты из SRD, а надетые предметы определяют ваш Класс Доспеха. Каталог магических предметов содержит все магические предметы из SRD и свиток с каждым заклинанием. Всё работает по описанию: зелье лечения лечит, свиток накладывает своё заклинание, а меч +1 бьёт сильнее. У каждого предмета есть цена, а побеждённое существо может оставить монеты и иногда зелье, свиток или магический предмет. Мастер покупает и продаёт за вас на рынке — от лавки в деревушке до торговца магическими предметами в городе. Честные продавцы предупреждают перед продажей предметов с непредсказуемыми случайными эффектами, а местный скупщик краденого может выдать подделку за подлинник. Каталог рас содержит девять рас из SRD и их подрасы, а ваша скорость зависит от выбранной расы. Пошаговый помощник проведёт вас через создание персонажа: раса, класс, значения характеристик, предыстория, владения, умения, заклинания и снаряжение. Включает материалы Системного справочного документа 5.1 и 5.2.1 компании Wizards of the Coast LLC (https://www.dndbeyond.com/srd), распространяемые по лицензии CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/legalcode). Не связан с Wizards of the Coast и не одобрен этой компанией. После установки выберите этот набор в разделе «Правила» мастера настройки игрового режима при создании новой игры."
+        },
+        "zh-Hans": {
+          "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/ruleset-5e-2014-1.0.1.zh-Hans.json",
+          "sha256": "6274c26d50d3d3485fd9b82ad23a1e36cfb91f1f68d9511f0d0010ef490dbe66",
+          "bytes": 1505973,
+          "name": "5e (SRD 5.1)",
+          "description": "在游戏模式中按5e规则（SRD 5.1）游玩：进行属性检定和豁免检定，使用包含法术与职业特性的完整角色卡，并按5e规则与323种怪物战斗，既可使用战斗棋盘，也可不使用站位。装备目录可将SRD中的护甲、武器、冒险用品和工具放入你的背包，你的穿戴则决定你的护甲等级。魔法物品目录收录了SRD中的全部魔法物品，以及每个法术对应的法术卷轴，效果均与规则描述一致：治疗药水恢复生命，卷轴施展其记载的法术，+1剑的攻击更强。每件物品都有价格，击败生物后可能获得钱币，偶尔还能获得药水、卷轴或魔法物品。游戏主持人会替你在市场上买卖物品，无论是小村落的杂货店，还是城市里的魔法物品商店。诚实的商人在出售效果随机且难以预测的物品前会提醒你，而镇上的销赃者可能把赝品当真货卖给你。种族目录包含SRD中的九个种族及其亚种，你的速度取决于所选种族。创建向导会引导你逐步创建角色：种族、职业、属性值、背景、熟练项、特性、法术和装备。包含Wizards of the Coast LLC《系统参考文档》5.1和5.2.1（https://www.dndbeyond.com/srd）中的内容，依照CC BY 4.0许可协议（https://creativecommons.org/licenses/by/4.0/legalcode）使用。本规则集与Wizards of the Coast无关联，也未获其认可。安装后，创建新游戏时，请在游戏模式设置向导的“规则”中选择此规则集。"
+        }
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/game/getting-started.md#choosing-rules"
     },
@@ -237,7 +370,7 @@
         },
         "id": "otome-forge",
         "name": "Otome Hearth",
-        "version": "0.6.2",
+        "version": "0.6.9",
         "description": "An otome game in its own Home tab, made from your own characters: love interests who remember what you chose, their messages to you, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn. Install it, restart Marinara Engine when prompted, then open Home → Otome Hearth.",
         "engine": {
           "min": "2.5.1",
@@ -271,13 +404,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "495b8f33a93f426014d1ec3a5a8bf81d2e0d33db1d65e5cf5b29355f8832e1d8",
-            "bytes": 447166
+            "sha256": "5d4a76f4eef340ce4d5fe336135ee653a46f60ea79d495b02e7cf21538b1c999",
+            "bytes": 471739
           },
           {
             "path": "client.js",
-            "sha256": "202c03170fcd446471d3ee974efe898db4dda8677f35d075aa830aa4ddc18b64",
-            "bytes": 1161245
+            "sha256": "29dfd26c1224ed5ad866e083b00e3b78eb2067a2fec066fa9760c4cdece55132",
+            "bytes": 1172369
           },
           {
             "path": "otome-hearth-icon.png",
@@ -305,9 +438,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/otome-forge.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/otome-forge-0.6.2.zip",
-        "sha256": "2eeeb16062df626a4dd2691e75b6c89e83dadeb6297db2f9bb71a59470b95e7e",
-        "bytes": 1760062
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/otome-forge-0.6.9.zip",
+        "sha256": "5aa0e22e3103bfd02978830feae54b6a317ba9c3fa493939cdc86fd92c7a7096",
+        "bytes": 1795759
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/otome-forge/README.md"
     },

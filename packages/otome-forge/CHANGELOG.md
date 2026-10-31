@@ -1,5 +1,40 @@
 # Otome Hearth release notes
 
+## 0.6.9 — 2026-10-31
+
+- The chapter list groups chapters under their arc, and a chapter's reader says which arc it belongs to ("Arc 2 · Chapter 4").
+- A breathing-room arc says so: "Take a breath" arcs show a quiet-stretch badge, so a plot-free stretch is never mistaken for the story stalling.
+
+## 0.6.8 — 2026-10-31
+
+- **The end of an arc is a choice:** when one closes, pick **Take a breath** (a few quiet chapters with the people you love), **Go on with the story** (a new arc with a new threat), or **Meet someone new**. The next arc is planned from your answer.
+- **Meet someone new:** bring in one of your character cards, or someone invented for this story. They meet you and the others on the page, and the story writes how each of the cast takes them. The cast holds five love interests at most.
+
+## 0.6.7 — 2026-10-31
+
+- **Story arcs:** each stretch of main chapters now follows a plan made before it starts: a goal, a big event near the end, and where the mystery's answers come out. The Story screen shows the arc's name and how far you are ("Arc The drowned bell · chapter 4 of 10"). Before this, no plan looked past the next chapter and the mystery's answer was never allowed to be said.
+
+## 0.6.6 — 2026-10-31
+
+- **Banned phrases** when you start a new story: type them right under **How it's written**, so the world and every love interest's Bible avoid them from the start. Still in Settings → Content.
+- Read Him and Read Me guess instead of repeating: one specific guess past what your persona states, across wants, thoughts, likes, dislikes, habits, fears and memories. He never guesses what he already knows.
+- **Group scenes:** two or more love interests at stage 3 and up may share one intimacy when the scene fits. Heat decides how far, each keeps their own tastes, and scenes are no longer capped to a couple of love interests.
+- Narration says what the protagonist feels in her body, not only the action.
+
+## 0.6.5 — 2026-10-31
+
+- Seasonal banners: the first fortnight that starts in each month brings three banners on that month's theme, with a badge such as “October · Halloween”: New Year in January, Valentine's Day in February, through Halloween in October, autumn in November and Christmas in December. A world without the holiday gets its own version of it. Later fortnights that month are your model's free choice, as before.
+
+## 0.6.4 — 2026-10-31
+
+- **Your cast** and **Your stories** moved from **Who's home** to **Settings → Stories**, each with a line on what it's for. **Who's home** now only picks who's home.
+
+## 0.6.3 — 2026-10-31
+
+- Date Night offers your Wardrobe looks: pick any painted look either of you owns, 4★ and 5★ alike. The date's scenes, key images and keepsake dress you both in them, and they stay on afterwards.
+- The story now knows how each love interest looks: their Image appearance and the look they wear. Fixing their Image appearance changes how the story describes them from the next scene on, not only their pictures.
+- On a phone, the date's keepsake card no longer squeezes its title and **Paint the keepsake** button into columns.
+
 ## 0.6.2 — 2026-10-31
 
 - After a love interest's finale, the story no longer assumes they already confessed: if you eased off before the words came, they can still say it later.

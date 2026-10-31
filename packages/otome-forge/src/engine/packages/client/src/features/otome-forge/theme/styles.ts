@@ -867,6 +867,8 @@ ${R} .of-banner-caption {
 ${R} .of-banner-eyebrow {
   font-size: 0.68rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: ${PALETTE.champagne};
 }
+/* A seasonal banner's badge, on the caption and in Echoes: at the start of its column, wrapping rather than overflowing. */
+${R} .of-banner-season { align-self: flex-start; max-width: 100%; margin-inline-start: 0; white-space: normal; text-shadow: none; }
 ${R} .of-banner-title {
   font-family: var(--of-font-display); font-weight: 600; font-size: clamp(1.6rem, 8cqw, 2.1rem); line-height: 1.04;
 }

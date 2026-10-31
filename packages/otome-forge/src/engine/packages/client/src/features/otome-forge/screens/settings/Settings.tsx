@@ -1,12 +1,13 @@
 // ──────────────────────────────────────────────
-// Otome Forge: Settings. Tabs for the look, the current story's content, connections, images and audio, the period
-// tracker, Privacy & data, and Debug. Story settings edit the active run; the look, the tracker and the 18+
-// confirmation are the player's own.
+// Otome Forge: Settings. Tabs for the look, Stories (the way to the story's cast and to Your stories), the current
+// story's content, connections, images and audio, the period tracker, Privacy & data, and Debug. Story settings edit
+// the active run; the look, the tracker and the 18+ confirmation are the player's own.
 // ──────────────────────────────────────────────
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import {
   AudioLines,
+  BookHeart,
   Bug,
   Flower2,
   Images,
@@ -25,14 +26,16 @@ import { ContentSettings } from "./ContentSettings";
 import { DebugSettings } from "./Debug";
 import { ImagesSettings } from "./Images";
 import { PrivacyData } from "./PrivacyData";
+import { StoriesSettings } from "./Stories";
 import { TrackerSettings } from "./Tracker";
 
-const TABS = ["look", "content", "connections", "images", "audio", "tracker", "privacy", "debug"] as const;
+const TABS = ["look", "stories", "content", "connections", "images", "audio", "tracker", "privacy", "debug"] as const;
 export type SettingsTab = (typeof TABS)[number];
 type Tab = SettingsTab;
 
 const TAB_META: Record<Tab, { labelKey: string; Icon: LucideIcon }> = {
   look: { labelKey: "ui.otomeForge.settings.tabLook", Icon: Palette },
+  stories: { labelKey: "ui.otomeForge.settings.tabStories", Icon: BookHeart },
   content: { labelKey: "ui.otomeForge.settings.tabContent", Icon: SlidersHorizontal },
   connections: { labelKey: "ui.otomeForge.settings.tabConnections", Icon: PlugZap },
   images: { labelKey: "ui.otomeForge.settings.tabImages", Icon: Images },
@@ -49,10 +52,21 @@ interface SettingsProps {
   onLookPreference: (preference: LookPreference) => void;
   /** The tab it opens on (Remind Me opens the tracker); the look otherwise. */
   initialTab?: SettingsTab;
+  /** The Stories tab's ways to the story's cast and to Your stories; without either, the tab is left out. */
+  onOpenCast?: () => void;
+  onOpenStories?: () => void;
 }
 
-export function Settings({ run, lookPreference, onLookPreference, initialTab = "look" }: SettingsProps) {
+export function Settings({
+  run,
+  lookPreference,
+  onLookPreference,
+  initialTab = "look",
+  onOpenCast,
+  onOpenStories,
+}: SettingsProps) {
   const { t } = useTranslation();
+  const tabs: readonly Tab[] = onOpenCast || onOpenStories ? TABS : TABS.filter((name) => name !== "stories");
   const id = useId();
   const [tab, setTab] = useState<Tab>(initialTab);
   const tabRefs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
@@ -72,19 +86,19 @@ export function Settings({ run, lookPreference, onLookPreference, initialTab = "
 
   // Arrow keys move between tabs (and select them), Home and End jump to the ends.
   const onKeyDown = (event: KeyboardEvent) => {
-    const index = TABS.indexOf(tab);
+    const index = tabs.indexOf(tab);
     const rtl = (event.currentTarget as HTMLElement).closest("[dir]")?.getAttribute("dir") === "rtl";
     const forward = rtl ? "ArrowLeft" : "ArrowRight";
     const backward = rtl ? "ArrowRight" : "ArrowLeft";
     const next =
       event.key === forward
-        ? TABS[(index + 1) % TABS.length]
+        ? tabs[(index + 1) % tabs.length]
         : event.key === backward
-          ? TABS[(index - 1 + TABS.length) % TABS.length]
+          ? tabs[(index - 1 + tabs.length) % tabs.length]
           : event.key === "Home"
-            ? TABS[0]
+            ? tabs[0]
             : event.key === "End"
-              ? TABS[TABS.length - 1]
+              ? tabs[tabs.length - 1]
               : null;
     if (!next) return;
     event.preventDefault();
@@ -95,6 +109,8 @@ export function Settings({ run, lookPreference, onLookPreference, initialTab = "
   const panel =
     tab === "look" ? (
       <LookSwitch preference={lookPreference} onChange={onLookPreference} />
+    ) : tab === "stories" ? (
+      <StoriesSettings onOpenCast={onOpenCast} onOpenStories={onOpenStories} />
     ) : tab === "content" ? (
       <ContentSettings run={run} />
     ) : tab === "connections" ? (
@@ -127,7 +143,7 @@ export function Settings({ run, lookPreference, onLookPreference, initialTab = "
         aria-label={t("ui.otomeForge.common.screenSettings")}
         onKeyDown={onKeyDown}
       >
-        {TABS.map((name) => {
+        {tabs.map((name) => {
           const { labelKey, Icon } = TAB_META[name];
           const selected = name === tab;
           return (

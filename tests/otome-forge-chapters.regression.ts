@@ -292,16 +292,24 @@ test("POST /chapters/next plans once, with the boundary, the contract and one re
 
   const planned = await t.call("POST", "/runs/:run/chapters/next", { lead: KAI });
   assert.equal(planned.status, 200, JSON.stringify(planned.body));
-  assert.equal(t.calls.length, 2, "one repair turn");
-  const [system, user] = t.calls[0]!.messages;
+  assert.equal(t.calls.length, 3, "the arc, the plan, and one repair turn");
+  const planCall = t.calls.find((entry) => entry.messages[0]!.content.includes("chapter planner"))!;
+  const [system, user] = planCall.messages;
   assert.ok(system!.content.includes(forgeKnowledgeBoundary), "P5 carries the knowledge boundary");
   assert.match(system!.content, /CONTENT CONTRACT/);
   assert.match(system!.content, /PLAYER AGENCY/);
-  assert.match(user!.content, /MYSTERY-TRUTH/, "the planner sees the hidden truth");
+  // #1980: the truth leaves the chapter planner; it is the arc planner's, and a chapter sees it only on the page it is
+  // scheduled to reveal it (the fake arc schedules it in chapter 12, so chapter 1 gets none of it).
+  assert.doesNotMatch(user!.content, /MYSTERY-TRUTH/, "no unscheduled chapter sees the hidden truth");
+  assert.match(user!.content, /The mystery: Who puts out the lanterns\?/, "it still knows the question");
   assert.match(user!.content, /HIDDEN-TRUTH/, "and the Lead's full bible");
   assert.equal(user!.content.split("BIBLE: ").length - 1, 3, "and every Foil candidate's full bible too");
   assert.match(user!.content, /Keep to the CONTENT CONTRACT above, silently\.$/);
-  assert.match(t.calls[1]!.messages.at(-1)!.content, /6 to 9 nodes, not 4/);
+  assert.match(
+    t.calls[2]!.messages.at(-1)!.content,
+    /6 to 9 nodes, not 4/,
+    "the repair turn follows the arc and the plan",
+  );
   assert.ok(t.logs.some((entry) => entry.level === "debugOverride" && entry.args[0] === "chapter-plan/main-1"));
 
   const view = planned.body.chapter;
@@ -314,7 +322,7 @@ test("POST /chapters/next plans once, with the boundary, the contract and one re
 
   const again = await t.call("POST", "/runs/:run/chapters/next", { lead: MIR });
   assert.equal(again.status, 409, "chapter 2 waits for chapter 1");
-  assert.equal(t.calls.length, 2);
+  assert.equal(t.calls.length, 3, "the arc, then one plan");
   const detail = await t.call("GET", "/runs/:run/chapters/:key", {}, { key: "main-1" });
   assert.deepEqual(
     detail.body.beats.map((beat: { state: string }) => beat.state),
@@ -328,6 +336,8 @@ test("POST /chapters/next plans once, with the boundary, the contract and one re
     title: "The Dark Quay",
     lead: KAI,
     state: "in-progress",
+    // #1980: the entry names its story arc, for grouping the list.
+    arc: 1,
     beatsRead: 0,
     nodes: 7,
   });

@@ -90,6 +90,10 @@ const NodeSchema: ZodType<ChapterNode> = z.object({
   gate: z.boolean().optional(),
   resolves: z.array(short(80)).optional(),
   reveals: z.array(short(80)).optional(),
+  reveal: z
+    .union([z.object({ kind: z.literal("piece"), li: z.string() }), z.object({ kind: z.literal("truth") })])
+    .optional(),
+  arcEvent: z.literal(true).optional(),
 });
 
 const LedgerSchema: ZodType<ChapterLedger> = z.object({
@@ -209,6 +213,7 @@ export function normalizeChapter(data: unknown): Chapter | null {
       grievance: short(80).optional(),
       lead: z.string(),
       foil: z.string().optional(),
+      arc: z.number().int().min(1).optional(),
       title: short(200),
       tags: (value) => validItems(short(40), value, 12),
       summary: short(1200),

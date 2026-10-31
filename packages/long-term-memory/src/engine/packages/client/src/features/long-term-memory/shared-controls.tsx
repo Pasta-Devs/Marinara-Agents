@@ -269,6 +269,7 @@ export function NumberField({
   help,
   compact = false,
   placeholder,
+  integer = false,
 }: {
   label: string;
   /** `null` is a value not yet known: the field stays empty (showing `placeholder`) instead of an invented number. */
@@ -283,6 +284,8 @@ export function NumberField({
   help?: ReactNode;
   compact?: boolean;
   placeholder?: string;
+  /** Whole numbers only: a typed decimal is rounded after the clamp, before it is shown or reported. */
+  integer?: boolean;
 }) {
   const id = useId();
   const valueText = value === null ? "" : String(value);
@@ -298,7 +301,7 @@ export function NumberField({
       setText(valueText);
       return;
     }
-    const clamped = Math.max(min, Math.min(max, next));
+    const clamped = Math.max(min, Math.min(max, integer ? Math.round(next) : next));
     setText(String(clamped));
     if (String(clamped) === committedText.current) return;
     committedText.current = String(clamped);

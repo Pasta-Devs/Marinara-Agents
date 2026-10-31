@@ -3,8 +3,9 @@
 // persona, two love interests of different genders, content, connections) and the forge; a main chapter read to its
 // end; Home with his note and a tap; Reply into his thread; a wish; Wear at home; the Album; Read Them, Date Night and
 // a Claw round; Remind Me, the tracker and a Caring message. Starlight earned on one screen is spent and shown on the
-// next. A second walk, in the other look at each size, visits the screens around the loop: Who’s home, the cast and a
-// bible, Rough day?, every Settings tab, the reader's Backlog and Ease off, the Album's other tabs and Your stories.
+// next. A second walk, in the other look at each size, visits the screens around the loop: Who’s home, the cast (from
+// Settings → Stories) and a bible, Rough day?, every Settings tab, the reader's Backlog and Ease off, the Album's other
+// tabs and Your stories (from Settings → Stories too).
 // On every screen both check the release's accessibility rules: each control is reached by Tab and shows a focus ring,
 // nothing answers only a pointer, nothing animates at reduced motion, new lines reach a polite live region, and dialogs
 // hold focus and give it back.
@@ -31,6 +32,7 @@ const ROS = "li-rosalind-0002";
 const HE = { subject: "he", object: "him", possessive: "his" };
 const SHE = { subject: "she", object: "her", possessive: "her" };
 const PREMISE = "In a city of clockwork canals, an apprentice sees a murder at the masked ball.";
+const BANNED = "wet heat, slick folds";
 const NOTE = "You left the lab light on again. I turned it off. Don’t thank me.";
 const REPLY = "Barely. The data kept me company.";
 const CARE_NOTE = "Blanket, tea, and no arguments tonight. I’ll keep the kettle warm.";
@@ -182,8 +184,10 @@ function memoriesBanner(): Json {
     key,
     kind: "memories",
     rotation: 1,
-    startsDay: "2026-10-28",
-    endsDay: "2026-11-10",
+    // A month's first rotation (it starts on the 1st to the 14th): seasonal, so it wears November's badge.
+    startsDay: "2026-11-04",
+    endsDay: "2026-11-17",
+    season: "autumn",
     featuredLi: ILVAR,
     title: "Clockwork Hearts",
     echo: false,
@@ -337,6 +341,8 @@ function createLoopStub({ seeded = false } = {}) {
       mystery: { question: "Who killed the duke?" },
       web: [],
       openingSituation: "",
+      // As the server keeps them: only when there are some.
+      ...(setup.bannedPhrases ? { bannedPhrases: setup.bannedPhrases } : {}),
       content: setup.content,
       images: { ...setup.images, connectionId: null },
       connections: setup.connections,
@@ -667,7 +673,7 @@ function createLoopStub({ seeded = false } = {}) {
           pity: wish ? { ...PITY, memories: { fiveIn: 60, fourIn: 10 } } : PITY,
           creating: false,
           missing: [],
-          rotation: { number: 1, startsDay: "2026-10-28", endsDay: "2026-11-10" },
+          rotation: { number: 1, startsDay: "2026-11-04", endsDay: "2026-11-17" },
           selectors: [],
         },
       };
@@ -814,7 +820,7 @@ function createLoopStub({ seeded = false } = {}) {
           counted: true,
           repaired: false,
           mends: false,
-          keepsake: { offer: false },
+          keepsake: { offer: true },
         },
       };
     }
@@ -1224,6 +1230,7 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await auditScreen(page, root, "setup: story");
     await root.getByRole("button", { name: "Surprise me" }).click();
     await expect(root.getByLabel("Premise")).toHaveValue(PREMISE);
+    await root.getByLabel("Banned phrases").fill(` ${BANNED} `);
     await root.getByRole("button", { name: "Next" }).click();
 
     await expect(root.getByRole("heading", { name: "Who are you here?" })).toBeFocused();
@@ -1253,6 +1260,7 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     const created = posts(stub, "/runs")[0]!.body!.setup;
     expect(created).toMatchObject({
       premise: PREMISE,
+      bannedPhrases: BANNED,
       protagonist: { personaId: "persona-mira", pronouns: SHE },
       lis: [
         { source: "card", cardId: "card-ilvar", pronouns: HE },
@@ -1282,6 +1290,12 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await expect(root.getByRole("heading", { name: "Prologue complete" })).toBeFocused();
     await expect(root.getByText("+30 Starlight")).toBeVisible();
     await root.getByRole("button", { name: "Back to Home" }).click();
+    await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeFocused();
+    // The banned phrases typed in setup are the story's, in Settings → Content.
+    await root.getByRole("button", { name: "Settings", exact: true }).click();
+    await root.getByRole("tablist").getByRole("tab", { name: "Content", exact: true }).click();
+    await expect(root.getByLabel("Banned phrases")).toHaveValue(BANNED);
+    await root.getByRole("button", { name: "Back", exact: true }).click();
     await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeFocused();
   });
 
@@ -1378,6 +1392,7 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await expect(root.getByRole("heading", { level: 1, name: "Wish" })).toBeFocused();
     const banner = root.getByRole("region", { name: "Clockwork Hearts" });
     await expect(banner.getByText("5★ in 37")).toBeVisible();
+    await expect(banner.locator(".of-banner-caption .of-banner-season")).toHaveText("November · Autumn");
     await auditScreen(page, root, "wish");
     const one = banner.getByRole("button", { name: /^Wish ×1,/u });
     await one.focus();
@@ -1473,9 +1488,13 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await root.getByRole("button", { name: "Next: what you wear" }).click();
     await expect(root.getByRole("heading", { level: 1, name: "What will you wear?" })).toBeFocused();
     await auditScreen(page, root, "date night: looks");
+    // Her owned look is offered (#1965), and the picker starts on what she wears now: the gown worn at home above.
+    const yours = root.getByRole("group", { name: "You wear" });
+    await expect(yours.getByRole("radio", { name: "Starlit Gown" })).toBeChecked();
+    await expect(yours.getByRole("radio", { name: "Everyday look" })).not.toBeChecked();
     await root.getByRole("button", { name: "Begin the date" }).click();
     await expect.poll(() => posts(stub, "/dates").length).toBe(1);
-    expect(posts(stub, "/dates")[0]!.body).toMatchObject({ li: ILVAR, herLook: "base", hisLook: "base" });
+    expect(posts(stub, "/dates")[0]!.body).toMatchObject({ li: ILVAR, herLook: "my-wardrobe-0-f", hisLook: "base" });
     for (const [i] of DATE_BEATS.entries()) {
       await expect(line(root)).toContainText(`Scene ${i + 1}: the tanks glow blue around you.`);
       await next(root);
@@ -1492,6 +1511,18 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     const ending = root.getByRole("heading", { level: 1 });
     await expect(ending).toBeFocused();
     await expect(root.getByText("+120 Starlight")).toBeVisible();
+    // The keepsake card stacks its title, text and button at every width: its button sits whole inside the card
+    // (the Album's .of-keepsake row once squeezed it into columns on a phone).
+    const keepsakeCard = root.locator(".of-date-keepsake");
+    const paintKeepsake = keepsakeCard.getByRole("button", { name: "Paint the keepsake" });
+    await expect(paintKeepsake).toBeVisible();
+    const card = (await keepsakeCard.boundingBox())!;
+    const button = (await paintKeepsake.boundingBox())!;
+    expect(button.x).toBeGreaterThanOrEqual(card.x);
+    expect(button.x + button.width).toBeLessThanOrEqual(card.x + card.width);
+    expect(await keepsakeCard.evaluate((element) => getComputedStyle(element).display)).not.toBe("grid");
+    const title = (await keepsakeCard.getByRole("heading", { level: 2 }).boundingBox())!;
+    expect(title.width, "the title spans the card, not one word per line").toBeGreaterThan(card.width / 2);
     await auditScreen(page, root, "date night: ending");
     await shot("09-date-night");
     await root.getByRole("button", { name: "Back to Dates" }).first().click();
@@ -1592,16 +1623,25 @@ test("Otome Hearth's screens around the loop, by keyboard: the cast, a bible, ev
   const home = root.getByRole("heading", { level: 1, name: "Ilvar Thorne" });
   await expect(home).toBeVisible();
 
-  await test.step("Who’s home, the cast and a bible behind its spoiler wall", async () => {
+  await test.step("Who’s home, then the cast from Settings → Stories and a bible behind its spoiler wall", async () => {
     const whoIsHome = root.getByRole("button", { name: "Who’s home" });
     await whoIsHome.click();
     const picker = page.getByRole("dialog", { name: "Who’s home" });
     await expectTrapped(page, picker);
+    // Who's home only picks who's home: the cast and the stories open from Settings.
+    await expect(picker.getByRole("button", { name: "Close", exact: true })).toBeVisible();
+    await expect(picker.getByRole("button", { name: /Your (cast|stories)/u })).toHaveCount(0);
     await page.keyboard.press("Escape");
     await expect(picker).toBeHidden();
     await expect(whoIsHome).toBeFocused();
-    await whoIsHome.click();
-    await picker.getByRole("button", { name: "Your cast" }).click();
+    await root.getByRole("button", { name: "Settings", exact: true }).click();
+    const stories = root.getByRole("tab", { name: "Stories", exact: true });
+    await stories.click();
+    const panel = root.getByRole("tabpanel");
+    await expect(panel.getByRole("heading", { name: "Your cast" })).toBeVisible();
+    await expect(panel.getByRole("heading", { name: "Your stories" })).toBeVisible();
+    await auditScreen(page, root, "settings: Stories", stories);
+    await panel.getByRole("button", { name: "Open your cast" }).click();
     await expect(root.getByRole("heading", { level: 1, name: "Your story is ready" })).toBeFocused();
     await auditScreen(page, root, "the cast");
     await root.getByRole("button", { name: "Open Rosalind Vey’s bible (spoilers)" }).click();
@@ -1628,7 +1668,17 @@ test("Otome Hearth's screens around the loop, by keyboard: the cast, a bible, ev
   await test.step("every Settings tab", async () => {
     await root.getByRole("button", { name: "Settings", exact: true }).click();
     const tabs = root.getByRole("tablist");
-    for (const name of ["Look", "Content", "Connections", "Images", "Audio", "Tracker", "Privacy & data", "Debug"]) {
+    for (const name of [
+      "Look",
+      "Stories",
+      "Content",
+      "Connections",
+      "Images",
+      "Audio",
+      "Tracker",
+      "Privacy & data",
+      "Debug",
+    ]) {
       const tab = tabs.getByRole("tab", { name, exact: true });
       await tab.click();
       await expect(tab).toHaveAttribute("aria-selected", "true");
@@ -1684,15 +1734,25 @@ test("Otome Hearth's screens around the loop, by keyboard: the cast, a bible, ev
     }
   });
 
-  await test.step("Your stories", async () => {
+  await test.step("Your stories, from Settings → Stories", async () => {
     await dock(root, "Album").click();
     await expect(home).toBeFocused();
-    await root.getByRole("button", { name: "Who’s home" }).click();
-    await page.getByRole("dialog", { name: "Who’s home" }).getByRole("button", { name: "Your stories" }).click();
-    await expect(root.getByRole("heading", { level: 1, name: "Your stories" })).toBeFocused();
+    await root.getByRole("button", { name: "Settings", exact: true }).click();
+    await root.getByRole("tab", { name: "Stories", exact: true }).click();
+    await root.getByRole("tabpanel").getByRole("button", { name: "Open your stories" }).click();
+    const stories = root.getByRole("heading", { level: 1, name: "Your stories" });
+    await expect(stories).toBeFocused();
     await expect(root.getByText("The Clockwork Masquerade")).toBeVisible();
     await auditScreen(page, root, "your stories");
     await page.screenshot({ path: testInfo.outputPath("stories.png") });
+    // Opened from Your stories, Settings → Stories offers the open story's cast, not Your stories again.
+    await root.getByRole("button", { name: "Settings", exact: true }).click();
+    await root.getByRole("tab", { name: "Stories", exact: true }).click();
+    const panel = root.getByRole("tabpanel");
+    await expect(panel.getByRole("button", { name: "Open your cast" })).toBeVisible();
+    await expect(panel.getByRole("button", { name: "Open your stories" })).toHaveCount(0);
+    await root.getByRole("button", { name: "Back", exact: true }).click();
+    await expect(stories).toBeFocused();
   });
 
   expect(pageErrors).toEqual([]);

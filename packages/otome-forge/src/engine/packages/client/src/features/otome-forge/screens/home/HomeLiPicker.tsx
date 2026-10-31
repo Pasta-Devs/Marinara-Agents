@@ -1,10 +1,10 @@
 // ──────────────────────────────────────────────
 // Otome Forge: "Who's home?": the cast, each with his portrait (or initials) and affection level; picking one makes
-// him the love interest on Home. The cast and bibles, and the other stories, are reached from here too.
+// him the love interest on Home. The cast and bibles, and the other stories, open from Settings → Stories.
 // ──────────────────────────────────────────────
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { BookHeart, Check, UsersRound } from "lucide-react";
+import { Check } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { Dialog } from "../../components/Dialog";
 import { ImageDescription } from "../../components/ImageDescription";
@@ -16,11 +16,9 @@ interface HomeLiPickerProps {
   current: LiId | null;
   onPick: (li: LiId) => void;
   onClose: () => void;
-  onOpenCast: () => void;
-  onOpenStories: () => void;
 }
 
-export function HomeLiPicker({ lis, current, onPick, onClose, onOpenCast, onOpenStories }: HomeLiPickerProps) {
+export function HomeLiPicker({ lis, current, onPick, onClose }: HomeLiPickerProps) {
   const { t } = useTranslation();
   const currentRef = useRef<HTMLButtonElement>(null);
   return (
@@ -29,23 +27,9 @@ export function HomeLiPicker({ lis, current, onPick, onClose, onOpenCast, onOpen
       onClose={onClose}
       initialFocus={currentRef}
       actions={
-        <>
-          <button type="button" className="of-button of-button--quiet of-button--small of-glass" onClick={onOpenCast}>
-            <UsersRound size={15} strokeWidth={2} aria-hidden="true" />
-            {t("ui.otomeForge.home.openCast")}
-          </button>
-          <button
-            type="button"
-            className="of-button of-button--quiet of-button--small of-glass"
-            onClick={onOpenStories}
-          >
-            <BookHeart size={15} strokeWidth={2} aria-hidden="true" />
-            {t("ui.otomeForge.common.screenPicker")}
-          </button>
-          <button type="button" className="of-button of-button--primary of-button--small" onClick={onClose}>
-            {t("ui.otomeForge.home.close")}
-          </button>
-        </>
+        <button type="button" className="of-button of-button--primary of-button--small" onClick={onClose}>
+          {t("ui.otomeForge.home.close")}
+        </button>
       }
     >
       <p className="of-hint">{t("ui.otomeForge.home.pickHint")}</p>

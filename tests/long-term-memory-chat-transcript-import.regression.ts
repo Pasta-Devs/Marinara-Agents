@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { mock } from "node:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -55,12 +56,18 @@ async function main() {
     { ltmImportSourceNotesResponseSchema, ltmInteropPreviewRequestSchema, ltmInteropPreviewResponseSchema },
     { LongTermMemoryStorage },
     { updateLtmExtractionConfig },
+    { armLtmAutoImport, isLtmAutoImportArmed, LTM_AUTO_IMPORT_QUIET_MS },
+    { readLtmDebugLog },
+    { LongTermMemoryDraftStore },
   ] = await Promise.all([
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/package-runtime.ts"),
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/sources/interop.ts"),
     import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts"),
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/persistence/storage.ts"),
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/extraction/extraction-config.ts"),
+    import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/sources/auto-import-job.ts"),
+    import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/maintenance/debug-log.ts"),
+    import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/drafts/draft-store.ts"),
   ]);
 
   const speaker = (row: FixtureMessage) => row.role;
@@ -556,8 +563,15 @@ async function main() {
 
       // Each of these runs on its own chat: a dropped candidate keeps a piece out of auto-apply, so the rejection
       // cannot share a chat with the committed link.
-      const importPieces = (chatId: string, first: string, second: string): Promise<any> => {
-        chats.push({ ...sealChat, id: chatId });
+      const importPieces = (
+        chatId: string,
+        first: string,
+        second: string,
+        applyLowRisk: boolean | "unset" = true,
+        importRoot = root,
+        metadata: Record<string, unknown> = {},
+      ): Promise<any> => {
+        chats.push({ ...sealChat, id: chatId, metadata });
         messages.set(chatId, [
           message(chatId, first, "user", `${"x".repeat(23_950)} The seal cracks at dawn.`),
           message(chatId, second, "assistant", "The seal holds."),
@@ -569,10 +583,10 @@ async function main() {
             sourceIds: [`${chatId}:messages:${first}`, `${chatId}:messages:${second}`],
             destinationScope: { characterIds: ["character-kirei"] },
             extract: true,
-            applyLowRisk: true,
+            applyLowRisk: applyLowRisk === "unset" ? undefined : applyLowRisk,
             limit: 100,
           },
-          root,
+          importRoot,
           new AbortController().signal,
         );
       };
@@ -599,6 +613,37 @@ async function main() {
           .map((mutation: any) => [mutation.kind, mutation.noteId ?? mutation.note.id]),
         [["update_section", listedThread]],
         "reusing the listed subjectId updates that thread instead of adding another",
+      );
+
+      // Hands-off: with no explicit request, "Accept safe changes automatically" decides whether safe work applies.
+      // Each run uses its own store, so earlier fixtures cannot make its proposals ambiguous.
+      const appliedBy = (result: any) => result.imported.flatMap((item: any) => item.appliedMutationIds);
+      const handsOff = async (
+        name: string,
+        applyLowRisk: boolean | "unset",
+        setting: boolean,
+        metadata: Record<string, unknown> = {},
+      ) => {
+        const importRoot = join(dataDir, name, "long-term-memory");
+        await updateLtmExtractionConfig({ autoImportChatSources: true, autoAcceptSafeChanges: setting }, importRoot);
+        return appliedBy(
+          await importPieces(`chat-${name}`, `${name}-1`, `${name}-2`, applyLowRisk, importRoot, metadata),
+        );
+      };
+      assert.deepEqual(await handsOff("review-first", "unset", false), [], "by default an import waits for review");
+      assert.ok(
+        (await handsOff("hands-off", "unset", true)).length > 0,
+        "with the setting on, an import accepts its safe proposals",
+      );
+      assert.deepEqual(
+        await handsOff("chat-review", "unset", true, { longTermMemoryChatMemories: "review" }),
+        [],
+        "an import of a chat set to review waits for review with the global setting on",
+      );
+      assert.deepEqual(
+        await handsOff("explicit-off", false, true),
+        [],
+        "an explicit applyLowRisk: false still wins over the setting",
       );
 
       // Chat import detail: each chat keeps the piece size of its first import.
@@ -690,6 +735,237 @@ async function main() {
         ],
         "a never-imported branch cuts at its chat's 12,000, so its shared pieces merge with the parent's",
       );
+
+      // Hands-off import: a reply arms a quiet-period run that imports the chat's summaries and closed pieces.
+      const autoRoot = join(dataDir, "auto", "long-term-memory");
+      await updateLtmExtractionConfig({ autoImportChatSources: true }, autoRoot);
+      const autoChat = {
+        ...roleplayChat,
+        id: "chat-auto",
+        name: "Auto",
+        metadata: {
+          summaryEntries: [{ id: "sum-1", content: "The vault opened.", rangeStartIndex: 1, rangeEndIndex: 2 }],
+        },
+      };
+      chats.push(autoChat);
+      messages.set(autoChat.id, [
+        message(autoChat.id, "u1", "user", "x".repeat(23_990)),
+        message(autoChat.id, "u2", "assistant", "y".repeat(23_990)),
+        message(autoChat.id, "u3", "user", "The tail is still being written."),
+      ]);
+      const autoImport = async (chatId: string) => {
+        mock.timers.enable({ apis: ["setTimeout"] });
+        try {
+          armLtmAutoImport(autoRoot, chatId, "roleplay");
+          mock.timers.tick(LTM_AUTO_IMPORT_QUIET_MS);
+        } finally {
+          mock.timers.reset();
+        }
+        for (let tries = 0; isLtmAutoImportArmed(autoRoot, chatId) && tries < 500; tries += 1)
+          await new Promise((resolveWait) => setTimeout(resolveWait, 10));
+        assert.equal(isLtmAutoImportArmed(autoRoot, chatId), false, "the background run finishes");
+      };
+      prompts.length = 0;
+      await autoImport(autoChat.id);
+      assert.deepEqual(
+        (await readLtmDebugLog({}, autoRoot))
+          .filter((event) => event.action === "auto_import")
+          .map(({ source, status, counts }) => ({ source, status, imported: counts?.imported })),
+        [
+          { source: "chats", status: "ok", imported: 1 },
+          { source: "messages", status: "ok", imported: 2 },
+        ],
+        "the summary and both closed pieces import, each source logged in Activity",
+      );
+      assert.equal(prompts.length, 3, "each imported source is extracted once");
+      assert.deepEqual(
+        (await previewPackageInterop({ source: "messages", chatId: autoChat.id, limit: 100 }, autoRoot)).samples.map(
+          ({ sourceId, status }) => ({ sourceId, status }),
+        ),
+        [
+          { sourceId: "chat-auto:messages:u1", status: "imported" },
+          { sourceId: "chat-auto:messages:u2", status: "imported" },
+          { sourceId: "chat-auto:messages:u3", status: "pending" },
+        ],
+        "the open tail waits until it closes",
+      );
+      await autoImport(autoChat.id);
+      assert.equal(prompts.length, 3, "a reply with nothing new makes no model call");
+
+      // A failing selection is not retried on every reply.
+      const failingChat = { ...roleplayChat, id: "chat-auto-failing", name: "Failing" };
+      chats.push(failingChat);
+      messages.set(failingChat.id, [
+        message(failingChat.id, "f1", "user", "x".repeat(23_990)),
+        message(failingChat.id, "f2", "user", "The tail."),
+      ]);
+      respond = () => {
+        throw new Error("fixture model is down");
+      };
+      prompts.length = 0;
+      await autoImport(failingChat.id);
+      const attempts = prompts.length;
+      assert.ok(attempts > 0, "the closed piece is attempted");
+      assert.equal(
+        (await readLtmDebugLog({}, autoRoot)).filter((event) => event.chatId === failingChat.id).at(-1)?.status,
+        "error",
+        "a failed background import is logged as an error",
+      );
+      await autoImport(failingChat.id);
+      assert.equal(prompts.length, attempts, "the same failed selection is not retried");
+      respond = () => [];
+
+      // A branch imports its own summaries, not the ones its siblings wrote after the split.
+      const autoEvents = async (chatId: string) =>
+        (await readLtmDebugLog({}, autoRoot)).filter(
+          (event) => event.action === "auto_import" && event.chatId === chatId,
+        );
+      const autoBranch = { ...roleplayChat, id: "chat-auto-branch", name: "Branch", groupId: "group-auto" };
+      const autoSibling = {
+        ...autoBranch,
+        id: "chat-auto-sibling",
+        name: "Sibling",
+        metadata: { summaryEntries: [{ id: "sum-sibling", content: "Only the sibling saw this." }] },
+      };
+      chats.push(autoBranch, autoSibling);
+      messages.set(autoBranch.id, [message(autoBranch.id, "g1", "user", "The tail.")]);
+      messages.set(autoSibling.id, [message(autoSibling.id, "g1-other", "user", "Another tail.")]);
+      prompts.length = 0;
+      await autoImport(autoBranch.id);
+      assert.deepEqual(await autoEvents(autoBranch.id), [], "a sibling's summary is not imported into the branch");
+      assert.equal(prompts.length, 0);
+
+      // An extraction that drops units leaves its source unfinished, so the next reply does not extract it again.
+      const droppingChat = { ...roleplayChat, id: "chat-auto-dropping", name: "Dropping" };
+      chats.push(droppingChat);
+      messages.set(droppingChat.id, [
+        message(droppingChat.id, "p1", "user", "x".repeat(23_990)),
+        message(droppingChat.id, "p2", "user", "The tail."),
+      ]);
+      respond = (prompt) => [
+        unit({
+          bucket: "timeline_event",
+          subjectId: "vault_opens",
+          sectionKey: "event",
+          title: "The vault opens",
+          text: "The vault opens.",
+          claimKind: "change",
+          links: [{ target: prompt.sourceNote.id, relation: "extracted_from" }],
+        }),
+        { bucket: "not_a_bucket" },
+      ];
+      prompts.length = 0;
+      await autoImport(droppingChat.id);
+      assert.equal(prompts.length, 1, "the closed piece is extracted");
+      assert.equal(
+        (await autoEvents(droppingChat.id)).at(-1)?.status,
+        "error",
+        "a dropped unit is logged as unfinished",
+      );
+      await autoImport(droppingChat.id);
+      assert.equal(prompts.length, 1, "the unfinished selection is not extracted on every reply");
+
+      // The same for an edited source, whose note keeps the fingerprint of the text it was imported from.
+      const dropping = respond;
+      respond = () => [];
+      const editedChat = {
+        ...roleplayChat,
+        id: "chat-auto-edited",
+        name: "Edited",
+        metadata: { summaryEntries: [{ id: "sum-edit", content: "The gate is shut." }] },
+      };
+      chats.push(editedChat);
+      messages.set(editedChat.id, [message(editedChat.id, "e1", "user", "The tail.")]);
+      const editedFreshness = async () =>
+        (await previewPackageInterop({ source: "chats", chatId: editedChat.id, limit: 100 }, autoRoot)).samples.find(
+          (sample) => sample.sourceId.startsWith(`${editedChat.id}:`),
+        )?.freshness;
+      prompts.length = 0;
+      await autoImport(editedChat.id);
+      assert.equal(prompts.length, 1, "the summary is imported");
+      assert.equal(await editedFreshness(), "current");
+      editedChat.metadata.summaryEntries[0]!.content = "The gate is open.";
+      assert.equal(await editedFreshness(), "source_updated");
+      respond = dropping;
+      await autoImport(editedChat.id);
+      assert.equal(prompts.length, 2, "the edited summary is extracted again");
+      assert.equal((await autoEvents(editedChat.id)).at(-1)?.status, "error", "a dropped unit is logged as unfinished");
+      assert.equal(await editedFreshness(), "source_updated", "the source still shows as edited");
+      await autoImport(editedChat.id);
+      assert.equal(prompts.length, 2, "the unfinished edit is not extracted on every reply");
+      respond = () => [];
+      prompts.length = 0;
+
+      // "Memories from this chat": the chat's choice beats the global one for the run's re-check and its accept step.
+      const memoriesChat = (id: string, choice?: string) => {
+        const chat = { ...roleplayChat, id, name: id, metadata: choice ? { longTermMemoryChatMemories: choice } : {} };
+        chats.push(chat);
+        messages.set(id, [message(id, `${id}-1`, "user", "x".repeat(23_990)), message(id, `${id}-2`, "user", "Tail.")]);
+        return chat;
+      };
+      respond = (prompt) => [
+        unit({
+          bucket: "timeline_event",
+          subjectId: `gate_${prompt.sourceNote.id.replace(/[^a-z0-9]/gi, "_").toLowerCase()}`,
+          sectionKey: "event",
+          title: "The gate opens",
+          text: "The gate opens.",
+          claimKind: "change",
+          links: [{ target: prompt.sourceNote.id, relation: "extracted_from" }],
+        }),
+      ];
+      const draftStore = new LongTermMemoryDraftStore(autoRoot);
+      const applied = async (chatId: string) => (await autoEvents(chatId)).at(-1)?.counts?.applied;
+      const pendingFor = async (chatId: string) =>
+        (await draftStore.listDrafts({ status: "pending", chatId })).filter((draft) => draft.mutations.length).length;
+      // Global: import on, accept off.
+      const inherits = memoriesChat("chat-memories-global");
+      const saves = memoriesChat("chat-memories-save", "save");
+      const manual = memoriesChat("chat-memories-manual", "manual");
+      prompts.length = 0;
+      await autoImport(inherits.id);
+      assert.equal(await applied(inherits.id), 0, "no chat choice: the global accept-off leaves changes for review");
+      assert.equal(await pendingFor(inherits.id), 1, "and they wait in review");
+      await autoImport(saves.id);
+      assert.ok(((await applied(saves.id)) ?? 0) > 0, "a chat set to save accepts safe changes with the global off");
+      assert.equal(await pendingFor(saves.id), 0, "and nothing waits for it");
+      const promptsBeforeManual = prompts.length;
+      await autoImport(manual.id);
+      assert.equal(prompts.length, promptsBeforeManual, "a chat set to manual imports nothing with the global on");
+      assert.deepEqual(await autoEvents(manual.id), [], "and logs nothing");
+      // Global: import off, accept on.
+      await updateLtmExtractionConfig({ autoImportChatSources: false, autoAcceptSafeChanges: true }, autoRoot);
+      const reviews = memoriesChat("chat-memories-review", "review");
+      const inheritsOff = memoriesChat("chat-memories-global-off");
+      await autoImport(reviews.id);
+      assert.equal(
+        await applied(reviews.id),
+        0,
+        "a chat set to review leaves changes for review with global accept on",
+      );
+      assert.equal(await pendingFor(reviews.id), 1);
+      const promptsBeforeOff = prompts.length;
+      await autoImport(inheritsOff.id);
+      assert.equal(prompts.length, promptsBeforeOff, "no chat choice falls back to the global import off");
+      await updateLtmExtractionConfig({ autoImportChatSources: true, autoAcceptSafeChanges: false }, autoRoot);
+      respond = () => [];
+      prompts.length = 0;
+
+      // Turning the setting off cancels a run that is already waiting.
+      messages.get(failingChat.id)!.push(message(failingChat.id, "f3", "user", "y".repeat(23_990)));
+      const failingEvents = (await autoEvents(failingChat.id)).length;
+      mock.timers.enable({ apis: ["setTimeout"] });
+      try {
+        armLtmAutoImport(autoRoot, failingChat.id, "roleplay");
+        await updateLtmExtractionConfig({ autoImportChatSources: false }, autoRoot);
+        mock.timers.tick(LTM_AUTO_IMPORT_QUIET_MS);
+      } finally {
+        mock.timers.reset();
+      }
+      for (let tries = 0; isLtmAutoImportArmed(autoRoot, failingChat.id) && tries < 500; tries += 1)
+        await new Promise((resolveWait) => setTimeout(resolveWait, 10));
+      assert.equal(prompts.length, 0, "a run armed before the setting was turned off makes no model call");
+      assert.equal((await autoEvents(failingChat.id)).length, failingEvents, "and logs nothing");
     },
     [() => releaseRuntime?.(), () => rm(dataDir, { recursive: true, force: true })],
   );

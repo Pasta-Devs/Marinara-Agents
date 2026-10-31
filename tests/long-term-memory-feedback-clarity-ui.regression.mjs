@@ -1377,6 +1377,76 @@ const localization = readFileSync(ltmSourcePaths.localization, "utf8");
 assert.match(localization, /import koreanCatalog from "\.\/locales\/ko\.json"/u);
 assert.match(localization, /ko: stringEntries\(koreanCatalog\)/u);
 
+// Issue #1964: the Advanced Memory backfill sends a fixed whole-number batch size (no field), and NumberField
+// rounds before it shows or reports a value (a typed 3.4 at size 3 must not leave "3.4" in the field).
+assert.match(workspace, /const ADVANCED_MEMORY_BACKFILL_BATCH = 10;/u);
+assert.match(workspace, /limit: ADVANCED_MEMORY_BACKFILL_BATCH,/u);
+assert.doesNotMatch(workspace, /advancedMemoryBatchSize/u);
+assert.match(sharedControls, /integer\?: boolean;/u);
+const clampSource = sharedControls.match(/const clamped = (.+);/u)?.[1] ?? "";
+assert.match(
+  clampSource,
+  /integer \? Math\.round\(next\) : next/u,
+  "NumberField rounds before it stores and shows the value",
+);
+const commitBody = sharedControls.slice(
+  sharedControls.indexOf("const clamped ="),
+  sharedControls.indexOf("useEffect(() => {\n    setText(valueText)"),
+);
+assert.ok(
+  commitBody.indexOf("setText(String(clamped))") > 0 && commitBody.includes("onChange(clamped)"),
+  "NumberField shows and reports the same clamped value",
+);
+const clampOf = (next, size, integer) => {
+  const clamped = new Function("min", "max", "next", "integer", `return ${clampSource};`)(1, 100, next, integer);
+  return { shown: String(clamped), changed: String(clamped) !== String(size), clamped };
+};
+const stay = clampOf(3.4, 3, true);
+assert.equal(stay.shown, "3", "typing 3.4 at size 3 shows 3");
+assert.equal(stay.changed, false, "no state change is needed for the field to read 3");
+const halfUp = clampOf(2.5, 10, true);
+assert.equal(halfUp.shown, "3", "typing 2.5 from 10 shows 3");
+assert.ok(Number.isInteger(halfUp.clamped), "the request limit is a whole number");
+assert.equal(clampOf(2.5, 10, false).shown, "2.5", "other NumberFields keep decimals");
+
+// Issue #1974: the settings schema's `.int()` fields must round a typed decimal like the batch size does;
+// the score threshold, the four recall weights and the temperature stay decimal.
+const numberFieldOf = (source, value) =>
+  source.match(
+    new RegExp(`<NumberField(?:(?!<NumberField)[\\s\\S])*?value=\\{${value.replace(".", "\\.")}\\}[\\s\\S]*?/>`, "u"),
+  )?.[0] ?? "";
+for (const [source, values] of [
+  [
+    settings,
+    [
+      "globalForm.longTermMemoryBudgetTokens",
+      "globalForm.longTermMemoryMaxChunks",
+      "globalForm.longTermMemoryRecallContextMessages",
+      "extractionFormState.maxOutputTokens",
+      "extractionFormState.maxSourceTokens",
+      "extractionFormState.existingNoteMaxChunks",
+      "extractionFormState.existingNoteMaxTokens",
+    ],
+  ],
+  [chatSettings, ["effectiveBudget", "effectiveMaxChunks"]],
+]) {
+  for (const value of values) {
+    assert.match(numberFieldOf(source, value), /^\s*integer$/mu, `${value} rounds a typed decimal`);
+  }
+}
+for (const value of [
+  "globalForm.longTermMemoryScoreThreshold",
+  "globalForm.longTermMemorySemanticWeight",
+  "globalForm.longTermMemoryLexicalWeight",
+  "globalForm.longTermMemoryGraphWeight",
+  "globalForm.longTermMemoryKeywordWeight",
+  "extractionFormState.temperature",
+]) {
+  const field = numberFieldOf(settings, value);
+  assert.ok(field.includes(`value={${value}}`), `${value} field found`);
+  assert.doesNotMatch(field, /^\s*integer$/mu, `${value} keeps decimals`);
+}
+
 process.stdout.write(
   "Long-Term Memory feedback clarity UI regression: labels, outcomes, usage, warnings, defaults, and scope loading ok\n",
 );

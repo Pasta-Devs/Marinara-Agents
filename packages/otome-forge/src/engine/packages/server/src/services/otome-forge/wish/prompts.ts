@@ -19,6 +19,10 @@
 //   at Explicit Heat. Each 4★ Moment then gets its own English brief within the image rating (momentBriefs), since its
 //   illustration would otherwise be painted from a premise that may go further. Snapshots stay SFW, and an SFW world's
 //   prompt is unchanged.
+// - 0.6.5: a month's first rotation is seasonal (SH/wish.ts rotationSeason): its three banners follow that month's
+//   theme (SEASON_CUES), a world without the holiday taking its own version of it. The theme's earlier banners of the
+//   kind are named apart from the last twelve, so next year's October banner is not this year's again. A rotation that
+//   is not seasonal gets the prompt it got before.
 // Prompts are English and never localized; titles, premises, look names and Snapshots are in the world's language. A
 // love interest may be any gender: the prompt names them or uses their bible's pronouns.
 import { z } from "zod";
@@ -34,6 +38,7 @@ import {
   BANNER_SIZES,
   type BannerKind,
   type ItemLook,
+  type Season,
 } from "../../../../../client/src/features/otome-forge/shared/wish.js";
 import { explicitCgAllowed, imageBriefRule, otomeContentContract, otomeContractReminder } from "../content-contract.js";
 import type { OtomeMessage } from "../generation.js";
@@ -49,6 +54,22 @@ export const BANNER_PLAN_TEMPERATURE = 0.8;
 export const BANNER_PLAN_TOKENS = 3000;
 /** Earlier banner titles of the kind the planner is told not to repeat. */
 const EARLIER_TITLES = 12;
+
+/** Each season's month and theme as the planner reads them (Northern Hemisphere): a short cue, never a script. */
+const SEASON_CUES: Record<Season, { month: string; theme: string }> = {
+  "new-year": { month: "January", theme: "New Year, fresh starts in winter" },
+  "valentines-day": { month: "February", theme: "Valentine's Day" },
+  "white-day": { month: "March", theme: "White Day, the first days of spring" },
+  "cherry-blossoms": { month: "April", theme: "cherry blossoms, spring" },
+  "gardens-in-bloom": { month: "May", theme: "flowers and gardens in bloom" },
+  "june-bride": { month: "June", theme: "June bride, early summer" },
+  "summer-festival": { month: "July", theme: "summer festival, the beach" },
+  "summer-nights": { month: "August", theme: "summer nights, fireworks" },
+  "harvest-moon": { month: "September", theme: "harvest moon, moon festival" },
+  halloween: { month: "October", theme: "Halloween" },
+  autumn: { month: "November", theme: "autumn" },
+  christmas: { month: "December", theme: "Christmas" },
+};
 
 const KIND_TEXT: Record<BannerKind, string> = {
   memories:
@@ -141,6 +162,21 @@ export interface BannerPlanInput {
   earlierTitles: string[];
   /** Shared canon (recall as a scene with nobody in it). */
   memory: string;
+  /** A month's first rotation: its theme, and the titles of this kind's earlier banners of it, newest last. */
+  season?: { id: Season; earlierTitles: string[] } | null;
+}
+
+/** A seasonal rotation's theme, and its earlier banners of the kind: last year's are often past the last twelve. */
+function seasonText({ id, earlierTitles }: NonNullable<BannerPlanInput["season"]>): string {
+  const { month, theme } = SEASON_CUES[id];
+  return [
+    `SEASON: this rotation is ${month}'s seasonal banner. Theme: ${theme}. Every title, premise, look and Snapshot follows the theme. A story set in the real world has the holiday or custom itself; a world without it has its own version (a winter festival of gifts and lights in place of Christmas, a night of masks and spirits in place of Halloween).`,
+    earlierTitles.length
+      ? `EARLIER ${month.toUpperCase()} BANNERS OF THIS KIND (do not repeat): ${earlierTitles.slice(-EARLIER_TITLES).join("; ")}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 /** P20: the banner plan's messages (system: role, shape, rules, boundary, contracts; user: cast, story, task). */
@@ -225,6 +261,7 @@ export function bannerPlanMessages(input: BannerPlanInput): OtomeMessage[] {
       ? `EARLIER BANNERS OF THIS KIND (do not repeat): ${input.earlierTitles.slice(-EARLIER_TITLES).join("; ")}`
       : "",
     input.memory.trim() ? `THE STORY SO FAR (what everyone knows)\n${input.memory.trim()}` : "",
+    input.season ? seasonText(input.season) : "",
     `Plan the ${kind} banner featuring ${featured.name}. ${otomeContractReminder("planner")}`,
   ]
     .filter(Boolean)

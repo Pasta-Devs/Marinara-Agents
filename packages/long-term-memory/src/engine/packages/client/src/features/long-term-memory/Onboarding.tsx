@@ -1,5 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import { Button, lockedActionProps } from "./shared-controls";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { LtmExtractionSettingsPatch } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import {
+  ltmChatMemoriesModeOf,
+  type LtmChatMemoriesMode,
+} from "../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
+import { errorMessage, invalidateLtmQueries, queryKeys, request } from "./api";
+import {
+  ChatMemoriesSample,
+  chatMemoriesDescriptionKey,
+  chatMemoriesFlags,
+  chatMemoriesLabelKey,
+  chatMemoriesModes,
+} from "./chat-memories";
+import { Button, StatusSurface, lockedActionProps } from "./shared-controls";
 import { useLtmTranslation } from "./localization";
 import type { CapabilityProps, SourceTab } from "./types";
 
@@ -120,6 +134,37 @@ export function Onboarding({
   const [mode, setMode] = useState<GuideMode>("closed");
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [onboardingSource, setOnboardingSource] = useState<SourceTab>("chats");
+  const queryClient = useQueryClient();
+  const extraction = useQuery({
+    queryKey: queryKeys.extractionSettings,
+    queryFn: () => request<LtmExtractionSettingsPatch>("/extraction-settings"),
+  });
+  const storedChatMemories = extraction.data ? ltmChatMemoriesModeOf(extraction.data) : null;
+  const [chatMemoriesChoice, setChatMemoriesChoice] = useState<LtmChatMemoriesMode | null>(null);
+  const [chatMemoriesError, setChatMemoriesError] = useState("");
+  // A new setup (empty vault, still on the stored default) starts on "Save them for me"; an existing one shows its choice.
+  // Until the status loads, the count reads 0, so the stored choice shows and advancing writes nothing.
+  const shownChatMemories =
+    chatMemoriesChoice ??
+    (ready && storedChatMemories === "manual" && savedMemoryCount === 0 ? "save" : storedChatMemories);
+  const saveChatMemories = async (choice: LtmChatMemoriesMode | null) => {
+    if (!choice || choice === storedChatMemories) return;
+    setChatMemoriesError("");
+    try {
+      await request("/extraction-settings", "PUT", chatMemoriesFlags(choice));
+      await invalidateLtmQueries(queryClient, [queryKeys.extractionSettings]);
+    } catch (error) {
+      setChatMemoriesError(
+        errorMessage(error, localizeUi("ui.longTermMemory.longtermmemorydetail.chatMemoriesCouldNotSave")),
+      );
+    }
+  };
+  const chooseChatMemories = (choice: LtmChatMemoriesMode) => {
+    // The locked buttons only set aria-disabled, so a click during a pending turn-on still arrives here.
+    if (activationPending) return;
+    setChatMemoriesChoice(choice);
+    void saveChatMemories(choice);
+  };
   const showFull = mode === "full" && onVault;
   const showBar = mode !== "closed" && !showFull;
   // A step change replaces the action buttons, so focus moves to the step title when the user
@@ -229,9 +274,14 @@ export function Onboarding({
       return next;
     });
   };
+  // Leaving the Activate step forward keeps the choice it shows, including the preselected one.
+  const advanceFromActivate = () => {
+    void saveChatMemories(shownChatMemories);
+    advanceOnboarding();
+  };
   const activateForOnboarding = async () => {
     if (activationPending) return;
-    if (await onActivate()) advanceOnboarding();
+    if (await onActivate()) advanceFromActivate();
   };
 
   if (showBar) {
@@ -302,12 +352,14 @@ export function Onboarding({
                 [data-ltm-onboarding-actions] > button {
                   width: 100%;
                 }
-                [data-ltm-source-choice] {
+                [data-ltm-source-choice],
+                [data-ltm-chat-memories-choice] {
                   display: grid;
                   grid-template-columns: repeat(3, minmax(0, 1fr));
                   gap: 0.5rem;
                 }
-                [data-ltm-source-choice] > button {
+                [data-ltm-source-choice] > button,
+                [data-ltm-chat-memories-choice] > button {
                   min-width: 0;
                   width: 100%;
                   justify-content: center;
@@ -657,6 +709,39 @@ export function Onboarding({
                 </>
               ) : null}
             </div>
+            {onboardingStep === 2 ? (
+              <div className="space-y-2">
+                <p id="ltm-onboarding-chat-memories" className="text-sm font-semibold">
+                  {localizeUi("ui.longTermMemory.longtermmemorydetail.chatMemoriesQuestion")}
+                </p>
+                <div data-ltm-chat-memories-choice role="group" aria-labelledby="ltm-onboarding-chat-memories">
+                  {chatMemoriesModes.map((choice) => (
+                    <Button
+                      key={choice}
+                      primary={shownChatMemories === choice}
+                      aria-pressed={shownChatMemories === choice}
+                      {...lockedActionProps(activationPending)}
+                      onClick={() => chooseChatMemories(choice)}
+                    >
+                      {localizeUi(chatMemoriesLabelKey(choice))}
+                    </Button>
+                  ))}
+                </div>
+                {shownChatMemories ? (
+                  <>
+                    <p className="max-w-[65ch] text-sm leading-6 text-[var(--muted-foreground)]">
+                      {localizeUi(chatMemoriesDescriptionKey(shownChatMemories))}
+                    </p>
+                    <ChatMemoriesSample mode={shownChatMemories} />
+                  </>
+                ) : null}
+                {chatMemoriesError ? (
+                  <StatusSurface tone="danger" compact>
+                    {chatMemoriesError}
+                  </StatusSurface>
+                ) : null}
+              </div>
+            ) : null}
             {onboardingStep === 3 ? (
               <>
                 <div
@@ -712,7 +797,7 @@ export function Onboarding({
             ) : onboardingStep === 2 ? (
               activeChat ? (
                 <>
-                  <Button primary onClick={advanceOnboarding}>
+                  <Button primary onClick={advanceFromActivate}>
                     {localizeUi("ui.longTermMemory.longtermmemorydetail.nextChooseASource")}
                   </Button>
                   {(props.chatMode === "roleplay" || props.chatMode === "game") &&
@@ -732,7 +817,7 @@ export function Onboarding({
                   >
                     {localizeUi("ui.longTermMemory.longtermmemorydetail.turnOnForThisChat")}
                   </Button>
-                  <Button onClick={advanceOnboarding}>
+                  <Button onClick={advanceFromActivate}>
                     {localizeUi("ui.longTermMemory.longtermmemorydetail.continueWithoutActivating")}
                   </Button>
                   {(props.chatMode === "roleplay" || props.chatMode === "game") &&
@@ -743,7 +828,7 @@ export function Onboarding({
                   ) : null}
                 </>
               ) : (
-                <Button primary onClick={advanceOnboarding}>
+                <Button primary onClick={advanceFromActivate}>
                   {localizeUi("ui.longTermMemory.longtermmemorydetail.continueWithoutAChat")}
                 </Button>
               )
