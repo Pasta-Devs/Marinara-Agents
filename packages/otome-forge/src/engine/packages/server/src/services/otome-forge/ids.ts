@@ -110,6 +110,8 @@ export function chapterOwner(key: string): string | null {
 export const chapterId = (runId: string, key: string) => `${runId}:chapter:${key}`;
 /** `${R}:beat:${key}:${i}`: one written node of that chapter. */
 export const beatId = (runId: string, key: string, i: number) => `${runId}:beat:${key}:${i}`;
+/** `${R}:arc:${n}`: one story arc's long-term plan (S/schemas/story-arc.ts). */
+export const arcId = (runId: string, n: number) => `${runId}:arc:${n}`;
 /** `${R}:memory`: the kit's story memory (summaries, overview, recall records). */
 export const memoryId = (runId: string) => `${runId}:memory`;
 
@@ -143,6 +145,7 @@ export const RUN_DOC_KINDS = [
   "unit",
   "state",
   "chapter",
+  "arc",
   "beat",
   "memory",
   "note",

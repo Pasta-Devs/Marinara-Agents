@@ -31,7 +31,18 @@ import type { ClimaxKind } from "../../../../../client/src/features/otome-forge/
 import { LIMIT_IDS, type LimitId } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import { generateJson, readOrGenerate, type GenerationDeps } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
-import { PROLOGUE_KEY, beatId, chapterId, mainChapterKey, mainChapterNumber, runDocTarget, stateId } from "../ids.js";
+import {
+  PROLOGUE_KEY,
+  arcId,
+  beatId,
+  chapterId,
+  mainChapterKey,
+  mainChapterNumber,
+  runDocTarget,
+  stateId,
+} from "../ids.js";
+import { normalizeArc, revealAt, toArcView, type StoryArc } from "../schemas/story-arc.js";
+import { arcCovering, arcRead, listArcs, planArc, revealedSoFar } from "./arc.js";
 import { defaultLiState, normalizeState, readRun } from "../schemas/state.js";
 import { normalizeBeat, normalizeChapter, toChapterView } from "../schemas/story.js";
 import { repairOffers, routeEntries } from "../state/stages.js";
@@ -102,6 +113,8 @@ export interface PlanContext {
   lead: LiId;
   /** The climax this chapter must use, after CLIMAX_STREAK main chapters alike; absent, the planner picks. */
   climax?: ClimaxKind;
+  /** The story arc this chapter belongs to (#1980), when the run has one. */
+  arc?: StoryArc | null;
 }
 
 /** How many main chapters in a row may end with the same climax (the maintainer's 2, so the two alternate often). */
@@ -282,6 +295,25 @@ export function normalizeChapterPlan(reply: ChapterPlanReply, context: PlanConte
     const missing = ids.filter((li) => !present.has(li));
     if (missing.length) return `chapter 1 must bring in every love interest; missing: ${missing.join(", ")}`;
   }
+  // #1980: the arc's schedule is what makes a reveal real. A scheduled chapter must place it on a node (with its holder
+  // when it is a piece); a node in an unscheduled chapter is dropped, so a hallucinated early reveal cannot land; the
+  // arc's last chapter carries its big event in the climax.
+  const arc = context.arc ?? null;
+  const scheduled = arc ? revealAt(arc, number) : undefined;
+  if (scheduled) {
+    const index = typeof reply.revealNode === "number" ? reply.revealNode : -1;
+    const node = nodes.find((entry) => entry.i === index);
+    if (!node) return "this chapter is scheduled to reveal something: set revealNode to the node that carries it";
+    if (scheduled.kind === "piece" && scheduled.li && !node.cast.includes(scheduled.li)) {
+      const holder = units.find((unit) => unit.id === scheduled.li);
+      return `${holder?.name ?? scheduled.li} must be in the node that reveals their part of the mystery`;
+    }
+    node.reveal = scheduled.kind === "truth" ? { kind: "truth" } : { kind: "piece", li: scheduled.li! };
+  }
+  if (arc && number === arc.endsAt) {
+    if (reply.eventNode !== climax.i) return "this is the arc's last chapter: set eventNode to the climax node's index";
+    climax.arcEvent = true;
+  }
   const tags = planTags(reply, context.world);
   if (typeof tags === "string") return tags;
   const ledger = planLedger(reply, context, present, { main: true, idPrefix: `c${number}`, knows: [context.lead] });
@@ -343,12 +375,41 @@ export async function planNextChapter(
       debugMode,
     });
     const climax = requiredClimax(mains);
+    // #1980: the arc this chapter belongs to, planned right here when the run has none covering it (the first arc, or
+    // the one after a finished one). Planned inline, never through a nested readOrGenerate: that would queue behind
+    // this task on the run's serial lane and hang.
+    const arcs = await listArcs(deps.store, runId);
+    const covering = arcCovering(arcs, number);
+    const arc: StoryArc =
+      covering ??
+      (await planArc(
+        deps,
+        runId,
+        {
+          world: run.world,
+          player: await withPersonaStoryAbout(deps.runtime, run.player),
+          units,
+          state: run.state,
+          memory: await recallText(deps, runId, {
+            job: "structured",
+            cast: [],
+            query: { plan: run.player.goal ?? "", speakers: units.map((unit) => unit.name) },
+            signal,
+            debugMode,
+          }),
+          previous: arcs,
+          number: arcs.length + 1,
+          from: number,
+        },
+        { debugMode, ...(signal ? { signal } : {}) },
+      ));
     const context: PlanContext = {
       units,
       state: run.state,
       world: run.world,
       number,
       lead,
+      arc,
       ...(climax ? { climax } : {}),
     };
     const { value, connectionId } = await generateJson(deps, {
@@ -365,6 +426,7 @@ export async function planNextChapter(
         memory,
         climax,
         lastClimax: climaxOfChapter(mains.at(-1)),
+        arc,
       }),
       schema: ChapterPlanSchema,
       normalize: (reply) => {
@@ -372,7 +434,7 @@ export async function planNextChapter(
         return typeof plan === "string" ? plan : reply;
       },
       temperature: 0.8,
-      maxTokens: 4000,
+      maxTokens: 10000,
       debugMode,
       lane: "foreground",
       signal,
@@ -419,8 +481,10 @@ export async function storyView(deps: { store: OtomeStore }, runId: string): Pro
     .map((record) => normalizeChapter(record.data))
     .filter((chapter): chapter is Chapter => !!chapter && chapter.kind !== "date")
     .sort((a, b) => storyOrder(a.key) - storyOrder(b.key) || a.plannedAt.localeCompare(b.plannedAt));
+  const arcs = await listArcs(deps.store, runId);
   const entries: StoryChapterEntry[] = chapters.map((chapter) => {
     const progress = run.state.chapters[chapter.key];
+    const arc = chapter.number != null ? arcCovering(arcs, chapter.number) : undefined;
     return {
       key: chapter.key,
       kind: chapter.kind,
@@ -430,7 +494,8 @@ export async function storyView(deps: { store: OtomeStore }, runId: string): Pro
       lead: chapter.lead,
       state: progress?.completed ? "done" : "in-progress",
       beatsRead: progress?.beatsRead ?? 0,
-      nodes: chapter.nodes.length,
+      nodes: chapters.find((entry) => entry.key === chapter.key)!.nodes.length,
+      ...(arc ? { arc: arc.number } : {}),
     };
   });
   const ready = run.world.forge.phase === "ready";
@@ -439,11 +504,15 @@ export async function storyView(deps: { store: OtomeStore }, runId: string): Pro
     chapters.filter((chapter) => chapter.kind === "main"),
     run.state,
   );
+  // #1980: the arc being played, once there is one; its length and progress are all the screen needs.
+  const current = arcs.at(-1);
+  const arc = current ? toArcView(current, arcRead(current, chapters, run.state)) : null;
   return {
     chapters: entries,
     next: ready && open && cast.length ? { kind: "main", number, candidates: leadCandidates(run.state, cast) } : null,
     routes: ready ? routeEntries(run.state, cast) : [],
     repairs: ready ? repairOffers(chapters, run.state, cast) : [],
+    arc,
   };
 }
 

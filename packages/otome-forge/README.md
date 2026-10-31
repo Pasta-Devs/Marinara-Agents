@@ -64,6 +64,8 @@ In **Your cast**, open a love interest and choose their **Character card** to li
 
 ## The story
 
+Main chapters come in **arcs**. Before an arc's first chapter is planned, the arc planner sets a goal, a big event near its end, and where the mystery's answers come out, and plans eight to twelve chapters toward it in one short line each. It is the only planner that sees the mystery's whole answer. A chapter sees it only in the chapter scheduled to reveal it, and must put it on the page there; a chapter that reveals nothing never touches it. The Story screen shows the arc's name and how far in you are, and the chapter list is grouped by arc. A story that began before arcs keeps its chapters as they are, and its first arc starts at the next chapter.
+
 Each main chapter is led by one love interest. Otome Hearth offers two to choose from: the one you have spent the least time with, and the one with the most unresolved between you. The chapter planner adds a second love interest whose goals get in the way, and writes six to nine scenes that build to a climax: a Confrontation, or a warm Closer. After two main chapters in a row end the same way, the next one ends with the other. Each scene is written when you reach it, and the next one is written ahead while you read.
 
 - **Who speaks:** every line names its speaker. Each love interest's line shows one of five faces: tender, flustered, cold, hurt or angry. Your thoughts are set apart, and after something that matters to you (a first kiss, a night together, a quarrel, a secret learned) your protagonist takes a moment to sit with it in their own voice, doubts and hopes included. From the second stage of a love interest's story you may hear one of their thoughts too.

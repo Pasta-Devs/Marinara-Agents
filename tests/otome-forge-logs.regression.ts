@@ -117,7 +117,11 @@ test("with debug off, no line above debug carries a prompt, a request body, a ca
   assert.equal(await post("/runs/:run/phone/:li/send", { text: BODY, id: "c-0001-abcd" }, { li: KAI }), 200);
   assert.equal(await post("/runs/:run/care-note", { li: KAI, careLine: CARE_LINE }), 200);
   assert.equal(await post("/runs/:run/care-note", { li: KAI, careLine: CARE_LINE }), 200, "a failure falls back");
-  assert.equal(t.calls.length, replies.length, "every scripted call was made");
+  assert.equal(
+    t.calls.filter((entry) => !entry.messages[0]!.content.startsWith("You are the arc planner")).length,
+    replies.length,
+    "every scripted call was made",
+  );
 
   const loud = t.logs.filter(atDefault);
   assert.ok(

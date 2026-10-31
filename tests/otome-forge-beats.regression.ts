@@ -72,6 +72,9 @@ import {
 
 const system = (messages: CapabilityLanguageModelMessage[]) => messages[0]!.content;
 const isPlanner = (messages: CapabilityLanguageModelMessage[]) => system(messages).includes("chapter planner");
+/** #1980: the arc planner runs before a chapter plan and is not the chapter plan. */
+const isArcPlan = (messages: CapabilityLanguageModelMessage[]) =>
+  system(messages).startsWith("You are the arc planner");
 
 /**
  * Answers every call: the plan for the planner, a stance game for the Confrontation (M2b), `beat(index)` for the
@@ -174,7 +177,7 @@ test("the narrator's sentence is the one the kit replaces; P6 carries the bounda
   );
   const t = await plannedWorld("r-trig-aaaaaa");
   assert.equal((await t.call("POST", beatPath, {}, node(0))).status, 200);
-  const sent = t.calls.find((entry) => !isPlanner(entry.messages))!.messages;
+  const sent = t.calls.find((entry) => !isPlanner(entry.messages) && !isArcPlan(entry.messages))!.messages;
   assert.ok(!system(sent).includes(NO_CHOICES_SENTENCE));
   assert.match(system(sent), /PLAYER CHOICES/);
   assert.match(system(sent), /CHOICE EFFECTS/);
@@ -384,7 +387,13 @@ test("a refusal is a 422 that writes nothing; a LI's thought before stage 2 gets
   assert.equal(await t.store.readDoc(beatId(t.runId, "main-1", 0), normalizeBeat), null);
   const repaired = await t.call("POST", beatPath, {}, node(0));
   assert.equal(repaired.status, 200);
-  assert.match(t.calls[4]!.messages.at(-1)!.content, /Kai is still behind their mask/);
+  assert.match(
+    t.calls
+      .filter((entry) => !isArcPlan(entry.messages))
+      .at(-1)!
+      .messages.at(-1)!.content,
+    /Kai is still behind their mask/,
+  );
 });
 
 test("a love interest's thought under his first name alone keeps the stage and one-per-beat rules", () => {

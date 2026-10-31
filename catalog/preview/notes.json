@@ -72,6 +72,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.6.7",
+          "date": "2026-10-31",
+          "notes": "- **Story arcs:** each stretch of main chapters now follows a plan made before it starts: a goal, a big event near the end, and where the mystery's answers come out. The Story screen shows the arc's name and how far you are (\"Arc The drowned bell · chapter 4 of 10\"). Before this, no plan looked past the next chapter and the mystery's answer was never allowed to be said.",
+          "highlight": false
+        },
+        {
           "version": "0.6.6",
           "date": "2026-10-31",
           "notes": "- **Banned phrases** when you start a new story: type them right under **How it's written**, so the world and every love interest's Bible avoid them from the start. Still in Settings → Content.\n- Read Him and Read Me guess instead of repeating: one specific guess past what your persona states, across wants, thoughts, likes, dislikes, habits, fears and memories. He never guesses what he already knows.\n- **Group scenes:** two or more love interests at stage 3 and up may share one intimacy when the scene fits. Heat decides how far, each keeps their own tastes, and scenes are no longer capped to a couple of love interests.\n- Narration says what the protagonist feels in her body, not only the action.",
@@ -183,12 +189,6 @@
           "version": "0.1.17",
           "date": "2026-10-30",
           "notes": "- Read a love interest’s intended appearance from Your cast or Who’s home without opening Bible spoilers. Wardrobe looks and reached story illustrations also expose their existing visual descriptions, including when no image was painted.\n- After adding an image connection, missing story locations and key moments offer the existing explicit Paint action with its image cost and prompt review. Reading descriptions and saving image settings paint nothing.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.16",
-          "date": "2026-10-30",
-          "notes": "- Automatically painted current-location backgrounds prepare before reading begins, with the existing manual-paint and failure paths retained.\n- Story generation can reuse saved location artwork for recurring settings instead of painting a new numbered visit.\n- Protagonist dialogue, thoughts and performed choices explicitly follow the selected persona’s authored identity and the player’s writing instructions.",
           "highlight": false
         }
       ]

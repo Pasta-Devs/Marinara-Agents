@@ -164,6 +164,15 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
           onMakeItRight={() => openArc({ kind: "repair", li: repair.li, key: repair.key })}
         />
       ))}
+      {story.arc ? (
+        <p className="of-eyebrow of-story-arc" title={story.arc.label}>
+          {t("ui.otomeForge.story.arcLine", {
+            chapter: Math.min(story.arc.read + 1, story.arc.endsAt - story.arc.from + 1),
+            total: story.arc.endsAt - story.arc.from + 1,
+            label: story.arc.label,
+          })}
+        </p>
+      ) : null}
       {reading ? <ContinueCard runKey={runKey} entry={reading} view={view} onOpen={onOpenChapter} /> : null}
       {next ? (
         <section className="of-section of-glass of-story-next" aria-labelledby="of-story-next">

@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.6.7 — 2026-10-31
+
+- **Story arcs:** each stretch of main chapters now follows a plan made before it starts: a goal, a big event near the end, and where the mystery's answers come out. The Story screen shows the arc's name and how far you are ("Arc The drowned bell · chapter 4 of 10"). Before this, no plan looked past the next chapter and the mystery's answer was never allowed to be said.
+
 ## 0.6.6 — 2026-10-31
 
 - **Banned phrases** when you start a new story: type them right under **How it's written**, so the world and every love interest's Bible avoid them from the start. Still in Settings → Content.
