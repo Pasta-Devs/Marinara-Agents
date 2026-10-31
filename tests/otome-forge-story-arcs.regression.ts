@@ -37,6 +37,7 @@ import {
   ChapterPlanSchema,
   type ChapterPlanReply,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/prompts.ts";
+import { revealedSoFar } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/arc.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { CAST, HE, KAI, MIR, SOL, bible, planReply } from "./fixtures/otome-forge-story.ts";
 
@@ -193,6 +194,50 @@ test("the reveal schedule refuses what would break it: past the end, twice in a 
     }),
     /last chapter/u,
   );
+});
+
+test("a repeated piece and a nameless label are refused, and the ending is always the arc's last chapter", () => {
+  // #1985 review: a love interest holds one piece, so the same one cannot be scheduled twice in an arc.
+  assert.match(
+    String(
+      normalizeArcPlan(
+        parse(
+          arcReply({
+            reveals: [
+              { chapter: 3, kind: "piece", li: KAI, what: "x" },
+              { chapter: 6, kind: "piece", li: KAI, what: "y" },
+            ],
+          }),
+        ),
+        context(),
+      ),
+    ),
+    /already scheduled in this arc/u,
+  );
+  assert.match(String(normalizeArcPlan(parse(arcReply({ label: "   " })), context())), /needs a short label/u);
+  // The big event lands in the arc's last chapter whatever position the reply gives it (0 means the last).
+  const planned = arc({ endsWith: { what: "the bell is raised", chapter: 0 } });
+  assert.equal(planned.endsWith?.n, planned.endsAt);
+  assert.equal(planned.endsWith?.n, 10);
+});
+
+test("a new arc reads what earlier arcs already revealed, so a repeat is refused", () => {
+  const first = arc();
+  const chapters = [
+    { number: 4, key: "main-4" },
+    { number: 5, key: "main-5" },
+    { number: 10, key: "main-10" },
+  ];
+  const state = normalizeState({
+    chapters: {
+      "main-4": { beatsRead: 0, completed: "2026-10-30", applied: [] },
+      "main-5": { beatsRead: 0, completed: "2026-10-30", applied: [] },
+      "main-10": { beatsRead: 0, completed: "2026-10-31", applied: [] },
+    },
+  });
+  const { pieces, truth } = revealedSoFar([first], chapters, state, 11);
+  assert.deepEqual([...pieces], [KAI]);
+  assert.equal(truth, true);
 });
 
 test("a stored arc keeps its range, drops a reveal outside it, and a breathing arc keeps no hidden text", () => {
@@ -372,7 +417,7 @@ test("a broken arc document still reads, and its usable parts survive", () => {
   })!;
   assert.equal(damaged.kind, "story", "an unknown kind reads as a story arc");
   assert.equal(damaged.endsAt, 12);
-  assert.equal(damaged.label, "Arc 2", "a nameless arc still has a name to show");
+  assert.equal(damaged.label, "2", 'a nameless arc falls back to its number (the screen already says "Arc")');
   assert.equal(damaged.endsWith?.n, 12, "a story arc always ends with something");
   assert.equal(
     normalizeWorld({ setting: "x", content: defaultContent() }).mystery.truth,

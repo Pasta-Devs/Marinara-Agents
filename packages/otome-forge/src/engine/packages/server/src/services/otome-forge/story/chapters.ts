@@ -398,6 +398,7 @@ export async function planNextChapter(
             debugMode,
           }),
           previous: arcs,
+          chapters: mains,
           number: arcs.length + 1,
           from: number,
         },

@@ -164,12 +164,12 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
           onMakeItRight={() => openArc({ kind: "repair", li: repair.li, key: repair.key })}
         />
       ))}
-      {story.arc ? (
-        <p className="of-eyebrow of-story-arc" title={story.arc.label}>
-          {t("ui.otomeForge.story.arcLine", {
-            chapter: Math.min(story.arc.read + 1, story.arc.endsAt - story.arc.from + 1),
-            total: story.arc.endsAt - story.arc.from + 1,
-            label: story.arc.label,
+      {story.data.arc ? (
+        <p className="of-eyebrow of-story-arc" title={story.data.arc.label}>
+          {t("ui.otomeForge.story.data.arcLine", {
+            chapter: Math.min(story.data.arc.read + 1, story.data.arc.endsAt - story.data.arc.from + 1),
+            total: story.data.arc.endsAt - story.data.arc.from + 1,
+            label: story.data.arc.label,
           })}
         </p>
       ) : null}

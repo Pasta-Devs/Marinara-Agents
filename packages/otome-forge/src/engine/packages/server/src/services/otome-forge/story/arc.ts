@@ -98,6 +98,8 @@ export interface ArcPlanInput {
   state: RunState;
   memory: string;
   previous: readonly StoryArc[];
+  /** The run's chapters, so a reveal an earlier arc already played is refused (it is read, never planned). */
+  chapters: ReadonlyArray<{ number?: number; key: string }>;
   number: number;
   from: number;
 }
@@ -199,7 +201,7 @@ export async function planArc(
   const target = runDocTarget("arc", arcId(runId, input.number));
   const existing = await deps.store.readDoc(target.id, normalizeArc);
   if (existing) return existing;
-  const { pieces, truth } = revealedSoFar([], [], input.state, input.from);
+  const { pieces, truth } = revealedSoFar(input.previous, input.chapters, input.state, input.from);
   const context: ArcPlanContext = {
     number: input.number,
     from: input.from,

@@ -11,7 +11,7 @@
 // normalizeArcPlan stamps `from + index - 1`. Off-by-one in a twelve-chapter schedule is the likeliest structural
 // failure, and this removes it. Brevity is part of the shape: one short sentence per purpose, and the schema caps it.
 import { z, type ZodType } from "zod";
-import type { StoryArc, StoryArcView } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import type { LiId, StoryArc, StoryArcView } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 export type { StoryArc, StoryArcView };
 import { isRecord, readFields, validItems } from "./common.js";
 
@@ -107,7 +107,7 @@ export function normalizeArc(data: unknown): StoryArc | null {
     arc.antagonist = null;
   }
   if (arc.kind === "story" && !arc.endsWith) arc.endsWith = { n: arc.endsAt, what: arc.goal };
-  if (!arc.label.trim()) arc.label = `Arc ${arc.number}`;
+  if (!arc.label.trim()) arc.label = String(arc.number);
   return arc;
 }
 
@@ -174,6 +174,7 @@ export function normalizeArcPlan(reply: z.infer<typeof ArcPlanSchema>, context: 
   if (count < min || count > max) return `a ${kind} arc needs ${min} to ${max} chapters, not ${count}`;
   const endsAt = context.from + count - 1;
   const long = chapters.findIndex((purpose) => wordCountOf(purpose) > ARC_PURPOSE_WORDS);
+  if (!reply.label.trim()) return "the arc needs a short label the player will see";
   if (long >= 0) return `chapter purposes must be ${ARC_PURPOSE_WORDS} words or fewer (chapter ${context.from + long})`;
   const from = context.from;
 
@@ -202,13 +203,12 @@ export function normalizeArcPlan(reply: z.infer<typeof ArcPlanSchema>, context: 
   }
 
   // Story arc: one ending, scheduled reveals in order, no repeat, nothing before its chapter, at most one per chapter.
-  const endsAtPos = reply.endsWith?.chapter ?? count;
-  const endsWith = reply.endsWith?.what.trim()
-    ? { n: from + Math.min(Math.max(endsAtPos, 1), count) - 1, what: reply.endsWith.what.trim() }
-    : null;
+  // The big event is always the arc's last chapter (chapters.ts carries it there), so its position is not the model's.
+  const endsWith = reply.endsWith?.what.trim() ? { n: endsAt, what: reply.endsWith.what.trim() } : null;
   if (!endsWith) return "a story arc needs endsWith: how the arc ends, in one sentence";
   const reveals: StoryArc["reveals"] = [];
   const seenChapters = new Set<number>();
+  const scheduled = new Set<LiId>();
   let sawTruth = false;
   for (const reveal of [...reply.reveals].sort((a, b) => a.chapter - b.chapter)) {
     const n = from + reveal.chapter - 1;
@@ -226,6 +226,9 @@ export function normalizeArcPlan(reply: z.infer<typeof ArcPlanSchema>, context: 
     const li = context.resolveLi(reveal.li);
     if (!li) return `a piece reveal must name one of the cast (got ${JSON.stringify(reveal.li ?? null)})`;
     if (context.revealed.has(li)) return `${li}'s piece of the mystery was already revealed; schedule another piece`;
+    // A love interest holds one piece: scheduling it twice in the same arc would ask two chapters to say it once.
+    if (scheduled.has(li)) return `${li}'s piece is already scheduled in this arc`;
+    scheduled.add(li);
     reveals.push({ n, kind: "piece", li, what: reveal.what.trim() });
   }
   // The truth comes after every piece this arc schedules, and the arc ends with it when it reveals it at all.
