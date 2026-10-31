@@ -2,7 +2,7 @@
   "$comment": "First-party 5e ruleset on SRD 5.1. Every id here is this file's own choice: the Engine never looks for 'level', 'dex' or 'slots'. A $comment key is allowed on any object and ignored.",
   "schemaVersion": 1,
   "id": "5e-2014",
-  "version": 454,
+  "version": 455,
   "name": "5e (SRD 5.1)",
   "edition": "System Reference Document 5.1, 2014 rules",
   "license": {

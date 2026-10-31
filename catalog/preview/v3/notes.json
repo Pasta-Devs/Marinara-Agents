@@ -196,6 +196,12 @@
     "ruleset-5e-2014": {
       "versions": [
         {
+          "version": "1.0.3",
+          "date": "2026-10-31",
+          "notes": "- The Low magic layer's name and summary, and the magic items' Spell level filter, are translated in all 11 language packs.",
+          "highlight": false
+        },
+        {
           "version": "1.0.2",
           "date": "2026-10-31",
           "notes": "- A Low magic layer, turned on when a game is created: magic is rare and feared. No spell above 5th level is offered, and no spell scroll above 5th level is found or sold. Every magic item still exists, but no shop sells one (the magic dealer and the scribe are gone, and temples and alchemists sell only mundane goods), treasure drops one about a fifth as often, and a town's fence is the one shady way to buy one. The Game Master keeps creatures of magic out of random encounters, may still build a fight around one on purpose, and, when the player gives no reason, decides at game creation why magic is rare in this world. Magic items' spell scrolls carry a Spell level filter. It needs Capability API 1.813.",
@@ -307,12 +313,6 @@
           "version": "0.436.0",
           "date": "2026-10-25",
           "notes": "- A long rest ends temporary hit points (Capability API 1.804): \"they last until they're depleted or you finish a long rest\".",
-          "highlight": true
-        },
-        {
-          "version": "0.435.0",
-          "date": "2026-10-25",
-          "notes": "- An encounter budget (Capability API 1.803): each challenge rating counts for its SRD 5.1 experience points, and a party may face up to SRD 5.2.1's XP Budget per Character (Low, Moderate, High) times its members, with no multiplier for numbers. Casual games play Low, normal Moderate, hard and brutal High; a boss fight may reach a step higher. The SRD 5.2.1 attribution is in LICENSE-SRD.md. A first class also writes its name into Class, so a sheet with only a class level still opens that class's spells.",
           "highlight": true
         }
       ]
