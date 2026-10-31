@@ -356,7 +356,7 @@ test("NSFW Heat and Dark romance reach the story prompts only with the 18+ confi
   assert.equal(raised.status, 200, JSON.stringify(raised.body));
   const planned = await t.call("POST", "/runs/:run/chapters/next", { lead: KAI });
   assert.equal(planned.status, 200, JSON.stringify(planned.body));
-  const planner = systemOf(t.calls[0]!.messages);
+  const planner = systemOf(t.calls.find((entry) => systemOf(entry.messages).includes("chapter planner"))!.messages);
   for (const text of [planner, await scenePrompt()]) {
     assert.match(text, /Heat: NSFW, explicit\./);
     assert.match(text, NSFW_WORDING.explicit);

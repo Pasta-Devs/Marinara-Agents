@@ -90,6 +90,10 @@ const NodeSchema: ZodType<ChapterNode> = z.object({
   gate: z.boolean().optional(),
   resolves: z.array(short(80)).optional(),
   reveals: z.array(short(80)).optional(),
+  reveal: z
+    .union([z.object({ kind: z.literal("piece"), li: z.string() }), z.object({ kind: z.literal("truth") })])
+    .optional(),
+  arcEvent: z.literal(true).optional(),
 });
 
 const LedgerSchema: ZodType<ChapterLedger> = z.object({

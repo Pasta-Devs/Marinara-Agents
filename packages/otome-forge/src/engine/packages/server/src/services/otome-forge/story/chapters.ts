@@ -28,15 +28,29 @@ import type {
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import type { ClimaxKind } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
+import { LIS_MAX } from "../../../../../client/src/features/otome-forge/shared/cast.js";
 import { LIMIT_IDS, type LimitId } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import { generateJson, readOrGenerate, type GenerationDeps } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
-import { PROLOGUE_KEY, beatId, chapterId, mainChapterKey, mainChapterNumber, runDocTarget, stateId } from "../ids.js";
+import {
+  PROLOGUE_KEY,
+  arcId,
+  beatId,
+  chapterId,
+  mainChapterKey,
+  mainChapterNumber,
+  runDocTarget,
+  stateId,
+} from "../ids.js";
+import { normalizeArc, revealAt, toArcView, type StoryArc } from "../schemas/story-arc.js";
+import { arcCovering, arcRead, listArcs, planArc, revealedSoFar } from "./arc.js";
 import { defaultLiState, normalizeState, readRun } from "../schemas/state.js";
 import { normalizeBeat, normalizeChapter, toChapterView } from "../schemas/story.js";
 import { repairOffers, routeEntries } from "../state/stages.js";
 import type { OtomeStore } from "../store.js";
 import { withPersonaStoryAbout } from "../setup/prompts.js";
+import { cancellable } from "./beats.js";
+import { removeLoveInterest } from "./introduce.js";
 import { recallText, type StoryMemory } from "./canon.js";
 import {
   ANGST_TYPES,
@@ -102,6 +116,8 @@ export interface PlanContext {
   lead: LiId;
   /** The climax this chapter must use, after CLIMAX_STREAK main chapters alike; absent, the planner picks. */
   climax?: ClimaxKind;
+  /** The story arc this chapter belongs to (#1980), when the run has one. */
+  arc?: StoryArc | null;
 }
 
 /** How many main chapters in a row may end with the same climax (the maintainer's 2, so the two alternate often). */
@@ -278,9 +294,36 @@ export function normalizeChapterPlan(reply: ChapterPlanReply, context: PlanConte
   if (!nodes.some((node) => node.cast.includes(lead))) return "the Lead must appear in the chapter";
   if (!nodes.some((node) => node.cast.includes(foil))) return "the Foil must appear in at least one node";
   const present = new Set(nodes.flatMap((node) => node.cast));
+  const arc = context.arc ?? null;
+  // #1983 M3: an arc that brings someone in introduces them on the page beside another love interest.
+  const debut = arc?.newcomer?.li ?? null;
+  if (debut && arc && number === arc.from && ids.includes(debut)) {
+    const withThem = nodes.some((node) => node.cast.includes(debut) && node.cast.some((li) => li !== debut));
+    if (!withThem) {
+      return `this chapter brings ${debut} in: one node must hold them beside another love interest`;
+    }
+  }
   if (number === 1) {
     const missing = ids.filter((li) => !present.has(li));
     if (missing.length) return `chapter 1 must bring in every love interest; missing: ${missing.join(", ")}`;
+  }
+  // #1980: the arc's schedule is what makes a reveal real. A scheduled chapter must place it on a node (with its holder
+  // when it is a piece); a node in an unscheduled chapter is dropped, so a hallucinated early reveal cannot land; the
+  // arc's last chapter carries its big event in the climax.
+  const scheduled = arc ? revealAt(arc, number) : undefined;
+  if (scheduled) {
+    const index = typeof reply.revealNode === "number" ? reply.revealNode : -1;
+    const node = nodes.find((entry) => entry.i === index);
+    if (!node) return "this chapter is scheduled to reveal something: set revealNode to the node that carries it";
+    if (scheduled.kind === "piece" && scheduled.li && !node.cast.includes(scheduled.li)) {
+      const holder = units.find((unit) => unit.id === scheduled.li);
+      return `${holder?.name ?? scheduled.li} must be in the node that reveals their part of the mystery`;
+    }
+    node.reveal = scheduled.kind === "truth" ? { kind: "truth" } : { kind: "piece", li: scheduled.li! };
+  }
+  if (arc && number === arc.endsAt) {
+    if (reply.eventNode !== climax.i) return "this is the arc's last chapter: set eventNode to the climax node's index";
+    climax.arcEvent = true;
   }
   const tags = planTags(reply, context.world);
   if (typeof tags === "string") return tags;
@@ -343,12 +386,48 @@ export async function planNextChapter(
       debugMode,
     });
     const climax = requiredClimax(mains);
+    // #1980: the arc this chapter belongs to, planned right here when the run has none covering it (the first arc, or
+    // the one after a finished one). Planned inline, never through a nested readOrGenerate: that would queue behind
+    // this task on the run's serial lane and hang.
+    const arcs = await listArcs(deps.store, runId);
+    const covering = arcCovering(arcs, number);
+    // #1983 M2: an arc that has ended waits for the player's choice before the next chapter is planned. The first arc
+    // of a run, and an arc still being played, plan here as they do; a finished one does not.
+    const latest = arcs.at(-1);
+    if (!covering && latest && nextMain(mains, run.state).number > latest.endsAt) {
+      throw new OtomeForgeError(409, "Choose how the story goes on.", "conflict");
+    }
+    const arc: StoryArc =
+      covering ??
+      (await planArc(
+        deps,
+        runId,
+        {
+          world: run.world,
+          player: await withPersonaStoryAbout(deps.runtime, run.player),
+          units,
+          state: run.state,
+          memory: await recallText(deps, runId, {
+            job: "structured",
+            cast: [],
+            query: { plan: run.player.goal ?? "", speakers: units.map((unit) => unit.name) },
+            signal,
+            debugMode,
+          }),
+          previous: arcs,
+          chapters: mains,
+          number: arcs.length + 1,
+          from: number,
+        },
+        { debugMode, ...(signal ? { signal } : {}) },
+      ));
     const context: PlanContext = {
       units,
       state: run.state,
       world: run.world,
       number,
       lead,
+      arc,
       ...(climax ? { climax } : {}),
     };
     const { value, connectionId } = await generateJson(deps, {
@@ -365,6 +444,7 @@ export async function planNextChapter(
         memory,
         climax,
         lastClimax: climaxOfChapter(mains.at(-1)),
+        arc,
       }),
       schema: ChapterPlanSchema,
       normalize: (reply) => {
@@ -372,7 +452,7 @@ export async function planNextChapter(
         return typeof plan === "string" ? plan : reply;
       },
       temperature: 0.8,
-      maxTokens: 4000,
+      maxTokens: 10000,
       debugMode,
       lane: "foreground",
       signal,
@@ -402,6 +482,87 @@ export async function planNextChapter(
   });
 }
 
+/**
+ * POST /runs/:run/arcs {choice} (#1983 M2): plan the arc that follows a finished one, as the player asked. One document
+ * is written and nothing else, so a lost request cannot half-apply; a repeat call returns the arc already there
+ * (planArc re-reads inside the run's queue). 409 while the current arc is unfinished or a next arc already exists.
+ */
+export async function startArc(
+  deps: ChapterDeps,
+  runId: string,
+  choice: StoryArc["choice"]["kind"],
+  {
+    debugMode,
+    signal,
+    newcomer,
+    arrive,
+  }: {
+    debugMode: boolean;
+    signal?: AbortSignal;
+    newcomer?: { id: LiId; name: string };
+    /** Writes the newcomer, called only once every gate above has passed (#1983 M3): a refused choice writes no one. */
+    arrive?: () => Promise<{ id: LiId; name: string }>;
+  },
+): Promise<StoryArc> {
+  const run = await readRun(deps.store, runId);
+  if (!run) throw notFound("Otome Forge run");
+  if (run.world.forge.phase !== "ready") throw new OtomeForgeError(409, "The world is still being forged.", "conflict");
+  const arcs = await listArcs(deps.store, runId);
+  const latest = arcs.at(-1);
+  if (!latest) throw new OtomeForgeError(409, "This story has no arc yet: plan a chapter first.", "conflict");
+  const mains = await mainChapters(deps.store, runId);
+  if (arcRead(latest, mains, run.state) < latest.plan.length) {
+    throw new OtomeForgeError(409, "Finish the current arc before choosing the next one.", "conflict");
+  }
+  if (arcs.some((arc) => arc.number === latest.number + 1)) {
+    throw new OtomeForgeError(409, "The next arc is already planned.", "conflict");
+  }
+  if (choice === "newcomer" && !newcomer && !arrive) {
+    throw new OtomeForgeError(400, "Say who arrives, or choose another way on.", "bad-request");
+  }
+  const arriving = newcomer ?? (arrive ? await arrive() : undefined);
+  // The newcomer is written before the arc, so a plan that fails, is declined or is cancelled takes them back: nobody
+  // stays in the cast that no arc introduces (#1985 review). A rollback never hides the original failure.
+  const rollback = async () => {
+    if (!arriving || newcomer) return;
+    await removeLoveInterest(deps, runId, arriving.id).catch(() => undefined);
+  };
+  const cast = Object.keys(run.state.lis).filter((li) => run.units.some((unit) => unit.id === li && unit.bible));
+  const units = cast.map((li) => run.units.find((unit) => unit.id === li)!);
+  const from = mains.at(-1) ? (mains.at(-1)!.number ?? mains.length) + 1 : 1;
+  try {
+    return await cancellable(deps, runId, async (stop) =>
+      planArc(
+        deps,
+        runId,
+        {
+          world: run.world,
+          player: await withPersonaStoryAbout(deps.runtime, run.player),
+          units,
+          state: run.state,
+          memory: await recallText(deps, runId, {
+            job: "structured",
+            cast: [],
+            query: { plan: run.player.goal ?? "", speakers: units.map((unit) => unit.name) },
+            signal: stop,
+            debugMode,
+          }),
+          previous: arcs,
+          chapters: mains,
+          number: latest.number + 1,
+          from,
+          choice,
+          ...(arriving && choice === "newcomer" ? { newcomer: arriving } : {}),
+        },
+        { debugMode, signal: stop },
+      ),
+    );
+  } catch (error) {
+    await rollback();
+    throw error;
+  }
+}
+
 // ── The story view ──
 
 /**
@@ -419,8 +580,10 @@ export async function storyView(deps: { store: OtomeStore }, runId: string): Pro
     .map((record) => normalizeChapter(record.data))
     .filter((chapter): chapter is Chapter => !!chapter && chapter.kind !== "date")
     .sort((a, b) => storyOrder(a.key) - storyOrder(b.key) || a.plannedAt.localeCompare(b.plannedAt));
+  const arcs = await listArcs(deps.store, runId);
   const entries: StoryChapterEntry[] = chapters.map((chapter) => {
     const progress = run.state.chapters[chapter.key];
+    const arc = chapter.number != null ? arcCovering(arcs, chapter.number) : undefined;
     return {
       key: chapter.key,
       kind: chapter.kind,
@@ -430,7 +593,8 @@ export async function storyView(deps: { store: OtomeStore }, runId: string): Pro
       lead: chapter.lead,
       state: progress?.completed ? "done" : "in-progress",
       beatsRead: progress?.beatsRead ?? 0,
-      nodes: chapter.nodes.length,
+      nodes: chapters.find((entry) => entry.key === chapter.key)!.nodes.length,
+      ...(arc ? { arc: arc.number } : {}),
     };
   });
   const ready = run.world.forge.phase === "ready";
@@ -439,12 +603,30 @@ export async function storyView(deps: { store: OtomeStore }, runId: string): Pro
     chapters.filter((chapter) => chapter.kind === "main"),
     run.state,
   );
+  // #1980: the arc being played, once there is one; its length and progress are all the screen needs.
+  const current = arcs.at(-1);
+  const arcReading = current ? arcRead(current, chapters, run.state) : 0;
+  const arc = current ? toArcView(current, arcReading) : null;
+  // #1983 M2: once an arc ends, the next one waits for the player's choice; until it is made there is no next chapter.
+  const ended = !!arc?.done && !arcs.some((entry) => entry.number === current!.number + 1);
+  const arcChoice = ended ? arcChoiceFor(run.state) : null;
   return {
     chapters: entries,
-    next: ready && open && cast.length ? { kind: "main", number, candidates: leadCandidates(run.state, cast) } : null,
+    next:
+      ready && open && cast.length && !ended
+        ? { kind: "main", number, candidates: leadCandidates(run.state, cast) }
+        : null,
     routes: ready ? routeEntries(run.state, cast) : [],
     repairs: ready ? repairOffers(chapters, run.state, cast) : [],
+    arc,
+    arcChoice,
   };
+}
+
+/** The ways on at the end of an arc: breathing room, the story going on, and someone new while the cast has room. */
+export function arcChoiceFor(state: RunState): NonNullable<StoryView["arcChoice"]> {
+  const castFull = Object.keys(state.lis).length >= LIS_MAX;
+  return { options: castFull ? ["breathe", "continue"] : ["breathe", "continue", "newcomer"], castFull };
 }
 
 /** GET /runs/:run/chapters/:key: the plan as the client sees it, and each node's beat state. */

@@ -775,6 +775,10 @@ export interface ChapterNode {
   resolves?: string[];
   /** Bible secret ids the protagonist learns in this node (a route chapter's gate, hidden from the client). */
   reveals?: string[];
+  /** This node carries the story arc's scheduled reveal (hidden from the client). */
+  reveal?: { kind: "piece"; li: LiId } | { kind: "truth" };
+  /** This node carries the arc's big event, on the arc's last chapter (hidden from the client). */
+  arcEvent?: true;
 }
 
 /** What the planner wrote for the ledgers; saved to the state when the chapter's last node is read. */
@@ -1028,6 +1032,8 @@ export interface StoryChapterEntry {
   beatsRead: number;
   /** How many nodes the chapter has. */
   nodes: number;
+  /** The story arc a main chapter belongs to, for grouping the list; absent before arcs existed. */
+  arc?: number;
 }
 
 export type LeadReason = "least-recent" | "ripe-conflict";
@@ -1036,6 +1042,49 @@ export type LeadReason = "least-recent" | "ripe-conflict";
 export interface RepairEntry {
   li: LiId;
   key: string;
+}
+
+/** One story arc (#1980): the long-term plan a run of main chapters follows. Its hidden text never leaves the server. */
+export interface StoryArc {
+  version: number;
+  number: number;
+  kind: "story" | "breathing";
+  /** What the Story screen shows: a spoiler-free name and promise. */
+  label: string;
+  theme: string;
+  /** How the arc ends up: the protagonist's stake in it. */
+  goal: string;
+  /** The first and last main chapters it covers (absolute, never renumbered). */
+  from: number;
+  endsAt: number;
+  /** One short purpose per chapter, in play order. */
+  plan: Array<{ n: number; purpose: string }>;
+  /** How it ends, the big event its last chapter carries. */
+  endsWith: { n: number; what: string } | null;
+  /** What of the mystery is revealed, and in which chapter. */
+  reveals: Array<{ n: number; kind: "piece" | "truth"; li?: LiId; what: string }>;
+  antagonist: { name: string; want: string; whyNow: string } | null;
+  /** The love interest this arc brings into the cast (#1983 M3), and the one scene they are met in. */
+  newcomer: { li: LiId; how: string } | null;
+  /** How this arc was asked for: the story goes on, a breathing room, or someone new arrives. */
+  choice: { kind: ArcChoice };
+  plannedAt: string;
+  connectionId: string;
+}
+
+/** How the player asks for the next arc, once one ends (#1983 M2). */
+export type ArcChoice = "continue" | "breathe" | "newcomer";
+
+/** The arc as a player sees it: its name, its range and how far in they are. Never its plan or hidden text. */
+export interface StoryArcView {
+  number: number;
+  kind: "story" | "breathing";
+  label: string;
+  from: number;
+  endsAt: number;
+  /** How many of its chapters are read. */
+  read: number;
+  done: boolean;
 }
 
 /** GET /runs/:run/story */
@@ -1047,6 +1096,10 @@ export interface StoryView {
   routes: RouteEntry[];
   /** M2b: a repair chapter for each love interest a rupture stands with. */
   repairs: RepairEntry[];
+  /** The story arc being played, or null before arcs existed in this run (a legacy run plans its first on demand). */
+  arc: StoryArcView | null;
+  /** The ways on once an arc has ended, and no next arc is planned yet; null while one is being played. */
+  arcChoice: { options: ArcChoice[]; castFull: boolean } | null;
 }
 
 /** GET /runs/:run/chapters/:key */
