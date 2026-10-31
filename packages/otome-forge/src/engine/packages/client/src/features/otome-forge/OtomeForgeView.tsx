@@ -270,6 +270,9 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
         lookPreference={lookPreference}
         onLookPreference={onLookPreference}
         initialTab={settingsTab}
+        // Settings → Stories: the cast needs a story, and neither is offered where Back already leads.
+        onOpenCast={activeRun && view && settingsReturn !== "forge" ? () => go("forge") : undefined}
+        onOpenStories={settingsReturn === "picker" ? undefined : () => go("picker")}
       />
     ) : screen === "story" && activeRun && view ? (
       <StoryHome runKey={activeRun} view={view} onOpenChapter={openReader("story")} />
@@ -303,8 +306,6 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
           setPhoneOpen(open);
           go("phone");
         }}
-        onOpenCast={() => go("forge")}
-        onOpenStories={() => go("picker")}
         onOpenRemind={() => go("remind")}
       />
     ) : screen === "phone" && activeRun && view ? (

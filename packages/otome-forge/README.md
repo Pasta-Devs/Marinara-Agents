@@ -52,13 +52,13 @@ Forging writes the world and its central mystery: each love interest holds one p
 - how they stand with each of the others;
 - secrets that come out stage by stage.
 
-Bibles sit behind a spoiler gate, and you can edit them. A step that fails or is stopped waits for you to try it again. Base looks are painted only when you tap **Paint the cast**. To paint one again later, open **Your cast** from Home's **Who's home** and choose **Repaint**. Then choose **Begin**.
+Bibles sit behind a spoiler gate, and you can edit them. A step that fails or is stopped waits for you to try it again. Base looks are painted only when you tap **Paint the cast**. To paint one again later, open **Your cast** from **Settings → Stories** and choose **Repaint**. Then choose **Begin**.
 
 With **Expressions** on, **Repaint expressions** beside a love interest's repaint action replaces the five faces for the look they currently wear. It uses that look as the image reference and your configured image style. The current set stays available while replacements paint, and a failed replacement keeps it. With prompt review on, review all five prompts first; the last confirmation starts the five paid images. Canceling the review paints nothing. Reading or replaying a scene never triggers this replacement.
 
 **Begin** plays the **prologue** first: one short scene of your protagonist's own life, just before the story opens. No love interest is in it; you meet them in chapter 1, which picks up where the prologue ends. It is written once, and the Story screen offers it again. **Skip** goes straight Home.
 
-You can keep several stories. **Your stories** lists them, and deleting one asks you to type its title. **Settings** changes a story's content, connections, images and audio later. On desktop, Settings uses the available stage space. On phones, its categories form one horizontally scrolling row, and long settings pages remain vertically scrollable.
+You can keep several stories. **Your stories** lists them, and deleting one asks you to type its title; open it from **Settings → Stories**. **Settings** changes a story's content, connections, images and audio later. On desktop, Settings uses the available stage space. On phones, its categories form one horizontally scrolling row, and long settings pages remain vertically scrollable.
 
 In **Your cast**, open a love interest and choose their **Character card** to link an Engine card explicitly. Its assigned voice and image references apply without replacing the love interest's story, progress or saved pictures. **No linked card** removes the association. Future paints prefer the card's **Full Body → Neutral** sprite, then its current avatar, then the retained Otome look; linking never paints automatically.
 
@@ -138,7 +138,8 @@ Each love interest has one private thread, written in whatever carries messages 
 Wishes cost Starlight you earn by playing: 100 each, or 1,000 for ten. There is no real money, and a new story starts with 2,000.
 
 - **Banners:** every 14 days, counted from the day the story began, opening Wish creates three banners: **Memories**, a love interest's **wardrobe**, and **yours**. Each features the love interest featured least recently.
-- **Echoes:** banners never expire. Past ones wait in **Echoes**, and you can still wish on them.
+- **Seasonal banners:** the first fortnight that starts in each month (on the 1st to the 14th) is that month's seasonal one: all three of its banners follow the month's theme, and a badge names it, such as **October · Halloween**. Any later fortnight that month is your model's free choice, as before. A story set in the real world gets the holiday itself; a world without it gets its own version, such as a winter festival of gifts and lights in December or a night of masks and spirits in October. The themes, January to December: New Year, Valentine's Day, White Day, cherry blossoms, gardens in bloom, June bride, summer festival, summer nights, harvest moon, Halloween, autumn and Christmas. Next year's seasonal banner knows the titles of earlier ones from the same month, so it does not repeat them. Banners made before 0.6.5 have no season.
+- **Echoes:** banners never expire. Past ones wait in **Echoes**, and you can still wish on them; a seasonal one keeps its badge.
 - **What a banner holds:** one featured 5★, three 4★s and six 3★ Snapshots.
   - A **Memory** (5★) is a key image, a short Character Story and a voiced line.
   - A **Moment** (4★) is one playable scene and an illustration.
@@ -276,7 +277,7 @@ Each story has its own content settings:
 
 - **Your role:** an optional Sub, Dom or Switch beside the Heat setting, in setup and **Settings → Content**. It is unspecified by default. It colours intimate scenes when they come, never every scene, and never decides what a love interest is like. Lowering Heat to SFW, or withdrawing the 18+ confirmation, clears it.
 - **Love interests' own tastes:** a new bible in an NSFW story gets a short intimacy part: what they are into, kinks included, and what draws them. They are tastes, not a checklist, and scenes and banner stories bring them in when a scene turns intimate, not in every scene. What a scene may hold is still up to your Heat, Darkness and Lines & Veils, consent toggles included.
-- **Older casts:** a love interest whose bible has none gets **Add intimacy preferences** on the forge's cast list (Home → **Who's home** → **Your cast**). It costs 1 call on the Planning connection, writes only that part, and keeps the rest of the bible, your story and your progress as they are. The text stays in the spoiler-gated bible.
+- **Older casts:** a love interest whose bible has none gets **Add intimacy preferences** on the forge's cast list (**Settings → Stories → Your cast**). It costs 1 call on the Planning connection, writes only that part, and keeps the rest of the bible, your story and your progress as they are. The text stays in the spoiler-gated bible.
 - **In the bible:** behind **Show spoilers**, an **Intimacy** part lists them as **Into** and **Drawn to**. Edit them there, or empty both to remove them; the cast then offers to add them again.
 - An SFW story never writes or sends any of it, even for a bible that kept it from before Heat was lowered.
 

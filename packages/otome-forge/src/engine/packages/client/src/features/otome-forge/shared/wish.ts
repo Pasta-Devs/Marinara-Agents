@@ -119,6 +119,39 @@ export function rotationWindow(createdDay: string, rotation: number): { startsDa
   return { startsDay, endsDay: addDays(startsDay, ROTATION_DAYS - 1) };
 }
 
+/**
+ * Each month's seasonal theme, January first (Northern Hemisphere): the planner's English cue is in S/wish/prompts.ts,
+ * the badge's label in the locale. A banner stores the id, not the cue, so its badge reads in the player's language.
+ */
+export const SEASONS = [
+  "new-year",
+  "valentines-day",
+  "white-day",
+  "cherry-blossoms",
+  "gardens-in-bloom",
+  "june-bride",
+  "summer-festival",
+  "summer-nights",
+  "harvest-moon",
+  "halloween",
+  "autumn",
+  "christmas",
+] as const;
+export type Season = (typeof SEASONS)[number];
+
+/**
+ * The season of the rotation that starts on `startsDay`. A month's first rotation, the one that starts on day 1–14 (a
+ * 14-day rotation starts there exactly once a month), carries that month's theme on its three banners; a later one that
+ * month is the planner's free choice (null), as is every rotation of a story begun after the 14th until next month's.
+ * Null for a day key that is not a real day.
+ */
+export function rotationSeason(startsDay: string): Season | null {
+  const match = DAY_KEY.exec(startsDay);
+  // A real day only: "2026-02-30" would read as March 2nd.
+  if (!match || addDays(startsDay, 0) !== startsDay || Number(match[3]) > ROTATION_DAYS) return null;
+  return SEASONS[Number(match[2]) - 1]!;
+}
+
 /** `${kind}-${rotation}`: a banner's key, and its document id's tail. */
 export const bannerKey = (kind: BannerKind, rotation: number) => `${kind}-${rotation}`;
 
@@ -230,6 +263,8 @@ export interface Banner {
   rotation: number;
   startsDay: string;
   endsDay: string;
+  /** The month's theme its plan followed (rotationSeason); none on a later rotation or a banner written before 0.6.5. */
+  season?: Season;
   featuredLi: LiId;
   items: { five: string[]; four: string[]; three: string[] };
   /** Null without an image connection (the client shows a gradient in his accent colour). */
@@ -265,6 +300,8 @@ export interface BannerView {
   rotation: number;
   startsDay: string;
   endsDay: string;
+  /** A seasonal banner's theme (its badge); absent otherwise. */
+  season?: Season;
   featuredLi: LiId;
   /** The featured item's title. */
   title: string;

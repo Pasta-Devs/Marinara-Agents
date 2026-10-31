@@ -428,11 +428,17 @@ function expressionRepaintFixture({
   return { answer, view, prompts };
 }
 
+/** Home → Settings → Stories → Your cast. */
+async function openCast(root: Locator) {
+  await root.getByRole("button", { name: "Settings", exact: true }).click();
+  await root.getByRole("tab", { name: "Stories", exact: true }).click();
+  await root.getByRole("tabpanel").getByRole("button", { name: "Open your cast", exact: true }).click();
+  await expect(root.getByRole("heading", { name: "Your story is ready", exact: true })).toBeVisible();
+}
+
 async function openRepaintCast(page: Page, reviewPrompts = false) {
   const root = await openOtome(page, { reviewPrompts });
-  await root.getByRole("button", { name: "Who’s home" }).click();
-  await page.getByRole("dialog", { name: "Who’s home" }).getByRole("button", { name: "Your cast" }).click();
-  await expect(root.getByRole("heading", { name: "Your story is ready", exact: true })).toBeVisible();
+  await openCast(root);
   return root;
 }
 
@@ -612,9 +618,7 @@ async function reopenCast(page: Page) {
   await page.reload();
   await page.getByRole("tab", { name: "Open Otome Hearth", exact: true }).click();
   const root = page.locator("marinara-capability-otome-forge .of-root");
-  await root.getByRole("button", { name: "Who’s home" }).click();
-  await page.getByRole("dialog", { name: "Who’s home" }).getByRole("button", { name: "Your cast" }).click();
-  await expect(root.getByRole("heading", { name: "Your story is ready", exact: true })).toBeVisible();
+  await openCast(root);
   return root;
 }
 
@@ -3296,7 +3300,8 @@ test("Otome Hearth card link: a generated LI keeps their story and art while an 
     await root.getByRole("button", { name: "Who’s home" }).click();
     const picker = page.getByRole("dialog", { name: "Who’s home" });
     await expect(picker.getByText("Affection 2", { exact: true })).toBeVisible();
-    await picker.getByRole("button", { name: "Your cast" }).click();
+    await page.keyboard.press("Escape");
+    await openCast(root);
     await root.getByRole("button", { name: `Open ${name}’s bible (spoilers)` }).click();
     await expect(root.getByRole("heading", { name: `${name}’s bible` })).toBeVisible();
     await expect(root.locator(".of-page-head .of-avatar img")).toHaveAttribute("src", FACE_COLD);
@@ -3412,7 +3417,7 @@ test("Otome Hearth Settings fills its frame and exposes every tab on desktop and
   await root.getByRole("button", { name: "Settings", exact: true }).click();
   const settings = root.locator(".of-settings");
   const tabs = settings.getByRole("tablist");
-  const names = ["Look", "Content", "Connections", "Images", "Audio", "Tracker", "Privacy & data", "Debug"];
+  const names = ["Look", "Stories", "Content", "Connections", "Images", "Audio", "Tracker", "Privacy & data", "Debug"];
   for (const [index, size] of sizes.entries()) {
     await page.setViewportSize(size);
     await settings.evaluate((element) => element.scrollTo(0, 0));
@@ -4059,12 +4064,7 @@ test("Otome Hearth fullscreen fills the whole mode across navigation and restore
     );
     await fillsFrame();
     if (index === 1) {
-      await root.getByRole("button", { name: "Who’s home", exact: true }).click();
-      await page
-        .getByRole("dialog", { name: "Who’s home", exact: true })
-        .getByRole("button", { name: "Your cast", exact: true })
-        .click();
-      await expect(root.getByRole("heading", { name: "Your story is ready", exact: true })).toBeVisible();
+      await openCast(root);
       await fillsFrame();
       await page.screenshot({ path: testInfo.outputPath(`fullscreen-cast-${size.width}-${look}.png`) });
       await root.getByRole("button", { name: "Back", exact: true }).click();
