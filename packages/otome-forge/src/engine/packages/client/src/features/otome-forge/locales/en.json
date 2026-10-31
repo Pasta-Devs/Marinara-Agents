@@ -1098,7 +1098,7 @@
   "ui.otomeForge.setup.heatSfw": "SFW",
   "ui.otomeForge.setup.heatSfwText": "Romance fades to black.",
   "ui.otomeForge.setup.imageAppearance": "Image appearance",
-  "ui.otomeForge.setup.imageAppearanceHint": "Future images use this appearance; repaint separately. Leave blank to restore the original description.",
+  "ui.otomeForge.setup.imageAppearanceHint": "Future images and the story use this appearance; repaint images separately. Leave blank to restore the original description.",
   "ui.otomeForge.setup.imageAppearanceOf": "Image appearance for {{name}}",
   "ui.otomeForge.setup.imageAppearanceSaved": "Image appearance saved.",
   "ui.otomeForge.setup.imageConnections": "Images",

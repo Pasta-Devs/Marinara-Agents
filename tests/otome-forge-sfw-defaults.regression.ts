@@ -17,6 +17,8 @@
 // beat, CG beat, confrontation and closer digests moved.
 // 0.6.1 (#1960): what stands between each love interest and the protagonist names the slow burn of their stage, so
 // every story and banner digest moved once.
+// 0.6.3 (#1965): each love interest's card and bible carry how they look now (their Image appearance and worn outfit),
+// so the plans, scenes, Confrontations and Closers moved.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
@@ -236,25 +238,25 @@ const EXPECTED_ANGST: Record<string, string> = {
   bannerHis: "39604e03caf88941",
   bannerMemories: "bd0201a64f300049",
   bannerMine: "6fa79429992f2018",
-  beat: "ab7e71f5ff7af527",
-  beatWithCg: "892ffb31a2534b61",
-  chapterPlan: "b451d1e85d12e2e9",
-  closer: "dd4e4da6ab41a31e",
-  confrontation: "6c291fa4b2d7c113",
-  repairPlan: "88ce49eb55b41e60",
-  routePlan: "4ba8d1e6b2a8c86d",
+  beat: "21b6f1788829c516",
+  beatWithCg: "11160e60e67f8829",
+  chapterPlan: "1d325506d14909a2",
+  closer: "4dc6c0e33e31cb8e",
+  confrontation: "efb2c19564ebff1c",
+  repairPlan: "a58b64be4ece14c3",
+  routePlan: "ba3d5b3c4ab8f4f4",
 };
 const EXPECTED_GENTLE: Record<string, string> = {
   bannerHis: "249c85863bcc1d7a",
   bannerMemories: "75f9dcf70d8a997c",
   bannerMine: "225a0a56f3bfa31a",
-  beat: "0282311f5a3b7aad",
-  beatWithCg: "b012207b25e8f226",
-  chapterPlan: "833b6157e4a364e7",
-  closer: "a0dad5c03f1c4049",
-  confrontation: "8da7b28411aedbc7",
-  repairPlan: "8cb54c6c2ae7293f",
-  routePlan: "558cde1397b80d02",
+  beat: "720902093be87e2d",
+  beatWithCg: "36f5c93c0b5c3680",
+  chapterPlan: "8b30188d457fcb0d",
+  closer: "876da44f659779b6",
+  confrontation: "d7241b1575f7a848",
+  repairPlan: "a6f08a721a7096ae",
+  routePlan: "9ca26f8b1c9bee1e",
 };
 
 test("the SFW defaults pin scene pacing and earned character change in story and banner prompts", () => {

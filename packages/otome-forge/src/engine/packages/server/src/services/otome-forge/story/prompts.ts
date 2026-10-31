@@ -326,6 +326,22 @@ export function ledgerBlock(state: RunState, units: readonly Unit[], knows: read
  * A love interest's full bible for the planner (it authors the hidden truth), without the drawing and claw fields, and
  * what stands between them as a planner for `knows` may see it (seenBy).
  */
+/**
+ * How a love interest looks now (#1965): their Image appearance (the player's edit wins over the bible's look) and the
+ * outfit they wear (a worn Wardrobe look, else their everyday clothes). The story describes them from this, so an edit
+ * to Image appearance reaches the next scene, not only the next image. "" with nothing to say.
+ */
+export function appearanceLine(
+  unit: Pick<Unit, "name" | "identityLine" | "outfitLine" | "outfits" | "wornOutfit" | "bible">,
+) {
+  const identity = (unit.identityLine || unit.bible?.look.identityLine || "").trim();
+  const worn = unit.wornOutfit ? unit.outfits.find((outfit) => outfit.id === unit.wornOutfit) : undefined;
+  const outfit = (worn?.outfitLine || unit.outfitLine || unit.bible?.look.outfitLine || "").trim();
+  if (!identity && !outfit) return "";
+  const parts = [identity, outfit ? `wearing ${outfit}` : ""].filter(Boolean).join("; ");
+  return `How ${unit.name} looks now (English image tags; describe them from this, in the story's language, whenever their looks come up): ${parts}.`;
+}
+
 export function bibleBlock(unit: Unit, state: RunState, knows: readonly LiId[], world: Pick<World, "content">): string {
   const liState = seenBy(liStateOf(state, unit.id), unit.id, knows);
   // Intimacy (#1936) never rides in the bible's JSON: only an NSFW story gets it, as its own guarded line.
@@ -333,7 +349,7 @@ export function bibleBlock(unit: Unit, state: RunState, knows: readonly LiId[], 
   return [
     `id ${unit.id}: ${unit.name} (${pronounText(unit.pronouns)}), stage ${liState.stage}.`,
     `BIBLE: ${JSON.stringify(bible)}`,
-    ...[intimacyLine(world, unit)].filter(Boolean),
+    ...[appearanceLine(unit), intimacyLine(world, unit)].filter(Boolean),
     // Every unresolved grievance, so a node may resolve any of them. ponytail: the ceiling is GRIEVANCES_MAX (60) at
     // up to 300 characters each; the upgrade path is clipping those older than the newest three to an id and excerpt.
     betweenYou(unit, liState, "all"),
@@ -353,7 +369,9 @@ function webBlock(world: World, units: readonly Unit[]): string {
 
 /** A love interest's scene card and what stands between them and the protagonist (every prompt but the planners'). */
 export function sceneCardBlock(unit: Unit, liState: LiState, resolves: readonly string[] = []): string {
-  return [`id ${unit.id}:`, otomeSceneCard(unit, liState), betweenYou(unit, liState, resolves)].join("\n");
+  return [`id ${unit.id}:`, otomeSceneCard(unit, liState), appearanceLine(unit), betweenYou(unit, liState, resolves)]
+    .filter(Boolean)
+    .join("\n");
 }
 
 // ── P5: chapter plan (structured, 0.8, planner contract) ──

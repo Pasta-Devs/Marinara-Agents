@@ -814,7 +814,7 @@ function createLoopStub({ seeded = false } = {}) {
           counted: true,
           repaired: false,
           mends: false,
-          keepsake: { offer: false },
+          keepsake: { offer: true },
         },
       };
     }
@@ -1473,9 +1473,13 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await root.getByRole("button", { name: "Next: what you wear" }).click();
     await expect(root.getByRole("heading", { level: 1, name: "What will you wear?" })).toBeFocused();
     await auditScreen(page, root, "date night: looks");
+    // Her owned look is offered (#1965), and the picker starts on what she wears now: the gown worn at home above.
+    const yours = root.getByRole("group", { name: "You wear" });
+    await expect(yours.getByRole("radio", { name: "Starlit Gown" })).toBeChecked();
+    await expect(yours.getByRole("radio", { name: "Everyday look" })).not.toBeChecked();
     await root.getByRole("button", { name: "Begin the date" }).click();
     await expect.poll(() => posts(stub, "/dates").length).toBe(1);
-    expect(posts(stub, "/dates")[0]!.body).toMatchObject({ li: ILVAR, herLook: "base", hisLook: "base" });
+    expect(posts(stub, "/dates")[0]!.body).toMatchObject({ li: ILVAR, herLook: "my-wardrobe-0-f", hisLook: "base" });
     for (const [i] of DATE_BEATS.entries()) {
       await expect(line(root)).toContainText(`Scene ${i + 1}: the tanks glow blue around you.`);
       await next(root);
@@ -1492,6 +1496,18 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     const ending = root.getByRole("heading", { level: 1 });
     await expect(ending).toBeFocused();
     await expect(root.getByText("+120 Starlight")).toBeVisible();
+    // The keepsake card stacks its title, text and button at every width: its button sits whole inside the card
+    // (the Album's .of-keepsake row once squeezed it into columns on a phone).
+    const keepsakeCard = root.locator(".of-date-keepsake");
+    const paintKeepsake = keepsakeCard.getByRole("button", { name: "Paint the keepsake" });
+    await expect(paintKeepsake).toBeVisible();
+    const card = (await keepsakeCard.boundingBox())!;
+    const button = (await paintKeepsake.boundingBox())!;
+    expect(button.x).toBeGreaterThanOrEqual(card.x);
+    expect(button.x + button.width).toBeLessThanOrEqual(card.x + card.width);
+    expect(await keepsakeCard.evaluate((element) => getComputedStyle(element).display)).not.toBe("grid");
+    const title = (await keepsakeCard.getByRole("heading", { level: 2 }).boundingBox())!;
+    expect(title.width, "the title spans the card, not one word per line").toBeGreaterThan(card.width / 2);
     await auditScreen(page, root, "date night: ending");
     await shot("09-date-night");
     await root.getByRole("button", { name: "Back to Dates" }).first().click();

@@ -776,7 +776,7 @@ function Keepsake({ runKey, view, partner, entry, onPainted }: KeepsakeProps) {
   const ready = art?.state === "ready" && art.url ? art : null;
   const failed = art?.state === "failed" || art?.state === "stopped";
   return (
-    <section className="of-section of-glass of-keepsake" aria-labelledby="of-keepsake-title" aria-busy={busy}>
+    <section className="of-section of-glass of-date-keepsake" aria-labelledby="of-keepsake-title" aria-busy={busy}>
       <h2 id="of-keepsake-title" className="of-section-title">
         {t("ui.otomeForge.dateNight.keepsakeTitle")}
       </h2>

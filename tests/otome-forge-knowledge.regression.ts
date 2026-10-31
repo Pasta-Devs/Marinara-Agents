@@ -23,6 +23,7 @@ import {
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/setup/prompts.ts";
 import {
   betweenYou,
+  appearanceLine,
   beatMessages,
   chapterPlanMessages,
   closerMessages,
@@ -205,4 +206,35 @@ test("a slow burn through stage 2, a confession when earned from stage 3, by the
   const scene = beatMessages({ ...input, chapter, node, storySoFar: "", memory: "" });
   assert.match(text(scene), SLOW);
   assert.match(text(chapterPlanMessages({ ...input, number: 2, lead: KAI, memory: "" })), SLOW);
+});
+
+test("the story describes a love interest from their current Image appearance and worn look (#1965)", () => {
+  const input = inputs();
+  const kai = input.units.find((unit) => unit.id === KAI)!;
+  // The bible's look says one mask; the player fixed it in Image appearance. A Wardrobe look is worn.
+  kai.bible = { ...kai.bible!, look: { ...kai.bible!.look, identityLine: "OLD-MASK: a plain white mask" } };
+  kai.identityLine = "NEW-MASK: a crow-beaked half mask over the eyes, cyan hair";
+  kai.outfits = [
+    { id: "his-wardrobe-0-a1", name: "Harbour Night", outfitLine: "WORN: navy greatcoat", url: "/x.png", at },
+  ];
+  kai.wornOutfit = "his-wardrobe-0-a1";
+  const node = { i: 0, kind: "beat" as const, guide: "Kai turns to face you.", cast: [KAI] };
+  const chapter = { kind: "main" as const, number: 2, title: "Rain", lead: KAI, foil: MIR, nodes: [node] };
+  const scene = text(beatMessages({ ...input, chapter, node, storySoFar: "", memory: "" }));
+  const plan = text(chapterPlanMessages({ ...input, number: 2, lead: KAI, memory: "" }));
+  for (const [kind, prompt] of Object.entries({ scene, plan })) {
+    assert.match(
+      prompt,
+      /How Kai looks now \(English image tags; describe them from this[^)]*\): NEW-MASK: a crow-beaked/,
+      kind,
+    );
+    assert.match(prompt, /NEW-MASK[^\n]*; wearing WORN: navy greatcoat\./, kind);
+    assert.doesNotMatch(prompt, /OLD-MASK/, `${kind}: the bible's old look never reaches the story`);
+  }
+  // With no edit, the bible's look is used, in their everyday clothes.
+  const plain = { ...kai, identityLine: "", outfitLine: "", wornOutfit: undefined };
+  assert.equal(
+    appearanceLine(plain),
+    `How Kai looks now (English image tags; describe them from this, in the story's language, whenever their looks come up): OLD-MASK: a plain white mask; wearing ${plain.bible!.look.outfitLine}.`,
+  );
 });
