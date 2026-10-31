@@ -44,7 +44,10 @@ import {
   getLtmChatDisplayName,
 } from "../identity/chat-scope.js";
 import { estimateLongTermMemoryPromptOverhead } from "../recall/prompt.js";
-import { resolveLongTermMemoryRecallSettings } from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
+import {
+  resolveLongTermMemoryRecallSettings,
+  resolveLtmChatMemories,
+} from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
 import { isLtmSourceNote } from "../extraction/source-extraction.js";
 import { processLongTermMemorySource } from "../extraction/source-processing.js";
 import { PROFESSOR_MARI_CHARACTER_ID } from "../sources/interop.js";
@@ -616,7 +619,11 @@ export function registerNotesRoutes(app: FastifyInstance, runtime: LtmRouteRunti
             extractionMode,
             instruction: body.instruction,
             operationId,
-            applyLowRisk: body.applyLowRisk ?? extractionConfig.autoAcceptSafeChanges,
+            applyLowRisk:
+              body.applyLowRisk ??
+              (chat
+                ? resolveLtmChatMemories(parseLtmChatMetadata(chat.metadata), extractionConfig).autoAccept
+                : extractionConfig.autoAcceptSafeChanges),
             signal: controller.signal,
             root,
             chatId: chat?.id,

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import type { LtmStatusResponse } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { errorMessage, queryKeys, request } from "./api";
+import { clearLtmOpenRequest, peekLtmOpenRequest } from "./auto-import-status";
 import { LongTermMemoryNavigation } from "./LongTermMemoryNavigation";
 import { Button, IconButton, InfoPopover, StatusSurface, lockedActionProps } from "./shared-controls";
 import type {
@@ -56,7 +57,15 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     queryKey: queryKeys.pendingDrafts,
     queryFn: () => request<{ count: number }>("/drafts/pending-count"),
   });
-  const [destination, setDestination] = useState<LongTermMemoryDestination>("vault");
+  // Chat Settings can ask for the Review Queue or the Extraction settings; the request is read once, on open.
+  const [destination, setDestination] = useState<LongTermMemoryDestination>(() => {
+    const target = peekLtmOpenRequest();
+    return target === "review" ? "review" : target === "extraction" ? "settings" : "vault";
+  });
+  const [openForConnection, setOpenForConnection] = useState(() => peekLtmOpenRequest() === "extraction");
+  useEffect(() => {
+    clearLtmOpenRequest();
+  }, []);
   const [activationPending, setActivationPending] = useState(false);
   const [activationError, setActivationError] = useState("");
   const [repairPending, setRepairPending] = useState(false);
@@ -952,6 +961,8 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   openActivityRequest={openActivityRequest}
                   openActivityMemoryId={openActivityMemoryId}
                   onOpenActivityHandled={() => setOpenActivityRequest(0)}
+                  openForConnection={openForConnection}
+                  onOpenForConnectionHandled={() => setOpenForConnection(false)}
                   onRecoverCandidate={recoverCandidate}
                   openedNoteId={openedNoteId}
                   createMemoryRequest={createMemoryRequest}
