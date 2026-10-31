@@ -48,6 +48,7 @@ const EXPECTED_ROUTES = [
   "POST /api/long-term-memory/fork-repair/preview",
   "POST /api/long-term-memory/identity-repair/apply",
   "POST /api/long-term-memory/identity-repair/preview",
+  "POST /api/long-term-memory/import/advanced-memory/backfill-batch",
   "POST /api/long-term-memory/import/lorebooks/preview",
   "POST /api/long-term-memory/import/preview",
   "POST /api/long-term-memory/import/source-details",

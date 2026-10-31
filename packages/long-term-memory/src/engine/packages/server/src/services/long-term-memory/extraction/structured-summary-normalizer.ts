@@ -292,7 +292,11 @@ function normalizeSourceEventGraph(units: LtmEvidenceUnit[], sourceNote: LtmNote
   if (!sourceNote?.provenance) return units;
   const sourceLink = { relation: "extracted_from" as const, target: sourceNote.id };
 
-  if (sourceNote.provenance.kind !== "chat_summary" && sourceNote.provenance.kind !== "chat_transcript") {
+  if (
+    sourceNote.provenance.kind !== "chat_summary" &&
+    sourceNote.provenance.kind !== "chat_transcript" &&
+    sourceNote.provenance.kind !== "advanced_memory"
+  ) {
     return units.map((unit) => ({
       ...unit,
       ...(unit.bucket === "timeline_event" ? { claimKind: "change" as const } : {}),

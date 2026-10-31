@@ -1279,7 +1279,8 @@ export default function MemoryVault({
       return localizeUi("ui.longTermMemory.memoryvault.characterRecord", {
         name: scopeTargetLabel("character", draft.provenance.sourceId, targets),
       });
-    if (draft.provenance.kind === "chat_summary")
+    // An Advanced Memory scene recap is the host's summary of that chat.
+    if (draft.provenance.kind === "chat_summary" || draft.provenance.kind === "advanced_memory")
       return localizeUi("ui.longTermMemory.memoryvault.chatSummary", {
         title: scopeTargetLabel("chat", draft.provenance.sourceId, targets),
       });

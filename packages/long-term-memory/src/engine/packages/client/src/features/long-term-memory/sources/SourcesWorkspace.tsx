@@ -25,6 +25,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import type {
+  LtmAdvancedMemoryBackfillResponse,
+  LtmExtractionSettingsPatch,
   LtmImportSourceNotesResponse,
   LtmInteropPreviewResponse,
   LtmInteropPreviewSample,
@@ -52,6 +54,7 @@ import {
   ClickSurface,
   IconButton,
   InfoPopover,
+  NumberField,
   StatusSurface,
   inputClass,
   lockedActionProps,
@@ -455,6 +458,13 @@ export default function SourcesWorkspace({
 
   const scopeTargets = useQuery(scopeTargetsQueryOptions(props.chatId));
   const settingsQuery = useQuery(settingsQueryOptions);
+  const extractionSettings = useQuery({
+    queryKey: queryKeys.extractionSettings,
+    queryFn: () => request<LtmExtractionSettingsPatch>("/extraction-settings"),
+  });
+  const [advancedMemoryBatchSize, setAdvancedMemoryBatchSize] = useState(10);
+  const [advancedMemoryBackfillMessage, setAdvancedMemoryBackfillMessage] = useState("");
+  const advancedMemoryBackfillRef = useRef(false);
 
   const defaultAvailabilityMode: LtmMode =
     modeFilter !== "all"
@@ -1359,6 +1369,9 @@ export default function SourcesWorkspace({
           !result.counts.sourceWriteFailed
         )
           setReviewMessage(localizeUi("ui.longTermMemory.sourcesworkspace.sourceRefreshedRerunExtraction"));
+        // A batch where some sources failed is not done; its result panel already lists the failures.
+        if (result.counts.failed || result.counts.cancelled || result.counts.missing || result.counts.sourceWriteFailed)
+          return "partial" as const;
       } else if (task.status === "cancelled" || task.status === "failed") {
         setImportError(
           task.status === "cancelled"
@@ -1366,6 +1379,7 @@ export default function SourcesWorkspace({
             : task.error?.message || localizeUi("ui.longTermMemory.sourcesworkspace.sourcesCouldNotBeImported"),
         );
       }
+      return task.status;
     } catch (error) {
       setImportError(errorMessage(error, localizeUi("ui.longTermMemory.sourcesworkspace.sourcesCouldNotBeImported")));
     }
@@ -1603,6 +1617,83 @@ export default function SourcesWorkspace({
 
   // Notes whose source is gone. Keeping one needs no action; Remove goes through the delete workbench.
   const outdatedNotes = (source === "lorebooks" ? lorebookPreviewData?.outdated : previewData?.outdated) ?? [];
+  // Issue #1964: scene recaps without a memory block are read by the summary extractor one batch at a time. Pressing
+  // again continues, because the server leaves out recaps already imported or covered by an earlier chat import.
+  const backfillAdvancedMemory = async () => {
+    // The batch request runs before the import task exists, so a second click must not start another.
+    if (importing || advancedMemoryBackfillRef.current) return;
+    advancedMemoryBackfillRef.current = true;
+    setImportError("");
+    setAdvancedMemoryBackfillMessage("");
+    try {
+      const batch = await request<LtmAdvancedMemoryBackfillResponse>("/import/advanced-memory/backfill-batch", "POST", {
+        ...(previewScope ? { sourceScope: previewScope } : {}),
+        ...(props.chatId ? { chatId: props.chatId } : {}),
+        limit: advancedMemoryBatchSize,
+      });
+      if (!batch.sourceIds.length) {
+        setAdvancedMemoryBackfillMessage(localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillDone"));
+        return;
+      }
+      if ((await runImport(batch.sourceIds)) !== "completed") return;
+      setAdvancedMemoryBackfillMessage(
+        batch.remaining
+          ? localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillRemaining", {
+              value1: batch.remaining,
+            })
+          : localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillDone"),
+      );
+    } catch (error) {
+      setImportError(
+        errorMessage(error, localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillFailed")),
+      );
+    } finally {
+      advancedMemoryBackfillRef.current = false;
+    }
+  };
+  const advancedMemoryBackfillGroup =
+    source === "chats" && extractionSettings.data?.useAdvancedMemory ? (
+      <section className="space-y-2 rounded-md border border-[var(--border)] p-2" data-ltm-advanced-memory-backfill>
+        <h3 className="text-xs font-semibold">
+          {localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfill")}
+        </h3>
+        <p className="text-xs text-[var(--muted-foreground)]">
+          {localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillHelp")}
+        </p>
+        <div className="flex flex-wrap items-end gap-2">
+          <NumberField
+            label={localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBatchSize")}
+            value={advancedMemoryBatchSize}
+            min={1}
+            max={100}
+            onChange={setAdvancedMemoryBatchSize}
+            disabled={importRunning}
+          />
+          <Button
+            {...importActionProps}
+            {...destinationWait(`${importReasonId}-backfill`)}
+            onClick={() => {
+              if (currentDestinationScope) void backfillAdvancedMemory();
+            }}
+            data-ltm-source-action="advanced-memory-backfill"
+          >
+            <RefreshCw aria-hidden="true" size="0.75rem" />
+            {localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfill")}
+          </Button>
+          {importing ? (
+            <Button destructive onClick={cancelLtmSourceTask} data-ltm-source-action="cancel-backfill">
+              {localizeUi("ui.longTermMemory.memoryvault.cancel")}
+            </Button>
+          ) : null}
+          {importReason(`${importReasonId}-backfill`)}
+        </div>
+        {advancedMemoryBackfillMessage ? (
+          <p role="status" className="text-xs text-[var(--muted-foreground)]">
+            {advancedMemoryBackfillMessage}
+          </p>
+        ) : null}
+      </section>
+    ) : null;
   const outdatedSourcesGroup = outdatedNotes.length ? (
     <section className="space-y-2 rounded-md border border-[var(--border)] p-2" data-ltm-source-outdated>
       <h3 className="text-xs font-semibold">
@@ -2093,6 +2184,7 @@ export default function SourcesWorkspace({
                       </Button>
                     </div>
                     {outdatedSourcesGroup}
+                    {advancedMemoryBackfillGroup}
                     <div
                       role="tablist"
                       aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.sourceStatus")}
@@ -2628,6 +2720,7 @@ export default function SourcesWorkspace({
                       </Button>
                     </div>
                     {outdatedSourcesGroup}
+                    {advancedMemoryBackfillGroup}
                     <div
                       role="tablist"
                       aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.sourceStatus")}

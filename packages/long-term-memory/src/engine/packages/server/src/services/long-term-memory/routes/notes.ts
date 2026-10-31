@@ -562,7 +562,9 @@ export function registerNotesRoutes(app: FastifyInstance, runtime: LtmRouteRunti
       const explicitChatId = body.chatId;
       const chatId =
         body.chatId ??
-        (sourceNote.provenance?.kind === "chat_summary" || sourceNote.provenance?.kind === "chat_transcript"
+        (sourceNote.provenance?.kind === "chat_summary" ||
+        sourceNote.provenance?.kind === "chat_transcript" ||
+        sourceNote.provenance?.kind === "advanced_memory"
           ? sourceNote.provenance.sourceId
           : undefined);
       const chat = chatId ? await getPackagePersistence().getChat(chatId) : null;

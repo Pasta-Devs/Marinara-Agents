@@ -85,7 +85,7 @@ async function pendingSources({ root, chatId, mode }: Job, sourceScope: LtmScope
         limit: BATCH,
         sourceScope,
         mode,
-        ...(source === "messages" ? { branchChatId: chatId } : {}),
+        ...(source === "messages" ? { branchChatId: chatId } : { advancedMemoryBlocksOnly: true }),
         ...(cursor ? { cursor } : {}),
       },
       root,
@@ -153,6 +153,8 @@ async function runLtmAutoImport(job: Job, key: string, signal: AbortSignal) {
           mode,
           extract: true,
           limit: BATCH,
+          // Advanced Memory scenes without a block need a model call; only the Import panel's Backfill reads them.
+          ...(source === "chats" ? { advancedMemoryBlocksOnly: true } : {}),
         },
         root,
         signal,
