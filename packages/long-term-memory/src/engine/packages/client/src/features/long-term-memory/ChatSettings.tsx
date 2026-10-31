@@ -129,6 +129,7 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
             label={localizeUi("ui.longTermMemory.chatsettings.recallContextBudget")}
             help={localizeUi("ui.longTermMemory.chatsettings.maximumNumberOfTokensThatRecalledMemoriesMayAdd")}
             value={effectiveBudget}
+            integer
             min={128}
             max={16384}
             step={128}
@@ -151,6 +152,7 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
             label={localizeUi("ui.longTermMemory.chatsettings.maximumMemories")}
             help={localizeUi("ui.longTermMemory.chatsettings.maximumNumberOfSavedMemoriesThatOneRecallMay")}
             value={effectiveMaxChunks}
+            integer
             min={1}
             max={100}
             placeholder={effectiveMaxChunks === null ? unknownValueLabel : undefined}

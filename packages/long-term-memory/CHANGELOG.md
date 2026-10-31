@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- Whole-number settings (memory budget, maximum memories, recall context messages and the Extraction token and note limits, including the per-chat budget and maximum memories) now round a typed decimal like `2.5` instead of failing to save.
+
 ## 1.5.20 — 2026-10-31
 
 - Memory Settings → Extraction gains "Use Advanced Memory recaps". A chat that uses Advanced Memory is imported from its scene recaps instead of its summaries and messages, without an AI call, and with "Import new chat sources automatically" on this happens while you chat. A recap reaches only the characters who were in that scene, and a chat does not recall memories made from its own recaps. Import → Chats gains "Backfill Advanced Memory" for older recaps: it reads them in batches and skips recaps an earlier chat import already covers. This needs a Marinara version with Capability API 1.391; on older versions nothing changes.
