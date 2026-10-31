@@ -46,10 +46,8 @@ import {
 import { slurpArcPoll, slurpArcRotation, slurpProjectChapter } from "../../modules/projects/slp-arc-progress.js";
 import { slurpPurposeMetadata } from "../../modules/feed/slp-post-purpose.js";
 import { ensureSlurpCreatorWardrobe, resolveSlurpCreatorScheduleContext } from "../creators/slp-creators-contract.js";
-import { type SlpCreatorContentFormat } from "../../base/prompting/slp-content-format.js";
 import { resolveSlurpLoreContext } from "../../data/host/slp-lore-context.js";
 import { pickGalleryAttachmentForAccount } from "./slp-generated-activity-service.js";
-import { protectCreatorGeneratedIdentity, type PublicIdentity } from "../../base/identity/slp-identity-protection.js";
 import { resolveCreatorCharacterCanon } from "../../data/creators/slp-source-resolve.js";
 import { readSlurpCreatorSteering, removeSlurpCreatorNudge } from "../../data/creators/slp-steering-storage.js";
 import { resolveSlurpCreatorFlavour } from "../../data/creators/slp-flavour-source.js";
@@ -89,7 +87,12 @@ import { openSlurpShoot, useSlurpShoot } from "../../data/feed/slp-shoot-storage
 import { slurpEffortInstruction, slurpPostEffort } from "../../modules/creators/slp-production-profile.js";
 import { slurpCreatorStrategy, slurpStrategyInstruction } from "../../modules/creators/slp-creator-strategy.js";
 import { createSlurpPostProvider } from "../../base/host/slp-generation-integrations.js";
-import { resolveSlurpWardrobeSelection, slurpWardrobePrompt } from "../../modules/feed/slp-wardrobe-selection.js";
+import {
+  resolveSlurpWardrobeSelection,
+  slurpPostCloset,
+  slurpRecentLookIds,
+  slurpWardrobePrompt,
+} from "../../modules/feed/slp-wardrobe-selection.js";
 import type {
   GeneratedCreatorPostResult,
   PreparedCreatorPostResult,
@@ -153,10 +156,7 @@ export async function generateCreatorPost(
     connection: input.connection,
     sourceText: sourceCharacterContext,
   });
-  const wardrobeLooks = slurpConditionCloset(looks, story.state.wardrobe);
-  const recentWardrobeIds = recentPosts
-    .map((post) => (typeof post.metadata.wardrobeLookId === "string" ? post.metadata.wardrobeLookId : null))
-    .filter((id): id is string => Boolean(id));
+  const recentWardrobeIds = slurpRecentLookIds(recentPosts);
   const prompts = slurpPromptContext({
     promptBlocks: input.promptBlocks ?? settings.promptBlocks,
     promptInstructions: input.promptInstructions ?? settings.promptInstructions,
@@ -326,6 +326,8 @@ export async function generateCreatorPost(
   const explicitLevel = plannedBeat
     ? slurpPlannedExplicitLevel(dialLevel, plannedBeat.heatFloor ?? 0, account.id, sequence)
     : dialLevel;
+  const post = { level: explicitLevel, access: input.request.access, intent: axes?.intent, scene: askModelForScene };
+  const { looks: wardrobeLooks, bare } = slurpPostCloset(slurpConditionCloset(looks, story.state.wardrobe), post);
   // What makes this post spicy, in this Creator's own way. Locked posts get it; teasers hint at it.
   const spiced = await planSlurpPostSpice(db, {
     account,
@@ -395,9 +397,8 @@ export async function generateCreatorPost(
     allowImagePrompt: askModelForImagePrompt,
     allowScenePlan: askModelForScene,
     sceneShots,
-    wardrobePrompt: askModelForScene
-      ? slurpWardrobePrompt(wardrobeLooks, input.request.access, recentWardrobeIds, account.displayName)
-      : null,
+    bareOutfit: bare,
+    wardrobePrompt: slurpWardrobePrompt(wardrobeLooks, input.request.access, recentWardrobeIds, account.displayName),
     imageGenerationPrompt: settings.imageGenerationPrompt,
     generationGuidance: settings.generationGuidance,
     postMaxLength: settings.postMaxLength,
@@ -496,13 +497,12 @@ export async function generateCreatorPost(
   };
 
   const wardrobeSelection = resolveSlurpWardrobeSelection({
-    looks: askModelForScene ? wardrobeLooks : [],
+    looks: wardrobeLooks,
     access: input.request.access,
     scene: askModelForScene ? generated.scene : null,
     recentIds: recentWardrobeIds,
     creatorName: account.displayName,
   });
-
   // What the picture is and may show, in one place so the two briefs agree on level, shoot and effort.
   const tagged = await resolveSlurpMentionedCast(db, account.id, protectedGenerated.content, false);
   const pictureIds = [...new Set([...castIds, ...tagged.ids])];

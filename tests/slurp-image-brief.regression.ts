@@ -58,6 +58,18 @@ const callback = slurpImageBrief({
 });
 assert.ok(callback.includes(scene.setting) && !callback.includes("a different place"));
 assert.ok(!callback.includes("a different outfit"));
+const bareBrief = slurpImageBrief({
+  cameraPhoto: slurpCameraSourcePhoto("tripod"),
+  variation,
+  sexualLevel: "explicit",
+  stageFacts: { wardrobe: "hoodies and jeans" },
+  scene: { ...scene, outfit: "nothing" },
+});
+assert.doesNotMatch(
+  bareBrief,
+  /Wearing|hoodies/u,
+  "a body-showing level never dresses the picture from the usual wardrobe",
+);
 const legacy = slurpImageBrief({
   cameraPhoto: slurpCameraSourcePhoto("tripod"),
   variation,
