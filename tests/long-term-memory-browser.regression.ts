@@ -3216,6 +3216,11 @@ async function main() {
       );
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
       await page.locator("#settings-tab-extraction").click();
+      // Extraction settings load after the tab opens, so wait for the toggle rather than sampling once.
+      await page
+        .locator("#settings-panel-extraction")
+        .getByText("Accept safe changes automatically")
+        .waitFor({ state: "visible", timeout: 5_000 });
       assert.deepEqual(
         await shortTouchTargets('[data-ltm-surface="memory-settings"]'),
         [],

@@ -166,6 +166,8 @@ function extractionForm(settings: LtmExtractionSettingsPatch): ExtractionForm {
     activePromptTemplateIdsByMode: resolved.activePromptTemplateIdsByMode ?? {},
     aiKeywordExtraction: resolved.aiKeywordExtraction ?? false,
     finishCutOffAnswers: resolved.finishCutOffAnswers ?? false,
+    autoAcceptSafeChanges: resolved.autoAcceptSafeChanges ?? false,
+    autoImportChatSources: resolved.autoImportChatSources ?? false,
     chatImportDetail: resolved.chatImportDetail ?? "standard",
     useExtractionAgentOnGameMode: resolved.useExtractionAgentOnGameMode ?? false,
     ...(resolved.systemPrompt === undefined ? {} : { systemPrompt: resolved.systemPrompt }),
@@ -1087,6 +1089,29 @@ export default function MemorySettings({
               setExtractionFormState({
                 ...extractionFormState,
                 finishCutOffAnswers: value,
+              })
+            }
+          />
+          <h4 className="text-xs font-semibold">{localizeUi("ui.longTermMemory.memorysettings.handsOffHeading")}</h4>
+          <Toggle
+            label={localizeUi("ui.longTermMemory.memorysettings.autoAcceptSafeChanges")}
+            help={localizeUi("ui.longTermMemory.memorysettings.autoAcceptSafeChangesHelp")}
+            checked={extractionFormState.autoAcceptSafeChanges}
+            onChange={(value) =>
+              setExtractionFormState({
+                ...extractionFormState,
+                autoAcceptSafeChanges: value,
+              })
+            }
+          />
+          <Toggle
+            label={localizeUi("ui.longTermMemory.memorysettings.autoImportChatSources")}
+            help={localizeUi("ui.longTermMemory.memorysettings.autoImportChatSourcesHelp")}
+            checked={extractionFormState.autoImportChatSources}
+            onChange={(value) =>
+              setExtractionFormState({
+                ...extractionFormState,
+                autoImportChatSources: value,
               })
             }
           />

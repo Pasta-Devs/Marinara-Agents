@@ -914,6 +914,26 @@ async function applyInner(
       }
     }
     selected = selected.filter((mutation) => !previouslyApplied.has(mutation.id));
+    // A rewrite always waits for explicit review: leave it and what depends on it in the draft and apply the rest.
+    while (options.autoApplyLowRiskOnly && selected.length) {
+      const byId = new Map(selected.map((mutation) => [mutation.id, mutation]));
+      const { projections } = await preflight(storage, draft, selected, {
+        originals: originalDraftMutations,
+        namedIds: null,
+      });
+      const rewrites = new Set(
+        projections.flatMap((group) =>
+          group.mutations
+            .filter((row) => isDestructiveLtmRewrite(group.before, byId.get(row.mutationId)!, row.disposition))
+            .map((row) => row.mutationId),
+        ),
+      );
+      if (!rewrites.size) break;
+      selected = await filterAutoApplyDependencies(
+        storage,
+        selected.filter((mutation) => !rewrites.has(mutation.id)),
+      );
+    }
     const skippedMutationIds = draft.mutations
       .filter((mutation) => !previouslyApplied.has(mutation.id) && !selected.some((item) => item.id === mutation.id))
       .map((mutation) => mutation.id);

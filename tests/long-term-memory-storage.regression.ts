@@ -322,8 +322,24 @@ async function main() {
         "standard",
         "chatImportDetail defaults to standard",
       );
+      assert.equal(
+        (await getLtmExtractionConfig(root)).autoAcceptSafeChanges,
+        false,
+        "autoAcceptSafeChanges defaults off so imports stay review-first",
+      );
+      assert.equal(
+        (await getLtmExtractionConfig(root)).autoImportChatSources,
+        false,
+        "autoImportChatSources defaults off so nothing imports without asking",
+      );
       await updateLtmExtractionConfig(
-        { aiKeywordExtraction: true, finishCutOffAnswers: true, chatImportDetail: "detailed" },
+        {
+          aiKeywordExtraction: true,
+          finishCutOffAnswers: true,
+          chatImportDetail: "detailed",
+          autoAcceptSafeChanges: true,
+          autoImportChatSources: true,
+        },
         root,
       );
       assert.equal(
@@ -333,6 +349,8 @@ async function main() {
       );
       assert.equal((await getLtmExtractionConfig(root)).finishCutOffAnswers, true, "finishCutOffAnswers saves");
       assert.equal((await getLtmExtractionConfig(root)).chatImportDetail, "detailed", "chatImportDetail saves");
+      assert.equal((await getLtmExtractionConfig(root)).autoAcceptSafeChanges, true, "autoAcceptSafeChanges saves");
+      assert.equal((await getLtmExtractionConfig(root)).autoImportChatSources, true, "autoImportChatSources saves");
       await writeFile(ltmSettingsPath(root), '{"version":1,"someNewSetting":true,"longTermMemoryBudgetTokens":"x"}\n');
       await assert.rejects(getLtmGlobalSettings(root), /expected number/i, "an invalid known field must still fail");
 
@@ -2867,6 +2885,28 @@ async function main() {
         (error: unknown) =>
           error instanceof Error &&
           error.message === "Rewrite and other destructive changes must be reviewed and applied one at a time.",
+      );
+
+      // OT-3: auto-accepting the safe part of a draft must not fail because a rewrite sits beside it.
+      const safePartApplied = await applyLongTermMemoryDraft(anchorUpdate.draft.id, {
+        root,
+        autoApplyLowRiskOnly: true,
+        rebuildIndexes: false,
+      });
+      assert.deepEqual(
+        safePartApplied.appliedMutationIds,
+        [anchorUpdate.mutationIds[1]],
+        "auto-apply keeps the safe link and leaves the rewrite out",
+      );
+      assert.ok(
+        safePartApplied.skippedMutationIds.includes(anchorUpdate.mutationIds[0]),
+        "the anchor rewrite is skipped, not applied",
+      );
+      assert.equal(safePartApplied.draft.status, "pending", "the rewrite stays pending for review");
+      assert.deepEqual(
+        safePartApplied.draft.mutations.map((mutation) => mutation.id),
+        [anchorUpdate.mutationIds[0]],
+        "only the rewrite remains in the draft",
       );
 
       const unlinkedChangeMutationId = randomUUID();

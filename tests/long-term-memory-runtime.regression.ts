@@ -1539,6 +1539,25 @@ async function main() {
       } finally {
         chats.pop();
       }
+      // #1962: a recall arms the chat's background import only when the setting is on, and never waits for it.
+      {
+        const { isLtmAutoImportArmed, resumeLtmAutoImport, stopLtmAutoImport } = await import(
+          `${source}/sources/auto-import-job.ts`
+        );
+        const { updateLtmExtractionConfig } = await import(`${source}/extraction/extraction-config.ts`);
+        const settle = () => new Promise((done) => setTimeout(done, 20));
+        assert.match((await runtime.recall(input)).text, /beneath the observatory/);
+        await settle();
+        assert.equal(isLtmAutoImportArmed(storage.root, input.chatId), false, "the setting off arms nothing");
+        await updateLtmExtractionConfig({ autoImportChatSources: true }, storage.root);
+        assert.match((await runtime.recall(input)).text, /beneath the observatory/, "recall results do not change");
+        for (let wait = 0; wait < 100 && !isLtmAutoImportArmed(storage.root, input.chatId); wait += 1) await settle();
+        assert.equal(isLtmAutoImportArmed(storage.root, input.chatId), true, "the setting on arms the chat's import");
+        await stopLtmAutoImport(storage.root);
+        assert.equal(isLtmAutoImportArmed(storage.root, input.chatId), false, "deactivation drops a pending import");
+        resumeLtmAutoImport(storage.root);
+        await updateLtmExtractionConfig({ autoImportChatSources: false }, storage.root);
+      }
       const legacyReadable = await runtime.recall(input);
       assert.match(legacyReadable.text, /beneath the observatory/);
       const first = await runtime.recall(input);

@@ -1441,7 +1441,7 @@ export async function importPackageInterop(
           operationId,
           chatId: request.chatId,
           signal,
-          applyLowRisk: request.applyLowRisk,
+          applyLowRisk: request.applyLowRisk ?? extractionConfig.autoAcceptSafeChanges,
           concurrency: request.importConcurrency ?? 3,
           root,
           directGameMode: !extractionConfig.useExtractionAgentOnGameMode,

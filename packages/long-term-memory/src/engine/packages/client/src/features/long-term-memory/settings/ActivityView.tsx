@@ -95,6 +95,7 @@ const actionLabelKeys: Record<string, string> = {
   evidence_units_compiled: "ui.longTermMemory.activityview.actionCompileEvidence",
   candidate_reconciliation: "ui.longTermMemory.activityview.actionCandidateReconciliation",
   draft_deferred: "ui.longTermMemory.activityview.actionDraftDeferred",
+  auto_import: "ui.longTermMemory.activityview.actionAutoImport",
   apply_draft: "ui.longTermMemory.activityview.actionApplyDraft",
   mutations_selected: "ui.longTermMemory.activityview.actionApplyDraft",
 };

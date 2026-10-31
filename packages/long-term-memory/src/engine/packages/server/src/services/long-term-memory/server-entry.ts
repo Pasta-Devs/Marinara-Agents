@@ -3,6 +3,7 @@ import { configurePackageRuntime, type CapabilityRuntimeHost } from "./package-r
 import { activateLongTermMemoryStorage, withLongTermMemoryVaultMutation } from "./runtime.js";
 import { refreshLongTermMemoryIndexes } from "./recall/rebuild.js";
 import { resumeLtmIndexRebuild, stopLtmIndexRebuild } from "./recall/rebuild-job.js";
+import { resumeLtmAutoImport, stopLtmAutoImport } from "./sources/auto-import-job.js";
 import {
   prepareGenerationLongTermMemory,
   recordGenerationLongTermMemoryDispatch,
@@ -31,6 +32,7 @@ export async function activate({ api, dataDir }: ActivationContext) {
     active = await activateLongTermMemoryStorage(join(dataDir, "long-term-memory"));
     const activationRoot = active.root;
     resumeLtmIndexRebuild(activationRoot);
+    resumeLtmAutoImport(activationRoot);
     await adoptLegacyLongTermMemoryAgentConfig(active.root);
     const releaseRoutes = await api.registerPrivilegedRoutes(createLongTermMemoryRoutes(active), {
       prefix: "/api/long-term-memory",
@@ -63,6 +65,9 @@ export async function activate({ api, dataDir }: ActivationContext) {
       releaseRoutes();
       releaseRuntimeService();
       releaseRecallService();
+      // A background import must not write after deactivation; the next reply after activation arms it again. It stops
+      // first, so a rebuild it requests on the way out is stopped below.
+      await stopLtmAutoImport(activationRoot);
       // A scheduled rebuild must not publish after deactivation; the index stays dirty and the next recall rebuilds it.
       await stopLtmIndexRebuild(activationRoot);
       await active?.cleanup();

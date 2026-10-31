@@ -328,6 +328,8 @@ const ltmImportedSourceResultBaseSchema = z.object({
   accounting: ltmExtractionAccountingSchema,
   appliedMutationIds: z.array(z.string().uuid()).max(500),
   skippedMutationIds: z.array(z.string().uuid()).max(500),
+  /** The extraction saved the source's current fingerprint, so its preview no longer lists it as pending. */
+  markedCurrent: z.boolean().optional(),
 });
 
 export const ltmImportedSourceResultSchema = z

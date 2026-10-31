@@ -470,9 +470,9 @@ async function commitPreparedLongTermMemorySource(
             rebuildIndexes: false,
             operationId: prepared.operationId,
           }).catch((error: unknown) => {
-            // Apply still refuses a status, title or subject change, or an anchor rewrite, beside other changes.
-            // It may also name a note only the previous piece's still-unapplied draft creates. The draft is
-            // already written, so it waits for review instead of failing the piece.
+            // Apply drops a rewrite from an auto-apply, so this is for other refusals: it may name a note only
+            // the previous piece's still-unapplied draft creates. The draft is already written, so it waits for
+            // review instead of failing the piece.
             if (
               error instanceof LtmDraftApplyError &&
               (error.code === "destructive_disposition_requires_explicit_review" ||
@@ -483,7 +483,17 @@ async function commitPreparedLongTermMemorySource(
           })
         : null;
     const finalDraft = applyResult?.draft ?? draft;
-    return { draft: finalDraft, note, applyResult, response, diagnostics, outcome, accounting, reviewRequired };
+    return {
+      draft: finalDraft,
+      note,
+      fingerprintPersisted,
+      applyResult,
+      response,
+      diagnostics,
+      outcome,
+      accounting,
+      reviewRequired,
+    };
   });
 }
 
@@ -624,6 +634,7 @@ export async function processLongTermMemorySourceBatch(options: {
         accounting: committed.accounting,
         appliedMutationIds: committed.applyResult?.appliedMutationIds ?? [],
         skippedMutationIds: committed.applyResult?.skippedMutationIds ?? [],
+        markedCurrent: committed.fingerprintPersisted,
       } as LtmImportedSourceResult;
     } catch (error) {
       return failed(item, prepared.extractionMethod, "finalize", error, cancelled(error, options.signal), prepared);

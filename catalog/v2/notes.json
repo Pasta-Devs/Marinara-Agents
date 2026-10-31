@@ -364,6 +364,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.5.19",
+          "date": "2026-10-31",
+          "notes": "- Memory Settings → Extraction gains \"Accept safe changes automatically\", which accepts low-risk proposed memories after an import or extraction and now applies the safe part of a draft that also holds a rewrite.\n- Memory Settings → Extraction gains \"Import new chat sources automatically\", which imports a chat's new summaries and finished message stretches in the background while you chat.",
+          "highlight": false
+        },
+        {
           "version": "1.5.18",
           "date": "2026-10-30",
           "notes": "- The memory page now uses the same header as every other agent page: store banner, logo, name, the Active switch for the open chat and Manage package. Add memories and the setup guide stay in that header. This needs a Marinara version with Capability API 1.390; on older versions nothing changes.",
@@ -476,12 +482,6 @@
           "date": "2026-10-27",
           "notes": "- Sources has a Chat Messages tab that learns from a chat's own messages, so a chat without summaries can have memories too. It warns when the chat also has summaries, because importing both can repeat memories in review.\n- Whispers, and messages hidden from the AI or from some characters, are left out of chat messages, because a memory can reach every character.\n- Needs Marinara Engine 2.5.1 with capability API 1.387, which no longer runs its own memory recall in chats where Long-Term Memory is on.\n- Chats with Long-Term Memory on and nothing imported in Sources have no memories on that Engine. Import their messages or summaries from Sources.\n- If you used the Engine's old built-in memory, switch Long-Term Memory on in each chat's settings; the package no longer turns it on for those chats.\n- The package no longer asks to change chat settings.",
           "highlight": true
-        },
-        {
-          "version": "1.4.95",
-          "date": "2026-10-26",
-          "notes": "- Maintenance, Debug, setup and Chat Settings buttons keep keyboard focus while their work runs, so the result appears where you are.\n- Vault and Review controls stay reachable while they save or while identity edits are unsaved, and say why they are locked.\n- Sources re-extract and re-import buttons stay reachable during a run and explain why they are waiting.\n- Debug, Maintenance and source results are announced to screen readers, and Add section explains why a name was not accepted.\n- The setup guide picture and detail header follow the panel's width, and navigation and availability tabs are easier to tap.\n- Loading spinners stop spinning when reduced motion is on, and typing in Debug search stays smooth on long logs.",
-          "highlight": false
         }
       ]
     },
