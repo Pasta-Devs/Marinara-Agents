@@ -72,6 +72,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.6.4",
+          "date": "2026-10-31",
+          "notes": "- **Your cast** and **Your stories** moved from **Who's home** to **Settings → Stories**, each with a line on what it's for. **Who's home** now only picks who's home.",
+          "highlight": false
+        },
+        {
           "version": "0.6.3",
           "date": "2026-10-31",
           "notes": "- Date Night offers your Wardrobe looks: pick any painted look either of you owns, 4★ and 5★ alike. The date's scenes, key images and keepsake dress you both in them, and they stay on afterwards.\n- The story now knows how each love interest looks: their Image appearance and the look they wear. Fixing their Image appearance changes how the story describes them from the next scene on, not only their pictures.\n- On a phone, the date's keepsake card no longer squeezes its title and **Paint the keepsake** button into columns.",
@@ -183,12 +189,6 @@
           "version": "0.1.14",
           "date": "2026-10-29",
           "notes": "- Album Memories can be filtered by 3★, 4★ or 5★, with unplayed content listed first.\n\n- Owned 3★ Snapshots can be illustrated on first opening through the existing image connection, confirmation and prompt review flow. Paintings are saved and reused; old vignettes and story progress stay intact.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.13",
-          "date": "2026-10-29",
-          "notes": "- Suggestive is an image-content ceiling: neutral portraits and facial expression edits no longer receive mandatory suggestive or sensitive-content tags. Image briefs follow the actual moment, with non-explicit adult intimacy allowed when appropriate.\n- Wish and Wardrobe display cleaned love-interest and persona outfits while retaining the original paintings. Wardrobe banner art is centered and shown whole, and tapping a ready banner image opens a full-image view without making a wish.",
           "highlight": false
         }
       ]
