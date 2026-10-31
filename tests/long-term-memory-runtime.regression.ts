@@ -1556,6 +1556,29 @@ async function main() {
         await stopLtmAutoImport(storage.root);
         assert.equal(isLtmAutoImportArmed(storage.root, input.chatId), false, "deactivation drops a pending import");
         resumeLtmAutoImport(storage.root);
+        // "Memories from this chat": the chat's choice beats the global one; no choice uses the global one.
+        const armedChat = chats.find((chat) => chat.id === input.chatId)!;
+        const metadataBefore = armedChat.metadata;
+        const armsWith = async (choice: string | undefined) => {
+          await stopLtmAutoImport(storage.root);
+          resumeLtmAutoImport(storage.root);
+          armedChat.metadata = { ...metadataBefore, ...(choice ? { longTermMemoryChatMemories: choice } : {}) };
+          await runtime.recall(input);
+          for (let wait = 0; wait < 10 && !isLtmAutoImportArmed(storage.root, input.chatId); wait += 1) await settle();
+          return isLtmAutoImportArmed(storage.root, input.chatId);
+        };
+        try {
+          assert.equal(await armsWith("manual"), false, "a chat set to manual arms nothing while the global is on");
+          await updateLtmExtractionConfig({ autoImportChatSources: false }, storage.root);
+          assert.equal(await armsWith("review"), true, "a chat set to review arms while the global is off");
+          assert.equal(await armsWith("save"), true, "a chat set to save arms while the global is off");
+          assert.equal(await armsWith(undefined), false, "no chat choice falls back to the global off");
+          assert.equal(await armsWith("bogus"), false, "an unknown chat choice falls back to the global");
+        } finally {
+          armedChat.metadata = metadataBefore;
+          await stopLtmAutoImport(storage.root);
+          resumeLtmAutoImport(storage.root);
+        }
         await updateLtmExtractionConfig({ autoImportChatSources: false }, storage.root);
       }
       const legacyReadable = await runtime.recall(input);

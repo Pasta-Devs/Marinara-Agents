@@ -29,6 +29,8 @@ export type CapabilityProps = {
     longTermMemoryRecallStyle?: string;
     longTermMemoryBudgetTokens?: number;
     longTermMemoryMaxChunks?: number;
+    // Not passed by the Engine today; ChatSettings reads it from GET /chat-memories/:chatId.
+    longTermMemoryChatMemories?: string | null;
   };
   onEnabledForChatChange?: (enabled: boolean) => void | Promise<void>;
   onChatSettingsChange?: (patch: Record<string, unknown>) => void | Promise<void>;

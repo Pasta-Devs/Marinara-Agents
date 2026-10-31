@@ -102,6 +102,7 @@ export const queryKeys = {
   scopeTargets: (chatId: string | null | undefined) => ["long-term-memory", "scope-targets", chatId] as const,
   localCharacters: (chatId: string | null | undefined) => ["long-term-memory", "local-characters", chatId] as const,
   lastInjection: (chatId: string | null | undefined) => ["long-term-memory", "last-injection", chatId] as const,
+  chatMemories: (chatId: string | null | undefined) => ["long-term-memory", "chat-memories", chatId] as const,
 } as const;
 
 export const ltmScopeTargetsKey = (chatId: string | null | undefined) =>

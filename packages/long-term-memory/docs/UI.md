@@ -17,7 +17,7 @@ the separate Chat Settings entry:
 | Review Queue | `review/ReviewQueue.tsx` | Inspect evidence, edit or preflight proposed mutations, then accept or skip them. |
 | Sources | `sources/SourcesWorkspace.tsx` | Select source and destination scopes; import, refresh, re-extract, cancel, and inspect source results. |
 | Memory Settings | `settings/MemorySettings.tsx` | Configure recall and extraction, run maintenance (index and identity repair, backup, reset, delete all data), and inspect activity. |
-| Chat Settings | `ChatSettings.tsx` | Set per-chat recall style, token budget, and maximum memories; see what background import did today and what waits for review; inspect the last injection. |
+| Chat Settings | `ChatSettings.tsx` | Set per-chat recall style, token budget, maximum memories and how memories from the chat get in; see what background import did today and what waits for review; inspect the last injection. |
 
 Each screen lives in its own folder (`vault/`, `review/`, `sources/`, `settings/`)
 with the components cut out of it; modules shared across screens stay at the
@@ -53,7 +53,12 @@ visit; Don't show again and the last step's Done record `complete`. The Help
 button replays the guide from step 1 and goes to the Vault first. A step button
 that opens another screen, a related chat setting or a prompt editor suspends
 onboarding at the current step into the bar rather than completing it; steps
-that open Sources use the source type chosen in step 4.
+that open Sources use the source type chosen in step 4. Step 3 (Activate) asks
+"How should memories get in?" with the three Memories from chats choices as
+pressed buttons and an "After a reply" sample. A new setup (empty vault, choice
+still I add them myself) starts on Save them for me; an existing one shows its
+stored choice. Pressing a choice saves it, and moving on from step 3 saves the
+choice it shows.
 
 ## Responsive Contract
 
@@ -181,7 +186,11 @@ messages the chat's summary keeps (10 when unset). It records only the messages
 it hid; turning it off or permanently deleting a piece's source note shows
 those again, archiving keeps them hidden, and a message shown or hidden by hand
 stays as set. A branch copies the hidden state, and those copies are not
-recorded, so turning it off leaves them hidden. On an Engine without the host
+recorded, so turning it off leaves them hidden. A piece not hidden yet whose
+source note has a proposal waiting in the Review Queue keeps its messages until
+that draft is accepted, skipped or deleted; then Hide runs again for that piece
+(messages already hidden stay hidden through a later re-extract; a branch
+sharing the piece hides on its own next import). On an Engine without the host
 call the toggle is disabled with a note.
 When the unsearched first page finds imported notes whose character, lorebook
 entry, chat summary or message piece no longer exists, a "Source gone (N)" group
@@ -189,21 +198,27 @@ above the source tabs lists them. Each row opens the memory or removes it with
 its source (the usual delete confirmation); leaving a row alone keeps the
 memory and lists it again on the next preview. Searching hides the group.
 
-The Extraction tab ends its model settings with a Hands-off group. Accept safe
-changes automatically (off by default) accepts the low-risk proposals
-of a chat import or extraction (new notes and additions with no conflicts);
-rewrites, status changes, shared memories and anything with warnings wait in the
-Review Queue, and a draft that mixes them applies its safe part and keeps the
-rest pending. The Sources result then says how many were accepted and how many
-wait for review. Import new chat sources automatically (off by default) imports
-every chat's new or changed summaries and finished message pieces (the setting
-is global, not per chat) in the background, a couple of seconds after the chat's latest generation starts and
-never the piece still being written. Its proposals follow the accept setting
-above, and each run is an "Imported automatically" row in Activity. A selection
-whose import failed is not retried until a source or the extraction connection
-changes. Use Advanced Memory recaps needs a Marinara version that provides the
-recaps (Capability API 1.391); on an older Engine the toggle is disabled with a
-note, the same way as Hide imported messages from the AI.
+The Extraction tab starts with Memories from chats, one select on its own row
+with three choices: I add them myself (nothing is imported in the background),
+Collect them, I'll review (background import, every proposal waits in the
+Review Queue) and Save them for me (background import, low-risk proposals are
+accepted). The choice is stored as the two extraction settings
+`autoImportChatSources` and `autoAcceptSafeChanges`; import off with accept on
+shows as I add them myself, and the next save writes accept off. Its hint says
+chats use this unless they choose otherwise, and an "After a reply" sample shows
+what the choice does. Accepting low-risk proposals covers new notes and
+additions with no conflicts; rewrites, status changes, shared memories and
+anything with warnings wait in the Review Queue, and a draft that mixes them
+applies its safe part and keeps the rest pending. A Sources import follows the
+global choice, or the chat's own choice when the import comes from one chat that
+has one. Background import brings in each chat's new or changed summaries and
+finished message pieces a couple of seconds after the chat's latest generation
+starts and never the piece still being written, and each run is an "Imported
+automatically" row in Activity. A selection whose import failed is not retried
+until a source or the extraction connection changes. Use Advanced Memory recaps
+needs a Marinara version that provides the recaps (Capability API 1.391); on an
+older Engine the toggle is disabled with a note, the same way as Hide imported
+messages from the AI.
 When background import is on and has no extraction connection, Extraction shows a warning
 (`StatusSurface` warning tone) with a Choose button that focuses the connection field; the same
 warning appears in Chat Settings, where Choose opens Extraction with that field focused. The warning
@@ -216,8 +231,13 @@ runs; Chat Settings looks at the open chat's runs. Both read the newest 1000 imp
 
 Global settings and per-chat settings are distinct. Chat Settings shows whether
 values inherit global defaults, disables edits when the host owns settings, and
-shows last-injection loading, error, retry, and result states. While background import is
-on it also shows one status line, "N saved today · N waits for you" with a Review button: the
+shows last-injection loading, error, retry, and result states. Memories from this chat
+picks one of the three Memories from chats choices for the open chat; it shows the global
+choice with the Global default chip until the chat has its own, then a "Use global default"
+button clears it. The Engine passes only the recall keys to Chat Settings, so the panel reads
+the chat's choice from `GET /chat-memories/:chatId` and writes it through the host's chat
+settings change. While background import is
+on for the chat it also shows one status line, "N saved today · N waits for you" with a Review button: the
 first count adds up the memories the chat's `auto_import` Activity rows applied since local
 midnight, the second is the chat's pending drafts. Review opens the Review Queue (it has no
 per-chat filter); Chat Settings is a separate host view, so it leaves a short-lived open request

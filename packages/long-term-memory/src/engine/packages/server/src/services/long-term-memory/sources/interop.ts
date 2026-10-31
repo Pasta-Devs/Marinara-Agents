@@ -36,6 +36,7 @@ import {
   parseLtmChatMetadata,
 } from "../identity/chat-scope.js";
 import { DEFAULT_LTM_IMPORTED_SOURCE_MODE } from "../../../../../shared/src/features/agents/long-term-memory/constants.js";
+import { resolveLtmChatMemories } from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
 import { nowIso } from "../ltm-utils.js";
 import { getPackagePersistence, getPackageResources, logger, resolvePackageLanguageModel } from "../package-runtime.js";
 import { processLongTermMemorySourceBatch, type ImportedSourceItem } from "../extraction/source-processing.js";
@@ -43,6 +44,7 @@ import { getLtmExtractionConfig } from "../extraction/extraction-config.js";
 import { extractionFingerprintForLtmSourceMaterial } from "../extraction/source-hash.js";
 import { inferSourceProvenance, sourceNoteIdForProvenance } from "./source-identity.js";
 import { LongTermMemoryStorage } from "../persistence/storage.js";
+import { LongTermMemoryDraftStore } from "../drafts/draft-store.js";
 import {
   ltmSetMessagesHiddenFromAI,
   readLtmHiddenMessages,
@@ -985,8 +987,8 @@ function summaryTailMessages(value: unknown) {
 }
 
 /**
- * "Hide imported messages from the AI": hides the messages of each Chat Messages piece whose source note is active and
- * extracted from its current text, except the chat's last summaryTailMessages visible messages, the tail the Engine's
+ * "Hide imported messages from the AI": hides the messages of each Chat Messages piece whose source note is active,
+ * extracted from its current text and has no suggestions still waiting in review, except the chat's last summaryTailMessages visible messages, the tail the Engine's
  * summary hiding keeps. Records under the source note only the ids the host changed, so a message hidden by someone
  * else is never shown by this package. A message the user hid or showed by hand leaves the record and stays theirs.
  * Runs for the given chats, or every chat with imported pieces.
@@ -1001,6 +1003,12 @@ export async function hideImportedChatMessages(root: string, chatIds?: Iterable<
       matchExisting = await existingMatcher(new LongTermMemoryStorage(root)),
       pieces = await chatPieces("messages", matchExisting, root),
       noteIds = new Set(matchExisting.sourceNotes.map(({ note }) => note.id)),
+      // A piece whose memories wait in review is not saved yet, so the AI still reads its messages.
+      reviewing = new Set(
+        (await new LongTermMemoryDraftStore(root).listDrafts({ status: "pending" }))
+          .filter((draft) => draft.mutations.length)
+          .map((draft) => draft.source.sourceNoteId),
+      ),
       owned = await readLtmHiddenMessages(root),
       before = JSON.stringify(owned),
       wanted = new Set(chatIds ?? [...matchExisting.pieceStarts.keys(), ...Object.keys(owned)]);
@@ -1039,6 +1047,7 @@ export async function hideImportedChatMessages(root: string, chatIds?: Iterable<
           const note = matchExisting(row),
             current =
               note?.status === "active" &&
+              !reviewing.has(note.id) &&
               note.extractionFingerprint?.sourceHash === candidateFingerprintForNote(row, note).sourceHash;
           for (const id of row.messageIds ?? [])
             if (!current) pending.add(id);
@@ -1058,6 +1067,18 @@ export async function hideImportedChatMessages(root: string, chatIds?: Iterable<
       if (JSON.stringify(owned) !== before) await writeLtmHiddenMessages(owned, root);
     }
   });
+}
+
+/**
+ * A source note's suggestions left review (accepted, skipped or deleted): hide its chat's messages that may hide now.
+ * ponytail: only the piece's own chat; a branch sharing the piece hides on its next import. Pass the group's chats if
+ * that wait shows up.
+ */
+export async function hideImportedMessagesAfterReview(root: string, sourceNoteId: string | undefined) {
+  if (!sourceNoteId || !ltmSetMessagesHiddenFromAI()) return;
+  if (!(await getLtmGlobalSettings(root)).longTermMemoryHideImportedMessages) return;
+  const note = await new LongTermMemoryStorage(root).getNote(sourceNoteId);
+  if (note?.provenance?.kind === "chat_transcript") await hideImportedChatMessages(root, [note.provenance.sourceId]);
 }
 
 const OUTDATED_NOTE_LIMIT = 1_000;
@@ -1675,7 +1696,14 @@ export async function importPackageInterop(
           operationId,
           chatId: request.chatId,
           signal,
-          applyLowRisk: request.applyLowRisk ?? extractionConfig.autoAcceptSafeChanges,
+          // An import of only the open chat follows that chat's "Memories from this chat" choice when it has one.
+          applyLowRisk:
+            request.applyLowRisk ??
+            (chat &&
+            rows.length > 0 &&
+            rows.every((row) => isChatSource(row.provenance.kind) && row.provenance.sourceId === chat.id)
+              ? resolveLtmChatMemories(parseLtmChatMetadata(chat.metadata), extractionConfig).autoAccept
+              : extractionConfig.autoAcceptSafeChanges),
           concurrency: request.importConcurrency ?? 3,
           root,
         })

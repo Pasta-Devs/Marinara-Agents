@@ -25,10 +25,16 @@ import type { CapabilityProps } from "./types";
 import { LastInjectionSummary } from "./LastInjectionSummary";
 import { selectLtmPluralForm, useLtmTranslation } from "./localization";
 import { recallStyleDescriptionKey, recallStyles } from "./recall-style";
+import {
+  ltmChatMemoriesModeOf,
+  type LtmChatMemoriesMode,
+} from "../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
+import { chatMemoriesDescriptionKey, chatMemoriesLabelKey, chatMemoriesModes } from "./chat-memories";
 
 export function ChatSettings({ props }: { props: CapabilityProps }) {
   const { t: localizeUi, locale } = useLtmTranslation();
   const recallStyleLabelId = useId();
+  const chatMemoriesLabelId = useId();
   const [pending, setPending] = useState(false);
   // A pending save keeps its controls focusable (aria-disabled, not `disabled`), so this guard ignores input meanwhile.
   const pendingRef = useRef(false);
@@ -41,7 +47,20 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
     queryKey: queryKeys.extractionSettings,
     queryFn: () => request<LtmExtractionSettingsPatch>("/extraction-settings"),
   });
-  const autoImportOn = extraction.data?.autoImportChatSources === true;
+  // The Engine passes only the recall keys in chatSettings, so this chat's own choice is read from the package.
+  const chatMemories = useQuery({
+    enabled: Boolean(props.chatId),
+    queryKey: queryKeys.chatMemories(props.chatId),
+    queryFn: () =>
+      request<{ chatMemories: LtmChatMemoriesMode | null }>(`/chat-memories/${encodeURIComponent(props.chatId!)}`),
+  });
+  const chatMemoriesOverride = chatMemories.data?.chatMemories ?? null;
+  const globalChatMemories = extraction.data ? ltmChatMemoriesModeOf(extraction.data) : null;
+  const effectiveChatMemories = chatMemoriesOverride ?? (chatMemories.data ? globalChatMemories : null);
+  // An override decides import on its own; without one the global switch does.
+  const autoImportOn = chatMemoriesOverride
+    ? chatMemoriesOverride !== "manual"
+    : extraction.data?.autoImportChatSources === true;
   const autoImportEvents = useAutoImportEvents(autoImportOn);
   const waitingDrafts = useQuery({
     enabled: autoImportOn && Boolean(props.chatId),
@@ -68,6 +87,11 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
     }
   };
   const update = (patch: Record<string, unknown>) => void runUpdate(() => props.onChatSettingsChange?.(patch));
+  const updateChatMemories = (mode: LtmChatMemoriesMode | null) =>
+    void runUpdate(async () => {
+      await props.onChatSettingsChange?.({ longTermMemoryChatMemories: mode });
+      await chatMemories.refetch();
+    });
   const settings = props.chatSettings ?? {};
   const readOnly = typeof props.onChatSettingsChange !== "function";
   // Until the global defaults arrive, an inherited value is unknown: show a neutral placeholder, not an invented number.
@@ -197,6 +221,69 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
           ) : null}
         </div>
       </div>
+      {props.chatId ? (
+        <div data-ltm-chat-memories-field className="space-y-1 text-[0.625rem] font-medium">
+          <span id={chatMemoriesLabelId} className="flex items-center gap-1 text-[var(--foreground)]">
+            {localizeUi("ui.longTermMemory.chatsettings.memoriesFromThisChat")}
+            <InfoPopover
+              label={localizeUi("ui.longTermMemory.chatsettings.memoriesFromThisChat")}
+              content={
+                <ul className="space-y-1.5">
+                  {chatMemoriesModes.map((mode) => (
+                    <li key={mode} data-ltm-chat-memories-option={mode}>
+                      <span className="font-semibold">{localizeUi(chatMemoriesLabelKey(mode))}</span>
+                      {" · "}
+                      {localizeUi(chatMemoriesDescriptionKey(mode))}
+                    </li>
+                  ))}
+                </ul>
+              }
+              compact
+            />
+          </span>
+          <select
+            aria-labelledby={chatMemoriesLabelId}
+            data-ltm-control="select"
+            data-ltm-chat-memories="chat"
+            className={`${compactInputClass}${pending ? " opacity-50" : ""}`}
+            style={compactInputStyle}
+            disabled={readOnly || !chatMemories.data}
+            aria-disabled={pending || undefined}
+            value={effectiveChatMemories ?? ""}
+            onChange={(event) => updateChatMemories(event.target.value as LtmChatMemoriesMode)}
+          >
+            {effectiveChatMemories === null ? (
+              <option value="" disabled hidden>
+                {localizeUi(
+                  chatMemories.isError || extraction.isError
+                    ? "ui.longTermMemory.chatsettings.defaultUnavailable"
+                    : "ui.longTermMemory.chatsettings.defaultLoading",
+                )}
+              </option>
+            ) : null}
+            {chatMemoriesModes.map((mode) => (
+              <option key={mode} value={mode}>
+                {localizeUi(chatMemoriesLabelKey(mode))}
+              </option>
+            ))}
+          </select>
+          {chatMemories.data && !chatMemoriesOverride && globalChatMemories ? (
+            <span className="text-[0.5625rem] text-[var(--muted-foreground)]">
+              <span className="inline-flex rounded border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5">
+                {localizeUi("ui.longTermMemory.chatsettings.globalDefault")}
+              </span>
+            </span>
+          ) : chatMemoriesOverride && !readOnly ? (
+            <Button
+              data-ltm-chat-memories-reset
+              onClick={() => updateChatMemories(null)}
+              aria-disabled={pending || undefined}
+            >
+              {localizeUi("ui.longTermMemory.chatsettings.useGlobalDefault")}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       {autoImportOn &&
       !extraction.data?.connectionId &&
       autoImportNeedsConnection(autoImportEvents.data?.events ?? [], props.chatId) ? (

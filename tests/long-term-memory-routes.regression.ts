@@ -20,6 +20,7 @@ const EXPECTED_ROUTES = [
   "DELETE /api/long-term-memory/rejected-suggestions",
   "DELETE /api/long-term-memory/rejected-suggestions/:id",
   "GET /api/long-term-memory/backup/export",
+  "GET /api/long-term-memory/chat-memories/:chatId",
   "GET /api/long-term-memory/debug-log",
   "GET /api/long-term-memory/debug-log/export",
   "GET /api/long-term-memory/drafts",
@@ -669,6 +670,19 @@ async function main(routeScenario: RouteScenario) {
         },
         { total: 0, sourceNotes: 0, savedMemories: 0, pendingDrafts: 0 },
       );
+      const chatMemoriesFor = async (chatId: string) =>
+        app.inject({ method: "GET", url: `/api/long-term-memory/chat-memories/${chatId}`, headers });
+      assert.deepEqual((await chatMemoriesFor("chat-a")).json(), { chatMemories: null });
+      chats[1].metadata = { longTermMemoryChatMemories: "review" };
+      assert.deepEqual((await chatMemoriesFor("chat-b")).json(), { chatMemories: "review" });
+      chats[1].metadata = JSON.stringify({ longTermMemoryChatMemories: "everything" });
+      assert.deepEqual(
+        (await chatMemoriesFor("chat-b")).json(),
+        { chatMemories: null },
+        "an unknown stored choice reads as the global default",
+      );
+      chats[1].metadata = {};
+      assert.equal((await chatMemoriesFor("missing-chat")).statusCode, 404);
       const missingInjection = await app.inject({
         method: "GET",
         url: "/api/long-term-memory/last-injection/no-recorded-recall",

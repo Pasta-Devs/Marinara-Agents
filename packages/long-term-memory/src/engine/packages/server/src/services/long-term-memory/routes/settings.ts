@@ -11,7 +11,9 @@ import { resetLongTermMemorySettings } from "../persistence/backup-restore.js";
 import { listLtmPackageReaders } from "../services/storage-read.js";
 import { ltmSetMessagesHiddenFromAI, showLtmHiddenMessages } from "../persistence/hidden-messages.js";
 import { advancedMemoryAvailable, hideImportedChatMessages } from "../sources/interop.js";
-import { logger } from "../package-runtime.js";
+import { getPackagePersistence, logger } from "../package-runtime.js";
+import { parseLtmChatMetadata } from "../identity/chat-scope.js";
+import { readLtmChatMemoriesMode } from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
 import type { FastifyInstance } from "fastify";
 import {
   MAINTENANCE_BODY_LIMIT_BYTES,
@@ -76,6 +78,16 @@ export function registerSettingsRoutes(app: FastifyInstance, runtime: LtmRouteRu
     }),
   );
   app.get("/extraction-settings", async () => getLtmExtractionConfig(root));
+  // ponytail: the Engine passes only the recall-style, budget and chunk keys to Chat Settings,
+  // so the panel reads this chat's "Memories from this chat" choice here. Drop this route once
+  // the Engine passes longTermMemoryChatMemories in chatSettings.
+  app.get<{ Params: { chatId: string } }>("/chat-memories/:chatId", async (request, reply) => {
+    const chat = await getPackagePersistence().getChat(request.params.chatId);
+    if (!chat) return reply.status(404).send({ error: "Chat not found" });
+    return {
+      chatMemories: readLtmChatMemoriesMode(parseLtmChatMetadata(chat.metadata).longTermMemoryChatMemories) ?? null,
+    };
+  });
   app.put<{ Body: unknown }>(
     "/extraction-settings",
     { bodyLimit: EXTRACTION_SETTINGS_BODY_LIMIT_BYTES },

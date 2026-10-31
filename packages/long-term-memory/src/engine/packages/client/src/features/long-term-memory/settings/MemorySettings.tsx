@@ -5,9 +5,20 @@ import type {
   LtmGlobalSettings,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { LTM_RECALL_STYLE_WEIGHTS } from "../../../../../shared/src/features/agents/long-term-memory/constants.js";
-import { LTM_RECALL_SCORE_THRESHOLD_CEILING } from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
+import {
+  LTM_RECALL_SCORE_THRESHOLD_CEILING,
+  ltmChatMemoriesModeOf,
+  type LtmChatMemoriesMode,
+} from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
 import { errorMessage, invalidateLtmQueries, queryKeys, request, requestHost, settingsQueryOptions } from "../api";
 import { autoImportNeedsConnection, useAutoImportEvents } from "../auto-import-status";
+import {
+  ChatMemoriesSample,
+  chatMemoriesDescriptionKey,
+  chatMemoriesFlags,
+  chatMemoriesLabelKey,
+  chatMemoriesModes,
+} from "../chat-memories";
 import { Button, InfoPopover, NumberField, StatusSurface, inputClass, lockedActionProps } from "../shared-controls";
 import { nextTabIndex } from "../tab-keys";
 import type { LongTermMemoryDestinationProps } from "../types";
@@ -184,7 +195,8 @@ function extractionPayload({
   activePromptTemplateId: _activePromptTemplateId,
   ...settings
 }: ExtractionForm) {
-  return settings;
+  // Saving writes the two flags the shown choice stands for, so a stored import-off + accept-on becomes "I add them myself".
+  return { ...settings, ...chatMemoriesFlags(ltmChatMemoriesModeOf(settings)) };
 }
 
 export default function MemorySettings({
@@ -208,6 +220,7 @@ export default function MemorySettings({
   const verbosityLabelId = useId();
   const chatImportDetailLabelId = useId();
   const extractionConnectionLabelId = useId();
+  const chatMemoriesLabelId = useId();
   const queryClient = useQueryClient();
   const global = useQuery(settingsQueryOptions);
   const extraction = useQuery({
@@ -983,6 +996,53 @@ export default function MemorySettings({
           <h3 className="text-sm font-semibold">{localizeUi("ui.longTermMemory.memorysettings.extraction")}</h3>
         </div>
         <div data-ltm-extraction-grid>
+          {/* The leading choice takes its own row, so connection and model stay paired below it. */}
+          <div
+            data-ltm-chat-memories-field
+            className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]"
+            style={{ gridColumn: "1 / -1" }}
+          >
+            <span id={chatMemoriesLabelId} className="flex items-center gap-1">
+              {localizeUi("ui.longTermMemory.memorysettings.memoriesFromChats")}
+              <InfoPopover
+                label={localizeUi("ui.longTermMemory.memorysettings.memoriesFromChats")}
+                content={
+                  <ul className="space-y-1.5">
+                    {chatMemoriesModes.map((mode) => (
+                      <li key={mode}>
+                        <strong className="font-semibold">{localizeUi(chatMemoriesLabelKey(mode))}</strong>{" "}
+                        {localizeUi(chatMemoriesDescriptionKey(mode))}
+                      </li>
+                    ))}
+                  </ul>
+                }
+              />
+            </span>
+            <select
+              aria-labelledby={chatMemoriesLabelId}
+              aria-describedby={`${chatMemoriesLabelId}-hint`}
+              data-ltm-chat-memories="global"
+              className={inputClass}
+              value={ltmChatMemoriesModeOf(extractionFormState)}
+              onChange={(event) =>
+                setExtractionFormState({
+                  ...extractionFormState,
+                  ...chatMemoriesFlags(event.target.value as LtmChatMemoriesMode),
+                })
+              }
+            >
+              {chatMemoriesModes.map((mode) => (
+                <option key={mode} value={mode}>
+                  {localizeUi(chatMemoriesLabelKey(mode))}
+                </option>
+              ))}
+            </select>
+            <p id={`${chatMemoriesLabelId}-hint`} className="text-[0.6875rem] font-normal">
+              {localizeUi(chatMemoriesDescriptionKey(ltmChatMemoriesModeOf(extractionFormState)))}{" "}
+              {localizeUi("ui.longTermMemory.memorysettings.memoriesFromChatsInherit")}
+            </p>
+            <ChatMemoriesSample mode={ltmChatMemoriesModeOf(extractionFormState)} compact />
+          </div>
           <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
             <span id={extractionConnectionLabelId} className="flex min-h-11 items-center">
               {localizeUi("ui.longTermMemory.memorysettings.extractionConnection")}
@@ -1018,6 +1078,18 @@ export default function MemorySettings({
             <p id={`${extractionConnectionLabelId}-hint`} className="text-[0.6875rem] font-normal">
               {localizeUi("ui.longTermMemory.memorysettings.extractionConnectionHint")}
             </p>
+            {extractionFormState.autoImportChatSources &&
+            !extractionFormState.connectionId &&
+            autoImportNeedsConnection(autoImportEvents.data?.events ?? []) ? (
+              <StatusSurface tone="warning" compact data-ltm-connection-warning>
+                <span className="min-w-0 flex-1">
+                  {localizeUi("ui.longTermMemory.memorysettings.autoImportNeedsConnection")}
+                </span>
+                <Button onClick={() => connectionSelectRef.current?.focus()}>
+                  {localizeUi("ui.longTermMemory.memorysettings.autoImportChooseConnection")}
+                </Button>
+              </StatusSurface>
+            ) : null}
             {connections.isError ? (
               <StatusSurface tone="danger">
                 {localizeUi("ui.longTermMemory.memorysettings.couldNotLoadLanguageConnections")}{" "}
@@ -1111,41 +1183,6 @@ export default function MemorySettings({
               })
             }
           />
-          <h4 className="text-xs font-semibold">{localizeUi("ui.longTermMemory.memorysettings.handsOffHeading")}</h4>
-          <Toggle
-            label={localizeUi("ui.longTermMemory.memorysettings.autoAcceptSafeChanges")}
-            help={localizeUi("ui.longTermMemory.memorysettings.autoAcceptSafeChangesHelp")}
-            checked={extractionFormState.autoAcceptSafeChanges}
-            onChange={(value) =>
-              setExtractionFormState({
-                ...extractionFormState,
-                autoAcceptSafeChanges: value,
-              })
-            }
-          />
-          <Toggle
-            label={localizeUi("ui.longTermMemory.memorysettings.autoImportChatSources")}
-            help={localizeUi("ui.longTermMemory.memorysettings.autoImportChatSourcesHelp")}
-            checked={extractionFormState.autoImportChatSources}
-            onChange={(value) =>
-              setExtractionFormState({
-                ...extractionFormState,
-                autoImportChatSources: value,
-              })
-            }
-          />
-          {extractionFormState.autoImportChatSources &&
-          !extractionFormState.connectionId &&
-          autoImportNeedsConnection(autoImportEvents.data?.events ?? []) ? (
-            <StatusSurface tone="warning" compact data-ltm-connection-warning>
-              <span className="min-w-0 flex-1">
-                {localizeUi("ui.longTermMemory.memorysettings.autoImportNeedsConnection")}
-              </span>
-              <Button onClick={() => connectionSelectRef.current?.focus()}>
-                {localizeUi("ui.longTermMemory.memorysettings.autoImportChooseConnection")}
-              </Button>
-            </StatusSurface>
-          ) : null}
           <Toggle
             label={localizeUi("ui.longTermMemory.memorysettings.useAdvancedMemory")}
             help={localizeUi(

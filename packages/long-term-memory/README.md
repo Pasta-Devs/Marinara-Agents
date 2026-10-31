@@ -14,6 +14,14 @@ scoped context during pre-generation.
 - [`../../tests/README.md`](../../tests/README.md): test ownership and Engine-backed commands.
 - [`CHANGELOG.md`](CHANGELOG.md): released package behavior.
 
+## Automatic Memories
+
+Memories from chats (Memory Settings → Extraction) turns on background import:
+Collect them, I'll review imports new chat summaries and message pieces into the
+Review Queue, and Save them for me also accepts the low-risk proposals. A chat
+can choose differently in its Chat Settings, and the setup guide asks the same
+question in its Activate step.
+
 ## Source Layout
 
 ```text
