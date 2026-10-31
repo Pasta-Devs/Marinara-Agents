@@ -1156,6 +1156,57 @@ async function main(routeScenario: RouteScenario) {
         });
         assert.equal(clearedStopWords.json().rebuild?.status, "complete", clearedStopWords.body);
       }
+      {
+        // Advanced Memory is available only where the host answers with a scene list (Capability API 1.391), and a
+        // host with `listChatSummaries` but no list is told apart by one real chat.
+        const { configurePackageRuntime, getPackageRuntime } =
+          await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/package-runtime.ts");
+        const originalHost = getPackageRuntime();
+        let probes = 0;
+        const get = async () => {
+          const response = await app.inject({ method: "GET", url: "/api/long-term-memory/settings", headers });
+          assert.equal(response.statusCode, 200, response.body);
+          return response.json().advancedMemoryAvailable;
+        };
+        const available = async (listChatSummaries: unknown, chats: unknown[] = [{ id: "chat-probe" }]) => {
+          configurePackageRuntime({
+            ...originalHost,
+            persistence: {
+              ...originalHost.persistence,
+              listChats: async () => {
+                probes += 1;
+                return chats;
+              },
+              listChatSummaries,
+            },
+          } as typeof originalHost);
+          probes = 0;
+          return get();
+        };
+        try {
+          assert.equal(await available(async () => ({ advancedMemory: [] })), true, "a 1.391 host lists scenes");
+          assert.equal(await available(async () => ({ summaries: [] })), false, "an older host has no scene list");
+          assert.equal(await available(undefined), false, "a host without the call has none");
+          assert.equal(await available(async () => ({}), []), true, "no chat to probe leaves it available");
+          assert.equal(await available(async () => ({ summaries: [] })), false);
+          assert.equal(await get(), false);
+          assert.equal(probes, 1, "a settled answer is kept for the host");
+          assert.equal(await available(async () => ({}), []), true);
+          await get();
+          assert.equal(probes, 2, "no chat to probe is asked again");
+          assert.equal(
+            await available(async () => {
+              throw new Error("summaries unavailable");
+            }),
+            true,
+            "a failed read leaves it available",
+          );
+          await get();
+          assert.equal(probes, 2, "and is asked again");
+        } finally {
+          configurePackageRuntime(originalHost);
+        }
+      }
       const renameSectionCollision = await app.inject({
         method: "POST",
         url: "/api/long-term-memory/notes/world_route_fixture/sections/rename",

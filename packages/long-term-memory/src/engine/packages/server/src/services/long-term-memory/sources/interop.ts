@@ -633,6 +633,32 @@ export async function advancedMemoryRecords(chatId: string): Promise<AdvancedMem
   }
 }
 
+const advancedMemoryHosts = new WeakMap<object, boolean>();
+
+/**
+ * Whether this host returns Advanced Memory scene records (Capability API 1.391). `listChatSummaries` exists on older
+ * hosts too, but only a 1.391 host answers with an `advancedMemory` list, so one real chat tells them apart. With no
+ * chat or a failed read it stays available, since nothing could be read anyway, and only a settled answer is kept.
+ */
+export async function advancedMemoryAvailable() {
+  try {
+    const persistence = getPackagePersistence();
+    const known = advancedMemoryHosts.get(persistence);
+    if (known !== undefined) return known;
+    if (!persistence.listChatSummaries) return remember(persistence, false);
+    const [chat] = await persistence.listChats();
+    const listed = chat ? await persistence.listChatSummaries(chat.id) : null;
+    return listed ? remember(persistence, Array.isArray(listed.advancedMemory)) : true;
+  } catch {
+    return true;
+  }
+}
+
+function remember(persistence: object, available: boolean) {
+  advancedMemoryHosts.set(persistence, available);
+  return available;
+}
+
 // A scene's audience narrows the chat's characters: an empty audience keeps the chat scope, and an audience of
 // characters no longer in the chat leaves no characters, so only the chat itself recalls the scene.
 function advancedMemoryScope(chat: Parameters<typeof resolveChatLtmScope>[0], audience: readonly string[]) {

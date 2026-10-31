@@ -5067,6 +5067,37 @@ async function main() {
         assert.match(await note.innerText(), /returns to Balanced\./u, "the discarded pick is not remembered");
         await customPage.close();
       }
+      // The Advanced Memory toggle is disabled with a note on an Engine that cannot provide scene recaps.
+      for (const advancedMemoryAvailable of [false, true]) {
+        const recapPage = await browserContext.newPage();
+        await recapPage.setViewportSize({ width: 1280, height: 900 });
+        await recapPage.route("**/api/long-term-memory/settings", (route) =>
+          route.request().method() === "GET" ? route.fulfill({ json: { advancedMemoryAvailable } }) : route.continue(),
+        );
+        await recapPage.goto(`http://127.0.0.1:${address.port}/`);
+        await recapPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await recapPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        await recapPage.locator('[data-ltm-destination="settings"]:visible').first().click();
+        await recapPage.locator("#settings-tab-extraction").click();
+        const recapToggle = recapPage
+          .locator("#settings-panel-extraction")
+          .getByLabel("Use Advanced Memory recaps", { exact: true });
+        await recapToggle.waitFor({ state: "visible", timeout: 5_000 });
+        assert.equal(await recapToggle.isDisabled(), !advancedMemoryAvailable);
+        await recapPage.locator('[data-ltm-info="Use Advanced Memory recaps"]').click();
+        const recapNote = await recapPage.locator('[data-ltm-info-panel="Use Advanced Memory recaps"]').innerText();
+        assert.equal(
+          recapNote.includes("Update Marinara to use this setting"),
+          !advancedMemoryAvailable,
+          "only an Engine without scene recaps gets the update note",
+        );
+        await recapPage.close();
+      }
       // #1659: saving a form as Custom also drops the preset history, so Reset to preset agrees with a reload.
       {
         const savePage = await browserContext.newPage();

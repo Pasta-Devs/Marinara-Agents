@@ -1122,8 +1122,13 @@ export default function MemorySettings({
           />
           <Toggle
             label={localizeUi("ui.longTermMemory.memorysettings.useAdvancedMemory")}
-            help={localizeUi("ui.longTermMemory.memorysettings.useAdvancedMemoryHelp")}
+            help={localizeUi(
+              global.data?.advancedMemoryAvailable === false
+                ? "ui.longTermMemory.memorysettings.useAdvancedMemoryUnavailable"
+                : "ui.longTermMemory.memorysettings.useAdvancedMemoryHelp",
+            )}
             checked={extractionFormState.useAdvancedMemory}
+            disabled={global.data?.advancedMemoryAvailable === false}
             onChange={(value) =>
               setExtractionFormState({
                 ...extractionFormState,

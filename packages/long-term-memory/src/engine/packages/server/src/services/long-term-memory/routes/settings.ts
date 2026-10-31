@@ -10,7 +10,7 @@ import { withLtmVaultLock } from "../persistence/vault-lock.js";
 import { resetLongTermMemorySettings } from "../persistence/backup-restore.js";
 import { listLtmPackageReaders } from "../services/storage-read.js";
 import { ltmSetMessagesHiddenFromAI, showLtmHiddenMessages } from "../persistence/hidden-messages.js";
-import { hideImportedChatMessages } from "../sources/interop.js";
+import { advancedMemoryAvailable, hideImportedChatMessages } from "../sources/interop.js";
 import { logger } from "../package-runtime.js";
 import type { FastifyInstance } from "fastify";
 import {
@@ -28,9 +28,11 @@ export function registerSettingsRoutes(app: FastifyInstance, runtime: LtmRouteRu
   const effectiveIndexStopWords = (settings: LtmResolvedGlobalSettings) =>
     JSON.stringify([...buildStopWordSet(ltmGeneratedStopWords(settings))].sort());
   // The page disables "Hide imported messages from the AI" on an Engine that cannot hide messages for a package.
-  const withHideAvailability = <T extends object>(settings: T) => ({
+  // It does the same for "Use Advanced Memory scene recaps" on an Engine older than Capability API 1.391.
+  const withHostAvailability = async <T extends object>(settings: T) => ({
     ...settings,
     hideImportedMessagesAvailable: ltmSetMessagesHiddenFromAI() !== null,
+    advancedMemoryAvailable: await advancedMemoryAvailable(),
   });
   // Turning it on hides imported pieces now. While it is off, a save shows whatever it hid, so a failed show can
   // be retried by saving again. The setting is saved either way, so a failure is logged and the save goes on to its
@@ -47,7 +49,7 @@ export function registerSettingsRoutes(app: FastifyInstance, runtime: LtmRouteRu
       ),
     );
   };
-  app.get("/settings", async () => withHideAvailability(await getLtmGlobalSettings(root)));
+  app.get("/settings", async () => withHostAvailability(await getLtmGlobalSettings(root)));
   app.get("/settings/package-readers", async () => ({ readers: await listLtmPackageReaders(root) }));
   // Settings that change the recall index persist first, then rebuild under the
   // reentrant vault lock so a concurrent recall never sees the new settings beside a

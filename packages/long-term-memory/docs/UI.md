@@ -188,12 +188,14 @@ rewrites, status changes, shared memories and anything with warnings wait in the
 Review Queue, and a draft that mixes them applies its safe part and keeps the
 rest pending. The Sources result then says how many were accepted and how many
 wait for review. Import new chat sources automatically (off by default) imports
-this chat's new or changed summaries and its finished message pieces in the
-background, a couple of seconds after the chat's latest generation starts and
+every chat's new or changed summaries and finished message pieces (the setting
+is global, not per chat) in the background, a couple of seconds after the chat's latest generation starts and
 never the piece still being written. Its proposals follow the accept setting
 above, and each run is an "Imported automatically" row in Activity. A selection
 whose import failed is not retried until a source or the extraction connection
-changes.
+changes. Use Advanced Memory recaps needs a Marinara version that provides the
+recaps (Capability API 1.391); on an older Engine the toggle is disabled with a
+note, the same way as Hide imported messages from the AI.
 
 ### Settings and Chat Settings
 
