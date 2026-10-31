@@ -5098,6 +5098,161 @@ async function main() {
         );
         await recapPage.close();
       }
+      // Older Advanced Memory recaps: one press reads every batch with progress, Stop halts after the batch being
+      // read, and the next press resumes with what the route still lists.
+      {
+        const backfillPage = await browserContext.newPage();
+        await backfillPage.setViewportSize({ width: 1280, height: 900 });
+        let pending = Array.from({ length: 25 }, (_, index) => `recap-${index + 1}`);
+        const batchLimits: number[] = [];
+        const readBatches: string[][] = [];
+        let holdBatch: Promise<void> | null = null;
+        let batchStarted: (() => void) | null = null;
+        await backfillPage.route("**/api/long-term-memory/extraction-settings", (route) =>
+          route.request().method() === "GET" ? route.fulfill({ json: { useAdvancedMemory: true } }) : route.continue(),
+        );
+        await backfillPage.route("**/api/long-term-memory/import/advanced-memory/backfill-batch", (route) => {
+          const { limit } = route.request().postDataJSON() as { limit: number };
+          if (limit > 1) batchLimits.push(limit);
+          return route.fulfill({
+            json: { sourceIds: pending.slice(0, limit), remaining: Math.max(0, pending.length - limit) },
+          });
+        });
+        await backfillPage.route("**/api/long-term-memory/import/source-notes", async (route) => {
+          const { sourceIds, source } = route.request().postDataJSON() as { sourceIds: string[]; source: string };
+          batchStarted?.();
+          await holdBatch;
+          readBatches.push(sourceIds);
+          pending = pending.filter((id) => !sourceIds.includes(id));
+          return route.fulfill({
+            json: {
+              operationId: crypto.randomUUID(),
+              batchStatus: "completed",
+              source,
+              imported: [],
+              writeFailures: [],
+              missingSourceIds: [],
+              counts: {
+                requested: sourceIds.length,
+                sourceNotesWritten: sourceIds.length,
+                succeeded: sourceIds.length,
+                failed: 0,
+                cancelled: 0,
+                missing: 0,
+                sourceWriteFailed: 0,
+              },
+            },
+          });
+        });
+        await backfillPage.goto(`http://127.0.0.1:${address.port}/`);
+        await backfillPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await backfillPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { chatId: "desktop-chat", confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        await backfillPage.locator('[data-ltm-destination="sources"]:visible').first().click();
+        const backfillGroup = backfillPage.locator("[data-ltm-advanced-memory-backfill]");
+        const backfillButton = backfillGroup.locator('[data-ltm-source-action="advanced-memory-backfill"]');
+        await backfillButton.waitFor({ timeout: 10_000 });
+        // The button shows before the count loads, with a plain label.
+        await backfillGroup
+          .getByRole("button", { name: "Read 25 older recaps", exact: true })
+          .waitFor({ timeout: 10_000 });
+        assert.equal(await backfillGroup.locator("input[type=number]").count(), 0, "no batch-size field");
+        // Stop while the first batch is being read: that batch finishes, no second one starts.
+        let releaseBatch!: () => void;
+        holdBatch = new Promise<void>((resolve) => {
+          releaseBatch = resolve;
+        });
+        const firstBatchStarted = new Promise<void>((resolve) => {
+          batchStarted = resolve;
+        });
+        await backfillButton.click();
+        await firstBatchStarted;
+        const backfillProgress = backfillGroup.locator("[data-ltm-advanced-memory-progress]");
+        assert.match(await backfillProgress.innerText(), /Read 0 of 25/u);
+        await backfillGroup.locator('[data-ltm-source-action="stop-backfill"]').click();
+        batchStarted = null;
+        releaseBatch();
+        await backfillGroup.getByText("Stopped. 15 recaps are left", { exact: false }).waitFor({ timeout: 10_000 });
+        assert.deepEqual(
+          readBatches.map((ids) => ids.length),
+          [10],
+          "Stop ends the loop after the batch being read",
+        );
+        // The next press resumes from what remains and reads the rest without another press.
+        holdBatch = null;
+        await backfillButton.waitFor({ timeout: 10_000 });
+        await backfillPage.waitForFunction(
+          () =>
+            document.querySelector('[data-ltm-source-action="advanced-memory-backfill"]')?.textContent ===
+            "Read 15 older recaps",
+        );
+        await backfillButton.click();
+        await backfillGroup.locator("[data-ltm-advanced-memory-done]").waitFor({ timeout: 10_000 });
+        assert.deepEqual(
+          readBatches.map((ids) => ids.length),
+          [10, 10, 5],
+          "one press reads every remaining batch",
+        );
+        assert.deepEqual([...new Set(batchLimits)], [10], "a fixed batch size");
+        assert.equal(await backfillButton.count(), 0, "nothing left to read hides the button");
+        await backfillPage.close();
+      }
+      // A recap the route lists again after a completed batch must not loop forever.
+      {
+        const stuckPage = await browserContext.newPage();
+        await stuckPage.setViewportSize({ width: 1280, height: 900 });
+        let stuckImports = 0;
+        await stuckPage.route("**/api/long-term-memory/extraction-settings", (route) =>
+          route.request().method() === "GET" ? route.fulfill({ json: { useAdvancedMemory: true } }) : route.continue(),
+        );
+        await stuckPage.route("**/api/long-term-memory/import/advanced-memory/backfill-batch", (route) =>
+          route.fulfill({ json: { sourceIds: ["stuck-recap"], remaining: 0 } }),
+        );
+        await stuckPage.route("**/api/long-term-memory/import/source-notes", (route) => {
+          stuckImports += 1;
+          const { source } = route.request().postDataJSON() as { source: string };
+          return route.fulfill({
+            json: {
+              operationId: crypto.randomUUID(),
+              batchStatus: "completed",
+              source,
+              imported: [],
+              writeFailures: [],
+              missingSourceIds: [],
+              counts: {
+                requested: 1,
+                sourceNotesWritten: 1,
+                succeeded: 1,
+                failed: 0,
+                cancelled: 0,
+                missing: 0,
+                sourceWriteFailed: 0,
+              },
+            },
+          });
+        });
+        await stuckPage.goto(`http://127.0.0.1:${address.port}/`);
+        await stuckPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await stuckPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { chatId: "desktop-chat", confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        await stuckPage.locator('[data-ltm-destination="sources"]:visible').first().click();
+        const stuckGroup = stuckPage.locator("[data-ltm-advanced-memory-backfill]");
+        const stuckButton = stuckGroup.locator('[data-ltm-source-action="advanced-memory-backfill"]');
+        await stuckButton.waitFor({ timeout: 10_000 });
+        await stuckButton.click();
+        await stuckGroup.getByText("Some recaps could not be read", { exact: false }).waitFor({ timeout: 10_000 });
+        assert.equal(stuckImports, 1, "a recap that stays listed is read once, then the loop ends");
+        await stuckButton.waitFor({ timeout: 10_000 });
+        await stuckPage.close();
+      }
       // Background import: Chat Settings counts today's saved and waiting memories, and a missing extraction
       // connection is a warning with a Choose button in Chat Settings and in Extraction.
       for (const scenario of ["connection-missing", "connection-chosen", "working"] as const) {

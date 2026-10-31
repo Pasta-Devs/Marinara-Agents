@@ -54,7 +54,6 @@ import {
   ClickSurface,
   IconButton,
   InfoPopover,
-  NumberField,
   StatusSurface,
   inputClass,
   lockedActionProps,
@@ -278,6 +277,9 @@ function handleTabKey<T extends string>(
   });
 }
 
+// Recaps per request of the Advanced Memory backfill loop (the route accepts 1-100).
+const ADVANCED_MEMORY_BACKFILL_BATCH = 10;
+
 export default function SourcesWorkspace({
   props,
   onOpenMemory,
@@ -462,9 +464,11 @@ export default function SourcesWorkspace({
     queryKey: queryKeys.extractionSettings,
     queryFn: () => request<LtmExtractionSettingsPatch>("/extraction-settings"),
   });
-  const [advancedMemoryBatchSize, setAdvancedMemoryBatchSize] = useState(10);
   const [advancedMemoryBackfillMessage, setAdvancedMemoryBackfillMessage] = useState("");
+  // Set while the loop runs, so the progress and Stop show between batches too, when no import task is active.
+  const [advancedMemoryProgress, setAdvancedMemoryProgress] = useState<{ read: number; total: number } | null>(null);
   const advancedMemoryBackfillRef = useRef(false);
+  const advancedMemoryStopRef = useRef<AbortController | null>(null);
 
   const defaultAvailabilityMode: LtmMode =
     modeFilter !== "all"
@@ -748,6 +752,25 @@ export default function SourcesWorkspace({
         signal,
       ),
     enabled: previewEnabled && source === "messages" && previewScope !== undefined,
+  });
+  // How many scene recaps the backfill button would read. The batch route answers with one id plus the rest, so the
+  // count needs no route of its own; an import refreshes it through the preview key.
+  const advancedMemoryPending = useQuery({
+    queryKey: [...queryKeys.preview, "advanced-memory-backfill", previewScope, props.chatId],
+    queryFn: async ({ signal }) => {
+      const batch = await request<LtmAdvancedMemoryBackfillResponse>(
+        "/import/advanced-memory/backfill-batch",
+        "POST",
+        {
+          ...(previewScope ? { sourceScope: previewScope } : {}),
+          ...(props.chatId ? { chatId: props.chatId } : {}),
+          limit: 1,
+        },
+        signal,
+      );
+      return batch.sourceIds.length + batch.remaining;
+    },
+    enabled: previewEnabled && source === "chats" && extractionSettings.data?.useAdvancedMemory === true,
   });
   const sourceDetails = useQuery({
     queryKey: [...queryKeys.preview, "details", source, previewScope, modeFilter, focusedFlatSourceId],
@@ -1617,40 +1640,91 @@ export default function SourcesWorkspace({
 
   // Notes whose source is gone. Keeping one needs no action; Remove goes through the delete workbench.
   const outdatedNotes = (source === "lorebooks" ? lorebookPreviewData?.outdated : previewData?.outdated) ?? [];
-  // Issue #1964: scene recaps without a memory block are read by the summary extractor one batch at a time. Pressing
-  // again continues, because the server leaves out recaps already imported or covered by an earlier chat import.
+  // Issue #1964: scene recaps without a memory block are read by the summary extractor in batches. One press loops
+  // the batch route until nothing is left; the route leaves out recaps already imported or covered by an earlier
+  // chat import, so its remaining count is the cursor and a later press resumes from what is left.
+  // Leaving the Chats tab or the workspace ends the loop after the batch being read; nothing else could stop it.
+  useEffect(() => {
+    if (source !== "chats") advancedMemoryStopRef.current?.abort();
+  }, [source]);
+  useEffect(() => () => advancedMemoryStopRef.current?.abort(), []);
   const backfillAdvancedMemory = async () => {
     // The batch request runs before the import task exists, so a second click must not start another.
     if (importing || advancedMemoryBackfillRef.current) return;
     advancedMemoryBackfillRef.current = true;
+    const stop = new AbortController();
+    advancedMemoryStopRef.current = stop;
     setImportError("");
     setAdvancedMemoryBackfillMessage("");
+    let read = 0,
+      total = 0,
+      previousRemaining = Number.POSITIVE_INFINITY,
+      ended: "stopped" | "done" | "stalled" | "failed" = "stopped";
+    // Shown at once, so Stop and the progress line exist while the first listing is still loading.
+    setAdvancedMemoryProgress({ read: 0, total: 0 });
     try {
-      const batch = await request<LtmAdvancedMemoryBackfillResponse>("/import/advanced-memory/backfill-batch", "POST", {
-        ...(previewScope ? { sourceScope: previewScope } : {}),
-        ...(props.chatId ? { chatId: props.chatId } : {}),
-        limit: advancedMemoryBatchSize,
-      });
-      if (!batch.sourceIds.length) {
-        setAdvancedMemoryBackfillMessage(localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillDone"));
-        return;
+      while (!stop.signal.aborted) {
+        const batch = await request<LtmAdvancedMemoryBackfillResponse>(
+          "/import/advanced-memory/backfill-batch",
+          "POST",
+          {
+            ...(previewScope ? { sourceScope: previewScope } : {}),
+            ...(props.chatId ? { chatId: props.chatId } : {}),
+            limit: ADVANCED_MEMORY_BACKFILL_BATCH,
+          },
+          stop.signal,
+        );
+        if (!batch.sourceIds.length) {
+          ended = "done";
+          break;
+        }
+        // Recaps that stay pending after a completed batch would repeat forever, so the count must shrink.
+        if (batch.remaining >= previousRemaining) {
+          ended = "stalled";
+          break;
+        }
+        previousRemaining = batch.remaining;
+        if (!total) total = batch.sourceIds.length + batch.remaining;
+        setAdvancedMemoryProgress({ read, total });
+        // A failed or cancelled batch, or another import taking the lock, ends the loop; the result panel says why.
+        if ((await runImport(batch.sourceIds)) !== "completed") {
+          ended = "failed";
+          break;
+        }
+        read += batch.sourceIds.length;
+        setAdvancedMemoryProgress({ read, total });
       }
-      if ((await runImport(batch.sourceIds)) !== "completed") return;
+      if (ended === "stopped" && total > 0 && read >= total) ended = "done";
       setAdvancedMemoryBackfillMessage(
-        batch.remaining
-          ? localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillRemaining", {
-              value1: batch.remaining,
-            })
-          : localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillDone"),
+        ended === "done"
+          ? localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillDone")
+          : ended === "stalled"
+            ? localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillStalled")
+            : ended === "stopped"
+              ? localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillStopped", {
+                  value1: Math.max(0, total - read),
+                })
+              : "",
       );
     } catch (error) {
-      setImportError(
-        errorMessage(error, localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillFailed")),
-      );
+      if (stop.signal.aborted)
+        setAdvancedMemoryBackfillMessage(
+          localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillStopped", {
+            value1: Math.max(0, total - read),
+          }),
+        );
+      else
+        setImportError(
+          errorMessage(error, localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillFailed")),
+        );
     } finally {
       advancedMemoryBackfillRef.current = false;
+      advancedMemoryStopRef.current = null;
+      setAdvancedMemoryProgress(null);
     }
   };
+  const pendingRecaps = advancedMemoryPending.data;
+  const allRecapsRead = pendingRecaps === 0 && !advancedMemoryProgress;
   const advancedMemoryBackfillGroup =
     source === "chats" && extractionSettings.data?.useAdvancedMemory ? (
       <section className="space-y-2 rounded-md border border-[var(--border)] p-2" data-ltm-advanced-memory-backfill>
@@ -1660,35 +1734,68 @@ export default function SourcesWorkspace({
         <p className="text-xs text-[var(--muted-foreground)]">
           {localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillHelp")}
         </p>
-        <div className="flex flex-wrap items-end gap-2">
-          <NumberField
-            label={localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBatchSize")}
-            value={advancedMemoryBatchSize}
-            min={1}
-            max={100}
-            integer
-            onChange={setAdvancedMemoryBatchSize}
-            disabled={importRunning}
-          />
-          <Button
-            {...importActionProps}
-            {...destinationWait(`${importReasonId}-backfill`)}
-            onClick={() => {
-              if (currentDestinationScope) void backfillAdvancedMemory();
-            }}
-            data-ltm-source-action="advanced-memory-backfill"
+        {advancedMemoryProgress ? (
+          <div className="space-y-1" data-ltm-advanced-memory-progress>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs" role="status">
+                {advancedMemoryProgress.total
+                  ? localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillProgress", {
+                      value1: advancedMemoryProgress.read,
+                      value2: advancedMemoryProgress.total,
+                    })
+                  : localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillStarting")}
+              </span>
+              <Button
+                destructive
+                onClick={() => advancedMemoryStopRef.current?.abort()}
+                data-ltm-source-action="stop-backfill"
+              >
+                {localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillStop")}
+              </Button>
+            </div>
+            {advancedMemoryProgress.total ? (
+              <progress
+                className="w-full"
+                max={advancedMemoryProgress.total}
+                value={advancedMemoryProgress.read}
+                aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfill")}
+              />
+            ) : null}
+          </div>
+        ) : allRecapsRead ? (
+          <p
+            role="status"
+            className="text-xs"
+            style={{ color: "var(--ltm-success, var(--marinara-editor-text))" }}
+            data-ltm-advanced-memory-done
           >
-            <RefreshCw aria-hidden="true" size="0.75rem" />
-            {localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfill")}
-          </Button>
-          {importing ? (
-            <Button destructive onClick={cancelLtmSourceTask} data-ltm-source-action="cancel-backfill">
-              {localizeUi("ui.longTermMemory.memoryvault.cancel")}
+            <Check aria-hidden="true" size="0.75rem" className="mr-1 inline" />
+            {localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillDone")}
+          </p>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              {...importActionProps}
+              {...destinationWait(`${importReasonId}-backfill`)}
+              onClick={() => {
+                if (currentDestinationScope) void backfillAdvancedMemory();
+              }}
+              data-ltm-source-action="advanced-memory-backfill"
+            >
+              <RefreshCw aria-hidden="true" size="0.75rem" />
+              {pendingRecaps
+                ? localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillRead", { value1: pendingRecaps })
+                : localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillReadOlder")}
             </Button>
-          ) : null}
-          {importReason(`${importReasonId}-backfill`)}
-        </div>
-        {advancedMemoryBackfillMessage ? (
+            {importing ? (
+              <Button destructive onClick={cancelLtmSourceTask} data-ltm-source-action="cancel-backfill">
+                {localizeUi("ui.longTermMemory.memoryvault.cancel")}
+              </Button>
+            ) : null}
+            {importReason(`${importReasonId}-backfill`)}
+          </div>
+        )}
+        {advancedMemoryBackfillMessage && !allRecapsRead ? (
           <p role="status" className="text-xs text-[var(--muted-foreground)]">
             {advancedMemoryBackfillMessage}
           </p>

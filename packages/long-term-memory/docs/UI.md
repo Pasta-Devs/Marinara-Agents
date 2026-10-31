@@ -160,6 +160,14 @@ in typing and keeps the current rows, marked busy, until its results arrive.
 Long-running source tasks expose running, completed, cancelled, partial-failure,
 and failed states through the Sources navigation and workspace feedback. A
 running task can be cancelled and its latest result can be revisited.
+With Use Advanced Memory recaps on, the Chats tab shows an Older scene recaps group. Its button
+reads "Read N older recaps" (N is what the batch route still lists), and one press
+reads them in batches of 10 until none are left, showing "Read X of Y" with a
+progress bar. Stop ends the loop after the batch being read; the next press
+resumes with what the route still lists, since it leaves out recaps already
+imported or covered by an earlier chat import. A failed or cancelled batch ends
+the loop and its result is listed in the task panel. When nothing is left the
+group says so instead of showing the button.
 The Chat Messages tab imports a chat's own messages in pieces of up to 24,000
 characters, or 12,000 when the Extraction setting Chat import detail is
 Detailed. Each chat keeps the piece size of its first import, and a branch
