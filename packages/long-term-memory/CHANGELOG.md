@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.5.20 — 2026-10-31
+
+- Memory Settings → Extraction gains "Use Advanced Memory recaps". A chat that uses Advanced Memory is imported from its scene recaps instead of its summaries and messages, without an AI call, and with "Import new chat sources automatically" on this happens while you chat. A recap reaches only the characters who were in that scene, and a chat does not recall memories made from its own recaps. Import → Chats gains "Backfill Advanced Memory" for older recaps: it reads them in batches and skips recaps an earlier chat import already covers. This needs a Marinara version with Capability API 1.391; on older versions nothing changes.
+
 ## 1.5.19 — 2026-10-31
 
 - Memory Settings → Extraction gains "Accept safe changes automatically", which accepts low-risk proposed memories after an import or extraction and now applies the safe part of a draft that also holds a rewrite.
