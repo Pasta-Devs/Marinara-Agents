@@ -166,7 +166,7 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
       ))}
       {story.data.arc ? (
         <p className="of-eyebrow of-story-arc" title={story.data.arc.label}>
-          {t("ui.otomeForge.story.data.arcLine", {
+          {t("ui.otomeForge.story.arcLine", {
             chapter: Math.min(story.data.arc.read + 1, story.data.arc.endsAt - story.data.arc.from + 1),
             total: story.data.arc.endsAt - story.data.arc.from + 1,
             label: story.data.arc.label,
