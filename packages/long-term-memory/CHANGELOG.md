@@ -1,5 +1,10 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- Memory Settings → Extraction gains "Accept safe changes automatically", which accepts low-risk proposed memories after an import or extraction and now applies the safe part of a draft that also holds a rewrite.
+- Memory Settings → Extraction gains "Import new chat sources automatically", which imports a chat's new summaries and finished message stretches in the background while you chat.
+
 ## 1.5.18 — 2026-10-30
 
 - The memory page now uses the same header as every other agent page: store banner, logo, name, the Active switch for the open chat and Manage package. Add memories and the setup guide stay in that header. This needs a Marinara version with Capability API 1.390; on older versions nothing changes.
