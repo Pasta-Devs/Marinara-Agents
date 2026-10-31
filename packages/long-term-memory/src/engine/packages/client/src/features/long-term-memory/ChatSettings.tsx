@@ -2,18 +2,32 @@ import { Settings2 } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type {
+  LtmExtractionSettingsPatch,
   LtmGlobalSettings,
   LtmLastInjectionResponse,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { errorMessage, queryKeys, request } from "./api";
-import { InfoPopover, NumberField, StatusSurface, compactInputClass, compactInputStyle } from "./shared-controls";
+import {
+  autoImportNeedsConnection,
+  autoImportSavedToday,
+  requestLtmOpen,
+  useAutoImportEvents,
+} from "./auto-import-status";
+import {
+  Button,
+  InfoPopover,
+  NumberField,
+  StatusSurface,
+  compactInputClass,
+  compactInputStyle,
+} from "./shared-controls";
 import type { CapabilityProps } from "./types";
 import { LastInjectionSummary } from "./LastInjectionSummary";
-import { useLtmTranslation } from "./localization";
+import { selectLtmPluralForm, useLtmTranslation } from "./localization";
 import { recallStyleDescriptionKey, recallStyles } from "./recall-style";
 
 export function ChatSettings({ props }: { props: CapabilityProps }) {
-  const { t: localizeUi } = useLtmTranslation();
+  const { t: localizeUi, locale } = useLtmTranslation();
   const recallStyleLabelId = useId();
   const [pending, setPending] = useState(false);
   // A pending save keeps its controls focusable (aria-disabled, not `disabled`), so this guard ignores input meanwhile.
@@ -22,6 +36,17 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
   const globalSettings = useQuery({
     queryKey: queryKeys.chatDefaults,
     queryFn: () => request<LtmGlobalSettings>("/settings"),
+  });
+  const extraction = useQuery({
+    queryKey: queryKeys.extractionSettings,
+    queryFn: () => request<LtmExtractionSettingsPatch>("/extraction-settings"),
+  });
+  const autoImportOn = extraction.data?.autoImportChatSources === true;
+  const autoImportEvents = useAutoImportEvents(autoImportOn);
+  const waitingDrafts = useQuery({
+    enabled: autoImportOn && Boolean(props.chatId),
+    queryKey: [...queryKeys.pendingDrafts, props.chatId],
+    queryFn: () => request<{ count: number }>(`/drafts/pending-count?chatId=${encodeURIComponent(props.chatId!)}`),
   });
   const lastInjection = useQuery({
     enabled: Boolean(props.chatId),
@@ -58,6 +83,8 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
       ? "ui.longTermMemory.chatsettings.defaultUnavailable"
       : "ui.longTermMemory.chatsettings.defaultLoading",
   );
+  const saved = props.chatId ? autoImportSavedToday(autoImportEvents.data?.events ?? [], props.chatId) : 0;
+  const waiting = waitingDrafts.data?.count ?? 0;
   const styleInherited = settings.longTermMemoryRecallStyle == null;
   const budgetInherited = settings.longTermMemoryBudgetTokens == null;
   const maxChunksInherited = settings.longTermMemoryMaxChunks == null;
@@ -170,6 +197,52 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
           ) : null}
         </div>
       </div>
+      {autoImportOn &&
+      !extraction.data?.connectionId &&
+      autoImportNeedsConnection(autoImportEvents.data?.events ?? [], props.chatId) ? (
+        <StatusSurface tone="warning" compact data-ltm-connection-warning>
+          <span className="min-w-0 flex-1">
+            {localizeUi("ui.longTermMemory.chatsettings.autoImportNeedsConnection")}
+          </span>
+          <Button
+            onClick={() => {
+              requestLtmOpen("extraction");
+              props.onOpenAgentSettings?.();
+            }}
+            disabled={!props.onOpenAgentSettings}
+          >
+            {localizeUi("ui.longTermMemory.chatsettings.autoImportChooseConnection")}
+          </Button>
+        </StatusSurface>
+      ) : autoImportOn && props.chatId && autoImportEvents.data && waitingDrafts.data ? (
+        <StatusSurface compact data-ltm-auto-import-status>
+          <span className="min-w-0 flex-1">
+            {localizeUi(
+              selectLtmPluralForm(locale, saved) === "one"
+                ? "ui.longTermMemory.chatsettings.autoImportSavedTodayOne"
+                : "ui.longTermMemory.chatsettings.autoImportSavedTodayOther",
+              { count: saved },
+            )}
+            {" · "}
+            {localizeUi(
+              selectLtmPluralForm(locale, waiting) === "one"
+                ? "ui.longTermMemory.chatsettings.autoImportWaitingOne"
+                : "ui.longTermMemory.chatsettings.autoImportWaitingOther",
+              { count: waiting },
+            )}
+          </span>
+          {props.onOpenAgentSettings ? (
+            <Button
+              onClick={() => {
+                requestLtmOpen("review");
+                props.onOpenAgentSettings?.();
+              }}
+            >
+              {localizeUi("ui.longTermMemory.chatsettings.autoImportReview")}
+            </Button>
+          ) : null}
+        </StatusSurface>
+      ) : null}
       {/* D27: initial load only, so a background refetch keeps the existing data and
           title instead of flashing the loading title; error/Retry behavior is unchanged. */}
       <LastInjectionSummary

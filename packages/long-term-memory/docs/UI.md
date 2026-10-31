@@ -17,7 +17,7 @@ the separate Chat Settings entry:
 | Review Queue | `review/ReviewQueue.tsx` | Inspect evidence, edit or preflight proposed mutations, then accept or skip them. |
 | Sources | `sources/SourcesWorkspace.tsx` | Select source and destination scopes; import, refresh, re-extract, cancel, and inspect source results. |
 | Memory Settings | `settings/MemorySettings.tsx` | Configure recall and extraction, run maintenance (index and identity repair, backup, reset, delete all data), and inspect activity. |
-| Chat Settings | `ChatSettings.tsx` | Set per-chat recall style, token budget, and maximum memories; inspect the last injection. |
+| Chat Settings | `ChatSettings.tsx` | Set per-chat recall style, token budget, and maximum memories; see what background import did today and what waits for review; inspect the last injection. |
 
 Each screen lives in its own folder (`vault/`, `review/`, `sources/`, `settings/`)
 with the components cut out of it; modules shared across screens stay at the
@@ -196,12 +196,24 @@ whose import failed is not retried until a source or the extraction connection
 changes. Use Advanced Memory recaps needs a Marinara version that provides the
 recaps (Capability API 1.391); on an older Engine the toggle is disabled with a
 note, the same way as Hide imported messages from the AI.
+When background import is on and has no extraction connection, Extraction shows a warning
+(`StatusSurface` warning tone) with a Choose button that focuses the connection field; the same
+warning appears in Chat Settings, where Choose opens Extraction with that field focused. The warning
+shows only while the newest background import of either source (chats or messages) ended for lack
+of a language model: Automatic borrows the chat's own connection, so it stays hidden until a run
+actually fails, and a later run of that source that works clears it. Extraction looks at every chat's
+runs; Chat Settings looks at the open chat's runs. Both read the newest 1000 import Activity rows.
 
 ### Settings and Chat Settings
 
 Global settings and per-chat settings are distinct. Chat Settings shows whether
 values inherit global defaults, disables edits when the host owns settings, and
-shows last-injection loading, error, retry, and result states. It keeps one short
+shows last-injection loading, error, retry, and result states. While background import is
+on it also shows one status line, "N saved today · N waits for you" with a Review button: the
+first count adds up the memories the chat's `auto_import` Activity rows applied since local
+midnight, the second is the chat's pending drafts. Review opens the Review Queue (it has no
+per-chat filter); Chat Settings is a separate host view, so it leaves a short-lived open request
+(`auto-import-status.ts`) that the detail view reads when it opens. It keeps one short
 explanation above the controls; the Recall style info popover lists every style
 and marks the current one. While the global defaults have not arrived, an
 inherited value shows "Loading default…" (or "Default unavailable" after a

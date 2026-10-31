@@ -1471,5 +1471,14 @@
   "ui.longTermMemory.sourcesworkspace.lorebookEntryCountOne": "{{count}} entry",
   "ui.longTermMemory.sourcesworkspace.lorebookEntryCountOther": "{{count}} entries",
   "ui.longTermMemory.sourcesworkspace.messageValue1": "message {{value1}}",
-  "ui.longTermMemory.sourcesworkspace.messagesValue1ToValue2": "messages {{value1}}–{{value2}}"
+  "ui.longTermMemory.sourcesworkspace.messagesValue1ToValue2": "messages {{value1}}–{{value2}}",
+  "ui.longTermMemory.memorysettings.autoImportNeedsConnection": "Background import is on but has no language model to read with. Choose an extraction connection.",
+  "ui.longTermMemory.memorysettings.autoImportChooseConnection": "Choose",
+  "ui.longTermMemory.chatsettings.autoImportNeedsConnection": "Needs an extraction connection",
+  "ui.longTermMemory.chatsettings.autoImportChooseConnection": "Choose",
+  "ui.longTermMemory.chatsettings.autoImportSavedTodayOne": "{{count}} saved today",
+  "ui.longTermMemory.chatsettings.autoImportSavedTodayOther": "{{count}} saved today",
+  "ui.longTermMemory.chatsettings.autoImportWaitingOne": "{{count}} waits for you",
+  "ui.longTermMemory.chatsettings.autoImportWaitingOther": "{{count}} wait for you",
+  "ui.longTermMemory.chatsettings.autoImportReview": "Review"
 }

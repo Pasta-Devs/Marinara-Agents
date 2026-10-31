@@ -84,6 +84,9 @@ export type LongTermMemoryDestinationProps = {
   openActivityRequest?: number;
   openActivityMemoryId?: string | null;
   onOpenActivityHandled?: () => void;
+  /** Chat Settings asked to choose the extraction connection: open Extraction with that field focused. */
+  openForConnection?: boolean;
+  onOpenForConnectionHandled?: () => void;
   onOpenActivityMemoryIdHandled?: () => void;
   onRecoverCandidate?: (
     candidate: LtmExtractionDroppedCandidate,

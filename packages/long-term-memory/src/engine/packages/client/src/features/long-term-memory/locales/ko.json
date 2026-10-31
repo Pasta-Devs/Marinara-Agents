@@ -1471,5 +1471,14 @@
   "ui.longTermMemory.sourcesworkspace.lorebookEntryCountOne": "항목 {{count}}개",
   "ui.longTermMemory.sourcesworkspace.lorebookEntryCountOther": "항목 {{count}}개",
   "ui.longTermMemory.sourcesworkspace.messageValue1": "메시지 {{value1}}",
-  "ui.longTermMemory.sourcesworkspace.messagesValue1ToValue2": "메시지 {{value1}}–{{value2}}"
+  "ui.longTermMemory.sourcesworkspace.messagesValue1ToValue2": "메시지 {{value1}}–{{value2}}",
+  "ui.longTermMemory.memorysettings.autoImportNeedsConnection": "백그라운드 가져오기가 켜져 있지만 읽을 언어 모델이 없어요. 추출 연결을 선택해 주세요.",
+  "ui.longTermMemory.memorysettings.autoImportChooseConnection": "선택",
+  "ui.longTermMemory.chatsettings.autoImportNeedsConnection": "추출 연결이 필요해요",
+  "ui.longTermMemory.chatsettings.autoImportChooseConnection": "선택",
+  "ui.longTermMemory.chatsettings.autoImportSavedTodayOne": "오늘 {{count}}개 저장됨",
+  "ui.longTermMemory.chatsettings.autoImportSavedTodayOther": "오늘 {{count}}개 저장됨",
+  "ui.longTermMemory.chatsettings.autoImportWaitingOne": "{{count}}개가 확인을 기다려요",
+  "ui.longTermMemory.chatsettings.autoImportWaitingOther": "{{count}}개가 확인을 기다려요",
+  "ui.longTermMemory.chatsettings.autoImportReview": "검토"
 }

@@ -5098,6 +5098,99 @@ async function main() {
         );
         await recapPage.close();
       }
+      // Background import: Chat Settings counts today's saved and waiting memories, and a missing extraction
+      // connection is a warning with a Choose button in Chat Settings and in Extraction.
+      for (const scenario of ["connection-missing", "connection-chosen", "working"] as const) {
+        const importPage = await browserContext.newPage();
+        await importPage.setViewportSize({ width: 1280, height: 900 });
+        const now = new Date().toISOString();
+        const event = (fields: Record<string, unknown>) => ({
+          id: crypto.randomUUID(),
+          operationId: crypto.randomUUID(),
+          phase: "import",
+          action: "auto_import",
+          chatId: "chat-import",
+          ts: now,
+          ...fields,
+        });
+        const events =
+          scenario === "working"
+            ? [
+                event({ status: "ok", counts: { imported: 2, failed: 0, applied: 3, skipped: 1 } }),
+                event({ status: "ok", counts: { imported: 1, failed: 0, applied: 2, skipped: 0 } }),
+                event({ status: "ok", chatId: "other-chat", counts: { applied: 9 } }),
+                event({ status: "ok", ts: "2000-01-01T00:00:00.000Z", counts: { applied: 7 } }),
+              ]
+            : [event({ status: "error", error: { message: "No model", code: "ltm_model_configuration" } })];
+        await importPage.route("**/api/long-term-memory/extraction-settings", (route) =>
+          route.request().method() === "GET"
+            ? route.fulfill({
+                json: {
+                  autoImportChatSources: true,
+                  connectionId: scenario === "connection-chosen" ? "connection-1" : null,
+                },
+              })
+            : route.continue(),
+        );
+        await importPage.route("**/api/long-term-memory/debug-log?*", (route) => route.fulfill({ json: { events } }));
+        await importPage.route("**/api/long-term-memory/drafts/pending-count?*", (route) => {
+          assert.match(route.request().url(), /chatId=chat-import/u, "the waiting count is for this chat");
+          return route.fulfill({ json: { count: 4 } });
+        });
+        await importPage.goto(`http://127.0.0.1:${address.port}/`);
+        await importPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await importPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "settings");
+          element.capabilityProps = {
+            chatId: "chat-import",
+            onChatSettingsChange: () => {},
+            onOpenAgentSettings: () => {
+              const detail = document.createElement("marinara-capability-long-term-memory");
+              detail.setAttribute("view", "detail");
+              detail.capabilityProps = { chatId: "chat-import", confirmAction: () => true };
+              document.body.append(detail);
+            },
+          };
+          document.body.append(element);
+        })()`);
+        const importSettings = importPage.locator('[data-ltm-surface="chat-settings"]').last();
+        await importSettings.waitFor();
+        if (scenario === "working") {
+          const status = importSettings.locator("[data-ltm-auto-import-status]");
+          await status.waitFor({ timeout: 5_000 });
+          assert.match(await status.innerText(), /5 saved today · 4 wait for you/u, "only this chat's rows from today");
+          assert.equal(await importSettings.locator("[data-ltm-connection-warning]").count(), 0);
+          await status.getByRole("button", { name: "Review", exact: true }).click();
+          await importPage.locator('[data-ltm-destination="review"][aria-current="page"]:visible').first().waitFor({
+            timeout: 5_000,
+          });
+        } else if (scenario === "connection-chosen") {
+          await importSettings.locator("[data-ltm-auto-import-status]").waitFor({ timeout: 5_000 });
+          assert.equal(
+            await importSettings.locator("[data-ltm-connection-warning]").count(),
+            0,
+            "a chosen connection hides the warning",
+          );
+        } else {
+          const warning = importSettings.locator("[data-ltm-connection-warning]");
+          await warning.waitFor({ timeout: 5_000 });
+          assert.match(await warning.innerText(), /Needs an extraction connection/u);
+          await warning.getByRole("button", { name: "Choose", exact: true }).click();
+          await importPage.waitForFunction(
+            () =>
+              document.activeElement?.getAttribute("aria-labelledby")?.length &&
+              document.activeElement.tagName === "SELECT",
+          );
+          assert.equal(
+            await importPage.locator("#settings-tab-extraction").getAttribute("aria-selected"),
+            "true",
+            "Choose opens Extraction",
+          );
+          assert.equal(await importPage.locator("[data-ltm-connection-warning]").count(), 2);
+        }
+        await importPage.close();
+      }
       // #1659: saving a form as Custom also drops the preset history, so Reset to preset agrees with a reload.
       {
         const savePage = await browserContext.newPage();

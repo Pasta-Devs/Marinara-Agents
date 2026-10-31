@@ -7,6 +7,7 @@ import type {
 import { LTM_RECALL_STYLE_WEIGHTS } from "../../../../../shared/src/features/agents/long-term-memory/constants.js";
 import { LTM_RECALL_SCORE_THRESHOLD_CEILING } from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
 import { errorMessage, invalidateLtmQueries, queryKeys, request, requestHost, settingsQueryOptions } from "../api";
+import { autoImportNeedsConnection, useAutoImportEvents } from "../auto-import-status";
 import { Button, InfoPopover, NumberField, StatusSurface, inputClass, lockedActionProps } from "../shared-controls";
 import { nextTabIndex } from "../tab-keys";
 import type { LongTermMemoryDestinationProps } from "../types";
@@ -194,6 +195,8 @@ export default function MemorySettings({
   openActivityRequest,
   openActivityMemoryId,
   onOpenActivityHandled,
+  openForConnection,
+  onOpenForConnectionHandled,
 }: LongTermMemoryDestinationProps) {
   const { t: localizeUi, locale } = useLtmTranslation();
   const memorySettingsTitleId = useId();
@@ -211,6 +214,7 @@ export default function MemorySettings({
     queryKey: queryKeys.extractionSettings,
     queryFn: () => request<LtmExtractionSettingsPatch>("/extraction-settings"),
   });
+  const autoImportEvents = useAutoImportEvents(extraction.data?.autoImportChatSources === true);
   const connections = useQuery({
     queryKey: ["long-term-memory", "language-connections"],
     queryFn: () => requestHost<LanguageConnection[]>("/api/connections"),
@@ -247,7 +251,9 @@ export default function MemorySettings({
   const message = messageState.text;
   const setMessage = (text: string, tone: "success" | "danger" = "success", surface: "shared" | "debug" = "shared") =>
     setMessageState({ text, tone, surface });
-  const [activeTab, setActiveTab] = useState<SettingsTab>("recall");
+  // Chat Settings can open this tab with the connection field focused (once).
+  const [activeTab, setActiveTab] = useState<SettingsTab>(openForConnection ? "extraction" : "recall");
+  const connectionSelectRef = useRef<HTMLSelectElement>(null);
   // Capture the Vault memory link's target before the handoff request is reset, so the
   // Debug tab can open filtered to that memory without a stale filter on later entries.
   const [debugMemoryId, setDebugMemoryId] = useState<string | null>(null);
@@ -484,6 +490,13 @@ export default function MemorySettings({
     </section>
   );
 
+  // The form (and its connection field) mounts only once both settings have loaded.
+  const formReady = Boolean(globalForm && extractionFormState);
+  useEffect(() => {
+    if (!openForConnection || !formReady) return;
+    connectionSelectRef.current?.focus({ preventScroll: true });
+    onOpenForConnectionHandled?.();
+  }, [formReady, onOpenForConnectionHandled, openForConnection]);
   if (global.isError || extraction.isError)
     return loadScreen(
       <StatusSurface tone="danger">
@@ -975,6 +988,7 @@ export default function MemorySettings({
               {localizeUi("ui.longTermMemory.memorysettings.extractionConnection")}
             </span>
             <select
+              ref={connectionSelectRef}
               aria-labelledby={extractionConnectionLabelId}
               aria-describedby={`${extractionConnectionLabelId}-hint`}
               className={inputClass}
@@ -1120,6 +1134,18 @@ export default function MemorySettings({
               })
             }
           />
+          {extractionFormState.autoImportChatSources &&
+          !extractionFormState.connectionId &&
+          autoImportNeedsConnection(autoImportEvents.data?.events ?? []) ? (
+            <StatusSurface tone="warning" compact data-ltm-connection-warning>
+              <span className="min-w-0 flex-1">
+                {localizeUi("ui.longTermMemory.memorysettings.autoImportNeedsConnection")}
+              </span>
+              <Button onClick={() => connectionSelectRef.current?.focus()}>
+                {localizeUi("ui.longTermMemory.memorysettings.autoImportChooseConnection")}
+              </Button>
+            </StatusSurface>
+          ) : null}
           <Toggle
             label={localizeUi("ui.longTermMemory.memorysettings.useAdvancedMemory")}
             help={localizeUi(
