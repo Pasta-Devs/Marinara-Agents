@@ -502,6 +502,7 @@ export async function generateCreatorPost(
     scene: askModelForScene ? generated.scene : null,
     recentIds: recentWardrobeIds,
     creatorName: account.displayName,
+    bare,
   });
   // What the picture is and may show, in one place so the two briefs agree on level, shoot and effort.
   const tagged = await resolveSlurpMentionedCast(db, account.id, protectedGenerated.content, false);

@@ -83,6 +83,18 @@ const bareCallback = slurpImageBrief({
 });
 assert.doesNotMatch(bareCallback, /hoodie/u, "a body-showing callback keeps the shoot's place, not its clothes");
 assert.equal(slurpPictureOutfit({ level: "nudity", scene: "Nothing but a towel" }), "Nothing but a towel");
+const wearingPlace = slurpShootContinuity({
+  scene: { ...scene, setting: "a loft, people wearing masks. Rain outside", outfit: "hoodie and jeans" },
+});
+const bareWearing = slurpImageBrief({
+  cameraPhoto: slurpCameraSourcePhoto("tripod"),
+  variation,
+  sexualLevel: "explicit",
+  shoot: { place: "loft", company: "", brief: wearingPlace ?? "" },
+  scene,
+});
+assert.match(bareWearing, /wearing masks/u, "only the Wearing clause is cut, not place text");
+assert.doesNotMatch(bareWearing, /hoodie/u);
 const legacy = slurpImageBrief({
   cameraPhoto: slurpCameraSourcePhoto("tripod"),
   variation,

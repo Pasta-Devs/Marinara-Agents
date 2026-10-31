@@ -80,13 +80,13 @@ export function readSlpWardrobeLooks(value: unknown): SlpWardrobeLook[] {
   return looks;
 }
 
-// ponytail: an English word list, so looks named in other languages are missed; ceiling is a tagged "intimate" field on the look.
+// ponytail: an English word list on the look's name and tags only (free text such as "sports bra" would match), so looks named in other languages are missed; ceiling is an explicit intimate field on the look.
 const INTIMATE_LOOK =
-  /\b(?:nude|naked|topless|lingerie|underwear|undies|panties|bra|bralette|thong|briefs|boxers|bikini|swimsuit|swimwear|towel|negligee|babydoll|corset|stockings|garter|boudoir|robe|bathrobe|bodysuit|teddy|chemise|nightgown|fishnets|lace|sheer|latex|harness)\b/iu;
+  /\b(?:nude|naked|topless|lingerie|underwear|undies|panties|bra|bralette|thong|briefs|boxers|bikini|swimsuit|swimwear|towel|negligee|babydoll|corset|stockings|garter|boudoir|bathrobe|bodysuit|chemise|nightgown|fishnets)\b/iu;
 
 /** A look that suits a picture showing the body: lingerie, swimwear, a towel, or nothing. Everyday clothes do not. */
 export function slpWardrobeLookIntimate(look: SlpWardrobeLook): boolean {
-  return INTIMATE_LOOK.test([look.name, look.summary, look.description, ...look.tags].join(" "));
+  return INTIMATE_LOOK.test([look.name, ...look.tags].join(" "));
 }
 
 export function slpWardrobeLookFits(look: SlpWardrobeLook, access: "public" | "locked"): boolean {

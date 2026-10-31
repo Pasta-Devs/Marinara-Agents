@@ -186,7 +186,7 @@ export function slurpImageBrief(input: {
     )
       ? // A body-showing picture continuing a clothed shoot keeps its place and light, not its clothes.
         slurpLevelIsBare(input.sexualLevel)
-        ? input.shoot.brief.replace(/\bWearing [^.]*\.\s*/giu, "").trim()
+        ? input.shoot.brief.replace(/(^|\. )Wearing [^.]*\.\s*/gu, "$1").trim()
         : input.shoot.brief
       : "";
   const outfit = slurpPictureOutfit({

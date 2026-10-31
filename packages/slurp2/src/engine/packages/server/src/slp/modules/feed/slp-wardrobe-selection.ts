@@ -65,6 +65,8 @@ export function resolveSlurpWardrobeSelection(input: {
   scene?: SlpWardrobeScene | null;
   recentIds?: readonly string[];
   creatorName: string;
+  /** The picture shows the body: only a look the writer named is used, never a fallback over its outfit. */
+  bare?: boolean;
 }): SlurpWardrobeSelection {
   const resolve = (look: SlpWardrobeLook): SlpWardrobeLook => ({
     ...look,
@@ -75,6 +77,7 @@ export function resolveSlurpWardrobeSelection(input: {
   if (requested && slpWardrobeLookFits(requested, input.access)) {
     return { look: resolve(requested), requestedId, fallback: false };
   }
+  if (input.bare) return { look: null, requestedId, fallback: Boolean(requestedId) };
   const recent = input.recentIds ?? [];
   const recency = new Map(recent.map((id, index) => [id, index]));
   const compatible = input.looks.filter((look) => slpWardrobeLookFits(look, input.access));

@@ -107,6 +107,31 @@ assert.equal(
   }).look,
   null,
 );
+const sportsBra = {
+  ...look("gym", "locked", "2026-02-01T00:00:00.000Z"),
+  name: "Gym day",
+  description: "sports bra and lace-up shoes",
+};
+assert.deepEqual(
+  closet([sportsBra, lingerie], "explicit").looks.map((entry) => entry.id),
+  ["lingerie"],
+  "only name and tags count",
+);
+assert.equal(
+  resolveSlurpWardrobeSelection({ looks: [lingerie], access: "locked", creatorName: "Mia", bare: true }).look,
+  null,
+  "a body-showing post never gets a fallback look over the writer's outfit",
+);
+assert.equal(
+  resolveSlurpWardrobeSelection({
+    looks: [lingerie],
+    access: "locked",
+    creatorName: "Mia",
+    bare: true,
+    scene: { wardrobeId: "lingerie", setting: "x", action: "x", expression: "x", visualDirection: "x" },
+  }).look?.id,
+  "lingerie",
+);
 assert.equal(slurpWardrobePrompt(closet(everyday, "explicit").looks, "locked", [], "Mia"), null);
 assert.match(
   slurpWardrobePrompt(closet([...everyday, lingerie], "explicit").looks, "locked", [], "Mia") ?? "",
