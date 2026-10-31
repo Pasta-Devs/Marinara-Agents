@@ -5,7 +5,7 @@ import type { SlurpVisualBrief } from "../../base/media/slp-visual-brief.js";
 import type { SlurpExplicitLevel, SlurpPostAccess } from "../../modules/feed/slp-post-guidance.js";
 import type { SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
 import { normalizeSlpImagePrompt, slurpWithoutCameraDevice } from "../../base/media/slp-image-prompt.js";
-import { slurpImageBrief, slurpImageNegativePrompt } from "../../modules/feed/slp-image-brief.js";
+import { slurpImageBrief, slurpImageNegativePrompt, slurpPictureOutfit } from "../../modules/feed/slp-image-brief.js";
 import { slurpCameraSourceShot, type SlurpCameraSource } from "../../modules/feed/slp-camera-source.js";
 import { slurpVisualBriefFromSituation } from "../../modules/feed/slp-visual-brief.js";
 import { slurpPostSexualLevel } from "../../modules/feed/slp-post-guidance.js";
@@ -130,7 +130,13 @@ export function slurpPostPictureBriefs(input: {
             access: input.access,
             explicitLevel: input.explicitLevel,
             scene: input.scene,
-            clothing: input.selectedWardrobe?.description ?? input.scene?.outfit ?? input.stageFacts?.wardrobe ?? null,
+            clothing:
+              slurpPictureOutfit({
+                level: sexualLevel,
+                selected: input.selectedWardrobe?.description,
+                scene: input.scene?.outfit,
+                usual: input.stageFacts?.wardrobe,
+              }) || null,
           })
         : undefined,
     negativePrompt:

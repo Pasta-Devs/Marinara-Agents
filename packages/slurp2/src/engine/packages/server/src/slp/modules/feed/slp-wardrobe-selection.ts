@@ -1,9 +1,12 @@
 import {
   formatSlpWardrobeCloset,
+  slpWardrobeForPicture,
   slpWardrobeLookFits,
   type SlpWardrobeLook,
   type SlpWardrobeScene,
 } from "../../../../../shared/src/slp/slp-wardrobe.js";
+import { slurpPostIsBare } from "./slp-image-brief.js";
+import type { SlurpExplicitLevel, SlurpPostAccess } from "./slp-post-guidance.js";
 import { slpResolveCardMacros } from "../../base/prompting/slp-prompt-safety.js";
 
 export type SlurpWardrobeSelection = {
@@ -11,6 +14,27 @@ export type SlurpWardrobeSelection = {
   requestedId: string | null;
   fallback: boolean;
 };
+
+/** The wardrobe look IDs the given posts used. */
+export function slurpRecentLookIds(posts: readonly { metadata: Record<string, unknown> }[]): string[] {
+  return posts.flatMap((post) =>
+    typeof post.metadata.wardrobeLookId === "string" ? [post.metadata.wardrobeLookId] : [],
+  );
+}
+
+/**
+ * The closet a post chooses from, and whether its picture shows the body. A picture that shows the
+ * body (nudity or explicit, once access and intent have capped the level) is dressed by an everyday
+ * look, so only intimate looks are offered, and no everyday look is the fallback. Without a scene
+ * plan (`scene` false) nothing is chosen.
+ */
+export function slurpPostCloset(
+  looks: readonly SlpWardrobeLook[],
+  post: { level: SlurpExplicitLevel; access: SlurpPostAccess; intent?: string; scene: boolean },
+): { looks: SlpWardrobeLook[]; bare: boolean } {
+  const bare = slurpPostIsBare(post);
+  return { looks: post.scene ? slpWardrobeForPicture(looks, bare) : [], bare };
+}
 
 export function slurpWardrobePrompt(
   looks: readonly SlpWardrobeLook[],
@@ -41,6 +65,8 @@ export function resolveSlurpWardrobeSelection(input: {
   scene?: SlpWardrobeScene | null;
   recentIds?: readonly string[];
   creatorName: string;
+  /** The picture shows the body: only a look the writer named is used, never a fallback over its outfit. */
+  bare?: boolean;
 }): SlurpWardrobeSelection {
   const resolve = (look: SlpWardrobeLook): SlpWardrobeLook => ({
     ...look,
@@ -51,6 +77,7 @@ export function resolveSlurpWardrobeSelection(input: {
   if (requested && slpWardrobeLookFits(requested, input.access)) {
     return { look: resolve(requested), requestedId, fallback: false };
   }
+  if (input.bare) return { look: null, requestedId, fallback: Boolean(requestedId) };
   const recent = input.recentIds ?? [];
   const recency = new Map(recent.map((id, index) => [id, index]));
   const compatible = input.looks.filter((look) => slpWardrobeLookFits(look, input.access));

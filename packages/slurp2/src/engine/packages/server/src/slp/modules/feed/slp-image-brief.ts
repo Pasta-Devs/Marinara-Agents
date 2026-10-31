@@ -17,7 +17,7 @@
  * the Creator's look and the Engine style profile are known.
  */
 import type { SlurpPostVariation } from "./slp-post-variation.js";
-import type { SlurpExplicitLevel } from "./slp-post-guidance.js";
+import { slurpPostSexualLevel, type SlurpExplicitLevel, type SlurpPostAccess } from "./slp-post-guidance.js";
 import { slurpIsLegacyImageBrief } from "../../base/media/slp-image-prompt.js";
 import { slurpCameraSourceNegative, type SlurpCameraSource } from "./slp-camera-source.js";
 import type { SlpWardrobeScene } from "../../../../../shared/src/slp/slp-wardrobe.js";
@@ -97,17 +97,57 @@ function sentence(value: string | null | undefined): string {
   return text ? `${text}.` : "";
 }
 
+/** The levels that show the body: an everyday outfit line there would dress the picture. */
+export function slurpLevelIsBare(level: SlurpExplicitLevel): boolean {
+  return level === "nudity" || level === "explicit";
+}
+
+/** Whether this post's picture shows the body, once its access and intent have capped the Creator's level. */
+export function slurpPostIsBare(input: {
+  level: SlurpExplicitLevel;
+  access: SlurpPostAccess;
+  intent?: string;
+}): boolean {
+  return slurpLevelIsBare(slurpPostSexualLevel(input));
+}
+
+const NO_CLOTHES =
+  /^(?:nothing|nude|naked|unclothed|no clothes|completely bare)(?:[,.;!\s]+(?:bare skin|at all|completely|nude|naked))*[.!\s]*$/iu;
+
+/**
+ * The clothes a picture names. At a body-showing level the Creator's usual wardrobe (everyday
+ * clothes) is not a fallback, and an outfit that is nothing says nothing: the level already says it.
+ */
+export function slurpPictureOutfit(input: {
+  level: SlurpExplicitLevel;
+  selected?: string | null;
+  scene?: string | null;
+  usual?: string | null;
+}): string {
+  const bare = slurpLevelIsBare(input.level);
+  const outfit = input.selected?.trim() || input.scene?.trim() || (bare ? "" : input.usual?.trim()) || "";
+  return bare && NO_CLOTHES.test(outfit) ? "" : outfit;
+}
+
 /**
  * What a later callback needs to keep from this photo: place, clothes, and light. Stored on the
  * shoot instead of the whole draft, so a callback never nests an earlier draft inside its own.
  */
 export function slurpShootContinuity(input: {
   scene?: SlpWardrobeScene | null;
-  outfit?: string | null;
+  selected?: string | null;
+  /** The picture shows the body: "nothing" is not stored as clothes. */
+  bare?: boolean;
 }): string | null {
+  const outfit = slurpPictureOutfit({
+    level: input.bare ? "explicit" : "none",
+    selected: input.selected,
+    scene: input.scene?.outfit,
+  });
   const text = [
     sentence(input.scene?.setting),
-    input.outfit?.trim() ? sentence(`Wearing ${input.outfit.trim()}`) : "",
+    // One sentence, so a callback at another level can cut it whole.
+    outfit ? sentence(`Wearing ${outfit.replace(/[.!?]+\s*(?=\S)/gu, ", ")}`) : "",
     sentence(input.scene?.visualDirection),
   ]
     .filter(Boolean)
@@ -145,19 +185,26 @@ export function slurpImageBrief(input: {
     !/\b(?:same (?:outfit|clothes|place|shoot)|earlier (?:shoot|photo|picture)|established (?:outfit|clothing|appearance))\b/iu.test(
       input.shoot.brief,
     )
-      ? input.shoot.brief
+      ? // A body-showing picture continuing a clothed shoot keeps its place and light, not its clothes.
+        slurpLevelIsBare(input.sexualLevel)
+        ? input.shoot.brief.replace(/(^|\. )Wearing [^.]*\.\s*/gu, "$1").trim()
+        : input.shoot.brief
       : "";
-  const outfit =
-    input.selectedWardrobe?.description?.trim() ||
-    input.scene?.outfit?.trim() ||
-    input.stageFacts?.wardrobe?.trim() ||
-    "";
+  const outfit = slurpPictureOutfit({
+    level: input.sexualLevel,
+    selected: input.selectedWardrobe?.description,
+    scene: input.scene?.outfit,
+    usual: input.stageFacts?.wardrobe,
+  });
   const place = input.shoot ? shootBrief || input.shoot.place : input.scene?.setting?.trim() || input.variation.place;
   return [
     sentence(input.scene?.action || input.variation.moment),
     sentence(input.scene?.expression),
     // A callback keeps the shoot's clothes; its continuity text already names them.
-    !shootBrief && outfit ? sentence(`Wearing ${outfit}`) : "",
+    !shootBrief && // One sentence, so a callback at another level can cut it whole.
+    outfit
+      ? sentence(`Wearing ${outfit.replace(/[.!?]+\s*(?=\S)/gu, ", ")}`)
+      : "",
     sentence(place),
     input.shoot && shootBrief ? "" : sentence(input.scene?.visualDirection),
     sentence(

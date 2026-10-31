@@ -7,6 +7,7 @@ import {
 } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-wardrobe";
 import {
   resolveSlurpWardrobeSelection,
+  slurpPostCloset,
   slurpWardrobePrompt,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-wardrobe-selection";
 import {
@@ -17,6 +18,7 @@ import {
   buildSlpWardrobeJson,
   parseSlpWardrobeJson,
 } from "../packages/slurp2/src/engine/packages/client/src/slp/features/creators/slp-wardrobe-json";
+import { slurpPictureOutfit } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-image-brief";
 import { slurp2Source } from "./slurp2-source";
 
 const look = (
@@ -71,6 +73,77 @@ assert.equal(
 );
 assert.doesNotMatch(formatSlpWardrobeCloset(looks), /disabled/u);
 assert.match(slurpWardrobePrompt(looks, "public", ["both-new"], "Mia") ?? "", /public-old[\s\S]*both-new/u);
+
+// A post that shows the body is offered only intimate looks, and no everyday look is a fallback.
+const lingerie = {
+  ...look("lingerie", "locked", "2026-06-01T00:00:00.000Z"),
+  description: "black lace lingerie set",
+};
+const everyday = [bothNew, locked, publicOld];
+const closet = (
+  looks: SlpWardrobeLook[],
+  level: "none" | "nudity" | "explicit",
+  access: "public" | "locked" = "locked",
+) => slurpPostCloset(looks, { level, access, scene: true });
+assert.deepEqual(
+  closet([...everyday, lingerie], "explicit").looks.map((entry) => entry.id),
+  ["lingerie"],
+);
+assert.equal(closet(everyday, "explicit").bare, true);
+assert.deepEqual(closet(everyday, "explicit").looks, []);
+assert.equal(closet(everyday, "none").looks.length, 3, "other levels still offer every look");
+assert.equal(
+  closet(everyday, "explicit", "public").bare,
+  false,
+  "public posts never show nudity, so the closet is whole",
+);
+assert.deepEqual(slurpPostCloset(everyday, { level: "none", access: "locked", scene: false }).looks, []);
+assert.equal(
+  resolveSlurpWardrobeSelection({
+    looks: closet(everyday, "explicit").looks,
+    access: "locked",
+    creatorName: "Mia",
+    scene: { wardrobeId: "locked", setting: "x", action: "x", expression: "x", visualDirection: "x" },
+  }).look,
+  null,
+);
+const sportsBra = {
+  ...look("gym", "locked", "2026-02-01T00:00:00.000Z"),
+  name: "Gym day",
+  description: "sports bra and lace-up shoes",
+};
+assert.deepEqual(
+  closet([sportsBra, lingerie], "explicit").looks.map((entry) => entry.id),
+  ["lingerie"],
+  "only name and tags count",
+);
+assert.equal(
+  resolveSlurpWardrobeSelection({ looks: [lingerie], access: "locked", creatorName: "Mia", bare: true }).look,
+  null,
+  "a body-showing post never gets a fallback look over the writer's outfit",
+);
+assert.equal(
+  resolveSlurpWardrobeSelection({
+    looks: [lingerie],
+    access: "locked",
+    creatorName: "Mia",
+    bare: true,
+    scene: { wardrobeId: "lingerie", setting: "x", action: "x", expression: "x", visualDirection: "x" },
+  }).look?.id,
+  "lingerie",
+);
+assert.equal(slurpWardrobePrompt(closet(everyday, "explicit").looks, "locked", [], "Mia"), null);
+assert.match(
+  slurpWardrobePrompt(closet([...everyday, lingerie], "explicit").looks, "locked", [], "Mia") ?? "",
+  /lingerie/u,
+);
+
+// The picture's outfit: usual wardrobe is no fallback when the body shows; "nothing" adds no clothes line.
+assert.equal(slurpPictureOutfit({ level: "explicit", usual: "hoodies and jeans" }), "");
+assert.equal(slurpPictureOutfit({ level: "none", usual: "hoodies and jeans" }), "hoodies and jeans");
+assert.equal(slurpPictureOutfit({ level: "nudity", scene: "Nothing, bare skin" }), "");
+assert.equal(slurpPictureOutfit({ level: "suggestive", scene: "Nothing but a towel" }), "Nothing but a towel");
+assert.equal(slurpPictureOutfit({ level: "explicit", selected: "lace lingerie", scene: "a sweater" }), "lace lingerie");
 
 // Engine macros in a look resolve for the post; the stored look keeps its template.
 const macroLook = {
