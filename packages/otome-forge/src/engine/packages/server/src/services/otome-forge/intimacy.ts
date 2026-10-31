@@ -42,6 +42,23 @@ export function intimacyLine(world: Pick<World, "content">, unit: Pick<Unit, "na
   return `${unit.name}'s tastes in sex and intimacy: ${parts.join("; ")}. Bring them in when a scene turns intimate and they fit; not every intimate scene needs them, and ${unit.name} can want other things too.`;
 }
 
+/**
+ * The group-intimacy line (#1975): with two or more love interests present who are established with the protagonist (stage
+ * 3 and up: past the mask), a scene may bring them into one intimacy together, a threesome or all of them, when the beat
+ * and the relationships fit. Heat decides how far, as ever; an SFW story and an unestablished cast get nothing.
+ */
+export function groupIntimacyLine(
+  world: Pick<World, "content">,
+  present: ReadonlyArray<Pick<Unit, "name"> & { id?: string }>,
+  stageOf: (unit: Pick<Unit, "name"> & { id?: string }, index: number) => number,
+): string {
+  if (!intimacyOpen(world.content) || present.length < 2) return "";
+  const established = present.filter((unit, index) => stageOf(unit, index) >= 3);
+  if (established.length < 2) return "";
+  const names = established.map((unit) => unit.name);
+  return `Beyond one partner: ${names.join(", ")} are each established with the protagonist. When the chapter, the beat and their ties make it fit, a scene may bring two or more of them into the same intimacy (a threesome, or everyone present) — not in most scenes, and never against their own tastes or the content limits. The others' presence changes the tone: each has their own wants, their own jealousy or ease with the others.`;
+}
+
 const IntimacyReplySchema: ZodType<{ intimacy: BibleIntimacy }> = z.object({
   intimacy: z.object({ preferences: z.array(z.string()), attractions: z.array(z.string()) }),
 });

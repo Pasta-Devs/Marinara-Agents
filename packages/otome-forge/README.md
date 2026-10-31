@@ -183,10 +183,10 @@ Over five moments, pick what your love interest really feels from three or four 
 
 ### Read Me
 
-Read Them in reverse: your love interest studies you and makes four guesses about you, from what you like and dislike to your habits, fears and dreams. Answer each with **Spot on**, **Close** or **Not at all**, and tell them the truth in your own words if you like.
+Read Them in reverse: your love interest studies you and makes four guesses about you, from what you want right now and what you think to your likes, dislikes, habits, fears, memories and things you would rather not admit. A guess is never what your persona already states: from a persona who loves sweets he guesses the sweet, not the liking, so every answer teaches him something new. Answer each with **Spot on**, **Close** or **Not at all**, and tell them the truth in your own words if you like.
 
 - It pays 40 Starlight and 20 affection, plus 10 for each guess they get spot on and 5 for each close one, within the day's caps. It is 1 model call, and it follows your story's Heat.
-- **What they know about you:** every answer goes into that love interest's notebook. Open it from Read Me to read it, rewrite your own words or delete an entry.
+- **What they know about you:** every answer goes into that love interest's notebook, and he never guesses it again. Open it from Read Me to read it, rewrite your own words or delete an entry.
 - Only that love interest knows it. It reaches the scenes they're in, their Home notes and messages, and dates and stories with them, never another love interest's prompts. Others in a scene only learn what happens on the page.
 - It is never part of story memory, so a delete is final. A scene already written ahead keeps the notebook it was written with; your change reaches the next one.
 - Guesses never touch your health, medication or cycle, and words about them can't be kept.
