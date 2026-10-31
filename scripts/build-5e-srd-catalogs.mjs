@@ -8299,6 +8299,9 @@ function scrollEntry(spell, table, report) {
   return {
     id: `spell-scroll-${spell.id}`,
     label: `Spell Scroll: ${spell.label}`,
+    // The level of the spell it holds (1.0.2), so a layer can hide scrolls past a cap as it hides the
+    // spells themselves: Low magic's "no spell above 5th level", in loot, shops and the picker alike.
+    filters: { spell_level: level },
     summary: trimToSentence(
       `A scroll of ${said}, used up when read: save DC ${row.dc}, attack bonus +${row.bonus}. ${spell.summary}`,
       SUMMARY_MAX,
@@ -31321,6 +31324,9 @@ const catalogs = [
     id: MAGIC_CATALOG,
     label: "Magic items",
     holds: "items",
+    // A spell scroll's spell level (1.0.2); no other item sets it, and a layer never hides an entry
+    // that does not set the filter it names.
+    filters: [{ id: "spell_level", label: "Spell level", type: "number" }],
     asset: `catalogs/${MAGIC_CATALOG}.json`,
   },
   {

@@ -2,7 +2,7 @@
   "$comment": "First-party 5e ruleset on SRD 5.1. Every id here is this file's own choice: the Engine never looks for 'level', 'dex' or 'slots'. A $comment key is allowed on any object and ignored.",
   "schemaVersion": 1,
   "id": "5e-2014",
-  "version": 453,
+  "version": 454,
   "name": "5e (SRD 5.1)",
   "edition": "System Reference Document 5.1, 2014 rules",
   "license": {
@@ -854,6 +854,17 @@
 {"id":"acolyte","label":"Acolyte","summary":"The SRD's Acolyte background equipment, taken beside a class's.","group":"background","lines":[{"oneOf":["equipment/amulet","equipment/emblem","equipment/reliquary"]},{"name":"Stick of incense","count":5},{"name":"Vestments"},{"item":"equipment/clothes-common"},{"item":"equipment/pouch"},{"coins":"gp","count":15}],"choices":[{"label":"Choice 1","options":[{"label":"A prayer book","lines":[{"item":"equipment/book"}]},{"label":"Prayer wheel","lines":[{"name":"Prayer wheel"}]}]}]}
     ]
   },
+  "layers": [
+    {
+"$comment":"Low magic (1.0.2, Capability API 1.813): flavour plus caps. Spells and spell scrolls stop at 5th level; every magic item stays in the game but no seller has one among their wares, the magic dealer and the scribe are gone, and treasure drops one about a fifth as often. A fence's odd lot is the one shady way to buy one. Slots of 6th level and up stay on the sheet, for casting lower spells with them.",
+"id":"low_magic",
+"label":"Low magic",
+"summary":"Magic is rare and feared. No spell above 5th level, and magic items are seldom found and never sold in shops.",
+"gm":{"guidance":"Low magic is on. Magic is rare, feared and remarked on: few people ever see a spell cast, casters are scarce and often hidden, and NPCs meet magic with awe, suspicion or fear. Nobody, the party or anyone else, knows or casts a spell above 5th level, and nothing in the world reaches past that. Magic items still exist, rare ones included, but they are seldom found and never sold over a counter: one comes from a ruin, a hoard, an old family, the dead or the black market, and each has a story. Do not invent magic items, and give one only as a deliberate, story-worthy reward. Keep creatures of magic out of random and incidental encounters: aberrations, celestials, constructs, dragons, elementals, fey, fiends, undead, and anything that casts spells. You may still build a fight around one on purpose when the story calls for it: give it a reason to exist in a world where magic is rare, and let the party feel how unusual it is.","worldGuidance":"Low magic is on. If the player has not said why magic is rare in this world, decide it now and keep to it: what happened (a cataclysm, a purge, a fading source, a law, a curse), when, who remembers it and what it left behind. Build a world where that shows: no schools of wizardry and no magic shops, healing that comes from herbs and hands, a few practitioners who are feared, hunted or prized, and ruins and relics from a time when magic was stronger."},
+"catalogs":[{"id":"spells","hide":{"filter":"level","above":5}},{"id":"magic_items","hide":{"filter":"spell_level","above":5}}],
+"items":{"market":{"removeSellers":["magic_dealer","scribe"],"unsold":[{"tag":"magical"}]},"lootTables":[{"id":"treasure_low","label":"Pocket treasure (challenge 0 to 4)","rolls":1,"entries":[{"coins":"cp","weight":15,"count":"5d6"},{"coins":"sp","weight":20,"count":"4d6"},{"coins":"gp","weight":10,"count":"2d6"},{"filter":{"category":"potion","rarity":"common"},"weight":1}]},{"id":"treasure_mid","label":"Pocket treasure (challenge 5 to 10)","rolls":"1d2","entries":[{"coins":"gp","weight":25,"count":"4d6"},{"coins":"sp","weight":10,"count":"10d6"},{"filter":{"category":"potion","rarity":"uncommon"},"weight":1},{"filter":{"category":"scroll","rarity":"common"},"weight":1},{"filter":{"rarity":"uncommon"},"weight":1}]},{"id":"treasure_high","label":"Pocket treasure (challenge 11 to 16)","rolls":"1d2","entries":[{"coins":"gp","weight":20,"count":"10d10"},{"coins":"pp","weight":15,"count":"2d6"},{"filter":{"category":"potion","rarity":"rare"},"weight":1},{"filter":{"category":"scroll","rarity":"uncommon"},"weight":1},{"filter":{"rarity":"rare"},"weight":1}]},{"id":"treasure_epic","label":"Pocket treasure (challenge 17 and up)","rolls":"1d3","entries":[{"coins":"pp","weight":25,"count":"4d6"},{"coins":"gp","weight":10,"count":"10d10"},{"filter":{"category":"potion","rarity":"very_rare"},"weight":1},{"filter":{"category":"scroll","rarity":"rare"},"weight":1},{"filter":{"rarity":"very_rare"},"weight":1},{"filter":{"rarity":"legendary"},"weight":1}]},{"id":"smiths_odd_lot","label":"A smith's odd lot","rolls":1,"entries":[{"coins":"cp","weight":49},{"filter":{"category":"weapon","rarity":"uncommon"},"weight":1}]},{"id":"fences_odd_lot","label":"A fence's odd lot","rolls":1,"entries":[{"item":"magic_items/bag-of-devouring","weight":1},{"item":"magic_items/dust-of-sneezing-and-choking","weight":2},{"item":"magic_items/potion-of-poison","weight":3,"count":"1d2"},{"item":"magic_items/armor-of-vulnerability","weight":1},{"item":"magic_items/shield-of-missile-attraction","weight":1},{"filter":{"tag":"magical","rarity":"common"},"weight":2},{"filter":{"tag":"magical","rarity":"uncommon"},"weight":1},{"coins":"cp","weight":16}]}]}
+    }
+  ],
   "catalogs": [
     {
 "$comment":"Ready-made SRD 5.1 spells. A picked row is a copy the player can edit. Generated by scripts/build-5e-srd-catalogs.mjs from Open5e SRD 5.1 data; its catalog file names the source.",
@@ -940,6 +951,7 @@
 "id":"magic_items",
 "label":"Magic items",
 "holds":"items",
+"filters":[{"id":"spell_level","label":"Spell level","type":"number"}],
 "asset":"catalogs/magic_items.json"
     },
     {
