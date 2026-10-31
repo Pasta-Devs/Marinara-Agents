@@ -228,7 +228,7 @@
         {
           "version": "0.448.0",
           "date": "2026-10-30",
-          "notes": "- Magic ammunition hits more often as well as harder: an Arrow, Crossbow Bolt, Sling Bullet or Blowgun Needle (+1, +2 or +3) adds its bonus to the attack roll as well as the damage (Capability API 1.812). It declares 1.812.",
+          "notes": "- Magic ammunition hits more often as well as harder: an Arrow, Crossbow Bolt, Sling Bullet or Blowgun Needle (+1, +2 or +3) adds its bonus to the attack roll as well as the damage (Capability API 1.811). It declares 1.811.",
           "highlight": true
         },
         {
