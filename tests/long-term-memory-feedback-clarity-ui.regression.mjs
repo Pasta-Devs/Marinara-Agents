@@ -1410,6 +1410,44 @@ assert.equal(halfUp.shown, "3", "typing 2.5 from 10 shows 3");
 assert.ok(Number.isInteger(halfUp.clamped), "the request limit is a whole number");
 assert.equal(clampOf(2.5, 10, false).shown, "2.5", "other NumberFields keep decimals");
 
+// Issue #1974: the settings schema's `.int()` fields must round a typed decimal like the batch size does;
+// the score threshold, the four recall weights and the temperature stay decimal.
+const numberFieldOf = (source, value) =>
+  source.match(
+    new RegExp(`<NumberField(?:(?!<NumberField)[\\s\\S])*?value=\\{${value.replace(".", "\\.")}\\}[\\s\\S]*?/>`, "u"),
+  )?.[0] ?? "";
+for (const [source, values] of [
+  [
+    settings,
+    [
+      "globalForm.longTermMemoryBudgetTokens",
+      "globalForm.longTermMemoryMaxChunks",
+      "globalForm.longTermMemoryRecallContextMessages",
+      "extractionFormState.maxOutputTokens",
+      "extractionFormState.maxSourceTokens",
+      "extractionFormState.existingNoteMaxChunks",
+      "extractionFormState.existingNoteMaxTokens",
+    ],
+  ],
+  [chatSettings, ["effectiveBudget", "effectiveMaxChunks"]],
+]) {
+  for (const value of values) {
+    assert.match(numberFieldOf(source, value), /^\s*integer$/mu, `${value} rounds a typed decimal`);
+  }
+}
+for (const value of [
+  "globalForm.longTermMemoryScoreThreshold",
+  "globalForm.longTermMemorySemanticWeight",
+  "globalForm.longTermMemoryLexicalWeight",
+  "globalForm.longTermMemoryGraphWeight",
+  "globalForm.longTermMemoryKeywordWeight",
+  "extractionFormState.temperature",
+]) {
+  const field = numberFieldOf(settings, value);
+  assert.ok(field.includes(`value={${value}}`), `${value} field found`);
+  assert.doesNotMatch(field, /^\s*integer$/mu, `${value} keeps decimals`);
+}
+
 process.stdout.write(
   "Long-Term Memory feedback clarity UI regression: labels, outcomes, usage, warnings, defaults, and scope loading ok\n",
 );

@@ -677,6 +677,7 @@ export default function MemorySettings({
               label={localizeUi("ui.longTermMemory.memorysettings.recallBudgetTokens")}
               help={localizeUi("ui.longTermMemory.memorysettings.maximumTokenBudgetAvailableForMemoriesAddedToA")}
               value={globalForm.longTermMemoryBudgetTokens}
+              integer
               min={128}
               max={16384}
               step={128}
@@ -691,6 +692,7 @@ export default function MemorySettings({
               label={localizeUi("ui.longTermMemory.memorysettings.maximumRecalledMemories")}
               help={localizeUi("ui.longTermMemory.memorysettings.maximumNumberOfMemoriesThatMayBeIncludedIn")}
               value={globalForm.longTermMemoryMaxChunks}
+              integer
               min={1}
               max={100}
               onChange={(value) => setGlobalForm({ ...globalForm, longTermMemoryMaxChunks: value })}
@@ -699,6 +701,7 @@ export default function MemorySettings({
               label={localizeUi("ui.longTermMemory.memorysettings.recentMessagesForRecall")}
               help={localizeUi("ui.longTermMemory.memorysettings.numberOfRecentChatMessagesUsedToBuildThe")}
               value={globalForm.longTermMemoryRecallContextMessages}
+              integer
               min={1}
               max={20}
               onChange={(value) =>
@@ -1072,6 +1075,7 @@ export default function MemorySettings({
             label={localizeUi("ui.longTermMemory.memorysettings.maximumOutputTokens")}
             help={localizeUi("ui.longTermMemory.memorysettings.maximumTokensTheModelMayProduceForOneExtraction")}
             value={extractionFormState.maxOutputTokens}
+            integer
             min={512}
             max={32768}
             step={256}
@@ -1187,6 +1191,7 @@ export default function MemorySettings({
             label={localizeUi("ui.longTermMemory.memorysettings.maximumSourceTokens")}
             help={localizeUi("ui.longTermMemory.memorysettings.rejectsASourceWhenItsEstimatedSizeExceedsThis")}
             value={extractionFormState.maxSourceTokens}
+            integer
             min={128}
             max={65536}
             step={128}
@@ -1203,6 +1208,7 @@ export default function MemorySettings({
               "ui.longTermMemory.memorysettings.maximumNumberOfExistingMemoryChunksConsideredWhileChecking",
             )}
             value={extractionFormState.existingNoteMaxChunks}
+            integer
             min={1}
             max={100}
             onChange={(value) =>
@@ -1216,6 +1222,7 @@ export default function MemorySettings({
             label={localizeUi("ui.longTermMemory.memorysettings.existingNoteTokenBudget")}
             help={localizeUi("ui.longTermMemory.memorysettings.maximumTokensFromThoseExistingChunksIncludedInThe")}
             value={extractionFormState.existingNoteMaxTokens}
+            integer
             min={128}
             max={32768}
             step={128}

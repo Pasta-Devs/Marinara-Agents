@@ -364,6 +364,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.5.21",
+          "date": "2026-10-31",
+          "notes": "- Whole-number settings (memory budget, maximum memories, recall context messages and the Extraction token and note limits, including the per-chat budget and maximum memories) now round a typed decimal like `2.5` instead of failing to save.",
+          "highlight": false
+        },
+        {
           "version": "1.5.20",
           "date": "2026-10-31",
           "notes": "- Memory Settings → Extraction gains \"Use Advanced Memory recaps\". A chat that uses Advanced Memory is imported from its scene recaps instead of its summaries and messages, without an AI call, and with \"Import new chat sources automatically\" on this happens while you chat. A recap reaches only the characters who were in that scene, and a chat does not recall memories made from its own recaps. Import → Chats gains \"Backfill Advanced Memory\" for older recaps: it reads them in batches and skips recaps an earlier chat import already covers. This needs a Marinara version with Capability API 1.391; on older versions nothing changes.",
@@ -475,12 +481,6 @@
           "version": "1.5.2",
           "date": "2026-10-27",
           "notes": "- The Chat Messages tab in Sources has a Branch menu for a chat with branches. It starts on this branch, so another branch's messages no longer mix into the list. Choose a branch or All branches; importing still goes to the whole chat.",
-          "highlight": false
-        },
-        {
-          "version": "1.5.1",
-          "date": "2026-10-27",
-          "notes": "- Sources lists imported memories whose character, lorebook entry, chat summary or chat message was deleted under \"Source gone\", so you can remove them with their source or leave them as they are.",
           "highlight": false
         }
       ]
