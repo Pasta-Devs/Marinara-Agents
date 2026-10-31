@@ -201,6 +201,8 @@ export function normalizeArcPlan(reply: z.infer<typeof ArcPlanSchema>, context: 
 
   const plan = chapters.map((purpose, index) => ({ n: from + index, purpose }));
 
+  const how = (reply.newcomer?.how ?? "").trim();
+  if (context.newcomer && !how) return "say how the newcomer meets the protagonist, in one sentence (newcomer.how)";
   if (kind === "breathing") {
     if (reply.reveals.length) return "a breathing arc reveals nothing: leave reveals empty";
     if (reply.antagonist) return "a breathing arc has no antagonist";
@@ -279,9 +281,7 @@ export function normalizeArcPlan(reply: z.infer<typeof ArcPlanSchema>, context: 
           whyNow: reply.antagonist.whyNow.trim(),
         }
       : null,
-    newcomer: context.newcomer
-      ? { li: context.newcomer.id, how: (reply.newcomer?.how ?? context.newcomer.how ?? "").trim() }
-      : null,
+    newcomer: context.newcomer ? { li: context.newcomer.id, how } : null,
     choice: { kind: context.choice ?? "continue" },
     plannedAt: "",
     connectionId: "",

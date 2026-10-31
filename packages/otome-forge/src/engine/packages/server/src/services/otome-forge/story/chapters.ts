@@ -50,6 +50,7 @@ import { repairOffers, routeEntries } from "../state/stages.js";
 import type { OtomeStore } from "../store.js";
 import { withPersonaStoryAbout } from "../setup/prompts.js";
 import { cancellable } from "./beats.js";
+import { removeLoveInterest } from "./introduce.js";
 import { recallText, type StoryMemory } from "./canon.js";
 import {
   ANGST_TYPES,
@@ -293,6 +294,15 @@ export function normalizeChapterPlan(reply: ChapterPlanReply, context: PlanConte
   if (!nodes.some((node) => node.cast.includes(lead))) return "the Lead must appear in the chapter";
   if (!nodes.some((node) => node.cast.includes(foil))) return "the Foil must appear in at least one node";
   const present = new Set(nodes.flatMap((node) => node.cast));
+  const arc = context.arc ?? null;
+  // #1983 M3: an arc that brings someone in introduces them on the page beside another love interest.
+  const debut = arc?.newcomer?.li ?? null;
+  if (debut && arc && number === arc.from && ids.includes(debut)) {
+    const withThem = nodes.some((node) => node.cast.includes(debut) && node.cast.some((li) => li !== debut));
+    if (!withThem) {
+      return `this chapter brings ${debut} in: one node must hold them beside another love interest`;
+    }
+  }
   if (number === 1) {
     const missing = ids.filter((li) => !present.has(li));
     if (missing.length) return `chapter 1 must bring in every love interest; missing: ${missing.join(", ")}`;
@@ -300,7 +310,6 @@ export function normalizeChapterPlan(reply: ChapterPlanReply, context: PlanConte
   // #1980: the arc's schedule is what makes a reveal real. A scheduled chapter must place it on a node (with its holder
   // when it is a piece); a node in an unscheduled chapter is dropped, so a hallucinated early reveal cannot land; the
   // arc's last chapter carries its big event in the climax.
-  const arc = context.arc ?? null;
   const scheduled = arc ? revealAt(arc, number) : undefined;
   if (scheduled) {
     const index = typeof reply.revealNode === "number" ? reply.revealNode : -1;
@@ -512,35 +521,46 @@ export async function startArc(
     throw new OtomeForgeError(400, "Say who arrives, or choose another way on.", "bad-request");
   }
   const arriving = newcomer ?? (arrive ? await arrive() : undefined);
+  // The newcomer is written before the arc, so a plan that fails, is declined or is cancelled takes them back: nobody
+  // stays in the cast that no arc introduces (#1985 review). A rollback never hides the original failure.
+  const rollback = async () => {
+    if (!arriving || newcomer) return;
+    await removeLoveInterest(deps, runId, arriving.id).catch(() => undefined);
+  };
   const cast = Object.keys(run.state.lis).filter((li) => run.units.some((unit) => unit.id === li && unit.bible));
   const units = cast.map((li) => run.units.find((unit) => unit.id === li)!);
   const from = mains.at(-1) ? (mains.at(-1)!.number ?? mains.length) + 1 : 1;
-  return cancellable(deps, runId, async (stop) =>
-    planArc(
-      deps,
-      runId,
-      {
-        world: run.world,
-        player: await withPersonaStoryAbout(deps.runtime, run.player),
-        units,
-        state: run.state,
-        memory: await recallText(deps, runId, {
-          job: "structured",
-          cast: [],
-          query: { plan: run.player.goal ?? "", speakers: units.map((unit) => unit.name) },
-          signal: stop,
-          debugMode,
-        }),
-        previous: arcs,
-        chapters: mains,
-        number: latest.number + 1,
-        from,
-        choice,
-        ...(arriving && choice === "newcomer" ? { newcomer: arriving } : {}),
-      },
-      { debugMode, signal: stop },
-    ),
-  );
+  try {
+    return await cancellable(deps, runId, async (stop) =>
+      planArc(
+        deps,
+        runId,
+        {
+          world: run.world,
+          player: await withPersonaStoryAbout(deps.runtime, run.player),
+          units,
+          state: run.state,
+          memory: await recallText(deps, runId, {
+            job: "structured",
+            cast: [],
+            query: { plan: run.player.goal ?? "", speakers: units.map((unit) => unit.name) },
+            signal: stop,
+            debugMode,
+          }),
+          previous: arcs,
+          chapters: mains,
+          number: latest.number + 1,
+          from,
+          choice,
+          ...(arriving && choice === "newcomer" ? { newcomer: arriving } : {}),
+        },
+        { debugMode, signal: stop },
+      ),
+    );
+  } catch (error) {
+    await rollback();
+    throw error;
+  }
 }
 
 // ── The story view ──

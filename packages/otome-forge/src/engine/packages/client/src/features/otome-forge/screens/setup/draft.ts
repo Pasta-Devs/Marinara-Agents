@@ -120,7 +120,11 @@ export interface SetupDraft {
   connections: DraftConnections;
 }
 
-const emptyPronouns = (): PronounChoice => ({ preset: null, custom: { subject: "", object: "", possessive: "" } });
+/** A pronoun choice nobody made yet: the picker starts blank. */
+export const emptyPronouns = (): PronounChoice => ({
+  preset: null,
+  custom: { subject: "", object: "", possessive: "" },
+});
 
 export function emptyDraft(): SetupDraft {
   return {

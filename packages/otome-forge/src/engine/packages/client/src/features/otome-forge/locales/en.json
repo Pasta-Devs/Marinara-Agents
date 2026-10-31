@@ -1303,6 +1303,7 @@
   "ui.otomeForge.story.newcomerCost": "2 model calls: one for them, one for the arc",
   "ui.otomeForge.story.newcomerName": "Their name",
   "ui.otomeForge.story.newcomerNameHint": "They will be written from this, and the next arc will bring them in.",
+  "ui.otomeForge.story.newcomerPronouns": "How they are addressed",
   "ui.otomeForge.story.newcomerScratch": "Someone new, invented for this story",
   "ui.otomeForge.story.newcomerTitle": "Who arrives?",
   "ui.otomeForge.story.nextText": "Two of them are waiting. Choose who leads; the story finds a place for another.",

@@ -25,7 +25,7 @@ import { normalizeWorld } from "../schemas/world.js";
 
 /** What the player picked at the end of an arc: one of their cards, or someone invented. */
 export type Arrival =
-  | { source: "card"; cardId: string }
+  | { source: "card"; cardId: string; pronouns: Pronouns }
   | { source: "archetype"; archetype: string; name: string; pronouns: Pronouns; notes?: string };
 
 const VOICE_GENDER = { man: "male", woman: "female", person: "" } as const;
@@ -79,10 +79,8 @@ export async function introduceLoveInterest(
     id: li,
     kind: "character",
     name,
-    pronouns:
-      arrival.source === "card"
-        ? (run.units.at(0)?.pronouns ?? { subject: "they", object: "them", possessive: "their" })
-        : arrival.pronouns,
+    // The player's pick for a card, exactly as setup asks (a card carries no pronouns of its own).
+    pronouns: arrival.pronouns,
     source: arrival.source,
     ...(arrival.source === "card" ? { cardId: arrival.cardId } : {}),
     ...(arrival.source === "archetype"
@@ -148,4 +146,29 @@ export async function introduceLoveInterest(
     lis: { ...state.lis, [li]: defaultLiState() },
   }));
   return { id: li, name };
+}
+
+/**
+ * Takes back a newcomer whose arc never got planned (#1985 review): their unit, their ties in the world's web and their
+ * cast entry go, so a failed or cancelled plan leaves no one in the cast that the story never introduces. Their bible
+ * lives on the unit that goes with it. Best effort: a rollback never throws over the original failure.
+ */
+export async function removeLoveInterest(
+  deps: { store: import("../store.js").OtomeStore },
+  runId: string,
+  li: string,
+): Promise<void> {
+  await deps.store.removeDoc(unitId(runId, li)).catch(() => false);
+  await deps.store
+    .updateDoc(runDocTarget("world", worldId(runId)), normalizeWorld, (world) => ({
+      ...world,
+      web: world.web.filter((row) => row.a !== li && row.b !== li),
+    }))
+    .catch(() => null);
+  await deps.store
+    .updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (state) => {
+      const { [li]: _gone, ...lis } = state.lis;
+      return { ...state, lis };
+    })
+    .catch(() => null);
 }

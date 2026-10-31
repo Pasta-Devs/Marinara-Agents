@@ -137,7 +137,9 @@ export function arcPlanMessages({
   const system = [
     "You are the arc planner of an otome visual novel: a character-driven romance mystery. You plan one story arc: a run of main chapters with one goal, one big event near its end, and the mystery's reveals placed where they land. Each chapter is planned later from your outline, one at a time.",
     "Reply with ONLY a JSON object of this shape:",
-    '{"kind": "<the kind asked for>", "label": "<2–5 words, spoiler-free; the player sees this>", "theme": "<one short sentence>", "goal": "<one short sentence: what the protagonist is after in this arc>", "chapters": ["<one short sentence per chapter, in play order>"], "endsWith": {"what": "<one short sentence: the big event the last chapter carries>", "chapter": 0}, "reveals": [{"chapter": 0, "kind": "piece|truth", "li": "<love interest id, piece only>", "what": "<one sentence: what the protagonist learns>"}], "antagonist": {"name": "<name>", "want": "<one short sentence>", "whyNow": "<one short sentence>"}}',
+    '{"kind": "<the kind asked for>", "label": "<2–5 words, spoiler-free; the player sees this>", "theme": "<one short sentence>", "goal": "<one short sentence: what the protagonist is after in this arc>", "chapters": ["<one short sentence per chapter, in play order>"], "endsWith": {"what": "<one short sentence: the big event the last chapter carries>", "chapter": 0}, "reveals": [{"chapter": 0, "kind": "piece|truth", "li": "<love interest id, piece only>", "what": "<one sentence: what the protagonist learns>"}], "antagonist": {"name": "<name>", "want": "<one short sentence>", "whyNow": "<one short sentence>"}' +
+      (newcomer ? ', "newcomer": {"how": "<one short sentence: the scene they are met in>"}' : "") +
+      "}",
     "FIELDS",
     `- chapters: ${count} short purposes, in play order. Each is one sentence of about 12 words and must not exceed ${ARC_PURPOSE_WORDS}. Say what happens in that chapter, not how it is written.`,
     "- chapter positions are 1-based within this arc (1 is its first chapter): endsWith.chapter and each reveals[].chapter. Never write a chapter number of your own.",
@@ -155,6 +157,7 @@ export function arcPlanMessages({
     ...(newcomer
       ? [
           `- ${newcomer.name} (id ${newcomer.id}) arrives in this arc. Its first chapter is where they meet the protagonist and at least one of the others on the page; later chapters show how each of the cast takes them. They are never the antagonist and never a plot device: they want something of their own.`,
+          `- Set newcomer.how to one sentence naming the scene they are met in: where, and who is with the protagonist when it happens.`,
         ]
       : []),
     "- The mystery's truth is yours to schedule, never to spend early: it is revealed in the last chapter, after the pieces.",

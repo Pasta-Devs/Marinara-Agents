@@ -55,7 +55,15 @@ const ArcBody = z.object({
   /** M3: who arrives, when the choice is "newcomer". */
   newcomer: z
     .union([
-      z.object({ source: z.literal("card"), cardId: z.string().min(1).max(200) }),
+      z.object({
+        source: z.literal("card"),
+        cardId: z.string().min(1).max(200),
+        pronouns: z.object({
+          subject: z.string().min(1).max(20),
+          object: z.string().min(1).max(20),
+          possessive: z.string().min(1).max(20),
+        }),
+      }),
       z.object({
         source: z.literal("archetype"),
         archetype: z.string().min(1).max(80),
@@ -123,11 +131,16 @@ export const registerStoryRoutes: RegisterRoutes = (router, deps) => {
       if (body.choice === "newcomer" && !body.newcomer) {
         throw new OtomeForgeError(400, "Say who arrives, or choose another way on.", "bad-request");
       }
+      // Someone arriving belongs to the newcomer choice alone: a body that names one for breathing room or the story
+      // going on would write a love interest the arc never introduces.
+      if (body.choice !== "newcomer" && body.newcomer) {
+        throw new OtomeForgeError(400, "Only the newcomer choice brings someone in.", "bad-request");
+      }
       let arrival: { id: string; name: string } | null = null;
       const arc = await startArc(deps, runId, body.choice, {
         debugMode,
         // Written only once every gate has passed, so a refused choice leaves no half-arrived love interest.
-        ...(body.newcomer
+        ...(body.choice === "newcomer" && body.newcomer
           ? {
               arrive: async () => {
                 arrival = await introduceLoveInterest(deps, runId, body.newcomer!);

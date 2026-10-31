@@ -37,6 +37,8 @@ import { Dialog } from "../../components/Dialog";
 import { useCharacterOptions } from "../../hooks/use-engine-resources";
 import { cancelStoryWork, runPath, storyQueryKey, useChapter, useStory } from "../../hooks/use-reader";
 import { accentOf } from "../../lib/accent";
+import { emptyPronouns, resolvePronouns, type PronounChoice } from "../setup/draft";
+import { PronounPicker } from "../setup/parts";
 import { ARCHETYPES, ARCHETYPE_IDS } from "../../shared/archetypes";
 import type {
   ArcChoice,
@@ -607,9 +609,7 @@ function ArcChoiceCard({ runKey, options }: { runKey: string; options: { options
         {t("ui.otomeForge.story.arcChoiceText")}
       </h2>
       <p className="of-hint">{t("ui.otomeForge.story.arcChoiceCost")}</p>
-      {failed ? (
-        <p className="of-notice of-notice--error">{t(`ui.otomeForge.errors.${otomeErrorCode(failed) ?? "unknown"}`)}</p>
-      ) : null}
+      {failed ? <p className="of-notice of-notice--error">{otome.errorMessage(failed)}</p> : null}
       <div className="of-choices">
         {ways.map((way) => (
           <button
@@ -655,6 +655,9 @@ function NewcomerDialog({
   const [cardId, setCardId] = useState("");
   const [name, setName] = useState("");
   const [archetype, setArchetype] = useState(ARCHETYPE_IDS[0]);
+  // A card carries no pronouns of its own: the player picks them, as setup asks (#1985 review).
+  const [pronouns, setPronouns] = useState<PronounChoice>(emptyPronouns());
+  const resolved = resolvePronouns(pronouns);
   void runKey;
   return (
     <Dialog
@@ -668,16 +671,16 @@ function NewcomerDialog({
           <button
             type="button"
             className="of-button of-button--primary"
-            disabled={busy || (mode === "card" ? !cardId : !name.trim())}
+            disabled={busy || !resolved || (mode === "card" ? !cardId : !name.trim())}
             onClick={() =>
               onArrive(
                 mode === "card"
-                  ? { source: "card", cardId }
+                  ? { source: "card", cardId, pronouns: resolved }
                   : {
                       source: "archetype",
                       archetype,
                       name: name.trim(),
-                      pronouns: { subject: "they", object: "them", possessive: "their" },
+                      pronouns: resolved,
                     },
               )
             }
@@ -698,6 +701,7 @@ function NewcomerDialog({
           {t("ui.otomeForge.story.newcomerScratch")}
         </label>
       </fieldset>
+      <PronounPicker legend={t("ui.otomeForge.story.newcomerPronouns")} value={pronouns} onChange={setPronouns} />
       {mode === "card" ? (
         <ul className="of-cast-picks">
           {cards.items.map((card) => (
