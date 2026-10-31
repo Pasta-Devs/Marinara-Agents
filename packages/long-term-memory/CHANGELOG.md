@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.5.19 — 2026-10-31
 
 - Memory Settings → Extraction gains "Accept safe changes automatically", which accepts low-risk proposed memories after an import or extraction and now applies the safe part of a draft that also holds a rewrite.
 - Memory Settings → Extraction gains "Import new chat sources automatically", which imports a chat's new summaries and finished message stretches in the background while you chat.
