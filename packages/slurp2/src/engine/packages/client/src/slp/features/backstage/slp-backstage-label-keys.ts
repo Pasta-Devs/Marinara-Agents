@@ -106,6 +106,7 @@ export const SLP_BACKSTAGE_LABEL_KEYS: Partial<Record<keyof SlurpSettings, strin
   enableLorebookContext: "ui.slurp.settings.prompts.lorebookContext",
   flavourFromAgents: "ui.slurp.settings.prompts.flavourFromAgents",
   memoryRecall: "ui.slurp.settings.prompts.memoryRecall",
+  shareWithMemory: "ui.slurp.settings.prompts.shareWithMemory",
   postPlanner: "ui.slurp.settings.strip.teasers",
   sharedPreseed: "ui.slurp.settings.storyActivity.title",
   sharedWorldEvents: "ui.slurp.settings.prompts.sharedWorldEvents",
