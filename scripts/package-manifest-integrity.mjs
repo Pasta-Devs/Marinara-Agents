@@ -15,6 +15,13 @@ import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import {
+  isRulesetManifest,
+  readPackageFile,
+  RULESET_FILE_EXTENSION,
+  RULESET_FILE_FORMAT,
+  rulesetArtifactName,
+} from "./package-file.mjs";
+import {
   assertPortableFilenameComponent,
   assertPortableRelativePath,
   packageArtifactName,
@@ -106,7 +113,11 @@ export async function assertDeclaredFilesMatchManifest({ manifest, packageRoot, 
     );
     const payloads = [["source", sourcePayload]];
     let archivedPayload = null;
-    if (artifactPath) {
+    if (artifactPath?.endsWith(RULESET_FILE_EXTENSION)) {
+      archivedPayload = readPackageFile(await readFile(artifactPath), RULESET_FILE_FORMAT).files.get(declared.path);
+      if (!archivedPayload) throw new Error(`${manifest.id} ${declared.path} is missing from its ruleset file`);
+      payloads.push(["artifact", archivedPayload]);
+    } else if (artifactPath) {
       archivedPayload = readZip(["-p", artifactPath, declared.path], {
         packageId: manifest.id,
         artifactPath,
@@ -137,7 +148,18 @@ export async function assertDeclaredFilesMatchManifest({ manifest, packageRoot, 
 
 // Verifies the artifact describes the same file set as the manifest, and that
 // the manifest sealed inside the zip is the manifest on disk.
-function assertArtifactMatchesManifest({ manifest, artifactPath }) {
+async function assertArtifactMatchesManifest({ manifest, artifactPath }) {
+  if (artifactPath.endsWith(RULESET_FILE_EXTENSION)) {
+    const read = readPackageFile(await readFile(artifactPath), RULESET_FILE_FORMAT);
+    const declaredFiles = manifest.files.map((file) => file.path);
+    if (JSON.stringify([...read.files.keys()]) !== JSON.stringify(declaredFiles)) {
+      throw new Error(`Ruleset file list mismatch for ${manifest.id}`);
+    }
+    if (JSON.stringify(read.manifest) !== JSON.stringify(manifest)) {
+      throw new Error(`Ruleset file manifest does not match packages/${manifest.id}/manifest.json`);
+    }
+    return;
+  }
   const listed = readZip(["-Z1", artifactPath], {
     packageId: manifest.id,
     artifactPath,
@@ -212,12 +234,14 @@ export async function assertEveryPackageManifestIntegrity({ repoRoot, catalogued
     }
     // A held-back package need not have been built yet, but when its artifact
     // is committed the artifact is held to the same contract as a listed one.
-    const artifactName = packageArtifactName(manifest.id, manifest.version);
+    const artifactName = isRulesetManifest(manifest)
+      ? rulesetArtifactName(manifest.id, manifest.version)
+      : packageArtifactName(manifest.id, manifest.version);
     const candidateArtifactPath = join(artifactsRoot, artifactName);
     let artifactPath = null;
     if (existsSync(candidateArtifactPath)) {
       artifactPath = await resolveContainedPortablePath(artifactsRoot, artifactName, `Artifact for ${manifest.id}`);
-      assertArtifactMatchesManifest({ manifest, artifactPath });
+      await assertArtifactMatchesManifest({ manifest, artifactPath });
     } else {
       withoutArtifact.push(manifest.id);
     }
