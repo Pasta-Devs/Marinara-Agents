@@ -241,6 +241,7 @@ recall({
   mode?: "roleplay" | "conversation",
   maxTokens?: number,      // 50-4,000, default 800
   whole?: boolean,         // default false: whole memories instead of ranked parts
+  excludeFrom?: string[],  // callers whose intake records are left out, up to 10 names like `caller`
   signal?: AbortSignal,
 }): Promise<{ version: 1; sections: { noteId; type; title?; text }[] } | null>
 ```
@@ -264,6 +265,11 @@ recall({
   does not fit is skipped, never cut, and later smaller ones can still fit.
   At most 20 sections. An older Long-Term Memory ignores `whole` and answers
   with ranked parts.
+- Sections that only hold records the `excludeFrom` callers added through
+  `long-term-memory:intake` are left out, and a memory with nothing else left
+  is not returned. A section that also holds a chat memory or a manual edit
+  stays. An older Long-Term Memory ignores `excludeFrom`; a malformed name
+  makes the call invalid (`null`).
 - A new section field can be added without a version change; removing or
   renaming one raises `version`.
 

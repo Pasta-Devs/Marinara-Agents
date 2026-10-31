@@ -5,7 +5,13 @@ import { estimateTokens } from "../recall/budget.js";
 import { chunkNoteSections } from "../recall/chunking.js";
 import { retrieveLongTermMemory } from "../recall/retrieval.js";
 import { getLtmGlobalSettings } from "../settings.js";
-import { isLtmNoteShareable, ltmPackageCallerSchema, recordLtmPackageRead } from "./storage-read.js";
+import { ltmPackageSourceNotePrefix } from "./intake.js";
+import {
+  isLtmNoteShareable,
+  ltmPackageCallerIdSchema,
+  ltmPackageCallerSchema,
+  recordLtmPackageRead,
+} from "./storage-read.js";
 
 const LTM_RECALL_SERVICE_VERSION = 1;
 /** The most sections a whole-memory recall returns. */
@@ -29,6 +35,8 @@ const recallInputSchema = z.object({
   mode: z.enum(["roleplay", "conversation"]).optional(),
   maxTokens: z.number().int().min(50).max(4_000).default(800),
   whole: z.boolean().default(false),
+  // The strict id schema: ltmPackageCallerSchema drops a bad name, which would let a bad entry through unnoticed.
+  excludeFrom: z.array(ltmPackageCallerIdSchema).max(10).default([]),
 });
 
 type LtmRecallServiceSection = { noteId: string; type: LtmNoteType; title?: string; text: string };
@@ -41,6 +49,20 @@ type LtmRecallServiceResult = {
 function isAboutAccounts(note: Pick<LtmNote, "type" | "subjects">, accountIds: ReadonlySet<string>) {
   if (note.type !== "character" && note.type !== "relationship") return true;
   return note.subjects?.some((subject) => accountIds.has(subject.ref?.id ?? "")) ?? false;
+}
+
+/**
+ * Whether a section holds only records the excluded callers added through `long-term-memory:intake`. A section
+ * with any other contribution (a chat memory, a manual edit) stays; one with none, or none stored, stays too.
+ */
+function fromExcluded(note: Pick<LtmNote, "sections">, sectionKey: string, prefixes: readonly string[]) {
+  const contributions = note.sections[sectionKey]?.contributions;
+  return (
+    !!contributions?.length &&
+    contributions.every(
+      (item) => item.owner === "source" && prefixes.some((prefix) => item.sourceNoteId.startsWith(prefix)),
+    )
+  );
 }
 
 /**
@@ -57,7 +79,8 @@ export function createLtmRecallService(storage: Pick<LongTermMemoryStorage, "lis
           : undefined;
       const parsed = recallInputSchema.safeParse(input);
       if (!parsed.success || signal?.aborted) return null;
-      const { caller, queryText, characterIds, personaId, mode, maxTokens, whole } = parsed.data;
+      const { caller, queryText, characterIds, personaId, mode, maxTokens, whole, excludeFrom } = parsed.data;
+      const prefixes = excludeFrom.map(ltmPackageSourceNotePrefix);
       if (!characterIds.length && !personaId) return null;
       try {
         const settings = await getLtmGlobalSettings(storage.root);
@@ -88,6 +111,7 @@ export function createLtmRecallService(storage: Pick<LongTermMemoryStorage, "lis
           for (const note of wholeOrder) {
             if (sections.size >= WHOLE_RECALL_MAX_SECTIONS) break;
             const text = chunkNoteSections(note)
+              .filter((chunk) => !fromExcluded(note, chunk.sectionKey, prefixes))
               .map((chunk) => chunk.text)
               .filter(Boolean)
               .join("\n");
@@ -117,6 +141,15 @@ export function createLtmRecallService(storage: Pick<LongTermMemoryStorage, "lis
             graphWeight: settings.longTermMemoryGraphWeight,
             keywordWeight: settings.longTermMemoryKeywordWeight,
             signal,
+            // Judged before ranking, so an excluded chunk cannot spend the chunk or token budget.
+            ...(prefixes.length
+              ? {
+                  excludedChunk: (chunk: { noteId: string; sectionKey: string }) => {
+                    const note = notes.get(chunk.noteId);
+                    return !!note && fromExcluded(note, chunk.sectionKey, prefixes);
+                  },
+                }
+              : {}),
           });
           for (const { chunk } of retrieval.chunks) {
             const section = sections.get(chunk.noteId);
