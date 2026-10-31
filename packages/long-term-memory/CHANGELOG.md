@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.5.24 — 2026-11-01
 
 - An Agent that adds memories can ask recall to leave out what it added itself, so its own facts do not come back as new.
 
