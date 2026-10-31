@@ -1288,6 +1288,7 @@ export default function MemoryVault({
       return localizeUi("ui.longTermMemory.memoryvault.chatMessages", {
         title: scopeTargetLabel("chat", draft.provenance.sourceId, targets),
       });
+    if (draft.provenance.kind === "package_record") return localizeUi("ui.longTermMemory.memoryvault.fromSlurp");
     return localizeUi("ui.longTermMemory.memoryvault.lorebook");
   };
 
@@ -2874,23 +2875,25 @@ export default function MemoryVault({
                         <h3 className="text-sm font-semibold">{memoryLabel(draft)}</h3>
                         <p className="mt-1 text-xs text-[var(--muted-foreground)]">{provenanceSourceLabel()}</p>
                       </div>
-                      <Button
-                        onClick={() =>
-                          void onOpenSources?.(
-                            draft.provenance?.kind === "character" || draft.tags.includes("imported_character")
-                              ? "characters"
-                              : draft.provenance?.kind === "lorebook" || draft.tags.includes("imported_lorebook")
-                                ? "lorebooks"
-                                : draft.provenance?.kind === "chat_transcript"
-                                  ? "messages"
-                                  : "chats",
-                            draft.id,
-                          )
-                        }
-                      >
-                        <FileText aria-hidden="true" size="1rem" className="shrink-0" />
-                        {localizeUi("ui.longTermMemory.memoryvault.openInSources")}
-                      </Button>
+                      {draft.provenance?.kind !== "package_record" && (
+                        <Button
+                          onClick={() =>
+                            void onOpenSources?.(
+                              draft.provenance?.kind === "character" || draft.tags.includes("imported_character")
+                                ? "characters"
+                                : draft.provenance?.kind === "lorebook" || draft.tags.includes("imported_lorebook")
+                                  ? "lorebooks"
+                                  : draft.provenance?.kind === "chat_transcript"
+                                    ? "messages"
+                                    : "chats",
+                              draft.id,
+                            )
+                          }
+                        >
+                          <FileText aria-hidden="true" size="1rem" className="shrink-0" />
+                          {localizeUi("ui.longTermMemory.memoryvault.openInSources")}
+                        </Button>
+                      )}
                     </header>
                     <section className="space-y-2">
                       <h4 className="text-xs font-semibold">

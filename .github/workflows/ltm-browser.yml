@@ -116,6 +116,6 @@ jobs:
       - name: Run Engine-free Long-Term Memory regressions
         run: |
           for test in advanced-memory-import candidate-reconciliation chat-transcript-import conversation-summary-import debug-log \
-            delta-review extraction-graph extraction-reliability hide-imported-messages local-characters rebuild-job runtime; do
+            delta-review extraction-graph extraction-reliability hide-imported-messages intake local-characters rebuild-job runtime; do
             npx tsx "tests/long-term-memory-$test.regression.ts"
           done

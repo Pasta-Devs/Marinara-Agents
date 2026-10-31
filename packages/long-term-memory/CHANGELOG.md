@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.5.23 — 2026-11-01
+
+- Slurp can add memories when you allow it in Memory Settings → Sharing. Off by default.
+
 ## 1.5.22 — 2026-10-31
 
 - Clearer hands-off wording: the background import help says it covers every chat, intro and re-extract text is right when safe changes are accepted automatically, and Advanced Memory scene recaps are disabled with a note on Engines that cannot provide them.
