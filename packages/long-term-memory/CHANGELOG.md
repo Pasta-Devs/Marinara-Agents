@@ -1,5 +1,10 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- Chat Settings puts "Memories from this chat" first and shows what happened in plain parts (saved today with a check, waiting for you with a clock, Review only when something waits), with clear lines when nothing is new or memories are added by hand; the "After a reply" sample in Extraction and the setup guide looks the same.
+- The setup guide's import step says new messages are already being collected when you chose a hands-off mode, and "Hide imported messages from the AI" is now "Hide remembered messages from the AI" with a short note that your latest messages always stay.
+
 ## 1.5.24 — 2026-11-01
 
 - An Agent that adds memories can ask recall to leave out what it added itself, so its own facts do not come back as new.
