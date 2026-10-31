@@ -116,15 +116,11 @@ declare module "@forge-kit/image-avatar-references.mjs" {
    * they should be sent. `method` is the paint being made ("generatePortrait", "generateOutfit", "generateBannerArt"),
    * so a subject may send more for a portrait than for a scene, where the reference budget is shared by the cast.
    */
-  export type ImageSubjectReference =
-    | string
-    | readonly string[]
-    | null
-    | undefined;
+  export type ImageSubjectReference = string | readonly string[] | null | undefined;
   export type ImageSubjectReferenceResolver<C> = (
     client: C,
     subject: ImageIdentitySubject,
-    context: { method: string },
+    context: { method?: string },
   ) => Promise<ImageSubjectReference>;
   /**
    * Wraps the client's generatePortrait, generateOutfit and generateBannerArt so each call carries the subject's card
