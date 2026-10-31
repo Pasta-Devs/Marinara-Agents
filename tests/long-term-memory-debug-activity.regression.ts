@@ -160,10 +160,15 @@ for (const [ago, expected] of [
 }
 assert.equal(formatAge("not a date", "en", ageNow), "");
 
-// Slurp's memory switch: the offer asks only when Slurp answers with the switch off, and saves only on yes.
-const offer = async (read: () => Promise<{ flavourFromAgents?: boolean }>, answer: boolean) => {
+// Slurp's memory switches: the offer asks only when Slurp answers with that switch off, and saves only on yes.
+const offer = async (
+  read: () => Promise<{ flavourFromAgents?: boolean; shareWithMemory?: boolean }>,
+  answer: boolean,
+  setting: "flavourFromAgents" | "shareWithMemory" = "flavourFromAgents",
+) => {
   const calls = { confirm: 0, save: 0 };
   const outcome = await offerSlurpMemories({
+    setting,
     read,
     confirm: () => (calls.confirm++, answer),
     save: async () => void calls.save++,
@@ -192,6 +197,24 @@ void (async () => {
     }, true),
     { outcome: "skipped", confirm: 0, save: 0 },
   );
+  // Each switch is read on its own: the add offer ignores the read switch, and an older Slurp without it skips.
+  assert.deepEqual(
+    await offer(async () => ({ flavourFromAgents: false, shareWithMemory: true }), true, "shareWithMemory"),
+    { outcome: "skipped", confirm: 0, save: 0 },
+  );
+  assert.deepEqual(
+    await offer(async () => ({ flavourFromAgents: true, shareWithMemory: false }), true, "shareWithMemory"),
+    {
+      outcome: "enabled",
+      confirm: 1,
+      save: 1,
+    },
+  );
+  assert.deepEqual(await offer(async () => ({ flavourFromAgents: false }), true, "shareWithMemory"), {
+    outcome: "skipped",
+    confirm: 0,
+    save: 0,
+  });
   console.log("long-term-memory slurp memory offer: ok");
 })().catch((error) => {
   console.error(error);
