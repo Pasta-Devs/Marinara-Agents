@@ -37,10 +37,14 @@ const KIND_KEYS: Record<Exclude<ChapterKind, "main">, string> = {
 };
 
 /** A chapter's eyebrow: "Chapter 3", or its kind. */
-export function chapterEyebrowKey(chapter: Pick<ChapterView, "kind" | "number">): [string, { number?: number }] {
-  return chapter.kind === "main"
-    ? ["ui.otomeForge.story.chapterNumber", { number: chapter.number ?? 1 }]
-    : [KIND_KEYS[chapter.kind], {}];
+export function chapterEyebrowKey(
+  chapter: Pick<ChapterView, "kind" | "number"> & { arc?: number },
+): [string, { number?: number; arc?: number }] {
+  if (chapter.kind !== "main") return [KIND_KEYS[chapter.kind], {}];
+  // #1983 M4: a main chapter in an arc names it beside its number.
+  return chapter.arc
+    ? ["ui.otomeForge.story.arcChapter", { arc: chapter.arc, number: chapter.number ?? 1 }]
+    : ["ui.otomeForge.story.chapterNumber", { number: chapter.number ?? 1 }];
 }
 
 const MOMENT_KEYS: Record<MomentKind, string> = {

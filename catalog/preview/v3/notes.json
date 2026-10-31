@@ -72,6 +72,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.6.9",
+          "date": "2026-10-31",
+          "notes": "- The chapter list groups chapters under their arc, and a chapter's reader says which arc it belongs to (\"Arc 2 · Chapter 4\").\n- A breathing-room arc says so: \"Take a breath\" arcs show a quiet-stretch badge, so a plot-free stretch is never mistaken for the story stalling.",
+          "highlight": false
+        },
+        {
           "version": "0.6.8",
           "date": "2026-10-31",
           "notes": "- **The end of an arc is a choice:** when one closes, pick **Take a breath** (a few quiet chapters with the people you love), **Go on with the story** (a new arc with a new threat), or **Meet someone new**. The next arc is planned from your answer.\n- **Meet someone new:** bring in one of your character cards, or someone invented for this story. They meet you and the others on the page, and the story writes how each of the cast takes them. The cast holds five love interests at most.",
@@ -184,12 +190,6 @@
           "date": "2026-10-30",
           "notes": "- Make desktop fullscreen fill the available Otome Hearth area across its screens. Leaving fullscreen restores ordinary portrait layouts while preserving drafts and the current reader line.",
           "highlight": false
-        },
-        {
-          "version": "0.2.0",
-          "date": "2026-10-30",
-          "notes": "- Restore the scrolling mobile Settings category strip, and keep each cast member's repaint actions together.\n- Show progress toward the next Affection level in Between you.\n- Facial expression edits use an adult, nonsexual face-edit policy while preserving the current look, clothing and style. Non-explicit Suggestive images keep concise content exclusions without unrelated graphic boilerplate.\n- Edit a love interest’s image appearance above their spoiler Bible without repainting or changing their story.\n- Choose an existing Assets Music folder in Audio settings when music generation is off.\n- Give chapters and scenes room for ordinary moments, earned emotional payoffs, and character change.",
-          "highlight": true
         }
       ]
     },
