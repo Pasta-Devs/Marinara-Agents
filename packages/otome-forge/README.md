@@ -193,7 +193,7 @@ Read Them in reverse: your love interest studies you and makes four guesses abou
 ### Date Night
 
 1. **Pick a place:** one of eight, one your love interest chooses, or a place your story has painted (shown with its picture).
-2. **Pick what you both wear:** your base looks. A date does not offer Wardrobe looks yet.
+2. **Pick what you both wear:** your everyday looks, or any painted look either of you owns in the Wardrobe (4★ and 5★). The date's scenes, key images and keepsake dress you both in them, each look worn over that person's own appearance, and the looks stay on at Home afterwards. A look you own appears once it is painted: open it in the Wardrobe.
 3. **Play three scenes of choices,** judged by what they like and voiced like any scene. You can ask for a keepsake image at the end.
 
 During a rift, Date Night becomes **Make it right**.

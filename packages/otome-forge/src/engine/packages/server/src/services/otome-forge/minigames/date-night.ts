@@ -48,6 +48,7 @@ import type {
   Grievance,
   LiId,
   LiState,
+  Outfit,
   Paint,
   PlaceArt,
   Player,
@@ -57,7 +58,6 @@ import type {
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { LIMIT_IDS, type LimitId } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import {
-  BASE_LOOK,
   DATE_BEATS,
   PARTNER_CHOICE,
   STORY_PLACE,
@@ -102,6 +102,10 @@ export type DateDeps = BeatDeps & {
   /** The loopback image client by default; tests pass a fake. */
   images?: ImageClient;
 };
+
+/** The outfit line of the look someone wears now (Wear at home, or a date's pick), or "" in their base look. */
+const wornOutfitLine = (person: { outfits: readonly Outfit[]; wornOutfit?: string }) =>
+  (person.wornOutfit ? person.outfits.find((outfit) => outfit.id === person.wornOutfit)?.outfitLine : "") ?? "";
 
 /** The finish's entry in `chapters[key].applied`, after the beats' own `${i}/choice-<n>` picks. */
 const FINISH_CHOICE = "finish";
@@ -266,8 +270,8 @@ export function datePlanMessages({
         : `${PLACE_SPIRIT[place]}. Adapt it to this world's setting and era, keeping its spirit.`,
     "",
     "WHAT THEY WEAR (image tags; describe them in words if at all)",
-    wear(name, unit.outfitLine || unit.bible?.look.outfitLine || ""),
-    wear(player.name || "The protagonist", player.look.outfitLine),
+    wear(name, wornOutfitLine(unit) || unit.outfitLine || unit.bible?.look.outfitLine || ""),
+    wear(player.name || "The protagonist", wornOutfitLine(player) || player.look.outfitLine),
     makeItRight ? `\nMAKE IT RIGHT\nThe rupture (${makeItRight.id})${mendText ? `: ${mendText}` : ""}` : "",
     "",
     memory.trim() ? `STORY MEMORY\n${memory.trim()}` : "",
@@ -484,7 +488,8 @@ const nextDateKey = (chapters: readonly Chapter[]) =>
 
 /**
  * POST /runs/:run/dates: plans a date (P26) and saves it as chapter `date-<n>`, or returns the date with that love
- * interest that is still open (`resumed`). Looks are the base looks until M4's Wardrobe.
+ * interest that is still open (`resumed`). The route wears the picked looks first (S/routes/wardrobe.ts wearLook), so
+ * the plan and everything painted afterwards dress them in what they wear now.
  */
 export async function startDate(
   deps: DateDeps,
@@ -497,10 +502,6 @@ export async function startDate(
   if (first.world.forge.phase !== "ready") throw conflict("The world is still being forged.");
   partnerOf(first, input.li);
   storyPlaceOf(first.world, input);
-  // ponytail: the base look is the only one until M4 lists owned looks; a look id is then checked against them.
-  if (input.herLook !== BASE_LOOK || input.hisLook !== BASE_LOOK) {
-    throw new OtomeForgeError(400, "Only the base looks can be worn on a date yet.", "bad-request");
-  }
   const resume = (open: { chapter: Chapter; state: RunState }) => ({
     chapter: open.chapter,
     date: entryOf(runId, open.chapter, open.state, null),
@@ -726,13 +727,13 @@ async function keepsakeSubject(deps: DateDeps, runId: string, key: string) {
     {
       name: unit.name,
       identityLine: unit.identityLine || unit.bible!.look.identityLine,
-      outfitLine: unit.outfitLine || unit.bible!.look.outfitLine,
+      outfitLine: wornOutfitLine(unit) || unit.outfitLine || unit.bible!.look.outfitLine,
       presentation: unit.bible!.look.presentation,
     },
     {
       name: run.player.name || "Protagonist",
       identityLine: run.player.look.identityLine,
-      outfitLine: run.player.look.outfitLine,
+      outfitLine: wornOutfitLine(run.player) || run.player.look.outfitLine,
       presentation: "person",
     },
   ];
@@ -743,6 +744,7 @@ async function keepsakeSubject(deps: DateDeps, runId: string, key: string) {
     ...(unit.cardId ? { cardId: unit.cardId } : {}),
     ...(unit.portrait ? { portrait: unit.portrait } : {}),
     outfits: unit.outfits,
+    ...(unit.wornOutfit ? { wornOutfit: unit.wornOutfit } : {}),
   };
   return { run, chapter, plan: chapter.date, unit, people, image };
 }

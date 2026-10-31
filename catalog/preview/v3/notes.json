@@ -72,6 +72,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.6.3",
+          "date": "2026-10-31",
+          "notes": "- Date Night offers your Wardrobe looks: pick any painted look either of you owns, 4★ and 5★ alike. The date's scenes, key images and keepsake dress you both in them, and they stay on afterwards.",
+          "highlight": false
+        },
+        {
           "version": "0.6.2",
           "date": "2026-10-31",
           "notes": "- After a love interest's finale, the story no longer assumes they already confessed: if you eased off before the words came, they can still say it later.",
@@ -183,12 +189,6 @@
           "version": "0.1.13",
           "date": "2026-10-29",
           "notes": "- Suggestive is an image-content ceiling: neutral portraits and facial expression edits no longer receive mandatory suggestive or sensitive-content tags. Image briefs follow the actual moment, with non-explicit adult intimacy allowed when appropriate.\n- Wish and Wardrobe display cleaned love-interest and persona outfits while retaining the original paintings. Wardrobe banner art is centered and shown whole, and tapping a ready banner image opens a full-image view without making a wish.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.12",
-          "date": "2026-10-29",
-          "notes": "- Desktop settings use the available stage space, with every settings section reachable and long pages scrollable.\n- Text generation can recover when an endpoint rejects the optional JSON-format hint, while retaining reply validation and output budgets.",
           "highlight": false
         }
       ]

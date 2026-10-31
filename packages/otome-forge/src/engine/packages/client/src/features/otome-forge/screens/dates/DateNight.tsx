@@ -48,7 +48,9 @@ import {
 } from "../../shared/dates";
 import { Reader } from "../reader/Reader";
 import { playQueryKey, type ActivityScreenProps } from "./DatesHub";
-import { LookPicker } from "./LookPicker";
+import { LookPicker, wornDateLook } from "./LookPicker";
+import { useWardrobe } from "../wardrobe/Wardrobe";
+import { wardrobeQueryKey } from "../../hooks/use-items";
 import { PLACE_ICONS, PLACE_NAME_KEYS, PlacePicker, paintedPlaces, type PlacePick } from "./PlacePicker";
 
 export const datesQueryKey = (runKey: string) => ["otome-forge", "dates", runKey] as const;
@@ -123,6 +125,9 @@ export function DateNight({ runKey, view, li: picked, onExit, onHome = onExit, o
   const [step, setStep] = useState<Step | null>(null);
   const [place, setPlace] = useState<PlacePick | null>(null);
   const [looks, setLooks] = useState({ hisLook: BASE_LOOK, herLook: BASE_LOOK });
+  // The looks each of them owns (the Wardrobe's list): the picker starts on what each wears now.
+  const wardrobe = useWardrobe(runKey);
+  const chosenLooks = useRef(false);
   const [planError, setPlanError] = useState<unknown>(null);
   const abortRef = useRef<AbortController | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -130,6 +135,12 @@ export function DateNight({ runKey, view, li: picked, onExit, onHome = onExit, o
   const moved = useRef(false);
   // The run view's copy carries the newest level.
   const partner = view.lis.find((item) => item.id === picked.id) ?? picked;
+  // Until the player picks, the looks are what each of them wears now (their worn look when they may wear it).
+  const hisWorn = wornDateLook(wardrobe.data?.him[partner.id]);
+  const herWorn = wornDateLook(wardrobe.data?.me);
+  useEffect(() => {
+    if (!chosenLooks.current) setLooks({ hisLook: hisWorn, herLook: herWorn });
+  }, [hisWorn, herWorn]);
   const rupture = !!dates.data?.lis.find((entry) => entry.li === partner.id)?.rupture;
 
   // Opens where this love interest's dates stand, once they are known. On a first visit that is after the loading
@@ -173,6 +184,9 @@ export function DateNight({ runKey, view, li: picked, onExit, onHome = onExit, o
 
   const refresh = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: datesQueryKey(runKey) });
+    // Starting a date wears its looks (S/routes/dates.ts): Home and the Wardrobe show them.
+    void queryClient.invalidateQueries({ queryKey: wardrobeQueryKey(runKey) });
+    void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
   }, [queryClient, runKey]);
 
   const plan = useCallback(async () => {
@@ -291,7 +305,17 @@ export function DateNight({ runKey, view, li: picked, onExit, onHome = onExit, o
       {step.kind === "looks" && place ? (
         <>
           <StepHead partner={partner} rupture={rupture} step={2} title={t("ui.otomeForge.dateNight.looksTitle")} />
-          <LookPicker partner={partner} player={view.player} {...looks} onChange={setLooks} />
+          <LookPicker
+            partner={partner}
+            player={view.player}
+            hisLooks={wardrobe.data?.him[partner.id]}
+            herLooks={wardrobe.data?.me}
+            {...looks}
+            onChange={(next) => {
+              chosenLooks.current = true;
+              setLooks(next);
+            }}
+          />
           <section className="of-section of-glass of-date-summary" aria-labelledby="of-date-summary">
             <p className="of-eyebrow">{t("ui.otomeForge.dateNight.tonight")}</p>
             <h2 id="of-date-summary" className="of-section-title of-date-summary-title">
