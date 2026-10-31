@@ -1,5 +1,9 @@
 # 5e (SRD 5.1)
 
+## 1.0.2 - 2026-10-31
+
+- A Low magic layer, turned on when a game is created: magic is rare and feared. No spell above 5th level is offered, and no spell scroll above 5th level is found or sold. Every magic item still exists, but no shop sells one (the magic dealer and the scribe are gone, and temples and alchemists sell only mundane goods), treasure drops one about a fifth as often, and a town's fence is the one shady way to buy one. The Game Master keeps creatures of magic out of random encounters, may still build a fight around one on purpose, and, when the player gives no reason, decides at game creation why magic is rare in this world. Magic items' spell scrolls carry a Spell level filter. It needs Capability API 1.813.
+
 ## 1.0.1 - 2026-10-31 [highlight]
 
 - The whole SRD 5.1 in Game Mode: build a character from any SRD race, class, background and subclass, up to 20th level, and fight on screen by the SRD's rules against its 323 monsters, with its 325 spells, 966 magic items and every piece of equipment. It ships with 11 translations as language packs beside the English ruleset, and the Engine downloads only the one it is set to. It needs Capability API 1.812, whose numbers it now follows, upstream having taken 1.391 (the 5e minors move up one, to 1.392-1.812). A monk taken as a second or third class is proficient with shortswords, as the SRD's Multiclassing Proficiencies say.

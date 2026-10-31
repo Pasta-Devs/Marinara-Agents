@@ -29724,15 +29724,30 @@ console.log("ruleset 0.449.0 casters as strong as their challenge regression che
 
 // 1.0.0: the first full release. The ruleset version keeps counting past 0.451.0's 451, so every game updates.
 {
-  assert.ok(["1.0.0", "1.0.1"].includes(shippedManifest.version));
+  assert.ok(["1.0.0", "1.0.1", "1.0.2"].includes(shippedManifest.version));
   assert.ok(parsedAsset.version >= 452);
 }
 console.log("ruleset 1.0.0 first full release regression checks passed");
 
 // 1.0.1: renumbered past upstream's 1.391 (the 5e minors are 1.392-1.812).
 {
-  assert.equal(shippedManifest.version, "1.0.1");
-  assert.equal(parsedAsset.version, 453);
-  assert.deepEqual(shippedManifest.capabilityApi, { major: 1, minor: 812 });
+  assert.ok(parsedAsset.version >= 453);
 }
 console.log("ruleset 1.0.1 renumbered regression checks passed");
+
+// 1.0.2: the Low magic layer, whose market and loot changes take Capability API 1.813 (a layer's `items`).
+{
+  assert.equal(shippedManifest.version, "1.0.2");
+  assert.equal(parsedAsset.version, 454);
+  assert.deepEqual(shippedManifest.capabilityApi, { major: 1, minor: 813 });
+  const lowMagic = parsedAsset.layers?.find((layer) => layer.id === "low_magic");
+  assert.ok(lowMagic, "the Low magic layer ships");
+  assert.deepEqual(lowMagic.items.market.removeSellers, ["magic_dealer", "scribe"]);
+  assert.deepEqual(lowMagic.items.market.unsold, [{ tag: "magical" }]);
+  const sellers = new Set(parsedAsset.items.market.sellers.map((seller) => seller.id));
+  for (const id of lowMagic.items.market.removeSellers) assert.ok(sellers.has(id), `the market has ${id}`);
+  const tables = new Set(parsedAsset.items.lootTables.map((table) => table.id));
+  for (const table of lowMagic.items.lootTables)
+    assert.ok(tables.has(table.id), `the ruleset has loot table ${table.id}`);
+}
+console.log("ruleset 1.0.2 low magic layer regression checks passed");
