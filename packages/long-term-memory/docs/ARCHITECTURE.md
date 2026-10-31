@@ -141,7 +141,7 @@ and a source note's re-extract. The Engine passes only the recall keys to Chat
 Settings, so `GET /chat-memories/:chatId` (`routes/settings.ts`) reads the
 chat's choice for the panel.
 
-Hide imported messages from the AI hides a piece's messages only after its
+Hide remembered messages from the AI hides a piece's messages only after its
 memories are saved: a source note with a pending draft keeps its not-yet-hidden
 messages, and accepting, skipping or deleting that draft runs Hide again for the
 note (`hideImportedMessagesAfterReview` in `sources/interop.ts`). The extraction

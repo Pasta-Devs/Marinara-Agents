@@ -10102,6 +10102,11 @@ async function main() {
       for (let wait = 0; wait < 50 && extractionWrites.length === writesBeforeGuide; wait += 1)
         await firstRunPage.waitForTimeout(20);
       assert.deepEqual(extractionWrites.at(-1), { autoImportChatSources: true, autoAcceptSafeChanges: true });
+      // The import step follows the chosen way: new messages are already collected.
+      await firstRunGuide
+        .getByText("New messages in this chat are already being collected. Older ones can be imported here.")
+        .waitFor({ timeout: 5_000 });
+      assert.doesNotMatch(await firstRunGuide.innerText(), /Importing a Chat Summary saves the source/u);
       await firstRunGuide.getByRole("button", { name: "Next: Reviewing and saving memories" }).click();
       await firstRunGuide.getByRole("button", { name: "Next: Check it works" }).click();
       assert.equal(await firstRunGuide.getByRole("button", { name: "Choose a Source" }).count(), 1);

@@ -621,7 +621,15 @@ export function Onboarding({
                 )
               ) : onboardingStep === 6 ? (
                 <>
-                  <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.youReSetUpIntro")}</p>
+                  <p>
+                    {localizeUi(
+                      shownChatMemories === "save"
+                        ? "ui.longTermMemory.longtermmemorydetail.youReSetUpIntroSave"
+                        : shownChatMemories === "review"
+                          ? "ui.longTermMemory.longtermmemorydetail.youReSetUpIntroReview"
+                          : "ui.longTermMemory.longtermmemorydetail.youReSetUpIntro",
+                    )}
+                  </p>
                   <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.underTheHoodIntro")}</p>
                   <details className="rounded-md border border-[var(--border)] px-3 py-2">
                     <summary className="cursor-pointer font-semibold text-[var(--foreground)]">
@@ -764,7 +772,13 @@ export function Onboarding({
                 </div>
                 {onboardingSource === "chats" ? (
                   <div className="max-w-[65ch] space-y-4 text-sm leading-6 text-[var(--muted-foreground)]">
-                    <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.chatSummarySetupIntro")}</p>
+                    <p>
+                      {localizeUi(
+                        shownChatMemories === "save" || shownChatMemories === "review"
+                          ? "ui.longTermMemory.longtermmemorydetail.chatSummarySetupIntroCollecting"
+                          : "ui.longTermMemory.longtermmemorydetail.chatSummarySetupIntro",
+                      )}
+                    </p>
                     <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.chatSummarySetupOpen")}</p>
                   </div>
                 ) : null}

@@ -59,6 +59,11 @@ pressed buttons and an "After a reply" sample. A new setup (empty vault, choice
 still I add them myself) starts on Save them for me; an existing one shows its
 stored choice. Pressing a choice saves it, and moving on from step 3 saves the
 choice it shows.
+Step 4 (Import) and step 7 (You're Set Up) follow that choice: when the choice
+collects new messages (Collect them, I'll review or Save them for me) the import
+step says new messages are already being collected, and step 7 says what waits
+for you or is saved on its own; I add them myself keeps the plain import and
+setup wording.
 
 ## Responsive Contract
 
@@ -180,7 +185,7 @@ never imported uses its chat's size. When the selected chat also has summaries,
 it says that importing both can repeat memories in review. A chat with branches
 adds a Branch menu (this branch, each other branch, All branches); it filters
 the list to a branch's history, and the destination stays the whole chat.
-The Extraction setting Hide imported messages from the AI (off by default)
+The Extraction setting Hide remembered messages from the AI (off by default)
 hides each extracted piece's messages from the chat's prompt, except the last
 messages the chat's summary keeps (10 when unset). It records only the messages
 it hid; turning it off or permanently deleting a piece's source note shows
@@ -217,7 +222,7 @@ starts and never the piece still being written, and each run is an "Imported
 automatically" row in Activity. A selection whose import failed is not retried
 until a source or the extraction connection changes. Use Advanced Memory recaps
 needs a Marinara version that provides the recaps (Capability API 1.391); on an
-older Engine the toggle is disabled with a note, the same way as Hide imported
+older Engine the toggle is disabled with a note, the same way as Hide remembered
 messages from the AI.
 When background import is on and has no extraction connection, Extraction shows a warning
 (`StatusSurface` warning tone) with a Choose button that focuses the connection field; the same
