@@ -802,6 +802,8 @@ export interface Chapter {
   grievance?: string;
   lead: LiId;
   foil?: LiId;
+  /** The story arc this main chapter belongs to (#1983 M4); absent before arcs existed. */
+  arc?: number;
   title: string;
   /** Content tags shown before a dark chapter: LimitIds plus jealousy, grief, possessiveness, betrayal, violence. */
   tags: string[];

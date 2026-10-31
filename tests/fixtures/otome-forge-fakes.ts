@@ -148,6 +148,8 @@ export type FakeReply =
 export interface FakeRuntimeOptions {
   documents?: CapabilityDocumentStore;
   replies?: FakeReply[];
+  /** The arc plan the fake writes for the arc planner's calls (#1980); the default is fakeArcReply. */
+  arcReply?: (prompt: string) => string;
   debugAgents?: boolean;
   /** Levels the logger reports as enabled through isLevelEnabled; default none. */
   enabledLevels?: string[];
@@ -216,8 +218,10 @@ export function createFakeRuntime(options: FakeRuntimeOptions = {}) {
       // #1980: the chapter planner now plans its arc first (story/arc.ts). The fake answers that call itself, so every
       // test's scripted replies still line up with the calls it really cares about.
       const arcCall = messages.some((message) => message.content.includes("You are the arc planner"));
-      if (arcCall)
-        return { content: fakeArcReply(messages.map((message) => message.content).join("\n")), finishReason: "stop" };
+      if (arcCall) {
+        const prompt = messages.map((message) => message.content).join("\n");
+        return { content: (options.arcReply ?? fakeArcReply)(prompt), finishReason: "stop" };
+      }
       const reply = replies.shift();
       if (reply === undefined) throw new Error("The Otome Forge fake model has no scripted reply left");
       if (reply instanceof Error) throw reply;
