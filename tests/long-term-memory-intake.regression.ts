@@ -236,6 +236,36 @@ async function main() {
       assert.deepEqual(await service.submit(orphan), { version: 1, status: "applied" });
       assert.equal((await ada()).sections.from_slurp2?.text, "Ada waves.", "the orphan's line is written");
       assert.deepEqual(await service.submit(orphan), { version: 1, status: "unchanged" }, "and then it is unchanged");
+
+      // 13. Replacing a two-character record keeps the archived character's memory exactly as it is, old line included.
+      const duo = { caller: "slurp2", recordId: "bond:d1", characterIds: ["char-a", "char-d"], text: "Ada knows Dee." };
+      const duoSourceId = ltmPackageSourceNoteId("slurp2", "bond:d1");
+      assert.deepEqual(await service.submit(duo), { version: 1, status: "applied" });
+      const madeForDee = (await storage.listNotes({ type: "character" })).find(
+        (note: any) => note.id.startsWith("char_slurp2_") && note.scope.characterIds?.[0] === "char-d",
+      );
+      assert.equal(madeForDee?.sections.from_slurp2?.text, "Ada knows Dee.");
+      await storage.updateNote(madeForDee.id, { status: "archived" });
+      assert.deepEqual(await service.submit({ ...duo, text: "Ada meets Dee." }), { version: 1, status: "applied" });
+      const keptDee = await storage.getNote(madeForDee.id);
+      assert.equal(keptDee?.status, "archived", "the archived memory still exists and stays archived");
+      assert.equal(keptDee.sections.from_slurp2?.text, "Ada knows Dee.", "and keeps its old line");
+      assert.equal(
+        keptDee.links.some((link: any) => link.target === duoSourceId),
+        false,
+        "only its link to the replaced source is gone",
+      );
+      const adaLines = (await ada()).sections.from_slurp2?.text ?? "";
+      assert.ok(
+        adaLines.includes("Ada meets Dee.") && !adaLines.includes("Ada knows Dee."),
+        "the other gets the new line",
+      );
+      assert.equal(
+        await service.submit({ caller: "slurp2", recordId: "fact:d2", characterIds: ["char-d"], text: "Dee naps." }),
+        null,
+        "a new record naming the archived character is skipped",
+      );
+      assert.equal((await storage.getNote(madeForDee.id)).sections.from_slurp2?.text, "Ada knows Dee.");
     },
     [() => storage?.cleanup(), () => releaseRuntime?.(), () => rm(dataDir, { recursive: true, force: true })],
   );

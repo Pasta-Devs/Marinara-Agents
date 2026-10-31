@@ -107,15 +107,22 @@ export function createLtmIntakeService(storage: LongTermMemoryStorage, root = st
   const enabled = async () => (await getLtmGlobalSettings(root)).longTermMemoryAcceptFromPackages;
 
   // Callers hold the vault lock.
-  async function retractUnlocked(sourceNoteId: string) {
+  // `optedOutNoteIds` (a replace only): memories the user archived or narrowed are excluded from the delete, so they
+  // keep their sections, old line included, and lose only their link to the source.
+  async function retractUnlocked(sourceNoteId: string, optedOutNoteIds: readonly string[] = []) {
     if (!(await storage.getNote(sourceNoteId))) return false;
     // Everything that can stop the delete is checked before the first write, so a failed retract changes nothing:
     // the full listing fails on an unreadable note as the delete would, and a note made from a note this deletes
     // would widen the delete's lineage.
     const notes = await storage.listNotes();
     const deleted = [sourceNoteId];
+    const excluded: string[] = [];
     const kept: Array<[LtmNote, LtmNote]> = [];
     for (const note of notes.filter((item) => madeFrom(item, sourceNoteId))) {
+      if (optedOutNoteIds.includes(note.id)) {
+        excluded.push(note.id);
+        continue;
+      }
       const next = withoutSource(note, sourceNoteId);
       if (next) kept.push([note, next]);
       else deleted.push(note.id);
@@ -126,8 +133,9 @@ export function createLtmIntakeService(storage: LongTermMemoryStorage, root = st
     // The other notes no longer come from the source, so its lineage is the source and the notes it alone made.
     await storage.deleteNotesPermanently(deleted, {
       retractExtracted: true,
+      excludedNoteIds: excluded,
       lineageSourceNoteId: sourceNoteId,
-      expectedLineageNoteIds: deleted,
+      expectedLineageNoteIds: [...deleted, ...excluded],
     });
     return true;
   }
@@ -182,7 +190,7 @@ export function createLtmIntakeService(storage: LongTermMemoryStorage, root = st
       (id) => !targetFor(before, id) && before.some((note) => note.id === memoryId(id)),
     );
     if (optedOut.length === input.characterIds.length) return null;
-    if (existing) await retractUnlocked(sourceNoteId);
+    if (existing) await retractUnlocked(sourceNoteId, optedOut.map(memoryId));
 
     const scope = { characterIds: [...input.characterIds] };
     // Apply needs each change to name its source note; the record id says where it came from.
