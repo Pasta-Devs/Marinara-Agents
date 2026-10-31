@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { isDeepStrictEqual } from "node:util";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { packageFileBuffer, RULESET_FILE_FORMAT, rulesetArtifactName } from "../package-file.mjs";
@@ -29724,7 +29724,7 @@ console.log("ruleset 0.449.0 casters as strong as their challenge regression che
 
 // 1.0.0: the first full release. The ruleset version keeps counting past 0.451.0's 451, so every game updates.
 {
-  assert.ok(["1.0.0", "1.0.1", "1.0.2"].includes(shippedManifest.version));
+  assert.ok(["1.0.0", "1.0.1", "1.0.2", "1.0.3"].includes(shippedManifest.version));
   assert.ok(parsedAsset.version >= 452);
 }
 console.log("ruleset 1.0.0 first full release regression checks passed");
@@ -29737,8 +29737,8 @@ console.log("ruleset 1.0.1 renumbered regression checks passed");
 
 // 1.0.2: the Low magic layer, whose market and loot changes take Capability API 1.813 (a layer's `items`).
 {
-  assert.equal(shippedManifest.version, "1.0.2");
-  assert.equal(parsedAsset.version, 454);
+  assert.ok(["1.0.2", "1.0.3"].includes(shippedManifest.version));
+  assert.ok(parsedAsset.version >= 454);
   assert.deepEqual(shippedManifest.capabilityApi, { major: 1, minor: 813 });
   const lowMagic = parsedAsset.layers?.find((layer) => layer.id === "low_magic");
   assert.ok(lowMagic, "the Low magic layer ships");
@@ -29751,3 +29751,20 @@ console.log("ruleset 1.0.1 renumbered regression checks passed");
     assert.ok(tables.has(table.id), `the ruleset has loot table ${table.id}`);
 }
 console.log("ruleset 1.0.2 low magic layer regression checks passed");
+
+// 1.0.3: the Low magic layer's words and the Spell level filter, translated in every language pack.
+{
+  assert.equal(shippedManifest.version, "1.0.3");
+  assert.equal(parsedAsset.version, 455);
+  const lowMagic = parsedAsset.layers.find((layer) => layer.id === "low_magic");
+  const words = [lowMagic.label, lowMagic.summary, "Spell level"];
+  const localeDir = join(packageRoot, "locales");
+  for (const name of (await readdir(localeDir)).filter((file) => file.endsWith(".json") && file !== "en.json")) {
+    const strings = JSON.parse(await readFile(join(localeDir, name), "utf8")).ruleset;
+    for (const english of words) {
+      assert.equal(typeof strings[english], "string", `${name} translates ${english}`);
+      assert.ok(strings[english].trim() && strings[english] !== english, `${name} translates ${english}`);
+    }
+  }
+}
+console.log("ruleset 1.0.3 low magic translations regression checks passed");
