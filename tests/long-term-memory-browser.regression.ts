@@ -6255,7 +6255,7 @@ async function main() {
         })()`);
         const loadingSettings = loadingPage.locator('[data-ltm-surface="chat-settings"]');
         await loadingSettings.waitFor();
-        const loadingStyle = loadingSettings.locator('select[data-ltm-control="select"]').first();
+        const loadingStyle = loadingSettings.getByLabel("Recall style", { exact: true });
         const loadingBudget = loadingSettings.getByRole("spinbutton", { name: "Recall context budget" });
         const loadingMaxChunks = loadingSettings.getByRole("spinbutton", { name: "Maximum memories" });
         assert.equal(
@@ -6269,7 +6269,8 @@ async function main() {
         assert.equal(await loadingSettings.getByText("Global default").count(), 0);
         releaseDefaults();
         await loadingPage.waitForFunction(
-          () => document.querySelector('[data-ltm-surface="chat-settings"] select')?.value === "balanced",
+          (select) => (select as HTMLSelectElement).value === "balanced",
+          await loadingStyle.elementHandle(),
         );
         assert.equal(await loadingBudget.inputValue(), "4096");
         assert.equal(await loadingMaxChunks.inputValue(), "20");
@@ -9786,7 +9787,7 @@ async function main() {
       }, packageManifest.version);
       const heldChatSettings = mobilePage.locator('[data-ltm-surface="chat-settings"]');
       await heldChatSettings.waitFor();
-      const heldStyle = heldChatSettings.locator('select[data-ltm-control="select"]').first();
+      const heldStyle = heldChatSettings.getByLabel("Recall style", { exact: true });
       const heldBudget = heldChatSettings.getByRole("spinbutton", { name: "Recall context budget" });
       const heldMaxChunks = heldChatSettings.getByRole("spinbutton", { name: "Maximum memories" });
       const isFocused = (target: typeof heldBudget) => target.evaluate((element) => element === document.activeElement);
