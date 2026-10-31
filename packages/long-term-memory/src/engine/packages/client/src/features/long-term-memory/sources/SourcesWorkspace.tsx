@@ -1666,7 +1666,8 @@ export default function SourcesWorkspace({
             value={advancedMemoryBatchSize}
             min={1}
             max={100}
-            onChange={setAdvancedMemoryBatchSize}
+            // The backfill route takes a whole number; NumberField clamps but does not round.
+            onChange={(value) => setAdvancedMemoryBatchSize(Math.round(value))}
             disabled={importRunning}
           />
           <Button

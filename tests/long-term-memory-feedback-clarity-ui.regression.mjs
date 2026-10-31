@@ -1377,6 +1377,10 @@ const localization = readFileSync(ltmSourcePaths.localization, "utf8");
 assert.match(localization, /import koreanCatalog from "\.\/locales\/ko\.json"/u);
 assert.match(localization, /ko: stringEntries\(koreanCatalog\)/u);
 
+// Issue #1964 (Dottore on #1970): the backfill route's `limit` is `.int()`, so a typed 2.5 must reach state as a whole number.
+assert.match(workspace, /onChange=\{\(value\) => setAdvancedMemoryBatchSize\(Math\.round\(value\)\)\}/u);
+assert.match(workspace, /limit: advancedMemoryBatchSize,/u);
+
 process.stdout.write(
   "Long-Term Memory feedback clarity UI regression: labels, outcomes, usage, warnings, defaults, and scope loading ok\n",
 );
