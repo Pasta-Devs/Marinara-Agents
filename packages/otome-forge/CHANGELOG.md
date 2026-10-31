@@ -2,7 +2,7 @@
 
 ## 0.6.5 — 2026-10-31
 
-- Seasonal banners: the first fortnight that starts in each month brings three banners on that month's theme, with a badge such as **October · Halloween**: New Year in January, Valentine's Day in February, through Halloween in October, autumn in November and Christmas in December. A world without the holiday gets its own version of it. Later fortnights that month are your model's free choice, as before.
+- Seasonal banners: the first fortnight that starts in each month brings three banners on that month's theme, with a badge such as “October · Halloween”: New Year in January, Valentine's Day in February, through Halloween in October, autumn in November and Christmas in December. A world without the holiday gets its own version of it. Later fortnights that month are your model's free choice, as before.
 
 ## 0.6.4 — 2026-10-31
 
