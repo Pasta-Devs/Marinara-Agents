@@ -111,10 +111,10 @@ const profilesSchema = {
 const slpSceneShotJsonSchema = {
   type: "object",
   properties: {
-    setting: { type: "string", maxLength: 500 },
-    action: { type: "string", maxLength: 500 },
+    setting: { type: "string", maxLength: 1500 },
+    action: { type: "string", maxLength: 1500 },
     expression: { type: "string", maxLength: 300 },
-    visualDirection: { type: "string", maxLength: 500 },
+    visualDirection: { type: "string", maxLength: 1500 },
     outfit: { type: "string", maxLength: 300 },
   },
   required: ["setting", "action", "expression", "visualDirection", "outfit"],
@@ -159,10 +159,10 @@ function slpCreatorPostSchema(
               type: "object",
               properties: {
                 wardrobeId: { anyOf: [{ type: "string", maxLength: 80 }, { type: "null" }] },
-                setting: { type: "string", maxLength: 500 },
-                action: { type: "string", maxLength: 500 },
+                setting: { type: "string", maxLength: 1500 },
+                action: { type: "string", maxLength: 1500 },
                 expression: { type: "string", maxLength: 300 },
-                visualDirection: { type: "string", maxLength: 500 },
+                visualDirection: { type: "string", maxLength: 1500 },
                 outfit: { type: "string", maxLength: 300 },
                 subject: { anyOf: [{ type: "string", maxLength: 120 }, { type: "null" }] },
               },

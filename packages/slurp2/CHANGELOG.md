@@ -1,5 +1,11 @@
 # Slurp release notes
 
+## 0.4.13 — 2026-10-31
+
+- Wardrobe looks can be exported and imported as JSON. Export the whole wardrobe or a single look, and import a file back into the same review list as the AI import. No model call is needed, and {{random}} in a description stays as written.
+- Rewritten commission requests keep up to 1000 characters instead of being cut off at 400.
+- A scene's setting, action and visual direction may be up to 1500 characters, so a long visual direction no longer fails "Post now" on a collab.
+
 ## 0.4.12 — 2026-10-30
 
 - Wardrobe import finds looks again. It accepts untidy model replies (other list names, extra fields, long summaries, tags as one line) and has room for long replies and thinking models.
