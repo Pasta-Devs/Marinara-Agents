@@ -19,7 +19,7 @@ import { getLtmGlobalSettings } from "../settings.js";
 // ponytail: the Engine does not tell a service who calls it, so `caller` is self-reported and any package
 // can name itself "slurp2". The list only keeps unknown names out; a package that lies still needs the user's
 // "Other Agents can add memories" switch on. Upgrade path: the Engine passes the caller's id
-// (`registerService(key, service, { forCaller })`, scratch/issues/engine-service-caller-identity.md).
+// (`registerService(key, service, { forCaller })`).
 export const LTM_INTAKE_CALLERS = ["slurp2"] as const;
 export type LtmIntakeCaller = (typeof LTM_INTAKE_CALLERS)[number];
 
@@ -72,6 +72,9 @@ function signalOf(input: unknown) {
 const sameIds = (left: readonly string[] = [], right: readonly string[] = []) =>
   left.length === right.length && [...left].sort().join("\n") === [...right].sort().join("\n");
 
+const madeFrom = (note: LtmNote, target: string) =>
+  note.links.some((link) => link.target === target && link.relation === "extracted_from");
+
 const characterRef = (subject: LtmSubject, characterId: string) =>
   subject.ref?.kind === "character" && subject.ref.id === characterId;
 
@@ -110,8 +113,6 @@ export function createLtmIntakeService(storage: LongTermMemoryStorage, root = st
     // the full listing fails on an unreadable note as the delete would, and a note made from a note this deletes
     // would widen the delete's lineage.
     const notes = await storage.listNotes();
-    const madeFrom = (note: LtmNote, target: string) =>
-      note.links.some((link) => link.target === target && link.relation === "extracted_from");
     const deleted = [sourceNoteId];
     const kept: Array<[LtmNote, LtmNote]> = [];
     for (const note of notes.filter((item) => madeFrom(item, sourceNoteId))) {
@@ -135,7 +136,15 @@ export function createLtmIntakeService(storage: LongTermMemoryStorage, root = st
     const sourceNoteId = ltmPackageSourceNoteId(input.caller, input.recordId);
     const sourceId = `${input.caller}:${input.recordId}`;
     const existing = await storage.getNote(sourceNoteId);
-    if (existing?.sections.source?.text === input.text && sameIds(existing.scope.characterIds, input.characterIds))
+    const listCharacterNotes = () => storage.listNotes({ type: "character", skipInvalid: true });
+    // Listed before any retract: a retract can delete the memory a later check has to see.
+    const before = await listCharacterNotes();
+    // Unchanged only while a character memory still holds the line; a source left by a failed apply is rewritten.
+    if (
+      existing?.sections.source?.text === input.text &&
+      sameIds(existing.scope.characterIds, input.characterIds) &&
+      before.some((note) => madeFrom(note, sourceNoteId))
+    )
       return "unchanged" as const;
     // A changed line or a changed list of characters replaces the old one everywhere it went.
     let names = new Map<string, string>();
@@ -152,24 +161,40 @@ export function createLtmIntakeService(storage: LongTermMemoryStorage, root = st
     } catch {
       // A host without resources still gets the memory, only without a title.
     }
+
+    const sectionKey = ltmIntakeSectionKey(input.caller);
+    const memoryId = (characterId: string) => `char_${input.caller}_${hashShort(characterId)}`;
+    // The oldest memory of the character that recall serves in every mode intake writes for.
+    const targetFor = (notes: LtmNote[], characterId: string) =>
+      notes
+        .filter((note) => note.subjects?.some((subject) => characterRef(subject, characterId)))
+        .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+        .find(
+          (note) =>
+            note.status !== "archived" &&
+            note.subjects?.length === 1 &&
+            MODES.every((mode) => note.modes.includes(mode)) &&
+            canUpdateLtmScopedTarget(note.scope, { characterIds: [characterId] }),
+        );
+    // The memory intake made earlier and the user archived or narrowed: leave that character out. Decided before
+    // a replace retracts the old line, which deletes a memory holding only that line.
+    const optedOut = input.characterIds.filter(
+      (id) => !targetFor(before, id) && before.some((note) => note.id === memoryId(id)),
+    );
+    if (optedOut.length === input.characterIds.length) return null;
     if (existing) await retractUnlocked(sourceNoteId);
 
     const scope = { characterIds: [...input.characterIds] };
     // Apply needs each change to name its source note; the record id says where it came from.
     const evidence = [`source_note:${sourceNoteId}`, sourceId];
     const timestamp = new Date().toISOString();
-    const characterNotes = await storage.listNotes({ type: "character", skipInvalid: true });
-    const sectionKey = ltmIntakeSectionKey(input.caller);
+    const characterNotes = existing ? await listCharacterNotes() : before;
     const mutations = input.characterIds.flatMap((characterId): LtmDraftMutation[] => {
+      if (optedOut.includes(characterId)) return [];
       const about = characterNotes
         .filter((note) => note.subjects?.some((subject) => characterRef(subject, characterId)))
         .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
-      const target = about.find(
-        (note) =>
-          note.status !== "archived" &&
-          note.subjects?.length === 1 &&
-          canUpdateLtmScopedTarget(note.scope, { characterIds: [characterId] }),
-      );
+      const target = targetFor(characterNotes, characterId);
       const base = {
         id: randomUUID(),
         // A standing fact, not an event: only "change" claims need a timeline event from the same source.
@@ -180,9 +205,7 @@ export function createLtmIntakeService(storage: LongTermMemoryStorage, root = st
         evidence,
       };
       if (target) return [{ ...base, kind: "append_section", noteId: target.id, sectionKey, text: input.text }];
-      const noteId = `char_${input.caller}_${hashShort(characterId)}`;
-      // The memory intake made earlier and the user archived or narrowed: leave that character out.
-      if (characterNotes.some((note) => note.id === noteId)) return [];
+      const noteId = memoryId(characterId);
       const key =
         about.flatMap((note) => note.subjects ?? []).find((subject) => characterRef(subject, characterId))?.key ??
         `character:${characterId}`;

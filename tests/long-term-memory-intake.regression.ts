@@ -173,11 +173,74 @@ async function main() {
       assert.equal(await service.submit(later), null, "nothing goes into the archived memory");
       assert.equal(await storage.getNote(ltmPackageSourceNoteId("slurp2", "fact:b2")), null);
       assert.equal((await storage.getNote(madeForBea.id)).sections.from_slurp2?.text, "Bea sings.");
+
+      // 10. Replacing a record whose memory the user archived or narrowed changes nothing; that memory is not
+      // deleted and recreated active.
+      const replaced = { caller: "slurp2", recordId: "fact:b1", characterIds: ["char-b"], text: "Bea whistles." };
+      assert.equal(await service.submit(replaced), null, "a replacement into an archived memory is refused");
+      assert.equal((await storage.getNote(madeForBea.id)).status, "archived", "and the memory stays archived");
+      assert.equal((await storage.getNote(madeForBea.id)).sections.from_slurp2?.text, "Bea sings.");
+      assert.equal(
+        (await storage.getNote(ltmPackageSourceNoteId("slurp2", "fact:b1")))?.sections.source?.text,
+        "Bea sings.",
+      );
+      await storage.updateNote(madeForBea.id, { status: "active", modes: ["roleplay"] });
+      assert.equal(await service.submit(replaced), null, "a replacement into a narrowed memory is refused");
+      assert.deepEqual((await storage.getNote(madeForBea.id)).modes, ["roleplay"], "and the memory is not widened");
+      assert.equal((await storage.getNote(madeForBea.id)).sections.from_slurp2?.text, "Bea sings.");
+
+      // 11. A line goes only on a memory recall serves in both modes; a game-only memory is left alone.
+      await storage.createNote({
+        id: "char_cy_game",
+        title: "Cy",
+        type: "character",
+        status: "active",
+        modes: ["game"],
+        scope: { characterIds: ["char-c"] },
+        tags: [],
+        keywords: [],
+        links: [],
+        subjects: [{ key: "character:char-c", ref: { kind: "character", id: "char-c" } }],
+        sections: { traits: { text: "Cy plays alone.", updatedAt: timestamp } },
+      });
+      assert.deepEqual(
+        await service.submit({ caller: "slurp2", recordId: "fact:c1", characterIds: ["char-c"], text: "Cy waves." }),
+        { version: 1, status: "applied" },
+      );
+      assert.equal(
+        (await storage.getNote("char_cy_game")).sections.from_slurp2,
+        undefined,
+        "the game-only memory stays",
+      );
+      const madeForCy = (await storage.listNotes({ type: "character" })).find(
+        (note: any) => note.id.startsWith("char_slurp2_") && note.scope.characterIds?.[0] === "char-c",
+      );
+      assert.equal(madeForCy?.sections.from_slurp2?.text, "Cy waves.", "the line gets a memory of its own");
+      assert.deepEqual(madeForCy.modes, ["roleplay", "conversation"]);
+
+      // 12. A source left behind by a failed apply is rewritten, not reported unchanged.
+      const orphanId = ltmPackageSourceNoteId("slurp2", "fact:o1");
+      await storage.createNote({
+        id: orphanId,
+        type: "source",
+        status: "active",
+        modes: ["roleplay", "conversation"],
+        scope: { characterIds: ["char-a"] },
+        tags: ["package_record"],
+        keywords: [],
+        links: [],
+        provenance: { kind: "package_record", sourceId: "slurp2:fact:o1" },
+        sections: { source: { text: "Ada waves.", updatedAt: timestamp } },
+      });
+      const orphan = { caller: "slurp2", recordId: "fact:o1", characterIds: ["char-a"], text: "Ada waves." };
+      assert.deepEqual(await service.submit(orphan), { version: 1, status: "applied" });
+      assert.equal((await ada()).sections.from_slurp2?.text, "Ada waves.", "the orphan's line is written");
+      assert.deepEqual(await service.submit(orphan), { version: 1, status: "unchanged" }, "and then it is unchanged");
     },
     [() => storage?.cleanup(), () => releaseRuntime?.(), () => rm(dataDir, { recursive: true, force: true })],
   );
   process.stdout.write(
-    "Long-Term Memory intake regression: off by default, caller and input checks, apply, unchanged and replace, retract, two characters, unknown characters, failed retract and archived memories ok\n",
+    "Long-Term Memory intake regression: off by default, caller and input checks, apply, unchanged and replace, retract, two characters, unknown characters, failed retract, archived memories, replaced archived memories, game-only memories and orphaned sources ok\n",
   );
 }
 
