@@ -352,7 +352,7 @@
         "schemaVersion": 1,
         "id": "card-evolution-auditor",
         "name": "Card Evolution Auditor",
-        "version": "1.0.3",
+        "version": "1.0.4",
         "description": "Suggests character card updates when the story changes a character, for you to approve. Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
@@ -367,8 +367,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "78f33f0d8baa9181c178ba766936180970b26db20244fdc16acdee8632614ae3",
-            "bytes": 1750
+            "sha256": "af62d704c1b2364ba2931cfca7e87b497708d68a944c4e0ca850b1b3a9e7e10a",
+            "bytes": 1735
           }
         ],
         "permissions": [
@@ -383,9 +383,9 @@
       "category": "writer",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/card-evolution-auditor.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/card-evolution-auditor-1.0.3.zip",
-        "sha256": "a650a487d8f496267b09e5175309b27825b2f418208adffa2f94cfa597c28149",
-        "bytes": 1540
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/card-evolution-auditor-1.0.4.zip",
+        "sha256": "7f87bbd621c179596302ee77bacc078fdcd5edac10aa80f427e32146b7503e33",
+        "bytes": 1532
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#card-evolution-auditor"
     },
