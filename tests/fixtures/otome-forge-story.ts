@@ -82,6 +82,7 @@ export async function storyWorld({
   content = defaultContent(),
   cancellation = false,
   personas = [],
+  arcReply,
 }: {
   runKey: string;
   replies?: FakeReply[];
@@ -89,10 +90,17 @@ export async function storyWorld({
   content?: ReturnType<typeof defaultContent>;
   cancellation?: boolean;
   personas?: Array<{ id: string; data: unknown }>;
+  /** #1983 M4: the arc plan the fake writes, when a test needs one that differs from the default. */
+  arcReply?: (prompt: string) => string;
 }) {
   const fake = createFakeDocuments();
   const store = createOtomeStore(fake.documents);
-  const { runtime, logs, calls } = createFakeRuntime({ documents: fake.documents, replies, personas });
+  const { runtime, logs, calls } = createFakeRuntime({
+    documents: fake.documents,
+    replies,
+    personas,
+    ...(arcReply ? { arcReply } : {}),
+  });
   const runId = runIdOf(runKey);
   await store.mutateDoc(INDEX_TARGET, normalizeIndex, (index) => ({
     ...index,

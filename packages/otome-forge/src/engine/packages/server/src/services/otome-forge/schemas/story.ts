@@ -213,6 +213,7 @@ export function normalizeChapter(data: unknown): Chapter | null {
       grievance: short(80).optional(),
       lead: z.string(),
       foil: z.string().optional(),
+      arc: z.number().int().min(1).optional(),
       title: short(200),
       tags: (value) => validItems(short(40), value, 12),
       summary: short(1200),

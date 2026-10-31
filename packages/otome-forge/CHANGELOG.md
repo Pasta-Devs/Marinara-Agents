@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.6.9 — 2026-10-31
+
+- The chapter list groups chapters under their arc, and a chapter's reader says which arc it belongs to ("Arc 2 · Chapter 4").
+- A breathing-room arc says so: "Take a breath" arcs show a quiet-stretch badge, so a plot-free stretch is never mistaken for the story stalling.
+
 ## 0.6.8 — 2026-10-31
 
 - **The end of an arc is a choice:** when one closes, pick **Take a breath** (a few quiet chapters with the people you love), **Go on with the story** (a new arc with a new threat), or **Meet someone new**. The next arc is planned from your answer.
