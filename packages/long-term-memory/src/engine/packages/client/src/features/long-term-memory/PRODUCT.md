@@ -16,7 +16,7 @@ Long-Term Memory extracts durable memories from chat summaries, chat messages, c
 
 ## Positioning
 
-Three durable mechanisms together: evidence-led human review of proposed memory changes (confidence, freshness, evidence units, and diagnostics visible before acceptance); a package-owned vault scoped by chat, character, and lorebook with import, transfer, backup, and integrity repair; and deterministic, budgeted recall (lexical, metadata, and graph ranking under a token budget) injected at pre-generation. The package never silently auto-writes memory from generation.
+Three durable mechanisms together: evidence-led human review of proposed memory changes (confidence, freshness, evidence units, and diagnostics visible before acceptance); a package-owned vault scoped by chat, character, and lorebook with import, transfer, backup, and integrity repair; and deterministic, budgeted recall (lexical, metadata, and graph ranking under a token budget) injected at pre-generation. The package never writes memory from a generation turn itself; an opt-in background import of the chat's own finished sources runs shortly after a generation starts, never delays its recall, and is logged in Activity.
 
 ## Operating Context
 

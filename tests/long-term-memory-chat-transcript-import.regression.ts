@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { mock } from "node:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -55,12 +56,16 @@ async function main() {
     { ltmImportSourceNotesResponseSchema, ltmInteropPreviewRequestSchema, ltmInteropPreviewResponseSchema },
     { LongTermMemoryStorage },
     { updateLtmExtractionConfig },
+    { armLtmAutoImport, isLtmAutoImportArmed, LTM_AUTO_IMPORT_QUIET_MS },
+    { readLtmDebugLog },
   ] = await Promise.all([
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/package-runtime.ts"),
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/sources/interop.ts"),
     import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts"),
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/persistence/storage.ts"),
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/extraction/extraction-config.ts"),
+    import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/sources/auto-import-job.ts"),
+    import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/maintenance/debug-log.ts"),
   ]);
 
   const speaker = (row: FixtureMessage) => row.role;
@@ -715,6 +720,121 @@ async function main() {
         ],
         "a never-imported branch cuts at its chat's 12,000, so its shared pieces merge with the parent's",
       );
+
+      // Hands-off import: a reply arms a quiet-period run that imports the chat's summaries and closed pieces.
+      const autoRoot = join(dataDir, "auto", "long-term-memory");
+      await updateLtmExtractionConfig({ autoImportChatSources: true }, autoRoot);
+      const autoChat = {
+        ...roleplayChat,
+        id: "chat-auto",
+        name: "Auto",
+        metadata: {
+          summaryEntries: [{ id: "sum-1", content: "The vault opened.", rangeStartIndex: 1, rangeEndIndex: 2 }],
+        },
+      };
+      chats.push(autoChat);
+      messages.set(autoChat.id, [
+        message(autoChat.id, "u1", "user", "x".repeat(23_990)),
+        message(autoChat.id, "u2", "assistant", "y".repeat(23_990)),
+        message(autoChat.id, "u3", "user", "The tail is still being written."),
+      ]);
+      const autoImport = async (chatId: string) => {
+        mock.timers.enable({ apis: ["setTimeout"] });
+        try {
+          armLtmAutoImport(autoRoot, chatId, "roleplay");
+          mock.timers.tick(LTM_AUTO_IMPORT_QUIET_MS);
+        } finally {
+          mock.timers.reset();
+        }
+        for (let tries = 0; isLtmAutoImportArmed(autoRoot, chatId) && tries < 500; tries += 1)
+          await new Promise((resolveWait) => setTimeout(resolveWait, 10));
+        assert.equal(isLtmAutoImportArmed(autoRoot, chatId), false, "the background run finishes");
+      };
+      prompts.length = 0;
+      await autoImport(autoChat.id);
+      assert.deepEqual(
+        (await readLtmDebugLog({}, autoRoot))
+          .filter((event) => event.action === "auto_import")
+          .map(({ source, status, counts }) => ({ source, status, imported: counts?.imported })),
+        [
+          { source: "chats", status: "ok", imported: 1 },
+          { source: "messages", status: "ok", imported: 2 },
+        ],
+        "the summary and both closed pieces import, each source logged in Activity",
+      );
+      assert.equal(prompts.length, 3, "each imported source is extracted once");
+      assert.deepEqual(
+        (await previewPackageInterop({ source: "messages", chatId: autoChat.id, limit: 100 }, autoRoot)).samples.map(
+          ({ sourceId, status }) => ({ sourceId, status }),
+        ),
+        [
+          { sourceId: "chat-auto:messages:u1", status: "imported" },
+          { sourceId: "chat-auto:messages:u2", status: "imported" },
+          { sourceId: "chat-auto:messages:u3", status: "pending" },
+        ],
+        "the open tail waits until it closes",
+      );
+      await autoImport(autoChat.id);
+      assert.equal(prompts.length, 3, "a reply with nothing new makes no model call");
+
+      // A failing selection is not retried on every reply.
+      const failingChat = { ...roleplayChat, id: "chat-auto-failing", name: "Failing" };
+      chats.push(failingChat);
+      messages.set(failingChat.id, [
+        message(failingChat.id, "f1", "user", "x".repeat(23_990)),
+        message(failingChat.id, "f2", "user", "The tail."),
+      ]);
+      respond = () => {
+        throw new Error("fixture model is down");
+      };
+      prompts.length = 0;
+      await autoImport(failingChat.id);
+      const attempts = prompts.length;
+      assert.ok(attempts > 0, "the closed piece is attempted");
+      assert.equal(
+        (await readLtmDebugLog({}, autoRoot)).filter((event) => event.chatId === failingChat.id).at(-1)?.status,
+        "error",
+        "a failed background import is logged as an error",
+      );
+      await autoImport(failingChat.id);
+      assert.equal(prompts.length, attempts, "the same failed selection is not retried");
+      respond = () => [];
+
+      // A branch imports its own summaries, not the ones its siblings wrote after the split.
+      const autoEvents = async (chatId: string) =>
+        (await readLtmDebugLog({}, autoRoot)).filter(
+          (event) => event.action === "auto_import" && event.chatId === chatId,
+        );
+      const autoBranch = { ...roleplayChat, id: "chat-auto-branch", name: "Branch", groupId: "group-auto" };
+      const autoSibling = {
+        ...autoBranch,
+        id: "chat-auto-sibling",
+        name: "Sibling",
+        metadata: { summaryEntries: [{ id: "sum-sibling", content: "Only the sibling saw this." }] },
+      };
+      chats.push(autoBranch, autoSibling);
+      messages.set(autoBranch.id, [message(autoBranch.id, "g1", "user", "The tail.")]);
+      messages.set(autoSibling.id, [message(autoSibling.id, "g1-other", "user", "Another tail.")]);
+      prompts.length = 0;
+      await autoImport(autoBranch.id);
+      assert.deepEqual(await autoEvents(autoBranch.id), [], "a sibling's summary is not imported into the branch");
+      assert.equal(prompts.length, 0);
+
+      // Turning the setting off cancels a run that is already waiting.
+      messages.get(failingChat.id)!.push(message(failingChat.id, "f3", "user", "y".repeat(23_990)));
+      const failingEvents = (await autoEvents(failingChat.id)).length;
+      mock.timers.enable({ apis: ["setTimeout"] });
+      try {
+        armLtmAutoImport(autoRoot, failingChat.id, "roleplay");
+        await updateLtmExtractionConfig({ autoImportChatSources: false }, autoRoot);
+        mock.timers.tick(LTM_AUTO_IMPORT_QUIET_MS);
+      } finally {
+        mock.timers.reset();
+      }
+      for (let tries = 0; isLtmAutoImportArmed(autoRoot, failingChat.id) && tries < 500; tries += 1)
+        await new Promise((resolveWait) => setTimeout(resolveWait, 10));
+      assert.equal(prompts.length, 0, "a run armed before the setting was turned off makes no model call");
+      assert.equal((await autoEvents(failingChat.id)).length, failingEvents, "and logs nothing");
     },
     [() => releaseRuntime?.(), () => rm(dataDir, { recursive: true, force: true })],
   );

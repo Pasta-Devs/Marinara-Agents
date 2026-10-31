@@ -304,6 +304,7 @@ const ltmExtractionSettingsFields = {
   aiKeywordExtraction: z.boolean().optional(),
   finishCutOffAnswers: z.boolean().optional(),
   autoAcceptSafeChanges: z.boolean().optional(),
+  autoImportChatSources: z.boolean().optional(),
   chatImportDetail: ltmChatImportDetailSchema.optional(),
   useExtractionAgentOnGameMode: z.boolean().optional(),
 };
@@ -353,6 +354,7 @@ export const ltmResolvedExtractionSettingsSchema = z
     aiKeywordExtraction: z.boolean(),
     finishCutOffAnswers: z.boolean(),
     autoAcceptSafeChanges: z.boolean(),
+    autoImportChatSources: z.boolean(),
     chatImportDetail: ltmChatImportDetailSchema,
     useExtractionAgentOnGameMode: z.boolean(),
   })

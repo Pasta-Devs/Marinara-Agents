@@ -327,12 +327,18 @@ async function main() {
         false,
         "autoAcceptSafeChanges defaults off so imports stay review-first",
       );
+      assert.equal(
+        (await getLtmExtractionConfig(root)).autoImportChatSources,
+        false,
+        "autoImportChatSources defaults off so nothing imports without asking",
+      );
       await updateLtmExtractionConfig(
         {
           aiKeywordExtraction: true,
           finishCutOffAnswers: true,
           chatImportDetail: "detailed",
           autoAcceptSafeChanges: true,
+          autoImportChatSources: true,
         },
         root,
       );
@@ -344,6 +350,7 @@ async function main() {
       assert.equal((await getLtmExtractionConfig(root)).finishCutOffAnswers, true, "finishCutOffAnswers saves");
       assert.equal((await getLtmExtractionConfig(root)).chatImportDetail, "detailed", "chatImportDetail saves");
       assert.equal((await getLtmExtractionConfig(root)).autoAcceptSafeChanges, true, "autoAcceptSafeChanges saves");
+      assert.equal((await getLtmExtractionConfig(root)).autoImportChatSources, true, "autoImportChatSources saves");
       await writeFile(ltmSettingsPath(root), '{"version":1,"someNewSetting":true,"longTermMemoryBudgetTokens":"x"}\n');
       await assert.rejects(getLtmGlobalSettings(root), /expected number/i, "an invalid known field must still fail");
 
