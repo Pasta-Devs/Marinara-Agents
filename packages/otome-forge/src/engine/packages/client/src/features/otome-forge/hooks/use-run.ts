@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useOtomeApi } from "../api";
-import { accentIsPlaceholder, sampleAccent } from "../lib/accent";
+import { ACCENT_SAMPLER_VERSION, accentIsPlaceholder, accentOf, pickDistinctAccent, sampleAccent } from "../lib/accent";
 import type { RunView, SettingsInput, WorldView } from "../shared/api-types";
 import { forgeIsWorking } from "../shared/forge";
 
@@ -52,16 +52,21 @@ export function useSampledAccents(view: RunView | undefined) {
       const key = `${li.id} ${li.portrait}`;
       if (!li.portrait || !accentIsPlaceholder(li) || tried.current.has(key)) continue;
       tried.current.add(key);
-      void sampleAccent(li.portrait).then(async (accent) => {
-        if (!accent) return;
+      void sampleAccent(li.portrait).then(async (sampled) => {
+        if (!sampled) return;
+        // No two name plates alike: his own colour unless it reads as one the rest of the cast already has.
+        const others = view.lis.filter((item) => item.id !== li.id).map((item) => accentOf(item));
+        const accent = pickDistinctAccent(sampled, li.name, others);
         try {
           const saved = await otome.post<{ accent: string }>(
             `/runs/${encodeURIComponent(view.runKey)}/lis/${encodeURIComponent(li.id)}/accent`,
-            { accent },
+            { accent, sampler: ACCENT_SAMPLER_VERSION },
           );
           patchRun(queryClient, view.runKey, (current) => ({
             ...current,
-            lis: current.lis.map((item) => (item.id === li.id ? { ...item, accent: saved.accent } : item)),
+            lis: current.lis.map((item) =>
+              item.id === li.id ? { ...item, accent: saved.accent, accentSampler: ACCENT_SAMPLER_VERSION } : item,
+            ),
           }));
         } catch (error) {
           console.warn("Otome Forge could not save an accent colour", error);

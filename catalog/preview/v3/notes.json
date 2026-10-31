@@ -72,6 +72,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.6.10",
+          "date": "2026-10-31",
+          "notes": "- **Each love interest has his own colour again** on his name plate and in the glow behind his art. It is picked from a vivid detail of his portrait (an earring, his eyes) rather than averaged from the picture, so no two love interests in a cast share one, and the backdrop a look is painted on never becomes it.\n- Stories already in progress re-pick their colours when opened: an accent chosen by the old picker is treated as unset.",
+          "highlight": false
+        },
+        {
           "version": "0.6.9",
           "date": "2026-10-31",
           "notes": "- The chapter list groups chapters under their arc, and a chapter's reader says which arc it belongs to (\"Arc 2 · Chapter 4\").\n- A breathing-room arc says so: \"Take a breath\" arcs show a quiet-stretch badge, so a plot-free stretch is never mistaken for the story stalling.",
@@ -183,12 +189,6 @@
           "version": "0.2.2",
           "date": "2026-10-30",
           "notes": "- In stories, hide the header's Image description panel while a character sprite is shown; keep the description available without a sprite.\n- Four-star memories include artwork through the existing painting flow alongside their playable memory.\n- Round every corner of story character nameplates.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.1",
-          "date": "2026-10-30",
-          "notes": "- Make desktop fullscreen fill the available Otome Hearth area across its screens. Leaving fullscreen restores ordinary portrait layouts while preserving drafts and the current reader line.",
           "highlight": false
         }
       ]

@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.6.10 — 2026-10-31
+
+- **Each love interest has his own colour again** on his name plate and in the glow behind his art. It is picked from a vivid detail of his portrait (an earring, his eyes) rather than averaged from the picture, so no two love interests in a cast share one, and the backdrop a look is painted on never becomes it.
+- Stories already in progress re-pick their colours when opened: an accent chosen by the old picker is treated as unset.
+
 ## 0.6.9 — 2026-10-31
 
 - The chapter list groups chapters under their arc, and a chapter's reader says which arc it belongs to ("Arc 2 · Chapter 4").

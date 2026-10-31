@@ -146,7 +146,11 @@ const SettingsBody = z.object({
 });
 const BibleBody = z.object({ bible: BibleSchema });
 const AppearanceBody = z.object({ identityLine: z.string() });
-const AccentBody = z.object({ accent: z.string().regex(ACCENT_PATTERN) });
+const AccentBody = z.object({
+  accent: z.string().regex(ACCENT_PATTERN),
+  /** Which picker chose it (client lib/accent.ts ACCENT_SAMPLER_VERSION), so a newer one picks again. */
+  sampler: z.number().int().min(0).optional(),
+});
 const CardLinkBody = z.object({ cardId: z.string().trim().min(1).max(ID_MAX).nullable() });
 
 const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
@@ -571,15 +575,16 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
   router.post(
     "/runs/:run/lis/:li/accent",
     handle(async (request) => {
-      const { accent } = parseBody(AccentBody, request.body);
+      const { accent, sampler } = parseBody(AccentBody, request.body);
       const { runId } = runParam(request);
       const li = liParam(request);
       const unit = await store.updateDoc(runDocTarget("unit", unitId(runId, li)), normalizeUnit, (current) => ({
         ...current,
         accent: accent.toUpperCase(),
+        ...(sampler === undefined ? {} : { accentSampler: sampler }),
       }));
       if (!unit) throw liNotFound();
-      return { accent: unit.accent };
+      return { accent: unit.accent, ...(unit.accentSampler ? { sampler: unit.accentSampler } : {}) };
     }),
   );
 };
