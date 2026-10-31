@@ -20,6 +20,7 @@ const EXPECTED_ROUTES = [
   "DELETE /api/long-term-memory/rejected-suggestions",
   "DELETE /api/long-term-memory/rejected-suggestions/:id",
   "GET /api/long-term-memory/backup/export",
+  "GET /api/long-term-memory/chat-memories/:chatId",
   "GET /api/long-term-memory/debug-log",
   "GET /api/long-term-memory/debug-log/export",
   "GET /api/long-term-memory/drafts",
@@ -669,6 +670,19 @@ async function main(routeScenario: RouteScenario) {
         },
         { total: 0, sourceNotes: 0, savedMemories: 0, pendingDrafts: 0 },
       );
+      const chatMemoriesFor = async (chatId: string) =>
+        app.inject({ method: "GET", url: `/api/long-term-memory/chat-memories/${chatId}`, headers });
+      assert.deepEqual((await chatMemoriesFor("chat-a")).json(), { chatMemories: null });
+      chats[1].metadata = { longTermMemoryChatMemories: "review" };
+      assert.deepEqual((await chatMemoriesFor("chat-b")).json(), { chatMemories: "review" });
+      chats[1].metadata = JSON.stringify({ longTermMemoryChatMemories: "everything" });
+      assert.deepEqual(
+        (await chatMemoriesFor("chat-b")).json(),
+        { chatMemories: null },
+        "an unknown stored choice reads as the global default",
+      );
+      chats[1].metadata = {};
+      assert.equal((await chatMemoriesFor("missing-chat")).statusCode, 404);
       const missingInjection = await app.inject({
         method: "GET",
         url: "/api/long-term-memory/last-injection/no-recorded-recall",
@@ -1155,6 +1169,57 @@ async function main(routeScenario: RouteScenario) {
           payload: { longTermMemoryStopWords: [] },
         });
         assert.equal(clearedStopWords.json().rebuild?.status, "complete", clearedStopWords.body);
+      }
+      {
+        // Advanced Memory is available only where the host answers with a scene list (Capability API 1.391), and a
+        // host with `listChatSummaries` but no list is told apart by one real chat.
+        const { configurePackageRuntime, getPackageRuntime } =
+          await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/package-runtime.ts");
+        const originalHost = getPackageRuntime();
+        let probes = 0;
+        const get = async () => {
+          const response = await app.inject({ method: "GET", url: "/api/long-term-memory/settings", headers });
+          assert.equal(response.statusCode, 200, response.body);
+          return response.json().advancedMemoryAvailable;
+        };
+        const available = async (listChatSummaries: unknown, chats: unknown[] = [{ id: "chat-probe" }]) => {
+          configurePackageRuntime({
+            ...originalHost,
+            persistence: {
+              ...originalHost.persistence,
+              listChats: async () => {
+                probes += 1;
+                return chats;
+              },
+              listChatSummaries,
+            },
+          } as typeof originalHost);
+          probes = 0;
+          return get();
+        };
+        try {
+          assert.equal(await available(async () => ({ advancedMemory: [] })), true, "a 1.391 host lists scenes");
+          assert.equal(await available(async () => ({ summaries: [] })), false, "an older host has no scene list");
+          assert.equal(await available(undefined), false, "a host without the call has none");
+          assert.equal(await available(async () => ({}), []), true, "no chat to probe leaves it available");
+          assert.equal(await available(async () => ({ summaries: [] })), false);
+          assert.equal(await get(), false);
+          assert.equal(probes, 1, "a settled answer is kept for the host");
+          assert.equal(await available(async () => ({}), []), true);
+          await get();
+          assert.equal(probes, 2, "no chat to probe is asked again");
+          assert.equal(
+            await available(async () => {
+              throw new Error("summaries unavailable");
+            }),
+            true,
+            "a failed read leaves it available",
+          );
+          await get();
+          assert.equal(probes, 2, "and is asked again");
+        } finally {
+          configurePackageRuntime(originalHost);
+        }
       }
       const renameSectionCollision = await app.inject({
         method: "POST",
@@ -6053,6 +6118,15 @@ async function main(routeScenario: RouteScenario) {
       assert.equal(dismissed.statusCode, 200, dismissed.body);
       assert.deepEqual(dismissed.json(), { deleted: true, id: groundingDraft.id });
       assert.equal(await storageService.drafts.getDraft(groundingDraft.id), null);
+      // A draft file that no longer parses can still be cleared: the source-note lookup is only for the hide step.
+      const unreadableDraftId = "10000000-0000-4000-8000-0000000000aa";
+      await writeFile(join(storageService.root, "drafts", `${unreadableDraftId}.json`), "{not-json", "utf8");
+      const unreadableDismissed = await app.inject({
+        method: "DELETE",
+        url: `/api/long-term-memory/drafts/${unreadableDraftId}`,
+        headers,
+      });
+      assert.equal(unreadableDismissed.statusCode, 200, unreadableDismissed.body);
       const reviewAfterDismissal = await app.inject({
         method: "GET",
         url: "/api/long-term-memory/drafts/review?includeInvalidated=true",

@@ -29,6 +29,8 @@ export type CapabilityProps = {
     longTermMemoryRecallStyle?: string;
     longTermMemoryBudgetTokens?: number;
     longTermMemoryMaxChunks?: number;
+    // Not passed by the Engine today; ChatSettings reads it from GET /chat-memories/:chatId.
+    longTermMemoryChatMemories?: string | null;
   };
   onEnabledForChatChange?: (enabled: boolean) => void | Promise<void>;
   onChatSettingsChange?: (patch: Record<string, unknown>) => void | Promise<void>;
@@ -84,6 +86,9 @@ export type LongTermMemoryDestinationProps = {
   openActivityRequest?: number;
   openActivityMemoryId?: string | null;
   onOpenActivityHandled?: () => void;
+  /** Chat Settings asked to choose the extraction connection: open Extraction with that field focused. */
+  openForConnection?: boolean;
+  onOpenForConnectionHandled?: () => void;
   onOpenActivityMemoryIdHandled?: () => void;
   onRecoverCandidate?: (
     candidate: LtmExtractionDroppedCandidate,
