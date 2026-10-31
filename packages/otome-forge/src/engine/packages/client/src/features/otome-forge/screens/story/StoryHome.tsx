@@ -422,9 +422,15 @@ function ChapterList({
               : entry.state === "in-progress"
                 ? { key: "ui.otomeForge.story.continue", Icon: BookOpen, primary: true }
                 : null;
-          // #1983 M4: a heading where a new arc's chapters begin, and where the ones from before arcs do.
-          const previous = chapters[index - 1];
-          const startsArc = index === 0 || previous?.arc !== entry.arc;
+          // #1983 M4: a heading where a new arc's chapters begin, and where the ones from before arcs do. Only the
+          // prologue and main chapters belong to an arc: route, repair and story chapters get no heading of their own
+          // and never open a second "before the arcs" one (Dottore on #1991).
+          const inArc = entry.kind === "prologue" || entry.kind === "main";
+          const previous = chapters
+            .slice(0, index)
+            .reverse()
+            .find((other) => other.kind === "prologue" || other.kind === "main");
+          const startsArc = inArc && (index === 0 || previous?.arc !== entry.arc);
           const heading = startsArc ? (
             <li key={`arc-${entry.arc ?? "none"}`} className="of-chapter-arc" aria-hidden="true">
               {entry.arc
