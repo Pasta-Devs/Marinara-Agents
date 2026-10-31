@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- An Agent that adds memories can ask recall to leave out what it added itself, so its own facts do not come back as new.
+
 ## 1.5.23 — 2026-11-01
 
 - Slurp can add memories when you allow it in Memory Settings → Sharing. Off by default.

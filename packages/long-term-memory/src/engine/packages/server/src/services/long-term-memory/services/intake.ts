@@ -25,7 +25,7 @@ export type LtmIntakeCaller = (typeof LTM_INTAKE_CALLERS)[number];
 
 const hashShort = (value: string) => createHash("sha256").update(value).digest("hex").slice(0, 16);
 
-export const ltmPackageSourceNotePrefix = (caller: LtmIntakeCaller) => `source_pkg_${caller}_`;
+export const ltmPackageSourceNotePrefix = (caller: string) => `source_pkg_${caller}_`;
 export const ltmPackageSourceNoteId = (caller: LtmIntakeCaller, recordId: string) =>
   `${ltmPackageSourceNotePrefix(caller)}${hashShort(recordId)}`;
 

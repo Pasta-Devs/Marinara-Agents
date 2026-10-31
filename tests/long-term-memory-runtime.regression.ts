@@ -33,6 +33,7 @@ async function main() {
     `${source}/services/storage-read.ts`
   );
   const { createLtmRecallService } = await import(`${source}/services/recall.ts`);
+  const { ltmPackageSourceNoteId } = await import(`${source}/services/intake.ts`);
   const { updateLtmGlobalSettings } = await import(`${source}/settings.ts`);
   const { getLongTermMemoryDirectories, notePathForId } = await import(`${source}/persistence/paths.ts`);
   const { invalidateLtmVaultSnapshot } = await import(`${source}/persistence/vault-snapshot.ts`);
@@ -452,6 +453,78 @@ async function main() {
           "world_w_new keeps the cobalt archive",
         );
         assert.deepEqual(await wholeSections({ mode: "conversation" }), []);
+        // #1998: `excludeFrom` leaves out sections that hold only records the named callers added through intake.
+        const slurpLine = {
+          owner: "source",
+          sourceNoteId: ltmPackageSourceNoteId("slurp2", "fact:f1"),
+          sourceHash: "a".repeat(64),
+          text: "char_s from_slurp2 keeps the cobalt archive",
+          updatedAt: timestamp,
+        };
+        const manualLine = { owner: "manual", text: "char_s history keeps the cobalt archive", updatedAt: timestamp };
+        const forS = { scope: { characterIds: ["char-s"] }, type: "character", ...about("char-s") };
+        // The create API turns every contribution into a manual one, so the intake-owned notes are written directly.
+        const writeNote = (fixture: { id: string; type: string }) =>
+          writeFile(notePathForId(fixture.id, fixture.type, recallRoot), JSON.stringify(fixture));
+        await writeNote(
+          note("char_s_slurp", "chat-r", "", {
+            ...forS,
+            sections: {
+              from_slurp2: { text: slurpLine.text, updatedAt: timestamp, contributions: [slurpLine] },
+              history: { text: manualLine.text, updatedAt: timestamp },
+            },
+          }),
+        );
+        await writeNote(
+          note("char_s_mixed", "chat-r", "", {
+            ...forS,
+            sections: {
+              mixed: {
+                text: "char_s mixed-slurp keeps the cobalt archive\nchar_s mixed keeps the cobalt archive",
+                updatedAt: timestamp,
+                contributions: [
+                  { ...slurpLine, text: "char_s mixed-slurp keeps the cobalt archive" },
+                  { ...manualLine, text: "char_s mixed keeps the cobalt archive" },
+                ],
+              },
+            },
+          }),
+        );
+        await writeNote(
+          note("char_s_only", "chat-r", "", {
+            ...forS,
+            sections: { from_slurp2: { text: slurpLine.text, updatedAt: timestamp, contributions: [slurpLine] } },
+          }),
+        );
+        invalidateLtmVaultSnapshot(recallRoot);
+        await rebuildLongTermMemoryIndexes({ root: recallRoot });
+        const textOf = async (whole: boolean, input: Record<string, unknown> = {}) =>
+          (
+            (await recall.recall({ queryText: "cobalt archive", characterIds: ["char-s"], whole, ...input })) as {
+              sections: Array<{ noteId: string; text: string }>;
+            }
+          ).sections.map((section) => `${section.noteId}: ${section.text}`);
+        for (const whole of [true, false]) {
+          const label = whole ? "whole" : "ranked";
+          const all = (await textOf(whole)).join("\n");
+          assert.match(all, /from_slurp2 keeps/, `${label} recall without excludeFrom must keep the intake line`);
+          assert.match(all, /history keeps/, `${label} recall without excludeFrom must keep the history section`);
+          assert.match(all, /char_s_only:/, `${label} recall without excludeFrom must return a memory of intake lines`);
+          const kept = (await textOf(whole, { excludeFrom: ["slurp2"] })).join("\n");
+          assert.doesNotMatch(
+            kept,
+            /from_slurp2 keeps/,
+            `${label} recall must leave out a section that holds only slurp2's records`,
+          );
+          assert.doesNotMatch(kept, /char_s_only:/, `${label} recall must omit a memory with nothing left`);
+          assert.match(kept, /history keeps/, `${label} recall must keep a section no excluded caller wrote`);
+          assert.match(kept, /mixed keeps/, `${label} recall must keep a section with a manual line`);
+        }
+        assert.equal(
+          await recall.recall({ queryText: "cobalt archive", characterIds: ["char-s"], excludeFrom: ["Bad Name!"] }),
+          null,
+          "a malformed excludeFrom entry must make the call invalid, not be dropped",
+        );
         assert.equal(
           await recall.recall({ queryText: "cobalt archive" }),
           null,
