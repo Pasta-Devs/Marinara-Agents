@@ -1,5 +1,11 @@
 # Otome Hearth release notes
 
+## 0.6.3 — 2026-10-31
+
+- Date Night offers your Wardrobe looks: pick any painted look either of you owns, 4★ and 5★ alike. The date's scenes, key images and keepsake dress you both in them, and they stay on afterwards.
+- The story now knows how each love interest looks: their Image appearance and the look they wear. Fixing their Image appearance changes how the story describes them from the next scene on, not only their pictures.
+- On a phone, the date's keepsake card no longer squeezes its title and **Paint the keepsake** button into columns.
+
 ## 0.6.2 — 2026-10-31
 
 - After a love interest's finale, the story no longer assumes they already confessed: if you eased off before the words came, they can still say it later.

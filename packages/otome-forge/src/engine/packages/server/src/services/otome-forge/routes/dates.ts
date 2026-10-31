@@ -3,6 +3,8 @@
 // ──────────────────────────────────────────────
 // GET  /runs/:run/dates                                         → DatesView
 // POST /runs/:run/dates {li, place, storyPlace?, herLook, hisLook} → {chapter: ChapterView, date: DateEntry, resumed}
+//                                                               each look is BASE_LOOK or a look item its wearer owns,
+//                                                               worn as Wear at home does before the date is planned
 // POST /runs/:run/dates/:key/finish                             → DateFinishResult
 // POST /runs/:run/art/keepsake/prompt {key}                     → {prompt, negativePrompt}
 // POST /runs/:run/art/keepsake {key, prompt?, negativePrompt?}  → {paint}
@@ -17,6 +19,7 @@ import { z } from "zod";
 import { DATE_PLACE_KINDS, type DatePlace } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { OtomeForgeError, debugModeOf, parseBody, runParam, type OtomeRequest, type RegisterRoutes } from "../http.js";
 import { isLiId } from "../ids.js";
+import { wearLook } from "./wardrobe.js";
 import {
   datesView,
   finishDate,
@@ -68,6 +71,11 @@ export const registerDateRoutes: RegisterRoutes = (router, deps) => {
       const { runId } = runParam(request);
       if (!isLiId(input.li)) throw new OtomeForgeError(404, "No such love interest.", "not-found");
       const debugMode = debugModeOf(request);
+      // The looks picked for the date are worn, as Wear at home wears them (owned and painted, or a 4xx), so the
+      // date's plan, scenes, faces, key images and keepsake all dress them in it. A resumed date keeps what it was
+      // planned with; the looks stay worn afterwards.
+      await wearLook(deps, runId, { owner: "me", look: input.herLook }, { debugMode });
+      await wearLook(deps, runId, { owner: input.li, look: input.hisLook }, { debugMode });
       const { chapter, date, resumed } = await cancellable(deps, runId, (signal) =>
         startDate(deps, runId, input, { debugMode, signal }),
       );
