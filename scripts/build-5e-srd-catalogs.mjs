@@ -28613,7 +28613,7 @@ magicItems.push({
     if (!text.includes(printed)) fail(`the Carpet of Flying no longer says "${printed}"`);
   const first = magicItems.find((entry) => entry.id === "carpet-of-flying") ?? fail("no Carpet of Flying");
   const carpets = FLYING_CARPETS.map(([size, capacity, fly], index) => {
-    const row = new RegExp(`\\| ${size.replace(/\./gu, "\\.")} +\\| ${capacity} lb\\. +\\| ${fly} feet +\\|`, "u");
+    const row = new RegExp(`\\| ${escaped(size)} +\\| ${capacity} lb\\. +\\| ${fly} feet +\\|`, "u");
     if (!row.test(text)) fail(`the Carpet of Flying's table no longer has ${size}, ${capacity} lb., ${fly} feet`);
     const entry = index === 0 ? first : structuredClone(first);
     entry.id =
