@@ -170,7 +170,14 @@ async function main(routeScenario: RouteScenario) {
   let shortNameRosterEnabled = false;
   let scenarioError: unknown;
   try {
-    assert.deepEqual(installed.manifest.permissions, ["agent-runtime", "chat-read", "routes", "storage", "ui"]);
+    assert.deepEqual(installed.manifest.permissions, [
+      "agent-runtime",
+      "chat-read",
+      "chat-write",
+      "routes",
+      "storage",
+      "ui",
+    ]);
     assert.equal(installed.manifest.permissions.includes("network"), false);
     await assert.rejects(
       registerCapabilityPrivilegedRoutes(
@@ -1106,6 +1113,48 @@ async function main(routeScenario: RouteScenario) {
       assert.equal(restoredSettings.statusCode, 200, restoredSettings.body);
       assert.equal(restoredSettings.json().rebuild?.status, "complete");
       assert.equal((await readFile(rebuildPath, "utf8")).length > 0, true);
+      {
+        // A host that cannot show hidden messages must not cost a stop-word save its index rebuild (#1914).
+        const { configurePackageRuntime, getPackageRuntime } =
+          await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/package-runtime.ts");
+        const { readLtmHiddenMessages, writeLtmHiddenMessages } =
+          await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/persistence/hidden-messages.ts");
+        const ltmRoot = join(dataDir, "long-term-memory");
+        const originalHost = getPackageRuntime();
+        const owned = { "chat-a": { "note-a": ["message-a1"] } };
+        let savedWithJammedHost: Awaited<ReturnType<typeof app.inject>> | undefined;
+        try {
+          await writeLtmHiddenMessages(owned, ltmRoot);
+          configurePackageRuntime({
+            ...originalHost,
+            persistence: {
+              ...originalHost.persistence,
+              async setMessagesHiddenFromAI() {
+                throw new Error("host cannot show messages");
+              },
+            },
+          });
+          savedWithJammedHost = await app.inject({
+            method: "PUT",
+            url: "/api/long-term-memory/settings",
+            headers,
+            payload: { longTermMemoryStopWords: ["quartz"] },
+          });
+        } finally {
+          configurePackageRuntime(originalHost);
+        }
+        assert.equal(savedWithJammedHost.statusCode, 200, savedWithJammedHost.body);
+        assert.equal(savedWithJammedHost.json().rebuild?.status, "complete", "the index still rebuilds");
+        assert.deepEqual(await readLtmHiddenMessages(ltmRoot), owned, "and the record stays for a later retry");
+        await writeLtmHiddenMessages({}, ltmRoot);
+        const clearedStopWords = await app.inject({
+          method: "PUT",
+          url: "/api/long-term-memory/settings",
+          headers,
+          payload: { longTermMemoryStopWords: [] },
+        });
+        assert.equal(clearedStopWords.json().rebuild?.status, "complete", clearedStopWords.body);
+      }
       const renameSectionCollision = await app.inject({
         method: "POST",
         url: "/api/long-term-memory/notes/world_route_fixture/sections/rename",

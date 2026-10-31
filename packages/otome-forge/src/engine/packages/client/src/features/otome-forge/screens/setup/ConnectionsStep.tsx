@@ -6,17 +6,21 @@
 import { useTranslation } from "react-i18next";
 import { ImageOff, PlugZap } from "lucide-react";
 import { CostHint } from "../../components/CostHint";
+import { CheckAgain, RetryNotice } from "../../components/RetryNotice";
 import { useConnections, type ConnectionOption } from "../../hooks/use-engine-resources";
+import { IMAGE_STYLE_MAX } from "../../shared/content";
 import { FACES_PER_LOOK, type DraftConnections, type DraftImages, type SetupDraft } from "./draft";
-import { ConnectionSelect, Section, Switch } from "./parts";
+import { ConnectionSelect, Section, Switch, TextField } from "./parts";
 
 interface ConnectionControlsProps {
   value: DraftConnections;
   onChange: (value: DraftConnections) => void;
   connections: readonly ConnectionOption[];
+  /** Asks the Engine again, offered while there are none (the player adds one in its Connections panel). */
+  onCheckAgain?: () => Promise<unknown>;
 }
 
-export function ConnectionControls({ value, onChange, connections }: ConnectionControlsProps) {
+export function ConnectionControls({ value, onChange, connections, onCheckAgain }: ConnectionControlsProps) {
   const { t } = useTranslation();
   const same = t("ui.otomeForge.setup.sameAsStory");
   if (connections.length === 0) {
@@ -24,6 +28,7 @@ export function ConnectionControls({ value, onChange, connections }: ConnectionC
       <div className="of-empty of-glass">
         <PlugZap size={22} strokeWidth={1.7} aria-hidden="true" />
         <p>{t("ui.otomeForge.setup.noTextConnections")}</p>
+        {onCheckAgain ? <CheckAgain onCheck={onCheckAgain} /> : null}
       </div>
     );
   }
@@ -70,8 +75,8 @@ export function ConnectionControls({ value, onChange, connections }: ConnectionC
 }
 
 interface ImageControlsProps {
-  value: Pick<DraftImages, "connectionId" | "ask" | "expressions">;
-  onChange: (value: Pick<DraftImages, "connectionId" | "ask" | "expressions">) => void;
+  value: Pick<DraftImages, "connectionId" | "ask" | "expressions" | "style">;
+  onChange: (value: Pick<DraftImages, "connectionId" | "ask" | "expressions" | "style">) => void;
   connections: readonly ConnectionOption[];
   /** How many love interests have looks, for the expression estimate. */
   lis: number;
@@ -91,6 +96,14 @@ export function ImageControls({ value, onChange, connections, lis }: ImageContro
       />
       {value.connectionId ? (
         <>
+          <TextField
+            label={t("ui.otomeForge.setup.imageStyleLabel")}
+            hint={t("ui.otomeForge.setup.imageStyleHint")}
+            placeholder={t("ui.otomeForge.setup.imageStylePlaceholder")}
+            value={value.style}
+            max={IMAGE_STYLE_MAX}
+            onChange={(style) => onChange({ ...value, style })}
+          />
           <Switch
             label={t("ui.otomeForge.setup.askLabel")}
             hint={t("ui.otomeForge.setup.askHint")}
@@ -140,19 +153,35 @@ export function ConnectionsStep({ draft, update }: ConnectionsStepProps) {
       </div>
     );
   }
+  // A failed list is not an empty one: the player is not told to add connections they may already have.
+  if (connections.isError && connections.text.length === 0) {
+    return (
+      <div className="of-step-body">
+        <p className="of-hand of-step-note">{t("ui.otomeForge.setup.connectionsNote")}</p>
+        <RetryNotice
+          message={t("ui.otomeForge.setup.connectionsFailed")}
+          onRetry={() => void connections.refetch()}
+          retrying={connections.retrying}
+        />
+      </div>
+    );
+  }
   return (
     <div className="of-step-body">
       <p className="of-hand of-step-note">{t("ui.otomeForge.setup.connectionsNote")}</p>
       {connections.isError ? (
-        <p className="of-notice of-notice--error" role="alert">
-          {t("ui.otomeForge.setup.connectionsFailed")}
-        </p>
+        <RetryNotice
+          message={t("ui.otomeForge.setup.connectionsFailed")}
+          onRetry={() => void connections.refetch()}
+          retrying={connections.retrying}
+        />
       ) : null}
       <Section title={t("ui.otomeForge.setup.textConnections")}>
         <ConnectionControls
           value={draft.connections}
           connections={connections.text}
           onChange={(value) => update((current) => ({ ...current, connections: value }))}
+          onCheckAgain={connections.isError ? undefined : connections.refetch}
         />
       </Section>
       <Section title={t("ui.otomeForge.setup.imageConnections")} hint={t("ui.otomeForge.setup.imagesOptional")}>

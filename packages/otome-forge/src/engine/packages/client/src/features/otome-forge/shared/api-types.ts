@@ -2,16 +2,27 @@
 // Otome Forge: the wire contract between the package's routes and its client (types only)
 // ──────────────────────────────────────────────
 // Imported by both bundles, so a code or field added on one side has to be handled on the other.
-import type { ConfrontationEnding, RouteEntry, Stance } from "./arcs";
+import type { ClimaxEnding, ClimaxMove, RouteEntry } from "./arcs";
 import type { ContentSettings, ImageRating, LimitId } from "./content";
 import type { DatePlan, DateScore } from "./dates";
 import type { Face, MusicMood } from "./faces";
 import type { ClawRound } from "./claw";
 import type { ReadHimPaid } from "./read-him";
+import type { NotebookEntry, ReadMePaid } from "./read-me";
 import type { ClawLineKind, TapZone, TimeOfDay } from "./home";
 import type { BannerKind, PityCounter, Rarity } from "./wish";
 
-export type { ConfrontationEnding, RouteEntry, RouteNext, Stance } from "./arcs";
+export type {
+  ClimaxEnding,
+  ClimaxKind,
+  ClimaxMove,
+  CloserEnding,
+  CloserMove,
+  ConfrontationEnding,
+  RouteEntry,
+  RouteNext,
+  Stance,
+} from "./arcs";
 
 /** The `code` of a failed route's `{error, code?}`; the client shows ui.otomeForge.errors.<code> (plan §1.5). */
 export type OtomeErrorCode =
@@ -67,6 +78,13 @@ export interface Paint {
   error?: string;
 }
 
+/** A free derivative of a retained look, tagged with the Engine cleanup that produced it. */
+export interface Cutout extends Paint {
+  cleanupRevision?: number;
+  /** Retain older derivatives for existing run deletion without deleting an image a live view may still show. */
+  previousRefs?: string[];
+}
+
 /** The model jobs a world names a connection for; a job without its own uses `narration`. */
 export type GenerationJob = "structured" | "narration" | "chat" | "compress";
 export interface Connections {
@@ -85,6 +103,8 @@ export interface ImageSettings {
   expressions: boolean;
   expressionsSince?: string;
   styleProfileId?: string;
+  /** The player's own words for how every picture looks (art style, medium); they lead each image prompt. */
+  style?: string;
 }
 
 export type ForgeStepState = "pending" | "running" | "done" | "failed" | "waiting-consent";
@@ -118,6 +138,10 @@ export interface AudioSettings {
   /** Kept for the kit's shape; Otome has no combat. */
   combatVoices: boolean;
   generate: boolean;
+  /** Generate and retain one theme for each chapter, instead of changing music with every mood. */
+  chapterThemes: boolean;
+  /** A Music asset folder (including its subfolders), or empty for Engine's mood library. */
+  musicFolder: string;
   homeMusic: string;
   audioConnectionId: string;
   muted: boolean;
@@ -133,6 +157,12 @@ export interface SoundtrackTrack {
   connectionId: string;
   tag: string;
   path: string;
+}
+
+/** Chapter-owned music is retained independently of the world's bounded mood soundtrack. */
+export interface ChapterMusic {
+  prompt?: string;
+  track?: SoundtrackTrack;
 }
 
 /** `world.audio` (M2b): the settings, each cue's music brief (P14, English), and the generated tracks. */
@@ -159,6 +189,10 @@ export interface World {
   mystery: { question: string; truth: string; pieces: Record<LiId, { piece: string; reasonToHide: string }> };
   web: WebRow[];
   openingSituation: string;
+  /** The player's own instructions for how the story is written (tense, voice, pacing…), whole; "" or absent: none. */
+  writingStyle?: string;
+  /** The player's own banned phrases as typed (Settings → Content), added to the built-in list; "" or absent: none. */
+  bannedPhrases?: string;
   content: ContentSettings;
   images: ImageSettings;
   connections: Connections;
@@ -199,6 +233,11 @@ export interface Player {
   pronouns: Pronouns;
   traits: string[];
   goal: string;
+  /**
+   * The persona's full authored story fields, retained as this protagonist's fallback. Chapter and scene generation
+   * refreshes them from the selected persona; image-only appearance overrides are not story facts.
+   */
+  about?: string;
   /** English, visual-only tags. */
   look: { identityLine: string; outfitLine: string };
   portrait?: string;
@@ -206,6 +245,8 @@ export interface Player {
   art?: Paint;
   /** M4: her looks from My Wardrobe. */
   outfits: Outfit[];
+  /** Free background-cleaned derivatives of retained generated looks; absent on older stories. */
+  cutouts?: Record<string, Cutout>;
   /** M4: the look she wears at home (an outfit id); absent wears her base look. */
   wornOutfit?: string;
   /** M4: his line about the look she wears now (P19), or null. */
@@ -221,6 +262,17 @@ export interface BibleSecret {
   truth: string;
   tells: string[];
   revealAt: { stage: RevealStage };
+}
+
+/**
+ * A love interest's own tastes in sex and intimacy (#1936), for NSFW stories only: short labels the story draws on now
+ * and then. They set no limits; the player's content settings decide what a scene may hold.
+ */
+export interface BibleIntimacy {
+  /** What they are into, kinks included. */
+  preferences: string[];
+  /** Physical traits or moments that draw them. */
+  attractions: string[];
 }
 
 /** An LI's hidden character bible (behind the spoiler gate). For a card LI it never contradicts the card. */
@@ -267,6 +319,8 @@ export interface Bible {
   /** English, visual-only tags. */
   look: { identityLine: string; outfitLine: string; presentation: Presentation };
   play: { style: string; cheat: ClawCheat };
+  /** Optional (#1936): written for adult NSFW stories only, and added to an older bible only on request. */
+  intimacy?: BibleIntimacy;
 }
 
 /** `${R}:unit:${li}`: the fields the forge kit expects of a character, plus the bible. */
@@ -301,7 +355,16 @@ export interface Unit {
   /** His pre-written Home lines (P15), written in the background; absent until the first pack lands. */
   lines?: LinePacks;
   /** Home cut-outs, keyed by the look's URL: `ready` carries the cut-out; `failed` means pan over the uncut look. */
-  cutouts: Record<string, Paint>;
+  cutouts: Record<string, Cutout>;
+  /** Their Claw Machine plush (#1954): the animal that fits them, drawn as SVG in the background; absent until then. */
+  plushArt?: PlushArt;
+}
+
+/** A love interest's own plush: the animal (English, one or two words) and its sanitized SVG (S/art/plush-svg.ts). */
+export interface PlushArt {
+  animal: string;
+  svg: string;
+  at: string;
 }
 
 // ── Home (M3): line packs, the message of the day, and what Home shows ──
@@ -559,7 +622,7 @@ export interface ChapterShift {
 
 /** One love interest's progress and the state of things between him and the protagonist. */
 export interface LiState {
-  /** Affection points; they only rise. Level = min(10, 1 + floor(points / 300)). */
+  /** Affection points may fall within the reached level. Level = min(10, 1 + floor(points / 300)). */
   points: number;
   stage: number;
   /** −3..+3, starting at 0; moved only by first-play choices, capped per beat and per chapter. */
@@ -583,6 +646,11 @@ export interface LiState {
   firsts: Record<string, string>;
   /** Indexes into his bible's `mask.tells` the protagonist has learned to read (Read Him, M5). */
   tellsLearned: number[];
+  /**
+   * What they have come to know about the protagonist (Read Me, #1945), newest last: theirs alone. Only prompts about
+   * them carry it (S/story/prompts.ts knowsAboutYou); the player reads, rewrites and deletes it.
+   */
+  known: NotebookEntry[];
 }
 
 /** A chapter's reading progress. `applied` holds `${i}/${choiceId}` for every pick whose effects reached the state. */
@@ -669,6 +737,8 @@ export interface RunState {
   claw: { rounds: ClawRound[] };
   /** The newest paid Read Him sets (M5): the finish's once-only mark, in the same write as its pay. */
   readHim: { paid: ReadHimPaid[] };
+  /** The newest paid Read Me sets (#1945): the once-only mark of the write that paid them and filled the notebook. */
+  readMe: { paid: ReadMePaid[] };
 }
 
 /** One pull as the state keeps it (S/wish/pull.ts), for answering a retried request. */
@@ -682,8 +752,9 @@ export interface WishPullRecord {
 // ── Story (M2a): chapters, beats, choices. Chapter keys: `main-<n>`, `route-<li>-<stage>`, `repair-<li>-<n>`,
 // `story-<itemId>`, `date-<n>`. ──
 
-export type ChapterKind = "main" | "route" | "repair" | "story" | "date";
-export type NodeKind = "beat" | "moment" | "confrontation";
+export type ChapterKind = "prologue" | "main" | "route" | "repair" | "story" | "date";
+/** `confrontation` and `closer` (#1938) are a chapter's climax: a main chapter has exactly one of them. */
+export type NodeKind = "beat" | "moment" | "confrontation" | "closer";
 /** A moment node's framing: reading his face, a phone call, a date gone wrong. Written as a beat until M2b/M5. */
 export type MomentKind = "read-him" | "call" | "date";
 
@@ -736,6 +807,7 @@ export interface Chapter {
   ledger: ChapterLedger;
   plannedAt: string;
   connectionId: string;
+  music?: ChapterMusic;
   /** A Memory's Character Story (M4): the line its card voices, kept with the chapter so the item is always given it. */
   voicedLine?: string;
   /** A date's own plan (M5, SH/dates.ts); hidden from the chapter view. */
@@ -819,41 +891,50 @@ export interface Beat {
   rewrites: number;
   /** Set once the reader was first served it (M2b): a rupture opens no route beat that was never on screen. */
   shown?: true;
-  /** A confrontation node's stance game (M2b, P12); `segments` holds its opening. Hidden: the client gets a view. */
+  /**
+   * A climax node's game: a Confrontation's stance game (M2b, P12) or a Closer's (#1938, P12c); `segments` holds its
+   * opening. Hidden: the client gets a view.
+   */
   confrontation?: Confrontation;
 }
 
-// ── The Confrontation (M2b): three rounds of Press, Hold, Yield or Reveal, one call (P12) ──
+// ── A chapter's climax game, one call: the Confrontation (M2b, P12: three rounds of Press, Hold, Yield or Reveal) or
+// the Closer (#1938, P12c: three rounds of Reassure, Tease, Mirror or Ask). Both share these shapes; a game's moves
+// and endings are its kind's (SH/arcs.ts CLIMAX_MOVES, CLIMAX_ENDINGS). ──
 
 export interface ConfrontationOption {
   /** The pill's short label. */
   label: string;
   /** What the protagonist says or does. */
   selection: { kind: "dialogue" | "action"; text: string };
-  /** His answer to the stance (1–3 segments). */
+  /** The love interest's answer to the move (1–3 segments). */
   segments: Segment[];
-  /** How the stance moves his composure (hidden; S/story/confrontation.ts). */
+  /** How the move shifts their composure, or a Closer's guard (hidden; S/story/confrontation.ts). */
   composure: -1 | 0 | 1;
 }
 
 export interface ConfrontationRound {
-  /** His lines opening the round; they follow from any stance of the round before. */
+  /** The love interest's lines opening the round; they follow from any move of the round before. */
   his: Segment[];
-  options: Record<Stance, ConfrontationOption>;
+  /** One option per move of the game's kind. */
+  options: Partial<Record<ClimaxMove, ConfrontationOption>>;
 }
 
-/** Stored on the beat. `picks` are the first-play stances, in round order; `ending` is set with the last pick. */
+/** Stored on the beat. `picks` are the first-play moves, in round order; `ending` is set with the last pick. */
 export interface Confrontation {
-  /** Whom she confronts. */
+  /** "closer" for a Closer; absent for a Confrontation (every game stored before 0.4.0 is one). */
+  kind?: "closer";
+  /** The love interest the game is played with. */
   li: LiId;
   rounds: ConfrontationRound[];
-  endings: Record<ConfrontationEnding, Segment[]>;
-  /** What a walkout leaves between them. */
-  grievance: { text: string; severity: "major" };
-  /** What she tells him when she picks Reveal, as one third-person sentence. */
+  /** One list per ending of the game's kind. */
+  endings: Partial<Record<ClimaxEnding, Segment[]>>;
+  /** What a walkout (major) or a Shut out (minor) leaves between them. */
+  grievance: { text: string; severity: "major" | "minor" };
+  /** What the protagonist tells them with Reveal or Mirror, as one third-person sentence. */
   disclosure: string;
-  picks: Stance[];
-  ending?: ConfrontationEnding;
+  picks: ClimaxMove[];
+  ending?: ClimaxEnding;
 }
 
 export interface ConfrontationOptionView {
@@ -867,20 +948,21 @@ export interface ConfrontationRoundView {
   /** 1–3. */
   round: number;
   his: Segment[];
-  options: Record<Stance, ConfrontationOptionView>;
-  /** The first-play stance, once picked (a replay keeps it). */
-  picked?: Stance;
+  /** One option per move of the game's kind, in its order. */
+  options: Partial<Record<ClimaxMove, ConfrontationOptionView>>;
+  /** The first-play move, once picked (a replay keeps it). */
+  picked?: ClimaxMove;
 }
 
 export interface ConfrontationEndingView {
-  kind: ConfrontationEnding;
+  kind: ClimaxEnding;
   segments: Segment[];
 }
 
 /**
- * The stance game as the client sees it, with the beat's own fields: the opening, every round played and the one
- * being played, and the ending once reached. His composure is never shown, nor the answers to stances not taken, nor
- * an ending not reached. Its reading position (`readThrough`, POST .../read {segment}, an Ease off's `at`) indexes its
+ * A climax game as the client sees it, with the beat's own fields (its `kind`, the node's, says which game it is): the
+ * opening, every round played and the one being played, and the ending once reached. Composure (a Closer's guard) is
+ * never shown, nor the answers to moves not taken, nor an ending not reached. Its reading position (`readThrough`, POST .../read {segment}, an Ease off's `at`) indexes its
  * mainline: the opening, then each shown round's `his` lines (a stance's answer shares its round's last index), then
  * the ending.
  */
@@ -891,7 +973,7 @@ export type ConfrontationView = Omit<BeatView, "segments" | "choices" | "choiceC
   ending?: ConfrontationEndingView;
 };
 
-/** POST .../beats/:i/stance {round, stance}. */
+/** POST .../beats/:i/stance {round, stance}: a Confrontation's stance or a Closer's move. */
 export interface StanceResult {
   /** The round just played, with its pick and his answer. */
   round: ConfrontationRoundView;
@@ -911,7 +993,8 @@ export type ChapterState = "unplanned" | "in-progress" | "done";
 export type BeatState = "unwritten" | "ready" | "read";
 
 /** A chapter as the client sees it: no guides and no ledger (the plan is the hidden story). */
-export type ChapterView = Omit<Chapter, "nodes" | "ledger" | "connectionId" | "date"> & {
+export type ChapterView = Omit<Chapter, "nodes" | "ledger" | "connectionId" | "date" | "music"> & {
+  music?: Pick<ChapterMusic, "track">;
   nodes: Array<Pick<ChapterNode, "i" | "kind" | "moment" | "cg" | "gate">>;
 };
 
@@ -927,9 +1010,9 @@ export interface SceneArt {
   places: PlaceArt[];
   /** The beat's key image with its paint, or null. */
   cg: NonNullable<BeatView["cg"]> | null;
-  /** Each love interest's faces for the look worn now, once the set is ready and expressions are on. */
+  /** Cleaned faces for the look worn now; originals awaiting or failing cleanup are never stage art. */
   faces: Record<LiId, Partial<Record<Face, string>>>;
-  /** The love interests whose faces are still being painted (a failed or stopped set never arrives on its own). */
+  /** Faces are still painting or being freely cleaned; failed/stopped work never keeps polling. */
   facesComing: LiId[];
 }
 
@@ -982,7 +1065,7 @@ export interface Grant {
 
 /** What an activity (Read Him, a date, a Claw round) earned, within the day's caps. */
 export interface ActivityGrant {
-  source: "read-him" | "date" | "claw";
+  source: "read-him" | "read-me" | "date" | "claw";
   starlight?: number;
   li?: LiId;
   affection?: number;
@@ -1030,7 +1113,17 @@ export interface RunLiView {
   voiceGender: Unit["voiceGender"];
   accent: string;
   portrait?: string;
+  /** Visual intent only, safe to read without opening a spoiler-heavy Bible. */
+  look?: Pick<Bible["look"], "identityLine" | "outfitLine">;
+  /** His look's paint record (the forge screen shows a failed paint's reason in debug mode). */
+  art?: Paint;
+  /** Which of this view's images are cut-outs (no backdrop): shown whole rather than cropped and faded. */
+  cut?: string[];
+  /** His bible has its intimacy block (#1936): only that it exists, never its text. */
+  intimacy?: true;
   level: number;
+  /** Current-level progress only; optional while a pre-update run view remains cached. */
+  affectionProgress?: { current: number; required: number };
   stage: number;
   /** M2b: his painted faces for the current look, once the whole set is ready and expressions are on. */
   expressions?: Partial<Record<Face, string>>;
@@ -1045,7 +1138,11 @@ export interface RunView {
   player: Player;
   lis: RunLiView[];
   forge: ForgeStatus;
+  /** Free sprite cleanup is still running; poll the run until the retained look's derivative is ready. */
+  cutoutsPending?: true;
   starlight: number;
+  /** GET /runs/:run: the prologue has been read to its end (Begin then goes straight Home). */
+  prologue?: boolean;
 }
 
 export type SetupLi =
@@ -1057,17 +1154,20 @@ export interface SetupInput {
   title?: string;
   premise: string;
   language: string;
+  writingStyle?: string;
   protagonist: { personaId: string; pronouns: Pronouns; traits: string[]; goal: string };
   lis: SetupLi[];
   content: ContentSettings;
-  images: Pick<ImageSettings, "connectionId" | "rating" | "ask" | "expressions">;
+  images: Pick<ImageSettings, "connectionId" | "rating" | "ask" | "expressions" | "style">;
   connections: Connections;
 }
 
 /** POST /runs/:run/settings. Raising a gated setting needs the 18+ gate; lowering one never does. */
 export interface SettingsInput {
   content?: ContentSettings;
-  images?: Partial<Pick<ImageSettings, "connectionId" | "rating" | "ask" | "expressions" | "styleProfileId">>;
+  images?: Partial<Pick<ImageSettings, "connectionId" | "rating" | "ask" | "expressions" | "styleProfileId" | "style">>;
   connections?: Connections;
   language?: string;
+  writingStyle?: string;
+  bannedPhrases?: string;
 }

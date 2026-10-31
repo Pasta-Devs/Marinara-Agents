@@ -1,3 +1,11 @@
+## 1.27.5 — 2026-10-29
+
+- Maintenance rebuild for the shared expression-image lifecycle. Gacha Forge keeps its existing automatic expression behavior; the explicit repaint controls belong to Otome Hearth.
+
+## 1.27.4 — 2026-10-29
+
+- Maintenance rebuild for the shared image-reference helper. Gacha Forge keeps its existing avatar and outfit reference behavior.
+
 ## 1.27.3 — 2026-10-28
 
 - Characters can equip their designated weapons even when a saved weapon has a different type from their role. The intended owner sees it in Gear and can equip it without regenerating the weapon. Signature skills still activate only for their owner; other characters keep the normal weapon-type rules.

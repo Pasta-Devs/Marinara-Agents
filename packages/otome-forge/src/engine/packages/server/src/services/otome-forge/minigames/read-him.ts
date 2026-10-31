@@ -19,9 +19,10 @@
 //   his own readers and scenes he is in, and titled private as a phone session is. An unfinished one is never a source.
 // P25 writes his words, so it carries the knowledge boundary and the writing rules, on the `home` contract (SFW wording
 // plus Lines and Veils, whatever the Heat). It sees his scene card (never an unrevealed secret's truth), his mask tells
-// by index, what stands between them, one thing he may know from his own recall, and the moments of his last sets so
-// none repeats. The state reaches it as his own reader may know it (story/prompts.ts ownView, M3's rule): no grievance,
-// disclosure or ledger line another love interest's own chapter left behind. Prompts are English and never localized;
+// by index, what stands between them, his own notebook (Read Me, #1945: what he has come to know about the
+// protagonist), one thing he may know from his own recall, and the moments of his last sets so none repeats. The state
+// reaches it as his own reader may know it (story/prompts.ts ownView, M3's rule): no grievance, disclosure or ledger
+// line another love interest's own chapter left behind. Prompts are English and never localized;
 // the set is written in the world's language.
 import { randomInt } from "node:crypto";
 import { sliceTextToTokenBudget } from "@forge-kit/shared-token-estimator.mjs";
@@ -60,13 +61,14 @@ import { OtomeForgeError } from "../http.js";
 import { runDocTarget, stateId, unitId, worldId } from "../ids.js";
 import type { OtomeMemory } from "../memory/memory.js";
 import { otomeSceneCard } from "../scene-card.js";
-import { STATE_LIMITS, clipText, keepNewest, normalizeState, readRun } from "../schemas/state.js";
+import { STATE_LIMITS, clipText, keepNewest, keepTimeline, normalizeState, readRun } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { grant } from "../state/rewards.js";
 import type { OtomeStore } from "../store.js";
-import { betweenYou, ownView } from "../story/prompts.js";
+import { betweenYou, knowsAboutYou, ownView } from "../story/prompts.js";
 import { otomeWritingRules } from "../writing-rules.js";
+import { aboutLine } from "../schemas/player.js";
 
 export const READ_HIM_TEMPERATURE = 0.9;
 export const READ_HIM_MAX_TOKENS = 2400;
@@ -262,7 +264,8 @@ export const ReadHimReplySchema: ZodType<ReadHimReply> = z.object({
     .max(READ_HIM_ROUNDS + 3),
 });
 
-const clean = (value: string) =>
+/** Collapses whitespace and strips wrapping quotes (Read Me uses it too). */
+export const clean = (value: string) =>
   value
     .replace(/\s+/g, " ")
     .trim()
@@ -332,8 +335,8 @@ export function shuffleRound(round: ReadHimReplyRound, random: (below: number) =
 }
 
 export interface ReadHimPromptInput {
-  world: Pick<World, "content" | "images" | "language" | "setting" | "premise">;
-  player: Pick<Player, "name" | "pronouns">;
+  world: Pick<World, "content" | "images" | "language" | "setting" | "premise" | "writingStyle" | "bannedPhrases">;
+  player: Pick<Player, "name" | "pronouns" | "about">;
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   /** His state as his own reader may know it (ownView). */
   liState: LiState;
@@ -359,6 +362,7 @@ export function readHimMessages({
 }: ReadHimPromptInput): OtomeMessage[] {
   const name = unit.name;
   const tells = unit.bible?.mask.tells ?? [];
+  const known = knowsAboutYou(unit, liState);
   const system = [
     `You write one set of "Read ${name}", a mini-game in an otome visual novel. Each round is a small moment with ${name}: what ${name} says and the face ${name} wears saying it. The player picks which of three or four readings is what ${name} really feels; then ${name}'s private thought is revealed.`,
     "Reply with ONLY a JSON object of this shape:",
@@ -381,7 +385,7 @@ export function readHimMessages({
     `- ${NO_ABSENCE_RULE}`,
     `- Write every field in ${world.language}.`,
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
     otomeContentContract({ world, lis: [{ name }], kind: "home" }),
   ].join("\n");
@@ -391,10 +395,12 @@ export function readHimMessages({
     "",
     "PROTAGONIST",
     `${player.name || "The protagonist"} (${pronounText(player.pronouns)}), addressed as "you". Never assume a gender the pronouns do not state.`,
+    aboutLine(player),
     "",
     "LOVE INTEREST",
     otomeSceneCard(unit, liState),
     betweenYou(unit, liState),
+    ...(known ? [known] : []),
     "",
     "MASK TELLS (by index)",
     ...tells.map((tell, index) => `${index}: ${tell}`),
@@ -436,8 +442,8 @@ async function listSets(store: Pick<OtomeStore, "listRun">, runId: string): Prom
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-/** One thing he may know, from his own recall; "" when memory has nothing ready or fails. */
-async function recalledLine(
+/** One thing he may know, from his own recall; "" when memory has nothing ready or fails (Read Me uses it too). */
+export async function recalledLine(
   memory: ReadHimDeps["memory"],
   runId: string,
   unit: Pick<Unit, "id" | "name">,
@@ -608,19 +614,16 @@ export function applyReadHim(
         },
       },
       timeline: first
-        ? keepNewest(
-            [
-              ...next.timeline,
-              {
-                at,
-                li: set.li,
-                kind: FIRST_READ_HIM_TIMELINE,
-                text: clipText(shown?.thought ?? "", STATE_LIMITS.text),
-                ref: set.setId,
-              },
-            ],
-            STATE_LIMITS.timeline,
-          )
+        ? keepTimeline([
+            ...next.timeline,
+            {
+              at,
+              li: set.li,
+              kind: FIRST_READ_HIM_TIMELINE,
+              text: clipText(shown?.thought ?? "", STATE_LIMITS.text),
+              ref: set.setId,
+            },
+          ])
         : next.timeline,
     },
   };

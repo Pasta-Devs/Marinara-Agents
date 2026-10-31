@@ -11,6 +11,7 @@ import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs"
 import type { Unit } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import * as wish from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/wish.ts";
 import {
+  itemArtPrompt,
   paintItemNow,
   queueItemArt,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/outfits.ts";
@@ -28,6 +29,8 @@ import {
   normalizeBanner,
   normalizeItem,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/wish.ts";
+import { enforceContent } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/content.ts";
+import { memoryArtBrief } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/content-contract.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import {
   paintBannerArtNow,
@@ -35,6 +38,7 @@ import {
   readItem,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/wish/banners.ts";
 import {
+  BannerPlanSchema,
   normalizeBannerPlan,
   type BannerPlan,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/wish/prompts.ts";
@@ -135,6 +139,190 @@ test("a read creates nothing; Wish open creates the rotation's three banners onc
   const again = await t.call("POST", "/runs/:run/wish/open");
   assert.deepEqual(again.body.failed, []);
   assert.equal(t.calls.length, 3);
+});
+
+test("every banner stores a Snapshot's optional English illustration brief without painting unowned rewards", async () => {
+  const kinds = ["memories", "his-wardrobe", "my-wardrobe"] as const;
+  const brief = `A quiet shared cup of tea beside the lantern.\nKeep the authored spacing  here. ${"Evening light and the quiet room. ".repeat(150)}FINAL ILLUSTRATION DETAIL.`;
+  assert.ok(brief.length > 4000);
+  const replies = kinds.map((kind) => {
+    const reply = bannerReply(kind);
+    return JSON.stringify({
+      ...reply,
+      snapshots: reply.snapshots.map((snapshot) => ({
+        ...snapshot,
+        cgBrief: ` \n${brief}\n `,
+        cgCast: ["Kai", "Mireille", "Sol", "Ines"],
+      })),
+    });
+  });
+  const t = await wishWorld({ runKey: "r-snapplan-aaaaaa", images: NO_IMAGES, replies });
+  const opened = await t.call("POST", "/runs/:run/wish/open");
+  assert.equal(opened.status, 200, JSON.stringify(opened.body));
+  for (const kind of kinds) {
+    const snapshot = (await readItem(t.store, t.runId, `${kind}-0-s1`))!;
+    assert.equal(snapshot.kind, "snapshot3", "the Memories banner has the same three-star Snapshot kind");
+    assert.equal(
+      snapshot.cg?.brief,
+      brief,
+      "Snapshot planner briefs are trimmed at the edges, never shortened or rewritten",
+    );
+    assert.deepEqual(snapshot.cg?.cast, ["Kai", "Ines"], "the private picture includes only its LI and protagonist");
+    assert.equal(snapshot.art, null);
+    const banner = opened.body.wish.banners.find((entry: wish.BannerView) => entry.kind === kind);
+    assert.equal(banner.three[0].text, undefined, "unowned vignette text remains private");
+    assert.equal("cg" in banner.three[0], false, "the private image brief stays on the server");
+  }
+  assert.deepEqual(t.paid, [], "planning and listing Snapshot rewards do not paint their pictures");
+  assert.equal(t.calls.length, 3, "the existing one planner call per banner is enough");
+  await setImages(t.store, t.runId, { connectionId: "conn-image" });
+  for (const kind of kinds) {
+    const pulled = await pullWish(t.deps, t.runId, { banner: `${kind}-0`, count: 1, random: () => 0.5 });
+    assert.equal(pulled.results[0]!.item.kind, "snapshot3");
+    assert.equal(pulled.results[0]!.item.art, null);
+  }
+  await t.call("GET", "/runs/:run/wish");
+  assert.deepEqual(t.paid, [], "wishes and list reads do not paint even with image generation enabled");
+  assert.equal(t.calls.length, 3);
+});
+
+test("an explicit Memory's art is painted explicit only under Explicit Heat and the Explicit rating (#1951)", async () => {
+  // The plan keeps the key image's mark only when the reply set it.
+  const kai = { id: KAI, name: "Kai" } as Unit;
+  const cast = [kai, { id: MIR, name: "Mireille" } as Unit, { id: SOL, name: "Sol" } as Unit];
+  // Above SFW Heat each 4★ Moment carries its own brief, so an explicit premise never reaches its picture.
+  const marked = (explicit: unknown, briefs = true) => {
+    const reply = bannerReply("memories");
+    const four = reply.four.map((entry) => ({
+      ...entry,
+      premise: "EXPLICIT-PREMISE: they end the night in bed together.",
+      ...(briefs ? { cgBrief: "MOMENT-BRIEF: the quay at dusk, walking under the lanterns.", cgCast: ["Ines"] } : {}),
+    }));
+    // An explicit brief carries its clothed twin, which a lowered world paints instead.
+    const featured = {
+      ...reply.featured,
+      cgBrief: "EXPLICIT-BRIEF: undressed in the lamp room, bodies pressed together by the great lens.",
+      clothedBrief: "CLOTHED-BRIEF: the lamp room just after, both of them wrapped in one blanket by the great lens.",
+      explicit,
+    };
+    return { ...reply, featured, four };
+  };
+  // The plan keeps the mark only where it offered one (Explicit Heat and the Explicit rating), as a story CG's.
+  const cgOf = (explicit: unknown, offered = true) =>
+    (
+      normalizeBannerPlan(marked(explicit), {
+        kind: "memories",
+        units: cast,
+        featured: kai,
+        explicitArt: offered,
+      }) as BannerPlan
+    ).featured.cg!;
+  assert.equal(cgOf(true).explicit, true);
+  assert.match(cgOf(true).clothed ?? "", /^CLOTHED-BRIEF/, "the clothed twin is kept beside the mark");
+  assert.equal("explicit" in cgOf(true, false), false, "a mark the plan was never offered is dropped");
+  assert.equal("clothed" in cgOf(true, false), false);
+  const twinless = { ...marked(true), featured: { ...marked(true).featured, clothedBrief: undefined } };
+  assert.match(
+    String(normalizeBannerPlan(twinless, { kind: "memories", units: cast, featured: kai, explicitArt: true })),
+    /featured\.clothedBrief is missing/,
+    "an explicit brief without its clothed twin is repaired",
+  );
+  // A null twin (the reply's natural answer when explicit is false) passes the schema; an explicit one still needs it.
+  for (const explicit of [false, null]) {
+    const unmarked = { ...marked(explicit), featured: { ...marked(explicit).featured, clothedBrief: null } };
+    assert.ok(BannerPlanSchema.safeParse(unmarked).success, `explicit ${explicit} with a null clothedBrief`);
+    const plain = normalizeBannerPlan(unmarked, { kind: "memories", units: cast, featured: kai, explicitArt: true });
+    assert.equal("explicit" in (plain as BannerPlan).featured.cg!, false);
+    assert.equal("clothed" in (plain as BannerPlan).featured.cg!, false);
+  }
+  const nullTwin = { ...marked(true), featured: { ...marked(true).featured, clothedBrief: null } };
+  assert.ok(BannerPlanSchema.safeParse(nullTwin).success);
+  assert.match(
+    String(normalizeBannerPlan(nullTwin, { kind: "memories", units: cast, featured: kai, explicitArt: true })),
+    /featured\.clothedBrief is missing/,
+  );
+  // A mark with no twin (none can be saved now) paints from the title when the world is lowered.
+  const lowered = { content: { heat: "fade" }, images: { rating: "explicit" } } as Parameters<typeof memoryArtBrief>[2];
+  assert.deepEqual(memoryArtBrief({ brief: "EXPLICIT", explicit: true }, "Lantern Vigil", lowered), {
+    brief: "Lantern Vigil",
+    explicit: false,
+  });
+  assert.equal("explicit" in cgOf(false), false);
+  assert.equal("explicit" in cgOf(null), false);
+  const moments = (briefs: boolean, required: boolean) =>
+    normalizeBannerPlan(marked(true, briefs), {
+      kind: "memories",
+      units: cast,
+      featured: kai,
+      playerName: "Ines",
+      moments: required,
+    });
+  assert.equal(moments(false, true), "four[0].cgBrief is missing", "required above SFW Heat");
+  assert.equal(typeof moments(false, false), "object", "not asked for under SFW Heat");
+  // The Moment's own love interest, and the protagonist when its cast names them.
+  assert.deepEqual((moments(true, true) as BannerPlan).four[0]!.cg, {
+    brief: "MOMENT-BRIEF: the quay at dusk, walking under the lanterns.",
+    cast: ["Mireille", "Ines"],
+  });
+
+  type Settings = readonly ["explicit" | "fade", "explicit" | "suggestive" | "sfw"];
+  // Plans the banner under `planned`, then paints it with a tap under `painted` (Ask before painting holds it).
+  const paint = async (runKey: string, planned: Settings, painted: Settings) => {
+    const offered = planned[0] === "explicit" && planned[1] === "explicit";
+    // A plan offered explicit art writes an explicit brief and its clothed twin; one that was not writes a clothed brief.
+    const reply = offered
+      ? marked(true)
+      : { ...marked(true), featured: { ...marked(true).featured, cgBrief: "PLAIN-BRIEF: the lamp room at night." } };
+    const replies = [JSON.stringify(reply), ...rotationReplies().slice(1)];
+    const t = await wishWorld({ runKey, images: { rating: planned[1], ask: true }, replies });
+    const set = async ([heat, rating]: Settings) => {
+      await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+        ...world,
+        content: enforceContent({ ...world.content, heat }, true),
+      }));
+      await setImages(t.store, t.runId, { rating });
+    };
+    await set(planned);
+    await t.call("POST", "/runs/:run/wish/open");
+    const memories = ((await t.call("GET", "/runs/:run/wish")).body as wish.WishView).banners[0]!;
+    assert.equal(memories.kind, "memories");
+    const item = (await readItem(t.store, t.runId, memories.five.id))!;
+    assert.equal(item.cg?.explicit === true, offered, "the item keeps the mark only where the plan offered it");
+    await set(painted);
+    await t.call("POST", "/runs/:run/wish/art", { banner: memories.key });
+    await paintsDone();
+    // The Memory's own art (its first open, or Repaint) is built the same way as the banner's.
+    const own = await itemArtPrompt(t.deps, t.runId, item);
+    // A Moment's picture comes from its own brief, never its premise, and stays clothed.
+    const moment = (await readItem(t.store, t.runId, memories.four[0]!.id))!;
+    const momentArt = await itemArtPrompt(t.deps, t.runId, moment);
+    assert.match(momentArt.prompt, /MOMENT-BRIEF/);
+    assert.doesNotMatch(momentArt.prompt, /EXPLICIT-PREMISE|explicit adult scene|nsfw/);
+    assert.match(momentArt.prompt, /\bclothed\b/);
+    return [t.paid.find((call) => call.method === "generateBannerArt")!.request, own] as const;
+  };
+  const top = ["explicit", "explicit"] as const;
+  for (const request of await paint("r-m4bann40-aaaaaa", top, top)) {
+    assert.match(request.prompt, /explicit adult scene/);
+    assert.match(request.prompt, /EXPLICIT-BRIEF/);
+    assert.match(request.negativePrompt, /child, childlike/);
+  }
+  for (const [runKey, planned, painted] of [
+    // Lowered after the plan: the paid call checks again.
+    ["r-m4bann41-bbbbbb", top, ["explicit", "suggestive"]],
+    ["r-m4bann42-cccccc", top, ["fade", "explicit"]],
+    ["r-m4bann43-dddddd", top, ["explicit", "sfw"]],
+    // Raised after a plan that was never offered the mark: it was not kept.
+    ["r-m4bann44-eeeeee", ["fade", "explicit"], top],
+  ] as const) {
+    for (const clothed of await paint(runKey, planned, painted)) {
+      const at = `planned ${planned.join("/")}, painted ${painted.join("/")}`;
+      assert.doesNotMatch(clothed.prompt, /explicit adult scene|nsfw|EXPLICIT-BRIEF/, at);
+      assert.match(clothed.prompt, /\bclothed\b/, at);
+      // A Memory marked explicit paints its clothed twin; one never marked paints its own (clothed) brief.
+      assert.match(clothed.prompt, planned === top ? /CLOTHED-BRIEF/ : /PLAIN-BRIEF/, at);
+    }
+  }
 });
 
 test("a Snapshot planned without a title is named by its first words, or its first characters when it has no spaces", () => {

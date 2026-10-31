@@ -57,10 +57,10 @@ function world(content: Partial<ContentSettings> = {}, rating: ImageRating = "sf
 const contract = (kind: ContractKind, content: Partial<ContentSettings> = {}, rating: ImageRating = "sfw") =>
   otomeContentContract({ world: world(content, rating), lis: LIS, kind });
 
-test("Home, care and summary prompts use SFW wording under any Heat, and still list the Lines", () => {
+test("Home and care prompts use SFW wording under any Heat, and still list the Lines", () => {
   const custom = [{ text: "spiders", level: "line" as const }];
   for (const heat of HEATS) {
-    for (const kind of ["home", "care", "summary"] as const) {
+    for (const kind of ["home", "care"] as const) {
       const text = contract(kind, { heat, darkness: "dark", custom });
       assert.match(text, /^CONTENT CONTRACT\n/);
       assert.match(text, /Heat: SFW\./, `${kind} under ${heat}`);
@@ -76,7 +76,14 @@ test("Home, care and summary prompts use SFW wording under any Heat, and still l
   assert.doesNotMatch(contract("home", { darkness: "angst" }), /possessive/);
   assert.ok(contract("care", { heat: "explicit", darkness: "dark" }).includes(COMFORT_RULE));
   assert.ok(!contract("home").includes(COMFORT_RULE), "the comfort rule is only for care");
-  assert.match(contract("summary", { heat: "explicit" }), /neutral, non-explicit words/);
+  // Summaries follow the story's own Heat and Darkness (0.3.0): never SFW by themselves, and still never a Line.
+  for (const heat of HEATS) {
+    const summary = contract("summary", { heat, darkness: "dark", custom });
+    assert.match(summary, /record intimacy, violence and darkness plainly, in adult terms/, heat);
+    assert.doesNotMatch(summary, /Heat: SFW|neutral|non-explicit/, heat);
+    assert.match(summary, /Never write or mention: [^\n]*non-consent[^\n]*spiders/, heat);
+  }
+  assert.match(contract("summary"), /Heat: SFW\./, "an SFW story's summaries keep its own Heat");
 });
 
 test("planner, scene and chat prompts get the full contract; the Dark addition appears only under Dark", () => {
@@ -112,14 +119,13 @@ test("every text contract keeps the fixed rules, and the reminder points back at
   assert.equal(otomeContractReminder("image"), "");
 });
 
-test("image prompts carry the image rating and an adult tag for every person, whatever the Heat", () => {
+test("image prompts carry clothing limits and an adult tag without requiring the rating's maximum content", () => {
   assert.equal(
     contract("image", { heat: "explicit", darkness: "dark" }),
     "safe for work, fully clothed, adult man, adult woman",
   );
-  // The `image` contract is a clothed portrait's (P20's looks and Memory art): at most Suggestive, said in words too.
-  const clothed =
-    "suggestive, tasteful, clothed, adult man, adult woman, Everyone shown is an adult over 18 with an adult face and body";
+  // The `image` contract is a clothed portrait's (P20's looks and Memory art): at most Suggestive, never required.
+  const clothed = "clothed, adult man, adult woman";
   assert.equal(contract("image", {}, "suggestive"), clothed);
   assert.equal(contract("image", { heat: "explicit" }, "explicit"), clothed);
   const protagonist = otomeContentContract({ world: world(), lis: [{ name: "Her" }, ...LIS], kind: "image" });

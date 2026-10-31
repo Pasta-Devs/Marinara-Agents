@@ -33,6 +33,7 @@ import {
 import { useOtomeAudio } from "../../hooks/use-otome-audio";
 import { cancelStoryWork, runPath, useReducedMotion } from "../../hooks/use-reader";
 import { patchRun } from "../../hooks/use-run";
+import { useSpriteDisplay } from "../../hooks/use-sprite-display";
 import { accentOf, initialsOf } from "../../lib/accent";
 import { useOtomeProps } from "../../props";
 import type { RunView } from "../../shared/api-types";
@@ -451,7 +452,13 @@ function BannerPanel({ view, banner, wish, actions, pulling, error, onPull, onBa
   const { locale } = useOtomeProps().localization;
   const number = new Intl.NumberFormat(locale);
   const li = view.lis.find((item) => item.id === banner.featuredLi) ?? null;
-  const art = readyArt(banner.art) ?? readyArt(banner.five.art);
+  const bannerTitle = banner.title || banner.five.title;
+  const look = banner.kind !== "memories";
+  const art = useSpriteDisplay(readyArt(banner.art) ?? readyArt(banner.five.art), look);
+  const [expanded, setExpanded] = useState(false);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const viewerBlocked = actions.busy.size > 0 || !!actions.review;
+  useEffect(() => setExpanded(false), [art, viewerBlocked]);
   const held = paintWaits(banner.art) ? banner.art : null;
   const heldId = `banner:${banner.key}`;
   const pity = wish.pity[banner.kind];
@@ -515,7 +522,15 @@ function BannerPanel({ view, banner, wish, actions, pulling, error, onPull, onBa
       ) : null}
       <div className="of-banner-hero" data-painting={banner.art?.state === "pending"}>
         {art ? (
-          <img className="of-banner-img" src={art} alt="" decoding="async" />
+          <button
+            type="button"
+            className="of-banner-art"
+            aria-label={t("ui.otomeForge.wish.viewImage", { title: bannerTitle })}
+            disabled={viewerBlocked}
+            onClick={() => setExpanded(true)}
+          >
+            <img className="of-banner-img" data-look={look} src={art} alt="" decoding="async" />
+          </button>
         ) : (
           <span className="of-banner-quiet" aria-hidden="true">
             <span className="of-item-initials">{initialsOf(li?.name ?? view.player.name)}</span>
@@ -532,7 +547,7 @@ function BannerPanel({ view, banner, wish, actions, pulling, error, onPull, onBa
               : t("ui.otomeForge.wish.until", { date: formatDay(banner.endsDay, locale) })}
           </p>
           <h2 id={titleId} className="of-banner-title" tabIndex={-1}>
-            {banner.title || banner.five.title}
+            {bannerTitle}
           </h2>
           <p className="of-banner-featured">
             <RarityStars rarity={5} />
@@ -606,6 +621,29 @@ function BannerPanel({ view, banner, wish, actions, pulling, error, onPull, onBa
       {banner.five.premise ? <p className="of-body of-banner-premise">{banner.five.premise}</p> : null}
       <p className="of-hint">{t("ui.otomeForge.wish.noModel")}</p>
       <BannerContents view={view} banner={banner} />
+      {expanded && art && !viewerBlocked ? (
+        <Dialog
+          wide
+          title={bannerTitle}
+          onClose={() => setExpanded(false)}
+          initialFocus={closeRef}
+          actions={
+            <button
+              ref={closeRef}
+              type="button"
+              className="of-button of-button--quiet of-glass"
+              onClick={() => setExpanded(false)}
+            >
+              <X size={16} strokeWidth={2} aria-hidden="true" />
+              {t("ui.otomeForge.wardrobe.close")}
+            </button>
+          }
+        >
+          <figure className="of-viewer-figure">
+            <img className="of-viewer-img" src={art} alt={bannerTitle} decoding="async" />
+          </figure>
+        </Dialog>
+      ) : null}
     </section>
   );
 }

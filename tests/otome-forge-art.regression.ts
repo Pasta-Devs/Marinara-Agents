@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { queueScenePaints } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cg.ts";
+import { createOtomeArt } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/expressions.ts";
 import { createImageClient } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/image-client.ts";
 import {
   paintSlot,
@@ -34,10 +35,12 @@ import {
   saveBeat,
   seedChapter,
   setImages,
+  until,
   type PaidCall,
 } from "./fixtures/otome-forge-art.ts";
 import { normalizeBeatBody } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/beats.ts";
-import { KAI, MIR, SOL, bible, storyRoutes } from "./fixtures/otome-forge-story.ts";
+import { runForeground } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/generation.ts";
+import { KAI, MIR, SOL, beatReply, bible, json, storyRoutes } from "./fixtures/otome-forge-story.ts";
 
 const CG = { at: 1, brief: "Rain on the lamp room glass; she catches his sleeve.", cast: ["Kai", "Ines"] };
 
@@ -81,6 +84,277 @@ test("a place is painted once, from its English tags with no people, and a known
   // A place name in another script keeps its own key.
   assert.equal(placeKey("灯台の部屋"), "灯台の部屋");
   assert.notEqual(placeKey("灯台の部屋"), placeKey("港の灯"));
+});
+
+test(
+  "a fresh beat waits for background registration, not its paid image, before answering",
+  { timeout: 5000 },
+  async (context) => {
+    let allowRegistration = () => {};
+    const registration = new Promise<void>((resolve) => (allowRegistration = resolve));
+    let allowImage = () => {};
+    const image = new Promise<void>((resolve) => (allowImage = resolve));
+    const t = await artWorld({
+      runKey: "r-bgregister-aaaaaa",
+      replies: [json(beatReply())],
+      images: { expressions: false },
+      before: async (call) => {
+        if (call.method === "generateImage") await image;
+      },
+    });
+    await seedChapter(t.store, t.runId, 1);
+    let registering = false;
+    const store = {
+      ...t.store,
+      async updateDoc(...args: Parameters<typeof t.store.updateDoc>) {
+        if (args[0].id === worldId(t.runId) && !registering) {
+          registering = true;
+          await registration;
+        }
+        return t.store.updateDoc(...args);
+      },
+    } as typeof t.store;
+    const deps = { ...t.deps, store, art: createOtomeArt({ ...t.deps, store }) };
+    let answered = false;
+    const serving = storyRoutes(deps, "r-bgregister-aaaaaa")(
+      "POST",
+      "/runs/:run/chapters/:key/beats/:i",
+      {},
+      { key: KEY, i: "0" },
+    ).then((result) => {
+      answered = true;
+      return result;
+    });
+    context.after(async () => {
+      allowRegistration();
+      allowImage();
+      deps.art.dispose();
+      await serving;
+    });
+    await until(() => registering, "background registration started");
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(answered, false, "the beat cannot answer before its background record exists");
+    allowRegistration();
+    assert.equal((await serving).status, 200);
+    const scene = await routesOf(registerArtRoutes, deps, "r-bgregister-aaaaaa")("GET", "/runs/:run/art/scene", {
+      key: KEY,
+      i: "0",
+    });
+    assert.equal(scene.body.places[0].art.state, "pending", "the first art response has settled registration");
+    assert.equal(t.uploads.length, 0, "answering never waits for the paid image");
+    allowImage();
+    await until(
+      async () =>
+        (await t.store.readDoc(worldId(t.runId), normalizeWorld))!.places[placeKey("The Lamp Room")]?.art?.state ===
+        "ready",
+      "background ready",
+    );
+    assert.equal(t.paid.length, 1);
+  },
+);
+
+test(
+  "stored registered places bypass a held foreground task, while missing, consent and retag writes still wait",
+  { timeout: 10000 },
+  async (context) => {
+    for (const mode of ["ready", "pending", "missing", "consent", "retag"] as const) {
+      const t = await artWorld({ runKey: `r-bgf${mode}-aaaaaa`, images: { expressions: false } });
+      await seedChapter(t.store, t.runId, 1);
+      await saveBeat(t.store, t.runId, beat(0));
+      const key = placeKey("The Lamp Room");
+      if (mode !== "missing")
+        await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+          ...world,
+          places: {
+            [key]: {
+              ...beat(0).places[0]!,
+              ...(mode === "retag" ? { tags: "" } : {}),
+              ...(mode === "ready"
+                ? { art: { state: "ready" as const, at: "old", url: "/saved-background.png" } }
+                : {}),
+              ...(mode === "pending" ? { art: { state: "pending" as const, at: "old" } } : {}),
+              ...(mode === "consent" ? { art: { state: "waiting-consent" as const, at: "old" } } : {}),
+            },
+          },
+        }));
+      const releasePending = mode === "pending" ? startPaint(t.runId, `place:${key}`) : null;
+      let free = () => {};
+      const held = new Promise<void>((resolve) => (free = resolve));
+      let entered = false;
+      let ended = false;
+      const foreground = runForeground(t.runId, async () => {
+        entered = true;
+        await held;
+        ended = true;
+      });
+      await until(() => entered, "foreground task held");
+      const art = createOtomeArt(t.deps);
+      let answered = false;
+      const serving = storyRoutes({ ...t.deps, art }, `r-bgf${mode}-aaaaaa`)(
+        "POST",
+        "/runs/:run/chapters/:key/beats/:i",
+        {},
+        { key: KEY, i: "0" },
+      ).then((response) => {
+        answered = true;
+        return response;
+      });
+      context.after(async () => {
+        free();
+        releasePending?.();
+        art.dispose();
+        await foreground;
+        await serving;
+      });
+      if (mode === "ready" || mode === "pending") {
+        await until(() => answered, `registered ${mode} scene answers before foreground finishes`, 1000);
+        assert.equal(ended, false);
+        assert.equal(t.paid.length, 0);
+      } else {
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.equal(answered, false, `${mode} still needs queued registration`);
+      }
+      free();
+      assert.equal((await serving).status, 200);
+      const place = (await t.store.readDoc(worldId(t.runId), normalizeWorld))!.places[key]!;
+      assert.ok(place, "even a stored beat acknowledges its missing place before responding");
+      assert.ok(place.tags.trim(), "the first description is saved before responding");
+      if (mode !== "ready" && mode !== "pending") {
+        await until(
+          async () => (await t.store.readDoc(worldId(t.runId), normalizeWorld))!.places[key]?.art?.state === "ready",
+          "new background ready",
+        );
+        assert.equal(t.paid.length, 1);
+      }
+      assert.equal(t.calls.length, 0, "a stored scene never rewrites its text");
+      releasePending?.();
+      art.dispose();
+      await foreground;
+    }
+  },
+);
+
+test("the writer reuses an explicitly selected saved background without another model lookup or paid image", async (context) => {
+  const canonical = "Dottore’s wing4";
+  const key = placeKey(canonical);
+  const t = await artWorld({
+    runKey: "r-bgreuse-aaaaaa",
+    images: { expressions: false },
+    replies: [
+      json(
+        beatReply({
+          places: [{ name: "dottore’s wing5", tags: "unused replacement tags", reuse: `  ${key}\t ` }],
+          segments: [{ speaker: "", text: "The same lab.", place: "dottore’s wing5" }],
+        }),
+      ),
+    ],
+  });
+  await seedChapter(t.store, t.runId, 1);
+  const original = {
+    name: canonical,
+    tags: "laboratory, green glass, no humans",
+    art: { state: "ready" as const, at: "old", url: "/api/global-gallery/file/lab.png", ref: "global-gallery:lab" },
+  };
+  await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+    ...world,
+    places: { [key]: original },
+  }));
+  const before = await t.state();
+  const art = createOtomeArt(t.deps);
+  context.after(() => art.dispose());
+  const served = await storyRoutes({ ...t.deps, art }, "r-bgreuse-aaaaaa")(
+    "POST",
+    "/runs/:run/chapters/:key/beats/:i",
+    {},
+    { key: KEY, i: "0" },
+  );
+  assert.equal(served.status, 200, JSON.stringify(served.body));
+  assert.equal(served.body.beat.segments[0].place, canonical);
+  assert.deepEqual((await readStoredBeat(t.store, t.runId, 0))!.places, [{ name: canonical, tags: original.tags }]);
+  assert.deepEqual((await t.store.readDoc(worldId(t.runId), normalizeWorld))!.places, { [key]: original });
+  assert.deepEqual(await t.state(), before, "art lookup never progresses the story");
+  assert.equal(t.calls.length, 1, "only the already-required writer call");
+  const prompt = t.calls[0]!.messages.map((message) => message.content).join("\n");
+  assert.match(prompt, /SAVED BACKGROUNDS/);
+  assert.ok(prompt.includes(JSON.stringify({ key, name: canonical, tags: original.tags })));
+  assert.match(prompt, /numbered rooms, wings and floors are distinct/);
+  assert.equal(t.paid.length, 0);
+  assert.deepEqual(t.deleted, []);
+});
+
+test("unknown background references use only the existing content repair and save or paint nothing", async (context) => {
+  const invalid = json(beatReply({ places: [{ name: "Lab", tags: "laboratory", reuse: "missing-place" }] }));
+  const t = await artWorld({
+    runKey: "r-bgbadref-aaaaaa",
+    images: { expressions: false },
+    replies: [invalid, invalid],
+  });
+  await seedChapter(t.store, t.runId, 1);
+  const art = createOtomeArt(t.deps);
+  context.after(() => art.dispose());
+  const before = await t.state();
+  const response = await storyRoutes({ ...t.deps, art }, "r-bgbadref-aaaaaa")(
+    "POST",
+    "/runs/:run/chapters/:key/beats/:i",
+    {},
+    { key: KEY, i: "0" },
+  );
+  assert.deepEqual([response.status, response.body.code], [502, "bad-format"]);
+  assert.equal(t.calls.length, 2);
+  assert.match(t.calls[1]!.messages.at(-1)!.content, /reuse.*existing saved place key/);
+  assert.equal(await readStoredBeat(t.store, t.runId, 0), null);
+  assert.deepEqual(await t.state(), before);
+  assert.deepEqual((await t.store.readDoc(worldId(t.runId), normalizeWorld))!.places, {});
+  assert.equal(t.paid.length, 0);
+});
+
+test("genuinely different numbered rooms keep separate backgrounds even with identical tags", async () => {
+  const t = await sceneWorld("r-bgrooms-aaaaaa");
+  for (const [i, name] of ["Room 4", "Room 5"].entries()) {
+    await t.write(i, { places: [{ name, tags: "laboratory, green glass, no humans" }], cg: undefined });
+  }
+  assert.equal(t.paid.length, 2);
+  assert.deepEqual(Object.keys((await t.world()).places), ["room-4", "room-5"]);
+});
+
+test("registration-only preparation preserves consent and failed records; disposal stops queued payment", async () => {
+  for (const mode of ["ask", "review", "failed"] as const) {
+    const t = await artWorld({ runKey: `r-bg${mode}-aaaaaa`, images: { ask: mode === "ask", expressions: false } });
+    const failed = { state: "failed" as const, at: "old", error: "provider declined" };
+    if (mode === "failed")
+      await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+        ...world,
+        places: { [placeKey("The Lamp Room")]: { ...beat(0).places[0]!, art: failed } },
+      }));
+    const art = createOtomeArt(t.deps);
+    try {
+      await art.prepareScenePlaces!(t.runId, beat(0), { debugMode: false, review: mode === "review" });
+      const place = (await t.store.readDoc(worldId(t.runId), normalizeWorld))!.places[placeKey("The Lamp Room")]!;
+      assert.equal(place.art?.state, mode === "failed" ? "failed" : "waiting-consent");
+      if (mode === "failed") assert.deepEqual(place.art, failed);
+      assert.equal(t.paid.length, 0);
+    } finally {
+      art.dispose();
+    }
+  }
+  const t = await artWorld({ runKey: "r-bgdispose-aaaaaa" });
+  let free = () => {};
+  const lane = paintSlot("conn-image", () => new Promise<void>((resolve) => (free = resolve)));
+  const art = createOtomeArt(t.deps);
+  try {
+    await art.prepareScenePlaces!(t.runId, beat(0), { debugMode: false });
+    art.dispose();
+  } finally {
+    free();
+  }
+  await lane;
+  await until(
+    async () =>
+      (await t.store.readDoc(worldId(t.runId), normalizeWorld))!.places[placeKey("The Lamp Room")]?.art?.state ===
+      "stopped",
+    "queued paint stops on teardown",
+  );
+  assert.equal(t.paid.length, 0);
 });
 
 test("Ask before painting holds every scene paint until its tap, and a tap never pays twice", async () => {
@@ -320,10 +594,13 @@ test("a paint waiting in the lane is built when its turn comes: a rating changed
   await Promise.all([cgTap, placeTap]);
   const place = t.paid.find((call) => call.method === "generateImage")!;
   // The place was built at its turn, under Suggestive: above SFW a place is scenery only, with no rating or person
-  // tags, and keeps the people, adult and SFW negatives. (The CG was built at SFW, before the change.)
+  // tags, and keeps the people, adult, nudity and explicit-act exclusions. (The CG was built at SFW, before the change.)
   assert.match(place.request.prompt, /no humans/);
   assert.doesNotMatch(place.request.prompt, /safe for work|suggestive|adults only/);
-  assert.match(place.request.negativePrompt, /people, person, humans.*child, childlike.*loli.*nudity, nsfw/);
+  assert.match(
+    place.request.negativePrompt,
+    /people, person, humans.*child, childlike.*nudity, explicit sexual activity/,
+  );
 });
 
 test("a tap that lands while another pass holds the place but paints nothing still paints it, once", async () => {

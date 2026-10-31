@@ -348,6 +348,15 @@ const tracker = (starts: string[], patch: Json = {}) => ({
 });
 
 async function openHome(page: Page): Promise<Locator> {
+  // Engine's calendar greeting can appear after startup. Keep its theme through the normal, specific dialog action.
+  await page.addLocatorHandler(
+    page
+      .getByRole("dialog", { name: "Happy Halloween!", exact: true })
+      .filter({ has: page.getByRole("button", { name: "Keep it", exact: true }) }),
+    async (dialog) => {
+      await dialog.getByRole("button", { name: "Keep it", exact: true }).click();
+    },
+  );
   await page.route("**/api/app-settings/ui", (route) =>
     route.fulfill({ json: route.request().method() === "GET" ? { value: null } : { success: true } }),
   );
@@ -549,7 +558,7 @@ test("Otome Forge Remind Me: the calendar, the tracker off by default, hearts, a
   await root.getByRole("tab", { name: "Tracker" }).click();
   await root.getByRole("button", { name: "Delete all cycle data" }).click();
   await expect(
-    root.getByText("All cycle data was deleted from this browser, with today’s caring messages."),
+    root.getByText("You deleted all cycle data from this browser, with today’s caring messages."),
   ).toBeVisible();
   await expect(root.getByRole("switch", { name: /Period tracker/ })).not.toBeChecked();
   expect(await stored(page, CYCLE_KEY)).toBeNull();
@@ -586,12 +595,13 @@ test("Otome Forge Remind Me with its storage blocked, at reduced motion in Pearl
   await expect(root.getByRole("heading", { level: 1, name: "Remind Me" })).toBeFocused();
   await expect(root.getByRole("grid")).toBeVisible();
   await expect(root.getByRole("region", { name: "Coming up" })).toContainText("Ilvar Thorne’s birthday");
-  // In Pearl the selected day keeps a 2 px border in its deeper champagne (about 5:1), with focus elsewhere.
+  // In Pearl the selected day keeps a 2 px border in its deeper champagne (Pearl's champagne-text, 4.5:1 or more on any
+  // of its glass), with focus elsewhere.
   await root.getByRole("button", { name: "Next month" }).focus();
   const selectedBorder = await root
     .locator('.of-day[aria-selected="true"]')
     .evaluate((cell) => `${getComputedStyle(cell).borderTopWidth} ${getComputedStyle(cell).borderTopColor}`);
-  expect(selectedBorder).toBe("2px rgb(134, 98, 31)");
+  expect(selectedBorder).toBe("2px rgb(124, 90, 29)");
 
   // The birthday's status region is there before anything goes wrong, so the notice is announced as it fills in.
   const birthdayStatus = root.getByRole("region", { name: "Your birthday" }).getByRole("status");

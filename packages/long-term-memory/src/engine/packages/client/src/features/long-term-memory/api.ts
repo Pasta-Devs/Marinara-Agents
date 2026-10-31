@@ -110,7 +110,8 @@ export const ltmScopeTargetsKey = (chatId: string | null | undefined) =>
 /** One definition per shared query, so every screen reads and invalidates the same cache entry. */
 export const settingsQueryOptions = {
   queryKey: queryKeys.settings,
-  queryFn: () => request<LtmGlobalSettings>("/settings"),
+  // hideImportedMessagesAvailable is false on an Engine that cannot hide chat messages.
+  queryFn: () => request<LtmGlobalSettings & { hideImportedMessagesAvailable?: boolean }>("/settings"),
 };
 
 export const scopeTargetsQueryOptions = (chatId: string | null | undefined) => ({
@@ -197,10 +198,16 @@ export async function request<TResponse, TBody = unknown>(
   return response.json() as Promise<TResponse>;
 }
 
-export async function requestHost<TResponse>(path: string): Promise<TResponse> {
+export async function requestHost<TResponse>(path: string, method = "GET", body?: unknown): Promise<TResponse> {
+  const headers = new Headers(getAdminSecretHeader());
+  if (method !== "GET") headers.set(CSRF_HEADER, CSRF_HEADER_VALUE);
+  if (body !== undefined) headers.set("Content-Type", "application/json");
   const response = await fetch(path, {
+    method,
+    headers,
     cache: "no-store",
     credentials: "same-origin",
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as {

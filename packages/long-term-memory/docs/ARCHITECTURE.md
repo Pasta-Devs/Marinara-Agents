@@ -10,10 +10,11 @@ server  -> persistence, extraction, retrieval, routes, runtime integration
 client  -> vault, review queue, sources, settings, and injection summary
 ```
 
-The server registers `long-term-memory:recall` and `long-term-memory:storage`
-(read-only memories for other packages, from `services/`; see Services for
-Other Packages) and `long-term-memory:runtime` (chat recall, receipts and the
-vault lock for the Engine) with the Engine and mounts
+The server registers `long-term-memory:recall` (read-only memories for other
+packages, from `services/`; see Services for Other Packages) and
+`long-term-memory:runtime` (chat recall, receipts and the
+vault lock for the Engine; registered host-only, so from Capability API 1.388
+other packages get `null` from `services.get`) with the Engine and mounts
 privileged routes under `/api/long-term-memory`. Registration is in
 `server-entry.ts`; `routes.ts` composes one file per area under `routes/`
 (notes, drafts, imports, maintenance, settings), with shared limits, errors and
@@ -76,7 +77,7 @@ folder owns one area.
 | `drafts/` | the draft store, projection and review, applying drafts to notes, rejected suggestions | `draft-store`, `draft-projector`, `draft-review`, `reconciliation`, `rejected-suggestions` |
 | `maintenance/` | integrity checks and repair, note transfer, legacy agent-settings adoption and quarantine, the debug log | `maintenance`, `note-transfer`, `legacy-adoption`, `legacy-source-quarantine`, `debug-log` |
 | `sources/` | Engine chats, summaries and messages read as sources | `interop`, `source-identity` |
-| `services/` | what other packages can look up through the Engine: recalled memories about the accounts they write as (`recall`), a character's memories available everywhere (`storage-read`), the reads switch and the reader list | `recall`, `storage-read` |
+| `services/` | what other packages can look up through the Engine: recalled memories about the accounts they write as (`recall`), the shareable-memory rule, the reads switch and the reader list | `recall`, `storage-read` |
 
 The folders are areas, not enforced layers. `persistence/` still imports from
 the areas above it: `storage.ts` uses `drafts/draft-projector`,
@@ -207,8 +208,8 @@ label.
 Other packages look these up with `api.runtime.services.get(key)`. The Engine
 does not say who asks, so `caller` is the name a package gives itself. Each read
 is a debug-log line ("Read by another Agent" in Activity), and Memory Settings
-lists the ten names that read most lately, so Clear log empties that list. Both
-services give nothing while "Other Agents can read memories" is off.
+lists the ten names that read most lately, so Clear log empties that list.
+Recall gives nothing while "Other Agents can read memories" is off.
 
 `long-term-memory:recall`, version 1:
 
@@ -220,6 +221,7 @@ recall({
   personaId?: string,      // only when the persona's own account writes
   mode?: "roleplay" | "conversation",
   maxTokens?: number,      // 50-4,000, default 800
+  whole?: boolean,         // default false: whole memories instead of ranked parts
   signal?: AbortSignal,
 }): Promise<{ version: 1; sections: { noteId; type; title?; text }[] } | null>
 ```
@@ -235,12 +237,16 @@ recall({
   within a type the order chat recall ranks them in (the user's recall
   weights). `text` is the recalled part of each memory, within `maxTokens` and
   at most 20 recalled parts in all. Recall receipts and usage are not touched.
+- `whole: true` returns every memory that passes the rules above with all its
+  text instead of the parts that fit `queryText`: no ranking and no
+  embeddings, but `queryText` is still required, so one call serves both
+  modes. Order is the type order above, then newest first (`updatedAt`). A
+  memory is added while its estimated tokens still fit `maxTokens`; one that
+  does not fit is skipped, never cut, and later smaller ones can still fit.
+  At most 20 sections. An older Long-Term Memory ignores `whole` and answers
+  with ranked parts.
 - A new section field can be added without a version change; removing or
   renaming one raises `version`.
-
-`long-term-memory:storage` offers `storage.listNotes({ caller?, type?,
-characterIds })`: whole notes available to those characters everywhere, not
-imported sources, archived or game-only (Slurp's flavour brief).
 
 ## Scope and Safety
 

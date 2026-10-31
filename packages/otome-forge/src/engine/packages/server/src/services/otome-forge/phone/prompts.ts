@@ -7,6 +7,8 @@
 // `chat` contract for him alone; the user turn holds his scene card with what stands between them, the story as he may
 // know it (recall with `reader: li`), the conversations that are over, the thread now, and the task, ending with the
 // contract reminder. The comfort rule applies whenever the protagonist says they are unwell or had a hard day.
+// Read Me (#1945): P17 carries his own notebook beside his card (story/prompts.ts knowsAboutYou), so a reply may show
+// what he has come to know about the protagonist; P18 writes no one's words and gets none.
 // P18 is GF's sv(): what he will remember of a closed conversation, on the `summary` contract with the summary wording
 // and no knowledge boundary (it writes no one's words). Its quote must be a line the conversation really holds.
 // Prompts are English and never localized; messages, suggestions and memories are written in the world's language.
@@ -24,8 +26,9 @@ import { NOTE_TEXT_MAX } from "../../../../../client/src/features/otome-forge/sh
 import { COMFORT_RULE, SUMMARY_WORDING, otomeContentContract, otomeContractReminder } from "../content-contract.js";
 import type { OtomeMessage } from "../generation.js";
 import { otomeSceneCard } from "../scene-card.js";
-import { betweenYou } from "../story/prompts.js";
+import { betweenYou, knowsAboutYou } from "../story/prompts.js";
 import { otomeWritingRules } from "../writing-rules.js";
+import { aboutLine } from "../schemas/player.js";
 
 /** A message's text, the player's or his (the route's body limit, and the cut on his). */
 export const MESSAGE_TEXT_MAX = 1000;
@@ -96,8 +99,8 @@ const RUPTURE_LINE =
   "A rupture stands between you. Answer curt and cold, at a distance, within your red lines. Do not pretend it is fine, and do not mend it here.";
 
 export interface ChatReplyInput {
-  world: Pick<World, "language" | "content" | "images">;
-  player: Pick<Player, "name" | "pronouns" | "traits">;
+  world: Pick<World, "language" | "content" | "images" | "writingStyle" | "bannedPhrases">;
+  player: Pick<Player, "name" | "pronouns" | "traits" | "about">;
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   liState: LiState;
   /** The open conversation's newest messages, oldest first; the last is the protagonist's. */
@@ -122,8 +125,9 @@ export function chatReplyMessages({
 }: ChatReplyInput): OtomeMessage[] {
   const name = unit.name;
   const them = player.name || "the protagonist";
+  const known = knowsAboutYou(unit, liState);
   const system = [
-    `You are ${name} (${pronounText(unit.pronouns)}), a love interest in an otome visual novel: a character-driven romance. You are texting ${them} in your private message thread. This is a MESSAGE, not a scene: write as ${name}, in the first person, in your own voice.`,
+    `You are ${name} (${pronounText(unit.pronouns)}), a love interest in an otome visual novel: a character-driven romance. You are writing to ${them} in your private message thread, by whatever carries messages in this world (never a phone or a screen unless the world has them). This is a MESSAGE, not a scene: write as ${name}, in the first person, in your own voice.`,
     "Reply with ONLY a JSON object of this shape:",
     `{"messages": [{"text": "...", "sticker": "${FACES.join("|")}"}], "suggestions": ["...", "..."]}`,
     `- messages: 1 to ${REPLY_MESSAGES_MAX} messages sent one after another, usually 1 or 2, each short: a line or a few, the way people text.`,
@@ -144,7 +148,7 @@ export function chatReplyMessages({
     `- If ${them} says they feel unwell or had a hard day, answer with comfort only. ${COMFORT_RULE}`,
     "- Never repeat a line you already sent in this thread.",
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
     otomeContentContract({ world, lis: [{ name }], kind: "chat" }),
   ]
@@ -154,6 +158,8 @@ export function chatReplyMessages({
     "WHO YOU ARE",
     otomeSceneCard(unit, liState),
     betweenYou(unit, liState),
+    // An empty notebook adds no line (a "" here would leave a blank one before the off-screen line).
+    ...(known ? [known] : []),
     offscreen.trim()
       ? `What you were doing lately, away from ${them}: ${offscreen.trim()} You may hint at it in your own way; never give away what you are hiding.`
       : "",
@@ -161,6 +167,7 @@ export function chatReplyMessages({
     "THE PROTAGONIST",
     `${them} (${pronounText(player.pronouns)}). Never assume a gender the pronouns do not state.`,
     player.traits.length ? `Traits: ${player.traits.join("; ")}` : "",
+    aboutLine(player),
     "",
     story.trim()
       ? `WHAT YOU KNOW OF THE STORY\nYou remember what you were there for or were told; anything else you know only as news that reached you, so never claim you were there.\n${story.trim()}`
@@ -257,7 +264,7 @@ export function normalizeChatReply(raw: ChatReplyRaw, names: ThreadNames): ChatR
 // ── P18: chat memory (compress, summary contract) ──
 
 export interface ChatMemoryInput {
-  world: Pick<World, "language" | "content" | "images">;
+  world: Pick<World, "language" | "content" | "images" | "writingStyle" | "bannedPhrases">;
   names: ThreadNames;
   /** The closed conversation, rendered for the summarizer (renderThread with `"told"`). */
   conversation: string;
@@ -265,7 +272,7 @@ export interface ChatMemoryInput {
 
 export function chatMemoryMessages({ world, names, conversation }: ChatMemoryInput): OtomeMessage[] {
   const system = [
-    `Two people have just finished texting: ${names.li} and ${names.player}. Write what ${names.li} will remember of it.`,
+    `Two people have just finished exchanging messages: ${names.li} and ${names.player}. Write what ${names.li} will remember of it.`,
     "Reply with ONLY a JSON object of this shape:",
     '{"memory": "...", "quote": "..."}',
     `- memory: 2 to 4 sentences in the third person about what passed between them: what was said that matters, what changed, what was left unsaid. Not a transcript. Written in ${world.language}.`,

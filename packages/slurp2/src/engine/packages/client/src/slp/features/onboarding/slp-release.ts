@@ -1,7 +1,7 @@
 import { SLURP2_LEGACY_RELEASES } from "./slp-release-archive";
 
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.4.8";
+export const SLURP2_VERSION = "0.4.12";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -14,6 +14,36 @@ export interface Slurp2ReleaseEntry {
  * in-universe bullets per release (technical detail lives in CHANGELOG.md).
  */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.4.12",
+    date: "2026-10-30",
+    notes: [
+      "Wardrobe import finds looks again, also from pasted text.",
+      "People from your chats no longer turn up as surprise collabs when Creators remember things.",
+    ],
+  },
+  {
+    version: "0.4.11",
+    date: "2026-10-29",
+    notes: [
+      "Backstage no longer says Long-Term Memory isn't sharing once you have turned its sharing on, however you turned it on.",
+    ],
+  },
+  {
+    version: "0.4.10",
+    date: "2026-10-29",
+    notes: [
+      'Turning on "What your other Agents know" now offers to turn on Long-Term Memory\'s sharing too, if it is off, so Creators can use your memories right away.',
+    ],
+  },
+  {
+    version: "0.4.9",
+    date: "2026-10-29",
+    notes: [
+      "Creators remember what Long-Term Memory knows about them in their posts and DMs. Pick whole memories or only the parts that fit, under Backstage › Engine link.",
+      "Backstage tells you when Long-Term Memory is missing or is not sharing its memories.",
+    ],
+  },
   {
     version: "0.4.8",
     date: "2026-10-28",

@@ -34,6 +34,7 @@ const ltmGlobalSettingsShape = z
     longTermMemoryRecallPreamble: z.string().max(500).optional(),
     longTermMemoryDebug: z.boolean().optional(),
     longTermMemoryShareWithPackages: z.boolean().optional(),
+    longTermMemoryHideImportedMessages: z.boolean().optional(),
     sourcesAvailabilityModes: z.array(ltmModeSchema).min(1).max(3).optional(),
   })
   .strict();
@@ -91,6 +92,8 @@ export const ltmResolvedGlobalSettingsSchema = z
     longTermMemoryDebug: z.boolean(),
     /** Other packages (Slurp, Noodle) may read memories available everywhere through the package services. */
     longTermMemoryShareWithPackages: z.boolean(),
+    /** Imported Chat Messages pieces are hidden from the AI, except the chat's recent tail. */
+    longTermMemoryHideImportedMessages: z.boolean(),
     sourcesAvailabilityModes: z.array(ltmModeSchema).min(1).max(3).optional(),
   })
   .strict();
@@ -113,6 +116,7 @@ export const DEFAULT_LTM_GLOBAL_SETTINGS = ltmResolvedGlobalSettingsSchema.parse
   longTermMemoryRecallPreamble: DEFAULT_LTM_RECALL_PREAMBLE,
   longTermMemoryDebug: false,
   longTermMemoryShareWithPackages: true,
+  longTermMemoryHideImportedMessages: false,
 });
 
 const ltmExtractionPromptTemplateIdSchema = z.string().trim().min(1).max(64);
@@ -282,6 +286,9 @@ const ltmPromptTemplatesSchema = z
   )
   .optional();
 
+// Chat Messages import piece size: standard cuts at 24,000 characters, detailed at 12,000.
+const ltmChatImportDetailSchema = z.enum(["standard", "detailed"]);
+
 const ltmExtractionSettingsFields = {
   version: z.literal(1).default(1),
   connectionId: z.string().min(1).max(120).nullable().optional(),
@@ -296,6 +303,7 @@ const ltmExtractionSettingsFields = {
   activePromptTemplateIdsByMode: ltmActivePromptTemplateIdsByModeSchema.optional(),
   aiKeywordExtraction: z.boolean().optional(),
   finishCutOffAnswers: z.boolean().optional(),
+  chatImportDetail: ltmChatImportDetailSchema.optional(),
   useExtractionAgentOnGameMode: z.boolean().optional(),
 };
 
@@ -343,6 +351,7 @@ export const ltmResolvedExtractionSettingsSchema = z
     activePromptTemplateIdsByMode: ltmActivePromptTemplateIdsByModeSchema,
     aiKeywordExtraction: z.boolean(),
     finishCutOffAnswers: z.boolean(),
+    chatImportDetail: ltmChatImportDetailSchema,
     useExtractionAgentOnGameMode: z.boolean(),
   })
   .strict();

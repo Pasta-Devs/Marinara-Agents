@@ -20,6 +20,8 @@ import type {
   Segment,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import {
+  CLOSER_ENDINGS,
+  CLOSER_MOVES,
   CONFRONTATION_ENDINGS,
   CONFRONTATION_ROUNDS,
   FIRST_STAGE,
@@ -35,6 +37,7 @@ import {
 import { FACES, MUSIC_MOODS } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { isChapterKey } from "../ids.js";
 import { PaintSchema, isRecord, readFields, validItems } from "./common.js";
+import { TrackSchema } from "./world.js";
 
 const short = (max = 600) => z.string().max(max);
 
@@ -78,7 +81,7 @@ export const EffectSchema: ZodType<Effect> = z.object({
 
 const NodeSchema: ZodType<ChapterNode> = z.object({
   i: z.number().int().min(0),
-  kind: z.enum(["beat", "moment", "confrontation"]),
+  kind: z.enum(["beat", "moment", "confrontation", "closer"]),
   moment: z.enum(["read-him", "call", "date"]).optional(),
   guide: short(4000),
   cast: z.array(z.string()),
@@ -120,18 +123,45 @@ const RoundSchema = z.object({
     reveal: StanceOptionSchema,
   }),
 });
-const EndingSegments = z.array(SegmentSchema).min(1);
-
-/** A stored stance game (S/story/confrontation.ts writes it): three rounds, three endings, the picks so far. */
-export const ConfrontationSchema: ZodType<Confrontation> = z.object({
-  li: z.string(),
-  rounds: z.array(RoundSchema).min(CONFRONTATION_ROUNDS).max(CONFRONTATION_ROUNDS),
-  endings: z.object({ truth: EndingSegments, walkout: EndingSegments, standoff: EndingSegments }),
-  grievance: z.object({ text: short(), severity: z.literal("major") }),
-  disclosure: short(),
-  picks: z.array(z.enum(STANCES)).max(CONFRONTATION_ROUNDS),
-  ending: z.enum(CONFRONTATION_ENDINGS).optional(),
+const CloserRoundSchema = z.object({
+  his: z.array(SegmentSchema).min(1),
+  options: z.object({
+    reassure: StanceOptionSchema,
+    tease: StanceOptionSchema,
+    mirror: StanceOptionSchema,
+    ask: StanceOptionSchema,
+  }),
 });
+const EndingSegments = z.array(SegmentSchema).min(1);
+const rounds = <T extends z.ZodTypeAny>(round: T) => z.array(round).min(CONFRONTATION_ROUNDS).max(CONFRONTATION_ROUNDS);
+
+/**
+ * A stored climax game (S/story/confrontation.ts writes it): three rounds, three endings, the picks so far. A
+ * Confrontation has no `kind` (as every game stored before the Closer); a Closer (#1938) has `kind: "closer"` and its
+ * own moves and endings. A game whose picks or ending are not its kind's fails, so it is never read half one, half the
+ * other.
+ */
+export const ConfrontationSchema: ZodType<Confrontation> = z.union([
+  z.object({
+    li: z.string(),
+    rounds: rounds(RoundSchema),
+    endings: z.object({ truth: EndingSegments, walkout: EndingSegments, standoff: EndingSegments }),
+    grievance: z.object({ text: short(), severity: z.literal("major") }),
+    disclosure: short(),
+    picks: z.array(z.enum(STANCES)).max(CONFRONTATION_ROUNDS),
+    ending: z.enum(CONFRONTATION_ENDINGS).optional(),
+  }),
+  z.object({
+    kind: z.literal("closer"),
+    li: z.string(),
+    rounds: rounds(CloserRoundSchema),
+    endings: z.object({ opened: EndingSegments, almost: EndingSegments, shut: EndingSegments }),
+    grievance: z.object({ text: short(), severity: z.literal("minor") }),
+    disclosure: short(),
+    picks: z.array(z.enum(CLOSER_MOVES)).max(CONFRONTATION_ROUNDS),
+    ending: z.enum(CLOSER_ENDINGS).optional(),
+  }),
+]);
 
 /** A date's plan (M5, SH/dates.ts); a damaged one reads as none, so the chapter is not a playable date. */
 const DatePlanSchema: ZodType<DatePlan> = z.object({
@@ -172,7 +202,7 @@ export function normalizeChapter(data: unknown): Chapter | null {
   const read = readFields<Chapter>(
     {
       key: z.string(),
-      kind: z.enum(["main", "route", "repair", "story", "date"]),
+      kind: z.enum(["prologue", "main", "route", "repair", "story", "date"]),
       number: z.number().int().min(1).optional(),
       li: z.string().optional(),
       stage: z.number().int().min(FIRST_STAGE).max(LAST_STAGE).optional(),
@@ -186,6 +216,7 @@ export function normalizeChapter(data: unknown): Chapter | null {
       ledger: (value) => (LedgerSchema.safeParse(value).success ? (value as ChapterLedger) : emptyLedger()),
       plannedAt: z.string(),
       connectionId: z.string(),
+      music: z.object({ prompt: z.string().min(1).max(1000).optional(), track: TrackSchema.optional() }).optional(),
       voicedLine: short().optional(),
       date: (value) => {
         const parsed = DatePlanSchema.safeParse(value);
@@ -220,7 +251,7 @@ export function normalizeBeat(data: unknown): Beat | null {
     {
       key: z.string(),
       i: z.number().int().min(0),
-      kind: z.enum(["beat", "moment", "confrontation"]),
+      kind: z.enum(["beat", "moment", "confrontation", "closer"]),
       places: (value) => validItems(z.object({ name: short(120), tags: short() }), value, 8),
       segments: (value) => validItems(SegmentSchema, value),
       choices: (value) => validItems(ChoiceSchema, value, 3),
@@ -276,9 +307,18 @@ export function normalizeBeat(data: unknown): Beat | null {
  * (GET .../dates shows a date).
  */
 export function toChapterView(chapter: Chapter): ChapterView {
-  const { nodes, ledger: _ledger, connectionId: _connection, grievance: _grievance, date: _date, ...rest } = chapter;
+  const {
+    nodes,
+    ledger: _ledger,
+    connectionId: _connection,
+    grievance: _grievance,
+    date: _date,
+    music,
+    ...rest
+  } = chapter;
   return {
     ...rest,
+    ...(music?.track ? { music: { track: music.track } } : {}),
     nodes: nodes.map(({ i, kind, moment, cg, gate }) => ({
       i,
       kind,

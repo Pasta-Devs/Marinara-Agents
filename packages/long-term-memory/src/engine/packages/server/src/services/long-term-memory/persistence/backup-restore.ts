@@ -24,6 +24,7 @@ import {
 } from "./restore-recovery.js";
 import { getLongTermMemoryDirectories, getLongTermMemoryRoot, notePathForId, safeJoin } from "./paths.js";
 import { getLtmGlobalSettings, ltmSettingsPath, readLtmSettingsFile } from "../settings.js";
+import { showLtmHiddenMessages } from "./hidden-messages.js";
 import { ltmExtractionConfigPath } from "../extraction/extraction-config.js";
 import { longTermMemoryRetentionConfigPath, removeLtmRepairBackups } from "./retention.js";
 import { LongTermMemoryDraftStore } from "../drafts/draft-store.js";
@@ -155,6 +156,8 @@ export async function replaceLongTermMemoryData(
             400,
             "ltm_backup_integrity_failed",
           );
+        // The notes "Hide imported messages from the AI" hid messages for are replaced, so it shows them first.
+        await showLtmHiddenMessages(root);
         await writeLtmBackupRestoreJournal(root, journal);
         journalWritten = true;
         const activeStorage = new LongTermMemoryStorage(root);

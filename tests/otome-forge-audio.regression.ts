@@ -4,6 +4,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { forgeSoundtrackContextKey } from "@forge-kit/audio-settings.mjs";
+import {
+  musicAssetFolders,
+  musicAssetsInFolder,
+  normalizeOtomeAudio,
+} from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/audio.ts";
 import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs";
 import { forgeSpeakerVoice } from "@forge-kit/voice-picking.mjs";
 import {
@@ -22,7 +27,10 @@ import { MUSIC_MOODS } from "../packages/otome-forge/src/engine/packages/client/
 import { musicBriefMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/audio/music.ts";
 import { worldId } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
 import { registerAudioRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/audio.ts";
-import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
+import {
+  normalizeWorld,
+  normalizeWorldAudio,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { routesOf } from "./fixtures/otome-forge-art.ts";
 import { HE, KAI, MIR, SHE, json, storyWorld } from "./fixtures/otome-forge-story.ts";
 
@@ -158,6 +166,98 @@ test("the audio settings are bounded, keep the briefs and tracks, and never show
   assert.equal((await t.call("POST", "/runs/:run/audio/settings", { audio: "loud" })).status, 400);
 });
 
+test("an uploaded music folder is saved without generation and survives unrelated audio saves", async () => {
+  assert.equal(normalizeOtomeAudio(undefined).musicFolder, "");
+  const t = await audioWorld("r-foldermusic1-dddddd");
+  const saved = await t.call("POST", "/runs/:run/audio/settings", {
+    audio: { generate: false, musicFolder: "music/My uploaded songs/Romance" },
+  });
+  assert.equal(saved.status, 200);
+  assert.equal(saved.body.audio.musicFolder, "music/My uploaded songs/Romance");
+  assert.equal((await t.world()).audio.musicFolder, "music/My uploaded songs/Romance");
+  const next = await t.call("POST", "/runs/:run/audio/settings", { audio: { muted: true } });
+  assert.equal(next.body.audio.musicFolder, "music/My uploaded songs/Romance");
+  assert.equal(t.calls.length, 0, "saving uploaded music never asks a model for a brief or track");
+  for (const invalid of [
+    null,
+    true,
+    "/music/songs",
+    "music/../private",
+    "music//songs",
+    "music/songs\\other",
+    "sfx/ui",
+    "music/line\nfeed",
+  ]) {
+    assert.equal(normalizeOtomeAudio({ musicFolder: invalid }).musicFolder, "");
+  }
+});
+
+test("music folder identifiers are bounded through saved worlds, settings and manifest selection", async () => {
+  const oversized = `music/${"a".repeat(2000)}`;
+  assert.equal(normalizeOtomeAudio({ musicFolder: oversized }).musicFolder, "");
+  const limit = `music/${"a".repeat(994)}`;
+  const overflow = `${limit}a`;
+  const nested = "music/My uploaded songs/Romance";
+  assert.equal(limit.length, 1000);
+  assert.equal(overflow.length, 1001);
+  const t = await audioWorld("r-folderbound-eeeeee");
+  for (const [musicFolder, expected] of [
+    [limit, limit],
+    [overflow, ""],
+    [oversized, ""],
+    [nested, nested],
+  ]) {
+    assert.equal(normalizeOtomeAudio({ musicFolder }).musicFolder, expected);
+    assert.equal(normalizeWorldAudio({ musicFolder }).musicFolder, expected);
+    assert.equal(normalizeWorld({ audio: { musicFolder } }).audio.musicFolder, expected);
+    const saved = await t.call("POST", "/runs/:run/audio/settings", { audio: { musicFolder } });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.body.audio.musicFolder, expected);
+    assert.equal((await t.world()).audio.musicFolder, expected);
+  }
+  assert.equal(t.calls.length, 0, "normalizing a folder never generates a brief or track");
+  const entry = (path: string) => [path.replace(/\.[^.]+$/u, "").replaceAll("/", ":"), { path }];
+  const valid = entry(`${nested}/song.mp3`);
+  const assets = Object.fromEntries([valid, entry(`${overflow}/song.mp3`), entry(`${oversized}/song.mp3`)]);
+  assert.deepEqual(musicAssetsInFolder(assets, "music"), Object.fromEntries([valid]));
+  assert.deepEqual(musicAssetsInFolder(assets, overflow), {});
+  assert.deepEqual(musicAssetFolders(assets), ["music", "music/My uploaded songs", nested]);
+});
+
+test("music folders contain only manifest-listed audio under that exact folder or its descendants", () => {
+  const entry = (path: string) => [path.replace(/\.[^.]+$/u, "").replaceAll("/", ":"), { path }];
+  const assets = Object.fromEntries([
+    entry("music/My songs/Polskie/miłość.MP3"),
+    entry("music/My songs/piano.ogg"),
+    entry("music/My songs elsewhere/other.wav"),
+    entry("sfx/ui/tap.wav"),
+    entry("music/My songs/cover.png"),
+    entry("music/My songs/../private.mp3"),
+    entry("music/My songs/line\nfeed.mp3"),
+    ["music:malformed", { path: "music/My songs/spoof.mp3" }],
+    ["music:bad-entry", null],
+  ]);
+  assert.deepEqual(
+    musicAssetFolders(assets),
+    ["music", "music/My songs", "music/My songs elsewhere", "music/My songs/Polskie"].sort((a, b) =>
+      a.localeCompare(b),
+    ),
+  );
+  const picked = musicAssetsInFolder(assets, "music/My songs");
+  assert.deepEqual(
+    Object.values(picked)
+      .map((value) => value.path)
+      .sort(),
+    ["music/My songs/Polskie/miłość.MP3", "music/My songs/piano.ogg"].sort(),
+  );
+  assert.deepEqual(musicAssetsInFolder(assets, "music/My songs/Polskie"), {
+    "music:My songs:Polskie:miłość": { path: "music/My songs/Polskie/miłość.MP3" },
+  });
+  assert.deepEqual(musicAssetsInFolder(assets, "music/deleted"), {});
+  assert.deepEqual(musicAssetFolders(null), []);
+  assert.deepEqual(musicAssetsInFolder(assets, "music/.."), {});
+});
+
 test("voices: a card's own Engine voice, the pool for an archetype love interest, the persona's voice, NPCs only on request", async () => {
   const config = {
     connectionId: "tts-1",
@@ -165,6 +265,7 @@ test("voices: a card's own Engine voice, the pool for an archetype love interest
       "tts-1": {
         voiceAssignments: [
           { characterId: "card-kai", voice: "kai-voice" },
+          { characterId: "card-mireille", voice: "mireille-card-voice" },
           { characterId: "persona-ines", voice: "ines-voice" },
         ],
         npcDefaultMaleVoices: ["m1", "m2", "m3"],
@@ -210,6 +311,15 @@ test("voices: a card's own Engine voice, the pool for an archetype love interest
   const mireille = await voice("Mireille");
   assert.ok(["f1", "f2"].includes(mireille!), "an archetype love interest gets the pool for her voice");
   assert.equal(await voice("Mireille"), mireille, "and always the same one");
+  lis[1]!.cardId = "card-mireille";
+  assert.equal(
+    await voice("Mireille"),
+    "mireille-card-voice",
+    "a linked generated love interest uses the selected card",
+  );
+  assert.equal(lis[1]!.source, "archetype", "linking retains the love interest's creation source");
+  delete lis[1]!.cardId;
+  assert.equal(await voice("Mireille"), mireille, "unlinking restores the same generated voice fallback");
   assert.equal(await voice("Ines"), "ines-voice", "the protagonist uses her persona's voice");
   assert.equal(await voice("you"), "ines-voice");
   assert.equal(

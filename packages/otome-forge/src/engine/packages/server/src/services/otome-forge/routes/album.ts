@@ -5,14 +5,20 @@
 // - cgs: story CGs once seen (M2b: POST .../art/cg/seen), each owned Memory's CG once painted, and couple sets' pair
 //   portraits, oldest first. The client saves an image through the Engine's services.imageDownloads.
 // - memories: the owned Memories, Moments and Snapshots in the order won, with how far each story has been read.
-// - timeline and favorites: the state's Love Timeline (stages, Snapshots, couple sets, …) and starred lines.
+// - timeline and favorites: the state's Love Timeline (stages, firsts, Snapshots, couple sets) with each owned Moment
+//   and Memory on the day it was won (#1947; not stored, so pulls made before it show too), and starred lines.
 // - soundtrack: each cue with its generated track, or null for the stock one.
 // - tells: per love interest, the tells she has learned to read: the mask tells Read Him taught (M5), and those of each
 //   secret of his she has learned (its truth is out, so what gave it away reads plainly now). The seed of the R2
 //   Dossier.
 // Nothing the player has not won, seen or learned is listed: no banner item not owned, no CG not seen, no tell of a
 // secret still hidden.
-import type { LiState, RunState, Unit } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import type {
+  LiState,
+  RunState,
+  TimelineEntry,
+  Unit,
+} from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { MUSIC_MOODS } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import type {
   AlbumImage,
@@ -64,7 +70,8 @@ export function albumCgs(run: Pick<RunDocuments, "state">, items: readonly Item[
       return { ...cg, source: cg.key.startsWith("pair:") ? "pair" : "story", ...(title ? { title } : {}) };
     }),
     ...owned.flatMap((item): AlbumImage[] => {
-      if (item.kind !== "memory5" || item.art?.state !== "ready" || !item.art.url) return [];
+      if ((item.kind !== "memory5" && item.kind !== "moment4") || item.art?.state !== "ready" || !item.art.url)
+        return [];
       const won = run.state.owned.at[item.id] ?? "";
       return [
         {
@@ -79,6 +86,22 @@ export function albumCgs(run: Pick<RunDocuments, "state">, items: readonly Item[
       ];
     }),
   ].sort((a, b) => a.at.localeCompare(b.at));
+}
+
+/**
+ * The Love Timeline as the Album shows it: the state's entries, and each owned Moment and Memory on the day it was won
+ * (`owned.at`), oldest first. They are read from what is owned rather than stored, so every pull shows, and the
+ * calendar's anniversaries (S/routes/care.ts, from the state's firsts) are unchanged.
+ */
+function albumTimeline(run: RunDocuments, owned: readonly Item[]): TimelineEntry[] {
+  const listed = new Set(run.state.timeline.flatMap((entry) => (entry.ref ? [entry.ref] : [])));
+  const won = owned.flatMap((item): TimelineEntry[] => {
+    if ((item.kind !== "memory5" && item.kind !== "moment4") || !item.li || listed.has(item.id)) return [];
+    const at = run.state.owned.at[item.id];
+    if (!at) return [];
+    return [{ at, li: item.li, kind: item.kind === "memory5" ? "memory" : "moment", text: item.title, ref: item.id }];
+  });
+  return [...run.state.timeline, ...won].sort((a, b) => a.at.localeCompare(b.at));
 }
 
 export async function albumView(deps: Pick<RouteDeps, "store">, runId: string): Promise<AlbumView> {
@@ -98,7 +121,7 @@ export async function albumView(deps: Pick<RouteDeps, "store">, runId: string): 
     memories: owned
       .filter((item) => MEMORY_KINDS.has(item.kind))
       .map((item) => ({ ...itemView(runId, item, true), read: readState(run.state, item) })),
-    timeline: run.state.timeline,
+    timeline: albumTimeline(run, owned),
     favorites: run.state.favorites,
     soundtrack: MUSIC_MOODS.map((cue) => ({ cue, track: tracks.find((track) => track.cue === cue) ?? null })),
     tells,

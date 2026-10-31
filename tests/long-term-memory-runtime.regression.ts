@@ -9,11 +9,11 @@ import { runRegressionToCompletion, runWithSafeCleanup } from "./regression-help
 async function main() {
   const repoRoot = resolve(dirname(process.argv[1] ?? process.cwd()), "..");
   const packageManifest = JSON.parse(await readFile(join(repoRoot, "packages/long-term-memory/manifest.json"), "utf8"));
-  // engine.min cannot tell Engine staging from the 2.5.1 release; capability API 1.387 (E2 + E3) can.
+  // engine.min cannot tell Engine staging from the 2.5.1 release; capability API 1.390 (E2 + E3, Engine header) can.
   assert.equal(packageManifest.engine.min, "2.5.1");
   assert.deepEqual(
     packageManifest.capabilityApi,
-    { major: 1, minor: 387 },
+    { major: 1, minor: 390 },
     "Long-Term Memory is gated by its capability API",
   );
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
@@ -29,7 +29,7 @@ async function main() {
   );
   const { withLtmVaultLock } = await import(`${source}/persistence/vault-lock.ts`);
   const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
-  const { createLtmStorageReadService, listLtmPackageReaders, recordLtmPackageRead } = await import(
+  const { isLtmNoteShareable, listLtmPackageReaders, recordLtmPackageRead } = await import(
     `${source}/services/storage-read.ts`
   );
   const { createLtmRecallService } = await import(`${source}/services/recall.ts`);
@@ -110,6 +110,7 @@ async function main() {
     estimatedTokens: 1,
   });
   const services = new Map<string, any>();
+  const serviceOptions = new Map<string, { hostOnly?: boolean } | undefined>();
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-runtime-"));
   const logger = { debug() {}, info() {}, warn() {}, error() {} };
   let resolvedAdapter = {
@@ -241,8 +242,9 @@ async function main() {
         },
       },
     },
-    registerService(name: string, service: unknown) {
+    registerService(name: string, service: unknown, options?: { hostOnly?: boolean }) {
       services.set(name, service);
+      serviceOptions.set(name, options);
       return () => services.delete(name);
     },
     async registerPrivilegedRoutes() {
@@ -299,70 +301,28 @@ async function main() {
         "explicit adapter",
         "explicit test adapters must bypass the runtime resolver",
       );
-      // The registered storage service is a filtered read for other packages; the test writes to the vault directly.
+      // The test writes to the vault directly.
       storage = new LongTermMemoryStorage(join(dataDir, "long-term-memory"));
       runtime = services.get("long-term-memory:runtime");
-      const storageService = services.get("long-term-memory:storage");
-      assert.deepEqual(
-        Object.keys(storageService),
-        ["storage"],
-        "the storage service must not hand out the vault folder or drafts",
+      assert.equal(
+        services.has("long-term-memory:storage"),
+        false,
+        "the older storage read must not be registered; other packages read through recall",
       );
-      assert.deepEqual(
-        Object.keys(storageService.storage),
-        ["listNotes"],
-        "the storage service must offer only listNotes",
-      );
-      // Its own vault, so these notes stay out of the recall checks below.
-      const sharedRoot = await mkdtemp(join(tmpdir(), "marinara-ltm-shared-read-"));
-      const sharedStorage = new LongTermMemoryStorage(sharedRoot);
-      try {
-        for (const [id, overrides] of [
-          ["world_shared_character", { scope: { characterIds: ["char-shared"] } }],
-          [
-            "world_shared_chat_and_character",
-            { scope: { chatId: "chat-x", chatIds: ["chat-x"], characterIds: ["char-shared"] } },
-          ],
-          ["world_shared_chat_only", {}],
-          ["world_shared_other_character", { scope: { characterIds: ["char-other"] } }],
-          ["world_shared_archived", { scope: { characterIds: ["char-shared"] }, status: "archived" }],
-          ["world_shared_game_only", { scope: { characterIds: ["char-shared"] }, modes: ["game"] }],
-          ["char_shared_own", { type: "character", scope: { characterIds: ["char-shared"] } }],
-          [
-            "source_shared_summary",
-            {
-              type: "source",
-              scope: { chatId: "chat-x", chatIds: ["chat-x"], characterIds: ["char-shared"] },
-              provenance: { kind: "chat_summary", sourceId: "chat-x", entryId: "shared" },
-              sections: { source: { text: "the raw summary", updatedAt: timestamp } },
-            },
-          ],
-        ] as const)
-          await sharedStorage.createNote(note(id, "chat-x", `${id} text`, overrides));
-        const sharedRead = createLtmStorageReadService(sharedStorage).storage;
-        const sharedIds = async (filter: unknown) =>
-          ((await sharedRead.listNotes(filter)) as Array<{ id: string }>).map((entry) => entry.id);
-        assert.deepEqual(
-          await sharedIds({ characterIds: ["char-shared"] }),
-          ["char_shared_own", "world_shared_character", "world_shared_chat_and_character"],
-          "another package must see only memories available to the character everywhere, not sources, archived or game-only",
-        );
-        assert.deepEqual(await sharedIds({ type: "character", characterIds: ["char-shared"] }), ["char_shared_own"]);
-        assert.deepEqual(await sharedIds({}), [], "a read without character ids must list nothing");
-        assert.deepEqual(await sharedIds({ characterIds: [] }), [], "an empty character list must list nothing");
-        assert.deepEqual(
-          await sharedIds({ characterIds: ["char-shared"], scope: { chatId: "chat-x", chatIds: ["chat-x"] } }),
-          ["char_shared_own", "world_shared_character", "world_shared_chat_and_character"],
-          "a chat in the filter must not open memories limited to that chat",
-        );
-      } finally {
-        await sharedStorage.cleanup();
-        await rm(sharedRoot, { recursive: true, force: true });
-      }
       assert.equal(
         services.get("long-term-memory:recall")?.version,
         1,
         "the recall service other packages read must carry its contract version",
+      );
+      assert.equal(
+        serviceOptions.get("long-term-memory:runtime")?.hostOnly,
+        true,
+        "the runtime service gives recall for any chat and the vault lock, so only the Engine may read it",
+      );
+      assert.notEqual(
+        serviceOptions.get("long-term-memory:recall")?.hostOnly,
+        true,
+        "other packages read recall, so it must stay open to them",
       );
       const recallRoot = await mkdtemp(join(tmpdir(), "marinara-ltm-shared-recall-"));
       const recallStorage = new LongTermMemoryStorage(recallRoot);
@@ -394,6 +354,15 @@ async function main() {
           ["world_recall_archived", { ...forA, status: "archived" }],
           ["world_recall_game", { ...forA, modes: ["game"] }],
           ["world_recall_persona", { scope: { personaIds: ["persona-p"] } }],
+          [
+            "source_recall_summary",
+            {
+              ...forA,
+              type: "source",
+              provenance: { kind: "chat_summary", sourceId: "chat-r", entryId: "shared" },
+              sections: { source: { text: "source_recall_summary keeps the cobalt archive", updatedAt: timestamp } },
+            },
+          ],
         ] as const)
           await recallStorage.createNote(note(id, "chat-r", `${id} keeps the cobalt archive`, overrides));
         const recall = createLtmRecallService(recallStorage);
@@ -411,6 +380,16 @@ async function main() {
           "recall must return the accounts' memories available everywhere, threads and events first, " +
             "without tone, chat-limited, archived, game-only, other characters' or subject-less character memories",
         );
+        assert.equal(
+          (await recalled({ characterIds: ["char-a"], whole: true }))?.includes("source_recall_summary"),
+          false,
+          "an imported source must never be recalled, whole or ranked",
+        );
+        assert.equal(
+          isLtmNoteShareable({ type: "source", status: "active", modes: ["roleplay", "conversation"] }),
+          false,
+          "an imported source must stay unshareable even when recall's own type list changes",
+        );
         assert.ok(
           result?.sections.every((section: { title?: string; text: string }) => section.title && section.text),
           "every section must carry its memory's title and text",
@@ -421,6 +400,48 @@ async function main() {
         );
         assert.deepEqual(await recalled({ characterIds: ["char-nobody"] }), [], "no memories must give no sections");
         assert.deepEqual(await recalled({ characterIds: ["char-a"], mode: "conversation" }), []);
+        const forW = { scope: { characterIds: ["char-w"] } };
+        const bigText = `world_w_big keeps the cobalt archive. ${"The vault door stays shut until dusk. ".repeat(10)}`;
+        for (const [id, text, overrides] of [
+          ["world_w_old", `world_w_old keeps the cobalt archive`, { ...forW, updatedAt: "2026-07-18T00:00:00.000Z" }],
+          ["world_w_new", `world_w_new keeps the cobalt archive`, { ...forW, updatedAt: "2026-07-20T00:00:00.000Z" }],
+          ["world_w_big", bigText, { ...forW, updatedAt: "2026-07-21T00:00:00.000Z" }],
+          ["thread_w", `thread_w keeps the cobalt archive`, { ...forW, type: "thread" }],
+          ["char_w_other", `char_w_other keeps the cobalt archive`, { ...forW, type: "character", ...about("char-z") }],
+          ["char_w_nobody", `char_w_nobody keeps the cobalt archive`, { ...forW, type: "character" }],
+        ] as const)
+          await recallStorage.createNote(note(id, "chat-r", text, overrides));
+        const wholeSections = async (input: Record<string, unknown> = {}) =>
+          (
+            (await recall.recall({ queryText: "cobalt archive", characterIds: ["char-w"], whole: true, ...input })) as {
+              version: number;
+              sections: Array<{ noteId: string; text: string }>;
+            }
+          ).sections;
+        const rankedIds = await recalled({ characterIds: ["char-w"] });
+        const wholeAll = await wholeSections();
+        assert.deepEqual(
+          wholeAll.map((section) => section.noteId),
+          ["thread_w", "world_w_big", "world_w_new", "world_w_old"],
+          "whole recall must apply the subject rule, order by type and then newest first",
+        );
+        assert.deepEqual(
+          [...(rankedIds ?? [])].sort(),
+          wholeAll.map((section) => section.noteId).sort(),
+          "whole recall must share the same memories as ranked recall",
+        );
+        assert.equal(wholeAll.find((section) => section.noteId === "world_w_big")?.text, bigText.trim());
+        const wholeTight = await wholeSections({ maxTokens: 50 });
+        assert.deepEqual(
+          wholeTight.map((section) => section.noteId),
+          ["thread_w", "world_w_new", "world_w_old"],
+          "a whole recall must skip a memory that does not fit, never cut it, and still fit later ones",
+        );
+        assert.equal(
+          wholeTight.find((section) => section.noteId === "world_w_new")?.text,
+          "world_w_new keeps the cobalt archive",
+        );
+        assert.deepEqual(await wholeSections({ mode: "conversation" }), []);
         assert.equal(
           await recall.recall({ queryText: "cobalt archive" }),
           null,
@@ -436,8 +457,9 @@ async function main() {
           await recall.recall({ caller: "Slurp 0.3!", queryText: "cobalt archive", characterIds: ["char-a"] }),
           "a malformed caller name must not stop the read",
         );
-        await createLtmStorageReadService(recallStorage).storage.listNotes({
+        const noodleRead = await recall.recall({
           caller: "noodle",
+          queryText: "cobalt archive",
           characterIds: ["char-a"],
         });
         assert.deepEqual(
@@ -492,14 +514,10 @@ async function main() {
             .reverse(),
           "readers must be ordered by their last read, newest first",
         );
-        const noodleNotes = await createLtmStorageReadService(recallStorage).storage.listNotes({
-          caller: "noodle",
-          characterIds: ["char-a"],
-        });
-        assert.ok(noodleNotes.length > 0, "the noodle read must return memories for the sum to mean anything");
+        assert.ok(noodleRead?.sections.length, "the noodle read must return memories for the sum to mean anything");
         assert.equal(
           readers.find((reader) => reader.caller === "noodle")?.memories,
-          noodleNotes.length,
+          noodleRead?.sections.length,
           "a reader's memories must add up what its reads returned",
         );
         await updateLtmGlobalSettings({ longTermMemoryShareWithPackages: false }, recallRoot);
@@ -508,10 +526,10 @@ async function main() {
           null,
           "turning off Other Agents can read memories must stop recall for other packages",
         );
-        assert.deepEqual(
-          await createLtmStorageReadService(recallStorage).storage.listNotes({ characterIds: ["char-a"] }),
-          [],
-          "turning off Other Agents can read memories must stop the storage read too",
+        assert.equal(
+          await recall.recall({ queryText: "cobalt archive", characterIds: ["char-w"], whole: true }),
+          null,
+          "turning off Other Agents can read memories must stop whole recall too",
         );
       } finally {
         await recallStorage.cleanup();

@@ -37,11 +37,15 @@ export type CapabilityProps = {
   onOpenActivePromptPresetEditor?: () => void;
   onClose?: () => void;
   onManagePackage?: () => void;
+  /** Capability API 1.390: the Engine draws the header and gives a slot for header buttons. */
+  engineHeader?: boolean;
+  headerSlot?: HTMLElement | null;
   onDirtyChange?: (dirty: boolean) => void;
   confirmAction?: (options: {
     title: string;
     message: string;
     confirmLabel?: string;
+    cancelLabel?: string;
     tone?: "destructive" | "default";
   }) => boolean | Promise<boolean>;
 };

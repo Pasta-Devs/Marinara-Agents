@@ -3434,6 +3434,128 @@ async function main() {
     if (basis) assert.equal(result.diagnostics[0]?.details?.matchBasis, basis, label);
   }
 
+  // LTM's own characters relate by whole name parts (#1905): one match binds to it, several go to
+  // review, and card short names and other chats' characters keep their own rules.
+  const { buildCatalogIndex, matchTrustedNameRelation } = await import(`${source}/identity/subject-matching.ts`);
+  const otherChatScope = { chatId: "other-chat" };
+  const localNoteEntry = (name: string, scope: typeof scopedChat.scope | typeof otherChatScope = scopedChat.scope) => ({
+    subject: localCharacterSubjectForName(scope, name)!,
+    name,
+    aliases: [],
+    canonicalSlug: name.toLowerCase().replace(/\s+/g, "_"),
+    familyId: ltmScopeFamilyId(scope)!,
+    sourceScope: "local_note" as const,
+  });
+  const localKey = (name: string) => localCharacterSubjectForName(scopedChat.scope, name)!.key;
+  assert.equal(
+    matchTrustedNameRelation(
+      buildCatalogIndex({ entries: [localNoteEntry("Preston Farraday", otherChatScope)], notes: [] }),
+      "Preston",
+      ltmScopeFamilyId(scopedChat.scope),
+    ),
+    null,
+    "another chat's character never relates",
+  );
+  // Each name expects the character it joins, or "review".
+  for (const { label, roster = [], saved = [], names, expect } of [
+    {
+      label: "short form of a saved full name",
+      saved: ["Preston Farraday"],
+      names: ["Preston"],
+      expect: ["Preston Farraday"],
+    },
+    { label: "full form of a saved short name", saved: ["Preston"], names: ["Preston Farraday"], expect: ["Preston"] },
+    {
+      label: "both forms new in one batch",
+      names: ["Preston", "Preston Farraday"],
+      expect: ["Preston Farraday", "Preston Farraday"],
+    },
+    {
+      label: "shared surname needs review",
+      saved: ["Preston Farraday", "Vivienne Farraday"],
+      names: ["Farraday"],
+      expect: ["review"],
+    },
+    {
+      label: "shared first name needs review",
+      saved: ["Preston Farraday", "Preston Hale"],
+      names: ["Preston"],
+      expect: ["review"],
+    },
+    {
+      label: "a surname also fits a full name new in the batch",
+      saved: ["Vivienne Farraday"],
+      names: ["Preston Farraday", "Farraday"],
+      expect: ["Preston Farraday", "review"],
+    },
+    {
+      label: "two different full names of one saved short name",
+      saved: ["Preston"],
+      names: ["Preston Farraday", "Preston Hale"],
+      expect: ["review", "review"],
+    },
+    { label: "Hangul given name of a saved full name", saved: ["도진욱"], names: ["진욱"], expect: ["도진욱"] },
+    { label: "Hangul full name of a saved given name", saved: ["진욱"], names: ["도진욱"], expect: ["진욱"] },
+    { label: "a camel-case part is not a name part", saved: ["JoAnn"], names: ["Ann"], expect: ["Ann"] },
+    { label: "a name is not a camel-case part of a saved name", saved: ["Ann"], names: ["JoAnn"], expect: ["JoAnn"] },
+    {
+      label: "card outranks a local character",
+      roster: ["Preston Farraday"],
+      saved: ["Preston Hale"],
+      names: ["Preston"],
+      expect: ["review"],
+    },
+    { label: "card nickname that is not a name part", roster: ["Ashleigh Farraday"], names: ["Ash"], expect: ["Ash"] },
+    { label: "card short name", roster: ["Ashleigh Farraday"], names: ["Ashleigh"], expect: ["review"] },
+  ] as Array<{ label: string; roster?: string[]; saved?: string[]; names: string[]; expect: string[] }>) {
+    const rosterCatalog = buildTrustedLtmSubjectCatalog({
+      roster: roster.map((name) => ({ kind: "character" as const, id: name.toLowerCase(), name, aliases: [] })),
+      notes: [],
+    });
+    const catalog = {
+      ...rosterCatalog,
+      entries: [...rosterCatalog.entries, ...saved.map((name) => localNoteEntry(name))],
+    };
+    const units = names.map((name, position) => ({
+      ...namedSubjectUnit,
+      id: `${namedSubjectUnit.id}-${position}`,
+      subjectNames: [name],
+    }));
+    const context = prepareLtmSubjectIdentityContext({
+      ...borrowingOptions,
+      catalog,
+      units,
+      sourceBackedNpcSourceText: names.map((name) => `${name} speaks.`).join(" "),
+    });
+    const result = context.resolve({ units, existingNotes: [] });
+    const resolvedIds = new Set(result.units.map((resolved) => resolved.id));
+    units.forEach((unit, position) => {
+      const expected = expect[position]!;
+      const name = `${label}: ${unit.subjectNames[0]}`;
+      if (expected === "review") {
+        assert.equal(resolvedIds.has(unit.id), false, name);
+        assert.ok(
+          result.diagnostics.some(
+            (entry) => entry.mutationId === unit.id && entry.details?.matchBasis === "partial_name_requires_review",
+          ),
+          name,
+        );
+        return;
+      }
+      assert.deepEqual(
+        result.units.find((resolved) => resolved.id === unit.id)?.subjectKeys,
+        [localKey(expected)],
+        name,
+      );
+      assert.equal(
+        context.identityKeyForUnit(unit),
+        context.identityKeyForUnit({ ...unit, subjectKeys: [localKey(expected)] }),
+        `${name}: prediction agrees with resolution`,
+      );
+    });
+    assert.equal(result.droppedCandidates.length, expect.filter((expected) => expected === "review").length, label);
+  }
+
   const dedupUnit = (text: string, subjectId = "dedup_subject", sectionKey = "facts") =>
     unit(chat, {
       bucket: "world_fact",

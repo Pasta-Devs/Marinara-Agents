@@ -1,5 +1,26 @@
 # Slurp release notes
 
+## 0.4.12 — 2026-10-30
+
+- Wardrobe import finds looks again. It accepts untidy model replies (other list names, extra fields, long summaries, tags as one line) and has room for long replies and thinking models.
+- The "Legacy wardrobe note" source says "(empty)" when the Creator has no old note, so it is clear why you cannot pick it.
+- Long-Term Memory no longer turns people from your chats into collabs. Creators keep those people out of posts and DMs unless the brief names them, and new installs recall only the relevant memories.
+
+## 0.4.11 — 2026-10-29
+
+- Backstage (Engine link) no longer says Long-Term Memory isn't sharing after its "Other Agents can read memories" switch is turned on. The line clears at once after Slurp's offer, and the next time the panel loads after Long-Term Memory's offer or Memory Settings.
+
+## 0.4.10 — 2026-10-29
+
+- Turning on "What your other Agents know" now asks whether to turn on Long-Term Memory's "Other Agents can read memories" when that switch is off. "Turn it on" changes only that switch; "Not now" leaves it alone.
+
+## 0.4.9 — 2026-10-29
+
+- Creators' posts and DM replies now use what Long-Term Memory remembers about them, through its recall service. A new "Long-term memory" choice in Backstage (Engine link) sets whether they get whole memories (the default) or only the parts that fit the post or message. It shows while "What your other Agents know" is on.
+- Backstage says when Long-Term Memory is missing, or is not sharing ("Other Agents can read memories" is off in its Memory Settings).
+- A DM brings in the persona's memories only when that persona's Slurp page uses Linked identity. A hinted or concealed page never does.
+- The Creator brief no longer reads Long-Term Memory's storage; the Character Tracker, World State and Persona Stats lines are unchanged.
+
 ## 0.4.8 — 2026-10-28
 
 - World lens: the canon-anchor reading also returns `world` (era, device, money, festivals). Cache version v4 → v5, so each card is read once more in the background. A modern card has no lens and nothing changes.

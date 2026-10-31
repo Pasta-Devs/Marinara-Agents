@@ -4,7 +4,8 @@
 // grant() is the one place Starlight and affection are added. Story earnings (a beat, a chapter, and the chapter's Lead
 // and Foil) are never capped. Activity earnings are capped per local day: Starlight at 400 in all, affection at 300 per
 // love interest. The day is forgeDayKey(Date.now()) in the request's time zone (every route runs inside
-// forgeTimeZoneRoutes), so it ends at the player's own midnight. Affection only rises.
+// forgeTimeZoneRoutes), so it ends at the player's own midnight. Choice losses are separate from earnings and never
+// refund those caps; the affection level already reached is their floor.
 //
 // readBeatToEnd() is the whole state change of reading a beat to its end: +30 the first time, and when that beat is the
 // chapter's last node, the chapter's Starlight, the Lead's and Foil's affection, the planner's ledger and the Lead's
@@ -48,7 +49,7 @@ const whole = (value: number | undefined) =>
 
 /**
  * Adds Starlight to the wallet and affection points to `li`, within the day's caps for an activity. `dayKey` defaults
- * to today in the request's time zone. Negative amounts add nothing: points, and so levels, only rise.
+ * to today in the request's time zone. This earning-only path ignores negative amounts.
  */
 export function grant(
   state: RunState,
@@ -109,8 +110,8 @@ const COMPLETION: Partial<Record<ChapterKind, { source: RewardSource; starlight:
   repair: { source: "chapter", starlight: STARLIGHT_EARNINGS.chapter },
   route: { source: "route-chapter", starlight: STARLIGHT_EARNINGS.routeChapter },
 };
-/** A date's beats are part of the date, which is paid as a capped activity. */
-const PAYS_BEATS: ReadonlySet<ChapterKind> = new Set<ChapterKind>(["main", "route", "repair", "story"]);
+/** A date's beats are part of the date, which is paid as a capped activity. The prologue pays its beat, and no affection. */
+const PAYS_BEATS: ReadonlySet<ChapterKind> = new Set<ChapterKind>(["prologue", "main", "route", "repair", "story"]);
 
 /** The newest main chapter number the state has finished, or 0 (a conflict planted outside a main chapter). */
 function latestMain(state: RunState): number {

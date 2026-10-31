@@ -46,10 +46,11 @@ import {
   OUTSIDE_AFFECTION_DAILY_CAP,
   STARLIGHT_EARNINGS,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
+import { plushSvgUrl } from "../art/plush-svg.js";
 import { linesView } from "../home/lines.js";
 import { OtomeForgeError } from "../http.js";
 import { wornLookUrl } from "../schemas/common.js";
-import { STATE_LIMITS, clipText, keepClawRounds, keepNewest } from "../schemas/state.js";
+import { STATE_LIMITS, clipText, keepClawRounds, keepTimeline } from "../schemas/state.js";
 import { grant } from "../state/rewards.js";
 
 /** The Love Timeline's kind (and `firsts` key) for his own plush joining the shelf. */
@@ -139,19 +140,16 @@ export function finishClawRound(
     next = {
       ...next,
       lis: { ...next.lis, [li]: { ...liState, firsts: { ...liState.firsts, [FIRST_PLUSH]: at } } },
-      timeline: keepNewest(
-        [
-          ...next.timeline,
-          {
-            at,
-            li,
-            kind: FIRST_PLUSH,
-            text: clipText(`${unit.name}'s plush joined the shelf.`, STATE_LIMITS.text),
-            ref: `claw/${input.round}`,
-          },
-        ],
-        STATE_LIMITS.timeline,
-      ),
+      timeline: keepTimeline([
+        ...next.timeline,
+        {
+          at,
+          li,
+          kind: FIRST_PLUSH,
+          text: clipText(`${unit.name}'s plush joined the shelf.`, STATE_LIMITS.text),
+          ref: `claw/${input.round}`,
+        },
+      ]),
     };
   }
 
@@ -194,7 +192,9 @@ export function plushArtOf(unit: Pick<Unit, "portrait" | "cutouts" | "outfits" |
  */
 export function playView(
   state: RunState,
-  units: ReadonlyArray<Pick<Unit, "id" | "bible" | "portrait" | "cutouts" | "outfits" | "wornOutfit" | "lines">>,
+  units: ReadonlyArray<
+    Pick<Unit, "id" | "bible" | "portrait" | "cutouts" | "outfits" | "wornOutfit" | "lines" | "plushArt">
+  >,
   dayKey: string,
   dates: Record<LiId, boolean> = {},
 ): PlayView {
@@ -205,6 +205,7 @@ export function playView(
     const play = unit?.bible?.play;
     const rupture = state.lis[id]!.rupture !== null;
     const plush = unit ? plushArtOf(unit) : undefined;
+    const animal = plushSvgUrl(unit?.plushArt?.svg);
     const { claw, cold } = unit ? linesView(unit, state.lis[id]!) : { claw: null, cold: [] };
     lis[id] = {
       cheat: cheatOf(unit),
@@ -212,6 +213,7 @@ export function playView(
       rupture,
       makeItRight: dates[id] ?? rupture,
       ...(plush ? { plush } : {}),
+      ...(animal ? { animal } : {}),
       lines: { claw, cold },
     };
   }

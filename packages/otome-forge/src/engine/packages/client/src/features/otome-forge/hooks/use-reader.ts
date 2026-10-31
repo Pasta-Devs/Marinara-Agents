@@ -21,10 +21,13 @@ import {
   onStageAt,
   openingLine,
   openingNode,
+  placeEntry,
   readerBeat,
+  readyUrl,
   ruptureHold,
   skipTarget,
   speakerLi,
+  worldPlaces,
   type BeatResponse,
   type Picks,
   type ReaderLine,
@@ -33,7 +36,7 @@ import type {
   BeatView,
   ChapterDetail,
   ChoiceOption,
-  ConfrontationEnding,
+  ClimaxEnding,
   ConfrontationView,
   Favorite,
   ForgeChoice,
@@ -49,6 +52,7 @@ import type {
 } from "../shared/api-types";
 import { useOtomeProps } from "../props";
 import { LIMIT_IDS, type LimitId } from "../shared/content";
+import { placeKey } from "../shared/places";
 import type { SpeakOutcome } from "./use-otome-audio";
 import { patchRun, runQueryKey } from "./use-run";
 
@@ -207,6 +211,7 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
   const detail = chapterQuery.data ?? null;
   const base = `${runPath(runKey)}/chapters/${encodeURIComponent(chapterKey)}`;
   const protagonist = view.player.name;
+  const { reviewImagePromptsBeforeSend } = useOtomeProps();
 
   const [node, setNode] = useState<number | null>(startNode ?? null);
   const [tagsSeen, setTagsSeen] = useState(false);
@@ -256,17 +261,65 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
     [beat, position, protagonist],
   );
   const lineIndex = timeline && position ? Math.min(position.line, timeline.lines.length - 1) : -1;
-  const current = timeline?.lines[lineIndex] ?? null;
+  const refBase = `${chapterKey}/${node ?? 0}r${beat?.rewrites ?? 0}`;
+  const images = view.world.images;
+  const sceneId = beat && node !== null ? `${runKey}:${refBase}` : "";
+  const [scene, setScene] = useState<{ id: string; art: SceneArt } | null>(null);
+  const [sceneTick, setSceneTick] = useState(0);
+  const [sceneUnavailable, setSceneUnavailable] = useState<string | null>(null);
+  const sceneArt = scene && scene.id === sceneId ? scene.art : null;
+  const place = timeline?.lines
+    .slice(0, lineIndex + 1)
+    .reverse()
+    .find((line) => line.segment.place)?.segment.place;
+  const scenePlace = placeEntry(sceneArt?.places, place);
+  const worldPlace = placeEntry(worldPlaces(view.world), place);
+  const placeInfo = readyUrl(scenePlace?.art)
+    ? scenePlace
+    : readyUrl(worldPlace?.art)
+      ? worldPlace
+      : (scenePlace ?? worldPlace);
+  const placeUrl = readyUrl(placeInfo?.art);
+  const backgroundKey = sceneId && place ? `${sceneId}:${placeKey(place)}` : "";
+  // Once a location has opened (or was bypassed), manual repaints cannot interrupt its read.
+  const [openedBackgrounds, setOpenedBackgrounds] = useState<ReadonlySet<string>>(() => new Set());
+  const paintablePlace = beat?.places.some(
+    (entry) => place && placeKey(entry.name) === placeKey(place) && entry.tags.trim(),
+  );
+  const preparingBackground =
+    !!backgroundKey &&
+    !!images.connectionId &&
+    !images.ask &&
+    !reviewImagePromptsBeforeSend &&
+    !openedBackgrounds.has(backgroundKey) &&
+    sceneUnavailable !== sceneId &&
+    (!!placeUrl || placeInfo?.art?.state === "pending" || (!sceneArt && !!paintablePlace));
+  useEffect(() => {
+    if (!backgroundKey || preparingBackground || openedBackgrounds.has(backgroundKey)) return;
+    setOpenedBackgrounds((opened) => new Set(opened).add(backgroundKey));
+  }, [backgroundKey, openedBackgrounds, preparingBackground]);
+  const continueWithoutBackground = useCallback(() => {
+    if (backgroundKey) setOpenedBackgrounds((opened) => new Set(opened).add(backgroundKey));
+  }, [backgroundKey]);
+  const backgroundTarget = useRef({ key: backgroundKey, url: placeUrl });
+  backgroundTarget.current = { key: backgroundKey, url: placeUrl };
+  const backgroundSettled = useCallback((key: string, url: string) => {
+    if (backgroundTarget.current.key !== key || backgroundTarget.current.url !== url) return;
+    setOpenedBackgrounds((opened) => (opened.has(key) ? opened : new Set(opened).add(key)));
+  }, []);
+  const current = preparingBackground ? null : (timeline?.lines[lineIndex] ?? null);
   const lineKey = position && current ? `${position.id}:${lineIndex}` : "";
   const typed = !!lineKey && typedKey === lineKey;
-  const pendingChoice = timeline?.pending.get(lineIndex) ?? null;
+  const pendingChoice = preparingBackground ? null : (timeline?.pending.get(lineIndex) ?? null);
   const atEnd = !!timeline && lineIndex === timeline.lines.length - 1;
-  const onStage = useMemo(() => onStageAt(timeline?.lines ?? [], lineIndex, view.lis), [timeline, lineIndex, view.lis]);
-  const refBase = `${chapterKey}/${node ?? 0}r${beat?.rewrites ?? 0}`;
+  const onStage = useMemo(
+    () => onStageAt(timeline?.lines ?? [], preparingBackground ? -1 : lineIndex, view.lis),
+    [timeline, lineIndex, preparingBackground, view.lis],
+  );
   /** The current line's ref (favourites, and its voice's cache key). */
   const currentRef = timeline && lineIndex >= 0 ? lineRef(timeline, lineIndex, refBase) : "";
-  // A Confrontation read to the end of its ending (not eased off) closes on the ending's card.
-  const outcomeKind: ConfrontationEnding | null =
+  // A climax game read to the end of its ending (not eased off) closes on the ending's card.
+  const outcomeKind: ClimaxEnding | null =
     confrontation?.ending && current?.kind !== "aftermath" ? confrontation.ending.kind : null;
   const showOutcome = !!outcomeKind && atEnd && !!position && outcomeFor === position.id;
   const voiceHold = !!voice && !!lineKey && voice.key === lineKey && voice.outcome === null;
@@ -463,7 +516,7 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
 
   // Leaving mid-beat keeps the place: the furthest line reached is saved on the way out.
   const leaving = useRef({ position, current, node, base });
-  leaving.current = { position, current, node, base };
+  if (!preparingBackground) leaving.current = { position, current, node, base };
   useEffect(
     () => () => {
       const { position: last, current: line, node: index, base: path } = leaving.current;
@@ -478,13 +531,8 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
 
   // ── Art: the scene's places, its key image and the faces (paid paints, never repainted without a tap) ──
 
-  const images = view.world.images;
-  const sceneId = beat && node !== null ? refBase : "";
   // GET .../art/scene for the beat on screen: its places and key image with their paints, and the ready faces. Read
   // when the beat opens (with an image connection only), then again while something is still painting.
-  const [scene, setScene] = useState<{ id: string; art: SceneArt } | null>(null);
-  const [sceneTick, setSceneTick] = useState(0);
-  const sceneArt = scene && scene.id === sceneId ? scene.art : null;
   const cg = sceneArt?.cg ?? beat?.cg ?? null;
   // The love interests who speak in this beat: their faces may still be on their way.
   const speakers = useMemo(() => {
@@ -499,20 +547,34 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
     let live = true;
     let tries = 0;
     let timer = 0;
+    let lastFaces = JSON.stringify(speakers.map(() => ({})));
+    const waitingForFaces = (art: SceneArt) => wantsFaces && speakers.some((li) => art.facesComing?.includes(li));
     const waiting = (art: SceneArt) =>
       art.cg?.art?.state === "pending" ||
       (Array.isArray(art.places) && art.places.some((place) => place.art?.state === "pending")) ||
-      // Only faces still being painted: a speaker with no look, or a failed or stopped set, is never waited for.
-      (wantsFaces && speakers.some((li) => art.facesComing?.includes(li)));
+      // Painting and free cleanup both settle; failed or stopped work is never waited for.
+      waitingForFaces(art);
     const look = async () => {
       tries += 1;
       try {
         const art = await otome.get<SceneArt>(`${runPath(runKey)}/art/scene`, { key: chapterKey, i: node });
         if (!live) return;
+        setSceneUnavailable((unavailable) => (unavailable === sceneId ? null : unavailable));
         setScene({ id: sceneId, art });
-        if (waiting(art) && tries < PAINT_POLL_TRIES) timer = window.setTimeout(look, PAINT_POLL_MS);
+        const nextFaces = JSON.stringify(speakers.map((li) => art.faces?.[li] ?? {}));
+        if (wantsFaces && (waitingForFaces(art) || nextFaces !== lastFaces)) {
+          // The run owns both the clean expression URLs and their cut/framing metadata.
+          void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) }, { cancelRefetch: false });
+        }
+        lastFaces = nextFaces;
+        if (waiting(art)) {
+          if (tries < PAINT_POLL_TRIES) timer = window.setTimeout(look, PAINT_POLL_MS);
+          else setSceneUnavailable(sceneId);
+        }
       } catch {
-        if (live && tries < PAINT_POLL_TRIES) timer = window.setTimeout(look, PAINT_POLL_MS);
+        if (!live) return;
+        setSceneUnavailable(sceneId);
+        if (tries < PAINT_POLL_TRIES) timer = window.setTimeout(look, PAINT_POLL_MS);
       }
     };
     void look();
@@ -521,7 +583,7 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
       window.clearTimeout(timer);
     };
     // The speakers belong to the scene id; a tap (sceneTick) looks again.
-  }, [chapterKey, images.connectionId, node, otome, runKey, sceneId, sceneTick, wantsFaces]);
+  }, [chapterKey, images.connectionId, node, otome, queryClient, runKey, sceneId, sceneTick, wantsFaces]);
 
   const seenCgs = useRef(new Set<string>());
 
@@ -565,7 +627,6 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
   // A paint on a tap: the key image, or a place. With "Review image prompts before sending" on, its prompt is shown
   // for editing first. The route waits for the paint and answers with its record; a second tap while one runs is
   // ignored here and on the server.
-  const { reviewImagePromptsBeforeSend } = useOtomeProps();
   const [review, setReview] = useState<PaintReview | null>(null);
   // One paint request at a time from this reader (the server also makes a second tap wait for the first).
   const paintBusy = useRef(false);
@@ -702,15 +763,19 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
     } else void endBeat();
   }, [current, endBeat, goTo, lineIndex, lineKey, outcomeFor, outcomeKind, position, timeline, typed]);
 
-  const canSkip = !!timeline && !!position && skipTarget(timeline, lineIndex, position.readThrough) !== lineIndex;
+  const canSkip =
+    !preparingBackground &&
+    !!timeline &&
+    !!position &&
+    skipTarget(timeline, lineIndex, position.readThrough) !== lineIndex;
   const skip = useCallback(() => {
-    if (!timeline || !position) return;
+    if (preparingBackground || !timeline || !position) return;
     const target = skipTarget(timeline, lineIndex, position.readThrough);
     if (target === lineIndex) return;
     setAuto(false);
     setInstantKey(`${position.id}:${target}`);
     goTo(target);
-  }, [goTo, lineIndex, position, timeline]);
+  }, [goTo, lineIndex, position, preparingBackground, timeline]);
 
   // Auto: once a line has typed itself out, wait long enough to read it, then go on. It waits at a choice.
   const advanceRef = useRef(advance);
@@ -731,7 +796,7 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
   const choosingRef = useRef(false);
   const choose = useCallback(
     async (choice: ForgeChoice, option: ChoiceOption) => {
-      if (!beat || !position || node === null || choosing || choosingRef.current) return;
+      if (preparingBackground || !beat || !position || node === null || choosing || choosingRef.current) return;
       setChoiceError(null);
       // Picked on an earlier read: this read shows the other branch, and nothing changes.
       if (canonOption(beat, choice)) {
@@ -787,7 +852,7 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
         setChoosing(null);
       }
     },
-    [base, beat, choosing, confrontation, lineIndex, node, otome, position, pushToast],
+    [base, beat, choosing, confrontation, lineIndex, node, otome, position, preparingBackground, pushToast],
   );
 
   // ── Ease off and veils ──
@@ -885,7 +950,7 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
   // favourite refs.
 
   useEffect(() => {
-    if (!timeline || !position || node === null || lineIndex < 0) return;
+    if (!current || !timeline || !position || node === null || lineIndex < 0) return;
     if (logged.current.id !== position.id) logged.current = { id: position.id, next: 0 };
     const from = logged.current.next;
     if (lineIndex < from) return;
@@ -899,7 +964,7 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
     }
     logged.current.next = lineIndex + 1;
     setLog((list) => [...list, ...added]);
-  }, [lineIndex, node, position, refBase, timeline]);
+  }, [current, lineIndex, node, position, refBase, timeline]);
 
   const star = useCallback(
     async (entry: LogEntry, text: string, li: LiId | null) => {
@@ -919,6 +984,7 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
   const heldBy = held ?? (load?.status === "failed" ? ruptureHold(otomeErrorCode(load.error), detail?.chapter) : null);
 
   const canRewrite =
+    !preparingBackground &&
     !heldBy &&
     !!ready &&
     !!position &&
@@ -934,6 +1000,7 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
   // before eases off only once its beat is open, as a replay that changes no canon.
   const nodeRead = (detail?.beats ?? []).some((item) => item.i === node && item.state === "read");
   const canEaseOff =
+    !preparingBackground &&
     !heldBy &&
     node !== null &&
     !finished &&
@@ -999,6 +1066,13 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
     currentRef,
     cg,
     sceneArt,
+    place,
+    placeInfo,
+    placeUrl,
+    backgroundKey,
+    preparingBackground,
+    backgroundSettled,
+    continueWithoutBackground,
     markCgSeen,
     paintCg,
     paintPlace,

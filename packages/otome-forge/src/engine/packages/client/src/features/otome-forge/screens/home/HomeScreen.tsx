@@ -19,7 +19,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, HandHeart, HeartHandshake, RotateCcw, Smartphone, UsersRound } from "lucide-react";
+import { CalendarDays, HandHeart, HeartHandshake, MessageCircleHeart, RotateCcw, UsersRound } from "lucide-react";
 import { useOtomeApi } from "../../api";
 import { CaringMessage } from "../../components/CaringMessage";
 import { HeNoticed } from "../../components/HeNoticed";
@@ -446,10 +446,9 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenCast, onOpenStorie
   // ── The figure. The cached look belongs to whoever it pictures: right after Him / Me flips, the other one's look is
   // still cached, so each side checks the URL before using it. His face (homeFace) when painted, cut-out first. ──
   const cached = data?.look ?? null;
-  const pictures = (url: string | undefined) => !!url && cached?.url === url;
+  const pictures = (url: string | undefined) => !!url && (cached?.url === url || cached?.cutout === url);
   const face = homeFace(note?.face ?? "", said?.mode ?? null, rupture);
   const painted = face ? faceArt(li, face) : null;
-  const faceImage = face ? (about?.faces[face] ?? (painted ? { url: painted } : null)) : null;
   // The look each side wears (the Wardrobe's Wear at home, else the base portrait), as the server names it.
   const himUrl = li.worn?.url ?? li.portrait;
   const herUrl = wornLookUrl(view.player) || undefined;
@@ -466,7 +465,11 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenCast, onOpenStorie
     : li.name;
   const unread = data?.unread ?? 0;
   const plainArt = toFigureArt(himLook);
-  const himArt = faceImage ? toFigureArt(faceImage, plainArt) : plainArt;
+  const cleanFace =
+    (face ? about?.faces[face]?.cutout : undefined) ?? (painted && li.cut?.includes(painted) ? painted : null);
+  const himArt: FigureArt | null = cleanFace
+    ? { url: cleanFace, cut: true, kind: "look", ...(plainArt ? { fallback: plainArt } : {}) }
+    : plainArt;
 
   return (
     <div
@@ -553,7 +556,7 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenCast, onOpenStorie
 
       <div className="of-home-rail">
         <button type="button" className="of-home-action of-glass" onClick={() => onOpenPhone(null)}>
-          <Smartphone size={17} strokeWidth={1.9} aria-hidden="true" />
+          <MessageCircleHeart size={17} strokeWidth={1.9} aria-hidden="true" />
           <span>{t("ui.otomeForge.common.screenPhone")}</span>
           {unread > 0 ? (
             <span className="of-home-badge">

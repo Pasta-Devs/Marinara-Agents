@@ -24,6 +24,7 @@ import { safeSnippet, uniqueStrings, normalizeSubjectName } from "../ltm-utils.j
 import {
   isSourceBackedProperName,
   nameTokenCount,
+  nameTokensRelated,
   normalizeSubjectIdentifier,
   sourceBackedNpcNames,
   stripNotePrefix,
@@ -44,6 +45,7 @@ import {
   matchTraitPrefix,
   matchTrustedNameRelation,
   partialNameCandidateEntries,
+  partialNameReview,
   segmentSubjectIdentifier,
   sortSubjectEntries,
   sortSubjects,
@@ -866,13 +868,15 @@ function preResolveBatchSubjectNames({
   const trustedRelationMatches = new Map<string, SubjectMatch>();
   for (const name of admissibleUnknownNames) {
     const relation = matchTrustedNameRelation(index, name, familyId);
-    if (!relation) continue;
+    // A local binding waits until this batch's longer names exist, which can make it ambiguous.
+    if (!relation || relation.basis === "local_name_relation") continue;
     matches.set(name, relation);
     trustedRelationMatches.set(name, relation);
   }
 
   const canonicalNames = uniqueStrings(admissibleUnknownNames.filter((name) => !trustedRelationMatches.has(name))).sort(
-    (left, right) => nameTokenCount(right) - nameTokenCount(left) || left.localeCompare(right),
+    (left, right) =>
+      nameTokenCount(right) - nameTokenCount(left) || right.length - left.length || left.localeCompare(right),
   );
   const canonicalNamesBySlug = new Map<string, string[]>();
   for (const name of canonicalNames) {
@@ -889,6 +893,14 @@ function preResolveBatchSubjectNames({
     const subject =
       (mode === undefined || mode === "roleplay") && scope ? localCharacterSubjectForName(scope, name) : null;
     if (!subject) continue;
+    // Longest names come first, so a shorter form new in this batch relates to the full name
+    // made just before it instead of forking its own character.
+    const relation = matchTrustedNameRelation(index, name, familyId);
+    if (relation) {
+      matches.set(name, relation);
+      trustedRelationMatches.set(name, relation);
+      continue;
+    }
     const key = subject.key;
     const existing = index.byKey.get(key);
     if (existing) continue;
@@ -902,6 +914,24 @@ function preResolveBatchSubjectNames({
     };
     addCatalogEntry(index, entry);
     provisionalKeys.add(key);
+  }
+
+  // Two unrelated names reaching one character ("Preston Farraday" and "Preston Hale" to a saved
+  // "Preston") are different people, so neither binds.
+  const localRelations = [...trustedRelationMatches].flatMap(([name, relation]) =>
+    relation.status === "matched" && relation.basis === "local_name_relation"
+      ? [{ name, entry: relation.entries[0]! }]
+      : [],
+  );
+  for (const { name, entry } of localRelations) {
+    if (
+      localRelations.some(
+        (other) =>
+          other.entry.subject.key === entry.subject.key && other.name !== name && !nameTokensRelated(name, other.name),
+      )
+    ) {
+      matches.set(name, partialNameReview(name, [entry], true));
+    }
   }
 
   for (const name of admissibleUnknownNames) {
@@ -1038,9 +1068,11 @@ function resolveNamedUnitSubjects(
     entries: [...uniqueEntries.values()],
     basis: matched.some((match) => match.basis === "batch_name_alias")
       ? "batch_name_alias"
-      : matched.some((match) => match.basis === "unique_alias")
-        ? "unique_alias"
-        : "exact_name",
+      : matched.some((match) => match.basis === "local_name_relation")
+        ? "local_name_relation"
+        : matched.some((match) => match.basis === "unique_alias")
+          ? "unique_alias"
+          : "exact_name",
   };
 }
 

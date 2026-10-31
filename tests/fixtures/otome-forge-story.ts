@@ -1,6 +1,6 @@
 // A forged Otome Forge world for the story regressions (M2a, M2b): three love interests with bibles, a ready world, the
-// story and arc routes on a fake router, scripted model replies, and builders for a chapter plan, a beat reply and a
-// Confrontation reply.
+// story and arc routes on a fake router, scripted model replies, and builders for a chapter plan, a beat reply, a
+// Confrontation reply and a Closer's (#1938).
 import assert from "node:assert/strict";
 import { createForgeStoryCancellation } from "@forge-kit/story-cancel-server.mjs";
 import type {
@@ -81,16 +81,18 @@ export async function storyWorld({
   lis = {},
   content = defaultContent(),
   cancellation = false,
+  personas = [],
 }: {
   runKey: string;
   replies?: FakeReply[];
   lis?: Record<string, Partial<LiState>>;
   content?: ReturnType<typeof defaultContent>;
   cancellation?: boolean;
+  personas?: Array<{ id: string; data: unknown }>;
 }) {
   const fake = createFakeDocuments();
   const store = createOtomeStore(fake.documents);
-  const { runtime, logs, calls } = createFakeRuntime({ documents: fake.documents, replies });
+  const { runtime, logs, calls } = createFakeRuntime({ documents: fake.documents, replies, personas });
   const runId = runIdOf(runKey);
   await store.mutateDoc(INDEX_TARGET, normalizeIndex, (index) => ({
     ...index,
@@ -291,9 +293,26 @@ export function withMireillesPrivateRows(state: RunState, { rupture = false } = 
   };
 }
 
+/** P5 for a chapter whose climax is a Closer with Kai (#1938): planReply with its confrontation node a closer. */
+export function closerPlanReply(changes: Record<string, unknown> = {}): Record<string, any> {
+  const plan = planReply(changes);
+  return {
+    ...plan,
+    nodes: plan.nodes.map((node: PlanNode) =>
+      node.kind === "confrontation"
+        ? { ...node, kind: "closer", guide: "Kai lets Ines into the lamp room, and almost tells her why." }
+        : node,
+    ),
+  };
+}
+
 /** True for a P12 call (the Confrontation narrator). */
 export const isConfrontationPrompt = (messages: Array<{ content: string }>) =>
   messages[0]!.content.includes("stance game");
+
+/** True for a P12c call (the Closer narrator, #1938). */
+export const isCloserPrompt = (messages: Array<{ content: string }>) =>
+  messages[0]!.content.includes("the warm climax of a chapter");
 
 type Move = -1 | 0 | 1;
 
@@ -335,6 +354,48 @@ export function confrontationReply(
     },
     grievance: { text: "She called him a liar in his own lighthouse.", severity: "major" },
     disclosure: "Ines said she was the one who rang the bell that night.",
+    ...changes,
+  };
+}
+
+/**
+ * A P12c reply (#1938): an opening, three rounds of four answers and the three endings. `moves` sets each answer's
+ * guard move in every round (by default Reassure and Mirror reach him, Tease does nothing, Ask closes him off).
+ */
+export function closerReply(
+  changes: Record<string, unknown> = {},
+  moves: Record<"reassure" | "tease" | "mirror" | "ask", Move> = { reassure: -1, tease: 0, mirror: -1, ask: 1 },
+): Record<string, any> {
+  const option = (answer: string, round: number) => ({
+    label: `${answer} ${round}`,
+    selection: { kind: "dialogue", text: `${answer.toUpperCase()}-${round}: I'm here.` },
+    segments: [{ speaker: "Kai", text: `REPLY-${answer}-${round}`, expression: "tender" }],
+    guard: moves[answer as keyof typeof moves],
+  });
+  const round = (k: number) => ({
+    lines: [{ speaker: "Kai", text: `OFFER-${k}: I used to sit up here with my mother.`, expression: "tender" }],
+    options: {
+      reassure: option("reassure", k),
+      tease: option("tease", k),
+      mirror: option("mirror", k),
+      ask: option("ask", k),
+    },
+  });
+  return {
+    musicMood: "confession",
+    places: [{ name: "The Lamp Room", tags: "lighthouse interior, great lens, no humans" }],
+    opening: [
+      { speaker: "", text: "CLOSER-OPENING: the lamp turns slowly.", place: "The Lamp Room" },
+      { speaker: "Kai", text: "Stay a while.", expression: "tender" },
+    ],
+    rounds: [round(1), round(2), round(3)],
+    endings: {
+      opened: [{ speaker: "Kai", text: "ENDING-OPENED: I've never told anyone that.", expression: "tender" }],
+      almost: [{ speaker: "", text: "ENDING-ALMOST: he looks away at the last second." }],
+      shut: [{ speaker: "Kai", text: "ENDING-SHUT: Forget I said anything.", expression: "cold" }],
+    },
+    grievance: { text: "She laughed when he finally spoke of his mother.", severity: "minor" },
+    disclosure: "Ines said she is afraid of the dark.",
     ...changes,
   };
 }

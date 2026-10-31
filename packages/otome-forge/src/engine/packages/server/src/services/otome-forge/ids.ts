@@ -85,15 +85,17 @@ export const stateId = (runId: string) => `${runId}:state`;
 
 // ── The story (M2a). Kinds: "chapter", "beat", "memory". ──
 
-/** `main-<n>`, `route-<li>-<stage>`, `repair-<li>-<n>`, `story-<itemId>` or `date-<n>`. */
+/** `prologue`, `main-<n>`, `route-<li>-<stage>`, `repair-<li>-<n>`, `story-<itemId>` or `date-<n>`. */
 const CHAPTER_KEY =
-  /^(?:main-[1-9]\d{0,5}|route-li-[a-z0-9-]{3,40}-[1-6]|repair-li-[a-z0-9-]{3,40}-[1-9]\d{0,5}|story-[a-z0-9-]{1,60}|date-[1-9]\d{0,5})$/;
+  /^(?:prologue|main-[1-9]\d{0,5}|route-li-[a-z0-9-]{3,40}-[1-6]|repair-li-[a-z0-9-]{3,40}-[1-9]\d{0,5}|story-[a-z0-9-]{1,60}|date-[1-9]\d{0,5})$/;
 
 export function isChapterKey(value: unknown): value is string {
   return typeof value === "string" && CHAPTER_KEY.test(value);
 }
 
 export const mainChapterKey = (number: number) => `main-${number}`;
+/** The prologue's chapter key (S/story/prologue.ts). */
+export const PROLOGUE_KEY = "prologue";
 /** The main chapter's number, or null for any other key. */
 export function mainChapterNumber(key: string): number | null {
   const match = /^main-(\d+)$/.exec(key);
@@ -148,6 +150,7 @@ export const RUN_DOC_KINDS = [
   "banner",
   "item",
   "readhim",
+  "readme",
 ] as const;
 export type RunDocKind = (typeof RUN_DOC_KINDS)[number];
 /** The `{id, kind, name}` mutateDoc creates a run document with. */

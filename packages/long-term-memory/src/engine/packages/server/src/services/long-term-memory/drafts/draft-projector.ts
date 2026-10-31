@@ -165,6 +165,20 @@ export function isAdditiveLtmSection(note: Pick<LtmNote, "type" | "tags">, key: 
   return key === "anchors";
 }
 
+// The compiler replaces a non-additive section on purpose (a thread's sections, a relationship's state, a
+// character's items and progression), so a section update on any non-anchor note applies with the rest; only an
+// anchor note's sections and status, title or subject changes still apply one at a time.
+export function isDestructiveLtmRewrite(
+  note: Pick<LtmNote, "tags"> | null,
+  mutation: LtmDraftMutation,
+  disposition: LtmMutationDisposition,
+) {
+  if (disposition !== "rewrite") return false;
+  if (mutation.kind === "update_section" || mutation.kind === "append_section")
+    return Boolean(note?.tags.includes("anchor"));
+  return true;
+}
+
 function projectMutation(
   current: LtmNote | null,
   mutation: LtmDraftMutation,

@@ -508,6 +508,15 @@ const engineStaleTime = (page: Page) =>
   });
 
 async function openHome(page: Page): Promise<Locator> {
+  // Engine's calendar greeting can appear after startup. Keep its theme through the normal, specific dialog action.
+  await page.addLocatorHandler(
+    page
+      .getByRole("dialog", { name: "Happy Halloween!", exact: true })
+      .filter({ has: page.getByRole("button", { name: "Keep it", exact: true }) }),
+    async (dialog) => {
+      await dialog.getByRole("button", { name: "Keep it", exact: true }).click();
+    },
+  );
   await page.route("**/api/app-settings/ui", (route) =>
     route.fulfill({ json: route.request().method() === "GET" ? { value: null } : { success: true } }),
   );
@@ -551,6 +560,13 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
   // Midnight here and in the phone test; Pearl in the last.
   await page.emulateMedia({ colorScheme: "dark" });
   const stub = createHomeStub();
+  const answer = stub.answer;
+  stub.answer = async (call) => {
+    const response = await answer(call);
+    // This positive presentation fixture represents faces whose cleanup is already complete.
+    if (call.path === `/api/otome-forge/runs/${RUN}`) (response.json as Json).view.lis[0].cut = [TENDER, FLUSTERED];
+    return response;
+  };
   const spoken: string[] = [];
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -596,7 +612,7 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
   await home.evaluate((element, phase) => {
     (element as HTMLElement).dataset.sky = phase;
   }, sky ?? "night");
-  await expect(root.getByRole("button", { name: /Phone/ })).toContainText("1");
+  await expect(root.getByRole("button", { name: /Messages/ })).toContainText("1");
   await page.screenshot({ path: testInfo.outputPath("01-home.png") });
   expect(posts(stub, "/home/note")).toHaveLength(1);
 
@@ -620,6 +636,8 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
   const heart = (await zones.getByRole("button", { name: "Heart" }).boundingBox())!;
   await page.mouse.click(heart.x + heart.width / 2, heart.y + heart.height / 2);
   await expect(bubble).toHaveText(anyOf(HIS_LINES.heart));
+  await zones.getByRole("button", { name: "Heart" }).focus();
+  await expect(zones.getByRole("button", { name: "Heart" })).toBeFocused();
   for (let tap = 0; tap < 4; tap++) await page.keyboard.press("Enter");
   await expect(bubble).toHaveAttribute("data-mode", "annoyed");
   expect(ANNOYED).toContain(await bubble.textContent());
@@ -718,9 +736,9 @@ test("Otome Forge phone: a thread with typing, his sticker, suggestions, her sti
   await stubRoutes(page, stub, []);
   const root = await openHome(page);
 
-  // The Phone button opens the threads: one per love interest, his with its unread message.
-  await root.getByRole("button", { name: /Phone/ }).click();
-  await expect(root.getByRole("heading", { level: 1, name: "Phone" })).toBeFocused();
+  // The Messages button opens the threads: one per love interest, his with its unread message.
+  await root.getByRole("button", { name: /Messages/ }).click();
+  await expect(root.getByRole("heading", { level: 1, name: "Messages" })).toBeFocused();
   const threads = root.locator(".of-threads");
   const row = threads.getByRole("button", { name: /Ilvar Thorne/ });
   await expect(row).toContainText("The light was on again.");
@@ -763,6 +781,8 @@ test("Otome Forge phone: a thread with typing, his sticker, suggestions, her sti
   await expect(root.locator(".of-typing")).toHaveCount(0);
   await root.getByRole("button", { name: "Stickers" }).click();
   await root.getByRole("button", { name: "Send the Flustered sticker" }).click();
+  // The pressed sticker leaves with its panel: focus goes on to the message box, never to the page.
+  await expect(box).toBeFocused();
   await expect.poll(() => posts(stub, "/send").length).toBe(3);
   expect(posts(stub, "/send")[2]!.body).toMatchObject({ text: "", sticker: "flustered" });
   await expect(log.getByRole("img", { name: "Sticker: Flustered" })).toBeVisible();
@@ -823,7 +843,7 @@ test("Otome Forge phone: a reply that lands after the player left his thread is 
   await stubRoutes(page, stub, []);
   const root = await openHome(page);
   await engineStaleTime(page);
-  await root.getByRole("button", { name: /Phone/ }).click();
+  await root.getByRole("button", { name: /Messages/ }).click();
   const row = root.locator(".of-threads").getByRole("button", { name: /Ilvar Thorne/ });
   await expect(row).toContainText("The light was on again.");
   await row.click();
@@ -1072,20 +1092,140 @@ for (const images of [true, false]) {
   }
 }
 
-test("Otome Forge Home asks again while his faces' cut-outs are on their way, and shows the cut-out once it lands", async ({
-  page,
-}) => {
-  test.setTimeout(120_000);
-  // His look was cut out on an earlier visit; his tender face (the note's) is painted, its cut-out still on its way.
-  const stub = createHomeStub({ faceCutouts: true });
-  await stubRoutes(page, stub, []);
-  const root = await openHome(page);
-  const figure = root.getByRole("img", { name: "Ilvar Thorne, tender" });
-  await expect(figure).toHaveAttribute("src", TENDER);
-  // Home reads itself again (every 10 s while a cut-out is coming) and the clean cut-out replaces the uncut face.
-  await expect(figure).toHaveAttribute("src", TENDER_CUT, { timeout: 25_000 });
-  await expect(root.locator('.of-figure[data-cut="true"]')).toHaveCount(1);
-});
+for (const cleanup of ["pending", "failed"] as const) {
+  test(`Otome Hearth phone stickers keep their original face when cleanup is ${cleanup}`, async ({
+    page,
+  }, testInfo) => {
+    const stub = createHomeStub({ faceCutouts: true });
+    stub.notes.set(ILVAR, {
+      li: ILVAR,
+      dayKey: new Date().toISOString().slice(0, 10),
+      text: NOTE,
+      face: "tender",
+      mood: { word: "fond", reason: "You came back" },
+      curt: false,
+      at: new Date().toISOString(),
+    });
+    const answer = stub.answer;
+    stub.answer = async (call) => {
+      const response = await answer(call);
+      if (call.path === `/api/otome-forge/runs/${RUN}`) {
+        const view = (response.json as Json).view;
+        Object.assign(view.lis[0], { portrait: PORTRAIT_CUT, expressions: { tender: TENDER }, cut: [PORTRAIT_CUT] });
+        view.cutoutsPending = cleanup === "pending";
+      }
+      if (call.path.endsWith("/home")) {
+        (response.json as Json).faces = {
+          tender: { url: TENDER, cutoutState: cleanup === "pending" ? "pending" : "uncut" },
+        };
+      }
+      if (call.path === `/api/otome-forge/runs/${RUN}/phone/${ILVAR}`) {
+        const messages = (response.json as Json).messages;
+        Object.assign(messages.at(-1), { text: "", sticker: "tender" });
+      }
+      return response;
+    };
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+    await stubRoutes(page, stub, []);
+    const root = await openHome(page);
+    await expect(root.locator(".of-figure-img").last()).toHaveAttribute("src", PORTRAIT_CUT);
+    await expect(root.locator(`.of-figure-img[src="${TENDER}"]`)).toHaveCount(0);
+    await root.getByRole("button", { name: /Messages/ }).click();
+    await root
+      .locator(".of-threads")
+      .getByRole("button", { name: /Ilvar Thorne/ })
+      .click();
+    const log = root.getByRole("list", { name: "Messages with Ilvar Thorne" });
+    await expect(log.getByRole("img", { name: "Sticker: Tender" })).toHaveAttribute("src", TENDER);
+    await expect(log.getByRole("img", { name: "Sticker: Tender" })).toBeVisible();
+    await root.getByRole("button", { name: "Stickers" }).click();
+    const choice = root.getByRole("button", { name: "Send the Tender sticker" });
+    await expect(choice).toBeVisible();
+    await expect(choice.locator("img")).toHaveAttribute("src", TENDER);
+    await page.screenshot({ path: testInfo.outputPath(`phone-original-sticker-${cleanup}.png`) });
+    expect(posts(stub, "/send")).toHaveLength(0);
+    expect(stub.calls.filter((call) => call.method === "POST" && call.path.includes("/art/"))).toHaveLength(0);
+  });
+}
+
+for (const outcome of ["ready", "uncut", "load-error"] as const) {
+  test(`Otome Hearth Home expressions retain a clean neutral when cleanup is ${outcome}`, async ({
+    page,
+  }, testInfo) => {
+    // His earlier neutral cut-out stays available; the offending raw expression is never removed from its descriptor.
+    const stub = createHomeStub({ faceCutouts: true });
+    stub.notes.set(ILVAR, {
+      li: ILVAR,
+      dayKey: new Date().toISOString().slice(0, 10),
+      text: NOTE,
+      face: "tender",
+      mood: { word: "fond", reason: "You came back" },
+      curt: false,
+      at: new Date().toISOString(),
+    });
+    let phase: "pending" | "ready" | "uncut" = "pending";
+    const broken = "/api/avatars/file/missing-clean-expression.png";
+    await page.route(`**${broken}`, (route) => route.fulfill({ status: 404, body: "Missing cut-out" }));
+    const answer = stub.answer;
+    stub.answer = async (call) => {
+      const response = await answer(call);
+      if (call.path === `/api/otome-forge/runs/${RUN}`) {
+        const view = (response.json as Json).view;
+        view.lis[0].expressions = { tender: TENDER };
+        view.lis[0].cut = [PORTRAIT_CUT];
+      }
+      if (call.path.endsWith("/home")) {
+        (response.json as Json).faces = {
+          tender: {
+            url: TENDER,
+            cutoutState: phase,
+            ...(phase === "ready" ? { cutout: outcome === "load-error" ? broken : TENDER_CUT } : {}),
+          },
+        };
+      }
+      return response;
+    };
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
+    await page.clock.install();
+    const spoken: string[] = [];
+    await stubRoutes(page, stub, spoken);
+    const root = await openHome(page);
+    const figure = root.getByRole("img", { name: "Ilvar Thorne, tender" });
+    await expect(figure).toHaveAttribute("src", PORTRAIT_CUT);
+    await expect(root.locator('.of-figure[data-cut="true"]')).toHaveCount(1);
+    await expect(root.locator(`.of-figure-img[src="${TENDER}"]`)).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath("home-expression-pending-neutral.png") });
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 60_000));
+    const reads = () => stub.calls.filter((call) => call.method === "GET" && call.path.endsWith("/home")).length;
+    const before = reads();
+    const completedResponse = page.waitForResponse(async (response) => {
+      if (!new URL(response.url()).pathname.endsWith("/home") || response.status() !== 200) return false;
+      return (await response.json()).faces.tender.cutoutState !== "pending";
+    });
+    phase = outcome === "uncut" ? "uncut" : "ready";
+    await page.clock.runFor(10_500);
+    await (await completedResponse).finished();
+    let drained = 0;
+    await expect
+      .poll(
+        async () => {
+          if (drained++ < 100) await page.clock.runFor(1);
+          return figure.getAttribute("src");
+        },
+        { intervals: [100], timeout: 10_000 },
+      )
+      .toBe(outcome === "ready" ? TENDER_CUT : PORTRAIT_CUT);
+    await expect(root.locator('.of-figure[data-cut="true"]')).toHaveCount(1);
+    await expect(root.locator(`.of-figure-img[src="${TENDER}"]`)).toHaveCount(0);
+    expect(reads()).toBeGreaterThan(before);
+    await page.screenshot({ path: testInfo.outputPath(`home-expression-${outcome}.png`) });
+    const completed = reads();
+    await page.clock.runFor(20_000);
+    expect(reads(), "ready or unavailable cleanup stops Home polling").toBe(completed);
+    expect(stub.calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"))).toHaveLength(0);
+    expect(spoken).toEqual([]);
+  });
+}
 
 test("Otome Forge Home wears what the Wardrobe put on: his look cut out, hers on Me with the line he noticed", async ({
   page,

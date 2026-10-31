@@ -22,10 +22,11 @@ import {
 } from "lucide-react";
 import { useOtomeApi } from "../../api";
 import { Dialog } from "../../components/Dialog";
-import { albumQueryKey, imagesOn, needsOpen, useItemActions } from "../../hooks/use-items";
+import { albumQueryKey, imagesOn, useItemActions } from "../../hooks/use-items";
 import { useMusicCue } from "../../hooks/use-otome-audio";
 import { runPath } from "../../hooks/use-reader";
 import { accentOf } from "../../lib/accent";
+import { albumMemories, isUnplayedMemory, type MemoryRarityFilter } from "../../lib/album-memories";
 import type { RunView } from "../../shared/api-types";
 import type { MusicMood } from "../../shared/faces";
 import type { AlbumMemory, AlbumView } from "../../shared/wardrobe";
@@ -56,6 +57,13 @@ const READ_KEYS: Record<NonNullable<AlbumMemory["read"]>, string> = {
   unread: "ui.otomeForge.album.unread",
   "in-progress": "ui.otomeForge.album.reading",
   done: "ui.otomeForge.album.read",
+};
+
+const MEMORY_FILTERS = ["all", 3, 4, 5] as const;
+const RARITY_LABEL_KEYS = {
+  3: "ui.otomeForge.wish.rarity3",
+  4: "ui.otomeForge.wish.rarity4",
+  5: "ui.otomeForge.wish.rarity5",
 };
 
 export function useAlbum(runKey: string) {
@@ -129,7 +137,7 @@ export function Album({ runKey, view, onOpenStory }: AlbumProps) {
     ) : tab === "memories" ? (
       <Memories view={view} memories={data.memories} onShow={setMemory} />
     ) : tab === "timeline" ? (
-      <Timeline view={view} entries={data.timeline} />
+      <Timeline view={view} entries={data.timeline} memories={data.memories} onShow={setMemory} />
     ) : tab === "favorites" ? (
       <Favorites view={view} favorites={data.favorites} />
     ) : tab === "soundtrack" ? (
@@ -233,55 +241,80 @@ function Memories({
 }) {
   const { t } = useTranslation();
   const kindLabel = useKindLabel();
-  if (!memories.length) {
-    return (
-      <p className="of-empty of-glass">
-        <BookHeart size={20} strokeWidth={1.8} aria-hidden="true" />
-        {t("ui.otomeForge.album.memoriesEmpty")}
-      </p>
-    );
-  }
-  const images = imagesOn(view);
+  const group = useId();
+  const [rarity, setRarity] = useState<MemoryRarityFilter>("all");
+  const shown = albumMemories(memories, rarity);
   return (
-    <ul className="of-keepsakes">
-      {memories.map((item) => {
-        const li = itemPerson(item, view);
-        const state = needsOpen(item, images)
-          ? t("ui.otomeForge.album.unopened")
-          : item.read
-            ? t(READ_KEYS[item.read])
-            : null;
-        return (
-          <li key={item.id}>
-            <button
-              type="button"
-              className="of-keepsake of-glass"
-              data-rarity={RARITY_NAMES[item.rarity]}
-              style={li ? ({ "--of-li-accent": accentOf(li) } as CSSProperties) : undefined}
-              onClick={() => onShow(item.id)}
-            >
-              <ItemArt item={item} view={view} />
-              <span className="of-keepsake-text">
-                <span className="of-keepsake-kind">
-                  <RarityStars rarity={item.rarity} />
-                  {kindLabel(item, view)}
-                </span>
-                <span className="of-keepsake-title">{item.title}</span>
-                {li ? <span className="of-keepsake-who">{li.name}</span> : null}
-                {item.kind === "snapshot3" && item.text ? (
-                  <span className="of-keepsake-snapshot">{item.text}</span>
-                ) : null}
-              </span>
-              {state ? (
-                <span className="of-keepsake-state">
-                  {item.read === "done" ? null : <BookOpen size={12} strokeWidth={2} aria-hidden="true" />}
-                  {state}
-                </span>
-              ) : null}
-            </button>
-          </li>
-        );
-      })}
-    </ul>
+    <>
+      <fieldset className="of-segmented of-memory-filters of-glass">
+        <legend className="of-visually-hidden">{t("ui.otomeForge.album.rarityFilterLabel")}</legend>
+        {MEMORY_FILTERS.map((value) => (
+          <label key={value} className="of-segment" data-checked={rarity === value}>
+            <input
+              type="radio"
+              className="of-visually-hidden"
+              name={group}
+              value={value}
+              checked={rarity === value}
+              aria-label={value === "all" ? t("ui.otomeForge.album.rarityAll") : t(RARITY_LABEL_KEYS[value])}
+              onChange={() => setRarity(value)}
+            />
+            <span aria-hidden="true">
+              {value === "all"
+                ? t("ui.otomeForge.album.rarityAll")
+                : t("ui.otomeForge.album.rarityOption", { rarity: value })}
+            </span>
+          </label>
+        ))}
+      </fieldset>
+      <p className="of-hint">{t("ui.otomeForge.album.unplayedFirst")}</p>
+      {!shown.length ? (
+        <p className="of-empty of-glass">
+          <BookHeart size={20} strokeWidth={1.8} aria-hidden="true" />
+          {t(memories.length ? "ui.otomeForge.album.rarityEmpty" : "ui.otomeForge.album.memoriesEmpty")}
+        </p>
+      ) : (
+        <ul className="of-keepsakes">
+          {shown.map((item) => {
+            const li = itemPerson(item, view);
+            const state = item.read
+              ? t(READ_KEYS[item.read])
+              : isUnplayedMemory(item)
+                ? t("ui.otomeForge.album.unopened")
+                : null;
+            return (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  className="of-keepsake of-glass"
+                  data-rarity={RARITY_NAMES[item.rarity]}
+                  style={li ? ({ "--of-li-accent": accentOf(li) } as CSSProperties) : undefined}
+                  onClick={() => onShow(item.id)}
+                >
+                  <ItemArt item={item} view={view} />
+                  <span className="of-keepsake-text">
+                    <span className="of-keepsake-kind">
+                      <RarityStars rarity={item.rarity} />
+                      {kindLabel(item, view)}
+                    </span>
+                    <span className="of-keepsake-title">{item.title}</span>
+                    {li ? <span className="of-keepsake-who">{li.name}</span> : null}
+                    {item.kind === "snapshot3" && item.text ? (
+                      <span className="of-keepsake-snapshot">{item.text}</span>
+                    ) : null}
+                  </span>
+                  {state ? (
+                    <span className="of-keepsake-state">
+                      {item.read === "done" ? null : <BookOpen size={12} strokeWidth={2} aria-hidden="true" />}
+                      {state}
+                    </span>
+                  ) : null}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </>
   );
 }

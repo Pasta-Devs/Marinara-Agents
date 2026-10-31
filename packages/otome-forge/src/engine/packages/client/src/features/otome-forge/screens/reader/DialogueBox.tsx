@@ -2,9 +2,10 @@
 // Otome Forge: the dialogue box (the bottom of the stage, frosted). A name plate in the speaker's accent colour; the
 // protagonist's thoughts in pale italics; a love interest's rare thought line set apart in his colour; narration
 // plain. A line types itself out (whole under reduced motion); the Next button, or a tap, shows it whole first.
-// Screen readers get the whole line at once, never the typing.
+// Screen readers get the whole line at once, never the typing. A line too long for the box scrolls with its typing,
+// so the newest words stay in view, until the player touches or scrolls the box themselves.
 // ──────────────────────────────────────────────
-import { forwardRef, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { forwardRef, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, CloudMoon } from "lucide-react";
 import { accentOf } from "../../lib/accent";
@@ -44,6 +45,28 @@ export const DialogueBox = forwardRef<HTMLButtonElement, DialogueBoxProps>(funct
   }
   const visible = instant ? chars.length : Math.min(count, chars.length);
   const done = visible >= chars.length;
+
+  const lineRef = useRef<HTMLParagraphElement>(null);
+  const restRef = useRef<HTMLSpanElement>(null);
+  const following = useRef(true);
+  // A new line opens at its top and follows its typing again.
+  useEffect(() => {
+    following.current = true;
+    if (lineRef.current) lineRef.current.scrollTop = 0;
+  }, [lineKey]);
+  // The untyped rest is laid out (hidden), so the box is already as tall as the whole line: scroll so the row being
+  // typed sits at the bottom edge.
+  useEffect(() => {
+    const box = lineRef.current;
+    const rest = restRef.current;
+    if (!box || !rest || !following.current) return;
+    const row = Number.parseFloat(getComputedStyle(box).lineHeight) || 0;
+    const target = rest.offsetTop - box.offsetTop + row - box.clientHeight;
+    if (target > box.scrollTop) box.scrollTop = target;
+  }, [visible]);
+  const stopFollowing = () => {
+    following.current = false;
+  };
 
   // The pace comes from the clock, not from frames: a slow frame shows more characters at once, never fewer per second.
   useEffect(() => {
@@ -103,11 +126,15 @@ export const DialogueBox = forwardRef<HTMLButtonElement, DialogueBoxProps>(funct
           ) : null}
         </p>
       ) : null}
-      <p className={lineClass}>
+      <p ref={lineRef} className={lineClass} onTouchStart={stopFollowing} onWheel={stopFollowing}>
         <span className="of-visually-hidden">{spoken}</span>
-        <span aria-hidden="true">
+        <span aria-hidden="true" data-done={done}>
           {done ? text : chars.slice(0, visible).join("")}
-          {done ? null : <span className="of-line-rest">{chars.slice(visible).join("")}</span>}
+          {done ? null : (
+            <span ref={restRef} className="of-line-rest">
+              {chars.slice(visible).join("")}
+            </span>
+          )}
         </span>
       </p>
       {canAdvance ? (

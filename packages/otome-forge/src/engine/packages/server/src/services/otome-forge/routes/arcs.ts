@@ -10,11 +10,12 @@
 //                                                                  next?, ending?, confrontation, remembered,
 //                                                                  rememberedBy}
 // All three are idempotent: the chapter a key has is returned as it is, and a stance already taken returns what it
-// did (another stance for that round is a 409 `locked`). Planning runs in the run's Cancel scope and may fail as any
+// did (another stance for that round is a 409 `locked`). A Closer (#1938) takes its answers (reassure, tease,
+// mirror, ask) on the same route; a move of the other game is a 400 that saves nothing. Planning runs in the run's Cancel scope and may fail as any
 // plan does (503 `no-connection`, 422 `declined`, 502 `bad-format`). GET /runs/:run/story carries each love
 // interest's `routes` entry and the `repairs` on offer (S/story/chapters.ts).
 import { z } from "zod";
-import { CONFRONTATION_ROUNDS, STANCES } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
+import { ALL_CLIMAX_MOVES, CONFRONTATION_ROUNDS } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { debugModeOf, liParam, parseBody, reviewModeOf, runParam, type RegisterRoutes } from "../http.js";
 import { toChapterView } from "../schemas/story.js";
 import { cancellable, chooseStance } from "../story/beats.js";
@@ -24,7 +25,7 @@ import { beatParams } from "./story.js";
 const NoFields = z.object({});
 const StanceBody = z.object({
   round: z.number().int().min(1).max(CONFRONTATION_ROUNDS),
-  stance: z.enum(STANCES),
+  stance: z.enum(ALL_CLIMAX_MOVES),
 });
 
 export const registerArcRoutes: RegisterRoutes = (router, deps) => {

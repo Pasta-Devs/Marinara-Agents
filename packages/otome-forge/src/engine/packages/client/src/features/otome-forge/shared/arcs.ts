@@ -38,7 +38,7 @@ export const STAGES: readonly StageRow[] = [
   { stage: 4, name: "wound", balance: "The mask breaks", unlockLevel: 7, gate: "reveal" },
   // A Confrontation node, then a big choice before the gate completes.
   { stage: 5, name: "reckoning", balance: "Mask 40 / self 60", unlockLevel: 8, gate: "confrontation" },
-  { stage: 6, name: "bond", balance: "Changed toward the protagonist only", unlockLevel: 10, gate: "finale" },
+  { stage: 6, name: "bond", balance: "Earned, character-consistent change", unlockLevel: 10, gate: "finale" },
 ];
 
 /** The row for `stage`, clamped into 1–6 (a damaged value reads as the nearest stage). */
@@ -131,3 +131,40 @@ export function endingFor(composure: number): ConfrontationEnding {
 
 /** A walkout opens a rupture instead of a major grievance when trust is at or below this. */
 export const WALKOUT_RUPTURE_TRUST = -2;
+
+// ── The Closer (#1938, a story node): the warm climax, three rounds of Reassure, Tease, Mirror or Ask ──
+
+export const CLOSER_MOVES = ["reassure", "tease", "mirror", "ask"] as const;
+export type CloserMove = (typeof CLOSER_MOVES)[number];
+
+export const CLOSER_ENDINGS = ["opened", "almost", "shut"] as const;
+export type CloserEnding = (typeof CLOSER_ENDINGS)[number];
+
+/**
+ * Their guard (never shown) runs on the composure line above: from 2, each picked answer's −1, 0 or +1, within 0–4.
+ * After the last round, 0 is Opened up, 4 is Shut out (the bad ending), and anything between is Almost.
+ */
+export function closerEndingFor(guard: number): CloserEnding {
+  return guard <= COMPOSURE_MIN ? "opened" : guard >= COMPOSURE_MAX ? "shut" : "almost";
+}
+
+/** A main chapter's one climax node: a Confrontation or a Closer. Route chapters keep Confrontations. */
+export const CLIMAX_KINDS = ["confrontation", "closer"] as const;
+export type ClimaxKind = (typeof CLIMAX_KINDS)[number];
+export type ClimaxMove = Stance | CloserMove;
+export type ClimaxEnding = ConfrontationEnding | CloserEnding;
+
+/** Each climax's moves in the order the reader offers them, and its endings. */
+export const CLIMAX_MOVES: Readonly<Record<ClimaxKind, readonly ClimaxMove[]>> = {
+  confrontation: STANCES,
+  closer: CLOSER_MOVES,
+};
+export const CLIMAX_ENDINGS: Readonly<Record<ClimaxKind, readonly ClimaxEnding[]>> = {
+  confrontation: CONFRONTATION_ENDINGS,
+  closer: CLOSER_ENDINGS,
+};
+/** Every move of either climax (the stance route's body). */
+export const ALL_CLIMAX_MOVES = [...STANCES, ...CLOSER_MOVES] as const;
+
+/** A stored game's climax: a game stored before the Closer has no `kind` and is a Confrontation. */
+export const climaxOf = (game: { kind?: "closer" }): ClimaxKind => game.kind ?? "confrontation";

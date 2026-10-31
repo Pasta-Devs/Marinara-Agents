@@ -9,9 +9,10 @@ import { useTranslation } from "react-i18next";
 import { ChevronRight, Sparkle, Sparkles } from "lucide-react";
 import { imagesOn, needsOpen, readyArt, useRefocus, type ItemActions } from "../../hooks/use-items";
 import { useOtomeAudio } from "../../hooks/use-otome-audio";
+import { useSpriteDisplay } from "../../hooks/use-sprite-display";
 import { accentOf, initialsOf } from "../../lib/accent";
 import type { RunView } from "../../shared/api-types";
-import type { ItemView } from "../../shared/wish";
+import { isLookKind, type ItemView } from "../../shared/wish";
 import { itemPerson, OpenCost, RarityStars, useKindLabel } from "./TenPullGrid";
 
 /** The dim before the reveal. */
@@ -49,7 +50,8 @@ export function Reveal5({
   const [shown, setShown] = useState(reducedMotion);
   const spoken = useRef<string | null>(null);
   const li = itemPerson(item, view);
-  const url = readyArt(item.art) ?? fallbackUrl;
+  const look = isLookKind(item.kind);
+  const url = useSpriteDisplay(readyArt(item.art) ?? fallbackUrl, look);
   const title = item.look?.name || item.title;
   const busy = actions.busy.has(item.id);
   const opening = needsOpen(item, imagesOn(view));
@@ -89,7 +91,7 @@ export function Reveal5({
       data-motion={!reducedMotion}
       style={accent ? ({ "--of-li-accent": accent } as CSSProperties) : undefined}
     >
-      <div className="of-reveal-art" aria-hidden="true">
+      <div className="of-reveal-art" data-look={look} aria-hidden="true">
         {url ? (
           <img src={url} alt="" decoding="async" />
         ) : (

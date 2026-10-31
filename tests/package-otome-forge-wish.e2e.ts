@@ -11,6 +11,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { crc32, deflateSync } from "node:zlib";
 
 const engineRoot = process.env.MARINARA_ENGINE_ROOT;
 if (!engineRoot) throw new Error("Set MARINARA_ENGINE_ROOT to a compatible Engine checkout");
@@ -46,6 +47,78 @@ const PNG = Buffer.from(
   "base64",
 );
 const GALLERY_CG = "/api/gallery/file/otome-forge-cg-observation-room.png";
+
+/** A meaningful full-body silhouette, with the same retained pixels on a green matte or transparent background. */
+function lookPng(clean: boolean): Buffer {
+  const width = 32;
+  const height = 48;
+  const rows = Buffer.alloc(height * (1 + width * 4));
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const subject =
+        (y < 11 && x >= 10 && x < 22) ||
+        (y >= 11 && y < 30 && x >= 7 && x < 25) ||
+        (y >= 15 && y < 29 && x >= 3 && x < 29) ||
+        (y >= 30 && ((x >= 8 && x < 14) || (x >= 18 && x < 24)));
+      const offset = y * (1 + width * 4) + 1 + x * 4;
+      rows.set(subject ? [90, 80, 160, 255] : [0, 255, 0, clean ? 0 : 255], offset);
+    }
+  }
+  const chunk = (kind: string, bytes: Buffer) => {
+    const name = Buffer.from(kind);
+    const size = Buffer.alloc(4);
+    size.writeUInt32BE(bytes.length);
+    const checksum = Buffer.alloc(4);
+    checksum.writeUInt32BE(crc32(Buffer.concat([name, bytes])));
+    return Buffer.concat([size, name, bytes, checksum]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width);
+  header.writeUInt32BE(height, 4);
+  header.set([8, 6], 8);
+  return Buffer.concat([
+    Buffer.from("89504e470d0a1a0a", "hex"),
+    chunk("IHDR", header),
+    chunk("IDAT", deflateSync(rows)),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+const RAW_LOOK = "/api/global-gallery/file/wish-look-green.png";
+const OTHER_LOOK = "/api/global-gallery/file/wardrobe-other-green.png";
+const CLEAN_LOOK = `data:image/png;base64,${lookPng(true).toString("base64")}`;
+
+async function stubLookCleanup(
+  page: Page,
+  respond?: () => Promise<{ base64: string }>,
+  finished?: (index: number) => void,
+) {
+  const calls: Json[] = [];
+  await page.route("**/api/global-gallery/file/*green.png", (route) =>
+    route.fulfill({ contentType: "image/png", body: lookPng(false) }),
+  );
+  await page.route("**/api/sprites/cleanup/status", (route) => route.fulfill({ json: { cleanupRevision: 2 } }));
+  await page.route("**/api/sprites/cleanup", async (route) => {
+    calls.push(route.request().postDataJSON());
+    const index = calls.length;
+    const cell = respond ? await respond() : { base64: CLEAN_LOOK };
+    await route.fulfill({ json: { cells: [cell], cleanupRevision: 2 } });
+    finished?.(index);
+  });
+  return calls;
+}
+
+/** A read-only completion barrier; visible pixels and no-write behavior are asserted separately. */
+const lookSettled = (page: Page, source: string) =>
+  expect
+    .poll(() =>
+      page.evaluate(
+        (url) =>
+          (globalThis as any).__MARINARA_HOST__.queryClient.getQueryState(["otome-forge", "speaker-display", url])
+            ?.fetchStatus,
+        source,
+      ),
+    )
+    .toBe("idle");
 
 function runView(starlight: number): Json {
   return {
@@ -323,6 +396,8 @@ function albumView(): Json {
         kind: "first-meeting",
         text: "The first time Ilvar said your name.",
       },
+      // A Memory won (#1947): the Album lists it on the day it was won, and it opens from here.
+      { at: "2026-10-28T09:00:00.000Z", li: ILVAR, kind: "memory", text: "Ink and Rain", ref: "memories-0-f" },
     ],
     favorites: [],
     soundtrack: [{ cue: "home", track: null }],
@@ -330,7 +405,7 @@ function albumView(): Json {
   };
 }
 
-type Answer = { status: number; json?: unknown; delay?: number; abort?: boolean };
+type Answer = { status: number; json?: unknown; delay?: number; abort?: boolean; wait?: Promise<void> };
 
 async function stubRoutes(page: Page, answer: (call: Call) => Answer | undefined, calls: Call[]) {
   await page.route("**/api/app-settings/ui", (route) =>
@@ -351,6 +426,7 @@ async function stubRoutes(page: Page, answer: (call: Call) => Answer | undefined
       status: 404,
       json: { error: `No stub for ${call.method} ${call.path}`, code: "not-found" },
     };
+    if (reply.wait) await reply.wait;
     if (reply.delay) await new Promise((done) => setTimeout(done, reply.delay));
     if (reply.abort) await route.abort("connectionreset");
     else await route.fulfill({ status: reply.status, json: reply.json });
@@ -413,6 +489,15 @@ function wishStub(starlight = 2000): { stub: WishStub; answer: (call: Call) => A
 }
 
 async function openOtome(page: Page, { review = false } = {}): Promise<Locator> {
+  // Engine's calendar greeting can appear after startup. Keep its theme through the normal, specific dialog action.
+  await page.addLocatorHandler(
+    page
+      .getByRole("dialog", { name: "Happy Halloween!", exact: true })
+      .filter({ has: page.getByRole("button", { name: "Keep it", exact: true }) }),
+    async (dialog) => {
+      await dialog.getByRole("button", { name: "Keep it", exact: true }).click();
+    },
+  );
   await page.addInitScript(
     ({ version, review }) => {
       localStorage.setItem("marinara:whats-new:seen-version", version);
@@ -449,6 +534,261 @@ const posts = (calls: Call[], suffix: string) =>
   calls.filter((call) => call.method === "POST" && call.path.endsWith(suffix));
 
 const starlight = (root: Locator) => root.locator(".of-topbar .of-starlight");
+
+test("Otome Hearth look art: Wish cleans and contains outfits, opens the full image without paying, and reuses it in reveals and results", async ({
+  page,
+}, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const { stub, answer } = wishStub();
+  const banner = stub.wish.banners[1];
+  banner.title = "";
+  banner.art = ready(RAW_LOOK);
+  banner.five.art = ready(RAW_LOOK);
+  const cleanup = await stubLookCleanup(page);
+  await stubRoutes(page, answer, calls);
+  const root = await openOtome(page);
+  await openDock(root, "Wish");
+  await expect(root.locator('.of-banner[data-kind="memories"] .of-banner-img')).toHaveAttribute("src", CG);
+  expect(cleanup).toHaveLength(0);
+  await root.getByRole("tab", { name: "Cassian’s Wardrobe" }).click();
+  await expect(root.locator(".of-banner-title")).toHaveText("Gilded Hours");
+  const image = root.locator(".of-banner-img");
+  await expect(image).toHaveAttribute("src", CLEAN_LOOK);
+  expect(cleanup).toHaveLength(1);
+  expect(cleanup[0]).toMatchObject({ engine: "builtin", cleanupStrength: 35 });
+  await expect(image).toHaveCSS("object-fit", "contain");
+  await expect(image).toHaveCSS("object-position", "50% 50%");
+  await expect(image).toHaveCSS("animation-name", "none");
+  await root.locator(".of-banner-hero").screenshot({ path: testInfo.outputPath("wardrobe-banner-contained.png") });
+  const open = root.getByRole("button", { name: "View full image: Gilded Hours" });
+  await open.focus();
+  await open.press("Enter");
+  const dialog = root.getByRole("dialog", { name: "Gilded Hours" });
+  await expect(dialog.locator(".of-viewer-img")).toHaveAttribute("src", CLEAN_LOOK);
+  await expect(dialog.locator(".of-viewer-img")).toHaveAttribute("alt", "Gilded Hours");
+  await expect(dialog.getByRole("button", { name: "Close", exact: true })).toBeFocused();
+  await expect(dialog.locator(".of-viewer-img")).toHaveCSS("object-fit", "contain");
+  await dialog.getByRole("button", { name: "Close", exact: true }).press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(open).toBeFocused();
+  expect(posts(calls, "/wish/pull")).toHaveLength(0);
+  expect(calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"))).toHaveLength(0);
+
+  stub.pullResponse = {
+    results: [{ item: { ...banner.five, owned: true }, rarity: 5, isNew: true, refund: 0 }],
+    spent: 100,
+    starlight: 1900,
+    pity: PITY,
+  };
+  await root.getByRole("button", { name: "Wish ×1, 100 Starlight", exact: true }).click();
+  const takeover = page.getByRole("dialog", { name: "Your wish" });
+  await takeover.getByRole("button", { name: "Break the seal" }).click();
+  await expect(takeover.locator(".of-reveal-art img")).toHaveAttribute("src", CLEAN_LOOK);
+  await takeover.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(takeover.locator(".of-item-art img")).toHaveAttribute("src", CLEAN_LOOK);
+  await takeover.locator(".of-pull-tile").click();
+  await expect(takeover.locator(".of-item-detail .of-item-art img")).toHaveAttribute("src", CLEAN_LOOK);
+  expect(cleanup).toHaveLength(1);
+  expect(posts(calls, "/wish/pull")).toHaveLength(1);
+  expect(calls.filter((call) => /\/(?:art|open|generate)$/u.test(call.path) && call.method === "POST")).toHaveLength(0);
+  expect(banner.art.url).toBe(RAW_LOOK);
+});
+
+test("Otome Hearth look art: Wardrobe cleans LI and persona looks, faces and couple thumbnails while preserving pair art", async ({
+  page,
+}) => {
+  const calls: Call[] = [];
+  const { stub, answer } = wishStub();
+  const wardrobe = wardrobeView();
+  for (const entry of [...wardrobe.him[ILVAR], ...wardrobe.me]) {
+    entry.url = RAW_LOOK;
+    entry.art = ready(RAW_LOOK);
+  }
+  for (const entry of wardrobe.him[ILVAR]) entry.faces = { cold: RAW_LOOK };
+  wardrobe.couples[0].his.url = RAW_LOOK;
+  wardrobe.couples[0].his.owned = true;
+  wardrobe.couples[0].hers.url = RAW_LOOK;
+  wardrobe.couples[0].complete = true;
+  wardrobe.couples[0].pair = ready(CG);
+  const cleanup = await stubLookCleanup(page);
+  await stubRoutes(
+    page,
+    (call) => (call.path.endsWith("/wardrobe") ? { status: 200, json: wardrobe } : answer(call)),
+    calls,
+  );
+  const root = await openOtome(page);
+  await openDock(root, "Wardrobe");
+  await expect(root.locator(".of-ward-look .of-ward-frame img")).toHaveCount(2);
+  await expect(root.locator(".of-ward-faces img")).toHaveCount(2);
+  for (const img of await root.locator(".of-ward-frame img, .of-ward-faces img").all())
+    await expect(img).toHaveAttribute("src", CLEAN_LOOK);
+  const owners = root.getByRole("group", { name: "Whose wardrobe" });
+  await owners.getByText("Me", { exact: true }).click();
+  await expect(owners.getByRole("radio", { name: "Me", exact: true })).toBeChecked();
+  await expect(root.getByRole("heading", { name: "My looks" })).toBeVisible();
+  for (const img of await root.locator(".of-ward-frame img, .of-ward-faces img").all())
+    await expect(img).toHaveAttribute("src", CLEAN_LOOK);
+  await expect(root.locator(".of-couple-portrait")).toHaveAttribute("src", CG);
+  expect(cleanup).toHaveLength(1);
+  expect(calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"))).toHaveLength(0);
+  expect(stub.view.player.outfits).toEqual([]);
+  expect(wardrobe.me[0].url).toBe(RAW_LOOK);
+});
+
+test("Otome Hearth look art: pending, late, missing and failed cleanup never exposes matte or the prior outfit", async ({
+  page,
+}) => {
+  const calls: Call[] = [];
+  const { stub, answer } = wishStub();
+  stub.wish.banners[1].art = ready(RAW_LOOK);
+  stub.wish.banners[2].art = ready(OTHER_LOOK);
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  let count = 0;
+  let oldRouteDone!: () => void;
+  const oldRoute = new Promise<void>((resolve) => (oldRouteDone = resolve));
+  const cleanup = await stubLookCleanup(
+    page,
+    async () => {
+      const current = ++count;
+      if (current === 1) await held;
+      return { base64: current === 1 ? CLEAN_LOOK : `data:image/png;base64,${lookPng(false).toString("base64")}` };
+    },
+    (index) => {
+      if (index === 1) oldRouteDone();
+    },
+  );
+  await stubRoutes(page, answer, calls);
+  const root = await openOtome(page);
+  await openDock(root, "Wish");
+  await root.getByRole("tab", { name: "Cassian’s Wardrobe" }).click();
+  await expect.poll(() => cleanup.length).toBe(1);
+  await expect(root.locator(".of-banner-img")).toHaveCount(0);
+  await expect(root.getByRole("button", { name: /View full image:/u })).toHaveCount(0);
+  const rejected = page.waitForResponse((response) => response.url().endsWith("/api/sprites/cleanup"));
+  await root.getByRole("tab", { name: "My Wardrobe" }).click();
+  await expect.poll(() => cleanup.length).toBe(2);
+  await (await rejected).finished();
+  await lookSettled(page, OTHER_LOOK);
+  release();
+  await oldRoute;
+  await expect(root.locator('.of-banner[data-kind="my-wardrobe"]')).toBeVisible();
+  await expect(root.locator(".of-banner-img")).toHaveCount(0);
+  // An updated source URL is missing: do not reuse a cached derivative for the older source.
+  stub.wish.banners[2].art = ready("/api/global-gallery/file/missing-look.png?v=2");
+  await page.route("**/api/global-gallery/file/missing-look.png?v=2", (route) => route.fulfill({ status: 404 }));
+  await page.clock.install();
+  await page.clock.fastForward(31_000);
+  await openDock(root, "Story");
+  const missing = page.waitForResponse(
+    (response) => response.url().endsWith("/missing-look.png?v=2") && response.status() === 404,
+  );
+  await openDock(root, "Wish");
+  // Wait for the replacement metadata before selecting its tab; the older failed URL may retry on a fresh mount.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        (run) =>
+          (globalThis as any).__MARINARA_HOST__.queryClient.getQueryData(["otome-forge", "wish", run])?.banners[2].art
+            .url,
+        RUN,
+      ),
+    )
+    .toBe("/api/global-gallery/file/missing-look.png?v=2");
+  await root.getByRole("tab", { name: "My Wardrobe" }).click();
+  await missing;
+  await expect(root.locator(".of-banner-img")).toHaveCount(0);
+  expect(cleanup).toHaveLength(2);
+  expect(calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"))).toHaveLength(0);
+});
+
+test("Otome Hearth look art: stale refresh keeps the same cleaned outfit and its viewer, but a cleanup 404 hides it", async ({
+  page,
+}) => {
+  const calls: Call[] = [];
+  const { stub, answer } = wishStub();
+  stub.wish.banners[1].art = ready(RAW_LOOK);
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  let count = 0;
+  const cleanup = await stubLookCleanup(page, async () => {
+    if (++count === 2) await held;
+    return { base64: CLEAN_LOOK };
+  });
+  await stubRoutes(page, answer, calls);
+  const root = await openOtome(page);
+  await openDock(root, "Wish");
+  await root.getByRole("tab", { name: "Cassian’s Wardrobe" }).click();
+  await expect(root.locator(".of-banner-img")).toHaveAttribute("src", CLEAN_LOOK);
+  await page.clock.install();
+  await page.clock.fastForward(31_000);
+  await openDock(root, "Story");
+  await openDock(root, "Wish");
+  await root.getByRole("tab", { name: "Cassian’s Wardrobe" }).click();
+  await expect.poll(() => cleanup.length).toBe(2);
+  await expect(root.locator(".of-banner-img")).toHaveAttribute("src", CLEAN_LOOK);
+  const open = root.getByRole("button", { name: "View full image: Gilded Hours" });
+  await open.click();
+  const dialog = root.getByRole("dialog", { name: "Gilded Hours" });
+  await expect(dialog.locator(".of-viewer-img")).toHaveAttribute("src", CLEAN_LOOK);
+  const refreshed = page.waitForResponse((response) => response.url().endsWith("/api/sprites/cleanup"));
+  release();
+  await (await refreshed).finished();
+  await lookSettled(page, RAW_LOOK);
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await page.clock.fastForward(31_000);
+  await page.route("**/api/sprites/cleanup", (route) => route.fulfill({ status: 404 }));
+  await openDock(root, "Story");
+  const missing = page.waitForResponse(
+    (response) => response.url().endsWith("/api/sprites/cleanup") && response.status() === 404,
+  );
+  await openDock(root, "Wish");
+  await root.getByRole("tab", { name: "Cassian’s Wardrobe" }).click();
+  await missing;
+  await expect(root.locator(".of-banner-img")).toHaveCount(0);
+  await expect(root.getByRole("button", { name: /View full image:/u })).toHaveCount(0);
+  expect(calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"))).toHaveLength(0);
+});
+
+test("Otome Hearth look art: a pending prompt review cannot open a second image dialog or pay for painting", async ({
+  page,
+}) => {
+  const calls: Call[] = [];
+  const { stub, answer } = wishStub();
+  const banner = stub.wish.banners[1];
+  banner.art = { state: "failed", at: now(), error: "Earlier image refused" };
+  banner.five.art = ready(RAW_LOOK);
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await stubLookCleanup(page);
+  await stubRoutes(
+    page,
+    (call) =>
+      call.path.endsWith("/wish/art/prompt")
+        ? { status: 200, json: { prompt: "A neutral fully clothed look", negativePrompt: "text" }, wait: held }
+        : answer(call),
+    calls,
+  );
+  const root = await openOtome(page, { review: true });
+  await openDock(root, "Wish");
+  await root.getByRole("tab", { name: "Cassian’s Wardrobe" }).click();
+  const open = root.getByRole("button", { name: "View full image: Gilded Hours" });
+  await expect(open).toBeEnabled();
+  await root.getByRole("button", { name: "Try painting it again", exact: true }).click();
+  await expect.poll(() => posts(calls, "/wish/art/prompt").length).toBe(1);
+  await expect(open).toBeDisabled();
+  release();
+  const review = root.getByRole("dialog", { name: "Paint: Gilded Hours" });
+  await expect(review).toBeVisible();
+  await expect(root.getByRole("dialog")).toHaveCount(1);
+  await review.press("Escape");
+  await expect(root.getByRole("dialog")).toHaveCount(0);
+  await expect(open).toBeEnabled();
+  expect(posts(calls, "/wish/art")).toHaveLength(0);
+  expect(posts(calls, "/wish/pull")).toHaveLength(0);
+});
 
 test("Otome Forge Wish: a ten-wish arrives sealed, Skip shows the results, and a double tap is one charged wish", async ({
   page,
@@ -669,7 +1009,7 @@ test("Otome Forge Wardrobe: the toggle moves between their looks and mine, wears
   ]);
   // He is noticing the gown, then his line takes the hint's place in the same live region, so it is announced.
   const status = root.getByRole("status").filter({ hasText: /noticed|noticing/i });
-  await expect(status).toContainText("Your new look is being noticed");
+  await expect(status).toContainText("They’re noticing your new look");
   await expect(status).toContainText(GOWN_NOTICED, { timeout: 15_000 });
   await expect(status.getByText("Ilvar Thorne noticed")).toBeVisible();
 
@@ -684,6 +1024,70 @@ test("Otome Forge Wardrobe: the toggle moves between their looks and mine, wears
   ]);
   await page.getByRole("button", { name: "Close" }).click();
   await expect(root.getByRole("button", { name: "Show off: Starlit Gown" })).toBeFocused();
+});
+
+test("Otome Hearth Album: rarity filters keep unplayed stories first in stable acquisition order", async ({ page }) => {
+  const calls: Call[] = [];
+  const { answer } = wishStub();
+  const album = albumView();
+  const memory = (id: string, kind: string, rarity: number, read: string | null, art: Json | null = null) => ({
+    ...item(id, kind, rarity, ILVAR, id),
+    owned: true,
+    story: read ? { key: `story-${id}` } : null,
+    read,
+    art,
+  });
+  album.memories = [
+    memory("Finished memory A", "memory5", 5, "done"),
+    memory("Snapshot", "snapshot3", 3, null),
+    memory("Unread moment A", "moment4", 4, "unread", ready(CG)),
+    memory("Reading memory", "memory5", 5, "in-progress", ready(CG)),
+    memory("Unopened memory", "memory5", 5, null),
+    memory("Unread moment B", "moment4", 4, "unread"),
+    memory("Finished moment", "moment4", 4, "done", ready(CG)),
+    memory("Unread memory", "memory5", 5, "unread", ready(CG)),
+    memory("Finished memory B", "memory5", 5, "done", ready(CG)),
+  ];
+  await stubRoutes(page, (call) => (call.path.endsWith("/album") ? { status: 200, json: album } : answer(call)), calls);
+  const root = await openOtome(page);
+  await openDock(root, "Album");
+  await root.getByRole("tab", { name: "Memories", exact: true }).click();
+  const filters = root.getByRole("group", { name: "Memory rarity" });
+  await expect(filters.getByRole("radio", { name: "All", exact: true })).toBeChecked();
+  const titles = root.locator(".of-keepsake-title");
+  await expect(titles).toHaveText([
+    "Unread moment A",
+    "Unopened memory",
+    "Unread moment B",
+    "Unread memory",
+    "Finished memory A",
+    "Snapshot",
+    "Reading memory",
+    "Finished moment",
+    "Finished memory B",
+  ]);
+  await filters.getByText("5★", { exact: true }).click();
+  await expect(filters.getByRole("radio", { name: "5 stars", exact: true })).toBeChecked();
+  await expect(titles).toHaveText([
+    "Unopened memory",
+    "Unread memory",
+    "Finished memory A",
+    "Reading memory",
+    "Finished memory B",
+  ]);
+  await filters.getByText("4★", { exact: true }).click();
+  await expect(filters.getByRole("radio", { name: "4 stars", exact: true })).toBeChecked();
+  await expect(titles).toHaveText(["Unread moment A", "Unread moment B", "Finished moment"]);
+  await filters.getByText("3★", { exact: true }).click();
+  await expect(filters.getByRole("radio", { name: "3 stars", exact: true })).toBeChecked();
+  await expect(titles).toHaveText(["Snapshot"]);
+  await filters.getByText("All", { exact: true }).click();
+  await expect(filters.getByRole("radio", { name: "All", exact: true })).toBeChecked();
+  await expect(titles).toHaveCount(9);
+  await expect(
+    root.locator(".of-keepsake").filter({ hasText: "Finished memory A" }).locator(".of-keepsake-state"),
+  ).toHaveText("Read");
+  expect(calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"))).toEqual([]);
 });
 
 test("Otome Forge Album: a CG opens large and saves through the Engine; the Timeline and the Tells read without images", async ({
@@ -720,6 +1124,13 @@ test("Otome Forge Album: a CG opens large and saves through the Engine; the Time
   const tabs = root.getByRole("tablist", { name: "Album" });
   await tabs.getByRole("tab", { name: "Love Timeline" }).click();
   await expect(root.getByText("The first time Ilvar said your name.")).toBeVisible();
+  // A Memory won is on the timeline with what it is, and opens in the Album.
+  const line = root.locator(".of-love-line");
+  await expect(line.locator(".of-love-kind")).toContainText("Memory");
+  await line.getByRole("button", { name: "Ink and Rain", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Read the story" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Read the story" })).toHaveCount(0);
   await tabs.getByRole("tab", { name: "Love Timeline" }).focus();
   await page.keyboard.press("End");
   await expect(tabs.getByRole("tab", { name: "Tells" })).toHaveAttribute("aria-selected", "true");
@@ -732,6 +1143,53 @@ test("Otome Forge Album: a CG opens large and saves through the Engine; the Time
   await expect(page.getByRole("button", { name: "Open it" })).toBeVisible();
   await expect(page.getByRole("dialog").getByText("Paints 1 image")).toBeVisible();
   await expect(page.getByRole("dialog").getByText("Writes its story")).toHaveCount(0);
+});
+
+test("Otome Hearth Wish: a long 5★ premise fits a phone: the title shows whole and Continue is reachable (#1944)", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 700 });
+  // The card's settled place, not its entrance slide.
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const { stub, answer } = wishStub();
+  const premise = `${"In the frost-lit observation gallery, the great clock stops and only one of you knows why. ".repeat(14)}PREMISE-END`;
+  const five = { ...memoriesBanner().five, premise };
+  // The reveal shows the banner's item.
+  stub.wish = {
+    ...stub.wish,
+    banners: stub.wish.banners.map((banner: Json) => (banner.five.id === five.id ? { ...banner, five } : banner)),
+  };
+  stub.pullResponse = { results: [{ item: five, rarity: 5, isNew: true, refund: 0 }], starlight: 1900, pity: PITY };
+  const calls: Call[] = [];
+  await stubRoutes(page, answer, calls);
+  const root = await openOtome(page);
+  await openDock(root, "Wish");
+  await root
+    .getByRole("region", { name: "Clockwork Hearts" })
+    .getByRole("button", { name: /^Wish ×1,/u })
+    .click();
+  const takeover = page.getByRole("dialog", { name: "Your wish" });
+  await expect(takeover.getByRole("button", { name: "Break the seal" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  const reveal = takeover.locator(".of-reveal");
+  const card = reveal.locator(".of-reveal-card");
+  const title = reveal.getByRole("heading", { name: "The Hour He Stopped" });
+  await expect(title).toBeInViewport({ ratio: 1 });
+  // Whole, inside the stage, and clear of Skip's row.
+  const stage = (await takeover.boundingBox())!;
+  const skip = (await takeover.getByRole("button", { name: "Skip" }).boundingBox())!;
+  const box = (await card.boundingBox())!;
+  expect(box.y).toBeGreaterThanOrEqual(skip.y + skip.height - 1);
+  expect(box.y + box.height).toBeLessThanOrEqual(stage.y + stage.height + 1);
+  // The premise scrolls inside the card, and Continue is there at its end.
+  expect(await card.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  const go = reveal.getByRole("button", { name: "Continue" });
+  await go.scrollIntoViewIfNeeded();
+  await expect(go).toBeInViewport();
+  await expect(reveal.getByText("PREMISE-END", { exact: false })).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath("reveal-long-premise-phone.png") });
+  await go.click();
+  await expect(reveal).toHaveCount(0);
 });
 
 test("Otome Forge Wish: an open on the 5★ reveal hands focus on, and the prompt review from the results is on top", async ({
@@ -801,3 +1259,189 @@ test("Otome Forge Wish: an open on the 5★ reveal hands focus on, and the promp
   expect(paints[0]!.body).toMatchObject({ prompt: "The great clock at midnight" });
   await expect(takeover.getByRole("button", { name: "Read the story" })).toBeFocused();
 });
+
+test("Otome Hearth Snapshot: an owned vignette reviews one full image prompt and reuses its saved art", async ({
+  page,
+}) => {
+  const calls: Call[] = [];
+  const { stub, answer } = wishStub();
+  stub.view.world.images.ask = true;
+  const text = "Ilvar warms his hands around a cup while the canal lanterns settle into the evening.";
+  const snapshot: Json = {
+    ...item("memories-1-s1", "snapshot3", 3, ILVAR, "A Quiet Cup", { text }),
+    owned: true,
+    read: null,
+  };
+  const album = { ...albumView(), memories: [snapshot] };
+  const prompt =
+    "Illustrate this saved everyday moment. " +
+    "Warm lantern light on a blue coat and a cup. ".repeat(120) +
+    "PROMPT-END";
+  const negativePrompt = "blurry, compression artifacts, ".repeat(150) + "NEGATIVE-END";
+  expect(prompt.length).toBeGreaterThan(4000);
+  expect(negativePrompt.length).toBeGreaterThan(4000);
+  const artPath = `/items/${snapshot.id}/art`;
+  const openPath = `/items/${snapshot.id}/open`;
+  await stubRoutes(
+    page,
+    (call) => {
+      if (call.path.endsWith("/album")) return { status: 200, json: album };
+      if (call.path.endsWith(openPath) && call.method === "POST") {
+        snapshot.art = { state: "waiting-consent", at: now() };
+        return { status: 200, json: { item: snapshot, story: null, art: snapshot.art } };
+      }
+      if (call.path.endsWith(`${artPath}/prompt`) && call.method === "POST")
+        return { status: 200, json: { prompt, negativePrompt } };
+      if (call.path.endsWith(artPath) && call.method === "POST") {
+        snapshot.art = ready(CG);
+        return { status: 200, json: { art: snapshot.art } };
+      }
+      return answer(call);
+    },
+    calls,
+  );
+  const root = await openOtome(page, { review: true });
+  const balance = await starlight(root).textContent();
+  expect(balance).toBeTruthy();
+  await openDock(root, "Album");
+  await root.getByRole("tab", { name: "Memories", exact: true }).click();
+  const card = root.getByRole("button", { name: /A Quiet Cup/u });
+  await expect(card).toContainText(text);
+  await card.click();
+  const detail = root.getByRole("dialog", { name: "Memory", exact: true });
+  await expect(detail.locator(".of-item-text--snapshot")).toHaveText(text);
+  await expect(
+    detail.getByText("Paints 1 image · after you tap Paint (Ask before painting)", { exact: true }),
+  ).toBeVisible();
+  await expect(detail.getByText("Writes its story", { exact: true })).toHaveCount(0);
+  expect(calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"))).toEqual([]);
+  await detail.getByRole("button", { name: "Open it", exact: true }).click();
+  await expect(detail.getByRole("button", { name: "Paint it", exact: true })).toBeVisible();
+  expect(posts(calls, openPath)).toHaveLength(1);
+  expect(posts(calls, artPath)).toHaveLength(0);
+  await detail.getByRole("button", { name: "Paint it", exact: true }).click();
+  const review = root.getByRole("dialog", { name: "Paint: A Quiet Cup", exact: true });
+  await expect(review).toBeVisible();
+  await expect(root.getByRole("dialog")).toHaveCount(1);
+  await expect(review.getByRole("textbox", { name: "Prompt", exact: true })).toHaveValue(prompt);
+  await expect(review.getByRole("textbox", { name: "Negative prompt", exact: true })).toHaveValue(negativePrompt);
+  await expect(review.getByText("Paints 1 image", { exact: true })).toBeVisible();
+  expect(posts(calls, artPath)).toHaveLength(0);
+  const reviewed = `${prompt} USER REVIEWED THE WHOLE PROMPT.`;
+  await review.getByRole("textbox", { name: "Prompt", exact: true }).fill(reviewed);
+  await review.getByRole("button", { name: "Paint", exact: true }).click();
+  await expect(review).toHaveCount(0);
+  await expect(detail.locator(".of-item-art img")).toHaveAttribute("src", CG);
+  await expect(detail.locator(".of-item-text--snapshot")).toHaveText(text);
+  expect(posts(calls, artPath)).toHaveLength(1);
+  expect(posts(calls, artPath)[0]!.body).toMatchObject({ prompt: reviewed, negativePrompt });
+  await detail.getByRole("button", { name: "Close", exact: true }).click();
+  await openDock(root, "Story");
+  await openDock(root, "Album");
+  await root.getByRole("tab", { name: "Memories", exact: true }).click();
+  await root.getByRole("button", { name: /A Quiet Cup/u }).click();
+  await expect(detail.locator(".of-item-art img")).toHaveAttribute("src", CG);
+  await expect(detail.locator(".of-item-text--snapshot")).toHaveText(text);
+  await expect(detail.getByRole("button", { name: "Open it", exact: true })).toHaveCount(0);
+  await expect(detail.getByRole("button", { name: "Paint it", exact: true })).toHaveCount(0);
+  await expect(starlight(root)).toHaveText(balance!);
+  expect(snapshot.story).toBeNull();
+  expect(snapshot.read).toBeNull();
+  expect(snapshot.text).toBe(text);
+  expect(
+    calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened")).map((call) => call.path),
+  ).toEqual([
+    `/api/otome-forge/runs/${RUN}${openPath}`,
+    `/api/otome-forge/runs/${RUN}${artPath}/prompt`,
+    `/api/otome-forge/runs/${RUN}${artPath}`,
+  ]);
+});
+
+for (const colorScheme of ["dark", "light"] as const) {
+  test(`Otome Hearth four-star memory: a saved Moment gains reviewed artwork without rewriting its story (${colorScheme})`, async ({
+    page,
+  }, testInfo) => {
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme });
+    const calls: Call[] = [];
+    const { stub, answer } = wishStub();
+    stub.view.world.images.ask = true;
+    const moment = item("memories-1-a1", "moment4", 4, ILVAR, "The Last Lantern", {
+      owned: true,
+      premise: "You and Ilvar share the last lantern on the canal.",
+      story: { key: "story-memories-1-a1" },
+      read: "done",
+    });
+    const savedStory = structuredClone(moment.story);
+    const album: Json = { ...albumView(), cgs: [], memories: [moment] };
+    const artPath = `/items/${moment.id}/art`;
+    const openPath = `/items/${moment.id}/open`;
+    const prompt = "Two adults sheltering the last canal lantern from the rain.";
+    let attempts = 0;
+    await stubRoutes(
+      page,
+      (call) => {
+        if (call.path.endsWith("/album")) return { status: 200, json: album };
+        if (call.path.endsWith(openPath) && call.method === "POST") {
+          moment.art = { state: "waiting-consent", at: now() };
+          return { status: 200, json: { item: moment, story: moment.story, art: moment.art } };
+        }
+        if (call.path.endsWith(`${artPath}/prompt`) && call.method === "POST")
+          return { status: 200, json: { prompt, negativePrompt: "text, watermark" } };
+        if (call.path.endsWith(artPath) && call.method === "POST") {
+          attempts += 1;
+          if (attempts === 1) return { status: 502, json: { error: "The image provider is unavailable." } };
+          moment.art = ready(CG);
+          album.cgs = [{ key: `item:${moment.id}`, source: "memory", li: ILVAR, title: moment.title, ...moment.art }];
+          return { status: 200, json: { art: moment.art } };
+        }
+        return answer(call);
+      },
+      calls,
+    );
+    const root = await openOtome(page, { review: true });
+    await expect(root).toHaveAttribute("data-look", colorScheme === "dark" ? "midnight" : "pearl");
+    const balance = await starlight(root).textContent();
+    await openDock(root, "Album");
+    await root.getByRole("tab", { name: "Memories", exact: true }).click();
+    await root.getByRole("button", { name: /The Last Lantern/u }).click();
+    const detail = root.getByRole("dialog", { name: "Memory", exact: true });
+    await expect(detail.getByRole("img", { name: "4 stars", exact: true })).toBeVisible();
+    await expect(detail.getByRole("button", { name: "Read the story", exact: true })).toBeVisible();
+    await expect(detail.getByText("Writes its story", { exact: true })).toHaveCount(0);
+    await expect(detail.getByText("Paints 1 image · after you tap Paint (Ask before painting)")).toBeVisible();
+    expect(calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"))).toEqual([]);
+    await detail.getByRole("button", { name: "Open it", exact: true }).click();
+    await expect(detail.getByRole("button", { name: "Paint it", exact: true })).toBeVisible();
+    expect(posts(calls, openPath)).toHaveLength(1);
+    expect(posts(calls, artPath)).toHaveLength(0);
+    await detail.getByRole("button", { name: "Paint it", exact: true }).click();
+    const review = root.getByRole("dialog", { name: "Paint: The Last Lantern", exact: true });
+    await expect(review.getByRole("textbox", { name: "Prompt", exact: true })).toHaveValue(prompt);
+    const reviewed = `${prompt} Blue hour, a close composition.`;
+    await review.getByRole("textbox", { name: "Prompt", exact: true }).fill(reviewed);
+    await review.getByRole("button", { name: "Paint", exact: true }).click();
+    await expect(review.getByRole("alert")).toContainText("Something went wrong. Try again.");
+    await expect(review.getByRole("textbox", { name: "Prompt", exact: true })).toHaveValue(reviewed);
+    await review.getByRole("button", { name: "Paint", exact: true }).click();
+    await expect(review).toHaveCount(0);
+    await expect(detail.locator(".of-item-art img")).toHaveAttribute("src", CG);
+    await expect(detail.getByRole("button", { name: "Read the story", exact: true })).toBeVisible();
+    await expect(detail.getByRole("button", { name: "Open it", exact: true })).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath(`four-star-memory-${colorScheme}.png`) });
+    await detail.getByRole("button", { name: "Close", exact: true }).click();
+    await openDock(root, "Story");
+    await openDock(root, "Album");
+    await root.getByRole("tab", { name: "Memories", exact: true }).click();
+    await root.getByRole("button", { name: /The Last Lantern/u }).click();
+    await expect(detail.locator(".of-item-art img")).toHaveAttribute("src", CG);
+    await expect(detail.getByRole("button", { name: "Open it", exact: true })).toHaveCount(0);
+    await expect(starlight(root)).toHaveText(balance!);
+    expect(moment.story).toEqual(savedStory);
+    expect(moment.read).toBe("done");
+    expect(posts(calls, openPath)).toHaveLength(1);
+    expect(posts(calls, artPath)).toHaveLength(2);
+    for (const paint of posts(calls, artPath))
+      expect(paint.body).toMatchObject({ prompt: reviewed, negativePrompt: "text, watermark" });
+    expect(calls.filter((call) => /\/chapters\/.*\/(?:beats|read)/u.test(call.path))).toEqual([]);
+  });
+}

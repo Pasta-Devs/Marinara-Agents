@@ -133,7 +133,7 @@ export function parseBannerKey(value: unknown): { kind: BannerKind; rotation: nu
 
 /**
  * memory5: a CG, a 3–5 beat Character Story and a voiced line · moment4: a one-beat Moment · snapshot3: a 2–3 sentence
- * vignette (his Love Timeline and his private memory) · his-look5: his look, a first-wear beat and repainted faces ·
+ * vignette with an illustration (his Love Timeline and his private memory) · his-look5: his look, a first-wear beat and repainted faces ·
  * his-look4: another love interest's look · her-look5: her look, a couple set with his · her-look4: a look of hers.
  */
 export const ITEM_KINDS = [
@@ -210,8 +210,12 @@ export interface Item {
   look?: ItemLook;
   /** her-look5: the item id of his look it pairs with (the his-wardrobe banner's 5★ of the same rotation). */
   coupleWith?: string;
-  /** memory5: the key image's English brief and the names of the people in it (at most 3), as a beat's `cg`. */
-  cg?: { brief: string; cast: string[] };
+  /**
+   * memory5 and new snapshot3: the illustration's English brief and cast (at most 3), as a beat's `cg`. `explicit`:
+   * a memory5 brief the banner plan marked explicit, painted so only under Explicit Heat and the Explicit rating;
+   * `clothed`, the same moment clothed, is painted in its place under lower settings.
+   */
+  cg?: { brief: string; cast: string[]; explicit?: true; clothed?: string };
   art: Paint | null;
   /** The Character Story (memory5), Moment (moment4) or first-wear beat (his-look5), once written. */
   story: { key: string } | null;

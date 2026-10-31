@@ -9,7 +9,6 @@ import {
 } from "./recall/generation-injection.js";
 import { createLongTermMemoryRoutes } from "./routes.js";
 import { createLtmRecallService } from "./services/recall.js";
-import { createLtmStorageReadService } from "./services/storage-read.js";
 import { adoptLegacyLongTermMemoryAgentConfig } from "./maintenance/legacy-adoption.js";
 import type { FastifyPluginAsync } from "fastify";
 
@@ -17,7 +16,7 @@ let active: Awaited<ReturnType<typeof activateLongTermMemoryStorage>> | null = n
 
 type Api = {
   runtime: CapabilityRuntimeHost;
-  registerService(name: string, service: unknown): () => void;
+  registerService(name: string, service: unknown, options?: { hostOnly?: boolean }): () => void;
   registerPrivilegedRoutes(routes: FastifyPluginAsync, options: { prefix: string }): Promise<() => void>;
 };
 
@@ -36,32 +35,33 @@ export async function activate({ api, dataDir }: ActivationContext) {
     const releaseRoutes = await api.registerPrivilegedRoutes(createLongTermMemoryRoutes(active), {
       prefix: "/api/long-term-memory",
     });
-    const releaseStorageService = api.registerService(
-      "long-term-memory:storage",
-      createLtmStorageReadService(active.storage),
-    );
     const releaseRecallService = api.registerService("long-term-memory:recall", createLtmRecallService(active.storage));
-    const releaseRuntimeService = api.registerService("long-term-memory:runtime", {
-      refresh: async ({ signal }: { signal: AbortSignal }) => {
-        await refreshLongTermMemoryIndexes(activationRoot, signal);
-        return { status: "refreshed" as const };
+    // Host-only from Capability API 1.388: only the Engine reads it. Older Engines ignore the option.
+    const releaseRuntimeService = api.registerService(
+      "long-term-memory:runtime",
+      {
+        refresh: async ({ signal }: { signal: AbortSignal }) => {
+          await refreshLongTermMemoryIndexes(activationRoot, signal);
+          return { status: "refreshed" as const };
+        },
+        recall: (input: {
+          chatId: string;
+          chatMode: string;
+          characterIds: string[];
+          messages: Array<{ role: string; content: string }>;
+          signal?: AbortSignal;
+          debugMode?: boolean;
+        }) => prepareGenerationLongTermMemory({ ...input, root: active!.root }),
+        recordPromptAccepted: (input: { chatId: string; receipt: unknown; messages: Array<{ content: string }> }) =>
+          recordGenerationLongTermMemoryDispatch({ ...input, root: active!.root }),
+        withVaultMutation: <T>(operation: () => Promise<T>) =>
+          withLongTermMemoryVaultMutation(activationRoot, operation),
       },
-      recall: (input: {
-        chatId: string;
-        chatMode: string;
-        characterIds: string[];
-        messages: Array<{ role: string; content: string }>;
-        signal?: AbortSignal;
-        debugMode?: boolean;
-      }) => prepareGenerationLongTermMemory({ ...input, root: active!.root }),
-      recordPromptAccepted: (input: { chatId: string; receipt: unknown; messages: Array<{ content: string }> }) =>
-        recordGenerationLongTermMemoryDispatch({ ...input, root: active!.root }),
-      withVaultMutation: <T>(operation: () => Promise<T>) => withLongTermMemoryVaultMutation(activationRoot, operation),
-    });
+      { hostOnly: true },
+    );
     return async () => {
       releaseRoutes();
       releaseRuntimeService();
-      releaseStorageService();
       releaseRecallService();
       // A scheduled rebuild must not publish after deactivation; the index stays dirty and the next recall rebuilds it.
       await stopLtmIndexRebuild(activationRoot);

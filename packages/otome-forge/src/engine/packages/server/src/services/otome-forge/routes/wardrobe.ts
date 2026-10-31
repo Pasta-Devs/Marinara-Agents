@@ -112,10 +112,18 @@ function ownerOf(value: string, run: RunDocuments): { kind: "me" } | { kind: "li
 
 function baseLook(runId: string, owner: "me" | LiId, person: Unit | Player, worn: boolean): LookView {
   const art = paintView(runId, owner === "me" ? "player" : `li:${owner}`, person.art) ?? null;
+  const look =
+    "identityLine" in person
+      ? {
+          identityLine: person.identityLine || person.bible?.look.identityLine,
+          outfitLine: person.outfitLine || person.bible?.look.outfitLine,
+        }
+      : person.look;
   return {
     id: BASE_LOOK,
     owner,
     name: "",
+    description: [look?.identityLine, look?.outfitLine].filter(Boolean).join("\n"),
     ...(person.portrait ? { url: person.portrait } : {}),
     art,
     worn,
@@ -130,6 +138,7 @@ function itemLook(runId: string, item: Item, owner: "me" | LiId, worn: string | 
     id: item.id,
     owner,
     name: item.look?.name ?? item.title,
+    description: item.look?.outfitLine,
     item: { kind: item.kind, rarity: ITEM_RARITY[item.kind], title: item.title },
     ...(outfit ? { url: outfit.url } : {}),
     art: itemArtView(runId, item),

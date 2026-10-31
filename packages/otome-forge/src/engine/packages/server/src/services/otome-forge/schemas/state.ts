@@ -6,6 +6,8 @@
 // M5: each love interest's `tellsLearned`, the plush shelf (`owned.plush`), each love interest's newest Claw Machine
 // rounds (`claw.rounds`) and the newest paid Read Him sets (`readHim.paid`).
 // M6 adds none: the period tracker and caring messages never reach a server document (plan §1.9).
+// 0.5.0 (#1945): each love interest's notebook (`known`, what they know about the protagonist) and the newest paid
+// Read Me sets (`readMe.paid`), written in the same write.
 import { forgeStoryExpressionCast, forgeStoryExpressionsOn } from "@forge-kit/story-expressions-server.mjs";
 import { z, type ZodType } from "zod";
 import type {
@@ -39,11 +41,22 @@ import {
   type ReadHimPaid,
 } from "../../../../../client/src/features/otome-forge/shared/read-him.js";
 import {
+  NOTEBOOK_CATEGORIES,
+  NOTEBOOK_MAX,
+  READ_ME_PAID_KEPT,
+  READ_ME_SET_ID,
+  READ_ME_VERDICTS,
+  READ_ME_WORDS_MAX,
+  type NotebookEntry,
+  type ReadMePaid,
+} from "../../../../../client/src/features/otome-forge/shared/read-me.js";
+import {
   STARTING_STARLIGHT,
   TENSION_MAX,
   TENSION_MIN,
   TRUST_MAX,
   TRUST_MIN,
+  affectionProgressOf,
   levelOf,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import { FACES, type Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
@@ -55,7 +68,7 @@ import {
   type BannerKind,
   type PityCounter,
 } from "../../../../../client/src/features/otome-forge/shared/wish.js";
-import { isChapterKey, isLiId, playerId, stateId, worldId } from "../ids.js";
+import { isChapterKey, isLiId, playerId, stateId, unitId, worldId } from "../ids.js";
 import { readChapterDelta } from "../state/relationship.js";
 import type { OtomeStore } from "../store.js";
 import { field, isRecord, readFields, validItems, wornLookUrl } from "./common.js";
@@ -68,7 +81,11 @@ export { FIRST_STAGE, LAST_STAGE };
 const TEXT_MAX = 600;
 const LIST_MAX = 200;
 const LEDGER_MAX = 300;
+/** Rolls off only Snapshot and couple lines (keepTimeline): every stage and first stays. */
 const TIMELINE_MAX = 500;
+// ponytail: the 301st favourite drops the oldest, and the 501st CG seen drops the oldest from the Album (the state is
+// rewritten on every read, so these lists stay bounded). Ceiling: 300 starred lines, 500 CGs (about 200 chapters).
+// Upgrade path: favourites and the Album's CGs in documents of their own, or a refusal with Unstar in the Album.
 const FAVORITES_MAX = 300;
 const ALBUM_MAX = 500;
 /** Pulls remembered for a retried request id (S/wish/pull.ts). */
@@ -145,6 +162,21 @@ const ReadHimPaidSchema: ZodType<ReadHimPaid> = z.object({
   starlight: z.number().int().min(0),
   affection: z.number().int().min(0),
 });
+const ReadMePaidSchema: ZodType<ReadMePaid> = z.object({
+  setId: z.string().regex(READ_ME_SET_ID),
+  li: z.string(),
+  starlight: z.number().int().min(0),
+  affection: z.number().int().min(0),
+});
+/** One notebook entry (SH/read-me.ts); one damaged entry is dropped, never the notebook. */
+export const NotebookEntrySchema: ZodType<NotebookEntry> = z.object({
+  id: short(120),
+  category: z.enum(NOTEBOOK_CATEGORIES),
+  text: short(300),
+  verdict: z.enum(READ_ME_VERDICTS),
+  words: short(READ_ME_WORDS_MAX).optional(),
+  at: z.string(),
+});
 
 /** A plush id the shelf can hold: a series plush, or `li:<li id>`. */
 const isPlushId = (id: string) => isPlushSeries(id) || isLiId(plushLi(id));
@@ -198,6 +230,7 @@ export const defaultLiState = (): LiState => ({
   angst: [],
   firsts: {},
   tellsLearned: [],
+  known: [],
 });
 
 function normalizeLiState(raw: unknown): LiState {
@@ -216,6 +249,7 @@ function normalizeLiState(raw: unknown): LiState {
       angst: (value) => validItems(short(80), value, LIST_MAX),
       firsts: z.record(z.string(), z.string()),
       tellsLearned: normalizeTells,
+      known: (value) => keepNewest(validItems(NotebookEntrySchema, value), NOTEBOOK_MAX),
     },
     defaultLiState,
     isRecord(raw) ? raw : undefined,
@@ -343,7 +377,7 @@ export function normalizeState(data: unknown): RunState {
           offscreen: validItems(RelationshipLineSchema, rawLedgers.offscreen, LEDGER_MAX),
         }
       : defaultLedgers(),
-    timeline: validItems(TimelineSchema, field(data, "timeline"), TIMELINE_MAX),
+    timeline: keepTimeline(validItems(TimelineSchema, field(data, "timeline"))),
     favorites: validItems(FavoriteSchema, field(data, "favorites"), FAVORITES_MAX),
     home: normalizeHome(field(data, "home"), lis),
     album: { cgs: validItems(AlbumCgSchema, field(field(data, "album"), "cgs"), ALBUM_MAX) },
@@ -355,6 +389,9 @@ export function normalizeState(data: unknown): RunState {
     readHim: {
       paid: keepNewest(validItems(ReadHimPaidSchema, field(field(data, "readHim"), "paid")), READ_HIM_PAID_KEPT),
     },
+    readMe: {
+      paid: keepNewest(validItems(ReadMePaidSchema, field(field(data, "readMe"), "paid")), READ_ME_PAID_KEPT),
+    },
   };
 }
 
@@ -362,6 +399,30 @@ export function normalizeState(data: unknown): RunState {
 export function keepNewest<T>(items: readonly T[], max: number): T[] {
   return items.length > max ? items.slice(items.length - max) : [...items];
 }
+/**
+ * Love Timeline kinds that are never trimmed: each stage reached and each `first-<what>`, a few per love interest. They
+ * are the calendar's yearly anniversaries (S/routes/care.ts), and nothing unlocked is taken back.
+ */
+const LASTING_TIMELINE = /^(?:stage-\d+|first-[a-z0-9-]+)$/;
+
+/**
+ * The Love Timeline within its cap: once full, the oldest Snapshot and couple-set lines go first (their items stay
+ * owned in the Album, dated by `owned.at`), and every stage and first stays.
+ */
+export function keepTimeline(entries: readonly TimelineEntry[]): TimelineEntry[] {
+  let extra = entries.length - TIMELINE_MAX;
+  if (extra <= 0) return [...entries];
+  const kept: TimelineEntry[] = [];
+  for (const entry of entries) {
+    if (extra > 0 && !LASTING_TIMELINE.test(entry.kind)) {
+      extra -= 1;
+      continue;
+    }
+    kept.push(entry);
+  }
+  return kept;
+}
+
 export const STATE_LIMITS = {
   ledger: LEDGER_MAX,
   timeline: TIMELINE_MAX,
@@ -380,6 +441,31 @@ export const STATE_LIMITS = {
 export function readyFaces(world: Pick<World, "images">, unit: Unit): Partial<Record<Face, string>> | undefined {
   const { expressions } = forgeStoryExpressionCast(world.images, unit, wornLookUrl(unit), FACES);
   return expressions as Partial<Record<Face, string>> | undefined;
+}
+
+/** The cut-out of `url`, keeping an older derivative visible while a free replacement is pending. */
+export function readyCutout(unit: Pick<Unit, "cutouts">, url: string | undefined): string | undefined {
+  const record = url ? unit.cutouts[url] : undefined;
+  return record?.url;
+}
+
+/** Stage faces use only cleaned derivatives; missing or failed cleanup keeps the neutral look on stage. */
+export function cleanedFaces(world: Pick<World, "images">, unit: Unit): Partial<Record<Face, string>> | undefined {
+  const faces = readyFaces(world, unit);
+  return faces
+    ? (Object.fromEntries(
+        Object.entries(faces).flatMap(([face, url]) => {
+          const cutout = readyCutout(unit, url);
+          return cutout ? [[face, cutout]] : [];
+        }),
+      ) as Partial<Record<Face, string>>)
+    : undefined;
+}
+
+/** Every image he stands on stage in (base look, worn look, ready faces): what the cut-outs are made of. */
+export function stageArtUrls(world: Pick<World, "images">, unit: Unit): string[] {
+  const worn = unit.wornOutfit ? unit.outfits.find((outfit) => outfit.id === unit.wornOutfit)?.url : undefined;
+  return [unit.portrait, worn, ...Object.values(readyFaces(world, unit) ?? {})].filter((url): url is string => !!url);
 }
 
 /**
@@ -440,8 +526,24 @@ export function toRunView(runKey: string, world: World, player: Player, units: U
       .sort((a, b) => rank(a) - rank(b))
       .map((unit) => {
         const progress = state.lis[unit.id] ?? defaultLiState();
-        const expressions = readyFaces(world, unit);
+        // Each image as its cut-out once one is ready, so he stands on every screen without a backdrop; `cut` lists the
+        // cut-outs, which the client frames whole instead of cropping and fading.
+        const cut: string[] = [];
+        const shown = (url: string) => {
+          const cutout = readyCutout(unit, url);
+          if (cutout) cut.push(cutout);
+          return cutout ?? url;
+        };
+        // Phone stickers keep the original while cleanup waits or fails; only URLs in `cut` may stand on stage.
+        const faces = readyFaces(world, unit);
+        const expressions = faces
+          ? (Object.fromEntries(
+              Object.entries(faces).map(([face, url]) => [face, url ? shown(url) : url]),
+            ) as typeof faces)
+          : undefined;
         const worn = unit.wornOutfit ? unit.outfits.find((outfit) => outfit.id === unit.wornOutfit) : undefined;
+        const portrait = unit.portrait ? shown(unit.portrait) : undefined;
+        const wornUrl = worn ? shown(worn.url) : undefined;
         return {
           id: unit.id,
           name: unit.name,
@@ -450,11 +552,19 @@ export function toRunView(runKey: string, world: World, player: Player, units: U
           ...(unit.cardId ? { cardId: unit.cardId } : {}),
           voiceGender: unit.voiceGender,
           accent: unit.accent,
-          ...(unit.portrait ? { portrait: unit.portrait } : {}),
+          look: {
+            identityLine: unit.identityLine || unit.bible?.look.identityLine || "",
+            outfitLine: unit.outfitLine || unit.bible?.look.outfitLine || "",
+          },
+          ...(portrait ? { portrait } : {}),
+          ...(unit.art ? { art: unit.art } : {}),
+          ...(unit.bible?.intimacy ? { intimacy: true as const } : {}),
           level: levelOf(progress.points),
+          affectionProgress: affectionProgressOf(progress.points),
           stage: progress.stage,
           ...(expressions ? { expressions } : {}),
-          ...(worn ? { worn: { id: worn.id, url: worn.url } } : {}),
+          ...(worn && wornUrl ? { worn: { id: worn.id, url: wornUrl } } : {}),
+          ...(cut.length ? { cut } : {}),
         };
       }),
     forge: world.forge,
@@ -469,22 +579,24 @@ export interface RunDocuments {
   state: RunState;
 }
 
-/** Every M1 document of the run, normalized; null when the run has no world. */
-export async function readRun(
-  store: Pick<OtomeStore, "readDoc" | "listRun">,
-  runId: string,
-): Promise<RunDocuments | null> {
-  const [world, player, unitRecords, state] = await Promise.all([
+/**
+ * Every M1 document of the run, normalized; null when the run has no world. The units are read by id, in cast order
+ * (`state.lis`, written with them at setup and never changed), never listed: the Engine's list returns every world's
+ * units, and this runs on nearly every request (M7 probe: 3 worlds made it parse 3 times the units it needs).
+ */
+export async function readRun(store: Pick<OtomeStore, "readDoc">, runId: string): Promise<RunDocuments | null> {
+  const [world, player, stored] = await Promise.all([
     store.readDoc(worldId(runId), normalizeWorld),
     store.readDoc(playerId(runId), normalizePlayer),
-    store.listRun("unit", runId),
     store.readDoc(stateId(runId), normalizeState),
   ]);
   if (!world) return null;
+  const state = stored ?? normalizeState(undefined);
+  const units = await Promise.all(Object.keys(state.lis).map((li) => store.readDoc(unitId(runId, li), normalizeUnit)));
   return {
     world,
     player: player ?? normalizePlayer(undefined),
-    units: unitRecords.map((record) => normalizeUnit(record.data)),
-    state: state ?? normalizeState(undefined),
+    units: units.filter((unit): unit is Unit => !!unit),
+    state,
   };
 }

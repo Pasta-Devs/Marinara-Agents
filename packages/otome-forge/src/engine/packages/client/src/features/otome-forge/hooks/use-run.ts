@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────
-// Otome Forge: one run (GET /runs/:run → {view}), polled every 2 s while the forge is working
+// Otome Forge: one run (GET /runs/:run → {view}), polled every 2 s while forging or free sprite cleanup is working
 // ──────────────────────────────────────────────
 // Polling runs while a step is running, or pending with nothing failed before it (SH/forge.ts forgeIsWorking): the
 // text steps, and a paid paint the player asked for. It stops while the world waits on a failed step's Retry (whose
@@ -15,6 +15,8 @@ import { forgeIsWorking } from "../shared/forge";
 const POLL_MS = 2_000;
 
 export const runQueryKey = (runKey: string) => ["otome-forge", "run", runKey] as const;
+/** A love interest's spoiler-gated bible (BibleView); the cast's intimacy fill refreshes it too. */
+export const bibleQueryKey = (runKey: string, li: string) => ["otome-forge", "bible", runKey, li] as const;
 
 /** GET /runs/:run, for useRun and for opening a story, which loads it before showing it. */
 export const fetchRunView = async (otome: ReturnType<typeof useOtomeApi>, runKey: string) =>
@@ -26,7 +28,8 @@ export function useRun(runKey: string | null) {
     queryKey: runQueryKey(runKey ?? ""),
     enabled: !!runKey,
     queryFn: () => fetchRunView(otome, runKey ?? ""),
-    refetchInterval: (query) => (query.state.data && forgeIsWorking(query.state.data.forge) ? POLL_MS : false),
+    refetchInterval: (query) =>
+      query.state.data && (query.state.data.cutoutsPending || forgeIsWorking(query.state.data.forge)) ? POLL_MS : false,
   });
 }
 

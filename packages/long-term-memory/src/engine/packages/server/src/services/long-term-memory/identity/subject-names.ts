@@ -200,12 +200,23 @@ const GENERIC_SUBJECT_NAMES = new Set([
 // A strict token-subset of a longer trusted character/persona name is a short or partial
 // surface form ("Alex" for "Alex Rivera"). It is never identity evidence on its own, so
 // callers route it to review instead of binding it by first name alone.
-export function partialNameTokensMatch(name: string, entryName: string) {
+export function partialNameTokensMatch(name: string, entryName: string, splitCamelCase = true) {
   if (isHangulNameSuffix(name, entryName)) return true;
-  const tokenTokens = normalizeSubjectName(name).split("_").filter(Boolean);
-  const entryTokens = normalizeSubjectName(entryName).split("_").filter(Boolean);
+  const parts = (value: string) =>
+    normalizeSubjectName(splitCamelCase ? value : value.toLowerCase())
+      .split("_")
+      .filter(Boolean);
+  const tokenTokens = parts(name);
+  const entryTokens = parts(entryName);
   if (tokenTokens.length === 0 || entryTokens.length <= tokenTokens.length) return false;
   return tokenTokens.every((part) => entryTokens.includes(part));
+}
+
+// LTM's own characters relate in either direction: a new "Preston" to a saved "Preston Farraday",
+// and a new "Preston Farraday" to a saved "Preston", on the same whole-token rule. Parts split on
+// whitespace and punctuation only, so "Ann" never binds to a saved "JoAnn".
+export function nameTokensRelated(name: string, entryName: string) {
+  return partialNameTokensMatch(name, entryName, false) || partialNameTokensMatch(entryName, name, false);
 }
 
 export function sourceBackedNpcNames(sources: Array<string | undefined>) {

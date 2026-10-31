@@ -40,10 +40,20 @@ import { getLtmExtractionConfig } from "../extraction/extraction-config.js";
 import { extractionFingerprintForLtmSourceMaterial } from "../extraction/source-hash.js";
 import { inferSourceProvenance, sourceNoteIdForProvenance } from "./source-identity.js";
 import { LongTermMemoryStorage } from "../persistence/storage.js";
+import {
+  ltmSetMessagesHiddenFromAI,
+  readLtmHiddenMessages,
+  writeLtmHiddenMessages,
+} from "../persistence/hidden-messages.js";
+import { withLtmVaultLock } from "../persistence/vault-lock.js";
+import { getLtmGlobalSettings } from "../settings.js";
 import { LtmServiceError } from "../service-error.js";
 
 // How much of the previous chat piece the next one sees as context.
 const CHAT_PIECE_TAIL_CHARS = 3_000;
+// Chat Messages piece size per Chat import detail choice. A chat keeps the size its pieces were first imported with.
+const CHAT_PIECE_CHARS = { standard: 24_000, detailed: 12_000 } as const;
+const CHAT_PIECE_SIZE_EVIDENCE = "piece_size:";
 
 type Candidate = {
   sourceId: string;
@@ -53,6 +63,10 @@ type Candidate = {
   title: string;
   // Chat Messages pieces only; the title string stays the source note title.
   messageRange?: { chatName: string; first: number; last: number };
+  // Chat Messages pieces only: the ids of the messages the piece reads.
+  messageIds?: string[];
+  // Chat Summaries without a numbered range: the label is the range text from the title.
+  summaryRange?: { chatName: string; label: string };
   sourceText: string;
   sourceNoteId: string;
   legacySourceNoteIds: string[];
@@ -143,18 +157,18 @@ function compact(data: Record<string, unknown>, comment = "") {
     .flatMap(([label, value]) => (text(value) ? [`${label}:\n${text(value)}`] : []))
     .join("\n\n");
 }
-function chunks(value: string) {
+function chunks(value: string, cap = 24_000) {
   const result: string[] = [];
   let remaining = value.trim();
-  while (remaining.length > 24_000) {
-    const window = remaining.slice(0, 24_001),
+  while (remaining.length > cap) {
+    const window = remaining.slice(0, cap + 1),
       boundary = Math.max(
         window.lastIndexOf("\n\n"),
         window.lastIndexOf("\n"),
         window.lastIndexOf(". "),
         window.lastIndexOf(" "),
       ),
-      end = boundary > 12_000 ? boundary : 24_000;
+      end = boundary > cap / 2 ? boundary : cap;
     result.push(remaining.slice(0, end).trim());
     remaining = remaining.slice(end).trim();
   }
@@ -162,17 +176,20 @@ function chunks(value: string) {
   return result;
 }
 type TranscriptMessage = Awaited<ReturnType<ReturnType<typeof getPackagePersistence>["listMessages"]>>[number];
-type TranscriptPiece = { entryId: string; first: number; last: number; content: string };
+type TranscriptPiece = { entryId: string; first: number; last: number; content: string; messageIds: string[] };
 // A piece is named by its first message, so new messages only grow or follow the last piece and earlier pieces keep
 // their ids and text. Numbers count every message, hidden ones too, so they match the chat's message numbers. Memories
 // reach every character, so like the Engine's own memory this reads the public content, never agentContent with its
 // whispers, and skips messages hidden from the AI or from some characters. isStart names the first messages of pieces
 // already imported: each starts its piece again, so an edit or deletion before it can't re-cut and orphan it. One now
-// hidden still names the piece its next visible message starts.
+// hidden still names the piece its next visible message starts. A message this package hid (owned) still counts, so
+// its piece keeps its text, until the user hides or shows it by hand.
 export function transcriptPieces(
   messages: TranscriptMessage[],
   speaker: (message: TranscriptMessage) => string,
   isStart: (messageId: string) => boolean = () => false,
+  cap: number = CHAT_PIECE_CHARS.standard,
+  owned: ReadonlySet<string> = new Set(),
 ) {
   const pieces: TranscriptPiece[] = [];
   let current: TranscriptPiece | undefined, start: string | undefined;
@@ -182,30 +199,33 @@ export function transcriptPieces(
       current = undefined;
       start = message.id;
     }
-    const extra = object(message.extra);
-    if (extra.hiddenFromAI === true || extra.commandOnly === true) continue;
+    const extra = object(message.extra),
+      ownHide = owned.has(message.id) && extra.visibilityManual !== true;
+    if ((extra.hiddenFromAI === true && !ownHide) || extra.commandOnly === true) continue;
     if (Array.isArray(extra.hiddenFromAICharacterIds) && extra.hiddenFromAICharacterIds.length) continue;
     const body = text(message.content);
     if (!body) continue;
     const number = index + 1,
       line = `${speaker(message)}: ${body}`;
-    if (!start && current && current.content.length + 2 + line.length <= 24_000) {
+    if (!start && current && current.content.length + 2 + line.length <= cap) {
       current.content += `\n\n${line}`;
       current.last = number;
+      current.messageIds.push(message.id);
       continue;
     }
     if (current) pieces.push(current);
     current = undefined;
     const entryId = start ?? message.id;
     start = undefined;
-    if (line.length <= 24_000) current = { entryId, first: number, last: number, content: line };
+    if (line.length <= cap) current = { entryId, first: number, last: number, content: line, messageIds: [message.id] };
     else
-      for (const [part, content] of chunks(line).entries())
+      for (const [part, content] of chunks(line, cap).entries())
         pieces.push({
           entryId: part ? `${entryId}:part:${part + 1}` : entryId,
           first: number,
           last: number,
           content,
+          messageIds: [message.id],
         });
   }
   if (current) pieces.push(current);
@@ -257,7 +277,15 @@ function conversationSummaries(metadata: Record<string, unknown>) {
 export function summaries(
   metadata: Record<string, unknown>,
   chatMode: LtmMode,
-): Array<{ id: string; content: string; range: string; origin: string; deterministicSourceText?: string }> {
+): Array<{
+  id: string;
+  content: string;
+  range: string;
+  first?: number;
+  last?: number;
+  origin: string;
+  deterministicSourceText?: string;
+}> {
   if (chatMode === "conversation") return conversationSummaries(metadata);
   const raw = Array.isArray(metadata.summaryEntries) ? metadata.summaryEntries.map(object) : [],
     entries = raw.flatMap((entry, index) => {
@@ -277,6 +305,9 @@ export function summaries(
                 : text(entry.sourceMode) === "agent"
                   ? "agent summary"
                   : "last messages",
+          ...(start && end && Number.isInteger(start) && Number.isInteger(end) && start >= 1 && end >= start
+            ? { first: start, last: end }
+            : {}),
           origin: text(entry.origin),
         },
       ];
@@ -570,7 +601,7 @@ async function candidates(
     includeOutOfScope?: boolean;
   },
   selected?: Set<string>,
-  pieceStarts?: Map<string, Set<string>>,
+  pieces?: Awaited<ReturnType<typeof chatPieces>>,
 ) {
   const result: Candidate[] = [];
   if (request.source === "characters")
@@ -628,6 +659,9 @@ async function candidates(
             ? { previewOrder: `${chat.id}\0${entry.range.split(".").reverse().join("-")}\0${entry.id}` }
             : {}),
           title,
+          ...(entry.first !== undefined && entry.last !== undefined
+            ? { messageRange: { chatName: chatDisplayName.slice(0, 240), first: entry.first, last: entry.last } }
+            : { summaryRange: { chatName: chatDisplayName.slice(0, 240), label: entry.range.slice(0, 80) } }),
           sourceText: entry.content,
           sourceNoteId: sourceNoteIdForProvenance(provenance),
           legacySourceNoteIds: legacy,
@@ -673,12 +707,15 @@ async function candidates(
               : message.role === "narrator"
                 ? "Narrator"
                 : "System";
-      const starts = pieceStarts?.get(chat.id);
+      const starts = pieces?.starts.get(chat.id),
+        cap = pieces?.sizes.get(chat.id) ?? pieces?.size ?? CHAT_PIECE_CHARS.standard;
       let previousPiece: Candidate["previousPiece"];
       for (const piece of transcriptPieces(
         await getPackagePersistence().listMessages(chat.id),
         speaker,
         (messageId) => starts?.has(boundedId(messageId, "message")) === true,
+        cap,
+        pieces?.owned.get(chat.id),
       )) {
         const entryId = boundedId(piece.entryId, "message"),
           provenance = { kind: "chat_transcript" as const, sourceId: chat.id, entryId },
@@ -689,6 +726,7 @@ async function candidates(
           previewOrder: `${chat.id}\0${String(piece.first).padStart(8, "0")}\0${entryId}`,
           title,
           messageRange: { chatName: chatDisplayName.slice(0, 240), first: piece.first, last: piece.last },
+          messageIds: piece.messageIds,
           sourceText: piece.content,
           sourceNoteId: sourceNoteIdForProvenance(provenance),
           legacySourceNoteIds: [],
@@ -699,6 +737,8 @@ async function candidates(
             `chat_name:${chatDisplayName}`,
             `message_entry:${entryId}`,
             `message_range:${range}`,
+            // Standard pieces record nothing, so notes imported before sizes existed keep their fingerprints.
+            ...(cap === CHAT_PIECE_CHARS.standard ? [] : [`${CHAT_PIECE_SIZE_EVIDENCE}${cap}`]),
           ],
           provenance,
           scope,
@@ -751,20 +791,149 @@ async function existingMatcher(storage: LongTermMemoryStorage) {
     byId = new Map(notes.map((note) => [note.id, note])),
     byProvenance = new Map<string, LtmNote>(),
     pieceStarts = new Map<string, Set<string>>(),
+    // Piece size per chat, read from its imported pieces.
+    pieceSizes = new Map<string, number>(),
     sourceNotes: Array<{ note: LtmNote; provenance: LtmSourceProvenance }> = [];
   for (const note of notes) {
     if (note.type !== "source") continue;
     const provenance = inferSourceProvenance(note);
     if (provenance) sourceNotes.push({ note, provenance });
     if (provenance && !byProvenance.has(provenanceKey(provenance))) byProvenance.set(provenanceKey(provenance), note);
-    if (provenance?.kind === "chat_transcript" && provenance.entryId)
+    if (provenance?.kind === "chat_transcript" && provenance.entryId) {
       pieceStarts.set(provenance.sourceId, (pieceStarts.get(provenance.sourceId) ?? new Set()).add(provenance.entryId));
+      if (!pieceSizes.has(provenance.sourceId))
+        pieceSizes.set(
+          provenance.sourceId,
+          note.sections.source?.evidence?.includes(`${CHAT_PIECE_SIZE_EVIDENCE}${CHAT_PIECE_CHARS.detailed}`)
+            ? CHAT_PIECE_CHARS.detailed
+            : CHAT_PIECE_CHARS.standard,
+        );
+    }
   }
   const match = (row: Candidate) =>
     [row.sourceNoteId, ...row.legacySourceNoteIds]
       .map((id) => byId.get(id))
       .find((note): note is LtmNote => Boolean(note)) ?? byProvenance.get(provenanceKey(row.provenance));
-  return Object.assign(match, { pieceStarts, sourceNotes });
+  return Object.assign(match, { pieceStarts, pieceSizes, sourceNotes });
+}
+
+// Each chat's piece starts and size. A chat with imported pieces keeps their size. A branch copies its parent's messages
+// under new ids, so one never imported takes its chat group's size and its shared pieces still match the parent's.
+// Other chats cut at the Chat import detail setting's size. Only a messages source reads chats or the setting. owned
+// holds each chat's messages this package hid, which still count toward their pieces.
+async function chatPieces(
+  source: LtmInteropPreviewRequest["source"],
+  matchExisting: Awaited<ReturnType<typeof existingMatcher>>,
+  root: string,
+) {
+  if (source !== "messages") return undefined;
+  const sizes = new Map(matchExisting.pieceSizes);
+  if (sizes.size) {
+    const chats = await getPackagePersistence().listChats(),
+      groupSizes = new Map<string, number>();
+    // ponytail: a group whose chats were imported at different sizes takes the first listed chat's; a mixed group
+    // only arises from chats imported before they were linked. Prefer the parent's size if that ever matters.
+    for (const chat of chats)
+      if (chat.groupId && sizes.has(chat.id) && !groupSizes.has(chat.groupId))
+        groupSizes.set(chat.groupId, sizes.get(chat.id)!);
+    for (const chat of chats)
+      if (chat.groupId && !sizes.has(chat.id) && groupSizes.has(chat.groupId))
+        sizes.set(chat.id, groupSizes.get(chat.groupId)!);
+  }
+  return {
+    starts: matchExisting.pieceStarts,
+    sizes,
+    size: CHAT_PIECE_CHARS[(await getLtmExtractionConfig(root)).chatImportDetail],
+    owned: new Map(
+      Object.entries(await readLtmHiddenMessages(root)).map(([chatId, notes]) => [
+        chatId,
+        new Set(Object.values(notes).flat()),
+      ]),
+    ),
+  };
+}
+
+// Mirrors the Engine's normalizeSummaryTailMessages: unset keeps 10, and anything invalid or negative keeps none.
+function summaryTailMessages(value: unknown) {
+  if (value === undefined || value === null) return 10;
+  const parsed = Math.floor(Number(value));
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+/**
+ * "Hide imported messages from the AI": hides the messages of each Chat Messages piece whose source note is active and
+ * extracted from its current text, except the chat's last summaryTailMessages visible messages, the tail the Engine's
+ * summary hiding keeps. Records under the source note only the ids the host changed, so a message hidden by someone
+ * else is never shown by this package. A message the user hid or showed by hand leaves the record and stays theirs.
+ * Runs for the given chats, or every chat with imported pieces.
+ */
+export async function hideImportedChatMessages(root: string, chatIds?: Iterable<string>) {
+  const setHidden = ltmSetMessagesHiddenFromAI();
+  if (!setHidden || !(await getLtmGlobalSettings(root)).longTermMemoryHideImportedMessages) return;
+  await withLtmVaultLock(root, async () => {
+    // A save that turned the setting off while this waited for the lock already showed everything.
+    if (!(await getLtmGlobalSettings(root)).longTermMemoryHideImportedMessages) return;
+    const persistence = getPackagePersistence(),
+      matchExisting = await existingMatcher(new LongTermMemoryStorage(root)),
+      pieces = await chatPieces("messages", matchExisting, root),
+      noteIds = new Set(matchExisting.sourceNotes.map(({ note }) => note.id)),
+      owned = await readLtmHiddenMessages(root),
+      before = JSON.stringify(owned),
+      wanted = new Set(chatIds ?? [...matchExisting.pieceStarts.keys(), ...Object.keys(owned)]);
+    // Written even when a later chat fails, so every message the host already hid stays recorded.
+    try {
+      for (const chatId of wanted) {
+        const chat = await persistence.getChat(chatId);
+        // A deleted chat took its messages with it.
+        if (!chat) {
+          delete owned[chatId];
+          continue;
+        }
+        const messages = await persistence.listMessages(chatId),
+          extras = new Map(messages.map((message) => [message.id, object(message.extra)])),
+          record = (owned[chatId] ??= {});
+        // A note deleted while showing its messages failed gets them shown now; its record goes once they are.
+        const orphaned: string[] = [];
+        for (const [noteId, ids] of Object.entries(record)) {
+          const kept = ids.filter((id) => extras.has(id) && extras.get(id)!.visibilityManual !== true);
+          if (!noteIds.has(noteId)) orphaned.push(...kept);
+          else if (kept.length) record[noteId] = kept;
+          else delete record[noteId];
+        }
+        if (orphaned.length)
+          for (const id of await setHidden(chatId, orphaned, false))
+            extras.set(id, { ...extras.get(id)!, hiddenFromAI: false });
+        for (const noteId of Object.keys(record)) if (!noteIds.has(noteId)) delete record[noteId];
+        const tail = summaryTailMessages(parseLtmChatMetadata(chat.metadata).summaryTailMessages),
+          visible = messages.filter((message) => extras.get(message.id)!.hiddenFromAI !== true),
+          tailIds = new Set(tail ? visible.slice(-tail).map((message) => message.id) : []),
+          noteFor = new Map<string, string>(),
+          // A long message split over several pieces hides only once every one of them is extracted.
+          pending = new Set<string>();
+        for (const row of await candidates({ source: "messages", chatId }, undefined, pieces)) {
+          if (row.provenance.sourceId !== chatId) continue;
+          const note = matchExisting(row),
+            current =
+              note?.status === "active" &&
+              note.extractionFingerprint?.sourceHash === candidateFingerprintForNote(row, note).sourceHash;
+          for (const id of row.messageIds ?? [])
+            if (!current) pending.add(id);
+            else if (!noteFor.has(id)) noteFor.set(id, note.id);
+        }
+        const hide = [...noteFor.keys()].filter((id) => {
+          const extra = extras.get(id)!;
+          return !pending.has(id) && !tailIds.has(id) && extra.hiddenFromAI !== true && extra.visibilityManual !== true;
+        });
+        for (const id of hide.length ? await setHidden(chatId, hide, true) : []) {
+          const noteId = noteFor.get(id);
+          if (noteId && !record[noteId]?.includes(id)) (record[noteId] ??= []).push(id);
+        }
+        if (!Object.keys(record).length) delete owned[chatId];
+      }
+    } finally {
+      if (JSON.stringify(owned) !== before) await writeLtmHiddenMessages(owned, root);
+    }
+  });
 }
 
 const OUTDATED_NOTE_LIMIT = 1_000;
@@ -836,6 +1005,7 @@ function previewSample(row: Candidate, note: LtmNote | undefined) {
     summary: row.summary,
     snippet: row.sourceText.length > 200 ? `${row.sourceText.slice(0, 200)}...` : row.sourceText,
     ...(row.messageRange ? { messageRange: row.messageRange } : {}),
+    ...(row.summaryRange ? { summaryRange: row.summaryRange } : {}),
   };
   return note
     ? {
@@ -895,8 +1065,9 @@ export async function previewPackageInterop(
 ): Promise<LtmInteropPreviewResponse> {
   const sourceScope = requestedSourceScope(request);
   const matchExisting = await existingMatcher(new LongTermMemoryStorage(root));
+  const pieces = await chatPieces(request.source, matchExisting, root);
   const candidateRequest = { ...request, sourceScope, includeOutOfScope: sourceScope !== undefined },
-    found = await candidates(candidateRequest, undefined, matchExisting.pieceStarts),
+    found = await candidates(candidateRequest, undefined, pieces),
     resolved = resolvePreviewCandidates(
       found.filter((row) => candidateVisibleInScope(row, sourceScope)),
       matchExisting,
@@ -914,9 +1085,7 @@ export async function previewPackageInterop(
       : outdatedSourceNotes(
           request.source,
           // ponytail: a mode filter reads the source a second time; one unfiltered walk would halve a messages preview.
-          request.mode
-            ? await candidates({ ...candidateRequest, mode: undefined }, undefined, matchExisting.pieceStarts)
-            : found,
+          request.mode ? await candidates({ ...candidateRequest, mode: undefined }, undefined, pieces) : found,
           matchExisting,
           sourceScope,
           isChatSource(OUTDATED_PROVENANCE_KIND[request.source]) ? await chatScopesById() : new Map(),
@@ -1082,7 +1251,7 @@ export async function sourcePackageDetails(
         includeOutOfScope: sourceScope !== undefined,
       },
       new Set(request.sourceIds),
-      matchExisting.pieceStarts,
+      await chatPieces(request.source, matchExisting, root),
     ),
     details = rows.flatMap((row) => {
       const existing = matchExisting(row);
@@ -1124,7 +1293,7 @@ export async function importPackageInterop(
     candidateRows = await candidates(
       { ...request, sourceScope, includeOutOfScope: sourceScope !== undefined },
       selected,
-      matchExisting.pieceStarts,
+      await chatPieces(request.source, matchExisting, root),
     ),
     visibleRows = candidateRows.filter((row) => candidateVisibleInScope(row, sourceScope)),
     resolvedIds = new Set(visibleRows.map((item) => item.sourceId)),
@@ -1331,6 +1500,12 @@ export async function importPackageInterop(
           : counts.cancelled && !counts.failed && !counts.missing && !counts.sourceWriteFailed
             ? ("cancelled" as const)
             : ("failed" as const);
+  // The pass hides only pieces this or an earlier import extracted, so failed and cancelled pieces stay visible. The
+  // notes are already written, so a failure here only leaves the messages visible until the next import.
+  if (request.source === "messages" && written.length)
+    await hideImportedChatMessages(root, new Set(rows.map((row) => row.provenance.sourceId))).catch((error) =>
+      logger.warn(error, "[ltm] Could not hide imported chat messages from the AI"),
+    );
   return {
     operationId,
     batchStatus,

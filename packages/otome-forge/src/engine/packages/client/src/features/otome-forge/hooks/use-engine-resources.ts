@@ -3,8 +3,10 @@
 // ──────────────────────────────────────────────
 // Rows are read defensively: the Engine stores flags as "true"/"false" strings, and older routes return arrays where
 // newer ones page. Characters are paged until `hasMore` clears.
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client";
+import { avatarCropOf, type AvatarCrop } from "../components/Avatar";
+import { musicAssetFolders } from "../shared/audio";
 
 export interface ConnectionOption {
   id: string;
@@ -18,6 +20,8 @@ export interface PickerItem {
   id: string;
   name: string;
   avatarUrl: string | null;
+  /** The crop chosen for the avatar in the Engine, when it has one. */
+  avatarCrop: AvatarCrop | null;
   detail: string;
 }
 
@@ -34,6 +38,7 @@ const AUDIO_PROVIDER = "audio_generation";
 
 export const engineResourceKeys = {
   connections: ["otome-forge", "engine", "connections"] as const,
+  musicFolders: ["otome-forge", "engine", "music-folders"] as const,
   characters: ["otome-forge", "engine", "characters"] as const,
   personas: ["otome-forge", "engine", "personas"] as const,
 };
@@ -63,7 +68,44 @@ function toItem(row: Row): PickerItem[] {
   const name = text(row.name).trim();
   if (!id || !name) return [];
   // The Engine serves avatarPath as a ready URL.
-  return [{ id, name, avatarUrl: text(row.avatarPath).trim() || null, detail: detailOf(row.summary, row.description) }];
+  return [
+    {
+      id,
+      name,
+      avatarUrl: text(row.avatarPath).trim() || null,
+      avatarCrop: avatarCropOf(row.avatarCrop),
+      detail: detailOf(row.summary, row.description),
+    },
+  ];
+}
+
+/**
+ * A list's load state as its screens read it. Try again after a failed first load is not a first load: TanStack Query
+ * clears the error and reads as pending while it asks again, which would swap the failed notice (and its focused
+ * button) for the loading line. So `isError` holds until the retry settles, and `retrying` says one is running.
+ */
+function loadState(query: UseQueryResult<unknown>) {
+  const retrying = query.isFetching && query.errorUpdatedAt > query.dataUpdatedAt;
+  return {
+    isLoading: query.isLoading && !retrying,
+    isError: query.isError || retrying,
+    retrying,
+    /** Asks the Engine again: after a failed load, or once the player has added one in the Engine. */
+    refetch: query.refetch,
+  };
+}
+
+/** Nonempty Music folders from the Engine's public, host-listed asset manifest. */
+export function useMusicFolders() {
+  const query = useQuery({
+    queryKey: engineResourceKeys.musicFolders,
+    queryFn: async () => {
+      const manifest = await api.get<unknown>("/game-assets/manifest");
+      return musicAssetFolders(isRecord(manifest) ? manifest.assets : undefined);
+    },
+    staleTime: STALE_TIME,
+  });
+  return { folders: query.data ?? [], ...loadState(query) };
 }
 
 // ── Connections ──
@@ -109,7 +151,10 @@ export function useConnections() {
     staleTime: STALE_TIME,
     select: toConnectionLists,
   });
-  return { ...(query.data ?? NO_CONNECTIONS), isLoading: query.isLoading, isError: query.isError };
+  return {
+    ...(query.data ?? NO_CONNECTIONS),
+    ...loadState(query),
+  };
 }
 
 /** The Engine's default text connection, else the first one. */
@@ -143,8 +188,7 @@ export function useCharacterOptions() {
   const query = useQuery({ queryKey: engineResourceKeys.characters, queryFn: fetchCharacters, staleTime: STALE_TIME });
   return {
     items: query.data ?? NO_ITEMS,
-    isLoading: query.isLoading,
-    isError: query.isError,
+    ...loadState(query),
     isSuccess: query.isSuccess,
   };
 }
@@ -160,8 +204,7 @@ export function usePersonaOptions() {
   });
   return {
     items: query.data ?? NO_ITEMS,
-    isLoading: query.isLoading,
-    isError: query.isError,
+    ...loadState(query),
     isSuccess: query.isSuccess,
   };
 }

@@ -1,5 +1,5 @@
 // Otome Forge's Dates and Claw Machine (M5) in the Engine's Home tab, with /api/otome-forge/** stubbed: the Dates hub
-// (who to spend time with, the three activities with their pay and cost, today's caps, the shelf), then a full Claw
+// (who to spend time with, the four activities with their pay and cost, today's caps, the shelf), then a full Claw
 // round at phone width played by keyboard: his turn first, cheering until his cheat (a nudge) goes off with his own
 // line, her drops, the round paid once (a lost answer retried with the same round), the shelf with what is new, the
 // Starlight in the top bar, and sounds through the Engine's player; then a round in motion, steered by holding the
@@ -350,6 +350,15 @@ async function recordSpeech(page: Page) {
 const voiced = (page: Page) => page.evaluate(() => ((window as any).__spoken ?? []) as Json[]);
 
 async function openOtome(page: Page): Promise<Locator> {
+  // Engine's calendar greeting can appear after startup. Keep its theme through the normal, specific dialog action.
+  await page.addLocatorHandler(
+    page
+      .getByRole("dialog", { name: "Happy Halloween!", exact: true })
+      .filter({ has: page.getByRole("button", { name: "Keep it", exact: true }) }),
+    async (dialog) => {
+      await dialog.getByRole("button", { name: "Keep it", exact: true }).click();
+    },
+  );
   await page.route("**/api/app-settings/ui", (route) =>
     route.fulfill({ json: route.request().method() === "GET" ? { value: null } : { success: true } }),
   );
@@ -496,7 +505,7 @@ test("Otome Forge Dates and a Claw round at phone width: the cheer meter, his ch
   await expect(activities.getByRole("heading", { name: "Read Kai Ardent" })).toBeVisible();
   await expect(activities.getByRole("heading", { name: "Date Night with Kai Ardent" })).toBeVisible();
   await expect(activities.getByRole("heading", { name: "Claw Machine with Kai Ardent" })).toBeVisible();
-  await expect(activities.getByRole("button", { name: /^Play: / })).toHaveCount(3);
+  await expect(activities.getByRole("button", { name: /^Play: / })).toHaveCount(4);
   await expect(activities).toContainText("No model calls");
   // Date Night's card says what it may paint besides the keepsake: its scenes paint places and faces as any scene does.
   await expect(activities).toContainText(
@@ -524,6 +533,8 @@ test("Otome Forge Dates and a Claw round at phone width: the cheer meter, his ch
   await root.locator("label.of-partner", { hasText: "Mireille" }).click();
   await expect(root.getByRole("radio", { name: /Mireille/ })).toBeChecked();
   await expect(root.getByRole("list", { name: "Things to do with Mireille" })).toBeVisible();
+  await root.getByRole("radio", { name: /Mireille/ }).focus();
+  await expect(root.getByRole("radio", { name: /Mireille/ })).toBeFocused();
   await page.keyboard.press("ArrowLeft");
   await expect(root.getByRole("radio", { name: /Kai Ardent/ })).toBeChecked();
 

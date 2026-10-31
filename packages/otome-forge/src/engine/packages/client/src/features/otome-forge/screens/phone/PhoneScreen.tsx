@@ -36,13 +36,26 @@ interface PhoneScreenProps {
 
 export function PhoneScreen({ runKey, view, open, onOpenChange }: PhoneScreenProps) {
   // Focus follows the player inside the phone: into a thread they opened here, back to its row when they leave it.
+  // A thread opened from Home's Reply leaves for a list read for the first time, whose rows come after it loads: the
+  // list's heading holds focus meanwhile, and the row takes it as it is drawn.
   const openedHere = useRef(false);
   const returnTo = useRef<LiId | null>(null);
   const rows = useRef(new Map<LiId, HTMLButtonElement | null>());
+  const heading = useRef<HTMLHeadingElement>(null);
+  const focusRow = (id: LiId, element: HTMLButtonElement | null) => {
+    if (!element || returnTo.current !== id) return;
+    returnTo.current = null;
+    // Never away from wherever the player has moved meanwhile.
+    const active = document.activeElement;
+    if (!active || active === document.body || active === heading.current) element.focus({ preventScroll: true });
+  };
   useEffect(() => {
     if (open || !returnTo.current) return;
-    rows.current.get(returnTo.current)?.focus({ preventScroll: true });
-    returnTo.current = null;
+    const row = rows.current.get(returnTo.current);
+    if (row) {
+      row.focus({ preventScroll: true });
+      returnTo.current = null;
+    } else heading.current?.focus({ preventScroll: true });
   }, [open]);
 
   const li = open ? (view.lis.find((item) => item.id === open.li) ?? null) : null;
@@ -68,7 +81,11 @@ export function PhoneScreen({ runKey, view, open, onOpenChange }: PhoneScreenPro
     <ThreadList
       runKey={runKey}
       view={view}
-      rowRef={(id, element) => rows.current.set(id, element)}
+      headingRef={heading}
+      rowRef={(id, element) => {
+        rows.current.set(id, element);
+        focusRow(id, element);
+      }}
       onOpen={(id) => {
         openedHere.current = true;
         onOpenChange({ li: id });

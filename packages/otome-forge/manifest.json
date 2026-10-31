@@ -10,8 +10,8 @@
   },
   "id": "otome-forge",
   "name": "Otome Hearth",
-  "version": "0.0.9",
-  "description": "An otome game in its own Home tab, made from your own characters: love interests who remember what you chose, their texts on your phone, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn. An early test build. Install it, restart Marinara Engine when prompted, then open Home → Otome Hearth.",
+  "version": "0.6.2",
+  "description": "An otome game in its own Home tab, made from your own characters: love interests who remember what you chose, their messages to you, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn. Install it, restart Marinara Engine when prompted, then open Home → Otome Hearth.",
   "engine": {
     "min": "2.5.1",
     "maxExclusive": "4.0.0"
@@ -32,30 +32,35 @@
       "label": "Otome Hearth",
       "ariaLabel": "Open Otome Hearth",
       "iconPaths": [
-        "otome-hearth-icon.png"
+        "otome-hearth-tab-heart.png"
       ]
     }
   },
   "files": [
     {
       "path": "agents.json",
-      "sha256": "5712b5dc4d2258ca1de9a43017ea35be73b0a4336ddb7360bf7e16d4916c9b99",
-      "bytes": 706
+      "sha256": "09424f88d12fdf3e542d3e67a3eb0c88071176658183fc4ead92e5a11d7dfac2",
+      "bytes": 681
     },
     {
       "path": "server.mjs",
-      "sha256": "0fc3103d7d132944b741f075d8ab70df50c34cdb1eee083a2a827495ceaa82c6",
-      "bytes": 379855
+      "sha256": "495b8f33a93f426014d1ec3a5a8bf81d2e0d33db1d65e5cf5b29355f8832e1d8",
+      "bytes": 447166
     },
     {
       "path": "client.js",
-      "sha256": "75eaa6e3e3b7446f56a488c8b511f58bc79076a1ddd6707c8364e5f0bc515abd",
-      "bytes": 1078595
+      "sha256": "202c03170fcd446471d3ee974efe898db4dda8677f35d075aa830aa4ddc18b64",
+      "bytes": 1161245
     },
     {
       "path": "otome-hearth-icon.png",
       "sha256": "8a579710820c718e3f3e1a2535fc12a251c5b91569bd7f5bb59961f1e873bce8",
       "bytes": 141313
+    },
+    {
+      "path": "otome-hearth-tab-heart.png",
+      "sha256": "301ef798d226eff3f2100daa1206b9ee1abe0654a070dd07718d98af4c7070d9",
+      "bytes": 2277
     },
     {
       "path": "fonts/OFL.txt",

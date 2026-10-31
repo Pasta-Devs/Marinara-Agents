@@ -1,0 +1,236 @@
+{
+  "schemaVersion": 1,
+  "packages": {
+    "2d-avatars": {
+      "section": "alive",
+      "tagline": "Animated 2D faces that blink and talk.",
+      "featured": 3
+    },
+    "3d-avatars": {
+      "section": "alive",
+      "tagline": "3D models that move and talk."
+    },
+    "background": {
+      "section": "media",
+      "tagline": "Picks a background for each scene."
+    },
+    "beholder": {
+      "section": "trackers",
+      "tagline": "What each character wears and holds."
+    },
+    "blackjack": {
+      "section": "games",
+      "tagline": "Play blackjack against the house."
+    },
+    "card-evolution-auditor": {
+      "section": "writing",
+      "tagline": "Suggests card updates as characters change."
+    },
+    "character-tracker": {
+      "section": "trackers",
+      "tagline": "Who is here, and how they look and feel."
+    },
+    "chess": {
+      "section": "games",
+      "tagline": "Play chess against your characters."
+    },
+    "combat": {
+      "section": "adventure",
+      "tagline": "Turn-based fights with initiative and HP."
+    },
+    "continuity": {
+      "section": "writing",
+      "tagline": "Fixes mistakes about places and time."
+    },
+    "conversation-calls": {
+      "section": "alive",
+      "tagline": "Voice and video calls with characters."
+    },
+    "custom-tracker": {
+      "section": "trackers",
+      "tagline": "Track anything you want."
+    },
+    "cyoa": {
+      "section": "adventure",
+      "tagline": "A few choices after each reply."
+    },
+    "director": {
+      "section": "writing",
+      "tagline": "Pushes the story in a new direction."
+    },
+    "echo-chamber": {
+      "section": "alive",
+      "tagline": "A live stream chat reacts to your roleplay."
+    },
+    "eightball": {
+      "section": "games",
+      "tagline": "8-Ball Pool in a chat."
+    },
+    "expression": {
+      "section": "alive",
+      "tagline": "Sprites that match the mood."
+    },
+    "gacha-forge": {
+      "section": "apps",
+      "tagline": "Turn any world into a gacha game."
+    },
+    "haptic": {
+      "section": "alive",
+      "tagline": "Connected toys that follow the story."
+    },
+    "hierarchical-maps": {
+      "section": "adventure",
+      "tagline": "World maps from regions to rooms."
+    },
+    "html": {
+      "section": "media",
+      "tagline": "Adds visual effects to messages."
+    },
+    "illustrator": {
+      "section": "media",
+      "tagline": "Paints scenes from your story as you play."
+    },
+    "inventory-tracker": {
+      "section": "trackers",
+      "tagline": "Money, gear and what you carry."
+    },
+    "knowledge-retrieval": {
+      "section": "memory",
+      "tagline": "Finds the lore that matters right now."
+    },
+    "knowledge-router": {
+      "section": "memory",
+      "tagline": "Picks lorebook entries, cheaper."
+    },
+    "long-term-memory": {
+      "section": "memory",
+      "tagline": "Remembers things across all your chats.",
+      "featured": 2
+    },
+    "lorebook-keeper": {
+      "section": "memory",
+      "tagline": "Keeps your lorebooks in sync with the story."
+    },
+    "memory-nag": {
+      "section": "memory",
+      "tagline": "Reminds the AI of loose ends."
+    },
+    "modern-life-sim": {
+      "section": "apps",
+      "tagline": "A town, a job and rent with your cast."
+    },
+    "noodle": {
+      "section": "apps",
+      "tagline": "A pretend social network for your characters."
+    },
+    "otome-forge": {
+      "section": "apps",
+      "tagline": "An otome game made from your characters.",
+      "featured": 1
+    },
+    "persona-stats": {
+      "section": "trackers",
+      "tagline": "Hunger, energy and hygiene."
+    },
+    "pixelforge": {
+      "section": "adventure",
+      "tagline": "A pixel-art world to walk around in."
+    },
+    "poker": {
+      "section": "games",
+      "tagline": "Texas Hold'em with your characters."
+    },
+    "prose-guardian": {
+      "section": "writing",
+      "tagline": "Removes repetition and banned words."
+    },
+    "quartermaster": {
+      "section": "trackers",
+      "tagline": "An RPG sheet with gear and outfits."
+    },
+    "quest": {
+      "section": "trackers",
+      "tagline": "A quest log with goals and rewards."
+    },
+    "relationship-tracker": {
+      "section": "trackers",
+      "tagline": "How everyone feels about each other."
+    },
+    "rock-paper-scissors": {
+      "section": "games",
+      "tagline": "Best of three, any time."
+    },
+    "ruleset-5e-2014": {
+      "section": "adventure",
+      "tagline": "Play Game Mode by the 5e rules."
+    },
+    "saucelings": {
+      "section": "apps",
+      "tagline": "A little pet that your characters raise."
+    },
+    "slurp2": {
+      "section": "apps",
+      "tagline": "A private creator app for your characters."
+    },
+    "spotify": {
+      "section": "media",
+      "tagline": "Music that fits the mood."
+    },
+    "story-writer": {
+      "section": "apps",
+      "tagline": "Co-write a book with your characters."
+    },
+    "storyboard": {
+      "section": "media",
+      "tagline": "Turns scenes into comic panels."
+    },
+    "tic-tac-toe": {
+      "section": "games",
+      "tagline": "A quick game of X and O."
+    },
+    "uno": {
+      "section": "games",
+      "tagline": "Play UNO with your characters."
+    },
+    "world-state": {
+      "section": "trackers",
+      "tagline": "Date, time, weather and place."
+    }
+  },
+  "kits": [
+    {
+      "id": "roleplay-starter",
+      "name": "Roleplay starter",
+      "tagline": "World, people, faces and lore for a roleplay.",
+      "packages": [
+        "world-state",
+        "character-tracker",
+        "expression",
+        "background",
+        "lorebook-keeper"
+      ]
+    },
+    {
+      "id": "story-writer",
+      "name": "Story writer",
+      "tagline": "Cleaner prose and a story that stays on track.",
+      "packages": [
+        "prose-guardian",
+        "continuity",
+        "director",
+        "long-term-memory"
+      ]
+    },
+    {
+      "id": "game-night",
+      "name": "Game night",
+      "tagline": "Card and board games to play in chat.",
+      "packages": [
+        "chess",
+        "poker",
+        "blackjack",
+        "uno"
+      ]
+    }
+  ]
+}

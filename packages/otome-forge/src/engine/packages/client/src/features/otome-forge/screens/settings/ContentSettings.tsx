@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────
-// Otome Forge Settings → Content: the story's Heat, Darkness, Lines & Veils and language, and the player's 18+
+// Otome Forge Settings → Content: the story's Heat, Darkness, Lines & Veils, language and how it's written, and the player's 18+
 // confirmation (withdrawing it drops every story to SFW Heat, Angst and SFW images).
 // ──────────────────────────────────────────────
 import { useId, useState } from "react";
@@ -13,6 +13,7 @@ import { INDEX_QUERY_KEY } from "../../hooks/use-index";
 import { useSaveSettings, type SaveSettings } from "../../hooks/use-run";
 import { useOtomeProps } from "../../props";
 import type { OtomeIndex, RunView } from "../../shared/api-types";
+import { OWN_BANNED_PHRASES_MAX } from "../../shared/banned-phrases";
 import type { ContentSettings as Content } from "../../shared/content";
 import { ContentControls } from "../setup/ContentStep";
 import { LANGUAGE_MAX, LANGUAGE_SUGGESTIONS } from "../setup/draft";
@@ -128,9 +129,16 @@ function StoryContent({ run, settings }: { run: RunView; settings: SaveSettings 
   const gate = useAgeGate();
   const [content, setContent] = useState<Content>(run.world.content);
   const [language, setLanguage] = useState(run.world.language);
+  const [writingStyle, setWritingStyle] = useState(run.world.writingStyle ?? "");
+  const [bannedPhrases, setBannedPhrases] = useState(run.world.bannedPhrases ?? "");
   const languagesId = useId();
+  const styleChanged = writingStyle.trim() !== (run.world.writingStyle ?? "");
+  const bannedChanged = bannedPhrases.trim() !== (run.world.bannedPhrases ?? "");
   const changed =
-    JSON.stringify(content) !== JSON.stringify(run.world.content) || language.trim() !== run.world.language;
+    JSON.stringify(content) !== JSON.stringify(run.world.content) ||
+    language.trim() !== run.world.language ||
+    styleChanged ||
+    bannedChanged;
   return (
     <>
       <ContentControls content={content} gate={gate} onChange={setContent} />
@@ -147,13 +155,36 @@ function StoryContent({ run, settings }: { run: RunView; settings: SaveSettings 
           <option key={name} value={name} />
         ))}
       </datalist>
+      <TextField
+        label={t("ui.otomeForge.setup.writingStyleLabel")}
+        hint={t("ui.otomeForge.setup.writingStyleHint")}
+        placeholder={t("ui.otomeForge.setup.writingStylePlaceholder")}
+        rows={3}
+        value={writingStyle}
+        onChange={setWritingStyle}
+      />
+      <TextField
+        label={t("ui.otomeForge.settings.bannedPhrasesLabel")}
+        hint={t("ui.otomeForge.settings.bannedPhrasesHint")}
+        placeholder={t("ui.otomeForge.settings.bannedPhrasesPlaceholder")}
+        rows={3}
+        max={OWN_BANNED_PHRASES_MAX}
+        counter
+        value={bannedPhrases}
+        onChange={setBannedPhrases}
+      />
       <SaveBar
         changed={changed && !!language.trim()}
         busy={settings.busy}
         status={settings.status}
         onSave={() =>
           void settings.save(
-            { content, ...(language.trim() !== run.world.language ? { language: language.trim() } : {}) },
+            {
+              content,
+              ...(language.trim() !== run.world.language ? { language: language.trim() } : {}),
+              ...(styleChanged ? { writingStyle: writingStyle.trim() } : {}),
+              ...(bannedChanged ? { bannedPhrases: bannedPhrases.trim() } : {}),
+            },
             t("ui.otomeForge.settings.saved"),
           )
         }
@@ -203,7 +234,13 @@ export function ContentSettings({ run }: { run: RunView | null }) {
       <GateStatus />
       {run ? (
         <StoryContent
-          key={storedKey(run.runKey, run.world.content, run.world.language)}
+          key={storedKey(
+            run.runKey,
+            run.world.content,
+            run.world.language,
+            run.world.writingStyle ?? "",
+            run.world.bannedPhrases ?? "",
+          )}
           run={run}
           settings={settings}
         />

@@ -47,7 +47,7 @@ import {
   type WishView,
 } from "../../../../../client/src/features/otome-forge/shared/wish.js";
 import { cgSubjects } from "../art/cg.js";
-import type { ImageSubject, PaintedImage } from "../art/image-client.js";
+import { worldStyle, type ImageSubject, type PaintedImage } from "../art/image-client.js";
 import { bannerArtOwner, itemArtOwner } from "../art/outfits.js";
 import {
   imagesOf,
@@ -60,6 +60,7 @@ import {
   type PaintCheck,
 } from "../art/paint.js";
 import { LOOK_SIZE, SCENE_SIZE, cgPrompt, lookPrompt, type ImagePrompt } from "../art/prompts.js";
+import { memoryArtBrief } from "../content-contract.js";
 import { generateJson, readOrGenerate } from "../generation.js";
 import { itemView } from "../items/open.js";
 import { OtomeForgeError, type RouteDeps } from "../http.js";
@@ -68,6 +69,7 @@ import { normalizeState, readRun, type RunDocuments } from "../schemas/state.js"
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeBanner, normalizeItem } from "../schemas/wish.js";
 import { normalizeWorld } from "../schemas/world.js";
+import { withPersonaImageAppearance } from "../setup/prompts.js";
 import type { OtomeStore } from "../store.js";
 import { cancellable } from "../story/beats.js";
 import { recallText } from "../story/canon.js";
@@ -76,6 +78,8 @@ import {
   BANNER_PLAN_TOKENS,
   BannerPlanSchema,
   bannerPlanMessages,
+  explicitMemoryArt,
+  momentBriefs,
   normalizeBannerPlan,
   type BannerPlan,
 } from "./prompts.js";
@@ -313,10 +317,12 @@ function itemsOf(
     ...base(`a${index + 1}` as ItemSlot, kinds.four, entry.li, entry.title),
     ...(entry.premise ? { premise: entry.premise } : {}),
     ...(entry.look ? { look: entry.look } : {}),
+    ...(entry.cg ? { cg: entry.cg } : {}),
   }));
   const three = plan.snapshots.map((entry, index): Item => ({
     ...base(`s${index + 1}` as ItemSlot, kinds.three, entry.li, entry.title),
     text: entry.text,
+    ...(entry.cg ? { cg: entry.cg } : {}),
   }));
   return { five, four, three };
 }
@@ -393,7 +399,14 @@ async function createBanner(
     const title = earlierItems.get(banner.items.five[0]!)?.title;
     if (title) earlierTitles.push(title);
   }
-  const context = { kind, units: cast, featured };
+  const context = {
+    kind,
+    units: cast,
+    featured,
+    playerName: run.player.name,
+    moments: momentBriefs(kind, run.world),
+    explicitArt: explicitMemoryArt(kind, run.world),
+  };
   const { value, connectionId, model } = await generateJson(deps, {
     runId,
     job: "structured",
@@ -526,20 +539,24 @@ export async function openWish(
 async function buildBannerArt(deps: WishDeps, runId: string, banner: Banner, edited: Partial<ImagePrompt> = {}) {
   const run = await readRun(deps.store, runId);
   if (!run) throw runNotFound();
+  run.player = await withPersonaImageAppearance(deps.runtime, run.player);
   const five = await readItem(deps.store, runId, banner.items.five[0] ?? "");
   if (!five) throw bannerNotFound();
   const images = imagesOf(deps);
-  const style = await images.styleProfile(run.world.images.styleProfileId);
+  const style = await worldStyle(images, run.world.images);
   if (banner.kind === "memories") {
     const subjects = cgSubjects(five.cg?.cast ?? [], run.units, run.player);
+    // Banner art stays clothed (at most Suggestive) unless its brief is marked explicit and the world allows that now;
+    // a lowered world paints the clothed brief written beside it.
+    const { brief, explicit } = memoryArtBrief(five.cg, five.title, run.world);
     const prompt = cgPrompt(
       {
-        brief: five.cg?.brief ?? five.title,
+        brief,
         people: subjects.map((subject) => subject.person),
         world: run.world,
         style,
-        // Banner art stays clothed (at most Suggestive): its Character Story is not written yet.
-        use: "clothed",
+        use: explicit ? "cg" : "clothed",
+        explicit,
       },
       edited,
     );
@@ -583,7 +600,10 @@ async function buildBannerArt(deps: WishDeps, runId: string, banner: Banner, edi
         personaId: run.player.personaId,
         ...(run.player.portrait ? { portrait: run.player.portrait } : {}),
       };
-  const prompt = lookPrompt({ ...person, outfitLine: five.look?.outfitLine ?? "", world: run.world, style }, edited);
+  const prompt = lookPrompt(
+    { ...person, outfitLine: five.look?.outfitLine ?? "", world: run.world, style, matte: true },
+    edited,
+  );
   return {
     ...prompt,
     paint: (connectionId: string, debugMode: boolean): Promise<PaintedImage> =>

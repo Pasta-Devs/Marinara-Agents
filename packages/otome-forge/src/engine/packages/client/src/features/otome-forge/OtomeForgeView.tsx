@@ -27,6 +27,7 @@ import { ClawMachine } from "./screens/dates/ClawMachine";
 import { DateNight } from "./screens/dates/DateNight";
 import { DatesHub, type DateActivity } from "./screens/dates/DatesHub";
 import { ReadHim } from "./screens/dates/ReadHim";
+import { ReadMe } from "./screens/dates/ReadMe";
 import { ForgeProgress } from "./screens/ForgeProgress";
 import { HomeScreen, useHomeLi } from "./screens/home/HomeScreen";
 import { PhoneScreen, type PhoneOpen } from "./screens/phone/PhoneScreen";
@@ -52,7 +53,7 @@ import type { OtomeIndex, RunView } from "./shared/api-types";
 
 const DOCKED: ReadonlySet<ScreenId> = new Set<ScreenId>(["home", ...DOCK_SCREENS]);
 /** The Dates activities this build opens (M5), each a screen taking ActivityScreenProps. */
-const ACTIVITIES: ReadonlySet<DateActivity> = new Set<DateActivity>(["read-him", "date-night", "claw"]);
+const ACTIVITIES: ReadonlySet<DateActivity> = new Set<DateActivity>(["read-him", "read-me", "date-night", "claw"]);
 
 interface ScreensProps {
   lookPreference: LookPreference;
@@ -118,14 +119,17 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     setChosen(next);
   };
 
+  const loading = (
+    <div className="of-center" role="status">
+      <Heart className="of-pulse" size={30} strokeWidth={1.6} fill="currentColor" aria-hidden="true" />
+      <p className="of-body">{t("ui.otomeForge.common.loading")}</p>
+    </div>
+  );
   if (waiting) {
     return (
       <>
         <TopBar />
-        <div className="of-center" role="status">
-          <Heart className="of-pulse" size={30} strokeWidth={1.6} fill="currentColor" aria-hidden="true" />
-          <p className="of-body">{t("ui.otomeForge.common.loading")}</p>
-        </div>
+        {loading}
       </>
     );
   }
@@ -210,6 +214,13 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     setReaderReturn(from);
     setChosen("reader");
   };
+  // Begin opens the prologue in the reader (its chapter is made at once, its scene written as it opens), then Home;
+  // once the prologue is read, Begin goes straight Home. A failure stays on the forge (ForgeProgress shows it).
+  const begin = async () => {
+    if (!activeRun || view?.prologue) return go("home");
+    await otome.post(`/runs/${encodeURIComponent(activeRun)}/prologue`);
+    openReader("home")("prologue");
+  };
   const bibleOf = view?.lis.find((li) => li.id === bibleLi) ?? null;
   const datesOf = view?.lis.find((li) => li.id === (datesLi ?? homeLi?.id)) ?? view?.lis[0] ?? null;
 
@@ -223,6 +234,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     phone: "home",
     remind: "home",
     "read-him": "dates",
+    "read-me": "dates",
     "date-night": "dates",
     claw: "dates",
     home: activeRun ? undefined : "picker",
@@ -243,7 +255,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     ) : screen === "forge" && activeRun ? (
       <ForgeProgress
         runKey={activeRun}
-        onBegin={() => go("home")}
+        onBegin={begin}
         onOpenBible={(li) => {
           navigated.current = true;
           setBibleLi(li);
@@ -313,6 +325,8 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
       />
     ) : screen === "read-him" && activeRun && view && datesOf ? (
       <ReadHim runKey={activeRun} view={view} li={datesOf} onExit={() => go("dates")} />
+    ) : screen === "read-me" && activeRun && view && datesOf ? (
+      <ReadMe runKey={activeRun} view={view} li={datesOf} onExit={() => go("dates")} />
     ) : screen === "date-night" && activeRun && view && datesOf ? (
       <DateNight
         runKey={activeRun}
@@ -324,8 +338,11 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
       />
     ) : screen === "claw" && activeRun && view && datesOf ? (
       <ClawMachine runKey={activeRun} view={view} li={datesOf} onExit={() => go("dates")} />
+    ) : activeRun && run.isPending ? (
+      // A screen of the story whose view is still on its way (the active story changed beneath it).
+      loading
     ) : (
-      <Placeholder screen={screen} />
+      <Placeholder screen={screen} onStories={() => go("picker")} />
     );
 
   return (
@@ -352,7 +369,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
             ? `bible-${bibleLi}`
             : screen === "reader"
               ? `reader-${chapterKey}`
-              : screen === "read-him" || screen === "date-night" || screen === "claw"
+              : screen === "read-him" || screen === "read-me" || screen === "date-night" || screen === "claw"
                 ? `${screen}-${datesOf?.id ?? ""}`
                 : screen
         }

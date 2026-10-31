@@ -95,6 +95,22 @@ declare module "@forge-kit/image-avatar-references.mjs" {
     cast: A[],
     name: unknown,
   ): A | null;
+  export interface ImageIdentitySubject {
+    cardId?: string;
+    personaId?: string;
+    portrait?: string;
+    avatarPath?: string;
+  }
+  export interface ImageIdentityClient {
+    characterCard(id: string): Promise<{ avatarPath: string } | null>;
+    personaAvatar(id: string): Promise<string>;
+    cardAvatarImage(path: string): Promise<{ mime: string; base64: string } | null>;
+  }
+  /** The default card/persona/avatar identity fallback, shared with Gacha Forge. */
+  export function forgeSubjectReference(
+    client: ImageIdentityClient,
+    subject: ImageIdentitySubject,
+  ): Promise<string | null>;
   /**
    * Wraps the client's generatePortrait, generateOutfit and generateBannerArt so each call carries the subject's card
    * or persona avatar (or saved portrait) as `referenceImages`. Needs characterCard, personaAvatar and cardAvatarImage.
@@ -102,7 +118,10 @@ declare module "@forge-kit/image-avatar-references.mjs" {
   export function forgeWrapImageReferenceClient<C extends object>(
     client: C,
     logger?: { debug?(message: string, ...args: unknown[]): void; warn?(message: string, ...args: unknown[]): void },
-    options?: { logPrefix?: string },
+    options?: {
+      logPrefix?: string;
+      subjectReference?: (client: C, subject: ImageIdentitySubject) => Promise<string | null>;
+    },
   ): C;
 }
 
@@ -335,6 +354,12 @@ declare module "@forge-kit/story-expressions-server.mjs" {
     model?: string;
   }
   export interface ForgeStoryExpressions {
+    repaint(
+      runId: string,
+      unitId: string,
+      base: string,
+      prompts?: Record<string, unknown>,
+    ): Promise<{ state: "ready" | "failed" | "stopped"; at: string; error?: string } | undefined> | null;
     /** Called with the cast a scene is served or written with; queues the faces in the background, returns the cast. */
     queue<C extends { name?: string; prota?: boolean }>(runId: string, run: unknown, cast: C[], beat: unknown): C[];
     /** Package teardown: queued faces of this instance stop before their paid call. */

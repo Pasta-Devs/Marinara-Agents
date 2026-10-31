@@ -7,6 +7,7 @@
 // stops under prefers-reduced-motion.
 import { DATE_NIGHT_RULES } from "../screens/dates/date-night-styles";
 import { READ_HIM_RULES } from "../screens/dates/ReadHim";
+import { READ_ME_RULES } from "../screens/dates/ReadMe";
 import { fontFaceCss, FONT_STACKS } from "./fonts";
 import { LOOK_TOKENS, PALETTE, RARITY, type Look } from "./tokens";
 
@@ -80,6 +81,19 @@ ${R} .of-stage::after {
   ${R} .of-stage { width: 100cqw; height: 100cqh; aspect-ratio: auto; border-radius: 0; box-shadow: none; }
   ${R} .of-stage::after { display: none; }
 }
+/* Settings uses the available host panel. */
+${R} .of-stage:has(.of-settings) {
+  width: 100%; height: 100%; min-width: 0; min-height: 0; aspect-ratio: auto; border-radius: 0; box-shadow: none;
+}
+${R} .of-stage:has(.of-settings)::after { display: none; }
+/* Keep the ready cast form readable in a short landscape panel. */
+@container of-frame (max-height: 500px) {
+  ${R} .of-stage:has(.of-cast) { width: min(360px, 100cqw); height: 100cqh; aspect-ratio: auto; }
+}
+${R} .of-frame[data-fullscreen="true"] .of-stage {
+  width: 100%; height: 100%; min-width: 0; min-height: 0; aspect-ratio: auto; border-radius: 0; box-shadow: none;
+}
+${R} .of-frame[data-fullscreen="true"] .of-stage::after { display: none; }
 ${R} .of-scene { position: absolute; inset: 0; z-index: 0; overflow: clip; pointer-events: none; }
 ${R} .of-scene-bg {
   position: absolute; inset: 0; background: var(--of-bg); background-size: cover; background-position: center;
@@ -153,14 +167,18 @@ ${R} .of-chip {
 }
 ${R} .of-chip:hover { background: var(--of-surface-strong); }
 ${R} .of-avatar {
-  flex: none; display: grid; place-items: center; width: 34px; height: 34px; overflow: hidden; border-radius: 50%;
+  position: relative; flex: none; display: grid; place-items: center; width: 34px; height: 34px; overflow: hidden;
+  border-radius: 50%;
   background:
     radial-gradient(circle at 30% 24%, rgb(255 255 255 / 0.5), transparent 52%),
     var(--of-li-accent, var(--of-rose));
   color: var(--of-on-accent); font-family: var(--of-font-display); font-weight: 600; font-size: 1rem;
   box-shadow: 0 0 0 2px var(--of-wish-ring), 0 0 14px var(--of-glow-soft);
 }
-${R} .of-avatar img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 12%; }
+/* Out of flow, so a tall look cannot keep its own height and push past the circle: cover then always crops it. */
+${R} .of-avatar img {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 12%;
+}
 ${R} .of-avatar--empty {
   background: transparent; color: var(--of-accent-text); box-shadow: none;
   border: 1.5px dashed var(--of-border-strong);
@@ -301,6 +319,7 @@ ${R} .of-segmented {
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin: 0; padding: 4px;
   border-radius: 20px; min-width: 0;
 }
+${R} .of-memory-filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 ${R} .of-segment {
   position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
   min-width: 0; min-height: 56px; padding: 6px 6px; border-radius: 16px; cursor: pointer; color: var(--of-text-soft);
@@ -394,8 +413,10 @@ ${R} .of-input {
 ${R} .of-input::placeholder { color: var(--of-text-faint); }
 ${R} .of-input:hover { border-color: var(--of-border-strong); }
 ${R} .of-input:focus { outline: none; }
-/* background-color, not the shorthand, which would reset the arrow .of-select draws with background-image. */
-${R} .of-input:focus-visible {
+/* background-color, not the shorthand, which would reset the arrow .of-select draws with background-image. A date
+   field's focus moves through its day, month, year and calendar button inside it, where neither :focus-visible nor
+   (on the button) :focus matches the field: :focus-within rings it there, as a text field is always ringed. */
+${R} :is(.of-input:focus-visible, .of-input[type="date"]:focus-within) {
   border-color: var(--of-focus); background-color: var(--of-input-bg-focus);
   box-shadow: 0 0 0 3px var(--of-glow-soft), inset 0 1px 2px rgb(0 0 0 / 0.08);
 }
@@ -669,10 +690,20 @@ ${R} .of-forge-step[data-state="failed"] .of-forge-state { color: var(--of-dange
 ${R} .of-forge-why { font-size: 0.78rem; color: var(--of-text-soft); }
 ${R} .of-forge-error { font-family: ui-monospace, Menlo, monospace; font-size: 0.7rem; color: var(--of-text-faint); overflow-wrap: anywhere; }
 ${R} .of-forge-retry { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+${R} .of-forge-retry--paints {
+  grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; gap: 10px;
+}
+${R} .of-forge-retry--paints > .of-forge-retry { min-width: 0; display: grid; grid-template-rows: 1fr auto; align-items: stretch; }
+${R} .of-forge-retry--paints .of-button { min-height: 44px; min-width: 0; padding: 8px 10px; white-space: normal; overflow-wrap: anywhere; }
+@container of-stage (max-width: 360px) {
+  ${R} .of-forge-retry--paints .of-button { flex-direction: column; gap: 4px; padding-inline: 4px; overflow-wrap: normal; }
+}
+${R} .of-forge-retry--paints .of-cost { min-width: 0; justify-content: center; text-align: center; }
+${R} .of-forge-retry--paints .of-cost > span { min-width: 0; overflow-wrap: anywhere; }
 ${R} .of-paint-offer { align-items: center; text-align: center; }
 ${R} .of-paint-offer > .of-button { align-self: center; }
 ${R} .of-cast {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: 8px; margin: 0; padding: 0;
   list-style: none;
 }
 ${R} .of-cast-card {
@@ -680,6 +711,10 @@ ${R} .of-cast-card {
   text-align: center; background: linear-gradient(180deg, color-mix(in srgb, var(--of-li-accent) 22%, transparent), transparent 70%), var(--of-surface);
   border: 1px solid var(--of-border); border-top: 3px solid var(--of-li-accent, var(--of-rose));
 }
+${R} .of-cast-appearance { width: 100%; min-width: 0; display: flex; flex-direction: column; gap: 8px; margin-top: 8px; text-align: start; }
+/* An older bible's "Add intimacy preferences" (#1936): its action, cost and any error, stacked on the card. */
+${R} .of-intimacy-fill { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+${R} .of-intimacy-fill .of-hint { margin: 0; font-size: 0.72rem; }
 ${R} .of-cast-name { margin-top: 4px; font-family: var(--of-font-display); font-weight: 600; font-size: 1.15rem; line-height: 1.1; }
 /* The story list. */
 ${R} .of-runs { display: flex; flex-direction: column; gap: 10px; width: 100%; margin: 0; padding: 0; list-style: none; }
@@ -716,6 +751,11 @@ ${R} .of-bible-secret, ${R} .of-bible-stage {
 ${R} .of-tabs {
   display: flex; gap: 4px; padding: 4px; border-radius: 18px; overflow-x: auto; scrollbar-width: none; flex: none;
 }
+/* Keep the phone's categories in one scrolling strip; wide Settings can show them all at once. */
+@container of-stage (min-width: 960px) {
+  ${R} .of-settings .of-tabs { flex-wrap: wrap; overflow: visible; }
+}
+${R} .of-settings .of-tab { min-height: 44px; }
 ${R} .of-tabs::-webkit-scrollbar { display: none; }
 ${R} .of-tab {
   flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border: 0; border-radius: 14px;
@@ -772,6 +812,7 @@ ${R} .of-item-art {
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14);
 }
 ${R} .of-item-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 18%; }
+${R} .of-item-art[data-look="true"] img { object-fit: contain; object-position: center; }
 ${R} .of-item-initials {
   font-family: var(--of-font-display); font-weight: 600; font-size: 1.6rem; color: rgb(255 250 244 / 0.92);
   text-shadow: 0 2px 14px rgb(0 0 0 / 0.3);
@@ -808,13 +849,18 @@ ${R} .of-banner-img {
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 22%;
   animation: of-banner-drift 24s ease-in-out infinite alternate;
 }
+${R} .of-banner-img[data-look="true"] { object-fit: contain; object-position: center; animation: none; }
+${R} .of-banner-art { position: absolute; inset: 0; padding: 0; border: 0; background: none; cursor: zoom-in; }
+${R} .of-banner-art:focus-visible { outline-offset: -4px; border-radius: inherit; }
+${R} .of-banner-art:disabled { cursor: default; }
 ${R} .of-banner-quiet { position: absolute; inset: 0; display: grid; place-items: center; padding-bottom: 30%; }
 ${R} .of-banner-quiet .of-item-initials { font-size: 4.2rem; opacity: 0.85; }
 ${R} .of-banner-shade {
-  position: absolute; inset: 0;
+  position: absolute; inset: 0; pointer-events: none;
   background: linear-gradient(to top, rgb(12 8 26 / 0.92) 0%, rgb(12 8 26 / 0.55) 34%, transparent 62%);
 }
 ${R} .of-banner-caption {
+  pointer-events: none;
   position: absolute; inset-inline: 0; bottom: 0; z-index: 2; display: flex; flex-direction: column; gap: 4px;
   padding: 16px 16px 14px; color: #fff8f1; text-shadow: 0 1px 10px rgb(0 0 0 / 0.45);
 }
@@ -999,6 +1045,7 @@ ${R} .of-reveal-art {
   transition: opacity 900ms var(--of-ease);
 }
 ${R} .of-reveal-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 28%; }
+${R} .of-reveal-art[data-look="true"] img { object-fit: contain; object-position: center; }
 ${R} .of-reveal-quiet {
   position: absolute; inset: 0; display: grid; place-items: center; padding-bottom: 36%;
   background: radial-gradient(70% 50% at 50% 34%, color-mix(in srgb, var(--of-li-accent, var(--of-rose)) 70%, transparent), transparent 72%),
@@ -1006,7 +1053,7 @@ ${R} .of-reveal-quiet {
 }
 ${R} .of-reveal-quiet .of-item-initials { font-size: 5rem; }
 ${R} .of-reveal[data-shown="true"] .of-reveal-art { opacity: 1; }
-${R} .of-reveal[data-shown="true"][data-motion="true"] .of-reveal-art img {
+${R} .of-reveal[data-shown="true"][data-motion="true"] .of-reveal-art:not([data-look="true"]) img {
   animation: of-cg-pan 6s cubic-bezier(0.32, 0.06, 0.3, 1) both;
 }
 ${R} .of-reveal-glow {
@@ -1022,6 +1069,9 @@ ${R} .of-reveal-card {
   border: 1px solid rgb(230 201 138 / 0.4); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
   box-shadow: 0 0 40px rgb(230 201 138 / 0.25);
   opacity: 0; translate: 0 18px; transition: opacity 700ms var(--of-ease) 300ms, translate 700ms var(--of-ease) 300ms;
+  /* Never taller than the stage below Skip's row: a long premise scrolls inside it, title first (#1944). */
+  max-height: calc(100% - 64px - max(16px, env(safe-area-inset-bottom)));
+  overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
 }
 ${R} .of-reveal[data-shown="true"] .of-reveal-card { opacity: 1; translate: 0 0; }
 ${R} .of-reveal-count { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.1em; color: var(--of-text-faint); }
@@ -1172,7 +1222,7 @@ ${R} .of-ward-frame {
   background: radial-gradient(80% 60% at 50% 30%, color-mix(in srgb, var(--of-li-accent, var(--of-rarity-violet)) 55%, transparent), transparent 72%),
     linear-gradient(180deg, #8a8494, #5e5869);
 }
-${R} .of-ward-frame img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 8%; }
+${R} .of-ward-frame img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: center; }
 ${R} .of-ward-frame--small { width: 64px; border-radius: 10px; }
 ${R} .of-ward-frame--small .of-item-initials { font-size: 1rem; }
 ${R} .of-ward-worn {
@@ -1289,6 +1339,16 @@ ${R} .of-love-dot {
 ${R} .of-love-when { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.04em; color: var(--of-champagne-text); }
 ${R} .of-love-who { color: var(--of-accent-text); }
 ${R} .of-love-text { font-family: var(--of-font-display); font-size: 1.08rem; line-height: 1.35; }
+${R} .of-love-kind {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--of-text-soft);
+}
+${R} .of-love-open {
+  display: block; padding: 0; border: 0; background: none; color: inherit; text-align: start; cursor: pointer;
+  text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--of-li-accent, currentColor) 45%, transparent);
+  text-underline-offset: 3px;
+}
+${R} .of-love-open:hover { text-decoration-color: var(--of-li-accent, currentColor); }
 ${R} .of-favorites { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
 ${R} .of-favorite {
   display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 18px;
@@ -1403,12 +1463,17 @@ ${R} .of-affection {
   display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "avatar name level" "avatar hearts hearts";
   align-items: center; column-gap: 10px; row-gap: 3px;
 }
+${R} .of-affection:has(.of-affection-progress) { grid-template-areas: "avatar name level" "avatar hearts progress"; }
 ${R} .of-affection > .of-avatar { grid-area: avatar; }
 ${R} .of-affection-name {
   grid-area: name; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
   font-family: var(--of-font-display); font-weight: 600; font-size: 1.12rem; line-height: 1.1;
 }
-${R} .of-affection-level { grid-area: level; font-size: 0.74rem; font-weight: 800; color: var(--of-accent-text); }
+${R} .of-affection-level { grid-area: level; justify-self: end; font-size: 0.74rem; font-weight: 800; color: var(--of-accent-text); }
+${R} .of-affection-progress {
+  grid-area: progress; justify-self: end; font-size: 0.7rem; line-height: 1.2; font-weight: 600;
+  font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--of-text-soft);
+}
 ${R} .of-hearts { grid-area: hearts; display: flex; flex-wrap: wrap; gap: 3px; color: var(--of-li-accent, var(--of-rose)); }
 ${R} .of-hearts svg[data-on="false"] { color: var(--of-border-strong); }
 ${R}[data-look="pearl"] .of-hearts { filter: brightness(0.8) saturate(1.35); }
@@ -1469,6 +1534,29 @@ const moodRules = (look: Look) =>
     .join("\n");
 
 // The reader: the scene, the face on stage, the dialogue box in the bottom third, choices, panels and the backlog.
+const MOBILE_READER_RULES = `
+${R} .of-reader-mobile { display: inline-grid; }
+${R} .of-reader-desktop { display: none; }
+${R} .of-reader-tool { width: 44px; height: 44px; }
+${R} .of-reader-secondary[data-expanded="true"] {
+  /* Keep the focus padding outside the More button's column. */
+  position: absolute; top: calc(100% + 6px); inset-inline-end: -4px;
+  display: flex; flex-direction: column; gap: 6px; padding: 4px;
+  max-height: max(44px, calc(100cqh - 120px - max(12px, env(safe-area-inset-top)) - max(10px, env(safe-area-inset-bottom))));
+  overflow-y: auto; overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+${R} .of-reader-secondary > button { flex: none; }
+${R} .of-reader-secondary .of-reader-pill { width: 44px; height: 44px; padding: 0; justify-content: center; }
+${R} .of-reader-secondary .of-reader-pill > span { display: none; }
+${R} .of-reader-bottom { margin-top: auto; }
+/* The cut-out continues behind the dialogue, rather than fitting its whole body above the panel. */
+${R} .of-reader-stage:has(.of-face-art) {
+  position: absolute; inset: clamp(100px, 18cqh, 150px) 0 0;
+}
+${R} .of-face-art { width: min(100%, 64cqh, 420px); }
+${R} .of-face-img[data-cut="true"] { object-fit: cover; object-position: 50% 0; }
+`;
 const READER_RULES = `
 ${R} .of-reader {
   position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: clip; isolation: isolate;
@@ -1507,6 +1595,8 @@ ${R} .of-reader-head {
 }
 ${R} .of-reader-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 ${R} .of-reader-row--sub { align-items: flex-start; }
+/* Its buttons wrap to a second line rather than run off a narrow screen. */
+${R} .of-reader-row--sub .of-reader-tools { flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
 ${R} .of-reader-title { flex: 1; min-width: 0; display: flex; flex-direction: column; text-shadow: 0 1px 12px rgb(0 0 0 / 0.3); }
 ${R}[data-look="pearl"] .of-reader-title { text-shadow: 0 1px 10px rgb(255 255 255 / 0.7); }
 ${R} .of-reader:focus, ${R} .of-reader-title:focus { outline: none; }
@@ -1525,6 +1615,8 @@ ${R} .of-reader-name {
   font-family: var(--of-font-display); font-weight: 600; font-size: 1.24rem; line-height: 1.12;
 }
 ${R} .of-reader-tools { flex: none; display: flex; align-items: center; gap: 6px; }
+${R} .of-reader-primary { position: relative; z-index: 1; }
+${R} .of-reader-mobile, ${R} .of-reader-secondary { display: none; }
 ${R} .of-reader-tool { width: 36px; height: 36px; }
 ${R} .of-reader-tool[aria-pressed="true"] {
   color: ${PALETTE.ink}; border-color: transparent;
@@ -1590,6 +1682,10 @@ ${R} .of-face-img {
   mask-image: radial-gradient(70% 82% at 50% 40%, #000 62%, transparent 100%);
 }
 ${R} .of-face-img[data-front="true"] { opacity: 1; }
+/* A cut-out has no backdrop to hide: he stands whole on the stage's floor, unmasked. */
+${R} .of-face-img[data-cut="true"] {
+  object-fit: contain; object-position: 50% 100%; -webkit-mask-image: none; mask-image: none;
+}
 ${R} .of-face-medallion {
   --of-medallion: clamp(48px, min(210px, 54cqw, calc(100cqh - 66px)), 210px);
   position: relative; flex: none; display: grid; place-items: center; width: var(--of-medallion); aspect-ratio: 1;
@@ -1669,13 +1765,12 @@ ${R} .of-dialogue::before {
 }
 ${R} .of-nameplate {
   position: absolute; top: -15px; inset-inline-start: 16px; display: inline-flex; align-items: center; gap: 8px;
-  max-width: calc(100% - 32px); margin: 0; padding: 6px 16px; border-radius: 999px 999px 999px 6px; overflow: hidden;
+  max-width: calc(100% - 32px); margin: 0; padding: 6px 16px; border-radius: 999px; overflow: hidden;
   white-space: nowrap; text-overflow: ellipsis; font-family: var(--of-font-display); font-weight: 600; font-size: 1.14rem;
   line-height: 1; color: ${PALETTE.ink};
   background: linear-gradient(135deg, color-mix(in srgb, var(--of-li-accent, ${PALETTE.rose}) 62%, white), var(--of-li-accent, ${PALETTE.rose}));
   box-shadow: 0 6px 16px rgb(0 0 0 / 0.2), inset 0 1px 0 rgb(255 255 255 / 0.6);
 }
-${R}[dir="rtl"] .of-nameplate { border-radius: 999px 999px 6px 999px; }
 ${R} .of-nameplate[data-voice="protagonist"] { background: linear-gradient(135deg, #f3dcaa, ${PALETTE.rose}); }
 ${R} .of-nameplate[data-voice="other"] { background: linear-gradient(135deg, #f6ecd6, ${PALETTE.champagne}); }
 ${R} .of-nameplate-tag {
@@ -1690,6 +1785,7 @@ ${R} .of-line-rest { visibility: hidden; }
 ${R} .of-line--thought { font-style: italic; color: var(--of-text-soft); }
 ${R} .of-line--thought > [aria-hidden="true"]::before { content: "("; }
 ${R} .of-line--thought > [aria-hidden="true"]::after { content: ")"; }
+${R} .of-line--thought > [aria-hidden="true"][data-done="false"]::after { visibility: hidden; }
 ${R} .of-line--his-thought {
   font-family: var(--of-font-display); font-style: italic; font-weight: 600; font-size: 1.2rem; line-height: 1.45;
   color: color-mix(in srgb, var(--of-li-accent) 45%, var(--of-text));
@@ -1757,7 +1853,8 @@ ${R} .of-tags-card {
   display: flex; flex-direction: column; gap: 10px; padding: 18px 16px; border-radius: 22px;
   border-color: rgb(230 201 138 / 0.55);
 }
-${R} .of-tags-card .of-hint { display: flex; align-items: center; gap: 6px; }
+${R} .of-tags-card .of-hint { display: block; }
+${R} .of-tags-card .of-hint > svg { display: inline-block; width: 13px; height: 13px; margin-inline-start: 6px; vertical-align: middle; }
 ${R} .of-tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
 ${R} .of-tag {
   padding: 4px 11px; border-radius: 999px; font-size: 0.8rem; font-weight: 800; color: var(--of-accent-text);
@@ -1787,6 +1884,13 @@ ${R} .of-reader-notice { align-items: center; justify-content: space-between; fl
 ${R} .of-reader-notice > span { flex: 1 1 16rem; }
 ${R} .of-reader-notice .of-button { margin-inline-start: auto; white-space: nowrap; }
 ${R} .of-reader-show { position: absolute; bottom: max(14px, env(safe-area-inset-bottom)); inset-inline-end: 14px; }
+@container of-frame (max-width: 560px) { ${MOBILE_READER_RULES} }
+/* A phone turned sideways still uses the mobile controls, even with a wide viewport. */
+@media (pointer: coarse) and (max-height: 560px) {
+  ${R} .of-stage:has(.of-reader) { width: 100cqw; height: 100cqh; aspect-ratio: auto; border-radius: 0; box-shadow: none; }
+  ${R} .of-stage:has(.of-reader)::after { display: none; }
+  ${MOBILE_READER_RULES}
+}
 /* The backlog. */
 ${R} .of-log {
   display: flex; flex-direction: column; gap: 10px; max-height: 52vh; margin: 0; padding: 0 4px 0 0; overflow-y: auto;
@@ -2513,6 +2617,10 @@ ${R} .of-stance[data-stance="press"] { --of-stance: #F08AA4; }
 ${R} .of-stance[data-stance="hold"] { --of-stance: #9DB8F0; }
 ${R} .of-stance[data-stance="yield"] { --of-stance: ${PALETTE.champagne}; }
 ${R} .of-stance[data-stance="reveal"] { --of-stance: #B79CF2; }
+${R} .of-stance[data-stance="reassure"] { --of-stance: #F5B6C8; }
+${R} .of-stance[data-stance="tease"] { --of-stance: ${PALETTE.champagne}; }
+${R} .of-stance[data-stance="mirror"] { --of-stance: #B79CF2; }
+${R} .of-stance[data-stance="ask"] { --of-stance: #9DB8F0; }
 ${R} .of-stance:hover {
   transform: translateY(-1px); border-color: var(--of-stance);
   box-shadow: inset 0 1px 0 var(--of-highlight), 0 10px 26px color-mix(in srgb, var(--of-stance) 30%, transparent);
@@ -2539,6 +2647,8 @@ ${R} .of-outcome-mark {
 }
 ${R} .of-outcome[data-outcome="walkout"] .of-outcome-mark { color: var(--of-danger); }
 ${R} .of-outcome[data-outcome="standoff"] .of-outcome-mark { color: var(--of-champagne-text); }
+${R} .of-outcome[data-outcome="almost"] .of-outcome-mark { color: var(--of-champagne-text); }
+${R} .of-outcome[data-outcome="shut"] .of-outcome-mark { color: var(--of-danger); }
 ${R} .of-outcome-title {
   font-family: var(--of-font-display); font-weight: 600; font-size: 1.65rem; line-height: 1.08; padding-bottom: 0.06em;
   background: var(--of-title-ink); -webkit-background-clip: text; background-clip: text; color: transparent;
@@ -3179,6 +3289,7 @@ export function otomeForgeStyles(): string {
     DATES_RULES,
     DATE_NIGHT_RULES,
     READ_HIM_RULES,
+    READ_ME_RULES,
     CLAW_RULES,
     DIALOG_RULES,
     MOTION_RULES,

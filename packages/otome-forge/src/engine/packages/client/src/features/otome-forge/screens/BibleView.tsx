@@ -4,12 +4,15 @@
 // (SH/bible.ts: adults only, no school roles, a secret at stage 4…) before it saves, and names the one an edit breaks;
 // the server checks every save again.
 // ──────────────────────────────────────────────
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookLock, Eye, Heart, Info, PencilLine, Plus, RotateCcw, Save, Trash } from "lucide-react";
 import { otomeErrorCode, useOtomeApi } from "../api";
 import { Avatar } from "../components/Avatar";
+import { RetryNotice } from "../components/RetryNotice";
+import { useCharacterOptions } from "../hooks/use-engine-resources";
+import { bibleQueryKey, patchRun, runQueryKey, useRun } from "../hooks/use-run";
 import { accentOf } from "../lib/accent";
 import type { ArcStageKey, Bible, BibleSecret, RevealStage, RunLiView } from "../shared/api-types";
 import {
@@ -21,6 +24,7 @@ import {
   SECRETS_MIN,
   type BibleProblem,
 } from "../shared/bible";
+import { intimacyOpen } from "../shared/content";
 import { TextField } from "./setup/parts";
 
 type FieldKind = "text" | "long" | "lines" | "number" | "choice";
@@ -134,6 +138,15 @@ const SECTIONS: readonly { titleKey: string; fields: readonly FieldSpec[] }[] = 
     ],
   },
 ];
+
+/** His tastes in sex and intimacy (#1936): shown and edited only in a story with NSFW Heat that has the block. */
+const INTIMACY_SECTION = {
+  titleKey: "ui.otomeForge.setup.bibleIntimacy",
+  fields: [
+    { path: "intimacy.preferences", labelKey: "ui.otomeForge.setup.bibleIntimacyPreferences", kind: "lines" },
+    { path: "intimacy.attractions", labelKey: "ui.otomeForge.setup.bibleIntimacyAttractions", kind: "lines" },
+  ],
+} as const satisfies { titleKey: string; fields: readonly FieldSpec[] };
 
 /** Why a bible cannot be saved, one message per rule (literal keys). */
 const PROBLEM_KEYS: Record<BibleProblem, string> = {
@@ -270,7 +283,7 @@ function Field({
 /** Lines are kept as typed while editing (blank lines included) and trimmed when saved. */
 function cleanLines(bible: Bible): Bible {
   let next = bible;
-  for (const section of SECTIONS) {
+  for (const section of bible.intimacy ? [...SECTIONS, INTIMACY_SECTION] : SECTIONS) {
     for (const spec of section.fields) {
       if (spec.kind === "lines") next = setAt(next, spec.path, fromLines(toLines(getAt(next, spec.path))));
     }
@@ -296,16 +309,134 @@ interface BibleViewProps {
   lis: RunLiView[];
 }
 
+function CardLink({ runKey, li, lis }: BibleViewProps) {
+  const { t } = useTranslation();
+  const otome = useOtomeApi();
+  const queryClient = useQueryClient();
+  const characters = useCharacterOptions();
+  const id = useId();
+  const [draft, setDraft] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [status, setStatus] = useState<{ error: boolean; text: string } | null>(null);
+  const saved = li.cardId ?? "";
+  const value = draft ?? saved;
+  const missing = !!value && !characters.items.some((card) => card.id === value);
+  const refresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await characters.refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+  const save = async () => {
+    if (busy || value === saved) return;
+    setBusy(true);
+    setStatus(null);
+    try {
+      const { cardId } = await otome.post<{ cardId: string | null }>(
+        `/runs/${encodeURIComponent(runKey)}/lis/${encodeURIComponent(li.id)}/card`,
+        { cardId: value || null },
+      );
+      patchRun(queryClient, runKey, (view) => ({
+        ...view,
+        lis: view.lis.map((item) => (item.id === li.id ? { ...item, cardId: cardId ?? undefined } : item)),
+      }));
+      setDraft(null);
+      setStatus({ error: false, text: t("ui.otomeForge.setup.cardLinkSaved") });
+    } catch (failure) {
+      setStatus({ error: true, text: otome.errorMessage(failure, "ui.otomeForge.setup.cardLinkFailed") });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form
+      className="of-section of-glass"
+      aria-label={t("ui.otomeForge.setup.cardLink")}
+      onSubmit={(event) => {
+        event.preventDefault();
+        void save();
+      }}
+    >
+      <div className="of-field">
+        <label className="of-label" htmlFor={id}>
+          {t("ui.otomeForge.setup.cardLink")}
+        </label>
+        <p id={`${id}-hint`} className="of-hint">
+          {t("ui.otomeForge.setup.cardLinkHint")}
+        </p>
+        <select
+          id={id}
+          className="of-input of-select"
+          value={value}
+          disabled={busy || characters.isLoading}
+          aria-describedby={`${id}-hint`}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            setStatus(null);
+          }}
+        >
+          <option value="">{t("ui.otomeForge.setup.cardLinkNone")}</option>
+          {missing ? <option value={value}>{t("ui.otomeForge.setup.cardLinkMissing")}</option> : null}
+          {characters.items.map((card) => (
+            <option
+              key={card.id}
+              value={card.id}
+              disabled={lis.some((other) => other.id !== li.id && other.cardId === card.id)}
+            >
+              {card.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      {characters.isError ? (
+        <RetryNotice
+          message={t("ui.otomeForge.setup.cardsFailed")}
+          onRetry={() => void refresh()}
+          retrying={refreshing}
+        />
+      ) : null}
+      <div className="of-actions">
+        <button
+          type="submit"
+          className="of-button of-button--primary of-button--small"
+          aria-disabled={busy || value === saved}
+        >
+          {t(busy ? "ui.otomeForge.settings.saving" : "ui.otomeForge.setup.cardLinkSave")}
+        </button>
+        <button
+          type="button"
+          className="of-button of-button--text"
+          aria-disabled={refreshing}
+          onClick={() => void refresh()}
+        >
+          <RotateCcw size={14} strokeWidth={2.2} aria-hidden="true" />
+          {t("ui.otomeForge.setup.cardLinkRefresh")}
+        </button>
+      </div>
+      {status ? (
+        <p className={status.error ? "of-error" : "of-hint"} role={status.error ? "alert" : "status"}>
+          {status.text}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
 export function BibleView({ runKey, li, lis }: BibleViewProps) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const queryClient = useQueryClient();
+  const run = useRun(runKey);
   const [revealed, setRevealed] = useState(false);
   const [draft, setDraft] = useState<Bible | null>(null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<{ error: boolean; text: string } | null>(null);
   const path = `/runs/${encodeURIComponent(runKey)}/lis/${encodeURIComponent(li.id)}/bible`;
-  const queryKey = ["otome-forge", "bible", runKey, li.id] as const;
+  const queryKey = bibleQueryKey(runKey, li.id);
   const bible = useQuery({
     queryKey,
     enabled: revealed,
@@ -314,6 +445,9 @@ export function BibleView({ runKey, li, lis }: BibleViewProps) {
   const accent = accentOf(li);
   const editing = draft !== null;
   const shown = draft ?? bible.data ?? null;
+  // An SFW story never shows the block; a save there keeps one written before Heat was lowered (the server's rule).
+  const sections =
+    shown?.intimacy && run.data && intimacyOpen(run.data.world.content) ? [...SECTIONS, INTIMACY_SECTION] : SECTIONS;
   const headingRef = useRef<HTMLHeadingElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   // Edit, Cancel and Save replace themselves: focus goes to the toolbar's new first button, not to the page.
@@ -341,6 +475,8 @@ export function BibleView({ runKey, li, lis }: BibleViewProps) {
     try {
       const saved = await otome.post<{ bible: Bible }>(path, { bible: bibleToSave });
       queryClient.setQueryData(queryKey, saved.bible);
+      // The cast's "Add intimacy preferences" follows whether the block is there.
+      void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
       setEditing(null);
       setStatus({ error: false, text: t("ui.otomeForge.setup.bibleSaved") });
     } catch (failure) {
@@ -369,6 +505,7 @@ export function BibleView({ runKey, li, lis }: BibleViewProps) {
           {t("ui.otomeForge.setup.bibleTitle", { name: li.name })}
         </h1>
       </div>
+      <CardLink key={li.id} runKey={runKey} li={li} lis={lis} />
       {!revealed ? (
         <section className="of-section of-glass of-spoiler">
           <BookLock size={26} strokeWidth={1.6} aria-hidden="true" />
@@ -453,8 +590,11 @@ export function BibleView({ runKey, li, lis }: BibleViewProps) {
             {status ? <p className={status.error ? "of-notice of-notice--error" : "of-notice"}>{status.text}</p> : null}
           </div>
 
-          {SECTIONS.map((section) => (
+          {sections.map((section) => (
             <Block key={section.titleKey} title={t(section.titleKey)}>
+              {section === INTIMACY_SECTION ? (
+                <p className="of-hint">{t("ui.otomeForge.setup.bibleIntimacyHint")}</p>
+              ) : null}
               {editing ? (
                 section.fields.map((spec) => (
                   <Field key={spec.path} spec={spec} bible={shown} editing onChange={setDraft} />

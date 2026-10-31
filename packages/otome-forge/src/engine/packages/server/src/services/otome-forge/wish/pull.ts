@@ -29,7 +29,7 @@ import { OtomeForgeError } from "../http.js";
 import { runDocTarget, stateId, worldId } from "../ids.js";
 import { updateIfChanged } from "../art/paint.js";
 import { withCoupleTimeline } from "../items/open.js";
-import { STATE_LIMITS, keepNewest, normalizeState } from "../schemas/state.js";
+import { STATE_LIMITS, keepNewest, keepTimeline, normalizeState } from "../schemas/state.js";
 import { normalizeWorld } from "../schemas/world.js";
 import type { OtomeStore } from "../store.js";
 import {
@@ -117,7 +117,7 @@ export function applyPull(
         items: [...state.owned.items, ...won],
         at: { ...state.owned.at, ...Object.fromEntries(won.map((id) => [id, at])) },
       },
-      timeline: keepNewest([...state.timeline, ...timeline], STATE_LIMITS.timeline),
+      timeline: keepTimeline([...state.timeline, ...timeline]),
       pulls: requestId
         ? keepNewest([...state.pulls, { id: requestId, banner: banner.key, at, results }], STATE_LIMITS.pulls)
         : state.pulls,

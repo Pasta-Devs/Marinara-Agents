@@ -275,6 +275,53 @@ test("(b) Gacha Forge's pasted expressions keep GF's names, looks, reader, log p
   assert.deepEqual(painted.scopes, ["gacha-forge-expressions"]);
 });
 
+test("explicit expression repaint joins only the same full prompts, independently of object key order", async () => {
+  const prompts = Object.fromEntries(
+    faces.map((face) => [face, { prompt: `${face}: ${"Full reviewed detail. ".repeat(250)}`, negativePrompt: "" }]),
+  );
+  delete prompts.tender.negativePrompt;
+  for (const reviewed of [undefined, prompts]) {
+    let release;
+    const gate = new Promise((resolve) => (release = resolve));
+    const instance = createForgeStoryExpressions({
+      documents: {},
+      packageId: "test",
+      logger: { warn: assert.fail },
+      // Hold the attempt before any document or paid-image access; this proof concerns its request ownership.
+      readRun: async () => (await gate, null),
+      names: faces,
+      localAvatarPath: otomePath,
+      background: (job) => job(),
+      dedupe: (_key, job) => job(),
+    });
+    const first = instance.repaint("w", "w:unit:arden", "/otome/arden.png", reviewed);
+    try {
+      assert.ok(first instanceof Promise);
+      const reordered = reviewed
+        ? Object.fromEntries(
+            Object.entries(reviewed)
+              .reverse()
+              .map(([face, value]) => [face, Object.fromEntries(Object.entries(value).reverse())]),
+          )
+        : undefined;
+      assert.equal(instance.repaint("w", "w:unit:arden", "/otome/arden.png", reordered), first);
+      const changed = structuredClone(prompts);
+      changed.angry.prompt += " DIFFERENT ENDING";
+      assert.equal(instance.repaint("w", "w:unit:arden", "/otome/arden.png", changed), null);
+      changed.angry.prompt = prompts.angry.prompt;
+      changed.angry.negativePrompt = "Different negative";
+      assert.equal(instance.repaint("w", "w:unit:arden", "/otome/arden.png", changed), null);
+      changed.angry.negativePrompt = prompts.angry.negativePrompt;
+      changed.tender.negativePrompt = "";
+      assert.equal(instance.repaint("w", "w:unit:arden", "/otome/arden.png", changed), null);
+    } finally {
+      release();
+      await first;
+      instance.dispose();
+    }
+  }
+});
+
 test("(b) Gacha Forge's pasted choices keep GF's label punctuation", async () => {
   const gf = await gachaBlock(["player-choice-text", "player-choices-server"], {}, ["forgeNormalizeChoiceBeat"]);
   const raw = {

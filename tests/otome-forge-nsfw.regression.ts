@@ -1,8 +1,8 @@
 // Otome Forge M4 (0.0.6): NSFW mode, written out for the maintainer's NSFW prompt within Otome's rules. NSFW Heat and
 // Dark romance reach the story prompts only through the 18+ gate and the settings that ask for them; the player's
 // Lines and Veils always appear, last, and win; non-consent stays a Line unless the player lifted it under Dark, NSFW
-// Heat and the gate, and only then (or with dubious consent open) does the consent framing appear; summaries stay
-// non-explicit. Every image keeps the adult-only negatives at every rating and after any edit; looks, faces, outfits,
+// Heat and the gate, and only then (or with dubious consent open) does the consent framing appear; summaries keep an
+// adult story as it was written (0.3.0). Every image keeps the adult-only negatives at every rating and after any edit; looks, faces, outfits,
 // the pair portrait and Memory art stay clothed portraits; places carry no person tags above SFW; and the explicit
 // tags appear only on a story CG whose brief set `explicit` under Explicit Heat and the Explicit rating.
 import assert from "node:assert/strict";
@@ -30,6 +30,7 @@ import { cgPromptFor } from "../packages/otome-forge/src/engine/packages/server/
 import {
   cgPrompt,
   expressionPrompt,
+  keepsakePrompt,
   lookPrompt,
   placePrompt,
   type ImagePrompt,
@@ -57,6 +58,7 @@ import { normalizeBeatReply } from "../packages/otome-forge/src/engine/packages/
 import {
   beatMessages,
   chapterPlanMessages,
+  closerMessages,
   confrontationMessages,
   routePlanMessages,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/prompts.ts";
@@ -161,10 +163,14 @@ test("a Line or Veil the player set always appears, after everything NSFW mode a
     }
     assert.equal(bulletIndex(text, NSFW_WORDING.win), veils + 1, `${kind}: they win, right after them`);
   }
-  // Home, care and summary prompts keep every Line and Veil as "never write or mention", under any Heat.
-  for (const kind of ["home", "care", "summary"] as const) {
+  // Home and care prompts keep every Line and Veil as "never write or mention", under any Heat.
+  for (const kind of ["home", "care"] as const) {
     assert.match(contract(content, kind), /Never write or mention: [^\n]*gore[^\n]*spiders[^\n]*drowning/, kind);
   }
+  // A summary never writes a Line, and records a Veil only as having happened off the page.
+  const summary = contract(content, "summary");
+  assert.match(summary, /Never write or mention: [^\n]*gore[^\n]*spiders\./);
+  assert.match(summary, /Veils \(they happen only off the page\): record at most that one happened[^\n]*drowning\./);
 });
 
 test("non-consent stays a Line unless the player lifted it under Dark, NSFW Heat and the 18+ gate", () => {
@@ -201,14 +207,83 @@ test("the consent framing appears only while dubious consent or non-consent is n
   assert.match(text, /When a choice is about intimacy, one option lets the protagonist decline/);
 });
 
-test("summaries stay non-explicit, whatever the Heat, Darkness and limits", () => {
+test("under NSFW: Explicit, sex is never rushed: room to unfold, dialogue throughout, a longer node", () => {
+  const explicit = beatPrompt(stored("explicit", "angst"), "sfw");
+  assert.match(explicit, /never summarized, sanitized or rushed\. Give it room, from the build-up through the act/);
+  assert.match(explicit, /may talk throughout, ask for a change of position, say what they feel, or simply give in/);
+  assert.match(explicit, /A node that reaches sex is the exception: [^\n]*up to 1500 words and 60 segments/);
+  // The planners read the same Heat line, so they plan the room too.
+  const plan = systemOf(
+    chapterPlanMessages({ ...storyInputs(stored("explicit", "angst")), number: 2, lead: KAI, memory: "" }),
+  );
+  assert.match(plan, /never summarized, sanitized or rushed/);
+  for (const content of [stored("fade", "angst"), defaultContent()]) {
+    const prompt = beatPrompt(content, "sfw");
+    assert.doesNotMatch(prompt, /A node that reaches sex is the exception|or rushed/, content.heat);
+  }
+  // A Closer's opened ending gets the room too, under Explicit Heat only (Dottore on #1959).
+  const closer = (content: ContentSettings) => {
+    const input = storyInputs(content);
+    const node = { ...cgNode("closer"), cg: false };
+    const chapter = { kind: "main" as const, number: 2, title: "Rain", lead: KAI, foil: MIR, nodes: [node] };
+    return systemOf(closerMessages({ ...input, chapter, node, storySoFar: "", memory: "", li: KAI }));
+  };
+  const ROOM = /When it reaches sex, opened may run to 20 segments, so it is never rushed\./;
+  assert.match(closer(stored("explicit", "angst")), ROOM);
+  assert.match(closer(stored("fade", "angst")), /- opened may turn intimate when the moment/);
+  assert.doesNotMatch(closer(stored("fade", "angst")), ROOM);
+  assert.doesNotMatch(closer(defaultContent()), /opened may turn intimate/);
+});
+
+test("no NSFW scene asks for consent or offers to stop, at any Darkness; an SFW story never says so", () => {
+  const CHECK_IN = /A love interest never asks permission, checks in or offers to stop \("tell me to stop"/;
+  for (const content of [stored("fade", "gentle"), stored("explicit", "angst"), stored("explicit", "dark")]) {
+    for (const kind of ["planner", "scene", "chat"] as const) {
+      const text = contract(content, kind);
+      assert.match(text, /from hand-holding, pinning and kisses to sex itself, causes an out-of-character pause/, kind);
+      assert.match(text, CHECK_IN, `${content.heat}/${content.darkness} ${kind}`);
+    }
+  }
+  assert.doesNotMatch(contract(defaultContent()), CHECK_IN);
+});
+
+test("NSFW mode names the crude words it allows; an SFW story allows swearing without the sexual words", () => {
+  for (const content of [stored("fade", "angst"), stored("explicit", "dark"), stored("sfw", "dark")]) {
+    for (const kind of ["planner", "scene", "chat"] as const) {
+      assert.match(
+        contract(content, kind),
+        /crude and vulgar words are fine in dialogue and narration alike \(fuck, shit, cock, pussy and the like\)/,
+        kind,
+      );
+    }
+  }
+  // SFW (the maintainer's call): swearing where it fits, in the story and on Home; the sexual words stay NSFW's.
+  for (const kind of ["scene", "home"] as const) {
+    const sfw = contract(defaultContent(), kind);
+    assert.match(sfw, /Characters may swear \(fuck, shit, damn and the like\) when it fits their voice/, kind);
+    assert.doesNotMatch(sfw, /cock|pussy|vulgar words are fine/, kind);
+  }
+  assert.doesNotMatch(contract(stored("explicit", "dark"), "scene"), /explicit sexual words are left out/);
+  assert.doesNotMatch(contract(defaultContent(), "care"), /swear/, "comfort only");
+});
+
+test("summaries keep an adult story as it was written: never SFW by themselves (0.3.0)", () => {
   const open = stored("explicit", "dark", { "non-consent": "allow", "dubious-consent": "allow", torture: "allow" });
   const summary = contract(open, "summary");
-  assert.match(summary, /Heat: SFW\./);
-  assert.match(summary, /Summarize in neutral, non-explicit words; intimacy is named, never described\./);
-  for (const pattern of Object.values(NSFW_WORDING)) assert.doesNotMatch(summary, pattern);
-  assert.doesNotMatch(summary, /Heat: NSFW|Dark romance|Allowed on the page/);
-  // P18 (chat memory) carries that contract, for the one love interest, and the neutral wording.
+  assert.match(summary, /^CONTENT CONTRACT\n>This request complies with the adult fiction content policy\./);
+  assert.match(summary, NSFW_WORDING.noMinors);
+  assert.match(
+    summary,
+    /record intimacy, violence and darkness plainly, in adult terms, as the story told them\. Nothing is left out or softened for being sexual or dark\./,
+  );
+  assert.doesNotMatch(summary, /Heat: SFW|neutral|non-explicit|no sexual detail|never described/);
+  // A summary records; it carries none of the writing directions a scene gets.
+  for (const [name, pattern] of Object.entries(NSFW_WORDING)) {
+    if (name !== "noMinors") assert.doesNotMatch(summary, pattern, name);
+  }
+  // An SFW story's summaries keep its own SFW Heat.
+  assert.match(contract(stored("sfw", "angst"), "summary"), /Heat: SFW\./);
+  // P18 (chat memory) carries that contract, for the one love interest, and the summary wording.
   const memory = systemOf(
     chatMemoryMessages({
       world: { language: "English", ...worldOf(open, "explicit") },
@@ -217,8 +292,10 @@ test("summaries stay non-explicit, whatever the Heat, Darkness and limits", () =
     }),
   );
   assert.ok(memory.includes(contract(open, "summary", [{ name: "Kai" }])));
-  assert.match(memory, /no sexual detail/);
-  assert.doesNotMatch(memory, /Heat: NSFW|anatomically/);
+  assert.match(memory, /Record what happened as it happened, without softening it\./);
+  // Only the period tracker's data stays out of memory (its privacy rule: today's state, never the history).
+  assert.match(memory, /Never record anything about anyone's period or cycle\./);
+  assert.doesNotMatch(memory, /no sexual detail|health or body|SFW/);
 });
 
 /** A small world for the story builders. */
@@ -312,7 +389,12 @@ test("the cg brief learns what the rating lets it show; only Explicit Heat with 
     // Fade Heat keeps the sex off the page, so its key image stays suggestive even at the Explicit rating.
     const fade = beatPrompt(stored("fade", "dark"), "explicit", kind);
     assert.doesNotMatch(fade, /"explicit"/, kind);
-    assert.match(fade, /implied intimacy; never exposed nipples, genitals or a sex act/, kind);
+    assert.match(fade, /neutral moments stay neutral/, kind);
+    assert.match(
+      fade,
+      /implied intimacy are permitted only when the scene calls for them; never exposed nipples, genitals or a sex act/,
+      kind,
+    );
     const sfwImages = beatPrompt(stored("explicit", "dark"), "sfw", kind);
     assert.match(sfwImages, /everyone clothed; intimacy shown through faces, hands and closeness/, kind);
     assert.doesNotMatch(sfwImages, /"explicit"/, kind);
@@ -328,22 +410,80 @@ test("the cg brief learns what the rating lets it show; only Explicit Heat with 
   assert.doesNotMatch(plan(stored("sfw", "dark")), /first night/);
 });
 
-test("P20: Memory art stays at most Suggestive and every look a complete clothed look above SFW", () => {
-  const input = storyInputs(stored("explicit", "dark"), "explicit");
-  const banner = (kind: "memories" | "his-wardrobe") =>
-    systemOf(bannerPlanMessages({ kind, ...input, featured: input.units[0]!, earlierTitles: [], memory: "" }));
-  const memories = banner("memories");
-  assert.match(memories, /The key image at this rating: allure, embraces, bare shoulders, implied intimacy/);
-  assert.doesNotMatch(memories, /set "explicit"/, "Memory art is painted before its story exists");
+test("P20: premises span the Heat; Memory art may be explicit only under Explicit Heat and rating; looks stay clothed", () => {
+  const banner = (heat: Heat, rating: ImageRating, kind: "memories" | "his-wardrobe" = "memories") => {
+    const input = storyInputs(stored(heat, heat === "sfw" ? "angst" : "dark"), rating);
+    return systemOf(bannerPlanMessages({ kind, ...input, featured: input.units[0]!, earlierTitles: [], memory: "" }));
+  };
+  // #1951: Explicit Heat and the Explicit rating: explicit premises, and a key image the brief may mark explicit.
+  const explicit = banner("explicit", "explicit");
+  assert.match(explicit, /SFW ones, suggestive ones \(desire, tension, a near miss\) and explicit ones \(sex between/);
   assert.match(
-    memories,
+    explicit,
+    /The key image at this rating: when the moment shown is sex or nudity[^\n]*set "explicit": true/,
+  );
+  assert.match(
+    explicit,
+    /"cgCast": \[[^\]]*\], "explicit": false, "clothedBrief": "<English, 1–2 sentences, only when explicit is true>"\}, "four"/,
+    "the shape carries the mark and its clothed twin",
+  );
+  assert.match(
+    explicit,
+    /When "explicit" is true, also write clothedBrief: the same moment just before or after it, everyone clothed/,
+  );
+  assert.match(
+    explicit,
+    /IMAGE TAGS every outfit line and 4★ brief must fit: [^\n]*\. The featured key image brief follows its rule above\./,
+  );
+  // Each 4★ Moment gets its own brief, held to clothed art whatever its premise holds.
+  assert.match(explicit, /"premise": "<1–2 sentences>", "cgBrief": "<English, 1–2 sentences>", "cgCast"/);
+  assert.match(
+    explicit,
+    /Each 4★'s cgBrief [^\n]*Whatever its premise holds, the picture follows this: follow the actual scene/,
+  );
+  assert.match(
+    explicit,
     /Every look stays a complete clothed look: it may be revealing \(lingerie, swimwear\), never nude\./,
   );
+  // Explicit Heat at the Suggestive rating: explicit premises, Memory art at most Suggestive as before.
+  const suggestive = banner("explicit", "suggestive");
+  assert.match(suggestive, /and explicit ones \(sex between the adults/);
+  assert.match(suggestive, /The key image at this rating: follow the actual scene; neutral moments stay neutral/);
   assert.match(
-    memories,
-    /IMAGE TAGS every outfit line and key image brief must fit: suggestive, tasteful, clothed, adult/,
+    suggestive,
+    /allure, embraces, bare shoulders and implied intimacy are permitted only when the scene calls for them/,
   );
-  assert.doesNotMatch(banner("his-wardrobe"), /The key image at this rating/, "a wardrobe banner has no key image");
+  assert.doesNotMatch(
+    suggestive,
+    /set "explicit"|"explicit": false|clothedBrief/,
+    "no explicit art below the Explicit rating",
+  );
+  assert.match(suggestive, /IMAGE TAGS every outfit line, key image brief and 4★ brief must fit: clothed, adult/);
+  // Explicit Heat with the SFW rating: the premises still go explicit; the art stays SFW (Heat writes, the rating paints).
+  const sfwArt = banner("explicit", "sfw");
+  assert.match(sfwArt, /and explicit ones \(sex between the adults/);
+  assert.match(
+    sfwArt,
+    /The key image at this rating: everyone clothed; intimacy shown through faces, hands and closeness/,
+  );
+  assert.doesNotMatch(sfwArt, /set "explicit"|"explicit": false/);
+  assert.match(
+    sfwArt,
+    /IMAGE TAGS every outfit line, key image brief and 4★ brief must fit: safe for work, fully clothed/,
+  );
+  assert.match(
+    sfwArt,
+    /Whatever its premise holds, the picture follows this: everyone clothed; intimacy shown through/,
+  );
+  // Fade: SFW and suggestive premises, never explicit ones or explicit art, whatever the rating.
+  const fade = banner("fade", "explicit");
+  assert.match(fade, /Premises span the Heat across the featured Memory and the 4★s: SFW ones, and suggestive ones/);
+  assert.doesNotMatch(fade, /explicit ones|set "explicit"|"explicit": false/);
+  // SFW Heat and a wardrobe banner have no premise line (an SFW world's prompt is pinned in sfw-defaults).
+  assert.doesNotMatch(banner("sfw", "explicit"), /Premises span the Heat|"explicit": false|4★'s cgBrief/);
+  const wardrobe = banner("explicit", "explicit", "his-wardrobe");
+  assert.doesNotMatch(wardrobe, /Premises span the Heat|"explicit": false/);
+  assert.doesNotMatch(wardrobe, /The key image at this rating/, "a wardrobe banner has no key image");
 });
 
 test("a brief's explicit mark is kept only when the world allowed it as the beat was written", () => {
@@ -393,6 +533,78 @@ const FACE_UNIT = {
   outfitLine: "keeper's coat",
   bible: bible({ look: { identityLine: "tall man", outfitLine: "keeper's coat", presentation: "man" } }),
 };
+
+test("non-explicit assets retain adult romance and lingerie without graphic policy enumeration", () => {
+  const world = worldOf(stored("sfw", "gentle"), "suggestive");
+  for (const style of [PLAIN, TAGGED]) {
+    const look = lookPrompt({ ...KAI_LOOK, outfitLine: "silk lingerie, sheer robe", world, style });
+    const scene = {
+      brief: "Two adults embrace romantically beside a fountain",
+      people: [KAI_LOOK, INES_LOOK],
+      world,
+      style,
+    };
+    const images = [
+      look,
+      placePrompt({ name: "Garden", tags: "rose garden, fountain, sunset", world, style }),
+      cgPrompt({ ...scene, use: "clothed" }),
+      cgPrompt({ ...scene, use: "cg" }),
+      keepsakePrompt(scene),
+    ];
+    for (const image of images) {
+      assert.match(image.negativePrompt, /child, childlike, minor, underage, school uniform/);
+      assert.match(image.negativePrompt, /nudity, explicit sexual activity/);
+      assert.doesNotMatch(image.negativePrompt, /loli|shota|nipples|genitals|\bsex\b|lingerie|sexual content/);
+      assert.doesNotMatch(image.prompt, /safe for work|adult face and body|over 18/);
+    }
+    assert.match(look.prompt, /silk lingerie, sheer robe/);
+    assert.match(images[2]!.prompt, /embrace romantically/);
+  }
+});
+
+test("a Suggestive ceiling leaves neutral looks and expression edits neutral in prose and tags", () => {
+  const world = worldOf(stored("sfw", "gentle"), "suggestive");
+  const neutralEdit = { prompt: "Neutral expression, blue coat", negativePrompt: "blurry" };
+  for (const style of [PLAIN, TAGGED]) {
+    for (const edited of [undefined, neutralEdit]) {
+      const images = [
+        { kind: "look", image: lookPrompt({ ...KAI_LOOK, world, style }, edited) },
+        {
+          kind: "face",
+          image: expressionPrompt({ unit: FACE_UNIT, base: "/kai.png", face: "cold", world, style, edited }),
+        },
+      ];
+      for (const { kind, image } of images) {
+        assert.doesNotMatch(image.prompt, /\b(?:suggestive|tasteful|sensitive|nsfw|explicit)\b/i);
+        assert.match(image.prompt, /adult man/);
+        assert.match(image.negativePrompt, /child, childlike, minor, underage, school uniform/);
+        if (kind === "look") {
+          assert.match(image.prompt, /clothed, adult man/);
+          assert.match(image.negativePrompt, /nudity, explicit sexual activity/);
+        } else {
+          assert.match(image.prompt, /clothing coverage/);
+          assert.match(image.negativePrompt, /nudity, sexual content/);
+          assert.doesNotMatch(image.negativePrompt, /loli|shota|nipples|genitals|\bsex\b/);
+        }
+        if (edited) assert.ok(image.prompt.includes(neutralEdit.prompt), "the reviewed neutral words stay whole");
+      }
+    }
+  }
+  const authored = "suggestive, tasteful, sensitive blue light";
+  assert.ok(lookPrompt({ ...KAI_LOOK, world, style: { ...PLAIN, styleText: authored } }).prompt.includes(authored));
+  assert.ok(
+    expressionPrompt({
+      unit: FACE_UNIT,
+      base: "/kai.png",
+      face: "cold",
+      world,
+      style: PLAIN,
+      edited: { prompt: authored },
+    }).prompt.includes(authored),
+    "authored wording stays intact; only the app's mandatory words are removed",
+  );
+});
+
 const BUILDERS: Builder[] = [
   { name: "look", clothed: true, build: (world, style, edited) => lookPrompt({ ...KAI_LOOK, world, style }, edited) },
   {
@@ -451,14 +663,13 @@ test("the adult-only negatives stay on every image, at every rating and after an
     const at = `${builder.name} ${heat} ${rating} ${style.tagged ? "tagged" : "plain"} ${JSON.stringify(edited)}`;
     const negative = tags(image.negativePrompt);
     for (const term of ADULT_TERMS) assert.ok(negative.includes(term), `${at}: ${term}`);
-    if (rating !== "sfw")
+    const explicit = builder.name === "explicit cg" && heat === "explicit" && rating === "explicit";
+    if (explicit)
       for (const term of ["loli", "shota", "teenager"]) assert.ok(negative.includes(term), `${at}: ${term}`);
     // Everyone drawn is tagged an adult (a place draws nobody).
     if (builder.name !== "place") assert.match(image.prompt, /adult man/, at);
-    // A sentence model (Grok drops negatives) is told in words above SFW.
-    if (builder.name !== "place" && rating !== "sfw") {
-      assert.equal(image.prompt.includes(ADULT_SENTENCE), !style.tagged, at);
-    }
+    // Only an actual explicit CG carries the additional whole-body adult sentence.
+    assert.equal(image.prompt.includes(ADULT_SENTENCE), explicit && !style.tagged, at);
     // Above SFW an edit that names a minor loses that part (a face takes no edit).
     if (edited.prompt?.includes("teenager") && builder.name !== "face") {
       assert.equal(image.prompt.includes("teenager"), rating === "sfw", at);
@@ -491,12 +702,15 @@ test("base looks, faces, outfits and the pair portrait stay clothed portraits at
     if (!builder.clothed) continue;
     const at = `${builder.name} ${rating} ${style.tagged ? "tagged" : "plain"} ${JSON.stringify(edited)}`;
     const positive = tags(image.prompt.replace(/\.\s/g, ", ").replace(/\.$/, ""));
-    assert.ok(positive.includes(rating === "sfw" ? "fully clothed" : "clothed"), at);
+    if (builder.name === "face") assert.match(image.prompt, /clothing coverage/, at);
+    else assert.ok(positive.includes(rating === "sfw" ? "fully clothed" : "clothed"), at);
     if (!edited.prompt) assert.doesNotMatch(image.prompt, /\bnsfw\b|\bexplicit\b|\bnude\b/, at);
     const negative = tags(image.negativePrompt);
-    for (const term of rating === "sfw"
-      ? ["nudity", "nsfw", "sexual content"]
-      : ["nude", "nudity", "nipples", "genitals", "sex", "explicit"]) {
+    for (const term of builder.name === "face"
+      ? ["nudity", "sexual content"]
+      : rating === "sfw"
+        ? ["nudity", "nsfw", "sexual content"]
+        : ["nudity", "explicit sexual activity"]) {
       assert.ok(negative.includes(term), `${at}: ${term}`);
     }
   }
@@ -507,7 +721,7 @@ test("base looks, faces, outfits and the pair portrait stay clothed portraits at
   );
 });
 
-test("a place carries no person or rating tags above SFW, and keeps the people and SFW negatives", () => {
+test("a place carries no person or rating tags above SFW, and keeps the people and non-explicit exclusions", () => {
   for (const rating of ["suggestive", "explicit"] as const) {
     for (const style of [PLAIN, TAGGED]) {
       const { prompt, negativePrompt } = placePrompt({
@@ -518,7 +732,7 @@ test("a place carries no person or rating tags above SFW, and keeps the people a
       });
       assert.doesNotMatch(prompt, /adult|suggestive|explicit|clothed|safe for work|nsfw/, rating);
       assert.match(prompt, /no humans, scenery/);
-      for (const term of ["people", "humans", "child", "loli", "nudity", "nsfw", "sexual content"]) {
+      for (const term of ["people", "humans", "child", "nudity", "explicit sexual activity"]) {
         assert.ok(tags(negativePrompt).includes(term), `${rating}: ${term}`);
       }
     }
@@ -545,7 +759,7 @@ test("an explicit CG only when the brief, Heat and rating all say so; then its p
       }
     }
   }
-  // Memory art and the pair portrait never go explicit, even marked so.
+  // A clothed picture (the pair portrait, Memory art not marked explicit) never goes explicit, even marked so.
   const world = worldOf(stored("explicit", "dark"), "explicit");
   const memory = cgPrompt({ brief: "x", people: [KAI_LOOK], world, style: PLAIN, use: "clothed", explicit: true });
   assert.doesNotMatch(memory.prompt, /explicit/);
@@ -576,7 +790,7 @@ test("a stored CG is painted explicit only while Heat and the rating are both Ex
   assert.match(bare.negativePrompt, /child, childlike, minor, underage, school uniform/);
   await setHeat("fade");
   const lowered = await cgPromptFor(t.deps, t.runId, KEY, 1);
-  assert.match(lowered.prompt, /suggestive, tasteful/);
+  assert.doesNotMatch(lowered.prompt, /\b(?:suggestive|tasteful|sensitive|explicit|nsfw)\b/);
   assert.match(lowered.prompt, /keeper's coat/);
-  assert.match(lowered.negativePrompt, /explicit, nude, nudity, nipples, genitals, sex/);
+  assert.match(lowered.negativePrompt, /nudity, explicit sexual activity/);
 });

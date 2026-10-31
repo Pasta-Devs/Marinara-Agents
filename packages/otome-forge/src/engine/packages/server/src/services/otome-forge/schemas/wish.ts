@@ -20,7 +20,14 @@ const SNAPSHOT_MAX = 600;
 const LINE_MAX = 600;
 
 const LookSchema: ZodType<ItemLook> = z.object({ name: text(TITLE_MAX), outfitLine: text(LINE_MAX) });
-const CgSchema = z.object({ brief: text(LINE_MAX), cast: z.array(z.string().max(120)).max(3) });
+const CgSchema = z.object({
+  brief: text(LINE_MAX),
+  cast: z.array(z.string().max(120)).max(3),
+  explicit: z.literal(true).optional(),
+  /** Beside an explicit brief: the same moment clothed, painted when the world is lowered (#1951). */
+  clothed: text(LINE_MAX).optional(),
+});
+const SnapshotCgSchema = CgSchema.extend({ brief: z.string() });
 
 const defaultBanner = (): Banner => ({
   key: "",
@@ -85,7 +92,7 @@ export function normalizeItem(data: unknown): Item {
       text: text(SNAPSHOT_MAX).optional(),
       look: LookSchema.optional(),
       coupleWith: z.string().max(80).optional(),
-      cg: CgSchema.optional(),
+      cg: (field(data, "kind") === "snapshot3" ? SnapshotCgSchema : CgSchema).optional(),
       art: PaintSchema.nullable(),
       story: z.object({ key: z.string().max(120) }).nullable(),
       voicedLine: text(LINE_MAX).optional(),

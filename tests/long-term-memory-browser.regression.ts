@@ -1029,6 +1029,35 @@ async function main() {
               nextCursor: null,
             });
           }
+          if (body.source === "chats" && body.query === "Lanterns") {
+            const chatName = "My Very Long Adventure With Some Friends In The City Of A Thousand Lanterns";
+            const summaryRows = [
+              { id: "numbered", label: "msgs 1-120", messageRange: { chatName, first: 1, last: 120 } },
+              { id: "session", label: "msgs game session 3", summaryRange: { chatName, label: "game session 3" } },
+              { id: "day", label: "msgs 27.07.2026", summaryRange: { chatName, label: "27.07.2026" } },
+            ];
+            return send(200, {
+              source: "chats",
+              scanned: 3,
+              draftable: 3,
+              importedCount: 0,
+              samples: summaryRows.map(({ id, label, ...range }) => ({
+                sourceId: `chat-long:${id}`,
+                title: `${chatName}, ${label}`,
+                ...range,
+                importMode: "roleplay",
+                mutationCount: 0,
+                summary: `Import ${chatName}, ${label}`,
+                snippet: "A summary of a long chat.",
+                status: "pending",
+                freshness: "new",
+              })),
+              totals: { matches: 3, ready: 3, imported: 0 },
+              truncated: false,
+              hasMore: false,
+              nextCursor: null,
+            });
+          }
           if (body.source === "messages") {
             const chatName = "My Very Long Adventure With Some Friends In The City Of A Thousand Lanterns";
             return send(200, {
@@ -4114,6 +4143,8 @@ async function main() {
         await showEvents();
         await searchBox.fill("Current Final Branch");
         await activity.locator('[data-ltm-debug-operation="recall-desktop"]').waitFor();
+        // The filter can apply a frame after the matching row appears; wait for the other row to leave.
+        await activity.locator('[data-ltm-debug-operation="recall"]').first().waitFor({ state: "detached" });
         assert.equal(await activity.locator('[data-ltm-debug-operation="recall"]').count(), 0);
         await showEvents();
         await searchBox.fill("");
@@ -8721,6 +8752,40 @@ async function main() {
           `${sourceId}: the chat name is the element that is cut`,
         );
       }
+      // #1910: Chat Summaries rows keep their range the same way, whether it is numbered or another form.
+      await page.locator('[data-ltm-source-tab="chats"]').click();
+      await page.locator("[data-ltm-source-search]").fill("Lanterns");
+      await page.locator('[data-ltm-source-id="chat-long:numbered"][data-ltm-source-row-status]').waitFor();
+      for (const [sourceId, label] of [
+        ["chat-long:numbered", "messages 1–120"],
+        ["chat-long:session", "game session 3"],
+        ["chat-long:day", "27.07.2026"],
+      ]) {
+        const summaryRow = page.locator(`[data-ltm-source-id="${sourceId}"][data-ltm-source-row-status]`);
+        const rangeLabel = summaryRow.locator("[data-ltm-source-message-range]");
+        const nameLabel = summaryRow.locator("[data-ltm-source-chat-name]");
+        assert.equal((await rangeLabel.innerText()).trim(), label);
+        const rowBox = (await summaryRow.boundingBox())!;
+        const rangeBox = (await rangeLabel.boundingBox())!;
+        assert.ok(
+          rangeBox.x + rangeBox.width <= rowBox.x + rowBox.width,
+          `${sourceId}: the range label is inside the row`,
+        );
+        const badgeBox = (await summaryRow.locator("[data-ltm-source-status]").boundingBox())!;
+        assert.ok(
+          badgeBox.x + badgeBox.width <= rowBox.x + rowBox.width,
+          `${sourceId}: the status badge is inside the row`,
+        );
+        assert.equal(
+          await nameLabel.evaluate((element) => element.scrollWidth > element.clientWidth),
+          true,
+          `${sourceId}: the chat name is the element that is cut`,
+        );
+      }
+      await page.locator("[data-ltm-source-search]").fill("");
+      await page
+        .locator('[data-ltm-source-id="chat-long:numbered"][data-ltm-source-row-status]')
+        .waitFor({ state: "detached" });
       if (rangeViewport) await page.setViewportSize(rangeViewport);
       await page.locator('[data-ltm-source-tab="chats"]').click();
       await page.locator('[data-ltm-source-status-filter="imported"]').click();

@@ -55,8 +55,9 @@ import type {
   Segment,
   StanceResult,
   Unit,
+  World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
-import { stageRow, type Stance } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
+import { stageRow, type ClimaxMove } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import type { DateScore } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { LIMIT_IDS, type LimitId } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import {
@@ -69,16 +70,18 @@ import { generateJson, readOrGenerate, runForeground } from "../generation.js";
 import type { OtomeArt } from "../art/expressions.js";
 import { explicitCgAllowed } from "../content-contract.js";
 import { OtomeForgeError } from "../http.js";
-import { beatId, runDocTarget, stateId, unitId, worldId } from "../ids.js";
+import { PROLOGUE_KEY, beatId, mainChapterKey, runDocTarget, stateId, unitId, worldId } from "../ids.js";
 import { normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeBeat } from "../schemas/story.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
+import { withPersonaStoryAbout } from "../setup/prompts.js";
 import { applyChoiceEffects } from "../state/relationship.js";
 import { readBeatToEnd } from "../state/rewards.js";
 import { countedNow, gateShut, healRupture, passGate } from "../state/stages.js";
 import type { ChapterDeps } from "./chapters.js";
 import { chapterSoFar, readBeat, readChapter, recallText } from "./canon.js";
+import { prologueEnding, prologueProblem } from "./prologue.js";
 import {
   afterRound,
   applyConfrontation,
@@ -86,6 +89,7 @@ import {
   confrontationMainline,
   confrontationOpponent,
   endingOf,
+  climaxSpec,
   normalizeConfrontationReply,
   toConfrontationView,
   type SegmentLists,
@@ -96,6 +100,7 @@ import {
   BeatReplySchema,
   ConfrontationReplySchema,
   beatMessages,
+  closerMessages,
   confrontationMessages,
   type BeatReply,
 } from "./prompts.js";
@@ -138,6 +143,8 @@ export interface BeatContext {
   cgExplicit?: boolean;
   /** Every love interest, so a speaker's name can be matched to his stage. */
   units: ReadonlyArray<Pick<Unit, "id" | "name">>;
+  /** Existing backgrounds a raw reply may explicitly reuse; never inferred from numbered names or tags. */
+  places?: World["places"];
   state: RunState;
   last: boolean;
   /** The beat must end on one big choice (a stage-5 route chapter's gate). */
@@ -157,6 +164,35 @@ interface BeatBody {
   places: Array<{ name: string; tags: string }>;
   musicMood: MusicMood;
   cg?: Beat["cg"];
+}
+
+/** Validate raw reuse references, then normalize them away instead of saving another identity field. */
+function declaredPlaces(raw: unknown, known: World["places"] = {}) {
+  const declared = new Map<string, { name: string; tags: string }>();
+  for (const entry of Array.isArray(raw) ? raw : []) {
+    if (!entry || typeof entry !== "object") continue;
+    const place = entry as Record<string, unknown>;
+    const name = str(place.name, NAME_MAX);
+    const reuse = typeof place.reuse === "string" ? place.reuse.trim() : place.reuse;
+    const hasReuse = Object.hasOwn(place, "reuse") && reuse !== undefined && reuse !== null && reuse !== "";
+    let target = { name, tags: str(place.tags, 600) };
+    if (hasReuse) {
+      if (typeof reuse !== "string" || !Object.hasOwn(known, reuse))
+        return "place reuse must name an existing saved place key from SAVED BACKGROUNDS";
+      if (!name) return "a reused place needs its scene name";
+      const existing = known[reuse]!;
+      target = { name: existing.name, tags: existing.tags.trim() ? existing.tags : target.tags };
+    }
+    const key = nameKey(name);
+    const previous = declared.get(key);
+    if (previous && previous.name !== target.name) return "the same place name has conflicting reuse references";
+    if (name && !previous) {
+      declared.set(key, target);
+      // Choice branches inherit the canonical mainline place rather than the raw alias.
+      if (hasReuse && !declared.has(nameKey(target.name))) declared.set(nameKey(target.name), target);
+    }
+  }
+  return declared;
 }
 
 /**
@@ -195,22 +231,18 @@ export function normalizeBeatBody(raw: unknown, options: NormalizeOptions): Beat
   if (!raw || typeof raw !== "object") return null;
   const reply = raw as Record<string, unknown>;
   if (!Array.isArray(reply.segments) || !reply.segments.length) return null;
-  const declared = new Map<string, { name: string; tags: string }>();
-  for (const place of Array.isArray(reply.places) ? reply.places : []) {
-    const name = str((place as Record<string, unknown> | null)?.name, NAME_MAX);
-    if (name && !declared.has(nameKey(name))) {
-      declared.set(nameKey(name), { name, tags: str((place as Record<string, unknown>).tags, 600) });
-    }
-  }
+  const declared = declaredPlaces(reply.places, options.context.places);
+  if (typeof declared === "string") return null;
   const used = new Map<string, { name: string; tags: string }>();
   const resolve = (value: unknown) => {
     const key = nameKey(value);
     if (!key) return "";
-    const known = used.get(key);
+    const place = declared.get(key) ?? { name: str(value, NAME_MAX), tags: "" };
+    const canonical = nameKey(place.name);
+    const known = used.get(canonical);
     if (known) return known.name;
     if (used.size >= BEAT_PLACES_MAX) return "";
-    const place = declared.get(key) ?? { name: str(value, NAME_MAX), tags: "" };
-    used.set(key, place);
+    used.set(canonical, place);
     return place.name;
   };
   // The place it opens in counts only once a line falls back to it: a scene that names its own place first never lists
@@ -262,6 +294,8 @@ type NormalizedBeat = BeatBody & { choices: ForgeChoice[] };
 
 /** The reply as a beat body with its choices, or the reason it is refused (the repair turn names it). */
 export function normalizeBeatReply(reply: BeatReply, context: BeatContext): NormalizedBeat | string {
+  const places = declaredPlaces(reply.places, context.places);
+  if (typeof places === "string") return places;
   // One thought per love interest on the path with the most of them: the mainline, then in each choice (every one
   // is played) the option that holds the most.
   let counts = new Map<string, number>();
@@ -300,6 +334,10 @@ export function normalizeBeatReply(reply: BeatReply, context: BeatContext): Norm
 /** P6's segment rules, lent to P12 (S/story/confrontation.ts normalizes each of its lists with them). */
 export function segmentLists(context: BeatContext): SegmentLists {
   return {
+    placesProblem: (raw) => {
+      const places = declaredPlaces(raw, context.places);
+      return typeof places === "string" ? places : "";
+    },
     list: (raw, start) => normalizeBeatBody(raw, { start, context }),
     thoughts: (raw, counts) => thoughtProblem(context, raw, counts),
   };
@@ -426,7 +464,7 @@ async function load(deps: BeatDeps, runId: string, key: string): Promise<Loaded>
   const [run, chapter] = await Promise.all([readRun(deps.store, runId), readChapter(deps.store, runId, key)]);
   if (!run) throw runNotFound();
   if (!chapter) throw chapterNotFound();
-  return { run, chapter };
+  return { run: { ...run, player: await withPersonaStoryAbout(deps.runtime, run.player) }, chapter };
 }
 
 const castUnits = (run: RunDocuments) =>
@@ -507,6 +545,7 @@ async function generateBeat(
   const context: BeatContext = {
     node,
     units,
+    places: run.world.places,
     state: run.state,
     last,
     mustChoose,
@@ -514,18 +553,38 @@ async function generateBeat(
     ...(chapter.kind === "date" ? { date: { goesWrong: chapter.date?.goesWrong ?? false } } : {}),
   };
   const opponent = confrontationOpponent(chapter, node, units);
-  const input = { world: run.world, player: run.player, units, state: run.state, chapter, node, storySoFar, memory };
+  // Chapter 1 opens where the prologue ended, with the choices taken in it.
+  const prologue =
+    key === mainChapterKey(1) && i === 0
+      ? prologueEnding(
+          await readBeat(deps.store, runId, PROLOGUE_KEY, 0),
+          await chapterSoFar(deps.store, runId, PROLOGUE_KEY, 1, run.player.name),
+        )
+      : "";
+  const input = {
+    world: run.world,
+    player: run.player,
+    units,
+    state: run.state,
+    chapter,
+    node,
+    storySoFar,
+    memory,
+    prologue,
+  };
   let body: Omit<Beat, "key" | "i" | "kind" | "choiceCanon" | "applied" | "readThrough" | "written" | "rewrites">;
   let written: { connectionId: string; model: string };
   if (opponent) {
-    // P12: the whole stance game in one call; its opening is the beat's segments.
+    // P12 (a Closer's P12c): the whole game in one call; its opening is the beat's segments.
+    const climax = node.kind === "closer" ? "closer" : "confrontation";
     const lists = segmentLists(context);
-    const shape = { li: opponent, node, cgOpen: !!node.cg, cgExplicit };
+    const intimateRoom = run.world.content.heat === "explicit";
+    const shape = { li: opponent, node, cgOpen: !!node.cg, cgExplicit, climax, intimateRoom } as const;
     const { value, connectionId, model } = await generateJson(deps, {
       runId,
       job: "narration",
-      label: `confrontation/${key}/${i}`,
-      messages: confrontationMessages({ ...input, li: opponent }),
+      label: `${climax}/${key}/${i}`,
+      messages: (climax === "closer" ? closerMessages : confrontationMessages)({ ...input, li: opponent }),
       schema: ConfrontationReplySchema,
       normalize: (reply) => {
         const game = normalizeConfrontationReply(reply, shape, lists);
@@ -561,7 +620,8 @@ async function generateBeat(
       schema: BeatReplySchema,
       normalize: (reply) => {
         const beat = normalizeBeatReply(reply, context);
-        return typeof beat === "string" ? beat : reply;
+        if (typeof beat === "string") return beat;
+        return (chapter.kind === "prologue" && prologueProblem(beat, units)) || reply;
       },
       temperature: 0.9,
       maxTokens: 6000,
@@ -798,6 +858,11 @@ export async function serveBeat(
         current && !current.shown ? { ...current, shown: true as const } : current,
       )) ?? beat;
   }
+  if (!run.state.chapters[key]?.completed && i >= (run.state.chapters[key]?.beatsRead ?? 0)) {
+    // generateBeat may itself run inside the foreground queue. Await its place registration only after that lock
+    // has been released; the reader's first art response must distinguish pending from no image/description.
+    await deps.art?.prepareScenePlaces?.(runId, beat, { debugMode, review });
+  }
   queueFaces(deps, runId, beat, debugMode);
   if (!run.state.chapters[key]?.completed) queueLookahead(deps, runId, chapter, beat, { debugMode, review });
   return beat;
@@ -920,13 +985,16 @@ async function applyStances(deps: BeatDeps, runId: string, chapter: Chapter, bea
   return outcome;
 }
 
-/** The `applied` entries the saved stances earn: each Reveal's, and the ending's once reached. */
-const stanceEffectKeys = (beat: Beat) => [
-  ...(beat.confrontation?.picks ?? []).flatMap((stance, k) =>
-    stance === "reveal" ? [`${beat.i}/stance-${k + 1}`] : [],
-  ),
-  ...(beat.confrontation?.ending ? [`${beat.i}/confrontation`] : []),
-];
+/** The `applied` entries the saved moves earn: each Reveal's (Mirror's), and the ending's once reached. */
+const stanceEffectKeys = (beat: Beat) => {
+  const game = beat.confrontation;
+  if (!game) return [];
+  const spec = climaxSpec(game);
+  return [
+    ...game.picks.flatMap((stance, k) => (stance === spec.discloses ? [`${beat.i}/stance-${k + 1}`] : [])),
+    ...(game.ending ? [`${beat.i}/${spec.noun}`] : []),
+  ];
+};
 
 /** The stance result for round `round` of the saved game. */
 function stanceResult(beat: Beat, round: number, outcome: Remembered): StanceResult {
@@ -934,10 +1002,11 @@ function stanceResult(beat: Beat, round: number, outcome: Remembered): StanceRes
 }
 
 /**
- * POST .../beats/:i/stance {round, stance}: the first-play stance of round `round` (1–3) on the Confrontation being
- * read. It is saved on the beat once (the third with the ending its picks reach), then its effects reach the state
- * once. The same stance again returns what it did; another stance for a round already played is a 409 `locked`. The
- * ending queues the next node.
+ * POST .../beats/:i/stance {round, stance}: the first-play move of round `round` (1–3) on the climax game being read
+ * (a Confrontation's stance, a Closer's answer). It is saved on the beat once (the third with the ending its picks
+ * reach), then its effects reach the state once. The same move again returns what it did; another move for a round
+ * already played is a 409 `locked`; a move of the other game is a 400 that saves nothing. The ending queues the next
+ * node.
  */
 export async function chooseStance(
   deps: BeatDeps,
@@ -945,13 +1014,21 @@ export async function chooseStance(
   key: string,
   i: number,
   round: number,
-  stance: Stance,
+  stance: ClimaxMove,
   mode: PaintMode,
 ): Promise<StanceResult> {
   const { run, chapter } = await load(deps, runId, key);
   const beat = await readBeat(deps.store, runId, key, i);
   const confrontation = beat?.confrontation;
   if (!beat || !confrontation) throw new OtomeForgeError(404, "No such confrontation.", "not-found");
+  // Before anything is saved: a move of the other game would make the stored game unreadable.
+  if (!climaxSpec(confrontation).moves.includes(stance)) {
+    throw new OtomeForgeError(
+      400,
+      `"${stance}" is not a move of this ${climaxSpec(confrontation).noun}.`,
+      "bad-request",
+    );
+  }
   const taken = confrontation.picks[round - 1];
   if (taken) {
     if (taken !== stance) throw locked("That round is played.");

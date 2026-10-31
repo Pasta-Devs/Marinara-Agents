@@ -14,7 +14,9 @@
 //   date's. The place is one of the picker's, the love interest's own pick, or one the story has painted (M2b's
 //   world.places): the date then goes there under the name the story gave it, so its scenes open on that place's art.
 // - P26 and the date's scenes see the state as the date's love interest may know it (story/prompts.ts ownView, M3's
-//   rule): no grievance, disclosure or ledger line another love interest's own chapter left behind reaches them.
+//   rule): no grievance, disclosure or ledger line another love interest's own chapter left behind reaches them. Both
+//   carry that love interest's own notebook beside their bible or card (knowsAboutYou, Read Me #1945), so the evening
+//   can turn on what they have come to know about the protagonist.
 // - The scenes are written and read through the story routes (S/story/beats.ts): each date beat has one choice whose
 //   options carry hidden scores, and the client never sees them before the date ends. A date's beats pay nothing on
 //   their own; its chapter still counts as read once its last scene is.
@@ -76,29 +78,24 @@ import {
   STARLIGHT_EARNINGS,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import { sameName } from "../../../../../client/src/features/otome-forge/shared/faces.js";
-import { galleryRef, type ImageClient, type ImageSubject } from "../art/image-client.js";
+import { galleryRef, worldStyle, type ImageClient, type ImageSubject } from "../art/image-client.js";
 import { imagesOf, type ArtDeps } from "../art/paint.js";
 import { SCENE_SIZE, keepsakePrompt, type ImagePrompt, type KeepsakePerson } from "../art/prompts.js";
 import { otomeContentContract, otomeContractReminder } from "../content-contract.js";
 import { generateJson, runForeground, type OtomeMessage } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
 import { chapterId, runDocTarget, stateId } from "../ids.js";
-import {
-  STATE_LIMITS,
-  defaultLiState,
-  keepNewest,
-  normalizeState,
-  readRun,
-  type RunDocuments,
-} from "../schemas/state.js";
+import { defaultLiState, keepTimeline, normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeChapter } from "../schemas/story.js";
+import { withPersonaImageAppearance } from "../setup/prompts.js";
 import { applyChoiceEffects } from "../state/relationship.js";
 import { grant } from "../state/rewards.js";
 import type { OtomeStore } from "../store.js";
 import { canonPicks, type BeatDeps } from "../story/beats.js";
 import { canonicalSegments, readBeat, readChapter, recallText } from "../story/canon.js";
-import { ANGST_TYPES, CHAPTER_TAGS, bibleBlock, ownView, protagonistBlock } from "../story/prompts.js";
-import { otomeWritingRules } from "../writing-rules.js";
+import { ANGST_TYPES, CHAPTER_TAGS, bibleBlock, knowsAboutYou, ownView, protagonistBlock } from "../story/prompts.js";
+import { withPersonaStoryAbout } from "../setup/prompts.js";
+import { STORY_PACING_INSTRUCTION, otomeWritingRules } from "../writing-rules.js";
 
 export type DateDeps = BeatDeps & {
   runtime: ArtDeps["runtime"];
@@ -211,6 +208,7 @@ export function datePlanMessages({
   const name = unit.name;
   const { liState } = ownView(state, unit.id);
   const recent = liState.angst.slice(-2);
+  const known = knowsAboutYou(unit, liState);
   // The rupture is always named (it is how they are now), with who holds it; its grievance only when it came from what
   // they may know.
   const mendText = makeItRight ? liState.grievances.find((item) => item.id === makeItRight.id)?.text : undefined;
@@ -242,7 +240,8 @@ export function datePlanMessages({
     `- Write the title, the place and every guide in ${world.language}; the keepsake brief in English.`,
     "- Omit an optional field rather than writing null.",
     "",
-    otomeWritingRules({ story: true }),
+    STORY_PACING_INSTRUCTION,
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
     otomeContentContract({ world, lis: [{ name }], kind: "planner" }),
   ].join("\n");
@@ -256,7 +255,8 @@ export function datePlanMessages({
     protagonistBlock(player),
     "",
     `THE DATE'S LOVE INTEREST (full bible; this date does not move the stage)`,
-    bibleBlock(unit, state, [unit.id]),
+    bibleBlock(unit, state, [unit.id], world),
+    ...(known ? [known] : []),
     "",
     "THE PLACE",
     place === PARTNER_CHOICE
@@ -539,7 +539,7 @@ export async function startDate(
       label: `date-plan/${key}`,
       messages: datePlanMessages({
         world: run.world,
-        player: run.player,
+        player: await withPersonaStoryAbout(deps.runtime, run.player),
         unit,
         state: run.state,
         place: input.place,
@@ -640,10 +640,10 @@ function withFirstDate(state: RunState, li: LiId, chapter: Chapter, at: string):
   return {
     ...state,
     lis: { ...state.lis, [li]: { ...current, firsts: { ...current.firsts, date: at } } },
-    timeline: keepNewest(
-      [...state.timeline, { at, li, kind: "first-date", text: chapter.title.slice(0, 600), ref: chapter.key }],
-      STATE_LIMITS.timeline,
-    ),
+    timeline: keepTimeline([
+      ...state.timeline,
+      { at, li, kind: "first-date", text: chapter.title.slice(0, 600), ref: chapter.key },
+    ]),
   };
 }
 
@@ -718,6 +718,7 @@ export async function finishDate(deps: DateDeps, runId: string, key: string): Pr
 async function keepsakeSubject(deps: DateDeps, runId: string, key: string) {
   const [run, chapter] = await Promise.all([readRun(deps.store, runId), readChapter(deps.store, runId, key)]);
   if (!run) throw runNotFound();
+  run.player = await withPersonaImageAppearance(deps.runtime, run.player);
   if (!chapter || chapter.kind !== "date" || !chapter.date) throw dateNotFound();
   if (!isFinished(run.state, chapter)) throw conflict("A keepsake is painted once the date is over.");
   const unit = partnerOf(run, chapter.date.li);
@@ -754,7 +755,7 @@ export async function keepsakePromptFor(
   edited: Partial<ImagePrompt> = {},
 ): Promise<ImagePrompt> {
   const { run, plan, people } = await keepsakeSubject(deps, runId, key);
-  const style = await imagesOf(deps).styleProfile(run.world.images.styleProfileId);
+  const style = await worldStyle(imagesOf(deps), run.world.images);
   return keepsakePrompt({ brief: plan.keepsake.brief, people, world: run.world, style }, edited);
 }
 
@@ -788,7 +789,7 @@ export async function paintKeepsake(
     const latest = (await readChapter(deps.store, runId, key))?.date?.keepsake.art;
     if (latest?.state === "ready") return latest;
     const images = imagesOf(deps);
-    const style = await images.styleProfile(run.world.images.styleProfileId);
+    const style = await worldStyle(images, run.world.images);
     const built = keepsakePrompt(
       { brief: plan.keepsake.brief, people, world: run.world, style },
       { prompt, negativePrompt },

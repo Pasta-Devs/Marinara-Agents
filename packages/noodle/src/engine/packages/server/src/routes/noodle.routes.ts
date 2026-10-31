@@ -34,6 +34,7 @@ import {
 } from "@marinara-engine/shared";
 import { isConnectionAdmissionFailure, admissionModeForRequest } from "../services/generation/connection-admission.js";
 import { tryNoodleOperation } from "../services/noodle/noodle-operation-lock.js";
+import { getNoodleMemoryStatus } from "../services/noodle/noodle-ltm-recall.js";
 
 const accountQuery = z.object({ accountId: z.string().trim().min(1) });
 const noodleImagePromptConfirmationSchema = z.object({
@@ -73,6 +74,7 @@ export async function noodleRoutes(app: FastifyInstance) {
     const [latest] = await noodle.listRefreshRuns({ status: "completed", limit: 1 });
     return { marker: latest ? `${latest.id}:${latest.updatedAt}` : null };
   });
+  app.get("/memory-status", async () => ({ status: getNoodleMemoryStatus() }));
   app.put("/settings", async (request) => noodle.updateSettings(request.body as Record<string, unknown>));
   app.post("/data/cleanup-unused", async () => {
     const [charactersList, personas] = await Promise.all([characters.list(), characters.listPersonas()]);

@@ -217,8 +217,8 @@ test("a `locked` refusal of a route chapter's scene is its love interest's ruptu
 
 test("the face on stage is his latest line's; narration keeps it; a first name finds him", () => {
   const timeline = buildTimeline(beat({ choices: [] }), {}, "Mira");
-  // Before anyone speaks, the first love interest who speaks in this beat stands there, never one who is not in it.
-  assert.deepEqual(onStageAt(timeline.lines, 0, LIS), { li: ILVAR, face: "", speaking: false });
+  // A future love interest's turn must not reveal him during the opening narration.
+  assert.deepEqual(onStageAt(timeline.lines, 0, LIS), { li: null, face: "", speaking: false });
   const alone = buildTimeline(
     beat({
       choices: [],
@@ -360,6 +360,28 @@ test("a Confrontation is a beat of stances: its mainline is the opening, each ro
   assert.throws(() => readerBeat({}));
 });
 
+test("a Closer is a beat of its own four answers, in their order, with the same mainline (#1938)", () => {
+  const answers = {
+    // Out of order on the wire: the reader keeps the Closer's own order, and never offers a stance.
+    ask: option("Ask why.", "Why here?"),
+    mirror: option("Tell your own.", "Me too."),
+    tease: option("Tease.", "You're blushing."),
+    reassure: option("Stay close.", "I'm here."),
+    press: option("A stance.", "Not a Closer's."),
+  } as ConfrontationView["rounds"][number]["options"];
+  const view = confrontation({
+    kind: "closer",
+    rounds: [{ round: 1, his: [{ speaker: "Ilvar", text: "I used to come here alone." }], options: answers }],
+  });
+  const served = readerBeat({ beat: beat(), confrontation: view }).beat;
+  const open = buildTimeline(served, initialPicks(served, false), "Mira");
+  assert.deepEqual(texts(open), ["The dome again.", "I used to come here alone."]);
+  assert.deepEqual(
+    open.pending.get(1)!.options.map((item) => item.id),
+    ["reassure", "tease", "mirror", "ask"],
+  );
+});
+
 test("a round with no lines of its own still gets a line for its stances, so no two rounds share one", () => {
   const read = confrontationBeat(
     confrontation({
@@ -397,6 +419,9 @@ test("a place's picture is found by its name, and only a ready paint has one", (
     { name: "The Lab", tags: "glass", art: { state: "waiting-consent" as const, at: "" } },
   ];
   assert.equal(readyUrl(placeEntry(places, "the observation  room")?.art), "/gallery/1.png");
+  assert.equal(readyUrl(placeEntry(places, "THE-observation-room")?.art), "/gallery/1.png");
+  assert.equal(placeEntry([{ name: "Dottore’s wing 4", tags: "lab" }], "dottore's wing 4")?.name, "Dottore’s wing 4");
+  assert.equal(placeEntry([{ name: "Dottore’s wing 4", tags: "lab" }], "Dottore’s wing 5"), null);
   assert.equal(readyUrl(placeEntry(places, "The Lab")?.art), null);
   assert.equal(placeEntry(places, "Elsewhere"), null);
   assert.equal(placeEntry(null, "The Lab"), null);

@@ -15,6 +15,10 @@ export type Heat = (typeof HEATS)[number];
 export const DARKNESSES = ["gentle", "angst", "dark"] as const;
 export type Darkness = (typeof DARKNESSES)[number];
 
+/** The protagonist's own intimacy role (#1936): optional, NSFW only, and never the love interests'. */
+export const MC_ROLES = ["sub", "dom", "switch"] as const;
+export type McRole = (typeof MC_ROLES)[number];
+
 export const IMAGE_RATINGS = ["sfw", "suggestive", "explicit"] as const;
 export type ImageRating = (typeof IMAGE_RATINGS)[number];
 
@@ -49,6 +53,8 @@ export interface ContentSettings {
   darkness: Darkness;
   limits: Record<LimitId, LimitLevel>;
   custom: CustomLimit[];
+  /** The protagonist's Sub, Dom or Switch preference; absent (the default) leaves it unspecified. NSFW only. */
+  mcRole?: McRole;
 }
 
 export const CUSTOM_LIMITS_MAX = 10;
@@ -154,6 +160,8 @@ export function limitsForDarkness(
 
 /** Maintainer defaults: Heat SFW, Darkness Angst, image rating SFW. */
 export const DEFAULT_IMAGE_RATING: ImageRating = "sfw";
+/** The player's image style (Settings → Images): a short line of art-style words. */
+export const IMAGE_STYLE_MAX = 300;
 export function defaultContent(): ContentSettings {
   return { heat: "sfw", darkness: "angst", limits: defaultLimits("angst"), custom: [] };
 }
@@ -161,6 +169,14 @@ export function defaultContent(): ContentSettings {
 /** True when this content needs the 18+ gate: NSFW Heat or Dark romance. */
 export function contentNeedsAgeGate(content: Pick<ContentSettings, "heat" | "darkness">): boolean {
   return content.heat !== "sfw" || content.darkness === "dark";
+}
+
+/**
+ * True when a story may draw on intimacy preferences (#1936): NSFW Heat, Fade or Explicit, which enforceContent only
+ * keeps behind the 18+ confirmation. SFW never does, whatever the image rating or Darkness.
+ */
+export function intimacyOpen(content: Pick<ContentSettings, "heat">): boolean {
+  return content.heat !== "sfw";
 }
 
 /** True when this image rating needs the 18+ gate (anything above SFW). */
@@ -211,7 +227,8 @@ export function enforceContent(content: ContentSettings, ageGate: boolean): Cont
     .map((limit) => ({ text: limit.text.trim().slice(0, CUSTOM_LIMIT_TEXT_MAX), level: limit.level }))
     .filter((limit) => limit.text)
     .slice(0, CUSTOM_LIMITS_MAX);
-  return { heat, darkness, limits, custom };
+  // The protagonist's role goes with NSFW Heat: lowering Heat, or withdrawing the 18+ confirmation, drops it.
+  return { heat, darkness, limits, custom, ...(content.mcRole && heat !== "sfw" ? { mcRole: content.mcRole } : {}) };
 }
 
 const isOneOf = <T extends string>(values: readonly T[], value: unknown): value is T =>
@@ -240,11 +257,13 @@ export function normalizeContent(data: unknown): ContentSettings {
     const level = field(raw, "level");
     if (typeof text === "string" && (level === "veil" || level === "line")) custom.push({ text, level });
   }
+  const mcRole = field(data, "mcRole");
   return {
     heat: isOneOf(HEATS, heat) ? heat : fallback.heat,
     darkness: resolvedDarkness,
     limits,
     custom: custom.slice(0, CUSTOM_LIMITS_MAX),
+    ...(isOneOf(MC_ROLES, mcRole) ? { mcRole } : {}),
   };
 }
 

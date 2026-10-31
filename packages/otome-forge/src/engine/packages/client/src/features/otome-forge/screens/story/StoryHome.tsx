@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { otomeErrorCode, useOtomeApi, type RequestBody } from "../../api";
 import { Avatar } from "../../components/Avatar";
+import { ChapterPaintCost } from "../../components/CostHint";
 import { DeclinedPanel } from "../../components/DeclinedPanel";
 import { Dialog } from "../../components/Dialog";
 import { cancelStoryWork, runPath, storyQueryKey, useChapter, useStory } from "../../hooks/use-reader";
@@ -270,6 +271,7 @@ const NODE_ICONS: Record<string, LucideIcon> = {
   "read-him": Eye,
   date: CalendarHeart,
   confrontation: Swords,
+  closer: HeartHandshake,
   cg: Star,
   gate: KeyRound,
 };
@@ -295,8 +297,8 @@ function NodePath({
       {Array.from({ length: total }, (_, index) => {
         const node = nodes?.[index];
         const Icon =
-          node?.kind === "confrontation"
-            ? NODE_ICONS.confrontation
+          node?.kind === "confrontation" || node?.kind === "closer"
+            ? NODE_ICONS[node.kind]
             : node?.kind === "moment" && node.moment
               ? NODE_ICONS[node.moment]
               : node?.gate
@@ -350,6 +352,23 @@ function Affection({ lis }: { lis: RunLiView[] }) {
               <span className="of-affection-level" aria-hidden="true">
                 {t("ui.otomeForge.story.level", { level })}
               </span>
+              {li.affectionProgress ? (
+                <span
+                  className="of-affection-progress"
+                  role="meter"
+                  aria-label={t("ui.otomeForge.story.affectionProgress", { name: li.name })}
+                  aria-valuemin={0}
+                  aria-valuemax={li.affectionProgress.required}
+                  aria-valuenow={li.affectionProgress.current}
+                  aria-valuetext={
+                    level === MAX_LEVEL
+                      ? t("ui.otomeForge.story.affectionProgressMax")
+                      : t("ui.otomeForge.story.affectionProgressValue", li.affectionProgress)
+                  }
+                >
+                  {t("ui.otomeForge.story.affectionProgressCount", li.affectionProgress)}
+                </span>
+              ) : null}
             </li>
           );
         })}
@@ -511,6 +530,7 @@ function LeadDialog({ runKey, view, next, onClose, onPlanned }: LeadDialogProps)
               <span className="of-cost-note"> · {t("ui.otomeForge.story.planCostNote")}</span>
             </span>
           </p>
+          <ChapterPaintCost images={view.world.images} />
           {stopped ? (
             <p className="of-hint" role="status">
               {t("ui.otomeForge.story.planStopped")}
@@ -669,10 +689,13 @@ function RuptureBanner({
           : t("ui.otomeForge.arcs.makeItRight")}
       </button>
       {entry ? null : (
-        <p className="of-cost">
-          <Feather size={14} strokeWidth={2} aria-hidden="true" />
-          <span>{t("ui.otomeForge.arcs.planCost")}</span>
-        </p>
+        <>
+          <p className="of-cost">
+            <Feather size={14} strokeWidth={2} aria-hidden="true" />
+            <span>{t("ui.otomeForge.arcs.planCost")}</span>
+          </p>
+          <ChapterPaintCost images={view.world.images} />
+        </>
       )}
     </section>
   );
@@ -708,6 +731,7 @@ function Routes({
               route={route}
               li={li}
               entry={route.next ? (chapters.find((chapter) => chapter.key === route.next?.key) ?? null) : null}
+              images={view.world.images}
               onOpen={() => onOpen(route)}
               onMakeItRight={() => onMakeItRight(route.li)}
             />
@@ -722,12 +746,14 @@ function RouteCard({
   route,
   li,
   entry,
+  images,
   onOpen,
   onMakeItRight,
 }: {
   route: RouteEntry;
   li: RunLiView;
   entry: StoryChapterEntry | null;
+  images: RunView["world"]["images"];
   onOpen: () => void;
   onMakeItRight: () => void;
 }) {
@@ -791,10 +817,13 @@ function RouteCard({
             {state === "reading" ? t("ui.otomeForge.story.continue") : t("ui.otomeForge.arcs.begin")}
           </button>
           {entry ? null : (
-            <p className="of-cost">
-              <Feather size={14} strokeWidth={2} aria-hidden="true" />
-              <span>{t("ui.otomeForge.arcs.planCost")}</span>
-            </p>
+            <>
+              <p className="of-cost">
+                <Feather size={14} strokeWidth={2} aria-hidden="true" />
+                <span>{t("ui.otomeForge.arcs.planCost")}</span>
+              </p>
+              <ChapterPaintCost images={images} />
+            </>
           )}
         </div>
       ) : state === "locked" && next ? (

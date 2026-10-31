@@ -52,6 +52,7 @@ import { ltmSettingsPath, readLtmSettingsFile, withNewerLtmSettings } from "../s
 import { longTermMemoryRetentionConfigPath, runLongTermMemoryRetention } from "./retention.js";
 import { parseStoredLtmNote } from "./stored-note.js";
 import { withLtmVaultLock } from "./vault-lock.js";
+import { showLtmHiddenMessages } from "./hidden-messages.js";
 import { invalidateLtmVaultSnapshot, readLtmVaultSnapshot, type LtmVaultScan } from "./vault-snapshot.js";
 import { LtmServiceError } from "../service-error.js";
 import { quarantineLegacyCapturedTurnSources } from "../maintenance/legacy-source-quarantine.js";
@@ -1297,6 +1298,13 @@ export class LongTermMemoryStorage {
           ),
         ],
       });
+      const deletedSources = deletedNotes.filter((note) => note.type === "source").map((note) => note.id);
+      // The delete stands if showing fails: the next pass of "Hide imported messages from the AI" over that chat shows
+      // them.
+      if (deletedSources.length)
+        await showLtmHiddenMessages(this.root, deletedSources).catch((error) =>
+          logger.warn(error, "[ltm] Could not show the chat messages hidden for deleted source notes"),
+        );
       const receiptsDir = getLongTermMemoryDirectories(this.root).receipts;
       for (const entry of await readdir(receiptsDir, {
         withFileTypes: true,

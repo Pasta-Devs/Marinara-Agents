@@ -11,6 +11,9 @@
 // Order (plan §1.7): system (role, JSON shape, rules, boundary and writing rules, contract), then the user turn
 // (world, protagonist, his scene card, what he knows and remembers, the task, the contract reminder). Prompts are
 // English and never localized; the lines and the note are written in the world's language.
+// Read Me (#1945): P16 carries his own notebook beside his card (story/prompts.ts knowsAboutYou), so the note may
+// show what he has come to know about the protagonist. P15 does not: a pack is written once per stage and kept, so it
+// would outlive an edit or delete. Today's note keeps the notebook it was written with; the next day's reads it anew.
 import { z, type ZodType } from "zod";
 import type {
   ClawCheat,
@@ -33,8 +36,9 @@ import {
 import { COMFORT_RULE, otomeContentContract, otomeContractReminder } from "../content-contract.js";
 import type { OtomeMessage } from "../generation.js";
 import { otomeSceneCard } from "../scene-card.js";
-import { betweenYou } from "../story/prompts.js";
+import { betweenYou, knowsAboutYou } from "../story/prompts.js";
 import { otomeWritingRules } from "../writing-rules.js";
+import { aboutLine } from "../schemas/player.js";
 
 /** The rule both prompts carry: Home never speaks about the player's absence or life outside the story. */
 export const NO_ABSENCE_RULE =
@@ -56,8 +60,13 @@ export const QUESTION_MARK = /[?？¿؟]/u;
 
 const pronounText = (pronouns: Unit["pronouns"]) => `${pronouns.subject}/${pronouns.object}/${pronouns.possessive}`;
 
-function protagonistLine(player: Pick<Player, "name" | "pronouns">): string {
-  return `${player.name || "The protagonist"} (${pronounText(player.pronouns)}), addressed as "you". Never assume a gender the pronouns do not state.`;
+function protagonistLine(player: Pick<Player, "name" | "pronouns" | "about">): string {
+  return [
+    `${player.name || "The protagonist"} (${pronounText(player.pronouns)}), addressed as "you". Never assume a gender the pronouns do not state.`,
+    aboutLine(player),
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 // ── P15: line pack (structured, 0.9, home contract, background lane) ──
@@ -93,7 +102,7 @@ const CHEAT_TEXT: Record<ClawCheat, string> = {
 };
 
 export interface LinePackInput {
-  world: Pick<World, "content" | "images" | "language" | "setting" | "premise">;
+  world: Pick<World, "content" | "images" | "language" | "setting" | "premise" | "writingStyle" | "bannedPhrases">;
   player: Pick<Player, "name" | "pronouns">;
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   stage: number;
@@ -131,7 +140,7 @@ export function linePackMessages({ world, player, unit, stage, withFixed }: Line
     "- No two lines alike.",
     `- Write every line in ${world.language}.`,
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
     otomeContentContract({ world, lis: [{ name }], kind: "home" }),
   ].join("\n");
@@ -191,7 +200,7 @@ export interface NoteDay {
 }
 
 export interface NoteInput {
-  world: Pick<World, "content" | "images" | "language" | "setting" | "premise">;
+  world: Pick<World, "content" | "images" | "language" | "setting" | "premise" | "writingStyle" | "bannedPhrases">;
   player: Pick<Player, "name" | "pronouns">;
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   liState: LiState;
@@ -223,6 +232,7 @@ export function noteMessages({
   curt,
 }: NoteInput): OtomeMessage[] {
   const name = unit.name;
+  const known = knowsAboutYou(unit, liState);
   const system = [
     `You write ${name}'s message of the day in an otome visual novel: a short handwritten note ${name} left for the protagonist today, in ${name}'s own voice. The player finds it on the Home screen.`,
     "Reply with ONLY a JSON object of this shape:",
@@ -241,7 +251,7 @@ export function noteMessages({
     "- Never repeat or closely echo one of the recent notes listed.",
     `- Write the note and the mood in ${world.language}.`,
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
     otomeContentContract({ world, lis: [{ name }], kind: "home" }),
   ].join("\n");
@@ -255,6 +265,7 @@ export function noteMessages({
     "LOVE INTEREST",
     otomeSceneCard(unit, liState),
     betweenYou(unit, liState),
+    ...(known ? [known] : []),
     "",
     "TODAY",
     `${today.weekday} ${timeWords(today.hour)}.${today.special.length ? ` ${today.special.join(" ")}` : ""}`,

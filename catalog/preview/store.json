@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "packages": {
+    "blackjack": {
+      "section": "games",
+      "tagline": "Play blackjack against the house.",
+      "iconPath": "../../store/icons/blackjack.webp",
+      "bannerPath": "../../store/banners/blackjack.webp",
+      "bannerSmallPath": "../../store/banners/blackjack-1200.webp"
+    },
+    "modern-life-sim": {
+      "section": "apps",
+      "tagline": "A town, a job and rent with your cast.",
+      "iconPath": "../../store/icons/modern-life-sim.webp",
+      "bannerPath": "../../store/banners/modern-life-sim.webp",
+      "bannerSmallPath": "../../store/banners/modern-life-sim-1200.webp"
+    },
+    "otome-forge": {
+      "section": "apps",
+      "tagline": "An otome game made from your characters.",
+      "featured": 1,
+      "iconPath": "../../store/icons/otome-forge.webp",
+      "bannerPath": "../../store/banners/otome-forge.webp",
+      "bannerSmallPath": "../../store/banners/otome-forge-1200.webp"
+    },
+    "ruleset-5e-2014": {
+      "section": "adventure",
+      "tagline": "Play Game Mode by the 5e rules.",
+      "iconPath": "../../store/icons/ruleset-5e-2014.webp",
+      "bannerPath": "../../store/banners/ruleset-5e-2014.webp",
+      "bannerSmallPath": "../../store/banners/ruleset-5e-2014-1200.webp"
+    },
+    "saucelings": {
+      "section": "apps",
+      "tagline": "A little pet that your characters raise.",
+      "iconPath": "../../store/icons/saucelings.webp",
+      "bannerPath": "../../store/banners/saucelings.webp",
+      "bannerSmallPath": "../../store/banners/saucelings-1200.webp"
+    }
+  }
+}

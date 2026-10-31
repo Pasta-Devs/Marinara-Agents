@@ -69,6 +69,7 @@ export function normalizeStoryPlan(
     return `the story needs ${STORY_NODES_MIN} to ${STORY_NODES_MAX} nodes, not ${reply.nodes.length}`;
   }
   if (reply.nodes.some((node) => node.kind === "confrontation")) return "a Character Story has no confrontation node";
+  if (reply.nodes.some((node) => node.kind === "closer")) return "a Character Story has no closer node";
   const nodes: ChapterNode[] = planNodes(reply, context).map(({ i, kind, moment, guide, place }) => ({
     i,
     kind,

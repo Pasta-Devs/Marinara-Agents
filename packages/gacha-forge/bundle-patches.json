@@ -2276,6 +2276,34 @@
               "reason": "Keep the Gear detail and its Choose/Change actions inside their clipped card; short landscape views scroll the containing panel instead of shrinking the card below its contents."
             }
           ]
+        },
+        {
+          "version": "1.27.4",
+          "commits": [],
+          "edits": [
+            {
+              "find": "ds=\"1.27.3\"",
+              "replace": "ds=\"1.27.4\""
+            },
+            {
+              "find": "var oy=[{version:null,fixed:[",
+              "replace": "var oy=[{version:null,fixed:[\"Maintenance rebuild for the shared image-reference helper. Gacha Forge keeps its existing avatar and outfit reference behavior.\"]},{version:\"1.27.3\",fixed:["
+            }
+          ]
+        },
+        {
+          "version": "1.27.5",
+          "commits": [],
+          "edits": [
+            {
+              "find": "ds=\"1.27.4\"",
+              "replace": "ds=\"1.27.5\""
+            },
+            {
+              "find": "var oy=[{version:null,fixed:[",
+              "replace": "var oy=[{version:null,fixed:[\"Maintenance rebuild for the shared expression-image lifecycle. Gacha Forge keeps its existing automatic expression behavior; the explicit repaint controls belong to Otome Hearth.\"]},{version:\"1.27.4\",fixed:["
+            }
+          ]
         }
       ]
     },

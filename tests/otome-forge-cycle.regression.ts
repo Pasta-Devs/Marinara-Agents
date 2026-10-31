@@ -470,6 +470,24 @@ test("the server bundle never names the tracker's or the caring messages' storag
   }
 });
 
+test("Read Me and the notebook it fills never touch the tracker's code or storage (#1945)", () => {
+  const client = join(root, "packages/otome-forge/src/engine/packages/client/src/features/otome-forge");
+  const server = join(root, "packages/otome-forge/src/engine/packages/server/src/services/otome-forge");
+  for (const file of [
+    join(client, "screens/dates/ReadMe.tsx"),
+    join(client, "screens/dates/Notebook.tsx"),
+    join(client, "shared/read-me.ts"),
+    join(server, "minigames/read-me.ts"),
+    join(server, "routes/read-me.ts"),
+  ]) {
+    const source = readFileSync(file, "utf8");
+    assert.doesNotMatch(source, /lib\/cycle|cycle-storage|care-note/u, file);
+    for (const key of [CYCLE_STORAGE_KEY, CARE_NOTE_STORAGE_KEY, PROFILE_STORAGE_KEY]) {
+      assert.equal(source.includes(key), false, `${file} names ${key}`);
+    }
+  }
+});
+
 test("Remind Me is a screen of the story: M2b's home music plays on beneath it and the tracker it opens", () => {
   assert.equal(playsHomeCue("remind", "home"), true);
   assert.equal(playsHomeCue("settings", "remind"), true, "Settings → Tracker, opened from Remind Me");

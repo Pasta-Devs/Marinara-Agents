@@ -5,7 +5,7 @@
 // its prompt first, so painting is offered once the world is ready and each look exists. Once the world is ready, the
 // cast is shown with their bibles behind a spoiler gate.
 // ──────────────────────────────────────────────
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -25,10 +25,28 @@ import { forgeStepErrorKey, useOtomeApi } from "../api";
 import { Avatar } from "../components/Avatar";
 import { CostHint } from "../components/CostHint";
 import { PromptReviewDialog, type ImagePrompt } from "../components/PromptReviewDialog";
-import { patchRun, runQueryKey, useRun, useSampledAccents } from "../hooks/use-run";
+import { bibleQueryKey, patchRun, runQueryKey, useRun, useSampledAccents } from "../hooks/use-run";
 import { accentOf } from "../lib/accent";
 import { useOtomeProps } from "../props";
-import type { ForgeStatus, ForgeStep, ForgeStepState, Paint, RunView } from "../shared/api-types";
+import type { ForgeStatus, ForgeStep, ForgeStepState, Paint, RunLiView, RunView } from "../shared/api-types";
+import { intimacyOpen } from "../shared/content";
+import { FACES, type Face } from "../shared/faces";
+import { TextField } from "./setup/parts";
+import { SaveBar } from "./settings/ContentSettings";
+
+const FACE_LABELS: Record<Face, string> = {
+  tender: "ui.otomeForge.reader.faceTender",
+  flustered: "ui.otomeForge.reader.faceFlustered",
+  cold: "ui.otomeForge.reader.faceCold",
+  hurt: "ui.otomeForge.reader.faceHurt",
+  angry: "ui.otomeForge.reader.faceAngry",
+};
+interface ExpressionReview {
+  li: string;
+  base: string;
+  prompts: Record<Face, ImagePrompt>;
+  index: number;
+}
 
 const STATE_ICONS: Record<ForgeStepState, LucideIcon> = {
   pending: Hourglass,
@@ -57,7 +75,8 @@ function paintOwner(stepId: string): string {
 interface ForgeProgressProps {
   runKey: string;
   onOpenBible: (li: string) => void;
-  onBegin: () => void;
+  /** Opens the story (the prologue first); a rejection is shown beside Begin. */
+  onBegin: () => Promise<void> | void;
 }
 
 export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressProps) {
@@ -70,11 +89,12 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Where the last action was started, so its failure shows beside that control: the paint offer or the steps.
-  const [errorAt, setErrorAt] = useState<"offer" | "steps">("steps");
+  const [errorAt, setErrorAt] = useState<"offer" | "steps" | "begin">("steps");
   // Prompt review: the paint steps still to show, and the prompt for the first one.
   const [reviewQueue, setReviewQueue] = useState<string[]>([]);
   const [reviewPrompt, setReviewPrompt] = useState<ImagePrompt | null>(null);
   const [reviewError, setReviewError] = useState<string | null>(null);
+  const [expressionReview, setExpressionReview] = useState<ExpressionReview | null>(null);
 
   const view = run.data;
   if (!view) {
@@ -99,6 +119,9 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
   const base = `/runs/${encodeURIComponent(runKey)}`;
   const steps = view.forge.steps;
   const ready = view.forge.phase === "ready";
+  // The look a paint step paints: its record carries the image connection's reason for a failure.
+  const paintOf = (step: ForgeStep): Paint | undefined =>
+    step.id === "paint:player" ? view.player.art : view.lis.find((li) => `paint:${li.id}` === step.id)?.art;
   const nameOfStep = (step: ForgeStep): string => {
     if (step.id === "world-plan") return t("ui.otomeForge.setup.forgeStepWorld");
     if (step.id === "paint:player") return t("ui.otomeForge.setup.forgeStepPaintPlayer");
@@ -151,7 +174,7 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
     void loadReview(stepIds[0]!);
   };
 
-  const reviewOpen = reviewQueue.length > 0;
+  const reviewOpen = reviewQueue.length > 0 || expressionReview !== null;
   const startPainting = () => {
     if (!waiting.length || busy || reviewOpen) return;
     setErrorAt("offer");
@@ -165,6 +188,86 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
     setErrorAt("steps");
     if (isPaint(step) && reviewImagePromptsBeforeSend) reviewStep([step.id]);
     else void send(step.id, "/forge/retry", { step: step.id });
+  };
+
+  // Repaint: a look already painted, painted anew. The old look stays until the new one is saved.
+  const repaint = async (step: ForgeStep) => {
+    if (busy || reviewOpen) return;
+    setErrorAt("steps");
+    if (reviewImagePromptsBeforeSend) {
+      reviewStep([step.id]);
+      return;
+    }
+    setBusy(step.id);
+    setError(null);
+    try {
+      const { paint } = await otome.post<{ paint: Paint }>(`${base}/art/paint`, {
+        target: { kind: "look", owner: paintOwner(step.id) },
+      });
+      if (paint.state === "failed") {
+        const message = t("ui.otomeForge.setup.repaintFailed");
+        setError(debugMode && paint.error ? `${message} (${paint.error})` : message);
+      }
+    } catch (failure) {
+      setError(otome.errorMessage(failure));
+    } finally {
+      setBusy(null);
+      void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
+    }
+  };
+
+  const sendExpressions = async (li: string, reviewed?: ExpressionReview) => {
+    setBusy(`expressions:${li}`);
+    setError(null);
+    setReviewError(null);
+    try {
+      const { paint } = await otome.post<{ paint: Paint }>(`${base}/art/expressions`, {
+        li,
+        ...(reviewed ? { base: reviewed.base, prompts: reviewed.prompts } : {}),
+      });
+      if (paint.state !== "ready") {
+        const message = t("ui.otomeForge.setup.repaintExpressionsFailed");
+        const detail = debugMode && paint.error ? `${message} (${paint.error})` : message;
+        if (reviewed) setReviewError(detail);
+        else setError(detail);
+      } else setExpressionReview(null);
+    } catch (failure) {
+      if (reviewed) setReviewError(otome.errorMessage(failure));
+      else setError(otome.errorMessage(failure));
+    } finally {
+      setBusy(null);
+      void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
+    }
+  };
+
+  const repaintExpressions = async (li: string) => {
+    if (busy || reviewOpen) return;
+    setErrorAt("steps");
+    setError(null);
+    if (!reviewImagePromptsBeforeSend) return sendExpressions(li);
+    setBusy("review");
+    setReviewError(null);
+    try {
+      const preview = await otome.post<Omit<ExpressionReview, "li" | "index">>(`${base}/art/expressions/prompt`, {
+        li,
+      });
+      setExpressionReview({ ...preview, li, index: 0 });
+    } catch (failure) {
+      setError(otome.errorMessage(failure));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const reviewExpression = (prompt: ImagePrompt) => {
+    if (!expressionReview || busy) return;
+    const updated = {
+      ...expressionReview,
+      prompts: { ...expressionReview.prompts, [FACES[expressionReview.index]!]: prompt },
+    };
+    setExpressionReview(updated);
+    if (updated.index < FACES.length - 1) setExpressionReview({ ...updated, index: updated.index + 1 });
+    else void sendExpressions(updated.li, updated);
   };
 
   const nextReview = () => {
@@ -206,8 +309,22 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
     ? nameOfStep(steps.find((step) => step.id === reviewing) ?? { id: reviewing, state: "waiting-consent" })
     : "";
 
+  const begin = async () => {
+    if (busy) return;
+    setErrorAt("begin");
+    setError(null);
+    setBusy("begin");
+    try {
+      await onBegin();
+    } catch (failure) {
+      setError(otome.errorMessage(failure));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   // Always in the page (a live region that appears with its message is often not read); filled only at `at`.
-  const errorAlert = (at: "offer" | "steps") => (
+  const errorAlert = (at: "offer" | "steps" | "begin") => (
     <div role="alert" className="of-live">
       {error && errorAt === at ? <p className="of-notice of-notice--error">{error}</p> : null}
     </div>
@@ -226,6 +343,9 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
         {steps.map((step) => {
           const Icon = STATE_ICONS[step.state];
           const name = nameOfStep(step);
+          const expressionLi = view.world.images.expressions
+            ? view.lis.find((li) => `paint:${li.id}` === step.id && (li.worn || li.portrait))
+            : undefined;
           return (
             <li key={step.id} className="of-forge-step" data-state={step.state}>
               <span className="of-forge-icon" aria-hidden="true">
@@ -237,8 +357,8 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
                 {step.state === "failed" ? (
                   <span className="of-forge-why">{t(forgeStepErrorKey(step.error))}</span>
                 ) : null}
-                {step.state === "failed" && debugMode && step.error ? (
-                  <span className="of-forge-error">{step.error}</span>
+                {step.state === "failed" && debugMode && (paintOf(step)?.error || step.error) ? (
+                  <span className="of-forge-error">{paintOf(step)?.error || step.error}</span>
                 ) : null}
               </span>
               {step.state === "failed" ? (
@@ -254,6 +374,41 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
                     {t("ui.otomeForge.common.retry")}
                   </button>
                   {isPaint(step) ? <CostHint images={1} /> : null}
+                </span>
+              ) : step.state === "done" && isPaint(step) && hasImages ? (
+                <span className={`of-forge-retry${expressionLi ? " of-forge-retry--paints" : ""}`}>
+                  <span className="of-forge-retry">
+                    <button
+                      type="button"
+                      className="of-button of-button--quiet of-glass of-button--small"
+                      aria-disabled={!!busy || reviewOpen}
+                      aria-label={t("ui.otomeForge.setup.forgeRepaintStep", { step: name })}
+                      onClick={() => void repaint(step)}
+                    >
+                      <Paintbrush size={14} strokeWidth={2.2} aria-hidden="true" />
+                      {busy === step.id ? t("ui.otomeForge.setup.repainting") : t("ui.otomeForge.setup.repaint")}
+                    </button>
+                    <CostHint images={1} />
+                  </span>
+                  {expressionLi ? (
+                    <span className="of-forge-retry">
+                      <button
+                        type="button"
+                        className="of-button of-button--quiet of-glass of-button--small"
+                        aria-disabled={!!busy || reviewOpen}
+                        aria-label={t("ui.otomeForge.setup.repaintExpressionsLabel", {
+                          name: expressionLi.name,
+                        })}
+                        onClick={() => void repaintExpressions(expressionLi.id)}
+                      >
+                        <Paintbrush size={14} strokeWidth={2.2} aria-hidden="true" />
+                        {busy === `expressions:${expressionLi.id}`
+                          ? t("ui.otomeForge.setup.repainting")
+                          : t("ui.otomeForge.setup.repaintExpressions")}
+                      </button>
+                      <CostHint images={FACES.length} />
+                    </span>
+                  ) : null}
                 </span>
               ) : null}
             </li>
@@ -310,10 +465,17 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
 
       {ready ? (
         <div className="of-actions">
-          <button type="button" className="of-button of-button--primary" onClick={onBegin}>
+          <button
+            type="button"
+            className="of-button of-button--primary"
+            aria-disabled={busy === "begin" || undefined}
+            onClick={() => void begin()}
+          >
             <Heart size={16} strokeWidth={2} aria-hidden="true" />
             {t("ui.otomeForge.setup.forgeBegin")}
           </button>
+          {view.prologue ? null : <p className="of-hint">{t("ui.otomeForge.setup.beginPrologueCost")}</p>}
+          {errorAlert("begin")}
         </div>
       ) : null}
 
@@ -328,6 +490,30 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
           error={reviewError}
           onSend={(prompt) => void sendReviewed(prompt)}
           onSkip={nextReview}
+        />
+      ) : null}
+      {expressionReview ? (
+        <PromptReviewDialog
+          key={`${expressionReview.li}:${expressionReview.index}`}
+          subject={t("ui.otomeForge.setup.reviewExpressionSubject", {
+            name: view.lis.find((li) => li.id === expressionReview.li)?.name,
+            face: t(FACE_LABELS[FACES[expressionReview.index]!]),
+            index: expressionReview.index + 1,
+            total: FACES.length,
+          })}
+          initial={expressionReview.prompts[FACES[expressionReview.index]!]}
+          busy={busy !== null}
+          error={reviewError}
+          onSend={reviewExpression}
+          onSkip={() => setExpressionReview(null)}
+          sendLabel={t(
+            expressionReview.index < FACES.length - 1
+              ? "ui.otomeForge.setup.reviewExpressionsNext"
+              : "ui.otomeForge.setup.reviewExpressionsSend",
+          )}
+          skipLabel={t("ui.otomeForge.setup.reviewExpressionsCancel")}
+          hint={t("ui.otomeForge.setup.reviewExpressionsHint")}
+          images={FACES.length}
         />
       ) : null}
     </div>
@@ -349,6 +535,10 @@ function CastList({ view, onOpenBible }: { view: RunView; onOpenBible: (li: stri
               <Avatar name={li.name} url={li.portrait} accent={accent} size={64} />
               <span className="of-cast-name">{li.name}</span>
               <span className="of-hint">{`${li.pronouns.subject}/${li.pronouns.object}`}</span>
+              <ImageAppearanceEditor key={`${view.runKey}:${li.id}`} runKey={view.runKey} li={li} />
+              {intimacyOpen(view.world.content) ? (
+                <IntimacyFill key={`${view.runKey}:${li.id}:intimacy`} runKey={view.runKey} li={li} />
+              ) : null}
               <button
                 type="button"
                 className="of-button of-button--text of-button--small"
@@ -363,5 +553,147 @@ function CastList({ view, onOpenBible }: { view: RunView; onOpenBible: (li: stri
         })}
       </ul>
     </section>
+  );
+}
+
+/**
+ * An adult NSFW story's way to give an older bible its intimacy preferences (#1936): one call writes that block alone,
+ * keeping the rest of the bible, the story and its progress. Its text stays in the spoiler-gated bible. Shown while the
+ * bible lacks the block; once added here, a focused status takes the button's place until the cast is left.
+ */
+function IntimacyFill({ runKey, li }: { runKey: string; li: RunLiView }) {
+  const { t } = useTranslation();
+  const otome = useOtomeApi();
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const [added, setAdded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const addedRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (added) addedRef.current?.focus({ preventScroll: true });
+  }, [added]);
+  if (added) {
+    return (
+      <p ref={addedRef} tabIndex={-1} role="status" className="of-hint of-intimacy-fill">
+        {t("ui.otomeForge.setup.intimacyFillDone")}
+      </p>
+    );
+  }
+  if (li.intimacy) return null;
+  const fill = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await otome.post(`/runs/${encodeURIComponent(runKey)}/lis/${encodeURIComponent(li.id)}/intimacy`);
+      setAdded(true);
+      patchRun(queryClient, runKey, (view) => ({
+        ...view,
+        lis: view.lis.map((entry) => (entry.id === li.id ? { ...entry, intimacy: true as const } : entry)),
+      }));
+      // A bible read before the fill would otherwise show without the block until it went stale.
+      void queryClient.invalidateQueries({ queryKey: bibleQueryKey(runKey, li.id) });
+    } catch (failure) {
+      setError(otome.errorMessage(failure));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="of-intimacy-fill">
+      <button
+        type="button"
+        className="of-button of-button--quiet of-glass of-button--small"
+        aria-disabled={busy || undefined}
+        aria-label={t("ui.otomeForge.setup.intimacyFillOf", { name: li.name })}
+        onClick={() => void fill()}
+      >
+        <Sparkles size={14} strokeWidth={2} aria-hidden="true" />
+        {busy ? t("ui.otomeForge.setup.intimacyFilling") : t("ui.otomeForge.setup.intimacyFill")}
+      </button>
+      <p className="of-hint">{t("ui.otomeForge.setup.intimacyFillHint")}</p>
+      <div role="alert" className="of-live">
+        {error ? <p className="of-notice of-notice--error">{error}</p> : null}
+      </div>
+    </div>
+  );
+}
+
+/** The public visual description, edited without opening the spoiler-heavy Bible or painting anything. */
+function ImageAppearanceEditor({ runKey, li }: { runKey: string; li: RunLiView }) {
+  const { t } = useTranslation();
+  const otome = useOtomeApi();
+  const queryClient = useQueryClient();
+  const stored = li.look?.identityLine ?? "";
+  const [draft, setDraft] = useState(stored);
+  const latest = useRef(stored);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<{ error: boolean; text: string } | null>(null);
+  const previousStored = useRef(stored);
+  useEffect(() => {
+    const previous = previousStored.current;
+    previousStored.current = stored;
+    if (latest.current === previous) {
+      latest.current = stored;
+      setDraft(stored);
+      setStatus(null);
+    }
+  }, [stored]);
+  const save = async () => {
+    if (busy || draft === stored) return;
+    const submitted = draft;
+    setBusy(true);
+    setStatus(null);
+    try {
+      const result = await otome.saveImageAppearance(runKey, li.id, submitted);
+      patchRun(queryClient, runKey, (view) => ({
+        ...view,
+        lis: view.lis.map((current) =>
+          current.id === li.id
+            ? {
+                ...current,
+                look: {
+                  ...current.look,
+                  outfitLine: current.look?.outfitLine ?? "",
+                  identityLine: result.identityLine,
+                },
+              }
+            : current,
+        ),
+      }));
+      // A save must not replace text typed while its request was pending.
+      if (latest.current === submitted) {
+        latest.current = result.identityLine;
+        setDraft(result.identityLine);
+        setStatus({ error: false, text: t("ui.otomeForge.setup.imageAppearanceSaved") });
+      }
+    } catch (failure) {
+      setStatus({ error: true, text: otome.errorMessage(failure) });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form
+      className="of-cast-appearance"
+      aria-label={t("ui.otomeForge.setup.imageAppearanceOf", { name: li.name })}
+      onSubmit={(event) => {
+        event.preventDefault();
+        void save();
+      }}
+    >
+      <TextField
+        label={t("ui.otomeForge.setup.imageAppearance")}
+        hint={t("ui.otomeForge.setup.imageAppearanceHint")}
+        rows={3}
+        value={draft}
+        onChange={(value) => {
+          latest.current = value;
+          setDraft(value);
+          setStatus(null);
+        }}
+      />
+      <SaveBar changed={draft !== stored} busy={busy} status={status} onSave={() => void save()} />
+    </form>
   );
 }

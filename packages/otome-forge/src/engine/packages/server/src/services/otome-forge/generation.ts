@@ -6,9 +6,9 @@
 // 3. Fit: model.fitContext(messages, {maxTokens: outputBudget(...)}): the request's maxTokens is what the reply itself
 //    needs; every call asks for GF's floor and reasoning headroom on top (outputBudget).
 // 4. Log: logOtomePrompt (debugOverride in debug mode, `redact` strings replaced).
-// 5. Call: chatComplete with responseFormat json_object (a hint only; Anthropic and Google ignore it), directly on
-//    both lanes. A background call runs inside a background-queue job, which holds the connection's admission slot
-//    for the whole job (both attempts), so it names that job's connection and never takes a second slot here.
+// 5. Call: chatComplete with responseFormat json_object; an explicit HTTP 400/422 rejection of that optional hint
+//    allows one retry without it, also omitted from the repair turn. A background call holds its job's connection
+//    admission slot throughout; it names that connection and never takes a second slot here.
 // 6. Parse: parseJsonish, then the schema, then `normalize`. On failure exactly one repair turn; if that fails too, two
 //    declines are a 422 `declined` and anything else a 502 `bad-format`. A decline is an empty reply, a content
 //    filter, or refusal wording in a reply that is not a JSON object (inside one it is a character's own words). A
@@ -161,6 +161,25 @@ async function resolveModel(deps: GenerationDeps, connectionId: string): Promise
   }
 }
 
+/** Like LTM's compatibility fallback, remove only an explicitly rejected optional format, never a general failure. */
+function rejectsJsonHint(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const { status, message } = error as { status?: unknown; message?: unknown };
+  if ((status !== 400 && status !== 422) || typeof message !== "string") return false;
+  const text = message.replace(/["'`]/gu, "").replace(/\s+/gu, " ");
+  return (
+    /\b(?:response[_ -]?format(?:[. _-]type)?|json_object|json[ -]mode|structured[ -]output)\b\s*:?\s*(?:(?:is|are)\s+)?(?:unsupported|unrecognized|invalid|not\s+(?:supported|allowed|permitted)|must\s+be|can\s+only\s+be)\b/iu.test(
+      text,
+    ) ||
+    /\b(?:unsupported|unrecognized|invalid|unknown)\s+(?:(?:request\s+)?(?:parameter|argument|field|value|type)(?:\s+(?:supplied|for))?\s*:?\s*)?(?:response[_ -]?format(?:[. _-]type)?|json_object|json[ -]mode|structured[ -]output)\b/iu.test(
+      text,
+    ) ||
+    /\b(?:does not|doesnt|do not|dont)\s+support\s+(?:the\s+)?(?:response[_ -]?format(?:[. _-]type)?|json_object|json[ -]mode|structured[ -]output)\b/iu.test(
+      text,
+    )
+  );
+}
+
 /** One JSON reply from the job's connection, validated; see the file header for every step. */
 export async function generateJson<T extends object>(
   deps: GenerationDeps,
@@ -179,20 +198,44 @@ export async function generateJson<T extends object>(
   const { runtime } = deps;
 
   const budget = outputBudget(request.maxTokens, model.maxOutputTokens);
-  const complete = async (messages: OtomeMessage[], label: string) => {
+  let useJsonHint = true;
+  const mayCall = () => {
+    request.signal?.throwIfAborted();
     if (request.mayCall && !request.mayCall()) {
       throw new OtomeForgeError(503, `${request.label} was held back before it was sent.`);
     }
+  };
+  const complete = async (messages: OtomeMessage[], label: string) => {
+    mayCall();
     const fitted = model.fitContext(messages, { maxTokens: budget });
     const sent = fitted.messages as OtomeMessage[];
     logOtomePrompt(runtime, label, sent, { debugMode: request.debugMode, redact: request.redact });
-    const reply = await model.chatComplete(sent, {
+    const options = {
       temperature: request.temperature,
       maxTokens: fitted.maxTokens ?? budget,
       debugMode: request.debugMode,
       signal: request.signal,
-      responseFormat: { type: "json_object" },
-    });
+      ...(useJsonHint ? { responseFormat: { type: "json_object" } } : {}),
+    };
+    let reply;
+    try {
+      reply = await model.chatComplete(sent, options);
+    } catch (error) {
+      if (!useJsonHint || !rejectsJsonHint(error)) throw error;
+      useJsonHint = false;
+      mayCall();
+      const debug = request.debugMode || runtime.isDebugAgentsEnabled();
+      if (debug || runtime.logger.isLevelEnabled?.("debug") !== false)
+        runtime.logger.debugOverride(
+          debug,
+          "[debug/otome-forge/%s] Endpoint rejected response_format; retrying once without the JSON hint.",
+          label,
+        );
+      logOtomePrompt(runtime, label, sent, { debugMode: request.debugMode, redact: request.redact });
+      const fallbackOptions = { ...options };
+      delete fallbackOptions.responseFormat;
+      reply = await model.chatComplete(sent, fallbackOptions);
+    }
     return check(request, runtime.json.parseJsonish, reply.content ?? "", reply.finishReason);
   };
 

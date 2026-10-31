@@ -15,22 +15,51 @@
 // more is paid for.
 import { forgeLocalAvatarPath } from "@forge-kit/image-avatar-references.mjs";
 import { createForgeStoryExpressions, type ForgeStoryExpressions } from "@forge-kit/story-expressions-server.mjs";
-import type { Beat, Unit, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import type { Beat, Paint, Unit, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { FACE_LOOKS, FACES, type Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
-import { OTOME_FORGE_PACKAGE_ID, runDocTarget, worldId } from "../ids.js";
+import { OTOME_FORGE_PACKAGE_ID, runDocTarget, unitId, worldId } from "../ids.js";
+import { OtomeForgeError } from "../http.js";
 import { wornLookUrl } from "../schemas/common.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { queueScenePaints, releaseBeatArt } from "./cg.js";
-import { galleryRef, type GeneratedImage } from "./image-client.js";
+import { galleryRef, worldStyle, type GeneratedImage } from "./image-client.js";
 import { imagesOf, paintSlot, updateIfChanged, type ArtDeps } from "./paint.js";
-import type { PaintOptions } from "./places.js";
-import { LOOK_SIZE, expressionPrompt } from "./prompts.js";
+import { paintBeatPlaces, type PaintOptions } from "./places.js";
+import { LOOK_SIZE, expressionPrompt, type ImagePrompt } from "./prompts.js";
+
+export type ExpressionPrompts = Partial<Record<Face, ImagePrompt>>;
+
+/** Read-only preview and validation shared by explicit repaint and its prompt review. */
+export async function expressionPromptsFor(deps: ArtDeps, runId: string, li: string) {
+  const [world, unit] = await Promise.all([
+    deps.store.readDoc(worldId(runId), normalizeWorld),
+    deps.store.readDoc(unitId(runId, li), normalizeUnit),
+  ]);
+  if (!world || !unit) throw new OtomeForgeError(404, "No such love interest.", "not-found");
+  if (!world.images.connectionId) throw new OtomeForgeError(503, "Choose an image connection first.", "no-connection");
+  if (!world.images.expressions) throw new OtomeForgeError(409, "Turn expressions on first.", "conflict");
+  const base = baseOf(unit);
+  if (!base || !forgeLocalAvatarPath(base)) throw new OtomeForgeError(409, "Paint this look first.", "conflict");
+  const style = await worldStyle(imagesOf(deps), world.images);
+  return {
+    base,
+    prompts: Object.fromEntries(
+      FACES.map((face) => [face, expressionPrompt({ unit, base, face, world, style })]),
+    ) as Record<Face, ImagePrompt>,
+  };
+}
 
 /** What the kit reads of a beat to find who speaks: its lines, its choices' branches and spoken selections. */
 export type ExpressionBeat = Pick<Beat, "segments" | "choices">;
 
 export interface OtomeArt {
+  /** Explicitly replaces the current look's five faces, preserving its usable set until completion. */
+  repaintExpressions(
+    runId: string,
+    li: string,
+    options: { debugMode: boolean; base?: string; prompts?: ExpressionPrompts },
+  ): Promise<Paint>;
   /**
    * Queues the five faces of every love interest who speaks in `beat` whose current look has no ready set. Returns at
    * once; painting happens in the background. Call it each time a beat is served (written or read from the store).
@@ -41,6 +70,8 @@ export interface OtomeArt {
    * painting, or `review`). Call it once after a beat is written or rewritten; do not await it. It never rejects.
    */
   queueScenePaints(runId: string, beat: Beat, options: Omit<PaintOptions, "active">): Promise<void>;
+  /** Called outside the run queue before a fresh scene answers; only registration is awaited, never paid images. */
+  prepareScenePlaces?(runId: string, beat: Beat, options: Omit<PaintOptions, "active">): Promise<void>;
   /** A beat replaced by a rewrite or removed: deletes its CG's gallery image unless the album keeps it. */
   releaseBeatArt(runId: string, beat: Pick<Beat, "cg">): Promise<void>;
   /** False once torn down: an item's paint (M4, S/art/outfits.ts) still waiting in its lane stops before its paid call. */
@@ -88,7 +119,7 @@ export function createOtomeArt(deps: ArtDeps): OtomeArt {
       async generateExpression(request: Record<string, unknown>) {
         const world = await store.readDoc(worldId(runId), normalizeWorld);
         if (!world) throw new Error("the story was deleted");
-        const style = await images.styleProfile(world.images.styleProfileId);
+        const style = await worldStyle(images, world.images);
         const unit = normalizeUnit(request.unit);
         const { prompt, negativePrompt } = expressionPrompt({
           unit,
@@ -96,6 +127,7 @@ export function createOtomeArt(deps: ArtDeps): OtomeArt {
           face: request.expression as Face,
           world,
           style,
+          edited: request.edited as Partial<ImagePrompt> | undefined,
         });
         const image: GeneratedImage = await images.generateImage({
           connectionId: String(request.connectionId),
@@ -169,6 +201,17 @@ export function createOtomeArt(deps: ArtDeps): OtomeArt {
   }
 
   return {
+    async repaintExpressions(runId, li, options) {
+      if (disposed) throw new OtomeForgeError(409, "The art service has stopped.", "conflict");
+      const preview = await expressionPromptsFor(deps, runId, li);
+      if (options.base !== undefined && options.base !== preview.base)
+        throw new OtomeForgeError(409, "The current look changed. Review its expressions again.", "conflict");
+      debugMode.set(runId, options.debugMode);
+      const pending = expressionsOf(runId).repaint(runId, unitId(runId, li), preview.base, options.prompts);
+      if (!pending)
+        throw new OtomeForgeError(409, "This character's expressions are already being painted.", "conflict");
+      return (await pending) ?? { state: "stopped", at: new Date().toISOString() };
+    },
     queueExpressions(runId, beat, options) {
       if (disposed) return;
       debugMode.set(runId, options.debugMode);
@@ -187,6 +230,10 @@ export function createOtomeArt(deps: ArtDeps): OtomeArt {
     },
     queueScenePaints: (runId, beat, options) =>
       disposed ? Promise.resolve() : queueScenePaints(deps, runId, beat, { ...options, active }),
+    prepareScenePlaces: (runId, beat, options) =>
+      disposed
+        ? Promise.resolve()
+        : paintBeatPlaces(deps, runId, beat.places, { ...options, active, registrationOnly: true }),
     releaseBeatArt: (runId, beat) => releaseBeatArt(deps, runId, beat),
     active,
     dispose() {

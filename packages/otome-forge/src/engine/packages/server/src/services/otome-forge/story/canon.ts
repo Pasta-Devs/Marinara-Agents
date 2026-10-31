@@ -46,7 +46,7 @@ import type {
   RunState,
   Segment,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
-import { STANCES } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
+import { CLIMAX_MOVES, climaxOf } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { beatId, chapterId, playerId, stateId, unitId } from "../ids.js";
 import type { OtomeMemory } from "../memory/memory.js";
 import { normalizePlayer } from "../schemas/player.js";
@@ -59,25 +59,30 @@ import type { OtomeStore } from "../store.js";
 export const EASE_OFF_MARKER =
   "[The scene was cut short by the player. Continue from its aftermath without depicting it.]";
 
-/** A Confrontation's canon: what was played, then its ending; null until it ends (unless it was eased off). */
+/**
+ * A climax game's canon (a Confrontation's or a Closer's): what was played, then its ending; null until it ends (unless
+ * it was eased off).
+ */
 function confrontationCanon(beat: Beat, protagonist: string): Segment[] | null {
   const confrontation = beat.confrontation!;
+  const climax = climaxOf(confrontation);
+  const move = climax === "closer" ? "answer" : "stance";
   const cut = beat.easedOff && !confrontation.ending ? beat.easedOff.at : undefined;
   const opening = cut !== undefined && !confrontation.picks.length ? beat.segments.slice(0, cut + 1) : beat.segments;
   const segments: Segment[] = [...opening];
   for (const [k, stance] of confrontation.picks.entries()) {
     const round = confrontation.rounds[k];
     const option = round?.options[stance];
-    if (!round || !option || !STANCES.includes(stance)) break;
+    if (!round || !option || !CLIMAX_MOVES[climax].includes(stance)) break;
     segments.push(...round.his);
     segments.push({
       speaker: "",
-      text: `[Canonical player stance${protagonist ? ` by ${protagonist}` : ""}, round ${k + 1} of the confrontation: ${stance}: ${option.label}]`,
+      text: `[Canonical player ${move}${protagonist ? ` by ${protagonist}` : ""}, round ${k + 1} of the ${climax}: ${stance}: ${option.label}]`,
     });
     segments.push({ speaker: option.selection.kind === "dialogue" ? protagonist : "", text: option.selection.text });
     segments.push(...option.segments);
   }
-  if (confrontation.ending) return [...segments, ...confrontation.endings[confrontation.ending]];
+  if (confrontation.ending) return [...segments, ...(confrontation.endings[confrontation.ending] ?? [])];
   return cut !== undefined ? [...segments, { speaker: "", text: EASE_OFF_MARKER }] : null;
 }
 
@@ -187,7 +192,8 @@ async function completedChapters(
   const chapters: Completed[] = [];
   for (const { key, completed } of done) {
     const chapter = await readChapter(store, runId, key);
-    if (!chapter) continue;
+    // The prologue is no memory source: no love interest was there, and chapter 1's first scene is given it directly.
+    if (!chapter || chapter.kind === "prologue") continue;
     const audience = audienceOf(chapter);
     chapters.push({
       chapter,

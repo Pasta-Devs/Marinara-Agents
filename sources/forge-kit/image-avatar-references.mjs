@@ -67,7 +67,7 @@ async function forgeReferenceImage(client, paths) {
 }
 
 // Who the subject is: never the outfit they have on, which would follow them into a new look or outfit.
-async function forgeSubjectReference(client, unit) {
+export async function forgeSubjectReference(client, unit) {
   const paths = [];
   // Only IDs already carried by the actual selected card/persona are used. Never
   // infer a card from a model-written name or attach a style profile's subject.
@@ -80,7 +80,11 @@ async function forgeSubjectReference(client, unit) {
   return forgeReferenceImage(client, [...paths, unit.portrait, unit.avatarPath]);
 }
 
-export function forgeWrapImageReferenceClient(client, logger, { logPrefix = "[gacha-forge]" } = {}) {
+export function forgeWrapImageReferenceClient(
+  client,
+  logger,
+  { logPrefix = "[gacha-forge]", subjectReference = forgeSubjectReference } = {},
+) {
   for (const method of ["generateBannerArt", "generatePortrait", "generateOutfit"]) {
     const generate = client[method];
     // Only a scene or banner shows the subject in the outfit they have on; a base look or a new outfit paints them anew.
@@ -92,7 +96,7 @@ export function forgeWrapImageReferenceClient(client, logger, { logPrefix = "[ga
       const identities = [],
         outfits = [];
       for (const subject of subjects) {
-        const identity = await forgeSubjectReference(client, subject);
+        const identity = await subjectReference(client, subject);
         if (identity) identities.push(identity);
         const outfit = scene && forgeWornOutfitPath(subject);
         if (outfit) {

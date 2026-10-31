@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────
-// Otome Forge: the art of items won on Wish (plan M4 "First open", §1.8): a Memory's CG, every look, and a couple set's
+// Otome Forge: the art of items won on Wish (plan M4 "First open", §1.8): Memory, Moment and Snapshot illustrations, every look, and a couple set's
 // pair portrait
 // ──────────────────────────────────────────────
 // An item's art is painted once, on its first open (S/items/open.ts), and only under the player's image settings: with
@@ -11,6 +11,7 @@
 // kept and repainted only on a tap; a `pending` record with no live paint in this process reads as `stopped`.
 // - memory5: the CG from the item's English brief (P20), with each person in it as a reference (the protagonist's
 //   persona avatar when she is in it; art/cg.ts cgSubjects), 768×1344, through generateBannerArt.
+// - moment4: its saved premise (or title), with its own love interest and protagonist, without another text call.
 // - his-look5, his-look4: his new look (generateOutfit, 832×1216 full body on grey), keeping his card or portrait as
 //   the likeness reference. her-look5, her-look4: the protagonist's.
 // A look's image, once ready, is added to its wearer's `outfits` (the kit's outfit shape), which is what makes it
@@ -38,9 +39,10 @@ import { STATE_LIMITS, keepNewest, normalizeState, readRun } from "../schemas/st
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeBanner, normalizeItem } from "../schemas/wish.js";
 import { normalizeWorld } from "../schemas/world.js";
+import { withPersonaImageAppearance } from "../setup/prompts.js";
 import type { OtomeArt } from "./expressions.js";
 import { cgSubjects } from "./cg.js";
-import { galleryRef, type ImageSubject, type PaintedImage } from "./image-client.js";
+import { galleryRef, worldStyle, type ImageSubject, type PaintedImage } from "./image-client.js";
 import {
   imagesOf,
   paintIsLive,
@@ -57,6 +59,7 @@ import {
   type PaintOwner,
 } from "./paint.js";
 import { LOOK_SIZE, SCENE_SIZE, cgPrompt, lookPrompt, type CgPerson, type ImagePrompt } from "./prompts.js";
+import { memoryArtBrief } from "../content-contract.js";
 
 export interface ItemArtDeps extends ArtDeps {
   /** The activation's art service: once torn down, nothing more is paid for. */
@@ -87,9 +90,12 @@ const isFeatured = (item: Pick<Item, "id" | "banner">) => item.id === itemIdOf(i
 const bannerPaints = (runId: string, item: Pick<Item, "id" | "banner">) =>
   isFeatured(item) && paintIsLive(runId, bannerArtOwner(item.banner));
 
-/** True for an item that has art: a Memory with its brief, or a look. Moments and Snapshots are text. */
-export const hasArt = (item: Pick<Item, "kind" | "cg" | "look">) =>
-  (item.kind === "memory5" && !!item.cg?.brief.trim()) || (isLookKind(item.kind) && !!item.look);
+/** An illustrated reward or a look. Moments and legacy Snapshots use their saved text without another planner call. */
+export const hasArt = (item: Pick<Item, "kind" | "cg" | "look" | "text" | "premise" | "title">) =>
+  (item.kind === "snapshot3" && !!item.text?.trim()) ||
+  (item.kind === "moment4" && !!(item.premise?.trim() || item.title.trim())) ||
+  (item.kind === "memory5" && !!item.cg?.brief.trim()) ||
+  (isLookKind(item.kind) && !!item.look);
 
 /** Whose look an item is: the protagonist (her-look*) or the love interest who wears it (his-look*). */
 export const lookWearer = (item: Pick<Item, "kind" | "li">): "player" | `li:${string}` | null =>
@@ -183,18 +189,45 @@ async function buildItemArt(
   if (!hasArt(item)) throw notFound("art for this item");
   const run = await readRun(deps.store, runId);
   if (!run) throw notFound("Otome Forge run");
+  run.player = await withPersonaImageAppearance(deps.runtime, run.player);
   const images = imagesOf(deps);
-  const style = await images.styleProfile(run.world.images.styleProfileId);
-  if (item.kind === "memory5") {
-    const subjects = cgSubjects(item.cg!.cast, run.units, run.player);
-    // Memory art is painted before its Character Story exists, so it stays clothed (at most Suggestive).
+  const style = await worldStyle(images, run.world.images);
+  const privateScene = item.kind === "snapshot3" || item.kind === "moment4";
+  if (item.kind === "memory5" || privateScene) {
+    const li = privateScene ? run.units.find((unit) => unit.id === item.li) : null;
+    if (privateScene && !li) throw notFound("love interest");
+    // Older rewards have no English art brief. Keep their saved text as scene context, never reroll the banner or
+    // pay a text model to rewrite it. Only its own love interest and protagonist can enter this private picture.
+    const cg = privateScene
+      ? {
+          brief:
+            item.cg?.brief ||
+            (item.kind === "snapshot3"
+              ? `Illustrate this saved everyday moment without adding events or people. Snapshot text: ${item.text}`
+              : `Illustrate this saved Moment's premise without adding plot turns or people. Moment premise: ${item.premise?.trim() || item.title}`),
+          cast: [
+            li!.name,
+            ...(run.player.name && (!item.cg || item.cg.cast.some((name) => name === run.player.name))
+              ? [run.player.name]
+              : []),
+          ],
+        }
+      : item.cg!;
+    const subjects = cgSubjects(cg.cast, li ? [li] : run.units, run.player);
+    // Collectible illustrations stay clothed (at most Suggestive), independently of a later Character Story; only a
+    // Memory whose brief the banner plan marked explicit goes further, while the world allows it (as banner art does),
+    // and a lowered one paints the clothed brief written beside it.
+    const { brief, explicit } = privateScene
+      ? { brief: cg.brief, explicit: false }
+      : memoryArtBrief(item.cg, item.title, run.world);
     const prompt = cgPrompt(
       {
-        brief: item.cg!.brief,
+        brief,
         people: subjects.map((subject) => subject.person),
         world: run.world,
         style,
-        use: "clothed",
+        use: explicit ? "cg" : "clothed",
+        explicit,
       },
       edited,
     );
@@ -217,7 +250,10 @@ async function buildItemArt(
   const wearer = lookWearer(item);
   if (!wearer) throw notFound("love interest");
   const subject = await readSubject(deps, runId, run.world, wearer, debugMode);
-  const prompt = lookPrompt({ ...subject, outfitLine: item.look!.outfitLine, world: run.world, style }, edited);
+  const prompt = lookPrompt(
+    { ...subject, outfitLine: item.look!.outfitLine, world: run.world, style, matte: true },
+    edited,
+  );
   return {
     ...prompt,
     world: run.world,
@@ -432,7 +468,8 @@ async function readPair(deps: ArtDeps, runId: string, hers: string) {
 async function buildPair(deps: ArtDeps, runId: string, hers: string, edited: Partial<ImagePrompt>) {
   const pair = await readPair(deps, runId, hers);
   const { run, unit, herOutfit, hisOutfit } = pair;
-  const style = await imagesOf(deps).styleProfile(run.world.images.styleProfileId);
+  run.player = await withPersonaImageAppearance(deps.runtime, run.player);
+  const style = await worldStyle(imagesOf(deps), run.world.images);
   const first = (name: string, fallback: string) => name.trim().split(/\s+/)[0] || fallback;
   const people: CgPerson[] = [
     {
@@ -450,9 +487,13 @@ async function buildPair(deps: ArtDeps, runId: string, hers: string, edited: Par
   ];
   const brief = `A couple portrait of ${first(unit.name, "them")} and ${first(run.player.name, "the protagonist")} together, side by side and in full view, sharing a quiet moment, soft romantic light.`;
   const prompt = cgPrompt({ brief, people, world: run.world, style, use: "clothed" }, edited);
-  // Each painted look is the reference, so the likeness and the clothes both carry over.
+  // Keep his selected card's neutral identity and this exact pair look; her painted look stays her reference.
   const units: ImageSubject[] = [
-    { kind: "character", portrait: hisOutfit.url },
+    {
+      kind: "character",
+      ...(unit.cardId ? { cardId: unit.cardId, outfits: [hisOutfit], wornOutfit: hisOutfit.id } : {}),
+      portrait: hisOutfit.url,
+    },
     { kind: "character", portrait: herOutfit.url },
   ];
   return { ...pair, ...prompt, units, name: first(unit.name, "Couple") };

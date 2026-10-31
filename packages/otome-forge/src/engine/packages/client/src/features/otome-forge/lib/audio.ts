@@ -74,7 +74,7 @@ export function lineSpeaker(
     const gender = li.voiceGender || segment.gender || pronounGender(li.pronouns);
     return {
       name: li.name,
-      characterId: li.source === "card" && li.cardId ? li.cardId : null,
+      characterId: li.cardId || null,
       ...(gender ? { gender } : {}),
       cast: true,
     };

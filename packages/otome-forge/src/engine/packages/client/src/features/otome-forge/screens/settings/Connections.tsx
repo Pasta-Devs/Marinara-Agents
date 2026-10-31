@@ -3,6 +3,7 @@
 // ──────────────────────────────────────────────
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { RetryNotice } from "../../components/RetryNotice";
 import { useConnections } from "../../hooks/use-engine-resources";
 import { useSaveSettings, type SaveSettings } from "../../hooks/use-run";
 import type { Connections, RunView } from "../../shared/api-types";
@@ -42,14 +43,21 @@ function StoryConnections({ run, settings }: { run: RunView; settings: SaveSetti
   // A failed list is not an empty one: the player is not told to add a connection they already have.
   if (connections.isError && connections.text.length === 0) {
     return (
-      <p className="of-notice of-notice--error" role="alert">
-        {t("ui.otomeForge.setup.connectionsFailed")}
-      </p>
+      <RetryNotice
+        message={t("ui.otomeForge.setup.connectionsFailed")}
+        onRetry={() => void connections.refetch()}
+        retrying={connections.retrying}
+      />
     );
   }
   return (
     <>
-      <ConnectionControls value={form} connections={connections.text} onChange={setForm} />
+      <ConnectionControls
+        value={form}
+        connections={connections.text}
+        onChange={setForm}
+        onCheckAgain={connections.refetch}
+      />
       <SaveBar
         changed={changed && !!form.narration}
         busy={settings.busy}

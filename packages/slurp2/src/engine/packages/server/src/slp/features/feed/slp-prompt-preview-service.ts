@@ -4,6 +4,7 @@ import { SLURP_SECONDARY_IMAGE_COUNT } from "../media/slp-media-contract.js";
 import type { DB } from "../../../db/connection.js";
 import { listSlurpContinuityFor } from "../../data/continuity/slp-continuity-storage.js";
 import { slurpContinuityInstruction } from "../../modules/continuity/slp-continuity-prompt.js";
+import { recallSlurpMemories } from "../../data/creators/slp-ltm-recall.js";
 import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { buildSlurpPostBlocks } from "./slp-post-prompt.js";
@@ -113,12 +114,21 @@ export async function previewSlurpPromptBlocks(
     postMaxLength: settings.postMaxLength,
     variationInstruction: slurpPostVariationInstruction(variation, slurpCameraSourceInstruction(camera)),
     contentTypeInstruction: slurpContentAxesInstruction(axes),
-    continuityInstruction: slurpContinuityInstruction(
-      await listSlurpContinuityFor(db, account.id, "public_post", { at: new Date(), limit: 20 }).catch(() => ({
+    continuityInstruction: slurpContinuityInstruction({
+      ...(await listSlurpContinuityFor(db, account.id, "public_post", { at: new Date(), limit: 20 }).catch(() => ({
         facts: [],
         events: [],
-      })),
-    ),
+      }))),
+      // No beat yet in a preview: Long-Term Memory is asked about the Creator by name.
+      memories: (
+        await recallSlurpMemories({
+          settings,
+          source: linkedPublicAccount,
+          disclosureMode,
+          queryText: account.displayName,
+        })
+      ).lines,
+    }),
     productionInstruction: slurpStrategyInstruction(strategy),
     promptBlocks: settings.promptBlocks,
     promptInstructions: settings.promptInstructions,

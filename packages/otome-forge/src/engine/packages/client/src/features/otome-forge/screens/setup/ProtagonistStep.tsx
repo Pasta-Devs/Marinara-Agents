@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { Plus, UserRound, X } from "lucide-react";
 import { usePersonaOptions, type PickerItem } from "../../hooks/use-engine-resources";
 import { Avatar } from "../../components/Avatar";
+import { CheckAgain, RetryNotice } from "../../components/RetryNotice";
 import { GOAL_MAX, TRAIT_MAX, TRAITS_MAX, type SetupDraft } from "./draft";
 import { PronounPicker, Section, TextField } from "./parts";
 
@@ -60,7 +61,7 @@ function PersonaGrid({
               checked={value === item.id}
               onChange={() => onChange(item)}
             />
-            <Avatar name={item.name} url={item.avatarUrl} />
+            <Avatar name={item.name} url={item.avatarUrl} crop={item.avatarCrop} />
             <span className="of-tile-name">{item.name}</span>
           </label>
         ))}
@@ -155,13 +156,16 @@ export function ProtagonistStep({ draft, update }: ProtagonistStepProps) {
           {t("ui.otomeForge.setup.loadingPersonas")}
         </p>
       ) : personas.isError ? (
-        <p className="of-notice of-notice--error" role="alert">
-          {t("ui.otomeForge.setup.personasFailed")}
-        </p>
+        <RetryNotice
+          message={t("ui.otomeForge.setup.personasFailed")}
+          onRetry={() => void personas.refetch()}
+          retrying={personas.retrying}
+        />
       ) : personas.items.length === 0 ? (
         <div className="of-empty of-glass">
           <UserRound size={22} strokeWidth={1.7} aria-hidden="true" />
           <p>{t("ui.otomeForge.setup.noPersonas")}</p>
+          <CheckAgain onCheck={personas.refetch} />
         </div>
       ) : (
         <PersonaGrid

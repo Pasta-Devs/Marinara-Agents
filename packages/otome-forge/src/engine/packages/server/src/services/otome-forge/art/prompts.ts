@@ -1,21 +1,24 @@
 // ──────────────────────────────────────────────
 // Otome Forge: image prompts, built in code with no model call (plan §1.8, M1 "Image prompts")
 // ──────────────────────────────────────────────
-// A look is the identity line and the outfit line, full body on a flat mid-grey background (so the Home cut-out has
-// an easy matte), plus the world's image rating and "adult <presentation>" from the content contract. The prompt goes
+// A look is the identity line and the outfit line, full body on a flat backdrop that the cut-out keys out
+// (art/cutout.ts). Generated love-interest and protagonist looks use a chroma matte, as the Engine's sprites have.
+// The prompt also carries the world's image rating and "adult <presentation>" from the content contract. The prompt goes
 // to the Engine as a prompt override, which replaces the Engine's own prompt and style, so the chosen style profile's
 // text and tags are added here. A prompt the player edited in the review dialog keeps every rating and adult tag:
 // the missing ones are appended again. Image prompts are always English. GF's buildImagePromptsMessages (server.mjs,
 // offset 574915) is the reference for the wording.
 // M2b adds a place (scenery from the beat's English tags, no people), a story CG (the narrator's English brief, then
 // each person's identity and outfit lines; at most 4 people, matching the references) and an expression edit (the
-// kit's edit instruction, which changes only the face). Each one carries the rating and adult tags the same way.
+// kit's edit instruction, which changes only the face). Expression edits use their own adult, nonsexual policy;
+// raising a world's image ceiling never changes the requested face edit or its reference's clothing coverage.
 // 0.0.6: the tags follow what the image is for (content-contract.ts otomeImageTags). Looks, faces, outfits, the pair
-// portrait and Memory art stay clothed portraits at most Suggestive; above SFW a place carries no person or rating
-// tags; a story CG is explicit only when its brief set `explicit` under Explicit Heat and the Explicit rating, and then
-// its people are drawn from their identity lines alone (an outfit line would dress the moment). The adult negatives
-// stay on every image, whatever the rating or the player's edit, and above SFW no part of a prompt names a minor
-// (adultsOnly). At SFW every prompt is what it was before.
+// portrait, Moment and Snapshot art, and Memory art not marked explicit stay clothed portraits at most Suggestive; above
+// SFW a place carries no person or rating tags; a story CG or a Memory's art (0.5.2, #1951) is explicit only when its
+// brief set `explicit` under Explicit Heat and the Explicit rating (a lowered Memory paints its clothed brief instead,
+// content-contract.ts memoryArtBrief), and then its people are drawn from their identity lines alone (an outfit line
+// would dress the moment). The adult negatives stay on every image, whatever the rating or the player's edit, and
+// above SFW no part of a prompt names a minor (adultsOnly). At SFW every prompt is what it was before.
 // M5 adds a date's keepsake: a story CG of the two of them (never explicit) with the keepsake's own framing.
 import { forgeStoryExpressionPrompt } from "@forge-kit/story-expressions-server.mjs";
 import type { Presentation, Unit, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
@@ -29,22 +32,51 @@ export const LOOK_SIZE = { width: 832, height: 1216 } as const;
 /** CGs and places (M2b). */
 export const SCENE_SIZE = { width: 768, height: 1344 } as const;
 
-export const LOOK_FRAMING = "full body, standing, neutral pose, plain flat mid-grey background";
+const LOOK_POSE = "full body, standing, neutral pose";
+export const LOOK_FRAMING = `${LOOK_POSE}, plain flat mid-grey background`;
+
+/**
+ * The Engine's sprite mattes (sprite-background.service.ts selectSpriteChromaMatte): the one whose colour the look
+ * names least, so the cut-out keys it out without eating the look; a tie keeps green.
+ * ponytail: mirrors the Engine's list; the upgrade path is the Engine giving packages its matte choice.
+ */
+const MATTES = [
+  { name: "chroma green #00FF00", colours: /\b(?:green|lime|emerald|olive|mint|chartreuse|teal|turquoise)\b/giu },
+  { name: "chroma magenta #FF00FF", colours: /\b(?:pink|magenta|fuchsia|purple|violet|lavender|rose|mauve)\b/giu },
+  { name: "chroma cyan #00FFFF", colours: /\b(?:blue|cyan|aqua|turquoise|teal|navy|azure|cobalt|indigo)\b/giu },
+];
+
+export function lookMatte(look: string): string {
+  let best = MATTES[0]!;
+  let fewest = Infinity;
+  for (const matte of MATTES) {
+    const named = look.toLowerCase().match(matte.colours)?.length ?? 0;
+    if (named < fewest) [best, fewest] = [matte, named];
+  }
+  return best.name;
+}
+
+/** A generated look on its selected chroma matte; callers can retain legacy mid-grey framing by omitting matte. */
+export function lookFraming(input: Pick<LookInput, "identityLine" | "outfitLine" | "matte">): string {
+  if (!input.matte) return LOOK_FRAMING;
+  const matte = lookMatte(`${input.identityLine} ${input.outfitLine}`);
+  return `${LOOK_POSE}, plain flat solid ${matte} background`;
+}
+
+/** What would spoil a matte's key: kept out through the negative prompt. */
+const MATTE_NEGATIVE = "cast shadow, floor shadow, gradient background, colour spill";
 const LOOK_NEGATIVE =
   "text, captions, logos, watermarks, borders, UI, collage layouts, duplicate faces, extra people, cropped-off heads, cropped feet, busy background, scenery";
 /** Kept on every image, whatever the settings or the player's edits. */
 const ADULT_NEGATIVE = "child, childlike, minor, underage, school uniform";
-/** Added to the adult negatives on every image above SFW. */
+/** Explicit story CGs retain these additional adult exclusions. */
 const ADULT_NEGATIVE_ABOVE_SFW = "loli, shota, teenager";
-/** What each rating rules out: at SFW on every image, as before 0.0.6; above SFW on a story CG (a place keeps SFW's). */
+/** Content exclusions: non-explicit adult assets allow romance and revealing clothing, never nudity or sex acts. */
 const RATING_NEGATIVE: Record<ImageRating, string> = {
   sfw: "nudity, nsfw, sexual content, lingerie",
-  suggestive: "explicit, nude, nudity, nipples, genitals, sex",
+  suggestive: "nudity, explicit sexual activity",
   explicit: "",
 };
-/** Above SFW, a clothed portrait (a look, a face, an outfit, the pair portrait, Memory art) may be revealing, never bare. */
-const CLOTHED_NEGATIVE = "nude, nudity, nipples, genitals, sex, explicit";
-
 /** A part of a prompt that names or describes a minor (English: image prompts are always English). */
 const MINOR_TERMS =
   /\b(child|children|childlike|kids?|minors?|underage|preteens?|teens?|teenagers?|teenage|loli|lolita|shota|schoolgirls?|schoolboys?|school uniform|toddlers?|infants?)\b|\b([1-9]|1[0-7])[- ]?(years?|yrs?)[- ]?old\b/i;
@@ -67,9 +99,9 @@ function adultsOnly(world: Pick<World, "images">, prompt: string): string {
 /** The negatives an image of this use always keeps: adults only, then what its rating rules out. */
 function requiredNegative(world: Pick<World, "content" | "images">, use: ImageUse, explicitScene = false): string {
   if (world.images.rating === "sfw") return mergeTags(ADULT_NEGATIVE, RATING_NEGATIVE.sfw);
-  const ruledOut =
-    use === "clothed" ? CLOTHED_NEGATIVE : RATING_NEGATIVE[effectiveImageRating({ world, use, explicitScene })];
-  return mergeTags(ADULT_NEGATIVE, ADULT_NEGATIVE_ABOVE_SFW, ruledOut);
+  return effectiveImageRating({ world, use, explicitScene }) === "explicit"
+    ? mergeTags(ADULT_NEGATIVE, ADULT_NEGATIVE_ABOVE_SFW, RATING_NEGATIVE.explicit)
+    : mergeTags(ADULT_NEGATIVE, RATING_NEGATIVE.suggestive);
 }
 
 export interface LookInput {
@@ -79,6 +111,8 @@ export interface LookInput {
   presentation: Presentation;
   world: Pick<World, "content" | "images">;
   style: StyleProfile;
+  /** A generated look, painted on a chroma matte for its cut-out (lookFraming). */
+  matte?: boolean;
 }
 
 export interface ImagePrompt {
@@ -130,12 +164,17 @@ export function lookPrompt(input: LookInput, edited: Partial<ImagePrompt> = {}):
   const negative = requiredNegative(world, "clothed");
   const prompt = edited.prompt?.trim()
     ? withTags(edited.prompt, required)
-    : [style.styleText, mergeTags(input.identityLine, input.outfitLine, LOOK_FRAMING, required, style.positiveTags)]
+    : [
+        style.styleText,
+        // Appearance may be the player's own prose: keep it whole, including repeated details, instead of tag deduplication.
+        input.identityLine.trim(),
+        mergeTags(input.outfitLine, lookFraming(input), required, style.positiveTags),
+      ]
         .filter(Boolean)
         .join(", ");
   const negativePrompt = edited.negativePrompt?.trim()
     ? withTags(edited.negativePrompt, negative)
-    : mergeTags(LOOK_NEGATIVE, negative, style.negativeTags);
+    : mergeTags(LOOK_NEGATIVE, input.matte ? MATTE_NEGATIVE : "", negative, style.negativeTags);
   return { prompt: adultsOnly(world, prompt), negativePrompt };
 }
 
@@ -212,7 +251,10 @@ export interface CgInput {
   people: readonly CgPerson[];
   world: Pick<World, "content" | "images">;
   style: StyleProfile;
-  /** cg: a story CG; clothed: the pair portrait and Memory or banner art, which stay clothed and at most Suggestive. */
+  /**
+   * cg: a story CG, or a Memory's art marked explicit while the world allows it; clothed: the pair portrait and any other
+   * Memory, banner, Moment or Snapshot art, which stay clothed and at most Suggestive.
+   */
   use: Extract<ImageUse, "cg" | "clothed">;
   /** The story CG's brief set `explicit` (beat.cg.explicit). */
   explicit?: boolean;
@@ -280,22 +322,47 @@ export interface ExpressionInput {
   face: Face;
   world: Pick<World, "content" | "images">;
   style: StyleProfile;
+  edited?: Partial<ImagePrompt>;
 }
 
 /**
- * An expression: the kit's edit instruction (change only the face, from SH/faces.ts FACE_LOOKS, as a sentence or as
- * tags for a tag profile), with the rating and adult tags appended and the safety negatives. A face is a clothed
- * portrait at any rating: it is the base of every Home cut-out and story reference after it.
+ * An expression changes only the face (SH/faces.ts FACE_LOOKS), keeping the adult reference's body, clothing and
+ * style. Its nonsexual edit policy is independent of a world's image ceiling; authored text and the existing
+ * adult-only guard are retained.
  */
 export function expressionPrompt(input: ExpressionInput): ImagePrompt {
   const { world, style, unit } = input;
   const presentation = unit.bible?.look.presentation ?? "person";
   const tagged = style.tagged === true;
-  const required = otomeImageTags({ world, people: [{ name: unit.name, presentation }], use: "clothed", tagged });
-  const { prompt } = forgeStoryExpressionPrompt(unit, input.base, input.face, style, { tagged, looks: FACE_LOOKS });
+  const required = tagged
+    ? `safe for work, adult ${presentation}, facial expression edit, same body, same clothing coverage, same pose, same framing, same background, same lighting, same art style`
+    : `A nonsexual facial-expression edit of an adult ${presentation}; preserve the reference image's body, clothing coverage, pose, framing, background, lighting and art style`;
+  // The shared tagged helper reads positiveTags only. Otome's configured style is prose too, so keep it whole.
+  const profile = tagged
+    ? { ...style, positiveTags: [style.styleText, style.positiveTags].filter(Boolean).join(", ") }
+    : style;
+  const expressionUnit = unit.identityLine.trim()
+    ? unit
+    : { ...unit, identityLine: unit.bible?.look.identityLine ?? "" };
+  const { prompt } = forgeStoryExpressionPrompt(expressionUnit, input.base, input.face, profile, {
+    tagged,
+    looks: FACE_LOOKS,
+  });
+  const prose = sentence(input.edited?.prompt ?? prompt);
+  const safetyTail = sentence(required);
+  const hasSafetyTail =
+    prose === safetyTail || (prose.endsWith(safetyTail) && /[.!?…]\s+$/u.test(prose.slice(0, -safetyTail.length)));
   return {
     // A tag profile gets the tags; an edit instruction gets them as its closing sentence.
-    prompt: adultsOnly(world, tagged ? withTags(prompt, required) : [sentence(prompt), sentence(required)].join(" ")),
-    negativePrompt: mergeTags(requiredNegative(world, "clothed"), style.negativeTags),
+    prompt: adultsOnly(
+      world,
+      tagged ? withTags(input.edited?.prompt ?? prompt, required) : hasSafetyTail ? prose : `${prose} ${safetyTail}`,
+    ),
+    negativePrompt: mergeTags(
+      ADULT_NEGATIVE,
+      "nudity, sexual content",
+      style.negativeTags,
+      input.edited?.negativePrompt ?? "",
+    ),
   };
 }

@@ -8,11 +8,12 @@
 // A stored bible is read field by field (readFields), so one damaged field keeps its default and not the whole bible.
 import { z, type ZodType } from "zod";
 import type {
+  BibleIntimacy,
   ArcStageKey,
   Bible,
   FixedLines,
   LinePacks,
-  Paint,
+  PlushArt,
   StageLines,
   Unit,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
@@ -33,12 +34,17 @@ import {
   defaultPronouns,
   field,
   isRecord,
+  normalizeCutouts,
   readFields,
   readWornOutfit,
   text,
   textList,
   validItems,
 } from "./common.js";
+import { sanitizePlushSvg } from "../art/plush-svg.js";
+
+/** The longest animal name kept for a plush. */
+export const PLUSH_ANIMAL_MAX = 40;
 
 export const LI_NOTES_MAX = 500;
 export const ACCENT_PATTERN = /^#[0-9a-f]{6}$/i;
@@ -46,6 +52,29 @@ export const ACCENT_PATTERN = /^#[0-9a-f]{6}$/i;
 export const DEFAULT_ACCENT = "#E7A6B8";
 
 const ArcStepSchema = z.object({ wantsFromHer: text().optional(), seed: text().optional() });
+
+/** How many preferences and attractions a bible's intimacy block holds: a handful, never an exhaustive list. */
+export const INTIMACY_ITEMS_MAX = 6;
+/** Bounded well above the handful, so a reply or edit that overshoots is trimmed by normalizeIntimacy, not refused. */
+export const IntimacySchema: ZodType<BibleIntimacy> = z.object({
+  preferences: textList(INTIMACY_ITEMS_MAX * 4),
+  attractions: textList(INTIMACY_ITEMS_MAX * 4),
+});
+
+const INTIMACY_ITEM_MAX = 120;
+
+/** The block trimmed to a handful of short labels, or the problem when nothing usable is left. */
+export function normalizeIntimacy(value: BibleIntimacy): BibleIntimacy | string {
+  const clean = (items: readonly string[]) =>
+    items
+      .map((item) => item.replace(/\s+/g, " ").trim().slice(0, INTIMACY_ITEM_MAX))
+      .filter(Boolean)
+      .slice(0, INTIMACY_ITEMS_MAX);
+  const intimacy = { preferences: clean(value.preferences), attractions: clean(value.attractions) };
+  return intimacy.preferences.length || intimacy.attractions.length
+    ? intimacy
+    : "intimacy needs at least one preference or attraction";
+}
 
 /** One zod schema per bible field: BibleSchema checks them all, normalizeBible falls back field by field. */
 const BIBLE_FIELDS: { [K in keyof Bible]-?: ZodType<Bible[K]> } = {
@@ -109,6 +138,7 @@ const BIBLE_FIELDS: { [K in keyof Bible]-?: ZodType<Bible[K]> } = {
     presentation: z.enum(["man", "woman", "person"]),
   }),
   play: z.object({ style: text(300), cheat: z.enum(["steady", "nudge", "extra", "freeze", "calculate"]) }),
+  intimacy: IntimacySchema.optional(),
 };
 
 export const BibleSchema: ZodType<Bible> = z.object(BIBLE_FIELDS);
@@ -181,6 +211,15 @@ export const FixedLinesSchema: ZodType<FixedLines> = z.object({
 
 const STAGE_KEYS: readonly ArcStageKey[] = ["1", "2", "3", "4", "5", "6"];
 
+/** A stored plush, its SVG checked again on every read (S/art/plush-svg.ts); a damaged one is dropped and drawn again. */
+export function normalizePlushArt(value: unknown): PlushArt | undefined {
+  if (!isRecord(value) || typeof value.svg !== "string" || typeof value.animal !== "string") return undefined;
+  const clean = sanitizePlushSvg(value.svg);
+  const animal = value.animal.trim().slice(0, PLUSH_ANIMAL_MAX);
+  if (!("svg" in clean) || !animal) return undefined;
+  return { animal, svg: clean.svg, at: typeof value.at === "string" ? value.at : "" };
+}
+
 /** Stored line packs, each stage on its own: one damaged pack is dropped (and written again), the others kept. */
 export function normalizeLinePacks(value: unknown): LinePacks | undefined {
   if (!isRecord(value)) return undefined;
@@ -192,17 +231,6 @@ export function normalizeLinePacks(value: unknown): LinePacks | undefined {
   }
   const fixed = FixedLinesSchema.safeParse(value.fixed);
   return { stages, fixed: fixed.success ? fixed.data : null };
-}
-
-/** Stored cut-out records, keyed by the look's URL; a bad record is dropped (the cut-out is made again). */
-function normalizeCutouts(value: unknown): Record<string, Paint> {
-  const cutouts: Record<string, Paint> = {};
-  if (!isRecord(value)) return cutouts;
-  for (const [url, record] of Object.entries(value)) {
-    const parsed = PaintSchema.safeParse(record);
-    if (url && parsed.success) cutouts[url] = parsed.data;
-  }
-  return cutouts;
 }
 
 const defaultUnit = (): Unit => ({
@@ -249,12 +277,14 @@ export function normalizeUnit(data: unknown): Unit {
       createdAt: z.string(),
       lines: normalizeLinePacks,
       cutouts: normalizeCutouts,
+      plushArt: normalizePlushArt,
     },
     defaultUnit,
     isRecord(data) ? data : undefined,
   );
-  // An LI with no pack yet has no `lines` key at all, as before M3.
+  // An LI with no pack yet has no `lines` key at all, as before M3; one with no plush drawn, no `plushArt`.
   if (!unit.lines) delete unit.lines;
+  if (!unit.plushArt) delete unit.plushArt;
   // A worn look that is not one of theirs (a damaged document) wears the base portrait.
   const { wornOutfit: _worn, ...rest } = unit;
   const worn = readWornOutfit(unit.outfits, field(data, "wornOutfit"));

@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { BookHeart, Check, UsersRound } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { Dialog } from "../../components/Dialog";
+import { ImageDescription } from "../../components/ImageDescription";
 import { accentOf } from "../../lib/accent";
 import type { LiId, RunLiView } from "../../shared/api-types";
 
@@ -67,6 +68,7 @@ export function HomeLiPicker({ lis, current, onPick, onClose, onOpenCast, onOpen
                 </span>
                 {chosen ? <Check className="of-home-pick-mark" size={18} strokeWidth={2.4} aria-hidden="true" /> : null}
               </button>
+              <ImageDescription text={[li.look?.identityLine, li.look?.outfitLine].filter(Boolean).join("\n")} />
             </li>
           );
         })}

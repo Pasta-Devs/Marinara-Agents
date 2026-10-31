@@ -46,7 +46,7 @@ export interface LtmBudgetRejectedCandidate {
   rejectionReason: "budget" | "lower_rank" | "missing_chunk" | "score_threshold" | "duplicate_text";
 }
 
-function estimateTokens(text: string) {
+export function estimateTokens(text: string) {
   return Math.max(1, Math.ceil(text.length / 4));
 }
 

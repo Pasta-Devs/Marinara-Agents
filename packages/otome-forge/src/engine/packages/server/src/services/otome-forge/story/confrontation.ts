@@ -15,6 +15,13 @@
 // every stance is saved on the beat once, and its effects reach `${R}:state` through applyChoiceEffects, whose
 // `applied` entries (`${i}/stance-<k>`, `${i}/confrontation`) make each land exactly once, with the per-beat and
 // per-chapter clamps. Everything here is pure.
+//
+// The Closer (#1938, P12c) is the warm climax on the same machinery, stored in the same slot with `kind: "closer"`:
+// the love interest offers something each round and the protagonist answers with Reassure, Tease, Mirror or Ask. Their
+// guard runs on the composure line; 0 is Opened up (trust +1 and, the first time, a "first-opened-up" Love Timeline
+// entry), 4 is Shut out (trust −1 and a minor grievance they hold), anything else is Almost (nothing changes). Mirror
+// records the protagonist's disclosure as Reveal does; its `applied` entries are `${i}/stance-<k>` and `${i}/closer`.
+// CLIMAX holds what differs between the two.
 import { forgeChoiceLabel } from "@forge-kit/player-choice-text.mjs";
 import { forgeSpeakerGenders } from "@forge-kit/player-choices-server.mjs";
 import type {
@@ -34,20 +41,25 @@ import type {
   Unit,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import {
-  CONFRONTATION_ENDINGS,
+  CLIMAX_ENDINGS,
+  CLIMAX_MOVES,
   CONFRONTATION_ROUNDS,
-  STANCES,
   WALKOUT_RUPTURE_TRUST,
+  climaxOf,
+  closerEndingFor,
   composureAfter,
   endingFor,
-  type ConfrontationEnding,
-  type Stance,
+  type ClimaxEnding,
+  type ClimaxKind,
+  type ClimaxMove,
 } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import type { MusicMood } from "../../../../../client/src/features/otome-forge/shared/faces.js";
+import { keepTimeline } from "../schemas/state.js";
 import { applyChoiceEffects } from "../state/relationship.js";
 import {
   BEAT_PLACES_MAX,
   CONFRONTATION_ANSWER_MAX,
+  CLOSER_INTIMATE_ENDING_MAX,
   CONFRONTATION_ENDING_MAX,
   CONFRONTATION_HIS_MAX,
   CONFRONTATION_OPENING_MAX,
@@ -60,19 +72,69 @@ const TEXT_MAX = 600;
 const NAME_MAX = 120;
 
 const str = (value: unknown, max: number) => (typeof value === "string" ? value.trim().slice(0, max) : "");
+
+/** What a Confrontation and a Closer differ in; everything else is the same game. */
+interface ClimaxSpec {
+  moves: readonly ClimaxMove[];
+  endings: readonly ClimaxEnding[];
+  /** The ending a final composure (a Closer's guard) reaches. */
+  endingFor(level: number): ClimaxEnding;
+  /** The move that tells something true about the protagonist, recorded once as a disclosure. */
+  discloses: ClimaxMove;
+  severity: "major" | "minor";
+  /** The reply's field for an option's hidden −1, 0 or +1 (stored as `composure`). */
+  moveField: "composure" | "guard";
+  /** The moods a reply may pick, the first being the default. */
+  moods: readonly MusicMood[];
+  /** The `applied` entry of its ending, and its name in the repair turn and the canon. */
+  noun: ClimaxKind;
+  grievanceWhy: string;
+  disclosureWhy: string;
+}
+
+export const CLIMAX: Readonly<Record<ClimaxKind, ClimaxSpec>> = {
+  confrontation: {
+    moves: CLIMAX_MOVES.confrontation,
+    endings: CLIMAX_ENDINGS.confrontation,
+    endingFor,
+    discloses: "reveal",
+    severity: "major",
+    moveField: "composure",
+    moods: ["tense", "angst"],
+    noun: "confrontation",
+    grievanceWhy: "what a walkout leaves between them",
+    disclosureWhy: "what the protagonist tells them in reveal",
+  },
+  closer: {
+    moves: CLIMAX_MOVES.closer,
+    endings: CLIMAX_ENDINGS.closer,
+    endingFor: closerEndingFor,
+    discloses: "mirror",
+    severity: "minor",
+    moveField: "guard",
+    moods: ["tender", "confession"],
+    noun: "closer",
+    grievanceWhy: "what being shut out leaves between them",
+    disclosureWhy: "what the protagonist shares of themselves in mirror",
+  },
+};
+
+/** The Love Timeline first an Opened up Closer marks, once per love interest. */
+export const OPENED_UP_FIRST = "opened-up";
 const record = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 
 /**
- * Whom the protagonist confronts in this node: the chapter's own love interest or its Lead when present, else the
- * first love interest in the node. Null when nobody is (the node is then written as an ordinary argument beat).
+ * Whom the protagonist plays a climax node with (a Confrontation's opponent, a Closer's partner): the chapter's own
+ * love interest or its Lead when present, else the first love interest in the node. Null when nobody is (the node is
+ * then written as an ordinary beat, framed as its kind).
  */
 export function confrontationOpponent(
   chapter: Pick<Chapter, "li" | "lead">,
   node: Pick<ChapterNode, "kind" | "cast">,
   units: ReadonlyArray<Pick<Unit, "id">>,
 ): LiId | null {
-  if (node.kind !== "confrontation") return null;
+  if (node.kind !== "confrontation" && node.kind !== "closer") return null;
   const known = node.cast.filter((li) => units.some((unit) => unit.id === li));
   const owner = chapter.li ?? chapter.lead;
   return known.includes(owner) ? owner : (known[0] ?? null);
@@ -80,6 +142,8 @@ export function confrontationOpponent(
 
 /** How beats.ts normalizes one list of segments (its P6 rules), lent to P12's reply. */
 export interface SegmentLists {
+  /** A specific place-reference validation error, before list() reduces invalid input to null. */
+  placesProblem?(raw: unknown): string;
   /** The list in its saved shape from `start` (the place it opens in); null when nothing usable is left. */
   list(raw: unknown, start: string): { segments: Segment[]; places: Array<{ name: string; tags: string }> } | null;
   /**
@@ -89,11 +153,11 @@ export interface SegmentLists {
   thoughts(raw: unknown[], counts: Map<string, number>): string;
 }
 
-/** The stored parts a P12 reply becomes: the opening (the beat's segments) and the rest of the game. */
+/** The stored parts a P12 (P12c) reply becomes: the opening (the beat's segments) and the rest of the game. */
 export interface ConfrontationBody {
   segments: Segment[];
   places: Array<{ name: string; tags: string }>;
-  musicMood: Extract<MusicMood, "tense" | "angst">;
+  musicMood: MusicMood;
   cg?: Beat["cg"];
   confrontation: Confrontation;
 }
@@ -101,7 +165,7 @@ export interface ConfrontationBody {
 const lastPlace = (segments: readonly Segment[], fallback: string) =>
   [...segments].reverse().find((segment) => segment.place)?.place ?? fallback;
 
-/** The reply as a confrontation, or the first rule it breaks (the repair turn names it). */
+/** The reply as a climax game of the node's kind, or the first rule it breaks (the repair turn names it). */
 export function normalizeConfrontationReply(
   reply: ConfrontationReply,
   {
@@ -109,9 +173,22 @@ export function normalizeConfrontationReply(
     node,
     cgOpen,
     cgExplicit = false,
-  }: { li: LiId; node: Pick<ChapterNode, "place">; cgOpen: boolean; cgExplicit?: boolean },
+    climax = "confrontation",
+    intimateRoom = false,
+  }: {
+    li: LiId;
+    node: Pick<ChapterNode, "place">;
+    cgOpen: boolean;
+    cgExplicit?: boolean;
+    climax?: ClimaxKind;
+    /** NSFW: Explicit: a Closer's opened ending may run to CLOSER_INTIMATE_ENDING_MAX when it reaches sex. */
+    intimateRoom?: boolean;
+  },
   lists: SegmentLists,
 ): ConfrontationBody | string {
+  const spec = CLIMAX[climax];
+  const placesProblem = lists.placesProblem?.(reply.places);
+  if (placesProblem) return placesProblem;
   const lengths = (name: string, items: unknown, max: number) =>
     Array.isArray(items) && items.length > max ? `${name} has more than ${max} segments` : "";
   // One thought per love interest in the whole scene, as P6 counts a beat: along the path with the most of them (the
@@ -138,7 +215,7 @@ export function normalizeConfrontationReply(
       const known = places.get(key);
       if (known) {
         if (!known.tags && entry.tags) places.set(key, entry);
-      } else if (places.size >= BEAT_PLACES_MAX) return `the confrontation uses more than ${BEAT_PLACES_MAX} places`;
+      } else if (places.size >= BEAT_PLACES_MAX) return `the ${spec.noun} uses more than ${BEAT_PLACES_MAX} places`;
       else places.set(key, entry);
     }
     return "";
@@ -172,9 +249,9 @@ export function normalizeConfrontationReply(
     if (typeof his === "string") return his;
     place = lastPlace(his, place);
     const rawOptions = record(round.options);
-    const options = {} as Record<Stance, ConfrontationOption>;
+    const options: Partial<Record<ClimaxMove, ConfrontationOption>> = {};
     const answers: Array<Map<string, number>> = [];
-    for (const stance of STANCES) {
+    for (const stance of spec.moves) {
       const option = record(rawOptions[stance]);
       const label = forgeChoiceLabel(str(option.label, LABEL_MAX));
       const selection = record(option.selection);
@@ -192,8 +269,8 @@ export function normalizeConfrontationReply(
         seen,
       );
       if (typeof segments === "string") return segments;
-      const move = Number(option.composure);
-      if (![-1, 0, 1].includes(move)) return `rounds[${index}].options.${stance}.composure must be -1, 0 or 1`;
+      const move = Number(option[spec.moveField]);
+      if (![-1, 0, 1].includes(move)) return `rounds[${index}].options.${stance}.${spec.moveField} must be -1, 0 or 1`;
       options[stance] = { label, selection: { kind, text: said }, segments, composure: move as -1 | 0 | 1 };
     }
     rounds.push({ his, options });
@@ -201,26 +278,32 @@ export function normalizeConfrontationReply(
   }
 
   const rawEndings = record(reply.endings);
-  const endings = {} as Confrontation["endings"];
-  for (const ending of CONFRONTATION_ENDINGS) {
-    const segments = list(`endings.${ending}`, rawEndings[ending], CONFRONTATION_ENDING_MAX, new Map(counts));
+  const endings: Confrontation["endings"] = {};
+  for (const ending of spec.endings) {
+    const max =
+      intimateRoom && climax === "closer" && ending === "opened"
+        ? CLOSER_INTIMATE_ENDING_MAX
+        : CONFRONTATION_ENDING_MAX;
+    const segments = list(`endings.${ending}`, rawEndings[ending], max, new Map(counts));
     if (typeof segments === "string") return segments;
     endings[ending] = segments;
   }
   const grievanceText = str(record(reply.grievance).text, TEXT_MAX);
-  if (!grievanceText) return "grievance.text is required (what a walkout leaves between them)";
+  if (!grievanceText) return `grievance.text is required (${spec.grievanceWhy})`;
   const disclosure = str(reply.disclosure, TEXT_MAX);
-  if (!disclosure) return "disclosure is required (what the protagonist tells them in reveal)";
+  if (!disclosure) return `disclosure is required (${spec.disclosureWhy})`;
 
+  const mood = spec.moods.find((candidate) => candidate === reply.musicMood) ?? spec.moods[0]!;
   const body: ConfrontationBody = {
     segments: opening.segments,
     places: [...places.values()],
-    musicMood: reply.musicMood === "angst" ? "angst" : "tense",
+    musicMood: mood,
     confrontation: {
+      ...(climax === "closer" ? { kind: "closer" as const } : {}),
       li,
       rounds,
       endings,
-      grievance: { text: grievanceText, severity: "major" },
+      grievance: { text: grievanceText, severity: spec.severity },
       disclosure,
       picks: [],
     },
@@ -244,17 +327,27 @@ export function normalizeConfrontationReply(
 
 // ── What the client sees ──
 
-/** The ending the picks reach: composure from 2 by each picked option's move. */
-export function endingOf(confrontation: Pick<Confrontation, "rounds">, picks: readonly Stance[]): ConfrontationEnding {
-  return endingFor(composureAfter(picks.map((stance, k) => confrontation.rounds[k]?.options[stance]?.composure ?? 0)));
+/** The game's spec: a Closer's, or a Confrontation's for any game stored without a kind. */
+export const climaxSpec = (game: Pick<Confrontation, "kind">) => CLIMAX[climaxOf(game)];
+
+/** The ending the picks reach: composure (a Closer's guard) from 2 by each picked option's move. */
+export function endingOf(
+  confrontation: Pick<Confrontation, "kind" | "rounds">,
+  picks: readonly ClimaxMove[],
+): ClimaxEnding {
+  return climaxSpec(confrontation).endingFor(
+    composureAfter(picks.map((stance, k) => confrontation.rounds[k]?.options[stance]?.composure ?? 0)),
+  );
 }
 
 function roundView(confrontation: Confrontation, k: number): ConfrontationRoundView {
   const round = confrontation.rounds[k]!;
   const picked = confrontation.picks[k];
-  const options = {} as ConfrontationRoundView["options"];
-  for (const stance of STANCES) {
-    const { label, selection, segments } = round.options[stance];
+  const options: ConfrontationRoundView["options"] = {};
+  for (const stance of climaxSpec(confrontation).moves) {
+    const option = round.options[stance];
+    if (!option) continue;
+    const { label, selection, segments } = option;
     options[stance] = { label, selection, ...(picked === stance ? { segments } : {}) };
   }
   return { round: k + 1, his: round.his, options, ...(picked ? { picked } : {}) };
@@ -262,7 +355,7 @@ function roundView(confrontation: Confrontation, k: number): ConfrontationRoundV
 
 export function endingView(confrontation: Confrontation): ConfrontationEndingView | undefined {
   const kind = confrontation.ending;
-  return kind ? { kind, segments: confrontation.endings[kind] } : undefined;
+  return kind ? { kind, segments: confrontation.endings[kind] ?? [] } : undefined;
 }
 
 /** How many rounds the client sees: those played, and the one being played until it ends or was eased off. */
@@ -280,12 +373,12 @@ export function confrontationMainline(beat: Pick<Beat, "segments" | "easedOff" |
   const confrontation = beat.confrontation;
   if (!confrontation) return beat.segments.length;
   const rounds = confrontation.rounds.slice(0, shownRounds(beat));
-  const ending = confrontation.ending ? confrontation.endings[confrontation.ending].length : 0;
+  const ending = confrontation.ending ? (confrontation.endings[confrontation.ending]?.length ?? 0) : 0;
   return beat.segments.length + rounds.reduce((sum, round) => sum + round.his.length, 0) + ending;
 }
 
 /**
- * The stance game as the client sees it, with the beat's own fields (no effects, no stored game): every round played
+ * A climax game as the client sees it, with the beat's own fields (no effects, no stored game): every round played
  * and the one being played (none more after an Ease off), and the ending once reached. Null for a beat with no game.
  */
 export function toConfrontationView(beat: Beat): ConfrontationView | null {
@@ -323,13 +416,14 @@ export function afterRound(confrontation: Confrontation, round: number) {
 export function confrontationLines(beat: Pick<Beat, "segments" | "confrontation">): Segment[] {
   const confrontation = beat.confrontation;
   if (!confrontation) return beat.segments;
+  const spec = climaxSpec(confrontation);
   return [
     ...beat.segments,
     ...confrontation.rounds.flatMap((round) => [
       ...round.his,
-      ...STANCES.flatMap((stance) => round.options[stance].segments),
+      ...spec.moves.flatMap((stance) => round.options[stance]?.segments ?? []),
     ]),
-    ...CONFRONTATION_ENDINGS.flatMap((ending) => confrontation.endings[ending]),
+    ...spec.endings.flatMap((ending) => confrontation.endings[ending] ?? []),
   ];
 }
 
@@ -354,7 +448,12 @@ export function endingEffects(confrontation: Confrontation, liState: Pick<LiStat
       ];
     case "standoff":
       return [{ li, tension: 1 }];
+    case "opened":
+      return [{ li, trust: 1 }];
+    case "shut":
+      return [{ li, trust: -1, grievance: { by: "li", text: confrontation.grievance.text, severity: "minor" } }];
     default:
+      // A standoff's twin, Almost, changes nothing.
       return [];
   }
 }
@@ -365,19 +464,35 @@ export interface ConfrontationOutcome {
   rememberedBy: LiId[];
 }
 
+/** The `${R}:state` with the love interest's Opened up first marked, the first time only (as a first date is). */
+function withOpenedUp(state: RunState, li: LiId, chapter: Pick<Chapter, "key" | "title">, at: string): RunState {
+  const current = state.lis[li];
+  if (!current || current.firsts[OPENED_UP_FIRST]) return state;
+  return {
+    ...state,
+    lis: { ...state.lis, [li]: { ...current, firsts: { ...current.firsts, [OPENED_UP_FIRST]: at } } },
+    timeline: keepTimeline([
+      ...state.timeline,
+      { at, li, kind: `first-${OPENED_UP_FIRST}`, text: chapter.title.slice(0, 600), ref: chapter.key },
+    ]),
+  };
+}
+
 /**
- * Every effect the beat's saved stances have earned and the state does not have yet: each Reveal's disclosure, and the
- * ending's effects once it is reached. A replay, or an effect that already landed, changes nothing. The walkout reads
- * trust from the state it lands on, so the rupture rule sees the trust of that moment.
+ * Every effect the beat's saved moves have earned and the state does not have yet: each Reveal's (Mirror's)
+ * disclosure, and the ending's effects once it is reached, with an Opened up Closer's first. A replay, or an effect
+ * that already landed, changes nothing. The walkout reads trust from the state it lands on, so the rupture rule sees
+ * the trust of that moment.
  */
 export function applyConfrontation(
   state: RunState,
-  chapter: Pick<Chapter, "key" | "nodes">,
+  chapter: Pick<Chapter, "key" | "nodes" | "title">,
   beat: Pick<Beat, "i" | "confrontation">,
   at: string,
 ): ConfrontationOutcome {
   const confrontation = beat.confrontation;
   if (!confrontation) return { state, remembered: false, rememberedBy: [] };
+  const spec = climaxSpec(confrontation);
   let next = state;
   const rememberedBy = new Set<LiId>();
   const apply = (effects: Effect[], choice: string) => {
@@ -390,11 +505,22 @@ export function applyConfrontation(
     });
     next = outcome.state;
     for (const li of outcome.rememberedBy) rememberedBy.add(li);
+    return outcome;
   };
   for (const [k, stance] of confrontation.picks.entries()) {
-    if (stance === "reveal") apply([{ li: confrontation.li, disclose: confrontation.disclosure }], `stance-${k + 1}`);
+    if (stance === spec.discloses) {
+      apply([{ li: confrontation.li, disclose: confrontation.disclosure }], `stance-${k + 1}`);
+    }
   }
-  if (confrontation.ending)
-    apply(endingEffects(confrontation, next.lis[confrontation.li] ?? { trust: 0 }), "confrontation");
+  if (confrontation.ending) {
+    const outcome = apply(endingEffects(confrontation, next.lis[confrontation.li] ?? { trust: 0 }), spec.noun);
+    // In the same write as the ending's effects, so a replay or a retry never marks it twice.
+    if (!outcome.replay && confrontation.ending === "opened") {
+      const stamped = withOpenedUp(next, confrontation.li, chapter, at);
+      // Remembered only when the first is new; the trust +1 reports itself when it moves.
+      if (stamped !== next) rememberedBy.add(confrontation.li);
+      next = stamped;
+    }
+  }
   return { state: next, remembered: rememberedBy.size > 0, rememberedBy: [...rememberedBy] };
 }

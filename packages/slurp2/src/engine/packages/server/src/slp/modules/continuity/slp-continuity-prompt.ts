@@ -14,6 +14,7 @@ import type { SlurpContinuityEvent, SlurpContinuityFact } from "../../../../../s
 /** Lines per section. A prompt carries what is current, not a file. */
 const MAX_FACTS = 12;
 const MAX_EVENTS = 8;
+const MAX_MEMORIES = 6;
 
 export const SLURP_CONTINUITY_FACT_LABELS: Record<string, string> = {
   boundary: "Limit",
@@ -70,12 +71,15 @@ function eventDetail(event: SlurpContinuityEvent): string {
 export function slurpContinuityInstruction(input: {
   facts: readonly SlurpContinuityFact[];
   events?: readonly SlurpContinuityEvent[];
+  /** What Long-Term Memory remembers about them, one line each (`slp-ltm-recall.ts`). */
+  memories?: readonly string[];
   /** A thread's own records are labelled, so a reply knows what belongs to this person alone. */
   threadId?: string | null;
 }): string {
   const facts = input.facts.slice(0, MAX_FACTS);
   const events = (input.events ?? []).slice(0, MAX_EVENTS);
-  if (facts.length === 0 && events.length === 0) return "";
+  const memories = (input.memories ?? []).map(line).filter(Boolean).slice(0, MAX_MEMORIES);
+  if (facts.length === 0 && events.length === 0 && memories.length === 0) return "";
   const own = (record: { threadId: string | null }) =>
     input.threadId && record.threadId === input.threadId ? " (with this person)" : "";
   return [
@@ -91,5 +95,12 @@ export function slurpContinuityInstruction(input: {
       (event) =>
         `- ${SLURP_CONTINUITY_EVENT_LABELS[event.eventType] ?? event.eventType}${own(event)}${eventDetail(event)}.`,
     ),
+    ...(memories.length > 0
+      ? [
+          "People named in your memory are from your life off Slurp: never make them a collab, a tag or a guest in what you write now unless your brief names them.",
+          "From your memory:",
+        ]
+      : []),
+    ...memories.map((memory) => `- ${memory}`),
   ].join("\n");
 }

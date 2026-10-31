@@ -40,7 +40,7 @@ import {
   type RouteDeps,
 } from "../http.js";
 import { isLiId, runDocTarget, stateId, unitId } from "../ids.js";
-import { normalizeThread, unreadCount } from "../phone/chat.js";
+import { readThread, unreadCount } from "../phone/chat.js";
 import { field } from "../schemas/common.js";
 import { normalizeState, readRun, readyFaces } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
@@ -75,9 +75,7 @@ async function personaAvatar(runtime: Pick<CapabilityRuntimeHost, "resources">, 
 
 /**
  * Him: the look he wears (Wear at home, else his portrait) with its cut-out. Me: the look she wears, else the
- * persona's avatar (never cut out).
- * ponytail: the protagonist's look is never cut out (the plan gives only units cut-outs), so Me pans over it uncut;
- * the upgrade path is a `cutouts` field on the player.
+ * persona's avatar. Generated looks share the same cleanup; the avatar stays as supplied by the player.
  */
 async function lookOf(
   deps: HomeRouteDeps,
@@ -88,7 +86,10 @@ async function lookOf(
 ): Promise<HomeLook | null> {
   if (show === "me") {
     const worn = wornLookUrl(player);
-    if (worn) return { url: worn, source: "look", cutoutState: "uncut" };
+    if (worn) {
+      const { state, cutout } = cutoutView(runId, { id: "player", cutouts: player.cutouts ?? {} }, worn);
+      return { url: worn, source: "look", cutoutState: state, ...(cutout ? { cutout } : {}) };
+    }
     const avatar = await personaAvatar(deps.runtime, player.personaId);
     return avatar ? { url: avatar, source: "avatar", cutoutState: "uncut" } : null;
   }
@@ -137,27 +138,37 @@ export function registerHomeRoutes(router: OtomeRouter, deps: HomeRouteDeps): vo
       if (!run) throw runNotFound();
       const order = Object.keys(run.state.lis);
       const li = run.state.home.li ?? order[0] ?? null;
-      const unit = (li && run.units.find((entry) => entry.id === li)) || null;
+      let unit = (li && run.units.find((entry) => entry.id === li)) || null;
       const liState = li ? run.state.lis[li] : undefined;
       const { show } = run.state.home;
-      const [note, look, chats, items] = await Promise.all([
+      let player = run.player;
+      const base = unit ? wornLookUrl(unit) : "";
+      const ready = unit && base ? (readyFaces(run.world, unit) ?? {}) : {};
+      if (show === "him" && unit && base) {
+        unit = await queueCutouts(deps, runId, unit, [base, ...Object.values(ready)]);
+      } else if (show === "me") {
+        const worn = wornLookUrl(player);
+        if (worn) {
+          const queued = await queueCutouts(deps, runId, { id: "player", cutouts: player.cutouts ?? {} }, [worn]);
+          player = { ...player, cutouts: queued.cutouts };
+        }
+      }
+      // Each love interest's thread by id, as the phone list reads them: listing would load every world's threads.
+      const [note, look, threads, items] = await Promise.all([
         li ? readNote(store, runId, todayKey(), li) : null,
-        lookOf(deps, runId, show, unit, run.player),
-        store.listRun("chat", runId),
+        lookOf(deps, runId, show, unit, player),
+        Promise.all(order.map((id) => readThread(store, runId, id))),
         readItems(store, runId),
       ]);
 
       // His ready faces on his worn look (M2b paints them in the background, as the reader and the phone read them),
       // each with its cut-out once it is made, and whether one is on its way (the client asks again until it lands).
       const faces: HomeView["faces"] = {};
-      const base = unit ? wornLookUrl(unit) : "";
-      const ready = unit && base ? (readyFaces(run.world, unit) ?? {}) : {};
       if (unit && base) {
         for (const [face, url] of Object.entries(ready) as Array<[Face, string]>) {
           const { state, cutout } = cutoutView(runId, unit, url);
           faces[face] = { url, cutoutState: state, ...(cutout ? { cutout } : {}) };
         }
-        if (show === "him") queueCutouts(deps, runId, unit, [base, ...Object.values(ready)]);
       }
       // The first visit backfills every love interest's pack; later visits catch a new stage's.
       void ensureLinePacks(deps, runId, order, { debugMode: debugModeOf(request) }).catch(
@@ -173,7 +184,7 @@ export function registerHomeRoutes(router: OtomeRouter, deps: HomeRouteDeps): vo
         faces,
         lines: { ready: !!unit && !!liState && !needsLines(unit, liState.stage) },
         rupture: !!liState?.rupture,
-        unread: chats.reduce((sum, record) => sum + unreadCount(normalizeThread(record.data)), 0),
+        unread: threads.reduce((sum, thread) => sum + (thread ? unreadCount(thread) : 0), 0),
         backdrop: backdropOf(albumCgs(run, items), run.world, li),
         // Only a line about the look she wears now is kept (schemas/player.ts), so a changed look shows none.
         noticed: run.player.noticed,

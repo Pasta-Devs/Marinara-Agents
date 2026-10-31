@@ -87,7 +87,8 @@ const PACKAGE_BUILT_AGAINST = Object.freeze({
 });
 // Capability API 1.387 ships Engine E2 (no built-in recall where Long-Term Memory is on) with E3, so only an Engine
 // that leaves recall to this package installs the version that learns from chat messages (Pasta-Devs/Marinara-Agents#1744).
-const LONG_TERM_MEMORY_CAPABILITY_API = Object.freeze({ major: 1, minor: 387 });
+// Capability API 1.390 lets the Engine draw the agent page header (agentDetail.header: "engine").
+const LONG_TERM_MEMORY_CAPABILITY_API = Object.freeze({ major: 1, minor: 390 });
 const hierarchicalMapsOwnedSourcePaths = [
   "packages/server/src/routes/spatial-context.routes.ts",
   "packages/server/src/services/spatial-context",
@@ -152,6 +153,7 @@ const noodleOwnedSourcePaths = [
   "packages/server/src/services/noodle/noodle-image-prompt.ts",
   "packages/server/src/services/noodle/noodle-image-retry.ts",
   "packages/server/src/services/noodle/noodle-interaction-policy.ts",
+  "packages/server/src/services/noodle/noodle-ltm-recall.ts",
   "packages/server/src/services/noodle/noodle-model-capabilities.ts",
   "packages/server/src/services/noodle/noodle-operation-lock.ts",
   "packages/server/src/services/noodle/noodle-participant-selection.ts",
@@ -233,7 +235,8 @@ const storyWriterOwnedSourcePaths = [
 // The reader's artwork and textures, fetched by URL from the package asset route.
 const storyWriterServedAssetPaths = ["story-writer-mari.webp", "wood-desk.webp", "paper-light.webp", "paper-dark.webp"];
 // Otome Forge is written here in Story Writer's layout and keeps its saves through api.runtime.persistence, so it
-// needs no host runtime overlay. Listed in no catalog while it is being built (scripts/catalog-incomplete.mjs).
+// needs no host runtime overlay. Offered to staging testers only until the maintainer promotes it
+// (STAGING_ONLY_PACKAGE_IDS in scripts/catalog-incomplete.mjs).
 const otomeForgeSourceRoot = join(packagesDir, "otome-forge/src/engine");
 const otomeForgeOwnedSourcePaths = [
   "packages/client/src/features/otome-forge",
@@ -412,7 +415,7 @@ async function removeOwnedSourceSnapshots(excludedPaths) {
 const features = [
   {
     id: "noodle",
-    version: "1.5.10",
+    version: "1.5.12",
     minEngineVersion: "2.5.1",
     capabilityApi: PACKAGE_CAPABILITY_API,
     builtAgainst: { engineVersion: "2.5.1", engineCommit: "42d64368e82340a46e35c0f4489d9f41024d6032" },
@@ -492,7 +495,7 @@ const features = [
   },
   {
     id: "slurp2",
-    version: "0.4.8",
+    version: "0.4.12",
     minEngineVersion: "2.4.6",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp",
@@ -567,7 +570,7 @@ const features = [
   },
   {
     id: "long-term-memory",
-    version: "1.5.7",
+    version: "1.5.18",
     minEngineVersion: "2.5.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
@@ -576,7 +579,7 @@ const features = [
     category: "misc",
     kind: ["agent"],
     modes: ["conversation", "roleplay", "game"],
-    permissions: ["agent-runtime", "chat-read", "routes", "storage", "ui"],
+    permissions: ["agent-runtime", "chat-read", "chat-write", "routes", "storage", "ui"],
     serverImport: "packages/server/src/services/long-term-memory/server-entry.ts",
     serverEntry: true,
     clientImport: "packages/client/src/features/long-term-memory/client-entry.tsx",
@@ -586,7 +589,7 @@ const features = [
     boundaryDisplayName: "Long-Term Memory",
     capabilityApi: LONG_TERM_MEMORY_CAPABILITY_API,
     contributions: {
-      agentDetail: { agentIds: ["long-term-memory"] },
+      agentDetail: { agentIds: ["long-term-memory"], header: "engine" },
       slots: ["chat-settings"],
     },
   },
@@ -647,7 +650,7 @@ const features = [
   },
   {
     id: "saucelings",
-    version: "0.23.1",
+    version: "0.23.2",
     // Home widgets need capability API 1.35+, first released in Engine 2.5.0 (2.4.6 shipped 1.18).
     minEngineVersion: "2.5.0",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
@@ -863,7 +866,7 @@ const features = [
   },
   {
     id: "otome-forge",
-    version: "0.0.9",
+    version: "0.6.2",
     minEngineVersion: "2.5.1",
     // The browser tab's openConnection prop and the debugMode field of /generate/raw arrived in capability API 1.386.
     capabilityApi: Object.freeze({ major: 1, minor: 386 }),
@@ -871,7 +874,7 @@ const features = [
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Otome Hearth",
     description:
-      "An otome game in its own Home tab, made from your own characters: love interests who remember what you chose, their texts on your phone, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn. An early test build.",
+      "An otome game in its own Home tab, made from your own characters: love interests who remember what you chose, their messages to you, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn.",
     category: "misc",
     kind: ["agent"],
     modes: ["conversation", "roleplay", "game"],
@@ -882,14 +885,14 @@ const features = [
     packageSourceRoot: otomeForgeSourceRoot,
     ownedSourcePaths: otomeForgeOwnedSourcePaths,
     // The fonts are embedded in client.js as data: URIs; their licence ships beside them.
-    assetPaths: ["otome-hearth-icon.png", "fonts/OFL.txt"],
+    assetPaths: ["otome-hearth-icon.png", "otome-hearth-tab-heart.png", "fonts/OFL.txt"],
     libraryHidden: true,
     contributions: {
       slots: ["home-browser-tab"],
       homeBrowserTab: {
         label: "Otome Hearth",
         ariaLabel: "Open Otome Hearth",
-        iconPaths: ["otome-hearth-icon.png"],
+        iconPaths: ["otome-hearth-tab-heart.png"],
       },
     },
   },

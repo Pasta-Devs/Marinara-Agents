@@ -11,26 +11,35 @@
 //      connection, each paint step the world lacks is added, waiting for the tap
 // GET  /runs/:run/lis/:li/bible?spoilers=1 → {bible}
 // POST /runs/:run/lis/:li/bible {bible}    → {bible}
+// POST /runs/:run/lis/:li/intimacy          → {intimacy: true}; writes his missing intimacy block only (1 call;
+//                                             adult NSFW stories, #1936), keeping the rest of the bible
+// POST /runs/:run/lis/:li/appearance {identityLine} → {identityLine}; image-only, never paints
 // POST /runs/:run/lis/:li/accent {accent}  → {accent}
+// POST /runs/:run/lis/:li/card {cardId}    → {cardId}; null unlinks, keeping the same love interest
 //
 // The server never trusts the client with content. The gate is read from the index on each write: raising Heat or the
 // image rating, or picking Dark romance, needs it (403 `age-gate`), lowering never does, and every stored content goes
 // through enforceContent, so a limit that cannot apply is always a Line.
 import { z } from "zod";
 import { ARCHETYPE_IDS } from "../../../../../client/src/features/otome-forge/shared/archetypes.js";
+import { OWN_BANNED_PHRASES_MAX } from "../../../../../client/src/features/otome-forge/shared/banned-phrases.js";
 import {
   DEFAULT_IMAGE_RATING,
   IMAGE_RATINGS,
+  IMAGE_STYLE_MAX,
   contentNeedsAgeGate,
   enforceContent,
   imageRatingNeedsAgeGate,
+  intimacyOpen,
   raisesGatedSetting,
 } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import { galleryRefIds } from "../art/image-client.js";
 import { imagesOf, paintView, updateIfChanged } from "../art/paint.js";
 import { withPlaceViews } from "../art/places.js";
+import { runForeground } from "../generation.js";
 import { OtomeForgeError, debugModeOf, liParam, parseBody, runParam, type RegisterRoutes } from "../http.js";
 import {
+  PROLOGUE_KEY,
   INDEX_ID,
   INDEX_TARGET,
   RUN_DOC_KINDS,
@@ -53,6 +62,7 @@ import {
   remapLearnedTells,
   toRunView,
   type RunDocuments,
+  stageArtUrls,
 } from "../schemas/state.js";
 import { ACCENT_PATTERN, BibleSchema, LI_NOTES_MAX, normalizeUnit } from "../schemas/unit.js";
 import {
@@ -66,8 +76,11 @@ import {
 } from "../schemas/world.js";
 import { checkBible } from "../setup/bible.js";
 import { initialForge, settleForge, startForge, withPaintSteps } from "../setup/forge.js";
-import { readCard, readPersona } from "../setup/prompts.js";
+import { personaStoryAbout, readCard, readPersona, withPersonaStoryAbout } from "../setup/prompts.js";
 import type { OtomeStore } from "../store.js";
+import { cutoutsPending, queueCutouts } from "../art/cutout.js";
+import { fillIntimacy } from "../intimacy.js";
+import { cancellable } from "../story/beats.js";
 
 const NoFields = z.object({});
 const LIS_MIN = 2;
@@ -83,11 +96,17 @@ const SetupLiSchema = z.union([
     notes: z.string().max(LI_NOTES_MAX).optional(),
   }),
 ]);
+const ImageStyleSchema = z
+  .string()
+  .max(IMAGE_STYLE_MAX)
+  .transform((style) => style.trim());
 const SetupBody = z.object({
   setup: z.object({
     title: z.string().max(200).optional(),
     premise: z.string().max(2000),
     language: z.string().min(1).max(LANGUAGE_MAX),
+    // The player wrote it: no cap.
+    writingStyle: z.string().optional(),
     protagonist: z.object({
       personaId: z.string().min(1).max(ID_MAX),
       pronouns: PronounsSchema,
@@ -101,6 +120,7 @@ const SetupBody = z.object({
       rating: z.enum(IMAGE_RATINGS),
       ask: z.boolean(),
       expressions: z.boolean(),
+      style: ImageStyleSchema.optional(),
     }),
     connections: ConnectionsSchema,
   }),
@@ -116,13 +136,18 @@ const SettingsBody = z.object({
       ask: z.boolean().optional(),
       expressions: z.boolean().optional(),
       styleProfileId: z.string().max(200).optional(),
+      style: ImageStyleSchema.optional(),
     })
     .optional(),
   connections: ConnectionsSchema.optional(),
   language: z.string().min(1).max(LANGUAGE_MAX).optional(),
+  writingStyle: z.string().optional(),
+  bannedPhrases: z.string().max(OWN_BANNED_PHRASES_MAX).optional(),
 });
 const BibleBody = z.object({ bible: BibleSchema });
+const AppearanceBody = z.object({ identityLine: z.string() });
 const AccentBody = z.object({ accent: z.string().regex(ACCENT_PATTERN) });
+const CardLinkBody = z.object({ cardId: z.string().trim().min(1).max(ID_MAX).nullable() });
 
 const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
 const liNotFound = () => new OtomeForgeError(404, "No such love interest.", "not-found");
@@ -132,14 +157,28 @@ const ageGateNeeded = () => new OtomeForgeError(403, "Confirm the 18+ gate befor
 const readIndex = async (store: Pick<OtomeStore, "readDoc">) =>
   (await store.readDoc(INDEX_ID, normalizeIndex)) ?? normalizeIndex(undefined);
 
-/** The run as the client sees it: the protagonist's or a place's paint left pending by a restart reads as `stopped`. */
+/** The run as the client sees it: a look's or a place's paint left pending by a restart reads as `stopped`. */
 function runView(runKey: string, runId: string, { world, player, units, state }: RunDocuments) {
   const shown = player.art ? { ...player, art: paintView(runId, "player", player.art) } : player;
-  return toRunView(runKey, withPlaceViews(runId, world), shown, units, state);
+  const lis = units.map((unit) => (unit.art ? { ...unit, art: paintView(runId, `li:${unit.id}`, unit.art) } : unit));
+  return toRunView(runKey, withPlaceViews(runId, world), shown, lis, state);
 }
 
 export const registerRunRoutes: RegisterRoutes = (router, deps) => {
   const { runtime, store, handle } = deps;
+
+  /**
+   * Keep the selected persona's four authored story fields current, including saves which only kept Description.
+   * A missing persona retains this protagonist's last saved copy; no other persona is substituted.
+   */
+  const withPersonaAbout = async (run: RunDocuments, runId: string): Promise<RunDocuments> => {
+    const about = (await withPersonaStoryAbout(runtime, run.player)).about ?? "";
+    if (run.player.about === about) return run;
+    const player = await store.updateDoc(runDocTarget("player", playerId(runId)), normalizePlayer, (current) =>
+      current.personaId === run.player.personaId ? { ...current, about } : current,
+    );
+    return player ? { ...run, player } : run;
+  };
 
   router.post(
     "/runs",
@@ -188,6 +227,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         ...player,
         personaId: protagonist.personaId,
         name: persona.name,
+        about: personaStoryAbout(persona),
         pronouns: protagonist.pronouns,
         traits: protagonist.traits.map((trait) => trait.trim()).filter(Boolean),
         goal: protagonist.goal.trim(),
@@ -201,6 +241,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         title: setup.title?.trim() ?? "",
         premise,
         language: setup.language.trim() || DEFAULT_LANGUAGE,
+        ...(setup.writingStyle?.trim() ? { writingStyle: setup.writingStyle.trim() } : {}),
         createdAt: at,
         content: enforceContent(setup.content, ageGate),
         images: { ...current.images, ...setup.images },
@@ -265,9 +306,30 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       const { runKey, runId } = runParam(request);
       // A forge step left running or pending by a restart reads as failed, with Retry.
       await settleForge(deps, runId);
-      const run = await readRun(store, runId);
-      if (!run) throw runNotFound();
-      return { view: runView(runKey, runId, run) };
+      const read = await readRun(store, runId);
+      if (!read) throw runNotFound();
+      const run = await withPersonaAbout(read, runId);
+      // Each image he stands on stage in is cut out of its backdrop in the background, once (free: the Engine's
+      // sprite cleanup); the view shows the cut-out from the read after it is ready.
+      const units = await Promise.all(
+        run.units.map((unit) => queueCutouts(deps, runId, unit, stageArtUrls(run.world, unit))),
+      );
+      const queuedPlayer = await queueCutouts(
+        deps,
+        runId,
+        { id: "player", cutouts: run.player.cutouts ?? {} },
+        [run.player.portrait, run.player.outfits.find((outfit) => outfit.id === run.player.wornOutfit)?.url].filter(
+          (url): url is string => !!url,
+        ),
+      );
+      const player = { ...run.player, cutouts: queuedPlayer.cutouts };
+      return {
+        view: {
+          ...runView(runKey, runId, { ...run, units, player }),
+          ...(cutoutsPending(runId, [...units, queuedPlayer]) ? { cutoutsPending: true as const } : {}),
+          prologue: !!run.state.chapters[PROLOGUE_KEY]?.completed,
+        },
+      };
     }),
   );
 
@@ -349,6 +411,8 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         return {
           ...current,
           language: body.language?.trim() || current.language,
+          writingStyle: body.writingStyle !== undefined ? body.writingStyle.trim() : current.writingStyle,
+          bannedPhrases: body.bannedPhrases !== undefined ? body.bannedPhrases.trim() : current.bannedPhrases,
           connections: body.connections ? normalizeConnections(body.connections) : current.connections,
           content: enforceContent(content, ageGate),
           images: { ...images, rating: ageGate ? images.rating : DEFAULT_IMAGE_RATING },
@@ -358,6 +422,59 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       });
       if (!world) throw runNotFound();
       return { world: toWorldView(withPlaceViews(runId, world)) };
+    }),
+  );
+
+  router.post(
+    "/runs/:run/lis/:li/card",
+    handle(async (request) => {
+      const { cardId } = parseBody(CardLinkBody, request.body);
+      const { runId } = runParam(request);
+      const li = liParam(request);
+      // The shared run lane keeps two simultaneous links from claiming the same card.
+      return runForeground(runId, async () => {
+        const run = await readRun(store, runId);
+        if (!run) throw runNotFound();
+        if (!run.units.some((unit) => unit.id === li)) throw liNotFound();
+        if (cardId) {
+          if (
+            /[\\/\u0000-\u001f\u007f]/u.test(cardId) ||
+            cardId.includes("..") ||
+            !(await readCard(runtime, cardId))?.name.trim()
+          ) {
+            throw badRequest("That character card is not available.");
+          }
+          if (run.units.some((unit) => unit.id !== li && unit.cardId === cardId)) {
+            throw new OtomeForgeError(409, "That card is linked to another love interest.", "conflict");
+          }
+        }
+        const unit = await store.updateDoc(runDocTarget("unit", unitId(runId, li)), normalizeUnit, (current) => {
+          const next = { ...current };
+          if (cardId) next.cardId = cardId;
+          else delete next.cardId;
+          return next;
+        });
+        if (!unit) throw liNotFound();
+        return { cardId: unit.cardId ?? null };
+      });
+    }),
+  );
+
+  router.post(
+    "/runs/:run/lis/:li/appearance",
+    handle(async (request) => {
+      const { identityLine } = parseBody(AppearanceBody, request.body);
+      const { runId } = runParam(request);
+      const li = liParam(request);
+      const run = await readRun(store, runId);
+      if (!run) throw runNotFound();
+      if (!run.units.some((unit) => unit.id === li)) throw liNotFound();
+      const unit = await store.updateDoc(runDocTarget("unit", unitId(runId, li)), normalizeUnit, (current) => ({
+        ...current,
+        identityLine: identityLine.trim() ? identityLine : "",
+      }));
+      if (!unit) throw liNotFound();
+      return { identityLine: unit.identityLine || unit.bible?.look.identityLine || "" };
     }),
   );
 
@@ -378,6 +495,19 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
   );
 
   router.post(
+    "/runs/:run/lis/:li/intimacy",
+    handle(async (request) => {
+      parseBody(z.object({}), request.body);
+      const { runId } = runParam(request);
+      const li = liParam(request);
+      const debugMode = debugModeOf(request);
+      await cancellable(deps, runId, (signal) => fillIntimacy(deps, runId, li, { debugMode, signal }));
+      // The run view says only that the block exists; its text stays in the spoiler-gated bible.
+      return { intimacy: true };
+    }),
+  );
+
+  router.post(
     "/runs/:run/lis/:li/bible",
     handle(async (request) => {
       const body = parseBody(BibleBody, request.body);
@@ -386,9 +516,15 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       const others = (await store.listRun("unit", runId))
         .map((record) => normalizeUnit(record.data))
         .filter((unit) => unit.id !== li);
-      // The player is the authority on an edit: no `pronouns` here, so the ones they set are kept.
-      const bible = checkBible(body.bible, { others });
+      // The player is the authority on an edit: no `pronouns` here, so the ones they set are kept. An SFW story takes no
+      // intimacy block from an edit (#1936); one written before Heat was lowered is kept below.
+      const world = await store.readDoc(worldId(runId), normalizeWorld);
+      const open = !!world && intimacyOpen(world.content);
+      const bible = checkBible(body.bible, { others, intimacy: open });
       if (typeof bible === "string") throw new OtomeForgeError(400, `Invalid bible: ${bible}`, "bad-request");
+      // In an NSFW story, an edit that sends the block with nothing left in it clears it (checkBible drops an empty
+      // one, which alone would read as an edit that never carried it).
+      const cleared = open && body.bible.intimacy !== undefined && !bible.intimacy;
       let tellsBefore: readonly string[] = [];
       const unit = await store.updateDoc(runDocTarget("unit", unitId(runId, li)), normalizeUnit, (current) => {
         if (!current.bible) throw new OtomeForgeError(409, "This bible is still being written.", "conflict");
@@ -398,9 +534,16 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         return {
           ...current,
           pronouns: bible.pronouns,
-          identityLine: bible.look.identityLine,
+          identityLine:
+            bible.look.identityLine === current.bible.look.identityLine
+              ? current.identityLine
+              : bible.look.identityLine,
           outfitLine: bible.look.outfitLine,
-          bible,
+          // An edit that does not carry his intimacy block (#1936), or any edit in an SFW story, keeps the one he has.
+          bible:
+            bible.intimacy || cleared || !current.bible.intimacy
+              ? bible
+              : { ...bible, intimacy: current.bible.intimacy },
           bibleEdited: true,
         };
       });

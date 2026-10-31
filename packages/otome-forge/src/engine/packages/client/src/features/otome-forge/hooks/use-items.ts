@@ -37,9 +37,9 @@ const WRITTEN_KINDS: ReadonlySet<ItemKind> = new Set(["memory5", "moment4", "his
 
 export const writesOnOpen = (item: Pick<ItemView, "kind">) => WRITTEN_KINDS.has(item.kind);
 
-/** An item that has art to paint on its first open (a Memory's CG, a look), with images on. */
+/** An illustrated reward or look whose first open can paint, with images on. */
 export const paintsOnOpen = (item: Pick<ItemView, "kind">, images: boolean) =>
-  images && (item.kind === "memory5" || isLookKind(item.kind));
+  images && (item.kind === "memory5" || item.kind === "moment4" || item.kind === "snapshot3" || isLookKind(item.kind));
 
 /**
  * True while an owned item's first open has not finished: its story is unwritten, or its art never started (as the

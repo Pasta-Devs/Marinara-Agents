@@ -237,8 +237,8 @@
         },
         "id": "otome-forge",
         "name": "Otome Hearth",
-        "version": "0.0.9",
-        "description": "An otome game in its own Home tab, made from your own characters: love interests who remember what you chose, their texts on your phone, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn. An early test build. Install it, restart Marinara Engine when prompted, then open Home → Otome Hearth.",
+        "version": "0.6.2",
+        "description": "An otome game in its own Home tab, made from your own characters: love interests who remember what you chose, their messages to you, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn. Install it, restart Marinara Engine when prompted, then open Home → Otome Hearth.",
         "engine": {
           "min": "2.5.1",
           "maxExclusive": "4.0.0"
@@ -259,30 +259,35 @@
             "label": "Otome Hearth",
             "ariaLabel": "Open Otome Hearth",
             "iconPaths": [
-              "otome-hearth-icon.png"
+              "otome-hearth-tab-heart.png"
             ]
           }
         },
         "files": [
           {
             "path": "agents.json",
-            "sha256": "5712b5dc4d2258ca1de9a43017ea35be73b0a4336ddb7360bf7e16d4916c9b99",
-            "bytes": 706
+            "sha256": "09424f88d12fdf3e542d3e67a3eb0c88071176658183fc4ead92e5a11d7dfac2",
+            "bytes": 681
           },
           {
             "path": "server.mjs",
-            "sha256": "0fc3103d7d132944b741f075d8ab70df50c34cdb1eee083a2a827495ceaa82c6",
-            "bytes": 379855
+            "sha256": "495b8f33a93f426014d1ec3a5a8bf81d2e0d33db1d65e5cf5b29355f8832e1d8",
+            "bytes": 447166
           },
           {
             "path": "client.js",
-            "sha256": "75eaa6e3e3b7446f56a488c8b511f58bc79076a1ddd6707c8364e5f0bc515abd",
-            "bytes": 1078595
+            "sha256": "202c03170fcd446471d3ee974efe898db4dda8677f35d075aa830aa4ddc18b64",
+            "bytes": 1161245
           },
           {
             "path": "otome-hearth-icon.png",
             "sha256": "8a579710820c718e3f3e1a2535fc12a251c5b91569bd7f5bb59961f1e873bce8",
             "bytes": 141313
+          },
+          {
+            "path": "otome-hearth-tab-heart.png",
+            "sha256": "301ef798d226eff3f2100daa1206b9ee1abe0654a070dd07718d98af4c7070d9",
+            "bytes": 2277
           },
           {
             "path": "fonts/OFL.txt",
@@ -300,9 +305,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/otome-forge.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/otome-forge-0.0.9.zip",
-        "sha256": "b8b6bcde3cfdc42e229c888a8726d40aab432474bd1ea7cdba0afddffd8e1b43",
-        "bytes": 1607580
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/otome-forge-0.6.2.zip",
+        "sha256": "2eeeb16062df626a4dd2691e75b6c89e83dadeb6297db2f9bb71a59470b95e7e",
+        "bytes": 1760062
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/otome-forge/README.md"
     },
@@ -319,7 +324,7 @@
         },
         "id": "saucelings",
         "name": "Saucelings",
-        "version": "0.23.1",
+        "version": "0.23.2",
         "description": "A Tamagotchi-style pet in Home: pick a character to look after an egg, let their personality drive their care schedule, cover the gaps they miss, watch its sauce temperament shift, retire elders to a Menagerie, and let the caretaker find eggs of their own invention while you chat. Install it, restart Marinara Engine when prompted, then open Home → Saucelings.",
         "engine": {
           "min": "2.5.0",
@@ -433,8 +438,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "fdeb4f4816ba1269a9e56d8ab543ad5a291e1f8e166a9d10a6a1412d1a47c916",
-            "bytes": 256578
+            "sha256": "acb4e38ec88c1d0929920ee4974af175cb1df4679aea9c13ff794b37bf0c5433",
+            "bytes": 256618
           },
           {
             "path": "saucelings-icon.png",
@@ -693,9 +698,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/saucelings.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/saucelings-0.23.1.zip",
-        "sha256": "4ac87c782c6670d1c53fc332b616fd0516ef221d7b939fc03b6d4ec80474d35b",
-        "bytes": 824273
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/saucelings-0.23.2.zip",
+        "sha256": "1f886bac6b54d5b97c5edef854b246f2f8a071ca50121a9234fb15a555bd24a8",
+        "bytes": 824313
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#saucelings"
     }
