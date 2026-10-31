@@ -1,8 +1,15 @@
 # Long-Term Memory changelog
 
-## 1.5.22 — 2026-10-31
+## 1.5.23 — 2026-11-01
 
 - Slurp can add memories when you allow it in Memory Settings → Sharing. Off by default.
+
+## 1.5.22 — 2026-10-31
+
+- Clearer hands-off wording: the background import help says it covers every chat, intro and re-extract text is right when safe changes are accepted automatically, and Advanced Memory scene recaps are disabled with a note on Engines that cannot provide them.
+- Chat Settings shows what background import did today and what waits for review, and both Chat Settings and Extraction warn with a "Choose" button when background import has no extraction connection.
+- Reading older Advanced Memory recaps is one button with progress, Stop and resume, instead of a batch-size field and repeated presses.
+- Memory Settings, Chat Settings and the setup guide offer one "Memories from chats" choice (I add them myself; Collect them, I'll review; Save them for me) with a per-chat override, and Hide imported messages now waits until a message's memories are saved.
 
 ## 1.5.21 — 2026-10-31
 

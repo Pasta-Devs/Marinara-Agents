@@ -129,6 +129,25 @@ source, bounded by the `existingNoteMaxChunks` and `existingNoteMaxTokens`
 extraction settings. The server uses them to drop duplicate details and to pick
 the memories a new unit updates. They are never sent to the model.
 
+Memories from chats decides whether chats are imported in the background and
+whether low-risk proposals are accepted. The global choice is the two extraction
+settings `autoImportChatSources` and `autoAcceptSafeChanges`; a chat can
+override it with the chat-metadata key `longTermMemoryChatMemories` (`manual`,
+`review` or `save`; unset or unknown uses the global settings).
+`resolveLtmChatMemories` in the shared `runtime-settings.ts` resolves the chat's
+choice against the global settings for the arm check in `generation-injection.ts`,
+the background job's re-check and accept step, a Sources import from one chat
+and a source note's re-extract. The Engine passes only the recall keys to Chat
+Settings, so `GET /chat-memories/:chatId` (`routes/settings.ts`) reads the
+chat's choice for the panel.
+
+Hide imported messages from the AI hides a piece's messages only after its
+memories are saved: a source note with a pending draft keeps its not-yet-hidden
+messages, and accepting, skipping or deleting that draft runs Hide again for the
+note (`hideImportedMessagesAfterReview` in `sources/interop.ts`). The extraction
+form saves the two flags of the shown choice, and an import follows a chat's
+override only when every row comes from that chat.
+
 ## Backup and Restore
 
 `backup-restore.ts` exports notes, drafts, rejected suggestions, and package

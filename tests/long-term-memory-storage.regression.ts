@@ -489,6 +489,7 @@ async function main() {
           systemPrompt: _systemPrompt,
           activePromptTemplateId: _activePromptTemplateId,
           hideImportedMessagesAvailable: _hideImportedMessagesAvailable,
+          advancedMemoryAvailable: _advancedMemoryAvailable,
           ...form
         } = (await settingsApp.inject({ method: "GET", url })).json();
         if (form.longTermMemoryStopWords)
