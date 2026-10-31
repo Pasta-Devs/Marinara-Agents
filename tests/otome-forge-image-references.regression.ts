@@ -69,7 +69,7 @@ function engine({
   return { client, reads, generations };
 }
 
-test("initial card looks, new outfits and scenes send the selected card's full-body neutral image", async () => {
+test("a portrait sends the card's full body AND its avatar; a scene sends one per subject", async () => {
   const t = engine();
   const unit: ImageSubject = {
     kind: "character",
@@ -82,15 +82,22 @@ test("initial card looks, new outfits and scenes send the selected card's full-b
   await t.client.generateOutfit({ ...request, unit });
   await t.client.generateBannerArt({ ...request, units: [unit] });
   const neutral = data("/api/sprites/card-dottore/file/full_neutral.png");
+  const avatar = data("/api/avatars/file/card.png");
   assert.deepEqual(
     t.generations.map((call) => call.referenceImages),
-    [[neutral], [neutral], [neutral, data(outfit)]],
+    // A look he is painted into keeps both likenesses, full body first; a scene keeps one per subject, because the
+    // four-reference budget is shared by the whole cast.
+    [
+      [neutral, avatar],
+      [neutral, avatar],
+      [neutral, data(outfit)],
+    ],
   );
   assert.ok(!t.reads.includes(portrait), "the existing card full-body neutral takes priority over the generated look");
   assert.ok(!t.reads.some((path) => path.includes("untrusted.invalid")), "sprite metadata URLs are never fetched");
   assert.ok(
-    !t.reads.includes("/api/avatars/file/card.png"),
-    "an avatar does not displace the available full-body image",
+    t.reads.includes("/api/avatars/file/card.png"),
+    "the card's avatar accompanies the full body in a portrait instead of being displaced by it",
   );
 });
 

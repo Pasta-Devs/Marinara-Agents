@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.6.11 — 2026-10-31
+
+- **His portrait is painted from his card's full-body image and his avatar together**, instead of one standing in for the other. A love interest drawn from a character card now keeps both his build and his face, which the reference could only carry one of before. Scenes still send one likeness per person, so a large cast is not crowded out of the reference budget.
+
 ## 0.6.10 — 2026-10-31
 
 - **Each love interest has his own colour again** on his name plate and in the glow behind his art. It is picked from a vivid detail of his portrait (an earring, his eyes) rather than averaged from the picture, so no two love interests in a cast share one, and the backdrop a look is painted on never becomes it.
