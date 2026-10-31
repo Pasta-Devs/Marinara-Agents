@@ -248,6 +248,43 @@ recall({
 - A new section field can be added without a version change; removing or
   renaming one raises `version`.
 
+`long-term-memory:intake`, version 1, lets a package add what it knows about a
+character. Only `caller: "slurp2"` is accepted. The name is self-reported, so
+the user's "Other Agents can add memories" switch (off by default) is the real
+gate; an Engine-supplied caller id is the upgrade path.
+
+```ts
+submit({
+  caller: "slurp2",
+  recordId: string,        // 1-100 characters, the package's own id for the record
+  characterIds: string[],  // 1-2 distinct character ids the line is about
+  text: string,            // 1-1,000 characters; line breaks become spaces
+  signal?: AbortSignal,
+}): Promise<{ version: 1; status: "applied" | "unchanged" } | null>
+
+retract({ caller: "slurp2", recordId: string, signal?: AbortSignal }):
+  Promise<{ version: 1; status: "retracted" | "missing" } | null>
+```
+
+- `null` for invalid input, another caller, a character the host does not
+  have, an aborted call or adding turned off (also for `retract`: memories
+  already added stay). The switch and the signal are checked inside the vault
+  lock. `submit` is also `null` when every named character's `char_slurp2_`
+  memory from an earlier record was archived or narrowed by the user: intake
+  leaves those alone. Other errors are thrown.
+- Each record is a source note `ltmPackageSourceNoteId(caller, recordId)`
+  (`source_pkg_slurp2_` and a hash) with `package_record` provenance
+  `slurp2:<recordId>`, scoped to the named characters. Its line goes through
+  the usual draft and apply path into a `from_slurp2` section on each
+  character's own character memory (one scoped to that character alone), or a
+  new `char_slurp2_` memory when there is none.
+- Submitting the same text for the same characters again is `unchanged`; new
+  text or characters replace the old line everywhere it went. `retract`
+  removes the line and keeps the memory's other sections; a memory left
+  empty is deleted with its source. It checks the whole vault before its
+  first write, so an unreadable note makes it throw without changing
+  anything.
+
 ## Scope and Safety
 
 Scope resolution is shared between chat context and server retrieval. Changes
@@ -258,7 +295,9 @@ and global targets. Inspect shared `scope.ts`, `identity/chat-scope.ts`, and
 Any installed package can look up a registered service, so whatever `services/`
 hands out lists only memories available to the named characters or persona
 everywhere: never memories limited to a chat or group, imported sources,
-archived or game-only memories, drafts, or the vault folder.
+archived or game-only memories, drafts, or the vault folder. The intake
+service writes only `from_<caller>` lines on character memories scoped to the
+named characters, through its own source notes.
 
 For storage or recovery changes, inspect `paths.ts`, `atomic-json.ts`,
 `mutation-transaction.ts`, `vault-lock.ts`, `restore-recovery.ts`, and the

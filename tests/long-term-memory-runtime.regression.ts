@@ -324,6 +324,16 @@ async function main() {
         true,
         "other packages read recall, so it must stay open to them",
       );
+      assert.equal(
+        services.get("long-term-memory:intake")?.version,
+        1,
+        "the intake service other packages write through must carry its contract version",
+      );
+      assert.notEqual(
+        serviceOptions.get("long-term-memory:intake")?.hostOnly,
+        true,
+        "Slurp adds memories through intake, so it must stay open to packages",
+      );
       const recallRoot = await mkdtemp(join(tmpdir(), "marinara-ltm-shared-recall-"));
       const recallStorage = new LongTermMemoryStorage(recallRoot);
       try {
