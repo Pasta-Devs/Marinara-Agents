@@ -70,7 +70,7 @@ import { defaultLiState } from "../schemas/state.js";
 import { STORY_PACING_INSTRUCTION, otomeWritingRules } from "../writing-rules.js";
 import { prologueFraming } from "./prologue.js";
 import { aboutLine } from "../schemas/player.js";
-import { intimacyLine } from "../intimacy.js";
+import { groupIntimacyLine, intimacyLine } from "../intimacy.js";
 
 /**
  * P6's, P12's and P12c's line on the protagonist's inner life: they react to what happens to them, in thought, instead
@@ -342,6 +342,12 @@ export function appearanceLine(
   return `How ${unit.name} looks now (English image tags; describe them from this, in the story's language, whenever their looks come up): ${parts}.`;
 }
 
+/** The group-intimacy line for the love interests present in a scene, with their own state's stage (#1975). */
+function groupIntimacyFor(world: Pick<World, "content">, present: readonly Unit[], state: RunState): string {
+  const stages = new Map(present.map((unit) => [unit.id, liStateOf(state, unit.id).stage]));
+  return groupIntimacyLine(world, present, (unit) => (unit.id ? (stages.get(unit.id) ?? 1) : 1));
+}
+
 export function bibleBlock(unit: Unit, state: RunState, knows: readonly LiId[], world: Pick<World, "content">): string {
   const liState = seenBy(liStateOf(state, unit.id), unit.id, knows);
   // Intimacy (#1936) never rides in the bible's JSON: only an NSFW story gets it, as its own guarded line.
@@ -490,6 +496,7 @@ export function chapterPlanMessages({
     "- The Lead is in most nodes and in the climax; the Foil appears in at least one node. The Foil's goal competes with the protagonist's or the Lead's, and not always for the protagonist: a rivalry over a goal, a secret, a duty or the mystery counts too.",
     `- Never plan a chapter on the template of the ones before it: vary what drives it and where its turn falls. When its last node leaves a lasting decision open, make it ${VARIED_DECISION}.`,
     "- The world has other people: give named minor characters (friends, family, rivals, officials, locals) real parts where the story calls for them; they speak and can matter. Not every node needs a love interest: the protagonist has a life of their own, and a node may be theirs alone or with others (cast []). A moment node and the climax always have their love interest in cast.",
+    "- No cap on the cast: when the beat needs everyone (a rescue, a party, a confrontation), a node may hold the whole cast, each with their own stake.",
     TIME_RULE,
     number === 1
       ? "- This is the first chapter: every love interest appears in at least one node, and it opens on the opening situation."
@@ -736,6 +743,8 @@ export function beatMessages({
           .join("\n"),
       )
       .join("\n\n"),
+    "",
+    groupIntimacyFor(world, present, state),
     "",
     memory.trim() ? `STORY MEMORY\n${memory.trim()}` : "",
     "",
@@ -1176,6 +1185,8 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
       )
       .join("\n\n"),
     "",
+    groupIntimacyFor(world, present, state),
+    "",
     memory.trim() ? `STORY MEMORY\n${memory.trim()}` : "",
     "",
     `CHAPTER: ${chapter.title} (${chapterLabel(chapter, units)})`,
@@ -1268,6 +1279,8 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
           .join("\n"),
       )
       .join("\n\n"),
+    "",
+    groupIntimacyFor(world, present, state),
     "",
     memory.trim() ? `STORY MEMORY\n${memory.trim()}` : "",
     "",

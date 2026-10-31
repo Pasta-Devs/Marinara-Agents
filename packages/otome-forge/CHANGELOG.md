@@ -1,5 +1,12 @@
 # Otome Hearth release notes
 
+## 0.6.6 — 2026-10-31
+
+- **Banned phrases** when you start a new story: type them right under **How it's written**, so the world and every love interest's Bible avoid them from the start. Still in Settings → Content.
+- Read Him and Read Me guess instead of repeating: one specific guess past what your persona states, across wants, thoughts, likes, dislikes, habits, fears and memories. He never guesses what he already knows.
+- **Group scenes:** two or more love interests at stage 3 and up may share one intimacy when the scene fits. Heat decides how far, each keeps their own tastes, and scenes are no longer capped to a couple of love interests.
+- Narration says what the protagonist feels in her body, not only the action.
+
 ## 0.6.5 — 2026-10-31
 
 - Seasonal banners: the first fortnight that starts in each month brings three banners on that month's theme, with a badge such as “October · Halloween”: New Year in January, Valentine's Day in February, through Halloween in October, autumn in November and Christmas in December. A world without the holiday gets its own version of it. Later fortnights that month are your model's free choice, as before.
