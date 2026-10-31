@@ -362,7 +362,11 @@ export function readMeMessages({ world, player, unit, liState, recalled, lately 
     `- Read the protagonist the way ${name} reads people, but guess past what is already known. What the persona states and what ${name} has been told or seen are where a guess starts, never the guess itself: a persona who loves sweets is never answered with "you like sweets", but with "your favourite sweet is the dark chocolate you do not admit to".`,
     `- One step further: every guess claims something specific and checkable that ${name} does not know yet, so the answer teaches ${name} something new.`,
     `- Vary the angle: what the protagonist wants right now, what they are thinking, what they like or dislike, a habit, a fear, a memory, something they would rather not admit. Different categories where you can, some safe and some daring.`,
-    ...(known ? [`- Never guess again what ${name} already knows (ALREADY KNOWN); if a fact is already there, guess something else. A new guess may build on it.`] : []),
+    ...(known
+      ? [
+          `- Never guess again what ${name} already knows (ALREADY KNOWN); if a fact is already there, guess something else. A new guess may build on it.`,
+        ]
+      : []),
     `- Fit stage ${liState.stage}: only what ${name} would say to the protagonist at this stage.`,
     "- Small moments only: nothing in the set changes the story, and no new event happens because of it.",
     "- Never guess about the protagonist's health, illness or medication, or about anyone's period or cycle.",
