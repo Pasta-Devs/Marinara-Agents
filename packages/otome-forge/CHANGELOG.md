@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.6.6 — 2026-10-31
+
+- **Banned phrases** when you start a new story: type them right under **How it's written**, and the world, every love interest's Bible and the whole story avoid them from the start. You can still change them later in Settings → Content.
+
 ## 0.6.5 — 2026-10-31
 
 - Seasonal banners: the first fortnight that starts in each month brings three banners on that month's theme, with a badge such as “October · Halloween”: New Year in January, Valentine's Day in February, through Halloween in October, autumn in November and Christmas in December. A world without the holiday gets its own version of it. Later fortnights that month are your model's free choice, as before.

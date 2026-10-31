@@ -30,7 +30,7 @@ On desktop, **Enter fullscreen** fills the Home browser panel across Otome Heart
 
 Choose **Begin a new story**. Setup has six steps, and an unfinished setup is kept in this browser until the story is made.
 
-1. **Story:** a premise, or **Surprise me** to have your model write one (an original world). A premise or a card set in an existing world, such as Teyvat from Genshin Impact, keeps that world and its canon. Then the language the story is written in, **How it's written** (tense, point of view, pacing: anything you want every scene, message and note to follow; also in **Settings → Content**), and an optional title.
+1. **Story:** a premise, or **Surprise me** to have your model write one (an original world). A premise or a card set in an existing world, such as Teyvat from Genshin Impact, keeps that world and its canon. Then the language the story is written in, **How it's written** (tense, point of view, pacing: anything you want every scene, message and note to follow; also in **Settings → Content**), **Banned phrases** (words and phrases you never want to read; also in **Settings → Content**), and an optional title.
 2. **You:** the persona you play, your pronouns, up to five traits, and a goal of your own that isn't romance. Your persona's **Description, Personality, Backstory and Appearance** reach story writing and personal interactions whole; see [What leaves your device](#what-leaves-your-device) for the prompt list and refresh behavior. Scenario, greetings and example dialogue are excluded. An unavailable persona keeps its own saved text as a fallback.
 3. **Cast:** two to five love interests. Pick them from your character cards or from six original archetypes: Brilliant Monster, Gilded Tyrant, Gentle Liar, Loyal Blade, Ruined Saint and Laughing Stranger. Love interests can be any gender and use the pronouns you pick. A card stays canon: the story never contradicts it.
 4. **Content:** Heat, Darkness, Lines & Veils and the image rating (see [Content settings](#content-settings-nsfw-mode-and-lines--veils)).
@@ -260,7 +260,7 @@ Each story has its own content settings:
 - you can add limits of your own;
 - changing Darkness keeps the levels you set yourself.
 
-**Banned phrases:** in **Settings → Content**, type the words and phrases you never want to read, separated by commas or one per line. Every scene, message and note avoids them, on top of the built-in list of overused phrases.
+**Banned phrases:** when you set up a story or later in **Settings → Content**, type the words and phrases you never want to read, separated by commas or one per line. Every scene, message and note avoids them, on top of the built-in list of overused phrases. Set during setup, they also apply to the world and every love interest’s Bible as they are forged.
 
 **NSFW mode:** NSFW Heat or Dark romance turns it on for the story, its chapters and Messages.
 
