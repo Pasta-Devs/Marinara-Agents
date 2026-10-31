@@ -205,7 +205,7 @@ Review Queue) and Save them for me (background import, low-risk proposals are
 accepted). The choice is stored as the two extraction settings
 `autoImportChatSources` and `autoAcceptSafeChanges`; import off with accept on
 shows as I add them myself, and the next save writes accept off. Its hint says
-chats use this unless they choose otherwise, and an "After a reply" sample shows
+chats use this unless they choose otherwise, and an "After a reply" sample (a small label over the same status line, with example numbers) shows
 what the choice does. Accepting low-risk proposals covers new notes and
 additions with no conflicts; rewrites, status changes, shared memories and
 anything with warnings wait in the Review Queue, and a draft that mixes them
@@ -236,13 +236,18 @@ picks one of the three Memories from chats choices for the open chat; it shows t
 choice with the Global default chip until the chat has its own, then a "Use global default"
 button clears it. The Engine passes only the recall keys to Chat Settings, so the panel reads
 the chat's choice from `GET /chat-memories/:chatId` and writes it through the host's chat
-settings change. While background import is
-on for the chat it also shows one status line, "N saved today · N waits for you" with a Review button: the
-first count adds up the memories the chat's `auto_import` Activity rows applied since local
-midnight, the second is the chat's pending drafts. Review opens the Review Queue (it has no
-per-chat filter); Chat Settings is a separate host view, so it leaves a short-lived open request
-(`auto-import-status.ts`) that the detail view reads when it opens. It keeps one short
-explanation above the controls; the Recall style info popover lists every style
+settings change. Memories from this chat is the first field, followed by one status line
+(`ChatMemoriesStatusLine` in `chat-memories.tsx`, shared with the "After a reply" sample). Save them
+for me shows a check with "N saved today" in `--ltm-success` (also at 0), then a "·" and a clock with
+"N waits for you" when something waits; Collect them, I'll review shows only the waiting part, since
+nothing saves on its own, and with nothing waiting says "Watching this chat · nothing new yet"; I add them myself
+says "Nothing is added on its own" with an Import button that opens Sources. The first count adds up
+the memories the chat's `auto_import` Activity rows applied since local midnight, the second is the
+chat's pending drafts. Review (shown only when something waits) opens the Review Queue (it has no
+per-chat filter); Chat Settings is a separate host view, so Review and Import leave a short-lived open
+request (`auto-import-status.ts`) that the detail view reads when it opens. There is no "reading your
+latest messages" state: the Activity rows load once and carry no live signal for a run in progress.
+It keeps one short explanation above the recall controls; the Recall style info popover lists every style
 and marks the current one. While the global defaults have not arrived, an
 inherited value shows "Loading default…" (or "Default unavailable" after a
 failed load) instead of an invented number, and the controls stay usable. Memory Settings

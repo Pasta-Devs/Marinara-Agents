@@ -60,7 +60,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   // Chat Settings can ask for the Review Queue or the Extraction settings; the request is read once, on open.
   const [destination, setDestination] = useState<LongTermMemoryDestination>(() => {
     const target = peekLtmOpenRequest();
-    return target === "review" ? "review" : target === "extraction" ? "settings" : "vault";
+    return target === "review" || target === "sources" ? target : target === "extraction" ? "settings" : "vault";
   });
   const [openForConnection, setOpenForConnection] = useState(() => peekLtmOpenRequest() === "extraction");
   useEffect(() => {

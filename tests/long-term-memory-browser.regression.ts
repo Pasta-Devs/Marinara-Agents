@@ -5277,7 +5277,15 @@ async function main() {
       }
       // Background import: Chat Settings counts today's saved and waiting memories, and a missing extraction
       // connection is a warning with a Choose button in Chat Settings and in Extraction.
-      for (const scenario of ["connection-missing", "connection-chosen", "working"] as const) {
+      for (const scenario of [
+        "connection-missing",
+        "connection-chosen",
+        "working",
+        "review",
+        "empty",
+        "empty-save",
+        "manual",
+      ] as const) {
         const importPage = await browserContext.newPage();
         await importPage.setViewportSize({ width: 1280, height: 900 });
         const now = new Date().toISOString();
@@ -5291,28 +5299,34 @@ async function main() {
           ...fields,
         });
         const events =
-          scenario === "working"
-            ? [
-                event({ status: "ok", counts: { imported: 2, failed: 0, applied: 3, skipped: 1 } }),
-                event({ status: "ok", counts: { imported: 1, failed: 0, applied: 2, skipped: 0 } }),
-                event({ status: "ok", chatId: "other-chat", counts: { applied: 9 } }),
-                event({ status: "ok", ts: "2000-01-01T00:00:00.000Z", counts: { applied: 7 } }),
-              ]
-            : [event({ status: "error", error: { message: "No model", code: "ltm_model_configuration" } })];
+          scenario === "empty" || scenario === "empty-save"
+            ? []
+            : scenario === "working" || scenario === "review"
+              ? [
+                  event({ status: "ok", counts: { imported: 2, failed: 0, applied: 3, skipped: 1 } }),
+                  event({ status: "ok", counts: { imported: 1, failed: 0, applied: 2, skipped: 0 } }),
+                  event({ status: "ok", chatId: "other-chat", counts: { applied: 9 } }),
+                  event({ status: "ok", ts: "2000-01-01T00:00:00.000Z", counts: { applied: 7 } }),
+                ]
+              : [event({ status: "error", error: { message: "No model", code: "ltm_model_configuration" } })];
         await importPage.route("**/api/long-term-memory/extraction-settings", (route) =>
           route.request().method() === "GET"
             ? route.fulfill({
                 json: {
-                  autoImportChatSources: true,
+                  autoImportChatSources: scenario !== "manual",
+                  autoAcceptSafeChanges: scenario === "working" || scenario === "empty-save",
                   connectionId: scenario === "connection-chosen" ? "connection-1" : null,
                 },
               })
             : route.continue(),
         );
+        await importPage.route("**/api/long-term-memory/chat-memories/*", (route) =>
+          route.fulfill({ json: { chatMemories: null } }),
+        );
         await importPage.route("**/api/long-term-memory/debug-log?*", (route) => route.fulfill({ json: { events } }));
         await importPage.route("**/api/long-term-memory/drafts/pending-count?*", (route) => {
           assert.match(route.request().url(), /chatId=chat-import/u, "the waiting count is for this chat");
-          return route.fulfill({ json: { count: 4 } });
+          return route.fulfill({ json: { count: scenario === "empty" || scenario === "empty-save" ? 0 : 4 } });
         });
         await importPage.goto(`http://127.0.0.1:${address.port}/`);
         await importPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
@@ -5336,10 +5350,41 @@ async function main() {
         if (scenario === "working") {
           const status = importSettings.locator("[data-ltm-auto-import-status]");
           await status.waitFor({ timeout: 5_000 });
-          assert.match(await status.innerText(), /5 saved today · 4 wait for you/u, "only this chat's rows from today");
+          assert.match(
+            await status.innerText(),
+            /5 saved today\s*·\s*4 wait for you/u,
+            "only this chat's rows from today",
+          );
+          assert.equal(await status.locator("svg").count(), 2, "a check for saved and a clock for waiting");
           assert.equal(await importSettings.locator("[data-ltm-connection-warning]").count(), 0);
           await status.getByRole("button", { name: "Review", exact: true }).click();
           await importPage.locator('[data-ltm-destination="review"][aria-current="page"]:visible').first().waitFor({
+            timeout: 5_000,
+          });
+        } else if (scenario === "review") {
+          // Nothing saves on its own in review mode, so only the waiting part shows.
+          const status = importSettings.locator("[data-ltm-auto-import-status]");
+          await status.waitFor({ timeout: 5_000 });
+          assert.equal((await status.innerText()).replace(/\s+/gu, " ").trim(), "4 wait for you Review");
+        } else if (scenario === "empty") {
+          const status = importSettings.locator("[data-ltm-auto-import-status]");
+          await status.waitFor({ timeout: 5_000 });
+          assert.match(await status.innerText(), /Watching this chat · nothing new yet/u);
+          assert.equal(
+            await status.getByRole("button", { name: "Review" }).count(),
+            0,
+            "Review only when something waits",
+          );
+        } else if (scenario === "empty-save") {
+          const status = importSettings.locator("[data-ltm-auto-import-status]");
+          await status.waitFor({ timeout: 5_000 });
+          assert.equal((await status.innerText()).replace(/\s+/gu, " ").trim(), "0 saved today");
+        } else if (scenario === "manual") {
+          const status = importSettings.locator("[data-ltm-auto-import-status]");
+          await status.waitFor({ timeout: 5_000 });
+          assert.match(await status.innerText(), /Nothing is added on its own/u);
+          await status.getByRole("button", { name: "Import", exact: true }).click();
+          await importPage.locator('[data-ltm-destination="sources"][aria-current="page"]:visible').first().waitFor({
             timeout: 5_000,
           });
         } else if (scenario === "connection-chosen") {
@@ -5413,6 +5458,14 @@ async function main() {
             { timeout: 5_000 },
           );
         await chatChoiceIs("save");
+        assert.equal(
+          await memoriesPage.evaluate(() => {
+            const panel = document.querySelector('[data-ltm-surface="chat-settings"]')!;
+            return panel.firstElementChild?.hasAttribute("data-ltm-chat-memories-field");
+          }),
+          true,
+          "Memories from this chat comes first",
+        );
         assert.equal(await memoriesField.getByText("Global default", { exact: true }).count(), 0);
         await memoriesField.getByRole("button", { name: "Use global default" }).click();
         // With no override the chat shows the global choice: import on, accept off is "Collect them, I'll review".
@@ -5438,7 +5491,7 @@ async function main() {
         await globalChoice.selectOption("save");
         await memoriesPage
           .locator('#settings-panel-extraction [data-ltm-chat-memories-sample="save"]')
-          .getByText("2 saved · 1 waits for you")
+          .getByText("2 saved", { exact: true })
           .waitFor({ timeout: 5_000 });
         await memoriesPage.getByRole("button", { name: "Save settings" }).click();
         await memoriesPage.getByRole("button", { name: "Save settings" }).waitFor({ state: "detached" });
@@ -10040,6 +10093,10 @@ async function main() {
       await firstRunChoice.waitFor({ timeout: 5_000 });
       assert.equal(await firstRunChoice.innerText(), "Save them for me");
       assert.equal(await firstRunGuide.locator('[data-ltm-chat-memories-sample="save"]').count(), 1);
+      assert.match(
+        (await firstRunGuide.locator('[data-ltm-chat-memories-sample="save"]').innerText()).replace(/\s+/gu, " "),
+        /^after a reply 2 saved · 1 waits for you$/iu,
+      );
       const writesBeforeGuide = extractionWrites.length;
       await firstRunGuide.getByRole("button", { name: "Continue without a chat" }).click();
       for (let wait = 0; wait < 50 && extractionWrites.length === writesBeforeGuide; wait += 1)
