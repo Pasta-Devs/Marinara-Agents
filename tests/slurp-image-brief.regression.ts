@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  slurpPictureOutfit,
   slurpImageBrief,
   slurpImageNegativePrompt,
   slurpImageNegativeWithCompany,
@@ -47,7 +48,7 @@ assert.match(slurpImageNegativePrompt("explicit"), /second person/u);
 assert.doesNotMatch(slurpImageNegativePrompt("explicit"), /nudity/u);
 
 // A callback keeps the shoot's place and clothes and never nests an earlier draft.
-const continuity = slurpShootContinuity({ scene, outfit: scene.outfit });
+const continuity = slurpShootContinuity({ scene });
 assert.ok(continuity?.includes(scene.setting) && continuity.includes(scene.outfit));
 const callback = slurpImageBrief({
   cameraPhoto: slurpCameraSourcePhoto("tripod"),
@@ -70,6 +71,18 @@ assert.doesNotMatch(
   /Wearing|hoodies/u,
   "a body-showing level never dresses the picture from the usual wardrobe",
 );
+assert.equal(slurpShootContinuity({ scene: { ...scene, outfit: "nothing" }, bare: true })?.includes("Wearing"), false);
+assert.match(slurpShootContinuity({ scene: { ...scene, outfit: "nothing" } }) ?? "", /Wearing nothing/u);
+const clothedShoot = slurpShootContinuity({ scene: { ...scene, outfit: "hoodie and jeans" } });
+const bareCallback = slurpImageBrief({
+  cameraPhoto: slurpCameraSourcePhoto("tripod"),
+  variation,
+  sexualLevel: "explicit",
+  shoot: { place: "loft", company: "", brief: clothedShoot ?? "" },
+  scene,
+});
+assert.doesNotMatch(bareCallback, /hoodie/u, "a body-showing callback keeps the shoot's place, not its clothes");
+assert.equal(slurpPictureOutfit({ level: "nudity", scene: "Nothing but a towel" }), "Nothing but a towel");
 const legacy = slurpImageBrief({
   cameraPhoto: slurpCameraSourcePhoto("tripod"),
   variation,

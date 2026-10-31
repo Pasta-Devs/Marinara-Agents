@@ -111,7 +111,8 @@ export function slurpPostIsBare(input: {
   return slurpLevelIsBare(slurpPostSexualLevel(input));
 }
 
-const NO_CLOTHES = /^(?:nothing|nude|naked|unclothed|no clothes|completely bare)\b/iu;
+const NO_CLOTHES =
+  /^(?:nothing|nude|naked|unclothed|no clothes|completely bare)(?:[,.;!\s]+(?:bare skin|at all|completely|nude|naked))*[.!\s]*$/iu;
 
 /**
  * The clothes a picture names. At a body-showing level the Creator's usual wardrobe (everyday
@@ -134,11 +135,18 @@ export function slurpPictureOutfit(input: {
  */
 export function slurpShootContinuity(input: {
   scene?: SlpWardrobeScene | null;
-  outfit?: string | null;
+  selected?: string | null;
+  /** The picture shows the body: "nothing" is not stored as clothes. */
+  bare?: boolean;
 }): string | null {
+  const outfit = slurpPictureOutfit({
+    level: input.bare ? "explicit" : "none",
+    selected: input.selected,
+    scene: input.scene?.outfit,
+  });
   const text = [
     sentence(input.scene?.setting),
-    input.outfit?.trim() ? sentence(`Wearing ${input.outfit.trim()}`) : "",
+    outfit ? sentence(`Wearing ${outfit}`) : "",
     sentence(input.scene?.visualDirection),
   ]
     .filter(Boolean)
@@ -176,7 +184,10 @@ export function slurpImageBrief(input: {
     !/\b(?:same (?:outfit|clothes|place|shoot)|earlier (?:shoot|photo|picture)|established (?:outfit|clothing|appearance))\b/iu.test(
       input.shoot.brief,
     )
-      ? input.shoot.brief
+      ? // A body-showing picture continuing a clothed shoot keeps its place and light, not its clothes.
+        slurpLevelIsBare(input.sexualLevel)
+        ? input.shoot.brief.replace(/\bWearing [^.]*\.\s*/giu, "").trim()
+        : input.shoot.brief
       : "";
   const outfit = slurpPictureOutfit({
     level: input.sexualLevel,

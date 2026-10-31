@@ -541,10 +541,7 @@ export async function generateCreatorPost(
         place: generated.scene?.setting?.trim() || variation.place, // concrete, so callbacks name it
         company: variation.company,
         cameraSource: camera,
-        brief: slurpShootContinuity({
-          scene: generated.scene,
-          outfit: wardrobeSelection.look?.description ?? generated.scene?.outfit,
-        }),
+        brief: slurpShootContinuity({ scene: generated.scene, selected: wardrobeSelection.look?.description, bare }),
         effort,
         theme: axes.intent,
         campaignId,
