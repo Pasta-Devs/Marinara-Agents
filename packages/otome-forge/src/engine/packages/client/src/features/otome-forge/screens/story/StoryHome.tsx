@@ -6,7 +6,7 @@
 // and shut while a rupture is open), each one's affection, and every chapter so far as a path of its scenes.
 // Planning a chapter is one model call with Cancel while it runs; a chapter already planned opens with none.
 // ──────────────────────────────────────────────
-import { useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { Fragment, useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -176,6 +176,10 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
             total: story.data.arc.endsAt - story.data.arc.from + 1,
             label: story.data.arc.label,
           })}
+          {/* #1983 M4: a breathing arc says what it is. */}
+          {story.data.arc.kind === "breathing" ? (
+            <span className="of-badge of-badge--soft of-story-arc-kind">{t("ui.otomeForge.story.arcQuiet")}</span>
+          ) : null}
         </p>
       ) : null}
       {reading ? <ContinueCard runKey={runKey} entry={reading} view={view} onOpen={onOpenChapter} /> : null}
@@ -409,7 +413,7 @@ function ChapterList({
         {t("ui.otomeForge.story.chaptersTitle")}
       </h2>
       <ol className="of-chapters">
-        {chapters.map((entry) => {
+        {chapters.map((entry, index) => {
           const lead = view.lis.find((li) => li.id === (entry.li ?? entry.lead)) ?? null;
           const title = entry.title || t("ui.otomeForge.story.untitled");
           const action =
@@ -418,38 +422,56 @@ function ChapterList({
               : entry.state === "in-progress"
                 ? { key: "ui.otomeForge.story.continue", Icon: BookOpen, primary: true }
                 : null;
-          return (
-            <li
-              key={entry.key}
-              className="of-chapter"
-              data-state={entry.state}
-              style={lead ? ({ "--of-li-accent": accentOf(lead) } as CSSProperties) : undefined}
-            >
-              <div className="of-chapter-head">
-                {lead ? <Avatar name={lead.name} url={lead.portrait} accent={accentOf(lead)} size={34} /> : null}
-                <div className="of-chapter-heading">
-                  <p className="of-chapter-eyebrow">{eyebrow(t, entry, lead)}</p>
-                  <h3 className="of-chapter-title">{title}</h3>
-                </div>
-                <span className="of-badge of-badge--soft">{t(STATE_KEYS[entry.state])}</span>
-              </div>
-              <NodePath count={entry.nodes} read={entry.beatsRead} current={entry.state === "in-progress"} />
-              {action ? (
-                <button
-                  type="button"
-                  className={
-                    action.primary
-                      ? "of-button of-button--primary of-button--small"
-                      : "of-button of-button--quiet of-glass of-button--small"
-                  }
-                  aria-label={`${t(action.key)}: ${title}`}
-                  onClick={() => onOpen(entry.key)}
-                >
-                  <action.Icon size={14} strokeWidth={2} aria-hidden="true" />
-                  {t(action.key)}
-                </button>
-              ) : null}
+          // #1983 M4: a heading where a new arc's chapters begin, and where the ones from before arcs do. Only the
+          // prologue and main chapters belong to an arc: route, repair and story chapters get no heading of their own
+          // and never open a second "before the arcs" one (Dottore on #1991).
+          const inArc = entry.kind === "prologue" || entry.kind === "main";
+          const previous = chapters
+            .slice(0, index)
+            .reverse()
+            .find((other) => other.kind === "prologue" || other.kind === "main");
+          const startsArc = inArc && (index === 0 || previous?.arc !== entry.arc);
+          const heading = startsArc ? (
+            <li key={`arc-${entry.arc ?? "none"}`} className="of-chapter-arc" aria-hidden="true">
+              {entry.arc
+                ? t("ui.otomeForge.story.arcHeading", { number: entry.arc })
+                : t("ui.otomeForge.story.arcHeadingBefore")}
             </li>
+          ) : null;
+          return (
+            <Fragment key={entry.key}>
+              {heading}
+              <li
+                className="of-chapter"
+                data-state={entry.state}
+                style={lead ? ({ "--of-li-accent": accentOf(lead) } as CSSProperties) : undefined}
+              >
+                <div className="of-chapter-head">
+                  {lead ? <Avatar name={lead.name} url={lead.portrait} accent={accentOf(lead)} size={34} /> : null}
+                  <div className="of-chapter-heading">
+                    <p className="of-chapter-eyebrow">{eyebrow(t, entry, lead)}</p>
+                    <h3 className="of-chapter-title">{title}</h3>
+                  </div>
+                  <span className="of-badge of-badge--soft">{t(STATE_KEYS[entry.state])}</span>
+                </div>
+                <NodePath count={entry.nodes} read={entry.beatsRead} current={entry.state === "in-progress"} />
+                {action ? (
+                  <button
+                    type="button"
+                    className={
+                      action.primary
+                        ? "of-button of-button--primary of-button--small"
+                        : "of-button of-button--quiet of-glass of-button--small"
+                    }
+                    aria-label={`${t(action.key)}: ${title}`}
+                    onClick={() => onOpen(entry.key)}
+                  >
+                    <action.Icon size={14} strokeWidth={2} aria-hidden="true" />
+                    {t(action.key)}
+                  </button>
+                ) : null}
+              </li>
+            </Fragment>
           );
         })}
       </ol>

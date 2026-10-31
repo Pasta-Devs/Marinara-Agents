@@ -464,6 +464,7 @@ export async function planNextChapter(
       kind: "main",
       number,
       lead,
+      arc: arc.number,
       ...plan,
       plannedAt: new Date().toISOString(),
       connectionId,
@@ -636,6 +637,11 @@ export async function chapterDetail(deps: { store: OtomeStore }, runId: string, 
     deps.store.readDoc(stateId(runId), normalizeState),
   ]);
   if (!chapter) throw notFound("chapter");
+  // A main chapter stored before 0.6.9 carries no arc of its own: the covering arc names it, exactly as the list does.
+  if (chapter.kind === "main" && chapter.arc == null && chapter.number != null) {
+    const covering = arcCovering(await listArcs(deps.store, runId), chapter.number);
+    if (covering) chapter.arc = covering.number;
+  }
   const read = state?.chapters[key]?.beatsRead ?? 0;
   const written = await Promise.all(
     chapter.nodes.map(async ({ i }) => i < read || !!(await deps.store.readDoc(beatId(runId, key, i), normalizeBeat))),
