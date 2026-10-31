@@ -146,7 +146,8 @@ export function slurpShootContinuity(input: {
   });
   const text = [
     sentence(input.scene?.setting),
-    outfit ? sentence(`Wearing ${outfit}`) : "",
+    // One sentence, so a callback at another level can cut it whole.
+    outfit ? sentence(`Wearing ${outfit.replace(/[.!?]+\s*(?=\S)/gu, ", ")}`) : "",
     sentence(input.scene?.visualDirection),
   ]
     .filter(Boolean)
@@ -200,7 +201,10 @@ export function slurpImageBrief(input: {
     sentence(input.scene?.action || input.variation.moment),
     sentence(input.scene?.expression),
     // A callback keeps the shoot's clothes; its continuity text already names them.
-    !shootBrief && outfit ? sentence(`Wearing ${outfit}`) : "",
+    !shootBrief && // One sentence, so a callback at another level can cut it whole.
+    outfit
+      ? sentence(`Wearing ${outfit.replace(/[.!?]+\s*(?=\S)/gu, ", ")}`)
+      : "",
     sentence(place),
     input.shoot && shootBrief ? "" : sentence(input.scene?.visualDirection),
     sentence(

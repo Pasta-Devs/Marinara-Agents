@@ -95,6 +95,8 @@ const bareWearing = slurpImageBrief({
 });
 assert.match(bareWearing, /wearing masks/u, "only the Wearing clause is cut, not place text");
 assert.doesNotMatch(bareWearing, /hoodie/u);
+const periodShoot = slurpShootContinuity({ scene: { ...scene, outfit: "A red hoodie. Black jeans. Boots" } });
+assert.equal(periodShoot?.match(/Wearing [^.]*\./u)?.[0].includes("Boots"), true, "the clothes stay one sentence");
 const legacy = slurpImageBrief({
   cameraPhoto: slurpCameraSourcePhoto("tripod"),
   variation,
