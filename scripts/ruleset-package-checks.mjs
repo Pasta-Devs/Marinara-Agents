@@ -20,6 +20,9 @@
 
 export const RULESET_ASSET_PATH = "ruleset.json";
 
+// Typed condition/track hides, sheet hides, and qualified item hides landed in 1.132.
+export const RULESET_TYPED_HIDES_MIN = Object.freeze({ major: 1, minor: 132 });
+
 // Capability API 1.20 is the Engine release that introduced the ruleset seam. An
 // older host has no way to read the asset, so a lower declaration would advertise
 // an install that cannot work.
@@ -53,6 +56,9 @@ export const RULESET_COMBAT_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor
 // ride inline in `ruleset.json` or inside a `catalogs/<id>.json` asset, so an
 // older Engine refuses whichever file holds it.
 export const RULESET_CREATURES_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 27 });
+// A catalog of items, and the items block every name in one comes from: an older Engine's strict
+// schema refuses both.
+export const RULESET_ITEMS_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 49 });
 
 // Capability API 1.28 gave a fight positions: `combat.distance` says what one cell
 // of a board is worth, and `ranged`, `cover`, `opportunity` and an attack list's
@@ -102,11 +108,1730 @@ export const RULESET_STRIKE_CAP_MIN_CAPABILITY_API = Object.freeze({ major: 1, m
 // key sits in a strict file, so an older Engine refuses the whole catalog rather
 // than reading the object as a boolean.
 export const RULESET_REACTION_MOMENT_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 33 });
-const RULESET_REACTION_MOMENTS = Object.freeze(["aimed", "hit", "harmed", "used"]);
-const RULESET_REACTION_AT = Object.freeze(["source", "chosen"]);
+const RULESET_REACTION_MOMENTS = Object.freeze([
+  "aimed",
+  "hit",
+  "harmed",
+  "used",
+  "falls",
+  "turn-start",
+  "caught",
+  "attacked",
+]);
+const RULESET_REACTION_AT = Object.freeze(["source", "chosen", "target"]);
 // The moments that are over before anybody could answer, so nothing answering them cancels anything.
 const RULESET_REACTION_DONE_MOMENTS = Object.freeze(["hit", "harmed"]);
-const RULESET_REACTION_KEYS = Object.freeze(["on", "at", "cancels", "against"]);
+const RULESET_REACTION_KEYS = Object.freeze([
+  "on",
+  // 1.564: only for one holding an item with one of these tags (gated at the end).
+  "forHolds",
+  "at",
+  "cancels",
+  "against",
+  "upTo",
+  "above",
+  "also",
+  "blow",
+  "seesSource",
+  "for",
+  "within",
+  "cancelSave",
+  "by",
+  "weapon",
+  "names",
+  "budget",
+  "oneOf",
+  "freeSlot",
+  "missed",
+  "sourceIs",
+]);
+// A reaction to a melee or ranged blow only, and one that must see its source (`blow`, `seesSource`).
+export const RULESET_BLOW_KIND_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 118 });
+// A condition counted down on its source's turns (`duration.of: "source"`).
+export const RULESET_SOURCE_ROUNDS_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 119 });
+// A condition that delays what its holder uses from some catalogs (`delays`).
+export const RULESET_DELAYS_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 120 });
+// A creature's healing action, and a lasting attack paid from the combat economy.
+export const RULESET_CREATURE_HEAL_MIN = Object.freeze({ major: 1, minor: 121 });
+export const RULESET_SUMMONS_MIN = Object.freeze({ major: 1, minor: 122 });
+// A reaction to a fall (`on: "falls"`), and a condition that lands its holder safely (`fallsSafely`).
+export const RULESET_FALLS_MIN = Object.freeze({ major: 1, minor: 124 });
+// Conditions that end on harm, re-save on damage, or can be shaken off by an ally.
+export const RULESET_CONDITION_ENDS_MIN = Object.freeze({ major: 1, minor: 125 });
+// A rider's ally-adjacent branch that holds only without disadvantage.
+export const RULESET_RIDER_NO_DISADVANTAGE_MIN = Object.freeze({ major: 1, minor: 126 });
+// Conditions can lack senses, and catalog mechanics or creature actions can need them.
+export const RULESET_SENSES_MIN = Object.freeze({ major: 1, minor: 127 });
+// A line wider than one cell (`area.width`).
+export const RULESET_LINE_WIDTH_MIN = Object.freeze({ major: 1, minor: 128 });
+// A save rolled only when damage lands (`saveEnds.at: "damaged"`).
+export const RULESET_DAMAGED_SAVE_MIN = Object.freeze({ major: 1, minor: 129 });
+// A builder stamp that takes its value from the earlier pick that offered the entry.
+export const RULESET_STAMP_FROM_WITHIN_MIN = Object.freeze({ major: 1, minor: 130 });
+// A sheet list of more than 12 columns, 24 at most.
+export const RULESET_WIDE_LISTS_MIN = Object.freeze({ major: 1, minor: 165 });
+// An entry usable in a fight only while a value read off its holder is in bounds (`mechanics.usableWhen`).
+export const RULESET_USABLE_WHEN_MIN = Object.freeze({ major: 1, minor: 166 });
+// A condition an entry applies only while a value read off the applier is in bounds (`applies[].when`).
+export const RULESET_APPLIES_WHEN_MIN = Object.freeze({ major: 1, minor: 167 });
+// Creature types (Capability API 1.168): `combat.creatureTypes`, a creature's `type` and `tags`, and
+// the target tests that read them (`targetIs` on extra damage and applied conditions,
+// `mechanics.targetTypes`).
+export const RULESET_CREATURE_TYPES_MIN = Object.freeze({ major: 1, minor: 168 });
+// A weapon item's extra damage on a hit (`attack.plus`) and the saves its `onHit` conditions allow
+// (Capability API 1.169).
+export const RULESET_WEAPON_EXTRAS_MIN = Object.freeze({ major: 1, minor: 169 });
+// An item its holder switches on and off, and extra damage dealt only while it is on (Capability API 1.170).
+export const RULESET_ITEM_TOGGLES_MIN = Object.freeze({ major: 1, minor: 170 });
+// A live pool that pays for another group's costs at its own level (5e's pact slots for spell slots),
+// and targets that grow with each step a cost is paid up (Capability API 1.171).
+export const RULESET_POOL_PAYS_MIN = Object.freeze({ major: 1, minor: 171 });
+// An area that stays and strikes again as creatures enter it or start or end a turn in it (Capability
+// API 1.172): Cloudkill, Moonbeam, Spirit Guardians.
+export const RULESET_ZONES_MIN = Object.freeze({ major: 1, minor: 172 });
+// A lasting area its caster moves or that drifts, and ground it makes hard going or that hurts to
+// cross (Capability API 1.173): Moonbeam, Cloudkill, Spike Growth.
+export const RULESET_MOVING_ZONES_MIN = Object.freeze({ major: 1, minor: 173 });
+// Escapes against the applier's save DC, zones that break concentration or stop at a damage cap, and
+// concentration and zones on item uses (Capability API 1.174): Web, Sleet Storm, Guardian of Faith.
+export const RULESET_ZONE_RULES_MIN = Object.freeze({ major: 1, minor: 174 });
+// Zones that ram or hurt whom they hold, ground that costs more or halves speed, and holds broken only
+// by their own escape DC and checks (Capability API 1.175): Web, Black Tentacles, Plant Growth.
+export const RULESET_HOLDS_MIN = Object.freeze({ major: 1, minor: 175 });
+// Cures that end conditions, steady the dying or bring back the dead (Capability API 1.176): Lesser
+// Restoration, Spare the Dying, Revivify, a healer's kit.
+export const RULESET_CURES_MIN = Object.freeze({ major: 1, minor: 176 });
+// Boxes (5e cubes and squares), and walls that block movement or sight, lie as a ring, or catch on a
+// chosen side (Capability API 1.177): Web, Wall of Fire, Wall of Stone.
+export const RULESET_WALLS_MIN = Object.freeze({ major: 1, minor: 177 });
+// Senses, unseen attacks, areas that obscure, conditions that hide, targets that must be seen, and
+// several boxes or bursts at once (Capability API 1.178): darkvision, Fog Cloud, invisible, Fire Storm.
+export const RULESET_SIGHT_MIN = Object.freeze({ major: 1, minor: 178 });
+// Components a use needs, zones that put conditions or immunities on whoever stands in them, stop
+// components or ward off a catalog's entries, and conditions that take a budget away this turn
+// (Capability API 1.179): 5e's verbal spells, Silence, Globe of Invulnerability, Stinking Cloud.
+export const RULESET_COMPONENTS_MIN = Object.freeze({ major: 1, minor: 179 });
+// Conditions that end when their holder attacks or casts, item uses that count as casting, senses a
+// condition or an item gives, and conditions that give the unseen away (Capability API 1.180): 5e's
+// Invisibility, spell scrolls, the Darkvision spell, goggles of night, Faerie Fire.
+export const RULESET_GIVEN_SENSES_MIN = Object.freeze({ major: 1, minor: 180 });
+// Wards by a spell's own level and raised per step, saves passed outright or counted against poison,
+// a creature's own spell components, and item uses that only leave an area (Capability API 1.181):
+// 5e's Globe of Invulnerability, Stinking Cloud, the unicorn's innate spells, a scroll of Fog Cloud.
+export const RULESET_SAVES_PASSED_MIN = Object.freeze({ major: 1, minor: 181 });
+// Pushes, lines and cones held from the caster and turned on their turn, ground that is hard going
+// only toward the caster, and senses that add to the holder's own (Capability API 1.182): 5e's Gust
+// of Wind, Thunderwave, the ring of the ram, goggles of night.
+export const RULESET_PUSHES_MIN = Object.freeze({ major: 1, minor: 182 });
+// Zones that burst when they end and grow while they wait, and zones that catch fire (Capability API
+// 1.183): 5e's Delayed Blast Fireball and Web.
+export const RULESET_DETONATES_MIN = Object.freeze({ major: 1, minor: 183 });
+// Creature actions that push, and a line's width on an item's use (Capability API 1.184): 5e's
+// dragon turtle Tail and a scroll of Gust of Wind.
+export const RULESET_CREATURE_PUSHES_MIN = Object.freeze({ major: 1, minor: 184 });
+// What a creature is, read further (Capability API 1.185): saves some kinds roll twice, damage at its
+// most against some, targets gated by an ability score or a condition immunity, attacks rolled twice
+// by or against a kind, and saves against what a kind does. 5e's Sunbeam, Blight, Animal Friendship,
+// Chill Touch, Protection from Evil and Good, Dragon Scale Mail.
+export const RULESET_KINDS_MIN = Object.freeze({ major: 1, minor: 185 });
+// Creature actions that share one recharge, and a blow that adds more after a straight run (Capability
+// API 1.186): a metallic dragon's two breaths and a minotaur's Charge.
+export const RULESET_GROUPS_MIN = Object.freeze({ major: 1, minor: 186 });
+// Weapons that know what they hit (Capability API 1.187): more to hit against a kind, a kill outright,
+// plus clauses that skip a kind, count only in reach or thrown, or give temporary points, and onHit
+// conditions only on a kind or once a turn. 5e's mace of smiting, vorpal sword, sword of life stealing.
+export const RULESET_SLAY_MIN = Object.freeze({ major: 1, minor: 187 });
+// Attacks and checks narrowed to the ability they are made with (Capability API 1.188), and up to 160
+// combat conditions: 5e's Weakening Breath, Rage and Enlarge/Reduce on Strength checks.
+export const RULESET_ABILITY_NARROWING_MIN = Object.freeze({ major: 1, minor: 188 });
+// Conditions that harm each turn, stack and keep to one holder per source, weapons that read a mark
+// their wielder put on, and monster attacks by ability (Capability API 1.189): 5e's sword of wounding,
+// oathbow, and Weakening Breath on a monster.
+export const RULESET_MARKS_MIN = Object.freeze({ major: 1, minor: 189 });
+// A weapon mode with its own range, extra on a hit, a line everybody on the way saves against, and
+// the item's charges it spends (Capability API 1.190): 5e's javelin of lightning.
+export const RULESET_WEAPON_MODES_MIN = Object.freeze({ major: 1, minor: 190 });
+// Heals that restore nothing, conditions kept off by what applies them, a least ability score a spell
+// needs, and saves against named actions (Capability API 1.191): 5e's Chill Touch, Protection from
+// Evil and Good, Hideous Laughter and dragon scale mail.
+export const RULESET_HEAL_WARDS_MIN = Object.freeze({ major: 1, minor: 191 });
+// A weapon that ignores resistance to its own damage, a slay's riders on a made save, and the mode
+// every other weapon rolls with while a mark stands (Capability API 1.192): 5e's vorpal sword, mace of
+// disruption and oathbow.
+export const RULESET_WEAPON_RIDERS_MIN = Object.freeze({ major: 1, minor: 192 });
+// Contests against a fixed number, aimed at anybody holding a condition or dying, that stabilize, and
+// hit points that only a rest gives back (Capability API 1.193): 5e's first aid and sword of wounding.
+export const RULESET_MEDICINE_MIN = Object.freeze({ major: 1, minor: 193 });
+// Creatures that fill more than one cell a side by their size (Capability API 1.194): 5e's Large 2,
+// Huge 3 and Gargantuan 4.
+export const RULESET_FOOTPRINTS_MIN = Object.freeze({ major: 1, minor: 194 });
+// Conditions that make their holder some sizes bigger or smaller while they hold (Capability API
+// 1.195): 5e's Enlarge/Reduce.
+export const RULESET_SIZE_CHANGES_MIN = Object.freeze({ major: 1, minor: 195 });
+// Entries that pick their targets by health left, from a pool, under a ceiling, or killing outright
+// (Capability API 1.196): 5e's Sleep, Color Spray and Power Words.
+export const RULESET_HEALTH_GATES_MIN = Object.freeze({ major: 1, minor: 196 });
+// A damage modifier that throws a blow's own dice more times over, and a creature's self action on its
+// own turn (Capability API 1.197): the duergar's Enlarge.
+export const RULESET_DICE_TIMES_MIN = Object.freeze({ major: 1, minor: 197 });
+// A zone that deals a damage type of its own at its triggers (Capability API 1.198): 5e's Wall of
+// Thorns, piercing as it appears and slashing to walk into.
+export const RULESET_ZONE_DAMAGE_TYPES_MIN = Object.freeze({ major: 1, minor: 198 });
+// A health pool that passes over some targets, by a condition they hold or not seeing its maker
+// (Capability API 1.199): 5e's Sleep and Color Spray.
+export const RULESET_POOL_SKIPS_MIN = Object.freeze({ major: 1, minor: 199 });
+// A wall in sections struck and broken one by one, harming whoever then walks through (Capability API
+// 1.200): 5e's Wall of Ice.
+export const RULESET_WALL_SECTIONS_MIN = Object.freeze({ major: 1, minor: 200 });
+// Live tracks moved by levels and health only a rest gives back given back, by a cure or harm, and a
+// broken section's own cost step (Capability API 1.201): 5e's Greater Restoration and Wall of Ice.
+export const RULESET_TRACK_CURES_MIN = Object.freeze({ major: 1, minor: 201 });
+// A condition put on with others that ends when one of them does (Capability API 1.202): 5e's Hypnotic
+// Pattern, the restraint of a grapple, and Rage's damage.
+export const RULESET_LINKED_ENDS_MIN = Object.freeze({ major: 1, minor: 202 });
+// A creature blow that lowers its target's health maximum on a failed save (Capability API 1.203): 5e's
+// Life Drain and the clay golem's Slam.
+export const RULESET_REDUCES_MAX_MIN = Object.freeze({ major: 1, minor: 203 });
+// A cure that does one of its cures, the user's pick (Capability API 1.204): 5e's Greater Restoration.
+export const RULESET_CURE_ONE_OF_MIN = Object.freeze({ major: 1, minor: 204 });
+// A lowered maximum without a save of its own, by one damage type, healing its maker; a damage floor;
+// targets by what they hold (Capability API 1.235): 5e's vampire Bite, Draining Kiss and Harm.
+export const RULESET_DRAINS_MIN = Object.freeze({ major: 1, minor: 235 });
+// Actions a condition gives its holder, uses that end that condition, cures of only what some creatures
+// put on, and uses that send somebody out of the fight (Capability API 1.236): 5e's Dispel Evil and
+// Good, its Break Enchantment and Dismissal, and Banishment.
+export const RULESET_DISMISSALS_MIN = Object.freeze({ major: 1, minor: 236 });
+// A condition whose holder is never surprised, and a use that shakes off surprise (Capability API
+// 1.237): 5e's Foresight and Feral Instinct.
+export const RULESET_SURPRISE_MIN = Object.freeze({ major: 1, minor: 237 });
+// A second turn in the first round at the holder's initiative and a number (Capability API 1.238): 5e's
+// Thief's Reflexes.
+export const RULESET_EXTRA_FIRST_TURN_MIN = Object.freeze({ major: 1, minor: 238 });
+// A granted strike only with a melee weapon, tracks moved as a condition ends, and a use that spends
+// another entry's uses (Capability API 1.239): 5e's Berserker Frenzy.
+export const RULESET_FRENZY_MIN = Object.freeze({ major: 1, minor: 239 });
+// Initiative read as a check of one ability, and an entry that rolls it twice (Capability API 1.240): 5e's
+// Dexterity check, Feral Instinct.
+export const RULESET_INITIATIVE_MODE_MIN = Object.freeze({ major: 1, minor: 240 });
+// A reaction to its holder's own weapon hitting, an entry added to that blow, and a cap on the steps a
+// higher cost adds (Capability API 1.241): 5e's Divine Smite and Stunning Strike.
+export const RULESET_OWN_HIT_MIN = Object.freeze({ major: 1, minor: 241 });
+// Held entries that change named attack rows and grant a strike, and entries offered only after the
+// attack action (Capability API 1.242): 5e's Martial Arts, Flurry of Blows and Ki-Empowered Strikes.
+export const RULESET_MARTIAL_ARTS_MIN = Object.freeze({ major: 1, minor: 242 });
+// Attack rules that reach held weapons by name and tags and hold only while wielding some, strikes
+// granted under the same bounds, and rows every sheet's attack list has (Capability API 1.244).
+export const RULESET_HELD_WEAPONS_MIN = Object.freeze({ major: 1, minor: 244 });
+// A use that spends several uses at once, a save whose failure drops the target to 0, a hit reaction
+// narrowed to named attacks, and a condition that harms as it ends (Capability API 1.245): 5e's
+// Quivering Palm and Hurl Through Hell.
+export const RULESET_QUIVERING_MIN = Object.freeze({ major: 1, minor: 245 });
+// What follows the attack action reaches the held weapons it names by tags (Capability API 1.246):
+// Martial Arts' bonus strike after a Dagger (+1).
+export const RULESET_AFTER_ATTACK_ITEMS_MIN = Object.freeze({ major: 1, minor: 246 });
+// An entry offered before its holder's first attack of a turn, attacks narrowed to weapon or spell
+// attacks and melee or ranged blows, and extra dice on a critical (Capability API 1.247): 5e's
+// Reckless Attack and Brutal Critical.
+export const RULESET_RECKLESS_MIN = Object.freeze({ major: 1, minor: 247 });
+// A hit reaction waiting for strikes one budget paid for, and answers to one hit of which only one
+// is taken (Capability API 1.248): 5e's Open Hand Technique on Flurry of Blows.
+export const RULESET_OPEN_HAND_MIN = Object.freeze({ major: 1, minor: 248 });
+// Dice held back until the holder's own roll falls short, and entries spent by themselves when such a
+// roll fails, to reroll it or to succeed (Capability API 1.249): 5e's Bardic Inspiration, Guidance,
+// Resistance, Indomitable, Diamond Soul and Stroke of Luck.
+export const RULESET_RESCUE_MIN = Object.freeze({ major: 1, minor: 249 });
+/** Dice taken off somebody else's attack roll that hit, and saves evaded (Capability API 1.250):
+ *  5e's Cutting Words and Evasion. */
+export const RULESET_CUTTING_WORDS_MIN = Object.freeze({ major: 1, minor: 250 });
+/** A heal whose user picks how many of its uses one use spends (Capability API 1.251): 5e's Lay on
+ *  Hands. */
+export const RULESET_USES_CHOSEN_MIN = Object.freeze({ major: 1, minor: 251 });
+/** A heal or buff that gives back to a pool of whoever it lands on, past its maximum if it says so
+ *  (Capability API 1.252): 5e's Font of Magic. */
+export const RULESET_RESTORE_POOL_MIN = Object.freeze({ major: 1, minor: 252 });
+/** An entry chosen with another as that one is used, changing how it works (Capability API 1.253):
+ *  5e's Metamagic. */
+export const RULESET_ALTERS_MIN = Object.freeze({ major: 1, minor: 253 });
+/** A miss that deals half, and an applied condition's harm that grows with each higher payment
+ *  (Capability API 1.255): 5e's Acid Arrow. */
+export const RULESET_HALF_ON_MISS_MIN = Object.freeze({ major: 1, minor: 255 });
+/** A failed check's d20 counted as a 20, a holder's own rescue die, an entry never on its own user,
+ *  and one condition of a group at a time (Capability API 1.256): 5e's Stroke of Luck, Peerless
+ *  Skill, Dark One's Own Luck and Bardic Inspiration. */
+export const RULESET_OWN_RESCUE_MIN = Object.freeze({ major: 1, minor: 256 });
+/** An answer's dice off somebody else's ability check or damage roll too, and half on a miss from an
+ *  item's use (Capability API 1.257): 5e's Cutting Words and a scroll of Acid Arrow. */
+export const RULESET_LOWERS_ALSO_MIN = Object.freeze({ major: 1, minor: 257 });
+// Condition kinds a cure or an immunity may name ("disease"), and saves counted to end a condition or
+// to worsen it into another (Contagion's three either way).
+export const RULESET_CONDITION_KINDS_MIN = Object.freeze({ major: 1, minor: 258 });
+// A rescue on a worn item's use, paid with its own charges (a ring of evasion).
+export const RULESET_ITEM_RESCUE_MIN = Object.freeze({ major: 1, minor: 259 });
+// A condition that lowers health's maximum at each rest it names (Mummy Rot, a disease's daily loss).
+export const RULESET_REST_LOSS_MIN = Object.freeze({ major: 1, minor: 260 });
+// A disease's stages (1.261): conditions brought on by taking damage (Slimy Doom), a clock that runs out
+// into another condition and a cure narrowed by level (an aboleth's), a lasting rest loss given back
+// on a cure, healing kept to magic (a diseased giant rat's), and a stat block's cure (Healing Touch).
+export const RULESET_DISEASE_STAGES_MIN = Object.freeze({ major: 1, minor: 261 });
+// Qualities on a stat block's action (1.262): a magical Healing Touch, a magical charm.
+export const RULESET_CREATURE_QUALITIES_MIN = Object.freeze({ major: 1, minor: 262 });
+// Auras on a combat condition, and conditions kept on all fight (1.263): a paladin's Aura of
+// Protection, Holy Nimbus, a balor's Fire Aura.
+export const RULESET_AURAS_MIN = Object.freeze({ major: 1, minor: 263 });
+// Conditions that decide their holder's turn, and a save spent an action on (1.264): Turn Undead,
+// Command, Confusion, Irresistible Dance.
+export const RULESET_BEHAVIOR_MIN = Object.freeze({ major: 1, minor: 264 });
+// More from auras (1.265): senses they need, harm as the holder's turn starts, a save as a reached
+// creature's turn starts, and saves against what a catalog casts. A balor's Fire Aura, Countercharm,
+// a pit fiend's Fear Aura, a basilisk's gaze, Holy Nimbus.
+export const RULESET_AURA_TURNS_MIN = Object.freeze({ major: 1, minor: 265 });
+// Dropping what is held, keep-out rings, a free stuck turn, saves rolled out of sight and destroying by
+// threat tier (1.266): Fear, Command's Drop, Turn Undead's 30 feet, Destroy Undead.
+export const RULESET_DROPS_MIN = Object.freeze({ major: 1, minor: 266 });
+// Any one sense, targets near each other, areas that grow with the cost, more uses on an item and a
+// stat block's held things (1.267): Turn Undead, Command, Confusion, the Wand of Fear, a guard's shield.
+export const RULESET_SPREAD_MIN = Object.freeze({ major: 1, minor: 267 });
+// Gazes and auras by who they reach (1.268): averting the eyes, a save failed by enough, auras on
+// some creature types or on whoever holds its holder, and a save leaning while the source is seen.
+export const RULESET_GAZES_MIN = Object.freeze({ major: 1, minor: 268 });
+// More combat conditions than 160 (up to 320), and an aura's immunity once its effect ends.
+export const RULESET_MORE_CONDITIONS_MIN = Object.freeze({ major: 1, minor: 269 });
+// An item use's save difficulty off its holder's sheet, and more charges for more (a staff's casts).
+export const RULESET_STAFFS_MIN = Object.freeze({ major: 1, minor: 269 });
+// A kind named as a spell is cast, auras by that kind or by sight, and saves rolled only far off.
+export const RULESET_KIND_CHOICE_MIN = Object.freeze({ major: 1, minor: 270 });
+// An item's first use named on the menu, a sheet value added to a use, more push a charge, and charges
+// back on a high last-charge roll.
+export const RULESET_STAFF_EXTRAS_MIN = Object.freeze({ major: 1, minor: 271 });
+// An item that becomes another on its last charge's bad roll (a staff turned nonmagical quarterstaff).
+export const RULESET_ITEM_BECOMES_MIN = Object.freeze({ major: 1, minor: 272 });
+// Charges spent on a weapon's hit: a Staff of Power's Power Strike, a Staff of Striking's force a charge.
+export const RULESET_HIT_SPENDS_MIN = Object.freeze({ major: 1, minor: 273 });
+// Numbers fixed off whoever put a condition on (Heroism's temporary points, an aura's DC), a save on
+// harm from that source, staying in reach, and a kind named as a scroll is read.
+export const RULESET_APPLIED_VALUES_MIN = Object.freeze({ major: 1, minor: 274 });
+// Conditions held off rather than ended (Antipathy's fright beyond 60 feet and out of sight, Calm
+// Emotions' and Mindless Rage's charms and frights): a combat condition's orSourceWithin and
+// suppresses.
+export const RULESET_HELD_OFF_MIN = Object.freeze({ major: 1, minor: 275 });
+// Teleports: Misty Step, Dimension Door and its passenger, a cape's cast of it, a balor's Teleport.
+export const RULESET_TELEPORT_MIN = Object.freeze({ major: 1, minor: 276 });
+// Five or six conditions from one entry, item use or creature action (Mindless Rage beside Rage's four).
+export const RULESET_MORE_APPLIES_MIN = Object.freeze({ major: 1, minor: 277 });
+// Calm Emotions: a save allies may fail, indifference to the source's side, and endings when attacked,
+// when a friend is harmed in sight, or when harmed from a catalog (spells).
+export const RULESET_CALM_MIN = Object.freeze({ major: 1, minor: 278 });
+// A teleport out of the fight, one that takes along only those its user sees, or one that leaves smoke.
+export const RULESET_TELEPORT_EXTRAS_MIN = Object.freeze({ major: 1, minor: 279 });
+// A creature's teleport that strikes with another of its actions before or after (the blink dog's Bite).
+export const RULESET_TELEPORT_STRIKE_MIN = Object.freeze({ major: 1, minor: 280 });
+// A blow that heals its maker by the damage it dealt (Psychic Drain, Vampiric Touch).
+export const RULESET_DRAIN_MIN = Object.freeze({ major: 1, minor: 281 });
+// A burst centred on its user, never aimed, and one that reaches through walls (Channel Negative Energy).
+export const RULESET_AROUND_MIN = Object.freeze({ major: 1, minor: 282 });
+// A creature's legendary move: a share of its speed or a distance, unprovoking or untouchable.
+export const RULESET_LEGENDARY_MOVE_MIN = Object.freeze({ major: 1, minor: 283 });
+// A creature's legendary cast: a spell its own action would cast, or only a cantrip, bought with points.
+export const RULESET_LEGENDARY_CAST_MIN = Object.freeze({ major: 1, minor: 284 });
+// A legendary move after what its action does (the dragons' Wing Attack), or on one of its speeds.
+export const RULESET_MOVE_AFTER_MIN = Object.freeze({ major: 1, minor: 285 });
+// Light obscurement, fog a wind blows away, and the wind that does (Cape smoke, Fog Cloud, Gust of Wind).
+export const RULESET_LIGHT_WIND_MIN = Object.freeze({ major: 1, minor: 286 });
+/** Real Hide, Search and a creature's Detect (Capability API 1.287). */
+export const RULESET_HIDING_MIN = Object.freeze({ major: 1, minor: 287 });
+/** Ready for real (Capability API 1.288). */
+export const RULESET_READYING_MIN = Object.freeze({ major: 1, minor: 288 });
+/** A fog a wind disperses only after a while (Capability API 1.289). */
+export const RULESET_SLOW_WIND_MIN = Object.freeze({ major: 1, minor: 289 });
+/** A passive Perception that reads advantage, and checks made to find somebody (Capability API 1.290). */
+export const RULESET_LOOKING_MIN = Object.freeze({ major: 1, minor: 290 });
+/** A creature's own ways of hiding and looking (Capability API 1.291). */
+export const RULESET_CREATURE_LOOKING_MIN = Object.freeze({ major: 1, minor: 291 });
+/** Somebody's own ways of hiding and of finding the hidden (Capability API 1.292). */
+export const RULESET_OWN_HIDING_MIN = Object.freeze({ major: 1, minor: 292 });
+/** A creature's attack rolls rolled twice where it stands (Capability API 1.293). */
+export const RULESET_ATTACK_MODES_MIN = Object.freeze({ major: 1, minor: 293 });
+/** Fights kept dark, and things that shed light (Capability API 1.294). */
+export const RULESET_DARKNESS_MIN = Object.freeze({ major: 1, minor: 294 });
+/** A carried light with a name, or a price to put out and light again (Capability API 1.295). */
+export const RULESET_CARRIED_SWITCH_MIN = Object.freeze({ major: 1, minor: 295 });
+/** Creatures that light or put out their own light, and items that shed light switched off
+ *  (Capability API 1.296). */
+export const RULESET_CREATURE_LIGHT_MIN = Object.freeze({ major: 1, minor: 296 });
+/** Light from zones, magical darkness a zone ends, and light that shows the unseen (Capability API 1.297). */
+export const RULESET_ZONE_LIGHT_MIN = Object.freeze({ major: 1, minor: 297 });
+/** 1.298: light that is sunlight, and a creature's light out under a condition. */
+export const RULESET_SUNLIGHT_MIN = Object.freeze({ major: 1, minor: 298 });
+// Darkness that puts out spell light, magical light, and a dispelling reach.
+export const RULESET_DARK_AGAINST_LIGHT_MIN = Object.freeze({ major: 1, minor: 299 });
+// A higher cost's more once for every so many steps.
+export const RULESET_STEPS_EVERY_MIN = Object.freeze({ major: 1, minor: 300 });
+// Zones carried with somebody, and copies set down apart and moved together.
+export const RULESET_CARRIED_ZONE_MIN = Object.freeze({ major: 1, minor: 301 });
+// Entries that change another its holder uses.
+export const RULESET_AMENDS_MIN = Object.freeze({ major: 1, minor: 302 });
+// Uses only in some light, and conditions moving or acting ends.
+export const RULESET_SHADOWS_MIN = Object.freeze({ major: 1, minor: 303 });
+// Once a creature until a rest.
+export const RULESET_ONCE_PER_TARGET_MIN = Object.freeze({ major: 1, minor: 304 });
+// Targets that grow with the sheet, and one target named more than once.
+export const RULESET_TARGETS_SCALE_MIN = Object.freeze({ major: 1, minor: 305 });
+// A weapon put in hand, and amends that add damage of their own or more strikes.
+export const RULESET_CONJURES_MIN = Object.freeze({ major: 1, minor: 306 });
+// A creature's own concentration, a condition ended by a named action, and conditions on a use's own user.
+export const RULESET_SELF_HELD_MIN = Object.freeze({ major: 1, minor: 307 });
+// Beams, darts and rays on an item's use, and thrown weapons conjured.
+export const RULESET_ITEM_BEAMS_MIN = Object.freeze({ major: 1, minor: 308 });
+// Hiding's needs (a condition, a wall), Feral Senses, surprise from a hidden start, the binding ritual.
+export const RULESET_HIDING_NEEDS_MIN = Object.freeze({ major: 1, minor: 309 });
+// Used again while concentrating, and a condition that ends once its holder is far from its source.
+export const RULESET_REPEATS_MIN = Object.freeze({ major: 1, minor: 310 });
+// appliesSelf on an item's use, a creature action that slays the dying, combat conditions ended by their holder.
+export const RULESET_LEFTOVERS_306_MIN = Object.freeze({ major: 1, minor: 311 });
+/** A weapon mode's thunderclap around a hit (Capability API 1.312): the Hammer of Thunderbolts. */
+export const RULESET_THUNDERCLAP_MIN = Object.freeze({ major: 1, minor: 312 });
+/** Maze, Expeditious Retreat, a casting's choices and capped ability adds (Capability API 1.313). */
+export const RULESET_LEFTOVERS_308_MIN = Object.freeze({ major: 1, minor: 313 });
+/** A condition that shuts its holder away, and targets up to a size (Capability API 1.314): Resilient Sphere. */
+export const RULESET_SEALED_MIN = Object.freeze({ major: 1, minor: 314 });
+/** A creature's Legendary Resistance, and an item's use held to a size (Capability API 1.317). */
+export const RULESET_LEGENDARY_RESISTANCE_MIN = Object.freeze({ major: 1, minor: 317 });
+/** Dice a rest spends to heal, with an extra die such as Song of Rest (Capability API 1.335). */
+export const RULESET_REST_DICE_MIN = Object.freeze({ major: 1, minor: 335 });
+/** A rest's dice as a list, one entry per pool with its own die (Capability API 1.337): 5e's hit dice. */
+export const RULESET_REST_DICE_LIST_MIN = Object.freeze({ major: 1, minor: 337 });
+/** What the art reads: who is drawn sneaking and who kneels to cast (Capability API 1.786). */
+export const RULESET_POSES_MIN = Object.freeze({ major: 1, minor: 786 });
+/** Rolls and riders that read the target and the turn (Capability API 1.393): attackModes that hold
+ *  while an ally stands beside the target (Pack Tactics) or while it is hurt (Blood Frenzy), a rider
+ *  on a hurt target (Colossus Slayer) and one on the holder's own turn only (Divine Strike). */
+export const RULESET_ATTACK_GATES_MIN = Object.freeze({ major: 1, minor: 393 });
+/** Creatures a catalog entry or an item use calls to its user's side (Capability API 1.394): Conjure
+ *  Animals, a Figurine of Wondrous Power. */
+export const RULESET_CATALOG_CALLS_MIN = Object.freeze({ major: 1, minor: 394 });
+/** Ways of moving a combat condition gives (Capability API 1.395): Fly's 60 feet, Spider Climb's
+ *  climb, hovering, and Levitate's up and down only. */
+export const RULESET_CONDITION_SPEEDS_MIN = Object.freeze({ major: 1, minor: 395 });
+/** Health regained as each of its holder's turns starts (Capability API 1.396): a troll's
+ *  Regeneration, the Champion's Survivor. */
+export const RULESET_REGENERATES_MIN = Object.freeze({ major: 1, minor: 396 });
+/** A shape change (Capability API 1.392): an entry's `forms` with a combat condition's `shape`, Wild
+ *  Shape, Polymorph, Shapechange and Change Shape. */
+export const RULESET_SHAPES_MIN = Object.freeze({ major: 1, minor: 392 });
+/** Left at 1 instead of 0 (Capability API 1.400): Undead Fortitude, a boar's Relentless. */
+export const RULESET_HANGS_ON_MIN = Object.freeze({ major: 1, minor: 400 });
+/** Shape forms read from a bestiary catalog (Capability API 1.401): every beast of Wild Shape's rating. */
+export const RULESET_FORMS_FROM_MIN = Object.freeze({ major: 1, minor: 401 });
+/** Calls read from a bestiary catalog, counts scaled by the slot, and attackModes on melee alone
+ *  (Capability API 1.402): Conjure Animals' bands, Blood Frenzy. */
+export const RULESET_CALLS_FROM_MIN = Object.freeze({ major: 1, minor: 402 });
+/** Sizes in a target test, engulfing and being inside a creature (Capability API 1.403): a grapple
+ *  that holds only a Medium or smaller target, the gelatinous cube's Engulf, a swallow. */
+export const RULESET_TARGET_SIZES_MIN = Object.freeze({ major: 1, minor: 403 });
+/** A hang-on off a list row's pool or only while holding a condition, and better-of shapes (Capability
+ *  API 1.404): the half-orc's Relentless Endurance, the barbarian's Relentless Rage, Wild Shape. */
+export const RULESET_HANGS_BY_ROW_MIN = Object.freeze({ major: 1, minor: 404 });
+/** Capability API 1.405: a shape's betterOf reading only proficient saves and skills, and a hang-on pool
+ *  named by a list row in a catalog file of its own (1.404 parsed only inline catalogs' rows). */
+export const RULESET_BETTER_OF_MIN = Object.freeze({ major: 1, minor: 405 });
+/** Capability API 1.405: room inside a holder, regurgitating, climbing out of a fallen holder, a creature
+ *  action aimed only at some targets (`targetTypes`), and a sequence's all-hit rider. */
+export const RULESET_SWALLOWING_MIN = Object.freeze({ major: 1, minor: 405 });
+/** Capability API 1.406: a floor under defense, `{ to: "defense", atLeast: n or a value ref }` (Barkskin's
+ *  16, Mage Armor's 13 + Dexterity). */
+export const RULESET_DEFENSE_FLOOR_MIN = Object.freeze({ major: 1, minor: 406 });
+/** Capability API 1.407: pulling a creature out of another (a contest that `pulls`, an applies entry's
+ *  `harmsPuller`), a swallow ending the grapple (`endsOnTarget`), a rider waiting on a hold
+ *  (`targetHolds` on an applies entry), and a share of the source's harm (`takesSourceHarm`). */
+export const RULESET_PULLS_MIN = Object.freeze({ major: 1, minor: 407 });
+/** Capability API 1.408: a d20 face rolled again, `rerollsFace` on a condition or a level (Lucky). */
+export const RULESET_REROLLS_FACE_MIN = Object.freeze({ major: 1, minor: 408 });
+/** Capability API 1.409: a condition whose holder's harm its source takes too (Warding Bond). */
+export const RULESET_COPIES_HARM_MIN = Object.freeze({ major: 1, minor: 409 });
+/** Capability API 1.410: spent pools given back within a budget, `mechanics.recovers` (Arcane Recovery). */
+export const RULESET_RECOVERS_MIN = Object.freeze({ major: 1, minor: 410 });
+/** Capability API 1.411: a text column scaled by `texts` (Font of Inspiration's recharge), and a pool
+ *  refilled at initiative, `mechanics.refillsAtInitiative` (Superior Inspiration, Perfect Self). */
+export const RULESET_TEXTS_MIN = Object.freeze({ major: 1, minor: 411 });
+/** Capability API 1.412: temporary points as a foe drops, `fellsGrant` on a condition (Dark One's Blessing). */
+export const RULESET_FELLS_GRANT_MIN = Object.freeze({ major: 1, minor: 412 });
+/** Capability API 1.413: a damage modifier adding a value off the sheet (`add`), and one lessening falls
+ *  only (`falls`): Deflect Missiles and Slow Fall. */
+export const RULESET_LESSENED_MIN = Object.freeze({ major: 1, minor: 413 });
+/** Capability API 1.414: amends and alterations by catalog filter, damageOnce, halfOnSave, sparesByLevel
+ *  and sparesWhole (the School of Evocation). */
+export const RULESET_BY_FILTER_MIN = Object.freeze({ major: 1, minor: 414 });
+/** Capability API 1.415: an alteration that maximizes damage with a backlash, and an amend that heals
+ *  at the most (Overchannel, Supreme Healing). */
+export const RULESET_MAXIMIZED_MIN = Object.freeze({ major: 1, minor: 415 });
+/** Capability API 1.416: a missile caught (the "caught" moment), a reaction offered with an item slot
+ *  free (freeSlot), and an attack that throws the caught missile back (throwsCaught): Deflect Missiles. */
+export const RULESET_CAUGHT_MIN = Object.freeze({ major: 1, minor: 416 });
+/** Capability API 1.417: no advantage against the holder, entries held off while their holder has some
+ *  condition or effect (notWhile), and save effects only against a source seen (whenSeen): Elusive and
+ *  Danger Sense. */
+export const RULESET_UNSEEN_MIN = Object.freeze({ major: 1, minor: 417 });
+/** Capability API 1.418: a floor under its holder's checks (checkFloor), a die face or a total off the
+ *  sheet, narrowed to trained skills, abilities or skills: Reliable Talent and Indomitable Might. */
+export const RULESET_CHECK_FLOOR_MIN = Object.freeze({ major: 1, minor: 418 });
+/** Capability API 1.419: what an untrained skill, save or section adds off the sheet (`untrained:
+ *  {add}`), an ability check's own add (`checkAdd`), and up to 40 combat levels in place of 20: Jack of
+ *  All Trades and Remarkable Athlete. */
+export const RULESET_UNTRAINED_ADD_MIN = Object.freeze({ major: 1, minor: 419 });
+/** Capability API 1.420: a catalog entry's long range (`longRange`, further than `range`) and a caught
+ *  missile thrown back with a die off the sheet (`throwsCaught: { die }`): Deflect Missiles' monk weapon. */
+export const RULESET_LONG_RANGE_MIN = Object.freeze({ major: 1, minor: 420 });
+/** Capability API 1.421: an amend's healing added to everybody it heals (`healAdd`) and to its holder
+ *  when it heals somebody else (`healsSelf`): Disciple of Life and Blessed Healer. */
+export const RULESET_HEAL_ADD_MIN = Object.freeze({ major: 1, minor: 421 });
+/** Capability API 1.422: the "attacked" moment (`missed`), `sourceIs` on a moment, and answers that
+ *  strike back (`strikesWith`) or send a missed attack on (`redirects`): Retaliation, Giant Killer and
+ *  Stand Against the Tide. */
+export const RULESET_STRIKES_BACK_MIN = Object.freeze({ major: 1, minor: 422 });
+/** Capability API 1.423: a combat condition's `sanctuary` (`save`, `difficulty`, `from`, `immuneOnSave`),
+ *  a save whoever aims an attack or a harmful entry at its holder makes first: Sanctuary and Nature's
+ *  Sanctuary. */
+export const RULESET_SANCTUARY_MIN = Object.freeze({ major: 1, minor: 423 });
+/** Capability API 1.424: a catalog entry's `endsSpells` (`catalogs`, `count`, `upTo`, `above`), ending
+ *  what entries of those catalogs put on its target: Dispel Magic and Cleansing Touch. */
+export const RULESET_ENDS_SPELLS_MIN = Object.freeze({ major: 1, minor: 424 });
+/** Capability API 1.425: an applied condition's `endsWhenHolder.castsAtFoes`, and a sanctuary's
+ *  `against`: Sanctuary kept through a heal on a friend, and stopping only attacks and spells. */
+export const RULESET_REACHES_FOES_MIN = Object.freeze({ major: 1, minor: 425 });
+/** Capability API 1.426: a rest's `puts`, and a combat condition's own `endsWhenHolder` on attacks and
+ *  casts: Tranquility. */
+export const RULESET_REST_PUTS_MIN = Object.freeze({ major: 1, minor: 426 });
+/** Capability API 1.427: `endsSpells.chosen` and `endsSpells.zones`, and `endsSpells` on an item's
+ *  use: Cleansing Touch's pick, Dispel Magic on a lasting area, a scroll of Dispel Magic. */
+export const RULESET_DISPELS_MORE_MIN = Object.freeze({ major: 1, minor: 427 });
+/** Capability API 1.428: a `utility` entry's `strikesWith` over an `area`, and a combat condition or
+ *  level's `strikesAgain`: Volley, Whirlwind Attack and Horde Breaker. */
+export const RULESET_AREA_STRIKES_MIN = Object.freeze({ major: 1, minor: 428 });
+/** Capability API 1.429: choices on the sheet read by their words (`atTypesIn`, `resistIn`,
+ *  `damageTypeIn`), a sheet value added to attacks, checks and saves, once on its holder's turn or onto
+ *  damage (`oncePer: "own-turn"`, `orDamage`), and only where proficient: Foe Slayer, Elemental
+ *  Affinity and Natural Explorer. */
+export const RULESET_SHEET_CHOICES_MIN = Object.freeze({ major: 1, minor: 429 });
+/** Capability API 1.430: a change to defense only against a creature that hit its holder this turn
+ *  (`afterHitBy`), and one to attacks taken only on opportunity attacks (`opportunity`): Multiattack
+ *  Defense and Escape the Horde. */
+export const RULESET_DEFENSE_AFTER_HIT_MIN = Object.freeze({ major: 1, minor: 430 });
+/** Capability API 1.432: a combat condition or level that walks hard ground as plain (`ignoresHardGround`)
+ *  or runs up walls and across water (`runsAcross`): Land's Stride and Unarmored Movement. */
+export const RULESET_HARD_GROUND_MIN = Object.freeze({ major: 1, minor: 432 });
+/** Capability API 1.431: an entry kept up again on a budget while what it put on lasts (`sustains`),
+ *  and `oncePerTarget` sparing only those that saved (`whenSaved`): Intimidating Presence. */
+export const RULESET_SUSTAINS_MIN = Object.freeze({ major: 1, minor: 431 });
+/** Capability API 1.433: a condition put on that ends as its holder ends a turn far from its source or
+ *  out of their sight, either one (`endsAway.orUnseen`): Intimidating Presence. */
+export const RULESET_AWAY_OR_UNSEEN_MIN = Object.freeze({ major: 1, minor: 433 });
+/** Capability API 1.434: a rest's restore step giving back one named row of `listPools` (`row`), and
+ *  any restore step only while a value off the sheet stands within bounds (`when`): Sorcerous
+ *  Restoration. */
+export const RULESET_REST_ROW_MIN = Object.freeze({ major: 1, minor: 434 });
+/** Capability API 1.435: a combat condition or level keeping actions in any shape its holder takes
+ *  (`shapeKeeps`), a whole catalog kept (`"<catalogId>/*"`), and components its holder's uses need none of
+ *  (`waives`): Beast Spells and Archdruid. */
+export const RULESET_SHAPE_KEEPS_MIN = Object.freeze({ major: 1, minor: 435 });
+/** Capability API 1.436: a combat condition that comes off as its holder ends a turn without attacking a
+ *  foe or taking damage (`endsIdle`), kept on while a value off the sheet stands within bounds: Rage and
+ *  Persistent Rage. */
+export const RULESET_ENDS_IDLE_MIN = Object.freeze({ major: 1, minor: 436 });
+/** Capability API 1.437: what a condition or level keeps in any shape or waives, narrowed to actions made
+ *  from rows of a sheet list whose column holds one of some values (`rowsWhere`): "your druid spells". */
+export const RULESET_ROWS_WHERE_MIN = Object.freeze({ major: 1, minor: 438 });
+/** Capability API 1.438: a combat condition that stops casting from catalogs and concentrating
+ *  (`forbids.casts`, `forbids.concentration`), or ends when its holder goes down (`endsWhenHolder.downed`):
+ *  Rage. 1.438 also reads a row with no cell for `rowsWhere`'s column as the column's default, which 5e's
+ *  builder-added spells need, so `rowsWhere` is held to 1.438 here. */
+export const RULESET_RAGE_LIMITS_MIN = Object.freeze({ major: 1, minor: 438 });
+/** Capability API 1.439: awareness of some kinds of creature only (`aware.of`), only past no total cover
+ *  (`aware.uncovered`), and from a combat condition or level: Divine Sense. */
+export const RULESET_AWARE_OF_MIN = Object.freeze({ major: 1, minor: 439 });
+/** What is wrong with an awareness's `of` and `uncovered` (1.439), or nothing. */
+function awareOfIssue(document, aware) {
+  if (aware.uncovered !== undefined && aware.uncovered !== true) return "uncovered is true when given";
+  if (aware.of === undefined) return undefined;
+  const of = aware.of;
+  const types = new Set((document?.combat?.creatureTypes?.types ?? []).map((one) => one?.id ?? one));
+  if (
+    !of ||
+    typeof of !== "object" ||
+    Array.isArray(of) ||
+    // 1.555: fliers, conditions held and alternatives (gated at the end).
+    // 1.530: and what it never is (`except`).
+    Object.keys(of).some(
+      (key) => !["types", "tags", "upToSize", "atLeastSize", "flying", "holding", "anyOf", "except"].includes(key),
+    ) ||
+    (of.except !== undefined &&
+      (!of.except ||
+        typeof of.except !== "object" ||
+        Array.isArray(of.except) ||
+        of.except.anyOf !== undefined ||
+        of.except.except !== undefined ||
+        awareOfIssue(document, { of: of.except }) !== undefined)) ||
+    Object.keys(of).length === 0 ||
+    (of.flying !== undefined && of.flying !== true) ||
+    (of.holding !== undefined &&
+      (!Array.isArray(of.holding) ||
+        of.holding.length < 1 ||
+        of.holding.length > 8 ||
+        of.holding.some((one) => typeof one !== "string" || one.length === 0))) ||
+    (of.anyOf !== undefined &&
+      (!Array.isArray(of.anyOf) ||
+        of.anyOf.length < 2 ||
+        of.anyOf.length > 4 ||
+        of.anyOf.some(
+          (one) =>
+            !one ||
+            typeof one !== "object" ||
+            one.anyOf !== undefined ||
+            awareOfIssue(document, { of: one }) !== undefined,
+        ))) ||
+    (of.types !== undefined &&
+      (!Array.isArray(of.types) || of.types.length === 0 || of.types.some((type) => !types.has(type)))) ||
+    (of.tags !== undefined &&
+      (!Array.isArray(of.tags) ||
+        of.tags.length === 0 ||
+        of.tags.some((tag) => typeof tag !== "string" || tag.trim() === "")))
+  )
+    return "of is a target test of the ruleset's creature types";
+  return undefined;
+}
+/** Capability API 1.442: an entry whose user picks which of the conditions it ends (`ends.chosen`):
+ *  Greater Restoration's "one of the following effects". */
+export const RULESET_ENDS_CHOSEN_MIN = Object.freeze({ major: 1, minor: 442 });
+/** Capability API 1.443: a use that works only on a roll (`mechanics.chance`), a failure spending only
+ *  the row `failUses` names: Divine Intervention. Held to 1.443, where a failure gives its own row back. */
+export const RULESET_USE_CHANCE_MIN = Object.freeze({ major: 1, minor: 443 });
+/** Capability API 1.444: a combat condition that senses only whether some kinds are near (`presence`):
+ *  Primeval Awareness. */
+export const RULESET_PRESENCE_MIN = Object.freeze({ major: 1, minor: 444 });
+/** Capability API 1.445: list rows that recharge after days of game time (`pools.rechargeDays`), counted
+ *  by the sheet's pass command: Divine Intervention, a week. */
+export const RULESET_TIMED_RECHARGE_MIN = Object.freeze({ major: 1, minor: 445 });
+/** Capability API 1.446: a creature action's calls picked among `options`, sent away after `rounds` or
+ *  with their caller (`endsWithCaller`), and arriving without calls of their own (`cantCall`): Summon
+ *  Demon and Summon Mephits. */
+export const RULESET_CREATURE_CALL_OPTIONS_MIN = Object.freeze({ major: 1, minor: 446 });
+/** Capability API 1.447: what an entry applies lasting more rounds for each step of higher cost
+ *  (`duration.perStep`): Primeval Awareness, a minute per slot level. */
+export const RULESET_DURATION_PER_STEP_MIN = Object.freeze({ major: 1, minor: 447 });
+/** Capability API 1.448: an entry that puts on one of its applies, picked at use (`appliesOneOf`):
+ *  Primeval Awareness's 6 miles in favored terrain. */
+export const RULESET_APPLIES_ONE_OF_MIN = Object.freeze({ major: 1, minor: 448 });
+/** Capability API 1.449: creatures a call brought that their caller can send away (`dismissible`):
+ *  "until its summoner dismisses it as an action". */
+export const RULESET_CALLS_DISMISSIBLE_MIN = Object.freeze({ major: 1, minor: 449 });
+/** Capability API 1.450: an entry by its targets' health left (`applies[].targetHealthAtMost`,
+ *  `killsAtMost`), and sending away only some kinds (`dismissesIs`): Divine Word. */
+export const RULESET_HEALTH_TIERS_MIN = Object.freeze({ major: 1, minor: 450 });
+/** Capability API 1.451: zones set off by whoever walks in (`detonates.entered`, `by`) and reaching past
+ *  their cells (`within`): Glyph of Warding's explosive runes. */
+export const RULESET_GLYPHS_MIN = Object.freeze({ major: 1, minor: 451 });
+/** Zones that keep some kinds out, or in (1.452): Magic Circle, Hallow. */
+export const RULESET_KEEPS_OUT_MIN = Object.freeze({ major: 1, minor: 452 });
+/** Capability API 1.453: a set-off zone that stays as a lasting burst (`detonates.becomes`): Symbol. */
+export const RULESET_BECOMES_MIN = Object.freeze({ major: 1, minor: 453 });
+/** Capability API 1.454: a glyph storing one of its caster's entries (`detonates.stores`): the spell glyph. */
+export const RULESET_STORES_MIN = Object.freeze({ major: 1, minor: 454 });
+/** Capability API 1.455: a zone hidden from its caster's foes until found (`hidden`): the glyphs. */
+export const RULESET_HIDDEN_ZONES_MIN = Object.freeze({ major: 1, minor: 455 });
+/** Capability API 1.456: a zone that outlasts its caster (`outlasts`). */
+export const RULESET_OUTLASTS_MIN = Object.freeze({ major: 1, minor: 456 });
+/** Capability API 1.457: a condition harming nobody (`cannot-harm`) or fleeing a point (`behavior.from`):
+ *  Symbol's Hopelessness and Fear. */
+export const RULESET_HARMLESS_MIN = Object.freeze({ major: 1, minor: 457 });
+/** Capability API 1.458: a zone keeping some kinds in that wards those outside (`keepsOut.way: "out"` with
+ *  `attacksInto` or `cantGive`): Magic Circle reversed. */
+export const RULESET_KEEPS_IN_WARDS_MIN = Object.freeze({ major: 1, minor: 458 });
+/** Capability API 1.459: a zone freeing whoever steps in (`keepsOut.frees`): Hallow. */
+export const RULESET_FREES_MIN = Object.freeze({ major: 1, minor: 459 });
+/** Capability API 1.460: a zone whose inside works only on some or is shrugged off (`inside.is`, `inside.save`):
+ *  Hallow's extra effect. */
+export const RULESET_INSIDE_TEST_MIN = Object.freeze({ major: 1, minor: 460 });
+/** Capability API 1.461: an entry cast over rounds (`castingRounds`): the 1-minute spells. */
+export const RULESET_CASTING_ROUNDS_MIN = Object.freeze({ major: 1, minor: 461 });
+/** Capability API 1.462: an entry only set up before a fight (`beforeFight`): Glyph of Warding, Hallow. */
+export const RULESET_BEFORE_FIGHT_MIN = Object.freeze({ major: 1, minor: 462 });
+/** Capability API 1.463: a condition wasting its holder's budget on a failed save each turn (`behavior.wastes`):
+ *  Bestow Curse. */
+export const RULESET_WASTES_MIN = Object.freeze({ major: 1, minor: 463 });
+/** Capability API 1.464: a condition walking its holder (`behavior.walks`), from where it was steered
+ *  (`from: "steered"`), and an entry that steers it (`steers`): Compulsion. */
+export const RULESET_STEERS_MIN = Object.freeze({ major: 1, minor: 464 });
+/** Capability API 1.465: `beforeFight` on an entry with no zone: Heroes' Feast, Antipathy/Sympathy. */
+export const RULESET_BEFORE_FIGHT_ANY_MIN = Object.freeze({ major: 1, minor: 465 });
+/** Capability API 1.466: a zone whose inside works on one creature type picked as it is cast
+ *  (`inside.chooses`): Hallow. */
+export const RULESET_INSIDE_CHOOSES_MIN = Object.freeze({ major: 1, minor: 466 });
+/** Capability API 1.467: a zone forbidding teleporting (`forbids.teleport`): Hallow's Extradimensional
+ *  Interference. */
+export const RULESET_FORBIDS_TELEPORT_MIN = Object.freeze({ major: 1, minor: 467 });
+/** Capability API 1.468: a ray rolled for each target (`rays`): Prismatic Spray. */
+export const RULESET_RAYS_MIN = Object.freeze({ major: 1, minor: 468 });
+/** Capability API 1.469: an entry picking one of up to 12 applies (`appliesOneOf`): Bestow Curse. */
+export const RULESET_APPLIES_ONE_OF_MANY_MIN = Object.freeze({ major: 1, minor: 469 });
+/** Capability API 1.470: a duration set by the cost paid (`duration.bySteps`), and concentration only
+ *  below a step of it (`concentrationBelowStep`): Bestow Curse. */
+export const RULESET_DURATION_BY_STEPS_MIN = Object.freeze({ major: 1, minor: 470 });
+/** Capability API 1.471: a damage change counting with no attack roll too (`alsoUnrolled`): Bestow
+ *  Curse's extra necrotic. */
+export const RULESET_ALSO_UNROLLED_MIN = Object.freeze({ major: 1, minor: 471 });
+/** Capability API 1.472: a condition walking its holder as they end their turn (`walks: "after"`):
+ *  Compulsion. */
+export const RULESET_WALKS_AFTER_MIN = Object.freeze({ major: 1, minor: 472 });
+/** Capability API 1.473: a condition raising its holder's health maximum (`raisesMax`): Aid, Heroes'
+ *  Feast. */
+export const RULESET_RAISES_MAX_MIN = Object.freeze({ major: 1, minor: 473 });
+/** Capability API 1.474: an entry casting any other of a catalog up to a level (`duplicates`): Wish. */
+export const RULESET_DUPLICATES_MIN = Object.freeze({ major: 1, minor: 474 });
+/** Capability API 1.475: a creature splitting in two when harmed by some kinds (`splits`): Black
+ *  Pudding, Ochre Jelly. */
+export const RULESET_SPLITS_MIN = Object.freeze({ major: 1, minor: 475 });
+/** Capability API 1.476: a condition warded against whole catalogs' effects
+ *  (`conditionImmunitiesFrom` `catalogs`): Freedom of Movement against magic. */
+export const RULESET_WARDS_BY_CATALOG_MIN = Object.freeze({ major: 1, minor: 476 });
+/** Capability API 1.477: a worn or carried item landing its holder safely or holding conditions off
+ *  (`fallsSafely`, `suppresses`): Ring of Feather Falling, Periapt of Health. */
+export const RULESET_ITEM_FALLS_SUPPRESSES_MIN = Object.freeze({ major: 1, minor: 477 });
+/** Capability API 1.478: a condition held off on some terrains (`whileOffTerrain`): the aboleth's
+ *  curse, underwater. */
+export const RULESET_WHILE_OFF_TERRAIN_MIN = Object.freeze({ major: 1, minor: 478 });
+/** Capability API 1.479: what an entry applies put on what it calls (`appliesToCalled`), and called
+ *  objects that take no turns (`initiative: "none"`): Antipathy/Sympathy on an object, Find Familiar. */
+export const RULESET_APPLIES_TO_CALLED_MIN = Object.freeze({ major: 1, minor: 479 });
+/** Capability API 1.480: a conjured weapon gone once left lying far off (`conjures.vanishes`): the
+ *  pact weapon. */
+export const RULESET_CONJURED_VANISHES_MIN = Object.freeze({ major: 1, minor: 480 });
+/** Capability API 1.481: a condition lending its holder's senses to whoever put it on (`lendsSenses`):
+ *  a familiar seen through, Gaze of Two Minds. */
+export const RULESET_LENDS_SENSES_MIN = Object.freeze({ major: 1, minor: 481 });
+/** Capability API 1.482: durations past 1000 rounds, up to a day, and "until-dispelled" steps. */
+export const RULESET_DAY_ROUNDS_MIN = Object.freeze({ major: 1, minor: 482 });
+/** Capability API 1.483: a save rolled as its source's turn starts, and failures that dismiss:
+ *  Banishment-like ends, Prismatic Spray's violet ray. */
+export const RULESET_SOURCE_TURN_SAVES_MIN = Object.freeze({ major: 1, minor: 483 });
+/** Capability API 1.484: an item holding off every condition of a kind (`suppresses` naming a kind):
+ *  the Periapt of Health and every disease. */
+export const RULESET_SUPPRESSES_KINDS_MIN = Object.freeze({ major: 1, minor: 484 });
+/** Capability API 1.485: a duration with no clock (`"until-dispelled"`): Continual Flame. */
+export const RULESET_UNTIL_DISPELLED_MIN = Object.freeze({ major: 1, minor: 485 });
+/** Capability API 1.486: speed kept from magic and slipping free for some walk (`speedKeptFrom`,
+ *  `slipsFree`), and catalog wards on items: Freedom of Movement, the Ring of Free Action. */
+export const RULESET_FREE_MOVEMENT_MIN = Object.freeze({ major: 1, minor: 486 });
+/** Capability API 1.487: familiars, a target test for one's own called creature (`targetTypes.calledBySelf`)
+ *  and a call's creature types picked as it is used (`calls.asTypes`): Find Familiar, Voice of the Chain
+ *  Master. */
+export const RULESET_FAMILIARS_MIN = Object.freeze({ major: 1, minor: 487 });
+/** Capability API 1.488: an attack given up for one by a called creature (`lendsStrikes`): Pact of the
+ *  Chain. */
+export const RULESET_LENDS_STRIKES_MIN = Object.freeze({ major: 1, minor: 488 });
+/** Capability API 1.489: hard going ignored on an item (`ignoresHardGround`) and a condition's answer to
+ *  a hit (`whenHit`): the Ring of Free Action, Holy Aura. */
+export const RULESET_WHEN_HIT_MIN = Object.freeze({ major: 1, minor: 489 });
+/** Capability API 1.490: a zone of layers crossed one at a time, and its flash (`zone.layers`): Prismatic
+ *  Wall. */
+export const RULESET_ZONE_LAYERS_MIN = Object.freeze({ major: 1, minor: 490 });
+/** Capability API 1.491: an entry aimed at a standing layered wall to break the layer that names it
+ *  (`endsLayers`): Passwall on Prismatic Wall's green layer. */
+export const RULESET_ENDS_LAYERS_MIN = Object.freeze({ major: 1, minor: 491 });
+/** Capability API 1.492: what a layer stops passing through the wall (`blocks` on a layer row), and
+ *  the creatures its caster picks to spare (`spares: { chosen }`): Prismatic Wall. */
+export const RULESET_LAYER_BLOCKS_MIN = Object.freeze({ major: 1, minor: 492 });
+/** Capability API 1.493: a catalog entry's row standing for another entry in a fight (`standsFor`):
+ *  Pact of the Chain's Find Familiar, the tiefling's Thaumaturgy. */
+export const RULESET_STANDS_FOR_MIN = Object.freeze({ major: 1, minor: 493 });
+/** Capability API 1.494: an item's use breaking a layered wall's layer as the entry it names
+ *  (`endsLayers` with `endsLayersAs`): a scroll of Passwall. */
+export const RULESET_ITEM_ENDS_LAYERS_MIN = Object.freeze({ major: 1, minor: 494 });
+/** Capability API 1.495: walking through other creatures (`combat.sizes.passing`, a condition's or level's
+ *  `passesCreatures`) and through solid ground (`passesObjects`): Halfling Nimbleness, Incorporeal Movement. */
+export const RULESET_PASSING_MIN = Object.freeze({ major: 1, minor: 495 });
+/** Capability API 1.496: mounted combat (`combat.mounts`, a block's `mountIndependent`). */
+export const RULESET_MOUNTS_MIN = Object.freeze({ major: 1, minor: 496 });
+/** Capability API 1.497: a condition's holder dragged along by whoever put it on (`dragged`): 5e's grappled. */
+export const RULESET_DRAGGED_MIN = Object.freeze({ major: 1, minor: 497 });
+/** Capability API 1.498: fighting under water and holding breath (`combat.underwater`). */
+export const RULESET_UNDERWATER_MIN = Object.freeze({ major: 1, minor: 498 });
+/** Capability API 1.499: long and high jumps (`combat.jumping`, a condition's `jumps`). */
+export const RULESET_JUMPING_MIN = Object.freeze({ major: 1, minor: 499 });
+/** Capability API 1.500: dying rolls as saves (`dying.asSave`), and a condition's `deathSaves` and
+ *  `healedMax`: Beacon of Hope. */
+export const RULESET_DEATH_SAVES_MIN = Object.freeze({ major: 1, minor: 500 });
+/** Capability API 1.501: a condition changing its holder's weapon blows (`weapon`): Magic Weapon, Shillelagh. */
+export const RULESET_CONDITION_WEAPON_MIN = Object.freeze({ major: 1, minor: 501 });
+/** Capability API 1.502: advantage on attacks taken from the condition's source only (`fromSource` on
+ *  attacks-taken), ending after that source's next attack (`endsAfter: "attacked-by-source"`): True Strike. */
+export const RULESET_TRUE_STRIKE_MIN = Object.freeze({ major: 1, minor: 502 });
+/** Capability API 1.503: a condition ending after its holder's next weapon hit (`endsAfter: "own-hit"`), and
+ *  what its holder's hits put on (`onHit`): Branding Smite. */
+export const RULESET_CONDITION_ON_HIT_MIN = Object.freeze({ major: 1, minor: 503 });
+/** Capability API 1.504: stopping in a foe's space (`stopsInFoes`), what entering one does (`entering`), and
+ *  the reaction a falling rider lands with (`combat.mounts.fall.landsWith`): Fire Form. */
+export const RULESET_ENTERING_MIN = Object.freeze({ major: 1, minor: 504 });
+/** Capability API 1.505: illusory duplicates drawing attacks off a condition's holder (`duplicates`):
+ *  Mirror Image. */
+export const RULESET_MIRROR_IMAGES_MIN = Object.freeze({ major: 1, minor: 505 });
+/** Capability API 1.506: off the board on a die as its holder's turn ends (`blinks`): Blink. */
+export const RULESET_BLINKS_MIN = Object.freeze({ major: 1, minor: 506 });
+/** Capability API 1.507: turns in a row (`stopsTime`): Time Stop. */
+export const RULESET_STOPS_TIME_MIN = Object.freeze({ major: 1, minor: 507 });
+/** Capability API 1.508: harm dealt back to a hitter with no save (`whenHit.harms`), from within a distance
+ *  (`whenHit.within`): Fire Shield, Heated Body. */
+export const RULESET_WHEN_HIT_HARMS_MIN = Object.freeze({ major: 1, minor: 508 });
+/** Capability API 1.509: stepping in front of an attack aimed at somebody else (`takesAim`), and defense or an
+ *  aimed moment narrowed by `blow`: Arrow-Catching Shield. */
+export const RULESET_TAKES_AIM_MIN = Object.freeze({ major: 1, minor: 509 });
+/** Capability API 1.510: critical hits on the holder made plain hits (`criticals-against-normal`): Adamantine
+ *  Armor. */
+export const RULESET_CRITICALS_NORMAL_MIN = Object.freeze({ major: 1, minor: 510 });
+/** Capability API 1.511: item attacks with no damage dice, an `onHit` on any hit (`atLeast: 0`) and one a
+ *  check ends (`checkEnds`): the blowgun and the net. */
+export const RULESET_DICELESS_ATTACKS_MIN = Object.freeze({ major: 1, minor: 511 });
+/** Capability API 1.512: creatures that breathe only water (`combat.underwater.breath.waterOnly`). */
+export const RULESET_WATER_ONLY_MIN = Object.freeze({ major: 1, minor: 512 });
+/** Capability API 1.513: worn items that lengthen jumps (`jumps`) and keep conditions on (`keepsOn`). */
+export const RULESET_WORN_KEEPS_MIN = Object.freeze({ major: 1, minor: 513 });
+/** Capability API 1.514: a condition held off by damage until its holder's turn starts
+ *  (`suppressedWhenHarmed`): Cloak of Displacement. */
+export const RULESET_SUPPRESSED_WHEN_HARMED_MIN = Object.freeze({ major: 1, minor: 514 });
+/** Capability API 1.515: abilities a combat condition changes while it holds (`abilities`): Potions of Giant
+ *  Strength, Feeblemind. */
+export const RULESET_CONDITION_ABILITIES_MIN = Object.freeze({ major: 1, minor: 515 });
+/** Capability API 1.516: an item's use that raises abilities for good (`raises`): Manuals and Tomes. */
+export const RULESET_ITEM_RAISES_MIN = Object.freeze({ major: 1, minor: 516 });
+/** Capability API 1.517: what an entry puts on picked by the steps paid (`paidSteps`): Magic Weapon,
+ *  Branding Smite. */
+export const RULESET_PAID_STEPS_MIN = Object.freeze({ major: 1, minor: 517 });
+/** Capability API 1.518: a check anybody next to its holder may make to end it (`checkEnds.by: "any"`):
+ *  the net, alchemist's fire, dousing a fire. */
+export const RULESET_CHECK_ENDS_BY_ANY_MIN = Object.freeze({ major: 1, minor: 518 });
+/** Capability API 1.519: up to 16 more uses, each with its own count of uses (`moreUses[].uses`): Staff of
+ *  Thunder and Lightning. */
+export const RULESET_MORE_USES_COUNT_MIN = Object.freeze({ major: 1, minor: 519 });
+/** Capability API 1.520: a combat condition that wards off spells up to a level (`wards`): Limited Magic
+ *  Immunity. */
+export const RULESET_CONDITION_WARDS_MIN = Object.freeze({ major: 1, minor: 520 });
+/** Capability API 1.521: a zone that suppresses magic and forbids casting inside it (`suppresses`,
+ *  `forbids.casts`): Antimagic Field. */
+export const RULESET_ZONE_SUPPRESSES_MIN = Object.freeze({ major: 1, minor: 521 });
+/** Capability API 1.522: a spell aimed at its holder alone taken in (`absorbs`): Rod of Absorption, Ioun
+ *  Stone of Greater Absorption. */
+export const RULESET_ABSORBS_MIN = Object.freeze({ major: 1, minor: 522 });
+/** Capability API 1.523: a spell aimed at its holder alone turned back (`turns`, `against.alone`): Ring of
+ *  Spell Turning. */
+export const RULESET_TURNS_MIN = Object.freeze({ major: 1, minor: 523 });
+/** Capability API 1.524: spells stored to cast later (`stores`): Ring of Spell Storing, Ioun Stone of
+ *  Reserve, the shield guardian. */
+export const RULESET_STORED_SPELLS_MIN = Object.freeze({ major: 1, minor: 524 });
+/** Capability API 1.525: a condition that forbids items (`forbids.items`), and up to twelve conditions
+ *  picked by the steps paid: Feeblemind, Branding Smite to 9d6. */
+export const RULESET_FORBIDS_ITEMS_MIN = Object.freeze({ major: 1, minor: 525 });
+/** Capability API 1.526: a save made again as days pass outside a fight (`saveEnds.at: "days"`): Feeblemind. */
+export const RULESET_SAVE_DAYS_MIN = Object.freeze({ major: 1, minor: 526 });
+/** Capability API 1.527: a touch answered as a hit is (`whenHit.touches`): Heated Body, Fire Form. */
+export const RULESET_TOUCHES_MIN = Object.freeze({ major: 1, minor: 527 });
+/** Capability API 1.528: a condition held off while its holder has others (`heldOffWhile`): Cloak of
+ *  Displacement. */
+export const RULESET_HELD_OFF_WHILE_MIN = Object.freeze({ major: 1, minor: 528 });
+/** Capability API 1.529: a condition walking on liquid as on ground (`walksOnLiquid`): Water Walk. */
+export const RULESET_WALKS_ON_LIQUID_MIN = Object.freeze({ major: 1, minor: 529 });
+/** Capability API 1.530: a target test with an exception (`except`): the net and the formless. */
+export const RULESET_TARGET_EXCEPT_MIN = Object.freeze({ major: 1, minor: 530 });
+/** Capability API 1.531: a condition a blow may cut away (`cutFree`): the net. */
+export const RULESET_CUT_FREE_MIN = Object.freeze({ major: 1, minor: 531 });
+/** Capability API 1.532: an item's use centred on its user (`area.around`): Thunderclap, Terrify. */
+export const RULESET_ITEM_AROUND_MIN = Object.freeze({ major: 1, minor: 532 });
+/** Capability API 1.533: a zone setting called creatures aside (`suppresses.setsAsideCalled`): Antimagic
+ *  Field. */
+export const RULESET_SETS_ASIDE_CALLED_MIN = Object.freeze({ major: 1, minor: 533 });
+/** Capability API 1.534: a weapon hit spending its own uses (`attack.spends[].uses`), with a save, a drain,
+ *  no amount, or conditions lasting rounds of its wielder's: the Rod of Lordly Might, the Staff of Thunder
+ *  and Lightning. */
+export const RULESET_SPEND_USES_MIN = Object.freeze({ major: 1, minor: 534 });
+/** Capability API 1.535: an item's use happening beside its others (`moreUses[].alongside`): Thunder and
+ *  Lightning. */
+export const RULESET_ALONGSIDE_MIN = Object.freeze({ major: 1, minor: 535 });
+/** Capability API 1.539: a summons striking by itself as its summoner's turn starts
+ *  (`summons.strikesAtTurnStart`): Faithful Hound. */
+export const RULESET_STRIKES_AT_TURN_START_MIN = Object.freeze({ major: 1, minor: 539 });
+/** Capability API 1.540: a creature bursting as it dies (`onDeath`): the mephits' Death Burst, the balor's
+ *  Death Throes. */
+export const RULESET_ON_DEATH_MIN = Object.freeze({ major: 1, minor: 540 });
+/** Capability API 1.541: damage that heals a creature instead (`healedBy`): the golems' Absorption. */
+export const RULESET_HEALED_BY_MIN = Object.freeze({ major: 1, minor: 541 });
+/** Capability API 1.537: calls that grow with the slot (`calls.perStep`, `upTo.perStep`, `options[].fromStep`
+ *  and `perStep`): Conjure Elemental, Animate Dead, Create Undead. */
+export const RULESET_CALLS_PER_STEP_MIN = Object.freeze({ major: 1, minor: 537 });
+/** Capability API 1.538: called creatures that turn as concentration breaks (`calls.hostileOnBreak`):
+ *  Conjure Elemental, Conjure Fey. */
+export const RULESET_HOSTILE_ON_BREAK_MIN = Object.freeze({ major: 1, minor: 538 });
+/** Capability API 1.542: conditions harm puts on a creature (`whenHarmedBy`): Aversion of Fire, Freeze. */
+export const RULESET_WHEN_HARMED_BY_MIN = Object.freeze({ major: 1, minor: 542 });
+/** Capability API 1.552: more than 320 combat conditions, up to 640. */
+export const RULESET_CONDITIONS_640_MIN = Object.freeze({ major: 1, minor: 552 });
+/** Capability API 1.554: a creature's calls raised from a corpse and held to a most (`calls.atCorpse`,
+ *  `calls.atMost`): the wraith's Create Specter. */
+export const RULESET_CALLS_AT_CORPSE_MIN = Object.freeze({ major: 1, minor: 554 });
+/** Capability API 1.543: a roll as a creature's turn starts (`rollsAtTurnStart`), a condition sending its
+ *  holder at the nearest creature (`behavior.nearest`) and one ending at full health (`endsAtFullHealth`):
+ *  the golems' Berserk. */
+export const RULESET_BERSERK_MIN = Object.freeze({ major: 1, minor: 543 });
+/** Capability API 1.544: attacks and damage against a surprised or not-yet-acted target (`whenTarget`), a
+ *  hit made critical (`critical`), and riders on such a target: Assassinate, Surprise Attack, Ambusher. */
+export const RULESET_WHEN_TARGET_MIN = Object.freeze({ major: 1, minor: 544 });
+/** Capability API 1.545: a creature's Rampage (`rampage`). */
+export const RULESET_RAMPAGE_MIN = Object.freeze({ major: 1, minor: 545 });
+/** Capability API 1.546: what follows a charge (`charge.then`): Pounce, Trampling Charge. */
+export const RULESET_CHARGE_THEN_MIN = Object.freeze({ major: 1, minor: 546 });
+/** Capability API 1.549: budgets back on every turn (`refillsEveryTurn`): the marilith's Reactive. */
+export const RULESET_REFILLS_EVERY_TURN_MIN = Object.freeze({ major: 1, minor: 549 });
+/** Capability API 1.550: heads that die and grow back (`heads`), and a sequence step made once for each
+ *  head (`perHead`): the hydra's Multiple Heads, Reactive Heads and Multiattack. */
+export const RULESET_HEADS_MIN = Object.freeze({ major: 1, minor: 550 });
+/** Capability API 1.553: attacks on a target held by their holder (`targetHoldsFromSelf`): the Grappler
+ *  feat and the mimic's Grappler. */
+export const RULESET_HELD_BY_SELF_MIN = Object.freeze({ major: 1, minor: 553 });
+/** Capability API 1.555: a wall's cover (zone `cover`), a condition's only speeds (`onlySpeeds`), a
+ *  regeneration kept off (`notIn`), and fliers, conditions held and alternatives in target tests
+ *  (`flying`, `holding`, `anyOf`): Blade Barrier, Gaseous Form, the vampires, Wind Wall. */
+export const RULESET_WALL_COVER_MIN = Object.freeze({ major: 1, minor: 555 });
+/** Capability API 1.556: charges and uses that come back after a wait in game time (`recharge.after`):
+ *  the Figurines of Wondrous Power and Wings of Flying. */
+export const RULESET_RECHARGE_AFTER_MIN = Object.freeze({ major: 1, minor: 556 });
+/** Capability API 1.557: a zone that changes from one of its caster's turns to the next (`stages`):
+ *  Storm of Vengeance. */
+export const RULESET_ZONE_STAGES_MIN = Object.freeze({ major: 1, minor: 557 });
+/** Capability API 1.560: double damage to objects (`doubleToObjects`): Siege Monster. */
+export const RULESET_DOUBLE_TO_OBJECTS_MIN = Object.freeze({ major: 1, minor: 560 });
+/** Capability API 1.563: one heal shared out among its targets (`sharesHeal`): Preserve Life. */
+export const RULESET_SHARES_HEAL_MIN = Object.freeze({ major: 1, minor: 563 });
+/** Capability API 1.566: a condition that lifts its holder off the ground (`lifts`): Reverse Gravity. */
+export const RULESET_LIFTS_MIN = Object.freeze({ major: 1, minor: 566 });
+/** Capability API 1.574: a charge followed by its own action again (`then.action` naming itself): the
+ *  warhorse's Trampling Charge. */
+export const RULESET_CHARGE_SELF_MIN = Object.freeze({ major: 1, minor: 574 });
+/** Capability API 1.562: harm as a condition's holder attacks its source or their side (`harms.at`
+ *  "attacks-source", "attacks-source-side", `once`): Geas. */
+export const RULESET_HARMS_DEFIANCE_MIN = Object.freeze({ major: 1, minor: 562 });
+/** Capability API 1.564: reactions against qualities (`against.qualities`) and for one holding an item
+ *  (`forHolds`): Rock Catching, the shield guardian's Shield. */
+export const RULESET_REACTION_QUALITIES_MIN = Object.freeze({ major: 1, minor: 564 });
+/** Capability API 1.565: a contest on a catalog entry (`contest`) and a target moved where its user picks
+ *  (`movesTarget`): Telekinesis. */
+export const RULESET_ENTRY_CONTEST_MIN = Object.freeze({ major: 1, minor: 565 });
+/** Capability API 1.567: a check mode against anybody but its source (`exceptSource`): Enthrall. */
+export const RULESET_EXCEPT_SOURCE_MIN = Object.freeze({ major: 1, minor: 567 });
+/** Capability API 1.578: a contest offered only to an actor holding conditions (`actorHolds`): the
+ *  Grappler feat's pin. */
+export const RULESET_ACTOR_HOLDS_MIN = Object.freeze({ major: 1, minor: 578 });
+/** Capability API 1.579: a zone's inside save thrown as it is cast (`inside.save.onCast`): Reverse Gravity. */
+export const RULESET_INSIDE_ON_CAST_MIN = Object.freeze({ major: 1, minor: 579 });
+/** Capability API 1.580: a zone stage that breaks concentration and disperses fog (`breaksConcentration`,
+ *  `disperses`): Storm of Vengeance's gusts. */
+export const RULESET_STAGE_WIND_MIN = Object.freeze({ major: 1, minor: 580 });
+/** Capability API 1.581: a zone turning nonmagical shots aside (`turnsShots`): Wind Wall. */
+export const RULESET_TURNS_SHOTS_MIN = Object.freeze({ major: 1, minor: 581 });
+/** Capability API 1.582: a save made with advantage by a creature being fought (`save.advantageIfFought`):
+ *  Charm Person, Enthrall. */
+export const RULESET_ADVANTAGE_IF_FOUGHT_MIN = Object.freeze({ major: 1, minor: 582 });
+/** Capability API 1.583: an item's use repeated while its user concentrates (`repeats` on an item use):
+ *  a scroll of Telekinesis. */
+export const RULESET_ITEM_REPEATS_MIN = Object.freeze({ major: 1, minor: 583 });
+/** Capability API 1.584: a condition ending on what its source does or can't do (`endsWhenSource`): Enthrall. */
+export const RULESET_ENDS_WHEN_SOURCE_MIN = Object.freeze({ major: 1, minor: 584 });
+/** Capability API 1.585: a condition counting as others (`countsAs`): Enthrall and Geas as charmed. */
+export const RULESET_COUNTS_AS_MIN = Object.freeze({ major: 1, minor: 585 });
+/** Capability API 1.586: a called creature's action keeping its caller's number off (`callerAdds: false`)
+ *  or growing for each step its call was paid above its base (`perCallerStep`): Arcane Hand's fist. */
+export const RULESET_CALLER_STEPS_MIN = Object.freeze({ major: 1, minor: 586 });
+/** Capability API 1.587: a contest rolled with advantage against the small (`advantageAtMostSize`) and a
+ *  push read off the actor's or its caller's sheet (`onWin.pushRead`): Arcane Hand's Forceful Hand. */
+export const RULESET_CONTEST_SIZE_PUSH_MIN = Object.freeze({ major: 1, minor: 587 });
+/** Capability API 1.588: cover a condition gives against its applier or the applier's caller
+ *  (`coverFor`): Arcane Hand's Interposing Hand. */
+export const RULESET_COVER_FOR_MIN = Object.freeze({ major: 1, minor: 588 });
+/** Capability API 1.591: an item's rolled call kept for later uses and spent after so many (`keepsRoll`,
+ *  `lifetimeUses`, options' `rounds`, `spendsItem`, `pastLifetime`): the Efreeti Bottle. */
+export const RULESET_KEPT_ROLLS_MIN = Object.freeze({ major: 1, minor: 591 });
+/** Capability API 1.592: an entry's or item use's save failed by so much putting others on (`save.failedBy`):
+ *  the Wand of Wonder's petrification. */
+export const RULESET_FAILED_BY_MIN = Object.freeze({ major: 1, minor: 592 });
+/** Capability API 1.593: an amount multiplied and shared out among those an area catches (`amountTimes`,
+ *  `dividedAmong`): the Wand of Wonder's gems. */
+export const RULESET_AMOUNT_SHARED_MIN = Object.freeze({ major: 1, minor: 593 });
+/** Capability API 1.594: targets each within a distance of the first one picked (`targetsWithinFirst`):
+ *  Chain Lightning. */
+export const RULESET_TARGETS_NEAR_FIRST_MIN = Object.freeze({ major: 1, minor: 594 });
+/** Capability API 1.595: a zone's `keepsOut` stopping reach through it (`reach`), or ending as whoever it
+ *  is around carries it over one it keeps out (`endsOnSweep`): Antilife Shell. */
+export const RULESET_REACH_BARRIER_MIN = Object.freeze({ major: 1, minor: 595 });
+/** Capability API 1.596: hanging on that ends its condition (`hangsOn.ends`), and wards off being slain
+ *  outright (`hangsOn.outright`): Death Ward. */
+export const RULESET_HANGS_ON_ENDS_MIN = Object.freeze({ major: 1, minor: 596 });
+/** Capability API 1.548: a creature hanging on as one of its own action's forms (`hangsOn.becomes`): the
+ *  vampire's Misty Escape. */
+export const RULESET_HANGS_ON_BECOMES_MIN = Object.freeze({ major: 1, minor: 548 });
+/** Capability API 1.597: up to 16 contests, up from 12: Arcane Hand's Grasping Hand. */
+export const RULESET_MORE_CONTESTS_MIN = Object.freeze({ major: 1, minor: 597 });
+/** Capability API 1.598: a contest's winner following the one it pushed (`onWin.follows`): Forceful Hand. */
+export const RULESET_CONTEST_FOLLOWS_MIN = Object.freeze({ major: 1, minor: 598 });
+/** Capability API 1.599: a condition ending once whoever applied it acts again (`endsWhenSource.acts`):
+ *  Interposing Hand. */
+export const RULESET_ENDS_WHEN_SOURCE_ACTS_MIN = Object.freeze({ major: 1, minor: 599 });
+/** Capability API 1.600: a creature only some foes pass through (`passableBy`), and one filling none of its
+ *  space (`fillsSpace: false`): Arcane Hand. */
+export const RULESET_PASSABLE_BY_MIN = Object.freeze({ major: 1, minor: 600 });
+/** Capability API 1.601: a condition's own `actions` kept offered beside its `behavior.only`
+ *  (`behavior.actions`): Wind Walk's revert. */
+export const RULESET_BEHAVIOR_ACTIONS_MIN = Object.freeze({ major: 1, minor: 601 });
+/** Capability API 1.602: a wall laid only as its ring (`area.ringOnly`), and a zone blocking spells cast
+ *  across it (`blocks: ["spells"]`): Forcecage. */
+export const RULESET_RING_ONLY_MIN = Object.freeze({ major: 1, minor: 602 });
+/** Capability API 1.603: a zone's teleport ban that a save gets past (`forbids.teleport: { save, difficulty:
+ *  "caster" }`): Forcecage. */
+export const RULESET_TELEPORT_SAVE_MIN = Object.freeze({ major: 1, minor: 603 });
+/** Capability API 1.604: a repeat offered once everybody it was aimed at is down (`repeats.afterTargetDown`):
+ *  Hunter's Mark. */
+export const RULESET_REPEATS_AFTER_DOWN_MIN = Object.freeze({ major: 1, minor: 604 });
+/** Capability API 1.605: a combat condition held only in some light (`heldOnlyIn.light`), held off anywhere
+ *  else: 5e's shadow's Sunlight Weakness. */
+export const RULESET_HELD_ONLY_IN_MIN = Object.freeze({ major: 1, minor: 605 });
+/** Capability API 1.606: a creature's free action taken before it attacks (`free`, `beforeAttack`): 5e's
+ *  Reckless. */
+export const RULESET_FREE_BEFORE_ATTACK_MIN = Object.freeze({ major: 1, minor: 606 });
+/** Capability API 1.607: a creature's move toward a hostile it sees (`move.toward`), needing no signature
+ *  when it only moves: 5e's orc's Aggressive. */
+export const RULESET_MOVES_TOWARD_SEEN_MIN = Object.freeze({ major: 1, minor: 607 });
+/** Capability API 1.608: a condition ending as its holder is incapacitated (`endsWhenHolder.incapacitated`),
+ *  and an aura on whom its holder sees (`seenByHolder`) and who understands it (`targetTypes.understands`):
+ *  5e's knight's Leadership. */
+export const RULESET_LEADERSHIP_MIN = Object.freeze({ major: 1, minor: 608 });
+/** Capability API 1.609: what obscures for everybody but its caster (a zone's `obscures.notForCaster`): 5e's
+ *  Staff of Swarming Insects' Insect Cloud. */
+export const RULESET_NOT_FOR_CASTER_MIN = Object.freeze({ major: 1, minor: 609 });
+/** Capability API 1.611: called creatures that come against their user unless it meets a requirement
+ *  (`calls.hostileUnless`): 5e's brass, bronze and iron Horns of Valhalla. */
+export const RULESET_HOSTILE_UNLESS_MIN = Object.freeze({ major: 1, minor: 611 });
+/** Capability API 1.612: an item spent as what it called dies (`calls.spendsItemOnDeath`), a wait from a
+ *  called creature's departure (`recharge.after.fromDeparture`) and a round's length (`combat.roundSeconds`):
+ *  5e's Ring of Djinni Summoning. */
+export const RULESET_ITEM_DEPARTURE_MIN = Object.freeze({ major: 1, minor: 612 });
+/** Capability API 1.613: an item that becomes the creature it calls (`calls.becomesItem`), and a catalog
+ *  entry's or an item's call its user may send away (`calls.dismissible`): 5e's Staff of the Python. */
+export const RULESET_BECOMES_ITEM_MIN = Object.freeze({ major: 1, minor: 613 });
+/** Capability API 1.610: called creatures leashed to their caller (`calls.leash`), or sent away on a budget
+ *  of its own (`calls.dismissible.budget`): 5e's treant's Animate Trees. */
+export const RULESET_CALL_LEASH_MIN = Object.freeze({ major: 1, minor: 610 });
+/** Capability API 1.740: a creature action's condition put on only while its user holds none of these on anybody
+ *  (`applies[].unlessImposing`): the chain devil's Chain. */
+export const RULESET_APPLIES_UNLESS_IMPOSING_MIN = Object.freeze({ major: 1, minor: 740 });
+/** Capability API 1.741: a creature action's area that ends as its maker is incapacitated
+ *  (`zone.endsWithCaller`): the ice devil's Wall of Ice. */
+export const RULESET_ZONE_ENDS_WITH_CALLER_MIN = Object.freeze({ major: 1, minor: 741 });
+/** Capability API 1.742: those called leave once their counted uses are spent (`calls.endsWhenSpent`): the
+ *  Dancing Sword. */
+export const RULESET_CALL_ENDS_WHEN_SPENT_MIN = Object.freeze({ major: 1, minor: 742 });
+/** Capability API 1.614: a call offered only where it says (`onlyWhere`), or whose creatures arrive after
+ *  their caller's turns (`calls.arrivesIn`): 5e's vampire's Children of the Night. */
+export const RULESET_CALL_WHERE_MIN = Object.freeze({ major: 1, minor: 614 });
+/** Capability API 1.615: a call whose creatures are under nobody's control (`calls.side: "none"`), tamed
+ *  while holding a condition (`calls.tamedWhile`), and charges more that only call more: 5e's Pipes of the
+ *  Sewers. */
+export const RULESET_WILD_CALLS_MIN = Object.freeze({ major: 1, minor: 615 });
+/** Capability API 1.205: a list sum that counts rows (`listSum.count`) or reads only rows whose cell equals a
+ *  value (`listSum.where`): 5e's wind instruments, for the Pipes of the Sewers. */
+export const RULESET_LIST_COUNT_MIN = Object.freeze({ major: 1, minor: 205 });
+/** Capability API 1.616: a condition put on for what was left of another (`duration.remainingOf`): 5e's
+ *  Wind Walk, back into the cloud. */
+export const RULESET_REMAINING_OF_MIN = Object.freeze({ major: 1, minor: 616 });
+/** Capability API 1.617: a use offered only while its user holds a condition (`userHolds`), and a condition
+ *  ending once its source holds none of some (`endsWhenSource.lacks`): 5e's Pipes of the Sewers. */
+export const RULESET_USER_HOLDS_MIN = Object.freeze({ major: 1, minor: 617 });
+/** Capability API 1.618: conditions a lost contest puts on (`contest.onLose`), and a condition ending as its
+ *  holder can't hear its source (`endsWhenHolder.cantHearSource`): the Pipes of the Sewers. */
+export const RULESET_CONTEST_ON_LOSE_MIN = Object.freeze({ major: 1, minor: 618 });
+/** Capability API 1.619: creatures that leave a worn item's wearer alone (`worn.ignoredBy`): the Pipes. */
+export const RULESET_IGNORED_BY_MIN = Object.freeze({ major: 1, minor: 619 });
+/** Capability API 1.620: a call commanded only within a distance of its caller (`calls.commandedWithin`):
+ *  5e's Staff of the Python. */
+export const RULESET_COMMANDED_WITHIN_MIN = Object.freeze({ major: 1, minor: 620 });
+/** Capability API 1.621: a call setting down what it calls within a distance, seen (`calls.within`): 5e's
+ *  treant's Animate Trees. */
+export const RULESET_CALL_WITHIN_MIN = Object.freeze({ major: 1, minor: 621 });
+/** Capability API 1.622: a condition its holder may take off at will (`endable { budget }`): 5e's Ring of
+ *  Invisibility, the Potion of Gaseous Form and the Boots of Speed. */
+export const RULESET_ENDABLE_MIN = Object.freeze({ major: 1, minor: 622 });
+/** Capability API 1.623: an item use whose condition lasts while its charges do (`chargesPerRound`): 5e's
+ *  Boots of Speed. */
+export const RULESET_CHARGES_PER_ROUND_MIN = Object.freeze({ major: 1, minor: 623 });
+/** Capability API 1.624: an item used past its last charge, with a chance to tear (`charges.overuse`): 5e's
+ *  Wind Fan. */
+export const RULESET_OVERUSE_MIN = Object.freeze({ major: 1, minor: 624 });
+/** Capability API 1.625: a duration of rounds that many times over, rolled (`duration.times`): 5e's Potions of
+ *  Growth and Diminution, and Dust of Disappearance. */
+export const RULESET_DURATION_TIMES_MIN = Object.freeze({ major: 1, minor: 625 });
+/** Capability API 1.626: a missile caught and kept (`keepsCaught`): 5e's Gloves of Missile Snaring. */
+export const RULESET_KEEPS_CAUGHT_MIN = Object.freeze({ major: 1, minor: 626 });
+/** Capability API 1.627: a use that sends its own user away while an endable condition holds, still taking
+ *  their turns (`dismisses { while, turns }` on a self use): 5e's Robe of Stars, into the Astral Plane. */
+export const RULESET_SELF_AWAY_MIN = Object.freeze({ major: 1, minor: 627 });
+/** Capability API 1.628: an item use that `needs` senses, and `oncePerTarget` beside an area. */
+export const RULESET_ITEM_NEEDS_MIN = Object.freeze({ major: 1, minor: 628 });
+/** Capability API 1.629: `amountAgainst { is, amount }`, a target of a kind taking another amount. */
+export const RULESET_AMOUNT_AGAINST_MIN = Object.freeze({ major: 1, minor: 629 });
+/** Capability API 1.630: an item use that `backfires { chance, amount, damageType?, destroys?, instead? }`. */
+export const RULESET_BACKFIRES_MIN = Object.freeze({ major: 1, minor: 630 });
+/** Capability API 1.631: `pushesOutSaved`, savers pushed out of an area. */
+export const RULESET_PUSHES_OUT_SAVED_MIN = Object.freeze({ major: 1, minor: 631 });
+/** Capability API 1.632: a condition's `onEnd.when`, the endings it follows. */
+export const RULESET_ON_END_WHEN_MIN = Object.freeze({ major: 1, minor: 632 });
+/** Capability API 1.633: `targetTypes.uncontrolled`. */
+export const RULESET_UNCONTROLLED_MIN = Object.freeze({ major: 1, minor: 633 });
+/** Capability API 1.634: a condition's `actions` entry at its own numbers, `{ entry, saveDifficulty?, toHit? }`. */
+export const RULESET_ACTION_NUMBERS_MIN = Object.freeze({ major: 1, minor: 634 });
+/** Capability API 1.635: `harms.save.drops`, a die off the harm at each save. */
+export const RULESET_HARM_DROPS_MIN = Object.freeze({ major: 1, minor: 635 });
+/** Capability API 1.636: `checkEnds.spendsItem` and `checkEnds.failedRetryAfter`. */
+export const RULESET_CHECK_ENDS_ITEM_MIN = Object.freeze({ major: 1, minor: 636 });
+/** Capability API 1.637: a zone over 1000 rounds (to 14400), `zone.close` and `zone.spreads`. */
+export const RULESET_ZONE_CLOSE_MIN = Object.freeze({ major: 1, minor: 637 });
+/** Capability API 1.638: a condition's `onFirstSeen { applies }`. */
+export const RULESET_ON_FIRST_SEEN_MIN = Object.freeze({ major: 1, minor: 638 });
+/** Capability API 1.639: a worn or carried `proficiencyBonus`. */
+export const RULESET_PROFICIENCY_BONUS_MIN = Object.freeze({ major: 1, minor: 639 });
+/** Capability API 1.640: an item's utility use that `duplicates` a catalog's entries. */
+export const RULESET_ITEM_DUPLICATES_MIN = Object.freeze({ major: 1, minor: 640 });
+/** Capability API 1.641: mounts that carry riders by weight (`combat.mounts.weights`, a block's
+ *  `mountCarries`): 5e's Carpet of Flying. */
+export const RULESET_MOUNT_WEIGHTS_MIN = Object.freeze({ major: 1, minor: 641 });
+/** Capability API 1.642: a creature's spell slots by level (`spellcasting.slots`), shared by a coven, and a
+ *  spell of its trait at its own `saveDifficulty` and `toHit`: 5e's hag covens. */
+export const RULESET_CREATURE_SLOTS_MIN = Object.freeze({ major: 1, minor: 642 });
+/** Capability API 1.643: a sequence step rolled for (`dice`), made only on an earlier step's hit (`ifHit`),
+ *  or left out at its maker's pick (`optional`): 5e's violet fungus, grick and gibbering mouther. */
+export const RULESET_SEQUENCE_STEPS_MIN = Object.freeze({ major: 1, minor: 643 });
+/** Capability API 1.644: a condition's command broken at a cost (`harms.at: "defies"`): 5e's Geas. */
+export const RULESET_DEFIED_COMMANDS_MIN = Object.freeze({ major: 1, minor: 644 });
+/** Capability API 1.645: a ward that keeps off only some entries (`wards.where`, `wards.entries`): Mind Blank. */
+export const RULESET_WARD_WHERE_MIN = Object.freeze({ major: 1, minor: 645 });
+/** Capability API 1.647: a condition holding its holder out of time (`stasis`): Sequester. */
+export const RULESET_STASIS_MIN = Object.freeze({ major: 1, minor: 647 });
+export const RULESET_CONDITION_LANGUAGES_MIN = Object.freeze({ major: 1, minor: 648 });
+export const RULESET_SEES_TRUE_MIN = Object.freeze({ major: 1, minor: 649 });
+export const RULESET_FALLS_SAFELY_UP_TO_MIN = Object.freeze({ major: 1, minor: 650 });
+export const RULESET_SUFFOCATES_MIN = Object.freeze({ major: 1, minor: 651 });
+export const RULESET_SAVE_QUALITIES_MIN = Object.freeze({ major: 1, minor: 652 });
+export const RULESET_KEEPS_ON_WHEN_MIN = Object.freeze({ major: 1, minor: 653 });
+export const RULESET_FLAT_WEAPON_DIE_MIN = Object.freeze({ major: 1, minor: 654 });
+export const RULESET_SEEN_ATTACKS_MIN = Object.freeze({ major: 1, minor: 655 });
+export const RULESET_ITEM_RECOVERS_MIN = Object.freeze({ major: 1, minor: 656 });
+export const RULESET_AMMO_RIDER_MIN = Object.freeze({ major: 1, minor: 657 });
+/** Ammunition's +N to the attack roll, `ammoRider.toHit` (Capability API 1.812). */
+export const RULESET_AMMO_TO_HIT_MIN = Object.freeze({ major: 1, minor: 812 });
+export const RULESET_DRAWS_AIM_MIN = Object.freeze({ major: 1, minor: 658 });
+export const RULESET_SEALED_ZONES_MIN = Object.freeze({ major: 1, minor: 659 });
+export const RULESET_SLOWED_SPEED_MIN = Object.freeze({ major: 1, minor: 660 });
+export const RULESET_GEAR_OFFERED_WHEN_MIN = Object.freeze({ major: 1, minor: 661 });
+export const RULESET_DERIVED_CHANGES_MIN = Object.freeze({ major: 1, minor: 662 });
+export const RULESET_LASTS_DAYS_MIN = Object.freeze({ major: 1, minor: 663 });
+export const RULESET_WHILE_ITEM_WORN_MIN = Object.freeze({ major: 1, minor: 664 });
+export const RULESET_BEARER_NEEDS_MIN = Object.freeze({ major: 1, minor: 667 });
+export const RULESET_TRAP_DISARM_MIN = Object.freeze({ major: 1, minor: 669 });
+export const RULESET_TELEPORT_FAMILIARITY_MIN = Object.freeze({ major: 1, minor: 670 });
+export const RULESET_CLIMB_NOT_ON_MIN = Object.freeze({ major: 1, minor: 671 });
+export const RULESET_SHEET_TOTALS_MIN = Object.freeze({ major: 1, minor: 672 });
+export const RULESET_CREATURE_FAILED_BY_MIN = Object.freeze({ major: 1, minor: 673 });
+export const RULESET_ONCE_PER_TARGET_KINDS_MIN = Object.freeze({ major: 1, minor: 674 });
+export const RULESET_PULL_MIN = Object.freeze({ major: 1, minor: 675 });
+export const RULESET_ATTACHES_MIN = Object.freeze({ major: 1, minor: 676 });
+export const RULESET_ON_FELL_MIN = Object.freeze({ major: 1, minor: 677 });
+export const RULESET_CREATURE_SLAYING_MIN = Object.freeze({ major: 1, minor: 678 });
+export const RULESET_FLYBY_MIN = Object.freeze({ major: 1, minor: 679 });
+export const RULESET_SHARES_SPACE_MIN = Object.freeze({ major: 1, minor: 680 });
+export const RULESET_SQUEEZING_MIN = Object.freeze({ major: 1, minor: 681 });
+export const RULESET_ALLY_SEEN_WITHIN_MIN = Object.freeze({ major: 1, minor: 682 });
+export const RULESET_WEAPON_POISON_MIN = Object.freeze({ major: 1, minor: 683 });
+export const RULESET_ENDS_HEALED_MIN = Object.freeze({ major: 1, minor: 684 });
+export const RULESET_CREATURE_DISMISSES_MIN = Object.freeze({ major: 1, minor: 685 });
+export const RULESET_CHECKS_16_MIN = Object.freeze({ major: 1, minor: 686 });
+export const RULESET_BY_USE_MIN = Object.freeze({ major: 1, minor: 687 });
+export const RULESET_WOUND_CLOSURE_MIN = Object.freeze({ major: 1, minor: 688 });
+export const RULESET_CAREFUL_GROUND_MIN = Object.freeze({ major: 1, minor: 689 });
+/** Capability API 1.665: a call that may ignore every order (`calls.disobeys`), rolled while its `when` holds on
+ *  the caller's sheet: 5e's obsidian steed. */
+export const RULESET_CALLS_DISOBEY_MIN = Object.freeze({ major: 1, minor: 665 });
+/** A combat condition's `forbids.entries`, each "<catalog>/<entry>", stopped while it holds (1.646). */
+export const RULESET_FORBIDS_ENTRIES_MIN = Object.freeze({ major: 1, minor: 646 });
+export const RULESET_WORDS_TABLE_MIN = Object.freeze({ major: 1, minor: 690 });
+export const RULESET_NEEDS_ANY_MIN = Object.freeze({ major: 1, minor: 691 });
+export const RULESET_TAKES_MODE_MIN = Object.freeze({ major: 1, minor: 692 });
+export const RULESET_APPLIES_SELF_SAVES_MIN = Object.freeze({ major: 1, minor: 693 });
+export const RULESET_ZONE_MOVE_CHECK_MIN = Object.freeze({ major: 1, minor: 694 });
+export const RULESET_CREATURE_CONTEST_MIN = Object.freeze({ major: 1, minor: 695 });
+export const RULESET_POSSESSES_MIN = Object.freeze({ major: 1, minor: 696 });
+export const RULESET_ZONE_KEEPS_TWELVE_MIN = Object.freeze({ major: 1, minor: 697 });
+export const RULESET_RIDERS_IS_MIN = Object.freeze({ major: 1, minor: 698 });
+export const RULESET_ALIGNMENT_TAGS_MIN = Object.freeze({ major: 1, minor: 699 });
+export const RULESET_STATS_IF_MIN = Object.freeze({ major: 1, minor: 700 });
+export const RULESET_TOUCH_HARMS_MIN = Object.freeze({ major: 1, minor: 701 });
+export const RULESET_ONE_CELL_MIN = Object.freeze({ major: 1, minor: 702 });
+export const RULESET_ZONE_MOVE_HOLDING_MIN = Object.freeze({ major: 1, minor: 703 });
+export const RULESET_UNHINDERED_BY_MIN = Object.freeze({ major: 1, minor: 704 });
+export const RULESET_COVER_IGNORED_MIN = Object.freeze({ major: 1, minor: 705 });
+export const RULESET_TOGGLE_FREES_SLOTS_MIN = Object.freeze({ major: 1, minor: 706 });
+export const RULESET_CALLS_FROM_CALLER_MIN = Object.freeze({ major: 1, minor: 707 });
+export const RULESET_EASY_GROUND_MIN = Object.freeze({ major: 1, minor: 708 });
+export const RULESET_INSTANT_DEATH_MIN = Object.freeze({ major: 1, minor: 709 });
+export const RULESET_AFTER_BONUS_SPELL_MIN = Object.freeze({ major: 1, minor: 710 });
+export const RULESET_LEANING_DAMAGE_SAVE_MIN = Object.freeze({ major: 1, minor: 712 });
+export const RULESET_HELD_ON_GROUND_MIN = Object.freeze({ major: 1, minor: 714 });
+export const RULESET_UNLESS_IMPOSING_MIN = Object.freeze({ major: 1, minor: 715 });
+export const RULESET_CREATURE_JUMP_MIN = Object.freeze({ major: 1, minor: 716 });
+export const RULESET_SAVE_OR_MIN = Object.freeze({ major: 1, minor: 724 });
+export const RULESET_LEAPS_ONTO_MIN = Object.freeze({ major: 1, minor: 725 });
+export const RULESET_WORN_BY_MOUNT_MIN = Object.freeze({ major: 1, minor: 717 });
+export const RULESET_BRACED_MIN = Object.freeze({ major: 1, minor: 718 });
+export const RULESET_MAKES_ITEMS_MIN = Object.freeze({ major: 1, minor: 721 });
+export const RULESET_BLOCKS_RESTS_MIN = Object.freeze({ major: 1, minor: 722 });
+export const RULESET_REFLECTS_MIN = Object.freeze({ major: 1, minor: 723 });
+export const RULESET_WEARS_MIN = Object.freeze({ major: 1, minor: 711 });
+export const RULESET_WHILE_LEFT_MIN = Object.freeze({ major: 1, minor: 732 });
+export const RULESET_ENTRY_CALLS_END_MIN = Object.freeze({ major: 1, minor: 733 });
+export const RULESET_LANGUAGES_UNDERSTANDS_MIN = Object.freeze({ major: 1, minor: 734 });
+export const RULESET_ENTRY_AGAINST_MIN = Object.freeze({ major: 1, minor: 738 });
+export const RULESET_CREATURE_CALLS_COMMANDED_MIN = Object.freeze({ major: 1, minor: 736 });
+export const RULESET_BONUS_TO_DEFENSE_MIN = Object.freeze({ major: 1, minor: 737 });
+export const RULESET_CREATURE_SUSTAINS_MIN = Object.freeze({ major: 1, minor: 727 });
+export const RULESET_ITEM_USE_LEVEL_MIN = Object.freeze({ major: 1, minor: 730 });
+export const RULESET_STEP_FILTER_LIST_MIN = Object.freeze({ major: 1, minor: 731 });
+export const RULESET_AURA_WHILE_RIDDEN_MIN = Object.freeze({ major: 1, minor: 735 });
+export const RULESET_WIELDS_WHILE_CALLED_MIN = Object.freeze({ major: 1, minor: 739 });
+/** Capability API 1.744: a save asked for each use of an item again before a rest (`use.againBeforeRest`): the
+ *  Ring of X-ray Vision's exhaustion. */
+export const RULESET_AGAIN_BEFORE_REST_MIN = Object.freeze({ major: 1, minor: 744 });
+/** Capability API 1.745: items an item's use makes (`use.makesItems`): a scroll of Goodberry. */
+export const RULESET_ITEM_MAKES_ITEMS_MIN = Object.freeze({ major: 1, minor: 745 });
+/** Capability API 1.746: further uses' counts rolled by kind for each stack (`moreUsesRolled`): the Necklace of
+ *  Prayer Beads. */
+export const RULESET_MORE_USES_ROLLED_MIN = Object.freeze({ major: 1, minor: 746 });
+/** Capability API 1.747: a further use spending another further use's count (`moreUses[].usesOf`): a curing bead's
+ *  Lesser Restoration off its Cure Wounds. */
+export const RULESET_MORE_USES_OF_MIN = Object.freeze({ major: 1, minor: 747 });
+/** Capability API 1.748: a call reading a catalog with the creature rolled for its user (`calls.rolled` with `from`):
+ *  a summons bead's Planar Ally. */
+export const RULESET_CALLS_ROLLED_FROM_MIN = Object.freeze({ major: 1, minor: 748 });
+/** Capability API 1.749: an item whose further uses are rolled by kind with no use of its own: the Necklace of
+ *  Prayer Beads, its menu its beads. */
+export const RULESET_ONLY_ROLLED_USES_MIN = Object.freeze({ major: 1, minor: 749 });
+/** Capability API 1.750: day saves that count `successes` and deal `harmsOnFail`, and a condition that
+ *  `keepsDamage` its own harms dealt until it ends: pale tincture. */
+export const RULESET_DAY_SAVES_COUNTED_MIN = Object.freeze({ major: 1, minor: 750 });
+/** Capability API 1.751: `lastsDays: "midnight"` and a save against `onEnd.harm`: midnight tears. */
+export const RULESET_MIDNIGHT_MIN = Object.freeze({ major: 1, minor: 751 });
+/** Capability API 1.752: a checks modifier only `for` some purposes the GM's check tag names: Gloves of
+ *  Swimming and Climbing. */
+export const RULESET_CHECKS_FOR_MIN = Object.freeze({ major: 1, minor: 752 });
+/** Capability API 1.753: a zone nobody teleports into (`forbids.teleport: "into"`), kinds named as it is
+ *  cast (`kindChoice: "many"`) and a damage type chosen as it is cast (`damageTypeChoice`): Forbiddance. */
+export const RULESET_FORBIDDANCE_MIN = Object.freeze({ major: 1, minor: 753 });
+/** Capability API 1.754: more than twelve actions on one creature (see RULESET_SIXTEEN_ACTIONS_MIN).
+ *  Capability API 1.755: a target test of standing in a zone (`insideZoneOf`, `outsideZoneOf`): Magic Jar. */
+export const RULESET_ZONE_TESTS_MIN = Object.freeze({ major: 1, minor: 755 });
+/** Capability API 1.756: an ability lowered only where higher (`atMost`) and days rolled as a condition goes
+ *  on, resting days counting more (`lastsDays: { dice, restingCounts? }`): Wish's stress. */
+export const RULESET_WISH_STRESS_MIN = Object.freeze({ major: 1, minor: 756 });
+/** Capability API 1.757: a heal of all the health its targets are missing (`healsAll`): Wish. */
+export const RULESET_HEALS_ALL_MIN = Object.freeze({ major: 1, minor: 757 });
+/** Capability API 1.758: an entry or creature action picked as it is cast, its conditions warding off that alone
+ *  (`wardPick`): Wish's immunity to a single spell. */
+export const RULESET_WARD_PICK_MIN = Object.freeze({ major: 1, minor: 758 });
+/** Capability API 1.759: a sense through walls only so many inches of each material (`throughWalls` a map), and a
+ *  cast wall's material (`zone.material`): the Ring of X-ray Vision and Wall of Stone. */
+export const RULESET_SIGHT_MATERIALS_MIN = Object.freeze({ major: 1, minor: 759 });
+/** Capability API 1.760: made items that vanish after a while (`makesItems.lasts`): Creation and Goodberry. */
+export const RULESET_MADE_LASTS_MIN = Object.freeze({ major: 1, minor: 760 });
+/** Capability API 1.761: how much thought a creature puts into a fight (`mind` on a stat block or a creature
+ *  type, `combat.minds` by an ability's tiers). */
+export const RULESET_MINDS_MIN = Object.freeze({ major: 1, minor: 761 });
+const RULESET_MINDS = Object.freeze(["mindless", "instinct", "cunning", "tactical", "genius"]);
+/** Capability API 1.762: losing heart (`combat.morale`, a stat block's `leader` and `morale`). */
+export const RULESET_MORALE_MIN = Object.freeze({ major: 1, minor: 762 });
+/** Capability API 1.766: a builder step that takes all it offers (`takesAll`), and `upTo.per`: 5e's class features. */
+export const RULESET_TAKES_ALL_MIN = Object.freeze({ major: 1, minor: 766 });
+/** Capability API 1.767: a builder step that marks rows a catalog wrote (`kind: "mark"`): 5e's wizard preparing spells. */
+export const RULESET_MARK_STEP_MIN = Object.freeze({ major: 1, minor: 767 });
+/** Capability API 1.769: a catalog entry's `variants`, each with `variantOf`: 5e's Magic Circle (fiends). */
+export const RULESET_VARIANTS_MIN = Object.freeze({ major: 1, minor: 769 });
+/** Capability API 1.770: `combat.cover.groundUnderTarget: false`, cover only from what lies between. */
+export const RULESET_GROUND_UNDER_TARGET_MIN = Object.freeze({ major: 1, minor: 770 });
+/** Capability API 1.771: `combat.standardEffects.help.beside`, Help only against an opponent beside the helper. */
+export const RULESET_HELP_BESIDE_MIN = Object.freeze({ major: 1, minor: 771 });
+/** Capability API 1.772: `exclusiveDefault`, the entry of its group a step taking all it offers takes until another is picked. */
+export const RULESET_EXCLUSIVE_DEFAULT_MIN = Object.freeze({ major: 1, minor: 772 });
+/** Capability API 1.773: a step taking all it offers that writes their labels to a `field`: 5e's subclasses. */
+export const RULESET_TAKES_ALL_FIELD_MIN = Object.freeze({ major: 1, minor: 773 });
+export const RULESET_MORALE_UNAWARE_MIN = Object.freeze({ major: 1, minor: 775 });
+/** Capability API 1.768: a guided builder of more than 24 steps, or a catalog step asking for more than 40: 5e's wizard spellbook. */
+export const RULESET_BIGGER_BUILDER_MIN = Object.freeze({ major: 1, minor: 768 });
+/** Capability API 1.764: a zone only a creature moving into it enters (`zone.enterOnlyByMoving`): Spirit Guardians. */
+export const RULESET_ENTER_BY_MOVING_MIN = Object.freeze({ major: 1, minor: 764 });
+/** Capability API 1.765: conditions put on with a condition (`alsoApplies`): the unconscious fall prone. */
+export const RULESET_ALSO_APPLIES_MIN = Object.freeze({ major: 1, minor: 765 });
+/** Capability API 1.763: how a creature goes about a fight (`behavior` on combat, a creature type or a stat block). */
+export const RULESET_FIGHT_BEHAVIOR_MIN = Object.freeze({ major: 1, minor: 763 });
+const RULESET_TEMPERAMENTS = Object.freeze([
+  "reckless",
+  "cautious",
+  "opportunistic",
+  "protective",
+  "supportive",
+  "disciplined",
+  "cowardly",
+  "patient",
+  "methodical",
+  "coordinated",
+  "fanatical",
+  "arrogant",
+  "territorial",
+  "cruel",
+  "honourable",
+  "hungry",
+]);
+const RULESET_ROLES = Object.freeze([
+  "bruiser",
+  "bulwark",
+  "skirmisher",
+  "marksman",
+  "spellcaster",
+  "supporter",
+  "controller",
+  "solo",
+]);
+/** Capability API 1.776: a creature that fights a whole side alone (`behavior.role` "solo"). */
+export const RULESET_SOLO_ROLE_MIN = Object.freeze({ major: 1, minor: 776 });
+/** Capability API 1.777: a bodyguard (`behavior.guards`): whom it keeps beside and stands up for. */
+export const RULESET_GUARDS_MIN = Object.freeze({ major: 1, minor: 777 });
+/** Capability API 1.778: a fanatic (`behavior.temperament` "fanatical"), who never loses heart. */
+export const RULESET_FANATICAL_MIN = Object.freeze({ major: 1, minor: 778 });
+/** Capability API 1.779: a temperament that turns mid-fight (`behavior.shifts`). */
+export const RULESET_SHIFTS_MIN = Object.freeze({ major: 1, minor: 779 });
+/** Capability API 1.780: the arrogant (`behavior.temperament`, or a shift turning to it, "arrogant"). */
+export const RULESET_ARROGANT_MIN = Object.freeze({ major: 1, minor: 780 });
+/** Capability API 1.781: the territorial (`behavior.temperament`, or a shift turning to it, "territorial") and `territory`. */
+export const RULESET_TERRITORIAL_MIN = Object.freeze({ major: 1, minor: 781 });
+const territorialIn = (behavior) =>
+  behavior?.temperament === "territorial" ||
+  behavior?.territory !== undefined ||
+  (behavior?.shifts ?? []).some((one) => one?.to === "territorial");
+/** Capability API 1.782: the cruel (`behavior.temperament`, or a shift turning to it, "cruel"). */
+export const RULESET_CRUEL_MIN = Object.freeze({ major: 1, minor: 782 });
+const cruelIn = (behavior) =>
+  behavior?.temperament === "cruel" || (behavior?.shifts ?? []).some((one) => one?.to === "cruel");
+/** Capability API 1.783: the honourable (`behavior.temperament`, or a shift turning to it, "honourable"). */
+export const RULESET_HONOURABLE_MIN = Object.freeze({ major: 1, minor: 783 });
+const honourableIn = (behavior) =>
+  behavior?.temperament === "honourable" || (behavior?.shifts ?? []).some((one) => one?.to === "honourable");
+/** Capability API 1.784: the hungry (`behavior.temperament`, or a shift turning to it, "hungry"). */
+export const RULESET_HUNGRY_MIN = Object.freeze({ major: 1, minor: 784 });
+/** Capability API 1.785: creature types that never surrender, only flee (`combat.morale.neverSurrender`). */
+export const RULESET_NEVER_SURRENDER_MIN = Object.freeze({ major: 1, minor: 785 });
+/** Capability API 1.787: an attack's damage that kills at 0 (`fellsKill`), a creature action only while
+ *  flying (`whileFlying`) or a sequence a spell may follow (`castsOne`), and a rescue narrowed to what a
+ *  save is against (`rescue.against`). */
+export const RULESET_ENGINE_ASKS_771_MIN = Object.freeze({ major: 1, minor: 787 });
+export const RULESET_ENGINE_ASKS_772_MIN = Object.freeze({ major: 1, minor: 788 });
+export const RULESET_REST_RECOVERY_MIN = Object.freeze({ major: 1, minor: 789 });
+// A priced material an entry cast from a sheet needs (1.790): Identify's pearl, Revivify's diamonds.
+export const RULESET_MATERIAL_MIN = Object.freeze({ major: 1, minor: 790 });
+// The combat styles a game may play (1.379), and the unit a weight is counted in (1.791).
+export const RULESET_COMBAT_STYLES_MIN = Object.freeze({ major: 1, minor: 379 });
+export const RULESET_WEIGHT_UNIT_MIN = Object.freeze({ major: 1, minor: 791 });
+// A damage change only on blows of given types (`onTypes`), and spent once it adds (`spentOnUse`), 1.792: oil.
+export const RULESET_DAMAGE_ON_TYPES_MIN = Object.freeze({ major: 1, minor: 792 });
+// An attack list value that stands for the best of several abilities (`abilityChoices`), 1.793: Finesse.
+export const RULESET_ABILITY_CHOICES_MIN = Object.freeze({ major: 1, minor: 793 });
+// A sheet migration that sets one column on the list rows it matches (`setColumn`), 1.794: old finesse rows.
+export const RULESET_SET_COLUMN_MIN = Object.freeze({ major: 1, minor: 794 });
+// What a bestiary creature has on it (`inventory`), 1.795: the SRD humanoids' weapons.
+export const RULESET_CREATURE_INVENTORY_MIN = Object.freeze({ major: 1, minor: 795 });
+// Words a text field or list column offers as chips (`suggestions`), 1.796: a ranger's favored enemies.
+export const RULESET_TEXT_SUGGESTIONS_MIN = Object.freeze({ major: 1, minor: 796 });
+// How many of a text field's suggestions its holder picks (`pick`), 1.797: one favored enemy, more at 6th and 14th level.
+export const RULESET_TEXT_PICK_MIN = Object.freeze({ major: 1, minor: 797 });
+// A guided rows step that counts its rows off the sheet (`countFrom`), 1.799: one hit point roll per level after 1st.
+export const RULESET_ROWS_COUNT_FROM_MIN = Object.freeze({ major: 1, minor: 799 });
+// A sheet value added to an attack row's roll to hit (`toHit.sheetBonus`), 1.800: Archery on the Attacks list.
+export const RULESET_ATTACK_SHEET_BONUS_MIN = Object.freeze({ major: 1, minor: 800 });
+// A list whose pools count uses rather than spend them (`pools.tallyColumn`), 1.801: Relentless Rage.
+export const RULESET_TALLY_POOLS_MIN = Object.freeze({ major: 1, minor: 801 });
+// Your own words on the sheet, the menu and the cards (1.378).
+export const RULESET_SHEET_WORDS_MIN = Object.freeze({ major: 1, minor: 378 });
+const hungryIn = (behavior) =>
+  behavior?.temperament === "hungry" || (behavior?.shifts ?? []).some((one) => one?.to === "hungry");
+const arrogantIn = (behavior) =>
+  behavior?.temperament === "arrogant" || (behavior?.shifts ?? []).some((one) => one?.to === "arrogant");
+const RULESET_TARGETS = Object.freeze([
+  "nearest",
+  "weakest",
+  "wounded",
+  "strongest",
+  "casters",
+  "healers",
+  "attacker",
+  "concentrating",
+  "leader",
+]);
+/** A 1.763 `behavior`: at least one key, each as the Engine reads it; `actions`, when given, the ids its openers name. */
+function behaviorOk(behavior, actions) {
+  if (!behavior || typeof behavior !== "object" || Array.isArray(behavior)) return false;
+  const keys = Object.keys(behavior);
+  if (
+    keys.length < 1 ||
+    keys.some(
+      (key) =>
+        !["temperament", "role", "targets", "opens", "pack", "ambush", "guards", "shifts", "territory"].includes(key),
+    )
+  )
+    return false;
+  if (behavior.temperament !== undefined && !RULESET_TEMPERAMENTS.includes(behavior.temperament)) return false;
+  if (behavior.role !== undefined && !RULESET_ROLES.includes(behavior.role)) return false;
+  const list = (value, allowed) =>
+    Array.isArray(value) &&
+    value.length >= 1 &&
+    value.length <= 4 &&
+    new Set(value).size === value.length &&
+    value.every(allowed);
+  if (behavior.targets !== undefined && !list(behavior.targets, (one) => RULESET_TARGETS.includes(one))) return false;
+  if (
+    behavior.shifts !== undefined &&
+    !(
+      Array.isArray(behavior.shifts) &&
+      behavior.shifts.length >= 1 &&
+      behavior.shifts.length <= 4 &&
+      new Set(behavior.shifts.map((one) => one?.on)).size === behavior.shifts.length &&
+      behavior.shifts.every(
+        (one) =>
+          one &&
+          typeof one === "object" &&
+          Object.keys(one).every((key) => key === "on" || key === "to") &&
+          ["bloodied", "ally-down", "leader-down", "cornered"].includes(one.on) &&
+          RULESET_TEMPERAMENTS.includes(one.to),
+      )
+    )
+  )
+    return false;
+  if (
+    behavior.territory !== undefined &&
+    !(Number.isInteger(behavior.territory) && behavior.territory >= 1 && behavior.territory <= 40)
+  )
+    return false;
+  if (
+    behavior.guards !== undefined &&
+    !(list(behavior.guards, (one) => ["leader", "casters", "healers"].includes(one)) && behavior.guards.length <= 3)
+  )
+    return false;
+  if (
+    behavior.opens !== undefined &&
+    !list(behavior.opens, (one) => typeof one === "string" && (one.includes("/") || !actions || actions.has(one)))
+  )
+    return false;
+  return [behavior.pack, behavior.ambush].every((flag) => flag === undefined || flag === true);
+}
+/** Capability API 1.743: up to twelve `combat.senses`, where eight were allowed: the Ring of X-ray Vision's ninth. */
+export const RULESET_TWELVE_SENSES_MIN = Object.freeze({ major: 1, minor: 743 });
+/** Capability API 1.719: a sense that walls do not stop (`throughWalls`): a Ring of X-ray Vision. */
+export const RULESET_SENSE_THROUGH_WALLS_MIN = Object.freeze({ major: 1, minor: 719 });
+/** Capability API 1.713: a character's tags off several fields (`tagsFrom` a list): Race and Alignment. */
+export const RULESET_TAGS_FROM_FIELDS_MIN = Object.freeze({ major: 1, minor: 713 });
+/** Capability API 1.728: a wall a creature's action lays, with its zone: an ice devil's Wall of Ice. */
+export const RULESET_CREATURE_WALLS_MIN = Object.freeze({ major: 1, minor: 728 });
+export const RULESET_KNOCK_OUT_MIN = Object.freeze({ major: 1, minor: 720 });
+export const RULESET_MODIFIER_AT_MIN = Object.freeze({ major: 1, minor: 726 });
+/** Capability API 1.559: a call rolled among weighted options, which may turn on their caller or call
+ *  nobody (`calls.rolled`, options' `weight`, `hostile`, `none`): a Bag of Tricks, an Efreeti Bottle; and
+ *  an item's use rolling on its `useTable` (`rollsTable`): a Wand of Wonder. */
+export const RULESET_ROLLED_CALLS_MIN = Object.freeze({ major: 1, minor: 559 });
+/** Capability API 1.561: who understands whom (`combat.languages`, a creature's `languages`, and
+ *  `targetTypes.understands`): Command, which does nothing to a creature that doesn't understand you. */
+export const RULESET_LANGUAGES_MIN = Object.freeze({ major: 1, minor: 561 });
+/** Capability API 1.589: a language row split on separators (`combat.languages.split`): a race's "Common and
+ *  Dwarvish". */
+export const RULESET_LANGUAGE_SPLIT_MIN = Object.freeze({ major: 1, minor: 589 });
+/** Capability API 1.590: the most a worn item pays slots up to (`worn.paysSlotsMax`): Rod of Absorption. */
+export const RULESET_PAYS_SLOTS_MAX_MIN = Object.freeze({ major: 1, minor: 590 });
+/** Capability API 1.575: an item its holder turns into other items' forms and back (`item.forms`): the Rod
+ *  of Lordly Might. */
+export const RULESET_ITEM_FORMS_MIN = Object.freeze({ major: 1, minor: 575 });
+/** Capability API 1.558: called creatures acting only as their caller commands (`calls.commandedWith`). */
+export const RULESET_COMMANDED_CALLS_MIN = Object.freeze({ major: 1, minor: 558 });
+/** Capability API 1.568: called images, not creatures (`calls.illusion`): Mislead, Project Image. */
+export const RULESET_CALLED_IMAGES_MIN = Object.freeze({ major: 1, minor: 568 });
+/** Capability API 1.570: a spell taken in only from a caster its holder sees, or for a budget
+ *  (`absorbs.seen`, `absorbs.spends`): Ioun Stone of Greater Absorption, Rod of Absorption. */
+export const RULESET_ABSORBS_SEEN_MIN = Object.freeze({ major: 1, minor: 570 });
+/** Capability API 1.571: the most an item ever takes in (`absorbs.lifetime`): Rod of Absorption. */
+export const RULESET_ABSORBS_LIFETIME_MIN = Object.freeze({ major: 1, minor: 571 });
+/** Capability API 1.572: an item's charges paying for spell slots (`worn.paysSlots`): Rod of Absorption. */
+export const RULESET_PAYS_SLOTS_MIN = Object.freeze({ major: 1, minor: 572 });
+/** Capability API 1.536: a further use's own count rolled as its item is found (`moreUses[].uses.rolled`):
+ *  Helm of Brilliance. */
+export const RULESET_ROLLED_USES_MIN = Object.freeze({ major: 1, minor: 536 });
+/** Capability API 1.573: an item found with rolled charges (`charges.rolled`): Rod of Absorption. */
+export const RULESET_ROLLED_CHARGES_MIN = Object.freeze({ major: 1, minor: 573 });
+/** Capability API 1.576: an item found holding stored spells (`stores.found`): Ring of Spell Storing,
+ *  Ioun Stone of Reserve. */
+export const RULESET_STORES_FOUND_MIN = Object.freeze({ major: 1, minor: 576 });
+/** Capability API 1.569: what is stored cast by itself as its holder is harmed or drops (`stores.castsOn`):
+ *  Contingency's statuette. */
+export const RULESET_STORES_CASTS_ON_MIN = Object.freeze({ major: 1, minor: 569 });
+/** Capability API 1.440: a combat condition that comes off as its holder comes to hold another
+ *  (`endsWhenHolder.gains`): Rage, "knocked unconscious" by Sleep. */
+export const RULESET_ENDS_ON_GAIN_MIN = Object.freeze({ major: 1, minor: 440 });
+/** Combat levels before Capability API 1.419. */
+const RULESET_COMBAT_MAX_LEVELS_BEFORE_1366 = 20;
+/** 1.408: `{ face: 1 to 20, rolls?: attacks, saves and checks }`, or why not. */
+function rerollsFaceIssue(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return true;
+  if (Object.keys(value).some((key) => !["face", "rolls"].includes(key))) return true;
+  if (!Number.isInteger(value.face) || value.face < 1 || value.face > 20) return true;
+  if (value.rolls === undefined) return false;
+  return (
+    !Array.isArray(value.rolls) ||
+    value.rolls.length === 0 ||
+    new Set(value.rolls).size !== value.rolls.length ||
+    value.rolls.some((one) => !["attacks", "saves", "checks"].includes(one))
+  );
+}
+/** What an action that `sheds` (1.296) never carries beside it. */
+const SHEDS_ALONE = Object.freeze([
+  "damage",
+  "heal",
+  "applies",
+  "area",
+  "teleport",
+  "move",
+  "casting",
+  "sequence",
+  "reaction",
+  "toHit",
+  "autoHit",
+  "save",
+  "search",
+  "standard",
+]);
+/** Why a room inside a holder (1.405) is not one: `{ of, takes? }`, sizes from combat.sizes. */
+function roomIssue(room, document) {
+  const sizes = new Set((document?.combat?.sizes?.order ?? []).map((one) => one?.id));
+  const count = (value) => Number.isInteger(value) && value >= 1 && value <= 20;
+  return (
+    !room ||
+    typeof room !== "object" ||
+    Object.keys(room).some((key) => !["of", "takes"].includes(key)) ||
+    !count(room.of) ||
+    (room.takes !== undefined &&
+      (!room.takes ||
+        typeof room.takes !== "object" ||
+        Object.entries(room.takes).some(([size, value]) => !sizes.has(size) || !count(value))))
+  );
+}
+/** Why an object `inside` (1.405) is not one. */
+function insideIssue(inside, document) {
+  const saves = new Set((document?.sheet?.saves ?? []).map((one) => one?.id));
+  const positive = (value) => Number.isInteger(value) && value >= 1;
+  return (
+    !inside ||
+    typeof inside !== "object" ||
+    Object.keys(inside).length === 0 ||
+    Object.keys(inside).some((key) => !["room", "releasedWhen", "corpse"].includes(key)) ||
+    (inside.room !== undefined && roomIssue(inside.room, document)) ||
+    (inside.releasedWhen !== undefined &&
+      (!inside.releasedWhen ||
+        typeof inside.releasedWhen !== "object" ||
+        Object.keys(inside.releasedWhen).some((key) => !["dealt", "save", "prone"].includes(key)) ||
+        !positive(inside.releasedWhen.dealt) ||
+        !saves.has(inside.releasedWhen.save?.save) ||
+        !Number.isInteger(inside.releasedWhen.save?.difficulty) ||
+        (inside.releasedWhen.prone !== undefined && inside.releasedWhen.prone !== true))) ||
+    (inside.corpse !== undefined &&
+      (!inside.corpse ||
+        typeof inside.corpse !== "object" ||
+        Object.keys(inside.corpse).some((key) => !["costs", "prone"].includes(key)) ||
+        !positive(inside.corpse.costs) ||
+        (inside.corpse.prone !== undefined && inside.corpse.prone !== true)))
+  );
+}
+const BEHAVIOR_DOES = Object.freeze(["wander", "nothing", "strike", "normal"]);
+/** What a combat condition's `behavior` must be (1.264), or why it is not. `held` names the item slots,
+ *  item tags and budgets a `drops` may name (1.266). */
+function behaviorIssue(
+  behavior,
+  standard,
+  held = { slots: new Set(), tags: new Set(), budgets: new Set(), saves: new Set() },
+) {
+  const shape =
+    'behavior is { only?: move|escape|standard actions, onlyWhenStuck?: standard actions (with only naming move) or "any", moves?: away|toward, walks?: true|after (with moves), keepsOut?: 1 to 1000, keepsIn?: 1 to 1000, from?: point|steered (with moves or keepsOut), drops?: { slots?: item slots, tags?: item tags, at: applied|turn-start, pickUp?: a budget }, wastes?: { save: a sheet save, budget: a budget }, table?: { dice, rows: [{ atMost, does: wander|nothing|strike|normal }] }, nearest?: true, actions?: true (with only) }';
+  if (!behavior || typeof behavior !== "object" || Array.isArray(behavior)) return shape;
+  const keys = Object.keys(behavior);
+  if (
+    keys.length === 0 ||
+    keys.some(
+      // 1.543: nearest, gated with the newer keys.
+      // 1.601: actions, gated with the newer keys.
+      (key) =>
+        ![
+          "only",
+          "onlyWhenStuck",
+          "moves",
+          "walks",
+          "keepsOut",
+          "keepsIn",
+          "from",
+          "drops",
+          "wastes",
+          "table",
+          "nearest",
+          "actions",
+        ].includes(key),
+    )
+  )
+    return shape;
+  if (behavior.nearest !== undefined && behavior.nearest !== true) return shape;
+  if (behavior.actions !== undefined && (behavior.actions !== true || behavior.only === undefined)) return shape;
+  if (
+    behavior.from !== undefined &&
+    (!["point", "steered"].includes(behavior.from) || (behavior.moves === undefined && behavior.keepsOut === undefined))
+  )
+    return shape;
+  // 1.464: walked the way it moves.
+  // 1.472: or as its turn ends, after acting.
+  if (behavior.walks !== undefined && (![true, "after"].includes(behavior.walks) || behavior.moves === undefined))
+    return shape;
+  // 1.463: a budget wasted on a failed save as each turn starts.
+  const wastes = behavior.wastes;
+  if (
+    wastes !== undefined &&
+    (!wastes ||
+      typeof wastes !== "object" ||
+      Object.keys(wastes).some((key) => !["save", "budget"].includes(key)) ||
+      !(held.saves ?? new Set()).has(wastes.save) ||
+      !held.budgets.has(wastes.budget))
+  )
+    return shape;
+  if (
+    behavior.keepsIn !== undefined &&
+    (!Number.isInteger(behavior.keepsIn) || behavior.keepsIn < 1 || behavior.keepsIn > 1000)
+  )
+    return shape;
+  if (
+    behavior.keepsOut !== undefined &&
+    (!Number.isInteger(behavior.keepsOut) || behavior.keepsOut < 1 || behavior.keepsOut > 1000)
+  )
+    return shape;
+  const drops = behavior.drops;
+  if (drops !== undefined) {
+    const list = (value, known, most) =>
+      value === undefined ||
+      (Array.isArray(value) &&
+        value.length >= 1 &&
+        value.length <= most &&
+        new Set(value).size === value.length &&
+        value.every((one) => known.has(one)));
+    if (
+      !drops ||
+      typeof drops !== "object" ||
+      Array.isArray(drops) ||
+      Object.keys(drops).some((key) => !["slots", "tags", "at", "pickUp"].includes(key)) ||
+      (drops.slots === undefined && drops.tags === undefined) ||
+      !list(drops.slots, held.slots, 4) ||
+      !list(drops.tags, held.tags, 8) ||
+      !["applied", "turn-start"].includes(drops.at) ||
+      (drops.pickUp !== undefined && !held.budgets.has(drops.pickUp))
+    )
+      return shape;
+  }
+  const named = (list, also) =>
+    Array.isArray(list) &&
+    list.length <= 8 &&
+    new Set(list).size === list.length &&
+    list.every((one) => also.includes(one) || standard.includes(one));
+  if (behavior.only !== undefined && !named(behavior.only, ["move", "escape"])) return shape;
+  if (
+    behavior.onlyWhenStuck !== undefined &&
+    behavior.onlyWhenStuck !== "any" &&
+    (!named(behavior.onlyWhenStuck, []) || behavior.onlyWhenStuck.length < 1 || !behavior.only?.includes("move"))
+  )
+    return shape;
+  if (behavior.moves !== undefined && !["away", "toward"].includes(behavior.moves)) return shape;
+  const table = behavior.table;
+  if (table !== undefined) {
+    if (
+      !table ||
+      typeof table !== "object" ||
+      Object.keys(table).some((key) => !["dice", "rows"].includes(key)) ||
+      typeof table.dice !== "string" ||
+      !Array.isArray(table.rows) ||
+      table.rows.length < 1 ||
+      table.rows.length > 10 ||
+      table.rows.some(
+        (row, index) =>
+          !row ||
+          typeof row !== "object" ||
+          Object.keys(row).some((key) => !["atMost", "does"].includes(key)) ||
+          !Number.isInteger(row.atMost) ||
+          row.atMost < 1 ||
+          row.atMost > 100 ||
+          (index > 0 && row.atMost <= table.rows[index - 1].atMost) ||
+          !BEHAVIOR_DOES.includes(row.does),
+      )
+    )
+      return shape;
+  }
+  return undefined;
+}
+/** What a `keepsOn` must be (1.263): 1 to 4 of the sheet's conditions, each once. */
+function keepsOnIssue(keepsOn, conditionIds) {
+  if (
+    !Array.isArray(keepsOn) ||
+    keepsOn.length < 1 ||
+    keepsOn.length > 4 ||
+    new Set(keepsOn).size !== keepsOn.length ||
+    keepsOn.some((one) => !conditionIds.has(one))
+  )
+    return "keepsOn is 1 to 4 of the sheet's conditions, each once";
+  return null;
+}
+const RULESET_ALTERS_KEYS = [
+  "catalogs",
+  "maximizes",
+  "backlash",
+  "where",
+  "sparesByLevel",
+  "sparesWhole",
+  "spares",
+  "range",
+  "rerolls",
+  "lasts",
+  "heightens",
+  "budget",
+  "drops",
+  "twins",
+  "joins",
+];
+// Ally/any attack windows, turn-start reactions, conditional cancels, named actions and action-only durations.
+export const RULESET_REACTION_FOR_MIN = Object.freeze({ major: 1, minor: 131 });
+// Per-row casting references, and values a builder catalog step writes onto picked rows.
+export const RULESET_BY_COLUMN_MIN = Object.freeze({ major: 1, minor: 108 });
+// A starting-gear step that offers only the kits the character fits.
+export const RULESET_STRICT_GEAR_MIN = Object.freeze({ major: 1, minor: 109 });
+// A counter that stops only what was paid no higher than itself, and the check above it; a pool's own
+// level (`upTo`, `above`, a pool's `level`).
+export const RULESET_COUNTER_REACH_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 116 });
+// Answering named entries (`against.entries`), at more moments (`also`), and a condition that keeps
+// named entries' harm off (`noDamageFrom`).
+export const RULESET_NAMED_ANSWERS_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 117 });
+const RULESET_REACTION_ALSO_MAX = 3;
 const RULESET_REACTION_AGAINST_MAX = 12;
 
 // A bestiary creature may carry a sheet in the ruleset's own terms, built the way
@@ -138,11 +1863,125 @@ export const RULESET_CONDITION_NUMBERS_MIN_CAPABILITY_API = Object.freeze({ majo
 // A reaction on being hit, and a creature's own action that is a reaction or lands on the creature
 // itself: a new value in the strict reaction object and new keys on the strict creature action.
 export const RULESET_HIT_MOMENT_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 46 });
+// Cover by degrees: three-quarters cover's own bonus, the saves cover helps, and creatures in the way
+// counted as cover. New keys on the strict cover object.
+export const RULESET_COVER_DEGREES_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 74 });
+// Height: what a board's levels do in a ruleset's fights. A new key on the strict combat block.
+export const RULESET_ELEVATION_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 75 });
+// The action economy a condition changes (Haste's extra action, Slow's one of the two, its single
+// attack, the lethargy Haste leaves), and a budget of no count that only such a condition fills: new
+// keys on the strict condition, and a count an older Engine refuses.
+export const RULESET_CONDITION_ECONOMY_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 76 });
+// Sheet migrations: how a sheet stored on an older layout reads on this one. A new key on the strict
+// sheet, which an older Engine refuses.
+export const RULESET_SHEET_MIGRATIONS_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 77 });
+// Starting gear: what a character may take into their bag at the start, on the player's word. A new
+// key on the strict items block, which an older Engine refuses.
+export const RULESET_STARTING_GEAR_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 78 });
+// Seller honesty: an item that is `risky` or a fake that `passesFor` another, and a seller that is not
+// honest. New keys on the strict item and seller, which an older Engine refuses.
+export const RULESET_SELLER_HONESTY_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 79 });
+// A critical hit from a lower natural face, read off the attacker's sheet: a new key on the strict
+// attack roll.
+export const RULESET_CRITICAL_FROM_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 81 });
+// A derived value that multiplies its references: a new op an older Engine refuses.
+export const RULESET_MULTIPLY_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 82 });
+// A sheet value added to an ability's amount (Second Wind's "+ your fighter level"): a new key on the
+// strict catalog mechanics.
+export const RULESET_AMOUNT_ADD_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 83 });
+// More than 60 derived values on one sheet, which an older Engine refuses; 120 at most.
+export const RULESET_MANY_DERIVED_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 84 });
+// A list's number column the sheet editor rolls with the Engine's dice: a new key on the strict column.
+export const RULESET_ROLLED_COLUMN_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 85 });
+// The guided builder: `sheet.builder`, and what a catalog entry `grants` when picked through it. New keys
+// on the strict sheet and catalog entry.
+export const RULESET_BUILDER_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 86 });
+// The beginner-safe builder: an abilities step's `default` method and a catalog step's `upTo` limit.
+export const RULESET_BUILDER_SAFE_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 87 });
+const RULESET_DERIVED_OLD_MAX = 60;
+const RULESET_DERIVED_MID_MAX = 120;
+const RULESET_DERIVED_PRE_106_MAX = 240;
+const RULESET_DERIVED_MAX = 800;
+// More than 400 derived values (Capability API 1.729), gated in the sheet hooks.
+const RULESET_DERIVED_PRE_676_MAX = 400;
+export const RULESET_DERIVED_800_MIN = Object.freeze({ major: 1, minor: 729 });
+// More than 120 derived values on one sheet (Capability API 1.88), 240 at most.
+export const RULESET_MOST_DERIVED_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 88 });
+// A currency unit's name for exactly one of it (`one` beside the plural `label`).
+export const RULESET_COIN_ONE_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 89 });
+// A builder catalog step's count read off the sheet (`countFrom`).
+export const RULESET_BUILDER_COUNT_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 90 });
+// Entries of another catalog a pick offers to choose (`grants.entries`), at a builder `choices` step.
+export const RULESET_BUILDER_CHOICES_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 91 });
+// Several scaled rows of one list in one catalog entry, told apart by name.
+export const RULESET_SCALED_BY_NAME_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 92 });
+// A builder score choice that may name one score twice (`abilities.choose[].repeat`).
+export const RULESET_REPEAT_CHOICE_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 93 });
+// Catalog entries a builder step keeps one of (`exclusive`).
+export const RULESET_EXCLUSIVE_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 94 });
+// An item's to-hit bonus read off its holder's sheet (`toHit.sheetBonus`).
+export const RULESET_SHEET_BONUS_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 95 });
+// A builder score choice with a cap (`abilities.choose[].upTo`).
+export const RULESET_CHOICE_CAP_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 96 });
+// A weapon's damage off the holder's sheet (`damage.sheetBonus`, `oneHanded`), and an off hand kept full
+// by the sheet (`combat.offHand.fullWhen`).
+export const RULESET_DAMAGE_SHEET_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 97 });
+// A weapon's low damage dice rerolled off the holder's sheet (`damage.rerollUpTo`).
+export const RULESET_DAMAGE_REROLL_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 98 });
+// A catalog entry a builder step offers only while the sheet allows (`offeredWhen`).
+export const RULESET_OFFERED_WHEN_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 99 });
+// What a spell's or a creature attack's harm carries past a resistance's `except` (`qualities`).
+export const RULESET_BLOW_QUALITIES_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 101 });
+// A creature attack's other amounts (`damage.alternatives`) and a creature's `shield`.
+export const RULESET_DAMAGE_ALTERNATIVES_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 102 });
+// How big a combatant is (`combat.sizes`, a creature's `size`), a contest's `maxSizeAbove`, and a hold's own
+// `escapeDc`.
+export const RULESET_SIZES_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 103 });
+// A fields step's conditional visibility and combined numeric maximum.
+export const RULESET_FIELDS_SHOWN_MIN = Object.freeze({ major: 1, minor: 107 });
+// More than 240 derived values on one sheet, 400 at most.
+export const RULESET_400_DERIVED_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 111 });
+// Ways of moving besides walking: a creature's `speeds` and `hover`, a sheet's `economy.movementModes`.
+export const RULESET_MOVE_MODES_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 113 });
+// A flier's height on a board. No key of its own: an Engine before it keeps fliers on the ground, so a
+// package whose creatures or sheets fly declares it.
+export const RULESET_FLYING_HEIGHT_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 114 });
+export const RULESET_MOVE_MODES = Object.freeze(["fly", "swim", "climb", "burrow"]);
+// A level or condition that halves the health maximum (`to: "health-max"`), a level that `defeats`,
+// and a creature immune to a track a level reads.
+export const RULESET_HEALTH_MAX_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 115 });
+// Printed innate, prepared and shared coven spells on a bestiary creature.
+export const RULESET_CREATURE_SPELLS_MIN = Object.freeze({ major: 1, minor: 123 });
 
 // The numbers a condition or a level may change, the ones of them that are rolled (so dice may be
 // added), and how a condition that applies to one use says which use.
-const RULESET_COMBAT_MODIFIER_TARGETS = Object.freeze(["defense", "attacks", "saves", "checks", "speed"]);
-const RULESET_ROLLED_MODIFIER_TARGETS = Object.freeze(["attacks", "saves", "checks"]);
+const RULESET_COMBAT_MODIFIER_TARGETS = Object.freeze([
+  "defense",
+  "attacks",
+  "saves",
+  "checks",
+  "speed",
+  "health-max",
+  "damage",
+  "damage-taken",
+  "attacks-taken",
+  "checks-taken",
+]);
+const RULESET_ROLLED_MODIFIER_TARGETS = Object.freeze(["attacks", "saves", "checks", "damage", "damage-taken"]);
+// Damage dealt or taken on an attack hit (`damage`, `damage-taken`) and their narrowing keys.
+export const RULESET_DAMAGE_MODIFIERS_MIN = Object.freeze({ major: 1, minor: 133 });
+// A save modifier that counts only against conditions, damage types or magic (`against`).
+export const RULESET_SAVES_AGAINST_MIN = Object.freeze({ major: 1, minor: 134 });
+const RULESET_DAMAGE_NARROWING_KEYS = Object.freeze([
+  "attacks",
+  "blow",
+  "ability",
+  "damageType",
+  "fromSource",
+  "alsoUnrolled",
+  "onTypes",
+  "spentOnUse",
+]);
 const RULESET_COMBAT_MODIFIERS_MAX = 6;
 const RULESET_SAVE_SCOPED_EFFECTS = Object.freeze(["own-saves-advantage", "own-saves-disadvantage"]);
 // A level is not something anybody put on its holder, and it ends only when the track goes down.
@@ -150,14 +1989,23 @@ const RULESET_LEVEL_REFUSED_EFFECTS = Object.freeze([
   "half-move-to-stand",
   "ends-on-damage",
   "cannot-target-source",
+  "cannot-target-source-side",
   "cannot-approach-source",
 ]);
-const RULESET_COMBAT_MAX_LEVELS = 20;
-const RULESET_COMBAT_MAX_CHECKS = 12;
-const RULESET_COMBAT_MAX_CONTESTS = 12;
+const RULESET_COMBAT_MAX_LEVELS = 40;
+// 16 since 1.686 (12 before), gated with the sheet hooks.
+const RULESET_COMBAT_MAX_CHECKS = 16;
+const RULESET_COMBAT_MAX_CONTESTS = 16;
 const RULESET_CONTEST_SIDE_MAX_CHECKS = 4;
 const RULESET_CONTEST_MAX_CHANGES = 4;
-const RULESET_APPLIES_ENDS_AFTER = Object.freeze(["own-attack", "attacked", "own-save"]);
+// "own-hit" since 1.503, "attacked-by-source" since 1.502.
+const RULESET_APPLIES_ENDS_AFTER = Object.freeze([
+  "own-attack",
+  "own-hit",
+  "attacked",
+  "attacked-by-source",
+  "own-save",
+]);
 // The mark a picked row carries, naming the catalog entry it came from.
 export const RULESET_CATALOG_ROW_KEY = "_catalog";
 // The Engine's own default for the per-skill and per-save bonus range.
@@ -169,7 +2017,7 @@ const RULESET_DISTANCE_LABEL_MAX = 12;
 const RULESET_COVER_MAX = 100;
 const RULESET_RANGED_RULES = Object.freeze(["disadvantage", "normal"]);
 // The shapes the Engine draws on a board, for a catalog entry and a creature action alike.
-const RULESET_AREA_SHAPES = Object.freeze(["burst", "cone", "line"]);
+const RULESET_AREA_SHAPES = Object.freeze(["burst", "cone", "line", "box", "wall"]);
 
 // How many columns of one row a ruleset may keep, and how long a step table may be.
 const RULESET_SCALED_MAX_COLUMNS = 4;
@@ -177,9 +2025,11 @@ const RULESET_STEP_TABLE_MAX = 100;
 
 // What the Engine's own schema allows one creature. Mirrored so a package that
 // would be refused on install never reaches the catalog.
-export const RULESET_CREATURE_MAX_ACTIONS = 12;
+export const RULESET_CREATURE_MAX_ACTIONS = 16;
+/** Capability API 1.754: more than twelve actions on one creature, up to sixteen (gated at the end). */
+export const RULESET_SIXTEEN_ACTIONS_MIN = Object.freeze({ major: 1, minor: 754 });
 export const RULESET_CREATURE_MAX_TRAITS = 8;
-const RULESET_CREATURE_MAX_APPLIES = 4;
+const RULESET_CREATURE_MAX_APPLIES = 6;
 const RULESET_CREATURE_MAX_SEQUENCE = 6;
 const RULESET_COMBAT_MAX_BUDGETS = 8;
 const RULESET_COMBAT_MAX_TIERS = 40;
@@ -208,11 +2058,33 @@ const RULESET_COMBAT_CONDITION_EFFECTS = Object.freeze([
   "own-checks-disadvantage",
   "resist-all",
   "cannot-target-source",
+  // Added by Capability API 1.278: nor at the source's side (Calm Emotions' indifference).
+  "cannot-target-source-side",
   "cannot-approach-source",
+  // Added by Capability API 1.191: every heal on the holder restores nothing.
+  "cannot-heal",
+  // Added by Capability API 1.261: every heal but a magical one restores nothing.
+  "cannot-heal-nonmagical",
+  // Added by Capability API 1.417: no attack against the holder has advantage (Elusive).
+  "attacks-against-no-advantage",
+  // Added by Capability API 1.457: its holder harms nobody (Symbol's Hopelessness).
+  "cannot-harm",
+  // Added by Capability API 1.510: a critical hit on its holder is a plain hit (Adamantine Armor).
+  "criticals-against-normal",
 ]);
 // The effects Capability API 1.45 added, which an Engine before it refuses the whole file for.
 const CHECK_CONDITION_EFFECTS = Object.freeze(["own-checks-advantage", "own-checks-disadvantage"]);
-const RULESET_COMBAT_STANDARD_ACTIONS = Object.freeze(["dash", "disengage", "dodge", "help", "hide", "ready"]);
+const RULESET_COMBAT_STANDARD_ACTIONS = Object.freeze([
+  "dash",
+  "disengage",
+  "dodge",
+  "help",
+  "hide",
+  "ready",
+  "search",
+  // 1.669: taking a trap apart with a check.
+  "disarm",
+]);
 
 // A value reference names exactly one of these. The same closed set the Engine has.
 const VALUE_REF_KEYS = Object.freeze([
@@ -263,6 +2135,170 @@ export function isRulesetPackage(manifest) {
 /** Whether a declared package asset path belongs to the catalog family. */
 export function isRulesetCatalogAssetPath(path) {
   return typeof path === "string" && RULESET_CATALOG_ASSET_PATTERN.test(path);
+}
+
+/** A ruleset's translation into one language (Capability API 1.806): `locales/<lang>.json`, named by
+ *  the language's code as the Engine's own language packs are ("ru", "pt-BR", "zh-Hans"). A file with no
+ *  `ruleset` section (the package's own English listing, `locales/en.json`) translates nothing and is
+ *  never shipped. */
+export const RULESET_LOCALE_ASSET_PATTERN = /^locales\/([a-z]{2,3}(?:-[A-Za-z0-9]{2,8}){0,2})\.json$/u;
+export const RULESET_LOCALES_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 806 });
+export const RULESET_LOCALE_MAX_BYTES = 8 * 1024 * 1024;
+/** The Engine's caps on a language pack's store-card name and description (capabilityCatalogLocalePackSchema,
+ *  counted in UTF-16 units as JavaScript counts them): over either, the Engine drops the whole catalog entry. */
+export const RULESET_LANGUAGE_PACK_NAME_MAX = 120;
+export const RULESET_LANGUAGE_PACK_DESCRIPTION_MAX = 2000;
+export const RULESET_LOCALE_MAX_FILES = 40;
+const RULESET_LOCALE_KEY_MAX = 8000;
+const RULESET_LOCALE_VALUE_MAX = 16000;
+
+/** The language a declared asset path translates into, or null for a path that is no translation. */
+export function rulesetLocaleOfAssetPath(path) {
+  return typeof path === "string" ? (RULESET_LOCALE_ASSET_PATTERN.exec(path)?.[1] ?? null) : null;
+}
+
+/** The translation asset paths a manifest declares, in declaration order. */
+export function rulesetLocaleAssetPaths(manifest) {
+  const paths = manifest?.contributions?.assets?.paths;
+  return Array.isArray(paths) ? paths.filter((path) => rulesetLocaleOfAssetPath(path) !== null) : [];
+}
+
+/** Whether a locale file is a ruleset translation (it has a `ruleset` section) rather than only the
+ *  package's own listing. */
+export function isRulesetTranslationDocument(document) {
+  return !!document && typeof document === "object" && !Array.isArray(document) && document.ruleset !== undefined;
+}
+
+/** One translation's text held to what the Engine reads (Capability API 1.806): JSON holding `$schema`,
+ *  `_meta`, `package` and `ruleset` and nothing else, its `_meta.locale` the language it is named for,
+ *  and every string text. `path` names it in the messages. */
+export function assertRulesetTranslationText(id, path, locale, text) {
+  let document;
+  try {
+    document = JSON.parse(text);
+  } catch {
+    throw new Error(`${id} ${path} is not valid JSON`);
+  }
+  if (!document || typeof document !== "object" || Array.isArray(document))
+    throw new Error(`${id} ${path} is not a JSON object`);
+  const extra = Object.keys(document).filter((key) => !["$schema", "_meta", "package", "ruleset"].includes(key));
+  if (extra.length) throw new Error(`${id} ${path} holds "${extra[0]}", which a translation does not have`);
+  if (document.$schema !== undefined && (typeof document.$schema !== "string" || document.$schema.length > 300))
+    throw new Error(`${id} ${path} $schema is not a short path`);
+  if (document._meta?.locale !== locale)
+    throw new Error(`${id} ${path} _meta.locale is not "${locale}", the language its name says`);
+  if (document._meta.direction !== undefined && !["ltr", "rtl"].includes(document._meta.direction))
+    throw new Error(`${id} ${path} _meta.direction is neither "ltr" nor "rtl"`);
+  if (document.package !== undefined) {
+    const own = document.package;
+    if (
+      !own ||
+      typeof own !== "object" ||
+      Array.isArray(own) ||
+      Object.values(own).some((value) => typeof value !== "string" || value.length > 4000)
+    )
+      throw new Error(`${id} ${path} package is not a few lines of text`);
+  }
+  const section = document.ruleset;
+  if (!section || typeof section !== "object" || Array.isArray(section))
+    throw new Error(`${id} ${path} ruleset is not a section of strings`);
+  for (const [english, translated] of Object.entries(section)) {
+    if (typeof translated !== "string") throw new Error(`${id} ${path} ruleset "${english.slice(0, 60)}" is not text`);
+    if (english.length > RULESET_LOCALE_KEY_MAX || translated.length > RULESET_LOCALE_VALUE_MAX)
+      throw new Error(`${id} ${path} ruleset "${english.slice(0, 60)}" is longer than a ruleset string may be`);
+  }
+}
+
+/**
+ * Hold a ruleset's translations (Capability API 1.806) to what the Engine reads: each declared and in
+ * `manifest.files`, at most 40 of 8 MB each, never English, holding `$schema`, `_meta`, `package` and
+ * `ruleset` and nothing else, its `_meta.locale` the language its name says, and every string text.
+ * `localeSources` maps each declared path to its text. Returns how many there are.
+ */
+export function assertRulesetLocales(manifest, localeSources) {
+  const id = manifest?.id ?? "package";
+  const paths = rulesetLocaleAssetPaths(manifest);
+  const malformed = (manifest?.contributions?.assets?.paths ?? []).filter(
+    (path) => typeof path === "string" && path.startsWith("locales/") && rulesetLocaleOfAssetPath(path) === null,
+  );
+  if (malformed.length)
+    throw new Error(`${id} declares ${malformed[0]}, which is not a "locales/<language>.json" translation`);
+  if (paths.length === 0) return 0;
+  if (paths.length > RULESET_LOCALE_MAX_FILES)
+    throw new Error(`${id} ships ${paths.length} translations, over ${RULESET_LOCALE_MAX_FILES}`);
+  const { major, minor } = RULESET_LOCALES_MIN_CAPABILITY_API;
+  if (!meetsCapabilityApi(manifest, RULESET_LOCALES_MIN_CAPABILITY_API))
+    throw new Error(`${id} ships translations and must declare capability API ${major}.${minor} or newer`);
+  const declaredFiles = Array.isArray(manifest.files) ? manifest.files : [];
+  for (const path of paths) {
+    const locale = rulesetLocaleOfAssetPath(path);
+    if (locale === "en") throw new Error(`${id} ships ${path}, but English is the ruleset's own text`);
+    if (!declaredFiles.some((file) => file?.path === path))
+      throw new Error(`${id} must declare ${path} in manifest.files with its sha256 and byte size`);
+    const text = localeSources.get(path);
+    if (typeof text !== "string") throw new Error(`${id} ${path} is missing`);
+    if (Buffer.byteLength(text, "utf8") > RULESET_LOCALE_MAX_BYTES)
+      throw new Error(`${id} ${path} is over the ${RULESET_LOCALE_MAX_BYTES}-byte limit`);
+    assertRulesetTranslationText(id, path, locale, text);
+  }
+  return paths.length;
+}
+
+/** Translations shipped as language packs (Capability API 1.811): each its own download beside the
+ *  ruleset file, `<id>-<version>.<language>.json`, holding what `locales/<language>.json` holds, listed
+ *  in the catalog entry's `locales` and fetched only for the language the Engine is set to. */
+export const RULESET_LANGUAGE_PACKS_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 811 });
+export const RULESET_LOCALE_CODE_PATTERN = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8}){0,2}$/u;
+
+/** Whether a manifest ships its translations as language packs. */
+export function meetsRulesetLanguagePacks(manifest) {
+  return meetsCapabilityApi(manifest, RULESET_LANGUAGE_PACKS_MIN_CAPABILITY_API);
+}
+
+/** The file a language pack ships as. */
+export function rulesetLanguagePackName(id, version, locale) {
+  return `${id}-${version}.${locale}.json`;
+}
+
+/**
+ * Hold a ruleset's language packs (Capability API 1.811) to what the Engine reads: none left inside the
+ * ruleset file, at most 40 of 8 MB each, never English, each a translation as `assertRulesetLocales`
+ * holds one. `packs` maps each language to its text. Returns how many there are.
+ */
+export function assertRulesetLanguagePacks(manifest, packs) {
+  const id = manifest?.id ?? "package";
+  if (packs.size === 0) return 0;
+  const embedded = rulesetLocaleAssetPaths(manifest);
+  if (embedded.length) throw new Error(`${id} ships ${embedded[0]} inside its ruleset file as well as language packs`);
+  if (packs.size > RULESET_LOCALE_MAX_FILES)
+    throw new Error(`${id} ships ${packs.size} language packs, over ${RULESET_LOCALE_MAX_FILES}`);
+  const { major, minor } = RULESET_LANGUAGE_PACKS_MIN_CAPABILITY_API;
+  if (!meetsCapabilityApi(manifest, RULESET_LANGUAGE_PACKS_MIN_CAPABILITY_API))
+    throw new Error(`${id} ships language packs and must declare capability API ${major}.${minor} or newer`);
+  for (const [locale, text] of packs) {
+    const name = rulesetLanguagePackName(id, manifest.version, locale);
+    if (!RULESET_LOCALE_CODE_PATTERN.test(locale))
+      throw new Error(`${id} has a language pack for "${locale}", which is not a language code`);
+    if (locale === "en") throw new Error(`${id} ships ${name}, but English is the ruleset's own text`);
+    if (typeof text !== "string") throw new Error(`${id} ${name} is missing`);
+    if (Buffer.byteLength(text, "utf8") > RULESET_LOCALE_MAX_BYTES)
+      throw new Error(`${id} ${name} is over the ${RULESET_LOCALE_MAX_BYTES}-byte limit`);
+    assertRulesetTranslationText(id, name, locale, text);
+    const listing = JSON.parse(text).package ?? {};
+    if (
+      typeof listing.name !== "string" ||
+      listing.name.length < 1 ||
+      listing.name.length > RULESET_LANGUAGE_PACK_NAME_MAX
+    )
+      throw new Error(
+        `${id} ${name} has a store-card name the Engine refuses (1 to ${RULESET_LANGUAGE_PACK_NAME_MAX} characters)`,
+      );
+    if (typeof listing.description !== "string" || listing.description.length > RULESET_LANGUAGE_PACK_DESCRIPTION_MAX)
+      throw new Error(
+        `${id} ${name} has a ${listing.description?.length}-character description, over the Engine's ${RULESET_LANGUAGE_PACK_DESCRIPTION_MAX}`,
+      );
+  }
+  return packs.size;
 }
 
 /** The catalog asset paths a manifest declares, in declaration order. */
@@ -387,10 +2423,16 @@ export function assertRulesetPackageContract(manifest) {
   return true;
 }
 
-/** Parse and sanity-check a package's ruleset.json payload.
+/** Parse and sanity-check a package's ruleset.json payload, and hold it to the Engine's size cap.
  *
  *  Deliberately shallow: see the scope note above. Returns the parsed document. */
 export function assertRulesetAssetDocument(raw, packageId) {
+  const bytes = Buffer.byteLength(raw, "utf8");
+  if (bytes > RULESET_MAX_BYTES) {
+    throw new Error(
+      `${packageId} ${RULESET_ASSET_PATH} is ${bytes} bytes, over the Engine's ${RULESET_MAX_BYTES}-byte limit; move catalog entries into catalogs/<id>.json files`,
+    );
+  }
   let document;
   try {
     document = JSON.parse(raw);
@@ -425,9 +2467,10 @@ function assertCatalogEntries(entries, catalog, lists, where) {
   if (entries.length > RULESET_CATALOG_MAX_ENTRIES) {
     throw new Error(`${where} holds ${entries.length} entries, over the ${RULESET_CATALOG_MAX_ENTRIES} limit`);
   }
-  // A bestiary's entries carry an opponent instead of rows, so the row checks below have nothing to
-  // look at. What a creature must satisfy is assertRulesetCreatures' story to tell.
-  const holdsCreatures = catalog.holds === "creatures";
+  // A bestiary's entries carry an opponent, and an item catalog's an item, instead of rows, so the
+  // row checks below have nothing to look at. What a creature or an item must satisfy is
+  // assertRulesetCreatures' or assertRulesetItems' story to tell.
+  const writesNoRows = catalog.holds === "creatures" || catalog.holds === "items";
   const feeds = new Set(catalog.feeds);
   const seen = new Set();
   for (const entry of entries) {
@@ -440,7 +2483,10 @@ function assertCatalogEntries(entries, catalog, lists, where) {
     if (typeof entry.label !== "string" || entry.label.trim().length === 0) {
       throw new Error(`${where} entry "${entry.id}" must carry a non-empty label`);
     }
-    if (holdsCreatures) continue;
+    if (writesNoRows) continue;
+    // An entry that only grants through the builder (1.86) may write no rows: a sorcerer taken as a
+    // second class gives its level and nothing else.
+    if (entry.rows === undefined && entry.grants !== undefined) continue;
     if (!Array.isArray(entry.rows) || entry.rows.length === 0) {
       throw new Error(`${where} entry "${entry.id}" must write at least one row`);
     }
@@ -500,10 +2546,11 @@ export function assertRulesetCatalogs(manifest, document, catalogSources = new M
     }
     if (seen.has(catalog.id)) throw new Error(`${id} repeats the catalog id "${catalog.id}"`);
     seen.add(catalog.id);
-    // A bestiary writes no rows, so it feeds no list; everything else names the lists it fills.
-    if (catalog.holds === "creatures") {
+    // A bestiary or an item catalog writes no rows, so it feeds no list; everything else names the
+    // lists it fills.
+    if (catalog.holds === "creatures" || catalog.holds === "items") {
       if (catalog.feeds !== undefined)
-        throw new Error(`${id} catalog "${catalog.id}" holds creatures, so it feeds no list`);
+        throw new Error(`${id} catalog "${catalog.id}" holds ${catalog.holds}, so it feeds no list`);
     } else if (!Array.isArray(catalog.feeds) || catalog.feeds.length === 0) {
       throw new Error(`${id} catalog "${catalog.id}" must feed at least one list`);
     }
@@ -573,12 +2620,31 @@ function catalogEntryList(catalog, catalogSources) {
   if (Array.isArray(catalog?.entries)) return catalog.entries;
   const raw = typeof catalog?.asset === "string" ? catalogSources.get(catalog.asset) : undefined;
   if (typeof raw !== "string") return null;
+  // The checks read the same catalog files dozens of times in one pass, and a large ruleset's catalogs are
+  // megabytes of JSON, so each text is parsed once. The entries are frozen, since every reader shares them.
+  if (parsedCatalogEntries.has(raw)) return parsedCatalogEntries.get(raw);
+  let entries = null;
   try {
     const file = JSON.parse(raw);
-    return Array.isArray(file?.entries) ? file.entries : null;
+    if (Array.isArray(file?.entries)) entries = deepFreeze(file.entries);
   } catch {
-    return null;
+    entries = null;
   }
+  if (parsedCatalogEntries.size >= PARSED_CATALOG_CACHE_SIZE)
+    parsedCatalogEntries.delete(parsedCatalogEntries.keys().next().value);
+  parsedCatalogEntries.set(raw, entries);
+  return entries;
+}
+
+const PARSED_CATALOG_CACHE_SIZE = 64;
+const parsedCatalogEntries = new Map();
+
+function deepFreeze(value) {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const child of Object.values(value)) deepFreeze(child);
+  }
+  return value;
 }
 
 /** Why this value reference cannot be resolved against the sheet beside it, or null when it can.
@@ -655,13 +2721,25 @@ export function assertRulesetScaled(manifest, document, catalogSources = new Map
   };
 
   let scaledRows = 0;
+  let textsAt;
   for (const catalog of catalogs) {
     for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
       const rows = Array.isArray(entry?.rows) ? entry.rows : [];
-      // A kept row has to be the entry's only one for its list, or a marked row on a sheet could
-      // not be matched back to the spec it came from without guessing which of two it was.
+      // A kept row has to be the entry's only one for its list, or (1.92) every row the entry writes
+      // there carries its own name in the list's name column, or a marked row on a sheet could not be
+      // matched back to the spec it came from without guessing which of two it was.
       const perList = new Map();
       for (const row of rows) perList.set(row?.list, (perList.get(row?.list) ?? 0) + 1);
+      const namedApart = (listId) => {
+        const list = (sheet.lists ?? []).find((each) => each.id === listId);
+        const nameColumn =
+          list?.pools?.nameColumn ?? (list?.columns ?? []).find((column) => column.type === "text")?.id;
+        if (!nameColumn) return false;
+        const names = rows.filter((each) => each?.list === listId).map((each) => each.values?.[nameColumn]);
+        return (
+          names.every((name) => typeof name === "string" && name.trim() !== "") && new Set(names).size === names.length
+        );
+      };
       for (const row of rows) {
         if (row?.scaled === undefined) continue;
         const where = `${id} catalog "${catalog?.id}" entry "${entry?.id}"`;
@@ -674,7 +2752,17 @@ export function assertRulesetScaled(manifest, document, catalogSources = new Map
           throw new Error(`${where} has a scaled that is not an object`);
         }
         if (perList.get(row.list) > 1) {
-          throw new Error(`${where} scales a row that is not its only one for the list "${row.list}"`);
+          if (!namedApart(row.list))
+            throw new Error(
+              `${where} scales a row that is not its only one for the list "${row.list}" and not named apart`,
+            );
+          const named = RULESET_SCALED_BY_NAME_MIN_CAPABILITY_API;
+          // Any scaled row beside others in its list was refused before 1.92, scaled or not.
+          if (!meetsCapabilityApi(manifest, named)) {
+            throw new Error(
+              `${id} scales a row beside others of the list "${row.list}" in one entry and must declare capability API ${named.major}.${named.minor}`,
+            );
+          }
         }
         const columnIds = Object.keys(row.scaled);
         if (columnIds.length === 0 || columnIds.length > RULESET_SCALED_MAX_COLUMNS) {
@@ -683,6 +2771,41 @@ export function assertRulesetScaled(manifest, document, catalogSources = new Map
         const columns = listColumns.get(row.list);
         if (!columns) throw new Error(`${where} scales a row of unknown list "${row.list}"`);
         for (const columnId of columnIds) {
+          // 1.411: a text or enum column follows the sheet by `texts`, the text of the last step reached.
+          const texts = row.scaled[columnId]?.texts;
+          if (texts !== undefined) {
+            const column = columns.get(columnId);
+            if (!["text", "enum"].includes(column?.type))
+              throw new Error(
+                `${where} scales "${columnId}" by texts, which is not a text or enum column of "${row.list}"`,
+              );
+            if (typeof row.values?.[columnId] !== "string")
+              throw new Error(`${where} scales "${columnId}" but its values hold no starting text for it`);
+            const spec = row.scaled[columnId];
+            const extra = Object.keys(spec).find((key) => key !== "from" && key !== "texts");
+            if (extra !== undefined)
+              throw new Error(`${where} scaled "${columnId}" has the unknown key ${JSON.stringify(extra)}`);
+            const refIssue = valueRefIssue(spec.from, names);
+            if (refIssue) throw new Error(`${where} scaled "${columnId}" from ${refIssue}`);
+            if (
+              !Array.isArray(texts) ||
+              texts.length < 1 ||
+              texts.some(
+                (step, index) =>
+                  !Array.isArray(step) ||
+                  step.length !== 2 ||
+                  typeof step[0] !== "number" ||
+                  typeof step[1] !== "string" ||
+                  (index > 0 && step[0] <= texts[index - 1][0]) ||
+                  (column.type === "enum" && !(column.values ?? []).includes(step[1])),
+              )
+            )
+              throw new Error(
+                `${where} scaled "${columnId}" texts are [threshold, text] steps going up, each a value of the column`,
+              );
+            textsAt ??= `${where} scaled "${columnId}"`;
+            continue;
+          }
           if (columns.get(columnId)?.type !== "number") {
             throw new Error(`${where} scales "${columnId}", which is not a number column of "${row.list}"`);
           }
@@ -707,6 +2830,8 @@ export function assertRulesetScaled(manifest, document, catalogSources = new Map
       }
     }
   }
+  if (textsAt && !meetsCapabilityApi(manifest, RULESET_TEXTS_MIN))
+    throw new Error(`${textsAt} follows the sheet by texts, of 1.411, and must declare capability API 1.411 or newer`);
   return scaledRows;
 }
 
@@ -742,24 +2867,314 @@ function sheetNames(document) {
     text: ids(sheet.live?.text),
     conditions: ids(sheet.live?.conditions),
     lists: new Map((sheet.lists ?? []).map((list) => [list.id, list])),
+    // What the combat conditions say they are (1.258), named by a cure or an immunity in their place.
+    kinds: new Set((document?.combat?.conditions ?? []).flatMap((one) => (Array.isArray(one?.kinds) ? one.kinds : []))),
   };
 }
 
 /** What is wrong with one number a condition or a level changes, or null. The Engine's own rules: a
  *  flat change with its own sign, dice rolled each time the number is used (taken away with `minus`)
- *  on a rolled number only, or, for speed only, `times` a half or a double. */
+ *  on a rolled number only, `times` a half or a double on speed and damage, or a roll `mode` on checks
+ *  and saves, which `skills` and `saves` narrow. Damage (1.133) narrows by attack kind, blow, ability,
+ *  its own type, and, on what is taken, the applying source. */
 function modifierIssue(modifier) {
   if (!modifier || typeof modifier !== "object" || Array.isArray(modifier)) {
     return `${JSON.stringify(modifier)} is not a modifier`;
   }
-  const extra = Object.keys(modifier).find((key) => !["to", "flat", "dice", "minus", "times"].includes(key));
+  const known = [
+    "to",
+    "flat",
+    "dice",
+    "minus",
+    "times",
+    "diceTimes",
+    "skills",
+    "saves",
+    "mode",
+    "against",
+    "atSource",
+    "at",
+    "from",
+    "abilities",
+    "criticalDice",
+    "rescue",
+    "atLeast",
+    "add",
+    "falls",
+    // 1.429: Foe Slayer's and Natural Explorer's (checked in full beside the sheet's fields).
+    "atTypesIn",
+    "oncePer",
+    "orDamage",
+    "proficient",
+    // 1.430: Multiattack Defense's and Escape the Horde's (checked in full at the end of the sheet hooks).
+    "afterHitBy",
+    "opportunity",
+    // 1.544: against a surprised or not-yet-acted target, and a hit made a critical (gated at the end).
+    "whenTarget",
+    "critical",
+    // 1.553: only at a target holding one of these from the holder (gated at the end).
+    "targetHoldsFromSelf",
+    // 1.567: a check mode on a Search against anybody but its source (gated at the end).
+    "exceptSource",
+    // 1.752: only on checks the GM's tag makes for one of these purposes (gated at the end).
+    "for",
+    // 1.378: what the modifier does in plain words on a card (gated at the end).
+    "label",
+    ...RULESET_DAMAGE_NARROWING_KEYS,
+  ];
+  const extra = Object.keys(modifier).find((key) => !known.includes(key));
   if (extra !== undefined) return `a modifier has the unknown key ${JSON.stringify(extra)}`;
+  if (
+    modifier.label !== undefined &&
+    (typeof modifier.label !== "string" || !modifier.label.trim() || modifier.label.length > 120)
+  )
+    return "a modifier's label is text of 1 to 120 characters";
+  if (
+    modifier.for !== undefined &&
+    (modifier.to !== "checks" ||
+      !Array.isArray(modifier.for) ||
+      modifier.for.length < 1 ||
+      modifier.for.length > 8 ||
+      new Set(modifier.for).size !== modifier.for.length ||
+      modifier.for.some((one) => typeof one !== "string" || !/^[a-z][a-z0-9_-]{0,39}$/u.test(one)))
+  )
+    return "for is 1 to 8 distinct purposes, lowercase, on a checks modifier";
+  if (
+    modifier.exceptSource !== undefined &&
+    (modifier.exceptSource !== true || modifier.to !== "checks" || modifier.mode === undefined)
+  )
+    return "exceptSource is true, on a checks modifier with a mode";
+  if (modifier.whenTarget !== undefined) {
+    if (!["surprised", "not-yet-acted"].includes(modifier.whenTarget) || !["attacks", "damage"].includes(modifier.to))
+      return 'whenTarget is "surprised" or "not-yet-acted", on attacks or damage';
+  }
+  if (modifier.targetHoldsFromSelf !== undefined) {
+    const held = modifier.targetHoldsFromSelf;
+    if (
+      !["attacks", "damage"].includes(modifier.to) ||
+      !Array.isArray(held) ||
+      held.length < 1 ||
+      held.length > 4 ||
+      held.some((one) => typeof one !== "string" || one.length === 0)
+    )
+      return "targetHoldsFromSelf is 1 to 4 conditions, on attacks or damage";
+  }
+  if (modifier.critical !== undefined) {
+    if (modifier.critical !== true || modifier.to !== "attacks") return "critical is true, on attacks";
+    const others = Object.keys(modifier).filter((key) => !["to", "critical", "whenTarget"].includes(key));
+    if (others.length > 0) return "a critical modifier says only where it holds (whenTarget)";
+    return null;
+  }
+  // 1.406: a floor under defense, alone: a number, or one value read off the holder's sheet.
+  if (modifier.atLeast !== undefined) {
+    const floor = modifier.atLeast;
+    const ref =
+      floor &&
+      typeof floor === "object" &&
+      !Array.isArray(floor) &&
+      Object.keys(floor).length === 1 &&
+      ((typeof floor.derived === "string" && floor.derived !== "") ||
+        Number.isFinite(floor.const) ||
+        ["str", "dex", "con", "int", "wis", "cha"].includes(floor.abilityMod));
+    if (modifier.to !== "defense" || Object.keys(modifier).some((key) => !["to", "atLeast"].includes(key)))
+      return "atLeast is a floor under defense, and stands alone: no flat, dice, times or mode beside it";
+    if (!Number.isFinite(floor) && !ref) return "atLeast is a number or one value ref (derived, const or abilityMod)";
+    return undefined;
+  }
   if (!RULESET_COMBAT_MODIFIER_TARGETS.includes(modifier.to)) {
     return `changes ${JSON.stringify(modifier.to)}, not one of ${RULESET_COMBAT_MODIFIER_TARGETS.join(", ")}`;
   }
-  if (modifier.flat === undefined && modifier.dice === undefined && modifier.times === undefined) {
-    return `changes ${modifier.to} by nothing: a modifier needs a flat amount, dice or, for speed, times`;
+  // 1.413: a value off the holder's sheet beside the dice and flat (Deflect Missiles), and a fall's
+  // damage lessened and nothing else (Slow Fall).
+  if (modifier.add !== undefined) {
+    const add = modifier.add;
+    const ref =
+      add &&
+      typeof add === "object" &&
+      !Array.isArray(add) &&
+      Object.keys(add).length === 1 &&
+      ((typeof add.derived === "string" && add.derived !== "") ||
+        (typeof add.field === "string" && add.field !== "") ||
+        Number.isFinite(add.const) ||
+        ["str", "dex", "con", "int", "wis", "cha"].includes(add.abilityMod));
+    // On attacks, checks and saves too since 1.429.
+    if (!["damage", "damage-taken", "attacks", "checks", "saves"].includes(modifier.to))
+      return "add is on a damage, damage-taken, attacks, checks or saves modifier";
+    if (!ref) return "add is one value ref (derived, field, const or abilityMod)";
   }
+  if (modifier.falls !== undefined) {
+    if (modifier.falls !== true || modifier.to !== "damage-taken") return "falls is true, on a damage-taken modifier";
+    const blowKeys = ["attacks", "blow", "ability", "fromSource", "times"].filter((key) => modifier[key] !== undefined);
+    if (blowKeys.length) return `a fall is no blow, so falls goes without ${blowKeys.join(", ")}`;
+  }
+  if (
+    modifier.oncePer !== undefined &&
+    (modifier.oncePer !== "own-turn" ||
+      !["damage", "attacks"].includes(modifier.to) ||
+      (modifier.to === "attacks" && modifier.rescue !== true))
+  )
+    return 'oncePer is "own-turn", on damage or a held-back change to attacks';
+  if (
+    modifier.add === undefined &&
+    modifier.flat === undefined &&
+    modifier.dice === undefined &&
+    modifier.times === undefined &&
+    modifier.diceTimes === undefined &&
+    modifier.criticalDice === undefined &&
+    modifier.mode === undefined
+  ) {
+    return `changes ${modifier.to} by nothing: a modifier needs a flat amount, dice, times or a roll mode`;
+  }
+  if (modifier.mode !== undefined) {
+    if (!["advantage", "disadvantage"].includes(modifier.mode)) return `rolls ${modifier.to} in an unknown mode`;
+    if (!["checks", "saves", "attacks", "attacks-taken", "checks-taken"].includes(modifier.to))
+      return `rolls ${modifier.to} twice, and mode is for checks, saves and attacks made or taken`;
+  }
+  // 1.185: attacks taken roll twice and nothing else, perhaps only from a kind of attacker; a holder's
+  // own attacks perhaps only against whoever put the condition on them.
+  if (modifier.to === "attacks-taken") {
+    // 1.430: perhaps only on opportunity attacks (Escape the Horde); 1.502, only from its source (True Strike).
+    if (
+      modifier.mode === undefined ||
+      Object.keys(modifier).some((key) => !["to", "mode", "from", "opportunity", "fromSource"].includes(key))
+    )
+      return "attacks-taken takes a mode, and perhaps from, opportunity or fromSource, and nothing else";
+  }
+  if (modifier.from !== undefined) {
+    const from = modifier.from;
+    const tags = (value) => value === undefined || (Array.isArray(value) && value.length > 0);
+    if (modifier.to !== "attacks-taken") return `narrows ${modifier.to} by who attacks, and only attacks-taken is`;
+    if (!from || typeof from !== "object" || (!from.types && !from.tags) || !tags(from.types) || !tags(from.tags))
+      return "from names creature types, tags or both";
+  }
+  // 1.726: the holder's own attacks or damage only at a target that is something (Demon Armor).
+  if (modifier.at !== undefined) {
+    const at = modifier.at;
+    const tags = (value) => value === undefined || (Array.isArray(value) && value.length > 0);
+    if (modifier.to !== "attacks" && modifier.to !== "damage")
+      return `narrows ${modifier.to} by its target, and only attacks and damage are`;
+    if (
+      !at ||
+      typeof at !== "object" ||
+      (!at.types && !at.tags) ||
+      !tags(at.types) ||
+      !tags(at.tags) ||
+      Object.keys(at).some((key) => !["types", "tags"].includes(key))
+    )
+      return "at names creature types, tags or both";
+  }
+  if (modifier.atSource !== undefined && (modifier.atSource !== true || modifier.to !== "attacks" || !modifier.mode))
+    return "atSource is true, on attacks rolled twice";
+  // 1.290: checks made to find the holder roll twice, perhaps only some skills', and nothing else.
+  if (modifier.to === "checks-taken") {
+    if (modifier.mode === undefined || Object.keys(modifier).some((key) => !["to", "mode", "skills"].includes(key)))
+      return "checks-taken takes a mode, and perhaps skills, and nothing else";
+  }
+  if (modifier.skills !== undefined && modifier.to !== "checks" && modifier.to !== "checks-taken")
+    return `narrows ${modifier.to} by skills`;
+  if (modifier.saves !== undefined && modifier.to !== "saves") return `narrows ${modifier.to} by saves`;
+  if (modifier.against !== undefined) {
+    const against = modifier.against;
+    if (modifier.to !== "saves") return `counts ${modifier.to} against something, and only saves are rolled against`;
+    if (!against || typeof against !== "object" || Array.isArray(against)) return "against must be an object";
+    const extraKey = Object.keys(against).find(
+      (key) => !["conditions", "damage", "magic", "from", "actions", "casts", "alone", "qualities"].includes(key),
+    );
+    if (extraKey !== undefined) return `against has the unknown key ${JSON.stringify(extraKey)}`;
+    const list = (value) => Array.isArray(value) && value.length > 0 && value.every((one) => typeof one === "string");
+    if (against.conditions !== undefined && !list(against.conditions)) return "against.conditions lists condition ids";
+    if (against.damage !== undefined && !list(against.damage)) return "against.damage lists damage types";
+    // 1.652: what the thing saved against is, a save's own against.qualities.
+    if (against.qualities !== undefined && !list(against.qualities)) return "against.qualities lists qualities";
+    if (against.magic !== undefined && against.magic !== true) return "against.magic is true or left out";
+    // 1.523: only against what is aimed at its holder alone.
+    if (against.alone !== undefined && against.alone !== true) return "against.alone is true or left out";
+    if (against.actions !== undefined && (!list(against.actions) || against.actions.length > 12))
+      return "against.actions lists 1 to 12 action ids, names or recharge groups";
+    if (against.casts !== undefined && (!list(against.casts) || against.casts.length > 8))
+      return "against.casts lists 1 to 8 catalog ids";
+    if (
+      against.from !== undefined &&
+      (!against.from ||
+        typeof against.from !== "object" ||
+        (!against.from.types && !against.from.tags) ||
+        (against.from.types !== undefined && !list(against.from.types)) ||
+        (against.from.tags !== undefined && !list(against.from.tags)))
+    )
+      return "against.from names creature types, tags or both";
+    if (
+      against.conditions === undefined &&
+      against.damage === undefined &&
+      against.magic === undefined &&
+      against.from === undefined &&
+      against.actions === undefined &&
+      against.casts === undefined &&
+      against.qualities === undefined
+    )
+      return "against names conditions, damage, magic, what it is from, the actions it is against, what is cast or what it is";
+  }
+  const damage = modifier.to === "damage" || modifier.to === "damage-taken";
+  // 1.188: attacks made with one ability, and checks of the abilities named.
+  if (modifier.abilities !== undefined) {
+    const list = modifier.abilities;
+    if (modifier.to !== "checks") return `narrows ${modifier.to} by abilities, and only checks are`;
+    if (!Array.isArray(list) || list.length === 0 || list.length > 12 || !list.every((one) => typeof one === "string"))
+      return "abilities lists 1 to 12 ability ids";
+  }
+  const narrowing = RULESET_DAMAGE_NARROWING_KEYS.find(
+    // Attack rolls narrow by ability (1.188), and by attack kind and blow (1.247); attacks taken by their
+    // source (1.502), and defense by blow (1.509).
+    (key) =>
+      modifier[key] !== undefined &&
+      !(["ability", "attacks", "blow"].includes(key) && modifier.to === "attacks") &&
+      !(key === "blow" && modifier.to === "defense") &&
+      !(key === "fromSource" && modifier.to === "attacks-taken"),
+  );
+  if (narrowing !== undefined && !damage) return `"${narrowing}" narrows damage only, not ${modifier.to}`;
+  if (modifier.attacks !== undefined && !["weapon", "spell", "any"].includes(modifier.attacks))
+    return `narrows damage to attacks ${JSON.stringify(modifier.attacks)}, not weapon, spell or any`;
+  if (modifier.blow !== undefined && !["melee", "ranged"].includes(modifier.blow))
+    return `narrows damage to the blow ${JSON.stringify(modifier.blow)}, not melee or ranged`;
+  // 1.249: held back for a roll of the holder's own that falls short, then spent.
+  if (
+    modifier.rescue !== undefined &&
+    (modifier.rescue !== true ||
+      !["attacks", "saves", "checks"].includes(modifier.to) ||
+      modifier.mode !== undefined ||
+      modifier.minus !== undefined ||
+      (modifier.dice === undefined &&
+        modifier.add === undefined &&
+        !(Number.isInteger(modifier.flat) && modifier.flat > 0)))
+  )
+    return "rescue is true, with dice, a value off the sheet (1.429) or a positive flat amount, on attacks, saves or checks";
+  // 1.247: more of the blow's own dice, on a critical only.
+  if (
+    modifier.criticalDice !== undefined &&
+    (modifier.to !== "damage" ||
+      !Number.isInteger(modifier.criticalDice) ||
+      modifier.criticalDice < 1 ||
+      modifier.criticalDice > 6)
+  )
+    return "criticalDice is 1 to 6 more of a blow's own dice, on damage";
+  // Or, since 1.502, the advantage or disadvantage of attacks-taken: True Strike.
+  if (
+    modifier.fromSource !== undefined &&
+    (modifier.fromSource !== true ||
+      !(modifier.to === "damage-taken" || (modifier.to === "attacks-taken" && modifier.mode)))
+  )
+    return '"fromSource" is true, and narrows damage-taken, or the roll mode of attacks-taken';
+  // 1.471: counted with no attack roll too.
+  if (modifier.alsoUnrolled !== undefined && modifier.alsoUnrolled !== true) return '"alsoUnrolled" is true';
+  // 1.792: only on blows of these types, and spent the first time it adds.
+  if (
+    modifier.onTypes !== undefined &&
+    (!Array.isArray(modifier.onTypes) ||
+      modifier.onTypes.length < 1 ||
+      modifier.onTypes.length > 8 ||
+      !modifier.onTypes.every((one) => typeof one === "string" && one.trim().length > 0 && one.length <= 80))
+  )
+    return '"onTypes" lists 1 to 8 damage types';
+  if (modifier.spentOnUse !== undefined && modifier.spentOnUse !== true) return '"spentOnUse" is true';
   if (modifier.flat !== undefined) {
     if (!Number.isInteger(modifier.flat) || modifier.flat < -100 || modifier.flat > 100) {
       return `changes ${modifier.to} by ${JSON.stringify(modifier.flat)}, not a whole number from -100 to 100`;
@@ -776,19 +3191,275 @@ function modifierIssue(modifier) {
   }
   if (modifier.minus !== undefined && modifier.minus !== true)
     return "a modifier's minus must be true when it is given";
-  if (modifier.minus && modifier.dice === undefined)
+  // 1.413: or a value off the sheet taken away with it, or alone.
+  if (modifier.minus && modifier.dice === undefined && modifier.add === undefined)
     return `takes dice off ${modifier.to} with "minus" but has no dice`;
   if (modifier.times !== undefined) {
     if (modifier.times !== 0.5 && modifier.times !== 2) {
       return `multiplies ${modifier.to} by ${JSON.stringify(modifier.times)}, not 0.5 or 2`;
     }
-    if (modifier.to !== "speed") return `multiplies ${modifier.to}, and "times" changes speed only`;
+    if (modifier.to !== "speed" && modifier.to !== "health-max" && !damage) {
+      return `multiplies ${modifier.to}, and "times" changes speed, the health maximum or damage only`;
+    }
+  }
+  // 1.197: the blow's own dice thrown two to four times, its flat part once.
+  if (modifier.diceTimes !== undefined) {
+    if (!Number.isInteger(modifier.diceTimes) || modifier.diceTimes < 2 || modifier.diceTimes > 4)
+      return `throws its dice ${JSON.stringify(modifier.diceTimes)} times, and diceTimes is 2 to 4`;
+    if (modifier.to !== "damage") return `throws ${modifier.to}'s dice again, and diceTimes changes damage dealt only`;
+  }
+  if (
+    modifier.to === "health-max" &&
+    (modifier.times !== 0.5 || modifier.flat !== undefined || modifier.dice !== undefined)
+  ) {
+    return "changes health-max by something other than halving it, which is all it takes";
   }
   return null;
 }
 
 /** The numbers one condition or level changes, and the saves it narrows, checked as the Engine reads
  *  them: `saves` narrows the save effects and the modifiers to saves, and nothing else reads it. */
+const wholeFrom = (value, min, max) => Number.isInteger(value) && value >= min && value <= max;
+
+/** The action economy a condition changes (1.76), read as the Engine reads it: budgets the economy
+ *  declares, standard actions the ruleset has, item tags it declares and conditions the sheet has. */
+function assertConditionEconomy(entry, where, { combat, conditions, itemTags, tracks = new Map() }) {
+  const declared = Array.isArray(combat.economy?.budgets) ? combat.economy.budgets : [];
+  const budgets = new Set(declared.map((budget) => budget?.id));
+  const knownBudget = (value, key) => {
+    if (!budgets.has(value)) throw new Error(`${where} ${key} names unknown budget ${JSON.stringify(value)}`);
+  };
+  if (entry.budgets !== undefined) {
+    if (!Array.isArray(entry.budgets) || entry.budgets.length < 1 || entry.budgets.length > 4) {
+      throw new Error(`${where} changes 1 to 4 budgets`);
+    }
+    for (const change of entry.budgets) {
+      knownBudget(change?.budget, "budgets");
+      // A turn's count is what a condition changes; a budget that refills by the round has no turn.
+      if (declared.find((budget) => budget?.id === change.budget)?.per !== "turn") {
+        throw new Error(`${where} changes "${change.budget}", which refills per round, not per turn`);
+      }
+      if (!wholeFrom(change.flat, -10, 10)) {
+        throw new Error(`${where} changes "${change.budget}" by a whole number from -10 to 10, not ${change.flat}`);
+      }
+    }
+  }
+  const grants = entry.grants;
+  if (grants !== undefined) {
+    knownBudget(grants?.budget, "grants");
+    const standard = grants.standard;
+    if (
+      standard !== undefined &&
+      (!Array.isArray(standard) ||
+        standard.length < 1 ||
+        standard.length > 7 ||
+        standard.some((action) => !RULESET_COMBAT_STANDARD_ACTIONS.includes(action)))
+    ) {
+      throw new Error(`${where} grants 1 to 7 standard actions the Engine resolves, not ${JSON.stringify(standard)}`);
+    }
+    for (const action of standard ?? []) {
+      if (!(combat.standard ?? []).includes(action)) {
+        throw new Error(`${where} grants the standard action "${action}", which this ruleset does not have`);
+      }
+    }
+    if (standard !== undefined && grants.budget === declared[0]?.id) {
+      throw new Error(`${where} grants standard actions on "${grants.budget}", which already takes every one`);
+    }
+    if (grants.attacks !== undefined && grants.attacks !== true) {
+      throw new Error(`${where} grants attacks as true or not at all, not ${JSON.stringify(grants.attacks)}`);
+    }
+    const items = grants.items;
+    if (items !== undefined && items !== true) {
+      const tags = items?.tags;
+      if (!Array.isArray(tags) || tags.length < 1 || tags.length > 8 || Object.keys(items).length !== 1) {
+        throw new Error(`${where} grants items as true or { tags: [...] }, not ${JSON.stringify(items)}`);
+      }
+      for (const tag of tags) {
+        if (!itemTags.has(tag)) throw new Error(`${where} grants items of unknown tag ${JSON.stringify(tag)}`);
+      }
+    }
+    // 1.239: the granted strike only with a weapon that strikes in reach.
+    if (grants.melee !== undefined && (grants.melee !== true || grants.attacks !== true)) {
+      throw new Error(`${where} grants melee as true, beside attacks`);
+    }
+    if (standard === undefined && grants.attacks === undefined && grants.items === undefined) {
+      throw new Error(`${where} grants a budget without saying what it may be spent on`);
+    }
+  }
+  if (entry.exclusive !== undefined) {
+    const pair = entry.exclusive;
+    if (!Array.isArray(pair) || pair.length !== 2 || pair[0] === pair[1]) {
+      throw new Error(`${where} makes two different budgets exclusive, not ${JSON.stringify(pair)}`);
+    }
+    for (const value of pair) knownBudget(value, "exclusive");
+  }
+  if (entry.attacksPerTurn !== undefined && !wholeFrom(entry.attacksPerTurn, 0, 10)) {
+    throw new Error(`${where} caps attacks at a whole number from 0 to 10, not ${entry.attacksPerTurn}`);
+  }
+  if (entry.onEnd !== undefined) {
+    const applies = entry.onEnd?.applies;
+    const moved = entry.onEnd?.tracks;
+    const harm = entry.onEnd?.harm;
+    // Since 1.239 it may only move tracks, and since 1.245 only harm: at least one of the three.
+    if (
+      (applies === undefined && moved === undefined && harm === undefined) ||
+      (applies !== undefined && (!Array.isArray(applies) || applies.length < 1 || applies.length > 4))
+    ) {
+      throw new Error(`${where} leaves 1 to 4 conditions behind when it ends`);
+    }
+    if (moved !== undefined) {
+      if (
+        !Array.isArray(moved) ||
+        moved.length < 1 ||
+        moved.length > 4 ||
+        moved.some(
+          (one) =>
+            !one ||
+            Object.keys(one).some((key) => !["track", "by"].includes(key)) ||
+            !tracks.has(one.track) ||
+            tracks.get(one.track)?.kinds !== undefined ||
+            !Number.isInteger(one.by) ||
+            one.by === 0,
+        )
+      ) {
+        throw new Error(`${where} moves 1 to 4 of the sheet's plain tracks by whole levels when it ends`);
+      }
+    }
+    // 1.245: damage as it ends, from whoever put it on, unless the holder is a named creature type.
+    if (harm !== undefined) {
+      const damageTypes = new Set((combat.damageTypes ?? []).map((type) => String(type).toLowerCase()));
+      const creatureTypes = new Set((combat.creatureTypes?.types ?? []).map((one) => one?.id ?? one));
+      if (
+        !harm ||
+        typeof harm !== "object" ||
+        Array.isArray(harm) ||
+        Object.keys(harm).some((key) => !["dice", "flat", "type", "unless", "save"].includes(key)) ||
+        (harm.save !== undefined &&
+          (!harm.save ||
+            typeof harm.save !== "object" ||
+            Object.keys(harm.save).some((key) => !["save", "difficulty", "onSuccess"].includes(key)) ||
+            typeof harm.save.save !== "string" ||
+            !Number.isInteger(harm.save.difficulty) ||
+            harm.save.difficulty < 1 ||
+            harm.save.difficulty > 100 ||
+            harm.save.onSuccess !== "half")) ||
+        (harm.dice === undefined && harm.flat === undefined) ||
+        (harm.dice !== undefined && !/^\d+d\d+$/u.test(String(harm.dice))) ||
+        (harm.flat !== undefined && !Number.isInteger(harm.flat)) ||
+        (harm.type !== undefined && !damageTypes.has(String(harm.type).toLowerCase())) ||
+        (harm.unless !== undefined &&
+          (!harm.unless ||
+            Object.keys(harm.unless).some((key) => key !== "types") ||
+            !Array.isArray(harm.unless.types) ||
+            harm.unless.types.length < 1 ||
+            harm.unless.types.some((type) => !creatureTypes.has(type))))
+      )
+        throw new Error(
+          `${where} harms as it ends with dice or a flat amount, a declared damage type and declared creature types it spares`,
+        );
+    }
+    for (const applied of applies ?? []) {
+      if (!conditions.has(applied?.condition)) {
+        throw new Error(`${where} leaves behind unknown condition ${JSON.stringify(applied?.condition)}`);
+      }
+      // Nothing rolls a save against what is left behind, and an instant one would never come off.
+      if (!applied.duration || typeof applied.duration !== "object") {
+        throw new Error(
+          `${where} leaves "${applied.condition}" behind for some rounds, not ${JSON.stringify(applied.duration)}`,
+        );
+      }
+    }
+  }
+}
+
+/** A condition's damage modifiers ask for 1.133, and an ability or a damage type they name is the
+ *  sheet's own. */
+function assertEvasion(manifest, entry, where, later) {
+  if (entry.evasion === undefined) return;
+  if (!Array.isArray(entry.evasion) || entry.evasion.length < 1 || entry.evasion.length > 12)
+    throw new Error(`${where} evasion lists 1 to 12 saves`);
+  if (!meetsCapabilityApi(manifest, RULESET_CUTTING_WORDS_MIN))
+    later.evasion ??= `${where} evades saves and must declare capability API 1.250 or newer`;
+}
+
+function assertDamageModifierGate(manifest, entry, where, names, later = undefined) {
+  for (const modifier of entry.modifiers ?? []) {
+    if (modifier?.diceTimes !== undefined && !meetsCapabilityApi(manifest, RULESET_DICE_TIMES_MIN)) {
+      const message = `${where} throws a blow's dice again and must declare capability API 1.197 or newer`;
+      if (!later) throw new Error(message);
+      later.dice ??= message;
+    }
+    if (modifier?.rescue !== undefined && !meetsCapabilityApi(manifest, RULESET_RESCUE_MIN)) {
+      const message = `${where} holds dice back for a roll that falls short and must declare capability API 1.249 or newer`;
+      if (!later) throw new Error(message);
+      later.rescue ??= message;
+    }
+    if (
+      (modifier?.criticalDice !== undefined ||
+        (modifier?.to === "attacks" && (modifier?.attacks !== undefined || modifier?.blow !== undefined))) &&
+      !meetsCapabilityApi(manifest, RULESET_RECKLESS_MIN)
+    ) {
+      const message = `${where} narrows attacks to weapon or spell, melee or ranged, or adds dice on a critical, and must declare capability API 1.247 or newer`;
+      if (!later) throw new Error(message);
+      later.reckless ??= message;
+    }
+    const narrowed =
+      (modifier?.to === "attacks" && modifier?.ability !== undefined) || modifier?.abilities !== undefined;
+    if (narrowed) {
+      for (const ability of [modifier.ability, ...(modifier.abilities ?? [])].filter((one) => one !== undefined))
+        if (!names.abilities.has(ability))
+          throw new Error(`${where} narrows ${modifier.to} to unknown ability ${JSON.stringify(ability)}`);
+      if (!meetsCapabilityApi(manifest, RULESET_ABILITY_NARROWING_MIN)) {
+        // Named once the older gates have had their turn, where the caller collects it.
+        const message = `${where} narrows ${modifier.to} to an ability and must declare capability API 1.188 or newer`;
+        if (!later) throw new Error(message);
+        later.message ??= message;
+      }
+    }
+    if (
+      modifier?.to === "attacks-taken" ||
+      modifier?.atSource !== undefined ||
+      modifier?.from !== undefined ||
+      modifier?.against?.from !== undefined ||
+      (modifier?.to === "attacks" && modifier?.mode !== undefined)
+    ) {
+      if (!meetsCapabilityApi(manifest, RULESET_KINDS_MIN))
+        throw new Error(
+          `${where} rolls attacks twice by who makes or takes them, or saves against what a kind of creature does, and must declare capability API ${RULESET_KINDS_MIN.major}.${RULESET_KINDS_MIN.minor} or newer`,
+        );
+    }
+    // 1.726's `at` is gated with the sheet hooks, after every older gate.
+    if (modifier?.against !== undefined) {
+      if (!meetsCapabilityApi(manifest, RULESET_SAVES_AGAINST_MIN))
+        throw new Error(
+          `${where} counts saves against conditions, damage or magic and must declare capability API ${RULESET_SAVES_AGAINST_MIN.major}.${RULESET_SAVES_AGAINST_MIN.minor} or newer`,
+        );
+      for (const condition of modifier.against.conditions ?? [])
+        if (!names.conditions.has(condition))
+          throw new Error(`${where} counts saves against unknown condition ${JSON.stringify(condition)}`);
+      // 1.191: saves against named actions, once the older gates have had their turn.
+      if (modifier.against.actions !== undefined && !meetsCapabilityApi(manifest, RULESET_HEAL_WARDS_MIN)) {
+        const message = `${where} counts saves against named actions and must declare capability API 1.191 or newer`;
+        if (!later) throw new Error(message);
+        later.wards ??= message;
+      }
+      // 1.265: saves against what a catalog casts (Holy Nimbus, spells).
+      if (modifier.against.casts !== undefined && !meetsCapabilityApi(manifest, RULESET_AURA_TURNS_MIN)) {
+        const message = `${where} counts saves against what is cast and must declare capability API 1.265 or newer`;
+        if (!later) throw new Error(message);
+        later.auraTurns ??= message;
+      }
+    }
+    if (modifier?.to !== "damage" && modifier?.to !== "damage-taken") continue;
+    if (!meetsCapabilityApi(manifest, RULESET_DAMAGE_MODIFIERS_MIN))
+      throw new Error(
+        `${where} changes ${modifier.to} and must declare capability API ${RULESET_DAMAGE_MODIFIERS_MIN.major}.${RULESET_DAMAGE_MODIFIERS_MIN.minor} or newer`,
+      );
+    if (modifier.ability !== undefined && !names.abilities.has(modifier.ability))
+      throw new Error(`${where} narrows damage to unknown ability ${JSON.stringify(modifier.ability)}`);
+  }
+}
+
 function assertConditionNumbers(entry, where) {
   if (entry.modifiers !== undefined) {
     const modifiers = entry.modifiers;
@@ -814,48 +3485,244 @@ function assertConditionNumbers(entry, where) {
 
 /** What is wrong with one reaction moment, or null. A catalog entry and a creature's own action say
  *  it the same way, so both are held to this one reading: `on` one of the moments the Engine opens,
- *  `at` source or chosen, `against` the catalogs whose entries open it, and a cancel only on a
- *  moment before anything has resolved, because what has already happened cannot be called off. */
-function reactionMomentIssue(reaction, catalogIds) {
+ *  `at` source, chosen or the acted-on ally, `against` catalog entries or whole action names, and
+ *  a cancel only before resolution. The holder's save can make that cancel conditional. */
+function reactionMomentIssue(reaction, catalogIds, saveIds) {
   const extra = Object.keys(reaction).find((key) => !RULESET_REACTION_KEYS.includes(key));
   if (extra !== undefined) return `reaction has an unknown key "${extra}"`;
   if (!RULESET_REACTION_MOMENTS.includes(reaction.on)) {
     return `waits for ${JSON.stringify(reaction.on)}, not one of ${RULESET_REACTION_MOMENTS.join(", ")}`;
   }
-  if (reaction.at !== undefined && !RULESET_REACTION_AT.includes(reaction.at)) {
-    return `is pointed at ${JSON.stringify(reaction.at)}, not one of ${RULESET_REACTION_AT.join(", ")}`;
-  }
-  if (reaction.cancels !== undefined && reaction.cancels !== true) {
-    return "reaction cancels must be true when it is given";
-  }
-  if (reaction.cancels && RULESET_REACTION_DONE_MOMENTS.includes(reaction.on)) {
-    return 'cancels a moment that has already happened: only an "aimed" or "used" reaction cancels';
-  }
-  if (reaction.against !== undefined) {
-    const against = reaction.against;
-    const extraAgainst =
-      against && typeof against === "object" && !Array.isArray(against)
-        ? Object.keys(against).find((key) => key !== "catalogs")
-        : "";
-    const catalogs = against?.catalogs;
+  const againstIssue = (against) => {
+    const keys = against && typeof against === "object" && !Array.isArray(against) ? Object.keys(against) : undefined;
     if (
-      extraAgainst !== undefined ||
-      !Array.isArray(catalogs) ||
-      catalogs.length === 0 ||
-      catalogs.length > RULESET_REACTION_AGAINST_MAX
+      keys === undefined ||
+      keys.length === 0 ||
+      keys.some((key) => !["catalogs", "entries", "actions", "qualities"].includes(key))
     ) {
-      return `answers ${JSON.stringify(against)}, not { catalogs } naming 1 to ${RULESET_REACTION_AGAINST_MAX} catalogs`;
+      return `answers ${JSON.stringify(against)}, not { catalogs, entries }, { actions } or { qualities }`;
     }
-    for (const catalog of catalogs) {
+    for (const key of keys) {
+      const list = against[key];
+      if (!Array.isArray(list) || list.length === 0 || list.length > RULESET_REACTION_AGAINST_MAX) {
+        return `answers ${key} ${JSON.stringify(list)}, not a list of 1 to ${RULESET_REACTION_AGAINST_MAX}`;
+      }
+    }
+    for (const name of against.actions ?? []) {
+      if (typeof name !== "string" || !name.trim())
+        return `answers action ${JSON.stringify(name)}, not a nonempty whole action name`;
+    }
+    // 1.564: anything carrying one of these qualities, item tags (gated at the end).
+    for (const tag of against.qualities ?? []) {
+      if (typeof tag !== "string" || !tag.trim()) return `answers quality ${JSON.stringify(tag)}, not an item tag`;
+    }
+    for (const catalog of against.catalogs ?? []) {
       if (!catalogIds.has(catalog)) return `answers unknown catalog ${JSON.stringify(catalog)}`;
+    }
+    for (const ref of against.entries ?? []) {
+      const [catalog, entry, more] = typeof ref === "string" ? ref.split("/") : [];
+      if (!catalog || !entry || more !== undefined) return `answers ${JSON.stringify(ref)}, not "<catalog>/<entry>"`;
+      if (!catalogIds.has(catalog)) return `answers an entry of unknown catalog ${JSON.stringify(catalog)}`;
+    }
+    return null;
+  };
+  for (const moment of [reaction, ...(Array.isArray(reaction.also) ? reaction.also : [])]) {
+    if (!moment || typeof moment !== "object") continue;
+    if (moment.at !== undefined && !RULESET_REACTION_AT.includes(moment.at))
+      return `is pointed at ${JSON.stringify(moment.at)}, not one of ${RULESET_REACTION_AT.join(", ")}`;
+    if (moment.cancels !== undefined && moment.cancels !== true)
+      return "reaction cancels must be true when it is given";
+    if (moment.on === "falls" && ["cancels", "blow", "seesSource", "against"].some((key) => moment[key] !== undefined))
+      return 'answers a fall, which nothing cancels and no blow or source opens: "falls" takes no cancels, blow, seesSource or against';
+    // 1.416: a missile caught, which is over once caught: nothing cancels it and no blow narrows it.
+    if (moment.on === "caught" && ["cancels", "blow", "against", "cancelSave"].some((key) => moment[key] !== undefined))
+      return '"caught" takes no cancels, blow, against or cancelSave';
+    if (moment.freeSlot !== undefined && (typeof moment.freeSlot !== "string" || !moment.freeSlot.trim()))
+      return "reaction freeSlot names an item slot";
+    // 1.422: an attack that is over, hit or missed: nothing cancels it; `missed` narrows it to a miss.
+    if (moment.on === "attacked" && ["cancels", "against", "cancelSave"].some((key) => moment[key] !== undefined))
+      return '"attacked" takes no cancels, against or cancelSave';
+    if (moment.missed !== undefined && (moment.missed !== true || moment.on !== "attacked"))
+      return 'reaction missed is true, on an "attacked" moment';
+    if (
+      moment.sourceIs !== undefined &&
+      (!moment.sourceIs ||
+        typeof moment.sourceIs !== "object" ||
+        Array.isArray(moment.sourceIs) ||
+        Object.keys(moment.sourceIs).length === 0 ||
+        Object.keys(moment.sourceIs).some((key) => !["types", "tags", "upToSize", "atLeastSize"].includes(key)) ||
+        ["falls", "turn-start"].includes(moment.on))
+    )
+      return "reaction sourceIs is { types, tags, upToSize, atLeastSize }, on a moment somebody caused";
+    if (moment.on === "turn-start" && (moment.cancels !== undefined || moment.against !== undefined))
+      return '"turn-start" takes no cancels or against';
+    if (moment.cancels && RULESET_REACTION_DONE_MOMENTS.includes(moment.on))
+      return 'cancels a moment that has already happened: only an "aimed" or "used" reaction cancels';
+    if (moment.for !== undefined && !["self", "ally", "any"].includes(moment.for))
+      return "reaction for must be self, ally or any";
+    if ((moment.for !== undefined || moment.within !== undefined) && !["aimed", "hit"].includes(moment.on)) {
+      // 1.422: how near whoever caused a harm or an attack is, for Retaliation and Giant Killer.
+      if (moment.for !== undefined || !["harmed", "attacked"].includes(moment.on))
+        return 'reaction for/within only belongs on "aimed" or "hit" (within also on "harmed" or "attacked")';
+    }
+    if (["ally", "any"].includes(moment.for) && moment.within === undefined)
+      return "reaction for ally/any requires within";
+    if (
+      moment.within !== undefined &&
+      (!Number.isFinite(moment.within) || moment.within < 0 || moment.within > RULESET_DISTANCE_MAX)
+    )
+      return `reaction within must be a distance from 0 to ${RULESET_DISTANCE_MAX}`;
+    // 1.241: the holder's own hit, aimed at whoever it struck.
+    if (moment.by !== undefined) {
+      if (moment.by !== "self" || moment.on !== "hit") return 'reaction by "self" answers only its holder\'s own "hit"';
+      if (moment.at !== "target") return 'reaction by "self" is aimed at "target", whoever the blow hit';
+      if (moment.for !== undefined || moment.within !== undefined || moment.cancels !== undefined)
+        return 'reaction by "self" takes no for, within or cancels';
+    }
+    if (moment.weapon !== undefined && (moment.weapon !== true || moment.on !== "hit"))
+      return 'reaction weapon is true, on a "hit"';
+    // 1.245: only a hit by these attacks, by their names.
+    if (
+      moment.names !== undefined &&
+      (moment.on !== "hit" ||
+        !Array.isArray(moment.names) ||
+        moment.names.length < 1 ||
+        moment.names.length > 8 ||
+        new Set(moment.names).size !== moment.names.length ||
+        moment.names.some((name) => typeof name !== "string" || !name.trim()))
+    )
+      return 'reaction names lists 1 to 8 distinct attack names, on a "hit"';
+    // 1.248: a hit by a strike one budget paid for, and one answer of several per hit.
+    if (moment.budget !== undefined && (moment.on !== "hit" || typeof moment.budget !== "string" || !moment.budget))
+      return 'reaction budget names the budget that paid for the strike, on a "hit"';
+    if (
+      moment.oneOf !== undefined &&
+      (moment.on !== "hit" ||
+        moment.by !== "self" ||
+        reaction.also !== undefined ||
+        typeof moment.oneOf !== "string" ||
+        !moment.oneOf.trim() ||
+        moment.oneOf.length > 40)
+    )
+      return 'reaction oneOf is a short name, on its holder\'s own "hit" with no also';
+    if (moment.at === "target" && moment.by === undefined && !["ally", "any"].includes(moment.for))
+      return 'reaction at "target" requires for ally/any';
+    if (moment.cancelSave !== undefined) {
+      if (!moment.cancels) return "reaction cancelSave requires cancels";
+      const save = moment.cancelSave;
+      if (
+        !save ||
+        typeof save !== "object" ||
+        Array.isArray(save) ||
+        Object.keys(save).some((key) => !["save", "dc"].includes(key))
+      )
+        return "reaction cancelSave must be { save, dc }";
+      if (!saveIds.has(save.save)) return `reaction cancelSave names unknown save ${JSON.stringify(save.save)}`;
+      if (!Number.isInteger(save.dc) || save.dc < 1 || save.dc > 1000)
+        return "reaction cancelSave dc must be a whole number from 1 to 1000";
+    }
+    if (moment.against !== undefined) {
+      const issue = againstIssue(moment.against);
+      if (issue) return issue;
+    }
+    if (moment.blow !== undefined) {
+      if (moment.blow !== "melee" && moment.blow !== "ranged")
+        return `answers a ${JSON.stringify(moment.blow)} blow, not melee or ranged`;
+      // 1.422: an attack over, hit or missed, has a kind of blow too.
+      if (moment.on !== "hit" && moment.on !== "attacked")
+        return 'answers a kind of blow, so it waits for "hit" or "attacked"';
+    }
+    if (moment.seesSource !== undefined && moment.seesSource !== true)
+      return "seesSource must be true when it is given";
+  }
+  if (reaction.upTo !== undefined) {
+    if (reaction.upTo !== "paid") return `stops up to ${JSON.stringify(reaction.upTo)}, not "paid"`;
+    if (!reaction.cancels || reaction.on !== "used")
+      return 'stops up to what was paid, so it is a "used" reaction that cancels';
+  }
+  if (reaction.above !== undefined) {
+    const above = reaction.above;
+    if (reaction.upTo === undefined) return 'has a check "above" what it stops with no "upTo"';
+    if (
+      !above ||
+      typeof above !== "object" ||
+      Array.isArray(above) ||
+      Object.keys(above).some((key) => key !== "check" && key !== "dc")
+    ) {
+      return `checks above with ${JSON.stringify(above)}, not { check, dc }`;
+    }
+    if (!above.check || typeof above.check !== "object") return "checks above with no check to roll";
+    if (!Number.isInteger(above.dc) || above.dc < 0 || above.dc > 1000)
+      return `checks above against ${JSON.stringify(above.dc)}, not a DC from 0 to 1000`;
+  }
+  if (reaction.also !== undefined) {
+    if (reaction.cancels) return "cancels, so it answers one moment and has no also";
+    if (
+      !Array.isArray(reaction.also) ||
+      reaction.also.length === 0 ||
+      reaction.also.length > RULESET_REACTION_ALSO_MAX
+    ) {
+      return `is also taken at ${JSON.stringify(reaction.also)}, not a list of 1 to ${RULESET_REACTION_ALSO_MAX} moments`;
+    }
+    for (const more of reaction.also) {
+      if (
+        !more ||
+        typeof more !== "object" ||
+        Object.keys(more).some(
+          (key) =>
+            ![
+              "on",
+              "against",
+              "blow",
+              "seesSource",
+              "for",
+              "within",
+              "at",
+              "cancels",
+              "cancelSave",
+              "freeSlot",
+              "missed",
+              "sourceIs",
+            ].includes(key),
+        )
+      ) {
+        return `is also taken at ${JSON.stringify(more)}, not { on, against, blow, seesSource, for, within, at, cancels, cancelSave, freeSlot, missed, sourceIs }`;
+      }
+      if (!RULESET_REACTION_MOMENTS.includes(more.on)) {
+        return `is also taken at ${JSON.stringify(more.on)}, not one of ${RULESET_REACTION_MOMENTS.join(", ")}`;
+      }
     }
   }
   return null;
 }
 
-/** The Engine a reaction moment needs: being hit is 1.46's, being used or answering only some
- *  catalogs is 1.44's, and any other moment is 1.33's. */
-function reactionMomentApi(reaction) {
+/** The newest Engine capability a moment uses, including secondary moments and grouped fallers. */
+function reactionMomentApi(reaction, targetCount) {
+  const moments = [reaction, ...(Array.isArray(reaction.also) ? reaction.also : [])];
+  if (moments.some((moment) => moment?.budget !== undefined || moment?.oneOf !== undefined))
+    return RULESET_OPEN_HAND_MIN;
+  if (moments.some((moment) => moment?.names !== undefined)) return RULESET_QUIVERING_MIN;
+  if (moments.some((moment) => moment?.by !== undefined || moment?.weapon !== undefined)) return RULESET_OWN_HIT_MIN;
+  if (
+    moments.some(
+      (moment) =>
+        moment?.on === "turn-start" ||
+        moment?.for !== undefined ||
+        moment?.within !== undefined ||
+        moment?.at === "target" ||
+        moment?.cancelSave !== undefined ||
+        moment?.against?.actions !== undefined,
+    )
+  )
+    return RULESET_REACTION_FOR_MIN;
+  if (moments.some((moment) => moment?.on === "falls"))
+    return targetCount !== undefined ? RULESET_REACTION_FOR_MIN : RULESET_FALLS_MIN;
+  if (moments.some((moment) => moment?.blow !== undefined || moment?.seesSource !== undefined)) {
+    return RULESET_BLOW_KIND_MIN_CAPABILITY_API;
+  }
+  if (reaction.also !== undefined || reaction.against?.entries !== undefined)
+    return RULESET_NAMED_ANSWERS_MIN_CAPABILITY_API;
+  if (reaction.upTo !== undefined || reaction.above !== undefined) return RULESET_COUNTER_REACH_MIN_CAPABILITY_API;
   if (reaction.on === "hit") return RULESET_HIT_MOMENT_MIN_CAPABILITY_API;
   if (reaction.on === "used" || reaction.against !== undefined) return RULESET_USED_MOMENT_MIN_CAPABILITY_API;
   return RULESET_REACTION_MOMENT_MIN_CAPABILITY_API;
@@ -871,6 +3738,14 @@ function appliesEndsNewly(applies) {
   );
 }
 
+function assertThisActionDuration(manifest, applies, reaction, where) {
+  if (applies?.duration !== "this-action") return;
+  if (!reaction || typeof reaction !== "object" || Array.isArray(reaction))
+    throw new Error(`${where} duration "this-action" only belongs inside a reaction moment`);
+  if (!meetsCapabilityApi(manifest, RULESET_REACTION_FOR_MIN))
+    throw new Error(`${where} duration "this-action" must declare capability API 1.131 or newer`);
+}
+
 /** What is wrong with how one applied condition comes off, or null. */
 function appliesEndingIssue(applies) {
   if (applies.endsAfter !== undefined && !RULESET_APPLIES_ENDS_AFTER.includes(applies.endsAfter)) {
@@ -880,7 +3755,88 @@ function appliesEndingIssue(applies) {
   if (duration && typeof duration === "object" && duration.at !== undefined && duration.at !== "turn-start") {
     return `counts "${applies.condition}" down at ${JSON.stringify(duration.at)}, not "turn-start"`;
   }
+  if (duration && typeof duration === "object" && duration.of !== undefined) {
+    if (duration.of !== "source")
+      return `counts "${applies.condition}" on ${JSON.stringify(duration.of)}'s turns, not "source"`;
+    if (duration.rounds === undefined)
+      return `counts "${applies.condition}" on its source's turns with no rounds to count`;
+  }
   return null;
+}
+
+/** Sense words belong to the ruleset. A need must name something a condition can lack. */
+function assertSenseList(manifest, document, value, where, key) {
+  if (value === undefined) return;
+  if (
+    !Array.isArray(value) ||
+    value.length < 1 ||
+    value.length > 4 ||
+    value.some((word) => typeof word !== "string" || !/^[a-z][a-z_]*$/u.test(word)) ||
+    new Set(value).size !== value.length
+  ) {
+    throw new Error(`${where} ${key} must be a list of 1 to 4 lowercase sense words, without repeats`);
+  }
+  if (!meetsCapabilityApi(manifest, RULESET_SENSES_MIN)) {
+    throw new Error(`${where} ${key} must declare capability API 1.127 or newer`);
+  }
+  if (key === "needs") {
+    const declared = new Set((document?.combat?.conditions ?? []).flatMap((condition) => condition.lacks ?? []));
+    for (const word of value) {
+      if (!declared.has(word)) throw new Error(`${where} needs sense "${word}" that no condition lacks`);
+    }
+  }
+}
+
+// Sheet text is parsed by the Engine: unknown damage words are ignored there. Declared
+// mechanics must instead name the ruleset's own damage types, conditions and item tags.
+function assertTypedHides(manifest, document, entry, where, item = false) {
+  const keys = item ? ["resist", "immune"] : ["resist", "immune", "vulnerable", "conditionImmunities"];
+  const carries = keys.some(
+    (key) =>
+      entry[key] !== undefined &&
+      (!item || (Array.isArray(entry[key]) && entry[key].some((one) => typeof one === "object"))),
+  );
+  if (carries && !meetsCapabilityApi(manifest, RULESET_TYPED_HIDES_MIN)) {
+    throw new Error(`${where} has typed hides and must declare capability API 1.132 or newer`);
+  }
+  const types = new Set(document.combat?.damageTypes ?? []);
+  const { conditions, kinds } = sheetNames(document);
+  const tags = new Set((document.items?.tags ?? []).map((tag) => tag.id));
+  for (const key of keys) {
+    if (entry[key] === undefined) continue;
+    if (
+      !Array.isArray(entry[key]) ||
+      entry[key].length === 0 ||
+      entry[key].length > (key === "conditionImmunities" ? 40 : 30)
+    )
+      throw new Error(`${where} ${key} must be a non-empty list within its limit`);
+    for (const one of entry[key]) {
+      if (key === "conditionImmunities") {
+        if (!conditions.has(one) && !kinds.has(one))
+          throw new Error(`${where} is immune to unknown condition ${JSON.stringify(one)}`);
+        continue;
+      }
+      const qualified = one !== null && typeof one === "object" && !Array.isArray(one);
+      const type = qualified ? one.type : one;
+      if (typeof type !== "string" || !types.has(type)) {
+        throw new Error(`${where} ${key} names unknown damage type ${JSON.stringify(type)}`);
+      }
+      if (
+        qualified &&
+        (key === "vulnerable" ||
+          Object.keys(one).some((word) => !["type", "except"].includes(word)) ||
+          !Array.isArray(one.except) ||
+          one.except.length === 0 ||
+          one.except.length > 8 ||
+          one.except.some((tag) => !tags.has(tag)) ||
+          new Set(one.except).size !== one.except.length)
+      ) {
+        throw new Error(
+          `${where} ${key} requires a type word or { type, except } with known item tags (vulnerable only accepts words)`,
+        );
+      }
+    }
+  }
 }
 
 /** Assert a ruleset package's `combat` block, and report whether it has one.
@@ -899,6 +3855,33 @@ export function assertRulesetCombat(manifest, document) {
   if (!meetsCapabilityApi(manifest, api)) {
     throw new Error(`${id} ships a combat block and must declare capability API ${api.major}.${api.minor} or newer`);
   }
+  // An ability-narrowed change found below is named only after every older refusal (1.188).
+  const later = {};
+  // 1.403 and newer: thrown after the older ones, so an older gate is met first.
+  const laterNew = {};
+  // 1.407: pulls, a share of the source's harm, and what an applies entry takes off or costs a puller.
+  const laterPull = {};
+  // 1.408: a face rolled again.
+  const laterFace = {};
+  // 1.409: harm copied to a condition's source.
+  const laterBond = {};
+  const laterGrant = {};
+  const laterLess = {};
+  for (const level of document?.combat?.levels ?? []) {
+    if (level?.rerollsFace === undefined) continue;
+    if (rerollsFaceIssue(level.rerollsFace))
+      throw new Error(`${id} combat level rerollsFace is { face: 1 to 20, rolls?: attacks, saves, checks }`);
+    if (!meetsCapabilityApi(manifest, RULESET_REROLLS_FACE_MIN))
+      laterFace.message ??= `${id} combat level rolls a face again, of 1.408, and must declare capability API 1.408 or newer`;
+  }
+  const conditionCount = Array.isArray(combat.conditions) ? combat.conditions.length : 0;
+  // Up to 640 since 1.552, gated with the newer keys.
+  if (conditionCount > 640)
+    throw new Error(`${id} combat declares ${conditionCount} conditions, over the Engine's 640`);
+  if (conditionCount > 160 && !meetsCapabilityApi(manifest, RULESET_MORE_CONDITIONS_MIN))
+    later.moreConditions = `${id} combat declares ${conditionCount} conditions, over 160, and must declare capability API 1.269 or newer`;
+  if (conditionCount > 80 && !meetsCapabilityApi(manifest, RULESET_ABILITY_NARROWING_MIN))
+    later.message = `${id} combat declares ${conditionCount} conditions, over 80, and must declare capability API 1.188 or newer`;
   if (combat.kind !== "attack-vs-defense") {
     throw new Error(`${id} combat kind ${JSON.stringify(combat.kind)} is not one the Engine resolves`);
   }
@@ -950,7 +3933,38 @@ export function assertRulesetCombat(manifest, document) {
     }
   }
 
+  const economyKeys = ["budgets", "grants", "exclusive", "attacksPerTurn", "onEnd"];
+  const declaredBudgets = Array.isArray(combat.economy?.budgets) ? combat.economy.budgets : [];
+  const carriesEconomy =
+    (combat.conditions ?? []).some((entry) => economyKeys.some((key) => entry?.[key] !== undefined)) ||
+    declaredBudgets.some((entry) => entry?.count === 0);
+  if (carriesEconomy) {
+    const economyApi = RULESET_CONDITION_ECONOMY_MIN_CAPABILITY_API;
+    if (!meetsCapabilityApi(manifest, economyApi)) {
+      throw new Error(
+        `${id} has conditions that change the action economy, or a budget of no count, and must declare capability API ${economyApi.major}.${economyApi.minor} or newer`,
+      );
+    }
+  }
+
   const names = sheetNames(document);
+  if (combat.sheetHides !== undefined) {
+    if (!meetsCapabilityApi(manifest, RULESET_TYPED_HIDES_MIN))
+      throw new Error(`${id} has sheetHides and must declare capability API 1.132 or newer`);
+    if (!Array.isArray(combat.sheetHides) || combat.sheetHides.length > 8)
+      throw new Error(`${id} sheetHides must be a list of at most 8 entries`);
+    for (const hide of combat.sheetHides) {
+      if (
+        !hide ||
+        Object.keys(hide).some((key) => !["list", "column", "kind"].includes(key)) ||
+        !["resist", "vulnerable", "immune", "conditionImmunities"].includes(hide.kind)
+      )
+        throw new Error(`${id} sheetHides requires { list, column, kind }`);
+      const column = names.lists.get(hide.list)?.columns?.find((one) => one.id === hide.column);
+      if (!column || !["text", "enum"].includes(column.type))
+        throw new Error(`${id} sheetHides must read a known text or enum column`);
+    }
+  }
   const pool = names.pools.get(combat.health?.pool);
   if (!pool) throw new Error(`${id} combat health names unknown live pool ${JSON.stringify(combat.health?.pool)}`);
   // A pool that starts empty counts up, so as health it would put every fresh character into their
@@ -964,7 +3978,58 @@ export function assertRulesetCombat(manifest, document) {
   };
   ref(combat.defense, "defense");
   if (combat.initiative?.modifier !== undefined) ref(combat.initiative.modifier, "initiative modifier");
+  // 1.240: initiative is a check of this ability, for what rolls those twice.
+  if (combat.initiative?.checkAbility !== undefined) {
+    if (!names.abilities.has(combat.initiative.checkAbility) || combat.initiative.dice === undefined)
+      throw new Error(`${id} combat initiative checkAbility names one of the sheet's abilities, beside thrown dice`);
+    if (!meetsCapabilityApi(manifest, RULESET_INITIATIVE_MODE_MIN))
+      later.initiative ??= `${id} combat initiative is a check of an ability and must declare capability API 1.240 or newer`;
+  }
+  // 1.244: rows every sheet's attack list has, in that list's own columns.
+  for (const [at, attack] of (combat.attacks ?? []).entries()) {
+    if (attack?.always === undefined) continue;
+    const list = (document?.sheet?.lists ?? []).find((one) => one?.id === attack.list);
+    const columns = new Set((list?.columns ?? []).map((column) => column?.id));
+    const rows = attack.always;
+    if (
+      !Array.isArray(rows) ||
+      rows.length === 0 ||
+      rows.length > 4 ||
+      rows.some(
+        (row) =>
+          !row ||
+          typeof row !== "object" ||
+          typeof row[attack.name] !== "string" ||
+          !row[attack.name].trim() ||
+          Object.keys(row).some((key) => !columns.has(key)),
+      ) ||
+      new Set(rows.map((row) => row[attack.name])).size !== rows.length
+    )
+      throw new Error(`${id} combat attacks[${at}] always is 1 to 4 named rows in the list's own columns`);
+    if (!meetsCapabilityApi(manifest, RULESET_HELD_WEAPONS_MIN))
+      later.always ??= `${id} combat attacks always rows every sheet has and must declare capability API 1.244 or newer`;
+  }
   if (combat.economy?.movement !== undefined) ref(combat.economy.movement, "economy movement");
+  if (combat.economy?.movementModes !== undefined) {
+    const modes = combat.economy.movementModes;
+    if (!modes || typeof modes !== "object" || Array.isArray(modes)) {
+      throw new Error(`${id} combat economy movementModes is an object of fly, swim, climb and burrow`);
+    }
+    for (const [mode, value] of Object.entries(modes)) {
+      if (!RULESET_MOVE_MODES.includes(mode)) {
+        throw new Error(`${id} combat economy movementModes has unknown way of moving ${JSON.stringify(mode)}`);
+      }
+      ref(value, `economy movementModes ${mode}`);
+    }
+    if (!meetsCapabilityApi(manifest, RULESET_MOVE_MODES_MIN_CAPABILITY_API)) {
+      throw new Error(
+        `${id} has sheets that fly, swim, climb or burrow and must declare capability API 1.113 or newer`,
+      );
+    }
+    if (modes.fly !== undefined && !meetsCapabilityApi(manifest, RULESET_FLYING_HEIGHT_MIN_CAPABILITY_API)) {
+      throw new Error(`${id} has sheets that fly and must declare capability API 1.114 or newer for their height`);
+    }
+  }
 
   // A natural result is one face of one die, exactly as it is for a check.
   const singleDie = (dice, where) => {
@@ -1001,6 +4066,9 @@ export function assertRulesetCombat(manifest, document) {
         `${id} combat budget "${budget?.id}" refills per turn or per round, not ${JSON.stringify(budget?.per)}`,
       );
     }
+    if (budget.count !== undefined && !wholeFrom(budget.count, 0, 10)) {
+      throw new Error(`${id} combat budget "${budget.id}" hands out a whole number from 0 to 10, not ${budget.count}`);
+    }
   }
   const budget = (value, where) => {
     if (!budgets.has(value)) throw new Error(`${id} combat ${where} names unknown budget ${JSON.stringify(value)}`);
@@ -1025,7 +4093,8 @@ export function assertRulesetCombat(manifest, document) {
   const ranged = blockOf("ranged");
   const cover = blockOf("cover");
   const opportunity = blockOf("opportunity");
-  const positionKeys = ["ranged", "cover", "opportunity"].filter((key) => combat[key] !== undefined);
+  const elevation = blockOf("elevation");
+  const positionKeys = ["ranged", "cover", "elevation", "opportunity"].filter((key) => combat[key] !== undefined);
   // A row that caps its own strikes: the key, the column it names, and the number it caps.
   (combat.attacks ?? []).forEach((source, index) => {
     const cap = source?.strikesCappedBy;
@@ -1083,9 +4152,59 @@ export function assertRulesetCombat(manifest, document) {
     }
   }
   if (cover !== undefined) {
-    const bonus = cover.bonus;
-    if (!Number.isInteger(bonus) || bonus < 0 || bonus > RULESET_COVER_MAX) {
-      throw new Error(`${id} combat cover bonus is a whole number from 0 to ${RULESET_COVER_MAX}, not ${bonus}`);
+    for (const key of ["bonus", "threeQuarters"]) {
+      const bonus = cover[key];
+      if (key === "threeQuarters" && bonus === undefined) continue;
+      if (!Number.isInteger(bonus) || bonus < 0 || bonus > RULESET_COVER_MAX) {
+        const name = key === "bonus" ? "bonus" : "threeQuarters bonus";
+        throw new Error(`${id} combat cover ${name} is a whole number from 0 to ${RULESET_COVER_MAX}, not ${bonus}`);
+      }
+    }
+    const degrees = ["threeQuarters", "saves", "creatures"].filter((key) => cover[key] !== undefined);
+    if (degrees.length > 0) {
+      const api = RULESET_COVER_DEGREES_MIN_CAPABILITY_API;
+      if (!meetsCapabilityApi(manifest, api)) {
+        throw new Error(
+          `${id} grades cover (${degrees.join(", ")}) and must declare capability API ${api.major}.${api.minor} or newer`,
+        );
+      }
+    }
+    if (cover.saves !== undefined) {
+      const saves = sheetNames(document).saves;
+      if (!Array.isArray(cover.saves) || cover.saves.length < 1 || cover.saves.length > 12) {
+        throw new Error(`${id} combat cover saves is a list of one to twelve saves`);
+      }
+      for (const save of cover.saves) {
+        if (!saves.has(save)) throw new Error(`${id} combat cover names unknown save ${JSON.stringify(save)}`);
+      }
+    }
+    if (cover.creatures !== undefined && cover.creatures !== true) {
+      throw new Error(`${id} combat cover creatures is true or left out, not ${JSON.stringify(cover.creatures)}`);
+    }
+  }
+  if (elevation !== undefined) {
+    const api = RULESET_ELEVATION_MIN_CAPABILITY_API;
+    if (!meetsCapabilityApi(manifest, api)) {
+      throw new Error(`${id} says what height does and must declare capability API ${api.major}.${api.minor} or newer`);
+    }
+    if (typeof elevation.levelHeight !== "number" || !(elevation.levelHeight > 0)) {
+      throw new Error(`${id} combat elevation levelHeight is a number above 0`);
+    }
+    const falling = elevation.falling;
+    if (falling !== undefined) {
+      const whole = (value, min, max) => Number.isInteger(value) && value >= min && value <= max;
+      if (
+        !(falling.per > 0) ||
+        !whole(falling.dice?.count, 1, 10) ||
+        !whole(falling.dice?.sides, 2, 1000) ||
+        !whole(falling.max, 1, 100)
+      ) {
+        throw new Error(`${id} combat elevation falling needs a per above 0, dice and a max`);
+      }
+      const conditions = new Set((document?.sheet?.live?.conditions ?? []).map((entry) => entry?.id));
+      if (falling.prone !== undefined && !conditions.has(falling.prone)) {
+        throw new Error(`${id} combat elevation falling names unknown condition ${JSON.stringify(falling.prone)}`);
+      }
     }
   }
   if (opportunity !== undefined) budget(opportunity.budget, "opportunity budget");
@@ -1183,6 +4302,40 @@ export function assertRulesetCombat(manifest, document) {
     }
     if (source.toHit !== undefined) ref(source.toHit, `abilities "${source.list}" toHit`);
     if (source.saveDifficulty !== undefined) ref(source.saveDifficulty, `abilities "${source.list}" saveDifficulty`);
+    if (source.byColumn !== undefined) {
+      const where = `abilities "${source.list}" byColumn`;
+      if (!meetsCapabilityApi(manifest, RULESET_BY_COLUMN_MIN)) {
+        throw new Error(`${id} combat ${where} must declare capability API 1.108 or newer`);
+      }
+      const byColumn = source.byColumn;
+      const column = columns.get(byColumn?.column);
+      if (!column) throw new Error(`${id} combat ${where} names unknown column ${JSON.stringify(byColumn?.column)}`);
+      const values = byColumn.values;
+      if (
+        !values ||
+        typeof values !== "object" ||
+        Array.isArray(values) ||
+        Object.keys(values).length < 1 ||
+        Object.keys(values).length > 20
+      ) {
+        throw new Error(`${id} combat ${where} values must be an object of 1 to 20 values`);
+      }
+      for (const [key, value] of Object.entries(values)) {
+        if (column.type === "enum" && !column.values?.includes(key)) {
+          throw new Error(`${id} combat ${where} key ${JSON.stringify(key)} is not an enum value of "${column.id}"`);
+        }
+        if (
+          !value ||
+          typeof value !== "object" ||
+          Array.isArray(value) ||
+          Object.keys(value).length === 0 ||
+          Object.keys(value).some((key) => !["toHit", "saveDifficulty"].includes(key))
+        ) {
+          throw new Error(`${id} combat ${where} value ${JSON.stringify(key)} needs only toHit and/or saveDifficulty`);
+        }
+        for (const [kind, reference] of Object.entries(value)) ref(reference, `${where} value "${key}" ${kind}`);
+      }
+    }
   }
 
   const standard = new Set();
@@ -1194,6 +4347,12 @@ export function assertRulesetCombat(manifest, document) {
     standard.add(action);
   }
 
+  if (
+    (document.sheet?.live?.pools ?? []).some((pool) => pool?.level !== undefined) &&
+    !meetsCapabilityApi(manifest, RULESET_COUNTER_REACH_MIN_CAPABILITY_API)
+  ) {
+    throw new Error(`${id} has pools that say their level and must declare capability API 1.116 or newer`);
+  }
   const mapped = new Set();
   for (const entry of combat.conditions ?? []) {
     if (!names.conditions.has(entry?.condition)) {
@@ -1205,6 +4364,212 @@ export function assertRulesetCombat(manifest, document) {
       if (!RULESET_COMBAT_CONDITION_EFFECTS.includes(effect)) {
         throw new Error(`${id} combat condition "${entry.condition}" has the unknown effect ${JSON.stringify(effect)}`);
       }
+    }
+    if (entry.delays !== undefined) {
+      const delays = entry.delays;
+      const where = `${id} combat condition "${entry.condition}" delays`;
+      const catalogs = new Set((document.catalogs ?? []).map((catalog) => catalog?.id));
+      const budgets = new Set((combat.economy?.budgets ?? []).map((budget) => budget?.id));
+      if (
+        !delays ||
+        typeof delays !== "object" ||
+        Object.keys(delays).some((key) => !["catalogs", "budget", "chance"].includes(key))
+      ) {
+        throw new Error(`${where} ${JSON.stringify(delays)}, not { catalogs, budget, chance }`);
+      }
+      if (
+        !Array.isArray(delays.catalogs) ||
+        delays.catalogs.length === 0 ||
+        delays.catalogs.some((one) => !catalogs.has(one))
+      ) {
+        throw new Error(`${where} what it names from catalogs this ruleset does not have`);
+      }
+      if (!budgets.has(delays.budget)) throw new Error(`${where} on unknown budget ${JSON.stringify(delays.budget)}`);
+      const chance = delays.chance;
+      if (
+        !chance ||
+        !Number.isInteger(chance.sides) ||
+        chance.sides < 2 ||
+        !Number.isInteger(chance.atLeast) ||
+        chance.atLeast < 1 ||
+        chance.atLeast > chance.sides
+      ) {
+        throw new Error(`${where} on a chance of ${JSON.stringify(chance)}, not { sides, atLeast } a die can roll`);
+      }
+      if (!meetsCapabilityApi(manifest, RULESET_DELAYS_MIN_CAPABILITY_API)) {
+        throw new Error(
+          `${id} has conditions that delay what their holder uses and must declare capability API 1.120 or newer`,
+        );
+      }
+    }
+    assertSenseList(manifest, document, entry.lacks, `${id} combat condition "${entry.condition}"`, "lacks");
+    if (entry.fallsSafely !== undefined) {
+      // Or a fall up to a height, not while holding any of `unless` (1.650, gated with the later ones).
+      const upTo = entry.fallsSafely;
+      const conditionIds = new Set((document?.combat?.conditions ?? []).map((one) => one?.condition));
+      const liveConditionIds = new Set((document?.sheet?.live?.conditions ?? []).map((one) => one?.id));
+      if (
+        entry.fallsSafely !== true &&
+        (!upTo ||
+          typeof upTo !== "object" ||
+          Array.isArray(upTo) ||
+          Object.keys(upTo).some((key) => !["upTo", "unless"].includes(key)) ||
+          !Number.isFinite(upTo.upTo) ||
+          upTo.upTo <= 0 ||
+          upTo.upTo > 10000 ||
+          (upTo.unless !== undefined &&
+            (!Array.isArray(upTo.unless) ||
+              upTo.unless.length < 1 ||
+              upTo.unless.length > 8 ||
+              upTo.unless.some((one) => !conditionIds.has(one) && !liveConditionIds.has(one)))))
+      ) {
+        throw new Error(
+          `${id} combat condition "${entry.condition}" fallsSafely must be true or { upTo, unless? } when it is given`,
+        );
+      }
+      if (!meetsCapabilityApi(manifest, RULESET_FALLS_MIN)) {
+        throw new Error(`${id} has conditions that land a fall safely and must declare capability API 1.124 or newer`);
+      }
+    }
+    if (entry.endsWhen !== undefined) {
+      const triggers = entry.endsWhen;
+      if (
+        !Array.isArray(triggers) ||
+        triggers.length === 0 ||
+        triggers.length > 6 ||
+        // Healed and healed by magic since 1.684, gated with the sheet hooks.
+        triggers.some(
+          (trigger) =>
+            ![
+              "damaged",
+              "harmed-by-source-side",
+              "attacked",
+              "ally-harmed-in-sight",
+              "healed",
+              "healed-by-magic",
+            ].includes(trigger),
+        ) ||
+        new Set(triggers).size !== triggers.length
+      ) {
+        throw new Error(
+          `${id} combat condition "${entry.condition}" endsWhen must be 1 to 6 of damaged, harmed-by-source-side, attacked, ally-harmed-in-sight, healed or healed-by-magic, without repeats`,
+        );
+      }
+      if (
+        triggers.some((trigger) => trigger === "attacked" || trigger === "ally-harmed-in-sight") &&
+        !meetsCapabilityApi(manifest, RULESET_CALM_MIN)
+      )
+        later.calm ??= `${id} combat condition "${entry.condition}" ends when attacked or a friend is harmed and must declare capability API 1.278 or newer`;
+    }
+    // 1.278: harm from anything cast out of these catalogs ends it (Calm Emotions, "harmed by a spell").
+    if (entry.endsWhenHarmedFrom !== undefined) {
+      const from = entry.endsWhenHarmedFrom;
+      const catalogIds = new Set((document?.catalogs ?? []).map((catalog) => catalog?.id));
+      if (
+        !Array.isArray(from) ||
+        from.length < 1 ||
+        from.length > 8 ||
+        new Set(from).size !== from.length ||
+        from.some((one) => !catalogIds.has(one))
+      )
+        throw new Error(
+          `${id} combat condition "${entry.condition}" endsWhenHarmedFrom is 1 to 8 of the ruleset's catalogs, each once`,
+        );
+      if (!meetsCapabilityApi(manifest, RULESET_CALM_MIN))
+        later.calm ??= `${id} combat condition "${entry.condition}" ends when harmed from a catalog and must declare capability API 1.278 or newer`;
+    }
+    if ((entry.effects ?? []).includes("cannot-target-source-side") && !meetsCapabilityApi(manifest, RULESET_CALM_MIN))
+      later.calm ??= `${id} combat condition "${entry.condition}" keeps its holder off the source's side and must declare capability API 1.278 or newer`;
+    // 1.712: or rolled with a lean, `{ lean: "advantage" | "disadvantage" }` (Hideous Laughter).
+    if (
+      entry.saveWhenDamaged !== undefined &&
+      entry.saveWhenDamaged !== true &&
+      !(
+        entry.saveWhenDamaged &&
+        typeof entry.saveWhenDamaged === "object" &&
+        Object.keys(entry.saveWhenDamaged).length === 1 &&
+        ["advantage", "disadvantage"].includes(entry.saveWhenDamaged.lean)
+      )
+    ) {
+      throw new Error(
+        `${id} combat condition "${entry.condition}" saveWhenDamaged must be true or { lean: "advantage" | "disadvantage" } when it is given`,
+      );
+    }
+    if (entry.shakeOff !== undefined) {
+      const shake = entry.shakeOff;
+      const where = `${id} combat condition "${entry.condition}" shakeOff`;
+      if (
+        !shake ||
+        typeof shake !== "object" ||
+        Array.isArray(shake) ||
+        Object.keys(shake).some((key) => !["budget", "reach"].includes(key))
+      ) {
+        throw new Error(`${where} must be { budget, reach? }`);
+      }
+      if (!(combat.economy?.budgets ?? []).some((budget) => budget.id === shake.budget)) {
+        throw new Error(`${where} names unknown budget ${JSON.stringify(shake.budget)}`);
+      }
+      if (shake.reach !== undefined && (!Number.isFinite(shake.reach) || shake.reach <= 0)) {
+        throw new Error(`${where} reach must be a positive number`);
+      }
+    }
+    if (
+      ["endsWhen", "saveWhenDamaged", "shakeOff"].some((key) => entry[key] !== undefined) &&
+      !meetsCapabilityApi(manifest, RULESET_CONDITION_ENDS_MIN)
+    ) {
+      throw new Error(`${id} has condition ending rules and must declare capability API 1.125 or newer`);
+    }
+    if (entry.noDamageFrom !== undefined) {
+      const refs = entry.noDamageFrom;
+      if (!Array.isArray(refs) || refs.length === 0 || refs.length > RULESET_REACTION_AGAINST_MAX) {
+        throw new Error(
+          `${id} combat condition "${entry.condition}" keeps off ${JSON.stringify(refs)}, not a list of 1 to ${RULESET_REACTION_AGAINST_MAX} entries`,
+        );
+      }
+      const catalogs = new Set((document.catalogs ?? []).map((catalog) => catalog?.id));
+      for (const ref of refs) {
+        const [catalog, one, more] = typeof ref === "string" ? ref.split("/") : [];
+        if (!catalog || !one || more !== undefined || !catalogs.has(catalog)) {
+          throw new Error(
+            `${id} combat condition "${entry.condition}" keeps off ${JSON.stringify(ref)}, not "<catalog>/<entry>" of a catalog this ruleset has`,
+          );
+        }
+      }
+      if (!meetsCapabilityApi(manifest, RULESET_NAMED_ANSWERS_MIN_CAPABILITY_API)) {
+        throw new Error(
+          `${id} has conditions that keep an entry's harm off and must declare capability API 1.117 or newer`,
+        );
+      }
+    }
+    // 1.237: never surprised.
+    if (entry.cannotBeSurprised !== undefined) {
+      if (entry.cannotBeSurprised !== true)
+        throw new Error(`${id} combat condition "${entry.condition}" cannotBeSurprised is true`);
+      if (!meetsCapabilityApi(manifest, RULESET_SURPRISE_MIN))
+        later.surprise ??= `${id} has conditions that cannot be surprised and must declare capability API 1.237 or newer`;
+    }
+    // 1.236: catalog entries its holder may use while it holds, at most 6.
+    if (entry.actions !== undefined) {
+      const refs = entry.actions;
+      const catalogs = new Set((document.catalogs ?? []).map((catalog) => catalog?.id));
+      if (
+        !Array.isArray(refs) ||
+        refs.length < 1 ||
+        refs.length > 6 ||
+        new Set(refs.map((ref) => (typeof ref === "string" ? ref : ref?.entry))).size !== refs.length ||
+        refs.some((given) => {
+          // 1.634: or { entry, saveDifficulty?, toHit? }, checked with the newest.
+          const ref = typeof given === "string" ? given : given?.entry;
+          const [catalog, one, more] = typeof ref === "string" ? ref.split("/") : [];
+          return !catalog || !one || more !== undefined || !catalogs.has(catalog);
+        })
+      ) {
+        throw new Error(
+          `${id} combat condition "${entry.condition}" gives ${JSON.stringify(refs)}, not 1 to 6 "<catalog>/<entry>" of catalogs this ruleset has`,
+        );
+      }
+      if (!meetsCapabilityApi(manifest, RULESET_DISMISSALS_MIN))
+        later.gives ??= `${id} has conditions that give actions and must declare capability API 1.236 or newer`;
     }
     // Both lists of saves, exactly as the Engine reads them: the ones this condition is about, and
     // the ones it fails outright.
@@ -1218,7 +4583,562 @@ export function assertRulesetCombat(manifest, document) {
         throw new Error(`${id} combat condition "${entry.condition}" fails unknown save ${JSON.stringify(save)}`);
       }
     }
+    for (const save of entry.evasion ?? []) {
+      if (!names.saves.has(save)) {
+        throw new Error(`${id} combat condition "${entry.condition}" evades unknown save ${JSON.stringify(save)}`);
+      }
+    }
+    assertEvasion(manifest, entry, `${id} combat condition "${entry.condition}"`, later);
+    assertTypedHides(manifest, document, entry, `${id} combat condition "${entry.condition}"`);
     assertConditionNumbers(entry, `${id} combat condition "${entry.condition}"`);
+    assertDamageModifierGate(manifest, entry, `${id} combat condition "${entry.condition}"`, names, later);
+    // 1.189: harm each turn, stacks, one holder per source.
+    {
+      const where = `${id} combat condition "${entry.condition}"`;
+      if (entry.harms !== undefined) {
+        const harm = entry.harms;
+        // 1.562: as its holder attacks or harms its source or their side, once while it holds (gated at the end).
+        // 1.644: as its holder breaks what it commands (gated at the end).
+        // 1.646: as its holder casts from these catalogs, by the level, past every resistance (gated at the end).
+        if (
+          !harm ||
+          ![
+            "turn-start",
+            "turn-end",
+            "source-turn-start",
+            "source-turn-end",
+            "attacks-source",
+            "attacks-source-side",
+            "defies",
+            "casts",
+          ].includes(harm.at)
+        )
+          throw new Error(
+            `${where} harms at "turn-start", "turn-end", "source-turn-start", "source-turn-end", "attacks-source", "attacks-source-side", "defies" or "casts"`,
+          );
+        const catalogIds = new Set((document?.catalogs ?? []).map((one) => one?.id));
+        if (
+          (harm.at === "casts") !== (harm.catalogs !== undefined) ||
+          (harm.catalogs !== undefined &&
+            (!Array.isArray(harm.catalogs) ||
+              harm.catalogs.length < 1 ||
+              harm.catalogs.length > 8 ||
+              harm.catalogs.some((one) => !catalogIds.has(one)))) ||
+          (harm.perLevel !== undefined && (harm.perLevel !== true || harm.at !== "casts")) ||
+          (harm.unblockable !== undefined && harm.unblockable !== true)
+        )
+          throw new Error(
+            `${where} harms at "casts" names 1 to 8 of the ruleset's catalogs (and only then), perLevel and unblockable true when given`,
+          );
+        if (
+          harm.at === "defies" &&
+          !entry.forbids &&
+          !entry.behavior &&
+          !(entry.effects ?? []).some((effect) => ["cannot-harm", "cannot-approach-source"].includes(effect))
+        )
+          throw new Error(
+            `${where} harms as its holder defies it, so it commands something: forbids, behavior, cannot-harm or cannot-approach-source`,
+          );
+        if (harm.once !== undefined && harm.once !== true) throw new Error(`${where} harms once is true or left out`);
+        // 1.403: as the turns of whoever put it on start or end, and a save that spares the holder.
+        if (harm.save !== undefined) {
+          if (
+            !harm.save ||
+            typeof harm.save !== "object" ||
+            !names.saves.has(harm.save.save) ||
+            // 1.635: drops, checked with the newest.
+            Object.keys(harm.save).some((key) => !["save", "difficulty", "drops"].includes(key)) ||
+            (harm.save.difficulty !== undefined &&
+              (!Number.isInteger(harm.save.difficulty) || harm.save.difficulty < 0))
+          )
+            throw new Error(`${where} harms save is { save: a declared save, difficulty? }`);
+        }
+        if (
+          (harm.at?.startsWith("source-") || harm.save !== undefined) &&
+          !meetsCapabilityApi(manifest, RULESET_TARGET_SIZES_MIN)
+        )
+          laterNew.message ??= `${where} harms on its source's turns or with a save, of 1.403, and must declare capability API 1.403 or newer`;
+        if (harm.dice === undefined && harm.flat === undefined)
+          throw new Error(`${where} harms with dice, a flat amount or both`);
+        if (harm.dice !== undefined && (typeof harm.dice !== "string" || !RULESET_CATALOG_DICE_PATTERN.test(harm.dice)))
+          throw new Error(`${where} harms with ${JSON.stringify(harm.dice)}, which is not dice a table has`);
+        if (harm.flat !== undefined && (!Number.isInteger(harm.flat) || harm.flat < 0 || harm.flat > 1000))
+          throw new Error(`${where} harms by a whole number from 0 to 1000`);
+        if (harm.healedOnlyByRest !== undefined) {
+          if (harm.healedOnlyByRest !== true) throw new Error(`${where} harms healedOnlyByRest is true or left out`);
+          if (!meetsCapabilityApi(manifest, RULESET_MEDICINE_MIN))
+            later.rest ??= `${where} harms what only a rest heals and must declare capability API 1.193 or newer`;
+        }
+        const types = (combat.damageTypes ?? []).map((type) => String(type).toLowerCase());
+        if (harm.type !== undefined && !types.includes(String(harm.type).toLowerCase()))
+          throw new Error(`${where} harms with unknown damage type ${JSON.stringify(harm.type)}`);
+      }
+      if (entry.stacks !== undefined) {
+        if (!Number.isInteger(entry.stacks) || entry.stacks < 2 || entry.stacks > 20)
+          throw new Error(`${where} stacks 2 to 20 times`);
+        if (entry.harms === undefined) throw new Error(`${where} stacks, and only a condition that harms does`);
+      }
+      if (entry.onePerSource !== undefined && entry.onePerSource !== true)
+        throw new Error(`${where} onePerSource is true or left out`);
+      if (
+        (entry.harms !== undefined || entry.stacks !== undefined || entry.onePerSource !== undefined) &&
+        !meetsCapabilityApi(manifest, RULESET_MARKS_MIN)
+      )
+        later.message ??= `${where} harms, stacks or keeps to one holder per source and must declare capability API 1.189 or newer`;
+    }
+    // 1.403: a holder inside whoever put it on (an engulf, a swallow).
+    if (entry.inside !== undefined) {
+      if (entry.inside !== true) {
+        if (insideIssue(entry.inside, document))
+          throw new Error(
+            `${id} combat condition "${entry.condition}" inside is true or { room?: { of: 1 to 20, takes?: { size: 1 to 20 } }, releasedWhen?: { dealt: 1 or more, save: { save, difficulty }, prone?: true }, corpse?: { costs: 1 or more, prone?: true } }`,
+          );
+        if (entry.inside.corpse && entry.endsWhenSourceDown !== true)
+          throw new Error(`${id} combat condition "${entry.condition}" inside corpse needs endsWhenSourceDown`);
+        if (!meetsCapabilityApi(manifest, RULESET_SWALLOWING_MIN))
+          laterNew.message ??= `${id} combat condition "${entry.condition}" lets its holder out by room, blows or climbing, of 1.405, and must declare capability API 1.405 or newer`;
+      }
+      if (!meetsCapabilityApi(manifest, RULESET_TARGET_SIZES_MIN))
+        laterNew.message ??= `${id} combat condition "${entry.condition}" is inside its source, of 1.403, and must declare capability API 1.403 or newer`;
+    }
+    // 1.413: a value off the sheet in a damage modifier, or a fall lessened (Deflect Missiles, Slow Fall).
+    if (
+      (entry.modifiers ?? []).some((one) => one?.add !== undefined || one?.falls !== undefined) &&
+      !meetsCapabilityApi(manifest, RULESET_LESSENED_MIN)
+    )
+      laterLess.message ??= `${id} combat condition "${entry.condition}" lessens damage by a value off the sheet or a fall's, of 1.413, and must declare capability API 1.413 or newer`;
+    // 1.412: temporary points as a foe its holder hurt last drops (Dark One's Blessing).
+    if (entry.fellsGrant !== undefined) {
+      const grant = entry.fellsGrant;
+      if (
+        !grant ||
+        typeof grant !== "object" ||
+        Array.isArray(grant) ||
+        Object.keys(grant).some((key) => key !== "temporary")
+      )
+        throw new Error(`${id} combat condition "${entry.condition}" fellsGrant is { temporary }`);
+      ref(grant.temporary, `condition "${entry.condition}" fellsGrant temporary`);
+      if (!meetsCapabilityApi(manifest, RULESET_FELLS_GRANT_MIN))
+        laterGrant.message ??= `${id} combat condition "${entry.condition}" grants temporary points as a foe drops, of 1.412, and must declare capability API 1.412 or newer`;
+    }
+    // 1.409: the same harm to whoever put it on (Warding Bond).
+    if (entry.copiesHarmToSource !== undefined) {
+      if (entry.copiesHarmToSource !== true)
+        throw new Error(`${id} combat condition "${entry.condition}" copiesHarmToSource is true or left out`);
+      if (!meetsCapabilityApi(manifest, RULESET_COPIES_HARM_MIN))
+        laterBond.message ??= `${id} combat condition "${entry.condition}" copies harm to its source, of 1.409, and must declare capability API 1.409 or newer`;
+    }
+    // 1.408: a d20 face rolled again (Lucky).
+    if (entry.rerollsFace !== undefined) {
+      if (rerollsFaceIssue(entry.rerollsFace))
+        throw new Error(
+          `${id} combat condition "${entry.condition}" rerollsFace is { face: 1 to 20, rolls?: attacks, saves, checks }`,
+        );
+      if (!meetsCapabilityApi(manifest, RULESET_REROLLS_FACE_MIN))
+        laterFace.message ??= `${id} combat condition "${entry.condition}" rolls a face again, of 1.408, and must declare capability API 1.408 or newer`;
+    }
+    // 1.407: a share of each blow to whoever put it on, taken by its holder (Damage Transfer).
+    if (entry.takesSourceHarm !== undefined) {
+      const share = entry.takesSourceHarm?.share;
+      if (
+        !entry.takesSourceHarm ||
+        typeof entry.takesSourceHarm !== "object" ||
+        Object.keys(entry.takesSourceHarm).some((key) => key !== "share") ||
+        typeof share !== "number" ||
+        !(share > 0 && share < 1)
+      )
+        throw new Error(
+          `${id} combat condition "${entry.condition}" takesSourceHarm is { share: more than 0, less than 1 }`,
+        );
+      if (!meetsCapabilityApi(manifest, RULESET_PULLS_MIN))
+        laterPull.message ??= `${id} combat condition "${entry.condition}" takes a share of its source's harm, of 1.407, and must declare capability API 1.407 or newer`;
+    }
+    // 1.256: one condition of a group on a creature at a time.
+    if (entry.oneAtATime !== undefined) {
+      const where = `${id} combat condition "${entry.condition}"`;
+      if (typeof entry.oneAtATime !== "string" || !/^[a-z][a-z0-9_]*$/u.test(entry.oneAtATime))
+        throw new Error(`${where} oneAtATime names a group id`);
+      if (!meetsCapabilityApi(manifest, RULESET_OWN_RESCUE_MIN))
+        later.oneAtATime ??= `${where} keeps to one of its group at a time and must declare capability API 1.256 or newer`;
+    }
+    // 1.258: the kinds a condition is, which a cure or an immunity may name in its place.
+    if (entry.kinds !== undefined) {
+      const where = `${id} combat condition "${entry.condition}"`;
+      const conditionIds = sheetNames(document).conditions;
+      if (
+        !Array.isArray(entry.kinds) ||
+        entry.kinds.length < 1 ||
+        entry.kinds.length > 4 ||
+        new Set(entry.kinds).size !== entry.kinds.length ||
+        entry.kinds.some((kind) => typeof kind !== "string" || !/^[a-z][a-z0-9_]*$/u.test(kind))
+      )
+        throw new Error(`${where} kinds is a list of 1 to 4 ids, each once`);
+      const named = entry.kinds.find((kind) => conditionIds.has(kind));
+      if (named) throw new Error(`${where} kind "${named}" is a condition, so it is no kind`);
+      if (!meetsCapabilityApi(manifest, RULESET_CONDITION_KINDS_MIN))
+        later.kinds ??= `${where} is of a kind and must declare capability API 1.258 or newer`;
+    }
+    // 1.260: what each rest it names takes off health's maximum, after a save if it has one.
+    if (entry.onRest !== undefined) {
+      const where = `${id} combat condition "${entry.condition}"`;
+      const rest = entry.onRest;
+      const restIds = new Set((document?.rests ?? []).map((one) => one?.id));
+      const lowers = rest?.lowersMax;
+      const save = rest?.save;
+      if (
+        !rest ||
+        typeof rest !== "object" ||
+        Object.keys(rest).some(
+          (key) => !["rests", "lowersMax", "lasting", "restoredWhenCured", "save"].includes(key),
+        ) ||
+        !Array.isArray(rest.rests) ||
+        rest.rests.length < 1 ||
+        new Set(rest.rests).size !== rest.rests.length ||
+        rest.rests.some((one) => !restIds.has(one)) ||
+        !lowers ||
+        typeof lowers !== "object" ||
+        Object.keys(lowers).some((key) => !["dice", "flat"].includes(key)) ||
+        (lowers.dice === undefined && lowers.flat === undefined) ||
+        (lowers.dice !== undefined && !RULESET_CATALOG_DICE_PATTERN.test(String(lowers.dice))) ||
+        (lowers.flat !== undefined && (!Number.isInteger(lowers.flat) || lowers.flat < 1 || lowers.flat > 1000)) ||
+        (rest.lasting !== undefined && rest.lasting !== true) ||
+        (rest.restoredWhenCured !== undefined && (rest.restoredWhenCured !== true || rest.lasting !== true)) ||
+        (save !== undefined &&
+          (!save ||
+            typeof save !== "object" ||
+            Object.keys(save).some((key) => !["save", "difficulty", "cures"].includes(key)) ||
+            !sheetNames(document).saves.has(save.save) ||
+            !Number.isInteger(save.difficulty) ||
+            save.difficulty < 1 ||
+            save.difficulty > 1000 ||
+            (save.cures !== undefined && save.cures !== true)))
+      )
+        throw new Error(
+          `${where} onRest is { rests: the ruleset's rests, lowersMax: { dice?, flat? }, lasting?: true, restoredWhenCured?: true (with lasting), save?: { save, difficulty, cures?: true } }`,
+        );
+      if (!meetsCapabilityApi(manifest, RULESET_REST_LOSS_MIN))
+        later.onRest ??= `${where} has conditions that lower a maximum on a rest and must declare capability API 1.260 or newer`;
+      if (rest.restoredWhenCured && !meetsCapabilityApi(manifest, RULESET_DISEASE_STAGES_MIN))
+        later.stages ??= `${where} gives a rest loss back on a cure and must declare capability API 1.261 or newer`;
+    }
+    // 1.264: what it makes its holder do with their turn.
+    if (entry.behavior !== undefined) {
+      const where = `${id} combat condition "${entry.condition}"`;
+      const issue = behaviorIssue(entry.behavior, combat.standard ?? [], {
+        slots: new Set((document.items?.slots ?? []).map((slot) => slot?.id)),
+        tags: new Set((document.items?.tags ?? []).map((tag) => tag?.id)),
+        budgets: new Set((combat.economy?.budgets ?? []).map((budget) => budget?.id)),
+        saves: new Set((document.sheet?.saves ?? []).map((save) => save?.id)),
+      });
+      if (issue) throw new Error(`${where} ${issue}`);
+      if (!meetsCapabilityApi(manifest, RULESET_BEHAVIOR_MIN))
+        later.behavior ??= `${where} decides its holder's turn and must declare capability API 1.264 or newer`;
+      const { keepsOut, drops, onlyWhenStuck } = entry.behavior;
+      if (
+        (keepsOut !== undefined || drops !== undefined || onlyWhenStuck === "any") &&
+        !meetsCapabilityApi(manifest, RULESET_DROPS_MIN)
+      )
+        later.drops ??= `${where} drops what is held, keeps out of a ring or frees a stuck turn and must declare capability API 1.266 or newer`;
+      if (entry.behavior.keepsIn !== undefined && !meetsCapabilityApi(manifest, RULESET_APPLIED_VALUES_MIN))
+        later.applied ??= `${where} keeps its holder near its source and must declare capability API 1.274 or newer`;
+    }
+    // 1.275: held while near its source as well as in sight, and others it holds off.
+    if (entry.orSourceWithin !== undefined || entry.suppresses !== undefined) {
+      const where = `${id} combat condition "${entry.condition}"`;
+      const conditionIds = sheetNames(document).conditions;
+      if (
+        entry.orSourceWithin !== undefined &&
+        (typeof entry.orSourceWithin !== "number" ||
+          !(entry.orSourceWithin > 0) ||
+          entry.orSourceWithin > 10000 ||
+          entry.whileSourceInSight === undefined)
+      )
+        throw new Error(`${where} orSourceWithin is a distance above 0 to 10000, beside whileSourceInSight`);
+      if (
+        entry.suppresses !== undefined &&
+        (!Array.isArray(entry.suppresses) ||
+          entry.suppresses.length < 1 ||
+          entry.suppresses.length > 12 ||
+          new Set(entry.suppresses).size !== entry.suppresses.length ||
+          entry.suppresses.some((held) => held === entry.condition || !conditionIds.has(held)))
+      )
+        throw new Error(`${where} suppresses is 1 to 12 other conditions of the sheet, each once`);
+      if (!meetsCapabilityApi(manifest, RULESET_HELD_OFF_MIN))
+        later.heldOff ??= `${where} holds a condition off without ending it and must declare capability API 1.275 or newer`;
+    }
+    // 1.263: what it spreads to whoever stands near its holder.
+    if (entry.auras !== undefined) {
+      const where = `${id} combat condition "${entry.condition}"`;
+      const conditionIds = sheetNames(document).conditions;
+      const spreads = new Set(
+        (combat.conditions ?? []).flatMap((one) => (one?.auras ?? []).flatMap((aura) => aura?.conditions ?? [])),
+      );
+      if (!Array.isArray(entry.auras) || entry.auras.length < 1 || entry.auras.length > 4)
+        throw new Error(`${where} auras are a list of 1 to 4`);
+      if (spreads.has(entry.condition)) throw new Error(`${where} is spread by an aura, so it carries none`);
+      for (const aura of entry.auras) {
+        const when = aura?.when;
+        if (
+          !aura ||
+          typeof aura !== "object" ||
+          Object.keys(aura).some(
+            (key) =>
+              ![
+                "distance",
+                "side",
+                "self",
+                "conditions",
+                "when",
+                "needs",
+                "harms",
+                "save",
+                "targetTypes",
+                "sourcesOf",
+                "chosenKind",
+                "orSeen",
+                "seenByHolder",
+                "whileRidden",
+              ].includes(key),
+          ) ||
+          // 1.735: only while somebody rides its holder.
+          (aura.whileRidden !== undefined && aura.whileRidden !== true) ||
+          (aura.chosenKind !== undefined && aura.chosenKind !== true) ||
+          // 1.608: only whoever its holder sees.
+          (aura.seenByHolder !== undefined && aura.seenByHolder !== true) ||
+          (aura.orSeen !== undefined && aura.orSeen !== true) ||
+          typeof aura.distance !== "number" ||
+          !(aura.distance > 0) ||
+          aura.distance > 10000 ||
+          !["allies", "enemies", "all"].includes(aura.side) ||
+          (aura.self !== undefined && (aura.self !== true || aura.side === "enemies")) ||
+          (aura.conditions === undefined && aura.harms === undefined && aura.save === undefined) ||
+          (aura.conditions !== undefined &&
+            (!Array.isArray(aura.conditions) ||
+              aura.conditions.length < 1 ||
+              aura.conditions.length > 4 ||
+              aura.conditions.some((one) => !conditionIds.has(one) || one === entry.condition))) ||
+          (aura.needs !== undefined &&
+            (!Array.isArray(aura.needs) ||
+              aura.needs.length < 1 ||
+              aura.needs.some((one) => typeof one !== "string"))) ||
+          (aura.harms !== undefined &&
+            (!aura.harms ||
+              typeof aura.harms !== "object" ||
+              Object.keys(aura.harms).some((key) => !["dice", "flat", "type"].includes(key)) ||
+              (aura.harms.dice === undefined && aura.harms.flat === undefined))) ||
+          (aura.save !== undefined &&
+            (!aura.save ||
+              typeof aura.save !== "object" ||
+              Object.keys(aura.save).some(
+                (key) =>
+                  ![
+                    "save",
+                    "difficulty",
+                    "applies",
+                    "seen",
+                    "immuneOnSuccess",
+                    "failedBy",
+                    "avert",
+                    "immuneWhenEnds",
+                    "appliedDifficulty",
+                  ].includes(key),
+              ) ||
+              (aura.save.immuneWhenEnds !== undefined && aura.save.immuneWhenEnds !== true) ||
+              (aura.save.appliedDifficulty !== undefined && aura.save.appliedDifficulty !== true) ||
+              (aura.save.avert !== undefined && (aura.save.avert !== true || aura.save.seen !== true)) ||
+              (aura.save.failedBy !== undefined &&
+                (!aura.save.failedBy ||
+                  typeof aura.save.failedBy !== "object" ||
+                  Object.keys(aura.save.failedBy).some((key) => !["atLeast", "applies"].includes(key)) ||
+                  !Number.isInteger(aura.save.failedBy.atLeast) ||
+                  aura.save.failedBy.atLeast < 1 ||
+                  !Array.isArray(aura.save.failedBy.applies) ||
+                  aura.save.failedBy.applies.length < 1 ||
+                  aura.save.failedBy.applies.length > 4 ||
+                  aura.save.failedBy.applies.some((one) => !conditionIds.has(one?.condition)))) ||
+              !sheetNames(document).saves.has(aura.save.save) ||
+              !Number.isInteger(aura.save.difficulty) ||
+              !Array.isArray(aura.save.applies) ||
+              aura.save.applies.length < 1 ||
+              aura.save.applies.length > 4 ||
+              aura.save.applies.some((one) => !conditionIds.has(one?.condition)) ||
+              (aura.save.seen !== undefined && aura.save.seen !== true) ||
+              (aura.save.immuneOnSuccess !== undefined && aura.save.immuneOnSuccess !== true))) ||
+          (when !== undefined &&
+            (!when ||
+              typeof when !== "object" ||
+              Object.keys(when).some((key) => !["value", "atLeast", "atMost"].includes(key)) ||
+              !when.value ||
+              typeof when.value !== "object" ||
+              (when.atLeast === undefined && when.atMost === undefined) ||
+              (when.atLeast !== undefined && !Number.isFinite(when.atLeast)) ||
+              (when.atMost !== undefined && !Number.isFinite(when.atMost)))) ||
+          (aura.sourcesOf !== undefined &&
+            (!Array.isArray(aura.sourcesOf) ||
+              aura.sourcesOf.length < 1 ||
+              aura.sourcesOf.length > 4 ||
+              aura.sourcesOf.some((one) => !conditionIds.has(one)))) ||
+          // 1.608: or only whoever understands its holder (`understands`, the holder's own languages).
+          (aura.targetTypes !== undefined &&
+            (!aura.targetTypes ||
+              typeof aura.targetTypes !== "object" ||
+              Object.keys(aura.targetTypes).some((key) => !["is", "not", "understands"].includes(key)) ||
+              Object.keys(aura.targetTypes).filter((key) => key !== "understands").length > 1 ||
+              Object.keys(aura.targetTypes).length < 1 ||
+              (aura.targetTypes.understands !== undefined && aura.targetTypes.understands !== true)))
+        )
+          throw new Error(
+            `${where} aura is { distance, side: allies|enemies|all, self?: true (not with enemies), conditions?: 1 to 4 others, when?: { value, atLeast?, atMost? }, needs?: senses, harms?: { dice?, flat?, type? }, save?: { save, difficulty, applies: 1 to 4, seen?: true, immuneOnSuccess?: true, immuneWhenEnds?: true, appliedDifficulty?: true, avert?: true (with seen), failedBy?: { atLeast, applies: 1 to 4 } }, targetTypes?: { is | not, understands?: true }, sourcesOf?: 1 to 4 conditions, chosenKind?: true, orSeen?: true, seenByHolder?: true }, with conditions, harms or a save`,
+          );
+        if (
+          (aura.needs !== undefined || aura.harms !== undefined || aura.save !== undefined) &&
+          !meetsCapabilityApi(manifest, RULESET_AURA_TURNS_MIN)
+        )
+          later.auraTurns ??= `${where} has an aura that needs senses, harms or asks a save and must declare capability API 1.265 or newer`;
+        if (
+          (aura.targetTypes !== undefined ||
+            aura.sourcesOf !== undefined ||
+            aura.save?.avert !== undefined ||
+            aura.save?.failedBy !== undefined) &&
+          !meetsCapabilityApi(manifest, RULESET_GAZES_MIN)
+        )
+          later.gazes ??= `${where} has an aura by who it reaches, a save to avert or one failed by enough and must declare capability API 1.268 or newer`;
+        if (
+          (aura.chosenKind !== undefined || aura.orSeen !== undefined) &&
+          !meetsCapabilityApi(manifest, RULESET_KIND_CHOICE_MIN)
+        )
+          later.kindChoice ??= `${where} has an aura by a chosen kind or by sight and must declare capability API 1.270 or newer`;
+        if (aura.save?.appliedDifficulty !== undefined && !meetsCapabilityApi(manifest, RULESET_APPLIED_VALUES_MIN))
+          later.applied ??= `${where} has an aura whose save reads its applier's DC and must declare capability API 1.274 or newer`;
+        if (aura.save?.immuneWhenEnds !== undefined && !meetsCapabilityApi(manifest, RULESET_MORE_CONDITIONS_MIN))
+          later.moreConditions ??= `${where} has an aura whose effect, once ended, leaves immunity and must declare capability API 1.269 or newer`;
+      }
+      if (!meetsCapabilityApi(manifest, RULESET_AURAS_MIN))
+        later.auras ??= `${where} spreads conditions with an aura and must declare capability API 1.263 or newer`;
+    }
+    // 1.261: what taking damage brings on, what a run-out clock turns into, and who may cure it.
+    {
+      const where = `${id} combat condition "${entry.condition}"`;
+      const conditionIds = sheetNames(document).conditions;
+      if (entry.onDamaged !== undefined) {
+        const applies = entry.onDamaged?.applies;
+        if (
+          !entry.onDamaged ||
+          typeof entry.onDamaged !== "object" ||
+          Object.keys(entry.onDamaged).some((key) => key !== "applies") ||
+          !Array.isArray(applies) ||
+          applies.length < 1 ||
+          applies.length > 4 ||
+          applies.some((one) => !conditionIds.has(one?.condition) || one.condition === entry.condition)
+        )
+          throw new Error(`${where} onDamaged is { applies: 1 to 4 other known conditions }`);
+      }
+      if (entry.expires !== undefined) {
+        const becomes = entry.expires?.becomes;
+        if (
+          !entry.expires ||
+          typeof entry.expires !== "object" ||
+          Object.keys(entry.expires).some((key) => key !== "becomes") ||
+          !conditionIds.has(becomes) ||
+          becomes === entry.condition
+        )
+          throw new Error(`${where} expires is { becomes: another known condition }`);
+      }
+      if (entry.curedOnlyBy !== undefined) {
+        const only = entry.curedOnlyBy;
+        const catalogIds = new Set((document?.catalogs ?? []).map((one) => one?.id));
+        if (
+          !only ||
+          typeof only !== "object" ||
+          Object.keys(only).some((key) => !["catalogs", "minLevel"].includes(key)) ||
+          !Number.isInteger(only.minLevel) ||
+          only.minLevel < 0 ||
+          only.minLevel > 30 ||
+          (only.catalogs !== undefined &&
+            (!Array.isArray(only.catalogs) ||
+              only.catalogs.length < 1 ||
+              only.catalogs.some((one) => catalogIds.size > 0 && !catalogIds.has(one))))
+        )
+          throw new Error(`${where} curedOnlyBy is { catalogs?: known catalogs, minLevel: 0 to 30 }`);
+      }
+      if (
+        (entry.onDamaged !== undefined ||
+          entry.expires !== undefined ||
+          entry.curedOnlyBy !== undefined ||
+          (entry.effects ?? []).includes("cannot-heal-nonmagical")) &&
+        !meetsCapabilityApi(manifest, RULESET_DISEASE_STAGES_MIN)
+      )
+        later.stages ??= `${where} has disease stages and must declare capability API 1.261 or newer`;
+    }
+    // 1.195: a condition that makes its holder bigger or smaller, by steps along combat.sizes.
+    if (entry.size !== undefined) {
+      const where = `${id} combat condition "${entry.condition}"`;
+      const steps = entry.size?.steps;
+      if (
+        !entry.size ||
+        typeof entry.size !== "object" ||
+        Array.isArray(entry.size) ||
+        Object.keys(entry.size).some((key) => key !== "steps")
+      )
+        throw new Error(`${where} size is { steps } only`);
+      if (!Number.isInteger(steps) || steps < -5 || steps > 5 || steps === 0)
+        throw new Error(`${where} size steps are a whole number from -5 to 5, never 0`);
+      if (combat.sizes === undefined) throw new Error(`${where} changes size and needs combat sizes`);
+      if (!meetsCapabilityApi(manifest, RULESET_SIZE_CHANGES_MIN))
+        later.grow ??= `${where} changes its holder's size and must declare capability API 1.195 or newer`;
+    }
+    // 1.191: heals that restore nothing, and conditions kept off by what applies them.
+    {
+      const where = `${id} combat condition "${entry.condition}"`;
+      if (entry.conditionImmunitiesFrom !== undefined) {
+        const wards = entry.conditionImmunitiesFrom;
+        if (!Array.isArray(wards) || wards.length < 1 || wards.length > 10)
+          throw new Error(`${where} conditionImmunitiesFrom is a list of 1 to 10`);
+        const types = new Set((combat.creatureTypes?.types ?? []).map((one) => one?.id ?? one));
+        wards.forEach((ward, index) => {
+          const at = `${where} conditionImmunitiesFrom ${index}`;
+          if (!Array.isArray(ward?.conditions) || ward.conditions.length < 1)
+            throw new Error(`${at} names the conditions it keeps off`);
+          for (const condition of ward.conditions)
+            if (!names.conditions.has(condition))
+              throw new Error(`${at} keeps off unknown condition ${JSON.stringify(condition)}`);
+          const from = ward.from;
+          // 1.476: or the catalogs of what puts them on, in its place or beside it.
+          const catalogIds = new Set((document?.catalogs ?? []).map((one) => one?.id));
+          if (
+            ward.catalogs !== undefined &&
+            (!Array.isArray(ward.catalogs) ||
+              ward.catalogs.length < 1 ||
+              ward.catalogs.some((one) => !catalogIds.has(one)))
+          )
+            throw new Error(`${at} catalogs names catalogs this ruleset has`);
+          if (ward.catalogs !== undefined && from === undefined) return;
+          if (!from || typeof from !== "object" || (!from.types && !from.tags))
+            throw new Error(`${at} from names creature types, tags or both`);
+          for (const type of from.types ?? [])
+            if (types.size > 0 && !types.has(type))
+              throw new Error(`${at} from names unknown creature type ${JSON.stringify(type)}`);
+        });
+      }
+      if (
+        (entry.conditionImmunitiesFrom !== undefined || (entry.effects ?? []).includes("cannot-heal")) &&
+        !meetsCapabilityApi(manifest, RULESET_HEAL_WARDS_MIN)
+      )
+        later.wards ??= `${where} keeps heals or conditions off and must declare capability API 1.191 or newer`;
+    }
+    assertConditionEconomy(entry, `${id} combat condition "${entry.condition}"`, {
+      combat,
+      conditions: names.conditions,
+      itemTags: new Set((document?.items?.tags ?? []).map((tag) => tag?.id)),
+      tracks: new Map((document?.sheet?.live?.tracks ?? []).map((one) => [one?.id, one])),
+    });
+    if (
+      (entry.grants?.melee !== undefined || entry.onEnd?.tracks !== undefined) &&
+      !meetsCapabilityApi(manifest, RULESET_FRENZY_MIN)
+    )
+      later.frenzy ??= `${id} combat condition "${entry.condition}" grants melee strikes or moves tracks as it ends and must declare capability API 1.239 or newer`;
+    if (entry.onEnd?.harm !== undefined && !meetsCapabilityApi(manifest, RULESET_QUIVERING_MIN))
+      later.harm ??= `${id} combat condition "${entry.condition}" harms as it ends and must declare capability API 1.245 or newer`;
   }
 
   // A level reads a plain track by its number: while the holder's track is at `at` or more it counts
@@ -1228,11 +5148,17 @@ export function assertRulesetCombat(manifest, document) {
       throw new Error(`${id} combat levels are a list of at most ${RULESET_COMBAT_MAX_LEVELS}`);
     }
     const tracks = new Map((document.sheet?.live?.tracks ?? []).map((track) => [track?.id, track]));
+    const derivedIds = new Set((document.sheet?.derived ?? []).map((value) => value?.id));
     const levelled = new Set();
     for (const entry of combat.levels) {
-      const track = tracks.get(entry?.track);
+      // ...or a derived value (1.54): the races' save advantages are levels reached at 1.
+      if ((entry?.track === undefined) === (entry?.derived === undefined))
+        throw new Error(`${id} combat level reads a track or a derived value, one of them`);
+      if (entry.derived !== undefined && !derivedIds.has(entry.derived))
+        throw new Error(`${id} combat level names unknown derived value ${JSON.stringify(entry.derived)}`);
+      const track = entry.derived !== undefined ? {} : tracks.get(entry?.track);
       if (!track) throw new Error(`${id} combat level names unknown track ${JSON.stringify(entry?.track)}`);
-      const where = `${id} combat level ${entry.at} of "${entry.track}"`;
+      const where = `${id} combat level ${entry.at} of "${entry.track ?? entry.derived}"`;
       if (track.levels !== undefined || track.boxes !== undefined) {
         throw new Error(`${where} reads a wound track, and a level reads a plain track's number`);
       }
@@ -1242,7 +5168,7 @@ export function assertRulesetCombat(manifest, document) {
       if (typeof track.max === "number" && entry.at > track.max) {
         throw new Error(`${where} is never reached: the track goes up to ${track.max}`);
       }
-      const key = `${entry.track}@${entry.at}`;
+      const key = `${entry.track ?? entry.derived}@${entry.at}`;
       if (levelled.has(key)) throw new Error(`${where} is given twice`);
       levelled.add(key);
       const effects = entry.effects ?? [];
@@ -1256,16 +5182,51 @@ export function assertRulesetCombat(manifest, document) {
           );
         }
       }
-      if (effects.length === 0 && entry.modifiers === undefined && entry.failsSaves === undefined) {
-        throw new Error(`${where} does nothing: a level has effects, modifiers or saves it fails`);
+      if (entry.defeats !== undefined && entry.defeats !== true)
+        throw new Error(`${where} defeats, if it says so, with true`);
+      if (
+        effects.length === 0 &&
+        entry.modifiers === undefined &&
+        entry.failsSaves === undefined &&
+        entry.evasion === undefined &&
+        entry.defeats === undefined &&
+        entry.checkFloor === undefined &&
+        // 1.428, 1.429, 1.432 and 1.435, checked beside the sheet hooks.
+        entry.strikesAgain === undefined &&
+        entry.shapeKeeps === undefined &&
+        entry.waives === undefined &&
+        entry.resistIn === undefined &&
+        entry.ignoresHardGround === undefined &&
+        entry.runsAcross === undefined &&
+        entry.passesCreatures === undefined &&
+        !["resist", "immune", "vulnerable", "conditionImmunities"].some((key) => entry[key]?.length > 0)
+      ) {
+        throw new Error(`${where} does nothing: a level has effects, modifiers, saves it fails or defeats`);
       }
-      for (const key of ["failsSaves", "saves"]) {
+      for (const key of ["failsSaves", "saves", "evasion"]) {
         for (const save of entry[key] ?? []) {
           if (!names.saves.has(save)) throw new Error(`${where} names unknown save ${JSON.stringify(save)}`);
         }
       }
+      assertEvasion(manifest, entry, where, later);
+      assertTypedHides(manifest, document, entry, where);
       assertConditionNumbers(entry, where);
+      assertDamageModifierGate(manifest, entry, where, names, later);
     }
+  }
+
+  const halvesHealth = (value, depth = 0) =>
+    depth < 40 &&
+    value !== null &&
+    typeof value === "object" &&
+    (value.to === "health-max" || Object.values(value).some((one) => halvesHealth(one, depth + 1)));
+  if (
+    (halvesHealth(combat) || (combat.levels ?? []).some((entry) => entry?.defeats !== undefined)) &&
+    !meetsCapabilityApi(manifest, RULESET_HEALTH_MAX_MIN_CAPABILITY_API)
+  ) {
+    throw new Error(
+      `${id} has levels that halve the health maximum or defeat and must declare capability API 1.115 or newer`,
+    );
   }
 
   // Contests: the checks they read, the budget they spend and the conditions they touch all exist,
@@ -1291,10 +5252,37 @@ export function assertRulesetCombat(manifest, document) {
       ref(check.value, `check "${check.id}" value`);
     }
   }
+  if (combat.sizes !== undefined) {
+    if (!meetsCapabilityApi(manifest, RULESET_SIZES_MIN_CAPABILITY_API)) {
+      throw new Error(`${id} has combatant sizes and must declare capability API 1.103 or newer`);
+    }
+    const order = combat.sizes?.order;
+    if (!Array.isArray(order) || order.length < 2 || order.length > 10) {
+      throw new Error(`${id} combat sizes are an order of 2 to 10`);
+    }
+    const sizeIds = order.map((size) => size?.id);
+    if (new Set(sizeIds).size !== sizeIds.length) throw new Error(`${id} combat sizes repeat an id`);
+    if (combat.sizes.default !== undefined && !sizeIds.includes(combat.sizes.default)) {
+      throw new Error(`${id} combat sizes default to unknown size ${JSON.stringify(combat.sizes.default)}`);
+    }
+    // 1.194: how many cells a side each size fills; left off, one.
+    let previous = 1;
+    for (const size of order) {
+      if (size?.cells === undefined) continue;
+      if (!Number.isInteger(size.cells) || size.cells < 1 || size.cells > 6)
+        throw new Error(`${id} combat size "${size.id}" fills 1 to 6 cells a side`);
+      if (size.cells < previous)
+        throw new Error(`${id} combat size "${size.id}" fills fewer cells than a smaller size`);
+      previous = size.cells;
+      if (!meetsCapabilityApi(manifest, RULESET_FOOTPRINTS_MIN))
+        later.feet ??= `${id} combat size "${size.id}" fills more than a cell and must declare capability API 1.194 or newer`;
+    }
+  }
   if (combat.contests !== undefined) {
     if (!Array.isArray(combat.contests) || combat.contests.length > RULESET_COMBAT_MAX_CONTESTS) {
       throw new Error(`${id} combat contests are a list of at most ${RULESET_COMBAT_MAX_CONTESTS}`);
     }
+
     const contests = new Set();
     const condition = (value, where) => {
       if (!names.conditions.has(value)) throw new Error(`${where} names unknown condition ${JSON.stringify(value)}`);
@@ -1315,7 +5303,44 @@ export function assertRulesetCombat(manifest, document) {
       if (contest.strike !== undefined && contest.strike !== true) {
         throw new Error(`${where} strike must be true when it is given`);
       }
+      // 1.407: a pull, of someone held inside another creature, against the hold's escape DC or the
+      // contest's own difficulty, with no defender.
+      if (contest.pulls !== undefined) {
+        const held = (combat.conditions ?? []).find((one) => one?.condition === contest.targetHolds);
+        if (
+          contest.pulls !== true ||
+          contest.defender !== undefined ||
+          contest.targetHolds === undefined ||
+          (held && !held.inside)
+        )
+          throw new Error(`${where} pulls is true, with no defender, and targetHolds an inside condition`);
+        if (!meetsCapabilityApi(manifest, RULESET_PULLS_MIN))
+          laterPull.message ??= `${where} pulls a creature out of another, of 1.407, and must declare capability API 1.407 or newer`;
+      }
+      // 1.193: a fixed number in place of a defender, whom it is aimed at, and stabilizing on a win.
+      else if ((contest.difficulty === undefined) === (contest.defender === undefined))
+        throw new Error(`${where} rolls against a defender or a difficulty, exactly one`);
+      if (
+        contest.difficulty !== undefined &&
+        (!Number.isInteger(contest.difficulty) || contest.difficulty < 0 || contest.difficulty > 1000)
+      )
+        throw new Error(`${where} difficulty is a whole number from 0 to 1000`);
+      if (contest.targets !== undefined && !["enemy", "ally", "any"].includes(contest.targets))
+        throw new Error(`${where} targets "enemy", "ally" or "any"`);
+      if (contest.targetHolds !== undefined) condition(contest.targetHolds, `${where} targetHolds`);
+      if (contest.targetDying !== undefined && contest.targetDying !== true)
+        throw new Error(`${where} targetDying is true or left out`);
+      if (contest.onWin?.stabilizes !== undefined && contest.onWin.stabilizes !== true)
+        throw new Error(`${where} onWin stabilizes is true or left out`);
+      if (
+        ["difficulty", "targets", "targetHolds", "targetDying"].some((key) => contest[key] !== undefined) ||
+        contest.onWin?.stabilizes !== undefined
+      ) {
+        if (!meetsCapabilityApi(manifest, RULESET_MEDICINE_MIN))
+          later.rest ??= `${where} rolls against a number, aims at the held or dying, or stabilizes, and must declare capability API 1.193 or newer`;
+      }
       for (const side of ["attacker", "defender"]) {
+        if (side === "defender" && (contest.difficulty !== undefined || contest.pulls)) continue;
         const checks = contest[side]?.checks;
         if (!Array.isArray(checks) || checks.length === 0 || checks.length > RULESET_CONTEST_SIDE_MAX_CHECKS) {
           throw new Error(`${where} ${side} rolls the best of 1 to ${RULESET_CONTEST_SIDE_MAX_CHECKS} checks`);
@@ -1330,9 +5355,47 @@ export function assertRulesetCombat(manifest, document) {
         throw new Error(`${where} gives a tie to ${JSON.stringify(contest.ties)}, not the defender or the attacker`);
       }
       if (contest.from !== undefined) condition(contest.from?.holding, `${where} from`);
+      if (contest.maxSizeAbove !== undefined) {
+        if (combat.sizes === undefined)
+          throw new Error(`${where} maxSizeAbove reads sizes, so the block declares "sizes" too`);
+        if (!Number.isInteger(contest.maxSizeAbove) || contest.maxSizeAbove < 0 || contest.maxSizeAbove > 9) {
+          throw new Error(`${where} maxSizeAbove is a whole number from 0 to 9`);
+        }
+      }
       const onWin = contest.onWin;
-      if (!onWin || (onWin.applies === undefined && onWin.ends === undefined && onWin.push === undefined)) {
-        throw new Error(`${where} onWin applies, ends or pushes something`);
+      if (
+        !onWin ||
+        (onWin.applies === undefined &&
+          onWin.ends === undefined &&
+          onWin.push === undefined &&
+          onWin.pushRead === undefined &&
+          onWin.stabilizes === undefined &&
+          onWin.both === undefined)
+      ) {
+        throw new Error(`${where} onWin applies, ends, pushes or stabilizes something`);
+      }
+      // 1.553: conditions on the loser and the winner alike, while the target holds one; only on a
+      // target holding its condition from the actor (both gated at the end).
+      if (onWin.both !== undefined) {
+        const both = onWin.both;
+        if (
+          !both ||
+          typeof both !== "object" ||
+          Object.keys(both).some((key) => !["applies", "whileTargetHolds"].includes(key)) ||
+          !Array.isArray(both.applies) ||
+          both.applies.length < 1 ||
+          both.applies.length > RULESET_CONTEST_MAX_CHANGES ||
+          both.whileTargetHolds === undefined
+        )
+          throw new Error(
+            `${where} onWin both is { applies: 1 to ${RULESET_CONTEST_MAX_CHANGES} conditions, whileTargetHolds }`,
+          );
+        for (const one of both.applies) condition(one, `${where} onWin both applies`);
+        condition(both.whileTargetHolds, `${where} onWin both whileTargetHolds`);
+      }
+      if (contest.targetHeldBySelf !== undefined) {
+        if (contest.targetHeldBySelf !== true || contest.targetHolds === undefined)
+          throw new Error(`${where} targetHeldBySelf is true, beside targetHolds`);
       }
       for (const key of ["applies", "ends"]) {
         const list = onWin[key];
@@ -1387,6 +5450,30 @@ export function assertRulesetCombat(manifest, document) {
     }
   }
 
+  // 1.710: once an entry of these catalogs is cast with a budget, only a lesser one with another that turn.
+  if (combat.casting !== undefined) {
+    const after = combat.casting?.afterBonusSpell;
+    if (
+      !combat.casting ||
+      typeof combat.casting !== "object" ||
+      Object.keys(combat.casting).some((key) => key !== "afterBonusSpell") ||
+      !after ||
+      typeof after !== "object" ||
+      Object.keys(after).some((key) => !["catalogs", "budget", "only"].includes(key)) ||
+      !Array.isArray(after.catalogs) ||
+      after.catalogs.length === 0 ||
+      after.catalogs.some((one) => typeof one !== "string" || one === "") ||
+      typeof after.budget !== "string" ||
+      !after.only ||
+      typeof after.only !== "object" ||
+      Object.keys(after.only).some((key) => !["level", "budget"].includes(key)) ||
+      !Number.isInteger(after.only.level) ||
+      after.only.level < 0 ||
+      typeof after.only.budget !== "string"
+    )
+      throw new Error(`${id} combat casting is { afterBonusSpell: { catalogs, budget, only: { level, budget } } }`);
+  }
+
   if (combat.dying !== undefined) {
     const dying = combat.dying;
     if (dying?.kind !== "saves")
@@ -1401,6 +5488,25 @@ export function assertRulesetCombat(manifest, document) {
     }
     if (dying.condition !== undefined && !names.conditions.has(dying.condition)) {
       throw new Error(`${id} combat dying names unknown condition ${JSON.stringify(dying.condition)}`);
+    }
+    // 1.709: massive damage, a blow whose overflow is at least the hit point maximum kills outright.
+    if (dying.instantDeath !== undefined) {
+      if (dying.instantDeath !== "overflow-at-least-max")
+        throw new Error(`${id} combat dying instantDeath is "overflow-at-least-max"`);
+    }
+    // 1.720: knocking a creature out with a melee blow that drops it to 0.
+    if (dying.knockOut !== undefined) {
+      const knock = dying.knockOut;
+      if (
+        !knock ||
+        typeof knock !== "object" ||
+        knock.blow !== "melee" ||
+        !names.conditions.has(knock.condition) ||
+        (knock.label !== undefined &&
+          (typeof knock.label !== "string" || knock.label === "" || knock.label.length > 40)) ||
+        Object.keys(knock).some((key) => !["blow", "condition", "label"].includes(key))
+      )
+        throw new Error(`${id} combat dying knockOut is { blow: "melee", condition: a combat condition, label? }`);
     }
     const dyingNaturals = dying.naturals ?? {};
     if (
@@ -1442,6 +5548,126 @@ export function assertRulesetCombat(manifest, document) {
       }
     }
   }
+  if (later.message) throw new Error(later.message);
+  // Newer than every gate above, so named only once they all pass.
+  if (later.wards) throw new Error(later.wards);
+  if (later.rest) throw new Error(later.rest);
+  if (later.feet) throw new Error(later.feet);
+  if (later.grow) throw new Error(later.grow);
+  if (later.dice) throw new Error(later.dice);
+  if (later.gives) throw new Error(later.gives);
+  if (later.surprise) throw new Error(later.surprise);
+  if (later.frenzy) throw new Error(later.frenzy);
+  if (later.initiative) throw new Error(later.initiative);
+  if (later.always) throw new Error(later.always);
+  if (later.harm) throw new Error(later.harm);
+  if (later.reckless) throw new Error(later.reckless);
+  if (later.rescue) throw new Error(later.rescue);
+  if (later.evasion) throw new Error(later.evasion);
+  if (later.oneAtATime) throw new Error(later.oneAtATime);
+  if (later.kinds) throw new Error(later.kinds);
+  if (later.onRest) throw new Error(later.onRest);
+  if (later.stages) throw new Error(later.stages);
+  if (later.auras) throw new Error(later.auras);
+  if (later.behavior) throw new Error(later.behavior);
+  if (later.auraTurns) throw new Error(later.auraTurns);
+  if (later.drops) throw new Error(later.drops);
+  if (later.gazes) throw new Error(later.gazes);
+  if (later.moreConditions) throw new Error(later.moreConditions);
+  if (later.kindChoice) throw new Error(later.kindChoice);
+  if (later.applied) throw new Error(later.applied);
+  if (later.heldOff) throw new Error(later.heldOff);
+  if (later.calm) throw new Error(later.calm);
+  if (laterNew.message) throw new Error(laterNew.message);
+  if (laterPull.message) throw new Error(laterPull.message);
+  if (laterFace.message) throw new Error(laterFace.message);
+  if (laterBond.message) throw new Error(laterBond.message);
+  if (laterGrant.message) throw new Error(laterGrant.message);
+  if (laterLess.message) throw new Error(laterLess.message);
+  // 1.417, after every older gate.
+  const conditionIds = new Set((document?.sheet?.live?.conditions ?? []).map((one) => one?.id));
+  let unseen;
+  for (const [kind, list] of [
+    ["condition", document?.combat?.conditions ?? []],
+    ["level", document?.combat?.levels ?? []],
+  ]) {
+    for (const entry of list) {
+      const where = `${id} combat ${kind} "${entry?.condition ?? entry?.derived ?? entry?.track}"`;
+      if (entry?.notWhile !== undefined) {
+        const held = entry.notWhile;
+        if (
+          !Array.isArray(held) ||
+          held.length < 1 ||
+          held.length > 8 ||
+          new Set(held).size !== held.length ||
+          held.some((one) => !conditionIds.has(one) && !RULESET_COMBAT_CONDITION_EFFECTS.includes(one))
+        )
+          throw new Error(`${where} notWhile is 1 to 8 of the sheet's conditions or condition effects, each once`);
+        unseen ??= `${where} notWhile`;
+      }
+      if (entry?.whenSeen !== undefined) {
+        const saving =
+          (entry.effects ?? []).some((one) => RULESET_SAVE_SCOPED_EFFECTS.includes(one)) ||
+          (entry.modifiers ?? []).some((one) => one?.to === "saves");
+        // 1.655: attacks against its holder at disadvantage only from those who see them.
+        const attacked = kind === "condition" && (entry.effects ?? []).includes("attacks-against-disadvantage");
+        if (entry.whenSeen !== true || !(saving || attacked))
+          throw new Error(
+            `${where} whenSeen is true, beside a save effect, a modifier to saves or attacks-against-disadvantage`,
+          );
+        // 1.655 is gated with the newest, in the sheet hooks.
+        if (saving) unseen ??= `${where} whenSeen`;
+      }
+      if ((entry?.effects ?? []).includes("attacks-against-no-advantage"))
+        unseen ??= `${where} attacks-against-no-advantage`;
+    }
+  }
+  if (unseen && !meetsCapabilityApi(manifest, RULESET_UNSEEN_MIN))
+    throw new Error(`${unseen}, of 1.417, must declare capability API 1.417 or newer`);
+  // 1.418, after every older gate.
+  const floorNames = sheetNames(document);
+  let floored;
+  for (const [kind, list] of [
+    ["condition", document?.combat?.conditions ?? []],
+    ["level", document?.combat?.levels ?? []],
+  ]) {
+    for (const entry of list) {
+      if (entry?.checkFloor === undefined) continue;
+      const where = `${id} combat ${kind} "${entry?.condition ?? entry?.derived ?? entry?.track}" checkFloor`;
+      const floor = entry.checkFloor;
+      const listOf = (value, known, most) =>
+        value === undefined ||
+        (Array.isArray(value) &&
+          value.length >= 1 &&
+          value.length <= most &&
+          new Set(value).size === value.length &&
+          value.every((one) => known.has(one)));
+      if (
+        !floor ||
+        typeof floor !== "object" ||
+        Array.isArray(floor) ||
+        Object.keys(floor).some((key) => !["face", "total", "proficient", "abilities", "skills"].includes(key)) ||
+        (floor.face === undefined && floor.total === undefined) ||
+        (floor.face !== undefined && (!Number.isInteger(floor.face) || floor.face < 1 || floor.face > 100)) ||
+        (floor.total !== undefined && valueRefIssue(floor.total, floorNames)) ||
+        (floor.proficient !== undefined && floor.proficient !== true) ||
+        !listOf(floor.abilities, floorNames.abilities, 12) ||
+        !listOf(floor.skills, floorNames.skills, 40)
+      )
+        throw new Error(
+          `${where} is { face?: 1 to 100, total?: a value off the sheet, proficient?: true, abilities?, skills? } with a face or a total`,
+        );
+      floored ??= where;
+    }
+  }
+  if (floored && !meetsCapabilityApi(manifest, RULESET_CHECK_FLOOR_MIN))
+    throw new Error(`${floored}, of 1.418, must declare capability API 1.418 or newer`);
+  // 1.419, after every older gate: what untrained adds, an ability check's add, and 40 levels.
+  let added;
+  const levelCount = document?.combat?.levels?.length ?? 0;
+  if (levelCount > RULESET_COMBAT_MAX_LEVELS_BEFORE_1366) added ??= `${id} combat levels (${levelCount}, more than 20)`;
+  if (added && !meetsCapabilityApi(manifest, RULESET_UNTRAINED_ADD_MIN))
+    throw new Error(`${added}, of 1.419, must declare capability API 1.419 or newer`);
   return true;
 }
 
@@ -1458,12 +5684,73 @@ export function assertRulesetCombat(manifest, document) {
  *  that opens that moment. The Engine's own rules, restated at this shape. */
 export function assertRulesetReactions(manifest, document, catalogSources = new Map()) {
   const id = manifest?.id ?? "package";
+  const saveIds = sheetNames(document).saves;
   const catalogs = Array.isArray(document?.catalogs) ? document.catalogs : [];
   const catalogIds = new Set(catalogs.map((catalog) => catalog?.id));
+  const slotIds = new Set((document?.items?.slots ?? []).map((slot) => slot?.id));
   let moments = 0;
   for (const catalog of catalogs) {
     if (catalog?.holds === "creatures") continue;
     for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+      const throwsCaught = entry?.mechanics?.throwsCaught;
+      if (throwsCaught !== undefined) {
+        const mechanics = entry.mechanics;
+        const die = throwsCaught?.die;
+        if (
+          (throwsCaught !== true &&
+            (!throwsCaught ||
+              typeof throwsCaught !== "object" ||
+              Object.keys(throwsCaught).some((key) => key !== "die") ||
+              !die ||
+              typeof die !== "object" ||
+              Object.keys(die).some((key) => !["from", "table"].includes(key)) ||
+              valueRefIssue(die.from, sheetNames(document)) ||
+              !Array.isArray(die.table) ||
+              die.table.length < 1 ||
+              die.table.some((step) => !Array.isArray(step) || step.length !== 2 || !step.every(Number.isInteger)))) ||
+          mechanics.kind !== "attack" ||
+          mechanics.attackRoll !== true ||
+          mechanics.amount === undefined ||
+          mechanics.reaction?.on !== "caught"
+        )
+          throw new Error(
+            `${id} catalog "${catalog.id}" entry "${entry.id}" throwsCaught is true or { die: { from, table } }, on an attack that rolls to hit with an amount, taken on "caught"`,
+          );
+      }
+      // 1.422: answered with its holder's own melee strike at the source, or the missed attack sent on.
+      for (const key of ["strikesWith", "redirects"]) {
+        const mechanics = entry?.mechanics;
+        if (mechanics?.[key] === undefined) continue;
+        const moment = mechanics.reaction && typeof mechanics.reaction === "object" ? mechanics.reaction : undefined;
+        // 1.428: or an action that strikes every foe an area catches with the best weapon of its kind.
+        const overArea =
+          key === "strikesWith" &&
+          moment === undefined &&
+          mechanics.reaction === undefined &&
+          mechanics.kind === "utility" &&
+          ["melee", "ranged"].includes(mechanics.strikesWith) &&
+          !!mechanics.area &&
+          typeof mechanics.area === "object" &&
+          mechanics.zone === undefined;
+        const fits =
+          key === "redirects"
+            ? mechanics.redirects === true &&
+              moment?.on === "attacked" &&
+              moment.missed === true &&
+              moment.at === "chosen" &&
+              mechanics.targets === "any"
+            : overArea ||
+              (mechanics.strikesWith === "melee" &&
+                moment !== undefined &&
+                !["falls", "turn-start"].includes(moment.on) &&
+                moment.at !== "chosen");
+        if (!fits || mechanics.amount !== undefined || mechanics.attackRoll !== undefined)
+          throw new Error(
+            key === "redirects"
+              ? `${id} catalog "${catalog.id}" entry "${entry.id}" redirects is true, on an "attacked" moment that "missed", "at": "chosen", targets "any", dealing nothing of its own`
+              : `${id} catalog "${catalog.id}" entry "${entry.id}" strikesWith is "melee", on a reaction aimed back at whoever caused its moment, or "melee" or "ranged" on a utility with an area and no zone, dealing nothing of its own`,
+          );
+      }
       const reaction = entry?.mechanics?.reaction;
       if (reaction === undefined || reaction === true || reaction === false) continue;
       const where = `${id} catalog "${catalog.id}" entry "${entry.id}"`;
@@ -1476,9 +5763,23 @@ export function assertRulesetReactions(manifest, document, catalogSources = new 
       if (!reaction || typeof reaction !== "object" || Array.isArray(reaction)) {
         throw new Error(`${where} has a reaction of ${JSON.stringify(reaction)}, not true or a moment`);
       }
-      const issue = reactionMomentIssue(reaction, catalogIds);
+      const issue = reactionMomentIssue(reaction, catalogIds, saveIds);
       if (issue) throw new Error(`${where} ${issue}`);
-      const needs = reactionMomentApi(reaction);
+      const caughtMoments = [reaction, ...(Array.isArray(reaction.also) ? reaction.also : [])];
+      const sizeIds = new Set((document?.combat?.sizes?.order ?? []).map((one) => one?.id));
+      for (const moment of caughtMoments) {
+        if (moment?.freeSlot !== undefined && !slotIds.has(moment.freeSlot))
+          throw new Error(`${where} reaction freeSlot names unknown item slot ${JSON.stringify(moment.freeSlot)}`);
+        for (const key of ["upToSize", "atLeastSize"])
+          if (moment?.sourceIs?.[key] !== undefined && !sizeIds.has(moment.sourceIs[key]))
+            throw new Error(
+              `${where} reaction sourceIs ${key} "${moment.sourceIs[key]}" is not a size in combat.sizes`,
+            );
+      }
+      const budgetIds = new Set((document?.combat?.economy?.budgets ?? []).map((one) => one?.id));
+      if (reaction.budget !== undefined && !budgetIds.has(reaction.budget))
+        throw new Error(`${where} reaction budget names unknown budget ${JSON.stringify(reaction.budget)}`);
+      const needs = reactionMomentApi(reaction, entry.mechanics.targetCount);
       if (!meetsCapabilityApi(manifest, needs)) {
         throw new Error(
           `${where} waits for a moment an older Engine does not open and must declare capability API ${needs.major}.${needs.minor} or newer`,
@@ -1488,6 +5789,31 @@ export function assertRulesetReactions(manifest, document, catalogSources = new 
     }
   }
   return moments;
+}
+
+/** Assert every save that ignores cover, on an entry's mechanics, a creature's action or an item's
+ *  use, and report how many it read: `ignoresCover` is true or left out, and needs 1.74. */
+export function assertRulesetCoverlessSaves(manifest, document, catalogSources = new Map()) {
+  const id = manifest?.id ?? "package";
+  let saves = 0;
+  for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : []) {
+    for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+      const actions = Array.isArray(entry?.creature?.actions) ? entry.creature.actions : [];
+      for (const save of [entry?.mechanics?.save, entry?.item?.use?.save, ...actions.map((action) => action?.save)]) {
+        if (save?.ignoresCover === undefined) continue;
+        const where = `${id} catalog "${catalog.id}" entry "${entry.id}"`;
+        if (save.ignoresCover !== true) throw new Error(`${where} has a save whose ignoresCover is true or left out`);
+        const api = RULESET_COVER_DEGREES_MIN_CAPABILITY_API;
+        if (!meetsCapabilityApi(manifest, api)) {
+          throw new Error(
+            `${where} has a save that ignores cover and must declare capability API ${api.major}.${api.minor} or newer`,
+          );
+        }
+        saves += 1;
+      }
+    }
+  }
+  return saves;
 }
 
 /** Assert the conditions every catalog entry applies, and report how many it read.
@@ -1502,11 +5828,19 @@ export function assertRulesetApplies(manifest, document, catalogSources = new Ma
   for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : []) {
     if (catalog?.holds === "creatures") continue;
     for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+      if (entry?.mechanics?.keepsOn !== undefined) {
+        const where = `${id} catalog "${catalog.id}" entry "${entry?.id}"`;
+        const issue = keepsOnIssue(entry.mechanics.keepsOn, names.conditions);
+        if (issue) throw new Error(`${where} ${issue}`);
+        if (!meetsCapabilityApi(manifest, RULESET_AURAS_MIN))
+          throw new Error(`${where} keeps conditions on all fight and must declare capability API 1.263 or newer`);
+      }
       const applies = entry?.mechanics?.applies;
       if (applies === undefined) continue;
       const where = `${id} catalog "${catalog.id}" entry "${entry?.id}"`;
       if (!Array.isArray(applies)) throw new Error(`${where} applies ${JSON.stringify(applies)}, not a list`);
       for (const one of applies) {
+        assertThisActionDuration(manifest, one, entry.mechanics.reaction, where);
         if (!names.conditions.has(one?.condition)) {
           throw new Error(`${where} applies unknown condition ${JSON.stringify(one?.condition)}`);
         }
@@ -1516,8 +5850,18 @@ export function assertRulesetApplies(manifest, document, catalogSources = new Ma
         if (one.saveEnds && !names.saves.has(one.saveEnds.save)) {
           throw new Error(`${where} ends "${one.condition}" on unknown save ${JSON.stringify(one.saveEnds.save)}`);
         }
+        if (one.saveEnds?.at === "damaged" && !meetsCapabilityApi(manifest, RULESET_DAMAGED_SAVE_MIN)) {
+          throw new Error(
+            `${where} ends "${one.condition}" on a save made when damaged and must declare capability API 1.129 or newer`,
+          );
+        }
         const issue = appliesEndingIssue(one);
         if (issue) throw new Error(`${where} ${issue}`);
+        if (one.duration?.of !== undefined && !meetsCapabilityApi(manifest, RULESET_SOURCE_ROUNDS_MIN_CAPABILITY_API)) {
+          throw new Error(
+            `${where} counts "${one.condition}" on its source's turns and must declare capability API 1.119 or newer`,
+          );
+        }
         const api = RULESET_CONDITION_NUMBERS_MIN_CAPABILITY_API;
         if (appliesEndsNewly(one) && !meetsCapabilityApi(manifest, api)) {
           throw new Error(
@@ -1555,6 +5899,77 @@ function cellIssue(spec, value) {
         ? null
         : `is longer than ${spec.maxLength} characters`;
   }
+}
+
+/** Assert a ruleset's item catalogs, and report how many items they hold.
+ *
+ *  What an item may say is the Engine's schema to check in full; this holds the package to what the
+ *  catalog itself owns: the Capability API that reads items (for the block alone too), the `items`
+ *  block every name in one comes from, an item on every entry of an item catalog and on no other, and each item's category
+ *  being one that block declares. */
+export function assertRulesetItems(manifest, document, catalogSources = new Map()) {
+  const id = manifest?.id ?? "package";
+  // The block is read without a catalog too (coins, carrying, the words invented items use).
+  const blockApi = RULESET_ITEMS_MIN_CAPABILITY_API;
+  if (document?.items !== undefined && !meetsCapabilityApi(manifest, blockApi)) {
+    throw new Error(
+      `${id} declares an items block and must declare capability API ${blockApi.major}.${blockApi.minor} or newer`,
+    );
+  }
+  const catalogs = Array.isArray(document?.catalogs) ? document.catalogs : [];
+  const categories = new Set((document?.items?.categories ?? []).map((category) => category?.id));
+  let count = 0;
+  for (const catalog of catalogs) {
+    if (catalog?.holds !== "items") {
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+        if (entry?.item !== undefined) {
+          throw new Error(
+            `${id} catalog "${catalog?.id}" holds ${catalog?.holds ?? "rows"}, so entry "${entry.id}" cannot carry an item`,
+          );
+        }
+      }
+      continue;
+    }
+    const api = RULESET_ITEMS_MIN_CAPABILITY_API;
+    if (!meetsCapabilityApi(manifest, api)) {
+      throw new Error(`${id} ships items and must declare capability API ${api.major}.${api.minor} or newer`);
+    }
+    if (catalog.feeds !== undefined) throw new Error(`${id} catalog "${catalog.id}" holds items, so it feeds no list`);
+    if (!document.items) {
+      throw new Error(`${id} catalog "${catalog.id}" holds items, which need an items block to be written in`);
+    }
+    const entries = catalogEntryList(catalog, catalogSources);
+    // An asset this check cannot read is assertRulesetCatalogs' rejection to make.
+    if (entries === null) continue;
+    for (const entry of entries) {
+      const where = `${id} catalog "${catalog.id}" entry "${entry?.id}"`;
+      const item = entry?.item;
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        throw new Error(`${where} carries no item, and this catalog holds items`);
+      }
+      for (const applied of item.use?.applies ?? []) assertThisActionDuration(manifest, applied, undefined, where);
+      for (const key of ["worn", "carried"]) {
+        if (item[key]) assertTypedHides(manifest, document, item[key], `${where} ${key}`, true);
+        for (const modifier of item[key]?.modifiers ?? []) {
+          const issue = modifierIssue(modifier);
+          if (issue) throw new Error(`${where} ${key} ${issue}`);
+        }
+        if (item[key]?.modifiers)
+          assertDamageModifierGate(manifest, item[key], `${where} ${key}`, sheetNames(document));
+      }
+      // 1.628: an item use may carry needs, checked and gated with the newest.
+      // A use that asks for a save says its own number, or reads its holder's (1.269, a staff's).
+      const asksForSave = !!item.use?.save || !!item.use?.applies?.some((applied) => applied?.saveEnds);
+      if (asksForSave && item.use.saveDifficulty === undefined && item.use.sheetDifficulty === undefined)
+        throw new Error(`${where} item use asks for a save and needs saveDifficulty or sheetDifficulty`);
+      if (entry.rows !== undefined) throw new Error(`${where} has both rows and an item`);
+      if (!categories.has(item.category)) {
+        throw new Error(`${where} names unknown item category ${JSON.stringify(item.category)}`);
+      }
+      count += 1;
+    }
+  }
+  return count;
 }
 
 /** A creature's sheet, against the ruleset that declares it: every id is one the sheet declares,
@@ -1644,7 +6059,103 @@ function assertCreatureSheet(document, sheet, where, names, catalogSources) {
   }
 }
 
+function assertCreatureSpellcasting(manifest, creature, where, catalogs, catalogSources) {
+  const casting = creature.spellcasting;
+  if (casting === undefined) return;
+  const api = RULESET_CREATURE_SPELLS_MIN;
+  if (!meetsCapabilityApi(manifest, api)) {
+    throw new Error(`${where} carries spellcasting and must declare capability API ${api.major}.${api.minor} or newer`);
+  }
+  if (!casting || !Array.isArray(casting.spells) || casting.spells.length === 0) {
+    throw new Error(`${where} spellcasting needs a nonempty spells array`);
+  }
+  for (const key of ["saveDifficulty", "toHit"]) {
+    if (casting[key] !== undefined && !Number.isInteger(casting[key])) {
+      throw new Error(`${where} spellcasting ${key} must be a whole number`);
+    }
+  }
+  if (casting.slots !== undefined) {
+    const slots = casting.slots;
+    if (
+      !slots ||
+      typeof slots !== "object" ||
+      Array.isArray(slots) ||
+      Object.keys(slots).length === 0 ||
+      Object.entries(slots).some(
+        ([level, count]) => !/^[1-9]$/u.test(level) || !Number.isInteger(count) || count < 1 || count > 20,
+      )
+    ) {
+      throw new Error(`${where} spellcasting slots names levels 1 to 9, each 1 to 20 slots`);
+    }
+  }
+  if (casting.coven !== undefined) {
+    const coven = casting.coven;
+    if (!coven || typeof coven.id !== "string" || !coven.id.trim()) {
+      throw new Error(`${where} spellcasting coven needs an id`);
+    }
+    if (!Number.isInteger(coven.size) || coven.size < 2 || coven.size > 6) {
+      throw new Error(`${where} spellcasting coven size must be 2 to 6`);
+    }
+    if (!Number.isFinite(coven.within) || coven.within <= 0 || coven.within > RULESET_DISTANCE_MAX) {
+      throw new Error(`${where} spellcasting coven within must be a positive distance`);
+    }
+  }
+  const catalog = catalogs.find((candidate) => candidate.id === "spells" && !candidate.holds);
+  const entries = catalog ? catalogEntryList(catalog, catalogSources) : null;
+  for (const spell of casting.spells) {
+    const at = `${where} spellcasting spell ${JSON.stringify(spell?.entry)}`;
+    const entry =
+      typeof spell?.entry === "string" && spell.entry.startsWith("spells/")
+        ? entries?.find((candidate) => candidate.id === spell.entry.slice("spells/".length))
+        : undefined;
+    if (!entry) throw new Error(`${at} names no existing spells-catalog entry`);
+    if (spell.uses !== undefined) {
+      if (
+        !["day", "encounter"].includes(spell.uses?.per) ||
+        !Number.isInteger(spell.uses?.count) ||
+        spell.uses.count < 1
+      ) {
+        throw new Error(`${at} uses needs per day or encounter and count >= 1`);
+      }
+    }
+    if (spell.level !== undefined && (!Number.isInteger(spell.level) || spell.level < 1 || spell.level > 9)) {
+      throw new Error(`${at} level must be 1 to 9`);
+    }
+    if (spell.coven !== undefined && spell.coven !== true) {
+      throw new Error(`${at} coven must be true or left out`);
+    }
+    if (spell.coven && !casting.coven) throw new Error(`${at} needs a coven block`);
+    if (
+      spell.saveDifficulty !== undefined &&
+      (!Number.isInteger(spell.saveDifficulty) || spell.saveDifficulty < 1 || spell.saveDifficulty > 60)
+    ) {
+      throw new Error(`${at} saveDifficulty must be a whole number 1 to 60`);
+    }
+    if (spell.toHit !== undefined && (!Number.isInteger(spell.toHit) || spell.toHit < -50 || spell.toHit > 100)) {
+      throw new Error(`${at} toHit must be a whole number -50 to 100`);
+    }
+    if (creature.sheet === undefined) {
+      if (entry.mechanics?.save && casting.saveDifficulty === undefined) {
+        throw new Error(`${at} needs saveDifficulty without a sheet`);
+      }
+      if (entry.mechanics?.attackRoll && casting.toHit === undefined) {
+        throw new Error(`${at} needs toHit without a sheet`);
+      }
+    }
+  }
+}
+
 export function assertRulesetCreatures(manifest, document, catalogSources = new Map()) {
+  // Gated once everything older has been checked, so an older Engine's own refusal is the one named.
+  let grouped;
+  let cures;
+  let magical;
+  let keeps;
+  let resists;
+  let byAbility;
+  let selfTurn;
+  let reducing;
+  let draining;
   const id = manifest?.id ?? "package";
   const catalogs = Array.isArray(document?.catalogs) ? document.catalogs : [];
   const names = sheetNames(document);
@@ -1658,13 +6169,16 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
   const types = combat?.damageTypes
     ? new Set(combat.damageTypes.map((type) => String(type).trim().toLowerCase()))
     : null;
+  const itemTags = new Set((document?.items?.tags ?? []).map((tag) => tag?.id));
 
   let count = 0;
   for (const catalog of catalogs) {
     if (catalog?.holds !== "creatures") {
       for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
         if (entry?.creature) {
-          throw new Error(`${id} catalog "${catalog?.id}" holds rows, so entry "${entry.id}" cannot carry a creature`);
+          throw new Error(
+            `${id} catalog "${catalog?.id}" holds ${catalog?.holds ?? "rows"}, so entry "${entry.id}" cannot carry a creature`,
+          );
         }
       }
       continue;
@@ -1742,15 +6256,100 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
         if (!names.saves.has(save)) throw new Error(`${where} names unknown save ${JSON.stringify(save)}`);
       }
       for (const key of ["resist", "vulnerable", "immune"]) {
-        for (const type of creature[key] ?? []) {
+        for (const each of creature[key] ?? []) {
+          // A resistance or an immunity may say what gets through it (1.55): `{ type, except }`, the
+          // item tags a blow carries past it.
+          const qualified = key !== "vulnerable" && each !== null && typeof each === "object";
+          const type = qualified ? each.type : each;
           if (types && !types.has(String(type).trim().toLowerCase())) {
             throw new Error(`${where} is ${key} to unknown damage type ${JSON.stringify(type)}`);
           }
+          if (qualified) {
+            if (!Array.isArray(each.except) || each.except.length === 0 || each.except.length > 8) {
+              throw new Error(`${where} is ${key} to ${JSON.stringify(type)} except a list of 1 to 8 item tags`);
+            }
+            for (const tag of each.except) {
+              if (!itemTags.has(tag))
+                throw new Error(
+                  `${where} is ${key} to ${JSON.stringify(type)} except unknown item tag ${JSON.stringify(tag)}`,
+                );
+            }
+          }
+        }
+      }
+      if (creature.size !== undefined) {
+        if (!meetsCapabilityApi(manifest, RULESET_SIZES_MIN_CAPABILITY_API)) {
+          throw new Error(`${where} has a size and must declare capability API 1.103 or newer`);
+        }
+        const sizeIds = (combat?.sizes?.order ?? []).map((size) => size?.id);
+        if (!sizeIds.includes(creature.size))
+          throw new Error(`${where} has unknown size ${JSON.stringify(creature.size)}`);
+      }
+      // 1.600: only some foes pass through it, and it fills none of its space.
+      if (creature.passableBy !== undefined || creature.fillsSpace !== undefined) {
+        const pass = creature.passableBy;
+        const abilityIds = new Set([
+          ...(document?.sheet?.abilities ?? []).map((one) => one?.id),
+          ...Object.keys(creature.abilities ?? {}),
+        ]);
+        if (
+          (pass !== undefined &&
+            (!pass ||
+              typeof pass !== "object" ||
+              Array.isArray(pass) ||
+              Object.keys(pass).some((key) => !["ability", "above", "difficult"].includes(key)) ||
+              typeof pass.ability !== "string" ||
+              !abilityIds.has(pass.ability) ||
+              !Number.isInteger(pass.above) ||
+              pass.above < 0 ||
+              pass.above > 100 ||
+              (pass.difficult !== undefined && pass.difficult !== true))) ||
+          (creature.fillsSpace !== undefined && creature.fillsSpace !== false)
+        )
+          throw new Error(
+            `${where} passableBy is { ability, above: 0 to 100, difficult?: true }, and fillsSpace is false`,
+          );
+      }
+      if (creature.speeds !== undefined || creature.hover !== undefined) {
+        const speeds = creature.speeds;
+        if (speeds !== undefined) {
+          if (!speeds || typeof speeds !== "object" || Array.isArray(speeds) || Object.keys(speeds).length === 0) {
+            throw new Error(`${where} speeds name at least one way of moving`);
+          }
+          for (const [mode, feet] of Object.entries(speeds)) {
+            if (!RULESET_MOVE_MODES.includes(mode)) {
+              throw new Error(`${where} has unknown way of moving ${JSON.stringify(mode)}`);
+            }
+            if (typeof feet !== "number" || !Number.isFinite(feet) || feet <= 0 || feet > 10000) {
+              throw new Error(`${where} ${mode} speed is a number above 0, at most 10000`);
+            }
+          }
+        }
+        if (creature.hover !== undefined && creature.hover !== true)
+          throw new Error(`${where} has a hover that is not true`);
+        if (creature.hover && !speeds?.fly) throw new Error(`${where} hovers with no fly speed`);
+        if (!meetsCapabilityApi(manifest, RULESET_MOVE_MODES_MIN_CAPABILITY_API)) {
+          throw new Error(`${where} moves other ways than walking and must declare capability API 1.113 or newer`);
+        }
+        if (speeds?.fly && !meetsCapabilityApi(manifest, RULESET_FLYING_HEIGHT_MIN_CAPABILITY_API)) {
+          throw new Error(`${where} flies and must declare capability API 1.114 or newer for its height`);
+        }
+      }
+      if (creature.shield !== undefined) {
+        if (creature.shield !== true) throw new Error(`${where} has a shield that is not true`);
+        if (!meetsCapabilityApi(manifest, RULESET_DAMAGE_ALTERNATIVES_MIN_CAPABILITY_API)) {
+          throw new Error(`${where} carries a shield and must declare capability API 1.102 or newer`);
         }
       }
       for (const condition of creature.conditionImmunities ?? []) {
-        if (!names.conditions.has(condition)) {
+        if (names.conditions.has(condition) || names.kinds.has(condition)) continue;
+        if (!(combat?.levels ?? []).some((level) => level?.track === condition)) {
           throw new Error(`${where} is immune to unknown condition ${JSON.stringify(condition)}`);
+        }
+        if (!meetsCapabilityApi(manifest, RULESET_HEALTH_MAX_MIN_CAPABILITY_API)) {
+          throw new Error(
+            `${where} is immune to the track "${condition}" and must declare capability API 1.115 or newer`,
+          );
         }
       }
       // Its own side of a contest, one number per check the combat block declares.
@@ -1786,9 +6385,17 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
           `${where} carries ${creature.traits.length} traits, over the ${RULESET_CREATURE_MAX_TRAITS} limit`,
         );
       }
-      // A creature with a sheet does what its sheet's lists give it, so it may have no actions of its own.
-      const actions = creature.sheet !== undefined ? (creature.actions ?? []) : creature.actions;
-      const fewest = creature.sheet !== undefined ? 0 : 1;
+      assertCreatureSpellcasting(manifest, creature, where, catalogs, catalogSources);
+      // What it holds all fight (1.263): a balor's Fire Aura.
+      if (creature.keepsOn !== undefined) {
+        const issue = keepsOnIssue(creature.keepsOn, sheetNames(document).conditions);
+        if (issue) throw new Error(`${where} ${issue}`);
+        keeps ??= `${where} keeps conditions on all fight`;
+      }
+      // A sheet or a spell menu can supply the creature's combat options without printed actions.
+      const hasMenu = creature.sheet !== undefined || creature.spellcasting !== undefined;
+      const actions = hasMenu ? (creature.actions ?? []) : creature.actions;
+      const fewest = hasMenu || creature.mountCarries !== undefined ? 0 : 1;
       if (!Array.isArray(actions) || actions.length < fewest || actions.length > RULESET_CREATURE_MAX_ACTIONS) {
         throw new Error(
           `${where} carries ${fewest} to ${RULESET_CREATURE_MAX_ACTIONS} actions, not ${actions?.length}`,
@@ -1799,13 +6406,125 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
         if (byId.has(action?.id)) throw new Error(`${where} repeats the action id ${JSON.stringify(action.id)}`);
         byId.set(action?.id, action);
       }
+      // Actions naming one recharge group are spent together and come back on one roll (1.186), so they
+      // roll the same dice for the same faces, and a group is at least two of them.
+      const groups = new Map();
+      for (const action of actions) {
+        const group = action?.recharge?.group;
+        if (group === undefined) continue;
+        const at = `${where} action "${action.id}"`;
+        if (typeof group !== "string" || !/^[a-z][a-z0-9_]{0,63}$/u.test(group))
+          throw new Error(`${at} names the recharge group ${JSON.stringify(group)}, not an id`);
+        grouped ??= `${at} shares a recharge group`;
+        if (!groups.has(group)) groups.set(group, []);
+        groups.get(group).push(action);
+      }
+      for (const [group, members] of groups) {
+        if (members.length < 2) throw new Error(`${where} names the recharge group "${group}" on one action only`);
+        const roll = (action) => JSON.stringify([action.recharge.dice, action.recharge.from]);
+        if (members.some((action) => roll(action) !== roll(members[0])))
+          throw new Error(`${where} recharge group "${group}" rolls different dice or faces`);
+      }
       if (creature.signaturePoints === undefined && actions.some((action) => action.signature)) {
         throw new Error(`${where} buys an action with points but declares no signaturePoints`);
       }
+      // 1.317: failed saves it may turn into successes, once each a fight.
+      if (creature.legendaryResistance !== undefined) {
+        if (
+          !Number.isInteger(creature.legendaryResistance) ||
+          creature.legendaryResistance < 1 ||
+          creature.legendaryResistance > 20
+        )
+          throw new Error(`${where} legendaryResistance is a whole number from 1 to 20`);
+        resists ??= `${where} has Legendary Resistance`;
+      }
       for (const action of actions) {
         const at = `${where} action "${action.id}"`;
+        assertSenseList(manifest, document, action.needs, at, "needs");
         if (!budgets.has(action.budget))
           throw new Error(`${at} spends unknown budget ${JSON.stringify(action.budget)}`);
+        if (action.heal !== undefined) {
+          if (!meetsCapabilityApi(manifest, RULESET_CREATURE_HEAL_MIN)) {
+            throw new Error(`${at} heals and must declare capability API 1.121 or newer`);
+          }
+          if (["damage", "toHit", "save", "area", "sequence"].some((key) => action[key] !== undefined)) {
+            throw new Error(`${at} heals, so it carries no damage, toHit, save, area or sequence`);
+          }
+          // On itself (a unicorn's Heal Self), or on whom it picks.
+          if (action.self ? action.targets !== undefined : !["ally", "any"].includes(action.targets)) {
+            throw new Error(`${at} heals itself (self) or targets "ally" or "any"`);
+          }
+        }
+        // A stat block's own qualities (1.262), item tags the ruleset declares.
+        if (action.qualities !== undefined) {
+          const tags = new Set((document?.items?.tags ?? []).map((tag) => tag?.id));
+          if (
+            !Array.isArray(action.qualities) ||
+            action.qualities.length < 1 ||
+            action.qualities.length > 8 ||
+            new Set(action.qualities).size !== action.qualities.length ||
+            action.qualities.some((tag) => !tags.has(tag))
+          )
+            throw new Error(`${at} qualities are 1 to 8 of the ruleset's item tags, each once`);
+          magical ??= `${at} carries qualities`;
+        }
+        // A stat block's cure (1.261): Healing Touch.
+        if (action.ends !== undefined) {
+          const ends = action.ends;
+          const known = sheetNames(document);
+          if (
+            !ends ||
+            typeof ends !== "object" ||
+            Object.keys(ends).some((key) => !["conditions", "count", "from"].includes(key)) ||
+            !Array.isArray(ends.conditions) ||
+            ends.conditions.length < 1 ||
+            ends.conditions.some((one) => !known.conditions.has(one) && !known.kinds.has(one)) ||
+            (ends.count !== undefined && (!Number.isInteger(ends.count) || ends.count < 1 || ends.count > 16))
+          )
+            throw new Error(`${at} ends { conditions: known conditions or kinds, count? }`);
+          if (!["ally", "any"].includes(action.targets)) throw new Error(`${at} cures, so it targets "ally" or "any"`);
+          cures ??= `${at} cures`;
+        }
+        // Other amounts in place of the first (1.102): two-handed, or at a share of its health.
+        if (action.damage?.alternatives !== undefined) {
+          const alternatives = action.damage.alternatives;
+          if (!meetsCapabilityApi(manifest, RULESET_DAMAGE_ALTERNATIVES_MIN_CAPABILITY_API)) {
+            throw new Error(`${at} deals alternative damage and must declare capability API 1.102 or newer`);
+          }
+          if (!Array.isArray(alternatives) || alternatives.length === 0 || alternatives.length > 4) {
+            throw new Error(`${at} has alternatives that are not a list of 1 to 4`);
+          }
+          for (const alternative of alternatives) {
+            const when = alternative?.when;
+            const share = when?.selfHealthAtMost;
+            if (when !== "twoHanded" && !(typeof share === "number" && share > 0 && share < 1)) {
+              throw new Error(
+                `${at} has an alternative whose when is neither "twoHanded" nor a health share between 0 and 1`,
+              );
+            }
+            if (alternative.dice !== undefined && !RULESET_CATALOG_DICE_PATTERN.test(alternative.dice)) {
+              throw new Error(
+                `${at} has an alternative rolling ${JSON.stringify(alternative.dice)}, which is not dice a table has`,
+              );
+            }
+            if (alternative.dice === undefined && alternative.flat === undefined) {
+              throw new Error(`${at} has an alternative that deals nothing`);
+            }
+          }
+        }
+        // What the blow carries past a resistance's `except` (1.101), the ruleset's own item tags.
+        if (action.damage?.qualities !== undefined) {
+          const qualities = action.damage.qualities;
+          if (!meetsCapabilityApi(manifest, RULESET_BLOW_QUALITIES_MIN_CAPABILITY_API)) {
+            throw new Error(`${at} carries qualities and must declare capability API 1.101 or newer`);
+          }
+          if (!Array.isArray(qualities) || qualities.length === 0 || qualities.length > 8) {
+            throw new Error(`${at} carries qualities that are not a list of 1 to 8 item tags`);
+          }
+          for (const tag of qualities) {
+            if (!itemTags.has(tag)) throw new Error(`${at} carries unknown item tag ${JSON.stringify(tag)}`);
+          }
+        }
         if (action.damage?.type && types && !types.has(String(action.damage.type).trim().toLowerCase())) {
           throw new Error(`${at} deals unknown damage type ${JSON.stringify(action.damage.type)}`);
         }
@@ -1871,17 +6590,218 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
           if (area.friendlyFire !== undefined && typeof area.friendlyFire !== "boolean") {
             throw new Error(`${at} says friendlyFire is ${JSON.stringify(area.friendlyFire)}, not true or false`);
           }
+          // A box (1.177). A wall only ever stays, so a creature action lays one only with a zone, that
+          // stays where it is laid (1.728, gated in the sheet hooks).
+          if (area.shape === "wall") {
+            if (
+              !action.zone ||
+              typeof action.zone !== "object" ||
+              action.zone.anchor === "caster" ||
+              action.zone.move ||
+              action.zone.drift
+            )
+              throw new Error(
+                `${at} is a wall, which a creature action lays only with a zone that stays where it is laid`,
+              );
+          } else if (area.ring !== undefined || area.ringOnly !== undefined)
+            throw new Error(`${at} lays a ring, which only a wall is`);
+          if (
+            area.ring !== undefined &&
+            (!Number.isFinite(area.ring) || area.ring <= 0 || area.ring > RULESET_DISTANCE_MAX)
+          )
+            throw new Error(`${at} has a ring ${JSON.stringify(area.ring)} across, not a size above 0`);
+          if (area.ringOnly !== undefined && (area.ringOnly !== true || area.ring === undefined))
+            throw new Error(`${at} ringOnly is true, on a wall with a ring`);
+          if (area.shape === "box" && !meetsCapabilityApi(manifest, RULESET_WALLS_MIN))
+            throw new Error(`${at} lands in a box and must declare capability API 1.177 or newer`);
+          // A line wider than one cell (1.128).
+          if (area.width !== undefined) {
+            if (area.shape !== "line" && area.shape !== "wall")
+              throw new Error(`${at} gives a ${area.shape} a width, which only a line or a wall has`);
+            if (!Number.isFinite(area.width) || area.width <= 0 || area.width > area.size) {
+              throw new Error(
+                `${at} has a line ${JSON.stringify(area.width)} wide, not a width above 0 and at most its length`,
+              );
+            }
+            if (!meetsCapabilityApi(manifest, RULESET_LINE_WIDTH_MIN)) {
+              throw new Error(`${at} has a line wider than one cell and must declare capability API 1.128 or newer`);
+            }
+          }
+        }
+        // 1.203: the damage taken also lowers the maximum, on a failed save of its own.
+        if (action.reducesMax !== undefined) {
+          const lowers = action.reducesMax;
+          const keys = ["save", "difficulty", "lasting", "onFailedSave", "damageType", "heals"];
+          const ownSave = lowers?.save !== undefined || lowers?.difficulty !== undefined;
+          if (
+            !lowers ||
+            typeof lowers !== "object" ||
+            Object.keys(lowers).some((key) => !keys.includes(key)) ||
+            (ownSave &&
+              (!names.saves.has(lowers.save) ||
+                !Number.isInteger(lowers.difficulty) ||
+                lowers.difficulty < 1 ||
+                lowers.difficulty > 1000)) ||
+            (ownSave && lowers.onFailedSave !== undefined) ||
+            (lowers.onFailedSave !== undefined && (lowers.onFailedSave !== true || action.save === undefined)) ||
+            (lowers.damageType !== undefined &&
+              types !== null &&
+              !types.has(String(lowers.damageType).toLowerCase())) ||
+            (lowers.heals !== undefined && lowers.heals !== true) ||
+            (lowers.lasting !== undefined && lowers.lasting !== true)
+          )
+            throw new Error(
+              `${at} reducesMax names a save and a difficulty or neither, and its type, healing or lasting`,
+            );
+          if (!ownSave || Object.keys(lowers).some((key) => ["onFailedSave", "damageType", "heals"].includes(key)))
+            draining ??= `${at} reducesMax of 1.235`;
+          if (action.damage === undefined || !combat?.health || "track" in combat.health)
+            throw new Error(`${at} reducesMax lowers the maximum by damage, in a fight that keeps health in points`);
+          reducing ??= `${at} lowers a health maximum`;
+        }
+        // 1.586: on a creature built from its caller, the caller's number kept off, and more for each step.
+        if (action.callerAdds !== undefined || action.perCallerStep !== undefined) {
+          const step = action.perCallerStep;
+          if (
+            (action.callerAdds !== undefined && action.callerAdds !== false) ||
+            (step !== undefined &&
+              (!step ||
+                typeof step !== "object" ||
+                Object.keys(step).some((key) => !["dice", "flat"].includes(key)) ||
+                (step.dice === undefined && step.flat === undefined))) ||
+            action.damage === undefined
+          )
+            throw new Error(
+              `${at} callerAdds is false and perCallerStep names dice or a flat amount, on an action that deals damage`,
+            );
+        }
+        // 1.235: aimed only at whoever holds one of these, or one the creature itself put on them.
+        if (action.targetHolds !== undefined) {
+          const holds = action.targetHolds;
+          const list = (one) =>
+            one === undefined ||
+            (Array.isArray(one) &&
+              one.length >= 1 &&
+              one.length <= 8 &&
+              new Set(one).size === one.length &&
+              one.every((condition) => names.conditions.has(condition)));
+          if (
+            !holds ||
+            typeof holds !== "object" ||
+            Object.keys(holds).some((key) => !["conditions", "fromSelf"].includes(key)) ||
+            (holds.conditions === undefined && holds.fromSelf === undefined) ||
+            !list(holds.conditions) ||
+            !list(holds.fromSelf)
+          )
+            throw new Error(`${at} targetHolds names the sheet's conditions, from anyone or from the creature itself`);
+          draining ??= `${at} targetHolds`;
+        }
+        // A push on a creature action, on a failed save where it has one (1.184).
+        if (action.push !== undefined) {
+          if (!Number.isFinite(action.push) || action.push <= 0 || action.push > RULESET_DISTANCE_MAX)
+            throw new Error(`${at} push is a distance above 0`);
+          if (!meetsCapabilityApi(manifest, RULESET_CREATURE_PUSHES_MIN))
+            throw new Error(`${at} pushes and must declare capability API 1.184 or newer`);
+        }
+        // The ability a stat block's attack is made with (1.189), for a modifier narrowed to one.
+        if (action.ability !== undefined) {
+          if (!names.abilities.has(action.ability))
+            throw new Error(`${at} is made with unknown ability ${JSON.stringify(action.ability)}`);
+          if (action.toHit === undefined) throw new Error(`${at} names an ability but rolls no attack`);
+          byAbility ??= `${at} names the ability it attacks with`;
+        }
+        // What a blow adds after a straight run at its target (1.186).
+        if (action.charge !== undefined) {
+          const charge = action.charge;
+          grouped ??= `${at} charges`;
+          if (!charge || typeof charge !== "object" || Array.isArray(charge))
+            throw new Error(`${at} has a charge that is not an object`);
+          // 1.546: then, what follows (gated at the end).
+          const known = new Set(["atLeast", "plus", "save", "push", "applies", "then"]);
+          for (const key of Object.keys(charge))
+            if (!known.has(key)) throw new Error(`${at} charge has the unknown key ${JSON.stringify(key)}`);
+          if (charge.then !== undefined) {
+            const then = charge.then;
+            const budgetIds = new Set((document?.combat?.economy?.budgets ?? []).map((one) => one?.id));
+            if (
+              !then ||
+              typeof then !== "object" ||
+              Object.keys(then).some((key) => !["action", "budget", "targetHolds"].includes(key)) ||
+              !(entry?.creature?.actions ?? []).some((one) => one?.id === then.action) ||
+              !budgetIds.has(then.budget) ||
+              (then.targetHolds !== undefined &&
+                (!Array.isArray(then.targetHolds) || then.targetHolds.length < 1 || then.targetHolds.length > 4))
+            )
+              throw new Error(
+                `${at} charge then is { action: one of its own (itself since 1.574), budget: a declared one, targetHolds?: 1 to 4 conditions }`,
+              );
+          }
+          if (!Number.isFinite(charge.atLeast) || charge.atLeast <= 0 || charge.atLeast > RULESET_DISTANCE_MAX)
+            throw new Error(`${at} charge needs a run atLeast a distance above 0`);
+          if (!charge.plus && charge.push === undefined && !charge.applies && !charge.then)
+            throw new Error(
+              `${at} charge adds damage ("plus"), a "push", conditions ("applies") or what follows ("then")`,
+            );
+          if (action.toHit === undefined && !action.autoHit)
+            throw new Error(`${at} charges, so it rolls to hit or simply lands`);
+          if (action.area !== undefined || (action.targetCount ?? 1) !== 1)
+            throw new Error(`${at} charges at one target, with no area`);
+          if (charge.save !== undefined) {
+            if (action.save !== undefined) throw new Error(`${at} already has a save, so its charge adds none`);
+            if (!names.saves.has(charge.save?.save))
+              throw new Error(`${at} charge rolls unknown save ${JSON.stringify(charge.save?.save)}`);
+            if (
+              !Number.isInteger(charge.save.difficulty) ||
+              charge.save.difficulty < 0 ||
+              charge.save.difficulty > 1000
+            )
+              throw new Error(`${at} charge save difficulty is a whole number from 0 to 1000`);
+          }
+          if (
+            charge.push !== undefined &&
+            (!Number.isFinite(charge.push) || charge.push <= 0 || charge.push > RULESET_DISTANCE_MAX)
+          )
+            throw new Error(`${at} charge push is a distance above 0`);
+          if (
+            charge.plus !== undefined &&
+            (!Array.isArray(charge.plus) || charge.plus.length < 1 || charge.plus.length > 4)
+          )
+            throw new Error(`${at} charge plus is a list of 1 to 4 damage clauses`);
+          for (const clause of charge.plus ?? [])
+            if (typeof clause?.dice !== "string" || typeof clause?.type !== "string")
+              throw new Error(`${at} charge plus clause names its dice and type`);
+          if (
+            charge.applies !== undefined &&
+            (!Array.isArray(charge.applies) || charge.applies.length < 1 || charge.applies.length > 4)
+          )
+            throw new Error(`${at} charge applies a list of 1 to 4 conditions`);
+          for (const entry of charge.applies ?? [])
+            if (!names.conditions.has(entry?.condition))
+              throw new Error(`${at} charge applies unknown condition ${JSON.stringify(entry?.condition)}`);
         }
         const applies = action.applies ?? [];
         if (applies.length > RULESET_CREATURE_MAX_APPLIES) {
           throw new Error(`${at} applies ${applies.length} conditions, over the ${RULESET_CREATURE_MAX_APPLIES} limit`);
         }
         for (const entryApplies of applies) {
+          assertThisActionDuration(manifest, entryApplies, action.reaction, at);
           if (!names.conditions.has(entryApplies?.condition)) {
             throw new Error(`${at} applies unknown condition ${JSON.stringify(entryApplies?.condition)}`);
           }
           if (entryApplies.duration === "until-save" && !entryApplies.saveEnds) {
             throw new Error(`${at} applies "${entryApplies.condition}" until a save it does not name`);
+          }
+          // A hold's own escape DC (1.103), rolled by a contest that breaks free of that condition.
+          if (entryApplies.escapeDc !== undefined) {
+            if (!meetsCapabilityApi(manifest, RULESET_SIZES_MIN_CAPABILITY_API)) {
+              throw new Error(`${at} gives an escape DC and must declare capability API 1.103 or newer`);
+            }
+            if (!Number.isInteger(entryApplies.escapeDc) || entryApplies.escapeDc < 1 || entryApplies.escapeDc > 1000) {
+              throw new Error(`${at} gives an escape DC that is not a whole number from 1 to 1000`);
+            }
+            if (!(combat?.contests ?? []).some((contest) => contest?.from?.holding === entryApplies.condition)) {
+              throw new Error(`${at} gives "${entryApplies.condition}" an escape DC, but no contest breaks free of it`);
+            }
           }
           if (entryApplies.saveEnds && !names.saves.has(entryApplies.saveEnds.save)) {
             throw new Error(
@@ -1890,6 +6810,14 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
           }
           const endingIssue = appliesEndingIssue(entryApplies);
           if (endingIssue) throw new Error(`${at} ${endingIssue}`);
+          if (
+            entryApplies.duration?.of !== undefined &&
+            !meetsCapabilityApi(manifest, RULESET_SOURCE_ROUNDS_MIN_CAPABILITY_API)
+          ) {
+            throw new Error(
+              `${at} counts "${entryApplies.condition}" on its source's turns and must declare capability API 1.119 or newer`,
+            );
+          }
           const endsApi = RULESET_CONDITION_NUMBERS_MIN_CAPABILITY_API;
           if (appliesEndsNewly(entryApplies) && !meetsCapabilityApi(manifest, endsApi)) {
             throw new Error(
@@ -1912,8 +6840,17 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
           if (!reaction || typeof reaction !== "object" || Array.isArray(reaction)) {
             throw new Error(`${at} has a reaction of ${JSON.stringify(reaction)}, not a moment`);
           }
-          const issue = reactionMomentIssue(reaction, catalogIds);
+          const issue = reactionMomentIssue(reaction, catalogIds, names.saves);
           if (issue) throw new Error(`${at} ${issue}`);
+          if (reaction.above && !creature.sheet && reaction.above.check?.const === undefined) {
+            throw new Error(`${at} has no sheet, so its check above is written { "const": n }`);
+          }
+          const needs = reactionMomentApi(reaction, action.targetCount);
+          if (needs.minor >= 116 && !meetsCapabilityApi(manifest, needs)) {
+            throw new Error(
+              `${at} answers as an older Engine cannot and must declare capability API ${needs.major}.${needs.minor} or newer`,
+            );
+          }
           // A signature action is bought between turns, and a reaction is taken at its moment.
           if (action.signature) throw new Error(`${at} is a reaction, so it is not bought with points as well`);
         }
@@ -1924,6 +6861,8 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
               throw new Error(`${at} lands on the creature itself, so it takes no ${key}`);
             }
           }
+          // 1.197: one taken on the creature's own turn lands on it too, not only a reaction.
+          if (action.reaction === undefined) selfTurn ??= `${at} acts on the creature itself on its turn`;
         }
         // A save with nothing to be rolled against is a save everybody passes.
         if (
@@ -1971,11 +6910,314 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
           if (step.times !== undefined && (!Number.isInteger(step.times) || step.times < 1 || step.times > 10)) {
             throw new Error(`${at} repeats "${step.action}" ${JSON.stringify(step.times)} times, not 1 to 10`);
           }
+          // 1.643: rolled for, made on an earlier step's hit, or left out.
+          if (step.dice !== undefined) {
+            const { count, sides } = step.dice ?? {};
+            if (
+              !Number.isInteger(count) ||
+              count < 1 ||
+              count > 10 ||
+              !Number.isInteger(sides) ||
+              sides < 2 ||
+              sides > 1000 ||
+              Object.keys(step.dice).some((key) => !["count", "sides"].includes(key)) ||
+              (step.times !== undefined && step.times !== 1) ||
+              step.perHead !== undefined
+            )
+              throw new Error(
+                `${at} rolls "${step.action}" as dice { count 1-10, sides 2-1000 }, not beside times or perHead`,
+              );
+          }
+          const place = action.sequence.indexOf(step);
+          if (step.ifHit !== undefined && (!Number.isInteger(step.ifHit) || step.ifHit < 0 || step.ifHit >= place))
+            throw new Error(`${at} makes "${step.action}" ifHit an earlier step's place, counted from 0`);
+          if (step.optional !== undefined && step.optional !== true)
+            throw new Error(`${at} step optional is true or left out`);
         }
+        if (action.sequence.every((step) => step.optional === true))
+          throw new Error(`${at} leaves every step optional`);
       }
     }
   }
+  if (grouped && !meetsCapabilityApi(manifest, RULESET_GROUPS_MIN))
+    throw new Error(`${grouped} and must declare capability API 1.186 or newer`);
+  if (byAbility && !meetsCapabilityApi(manifest, RULESET_MARKS_MIN))
+    throw new Error(`${byAbility} and must declare capability API 1.189 or newer`);
+  if (selfTurn && !meetsCapabilityApi(manifest, RULESET_DICE_TIMES_MIN))
+    throw new Error(`${selfTurn} and must declare capability API 1.197 or newer`);
+  if (reducing && !meetsCapabilityApi(manifest, RULESET_REDUCES_MAX_MIN))
+    throw new Error(`${reducing} and must declare capability API 1.203 or newer`);
+  if (draining && !meetsCapabilityApi(manifest, RULESET_DRAINS_MIN))
+    throw new Error(`${draining} and must declare capability API 1.235 or newer`);
+  if (cures && !meetsCapabilityApi(manifest, RULESET_DISEASE_STAGES_MIN))
+    throw new Error(`${cures} and must declare capability API 1.261 or newer`);
+  if (magical && !meetsCapabilityApi(manifest, RULESET_CREATURE_QUALITIES_MIN))
+    throw new Error(`${magical} and must declare capability API 1.262 or newer`);
+  if (keeps && !meetsCapabilityApi(manifest, RULESET_AURAS_MIN))
+    throw new Error(`${keeps} and must declare capability API 1.263 or newer`);
+  if (resists && !meetsCapabilityApi(manifest, RULESET_LEGENDARY_RESISTANCE_MIN))
+    throw new Error(`${resists} and must declare capability API 1.317 or newer`);
   return count;
+}
+
+/** The sheet's migrations (1.77), read as the Engine reads them: each hop once and below the sheet's
+ *  version; what a step writes to is on the sheet and what a rename or a live route reads from is not;
+ *  a rename is followed through the renames after it, and into a route that reads it. A rest that
+ *  shares a pool group's fraction is gated at 1.77 here too. Returns whether the sheet has any
+ *  migrations. */
+export function assertRulesetSheetMigrations(manifest, document) {
+  const id = manifest?.id ?? "package";
+  const sheet = document?.sheet;
+  const migrations = sheet?.migrations;
+  const api = RULESET_SHEET_MIGRATIONS_MIN_CAPABILITY_API;
+  // A rest that shares a pool group's fraction over its pools is 1.77's too: a new key on the strict
+  // restore step.
+  const sharedRest = (document?.rests ?? []).some((rest) =>
+    (rest?.restore ?? []).some((step) => step?.shared !== undefined),
+  );
+  if (sharedRest && !meetsCapabilityApi(manifest, api)) {
+    throw new Error(
+      `${id} has a rest that shares a pool group's fraction and must declare capability API ${api.major}.${api.minor} or newer`,
+    );
+  }
+  // 1.335: dice a rest spends to heal; 1.337: a list of them, one per pool.
+  const pools = new Set((sheet?.live?.pools ?? []).map((pool) => pool?.id));
+  for (const rest of document?.rests ?? []) {
+    if (rest?.dice === undefined) continue;
+    const where = `${id} rest "${rest?.id}" dice`;
+    const list = Array.isArray(rest.dice);
+    const entries = list ? rest.dice : [rest.dice];
+    if (entries.length < 1 || entries.length > 16) throw new Error(`${where} is 1 to 16 entries`);
+    const seen = new Set();
+    entries.forEach((entry, index) => {
+      const at = list ? `${where} entry ${index + 1}` : where;
+      const keys = Object.keys(entry ?? {});
+      if (
+        // "times", what each die heals multiplied, since 1.688 (gated with the sheet hooks).
+        keys.some((key) => !["pool", "die", "add", "times", "heals", "extra"].includes(key)) ||
+        (entry.times !== undefined &&
+          (!entry.times || typeof entry.times !== "object" || Array.isArray(entry.times))) ||
+        !pools.has(entry?.pool) ||
+        !pools.has(entry?.heals) ||
+        seen.has(entry.pool) ||
+        typeof entry?.die !== "object" ||
+        (entry.extra !== undefined &&
+          (typeof entry.extra?.die !== "object" ||
+            Object.keys(entry.extra).some((key) => !["die", "add"].includes(key))))
+      )
+        throw new Error(
+          `${at} is { pool, die, add?, heals, extra?: { die, add? } } on the sheet's own pools, each pool once`,
+        );
+      if (list && index > 0 && entry.extra !== undefined)
+        throw new Error(`${at} has an extra die, which only the first entry's gives`);
+      seen.add(entry.pool);
+    });
+    const need = list ? RULESET_REST_DICE_LIST_MIN : RULESET_REST_DICE_MIN;
+    if (!meetsCapabilityApi(manifest, need))
+      throw new Error(`${where} and must declare capability API ${need.major}.${need.minor} or newer`);
+  }
+  if (migrations === undefined) return false;
+  if (!meetsCapabilityApi(manifest, api)) {
+    throw new Error(
+      `${id} says how older sheets read on its sheet and must declare capability API ${api.major}.${api.minor} or newer`,
+    );
+  }
+  if (!Array.isArray(migrations) || migrations.length < 1 || migrations.length > 32) {
+    throw new Error(`${id} sheet migrations are a list of 1 to 32 hops`);
+  }
+  const ids = (list) => new Set((list ?? []).map((entry) => entry?.id));
+  const current = {
+    ability: ids(sheet.abilities),
+    skill: ids(sheet.skills),
+    save: ids(sheet.saves),
+    field: ids(sheet.fields),
+    pool: ids(sheet.live?.pools),
+    track: ids(sheet.live?.tracks),
+  };
+  const fieldById = new Map((sheet.fields ?? []).map((field) => [field?.id, field]));
+  const seen = new Set();
+  for (const hop of migrations) {
+    if (!Number.isInteger(hop?.from) || hop.from < 1 || hop.from >= sheet.version) {
+      throw new Error(
+        `${id} sheet migration from ${JSON.stringify(hop?.from)} is not a version below ${sheet.version}`,
+      );
+    }
+    if (seen.has(hop.from)) throw new Error(`${id} has two sheet migrations from version ${hop.from}`);
+    seen.add(hop.from);
+    if (!Array.isArray(hop.steps) || hop.steps.length < 1 || hop.steps.length > 64) {
+      throw new Error(`${id} sheet migration from ${hop.from} takes 1 to 64 steps`);
+    }
+  }
+  const ordered = [...migrations].sort((a, b) => a.from - b.from).flatMap((hop) => hop.steps);
+  const renamedFields = new Set(ordered.flatMap((step) => (step?.rename === "field" ? [step.from] : [])));
+  const fieldEnd = (start, position) => {
+    let end = start;
+    for (const later of ordered.slice(position + 1)) {
+      if (later?.rename === "field" && later.from === end) end = later.to;
+    }
+    return end;
+  };
+  ordered.forEach((step, position) => {
+    const where = `${id} sheet migration step ${JSON.stringify(step)}`;
+    if (step?.rename !== undefined) {
+      const kind = step.rename;
+      if (!["ability", "skill", "save", "field"].includes(kind)) throw new Error(`${where} renames an unknown kind`);
+      if (current[kind].has(step.from)) throw new Error(`${where} reads "${step.from}", still a ${kind} of the sheet`);
+      let end = step.to;
+      for (const later of ordered.slice(position + 1)) {
+        if (later?.rename === kind && later.from === end) end = later.to;
+      }
+      const routedOn = kind === "field" && ordered.slice(position + 1).some((later) => later?.route === end);
+      if (!current[kind].has(end) && !routedOn)
+        throw new Error(`${where} ends at "${end}", not a ${kind} of the sheet`);
+    } else if (step?.route !== undefined) {
+      if (!current.field.has(step.by) && !renamedFields.has(step.by)) {
+        throw new Error(`${where} reads the text of unknown field "${step.by}"`);
+      }
+      if (!Array.isArray(step.cases) || step.cases.length < 1 || step.cases.length > 32) {
+        throw new Error(`${where} has 1 to 32 cases`);
+      }
+      for (const target of [...step.cases.map((entry) => entry?.to), step.else]) {
+        const end = fieldEnd(target, position);
+        const field = fieldById.get(end);
+        if (!field) throw new Error(`${where} sends a value to unknown field "${end}"`);
+        const empty = field.default === undefined || field.default === 0 || field.default === "";
+        if (!["number", "text", "longtext"].includes(field.type) || !empty) {
+          throw new Error(`${where} sends a value to "${end}", which is not a number or text field that starts empty`);
+        }
+      }
+    } else if (step?.routeLive !== undefined) {
+      const kind = step.routeLive;
+      if (kind !== "pool" && kind !== "track") throw new Error(`${where} routes an unknown kind`);
+      if (current[kind].has(step.from)) throw new Error(`${where} reads "${step.from}", still a ${kind} of the sheet`);
+      const cases = Array.isArray(step.cases) ? step.cases : [];
+      if (cases.length < 1 || new Set(cases).size !== cases.length) {
+        throw new Error(`${where} lists 1 or more cases, each once`);
+      }
+      for (const target of [...cases, step.else]) {
+        if (!current[kind].has(target)) throw new Error(`${where} sends a value to unknown ${kind} "${target}"`);
+      }
+    } else if (step?.setColumn !== undefined) {
+      if (!meetsCapabilityApi(manifest, RULESET_SET_COLUMN_MIN)) {
+        throw new Error(`${where} sets a list column and must declare capability API 1.794 or newer`);
+      }
+      const { list: listId, where: match, column, to, ...rest } = step.setColumn ?? {};
+      if (Object.keys(rest).length) throw new Error(`${where} has a key setColumn does not take`);
+      const list = (sheet.lists ?? []).find((entry) => entry?.id === listId);
+      if (!list) throw new Error(`${where} names unknown list "${listId}"`);
+      const columns = new Map((list.columns ?? []).map((entry) => [entry?.id, entry]));
+      if (!columns.has(column)) throw new Error(`${where} sets unknown column "${column}" of "${listId}"`);
+      const values = columns.get(column).values;
+      if (Array.isArray(values) && !values.includes(to))
+        throw new Error(`${where} sets "${column}" to a value it does not offer`);
+      const keys = Object.keys(match ?? {});
+      if (keys.length < 1 || keys.length > 8) throw new Error(`${where} matches rows by 1 to 8 columns`);
+      for (const key of keys) {
+        if (!columns.has(key)) throw new Error(`${where} matches by unknown column "${key}" of "${listId}"`);
+        if (!Array.isArray(match[key]) || match[key].length < 1 || match[key].length > 32)
+          throw new Error(`${where} lists 1 to 32 values for "${key}"`);
+      }
+    } else {
+      throw new Error(`${where} is not a rename, a route or a live route, nor a column set`);
+    }
+  });
+  return true;
+}
+
+/** Starting gear: gated at 1.78, every item it names one of the package's items and never a service,
+ *  read from the catalog FILE too, which the Engine cannot do when it reads the ruleset alone; its
+ *  coins the items block's own, and its `fits` a value the sheet has. Returns how many it offers. */
+export function assertRulesetStartingGear(manifest, document, catalogSources = new Map()) {
+  const id = manifest?.id ?? "package";
+  const gear = document?.items?.startingGear;
+  if (gear === undefined) return 0;
+  const api = RULESET_STARTING_GEAR_MIN_CAPABILITY_API;
+  if (!meetsCapabilityApi(manifest, api)) {
+    throw new Error(`${id} offers starting gear and must declare capability API ${api.major}.${api.minor} or newer`);
+  }
+  if (!Array.isArray(gear)) throw new Error(`${id} starting gear is not a list`);
+  const catalogs = new Map((document.catalogs ?? []).map((catalog) => [catalog?.id, catalog]));
+  const units = new Set(
+    (document.items.currencies ?? []).flatMap((family) => (family?.units ?? []).map((unit) => unit?.id)),
+  );
+  const names = sheetNames(document);
+  const checkItem = (ref, where) => {
+    const [catalogId, entryId, ...rest] = typeof ref === "string" ? ref.split("/") : [];
+    const catalog = catalogs.get(catalogId);
+    if (!entryId || rest.length > 0 || catalog?.holds !== "items") {
+      throw new Error(`${where} names ${JSON.stringify(ref)}, which is no item catalog's entry`);
+    }
+    const entries = catalogEntryList(catalog, catalogSources);
+    const entry = entries?.find((each) => each?.id === entryId);
+    if (entries && !entry) throw new Error(`${where} names ${JSON.stringify(ref)}, which that catalog does not hold`);
+    if (entry?.item?.service)
+      throw new Error(`${where} names ${JSON.stringify(ref)}, a service, which is never carried`);
+  };
+  const checkLine = (line, where) => {
+    if (line?.item !== undefined) checkItem(line.item, where);
+    for (const ref of line?.oneOf ?? []) checkItem(ref, where);
+    if (line?.coins !== undefined && !units.has(line.coins)) {
+      throw new Error(`${where} pays in unknown coin ${JSON.stringify(line.coins)}`);
+    }
+  };
+  gear.forEach((each, gearIndex) => {
+    const where = `${id} starting gear "${each?.id ?? gearIndex}"`;
+    if (each?.fits !== undefined) {
+      const fits = valueRefIssue(each.fits?.value, names);
+      if (fits) throw new Error(`${where} fits by a value that ${fits}`);
+      const unknown = Object.keys(each.fits).find((key) => key !== "value" && key !== "atLeast");
+      if (unknown !== undefined) throw new Error(`${where} fits has the unknown key ${JSON.stringify(unknown)}`);
+      if (typeof each.fits.atLeast !== "number" || !Number.isFinite(each.fits.atLeast)) {
+        throw new Error(`${where} fits needs a finite number atLeast`);
+      }
+    }
+    (each?.lines ?? []).forEach((line, index) => checkLine(line, `${where} line ${index}`));
+    (each?.choices ?? []).forEach((choice, choiceIndex) =>
+      (choice?.options ?? []).forEach((option, optionIndex) =>
+        (option?.lines ?? []).forEach((line, index) =>
+          checkLine(line, `${where} choice ${choiceIndex} option ${optionIndex} line ${index}`),
+        ),
+      ),
+    );
+  });
+  return gear.length;
+}
+
+/** Assert a ruleset's poses (Capability API 1.786): who the art draws sneaking, and who kneels to cast.
+ *  Read only by the art, never by a rule. Returns whether the file has any. */
+export function assertRulesetPoses(manifest, document) {
+  const id = manifest?.id ?? "package";
+  const combat = document?.combat;
+  if (combat?.poses === undefined) return false;
+  const poses = combat.poses;
+  const conditions = new Set((document?.sheet?.live?.conditions ?? []).map((one) => one?.id));
+  const divine = poses?.divine;
+  const keys = (value) => (value && typeof value === "object" && !Array.isArray(value) ? Object.keys(value) : null);
+  if (
+    !keys(poses) ||
+    keys(poses).some((key) => !["$comment", "hidden", "divine"].includes(key)) ||
+    (poses.hidden !== undefined &&
+      (!Array.isArray(poses.hidden) ||
+        poses.hidden.length < 1 ||
+        poses.hidden.length > 12 ||
+        poses.hidden.some((one) => !conditions.has(one)))) ||
+    (divine !== undefined &&
+      (!keys(divine) ||
+        keys(divine).some((key) => !["column", "values", "entries"].includes(key)) ||
+        !(
+          (typeof divine.column === "string" &&
+            Array.isArray(divine.values) &&
+            divine.values.length >= 1 &&
+            divine.values.length <= 24) ||
+          (Array.isArray(divine.entries) && divine.entries.length >= 1)
+        )))
+  )
+    throw new Error(
+      `${id} combat poses is { hidden?: the sheet's conditions (1 to 12), divine?: { column, values } or { entries } }`,
+    );
+  if (!meetsCapabilityApi(manifest, RULESET_POSES_MIN))
+    throw new Error(`${id} combat poses and must declare capability API 1.786 or newer`);
+  return true;
 }
 
 /** Assert a ruleset package's `battle` block, and report whether it has one.
@@ -2073,4 +7315,11546 @@ export function assertRulesetBattle(manifest, document) {
     }
   }
   return true;
+}
+
+/** Seller honesty (1.79): gated wherever an item is `risky` or a fake, or a seller is not honest; and a
+ *  fake's target is a real, sellable item of the same kind, worn the same way, read across catalog
+ *  FILES too (the Engine's `rulesetFakeIssue`, which it can only run on files at install). Returns how
+ *  many fakes the package has. */
+export function assertRulesetSellerHonesty(manifest, document, catalogSources = new Map()) {
+  const id = manifest?.id ?? "package";
+  const catalogs = Array.isArray(document?.catalogs) ? document.catalogs : [];
+  const items = new Map();
+  const fakes = [];
+  let honesty = (document?.items?.market?.sellers ?? []).some((seller) => seller?.honest !== undefined);
+  for (const catalog of catalogs) {
+    for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+      const item = entry?.item;
+      if (!item || typeof item !== "object") continue;
+      const ref = `${catalog.id}/${entry.id}`;
+      items.set(ref, item);
+      if (item.risky !== undefined || item.passesFor !== undefined) honesty = true;
+      if (item.passesFor !== undefined) fakes.push({ ref, item });
+    }
+  }
+  const api = RULESET_SELLER_HONESTY_MIN_CAPABILITY_API;
+  if (honesty && !meetsCapabilityApi(manifest, api)) {
+    throw new Error(
+      `${id} has a risky item, a fake or a dishonest seller and must declare capability API ${api.major}.${api.minor} or newer`,
+    );
+  }
+  const slots = (item) =>
+    JSON.stringify(Object.entries(item.slots ?? {}).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+  for (const { ref, item } of fakes) {
+    const to = item.passesFor;
+    const target = items.get(to);
+    const where = `${id} fake "${ref}" passes for "${to}"`;
+    if (to === ref) throw new Error(`${where}, itself`);
+    if (!target) throw new Error(`${where}, which is no item of the package`);
+    if (target.passesFor !== undefined || target.binds?.cursed) throw new Error(`${where}, itself a fake or cursed`);
+    if (target.service) throw new Error(`${where}, a service`);
+    if (!target.cost) throw new Error(`${where}, which has no cost and is never sold`);
+    if (target.category !== item.category) throw new Error(`${where}, a different kind of item`);
+    if (slots(target) !== slots(item)) throw new Error(`${where}, worn in other slots`);
+    if (Boolean(target.binds) !== Boolean(item.binds)) throw new Error(`${where}, which binds differently`);
+  }
+  return fakes.length;
+}
+
+/** The sheet and fight hooks of 1.81 to 1.84, read as the Engine reads them: a critical range off the
+ *  attacker's sheet (one attack die whose natural top face is a critical, a resolvable reference), a
+ *  derived value that multiplies two to six references, a sheet value added to a catalog ability's
+ *  amount (never a rider's, and only beside an amount), and more than 60 derived values; each gated at
+ *  its own minor, in the ruleset file and in catalog files. Returns what it found, by hook. */
+/** 1.621: those a call brings set down within a distance of their caller, seen with `seen`. */
+const callWithinOk = (within) =>
+  within &&
+  typeof within === "object" &&
+  !Array.isArray(within) &&
+  Object.keys(within).every((key) => ["distance", "seen"].includes(key)) &&
+  typeof within.distance === "number" &&
+  within.distance > 0 &&
+  within.distance <= 10000 &&
+  (within.seen === undefined || within.seen === true);
+
+// 1.760: how long made items last, 1 to 8 spans, each labelled when there are several.
+const madeLastsOk = (lasts) =>
+  Array.isArray(lasts) &&
+  lasts.length >= 1 &&
+  lasts.length <= 8 &&
+  lasts.every(
+    (one) =>
+      one &&
+      typeof one === "object" &&
+      Object.keys(one).every((key) => ["label", "minutes"].includes(key)) &&
+      Number.isInteger(one.minutes) &&
+      one.minutes >= 1 &&
+      one.minutes <= 5256000 &&
+      (one.label === undefined
+        ? lasts.length === 1
+        : typeof one.label === "string" && one.label.trim().length > 0 && one.label.length <= 80),
+  ) &&
+  new Set(lasts.map((one) => one.label)).size === lasts.length;
+
+export function assertRulesetSheetHooks(manifest, document, catalogSources = new Map()) {
+  // A zone of over 1000 rounds (1.637), gated with the newest.
+  let longZone;
+  // 1.628 to 1.641, gated after every older check and shape.
+  const lateGates = [];
+  const lateGate = (min, text) => lateGates.push([min, text]);
+  // 1.699: tags read off an alignment in words.
+  if (document?.combat?.creatureTypes?.tagsFrom !== undefined) {
+    // 1.713: or a list of them, 1 to 6 distinct.
+    const from = document.combat.creatureTypes.tagsFrom;
+    const ids = Array.isArray(from) ? from : [from];
+    const fieldOk = (fid) => {
+      const field = (document.sheet?.fields ?? []).find((one) => one?.id === fid);
+      return field && ["text", "enum"].includes(field.type);
+    };
+    if (
+      ids.length < 1 ||
+      ids.length > 6 ||
+      new Set(ids).size !== ids.length ||
+      !ids.every(fieldOk) ||
+      !(document.combat.creatureTypes.tags ?? []).length
+    )
+      throw new Error(
+        `${document?.id ?? "ruleset"} combat.creatureTypes tagsFrom is a sheet text or choice field, or a list of them, beside tags`,
+      );
+    if (Array.isArray(from))
+      lateGate(RULESET_TAGS_FROM_FIELDS_MIN, "has combat.creatureTypes tagsFrom off several fields, of 1.713");
+    lateGate(RULESET_ALIGNMENT_TAGS_MIN, `has creature tags read off the words of a field, of 1.699`);
+  }
+  // 1.709 and 1.720: massive damage and knocking out; 1.710: a cantrip after a bonus action spell. Their shapes are
+  // checked with the combat block.
+  if (document?.combat?.dying?.instantDeath !== undefined)
+    lateGate(RULESET_INSTANT_DEATH_MIN, `has combat dying instantDeath, of 1.709`);
+  if (document?.combat?.dying?.knockOut !== undefined)
+    lateGate(RULESET_KNOCK_OUT_MIN, `has combat dying knockOut, of 1.720`);
+  if (document?.combat?.casting?.afterBonusSpell !== undefined)
+    lateGate(RULESET_AFTER_BONUS_SPELL_MIN, `has combat casting afterBonusSpell, of 1.710`);
+  // 1.704, 1.705 and 1.708: conditions never hindered by some actions, ignoring some cover, crossing some ground
+  // easily or harmed entering it.
+  for (const condition of document?.combat?.conditions ?? []) {
+    // 1.712: a save on damage rolled with a lean.
+    if (condition?.saveWhenDamaged?.lean !== undefined)
+      lateGate(
+        RULESET_LEANING_DAMAGE_SAVE_MIN,
+        `has condition "${condition.condition}" rolling its save on damage with a lean, of 1.712`,
+      );
+    const list = (value, max) =>
+      Array.isArray(value) &&
+      value.length >= 1 &&
+      value.length <= max &&
+      value.every((one) => typeof one === "string" && one.length >= 1 && one.length <= 60);
+    // 1.722: rests that do nothing.
+    if (condition?.blocksRests !== undefined) {
+      const rests = new Set((document?.rests ?? []).map((one) => one?.id));
+      const blocks = condition.blocksRests;
+      if (
+        blocks !== "all" &&
+        !(list(blocks, 12) && new Set(blocks).size === blocks.length && blocks.every((one) => rests.has(one)))
+      )
+        throw new Error(
+          `${document?.id ?? "ruleset"} condition "${condition.condition}" blocksRests is "all" or the ruleset's rest ids`,
+        );
+      lateGate(RULESET_BLOCKS_RESTS_MIN, `has condition "${condition.condition}" blocking rests, of 1.722`);
+    }
+    // 1.723: turned back on a die.
+    if (condition?.reflects !== undefined) {
+      const rule = condition.reflects;
+      const against = rule?.against;
+      const catalogs = new Set((Array.isArray(document?.catalogs) ? document.catalogs : []).map((one) => one?.id));
+      const areas = ["burst", "cone", "line", "box", "wall"];
+      if (
+        !rule ||
+        typeof rule !== "object" ||
+        Object.keys(rule).some((key) => !["sides", "backFrom", "against"].includes(key)) ||
+        !Number.isInteger(rule.sides) ||
+        rule.sides < 2 ||
+        rule.sides > 100 ||
+        !Number.isInteger(rule.backFrom) ||
+        rule.backFrom < 1 ||
+        rule.backFrom > rule.sides ||
+        !against ||
+        typeof against !== "object" ||
+        Object.keys(against).some((key) => !["catalogs", "entries", "area", "attackRoll"].includes(key)) ||
+        !list(against.catalogs, 8) ||
+        (catalogs.size > 0 && !against.catalogs.every((one) => catalogs.has(one))) ||
+        (against.entries !== undefined &&
+          !(list(against.entries, 20) && against.entries.every((one) => /^[a-z0-9_-]+\/[a-z0-9_-]+$/u.test(one)))) ||
+        (against.area !== undefined && !(list(against.area, 5) && against.area.every((one) => areas.includes(one)))) ||
+        (against.attackRoll !== undefined && against.attackRoll !== "ranged") ||
+        (against.entries === undefined && against.area === undefined && against.attackRoll === undefined)
+      )
+        throw new Error(
+          `${document?.id ?? "ruleset"} condition "${condition.condition}" reflects is { sides, backFrom: a face, against: { catalogs, entries?, area?, attackRoll?: "ranged" } }`,
+        );
+      lateGate(RULESET_REFLECTS_MIN, `has condition "${condition.condition}" turning entries back on a die, of 1.723`);
+    }
+    // 1.718: braced against being moved.
+    if (condition?.pushReducedBy !== undefined) {
+      const by = condition.pushReducedBy;
+      if (
+        !by ||
+        typeof by !== "object" ||
+        Object.keys(by).some((key) => !["by", "budget"].includes(key)) ||
+        !(by.by > 0) ||
+        (by.budget !== undefined && typeof by.budget !== "string")
+      )
+        throw new Error(
+          `${document?.id ?? "ruleset"} condition "${condition.condition}" pushReducedBy is { by: a distance, budget? }`,
+        );
+      lateGate(RULESET_BRACED_MIN, `has condition "${condition.condition}" braced against being moved, of 1.718`);
+    }
+    if (condition?.unhinderedBy !== undefined) {
+      if (!list(condition.unhinderedBy, 12))
+        throw new Error(`${document?.id ?? "ruleset"} condition "${condition.condition}" unhinderedBy names actions`);
+      lateGate(
+        RULESET_UNHINDERED_BY_MIN,
+        `has condition "${condition.condition}" never hindered by some actions, of 1.704`,
+      );
+    }
+    if (condition?.coverIgnored !== undefined) {
+      const rule = condition.coverIgnored;
+      if (
+        !rule ||
+        typeof rule !== "object" ||
+        Object.keys(rule).some((key) => !["upTo", "attacks", "blow"].includes(key)) ||
+        !["half", "three-quarters"].includes(rule.upTo) ||
+        (rule.attacks !== undefined && !["weapon", "spell", "any"].includes(rule.attacks)) ||
+        (rule.blow !== undefined && !["melee", "ranged"].includes(rule.blow))
+      )
+        throw new Error(
+          `${document?.id ?? "ruleset"} condition "${condition.condition}" coverIgnored is { upTo: half or three-quarters, attacks?, blow? }`,
+        );
+      lateGate(RULESET_COVER_IGNORED_MIN, `has condition "${condition.condition}" ignoring some cover, of 1.705`);
+    }
+    if (condition?.easyGround !== undefined || condition?.harmedEntering !== undefined) {
+      if (condition.easyGround !== undefined && !list(condition.easyGround, 12))
+        throw new Error(`${document?.id ?? "ruleset"} condition "${condition.condition}" easyGround names ground`);
+      const harm = condition.harmedEntering;
+      if (
+        harm !== undefined &&
+        (!harm ||
+          typeof harm !== "object" ||
+          (!harm.terrain && !harm.zones) ||
+          (harm.terrain !== undefined && !list(harm.terrain, 12)) ||
+          (harm.zones !== undefined && !list(harm.zones, 12)) ||
+          !harm.harm ||
+          typeof harm.harm !== "object")
+      )
+        throw new Error(
+          `${document?.id ?? "ruleset"} condition "${condition.condition}" harmedEntering is { terrain? or zones?, harm }`,
+        );
+      lateGate(
+        RULESET_EASY_GROUND_MIN,
+        `has condition "${condition.condition}" crossing ground easily or harmed entering it, of 1.708`,
+      );
+    }
+  }
+  const id = manifest?.id ?? "package";
+  const sheet = document?.sheet ?? {};
+  const ids = (items) => new Set((items ?? []).map((item) => item?.id));
+  const names = {
+    fields: new Map((sheet.fields ?? []).map((field) => [field.id, field])),
+    derived: ids(sheet.derived),
+    abilities: ids(sheet.abilities),
+    skills: ids(sheet.skills),
+    saves: ids(sheet.saves),
+    conditions: ids(sheet.live?.conditions),
+  };
+  // 1.439: awareness of some kinds, past no total cover, or from a condition or level.
+  let awareOf;
+  // 1.442: the conditions an entry ends, picked by its user.
+  let endsChosen;
+  const gate = (api, what) => {
+    if (!meetsCapabilityApi(manifest, api)) {
+      throw new Error(`${id} ${what} and must declare capability API ${api.major}.${api.minor} or newer`);
+    }
+  };
+  const found = { criticalFrom: false, multiply: 0, amountAdd: 0, derived: (sheet.derived ?? []).length };
+  // A sheet value here may also add up a list's number column (`listSum`), and a derived value may read
+  // a character's items or live state (`itemStat`, `liveTrack`, `livePool`), whose own checks are the
+  // items' and the live block's; `derived` names only the values declared above the one reading it.
+  const lists = new Map((sheet.lists ?? []).map((list) => [list.id, list]));
+  // 1.205: a list sum counting rows, or reading only those whose cell equals a value.
+  let countsRows;
+  const LIVE_KEYS = ["itemStat", "liveTrack", "livePool"];
+  const refIssue = (ref, derived = names.derived) => {
+    if (ref && typeof ref === "object" && ref.listSum !== undefined) {
+      if (Object.keys(ref).length !== 1) return "names exactly one kind of value";
+      const list = lists.get(ref.listSum.list);
+      if (!list) return `sums unknown list ${JSON.stringify(ref.listSum.list)}`;
+      const listColumns = new Map((list.columns ?? []).map((each) => [each.id, each]));
+      // 1.205: rows counted instead of a column added, over the rows whose `where` cell equals a value.
+      const where = ref.listSum.where;
+      if (
+        Object.keys(ref.listSum).some((key) => !["list", "column", "onlyWhen", "where", "count"].includes(key)) ||
+        (ref.listSum.count !== undefined && (ref.listSum.count !== true || ref.listSum.column !== undefined)) ||
+        (where !== undefined &&
+          (!where ||
+            typeof where !== "object" ||
+            Object.keys(where).some((key) => !["column", "equals"].includes(key)) ||
+            !listColumns.has(where.column) ||
+            !["number", "string", "boolean"].includes(typeof where.equals)))
+      )
+        return `sums ${list.id} by a column, or counts its rows (count true), with where { column, equals } a column of it`;
+      if (ref.listSum.count !== undefined || where !== undefined) countsRows ??= `sums ${list.id} by count or where`;
+      if (ref.listSum.count === true) return null;
+      const column = listColumns.get(ref.listSum.column);
+      if (column?.type !== "number")
+        return `sums ${JSON.stringify(ref.listSum.column)}, no number column of ${list.id}`;
+      return null;
+    }
+    if (ref && typeof ref === "object" && LIVE_KEYS.some((key) => ref[key] !== undefined)) {
+      return Object.keys(ref).length === 1 || (ref.liveTrack !== undefined && Object.keys(ref).length === 2 && ref.read)
+        ? null
+        : "names exactly one kind of value";
+    }
+    return valueRefIssue(ref, { ...names, derived });
+  };
+
+  const attackRoll = document?.combat?.attackRoll;
+  if (attackRoll?.criticalFrom !== undefined) {
+    found.criticalFrom = true;
+    gate(RULESET_CRITICAL_FROM_MIN_CAPABILITY_API, "reads its critical range off the sheet");
+    if (attackRoll.dice?.count !== 1)
+      throw new Error(`${id} combat attack roll criticalFrom needs a single attack die`);
+    if (attackRoll.naturals?.max !== "critical") {
+      throw new Error(`${id} combat attack roll criticalFrom needs naturals.max "critical"`);
+    }
+    const issue = refIssue(attackRoll.criticalFrom);
+    if (issue) throw new Error(`${id} combat attack roll criticalFrom ${issue}`);
+  }
+
+  // Every derived value reads only what is there, and only derived values declared above it: the Engine
+  // works them out top to bottom and refuses one that reads further down.
+  const earlier = new Set();
+  for (const value of sheet.derived ?? []) {
+    if (value?.op === "multiply") {
+      found.multiply += 1;
+      gate(RULESET_MULTIPLY_MIN_CAPABILITY_API, `multiplies in derived value "${value.id}"`);
+      if (!Array.isArray(value.of) || value.of.length < 2 || value.of.length > 6) {
+        throw new Error(`${id} derived value "${value.id}" multiplies 2 to 6 references`);
+      }
+    }
+    // An enumTable reads an enum field by its value; everything else reads numbers.
+    if (value?.op === "enumTable") {
+      const field = names.fields.get(value.from?.field);
+      if (field?.type !== "enum") throw new Error(`${id} derived value "${value.id}" reads no enum field`);
+    }
+    // 1.690: a words table reads a text or enum field's words, the first of its keys named giving the number.
+    if (value?.op === "wordsTable") {
+      const field = names.fields.get(value.from?.field);
+      const keys =
+        value.table && typeof value.table === "object" && !Array.isArray(value.table) ? Object.keys(value.table) : [];
+      if (
+        !["text", "enum"].includes(field?.type) ||
+        Object.keys(value.from).length !== 1 ||
+        keys.length < 1 ||
+        keys.length > 40 ||
+        keys.some((key) => key.trim().length < 1 || key.length > 40 || !Number.isFinite(value.table[key])) ||
+        (value.default !== undefined && !Number.isFinite(value.default))
+      )
+        throw new Error(
+          `${id} derived value "${value.id}" wordsTable reads a text or enum field by 1 to 40 words of up to 40 characters, each a number`,
+        );
+      lateGate(RULESET_WORDS_TABLE_MIN, `has derived value "${value.id}" reading the words of a field, of 1.690`);
+    }
+    const refs = [
+      ...(Array.isArray(value?.of) ? value.of : value?.of ? [value.of] : []),
+      ...(value?.from && !["enumTable", "wordsTable"].includes(value.op) ? [value.from] : []),
+    ];
+    for (const ref of refs) {
+      const issue = refIssue(ref, earlier);
+      if (issue) throw new Error(`${id} derived value "${value.id}" ${issue}`);
+    }
+    earlier.add(value?.id);
+  }
+
+  if (found.derived > RULESET_DERIVED_MAX) {
+    throw new Error(`${id} sheet has ${found.derived} derived values, over ${RULESET_DERIVED_MAX}`);
+  }
+  if (found.derived > RULESET_DERIVED_OLD_MAX) {
+    gate(
+      RULESET_MANY_DERIVED_MIN_CAPABILITY_API,
+      `has ${found.derived} derived values, over ${RULESET_DERIVED_OLD_MAX}`,
+    );
+  }
+
+  for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : []) {
+    for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+      const mechanics = entry?.mechanics;
+      if (mechanics?.amountAdd === undefined) continue;
+      const where = `${id} catalog "${catalog?.id}" entry "${entry?.id}"`;
+      found.amountAdd += 1;
+      gate(RULESET_AMOUNT_ADD_MIN_CAPABILITY_API, `adds a sheet value to an amount (${where})`);
+      if (mechanics.kind === "rider") throw new Error(`${where} adds a sheet value to a rider, which never reads it`);
+      if (mechanics.amount === undefined) throw new Error(`${where} adds a sheet value to no amount`);
+      const issue = valueRefIssue(mechanics.amountAdd, names);
+      if (issue) throw new Error(`${where} amountAdd ${issue}`);
+    }
+  }
+  // A rolled column: a number column whose die is a number, a sibling number or dice enum column, or a
+  // sheet value.
+  found.rolledColumns = 0;
+  for (const list of sheet.lists ?? []) {
+    for (const column of list.columns ?? []) {
+      if (column?.roll === undefined) continue;
+      found.rolledColumns += 1;
+      const where = `${id} list "${list.id}" column "${column.id}"`;
+      gate(RULESET_ROLLED_COLUMN_MIN_CAPABILITY_API, `rolls list "${list.id}" column "${column.id}"`);
+      if (column.type !== "number") throw new Error(`${where} rolls but is not a number column`);
+      const count = column.roll.count ?? 1;
+      if (!Number.isInteger(count) || count < 1 || count > 10) throw new Error(`${where} rolls 1 to 10 dice`);
+      const sides = column.roll.sides;
+      if (typeof sides === "number") {
+        if (!Number.isInteger(sides) || sides < 2 || sides > 100)
+          throw new Error(`${where} rolls dice of 2 to 100 sides`);
+      } else if (sides?.column !== undefined) {
+        const other = (list.columns ?? []).find((each) => each.id === sides.column);
+        if (!other || other.id === column.id) throw new Error(`${where} reads its die off no other column`);
+        const dice = (value) => /^[dD]?\d+$/u.test(String(value)) && Number(String(value).replace(/^[dD]/u, "")) >= 2;
+        if (other.type === "enum" ? !(other.values ?? []).every(dice) : other.type !== "number") {
+          throw new Error(`${where} reads its die off "${other.id}", which holds no dice`);
+        }
+      } else {
+        const issue = refIssue(sides);
+        if (issue) throw new Error(`${where} roll sides ${issue}`);
+      }
+    }
+  }
+
+  // The guided builder (1.86): the sheet's steps and any catalog entry's grants, inline or in a file.
+  found.builderSteps = (sheet.builder?.steps ?? []).length;
+  found.grants = 0;
+  found.entryChoices = 0;
+  found.repeatChoices = 0;
+  found.exclusive = 0;
+  const defaultGroups = new Set();
+  found.sheetBonus = 0;
+  found.choiceCaps = 0;
+  found.damageSheet = 0;
+  found.damageReroll = 0;
+  found.offeredWhen = 0;
+  found.fieldsShown = 0;
+  const choiceSteps = new Set(
+    (sheet.builder?.steps ?? []).filter((step) => step?.kind === "choices").map((step) => step.catalog),
+  );
+  const catalogById = new Map(
+    (Array.isArray(document?.catalogs) ? document.catalogs : []).map((catalog) => [catalog?.id, catalog]),
+  );
+  for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : []) {
+    for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+      // A to-hit bonus off the holder's sheet (1.95), read like any sheet value.
+      for (const toHit of [entry?.item?.attack?.toHit, entry?.item?.use?.toHit]) {
+        if (toHit?.sheetBonus === undefined) continue;
+        const issue = refIssue(toHit.sheetBonus);
+        if (issue) throw new Error(`${id} catalog "${catalog?.id}" entry "${entry?.id}" toHit sheetBonus ${issue}`);
+        found.sheetBonus += 1;
+      }
+      // Damage off the holder's sheet (1.97), read like any sheet value; oneHanded only gates one.
+      const damage = entry?.item?.attack?.damage;
+      if (damage?.sheetBonus !== undefined) {
+        const issue = refIssue(damage.sheetBonus);
+        if (issue) throw new Error(`${id} catalog "${catalog?.id}" entry "${entry?.id}" damage sheetBonus ${issue}`);
+        found.damageSheet += 1;
+      } else if (damage?.oneHanded !== undefined) {
+        throw new Error(`${id} catalog "${catalog?.id}" entry "${entry?.id}" damage is oneHanded with no sheetBonus`);
+      }
+      if (damage?.rerollUpTo !== undefined) {
+        const issue = refIssue(damage.rerollUpTo);
+        if (issue) throw new Error(`${id} catalog "${catalog?.id}" entry "${entry?.id}" damage rerollUpTo ${issue}`);
+        found.damageReroll += 1;
+      }
+      // Offered only while the sheet allows (1.99), read like any sheet value.
+      if (entry?.offeredWhen !== undefined) {
+        const issue = refIssue(entry.offeredWhen);
+        if (issue) throw new Error(`${id} catalog "${catalog?.id}" entry "${entry?.id}" offeredWhen ${issue}`);
+        found.offeredWhen += 1;
+      }
+      // A group a builder step keeps one pick of (1.94): a sheet id.
+      if (entry?.exclusive !== undefined) {
+        if (
+          typeof entry.exclusive !== "string" ||
+          !/^[a-z][a-z0-9_]*$/u.test(entry.exclusive) ||
+          entry.exclusive.length > 40
+        )
+          throw new Error(
+            `${id} catalog "${catalog?.id}" entry "${entry?.id}" names exclusive group "${entry.exclusive}", not a sheet id`,
+          );
+        found.exclusive += 1;
+      }
+      // 1.772: the one entry of its group taken until another is picked.
+      if (entry?.exclusiveDefault !== undefined) {
+        if (entry.exclusiveDefault !== true || entry.exclusive === undefined)
+          throw new Error(
+            `${id} catalog "${catalog?.id}" entry "${entry?.id}" exclusiveDefault is true, on an entry naming its exclusive group`,
+          );
+        const key = `${catalog?.id}\u0000${entry.exclusive}`;
+        if (defaultGroups.has(key))
+          throw new Error(`${id} catalog "${catalog?.id}" has two defaults of exclusive group "${entry.exclusive}"`);
+        defaultGroups.add(key);
+        lateGate(RULESET_EXCLUSIVE_DEFAULT_MIN, "takes a default of an exclusive group, of 1.772");
+      }
+      if (entry?.grants === undefined) continue;
+      found.grants += 1;
+      for (const choice of entry.grants.abilities?.choose ?? []) {
+        if (choice?.upTo !== undefined) {
+          if (!Number.isInteger(choice.upTo) || choice.upTo < 1 || choice.upTo > 99)
+            throw new Error(
+              `${id} catalog "${catalog?.id}" entry "${entry?.id}" caps a score choice at ${choice.upTo}`,
+            );
+          found.choiceCaps += 1;
+        }
+        if (choice?.repeat === undefined) continue;
+        if (typeof choice.repeat !== "boolean")
+          throw new Error(
+            `${id} catalog "${catalog?.id}" entry "${entry?.id}" repeats a score choice by a non-boolean`,
+          );
+        found.repeatChoices += 1;
+      }
+      // Entries to choose (1.91) come from a catalog of rows a `choices` step loads, by its own filters
+      // and ids.
+      for (const choice of entry.grants.entries?.choose ?? []) {
+        found.entryChoices += 1;
+        const where = `${id} catalog "${catalog?.id}" entry "${entry?.id}" chooses from "${choice?.catalog}"`;
+        if (!choiceSteps.has(choice?.catalog)) throw new Error(`${where}, which no builder "choices" step offers`);
+        const from = catalogById.get(choice.catalog);
+        const options = catalogEntryList(from, catalogSources) ?? [];
+        for (const filterId of Object.keys(choice.filters ?? {})) {
+          if (!(from?.filters ?? []).some((filter) => filter.id === filterId))
+            throw new Error(`${where} by no filter "${filterId}"`);
+        }
+        for (const optionId of choice.ids ?? []) {
+          if (!options.some((option) => option?.id === optionId))
+            throw new Error(`${where}, which has no "${optionId}"`);
+        }
+        const offered = options.filter(
+          (option) =>
+            Object.entries(choice.filters ?? {}).every(([filterId, value]) => {
+              const have = option?.filters?.[filterId];
+              return Array.isArray(have) ? have.includes(value) : have === value;
+            }) &&
+            (!choice.ids || choice.ids.includes(option?.id)),
+        );
+        if (offered.length < choice.count) throw new Error(`${where}: ${choice.count} of ${offered.length} offered`);
+      }
+      // What a grant sets is a field of this sheet, and an enum field's value one of its values.
+      for (const [fieldId, value] of Object.entries(entry.grants.sets ?? {})) {
+        const field = names.fields.get(fieldId);
+        const where = `${id} catalog "${catalog?.id}" entry "${entry?.id}" sets "${fieldId}"`;
+        if (!field) throw new Error(`${where}, no field of the sheet`);
+        if (field.type === "enum" && !(field.values ?? []).includes(value)) {
+          throw new Error(`${where} to ${JSON.stringify(value)}, not one of its values`);
+        }
+        if (field.type === "number" && typeof value !== "number") throw new Error(`${where} to a non-number`);
+      }
+    }
+  }
+  if (sheet.builder !== undefined) gate(RULESET_BUILDER_MIN_CAPABILITY_API, "has a guided builder");
+  if (found.grants > 0)
+    gate(RULESET_BUILDER_MIN_CAPABILITY_API, "has catalog entries that grant through the guided builder");
+  const catalogIds = new Set((document?.catalogs ?? []).map((catalog) => catalog?.id));
+  // The Engine reads at most 8 filters of a catalog (found again at 0.378.0, whose spells needed 10).
+  for (const catalog of document?.catalogs ?? [])
+    if ((catalog?.filters ?? []).length > 8)
+      throw new Error(`${id} catalog "${catalog.id}" has ${catalog.filters.length} filters, over 8`);
+  // 1.770: cover only from what lies between, never the ground the target stands on.
+  if (document?.combat?.cover?.groundUnderTarget !== undefined) {
+    if (document.combat.cover.groundUnderTarget !== false)
+      throw new Error(`${id} combat cover groundUnderTarget is false or left out`);
+    lateGate(RULESET_GROUND_UNDER_TARGET_MIN, "has cover only from what lies between, of 1.770");
+  }
+  // 1.771: Help only beside an opponent, and only against one who was beside the helper.
+  const help = document?.combat?.standardEffects?.help;
+  if (help !== undefined) {
+    if (help?.beside !== true || Object.keys(help).length !== 1)
+      throw new Error(`${id} combat standardEffects help is { "beside": true } or left out`);
+    if (!(document.combat.standard ?? []).includes("help"))
+      throw new Error(`${id} combat standardEffects help needs help in the standard list`);
+    lateGate(RULESET_HELP_BESIDE_MIN, "has Help only beside an opponent, of 1.771");
+  }
+  // 1.769: an entry's variants, each naming it back, none with variants of its own.
+  for (const catalog of document?.catalogs ?? []) {
+    const listed = catalogEntryList(catalog, catalogSources) ?? [];
+    const byId = new Map(listed.map((entry) => [entry?.id, entry]));
+    for (const entry of listed) {
+      const where = `${id} catalog "${catalog?.id}" entry "${entry?.id}"`;
+      if (entry?.variants !== undefined) {
+        const variants = entry.variants;
+        if (
+          !Array.isArray(variants) ||
+          variants.length < 1 ||
+          variants.length > 32 ||
+          new Set(variants).size !== variants.length ||
+          variants.some(
+            (one) => one === entry.id || byId.get(one)?.variantOf !== entry.id || byId.get(one)?.variants !== undefined,
+          )
+        )
+          throw new Error(`${where} variants are 1 to 32 other entries of the catalog, each with its variantOf`);
+        lateGate(RULESET_VARIANTS_MIN, `has ${where} with variants, of 1.769`);
+      }
+      if (entry?.variantOf !== undefined && !byId.get(entry.variantOf)?.variants?.includes(entry.id))
+        throw new Error(`${where} is a variant of "${entry.variantOf}", which does not list it`);
+    }
+  }
+  const stepIds = new Set();
+  const counted = [];
+  const strictSteps = [];
+  const stampsFromWithin = [];
+  const stamped = [];
+  // 1.768: up to 32 steps, a catalog step's min and max up to 60.
+  if ((sheet.builder?.steps?.length ?? 0) > 32) throw new Error(`${id} guided builder has at most 32 steps`);
+  if ((sheet.builder?.steps?.length ?? 0) > 24)
+    lateGate(RULESET_BIGGER_BUILDER_MIN, "has a guided builder of more than 24 steps, of 1.768");
+  for (const step of sheet.builder?.steps ?? []) {
+    const where = `${id} builder step "${step?.id}"`;
+    if (step?.kind === "catalog" && (step.min > 60 || step.max > 60)) throw new Error(`${where} asks for at most 60`);
+    if (step?.kind === "catalog" && (step.min > 40 || step.max > 40))
+      lateGate(RULESET_BIGGER_BUILDER_MIN, `has ${where} asking for more than 40, of 1.768`);
+    if ((step?.kind === "catalog" || step?.kind === "choices") && !catalogIds.has(step.catalog))
+      throw new Error(`${where} names no catalog "${step.catalog}"`);
+    if (step?.within && !stepIds.has(step.within.step))
+      throw new Error(`${where} is within no earlier step "${step.within.step}"`);
+    if (step?.kind === "catalog") {
+      const filters = new Set(
+        ((document?.catalogs ?? []).find((catalog) => catalog?.id === step.catalog)?.filters ?? []).map(
+          (filter) => filter.id,
+        ),
+      );
+      for (const filter of [...Object.keys(step.filters ?? {}), ...(step.within ? [step.within.filter] : [])]) {
+        if (!filters.has(filter)) throw new Error(`${where} reads no filter "${filter}" of ${step.catalog}`);
+      }
+      // 1.731: a filter may list values, any of which is offered.
+      for (const [filter, value] of Object.entries(step.filters ?? {})) {
+        if (!Array.isArray(value)) continue;
+        if (
+          value.length < 1 ||
+          value.length > 12 ||
+          new Set(value.map(String)).size !== value.length ||
+          value.some((one) => typeof one === "object" || one === null)
+        )
+          throw new Error(`${where} filter "${filter}" lists 1 to 12 distinct values`);
+        lateGate(RULESET_STEP_FILTER_LIST_MIN, `has ${where} filter "${filter}" listing values, of 1.731`);
+      }
+      // 1.766: a step that takes all it offers, and an upTo read for each entry.
+      if (step.takesAll !== undefined) {
+        if (
+          step.takesAll !== true ||
+          ["countFrom", "pool", "cost", "quotas", "distinctBy", "quotaBelow"].some((key) => step[key] !== undefined)
+        )
+          throw new Error(`${where} takesAll is true, with no countFrom, pool, cost, quotas, distinctBy or quotaBelow`);
+        lateGate(RULESET_TAKES_ALL_MIN, `has ${where} taking all it offers, of 1.766`);
+        // 1.773: the labels it takes written to a field.
+        if (step.field !== undefined)
+          lateGate(RULESET_TAKES_ALL_FIELD_MIN, `has ${where} writing all it takes to a field, of 1.773`);
+      }
+      if (step.upTo?.per !== undefined) {
+        const per = step.upTo.per;
+        if (
+          !per ||
+          typeof per !== "object" ||
+          Object.keys(per).some((key) => !["filter", "prefix"].includes(key)) ||
+          !filters.has(per.filter) ||
+          typeof per.prefix !== "string" ||
+          !/^[a-z][a-z0-9_]*$/u.test(per.prefix)
+        )
+          throw new Error(`${where} upTo.per is { filter: one of the catalog's, prefix }`);
+        lateGate(RULESET_TAKES_ALL_MIN, `has ${where} an upTo read for each entry, of 1.766`);
+      }
+    }
+    // 1.767: a step that marks rows a catalog wrote on a list, ticking a boolean column.
+    if (step?.kind === "mark") {
+      const columns = new Map(
+        ((sheet.lists ?? []).find((list) => list?.id === step.list)?.columns ?? []).map((column) => [
+          column.id,
+          column,
+        ]),
+      );
+      const where2 = Object.entries(step.where ?? {});
+      if (
+        columns.get(step.column)?.type !== "boolean" ||
+        where2.length < 1 ||
+        where2.length > 4 ||
+        where2.some(
+          ([column, value]) =>
+            !columns.has(column) ||
+            (value && typeof value === "object"
+              ? Object.keys(value).join() !== "atLeast" ||
+                typeof value.atLeast !== "number" ||
+                columns.get(column).type !== "number"
+              : !["string", "number", "boolean"].includes(typeof value)),
+        ) ||
+        (step.max === undefined) === (step.countFrom === undefined)
+      )
+        throw new Error(
+          `${where} marks a boolean column of a list, where 1 to 4 of its columns match, with max or countFrom`,
+        );
+      lateGate(RULESET_MARK_STEP_MIN, `has ${where} marking rows, of 1.767`);
+    }
+    if (step?.stamp !== undefined) {
+      stamped.push(where);
+      if (step.kind !== "catalog") throw new Error(`${where} stamp needs a catalog step`);
+      const stamp = step.stamp;
+      if (
+        !stamp ||
+        typeof stamp !== "object" ||
+        Array.isArray(stamp) ||
+        Object.keys(stamp).length < 1 ||
+        Object.keys(stamp).length > 4
+      ) {
+        throw new Error(`${where} stamp must be an object of 1 to 4 column values`);
+      }
+      const feeds = catalogById.get(step.catalog)?.feeds ?? [];
+      for (const [column, value] of Object.entries(stamp)) {
+        if (
+          feeds.length === 0 ||
+          !feeds.every((list) => lists.get(list)?.columns?.some((each) => each.id === column))
+        ) {
+          throw new Error(`${where} stamp names unknown column "${column}" of the lists its catalog feeds`);
+        }
+        if (value && typeof value === "object" && !Array.isArray(value) && "fromWithin" in value) {
+          if (Object.keys(value).length !== 1) throw new Error(`${where} stamp "${column}" takes only fromWithin`);
+          if (!step.within) throw new Error(`${where} stamp "${column}" fromWithin needs a within step`);
+          const parentStep = (sheet.builder?.steps ?? []).find((each) => each?.id === step.within.step);
+          const parent = catalogById.get(parentStep?.catalog);
+          const from = value.fromWithin;
+          if (from !== "id" && from !== "label" && !(parent?.filters ?? []).some((filter) => filter?.id === from)) {
+            throw new Error(
+              `${where} stamp "${column}" fromWithin must be "id", "label" or a filter of ${parentStep?.catalog}`,
+            );
+          }
+          // What it can write: each parent entry's id, label or filter value. An enum column takes only its values.
+          const columnDef = feeds.map((list) => lists.get(list)?.columns?.find((each) => each.id === column))[0];
+          if (columnDef?.type === "enum") {
+            for (const entry of catalogEntryList(parent, catalogSources) ?? []) {
+              const yields = from === "id" ? entry?.id : from === "label" ? entry?.label : entry?.filters?.[from];
+              if (
+                (typeof yields === "string" || typeof yields === "number") &&
+                !columnDef.values?.includes(String(yields))
+              ) {
+                throw new Error(
+                  `${where} stamp "${column}" would write ${JSON.stringify(yields)} from "${entry?.id}", not one of its values`,
+                );
+              }
+            }
+          }
+          stampsFromWithin.push(where);
+          continue;
+        }
+        if (
+          !["string", "number", "boolean"].includes(typeof value) ||
+          (typeof value === "number" && !Number.isFinite(value))
+        ) {
+          throw new Error(`${where} stamp "${column}" must be a string, number or boolean`);
+        }
+      }
+    }
+    if (step?.strict !== undefined) {
+      if (step.kind !== "startingGear") throw new Error(`${where} strict needs a startingGear step`);
+      if (typeof step.strict !== "boolean") throw new Error(`${where} strict must be true or false`);
+      strictSteps.push(where);
+    }
+    if (step?.field !== undefined && !names.fields.has(step.field))
+      throw new Error(`${where} writes no field "${step.field}"`);
+    for (const field of step?.fields ?? [])
+      if (!names.fields.has(field)) throw new Error(`${where} shows no field "${field}"`);
+    if (step?.shownWhen !== undefined || step?.total !== undefined) {
+      if (step.kind !== "fields") throw new Error(`${where} shownWhen and total need a fields step`);
+      found.fieldsShown += 1;
+      const fields = new Set(step.fields ?? []);
+      if (step.shownWhen !== undefined) {
+        if (!step.shownWhen || typeof step.shownWhen !== "object" || Array.isArray(step.shownWhen))
+          throw new Error(`${where} shownWhen must map fields to value references`);
+        for (const [field, ref] of Object.entries(step.shownWhen)) {
+          if (!fields.has(field)) throw new Error(`${where} shownWhen names "${field}", no field of this step`);
+          const issue = refIssue(ref);
+          if (issue) throw new Error(`${where} shownWhen "${field}" ${issue}`);
+        }
+      }
+      if (step.total !== undefined) {
+        const totalFields = step.total?.fields;
+        if (!Array.isArray(totalFields) || totalFields.length < 2 || new Set(totalFields).size !== totalFields.length)
+          throw new Error(`${where} total.fields needs at least two fields with no repeats`);
+        for (const field of totalFields) {
+          if (!fields.has(field)) throw new Error(`${where} total.fields names "${field}", no field of this step`);
+          if (names.fields.get(field)?.type !== "number")
+            throw new Error(`${where} total.fields names "${field}", no number field`);
+        }
+        if (!Number.isFinite(step.total.max) || step.total.max <= 0)
+          throw new Error(`${where} total.max must be a positive number`);
+      }
+    }
+    if (step?.default !== undefined) {
+      gate(RULESET_BUILDER_SAFE_MIN_CAPABILITY_API, `opens ${where} on a default method`);
+      if (step.methods?.[step.default] === undefined)
+        throw new Error(`${where} opens on "${step.default}", no method of it`);
+    }
+    if (step?.upTo !== undefined) {
+      gate(RULESET_BUILDER_SAFE_MIN_CAPABILITY_API, `limits ${where} by a sheet value`);
+      const filter = ((document?.catalogs ?? []).find((catalog) => catalog?.id === step.catalog)?.filters ?? []).find(
+        (each) => each.id === step.upTo.filter,
+      );
+      if (filter?.type !== "number") throw new Error(`${where} limits by "${step.upTo.filter}", no number filter`);
+      const issue = refIssue(step.upTo.value);
+      if (issue) throw new Error(`${where} upTo ${issue}`);
+    }
+    if (step?.countFrom !== undefined) {
+      const issue = refIssue(step.countFrom);
+      if (issue) throw new Error(`${where} countFrom ${issue}`);
+      counted.push(step.id);
+    }
+    stepIds.add(step?.id);
+  }
+
+  // Over 120 derived values (1.88).
+  if (found.derived > RULESET_DERIVED_MID_MAX) {
+    gate(
+      RULESET_MOST_DERIVED_MIN_CAPABILITY_API,
+      `has ${found.derived} derived values, over ${RULESET_DERIVED_MID_MAX}`,
+    );
+  }
+
+  // A coin's name for one (1.89).
+  const currencies = Array.isArray(document?.items?.currencies) ? document.items.currencies : [];
+  for (const currency of currencies) {
+    for (const unit of Array.isArray(currency?.units) ? currency.units : []) {
+      if (unit?.one === undefined) continue;
+      gate(RULESET_COIN_ONE_MIN_CAPABILITY_API, `names one ${unit.id} of currency ${currency.id}`);
+      if (typeof unit.one !== "string" || !unit.one.trim()) {
+        throw new Error(`${id}: currency ${currency.id} unit ${unit.id} names an empty "one"`);
+      }
+    }
+  }
+
+  // A step's count off the sheet (1.90).
+  for (const stepId of counted)
+    gate(RULESET_BUILDER_COUNT_MIN_CAPABILITY_API, `reads the count of builder step "${stepId}" off the sheet`);
+
+  // Entries to choose (1.91).
+  if (choiceSteps.size > 0) gate(RULESET_BUILDER_CHOICES_MIN_CAPABILITY_API, "has a builder choices step");
+  if (found.entryChoices > 0)
+    gate(RULESET_BUILDER_CHOICES_MIN_CAPABILITY_API, "has catalog entries that offer entries to choose");
+
+  // A score choice that repeats (1.93).
+  if (found.repeatChoices > 0) gate(RULESET_REPEAT_CHOICE_MIN_CAPABILITY_API, "has a score choice that repeats");
+
+  // Entries a step keeps one of (1.94).
+  if (found.exclusive > 0) gate(RULESET_EXCLUSIVE_MIN_CAPABILITY_API, "has catalog entries exclusive of each other");
+
+  // A to-hit bonus off the holder's sheet (1.95).
+  if (found.sheetBonus > 0) gate(RULESET_SHEET_BONUS_MIN_CAPABILITY_API, "has items whose to-hit reads the sheet");
+
+  // A score choice with a cap (1.96).
+  if (found.choiceCaps > 0) gate(RULESET_CHOICE_CAP_MIN_CAPABILITY_API, "has a score choice with a cap");
+
+  // Damage and an off hand read off the sheet (1.97).
+  const fullWhen = document?.combat?.offHand?.fullWhen;
+  if (fullWhen !== undefined) {
+    const issue = refIssue(fullWhen);
+    if (issue) throw new Error(`${id} combat.offHand.fullWhen ${issue}`);
+  }
+  if (found.damageSheet > 0 || fullWhen !== undefined)
+    gate(RULESET_DAMAGE_SHEET_MIN_CAPABILITY_API, "has weapons or an off hand that read the sheet for damage");
+
+  // Low damage dice rerolled off the sheet (1.98).
+  if (found.damageReroll > 0) gate(RULESET_DAMAGE_REROLL_MIN_CAPABILITY_API, "has weapons that reroll low damage dice");
+
+  // Entries offered only while the sheet allows (1.99), the newest gate, read last so an older key's gate
+  // speaks first.
+  if (found.offeredWhen > 0)
+    gate(RULESET_OFFERED_WHEN_MIN_CAPABILITY_API, "has catalog entries offered only while the sheet allows");
+
+  // What an entry's harm carries past a resistance's `except` (1.101), the ruleset's own item tags. Newer
+  // still, so read after every other gate.
+  const itemTags = new Set((document?.items?.tags ?? []).map((tag) => tag?.id));
+  for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : []) {
+    for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+      const mechanics = entry?.mechanics;
+      if (mechanics?.rider?.when?.includes?.("ally-adjacent-no-disadvantage")) {
+        gate(
+          RULESET_RIDER_NO_DISADVANTAGE_MIN,
+          `has a rider whose ally-adjacent branch needs no disadvantage (catalog "${catalog?.id}" entry "${entry?.id}")`,
+        );
+      }
+      if (mechanics?.summons !== undefined) {
+        const where = `${id} catalog "${catalog?.id}" entry "${entry?.id}" summons`;
+        gate(RULESET_SUMMONS_MIN, `has summons (${where})`);
+        const summons = mechanics.summons;
+        if (mechanics.kind !== "attack" || (mechanics.targets !== undefined && mechanics.targets !== "enemy")) {
+          throw new Error(`${where} needs kind "attack" targeting enemies`);
+        }
+        const budgets = new Set((document.combat?.economy?.budgets ?? []).map((budget) => budget.id));
+        // 1.539: one that strikes by itself as its summoner's turn starts names no budget and may stay
+        // up to 14400 rounds.
+        const striking = summons?.strikesAtTurnStart !== undefined;
+        if (striking) {
+          if (summons.strikesAtTurnStart !== true) throw new Error(`${where} strikesAtTurnStart is true`);
+        }
+        if (summons?.budget !== undefined || !striking) {
+          if (!budgets.has(summons?.budget)) throw new Error(`${where} spends an undeclared budget`);
+        }
+        const most = striking ? 14400 : 100;
+        if (!Number.isInteger(summons.rounds) || summons.rounds < 1 || summons.rounds > most) {
+          throw new Error(`${where} rounds must be an integer from 1 to ${most}`);
+        }
+        for (const key of ["move", "reach"]) {
+          if (
+            summons[key] !== undefined &&
+            (!Number.isFinite(summons[key]) || summons[key] < 0 || summons[key] > RULESET_DISTANCE_MAX)
+          ) {
+            throw new Error(`${where} ${key} must be a distance from 0`);
+          }
+        }
+      }
+      if (mechanics?.qualities !== undefined) {
+        const where = `${id} catalog "${catalog?.id}" entry "${entry?.id}"`;
+        gate(RULESET_BLOW_QUALITIES_MIN_CAPABILITY_API, `carries qualities (${where})`);
+        if (!Array.isArray(mechanics.qualities) || mechanics.qualities.length === 0 || mechanics.qualities.length > 8) {
+          throw new Error(`${where} carries qualities that are not a list of 1 to 8 item tags`);
+        }
+        for (const tag of mechanics.qualities) {
+          if (!itemTags.has(tag)) throw new Error(`${where} carries unknown item tag ${JSON.stringify(tag)}`);
+        }
+      }
+    }
+  }
+
+  // Conditional fields and totals (1.107), after the older builder gates.
+  if (found.fieldsShown > 0) gate(RULESET_FIELDS_SHOWN_MIN, "has a fields step with shownWhen or total");
+  if (found.derived > RULESET_DERIVED_PRE_106_MAX) {
+    gate(
+      RULESET_400_DERIVED_MIN_CAPABILITY_API,
+      `has ${found.derived} derived values, over ${RULESET_DERIVED_PRE_106_MAX}`,
+    );
+  }
+  if (found.derived > RULESET_DERIVED_PRE_676_MAX)
+    lateGate(
+      RULESET_DERIVED_800_MIN,
+      `has ${found.derived} derived values, over ${RULESET_DERIVED_PRE_676_MAX}, of 1.729`,
+    );
+
+  // Sense requirements (1.127) follow older gates so their rejection remains specific.
+  for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : []) {
+    for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+      assertSenseList(
+        manifest,
+        document,
+        entry?.mechanics?.needs,
+        `${id} catalog "${catalog?.id}" entry "${entry?.id}" mechanics`,
+        "needs",
+      );
+    }
+  }
+  // Gated last, so an older Engine's refusal names its own older gate first.
+  for (const where of stamped) gate(RULESET_BY_COLUMN_MIN, `has ${where} stamp`);
+  for (const where of strictSteps) gate(RULESET_STRICT_GEAR_MIN, `has ${where} strict`);
+  for (const list of sheet.lists ?? []) {
+    const count = list?.columns?.length ?? 0;
+    if (count > 24) throw new Error(`${id} sheet list "${list?.id}" has ${count} columns, more than 24`);
+    if (count > 12) gate(RULESET_WIDE_LISTS_MIN, `has sheet list "${list?.id}" with ${count} columns`);
+  }
+  for (const where of stampsFromWithin)
+    gate(RULESET_STAMP_FROM_WITHIN_MIN, `has ${where} stamp from the offering pick`);
+  // SRD 5.1 Protection's "You must be wielding a shield" and Rage's heavy armor: one value reference,
+  // with at least one bound and never a lower bound above the upper.
+  for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : []) {
+    if (catalog?.holds === "creatures") continue;
+    for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+      const where = `catalog "${catalog.id}" entry "${entry.id}"`;
+      const bounded = (when, key) => {
+        const bound = (value) => value === undefined || (typeof value === "number" && Number.isFinite(value));
+        if (
+          !when ||
+          typeof when !== "object" ||
+          Array.isArray(when) ||
+          Object.keys(when).some((one) => !["value", "atLeast", "atMost"].includes(one)) ||
+          !when.value ||
+          typeof when.value !== "object" ||
+          Object.keys(when.value).length !== 1 ||
+          !bound(when.atLeast) ||
+          !bound(when.atMost) ||
+          (when.atLeast === undefined && when.atMost === undefined)
+        )
+          throw new Error(`${id} ${where} ${key} needs { value, atLeast and/or atMost }`);
+        if (when.atLeast !== undefined && when.atMost !== undefined && when.atLeast > when.atMost)
+          throw new Error(`${id} ${where} ${key} is never true: atLeast is above atMost`);
+      };
+      if (entry?.mechanics?.usableWhen !== undefined) {
+        bounded(entry.mechanics.usableWhen, "usableWhen");
+        gate(RULESET_USABLE_WHEN_MIN, `has ${where} usable only while its holder's value allows`);
+      }
+      // Rage's damage by barbarian level: an applied condition read off the applier's sheet.
+      for (const applied of [...(entry?.mechanics?.applies ?? []), ...(entry?.item?.use?.applies ?? [])]) {
+        if (applied?.when === undefined) continue;
+        bounded(applied.when, `applies "${applied.condition}" when`);
+        gate(
+          RULESET_APPLIES_WHEN_MIN,
+          `has ${where} applying "${applied.condition}" only while the applier's value allows`,
+        );
+      }
+    }
+  }
+  let growing;
+  let zoned;
+  let moving;
+  let ruled;
+  let holding;
+  let curing;
+  let walled;
+  let sighted;
+  let windAndLight;
+  let zoneLight;
+  let sunlit;
+  let againstLight;
+  let componented;
+  let forbidsEntries;
+  let given;
+  let passed;
+  let pushing;
+  let detonating;
+  let glyphing;
+  let keepingOut;
+  // 1.595: a barrier stopping reach, or ending as it is carried over one it keeps out.
+  let reachBarrier;
+  let keepingIn;
+  let freeing;
+  let insideTest;
+  let castingOver;
+  let setUpBefore;
+  let setUpAny;
+  let steering;
+  let insideChoosing;
+  let barring;
+  let raying;
+  let becoming;
+  let hiddenZone;
+  let outlasting;
+  let storing;
+  let widened;
+  let kinded;
+  let slaying;
+  let marking;
+  let moded;
+  let warding;
+  let ridden;
+  let resting;
+  let gated;
+  let typedZone;
+  let skipping;
+  let byFilter;
+  let maximized;
+  let healing;
+  // 1.421: healing an amend adds, `add` off the sheet and `perLevel` from `fromLevel` up.
+  const healAddIssue = (value, names) =>
+    value !== undefined &&
+    (!value ||
+      typeof value !== "object" ||
+      Object.keys(value).some((key) => !["add", "perLevel", "fromLevel"].includes(key)) ||
+      (value.add === undefined && value.perLevel === undefined) ||
+      (value.add !== undefined && valueRefIssue(value.add, names) !== null) ||
+      (value.perLevel !== undefined &&
+        (!Number.isInteger(value.perLevel) || value.perLevel < 1 || value.perLevel > 10)) ||
+      (value.fromLevel !== undefined &&
+        (!Number.isInteger(value.fromLevel) || value.fromLevel < 0 || value.fromLevel > 9)));
+  // 1.415: the levels an alteration maximizes at, and the harm it does its user past its free uses.
+  const alterLevelFits = (one) => one === undefined || (Number.isInteger(one) && one >= 0 && one <= 9);
+  const maximizesIssue = (value) =>
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.keys(value).some((key) => !["fromLevel", "upToLevel"].includes(key)) ||
+    !alterLevelFits(value.fromLevel) ||
+    !alterLevelFits(value.upToLevel) ||
+    (value.fromLevel !== undefined && value.upToLevel !== undefined && value.fromLevel > value.upToLevel);
+  const diceText = (one) => typeof one === "string" && /^\d+d\d+$/u.test(one);
+  const backlashIssue = (value) =>
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.keys(value).some((key) => !["free", "dice", "grows", "type", "unblockable"].includes(key)) ||
+    !Number.isInteger(value.free) ||
+    value.free < 0 ||
+    !diceText(value.dice) ||
+    (value.grows !== undefined && !diceText(value.grows)) ||
+    (value.type !== undefined && typeof value.type !== "string") ||
+    (value.unblockable !== undefined && value.unblockable !== true);
+  // 1.414: catalogs an amend or alteration names, and a filter they declare.
+  const catalogsIssue = (list) =>
+    !Array.isArray(list) ||
+    list.length < 1 ||
+    list.length > 8 ||
+    list.some((one) => !(document?.catalogs ?? []).some((catalog) => catalog?.id === one));
+  const whereIssue = (list, where) =>
+    !where ||
+    typeof where !== "object" ||
+    Array.isArray(where) ||
+    Object.keys(where).some((key) => !["filter", "equals"].includes(key)) ||
+    typeof where.filter !== "string" ||
+    !(
+      typeof where.equals === "string" ||
+      Number.isFinite(where.equals) ||
+      (Array.isArray(where.equals) && where.equals.length > 0 && where.equals.every((one) => typeof one === "string"))
+    ) ||
+    list.some(
+      (one) =>
+        !((document?.catalogs ?? []).find((catalog) => catalog?.id === one)?.filters ?? []).some(
+          (filter) => filter?.id === where.filter,
+        ),
+    );
+  let sectioned;
+  let trackCure;
+  let linked;
+  let oneOf;
+  let drains;
+  let dismissing;
+  let shaking;
+  let twice;
+  let sharing;
+  let rolledTwice;
+  let smiting;
+  let stepsEvery;
+  let carriedZone;
+  let amending;
+  // 1.429: choices written on the sheet, read by their words: its text and enum fields.
+  let sheetChoosing;
+  const choiceFields = new Set(
+    (Array.isArray(document?.sheet?.fields) ? document.sheet.fields : [])
+      .filter((field) => field?.type === "text" || field?.type === "enum")
+      .map((field) => field.id),
+  );
+  let shadowed;
+  let oncePer;
+  let beams;
+  let conjuring;
+  let selfHeld;
+  let itemBeams;
+  let ritual;
+  let repeating;
+  let leftovers306;
+  let thunderclap;
+  let leftovers308;
+  let sealing;
+  let resisting;
+  let striking;
+  let heldWeapons;
+  let quivering;
+  let afterItems;
+  let beforeFirst;
+  let rescuing;
+  let rescueAgainst;
+  let lowering;
+  let choosing;
+  let restoring;
+  let altering;
+  let halving;
+  let ownRescue;
+  let lowersAlso;
+  let kindsOrCounts;
+  let itemRescue;
+  let spentSave;
+  let dropsMore;
+  let spread;
+  // 1.594: targets each within a distance of the first.
+  let nearFirst;
+  let tabling;
+  let staffs;
+  let kindsChosen;
+  let staffExtras;
+  let itemBecomes;
+  let hitSpends;
+  let appliedValues;
+  let teleports;
+  let moreApplies;
+  let alliesFail;
+  let teleportExtras;
+  let teleportStrike;
+  let healsBack;
+  let arounds;
+  let legendaryMoves;
+  // 1.605 to 1.608, gated after the 1.601 ones.
+  let heldOnlyInLight, freeBeforeAttack, movesTowardSeen, holderIncapacitated, auraSeenByHolder;
+  // 1.609 to 1.613, after those.
+  let notForCaster, hostileUnless, itemDeparture, becomesItem, callDisobeys, callEnds;
+  // 1.610 and 1.614 to 1.616, after those.
+  let callLeash, callWhere, wildCalls, remainingOfAt;
+  // 1.617 to 1.621, after those.
+  let userHolds, contestOnLose, ignoredBy, commandedWithin, callWithin;
+  let legendaryCasts;
+  let legendaryMovesAfter;
+  let smokeWind;
+  let hides;
+  let slowWind;
+  let creatureLooks;
+  // Every item of the ruleset, as "<catalog>/<entry>", for what an item becomes (1.272).
+  // Each item's own entry by "<catalog>/<entry>", for what a conjured weapon is (1.308).
+  const itemsByRef = new Map(
+    (document?.catalogs ?? []).flatMap((catalog) =>
+      (catalogEntryList(catalog, catalogSources) ?? [])
+        .filter((entry) => entry?.item && typeof entry.item === "object")
+        .map((entry) => [`${catalog?.id}/${entry?.id}`, entry.item]),
+    ),
+  );
+  const itemRefs = new Set(
+    (document?.catalogs ?? []).flatMap((catalog) =>
+      (catalogEntryList(catalog, catalogSources) ?? [])
+        .filter((entry) => entry?.item && typeof entry.item === "object")
+        .map((entry) => `${catalog?.id}/${entry?.id}`),
+    ),
+  );
+  // Every entry of the ruleset, as "<catalog>/<entry>", for what an entry amends (1.302).
+  const entryRefs = new Set(
+    (document?.catalogs ?? []).flatMap((catalog) =>
+      (catalogEntryList(catalog, catalogSources) ?? []).map((entry) => `${catalog?.id}/${entry?.id}`),
+    ),
+  );
+  let gazesMore;
+  // true, or attack names, held weapons by tags (1.246), or both.
+  const afterAttackOk = (after) => {
+    if (after === true) return true;
+    if (!after || typeof after !== "object" || Array.isArray(after)) return false;
+    if (Object.keys(after).some((key) => !["names", "items"].includes(key))) return false;
+    if (after.names === undefined && after.items === undefined) return false;
+    if (after.names !== undefined && (!Array.isArray(after.names) || after.names.length < 1)) return false;
+    const tagList = (list) => list === undefined || (Array.isArray(list) && list.length >= 1);
+    return (
+      after.items === undefined ||
+      (after.items &&
+        typeof after.items === "object" &&
+        Object.keys(after.items).length > 0 &&
+        Object.keys(after.items).every((key) => ["tags", "notTags"].includes(key)) &&
+        tagList(after.items.tags) &&
+        tagList(after.items.notTags))
+    );
+  };
+  const damageNames = new Set((document?.combat?.damageTypes ?? []).map((type) => String(type).toLowerCase()));
+  const liveIds = new Set((document?.sheet?.live?.conditions ?? []).map((one) => one?.id));
+  const listOf = (list, ok) =>
+    Array.isArray(list) && list.length >= 1 && list.length <= 8 && new Set(list).size === list.length && list.every(ok);
+  const saveExtras = (save, at) => {
+    if (save?.against === undefined && save?.succeeds === undefined) return;
+    const { against, succeeds } = save;
+    if (
+      (against !== undefined &&
+        (!against ||
+          (against.conditions === undefined && against.damage === undefined && against.qualities === undefined) ||
+          (against.conditions !== undefined && !listOf(against.conditions, (one) => liveIds.has(one))) ||
+          // What it is (1.652): Cloudkill's gas.
+          (against.qualities !== undefined &&
+            !listOf(against.qualities, (one) => typeof one === "string" && /^[a-z][a-z0-9_]{0,63}$/u.test(one))) ||
+          (against.damage !== undefined &&
+            !listOf(against.damage, (one) => damageNames.has(String(one).toLowerCase()))))) ||
+      (succeeds !== undefined &&
+        (!succeeds ||
+          (succeeds.immune === undefined && succeeds.conditionImmune === undefined && succeeds.is === undefined) ||
+          (succeeds.immune !== undefined &&
+            !listOf(succeeds.immune, (one) => damageNames.has(String(one).toLowerCase()))) ||
+          (succeeds.conditionImmune !== undefined && !listOf(succeeds.conditionImmune, (one) => liveIds.has(one)))))
+    )
+      throw new Error(`${id} ${at} save against and succeeds name the sheet's conditions and the fight's damage types`);
+    if (against?.qualities !== undefined)
+      lateGate(RULESET_SAVE_QUALITIES_MIN, `has ${at} a save against qualities, of 1.652`);
+    passed ??= `${at} save`;
+  };
+  const catalogNames = new Set((document?.catalogs ?? []).map((one) => one?.id));
+  const senseRanges = (value, at) => {
+    if (
+      !value ||
+      typeof value !== "object" ||
+      Array.isArray(value) ||
+      Object.keys(value).length < 1 ||
+      Object.entries(value).some(([sense, range]) => {
+        const reach = typeof range === "object" && range !== null ? range.add : range;
+        return (
+          !senseIds.has(sense) ||
+          !Number.isFinite(reach) ||
+          reach <= 0 ||
+          reach > 10000 ||
+          (typeof range === "object" && Object.keys(range).length !== 1)
+        );
+      })
+    )
+      throw new Error(`${id} ${at} senses are the fight's senses, each with a range or an add above 0`);
+    given ??= at;
+    if (Object.values(value).some((range) => typeof range === "object")) pushing ??= `${at} senses that add`;
+  };
+  const componentIds = new Set((document?.combat?.components ?? []).map((one) => one?.id));
+  const needsComponents = (list, at) => {
+    if (
+      !Array.isArray(list) ||
+      list.length < 1 ||
+      list.length > 8 ||
+      new Set(list).size !== list.length ||
+      list.some((component) => !componentIds.has(component))
+    )
+      throw new Error(`${id} ${at} components are the fight's components, each once`);
+    componented ??= at;
+  };
+  const senseIds = new Set((document?.combat?.senses ?? []).map((one) => one?.id));
+  // 1.289: a fog the wind blows away only after it has blown on it for whole rounds.
+  const slowDispersal = (value) =>
+    !!value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === 1 &&
+    Number.isInteger(value.after) &&
+    value.after >= 1 &&
+    value.after <= 10;
+  const pierced = (value, at, zone = false) => {
+    const list = value?.pierced;
+    // 1.609: a zone's, obscuring for everybody but its caster.
+    if (value && typeof value === "object" && value.notForCaster !== undefined) {
+      if (value.notForCaster !== true || !zone) throw new Error(`${id} ${at} notForCaster is true, and only a zone's`);
+      notForCaster ??= `${at} notForCaster`;
+    }
+    // 1.286: light obscurement, and fog a wind blows away.
+    if (value && typeof value === "object" && (value.light !== undefined || value.dispersed !== undefined)) {
+      if (
+        (value.light !== undefined && value.light !== true) ||
+        (value.dispersed !== undefined && value.dispersed !== true && !slowDispersal(value.dispersed))
+      )
+        throw new Error(`${id} ${at} light is true and dispersed true or { after: 1 to 10 } when given`);
+      windAndLight ??= `${at} light or dispersed`;
+      if (slowDispersal(value.dispersed)) slowWind ??= `${at} dispersed after ${value.dispersed.after} rounds`;
+    }
+    // 1.297: magical darkness, which a zone that dispelsDark ends.
+    if (value && typeof value === "object" && value.darkness !== undefined) {
+      if (value.darkness !== true) throw new Error(`${id} ${at} darkness is true when given`);
+      zoneLight ??= `${at} magical darkness`;
+    }
+    if (
+      !value ||
+      typeof value !== "object" ||
+      Object.keys(value).some((key) => !["pierced", "light", "dispersed", "darkness", "notForCaster"].includes(key)) ||
+      (list !== undefined &&
+        (!Array.isArray(list) ||
+          list.length < 1 ||
+          new Set(list).size !== list.length ||
+          list.some((sense) => !senseIds.has(sense))))
+    )
+      throw new Error(`${id} ${at} is seen through only by the fight's senses, each once`);
+    sighted ??= at;
+  };
+  // SRD 5.1 creature types: Hold Person takes a humanoid, holy water burns a fiend or undead. Every
+  // type and tag a test or a creature names is one the ruleset declares.
+  const kinds = document?.combat?.creatureTypes;
+  const typeIds = new Set((kinds?.types ?? []).map((one) => one?.id));
+  const tagIds = new Set((kinds?.tags ?? []).map((one) => one?.id));
+  if (kinds !== undefined) {
+    if (typeIds.size === 0) throw new Error(`${id} combat.creatureTypes declares no types`);
+    if (kinds.default !== undefined && !typeIds.has(kinds.default))
+      throw new Error(`${id} combat.creatureTypes default "${kinds.default}" is not a declared type`);
+    gate(RULESET_CREATURE_TYPES_MIN, "declares creature types");
+  }
+  const named = (where, types, tags) => {
+    if (!kinds) throw new Error(`${id} ${where} names a creature type, and the ruleset declares none`);
+    gate(RULESET_CREATURE_TYPES_MIN, `has ${where} reading what a creature is`);
+    for (const type of types ?? [])
+      if (!typeIds.has(type)) throw new Error(`${id} ${where} names creature type "${type}", which is not declared`);
+    for (const tag of tags ?? [])
+      if (!tagIds.has(tag)) throw new Error(`${id} ${where} names creature tag "${tag}", which is not declared`);
+  };
+  // 1.185: the kinds a condition's or an item's modifier names are declared ones.
+  const kindsOf = (where, modifiers) => {
+    for (const modifier of modifiers ?? []) {
+      const from = modifier?.from ?? modifier?.against?.from;
+      if (from) named(`${where} modifier from`, from.types, from.tags);
+    }
+  };
+  for (const condition of document?.combat?.conditions ?? [])
+    kindsOf(`combat condition "${condition?.condition}"`, condition?.modifiers);
+  // Gated with the newer gates, below, so an older gate is met first.
+  let sizedAt;
+  const test = (where, targetIs) => {
+    if (targetIs === undefined) return;
+    const sized = targetIs?.upToSize !== undefined || targetIs?.atLeastSize !== undefined;
+    if (
+      !targetIs ||
+      typeof targetIs !== "object" ||
+      (!targetIs.types && !targetIs.tags && !sized && targetIs.except === undefined)
+    )
+      throw new Error(`${id} ${where} needs { types and/or tags, or upToSize and/or atLeastSize }`);
+    if (targetIs.types || targetIs.tags) named(where, targetIs.types, targetIs.tags);
+    // 1.403: a size, read from combat.sizes.
+    if (sized) {
+      const sizes = new Set((document?.combat?.sizes?.order ?? []).map((one) => one?.id));
+      for (const key of ["upToSize", "atLeastSize"])
+        if (targetIs[key] !== undefined && !sizes.has(targetIs[key]))
+          throw new Error(`${id} ${where} ${key} "${targetIs[key]}" is not a size in combat.sizes`);
+      sizedAt ??= where;
+    }
+  };
+  const tests = (where, carrier) => {
+    (carrier?.plus ?? carrier?.damage?.plus ?? []).forEach((clause, index) =>
+      test(`${where} plus ${index} targetIs`, clause?.targetIs),
+    );
+    for (const applied of carrier?.applies ?? [])
+      test(`${where} applies "${applied?.condition}" targetIs`, applied?.targetIs);
+    if (carrier?.targetTypes !== undefined) {
+      const gates = carrier.targetTypes;
+      if (
+        !gates.is &&
+        !gates.not &&
+        !gates.abilityAtMost &&
+        !gates.abilityAtLeast &&
+        !gates.notImmuneTo &&
+        gates.calledBySelf === undefined &&
+        gates.understands === undefined
+      )
+        throw new Error(
+          `${id} ${where} targetTypes says none of is, not, abilityAtMost, abilityAtLeast, notImmuneTo, calledBySelf or understands`,
+        );
+      // 1.561: only a creature that understands its user; gated at the end.
+      if (gates.understands !== undefined && gates.understands !== true)
+        throw new Error(`${id} ${where} targetTypes understands is true when it is given`);
+      // 1.487: only a creature its user called; gated with the sheet hooks.
+      if (gates.calledBySelf !== undefined && gates.calledBySelf !== true)
+        throw new Error(`${id} ${where} targetTypes calledBySelf is true when it is given`);
+      if (gates.abilityAtLeast !== undefined) {
+        const abilities = new Set((document?.sheet?.abilities ?? []).map((one) => one?.id));
+        const pairs = Object.entries(gates.abilityAtLeast ?? {});
+        if (
+          pairs.length < 1 ||
+          pairs.some(([ability, least]) => (abilities.size > 0 && !abilities.has(ability)) || !Number.isInteger(least))
+        )
+          throw new Error(`${id} ${where} targetTypes abilityAtLeast names the sheet's abilities, each a whole number`);
+        warding ??= `${where} targetTypes abilityAtLeast`;
+      }
+      test(`${where} targetTypes.is`, gates.is);
+      test(`${where} targetTypes.not`, gates.not);
+      if (gates.abilityAtMost !== undefined) {
+        const abilities = new Set((document?.sheet?.abilities ?? []).map((one) => one?.id));
+        const pairs = Object.entries(gates.abilityAtMost ?? {});
+        if (
+          pairs.length < 1 ||
+          pairs.some(([ability, most]) => (abilities.size > 0 && !abilities.has(ability)) || !Number.isInteger(most))
+        )
+          throw new Error(`${id} ${where} targetTypes abilityAtMost names the sheet's abilities, each a whole number`);
+        kinded ??= `has ${where} targetTypes abilityAtMost`;
+      }
+      if (gates.notImmuneTo !== undefined) {
+        if (
+          !Array.isArray(gates.notImmuneTo) ||
+          gates.notImmuneTo.length < 1 ||
+          gates.notImmuneTo.some((one) => !liveIds.has(one))
+        )
+          throw new Error(`${id} ${where} targetTypes notImmuneTo names the sheet's conditions`);
+        kinded ??= `has ${where} targetTypes notImmuneTo`;
+      }
+    }
+    for (const [index, mode] of (carrier?.save?.modes ?? []).entries()) {
+      if (!["advantage", "disadvantage"].includes(mode?.mode))
+        throw new Error(`${id} ${where} save mode ${index} is advantage or disadvantage`);
+      test(`${where} save mode ${index} is`, mode.is ?? {});
+      kinded ??= `has ${where} save modes by what a target is`;
+    }
+    // 1.196: a health pool shared out lowest first, a health ceiling, and killing outright.
+    if (carrier?.healthPool !== undefined) {
+      const pool = carrier.healthPool;
+      if (
+        !pool ||
+        typeof pool !== "object" ||
+        Array.isArray(pool) ||
+        (pool.dice === undefined && pool.flat === undefined) ||
+        Object.keys(pool).some((key) => key !== "dice" && key !== "flat")
+      )
+        throw new Error(`${id} ${where} healthPool names dice or a flat number, and nothing else`);
+      if (pool.dice !== undefined && !/^\d+d\d+$/u.test(String(pool.dice)))
+        throw new Error(`${id} ${where} healthPool dice ${JSON.stringify(pool.dice)} are not NdM`);
+      if (pool.flat !== undefined && (!Number.isInteger(pool.flat) || pool.flat < 0))
+        throw new Error(`${id} ${where} healthPool flat is a whole number`);
+      gated ??= `${where} healthPool`;
+    }
+    // 1.199: who a pool passes over.
+    if (carrier?.healthPoolSkips !== undefined) {
+      const skips = carrier.healthPoolSkips;
+      if (
+        !skips ||
+        typeof skips !== "object" ||
+        Array.isArray(skips) ||
+        (skips.conditions === undefined && skips.unseeing === undefined) ||
+        Object.keys(skips).some((key) => key !== "conditions" && key !== "unseeing") ||
+        (skips.unseeing !== undefined && skips.unseeing !== true) ||
+        (skips.conditions !== undefined &&
+          (!Array.isArray(skips.conditions) ||
+            skips.conditions.length < 1 ||
+            skips.conditions.some((one) => !liveIds.has(one))))
+      )
+        throw new Error(`${id} ${where} healthPoolSkips names the sheet's conditions, unseeing true, or both`);
+      if (carrier.healthPool === undefined)
+        throw new Error(`${id} ${where} healthPoolSkips has no healthPool to skip from`);
+      skipping ??= `${where} healthPoolSkips`;
+    }
+    if (carrier?.healthAtMost !== undefined) {
+      if (!Number.isInteger(carrier.healthAtMost) || carrier.healthAtMost < 0 || carrier.healthAtMost > 100000)
+        throw new Error(`${id} ${where} healthAtMost is a whole number from 0 to 100000`);
+      gated ??= `${where} healthAtMost`;
+    }
+    if (carrier?.kills !== undefined) {
+      if (carrier.kills !== true) throw new Error(`${id} ${where} kills is true or left out`);
+      gated ??= `${where} kills`;
+    }
+    if (carrier?.maxAgainst !== undefined) {
+      if (carrier.amount === undefined) throw new Error(`${id} ${where} maxAgainst has no amount to deal at its most`);
+      test(`${where} maxAgainst`, carrier.maxAgainst);
+      kinded ??= `has ${where} maxAgainst`;
+    }
+  };
+  for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : []) {
+    for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+      const where = `catalog "${catalog.id}" entry "${entry.id}"`;
+      tests(`${where} mechanics`, entry?.mechanics);
+      tests(`${where} use`, entry?.item?.use);
+      for (const [hold, carrier] of Object.entries({ worn: entry?.item?.worn, carried: entry?.item?.carried })) {
+        kindsOf(`${where} ${hold}`, carrier?.modifiers);
+        if ((carrier?.modifiers ?? []).some((modifier) => modifier?.from ?? modifier?.against?.from))
+          kinded ??= `has ${where} ${hold} saves against what a kind of creature does`;
+      }
+      // SRD 5.1's dragon slayer, frost brand and sword of sharpness: at most three clauses, each with
+      // dice or a flat amount, and a critical-only one says so.
+      const attack = entry?.item?.attack;
+      if (attack?.plus !== undefined) {
+        if (!Array.isArray(attack.plus) || attack.plus.length < 1 || attack.plus.length > 3)
+          throw new Error(`${id} ${where} attack plus has one to three clauses`);
+        attack.plus.forEach((clause, index) => {
+          if (clause?.dice === undefined && clause?.flat === undefined)
+            throw new Error(`${id} ${where} attack plus ${index} names dice, a flat amount, or both`);
+          if (clause.when !== undefined && !["always", "critical", "toggled"].includes(clause.when))
+            throw new Error(`${id} ${where} attack plus ${index} when is "always", "critical" or "toggled"`);
+          if (clause.when === "toggled" && !entry.item.toggle)
+            throw new Error(`${id} ${where} attack plus ${index} burns only while on, and the item has no toggle`);
+          test(`${where} attack plus ${index} targetIs`, clause.targetIs);
+          // 1.187: skipping a kind, only one kind of blow, temporary points for what it dealt.
+          test(`${where} attack plus ${index} not`, clause.not);
+          if (clause.blow !== undefined && !["melee", "ranged"].includes(clause.blow))
+            throw new Error(`${id} ${where} attack plus ${index} blow is "melee" or "ranged"`);
+          if (clause.tempHp !== undefined && clause.tempHp !== true)
+            throw new Error(`${id} ${where} attack plus ${index} tempHp is true or left out`);
+          if (clause.not !== undefined || clause.blow !== undefined || clause.tempHp !== undefined)
+            slaying ??= `${where} attack plus ${index}`;
+          if (clause.marked !== undefined) {
+            if (!names.conditions.has(clause.marked))
+              throw new Error(
+                `${id} ${where} attack plus ${index} is marked by unknown condition ${JSON.stringify(clause.marked)}`,
+              );
+            marking ??= `${where} attack plus ${index}`;
+          }
+        });
+        gate(RULESET_WEAPON_EXTRAS_MIN, `has ${where} dealing extra damage on a hit`);
+      }
+      // The Engine takes at most 20 targets for one use.
+      for (const carrier of [entry?.mechanics, entry?.item?.use])
+        if (
+          carrier?.targetCount !== undefined &&
+          (!Number.isInteger(carrier.targetCount) || carrier.targetCount < 1 || carrier.targetCount > 20)
+        )
+          throw new Error(`${id} ${where} targetCount is a whole number from 1 to 20`);
+      const perStep = entry?.mechanics?.targetsPerCostStep;
+      if (perStep !== undefined) {
+        if (!Number.isInteger(perStep) || perStep < 1 || perStep > 10)
+          throw new Error(`${id} ${where} targetsPerCostStep is a whole number from 1 to 10`);
+        growing ??= where;
+      }
+      // A zone on the entry, or since 1.174 on an item's use, as a spell scroll of a zone spell has.
+      // 1.461: cast over rounds; 1.462: set up before a fight only, a zone; 1.465: any entry.
+      for (const [carrier, at] of [
+        [entry?.mechanics, where],
+        [entry?.item?.use, `${where} use`],
+      ]) {
+        if (carrier?.castingRounds !== undefined) {
+          if (!Number.isInteger(carrier.castingRounds) || carrier.castingRounds < 2 || carrier.castingRounds > 10)
+            throw new Error(`${id} ${at} castingRounds is 2 to 10`);
+          castingOver ??= `${at} castingRounds`;
+        }
+        if (carrier?.beforeFight !== undefined) {
+          if (carrier.beforeFight !== true) throw new Error(`${id} ${at} beforeFight is true`);
+          setUpBefore ??= `${at} beforeFight`;
+          if (carrier.zone === undefined) setUpAny ??= `${at} beforeFight with no zone`;
+        }
+        // 1.464: steering a condition its user put on at a point, aimed with an area.
+        if (carrier?.steers !== undefined) {
+          const known = new Set((document?.sheet?.live?.conditions ?? []).map((one) => one?.id));
+          if (!known.has(carrier.steers) || carrier.area === undefined)
+            throw new Error(`${id} ${at} steers is one of the sheet's conditions, with an area to aim it`);
+          steering ??= `${at} steers`;
+        }
+        // 1.468: a ray for each target, off one save and no attack roll.
+        if (carrier?.rays !== undefined) {
+          const rays = carrier.rays;
+          const applied = new Set((carrier.applies ?? []).map((one) => one?.condition));
+          const rows = rays?.rows;
+          if (
+            !rays ||
+            typeof rays !== "object" ||
+            Object.keys(rays).some((key) => !["dice", "rows"].includes(key)) ||
+            typeof rays.dice !== "string" ||
+            !Array.isArray(rows) ||
+            rows.length < 2 ||
+            rows.length > 12 ||
+            rows.some(
+              (row, index) =>
+                !row ||
+                typeof row !== "object" ||
+                Object.keys(row).some((key) => !["atMost", "label", "damageType", "applies", "again"].includes(key)) ||
+                !Number.isInteger(row.atMost) ||
+                row.atMost < 1 ||
+                row.atMost > 100 ||
+                (index > 0 && row.atMost <= rows[index - 1].atMost) ||
+                typeof row.label !== "string" ||
+                row.label.length < 1 ||
+                (row.damageType !== undefined && !damageNames.has(String(row.damageType).toLowerCase())) ||
+                (row.applies !== undefined &&
+                  (!Array.isArray(row.applies) ||
+                    row.applies.length < 1 ||
+                    row.applies.some((one) => !applied.has(one)))) ||
+                (row.again !== undefined && (!Number.isInteger(row.again) || row.again < 1 || row.again > 3)),
+            ) ||
+            carrier.save === undefined ||
+            carrier.attackRoll
+          )
+            throw new Error(
+              `${id} ${at} rays are { dice, rows: 2 to 12 of { atMost rising, label, damageType?, applies? of the entry's own, again? 1 to 3 } }, with a save and no attack roll`,
+            );
+          raying ??= `${at} rays`;
+        }
+      }
+      for (const [carrier, zoneAt] of [
+        [entry?.mechanics, where],
+        [entry?.item?.use, `${where} use`],
+        // 1.609: a further use's own zone too, Insect Cloud's.
+        ...(Array.isArray(entry?.item?.moreUses) ? entry.item.moreUses : []).map((more, index) => [
+          more?.use,
+          `${where} moreUses ${index} use`,
+        ]),
+      ]) {
+        const zone = carrier?.zone;
+        if (zone === undefined) continue;
+        if (carrier === entry?.item?.use) ruled ??= zoneAt;
+        {
+          const triggers = Array.isArray(zone?.triggers) ? zone.triggers : [];
+          if (
+            !Number.isInteger(zone?.rounds) ||
+            zone.rounds < 1 ||
+            zone.rounds > 14400 ||
+            (triggers.length < 1 &&
+              zone?.terrain === undefined &&
+              zone?.stages === undefined &&
+              zone?.obscures === undefined &&
+              zone?.inside === undefined &&
+              zone?.forbids === undefined &&
+              zone?.wards === undefined &&
+              zone?.detonates === undefined &&
+              zone?.keepsOut === undefined &&
+              zone?.disperses === undefined &&
+              zone?.lights === undefined &&
+              zone?.dispelsDark === undefined &&
+              zone?.dispelsLight === undefined &&
+              zone?.blocks === undefined &&
+              zone?.sealsAir === undefined &&
+              carrier.area?.shape !== "wall") ||
+            triggers.length > 3 ||
+            new Set(triggers).size !== triggers.length ||
+            triggers.some((one) => !["enter", "turn-start", "turn-end"].includes(one))
+          )
+            throw new Error(
+              `${id} ${zoneAt} zone needs rounds 1-1000 and one to three distinct triggers, or none with terrain`,
+            );
+          if (!carrier.area) throw new Error(`${id} ${zoneAt} zone has no area to stay`);
+          if (zone.rounds > 1000) longZone ??= `${zoneAt} a zone of over 1000 rounds`;
+          // 1.200: a wall in sections, each struck at like a creature and broken at 0.
+          if (zone.sections !== undefined) {
+            const sections = zone.sections;
+            const at = `${id} ${zoneAt} zone sections`;
+            const known = ["every", "health", "defense", "vulnerable", "resist", "immune", "broken"];
+            if (!sections || typeof sections !== "object" || Array.isArray(sections))
+              throw new Error(`${at} are an object`);
+            const extra = Object.keys(sections).find((key) => !known.includes(key));
+            if (extra !== undefined) throw new Error(`${at} have the unknown key ${JSON.stringify(extra)}`);
+            if (!(Number.isFinite(sections.every) && sections.every > 0))
+              throw new Error(`${at} every is a length above 0`);
+            if (!Number.isInteger(sections.health) || sections.health < 1 || sections.health > 100000)
+              throw new Error(`${at} health is a whole number from 1 to 100000`);
+            if (!Number.isInteger(sections.defense) || sections.defense < 0 || sections.defense > 1000)
+              throw new Error(`${at} defense is a whole number from 0 to 1000`);
+            for (const key of ["vulnerable", "resist", "immune"]) {
+              const types = sections[key];
+              if (types === undefined) continue;
+              if (!Array.isArray(types) || types.length < 1 || types.length > 16)
+                throw new Error(`${at} ${key} is a list of 1 to 16 damage types`);
+              for (const type of types)
+                if (!damageNames.has(String(type).toLowerCase()))
+                  throw new Error(`${at} ${key} names unknown damage type ${JSON.stringify(type)}`);
+            }
+            if (carrier.area?.shape !== "wall" || zone.blocks === undefined)
+              throw new Error(`${at} are a wall's that blocks`);
+            const broken = sections.broken;
+            if (broken !== undefined) {
+              const brokenKeys = ["triggers", "amount", "damageType", "save", "onSave", "perCostStep"];
+              const triggersOk =
+                Array.isArray(broken?.triggers) &&
+                broken.triggers.length >= 1 &&
+                broken.triggers.length <= 3 &&
+                new Set(broken.triggers).size === broken.triggers.length &&
+                broken.triggers.every((one) => ["enter", "turn-start", "turn-end"].includes(one));
+              if (
+                !broken ||
+                typeof broken !== "object" ||
+                Object.keys(broken).some((key) => !brokenKeys.includes(key)) ||
+                !triggersOk ||
+                !broken.amount ||
+                (broken.amount.dice === undefined && broken.amount.flat === undefined)
+              )
+                throw new Error(`${at} broken names one to three triggers and an amount`);
+              if (broken.damageType !== undefined && !damageNames.has(String(broken.damageType).toLowerCase()))
+                throw new Error(`${at} broken deals unknown damage type ${JSON.stringify(broken.damageType)}`);
+              if (
+                broken.onSave !== undefined &&
+                (!["half", "none"].includes(broken.onSave) || broken.save === undefined)
+              )
+                throw new Error(`${at} broken onSave is half or none, beside a save`);
+              if (broken.save !== undefined && carrier.save === undefined)
+                throw new Error(`${at} broken save is rolled against the entry's own save, which it has not`);
+              if (broken.perCostStep !== undefined) {
+                const step = broken.perCostStep;
+                if (
+                  !step ||
+                  typeof step !== "object" ||
+                  Object.keys(step).some((key) => !["dice", "flat"].includes(key)) ||
+                  (step.dice === undefined && step.flat === undefined)
+                )
+                  throw new Error(`${at} broken perCostStep is dice, a flat amount or both`);
+                trackCure ??= `${zoneAt} zone sections broken perCostStep`;
+              }
+            }
+            sectioned ??= `${zoneAt} zone sections`;
+          }
+          // 1.198: its own damage type at its triggers, the entry's as it appears.
+          if (zone.damageType !== undefined) {
+            if (!damageNames.has(String(zone.damageType).toLowerCase()))
+              throw new Error(`${id} ${zoneAt} zone deals unknown damage type ${JSON.stringify(zone.damageType)}`);
+            if (
+              carrier.amount === undefined ||
+              (triggers.length < 1 && zone.side === undefined && zone.move?.ram === undefined)
+            )
+              throw new Error(`${id} ${zoneAt} zone damage type needs an amount and a trigger, a side or a ram`);
+            typedZone ??= `${zoneAt} zone damageType`;
+          }
+          if (zone.obscures !== undefined) pierced(zone.obscures, `${zoneAt} zone obscures`, true);
+          if (zone.inside !== undefined) {
+            const inside = zone.inside;
+            const known = new Set((document?.sheet?.live?.conditions ?? []).map((one) => one?.id));
+            const types = new Set((document?.combat?.damageTypes ?? []).map((type) => String(type).toLowerCase()));
+            const listOf = (list, ok) =>
+              list === undefined ||
+              (Array.isArray(list) && list.length >= 1 && new Set(list).size === list.length && list.every(ok));
+            if (
+              !inside ||
+              typeof inside !== "object" ||
+              Object.keys(inside).some((key) => !["conditions", "immune", "is", "chooses", "save"].includes(key)) ||
+              (inside.chooses !== undefined && (inside.chooses !== "type" || inside.is !== undefined)) ||
+              (inside.conditions === undefined && inside.immune === undefined) ||
+              !listOf(inside.conditions, (one) => known.has(one)) ||
+              !listOf(inside.immune, (one) => types.has(String(one).toLowerCase()))
+            )
+              throw new Error(
+                `${id} ${zoneAt} zone inside names the sheet's conditions or the fight's damage types, and chooses is "type" in place of is`,
+              );
+            if (inside.chooses !== undefined) insideChoosing ??= `${zoneAt} zone inside chooses`;
+            componented ??= `${zoneAt} zone inside`;
+            // 1.460: only on those it matches, and a save that shrugs it off until they leave.
+            if (inside.is !== undefined || inside.save !== undefined) {
+              const saveIds = new Set((document?.sheet?.saves ?? []).map((one) => one?.id));
+              if (
+                (inside.is !== undefined && awareOfIssue(document, { of: inside.is }) !== undefined) ||
+                (inside.save !== undefined &&
+                  (!inside.save ||
+                    typeof inside.save !== "object" ||
+                    // 1.579: thrown as the zone is cast (gated at the end).
+                    Object.keys(inside.save).some((key) => !["save", "ignoresUntilLeaves", "onCast"].includes(key)) ||
+                    !saveIds.has(inside.save.save) ||
+                    inside.save.ignoresUntilLeaves !== true ||
+                    (inside.save.onCast !== undefined && inside.save.onCast !== true)))
+              )
+                throw new Error(
+                  `${id} ${zoneAt} zone inside is is a target test, and save is { save: the sheet's save, ignoresUntilLeaves: true, onCast?: true }`,
+                );
+              insideTest ??= `${zoneAt} zone inside is or save`;
+            }
+          }
+          if (zone.forbids !== undefined) {
+            const forbids = zone.forbids;
+            if (
+              !forbids ||
+              typeof forbids !== "object" ||
+              Object.keys(forbids).some((key) => !["components", "teleport", "casts"].includes(key)) ||
+              (forbids.components === undefined && forbids.teleport === undefined && forbids.casts === undefined) ||
+              (forbids.teleport !== undefined &&
+                forbids.teleport !== true &&
+                // 1.753: nobody teleports into it (gated at the end): Forbiddance.
+                forbids.teleport !== "into" &&
+                // 1.603: a save that gets past it, against the zone's maker (gated at the end).
+                !(
+                  forbids.teleport &&
+                  typeof forbids.teleport === "object" &&
+                  Object.keys(forbids.teleport).length === 2 &&
+                  typeof forbids.teleport.save === "string" &&
+                  forbids.teleport.difficulty === "caster"
+                )) ||
+              (forbids.casts !== undefined &&
+                (!Array.isArray(forbids.casts) ||
+                  forbids.casts.length < 1 ||
+                  new Set(forbids.casts).size !== forbids.casts.length ||
+                  forbids.casts.some((one) => !(document?.catalogs ?? []).some((catalog) => catalog?.id === one))))
+            )
+              throw new Error(
+                `${id} ${zoneAt} zone forbids is { components?, teleport?: true, "into" or { save, difficulty: "caster" }, casts?: the ruleset's catalogs }, at least one`,
+              );
+            if (forbids.components !== undefined) needsComponents(forbids.components, `${zoneAt} zone forbids`);
+            if (forbids.teleport) barring ??= `${zoneAt} zone forbids teleport`;
+          }
+          if (zone.wards !== undefined) {
+            const wards = zone.wards;
+            const catalogIds = new Set((document?.catalogs ?? []).map((one) => one?.id));
+            if (
+              !Array.isArray(wards?.catalogs) ||
+              wards.catalogs.length < 1 ||
+              new Set(wards.catalogs).size !== wards.catalogs.length ||
+              wards.catalogs.some((one) => !catalogIds.has(one)) ||
+              !Number.isInteger(wards.maxLevel) ||
+              wards.maxLevel < 0 ||
+              wards.maxLevel > 20 ||
+              (wards.by !== undefined && !["base", "paid"].includes(wards.by)) ||
+              (wards.maxLevelPerCostStep !== undefined &&
+                (!Number.isInteger(wards.maxLevelPerCostStep) ||
+                  wards.maxLevelPerCostStep < 1 ||
+                  wards.maxLevelPerCostStep > 10))
+            )
+              throw new Error(
+                `${id} ${zoneAt} zone wards name the ruleset's catalogs, a level from 0 to 20, by base or paid, and 1 to 10 more per step`,
+              );
+            componented ??= `${zoneAt} zone wards`;
+            if (wards.by !== undefined || wards.maxLevelPerCostStep !== undefined) passed ??= `${zoneAt} zone wards`;
+          }
+          // From 1.301 copies its caster moves move together; they are never anchored or drift.
+          if (carrier.area.copies !== undefined && (zone.anchor !== undefined || zone.drift !== undefined))
+            throw new Error(`${id} ${zoneAt} zone set down several times stays where it is cast or is moved`);
+          if (carrier.area.copies !== undefined && zone.move !== undefined)
+            carriedZone ??= `${zoneAt} zone of copies that moves`;
+          // 1.301: a burst put on a cell somebody stands on goes where they go.
+          if (zone.carried !== undefined) {
+            if (
+              !["any", "own"].includes(zone.carried) ||
+              carrier.area.shape !== "burst" ||
+              carrier.area.copies !== undefined ||
+              zone.anchor !== undefined ||
+              zone.move !== undefined ||
+              zone.drift !== undefined
+            )
+              throw new Error(
+                `${id} ${zoneAt} zone carried is "any" or "own", on a single burst at a point that never moves of its own`,
+              );
+            carriedZone ??= `${zoneAt} zone carried`;
+          }
+          const wall = carrier.area.shape === "wall";
+          if (wall) {
+            if (zone.anchor !== undefined || zone.move !== undefined || zone.drift !== undefined)
+              throw new Error(`${id} ${zoneAt} zone wall stays where it is cast`);
+            walled ??= zoneAt;
+          }
+          if (zone.side !== undefined) {
+            const sideTriggers = Array.isArray(zone.side?.triggers) ? zone.side.triggers : [];
+            if (
+              !wall ||
+              !Number.isFinite(zone.side?.distance) ||
+              zone.side.distance <= 0 ||
+              sideTriggers.length < 1 ||
+              sideTriggers.length > 3 ||
+              new Set(sideTriggers).size !== sideTriggers.length ||
+              sideTriggers.some((one) => !["enter", "turn-start", "turn-end"].includes(one))
+            )
+              throw new Error(`${id} ${zoneAt} zone side is a wall's, with a distance and one to three triggers`);
+          }
+          if (zone.blocks !== undefined) {
+            const blocks = zone.blocks;
+            if (
+              !Array.isArray(blocks) ||
+              blocks.length < 1 ||
+              new Set(blocks).size !== blocks.length ||
+              blocks.some((one) => !["move", "sight", "spells", "ranged"].includes(one)) ||
+              // 1.602: spells on any zone (gated at the end); 1.659: ranged on any zone; move and sight only a wall's.
+              (!wall && blocks.some((one) => !["spells", "ranged"].includes(one)))
+            )
+              throw new Error(`${id} ${zoneAt} zone blocks are move or sight (a wall's), spells or ranged, each once`);
+            if (blocks.includes("ranged"))
+              lateGate(RULESET_SEALED_ZONES_MIN, `has ${zoneAt} a zone blocking ranged weapon attacks, of 1.659`);
+          }
+          // 1.759: what a wall blocking sight is made of, and how thick.
+          if (zone.material !== undefined) {
+            const material = zone.material;
+            if (
+              !material ||
+              typeof material !== "object" ||
+              Object.keys(material).some((key) => !["of", "inches"].includes(key)) ||
+              typeof material.of !== "string" ||
+              !/^[a-z][a-z0-9_]*$/u.test(material.of) ||
+              typeof material.inches !== "number" ||
+              material.inches <= 0 ||
+              material.inches > 10000 ||
+              !wall ||
+              !zone.blocks?.includes("sight")
+            )
+              throw new Error(`${id} ${zoneAt} zone material is { of, inches }, on a wall blocking sight`);
+            lateGate(RULESET_SIGHT_MATERIALS_MIN, `has ${zoneAt} a wall of a material, of 1.759`);
+          }
+          // 1.764: only a creature moving in enters it.
+          if (zone.enterOnlyByMoving !== undefined) {
+            if (zone.enterOnlyByMoving !== true || !zone.triggers?.includes("enter"))
+              throw new Error(`${id} ${zoneAt} zone enterOnlyByMoving is true, on a zone with an enter trigger`);
+            lateGate(RULESET_ENTER_BY_MOVING_MIN, `has ${zoneAt} a zone entered only by moving, of 1.764`);
+          }
+          // 1.659: gases, wind and fog kept out.
+          if (zone.sealsAir !== undefined) {
+            if (zone.sealsAir !== true) throw new Error(`${id} ${zoneAt} zone sealsAir is true or left out`);
+            lateGate(RULESET_SEALED_ZONES_MIN, `has ${zoneAt} a zone sealing the air, of 1.659`);
+          }
+          if (zone.anchor === "caster" && !["burst", "line", "cone"].includes(carrier.area?.shape))
+            throw new Error(`${id} ${zoneAt} zone that moves with its caster is a burst, line or cone`);
+          if (zone.anchor === "caster" && carrier.area?.shape !== "burst")
+            pushing ??= `${zoneAt} zone held as a line or cone`;
+          if (zone.turn !== undefined) {
+            const budgets = new Set((document?.combat?.economy?.budgets ?? []).map((one) => one?.id));
+            if (
+              zone.anchor !== "caster" ||
+              !["line", "cone"].includes(carrier.area?.shape) ||
+              !budgets.has(zone.turn?.budget) ||
+              Object.keys(zone.turn).length !== 1
+            )
+              throw new Error(
+                `${id} ${zoneAt} zone turn is a caster-held line or cone's, with one of the fight's budgets`,
+              );
+            pushing ??= `${zoneAt} zone turn`;
+          }
+          if (zone.disperses !== undefined) {
+            if (zone.disperses !== true) throw new Error(`${id} ${zoneAt} zone disperses is true when given`);
+            windAndLight ??= `${zoneAt} zone disperses`;
+          }
+          // 1.297: light over the zone's own cells, and magical darkness it ends.
+          if (zone.lights !== undefined) {
+            const lights = zone.lights;
+            if (
+              !lights ||
+              typeof lights !== "object" ||
+              Object.keys(lights).some((key) => !["bright", "dim", "reveals", "sunlight"].includes(key)) ||
+              ![lights.bright, lights.dim].every(
+                (value) => typeof value === "number" && value >= 0 && value <= 10000,
+              ) ||
+              lights.bright + lights.dim <= 0 ||
+              (lights.reveals !== undefined && lights.reveals !== true) ||
+              (lights.sunlight !== undefined && lights.sunlight !== true) ||
+              !document?.combat?.sight?.darkness
+            )
+              throw new Error(
+                `${id} ${zoneAt} zone lights is { bright, dim, reveals? }, 0 to 10000 each and not both 0, in a fight with combat.sight.darkness`,
+              );
+            zoneLight ??= `${zoneAt} zone lights`;
+            if (lights.sunlight) sunlit ??= `${zoneAt} zone lights that are sunlight`;
+          }
+          if (zone.dispelsDark !== undefined) {
+            const upTo = zone.dispelsDark?.upTo;
+            const within = zone.dispelsDark?.within;
+            if (
+              !zone.dispelsDark ||
+              typeof zone.dispelsDark !== "object" ||
+              Object.keys(zone.dispelsDark).some((key) => !["upTo", "within"].includes(key)) ||
+              !Number.isInteger(upTo) ||
+              upTo < 0 ||
+              upTo > 20 ||
+              (within !== undefined && !(typeof within === "number" && within > 0 && within <= 10000))
+            )
+              throw new Error(`${id} ${zoneAt} zone dispelsDark is { upTo: 0 to 20, within? over 0 to 10000 }`);
+            zoneLight ??= `${zoneAt} zone dispelsDark`;
+            // 1.299: only the darkness that near its middle.
+            if (within !== undefined) againstLight ??= `${zoneAt} zone dispelsDark within`;
+          }
+          if (zone.dispelsLight !== undefined) {
+            const upTo = zone.dispelsLight?.upTo;
+            if (
+              !zone.dispelsLight ||
+              typeof zone.dispelsLight !== "object" ||
+              Object.keys(zone.dispelsLight).length !== 1 ||
+              !Number.isInteger(upTo) ||
+              upTo < 0 ||
+              upTo > 20 ||
+              zone.obscures?.darkness !== true
+            )
+              throw new Error(`${id} ${zoneAt} zone dispelsLight is { upTo: 0 to 20 }, on magical darkness`);
+            againstLight ??= `${zoneAt} zone dispelsLight`;
+          }
+          if (zone.terrain?.towardCaster !== undefined) {
+            if (zone.terrain.towardCaster !== true || !(zone.terrain.difficult || zone.terrain.costTimes))
+              throw new Error(`${id} ${zoneAt} zone terrain towardCaster is true on difficult or costlier ground`);
+            pushing ??= `${zoneAt} zone terrain toward the caster`;
+          }
+          zoned ??= zoneAt;
+          const positive = (value) => typeof value === "number" && Number.isFinite(value) && value > 0;
+          if (zone.move !== undefined || zone.drift !== undefined) {
+            if (zone.anchor === "caster" || carrier.area?.shape !== "burst")
+              throw new Error(`${id} ${zoneAt} zone that moves or drifts is a burst held at a point`);
+            const budgets = new Set((document?.combat?.economy?.budgets ?? []).map((one) => one?.id));
+            if (zone.move !== undefined && (!budgets.has(zone.move?.budget) || !positive(zone.move?.distance)))
+              throw new Error(`${id} ${zoneAt} zone move needs one of the fight's budgets and a distance`);
+            if (zone.drift !== undefined && !positive(zone.drift?.distance))
+              throw new Error(`${id} ${zoneAt} zone drift needs a distance`);
+            moving ??= zoneAt;
+          }
+          if (zone.terrain !== undefined) {
+            const terrain = zone.terrain;
+            const per = terrain?.perDistance;
+            if (
+              !terrain ||
+              (terrain.difficult !== undefined && terrain.difficult !== true) ||
+              (terrain.halvesSpeed !== undefined && terrain.halvesSpeed !== true) ||
+              (terrain.costTimes !== undefined &&
+                (!Number.isInteger(terrain.costTimes) || terrain.costTimes < 2 || terrain.costTimes > 10)) ||
+              (terrain.difficult && terrain.costTimes !== undefined) ||
+              (terrain.difficult === undefined &&
+                terrain.costTimes === undefined &&
+                terrain.halvesSpeed === undefined &&
+                per === undefined &&
+                // Or only walked carefully past, or ending a walk (1.689), checked with the sheet hooks.
+                terrain.spareSlowWalkers === undefined &&
+                terrain.endsWalk === undefined) ||
+              (per !== undefined && (!positive(per?.every) || !per?.amount))
+            )
+              throw new Error(
+                `${id} ${zoneAt} zone terrain is difficult or costTimes 2-10, halvesSpeed, harm per distance, careful or walk-ending ground, or several`,
+              );
+            if (terrain.costTimes !== undefined || terrain.halvesSpeed !== undefined) holding ??= zoneAt;
+            if (per?.damageType !== undefined) {
+              const types = new Set(document?.combat?.damageTypes ?? []);
+              if (types.size > 0 && !types.has(per.damageType))
+                throw new Error(`${id} ${zoneAt} zone terrain deals unknown damage type "${per.damageType}"`);
+            }
+            moving ??= zoneAt;
+          }
+          if (zone.move?.ram !== undefined) {
+            if (zone.move.ram !== true) throw new Error(`${id} ${zoneAt} zone move ram is true`);
+            holding ??= zoneAt;
+          }
+          if (zone.whileHeld !== undefined) {
+            const held = zone.whileHeld;
+            const conditionIds = new Set((document?.combat?.conditions ?? []).map((one) => one?.condition));
+            if (!held || !conditionIds.has(held.condition) || !held.amount)
+              throw new Error(`${id} ${zoneAt} zone whileHeld needs one of the fight's conditions and an amount`);
+            holding ??= zoneAt;
+          }
+          const dice = (amount) =>
+            amount &&
+            typeof amount === "object" &&
+            (amount.dice !== undefined || amount.flat !== undefined) &&
+            (amount.dice === undefined || /^\d+d\d+$/.test(String(amount.dice))) &&
+            (amount.flat === undefined || Number.isInteger(amount.flat));
+          if (zone.detonates !== undefined) {
+            const detonates = zone.detonates;
+            const grows = detonates?.grows;
+            const die = (text) => String(text ?? "").replace(/^\d+/, "");
+            if (
+              !detonates ||
+              typeof detonates !== "object" ||
+              zone.anchor !== undefined ||
+              zone.move !== undefined ||
+              zone.drift !== undefined ||
+              carrier.area?.shape === "wall" ||
+              (detonates.touched !== undefined && detonates.touched !== true) ||
+              (grows !== undefined &&
+                (!dice(grows) ||
+                  (grows.dice !== undefined &&
+                    carrier.amount?.dice !== undefined &&
+                    die(grows.dice) !== die(carrier.amount.dice))))
+            )
+              throw new Error(
+                `${id} ${zoneAt} zone detonates is held at a point, grows by dice matching its amount's, and touched is true`,
+              );
+            // Set off by whoever enters (1.451), it may do the entry's conditions alone (Symbol's).
+            if (carrier.amount === undefined && (detonates.entered !== true || carrier.applies === undefined))
+              throw new Error(`${id} ${zoneAt} zone detonates with no amount to burst`);
+            detonating ??= `${zoneAt} zone detonates`;
+            // 1.451: glyphs, set off by whoever walks in and reaching past their cells.
+            if (detonates.entered !== undefined || detonates.within !== undefined || detonates.by !== undefined) {
+              if (
+                (detonates.entered !== undefined && detonates.entered !== true) ||
+                (detonates.by !== undefined &&
+                  (detonates.entered !== true || awareOfIssue(document, { of: detonates.by }) !== undefined)) ||
+                (detonates.within !== undefined &&
+                  (typeof detonates.within !== "number" || !(detonates.within > 0) || detonates.within > 1000))
+              )
+                throw new Error(
+                  `${id} ${zoneAt} zone detonates entered is true, by a target test beside entered, and within a distance up to 1000`,
+                );
+              glyphing ??= `${zoneAt} zone detonates entered or within`;
+            }
+            // 1.453: staying once set off.
+            if (detonates.becomes !== undefined) {
+              const becomes = detonates.becomes;
+              const triggers = Array.isArray(becomes?.triggers) ? becomes.triggers : [];
+              const lights = becomes?.lights;
+              if (
+                !becomes ||
+                typeof becomes !== "object" ||
+                Object.keys(becomes).some((key) => !["size", "rounds", "triggers", "lights"].includes(key)) ||
+                typeof becomes.size !== "number" ||
+                !(becomes.size > 0) ||
+                becomes.size > 10000 ||
+                !Number.isInteger(becomes.rounds) ||
+                becomes.rounds < 1 ||
+                becomes.rounds > 1000 ||
+                triggers.length < 1 ||
+                triggers.length > 3 ||
+                new Set(triggers).size !== triggers.length ||
+                triggers.some((one) => !["enter", "turn-start", "turn-end"].includes(one)) ||
+                (lights !== undefined &&
+                  (!lights ||
+                    typeof lights !== "object" ||
+                    Object.keys(lights).some((key) => !["bright", "dim"].includes(key)) ||
+                    Object.values(lights).some((one) => typeof one !== "number" || !(one >= 0) || one > 10000)))
+              )
+                throw new Error(
+                  `${id} ${zoneAt} zone detonates becomes a size, rounds 1-1000, one to three distinct triggers and lights`,
+                );
+              becoming ??= `${zoneAt} zone detonates becomes`;
+            }
+            // 1.454: a stored entry, cast at whoever sets it off.
+            if (detonates.stores !== undefined) {
+              if (detonates.stores !== true || detonates.entered !== true)
+                throw new Error(`${id} ${zoneAt} zone detonates stores is true beside entered`);
+              storing ??= `${zoneAt} zone detonates stores`;
+            }
+          }
+          // 1.455: hidden from its caster's foes until found with a check.
+          if (zone.hidden !== undefined) {
+            const checks = new Set((document.combat?.checks ?? []).map((check) => check?.id));
+            if (
+              !zone.hidden ||
+              typeof zone.hidden !== "object" ||
+              Object.keys(zone.hidden).some((key) => key !== "check") ||
+              !checks.has(zone.hidden.check)
+            )
+              throw new Error(`${id} ${zoneAt} zone hidden is { check: one of the ruleset's combat checks }`);
+            hiddenZone ??= `${zoneAt} zone hidden`;
+          }
+          // 1.456: outlasting its caster, never by concentration nor around them.
+          if (zone.outlasts !== undefined) {
+            if (zone.outlasts !== true || carrier.concentration || zone.anchor === "caster")
+              throw new Error(
+                `${id} ${zoneAt} zone outlasts is true, never held by concentration nor around its caster`,
+              );
+            outlasting ??= `${zoneAt} zone outlasts`;
+          }
+          // 1.452: kinds kept out of it, or in it.
+          if (zone.keepsOut !== undefined) {
+            const ward = zone.keepsOut;
+            const conditionIds = sheetNames(document).conditions;
+            if (
+              !ward ||
+              typeof ward !== "object" ||
+              Array.isArray(ward) ||
+              Object.keys(ward).some(
+                (key) => !["is", "way", "attacksInto", "cantGive", "frees", "reach", "endsOnSweep"].includes(key),
+              ) ||
+              (ward.reach !== undefined && ward.reach !== true) ||
+              (ward.endsOnSweep !== undefined && ward.endsOnSweep !== true) ||
+              ward.is === undefined ||
+              awareOfIssue(document, { of: ward.is }) !== undefined ||
+              (ward.way !== undefined && !["in", "out"].includes(ward.way)) ||
+              (ward.attacksInto !== undefined && ward.attacksInto !== "disadvantage") ||
+              (ward.cantGive !== undefined &&
+                (!Array.isArray(ward.cantGive) ||
+                  ward.cantGive.length < 1 ||
+                  ward.cantGive.length > 12 ||
+                  new Set(ward.cantGive).size !== ward.cantGive.length ||
+                  ward.cantGive.some((one) => !conditionIds.has(one)))) ||
+              (ward.frees !== undefined &&
+                (!Array.isArray(ward.frees) ||
+                  ward.frees.length < 1 ||
+                  ward.frees.length > 12 ||
+                  new Set(ward.frees).size !== ward.frees.length ||
+                  ward.frees.some((one) => !conditionIds.has(one))))
+            )
+              throw new Error(
+                `${id} ${zoneAt} zone keepsOut is a target test, a way in or out, attacksInto disadvantage and up to 12 known conditions it can't give, and up to 12 it frees`,
+              );
+            // 1.697: more than 8 of either.
+            if ((ward.cantGive?.length ?? 0) > 8 || (ward.frees?.length ?? 0) > 8)
+              lateGate(
+                RULESET_ZONE_KEEPS_TWELVE_MIN,
+                `has ${zoneAt} a zone keeping out more than 8 conditions, of 1.697`,
+              );
+            keepingOut ??= `${zoneAt} zone keepsOut`;
+            // 1.458: kept in, warding those outside.
+            if (ward.way === "out" && (ward.attacksInto !== undefined || ward.cantGive !== undefined))
+              keepingIn ??= `${zoneAt} zone keepsOut way out warding those outside`;
+            // 1.459: freeing whoever steps in.
+            if (ward.frees !== undefined) freeing ??= `${zoneAt} zone keepsOut frees`;
+            // 1.595: no reaching through, and ending as it is carried over one it keeps out.
+            if (ward.reach !== undefined || ward.endsOnSweep !== undefined)
+              reachBarrier ??= `${zoneAt} zone keepsOut reach or endsOnSweep`;
+          }
+          if (zone.burns !== undefined) {
+            const burns = zone.burns;
+            if (
+              !burns ||
+              !Array.isArray(burns.by) ||
+              burns.by.length < 1 ||
+              new Set(burns.by).size !== burns.by.length ||
+              burns.by.some((one) => !damageNames.has(String(one).toLowerCase())) ||
+              (burns.amount !== undefined && (!dice(burns.amount) || burns.damageType === undefined)) ||
+              (burns.damageType !== undefined && !damageNames.has(String(burns.damageType).toLowerCase()))
+            )
+              throw new Error(
+                `${id} ${zoneAt} zone burns by the fight's damage types, and an amount it deals names its damage type`,
+              );
+            detonating ??= `${zoneAt} zone burns`;
+          }
+          if (zone.breaksConcentration !== undefined) {
+            if (zone.breaksConcentration !== true || !carrier.save || triggers.length === 0)
+              throw new Error(`${id} ${zoneAt} zone that breaks concentration is true, with a save and a trigger`);
+            ruled ??= zoneAt;
+          }
+          if (zone.damageCap !== undefined) {
+            if (!Number.isInteger(zone.damageCap) || zone.damageCap < 1 || zone.damageCap > 100000)
+              throw new Error(`${id} ${zoneAt} zone damageCap is a whole number from 1 to 100000`);
+            ruled ??= zoneAt;
+          }
+        }
+      }
+      if (entry?.item?.use?.concentration !== undefined) ruled ??= `${where} use`;
+      // Holds broken against the applier's save DC, or only with the checks they name (1.175).
+      const escapes = [];
+      const gather = (value, depth = 0) => {
+        if (!value || typeof value !== "object" || depth > 12) return;
+        if (Array.isArray(value)) return value.forEach((one) => gather(one, depth + 1));
+        if (Array.isArray(value.applies))
+          for (const applied of value.applies) if (applied?.escapeDc !== undefined) escapes.push(applied);
+        for (const one of Object.values(value)) gather(one, depth + 1);
+      };
+      gather(entry);
+      // 1.202: each endsWith names another condition of its own list.
+      const lists = [];
+      const gatherLists = (value, depth = 0) => {
+        if (!value || typeof value !== "object" || depth > 12) return;
+        if (Array.isArray(value)) return value.forEach((one) => gatherLists(one, depth + 1));
+        // A ray's applies (1.468) names the entry's own by id: not a list of its own.
+        if (Array.isArray(value.applies) && value.applies.every((one) => one && typeof one === "object"))
+          lists.push(value.applies);
+        for (const one of Object.values(value)) gatherLists(one, depth + 1);
+      };
+      gatherLists(entry);
+      for (const list of lists) {
+        const named = new Set(list.map((one) => one?.condition));
+        for (const applied of list) {
+          if (applied?.endsWith === undefined) continue;
+          if (
+            typeof applied.endsWith !== "string" ||
+            applied.endsWith === applied.condition ||
+            !named.has(applied.endsWith)
+          )
+            throw new Error(`${id} ${where} endsWith names another condition put on in the same list`);
+          linked ??= `${where} endsWith`;
+        }
+      }
+      for (const applied of escapes) {
+        const checkIds = new Set((document?.combat?.checks ?? []).map((one) => one?.id));
+        if (
+          applied.escapeDc !== "save" &&
+          (!Number.isInteger(applied.escapeDc) || applied.escapeDc < 1 || applied.escapeDc > 1000)
+        )
+          throw new Error(`${id} ${where} escapeDc is a whole number from 1 to 1000 or "save"`);
+        if (
+          applied.escapeChecks !== undefined &&
+          (!Array.isArray(applied.escapeChecks) ||
+            applied.escapeChecks.length < 1 ||
+            new Set(applied.escapeChecks).size !== applied.escapeChecks.length ||
+            applied.escapeChecks.some((check) => !checkIds.has(check)))
+        )
+          throw new Error(`${id} ${where} escapeChecks names the fight's checks, each once`);
+        if (!(document?.combat?.contests ?? []).some((contest) => contest?.from?.holding === applied.condition))
+          throw new Error(`${id} ${where} gives "${applied.condition}" an escape DC, but no contest breaks free of it`);
+        if (applied.escapeDc === "save" || applied.escapeChecks !== undefined) holding ??= where;
+      }
+      // A box or a wall (1.177), on the entry or an item's use.
+      for (const [carrier, boxAt] of [
+        [entry?.mechanics, where],
+        [entry?.item?.use, `${where} use`],
+      ]) {
+        const area = carrier?.area;
+        if (area?.copies !== undefined) {
+          if (
+            !Number.isInteger(area.copies) ||
+            area.copies < 2 ||
+            area.copies > 10 ||
+            !["burst", "box"].includes(area.shape)
+          )
+            throw new Error(`${id} ${boxAt} copies are 2 to 10 bursts or boxes`);
+          sighted ??= boxAt;
+        }
+        // 1.301: copies each within this far of another's middle.
+        if (area?.copiesWithin !== undefined) {
+          if (
+            area.copies === undefined ||
+            typeof area.copiesWithin !== "number" ||
+            !(area.copiesWithin > 0 && area.copiesWithin <= 10000)
+          )
+            throw new Error(`${id} ${boxAt} copiesWithin is over 0 to 10000, beside copies`);
+          carriedZone ??= `${boxAt} copiesWithin`;
+        }
+        if (carrier?.seen !== undefined) {
+          if (carrier.seen !== true) throw new Error(`${id} ${boxAt} seen is true`);
+          sighted ??= boxAt;
+        }
+        if (carrier?.components !== undefined) needsComponents(carrier.components, boxAt);
+        saveExtras(carrier?.save, boxAt);
+        if (carrier?.push !== undefined) {
+          if (!Number.isFinite(carrier.push) || carrier.push <= 0 || carrier.push > 10000)
+            throw new Error(`${id} ${boxAt} push is a distance above 0`);
+          pushing ??= `${boxAt} push`;
+        }
+        if (carrier === entry?.item?.use && area?.width !== undefined && area.shape !== "wall") {
+          if (area.shape !== "line" || !Number.isFinite(area.width) || area.width <= 0 || area.width > area.size)
+            throw new Error(`${id} ${boxAt} width is a line's, above 0 and at most its length`);
+          widened ??= `${boxAt} line width`;
+        }
+        // 1.730: an item's use at its own level, and one that is nothing but a reaction that stops what it answers.
+        const cancelling =
+          carrier === entry?.item?.use && carrier?.kind === "utility" && carrier?.reaction?.cancels === true;
+        if (
+          carrier === entry?.item?.use &&
+          (carrier?.level !== undefined || cancelling || carrier?.reaction?.upTo === "paid")
+        ) {
+          if (
+            carrier.level !== undefined &&
+            (!Number.isInteger(carrier.level) || carrier.level < 0 || carrier.level > 20)
+          )
+            throw new Error(`${id} ${boxAt} level is a whole number from 0 to 20`);
+          if (carrier.reaction?.upTo === "paid" && carrier.level === undefined)
+            throw new Error(`${id} ${boxAt} reaction upTo "paid" needs the use's level`);
+          lateGate(RULESET_ITEM_USE_LEVEL_MIN, `has ${boxAt} level or a cancelling reaction, of 1.730`);
+        }
+        if (carrier === entry?.item?.use && carrier?.kind === "utility") {
+          // 1.640: or duplicates a catalog's entries, gated with the newest.
+          // 1.745: or makes items, a scroll of Goodberry.
+          if (
+            !cancelling &&
+            !carrier.teleport &&
+            !carrier.calls &&
+            !carrier.endsSpells &&
+            !carrier.endsLayers &&
+            !carrier.rollsTable &&
+            !carrier.duplicates &&
+            !carrier.makesItems &&
+            (!carrier.area || !carrier.zone)
+          )
+            // 1.559: or rolls its item's table.
+            throw new Error(`${id} ${boxAt} utility use leaves an area: it needs one and a zone`);
+          passed ??= `${boxAt} utility`;
+        }
+        if (carrier?.casts !== undefined) {
+          if (carrier !== entry?.item?.use || !catalogNames.has(carrier.casts))
+            throw new Error(`${id} ${boxAt} casts is an item use's, naming one of the ruleset's catalogs`);
+          given ??= `${boxAt} casts`;
+        }
+        for (const applied of carrier?.applies ?? []) {
+          const ends = applied?.endsWhenHolder;
+          if (ends === undefined) continue;
+          const casts = ends?.casts;
+          if (
+            !ends ||
+            Object.keys(ends).some(
+              (key) => !["attacks", "casts", "castsAtFoes", "moves", "acts", "uses"].includes(key),
+            ) ||
+            (ends.attacks !== undefined && ends.attacks !== true) ||
+            // 1.425: only a cast that reaches a foe, beside casts.
+            (ends.castsAtFoes !== undefined && (ends.castsAtFoes !== true || casts === undefined)) ||
+            (ends.moves !== undefined && ends.moves !== true) ||
+            (ends.acts !== undefined && ends.acts !== true) ||
+            (ends.attacks === undefined &&
+              casts === undefined &&
+              ends.moves === undefined &&
+              ends.acts === undefined &&
+              ends.uses === undefined) ||
+            (ends.uses !== undefined &&
+              (!Array.isArray(ends.uses) ||
+                ends.uses.length < 1 ||
+                ends.uses.length > 8 ||
+                new Set(ends.uses).size !== ends.uses.length ||
+                ends.uses.some((one) => !entryRefs.has(one)))) ||
+            (casts !== undefined &&
+              (!Array.isArray(casts) ||
+                casts.length < 1 ||
+                new Set(casts).size !== casts.length ||
+                casts.some((one) => !catalogNames.has(one))))
+          )
+            throw new Error(
+              `${id} ${boxAt} endsWhenHolder says attacks, casts from the ruleset's catalogs, moves, acts or uses entries it has`,
+            );
+          given ??= `${boxAt} endsWhenHolder`;
+          if (ends.uses) selfHeld ??= `${boxAt} endsWhenHolder uses`;
+          // 1.303: ending when its holder moves or acts.
+          if (ends.moves || ends.acts) shadowed ??= `${boxAt} endsWhenHolder moves or acts`;
+        }
+        // 1.307: conditions on the entry's own user as it is used, not on an item's use.
+        if (carrier?.appliesSelf !== undefined) {
+          const own = carrier.appliesSelf;
+          const sheetConditions = sheetNames(document).conditions;
+          if (
+            (carrier !== entry?.mechanics && carrier !== entry?.item?.use) ||
+            !Array.isArray(own) ||
+            own.length < 1 ||
+            own.length > 4 ||
+            own.some((one) => !sheetConditions.has(one?.condition) || one?.duration === undefined)
+          )
+            throw new Error(`${id} ${boxAt} appliesSelf is 1 to 4 of the sheet's conditions with a duration`);
+          selfHeld ??= `${boxAt} appliesSelf`;
+          // 1.311: on an item's use.
+          if (carrier === entry?.item?.use) leftovers306 ??= `${boxAt} appliesSelf`;
+        }
+        // 1.310: offered again while its user concentrates on it.
+        if (carrier?.repeats !== undefined) {
+          const again = carrier.repeats;
+          const budgets = new Set((document?.combat?.economy?.budgets ?? []).map((one) => one?.id));
+          // 1.583: an item's use, or one of its moreUses, too (gated at the end).
+          if (
+            (carrier !== entry?.mechanics &&
+              carrier !== entry?.item?.use &&
+              !(entry?.item?.moreUses ?? []).some((more) => more?.use === carrier)) ||
+            !carrier.concentration ||
+            !again ||
+            typeof again !== "object" ||
+            Object.keys(again).some(
+              (key) => !["budget", "notSaved", "sameTargets", "group", "afterTargetDown"].includes(key),
+            ) ||
+            // 1.604: once its targets are down, moving what it applied (gated at the end).
+            (again.afterTargetDown !== undefined &&
+              (again.afterTargetDown !== true || again.sameTargets !== undefined || !Array.isArray(carrier.applies))) ||
+            !budgets.has(again.budget) ||
+            (again.group !== undefined &&
+              !(typeof again.group === "string" && /^[a-z0-9_-]{1,40}$/u.test(again.group))) ||
+            (again.notSaved !== undefined && again.notSaved !== true) ||
+            (again.sameTargets !== undefined && again.sameTargets !== true)
+          )
+            throw new Error(
+              `${id} ${boxAt} repeats is { budget the fight has, notSaved?, sameTargets?, afterTargetDown? (true, beside applies, not sameTargets) }, on a concentration entry's own mechanics or item use`,
+            );
+          repeating ??= `${boxAt} repeats`;
+          // 1.313: one casting's choices, offered again together.
+          if (again.group !== undefined) leftovers308 ??= `${boxAt} repeats group`;
+        }
+        // 1.310: a condition that comes off once its holder is far from (and, with unseen, out of sight of) its source.
+        for (const applied of carrier?.applies ?? []) {
+          const away = applied?.endsAway;
+          if (away === undefined) continue;
+          if (
+            !away ||
+            typeof away !== "object" ||
+            Object.keys(away).some((key) => !["beyond", "unseen", "orUnseen"].includes(key)) ||
+            typeof away.beyond !== "number" ||
+            !(away.beyond > 0) ||
+            away.beyond > 10000 ||
+            (away.unseen !== undefined && away.unseen !== true) ||
+            // 1.433: far or out of sight, either one, and never beside unseen.
+            (away.orUnseen !== undefined && (away.orUnseen !== true || away.unseen !== undefined))
+          )
+            throw new Error(
+              `${id} ${boxAt} endsAway is { beyond: feet, unseen?: true } or { beyond: feet, orUnseen: true }`,
+            );
+          repeating ??= `${boxAt} endsAway`;
+        }
+        // 1.305: more targets as the sheet grows, and the same target named again.
+        for (const key of ["targetsScale", "targetsRepeat"]) {
+          if (carrier?.[key] === undefined) continue;
+          const value = carrier[key];
+          if (
+            carrier.area !== undefined ||
+            carrier.targets === "self" ||
+            (key === "targetsRepeat" && value !== true) ||
+            (key === "targetsScale" &&
+              (!value ||
+                typeof value !== "object" ||
+                Object.keys(value).some((one) => !["from", "table"].includes(one)) ||
+                valueRefIssue(value.from, names) !== null ||
+                stepTableIssue(value.table) !== null))
+          )
+            throw new Error(
+              `${id} ${boxAt} ${key} is not an area's or a self one's: targetsScale { from, table }, targetsRepeat true`,
+            );
+          // 1.308: on an item's use.
+          if (carrier === entry?.item?.use) itemBeams ??= `${boxAt} ${key}`;
+          beams ??= `${boxAt} ${key}`;
+        }
+        // 1.304: not used on the same creature again until its user takes this rest.
+        if (carrier?.oncePerTarget !== undefined) {
+          const rests = new Set((document?.rests ?? []).map((rest) => rest?.id));
+          if (
+            // 1.628: on an item's use too, and beside an area, checked with the newest.
+            ![entry?.mechanics, entry?.item?.use, ...(entry?.item?.moreUses ?? []).map((one) => one?.use)].includes(
+              carrier,
+            ) ||
+            !carrier.oncePerTarget ||
+            typeof carrier.oncePerTarget !== "object" ||
+            Object.keys(carrier.oncePerTarget).some((key) => !["until", "whenSaved"].includes(key)) ||
+            !rests.has(carrier.oncePerTarget.until) ||
+            // 1.431: only a creature that made the entry's save is spared.
+            (carrier.oncePerTarget.whenSaved !== undefined &&
+              (carrier.oncePerTarget.whenSaved !== true || !carrier.save)) ||
+            carrier.targets === "self"
+          )
+            throw new Error(
+              `${id} ${boxAt} oncePerTarget is { until: a declared rest, whenSaved?: true with a save }, on an entry aimed at a creature`,
+            );
+          oncePer ??= `${boxAt} oncePerTarget`;
+        }
+        // 1.303: offered only while its user stands in one of these lights.
+        if (carrier?.usableIn !== undefined) {
+          const light = carrier.usableIn?.light;
+          if (
+            carrier !== entry?.mechanics ||
+            !carrier.usableIn ||
+            typeof carrier.usableIn !== "object" ||
+            Object.keys(carrier.usableIn).length !== 1 ||
+            !Array.isArray(light) ||
+            light.length < 1 ||
+            new Set(light).size !== light.length ||
+            light.some((one) => !["sunlight", "bright", "dim", "dark"].includes(one)) ||
+            !document?.combat?.sight?.darkness
+          )
+            throw new Error(
+              `${id} ${boxAt} usableIn is { light: sunlight, bright, dim or dark }, in a fight with combat.sight.darkness`,
+            );
+          shadowed ??= `${boxAt} usableIn`;
+        }
+        if (!area || !["box", "wall"].includes(area.shape)) continue;
+        const feet = (value) => value === undefined || (Number.isFinite(value) && value > 0);
+        if (area.shape === "wall" && (!carrier.zone || !feet(area.width) || !feet(area.ring)))
+          throw new Error(`${id} ${boxAt} wall needs a zone, and a width or ring above 0 where it has one`);
+        // 1.602: laid only as its ring (gated at the end).
+        if (area.ringOnly !== undefined && (area.ringOnly !== true || area.shape !== "wall" || area.ring === undefined))
+          throw new Error(`${id} ${boxAt} ringOnly is true, on a wall with a ring`);
+        if (area.shape === "box" && (area.width !== undefined || area.ring !== undefined))
+          throw new Error(`${id} ${boxAt} box has a size and nothing else`);
+        walled ??= boxAt;
+      }
+      // What a cure ends, steadies or brings back (1.176), on the entry or an item's use.
+      for (const [carrier, cureAt] of [
+        [entry?.mechanics, where],
+        [entry?.item?.use, `${where} use`],
+      ]) {
+        if (!carrier) continue;
+        // 1.235: a lowered maximum on the entry's own failed save or every landed blow, and a floor.
+        if (carrier.reducesMax !== undefined) {
+          const lowers = carrier.reducesMax;
+          if (
+            !lowers ||
+            typeof lowers !== "object" ||
+            Object.keys(lowers).some((key) => !["onFailedSave", "damageType", "heals", "lasting"].includes(key)) ||
+            (lowers.onFailedSave !== undefined && (lowers.onFailedSave !== true || carrier.save === undefined)) ||
+            (lowers.damageType !== undefined && !damageNames.has(String(lowers.damageType).toLowerCase())) ||
+            (lowers.heals !== undefined && lowers.heals !== true) ||
+            (lowers.lasting !== undefined && lowers.lasting !== true) ||
+            carrier.amount === undefined
+          )
+            throw new Error(`${id} ${cureAt} reducesMax lowers by damage it deals, with no save of its own`);
+          drains ??= `${cureAt} reducesMax`;
+        }
+        if (carrier.leavesAtLeast !== undefined) {
+          if (!Number.isInteger(carrier.leavesAtLeast) || carrier.leavesAtLeast < 1 || carrier.amount === undefined)
+            throw new Error(`${id} ${cureAt} leavesAtLeast is a whole number of 1 or more, beside an amount`);
+          drains ??= `${cureAt} leavesAtLeast`;
+        }
+        // 1.201: live tracks moved by levels, plain ones the sheet has, each once; sealed health given back.
+        if (carrier.tracks !== undefined) {
+          const plain = new Map((document?.sheet?.live?.tracks ?? []).map((one) => [one?.id, one]));
+          const tracks = carrier.tracks;
+          if (
+            !Array.isArray(tracks) ||
+            tracks.length < 1 ||
+            tracks.length > 4 ||
+            new Set(tracks.map((one) => one?.track)).size !== tracks.length ||
+            tracks.some(
+              (one) =>
+                !one ||
+                Object.keys(one).some((key) => !["track", "by"].includes(key)) ||
+                !plain.has(one.track) ||
+                plain.get(one.track)?.kinds !== undefined ||
+                !Number.isInteger(one.by) ||
+                one.by === 0 ||
+                one.by < -20 ||
+                one.by > 20,
+            )
+          )
+            throw new Error(
+              `${id} ${cureAt} tracks moves 1 to 4 of the sheet's plain tracks, each once, by -20 to 20 and not 0`,
+            );
+          trackCure ??= `${cureAt} tracks`;
+        }
+        if (carrier.unseals !== undefined) {
+          const health = document?.combat?.health;
+          if (carrier.unseals !== true || !health || "track" in health)
+            throw new Error(`${id} ${cureAt} unseals is true, in a fight that keeps health in points`);
+          trackCure ??= `${cureAt} unseals`;
+        }
+        // 1.204: one of at least two of its cures (ends, tracks, unseals).
+        if (carrier.cureOneOf !== undefined) {
+          const cures = [carrier.ends, carrier.tracks, carrier.unseals].filter((one) => one !== undefined).length;
+          if (carrier.cureOneOf !== true || cures < 2)
+            throw new Error(
+              `${id} ${cureAt} cureOneOf is true, on a cure with two or more of ends, tracks and unseals`,
+            );
+          oneOf ??= `${cureAt} cureOneOf`;
+        }
+        // 1.236: a use that ends a condition on its user, one that sends its target out of the fight (for
+        // good, or while it holds a condition the same use puts on), and a cure of only what some put on.
+        if (carrier.endsCondition !== undefined) {
+          if (carrier !== entry?.mechanics || !liveIds.has(carrier.endsCondition))
+            throw new Error(`${id} ${cureAt} endsCondition is an entry's, naming one of the sheet's conditions`);
+          dismissing ??= `${cureAt} endsCondition`;
+        }
+        if (carrier.dismisses !== undefined) {
+          const away = carrier.dismisses;
+          if (
+            away !== true &&
+            (!away ||
+              typeof away !== "object" ||
+              Object.keys(away).some((key) => !["while", "gone", "turns"].includes(key)) ||
+              (away.turns !== undefined && away.turns !== true) ||
+              !(carrier.applies ?? []).some((applied) => applied?.condition === away.while && applied.duration))
+          )
+            throw new Error(
+              `${id} ${cureAt} dismisses is true, or { while, gone } with a condition its use puts on for a time`,
+            );
+          if (away !== true) test(`${cureAt} dismisses gone`, away.gone);
+          dismissing ??= `${cureAt} dismisses`;
+          // 1.313: away, but still taking its turns.
+          if (away?.turns) leftovers308 ??= `${cureAt} dismisses turns`;
+        }
+        // 1.313: a condition its holder may end with a check of the fight's (5e's Maze).
+        for (const applied of carrier.applies ?? []) {
+          const out = applied?.checkEnds;
+          if (out === undefined) continue;
+          const checkIds = new Set((document?.combat?.checks ?? []).map((one) => one?.id));
+          if (
+            !out ||
+            typeof out !== "object" ||
+            // 1.636: spendsItem and failedRetryAfter, checked with the newest.
+            Object.keys(out).some(
+              (key) => !["check", "difficulty", "passes", "by", "spendsItem", "failedRetryAfter"].includes(key),
+            ) ||
+            !checkIds.has(out.check) ||
+            !Number.isInteger(out.difficulty) ||
+            out.difficulty < 1 ||
+            out.difficulty > 40
+          )
+            throw new Error(
+              `${id} ${cureAt} checkEnds is { check: one of the fight's checks, difficulty 1 to 40, passes?, by? }`,
+            );
+          if (out.passes !== undefined) test(`${cureAt} checkEnds passes`, out.passes);
+          leftovers308 ??= `${cureAt} checkEnds`;
+        }
+        // 1.314: aimed only at creatures up to a size; an item's use too since 1.317.
+        if (carrier.targetsUpTo !== undefined) {
+          const sizes = (document?.combat?.sizes?.order ?? []).map((one) => one?.id);
+          if (!sizes.includes(carrier.targetsUpTo))
+            throw new Error(`${id} ${cureAt} targetsUpTo is one of the fight's sizes`);
+          if (carrier === entry?.mechanics) sealing ??= `${cureAt} targetsUpTo`;
+          else resisting ??= `${cureAt} targetsUpTo`;
+        }
+        // 1.313: standard actions taken as it is used (Expeditious Retreat's Dash).
+        if (carrier.takes !== undefined) {
+          const takes = carrier.takes;
+          if (
+            carrier !== entry?.mechanics ||
+            !Array.isArray(takes) ||
+            takes.length < 1 ||
+            new Set(takes).size !== takes.length ||
+            takes.some((one) => !["dash", "disengage", "dodge"].includes(one))
+          )
+            throw new Error(
+              `${id} ${cureAt} takes is 1 to 3 of "dash", "disengage" and "dodge", on an entry's own mechanics`,
+            );
+          leftovers308 ??= `${cureAt} takes`;
+        }
+        // 1.237: a use on the sheet's own rows that a surprised holder may still take, ending it.
+        if (carrier.ignoresSurpriseWith !== undefined) {
+          const [catalogId, entryId, more] =
+            typeof carrier.ignoresSurpriseWith === "string" ? carrier.ignoresSurpriseWith.split("/") : [];
+          const catalog = (document?.catalogs ?? []).find((one) => one?.id === catalogId);
+          const list = catalog ? catalogEntryList(catalog, catalogSources) : null;
+          if (
+            carrier !== entry?.mechanics ||
+            !entryId ||
+            more !== undefined ||
+            !catalog ||
+            (list && !list.some((one) => one?.id === entryId && one.mechanics))
+          )
+            throw new Error(`${id} ${cureAt} ignoresSurpriseWith names an entry with mechanics, "<catalog>/<entry>"`);
+          shaking ??= `${cureAt} ignoresSurpriseWith`;
+        }
+        // 1.241: an attack added to its holder's own hit, and the most higher-cost steps that count.
+        if (carrier.addsToBlow !== undefined) {
+          if (
+            carrier !== entry?.mechanics ||
+            carrier.addsToBlow !== true ||
+            carrier.kind !== "attack" ||
+            carrier.reaction?.by !== "self"
+          )
+            throw new Error(`${id} ${cureAt} addsToBlow is true, on an attack entry answering its holder's own hit`);
+          smiting ??= `${cureAt} addsToBlow`;
+        }
+        if (carrier.perCostStepsMax !== undefined) {
+          if (
+            !Number.isInteger(carrier.perCostStepsMax) ||
+            carrier.perCostStepsMax < 1 ||
+            carrier.perCostStepsMax > 20 ||
+            (carrier.perCostStep === undefined && carrier.targetsPerCostStep === undefined)
+          )
+            throw new Error(`${id} ${cureAt} perCostStepsMax is 1 to 20, beside perCostStep or targetsPerCostStep`);
+          smiting ??= `${cureAt} perCostStepsMax`;
+        }
+        // 1.302: changes to another entry its holder uses, which stack.
+        if (carrier.amends !== undefined) {
+          const amends = carrier.amends;
+          const feet = (value) => value === undefined || (typeof value === "number" && value > 0 && value <= 10000);
+          if (
+            carrier !== entry?.mechanics ||
+            carrier.kind === undefined ||
+            !Array.isArray(amends) ||
+            amends.length < 1 ||
+            amends.length > 4 ||
+            amends.some(
+              (one) =>
+                !one ||
+                typeof one !== "object" ||
+                Object.keys(one).some(
+                  (key) =>
+                    ![
+                      "entry",
+                      "damageAdd",
+                      "range",
+                      "push",
+                      "pushOptional",
+                      "damagePlus",
+                      "strikes",
+                      "catalogs",
+                      "where",
+                      "damageOnce",
+                      "halfOnSave",
+                      "maxHeal",
+                      "healAdd",
+                      "healsSelf",
+                      "damageTypeIn",
+                    ].includes(key),
+                ) ||
+                (one.damagePlus !== undefined &&
+                  (!one.damagePlus ||
+                    typeof one.damagePlus !== "object" ||
+                    Object.keys(one.damagePlus).some((key) => !["add", "type", "atLeast"].includes(key)) ||
+                    valueRefIssue(one.damagePlus.add, names) !== null ||
+                    (one.damagePlus.type !== undefined && typeof one.damagePlus.type !== "string") ||
+                    (one.damagePlus.atLeast !== undefined && !Number.isInteger(one.damagePlus.atLeast)))) ||
+                (one.strikes !== undefined &&
+                  (!Number.isInteger(one.strikes) || one.strikes < 2 || one.strikes > 10)) ||
+                (one.catalogs === undefined
+                  ? !entryRefs.has(one.entry)
+                  : one.entry !== undefined || catalogsIssue(one.catalogs)) ||
+                (one.where !== undefined && (one.catalogs === undefined || whereIssue(one.catalogs, one.where))) ||
+                (one.damageOnce !== undefined && valueRefIssue(one.damageOnce, names) !== null) ||
+                // 1.429: only on the damage type a text or enum field of the holder's sheet names.
+                (one.damageTypeIn !== undefined && !choiceFields.has(one.damageTypeIn)) ||
+                (one.halfOnSave !== undefined && one.halfOnSave !== true) ||
+                (one.maxHeal !== undefined && one.maxHeal !== true) ||
+                healAddIssue(one.healAdd, names) ||
+                healAddIssue(one.healsSelf, names) ||
+                Object.keys(one).filter((key) => !["catalogs", "where"].includes(key)).length <
+                  2 - (one.catalogs !== undefined ? 1 : 0) ||
+                (one.damageAdd !== undefined && valueRefIssue(one.damageAdd, names) !== null) ||
+                !feet(one.range) ||
+                !feet(one.push) ||
+                (one.pushOptional !== undefined && (one.pushOptional !== true || one.push === undefined)) ||
+                ((one.range !== undefined || one.push !== undefined) && !document?.combat?.distance),
+            )
+          )
+            throw new Error(
+              `${id} ${cureAt} amends is 1 to 4 changes to a ruleset entry or catalogs (damageAdd, range, push, pushOptional, damagePlus, strikes, damageOnce, halfOnSave, maxHeal, healAdd, healsSelf, damageTypeIn: a text or enum field), on an entry with a kind`,
+            );
+          amending ??= `${cureAt} amends`;
+          if (amends.some((one) => one.damageTypeIn !== undefined)) sheetChoosing ??= `${cureAt} amends damageTypeIn`;
+          // 1.414: by catalog and filter, one damage roll added to, a save that negates left at half.
+          if (
+            amends.some(
+              (one) => one.catalogs !== undefined || one.damageOnce !== undefined || one.halfOnSave !== undefined,
+            )
+          )
+            byFilter ??= `${cureAt} amends by catalog`;
+          // 1.415: healing at the most.
+          if (amends.some((one) => one.maxHeal !== undefined)) maximized ??= `${cureAt} amends maxHeal`;
+          // 1.421: healing added to those healed, or to the healer.
+          if (amends.some((one) => one.healAdd !== undefined || one.healsSelf !== undefined))
+            healing ??= `${cureAt} amends healAdd or healsSelf`;
+          // 1.306: damage of its own type, and more attacks a spend.
+          if (amends.some((one) => one.damagePlus !== undefined || one.strikes !== undefined))
+            conjuring ??= `${cureAt} amends damagePlus or strikes`;
+        }
+        // 1.306: a melee weapon put in its user's hand, or a held one bound.
+        if (carrier.conjures !== undefined) {
+          const made = carrier.conjures;
+          const strings = (list) =>
+            Array.isArray(list) && list.length > 0 && list.every((one) => typeof one === "string");
+          if (
+            carrier !== entry?.mechanics ||
+            carrier.kind !== "utility" ||
+            !made ||
+            typeof made !== "object" ||
+            Object.keys(made).some(
+              (key) => !["items", "proficient", "qualities", "binds", "boundIn", "vanishes"].includes(key),
+            ) ||
+            // 1.480: gone once let lie farther than `beyond` for `rounds` of its maker's turns.
+            (made.vanishes !== undefined &&
+              (!made.vanishes ||
+                typeof made.vanishes !== "object" ||
+                Object.keys(made.vanishes).some((key) => !["beyond", "rounds"].includes(key)) ||
+                typeof made.vanishes.beyond !== "number" ||
+                made.vanishes.beyond < 0 ||
+                made.vanishes.beyond > 10000 ||
+                !Number.isInteger(made.vanishes.rounds) ||
+                made.vanishes.rounds < 1 ||
+                made.vanishes.rounds > 1000)) ||
+            (made.boundIn !== undefined &&
+              (made.binds === undefined ||
+                !(document?.sheet?.live?.text ?? []).some(
+                  (one) => one?.id === made.boundIn && one.id !== "concentration",
+                ))) ||
+            !Array.isArray(made.items) ||
+            made.items.length < 1 ||
+            made.items.length > 40 ||
+            new Set(made.items).size !== made.items.length ||
+            made.items.some((ref) => !itemRefs.has(ref)) ||
+            (made.proficient !== undefined && made.proficient !== true) ||
+            (made.qualities !== undefined && !strings(made.qualities)) ||
+            (made.binds !== undefined &&
+              (!made.binds ||
+                typeof made.binds !== "object" ||
+                Object.keys(made.binds).length < 1 ||
+                Object.entries(made.binds).some(
+                  ([key, list]) => !["names", "tags", "notTags"].includes(key) || !strings(list),
+                )))
+          )
+            throw new Error(
+              `${id} ${cureAt} conjures is { items: 1 to 40 of the ruleset's items, proficient?, qualities?, binds?, boundIn?: a live text with binds, vanishes?: { beyond, rounds: 1-1000 } }, on a utility entry`,
+            );
+          if (made.boundIn !== undefined) ritual ??= `${cureAt} conjures boundIn`;
+          conjuring ??= `${cureAt} conjures`;
+          // 1.308: a thrown melee weapon, conjured by its reach.
+          const thrown = made.items.find((ref) => itemsByRef.get(ref)?.attack?.range !== undefined);
+          if (thrown) itemBeams ??= `${cureAt} conjures a thrown weapon (${thrown})`;
+        }
+        // 1.300: perCostStep once for every this many steps.
+        if (carrier.perCostStepsEvery !== undefined) {
+          if (
+            !Number.isInteger(carrier.perCostStepsEvery) ||
+            carrier.perCostStepsEvery < 2 ||
+            carrier.perCostStepsEvery > 9 ||
+            carrier.perCostStep === undefined
+          )
+            throw new Error(`${id} ${cureAt} perCostStepsEvery is 2 to 9, beside perCostStep`);
+          stepsEvery ??= `${cureAt} perCostStepsEvery`;
+        }
+        // 1.245: one use spending several uses, and a failed save that drops the target to 0.
+        if (carrier.usesSpent !== undefined) {
+          if (
+            carrier !== entry?.mechanics ||
+            !Number.isInteger(carrier.usesSpent) ||
+            carrier.usesSpent < 2 ||
+            carrier.usesSpent > 20
+          )
+            throw new Error(`${id} ${cureAt} usesSpent is an entry's whole number from 2 to 20`);
+          quivering ??= `${cureAt} usesSpent`;
+        }
+        if (carrier.dropsOnFailedSave !== undefined) {
+          if (carrier !== entry?.mechanics || carrier.dropsOnFailedSave !== true || !carrier.save)
+            throw new Error(`${id} ${cureAt} dropsOnFailedSave is true, beside the entry's own save`);
+          quivering ??= `${cureAt} dropsOnFailedSave`;
+        }
+        // 1.249: never on the menu; spent by itself when its holder's own roll of that kind fails.
+        if (carrier.rescue !== undefined) {
+          const rescue = carrier.rescue;
+          // 1.259: a worn item's use too, spending its own charges.
+          const onItem = carrier !== entry?.mechanics;
+          const budgets = new Set((document?.combat?.economy?.budgets ?? []).map((one) => one?.id));
+          const saveIds = sheetNames(document).saves;
+          if (
+            (onItem && (carrier !== entry?.item?.use || !Number.isInteger(carrier.charges))) ||
+            (onItem ? !["utility", "buff"].includes(carrier.kind) : carrier.kind !== "utility") ||
+            carrier.free !== true ||
+            carrier.targets !== "self" ||
+            !rescue ||
+            typeof rescue !== "object" ||
+            Object.keys(rescue).some(
+              (key) => !["roll", "by", "dice", "die", "saves", "budget", "against"].includes(key),
+            ) ||
+            // 1.787: narrowed to a save against a filter's value or a creature type's harm.
+            (rescue.against !== undefined &&
+              (rescue.roll !== "saves" ||
+                !rescue.against ||
+                typeof rescue.against !== "object" ||
+                Object.keys(rescue.against).some((key) => !["where", "fromTypes"].includes(key)) ||
+                (rescue.against.where === undefined && rescue.against.fromTypes === undefined) ||
+                (rescue.against.where !== undefined &&
+                  (!rescue.against.where ||
+                    Object.keys(rescue.against.where).some((key) => !["filter", "equals"].includes(key)) ||
+                    typeof rescue.against.where.filter !== "string" ||
+                    !["string", "number"].includes(typeof rescue.against.where.equals))) ||
+                (rescue.against.fromTypes !== undefined &&
+                  (!Array.isArray(rescue.against.fromTypes) ||
+                    rescue.against.fromTypes.length < 1 ||
+                    rescue.against.fromTypes.length > 12 ||
+                    new Set(rescue.against.fromTypes).size !== rescue.against.fromTypes.length ||
+                    rescue.against.fromTypes.some(
+                      (one) => !(document?.combat?.creatureTypes?.types ?? []).some((type) => type?.id === one),
+                    ))))) ||
+            // 1.257: narrowed to some saves, and paid with a budget.
+            (rescue.saves !== undefined &&
+              (rescue.roll !== "saves" ||
+                !Array.isArray(rescue.saves) ||
+                rescue.saves.length < 1 ||
+                rescue.saves.some((save) => !saveIds.has(save)))) ||
+            (rescue.budget !== undefined && !budgets.has(rescue.budget)) ||
+            !["attacks", "saves", "checks"].includes(rescue.roll) ||
+            !["reroll", "success", "twenty", "die"].includes(rescue.by) ||
+            (rescue.by === "reroll" && rescue.roll !== "saves") ||
+            (rescue.by === "twenty" && rescue.roll !== "checks") ||
+            (rescue.by === "die") !== (rescue.dice !== undefined || rescue.die !== undefined) ||
+            (rescue.dice !== undefined && rescue.die !== undefined) ||
+            (rescue.dice !== undefined && !/^\d+d\d+$/u.test(rescue.dice)) ||
+            (rescue.die !== undefined &&
+              (!rescue.die?.from ||
+                !Array.isArray(rescue.die.table) ||
+                rescue.die.table.some((step) => !Array.isArray(step) || step.length !== 2)))
+          )
+            throw new Error(
+              `${id} ${cureAt} rescue is { roll, by } on a free utility entry for self (or a worn item's use spending charges): a failed save rerolled, a roll made a success, a check's d20 a 20, or the holder's own die (dice or die), narrowed by saves and paid with a budget`,
+            );
+          rescuing ??= `${cureAt} rescue`;
+          if (rescue.against !== undefined) rescueAgainst ??= `${cureAt} rescue against`;
+          if (rescue.saves !== undefined || rescue.budget !== undefined)
+            lowersAlso ??= `${cureAt} rescue saves or budget`;
+          if (onItem) itemRescue ??= `${cureAt} rescue`;
+          if (rescue.by === "twenty" || rescue.by === "die") ownRescue ??= `${cureAt} rescue by ${rescue.by}`;
+        }
+        // 1.250: dice off somebody else's attack roll that hit, one die sized by a value or dice.
+        if (carrier.lowersRoll !== undefined) {
+          const lowers = carrier.lowersRoll;
+          const moment = carrier.reaction;
+          const die = lowers?.die;
+          if (
+            carrier !== entry?.mechanics ||
+            !lowers ||
+            typeof lowers !== "object" ||
+            Object.keys(lowers).some((key) => !["dice", "die", "also"].includes(key)) ||
+            (lowers.also !== undefined &&
+              (!Array.isArray(lowers.also) ||
+                lowers.also.length < 1 ||
+                new Set(lowers.also).size !== lowers.also.length ||
+                lowers.also.some((one) => !["checks", "damage"].includes(one)))) ||
+            (lowers.dice === undefined) === (die === undefined) ||
+            (lowers.dice !== undefined && !/^\d+d\d+([+-]\d+)?$/.test(lowers.dice)) ||
+            (die !== undefined &&
+              (!die.from ||
+                !Array.isArray(die.table) ||
+                die.table.length < 1 ||
+                die.table.some(
+                  (step) => !Array.isArray(step) || step.length !== 2 || !step.every(Number.isInteger),
+                ))) ||
+            !moment ||
+            typeof moment !== "object" ||
+            moment.on !== "hit" ||
+            moment.by !== undefined ||
+            moment.also !== undefined
+          )
+            throw new Error(
+              `${id} ${cureAt} lowersRoll is { dice } or { die: { from, table } }, on an entry answering somebody else's hit`,
+            );
+          lowering ??= `${cureAt} lowersRoll`;
+          if (lowers.also !== undefined) lowersAlso ??= `${cureAt} lowersRoll also`;
+        }
+        // 1.253: chosen with an entry of its catalogs as that one is used, never on a menu of its own.
+        if (carrier.alters !== undefined || carrier.usesSpentByLevel !== undefined) {
+          const alters = carrier.alters;
+          const ref = (value) =>
+            value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 1;
+          const changes = [
+            "spares",
+            "range",
+            "rerolls",
+            "lasts",
+            "heightens",
+            "budget",
+            "drops",
+            "twins",
+            "maximizes",
+          ].filter((key) => alters?.[key] !== undefined);
+          if (
+            carrier !== entry?.mechanics ||
+            !alters ||
+            typeof alters !== "object" ||
+            Object.keys(alters).some((key) => !RULESET_ALTERS_KEYS.includes(key)) ||
+            !Array.isArray(alters.catalogs) ||
+            alters.catalogs.length < 1 ||
+            alters.catalogs.length > 8 ||
+            alters.catalogs.some((one) => !(document?.catalogs ?? []).some((catalog) => catalog?.id === one)) ||
+            changes.length === 0 ||
+            carrier.kind !== "utility" ||
+            carrier.reaction !== undefined ||
+            (alters.spares !== undefined && !ref(alters.spares)) ||
+            (alters.rerolls !== undefined && !ref(alters.rerolls)) ||
+            (alters.range !== undefined &&
+              (!Number.isInteger(alters.range.times) || alters.range.times < 2 || alters.range.times > 10)) ||
+            (alters.lasts !== undefined &&
+              (!Number.isInteger(alters.lasts) || alters.lasts < 2 || alters.lasts > 10)) ||
+            (alters.heightens !== undefined && alters.heightens !== true) ||
+            (alters.twins !== undefined && alters.twins !== true) ||
+            (alters.joins !== undefined && alters.joins !== true) ||
+            (alters.budget !== undefined &&
+              (typeof alters.budget.from !== "string" || typeof alters.budget.to !== "string")) ||
+            (alters.drops !== undefined && (!Array.isArray(alters.drops) || alters.drops.length === 0)) ||
+            (alters.where !== undefined && whereIssue(alters.catalogs, alters.where)) ||
+            (alters.sparesByLevel !== undefined && (alters.sparesByLevel !== true || alters.spares === undefined)) ||
+            (alters.sparesWhole !== undefined && (alters.sparesWhole !== true || alters.spares === undefined)) ||
+            (alters.maximizes !== undefined && maximizesIssue(alters.maximizes)) ||
+            (alters.backlash !== undefined &&
+              (alters.maximizes === undefined ||
+                typeof carrier.usesOf !== "string" ||
+                backlashIssue(alters.backlash))) ||
+            (carrier.usesSpentByLevel !== undefined &&
+              (carrier.usesSpentByLevel !== true || carrier.usesSpent !== undefined))
+          )
+            throw new Error(
+              `${id} ${cureAt} alters names its catalogs and changes something, on a utility entry that is no reaction (usesSpentByLevel in place of usesSpent)`,
+            );
+          altering ??= `${cureAt} alters`;
+          if (alters.where !== undefined || alters.sparesByLevel !== undefined || alters.sparesWhole !== undefined)
+            byFilter ??= `${cureAt} alters where, sparesByLevel or sparesWhole`;
+          if (alters.maximizes !== undefined || alters.backlash !== undefined)
+            maximized ??= `${cureAt} alters maximizes or backlash`;
+        }
+        // 1.256: never on its own user, on an entry pointed at an ally or anybody.
+        if (carrier.notSelf !== undefined) {
+          if (carrier.notSelf !== true || !["ally", "any"].includes(carrier.targets))
+            throw new Error(`${id} ${cureAt} notSelf is true, on an entry pointed at an ally or anybody`);
+          ownRescue ??= `${cureAt} notSelf`;
+        }
+        // 1.255: a miss deals half of what rolls to hit, and a condition's harm grows per higher step.
+        if (carrier.halfOnMiss !== undefined) {
+          if (carrier.halfOnMiss !== true || carrier.attackRoll !== true || !carrier.amount || carrier.kind === "heal")
+            throw new Error(`${id} ${cureAt} halfOnMiss is true, on an entry that rolls to hit and deals an amount`);
+          halving ??= `${cureAt} halfOnMiss`;
+          // On an item's use since 1.257: a scroll of Acid Arrow.
+          if (carrier !== entry?.mechanics) lowersAlso ??= `${cureAt} halfOnMiss`;
+        }
+        for (const applied of Array.isArray(carrier.applies) ? carrier.applies : []) {
+          const more = applied?.harmsPerCostStep;
+          if (more === undefined) continue;
+          if (
+            !more ||
+            typeof more !== "object" ||
+            Object.keys(more).some((key) => key !== "dice" && key !== "flat") ||
+            (more.dice === undefined && more.flat === undefined) ||
+            (more.dice !== undefined && !/^\d+d\d+$/u.test(more.dice)) ||
+            (more.flat !== undefined && (!Number.isInteger(more.flat) || more.flat < 1)) ||
+            !(document?.combat?.conditions ?? []).some((one) => one?.condition === applied.condition && one.harms)
+          )
+            throw new Error(`${id} ${cureAt} harmsPerCostStep names dice or a flat amount, on a condition that harms`);
+          halving ??= `${cureAt} harmsPerCostStep`;
+        }
+        // 1.252: a pool given back, by live pool id or a list row's pool name, never health.
+        if (carrier.restore !== undefined) {
+          const restore = carrier.restore;
+          const amount = restore?.amount;
+          if (
+            carrier !== entry?.mechanics ||
+            !["heal", "buff"].includes(carrier.kind) ||
+            !restore ||
+            typeof restore !== "object" ||
+            Object.keys(restore).some((key) => !["pool", "amount", "overMax"].includes(key)) ||
+            typeof restore.pool !== "string" ||
+            restore.pool.trim() === "" ||
+            restore.pool.length > 60 ||
+            restore.pool === "hp" ||
+            !amount ||
+            typeof amount !== "object" ||
+            (amount.dice === undefined && amount.flat === undefined) ||
+            (restore.overMax !== undefined && restore.overMax !== true)
+          )
+            throw new Error(
+              `${id} ${cureAt} restore is { pool, amount, overMax? } on a heal or buff, giving back a pool that isn't health`,
+            );
+          restoring ??= `${cureAt} restore`;
+        }
+        // 1.251: the user picks how many uses one use spends, healing that many times its amount.
+        if (carrier.usesChosen !== undefined) {
+          if (
+            carrier !== entry?.mechanics ||
+            carrier.usesChosen !== true ||
+            carrier.kind !== "heal" ||
+            carrier.usesSpent !== undefined
+          )
+            throw new Error(`${id} ${cureAt} usesChosen is true, on a heal entry with no usesSpent`);
+          choosing ??= `${cureAt} usesChosen`;
+        }
+        // 1.247: offered only before its holder's first attack of their turn.
+        if (carrier.beforeAttack !== undefined) {
+          if (carrier !== entry?.mechanics || carrier.beforeAttack !== true)
+            throw new Error(`${id} ${cureAt} beforeAttack is true, on an entry's own mechanics`);
+          beforeFirst ??= `${cureAt} beforeAttack`;
+        }
+        // 1.242: attack rows changed by name while held, a strike bought on another budget, and a use
+        // offered only after the attack action.
+        if (carrier.attackRows !== undefined) {
+          const rules = carrier.attackRows;
+          const abilityIds = new Set((document?.sheet?.abilities ?? []).map((one) => one?.id));
+          const names = (list) =>
+            Array.isArray(list) && list.length > 0 && list.every((name) => typeof name === "string" && name.trim());
+          // 1.244: held weapons by every one of `tags` and none of `notTags`, and `names` beside them.
+          const weaponMatch = (match, withNames) =>
+            match &&
+            typeof match === "object" &&
+            Object.keys(match).every((key) =>
+              (withNames ? ["names", "tags", "notTags"] : ["tags", "notTags"]).includes(key),
+            ) &&
+            (match.tags !== undefined || match.notTags !== undefined || (withNames && match.names !== undefined)) &&
+            [match.tags, match.notTags, withNames ? match.names : undefined].every(
+              (list) => list === undefined || names(list),
+            );
+          const wieldingOk = (wielding) =>
+            wielding && Object.keys(wielding).length === 1 && weaponMatch(wielding.only, true);
+          if (rules?.some?.((rule) => rule?.items !== undefined || rule?.wielding !== undefined))
+            heldWeapons ??= `${cureAt} attackRows items or wielding`;
+          if (
+            carrier !== entry?.mechanics ||
+            !Array.isArray(rules) ||
+            rules.length === 0 ||
+            rules.length > 4 ||
+            rules.some(
+              (rule) =>
+                !rule ||
+                (rule.names === undefined && rule.items === undefined) ||
+                (rule.names !== undefined && !names(rule.names)) ||
+                (rule.items !== undefined && !weaponMatch(rule.items, false)) ||
+                (rule.wielding !== undefined && !wieldingOk(rule.wielding)) ||
+                Object.keys(rule).some(
+                  (key) => !["names", "items", "abilities", "die", "qualities", "when", "wielding"].includes(key),
+                ) ||
+                (rule.abilities !== undefined &&
+                  (!Array.isArray(rule.abilities) || rule.abilities.some((one) => !abilityIds.has(one)))) ||
+                (rule.die !== undefined &&
+                  (!rule.die?.from ||
+                    !Array.isArray(rule.die.table) ||
+                    rule.die.table.length === 0 ||
+                    rule.die.table.some(
+                      (step) => !Array.isArray(step) || !Number.isInteger(step[0]) || !Number.isInteger(step[1]),
+                    ))) ||
+                (rule.qualities !== undefined && !names(rule.qualities)) ||
+                (rule.when !== undefined &&
+                  (!rule.when?.value || (rule.when.atLeast ?? rule.when.atMost) === undefined)) ||
+                (rule.abilities ?? rule.die ?? rule.qualities) === undefined,
+            )
+          )
+            throw new Error(
+              `${id} ${cureAt} attackRows is 1 to 4 rules, each naming attack rows and changing abilities, die or qualities`,
+            );
+          striking ??= `${cureAt} attackRows`;
+        }
+        if (carrier.grantsStrike !== undefined) {
+          const grant = carrier.grantsStrike;
+          const budgets = new Set((document?.combat?.economy?.budgets ?? []).map((one) => one?.id));
+          if (
+            carrier !== entry?.mechanics ||
+            !grant ||
+            !budgets.has(grant.budget) ||
+            Object.keys(grant).some(
+              (key) => !["budget", "names", "melee", "afterAttack", "when", "wielding"].includes(key),
+            ) ||
+            (grant.when !== undefined &&
+              (!grant.when?.value || (grant.when.atLeast ?? grant.when.atMost) === undefined)) ||
+            (grant.wielding !== undefined &&
+              !(
+                grant.wielding &&
+                Object.keys(grant.wielding).length === 1 &&
+                grant.wielding.only &&
+                typeof grant.wielding.only === "object" &&
+                Object.keys(grant.wielding.only).length > 0 &&
+                Object.keys(grant.wielding.only).every((key) => ["names", "tags", "notTags"].includes(key))
+              ))
+          )
+            throw new Error(`${id} ${cureAt} grantsStrike buys a strike with one of the economy's budgets`);
+          if (grant.when !== undefined || grant.wielding !== undefined)
+            heldWeapons ??= `${cureAt} grantsStrike when or wielding`;
+          if (grant.afterAttack !== undefined) {
+            if (!afterAttackOk(grant.afterAttack))
+              throw new Error(`${id} ${cureAt} grantsStrike afterAttack is true or { names, items }`);
+            if (grant.afterAttack.items !== undefined) afterItems ??= `${cureAt} grantsStrike afterAttack items`;
+          }
+          striking ??= `${cureAt} grantsStrike`;
+        }
+        if (carrier.afterAttack !== undefined) {
+          if (carrier !== entry?.mechanics || !afterAttackOk(carrier.afterAttack))
+            throw new Error(`${id} ${cureAt} afterAttack is true or { names, items }`);
+          if (carrier.afterAttack.items !== undefined) afterItems ??= `${cureAt} afterAttack items`;
+          striking ??= `${cureAt} afterAttack`;
+        }
+        // 1.240: initiative rolled twice while it is on the sheet.
+        if (carrier.initiativeMode !== undefined) {
+          if (carrier !== entry?.mechanics || !["advantage", "disadvantage"].includes(carrier.initiativeMode))
+            throw new Error(`${id} ${cureAt} initiativeMode is an entry's advantage or disadvantage`);
+          rolledTwice ??= `${cureAt} initiativeMode`;
+        }
+        // 1.239: spends the uses of the counter row another entry writes, by its name.
+        if (carrier.usesOf !== undefined) {
+          const counted = new Set(
+            [...(document?.catalogs ?? [])].flatMap((one) =>
+              (catalogEntryList(one, catalogSources) ?? []).flatMap((other) =>
+                (other?.rows ?? []).filter((row) => row?.list === "counters").map((row) => row?.values?.name),
+              ),
+            ),
+          );
+          if (carrier !== entry?.mechanics || typeof carrier.usesOf !== "string" || !counted.has(carrier.usesOf))
+            throw new Error(`${id} ${cureAt} usesOf names a counter another entry writes`);
+          sharing ??= `${cureAt} usesOf`;
+        }
+        // 1.238: a second turn in the first round, at the holder's initiative plus a whole number.
+        if (carrier.extraFirstTurn !== undefined) {
+          const turn = carrier.extraFirstTurn;
+          if (
+            carrier !== entry?.mechanics ||
+            !turn ||
+            typeof turn !== "object" ||
+            Object.keys(turn).some((key) => !["initiative", "unlessSurprised"].includes(key)) ||
+            !Number.isInteger(turn.initiative) ||
+            Math.abs(turn.initiative) > 100 ||
+            (turn.unlessSurprised !== undefined && turn.unlessSurprised !== true)
+          )
+            throw new Error(
+              `${id} ${cureAt} extraFirstTurn is an entry's { initiative: whole number -100 to 100, unlessSurprised? }`,
+            );
+          twice ??= `${cureAt} extraFirstTurn`;
+        }
+        if (carrier.ends?.from !== undefined) {
+          test(`${cureAt} ends from`, carrier.ends.from);
+          dismissing ??= `${cureAt} ends from`;
+        }
+        if ((carrier.ends ?? carrier.stabilizes ?? carrier.revives) === undefined) continue;
+        const ends = carrier.ends;
+        if (ends !== undefined) {
+          const known = new Set((document?.sheet?.live?.conditions ?? []).map((one) => one?.id));
+          const { kinds } = sheetNames(document);
+          const conditions = Array.isArray(ends?.conditions) ? ends.conditions : [];
+          // A kind (1.258) may be any number of conditions, so a count is not held to the names.
+          const kind = conditions.some((condition) => kinds.has(condition));
+          if (kind) kindsOrCounts ??= `${cureAt} ends a kind of condition`;
+          if (
+            conditions.length < 1 ||
+            conditions.length > 16 ||
+            new Set(conditions).size !== conditions.length ||
+            conditions.some((condition) => !known.has(condition) && !kinds.has(condition)) ||
+            (ends.count !== undefined &&
+              (!Number.isInteger(ends.count) || ends.count < 1 || ends.count > (kind ? 16 : conditions.length)))
+          )
+            throw new Error(`${id} ${cureAt} ends the sheet's conditions, each once, and at most as many as it names`);
+          // 1.442: its user picks which of them end.
+          if (ends.chosen !== undefined) {
+            if (ends.chosen !== true) throw new Error(`${id} ${cureAt} ends chosen is true when given`);
+            endsChosen ??= `${cureAt} ends chosen`;
+          }
+        }
+        if (carrier.stabilizes !== undefined && (carrier.stabilizes !== true || !document?.combat?.dying))
+          throw new Error(`${id} ${cureAt} stabilizes is true, in a fight with a dying rule`);
+        const revives = carrier.revives;
+        if (
+          revives !== undefined &&
+          (!Number.isInteger(revives?.withinRounds) ||
+            revives.withinRounds < 1 ||
+            revives.withinRounds > 1000 ||
+            !revives.health)
+        )
+          throw new Error(`${id} ${cureAt} revives within 1-1000 rounds, with health`);
+        curing ??= cureAt;
+      }
+      const toggle = entry?.item?.toggle;
+      if (toggle !== undefined) {
+        const budgets = new Set((document?.combat?.economy?.budgets ?? []).map((one) => one?.id));
+        if (!toggle || typeof toggle.label !== "string" || !toggle.label.trim() || !budgets.has(toggle.budget))
+          throw new Error(`${id} ${where} toggle needs a label and one of the fight's budgets`);
+        gate(RULESET_ITEM_TOGGLES_MIN, `has ${where} switching on and off`);
+      }
+      (attack?.onHit ?? []).forEach((hit, index) => {
+        test(`${where} attack onHit ${index} targetIs`, hit?.targetIs);
+        if (hit?.oncePerTurn !== undefined && hit.oncePerTurn !== true)
+          throw new Error(`${id} ${where} attack onHit ${index} oncePerTurn is true or left out`);
+        if (hit?.targetIs !== undefined || hit?.oncePerTurn !== undefined) slaying ??= `${where} attack onHit ${index}`;
+      });
+      if (attack?.against !== undefined) {
+        if (!Array.isArray(attack.against) || attack.against.length < 1 || attack.against.length > 4)
+          throw new Error(`${id} ${where} attack against is a list of 1 to 4`);
+        attack.against.forEach((one, index) => {
+          const at = `${where} attack against ${index}`;
+          if (!one?.is && one?.marked === undefined)
+            throw new Error(`${id} ${at} names what it is against: is, marked or both`);
+          test(`${at} is`, one.is);
+          if (one.marked !== undefined && !names.conditions.has(one.marked))
+            throw new Error(`${id} ${at} is marked by unknown condition ${JSON.stringify(one.marked)}`);
+          if (
+            one.toHit !== undefined &&
+            (!Number.isInteger(one.toHit) || one.toHit === 0 || one.toHit < -20 || one.toHit > 20)
+          )
+            throw new Error(`${id} ${at} toHit is a whole number from -20 to 20, not 0`);
+          if (one.mode !== undefined && !["advantage", "disadvantage"].includes(one.mode))
+            throw new Error(`${id} ${at} mode is "advantage" or "disadvantage"`);
+          for (const key of ["ignoresCover", "ignoresLongRange"])
+            if (one[key] !== undefined && one[key] !== true) throw new Error(`${id} ${at} ${key} is true or left out`);
+          if (one.toHit === undefined && one.mode === undefined && !one.ignoresCover && !one.ignoresLongRange)
+            throw new Error(`${id} ${at} changes nothing: toHit, mode, ignoresCover or ignoresLongRange`);
+          // 1.189: a mark, a mode and what it ignores.
+          if (one.marked !== undefined || one.mode !== undefined || one.ignoresCover || one.ignoresLongRange)
+            marking ??= at;
+        });
+        slaying ??= `${where} attack against`;
+      }
+      if (attack?.slay !== undefined) {
+        if (!Array.isArray(attack.slay) || attack.slay.length < 1 || attack.slay.length > 3)
+          throw new Error(`${id} ${where} attack slay is a list of 1 to 3`);
+        attack.slay.forEach((one, index) => {
+          const at = `${where} attack slay ${index}`;
+          const known = ["when", "is", "not", "immuneTo", "healthAtMost", "save", "charges", "saved"];
+          const extra = Object.keys(one ?? {}).find((key) => !known.includes(key));
+          if (extra !== undefined) throw new Error(`${id} ${at} has the unknown key ${JSON.stringify(extra)}`);
+          if (one.when !== undefined && !["always", "critical"].includes(one.when))
+            throw new Error(`${id} ${at} when is "always" or "critical"`);
+          test(`${at} is`, one.is);
+          test(`${at} not`, one.not);
+          const damage = new Set((document?.combat?.damageTypes ?? []).map((type) => String(type).toLowerCase()));
+          for (const type of one.immuneTo ?? [])
+            if (!damage.has(String(type).toLowerCase()))
+              throw new Error(`${id} ${at} immuneTo names unknown damage type ${JSON.stringify(type)}`);
+          if (one.healthAtMost !== undefined && (!Number.isInteger(one.healthAtMost) || one.healthAtMost < 0))
+            throw new Error(`${id} ${at} healthAtMost is a whole number from 0`);
+          if (one.save !== undefined) {
+            if (!names.saves.has(one.save?.save))
+              throw new Error(`${id} ${at} rolls unknown save ${JSON.stringify(one.save?.save)}`);
+            if (!Number.isInteger(one.save.difficulty) || one.save.difficulty < 0 || one.save.difficulty > 1000)
+              throw new Error(`${id} ${at} save difficulty is a whole number from 0 to 1000`);
+          }
+          if (one.saved !== undefined) {
+            if (one.save === undefined) throw new Error(`${id} ${at} saved needs the save it follows`);
+            if (!Array.isArray(one.saved) || one.saved.length < 1 || one.saved.length > 4)
+              throw new Error(`${id} ${at} saved is a list of 1 to 4 conditions`);
+            for (const applied of one.saved)
+              if (!names.conditions.has(applied?.condition))
+                throw new Error(`${id} ${at} saved puts on unknown condition ${JSON.stringify(applied?.condition)}`);
+            ridden ??= `${at} saved`;
+          }
+          if (one.charges !== undefined) {
+            if (!Number.isInteger(one.charges) || one.charges < 1 || one.charges > 100)
+              throw new Error(`${id} ${at} charges is a whole number from 1 to 100`);
+            if (!entry.item.charges || entry.item.stack !== 1)
+              throw new Error(`${id} ${at} spends charges, so its item holds some and stacks one`);
+          }
+        });
+        slaying ??= `${where} attack slay`;
+      }
+      // 1.737: some of its bonus moved to its wielder's defense for a turn.
+      if (attack?.bonusToDefense !== undefined) {
+        const moved = attack.bonusToDefense;
+        if (
+          !moved ||
+          typeof moved !== "object" ||
+          Object.keys(moved).some((key) => !["upTo", "label"].includes(key)) ||
+          !Number.isInteger(moved.upTo) ||
+          moved.upTo < 1 ||
+          moved.upTo > 10 ||
+          (moved.label !== undefined &&
+            (typeof moved.label !== "string" || !moved.label.trim() || moved.label.length > 80))
+        )
+          throw new Error(`${id} ${where} attack bonusToDefense is { upTo 1-10, label? }`);
+        lateGate(RULESET_BONUS_TO_DEFENSE_MIN, `has ${where} attack bonusToDefense, of 1.737`);
+      }
+      if (attack?.ignoresResistance !== undefined) {
+        if (attack.ignoresResistance !== true) throw new Error(`${id} ${where} attack ignoresResistance is true`);
+        ridden ??= `${where} attack ignoresResistance`;
+      }
+      if (attack?.healedOnlyByRest !== undefined) {
+        if (attack.healedOnlyByRest !== true) throw new Error(`${id} ${where} attack healedOnlyByRest is true`);
+        resting ??= `${where} attack healedOnlyByRest`;
+      }
+      if (attack?.othersWhileMarked !== undefined) {
+        const others = attack.othersWhileMarked;
+        if (!others || !names.conditions.has(others.condition))
+          throw new Error(
+            `${id} ${where} attack othersWhileMarked names unknown condition ${JSON.stringify(others?.condition)}`,
+          );
+        if (!["advantage", "disadvantage"].includes(others.mode))
+          throw new Error(`${id} ${where} attack othersWhileMarked mode is "advantage" or "disadvantage"`);
+        if (others.ranged !== undefined && others.ranged !== true)
+          throw new Error(`${id} ${where} attack othersWhileMarked ranged is true or left out`);
+        ridden ??= `${where} attack othersWhileMarked`;
+      }
+      (attack?.modes ?? []).forEach((mode, index) => {
+        const at = `${where} attack mode ${JSON.stringify(mode?.id)}`;
+        if (mode?.range !== undefined) {
+          const { normal, long } = mode.range ?? {};
+          if (!(normal > 0) || (long !== undefined && !(long >= normal)))
+            throw new Error(`${id} ${at} range has a normal distance above 0 and a long one no shorter`);
+        }
+        if (mode?.line !== undefined) {
+          if (!names.saves.has(mode.line?.save?.save))
+            throw new Error(`${id} ${at} line rolls unknown save ${JSON.stringify(mode.line?.save?.save)}`);
+          if (!["none", "half"].includes(mode.line.save.onSuccess))
+            throw new Error(`${id} ${at} line save onSuccess is "none" or "half"`);
+          if (mode.line.dice === undefined && mode.line.flat === undefined)
+            throw new Error(`${id} ${at} line deals dice, a flat amount, or both`);
+        }
+        if (mode?.charges !== undefined) {
+          if (!Number.isInteger(mode.charges) || mode.charges < 1 || mode.charges > 100)
+            throw new Error(`${id} ${at} charges is a whole number from 1 to 100`);
+          if (!entry.item.charges || entry.item.stack !== 1)
+            throw new Error(`${id} ${at} spends charges, so its item holds some and stacks one`);
+        }
+        if (mode?.plus !== undefined && (!Array.isArray(mode.plus) || mode.plus.length < 1))
+          throw new Error(`${id} ${at} plus is a list of at least one clause`);
+        if (mode?.aroundHit !== undefined) {
+          const around = mode.aroundHit;
+          if (!around || typeof around !== "object" || !(around.within > 0))
+            throw new Error(`${id} ${at} aroundHit reaches a distance above 0`);
+          if (!names.saves.has(around.save?.save) || !Number.isInteger(around.save?.difficulty))
+            throw new Error(`${id} ${at} aroundHit rolls a known save against a whole-number difficulty`);
+          if (!names.conditions.has(around.condition))
+            throw new Error(`${id} ${at} aroundHit puts on unknown condition ${JSON.stringify(around.condition)}`);
+          if (around.rounds !== undefined && !(Number.isInteger(around.rounds) && around.rounds >= 1))
+            throw new Error(`${id} ${at} aroundHit rounds is a whole number from 1`);
+          if (around.of !== undefined && (around.of !== "source" || around.rounds === undefined))
+            throw new Error(`${id} ${at} aroundHit of is "source", with rounds`);
+          thunderclap ??= `${at} aroundHit`;
+        }
+        if (["range", "plus", "line", "charges"].some((key) => mode?.[key] !== undefined)) moded ??= at;
+      });
+      if ((attack?.onHit ?? []).some((hit) => hit?.save !== undefined || hit?.saveEnds !== undefined))
+        gate(RULESET_WEAPON_EXTRAS_MIN, `has ${where} putting on a condition a save resists`);
+      const creature = entry?.creature;
+      if (creature?.senses !== undefined) {
+        const senses = creature.senses;
+        if (
+          !senses ||
+          typeof senses !== "object" ||
+          Object.entries(senses).some(
+            ([sense, range]) => !senseIds.has(sense) || !Number.isFinite(range) || range <= 0 || range > 10000,
+          )
+        )
+          throw new Error(`${id} ${where} senses are the fight's senses, each with a range above 0`);
+        sighted ??= `${where} senses`;
+      }
+      for (const action of creature?.actions ?? []) {
+        if (action?.seen === undefined) continue;
+        if (action.seen !== true) throw new Error(`${id} ${where} action "${action.name}" seen is true`);
+        sighted ??= `${where} action`;
+      }
+      for (const action of creature?.actions ?? [])
+        if (action?.components !== undefined) needsComponents(action.components, `${where} action "${action.name}"`);
+      // 1.280: a teleport that strikes names another plain action of the same creature.
+      for (const action of creature?.actions ?? []) {
+        const strike = action?.teleport?.strike;
+        if (strike === undefined) continue;
+        const other = (creature.actions ?? []).find((one) => one?.id === strike);
+        if (
+          !other ||
+          other === action ||
+          other.teleport !== undefined ||
+          other.sequence !== undefined ||
+          other.reaction !== undefined ||
+          other.signature !== undefined
+        )
+          throw new Error(
+            `${id} ${where} action "${action.name}" teleport strike names another plain action of the creature, not a teleport, sequence, reaction or legendary action`,
+          );
+        teleportStrike ??= `${where} action "${action.name}" striking with its teleport`;
+      }
+      for (const key of ["worn", "carried"])
+        if (entry?.item?.[key]?.senses !== undefined) senseRanges(entry.item[key].senses, `${where} ${key}`);
+      for (const action of creature?.actions ?? []) saveExtras(action?.save, `${where} action "${action.name}"`);
+      const casting = creature?.spellcasting;
+      for (const [list, at] of [
+        [casting?.components, `${where} spellcasting`],
+        ...(casting?.spells ?? []).map((spell) => [spell?.components, `${where} spellcasting spell ${spell?.entry}`]),
+      ]) {
+        if (list === undefined) continue;
+        if (
+          !Array.isArray(list) ||
+          list.length > 8 ||
+          new Set(list).size !== list.length ||
+          list.some((component) => !componentIds.has(component))
+        )
+          throw new Error(`${id} ${at} components are none or the fight's components, each once`);
+        passed ??= `${at} components`;
+      }
+      if (creature?.type !== undefined || creature?.tags !== undefined)
+        named(where, creature.type === undefined ? [] : [creature.type], creature.tags);
+      (creature?.actions ?? []).forEach((action, index) => tests(`${where} action ${index}`, action));
+    }
+  }
+
+  // Gated after the older keys, so an older Engine's refusal names its own older gate first.
+  if (growing) gate(RULESET_POOL_PAYS_MIN, `has ${growing} whose targets grow with the slot paid`);
+  if (zoned) gate(RULESET_ZONES_MIN, `has ${zoned} whose area stays`);
+  if (moving) gate(RULESET_MOVING_ZONES_MIN, `has ${moving} whose area moves or changes the ground`);
+  if (ruled)
+    gate(RULESET_ZONE_RULES_MIN, `has ${ruled} with concentration or a zone on an item, or a zone that ends a hold`);
+  if ((document?.combat?.contests ?? []).some((contest) => contest?.from?.escapable !== undefined))
+    holding ??= "a contest that breaks only holds with an escape DC";
+  if (holding) gate(RULESET_HOLDS_MIN, `has ${holding} that rams, holds, or slows beyond difficult ground`);
+  if (curing) gate(RULESET_CURES_MIN, `has ${curing} that ends conditions, stabilizes the dying, or revives the dead`);
+  const combatSight = document?.combat;
+  if (combatSight?.senses !== undefined) {
+    const senses = combatSight.senses;
+    if (
+      !Array.isArray(senses) ||
+      senses.length < 1 ||
+      senses.length > 12 ||
+      senseIds.size !== senses.length ||
+      senses.some((one) => typeof one?.label !== "string" || (one.blind !== undefined && one.blind !== true)) ||
+      !combatSight.distance
+    )
+      throw new Error(
+        `${id} combat.senses are one to twelve senses (eight before 1.743), each once with a label, in a fight with distance`,
+      );
+    sighted ??= "combat senses";
+  }
+  if (combatSight?.sight !== undefined) {
+    const sight = combatSight.sight;
+    const lacked = new Set((combatSight.conditions ?? []).flatMap((one) => one?.lacks ?? []));
+    if (
+      !sight ||
+      (sight.unseenAttacks !== undefined && sight.unseenAttacks !== true) ||
+      (sight.eyes !== undefined && !lacked.has(sight.eyes))
+    )
+      throw new Error(`${id} combat.sight has unseenAttacks true and eyes a sense a condition lacks`);
+    sighted ??= "combat sight";
+  }
+  for (const condition of combatSight?.conditions ?? [])
+    if (condition?.unseen !== undefined) pierced(condition.unseen, `combat condition "${condition.condition}" unseen`);
+  const declared = document?.combat?.components;
+  if (declared !== undefined) {
+    if (
+      !Array.isArray(declared) ||
+      declared.length < 1 ||
+      declared.length > 8 ||
+      componentIds.size !== declared.length ||
+      declared.some((one) => typeof one?.id !== "string" || typeof one?.label !== "string")
+    )
+      throw new Error(`${id} combat.components are one to eight components, each once with a label`);
+    componented ??= "combat components";
+  }
+  for (const condition of combatSight?.conditions ?? []) {
+    if (condition?.forbids !== undefined) {
+      const forbids = condition.forbids;
+      // 1.438: casts from catalogs and concentration, and components only if named.
+      if (
+        !forbids ||
+        typeof forbids !== "object" ||
+        Object.keys(forbids).length < 1 ||
+        Object.keys(forbids).some(
+          (key) => !["components", "casts", "concentration", "items", "entries"].includes(key),
+        ) ||
+        // 1.646: entries, each "<catalog>/<entry>" of a declared catalog.
+        (forbids.entries !== undefined &&
+          (!Array.isArray(forbids.entries) ||
+            forbids.entries.length < 1 ||
+            new Set(forbids.entries).size !== forbids.entries.length ||
+            forbids.entries.some(
+              (one) =>
+                typeof one !== "string" ||
+                !(document?.catalogs ?? []).some(
+                  (catalog) =>
+                    typeof catalog?.id === "string" &&
+                    one.startsWith(`${catalog.id}/`) &&
+                    one.length > catalog.id.length + 1,
+                ),
+            ))) ||
+        // 1.525: items, by their tags or all of them.
+        (forbids.items !== undefined &&
+          (!forbids.items ||
+            typeof forbids.items !== "object" ||
+            Object.keys(forbids.items).some((key) => key !== "tags") ||
+            (forbids.items.tags !== undefined &&
+              (!Array.isArray(forbids.items.tags) ||
+                forbids.items.tags.length < 1 ||
+                forbids.items.tags.some((one) => typeof one !== "string" || one.length < 1))))) ||
+        (forbids.casts !== undefined &&
+          (!Array.isArray(forbids.casts) ||
+            forbids.casts.length < 1 ||
+            new Set(forbids.casts).size !== forbids.casts.length ||
+            forbids.casts.some((one) => !(document?.catalogs ?? []).some((catalog) => catalog?.id === one)))) ||
+        (forbids.concentration !== undefined && forbids.concentration !== true)
+      )
+        throw new Error(
+          `${id} combat condition "${condition.condition}" forbids is { components?, casts?: [catalogs], concentration?: true, items?: { tags? }, entries?: ["<catalog>/<entry>"] }`,
+        );
+      if (forbids.entries !== undefined) forbidsEntries ??= `combat condition "${condition.condition}" forbids entries`;
+      if (
+        forbids.components !== undefined ||
+        (forbids.casts === undefined &&
+          forbids.concentration === undefined &&
+          forbids.items === undefined &&
+          forbids.entries === undefined)
+      )
+        needsComponents(forbids.components, `combat condition "${condition.condition}" forbids`);
+    }
+    if ((condition?.budgets ?? []).some((one) => typeof one?.flat === "number" && one.flat < 0))
+      componented ??= `combat condition "${condition.condition}" that takes a budget away`;
+    if (condition?.senses !== undefined) senseRanges(condition.senses, `combat condition "${condition.condition}"`);
+    if (condition?.cancelsUnseen !== undefined) {
+      if (condition.cancelsUnseen !== true)
+        throw new Error(`${id} combat condition "${condition.condition}" cancelsUnseen is true`);
+      given ??= `combat condition "${condition.condition}" cancelsUnseen`;
+    }
+  }
+  if (forbidsEntries) lateGate(RULESET_FORBIDS_ENTRIES_MIN, `has ${forbidsEntries}, of 1.646`);
+  if (walled) gate(RULESET_WALLS_MIN, `has ${walled} that lands in a box or is a wall`);
+  if (sighted) gate(RULESET_SIGHT_MIN, `has ${sighted} that reads what is seen`);
+  if (componented)
+    gate(RULESET_COMPONENTS_MIN, `has ${componented} that reads components, what a zone holds, or a lost budget`);
+  if (given) gate(RULESET_GIVEN_SENSES_MIN, `has ${given} that ends on attacking or casting, casts, or gives senses`);
+  if (passed)
+    gate(
+      RULESET_SAVES_PASSED_MIN,
+      `has ${passed} that wards by base level, passes or counts a save, names a creature's components, or leaves an area from an item`,
+    );
+  if (pushing) gate(RULESET_PUSHES_MIN, `has ${pushing} that pushes, turns a held line, or adds to a sense`);
+  if (detonating) gate(RULESET_DETONATES_MIN, `has ${detonating}, a zone that bursts as it ends or catches fire`);
+  if (widened) gate(RULESET_CREATURE_PUSHES_MIN, `has ${widened}, a line's width on an item's use`);
+  if (kinded) gate(RULESET_KINDS_MIN, `${kinded}, reading further what a creature is`);
+  if (slaying) gate(RULESET_SLAY_MIN, `has ${slaying}, a weapon that knows what it hits`);
+  if (marking) gate(RULESET_MARKS_MIN, `has ${marking}, a weapon that reads its wielder's mark`);
+  if (moded) gate(RULESET_WEAPON_MODES_MIN, `has ${moded}, a weapon mode of its own`);
+  if (warding) gate(RULESET_HEAL_WARDS_MIN, `has ${warding}, a least ability score its target needs`);
+  if (ridden) gate(RULESET_WEAPON_RIDERS_MIN, `has ${ridden}, a weapon rider of 1.192`);
+  if (resting) gate(RULESET_MEDICINE_MIN, `has ${resting}, hit points only a rest gives back`);
+  if (gated) gate(RULESET_HEALTH_GATES_MIN, `has ${gated}, targets picked by health left`);
+  if (typedZone) gate(RULESET_ZONE_DAMAGE_TYPES_MIN, `has ${typedZone}, a zone's own damage type`);
+  if (skipping) gate(RULESET_POOL_SKIPS_MIN, `has ${skipping}, a health pool that passes some over`);
+  if (sectioned) gate(RULESET_WALL_SECTIONS_MIN, `has ${sectioned}, a wall struck and broken in sections`);
+  if (trackCure) gate(RULESET_TRACK_CURES_MIN, `has ${trackCure}, of 1.201`);
+  if (linked) gate(RULESET_LINKED_ENDS_MIN, `has ${linked}, a condition that ends with another`);
+  if (oneOf) gate(RULESET_CURE_ONE_OF_MIN, `has ${oneOf}, a cure that does one of its cures`);
+  if (drains) gate(RULESET_DRAINS_MIN, `has ${drains}, of 1.235`);
+  if (dismissing) gate(RULESET_DISMISSALS_MIN, `has ${dismissing}, of 1.236`);
+  if (shaking) gate(RULESET_SURPRISE_MIN, `has ${shaking}, of 1.237`);
+  if (twice) gate(RULESET_EXTRA_FIRST_TURN_MIN, `has ${twice}, of 1.238`);
+  if (sharing) gate(RULESET_FRENZY_MIN, `has ${sharing}, of 1.239`);
+  if (rolledTwice) gate(RULESET_INITIATIVE_MODE_MIN, `has ${rolledTwice}, of 1.240`);
+  if (smiting) gate(RULESET_OWN_HIT_MIN, `has ${smiting}, of 1.241`);
+  if (striking) gate(RULESET_MARTIAL_ARTS_MIN, `has ${striking}, of 1.242`);
+  if (heldWeapons) gate(RULESET_HELD_WEAPONS_MIN, `has ${heldWeapons}, of 1.244`);
+  if (quivering) gate(RULESET_QUIVERING_MIN, `has ${quivering}, of 1.245`);
+  if (afterItems) gate(RULESET_AFTER_ATTACK_ITEMS_MIN, `has ${afterItems}, of 1.246`);
+  if (beforeFirst) gate(RULESET_RECKLESS_MIN, `has ${beforeFirst}, of 1.247`);
+  if (rescuing) gate(RULESET_RESCUE_MIN, `has ${rescuing}, of 1.249`);
+  if (lowering) gate(RULESET_CUTTING_WORDS_MIN, `has ${lowering}, of 1.250`);
+  if (choosing) gate(RULESET_USES_CHOSEN_MIN, `has ${choosing}, of 1.251`);
+  if (restoring) gate(RULESET_RESTORE_POOL_MIN, `has ${restoring}, of 1.252`);
+  if (altering) gate(RULESET_ALTERS_MIN, `has ${altering}, of 1.253`);
+  if (halving) gate(RULESET_HALF_ON_MISS_MIN, `has ${halving}, of 1.255`);
+  if (ownRescue) gate(RULESET_OWN_RESCUE_MIN, `has ${ownRescue}, of 1.256`);
+  if (lowersAlso) gate(RULESET_LOWERS_ALSO_MIN, `has ${lowersAlso}, of 1.257`);
+  // 1.258: saves counted to end a condition or to worsen it into another, anywhere they are applied.
+  {
+    const conditionIds = sheetNames(document).conditions;
+    const seen = new Set();
+    // An item's use (1.628), `itemUse`: a burst around its user may leave a zone there, as the Eversmoking
+    // Bottle's smoke.
+    const visit = (value, at, itemUse = false) => {
+      if (!value || typeof value !== "object" || seen.has(value)) return;
+      seen.add(value);
+      if (Array.isArray(value)) return value.forEach((one, index) => visit(one, `${at} ${index}`));
+      const ends = value.saveEnds;
+      if (ends?.at === "action") spentSave ??= `${at} "${value.condition}" saveEnds, a save spent an action on`;
+      // 1.270: a save rolled only farther off than this from its source.
+      if (ends && typeof ends === "object" && ends.beyond !== undefined) {
+        if (typeof ends.beyond !== "number" || !(ends.beyond > 0) || ends.beyond > 10000)
+          throw new Error(`${at} "${value.condition}" saveEnds beyond is a distance above 0`);
+        kindsChosen ??= `${at} "${value.condition}" saveEnds beyond`;
+      }
+      // 1.758: an entry or creature action picked as it is cast, which what it puts on wards off.
+      if (value.wardPick !== undefined) {
+        if (
+          value.wardPick !== true ||
+          !Array.isArray(value.applies) ||
+          !value.applies.length ||
+          value.kindChoice !== undefined
+        )
+          throw new Error(`${at} wardPick is true, on mechanics that put something on, without kindChoice`);
+        lateGate(RULESET_WARD_PICK_MIN, `has ${at} a ward against one spell or effect picked as it is cast, of 1.758`);
+      }
+      // 1.270: a kind named as it is cast, which what it puts on remembers.
+      // 1.753: or several, the kinds its zone strikes, from those its targetTypes name: Forbiddance.
+      if (value.kindChoice === "many") {
+        const named = value.targetTypes?.is;
+        if (
+          !value.zone ||
+          !document?.combat?.creatureTypes ||
+          !named ||
+          (named.types === undefined && named.tags === undefined)
+        )
+          throw new Error(`${at} kindChoice "many" goes with a zone and targetTypes naming the kinds to pick from`);
+        lateGate(RULESET_FORBIDDANCE_MIN, `has ${at} kinds named as it is cast, of 1.753`);
+      } else if (value.kindChoice !== undefined) {
+        const types = document?.combat?.creatureTypes;
+        if (value.kindChoice !== true || !Array.isArray(value.applies) || !value.applies.length || !types)
+          throw new Error(
+            `${at} kindChoice is true, on mechanics that put something on, with combat.creatureTypes declared`,
+          );
+        kindsChosen ??= `${at} kindChoice`;
+      }
+      // 1.268: a save leaning while its holder can see the source.
+      if (ends && typeof ends === "object" && ends.seenLean !== undefined) {
+        if (!["advantage", "disadvantage"].includes(ends.seenLean))
+          throw new Error(`${at} "${value.condition}" saveEnds seenLean is advantage or disadvantage`);
+        gazesMore ??= `${at} "${value.condition}" saveEnds seenLean`;
+      }
+      // 1.266: a save rolled only out of the source's sight, and destroying by threat tier.
+      if (ends && typeof ends === "object" && ends.unseen !== undefined) {
+        if (ends.unseen !== true) throw new Error(`${at} "${value.condition}" saveEnds unseen is true`);
+        dropsMore ??= `${at} "${value.condition}" saveEnds, a save rolled out of sight`;
+      }
+      // 1.267: any one sense, targets near each other, a growing area, more item uses, held things.
+      if (value.needsAny !== undefined) {
+        if (value.needsAny !== true || !Array.isArray(value.needs) || value.needs.length < 2)
+          throw new Error(`${at} needsAny is true, beside 2 or more needs`);
+        spread ??= `${at} needsAny`;
+      }
+      if (value.targetsWithin !== undefined) {
+        if (
+          typeof value.targetsWithin !== "number" ||
+          !(value.targetsWithin > 0) ||
+          !((value.targetCount ?? 1) > 1 || value.targetsPerCostStep)
+        )
+          throw new Error(`${at} targetsWithin is a distance above 0, on something aimed at more than one`);
+        spread ??= `${at} targetsWithin`;
+      }
+      // 1.594: each target after the first within a distance of the first.
+      if (value.targetsWithinFirst !== undefined) {
+        if (
+          typeof value.targetsWithinFirst !== "number" ||
+          !(value.targetsWithinFirst > 0) ||
+          value.targetsWithin !== undefined ||
+          !((value.targetCount ?? 1) > 1 || value.targetsPerCostStep)
+        )
+          throw new Error(
+            `${at} targetsWithinFirst is a distance above 0, in place of targetsWithin, on something aimed at more than one`,
+          );
+        nearFirst ??= `${at} targetsWithinFirst`;
+      }
+      if (value.area && typeof value.area === "object" && value.area.sizePerCostStep !== undefined) {
+        const step = value.area.sizePerCostStep;
+        if (typeof step !== "number" || !(step > 0) || value.area.shape === "wall" || !value.cost)
+          throw new Error(
+            `${at} area sizePerCostStep is a distance above 0, on an area that is no wall and has a cost`,
+          );
+        spread ??= `${at} area sizePerCostStep`;
+      }
+      if (value.moreUses !== undefined) {
+        const uses = value.moreUses;
+        if (
+          // 1.749: or none, its further uses rolled by kind.
+          (!value.use && value.moreUsesRolled === undefined) ||
+          !Array.isArray(uses) ||
+          uses.length < 1 ||
+          uses.length > 16 ||
+          uses.some(
+            (more) =>
+              !more ||
+              typeof more !== "object" ||
+              Object.keys(more).some((key) => !["label", "use", "uses", "usesOf", "alongside"].includes(key)) ||
+              // 1.747: or spends another further use's count, which counts its own.
+              (more.usesOf !== undefined &&
+                (more.uses !== undefined ||
+                  !uses.some(
+                    (other) =>
+                      other !== more &&
+                      other?.label === more.usesOf &&
+                      other?.uses !== undefined &&
+                      other?.usesOf === undefined,
+                  ))) ||
+              (more.uses !== undefined &&
+                (!more.uses ||
+                  typeof more.uses !== "object" ||
+                  Object.keys(more.uses).some((key) => !["max", "rolled", "recharge"].includes(key)) ||
+                  !Number.isInteger(more.uses.max) ||
+                  more.uses.max < 1 ||
+                  more.uses.max > 100 ||
+                  (more.uses.recharge !== undefined &&
+                    (!more.uses.recharge ||
+                      typeof more.uses.recharge !== "object" ||
+                      Object.keys(more.uses.recharge).some((key) => !["rests", "amount"].includes(key)) ||
+                      !Array.isArray(more.uses.recharge.rests) ||
+                      more.uses.recharge.rests.length < 1 ||
+                      (more.uses.recharge.amount !== undefined &&
+                        more.uses.recharge.amount !== "max" &&
+                        !/^\d+d\d+([+-]\d+)?$/u.test(more.uses.recharge.amount)))))) ||
+              typeof more.label !== "string" ||
+              more.label.length < 1 ||
+              more.label.length > 40 ||
+              !more.use ||
+              typeof more.use !== "object" ||
+              more.use.needs !== undefined ||
+              ((more.use.save || more.use.applies?.some((applied) => applied?.saveEnds)) &&
+                more.use.saveDifficulty === undefined &&
+                more.use.sheetDifficulty === undefined),
+          )
+        )
+          throw new Error(
+            `${at} moreUses is 1 to 16 of { label: up to 40 characters, use: an item use (with saveDifficulty or sheetDifficulty where it asks a save), uses?: { max: 1 to 100, rolled?: dice, recharge?: { rests, amount?: "max" or dice } }, usesOf?: the label of another that counts its own uses, in place of uses }, beside a use`,
+          );
+        // Its uses are counted on its stack, so one to a stack, as the Engine reads it.
+        if (uses.some((more) => more.uses !== undefined) && value.stack !== 1)
+          throw new Error(`${at} moreUses count their own uses, so its stack is 1`);
+        if (!value.use)
+          lateGate(RULESET_ONLY_ROLLED_USES_MIN, `has ${at} moreUses rolled by kind and no use, of 1.749`);
+        if (uses.some((more) => more.usesOf !== undefined))
+          lateGate(RULESET_MORE_USES_OF_MIN, `has ${at} moreUses usesOf, of 1.747`);
+        spread ??= `${at} moreUses`;
+      }
+      // 1.559: a use rolling on its item's table of weighted rows, each told and perhaps a use of its own.
+      if (value.useTable !== undefined || value.use?.rollsTable !== undefined) {
+        const rows = value.useTable;
+        if (
+          value.use?.rollsTable !== true ||
+          !Array.isArray(rows) ||
+          rows.length < 2 ||
+          rows.length > 24 ||
+          rows.some(
+            (row) =>
+              !row ||
+              typeof row !== "object" ||
+              Object.keys(row).some((key) => !["weight", "label", "use"].includes(key)) ||
+              !Number.isInteger(row.weight) ||
+              row.weight < 1 ||
+              row.weight > 100 ||
+              typeof row.label !== "string" ||
+              row.label.length < 1 ||
+              row.label.length > 80 ||
+              (row.use !== undefined &&
+                (!row.use ||
+                  typeof row.use !== "object" ||
+                  row.use.rollsTable !== undefined ||
+                  row.use.charges !== undefined ||
+                  row.use.needs !== undefined ||
+                  ((row.use.save || row.use.applies?.some((applied) => applied?.saveEnds)) &&
+                    row.use.saveDifficulty === undefined))),
+          ) ||
+          (value.moreUses ?? []).some((more) => more?.use?.rollsTable !== undefined)
+        )
+          throw new Error(
+            `${at} useTable is 2 to 24 of { weight: 1 to 100, label: up to 80 characters, use?: an item use (with saveDifficulty where it asks a save) that rolls nothing more and spends no charges }, rolled by its use's rollsTable: true`,
+          );
+        tabling ??= `${at} useTable`;
+      }
+      if (value.sheetDifficulty !== undefined || value.chargeStep !== undefined) {
+        const derived = new Set((document?.sheet?.derived ?? []).map((one) => one?.id));
+        const read = value.sheetDifficulty;
+        const step = value.chargeStep;
+        const amountIssue = (amount) =>
+          amount !== undefined &&
+          (!amount ||
+            typeof amount !== "object" ||
+            Object.keys(amount).some((key) => !["dice", "flat"].includes(key)) ||
+            (amount.dice !== undefined && !/^\d+d\d+([+-]\d+)?$/u.test(amount.dice)) ||
+            (amount.flat !== undefined && !Number.isInteger(amount.flat)));
+        if (
+          (read !== undefined &&
+            (!read ||
+              typeof read !== "object" ||
+              Object.keys(read).length !== 1 ||
+              !derived.has(read.derived) ||
+              value.saveDifficulty !== undefined)) ||
+          (step !== undefined &&
+            (!step ||
+              typeof step !== "object" ||
+              Object.keys(step).some((key) => !["max", "amount", "targets", "push"].includes(key)) ||
+              !Number.isInteger(step.max) ||
+              step.max < 1 ||
+              step.max > 20 ||
+              amountIssue(step.amount) ||
+              (step.targets !== undefined &&
+                (!Number.isInteger(step.targets) || step.targets < 1 || step.targets > 10)) ||
+              (step.push !== undefined && (typeof step.push !== "number" || !(step.push > 0))) ||
+              (step.amount === undefined &&
+                step.targets === undefined &&
+                step.push === undefined &&
+                value.calls?.perStep === undefined &&
+                value.calls?.timesPerSteps === undefined) ||
+              value.charges === undefined))
+        )
+          throw new Error(
+            `${at} use reads sheetDifficulty: { derived } (not with saveDifficulty) and chargeStep: { max 1 to 20, amount?, targets? 1 to 10, push? above 0 } beside its charges`,
+          );
+        staffs ??= `${at} ${read !== undefined ? "sheetDifficulty" : "chargeStep"}`;
+        if (step?.push !== undefined) staffExtras ??= `${at} chargeStep push`;
+        // 1.615: charges more that only call more.
+        if (step && step.amount === undefined && step.targets === undefined && step.push === undefined)
+          wildCalls ??= `${at} chargeStep calling more`;
+      }
+      // 1.271: an item's first use named, a sheet value added to a use, charges back on the last one.
+      if (value.use && typeof value.use === "object" && !Array.isArray(value.use) && value.category !== undefined) {
+        const derived = new Set((document?.sheet?.derived ?? []).map((one) => one?.id));
+        const fields = new Set((document?.sheet?.fields ?? []).map((one) => one?.id));
+        const uses = [value.use, ...(Array.isArray(value.moreUses) ? value.moreUses.map((more) => more?.use) : [])];
+        if (value.use.label !== undefined) {
+          if (typeof value.use.label !== "string" || value.use.label.length < 1 || value.use.label.length > 60)
+            throw new Error(`${at} use label is up to 60 characters`);
+          staffExtras ??= `${at} use label`;
+        }
+        if (uses.slice(1).some((use) => use?.label !== undefined))
+          throw new Error(`${at} moreUses: a further use is named by its own label, not its use's`);
+        for (const use of uses) {
+          if (use?.amountAdd === undefined) continue;
+          const add = use.amountAdd;
+          if (
+            !add ||
+            typeof add !== "object" ||
+            Object.keys(add).length !== 1 ||
+            !(
+              fields.has(add.abilityModFromField) ||
+              fields.has(add.field) ||
+              derived.has(add.derived) ||
+              typeof add.const === "number"
+            ) ||
+            !use.amount
+          )
+            throw new Error(
+              `${at} use amountAdd is one sheet value ({ field | derived | abilityModFromField | const }), beside an amount`,
+            );
+          staffExtras ??= `${at} use amountAdd`;
+        }
+      }
+      if (value.breaksOn && typeof value.breaksOn === "object" && value.max !== undefined) {
+        const breaks = value.breaksOn;
+        const back = breaks.regains;
+        if (
+          (breaks.atMost === undefined && back === undefined) ||
+          (back !== undefined &&
+            (!back ||
+              typeof back !== "object" ||
+              Object.keys(back).some((key) => !["atLeast", "amount"].includes(key)) ||
+              !Number.isInteger(back.atLeast) ||
+              back.atLeast > breaks.die ||
+              (breaks.atMost !== undefined && back.atLeast <= breaks.atMost) ||
+              !back.amount ||
+              typeof back.amount !== "object" ||
+              (back.amount.dice === undefined && back.amount.flat === undefined)))
+        )
+          throw new Error(`${at} breaksOn has atMost, regains { atLeast: a face above atMost, amount }, or both`);
+        if (back !== undefined || breaks.atMost === undefined) staffExtras ??= `${at} breaksOn regains`;
+        if (breaks.becomes !== undefined) {
+          if (typeof breaks.becomes !== "string" || breaks.atMost === undefined || !itemRefs.has(breaks.becomes))
+            throw new Error(
+              `${at} breaksOn becomes is another item of the ruleset ("<catalog>/<entry>"), beside atMost`,
+            );
+          itemBecomes ??= `${at} breaksOn becomes`;
+        }
+      }
+      // 1.274: a value fixed off whoever applies a condition, temporary points each turn, a save rolled
+      // only on harm from the source, and a kind named as an item is used.
+      if (typeof value.condition === "string" && value.value !== undefined) {
+        if (!value.value || typeof value.value !== "object" || Object.keys(value.value).length !== 1)
+          throw new Error(`${at} "${value.condition}" value is one sheet value ref`);
+        appliedValues ??= `${at} "${value.condition}" value`;
+      }
+      if (typeof value.condition === "string" && value.temporary !== undefined && value.temporary?.at !== undefined) {
+        const temp = value.temporary;
+        if (
+          Object.keys(temp).some((key) => !["at", "dice", "flat", "value", "lostWhenEnds"].includes(key)) ||
+          !["turn-start", "turn-end"].includes(temp.at) ||
+          (temp.value !== undefined && temp.value !== true) ||
+          (temp.lostWhenEnds !== undefined && temp.lostWhenEnds !== true) ||
+          (temp.dice === undefined && temp.flat === undefined && temp.value === undefined)
+        )
+          throw new Error(
+            `${at} "${value.condition}" temporary is { at: turn-start|turn-end, dice?, flat?, value?: true, lostWhenEnds?: true }`,
+          );
+        appliedValues ??= `${at} "${value.condition}" temporary`;
+      }
+      if (ends && typeof ends === "object" && ends.bySource !== undefined) {
+        if (ends.bySource !== true || ends.at !== "damaged")
+          throw new Error(`${at} "${value.condition}" saveEnds bySource is true, with at "damaged"`);
+        appliedValues ??= `${at} "${value.condition}" saveEnds bySource`;
+      }
+      if (value.use && typeof value.use === "object" && value.use.kindChoice === "many") {
+        // 1.753: a scroll's Forbiddance, its kinds named as it is read.
+        const named = value.use.targetTypes?.is;
+        if (!value.use.zone || !named || (named.types === undefined && named.tags === undefined))
+          throw new Error(`${at} use kindChoice "many" goes with a zone and targetTypes naming the kinds to pick from`);
+        lateGate(RULESET_FORBIDDANCE_MIN, `has ${at} use kinds named as it is used, of 1.753`);
+      } else if (value.use && typeof value.use === "object" && value.use.kindChoice !== undefined) {
+        if (value.use.kindChoice !== true || !Array.isArray(value.use.applies))
+          throw new Error(`${at} use kindChoice is true, beside applies`);
+        appliedValues ??= `${at} use kindChoice`;
+      }
+      // 1.278: a save its user's own side may fail on purpose (Calm Emotions).
+      if (value.save && typeof value.save === "object" && value.save.alliesMayFail !== undefined) {
+        if (value.save.alliesMayFail !== true) throw new Error(`${at} save alliesMayFail is true when given`);
+        alliesFail ??= `${at} save alliesMayFail`;
+      }
+      // 1.277: more than four conditions from one use, up to six.
+      if (
+        Array.isArray(value.applies) &&
+        value.applies.length > 4 &&
+        (value.kind !== undefined || value.budget !== undefined)
+      ) {
+        // 1.469: up to twelve when one is picked.
+        // 1.525: up to twelve when each says the steps it is paid at.
+        const most = value.appliesOneOf === true || value.applies.every((one) => one?.paidSteps !== undefined) ? 12 : 6;
+        if (value.applies.length > most)
+          throw new Error(`${at} applies ${value.applies.length} conditions, more than ${most}`);
+        moreApplies ??= `${at} applies ${value.applies.length} conditions`;
+      }
+      // 1.291: a creature's permission to take the fight's standard actions with this action's budget.
+      if (
+        value.standard !== undefined &&
+        value.budget !== undefined &&
+        value.kind === undefined &&
+        value.id !== undefined
+      ) {
+        const grant = value.standard;
+        const known = document?.combat?.standard ?? [];
+        if (
+          !grant ||
+          typeof grant !== "object" ||
+          Array.isArray(grant) ||
+          Object.keys(grant).some((key) => !["actions", "while"].includes(key)) ||
+          !Array.isArray(grant.actions) ||
+          grant.actions.length < 1 ||
+          grant.actions.some((action) => !known.includes(action)) ||
+          (grant.while !== undefined && grant.while !== "obscured")
+        )
+          throw new Error(`${at} standard is { actions: the fight's standard actions, while?: "obscured" }`);
+        creatureLooks ??= `${at} standard`;
+      }
+      // 1.287: a creature's search (a legendary Detect), and nothing else it does.
+      if (
+        value.search !== undefined &&
+        value.budget !== undefined &&
+        value.kind === undefined &&
+        value.id !== undefined
+      ) {
+        const extras = [
+          "damage",
+          "heal",
+          "applies",
+          "area",
+          "teleport",
+          "move",
+          "casting",
+          "sequence",
+          "reaction",
+          "toHit",
+          "autoHit",
+          "save",
+          "ends",
+          "push",
+          "charge",
+        ].filter((key) => value[key] !== undefined);
+        if (value.search !== true || extras.length || !document?.combat?.hiding)
+          throw new Error(`${at} search is true on an action that only looks, in a fight with combat.hiding`);
+        hides ??= `${at} search`;
+      }
+      // 1.284: a creature's cast bought with points, and nothing else it does.
+      if (
+        value.casting !== undefined &&
+        value.budget !== undefined &&
+        value.kind === undefined &&
+        value.id !== undefined
+      ) {
+        const casting = value.casting;
+        const extras = [
+          "damage",
+          "heal",
+          "applies",
+          "area",
+          "teleport",
+          "move",
+          "sequence",
+          "reaction",
+          "toHit",
+          "autoHit",
+          "save",
+          "ends",
+          "push",
+          "charge",
+        ].filter((key) => value[key] !== undefined);
+        if (
+          !casting ||
+          typeof casting !== "object" ||
+          Array.isArray(casting) ||
+          Object.keys(casting).some((key) => key !== "cantripsOnly") ||
+          (casting.cantripsOnly !== undefined && casting.cantripsOnly !== true) ||
+          !value.signature ||
+          extras.length
+        )
+          throw new Error(`${at} casting is { cantripsOnly?: true } on a signature action that only casts`);
+        legendaryCasts ??= `${at} casting`;
+      }
+      // 1.606: a creature's free action, taken before it attacks.
+      if (
+        (value.free !== undefined || value.beforeAttack !== undefined) &&
+        value.budget !== undefined &&
+        value.kind === undefined
+      ) {
+        if (
+          (value.free !== undefined && value.free !== true) ||
+          (value.beforeAttack !== undefined && (value.beforeAttack !== true || value.free !== true)) ||
+          value.reaction !== undefined
+        )
+          throw new Error(`${at} free is true, and beforeAttack is true beside it, never on a reaction`);
+        freeBeforeAttack ??= `${at} free action taken before it attacks`;
+      }
+      // 1.283: a creature's move bought with points. 1.285: after what the action does too, and on one speed.
+      if (
+        value.move !== undefined &&
+        typeof value.move !== "number" &&
+        value.budget !== undefined &&
+        value.kind === undefined
+      ) {
+        // (A summon's `move` is a number of feet.)
+        const move = value.move;
+        const refused = ["teleport", "sequence", "reaction", "charge"].filter((key) => value[key] !== undefined);
+        const does = [
+          "damage",
+          "heal",
+          "applies",
+          "area",
+          "toHit",
+          "autoHit",
+          "save",
+          "ends",
+          "push",
+          "casting",
+        ].filter((key) => value[key] !== undefined);
+        if (
+          !move ||
+          typeof move !== "object" ||
+          Array.isArray(move) ||
+          Object.keys(move).some(
+            (key) => !["share", "distance", "noOpportunity", "untouchable", "speed", "toward"].includes(key),
+          ) ||
+          // 1.607: every step nearer a hostile it sees, with no signature when the action only moves.
+          (move.toward !== undefined && move.toward !== "seen-hostile") ||
+          (move.share !== undefined && (typeof move.share !== "number" || !(move.share > 0) || move.share > 1)) ||
+          (move.distance !== undefined &&
+            (typeof move.distance !== "number" || !(move.distance > 0) || move.distance > 10000)) ||
+          (move.share !== undefined && move.distance !== undefined) ||
+          (move.noOpportunity !== undefined && move.noOpportunity !== true) ||
+          (move.untouchable !== undefined && move.untouchable !== true) ||
+          (move.speed !== undefined && !["walk", "fly", "swim", "climb", "burrow"].includes(move.speed)) ||
+          (!value.signature && !(move.toward !== undefined && does.length === 0)) ||
+          refused.length
+        )
+          throw new Error(
+            `${at} move is { share?: above 0 to 1 | distance?, noOpportunity?: true, untouchable?: true, speed?: walk|fly|swim|climb|burrow, toward?: "seen-hostile" } on a signature action (or, toward a seen hostile, an action that only moves), never with a teleport, sequence, reaction or charge`,
+          );
+        if (move.toward !== undefined) movesTowardSeen ??= `${at} move toward a hostile it sees`;
+        if (does.length || move.speed !== undefined)
+          legendaryMovesAfter ??= `${at} move after its action or on one speed`;
+        else legendaryMoves ??= `${at} move`;
+      }
+      // 1.282: a burst around its user, through walls or not, on an entry's mechanics or a creature's action.
+      if (
+        value.area &&
+        typeof value.area === "object" &&
+        (value.area.around !== undefined || value.area.throughWalls !== undefined) &&
+        (value.kind !== undefined || value.budget !== undefined)
+      ) {
+        const area = value.area;
+        if (
+          (area.around !== undefined && area.around !== true) ||
+          (area.throughWalls !== undefined && (area.throughWalls !== true || area.around !== true)) ||
+          area.shape !== "burst" ||
+          area.copies !== undefined ||
+          (value.kind !== undefined && value.zone !== undefined && !itemUse)
+        )
+          throw new Error(
+            `${at} area around is true on a single burst (throughWalls: true only beside it), never with copies or an entry's zone`,
+          );
+        arounds ??= `${at} area around`;
+      }
+      // 1.281: its user regains health by the damage dealt, on an entry's mechanics or a creature's action.
+      if (value.drain !== undefined && (value.kind !== undefined || value.budget !== undefined)) {
+        const drain = value.drain;
+        if (
+          !drain ||
+          typeof drain !== "object" ||
+          Array.isArray(drain) ||
+          Object.keys(drain).some((key) => !["share", "damageType"].includes(key)) ||
+          (drain.share !== undefined && (typeof drain.share !== "number" || !(drain.share > 0) || drain.share > 1)) ||
+          (drain.damageType !== undefined && (typeof drain.damageType !== "string" || drain.damageType.length === 0)) ||
+          value.kind === "heal" ||
+          (value.kind !== undefined ? value.amount === undefined : value.damage === undefined)
+        )
+          throw new Error(
+            `${at} drain is { share?: above 0 to 1, damageType? } on a blow that deals damage, never on a heal`,
+          );
+        healsBack ??= `${at} drain`;
+      }
+      // 1.276: its user teleports, on an entry's mechanics, an item's use or a creature's action.
+      if (value.teleport !== undefined && (value.kind !== undefined || value.budget !== undefined)) {
+        const port = value.teleport;
+        if (
+          !port ||
+          typeof port !== "object" ||
+          Object.keys(port).some(
+            (key) =>
+              ![
+                "distance",
+                "seen",
+                "carries",
+                "carriesWithin",
+                "carriesSeen",
+                "leaves",
+                "smoke",
+                "strike",
+                "familiarity",
+                "mishap",
+              ].includes(key),
+          ) ||
+          typeof port.distance !== "number" ||
+          !(port.distance > 0) ||
+          port.distance > 100000 ||
+          (port.seen !== undefined && port.seen !== true) ||
+          (port.carries !== undefined && (!Number.isInteger(port.carries) || port.carries < 1 || port.carries > 8)) ||
+          (port.carriesWithin !== undefined &&
+            (port.carries === undefined ||
+              typeof port.carriesWithin !== "number" ||
+              !(port.carriesWithin > 0) ||
+              port.carriesWithin > 10000)) ||
+          (port.carriesSeen !== undefined && (port.carriesSeen !== true || port.carries === undefined)) ||
+          (port.leaves !== undefined && port.leaves !== true) ||
+          (port.strike !== undefined &&
+            (value.kind !== undefined || typeof port.strike !== "string" || !/^[a-z][a-z0-9_]*$/u.test(port.strike))) ||
+          (port.smoke !== undefined &&
+            (!port.smoke ||
+              typeof port.smoke !== "object" ||
+              Array.isArray(port.smoke) ||
+              Object.keys(port.smoke).some((key) => !["pierced", "light", "dispersed"].includes(key)) ||
+              (port.smoke.light !== undefined && port.smoke.light !== true) ||
+              (port.smoke.dispersed !== undefined &&
+                port.smoke.dispersed !== true &&
+                !slowDispersal(port.smoke.dispersed)) ||
+              (port.smoke.pierced !== undefined &&
+                (!Array.isArray(port.smoke.pierced) ||
+                  port.smoke.pierced.length < 1 ||
+                  port.smoke.pierced.length > 8 ||
+                  new Set(port.smoke.pierced).size !== port.smoke.pierced.length ||
+                  port.smoke.pierced.some((sense) => typeof sense !== "string"))))) ||
+          (port.familiarity !== undefined &&
+            (port.leaves !== true ||
+              !Array.isArray(port.familiarity) ||
+              port.familiarity.length < 1 ||
+              port.familiarity.length > 8 ||
+              new Set(port.familiarity.map((row) => row?.id)).size !== port.familiarity.length ||
+              port.familiarity.some(
+                (row) =>
+                  !row ||
+                  typeof row !== "object" ||
+                  Object.keys(row).some((key) => !["id", "label", "mishap", "similar", "off"].includes(key)) ||
+                  typeof row.id !== "string" ||
+                  !/^[a-z][a-z0-9_]*$/u.test(row.id) ||
+                  typeof row.label !== "string" ||
+                  row.label.length < 1 ||
+                  row.label.length > 40 ||
+                  ["mishap", "similar", "off"].some(
+                    (key) => row[key] !== undefined && (!Number.isInteger(row[key]) || row[key] < 0 || row[key] > 100),
+                  ) ||
+                  !Number.isInteger(row.mishap) ||
+                  row.mishap + (row.similar ?? 0) + (row.off ?? 0) > 100,
+              ) ||
+              !port.mishap ||
+              typeof port.mishap !== "object" ||
+              Object.keys(port.mishap).some((key) => !["dice", "type"].includes(key)) ||
+              typeof port.mishap.dice !== "string" ||
+              typeof port.mishap.type !== "string")) ||
+          (port.mishap !== undefined && port.familiarity === undefined) ||
+          value.area !== undefined ||
+          value.reaction !== undefined ||
+          value.sequence !== undefined
+        )
+          throw new Error(
+            `${at} teleport is { distance: above 0 to 100000, seen?: true, carries?: 1 to 8, carriesWithin? and carriesSeen?: true (with carries), leaves?: true, smoke?: { pierced?: 1 to 8 senses, light?: true, dispersed?: true }, strike?: another action's id (a creature's only) }, never on an area, a reaction or a sequence`,
+          );
+        teleports ??= `${at} teleport`;
+        // 1.670: a teleport's familiarity table, each row's chances in a hundred, and what a mishap deals.
+        if (port.familiarity !== undefined)
+          lateGate(RULESET_TELEPORT_FAMILIARITY_MIN, `has ${at} a teleport's familiarity, of 1.670`);
+        if (port.smoke && (port.smoke.light !== undefined || port.smoke.dispersed !== undefined))
+          smokeWind ??= `${at} teleport smoke light or dispersed`;
+        if (port.leaves !== undefined || port.carriesSeen !== undefined || port.smoke !== undefined)
+          teleportExtras ??= `${at} teleport ${["leaves", "carriesSeen", "smoke"].filter((key) => port[key] !== undefined).join(", ")}`;
+      }
+      // 1.273: charges a weapon's holder may spend once a blow with it has hit.
+      if (value.attack && typeof value.attack === "object" && value.attack.spends !== undefined) {
+        const spends = value.attack.spends;
+        const amountOk = (amount) =>
+          !!amount &&
+          typeof amount === "object" &&
+          Object.keys(amount).every((key) => ["dice", "flat"].includes(key)) &&
+          (amount.dice === undefined || /^\d+d\d+([+-]\d+)?$/u.test(amount.dice)) &&
+          (amount.flat === undefined || Number.isInteger(amount.flat)) &&
+          (amount.dice !== undefined || amount.flat !== undefined);
+        if (
+          (!value.charges && (!Array.isArray(spends) || spends.some((spend) => spend?.charges !== undefined))) ||
+          !Array.isArray(spends) ||
+          spends.length < 1 ||
+          spends.length > 4 ||
+          spends.some(
+            (spend) =>
+              !spend ||
+              typeof spend !== "object" ||
+              Object.keys(spend).some(
+                (key) =>
+                  ![
+                    "label",
+                    "charges",
+                    "uses",
+                    "amount",
+                    "type",
+                    "blow",
+                    "chargeStep",
+                    "onHit",
+                    "save",
+                    "drain",
+                  ].includes(key),
+              ) ||
+              typeof spend.label !== "string" ||
+              spend.label.length < 1 ||
+              (spend.charges === undefined) === (spend.uses === undefined) ||
+              (spend.charges !== undefined && (!Number.isInteger(spend.charges) || spend.charges < 1)) ||
+              (spend.uses !== undefined &&
+                (!spend.uses ||
+                  typeof spend.uses !== "object" ||
+                  Object.keys(spend.uses).some((key) => !["max", "recharge"].includes(key)) ||
+                  !Number.isInteger(spend.uses.max) ||
+                  spend.uses.max < 1 ||
+                  spend.uses.max > 100 ||
+                  (spend.uses.recharge !== undefined &&
+                    (!Array.isArray(spend.uses.recharge?.rests) ||
+                      spend.uses.recharge.rests.length < 1 ||
+                      (spend.uses.recharge.amount !== "max" && !amountOk(spend.uses.recharge.amount)))))) ||
+              (spend.amount === undefined ? !(spend.onHit?.length > 0) : !amountOk(spend.amount)) ||
+              ((spend.save !== undefined || spend.drain !== undefined) && spend.amount === undefined) ||
+              (spend.save !== undefined &&
+                (typeof spend.save?.save !== "string" ||
+                  !Number.isInteger(spend.save?.difficulty) ||
+                  Object.keys(spend.save).length !== 2)) ||
+              (spend.drain !== undefined &&
+                (!spend.drain ||
+                  typeof spend.drain !== "object" ||
+                  Object.keys(spend.drain).some((key) => key !== "share") ||
+                  (spend.drain.share !== undefined &&
+                    !(typeof spend.drain.share === "number" && spend.drain.share > 0 && spend.drain.share <= 1)))) ||
+              (spend.chargeStep !== undefined && spend.charges === undefined) ||
+              (spend.blow !== undefined && !["melee", "ranged"].includes(spend.blow)) ||
+              (spend.chargeStep !== undefined &&
+                (!Number.isInteger(spend.chargeStep?.max) ||
+                  spend.chargeStep.max < 1 ||
+                  !amountOk(spend.chargeStep.amount))) ||
+              (spend.onHit !== undefined &&
+                (!Array.isArray(spend.onHit) ||
+                  spend.onHit.length < 1 ||
+                  spend.onHit.length > 2 ||
+                  spend.onHit.some(
+                    (hit) =>
+                      !hit ||
+                      !conditionIds.has(hit.condition) ||
+                      Object.keys(hit).some(
+                        (key) => !["condition", "rounds", "of", "save", "saveEnds"].includes(key),
+                      ) ||
+                      (hit.rounds !== undefined && !(Number.isInteger(hit.rounds) && hit.rounds > 0)) ||
+                      (hit.of !== undefined && (hit.of !== "source" || hit.rounds === undefined)) ||
+                      (hit.save !== undefined &&
+                        (typeof hit.save?.save !== "string" || !Number.isInteger(hit.save?.difficulty))) ||
+                      (hit.saveEnds !== undefined &&
+                        (typeof hit.saveEnds?.save !== "string" ||
+                          !Number.isInteger(hit.saveEnds?.difficulty) ||
+                          !["turn-end", "turn-start", "damaged"].includes(hit.saveEnds?.at))),
+                  ))),
+          )
+        )
+          throw new Error(
+            `${at} attack spends is 1 to 4 of { label, charges (on an item with charges) or uses { max, recharge? }, amount (or only onHit), type?, blow? melee | ranged, chargeStep? { max, amount } with charges, save? and drain? { share? } with an amount, onHit? 1 to 2 of { condition, rounds?, of? "source" with rounds, save?, saveEnds? } }`,
+          );
+        hitSpends ??= `${at} attack spends`;
+      }
+      if (value.held !== undefined && Array.isArray(value.actions)) {
+        const tags = new Set((document?.items?.tags ?? []).map((tag) => tag?.id));
+        const things = value.held;
+        if (
+          !Array.isArray(things) ||
+          things.length < 1 ||
+          things.length > 4 ||
+          things.some(
+            (thing) =>
+              !thing ||
+              typeof thing !== "object" ||
+              Object.keys(thing).some((key) => !["label", "tags", "defense"].includes(key)) ||
+              typeof thing.label !== "string" ||
+              thing.label.length < 1 ||
+              !Array.isArray(thing.tags) ||
+              thing.tags.length < 1 ||
+              thing.tags.some((tag) => !tags.has(tag)) ||
+              (thing.defense !== undefined && (!Number.isInteger(thing.defense) || Math.abs(thing.defense) > 20)),
+          )
+        )
+          throw new Error(`${at} held is 1 to 4 of { label, tags: item tags, defense?: -20 to 20 }`);
+        spread ??= `${at} held`;
+      }
+      if (value.destroysUpTo !== undefined) {
+        const where = `${at} "${value.condition}" destroysUpTo`;
+        const tiers = new Set((document?.combat?.threat?.tiers ?? []).map((tier) => tier?.id));
+        const derived = new Set((document?.sheet?.derived ?? []).map((one) => one?.id));
+        const fields = new Set((document?.sheet?.fields ?? []).map((one) => one?.id));
+        const rows = value.destroysUpTo;
+        if (
+          !Array.isArray(rows) ||
+          rows.length < 1 ||
+          rows.length > 10 ||
+          rows.some(
+            (row) =>
+              !row ||
+              typeof row !== "object" ||
+              Object.keys(row).some((key) => !["tier", "when"].includes(key)) ||
+              !tiers.has(row.tier) ||
+              (row.when !== undefined &&
+                (!row.when ||
+                  typeof row.when !== "object" ||
+                  Object.keys(row.when).some((key) => !["value", "atLeast", "atMost"].includes(key)) ||
+                  (row.when.atLeast === undefined && row.when.atMost === undefined) ||
+                  !(fields.has(row.when.value?.field) || derived.has(row.when.value?.derived)))),
+          )
+        )
+          throw new Error(
+            `${where} is 1 to 10 of { tier: a threat tier, when?: { value: a sheet field or derived value, atLeast?, atMost? } }`,
+          );
+        dropsMore ??= where;
+      }
+      if (ends && typeof ends === "object" && (ends.successes !== undefined || ends.failures !== undefined)) {
+        const where = `${at} "${value.condition}" saveEnds`;
+        if (
+          ends.successes !== undefined &&
+          (!Number.isInteger(ends.successes) || ends.successes < 2 || ends.successes > 10)
+        )
+          throw new Error(`${where} successes is a whole number from 2 to 10`);
+        const fails = ends.failures;
+        if (fails !== undefined) {
+          if (
+            !fails ||
+            typeof fails !== "object" ||
+            Object.keys(fails).some((key) => !["count", "becomes", "dismisses"].includes(key)) ||
+            !Number.isInteger(fails.count) ||
+            fails.count < 1 ||
+            fails.count > 10 ||
+            // 1.483: or its holder sent out of the fight.
+            (fails.dismisses === undefined
+              ? !conditionIds.has(fails.becomes)
+              : fails.dismisses !== true || fails.becomes !== undefined)
+          )
+            throw new Error(
+              `${where} failures is { count: 1 to 10, becomes: one of the sheet's conditions, or dismisses: true }`,
+            );
+        }
+        kindsOrCounts ??= `${where}, saves counted`;
+      }
+      for (const [key, one] of Object.entries(value)) if (key !== "saveEnds") visit(one, at, key === "use");
+    };
+    visit(document, id);
+    for (const catalog of document?.catalogs ?? [])
+      visit(catalogEntryList(catalog, catalogSources), `${id} catalog "${catalog?.id}"`);
+  }
+  if (kindsOrCounts) gate(RULESET_CONDITION_KINDS_MIN, `has ${kindsOrCounts}, of 1.258`);
+  if (itemRescue) gate(RULESET_ITEM_RESCUE_MIN, `has ${itemRescue}, of 1.259`);
+  if (spentSave) gate(RULESET_BEHAVIOR_MIN, `has ${spentSave}, of 1.264`);
+  if (dropsMore) gate(RULESET_DROPS_MIN, `has ${dropsMore}, of 1.266`);
+  if (spread) gate(RULESET_SPREAD_MIN, `has ${spread}, of 1.267`);
+  if (nearFirst) gate(RULESET_TARGETS_NEAR_FIRST_MIN, `has ${nearFirst}, of 1.594`);
+  if (tabling) gate(RULESET_ROLLED_CALLS_MIN, `has ${tabling}, of 1.559`);
+  if (gazesMore) gate(RULESET_GAZES_MIN, `has ${gazesMore}, of 1.268`);
+  if (staffs) gate(RULESET_STAFFS_MIN, `has ${staffs}, of 1.269`);
+  if (kindsChosen) gate(RULESET_KIND_CHOICE_MIN, `has ${kindsChosen}, of 1.270`);
+  if (staffExtras) gate(RULESET_STAFF_EXTRAS_MIN, `has ${staffExtras}, of 1.271`);
+  if (itemBecomes) gate(RULESET_ITEM_BECOMES_MIN, `has ${itemBecomes}, of 1.272`);
+  if (hitSpends) gate(RULESET_HIT_SPENDS_MIN, `has ${hitSpends}, of 1.273`);
+  if (appliedValues) gate(RULESET_APPLIED_VALUES_MIN, `has ${appliedValues}, of 1.274`);
+  if (teleports) gate(RULESET_TELEPORT_MIN, `has ${teleports}, of 1.276`);
+  if (moreApplies) gate(RULESET_MORE_APPLIES_MIN, `has ${moreApplies}, of 1.277`);
+  if (alliesFail) gate(RULESET_CALM_MIN, `has ${alliesFail}, of 1.278`);
+  if (teleportExtras) gate(RULESET_TELEPORT_EXTRAS_MIN, `has ${teleportExtras}, of 1.279`);
+  if (teleportStrike) gate(RULESET_TELEPORT_STRIKE_MIN, `has ${teleportStrike}, of 1.280`);
+  if (healsBack) gate(RULESET_DRAIN_MIN, `has ${healsBack}, of 1.281`);
+  if (arounds) gate(RULESET_AROUND_MIN, `has ${arounds}, of 1.282`);
+  if (legendaryMoves) gate(RULESET_LEGENDARY_MOVE_MIN, `has ${legendaryMoves}, of 1.283`);
+  if (legendaryCasts) gate(RULESET_LEGENDARY_CAST_MIN, `has ${legendaryCasts}, of 1.284`);
+  if (legendaryMovesAfter) gate(RULESET_MOVE_AFTER_MIN, `has ${legendaryMovesAfter}, of 1.285`);
+  if (smokeWind) gate(RULESET_LIGHT_WIND_MIN, `has ${smokeWind}, of 1.286`);
+  if (windAndLight) gate(RULESET_LIGHT_WIND_MIN, `has ${windAndLight}, of 1.286`);
+  // 1.287: hiding for real. The checks it throws are the fight's own, the components it hears too,
+  // and Search needs it.
+  const hiding = document?.combat?.hiding;
+  if (hiding !== undefined) {
+    const checks = new Set((document.combat.checks ?? []).map((check) => check?.id));
+    const components = new Set((document.combat.components ?? []).map((component) => component?.id));
+    const number = (value) => value === undefined || (Number.isInteger(value) && value >= 0 && value <= 100);
+    if (
+      !hiding ||
+      typeof hiding !== "object" ||
+      Array.isArray(hiding) ||
+      Object.keys(hiding).some(
+        (key) => !["$comment", "stealth", "perception", "passive", "lightly", "noisy", "passiveMode"].includes(key),
+      ) ||
+      !checks.has(hiding.stealth) ||
+      !checks.has(hiding.perception) ||
+      !number(hiding.passive) ||
+      !number(hiding.lightly) ||
+      (hiding.passiveMode !== undefined &&
+        (!Number.isInteger(hiding.passiveMode) || hiding.passiveMode < 1 || hiding.passiveMode > 20)) ||
+      (hiding.noisy !== undefined &&
+        (!Array.isArray(hiding.noisy) || hiding.noisy.some((component) => !components.has(component))))
+    )
+      throw new Error(
+        `${id} combat.hiding names two of its checks, a passive and lightly of 0 to 100, and noisy components it has`,
+      );
+    hides ??= "combat.hiding";
+  }
+  if ((document?.combat?.standard ?? []).includes("search")) {
+    if (!hiding) throw new Error(`${id} combat standard action "search" needs combat.hiding`);
+    hides ??= `the standard action "search"`;
+  }
+  if ((document?.combat?.standard ?? []).length > 6) hides ??= "seven standard actions";
+  if ((document?.combat?.standard ?? []).includes("disarm"))
+    lateGate(RULESET_TRAP_DISARM_MIN, `has the standard action "disarm", of 1.669`);
+  if (hides) gate(RULESET_HIDING_MIN, `has ${hides}, of 1.287`);
+  // 1.288: readying for real. Released with a budget the fight has, held by a concentration it keeps.
+  const readying = document?.combat?.readying;
+  if (readying !== undefined) {
+    const budgets = new Set((document.combat.economy?.budgets ?? []).map((budget) => budget?.id));
+    if (
+      !readying ||
+      typeof readying !== "object" ||
+      Array.isArray(readying) ||
+      Object.keys(readying).some((key) => !["$comment", "budget", "concentrates"].includes(key)) ||
+      !budgets.has(readying.budget) ||
+      (readying.concentrates !== undefined && readying.concentrates !== true) ||
+      (readying.concentrates && !document.combat.concentration)
+    )
+      throw new Error(`${id} combat.readying names a budget it has, and concentrates only with combat.concentration`);
+    gate(RULESET_READYING_MIN, "has combat.readying, of 1.288");
+  }
+  if (slowWind) gate(RULESET_SLOW_WIND_MIN, `has ${slowWind}, of 1.289`);
+  if (hiding?.passiveMode !== undefined) gate(RULESET_LOOKING_MIN, "has combat.hiding.passiveMode, of 1.290");
+  // 1.291: a creature's own modes on its checks, and its printed passive Perception.
+  {
+    const skills = new Set((document?.sheet?.skills ?? []).map((skill) => skill?.id));
+    const lights = ["sunlight", "bright", "dim", "dark"];
+    for (const [path, text] of catalogSources) {
+      let parsed;
+      try {
+        parsed = JSON.parse(String(text));
+      } catch {
+        continue;
+      }
+      for (const entry of parsed?.entries ?? []) {
+        const creature = entry?.creature;
+        if (!creature) continue;
+        const at = `${id} ${path} ${entry.id}`;
+        for (const rule of creature.checkModes ?? []) {
+          if (
+            !rule ||
+            Object.keys(rule).some((key) => !["skills", "mode", "sight", "light", "terrain"].includes(key)) ||
+            !Array.isArray(rule.skills) ||
+            rule.skills.length < 1 ||
+            rule.skills.some((skill) => !skills.has(skill)) ||
+            !["advantage", "disadvantage"].includes(rule.mode) ||
+            (rule.sight !== undefined && rule.sight !== true) ||
+            (rule.light !== undefined &&
+              (!Array.isArray(rule.light) ||
+                rule.light.length < 1 ||
+                rule.light.some((one) => !lights.includes(one)))) ||
+            (rule.terrain !== undefined &&
+              (!Array.isArray(rule.terrain) ||
+                rule.terrain.length < 1 ||
+                rule.terrain.some((one) => typeof one !== "string")))
+          )
+            throw new Error(`${at} checkModes are { skills, mode, sight?: true, light?, terrain? }`);
+          creatureLooks ??= `${at} checkModes`;
+        }
+        if (creature.passive !== undefined) {
+          if (!Number.isInteger(creature.passive) || creature.passive < 0 || creature.passive > 100 || !hiding)
+            throw new Error(`${at} passive is 0 to 100, in a fight with combat.hiding`);
+          creatureLooks ??= `${at} passive`;
+        }
+      }
+    }
+  }
+  if (creatureLooks) gate(RULESET_CREATURE_LOOKING_MIN, `has ${creatureLooks}, of 1.291`);
+  // 1.292: a catalog entry's or a creature's own ways of hiding and finding the hidden.
+  {
+    let ownHiding;
+    let needs;
+    const conditions = new Set((document?.sheet?.live?.conditions ?? []).map((condition) => condition?.id));
+    const traitsIssue = (traits, creature) => {
+      if (!traits || typeof traits !== "object" || Array.isArray(traits)) return true;
+      const keys = Object.keys(traits);
+      const allowed = [
+        "behindLarger",
+        "still",
+        "stillWhile",
+        "slow",
+        "aware",
+        "unseenStrikes",
+        ...(creature ? ["starts", "surprises"] : []),
+      ];
+      if (keys.length < 1 || keys.some((key) => !allowed.includes(key))) return true;
+      if (traits.behindLarger !== undefined && (traits.behindLarger !== true || !document?.combat?.sizes)) return true;
+      if (traits.still !== undefined && (!Number.isInteger(traits.still) || traits.still < 1 || traits.still > 20))
+        return true;
+      if (traits.slow !== undefined && traits.slow !== "advantage") return true;
+      // 1.309: the still bonus only while holding a condition and beside a wall; no disadvantage on
+      // the unseen; and a creature that surprises whoever it starts hidden from.
+      const still = traits.stillWhile;
+      if (still !== undefined) {
+        if (
+          traits.still === undefined ||
+          !still ||
+          typeof still !== "object" ||
+          Object.keys(still).length < 1 ||
+          Object.keys(still).some((key) => !["holds", "wall"].includes(key)) ||
+          (still.holds !== undefined && !conditions.has(still.holds)) ||
+          (still.wall !== undefined && still.wall !== true)
+        )
+          return true;
+        needs ??= "hiding stillWhile";
+      }
+      if (traits.unseenStrikes !== undefined) {
+        if (traits.unseenStrikes !== true) return true;
+        needs ??= "hiding unseenStrikes";
+      }
+      if (traits.surprises !== undefined) {
+        if (traits.surprises !== true || traits.starts === undefined) return true;
+        needs ??= "creature hiding surprises";
+      }
+      if (traits.starts !== undefined && (!Number.isInteger(traits.starts) || traits.starts < 1 || traits.starts > 60))
+        return true;
+      const aware = traits.aware;
+      if (aware !== undefined) {
+        if (
+          !aware ||
+          typeof aware !== "object" ||
+          Object.keys(aware).some((key) => !["within", "lostWith", "of", "uncovered"].includes(key))
+        )
+          return true;
+        if (typeof aware.within !== "number" || !(aware.within > 0) || aware.within > 10000) return true;
+        if (awareOfIssue(document, aware)) return true;
+        if (aware.of !== undefined || aware.uncovered !== undefined) awareOf ??= "hiding aware of or uncovered";
+        if (
+          aware.lostWith !== undefined &&
+          (!Array.isArray(aware.lostWith) ||
+            aware.lostWith.length < 1 ||
+            aware.lostWith.length > 8 ||
+            aware.lostWith.some((condition) => !conditions.has(condition)))
+        )
+          return true;
+      }
+      return !hiding;
+    };
+    for (const [path, text] of catalogSources) {
+      let parsed;
+      try {
+        parsed = JSON.parse(String(text));
+      } catch {
+        continue;
+      }
+      for (const entry of parsed?.entries ?? []) {
+        const at = `${id} ${path} ${entry?.id}`;
+        if (entry?.mechanics?.hiding !== undefined) {
+          if (traitsIssue(entry.mechanics.hiding, false))
+            throw new Error(
+              `${at} mechanics.hiding is { behindLarger?: true, still?: 1 to 20, stillWhile?: { holds?, wall? }, slow?: "advantage", aware?: { within, lostWith? }, unseenStrikes?: true }, in a fight with combat.hiding`,
+            );
+          ownHiding ??= `${at} mechanics.hiding`;
+        }
+        if (entry?.creature?.hiding !== undefined) {
+          if (traitsIssue(entry.creature.hiding, true))
+            throw new Error(
+              `${at} creature hiding is { behindLarger?, still?, stillWhile?, slow?, aware?, unseenStrikes?, starts?: 1 to 60, surprises?: true with starts }, in a fight with combat.hiding`,
+            );
+          ownHiding ??= `${at} creature hiding`;
+        }
+      }
+    }
+    if (ownHiding) gate(RULESET_OWN_HIDING_MIN, `has ${ownHiding}, of 1.292`);
+    // 1.309's gate waits for the later minors' (ritual, below).
+    if (needs) ritual ??= needs;
+  }
+  // 1.293: a creature's attack rolls rolled twice in some light, terrain or only while it sees.
+  {
+    let attackModes;
+    const lights = ["sunlight", "bright", "dim", "dark"];
+    for (const [path, text] of catalogSources) {
+      let parsed;
+      try {
+        parsed = JSON.parse(String(text));
+      } catch {
+        continue;
+      }
+      for (const entry of parsed?.entries ?? []) {
+        const rules = entry?.creature?.attackModes;
+        if (rules === undefined) continue;
+        const at = `${id} ${path} ${entry.id}`;
+        const wrong = (rule) =>
+          !rule ||
+          typeof rule !== "object" ||
+          Object.keys(rule).some(
+            // 1.544: whenTarget; 1.553: targetHoldsFromSelf; gated with the newer keys.
+            (key) =>
+              ![
+                "mode",
+                "sight",
+                "light",
+                "terrain",
+                "allyAdjacent",
+                "targetHurt",
+                "melee",
+                "whenTarget",
+                "targetHoldsFromSelf",
+              ].includes(key),
+          ) ||
+          !["advantage", "disadvantage"].includes(rule.mode) ||
+          (rule.sight === undefined &&
+            rule.light === undefined &&
+            rule.terrain === undefined &&
+            rule.allyAdjacent === undefined &&
+            rule.targetHurt === undefined &&
+            rule.whenTarget === undefined &&
+            rule.targetHoldsFromSelf === undefined) ||
+          (rule.whenTarget !== undefined && !["surprised", "not-yet-acted"].includes(rule.whenTarget)) ||
+          (rule.targetHoldsFromSelf !== undefined &&
+            (!Array.isArray(rule.targetHoldsFromSelf) ||
+              rule.targetHoldsFromSelf.length < 1 ||
+              rule.targetHoldsFromSelf.length > 4 ||
+              rule.targetHoldsFromSelf.some((one) => typeof one !== "string" || one.length === 0))) ||
+          (rule.sight !== undefined && rule.sight !== true) ||
+          (rule.allyAdjacent !== undefined && rule.allyAdjacent !== true) ||
+          (rule.targetHurt !== undefined && rule.targetHurt !== true) ||
+          (rule.melee !== undefined && rule.melee !== true) ||
+          (rule.light !== undefined &&
+            (!Array.isArray(rule.light) || rule.light.length < 1 || rule.light.some((one) => !lights.includes(one)))) ||
+          (rule.terrain !== undefined &&
+            (!Array.isArray(rule.terrain) ||
+              rule.terrain.length < 1 ||
+              rule.terrain.some((one) => typeof one !== "string")));
+        if (!Array.isArray(rules) || rules.length < 1 || rules.some(wrong))
+          throw new Error(
+            `${at} attackModes are { mode, sight?: true, light?, terrain?, allyAdjacent?: true, targetHurt?: true, melee?: true }, naming at least one of them`,
+          );
+        attackModes ??= `${at} attackModes`;
+      }
+    }
+    if (attackModes) gate(RULESET_ATTACK_MODES_MIN, `has ${attackModes}, of 1.293`);
+  }
+  // 1.294: the dark keeping eyes from seeing, and light shed by conditions, items and creatures.
+  {
+    let dark;
+    const darkness = document?.combat?.sight?.darkness;
+    const senses = new Set((document?.combat?.senses ?? []).map((sense) => sense?.id));
+    const lightWrong = (light) =>
+      !light ||
+      typeof light !== "object" ||
+      Array.isArray(light) ||
+      Object.keys(light).some((key) => !["bright", "dim", "reveals", "sunlight", "magical"].includes(key)) ||
+      ![light.bright, light.dim].every((value) => typeof value === "number" && value >= 0 && value <= 10000) ||
+      light.bright + light.dim <= 0 ||
+      (light.reveals !== undefined && light.reveals !== true) ||
+      (light.sunlight !== undefined && light.sunlight !== true) ||
+      (light.magical !== undefined && light.magical !== true);
+    const conditionIds = new Set((document?.combat?.conditions ?? []).map((condition) => condition?.condition));
+    let switched;
+    const lightMessage =
+      "light is { bright, dim }, 0 to 10000 each and not both 0, in a fight with combat.sight.darkness";
+    if (darkness !== undefined) {
+      const list = (value) =>
+        Array.isArray(value) && value.length >= 1 && value.length <= 8 && value.every((sense) => senses.has(sense));
+      if (
+        !darkness ||
+        typeof darkness !== "object" ||
+        Object.keys(darkness).some((key) => !["seeIn", "pierced", "carried"].includes(key)) ||
+        !list(darkness.seeIn) ||
+        (darkness.pierced !== undefined && !list(darkness.pierced)) ||
+        (darkness.carried !== undefined &&
+          (!darkness.carried ||
+            typeof darkness.carried !== "object" ||
+            lightWrong({ bright: darkness.carried.bright, dim: darkness.carried.dim }) ||
+            Object.keys(darkness.carried).some((key) => !["bright", "dim", "label", "budget"].includes(key)) ||
+            (darkness.carried.label !== undefined &&
+              (typeof darkness.carried.label !== "string" ||
+                darkness.carried.label.length < 1 ||
+                darkness.carried.label.length > 40)) ||
+            (darkness.carried.budget !== undefined &&
+              !(document?.combat?.economy?.budgets ?? []).some((budget) => budget?.id === darkness.carried.budget))))
+      )
+        throw new Error(
+          `${id} combat.sight.darkness is { seeIn: the fight's senses, pierced?, carried?: { bright, dim, label?, budget? } }`,
+        );
+      dark ??= "combat.sight.darkness";
+    }
+    for (const condition of document?.combat?.conditions ?? []) {
+      if (condition?.light === undefined) continue;
+      if (lightWrong(condition.light) || !darkness)
+        throw new Error(`${id} combat condition "${condition.condition}" ${lightMessage}`);
+      dark ??= `combat condition "${condition.condition}" light`;
+      if (condition.light.reveals) zoneLight ??= `combat condition "${condition.condition}" light that reveals`;
+      if (condition.light.sunlight) sunlit ??= `combat condition "${condition.condition}" light that is sunlight`;
+      if (condition.light.magical) againstLight ??= `combat condition "${condition.condition}" light that is magical`;
+    }
+    for (const [path, text] of catalogSources) {
+      let parsed;
+      try {
+        parsed = JSON.parse(String(text));
+      } catch {
+        continue;
+      }
+      for (const entry of parsed?.entries ?? []) {
+        const at = `${id} ${path} ${entry?.id}`;
+        for (const [where, light] of [
+          ["creature", entry?.creature?.light],
+          ["item worn", entry?.item?.worn?.light],
+          ["item carried", entry?.item?.carried?.light],
+          ["item toggle offLight", entry?.item?.toggle?.offLight],
+        ]) {
+          if (light === undefined) continue;
+          if (lightWrong(light) || !darkness) throw new Error(`${at} ${where} ${lightMessage}`);
+          dark ??= `${at} ${where} light`;
+          if (light.reveals) zoneLight ??= `${at} ${where} light that reveals`;
+          if (light.sunlight) sunlit ??= `${at} ${where} light that is sunlight`;
+          if (light.magical) againstLight ??= `${at} ${where} light that is magical`;
+          if (where === "item toggle offLight") switched ??= `${at} item toggle offLight`;
+        }
+        // 1.296: an action that lights or puts out its user's light, and nothing else; a creature
+        // that begins unlit has one that lights it.
+        const actions = Array.isArray(entry?.creature?.actions) ? entry.creature.actions : [];
+        for (const action of actions) {
+          if (action?.sheds === undefined) continue;
+          if (action.sheds !== "out" && (lightWrong(action.sheds) || !darkness))
+            throw new Error(`${at} creature action "${action?.id}" sheds "out" or ${lightMessage}`);
+          const extras = SHEDS_ALONE.filter((key) => action[key] !== undefined);
+          if (extras.length)
+            throw new Error(
+              `${at} creature action "${action?.id}" lights or puts out its light and carries no ${extras.join(", ")}`,
+            );
+          if (!darkness)
+            throw new Error(`${at} creature action "${action?.id}" sheds light without combat.sight.darkness`);
+          switched ??= `${at} creature action "${action.id}" sheds`;
+          if (action.sheds !== "out" && action.sheds.sunlight)
+            sunlit ??= `${at} creature action "${action.id}" sunlight`;
+          if (action.sheds !== "out" && action.sheds.magical)
+            againstLight ??= `${at} creature action "${action.id}" magical light`;
+        }
+        // 1.298: its own light out while one of these conditions is on it.
+        const out = entry?.creature?.lightOutWhile;
+        if (out !== undefined) {
+          if (
+            !Array.isArray(out) ||
+            out.length < 1 ||
+            out.length > 8 ||
+            new Set(out).size !== out.length ||
+            out.some((one) => !conditionIds.has(one)) ||
+            (entry.creature.light === undefined && !actions.some((action) => action?.sheds !== undefined))
+          )
+            throw new Error(
+              `${at} creature lightOutWhile is 1 to 8 of the fight's conditions, on a creature that sheds light`,
+            );
+          sunlit ??= `${at} creature lightOutWhile`;
+        }
+        // 1.307: a creature action held by its own concentration, and a condition it puts on that ends
+        // when its holder uses one of the creature's actions or a catalog entry.
+        for (const action of actions) {
+          if (action?.concentration !== undefined) {
+            if (action.concentration !== true || !document?.combat?.concentration)
+              throw new Error(`${at} creature action "${action?.id}" concentration is true, with combat.concentration`);
+            selfHeld ??= `${at} creature action "${action.id}" concentration`;
+          }
+          // 1.311: only the dying, slain on a failed save, and healing its user for each.
+          if (
+            action?.dyingOnly !== undefined ||
+            action?.slaysOnFailedSave !== undefined ||
+            action?.healsOnSlay !== undefined
+          ) {
+            const heals = action.healsOnSlay;
+            if (
+              (action.dyingOnly !== undefined && action.dyingOnly !== true) ||
+              (action.slaysOnFailedSave !== undefined && (action.slaysOnFailedSave !== true || !action.save)) ||
+              (heals !== undefined &&
+                (!action.slaysOnFailedSave ||
+                  !heals ||
+                  typeof heals !== "object" ||
+                  Object.keys(heals).length < 1 ||
+                  Object.keys(heals).some((key) => !["dice", "flat"].includes(key)) ||
+                  (heals.dice !== undefined && !/^\d+d\d+$/u.test(heals.dice)) ||
+                  (heals.flat !== undefined && !Number.isInteger(heals.flat))))
+            )
+              throw new Error(
+                `${at} creature action "${action?.id}" dyingOnly is true, slaysOnFailedSave true with a save, healsOnSlay { dice?, flat? } with slaysOnFailedSave`,
+              );
+            leftovers306 ??= `${at} creature action "${action.id}" slays the dying`;
+          }
+          for (const applied of action?.applies ?? []) {
+            const uses = applied?.endsWhenHolder?.uses;
+            if (uses === undefined) continue;
+            if (
+              !Array.isArray(uses) ||
+              uses.length < 1 ||
+              uses.length > 8 ||
+              new Set(uses).size !== uses.length ||
+              uses.some((one) => !entryRefs.has(one) && !actions.some((other) => other !== action && other?.id === one))
+            )
+              throw new Error(
+                `${at} creature action "${action?.id}" endsWhenHolder uses names its other actions or catalog entries`,
+              );
+            selfHeld ??= `${at} creature action "${action.id}" endsWhenHolder uses`;
+          }
+        }
+        if (entry?.creature?.unlit !== undefined) {
+          if (
+            entry.creature.unlit !== true ||
+            !actions.some((action) => action?.sheds !== undefined && action.sheds !== "out")
+          )
+            throw new Error(`${at} creature unlit is true, with an action that lights it`);
+          switched ??= `${at} creature unlit`;
+        }
+      }
+    }
+    if (dark) gate(RULESET_DARKNESS_MIN, `has ${dark}, of 1.294`);
+    // 1.295: a carried light named, or priced to put out and light again.
+    if (darkness?.carried?.label !== undefined || darkness?.carried?.budget !== undefined)
+      gate(RULESET_CARRIED_SWITCH_MIN, "has a carried light with a name or a price, of 1.295");
+    if (switched) gate(RULESET_CREATURE_LIGHT_MIN, `has ${switched}, of 1.296`);
+    if (zoneLight) gate(RULESET_ZONE_LIGHT_MIN, `has ${zoneLight}, of 1.297`);
+    if (sunlit) gate(RULESET_SUNLIGHT_MIN, `has ${sunlit}, of 1.298`);
+    if (againstLight) gate(RULESET_DARK_AGAINST_LIGHT_MIN, `has ${againstLight}, of 1.299`);
+    if (stepsEvery) gate(RULESET_STEPS_EVERY_MIN, `has ${stepsEvery}, of 1.300`);
+    if (carriedZone) gate(RULESET_CARRIED_ZONE_MIN, `has ${carriedZone}, of 1.301`);
+    if (amending) gate(RULESET_AMENDS_MIN, `has ${amending}, of 1.302`);
+    if (shadowed) gate(RULESET_SHADOWS_MIN, `has ${shadowed}, of 1.303`);
+    if (oncePer) gate(RULESET_ONCE_PER_TARGET_MIN, `has ${oncePer}, of 1.304`);
+    if (beams) gate(RULESET_TARGETS_SCALE_MIN, `has ${beams}, of 1.305`);
+    if (conjuring) gate(RULESET_CONJURES_MIN, `has ${conjuring}, of 1.306`);
+    if (selfHeld) gate(RULESET_SELF_HELD_MIN, `has ${selfHeld}, of 1.307`);
+    if (itemBeams) gate(RULESET_ITEM_BEAMS_MIN, `has ${itemBeams}, of 1.308`);
+    if (ritual) gate(RULESET_HIDING_NEEDS_MIN, `has ${ritual}, of 1.309`);
+    if (repeating) gate(RULESET_REPEATS_MIN, `has ${repeating}, of 1.310`);
+    // 1.311: a combat condition that comes off when its holder moves or acts.
+    for (const condition of document?.combat?.conditions ?? []) {
+      const ends = condition?.endsWhenHolder;
+      if (ends === undefined) continue;
+      if (
+        !ends ||
+        typeof ends !== "object" ||
+        Object.keys(ends).length < 1 ||
+        Object.keys(ends).some(
+          (key) =>
+            ![
+              "moves",
+              "acts",
+              "attacks",
+              "casts",
+              "castsAtFoes",
+              "downed",
+              "gains",
+              "incapacitated",
+              "cantHearSource",
+            ].includes(key) ||
+            (key === "cantHearSource"
+              ? !ends.cantHearSource ||
+                typeof ends.cantHearSource !== "object" ||
+                Object.keys(ends.cantHearSource).some((one) => !["sense", "beyond"].includes(one)) ||
+                typeof ends.cantHearSource.sense !== "string" ||
+                !(document?.combat?.conditions ?? []).some((one) =>
+                  (one?.lacks ?? []).includes(ends.cantHearSource.sense),
+                ) ||
+                (ends.cantHearSource.beyond !== undefined &&
+                  (typeof ends.cantHearSource.beyond !== "number" ||
+                    !(ends.cantHearSource.beyond > 0) ||
+                    ends.cantHearSource.beyond > 10000))
+              : key === "casts"
+                ? !Array.isArray(ends.casts) ||
+                  ends.casts.length < 1 ||
+                  ends.casts.some((one) => !catalogNames.has(one))
+                : key === "gains"
+                  ? !Array.isArray(ends.gains) ||
+                    ends.gains.length < 1 ||
+                    ends.gains.length > 8 ||
+                    new Set(ends.gains).size !== ends.gains.length ||
+                    ends.gains.includes(condition?.condition) ||
+                    ends.gains.some(
+                      (one) => !(document?.sheet?.live?.conditions ?? []).some((known) => known?.id === one),
+                    )
+                  : ends[key] !== true),
+        ) ||
+        (ends.castsAtFoes !== undefined && ends.casts === undefined)
+      )
+        throw new Error(
+          `${id} combat condition "${condition?.condition}" endsWhenHolder is { moves?: true, acts?: true, attacks?: true, casts?: [catalogs], castsAtFoes?: true, downed?: true, gains?: [other conditions], incapacitated?: true, cantHearSource?: { sense, beyond? } }`,
+        );
+      // 1.618: once its holder can't hear whoever put it on.
+      if (ends.cantHearSource !== undefined)
+        gate(
+          RULESET_CONTEST_ON_LOSE_MIN,
+          `has combat condition "${condition.condition}" endsWhenHolder cantHearSource, of 1.618`,
+        );
+      leftovers306 ??= `combat condition "${condition.condition}" endsWhenHolder`;
+    }
+    if (leftovers306) gate(RULESET_LEFTOVERS_306_MIN, `has ${leftovers306}, of 1.311`);
+    if (thunderclap) gate(RULESET_THUNDERCLAP_MIN, `has ${thunderclap}, of 1.312`);
+    // 1.313: an item bound only with others worn, and an ability add with a cap.
+    for (const [ref, item] of itemsByRef) {
+      const needs = item?.binds?.needsWorn;
+      if (needs !== undefined) {
+        if (
+          !Array.isArray(needs) ||
+          needs.length < 1 ||
+          needs.length > 4 ||
+          needs.some(
+            (group) =>
+              !group ||
+              typeof group !== "object" ||
+              Object.keys(group).some((key) => key !== "anyOf") ||
+              !Array.isArray(group.anyOf) ||
+              group.anyOf.length < 1 ||
+              group.anyOf.some((one) => one === ref || !itemsByRef.has(one)),
+          )
+        )
+          throw new Error(`${id} item "${ref}" binds needsWorn is 1 to 4 groups { anyOf: other items of the ruleset }`);
+        leftovers308 ??= `item "${ref}" binds needsWorn`;
+      }
+      for (const [ability, change] of Object.entries(item?.worn?.abilities ?? {})) {
+        if (change?.max === undefined) continue;
+        if (change.add === undefined || !Number.isInteger(change.max) || change.max < 1)
+          throw new Error(`${id} item "${ref}" worn ${ability} max is a whole number, on an add`);
+        leftovers308 ??= `item "${ref}" worn ${ability} max`;
+      }
+    }
+    if (leftovers308) gate(RULESET_LEFTOVERS_308_MIN, `has ${leftovers308}, of 1.313`);
+    // 1.314: a combat condition that shuts its holder away (Resilient Sphere).
+    {
+      const budgetIds = new Set((document?.combat?.economy?.budgets ?? []).map((one) => one?.id));
+      for (const condition of document?.combat?.conditions ?? []) {
+        const sealed = condition?.sealed;
+        if (sealed === undefined) continue;
+        const budgetOk = (one) => one && typeof one === "object" && budgetIds.has(one.budget);
+        if (
+          !sealed ||
+          typeof sealed !== "object" ||
+          Object.keys(sealed).some((key) => !["rolls", "lifted", "brokenBy"].includes(key)) ||
+          (sealed.rolls !== undefined &&
+            (!budgetOk(sealed.rolls) || !(sealed.rolls.share > 0 && sealed.rolls.share <= 1))) ||
+          (sealed.lifted !== undefined && !budgetOk(sealed.lifted)) ||
+          (sealed.brokenBy !== undefined &&
+            (!Array.isArray(sealed.brokenBy) ||
+              sealed.brokenBy.length < 1 ||
+              sealed.brokenBy.length > 8 ||
+              sealed.brokenBy.some((ref) => {
+                const [catalog, entryId] = String(ref).split("/");
+                return !(
+                  catalogEntryList(
+                    (document?.catalogs ?? []).find((one) => one?.id === catalog),
+                    catalogSources,
+                  ) ?? []
+                ).some((one) => one?.id === entryId);
+              })))
+        )
+          throw new Error(
+            `${id} combat condition "${condition.condition}" sealed is { rolls?: {budget, share}, lifted?: {budget}, brokenBy?: 1 to 8 catalog entries }`,
+          );
+        sealing ??= `combat condition "${condition.condition}" sealed`;
+      }
+    }
+    if (sealing) gate(RULESET_SEALED_MIN, `has ${sealing}, of 1.314`);
+    if (resisting) gate(RULESET_LEGENDARY_RESISTANCE_MIN, `has ${resisting}, of 1.317`);
+  }
+  {
+    const texts = [JSON.stringify(document ?? {}), ...[...catalogSources.values()].map(String)];
+    if (texts.some((text) => /"to":\s*"checks-taken"/u.test(text)))
+      gate(RULESET_LOOKING_MIN, 'has a change to "checks-taken", of 1.290');
+    if (texts.some((text) => /"(?:allyAdjacent|targetHurt)":\s*true/u.test(text)))
+      gate(RULESET_ATTACK_GATES_MIN, "has attackModes beside an ally or on a hurt target, of 1.393");
+    // A held-back change to attacks once a turn (1.429's Foe Slayer) is not a rider.
+    if (texts.some((text) => /"target-hurt"|(?<!"rescue":\s*true,\s*)"oncePer":\s*"own-turn"/u.test(text)))
+      gate(RULESET_ATTACK_GATES_MIN, 'has a rider "target-hurt" or "own-turn", of 1.393');
+    if (
+      texts.some((text) =>
+        /"targetHurt":\s*true,\s*"melee":\s*true|"melee":\s*true,\s*"targetHurt"|"allyAdjacent":\s*true,\s*"melee":\s*true/u.test(
+          text,
+        ),
+      )
+    )
+      gate(RULESET_CALLS_FROM_MIN, "has attackModes on melee alone, of 1.402");
+  }
+  // 1.394: creatures a catalog entry or an item use calls, each "<catalog>/<entry>" of a creature
+  // catalog the ruleset has, with a count of at least one.
+  {
+    let calling;
+    const creatureCatalogs = new Set(
+      (document?.catalogs ?? [])
+        .filter((one) => one?.holds === "creatures" || one?.id === "creatures")
+        .map((one) => one.id),
+    );
+    const known = new Map();
+    for (const catalogId of creatureCatalogs) {
+      const catalog = (document?.catalogs ?? []).find((one) => one?.id === catalogId);
+      known.set(catalogId, new Set((catalogEntryList(catalog, catalogSources) ?? []).map((one) => one?.id)));
+    }
+    const count = (amount) =>
+      amount &&
+      typeof amount === "object" &&
+      Object.keys(amount).every((key) => ["dice", "flat"].includes(key)) &&
+      (amount.dice !== undefined || (Number.isInteger(amount.flat) && amount.flat >= 1));
+    let reading;
+    let rolling, commanding, imaging, keeping;
+    const callBudgets = new Set((document?.combat?.economy?.budgets ?? []).map((one) => one?.id));
+    const derivedIdsForCalls = new Set((document?.sheet?.derived ?? []).map((one) => one?.id));
+    const combatConditionIdsForCalls = new Set((document?.combat?.conditions ?? []).map((one) => one?.condition));
+    // 1.402: { catalog, filters?, notFilters? } of a creature catalog, in place of "creature".
+    const from = (given) =>
+      given &&
+      typeof given === "object" &&
+      Object.keys(given).every((key) => ["catalog", "filters", "notFilters"].includes(key)) &&
+      creatureCatalogs.has(given.catalog) &&
+      ["filters", "notFilters"].every(
+        (key) =>
+          given[key] === undefined || (given[key] && typeof given[key] === "object" && !Array.isArray(given[key])),
+      );
+    // 1.537: `perStep`, the most rising with the slot.
+    const upTo = (given) =>
+      given &&
+      typeof given === "object" &&
+      Object.keys(given).every((key) => ["filter", "at", "perStep"].includes(key)) &&
+      typeof given.filter === "string" &&
+      Number.isFinite(given.at) &&
+      (given.perStep === undefined || (Number.isFinite(given.perStep) && given.perStep > 0 && given.perStep <= 100));
+    const steps = (value) => value === undefined || (Number.isInteger(value) && value >= 1 && value <= 20);
+    const callee = (one) =>
+      (one.creature === undefined) !== (one.from === undefined) &&
+      (one.from === undefined || from(one.from)) &&
+      (one.upTo === undefined || (one.from !== undefined && upTo(one.upTo)));
+    const checkCalls = (calls, where) => {
+      const options = calls?.options;
+      const bad =
+        !calls ||
+        typeof calls !== "object" ||
+        Object.keys(calls).some(
+          // 1.487: asTypes, checked with the sheet hooks.
+          (key) =>
+            ![
+              "creature",
+              "from",
+              "upTo",
+              "count",
+              "options",
+              "initiative",
+              "rounds",
+              "timesPerSteps",
+              "asTypes",
+              "perStep",
+              "hostileOnBreak",
+              "rolled",
+              "commandedWith",
+              "illusion",
+              "fromCaller",
+              "keepsRoll",
+              "lifetimeUses",
+              "hostileUnless",
+              "spendsItemOnDeath",
+              "becomesItem",
+              "dismissible",
+              "side",
+              "tamedWhile",
+              "commandedWithin",
+              "within",
+              "disobeys",
+              // 1.733: gone with their caller, or as their caller is incapacitated.
+              "endsWithCaller",
+              // 1.610: gone once their caller is farther off than this (a Dancing Sword's 30 feet).
+              "leash",
+              // 1.742: gone once their counted uses are spent (a Dancing Sword's fourth attack).
+              "endsWhenSpent",
+            ].includes(key),
+        ) ||
+        (calls.leash !== undefined && (typeof calls.leash !== "number" || !(calls.leash > 0) || calls.leash > 10000)) ||
+        (calls.endsWhenSpent !== undefined && calls.endsWhenSpent !== true) ||
+        // 1.665: a chance in 100 of ignoring every order, while a derived value of the caller's is in bounds.
+        (calls.disobeys !== undefined &&
+          (!calls.disobeys ||
+            typeof calls.disobeys !== "object" ||
+            Object.keys(calls.disobeys).some((key) => !["chance", "when"].includes(key)) ||
+            !Number.isInteger(calls.disobeys.chance) ||
+            calls.disobeys.chance < 1 ||
+            calls.disobeys.chance > 99 ||
+            (calls.disobeys.when !== undefined &&
+              (!calls.disobeys.when ||
+                typeof calls.disobeys.when !== "object" ||
+                Object.keys(calls.disobeys.when).some((key) => !["value", "atLeast", "atMost"].includes(key)) ||
+                !derivedIdsForCalls.has(calls.disobeys.when.value?.derived) ||
+                Object.keys(calls.disobeys.when.value ?? {}).length !== 1 ||
+                (calls.disobeys.when.atLeast === undefined && calls.disobeys.when.atMost === undefined) ||
+                [calls.disobeys.when.atLeast, calls.disobeys.when.atMost].some(
+                  (bound) => bound !== undefined && !Number.isFinite(bound),
+                ))))) ||
+        // 1.615: under nobody's control, tamed while holding a condition of the fight's.
+        (calls.side !== undefined && calls.side !== "none") ||
+        (calls.tamedWhile !== undefined &&
+          (calls.side !== "none" || !combatConditionIdsForCalls.has(calls.tamedWhile))) ||
+        // 1.620 and 1.621: commanded only within a distance, and set down within one, seen.
+        (calls.commandedWithin !== undefined &&
+          (typeof calls.commandedWithin !== "number" ||
+            !(calls.commandedWithin > 0) ||
+            calls.commandedWithin > 10000)) ||
+        (calls.within !== undefined && !callWithinOk(calls.within)) ||
+        // 1.611 to 1.613: a requirement, the item spent or become, and sent away again.
+        (calls.hostileUnless !== undefined &&
+          (!calls.hostileUnless ||
+            typeof calls.hostileUnless !== "object" ||
+            Object.keys(calls.hostileUnless).some((key) => !["derived", "atLeast"].includes(key)) ||
+            !derivedIdsForCalls.has(calls.hostileUnless.derived) ||
+            !Number.isFinite(calls.hostileUnless.atLeast) ||
+            Math.abs(calls.hostileUnless.atLeast) > 1000)) ||
+        [calls.spendsItemOnDeath, calls.becomesItem].some((flag) => flag !== undefined && flag !== true) ||
+        ((calls.spendsItemOnDeath !== undefined || calls.becomesItem !== undefined) && !/ use$/u.test(where)) ||
+        (calls.dismissible !== undefined &&
+          calls.dismissible !== true &&
+          (!calls.dismissible ||
+            typeof calls.dismissible !== "object" ||
+            Object.keys(calls.dismissible).some((key) => key !== "budget") ||
+            !callBudgets.has(calls.dismissible.budget))) ||
+        (options === undefined && (!callee(calls) || !count(calls.count))) ||
+        // 1.559: rolled among weighted options, each one creature, turning on their caller, or nobody.
+        // 1.748: or rolled among what its `from` reads.
+        (calls.rolled !== undefined &&
+          (calls.rolled !== true || (options === undefined && calls.from === undefined))) ||
+        (options !== undefined &&
+          (!Array.isArray(options) ||
+            options.length < (options.every((one) => one?.from !== undefined) ? 1 : 2) ||
+            options.length > 8 ||
+            calls.count !== undefined ||
+            calls.creature !== undefined ||
+            calls.from !== undefined ||
+            options.some(
+              (one) =>
+                !one ||
+                Object.keys(one).some(
+                  (key) =>
+                    ![
+                      "creature",
+                      "from",
+                      "upTo",
+                      "count",
+                      "label",
+                      "fromStep",
+                      "perStep",
+                      "weight",
+                      "hostile",
+                      "none",
+                      "rounds",
+                      "spendsItem",
+                      "pastLifetime",
+                    ].includes(key),
+                ) ||
+                !steps(one.fromStep) ||
+                !steps(one.perStep) ||
+                (!calls.rolled && (one.weight !== undefined || one.hostile !== undefined || one.none !== undefined)) ||
+                // 1.591: an option's own stay, the item it spends, and the one past the item's lifetime.
+                (one.rounds !== undefined &&
+                  (!calls.rolled || !Number.isInteger(one.rounds) || one.rounds < 1 || one.rounds > 14400)) ||
+                (one.spendsItem !== undefined && (one.spendsItem !== true || !calls.rolled)) ||
+                (one.pastLifetime !== undefined &&
+                  (one.pastLifetime !== true || calls.lifetimeUses === undefined || one.weight !== undefined)) ||
+                (calls.rolled && one.from !== undefined) ||
+                (one.weight !== undefined && (!Number.isInteger(one.weight) || one.weight < 1 || one.weight > 100)) ||
+                (one.hostile !== undefined && one.hostile !== true) ||
+                (one.none !== undefined &&
+                  (one.none !== true ||
+                    one.creature !== undefined ||
+                    one.count !== undefined ||
+                    typeof one.label !== "string")) ||
+                (one.none === undefined && (!callee(one) || !count(one.count))) ||
+                (one.label !== undefined && (typeof one.label !== "string" || one.label.length > 80)),
+            ))) ||
+        // 1.479: or no turns at all, an object it is cast on.
+        (calls.initiative !== undefined && !["roll", "after", "none"].includes(calls.initiative)) ||
+        (calls.rounds !== undefined && (!Number.isInteger(calls.rounds) || calls.rounds < 1 || calls.rounds > 14400)) ||
+        (calls.timesPerSteps !== undefined &&
+          (!Number.isInteger(calls.timesPerSteps) || calls.timesPerSteps < 1 || calls.timesPerSteps > 9)) ||
+        !steps(calls.perStep) ||
+        (calls.hostileOnBreak !== undefined && calls.hostileOnBreak !== true) ||
+        // 1.558 and 1.568: commanded with a budget of the ruleset's; images.
+        (calls.commandedWith !== undefined && !callBudgets.has(calls.commandedWith)) ||
+        (calls.illusion !== undefined && calls.illusion !== true) ||
+        (calls.endsWithCaller !== undefined &&
+          calls.endsWithCaller !== true &&
+          calls.endsWithCaller !== "incapacitated") ||
+        // 1.591: a roll kept for every later use, and how many uses the item has in it.
+        (calls.keepsRoll !== undefined && (calls.keepsRoll !== true || !calls.rolled)) ||
+        (calls.lifetimeUses !== undefined &&
+          (!Number.isInteger(calls.lifetimeUses) ||
+            calls.lifetimeUses < 1 ||
+            calls.lifetimeUses > 100 ||
+            (options ?? []).filter((one) => one?.pastLifetime).length !== 1)) ||
+        // 1.558: built from their caller, its health, attack bonus and modifier.
+        (calls.fromCaller !== undefined &&
+          (!calls.fromCaller ||
+            typeof calls.fromCaller !== "object" ||
+            Object.keys(calls.fromCaller).length === 0 ||
+            Object.keys(calls.fromCaller).some((key) => !["health", "toHit", "adds"].includes(key)) ||
+            (calls.fromCaller.health !== undefined && calls.fromCaller.health !== true) ||
+            [calls.fromCaller.toHit, calls.fromCaller.adds].some(
+              (ref) =>
+                ref !== undefined &&
+                (!ref || typeof ref !== "object" || Array.isArray(ref) || Object.keys(ref).length === 0),
+            )));
+      if (bad)
+        throw new Error(
+          `${id} ${where} calls are { creature or from (with upTo?), count } or { options: 2 to 8 of { creature or from, upTo?, count, label? } } (1 will do when it reads a catalog), with initiative "roll", "after" or "none", rounds 1 to 14400, timesPerSteps 1 to 9, asTypes, commandedWith a combat budget, commandedWithin a distance, within { distance, seen? }, illusion true, fromCaller { health?, toHit?, adds? }, hostileUnless { derived, atLeast }, disobeys { chance 1 to 99, when? { value: { derived }, atLeast?, atMost? } }, dismissible true or { budget }, side "none" with tamedWhile a combat condition, leash a distance, endsWhenSpent true, and an item's spendsItemOnDeath and becomesItem true; a rolled call's options name one creature or none, with weights 1 to 100`,
+        );
+      if (calls.commandedWithin !== undefined) commandedWithin ??= `${where} calls commandedWithin`;
+      if (calls.within !== undefined) callWithin ??= `${where} calls within`;
+      if (calls.rolled) rolling ??= `${where} calls rolled`;
+      if (calls.rolled && options === undefined)
+        lateGate(RULESET_CALLS_ROLLED_FROM_MIN, `has ${where} calls rolled from a catalog, of 1.748`);
+      if (calls.commandedWith !== undefined) commanding ??= `${where} calls commandedWith`;
+      if (calls.fromCaller !== undefined) commanding ??= `${where} calls fromCaller`;
+      if (calls.hostileUnless !== undefined) hostileUnless ??= `${where} calls hostileUnless`;
+      if (calls.disobeys !== undefined) callDisobeys ??= `${where} calls disobeys`;
+      if (calls.endsWithCaller !== undefined) callEnds ??= `${where} calls endsWithCaller`;
+      if (calls.side !== undefined || calls.tamedWhile !== undefined) wildCalls ??= `${where} calls side or tamedWhile`;
+      if (calls.spendsItemOnDeath !== undefined) itemDeparture ??= `${where} calls spendsItemOnDeath`;
+      if (calls.becomesItem !== undefined || calls.dismissible !== undefined)
+        becomesItem ??= `${where} calls becomesItem or dismissible`;
+      if (calls.leash !== undefined) lateGate(RULESET_CALL_LEASH_MIN, `has ${where} calls leash, of 1.610`);
+      if (calls.endsWhenSpent !== undefined)
+        lateGate(RULESET_CALL_ENDS_WHEN_SPENT_MIN, `has ${where} calls endsWhenSpent, of 1.742`);
+      if (calls.illusion !== undefined) imaging ??= `${where} calls illusion`;
+      if (
+        calls.keepsRoll !== undefined ||
+        calls.lifetimeUses !== undefined ||
+        (options ?? []).some(
+          (one) => one?.rounds !== undefined || one?.spendsItem !== undefined || one?.pastLifetime !== undefined,
+        )
+      )
+        keeping ??= `${where} calls keepsRoll, lifetimeUses or an option's rounds or spendsItem`;
+      for (const one of options ?? [calls]) {
+        if (one.none) continue;
+        if (one.from !== undefined) {
+          reading ??= `${where} calls from a catalog`;
+          continue;
+        }
+        const [catalogId, entryId] = String(one.creature).split("/");
+        if (!known.get(catalogId)?.has(entryId))
+          throw new Error(`${id} ${where} calls "${one.creature}", which is not a creature of the ruleset's catalogs`);
+      }
+      if (calls.timesPerSteps !== undefined) reading ??= `${where} calls scaled by the slot`;
+      calling ??= `${where} calls`;
+    };
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : []) {
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+        const at = `catalog "${catalog?.id}" entry "${entry?.id}"`;
+        if (entry?.mechanics?.calls !== undefined) checkCalls(entry.mechanics.calls, at);
+        if (entry?.item?.use?.calls !== undefined) checkCalls(entry.item.use.calls, `${at} use`);
+        // 1.739: weapons its user wields while what it called stands.
+        for (const [use, where] of [
+          [entry?.item?.use, `${at} use`],
+          ...(entry?.item?.moreUses ?? []).map((one, index) => [one?.use ?? one, `${at} moreUses ${index}`]),
+        ]) {
+          const lends = use?.wieldsWhileCalled;
+          if (lends === undefined) continue;
+          const budgets = new Set((document?.combat?.economy?.budgets ?? []).map((one) => one?.id));
+          const weapon = (ref) => {
+            if (typeof ref !== "string" || !ref.includes("/")) return false;
+            const catalog = (document?.catalogs ?? []).find((one) => one?.id === ref.slice(0, ref.indexOf("/")));
+            const found =
+              catalog &&
+              (catalogEntryList(catalog, catalogSources) ?? []).find(
+                (one) => one?.id === ref.slice(ref.indexOf("/") + 1),
+              );
+            return !!found?.item?.attack;
+          };
+          if (
+            !lends ||
+            typeof lends !== "object" ||
+            Object.keys(lends).some((key) => !["items", "takes"].includes(key)) ||
+            !Array.isArray(lends.items) ||
+            lends.items.length < 1 ||
+            lends.items.length > 4 ||
+            !lends.items.every(weapon) ||
+            (lends.takes !== undefined && !budgets.has(lends.takes)) ||
+            use.calls === undefined
+          )
+            throw new Error(
+              `${id} ${where} wieldsWhileCalled is { items: 1 to 4 of the ruleset's weapons, takes?: a budget } on a use that calls`,
+            );
+          lateGate(RULESET_WIELDS_WHILE_CALLED_MIN, `has ${where} wieldsWhileCalled, of 1.739`);
+        }
+        for (const [use, where] of [
+          [entry?.item?.use, `${at} use`],
+          ...(entry?.item?.moreUses ?? []).map((one, index) => [one?.use, `${at} moreUses ${index}`]),
+        ]) {
+          // 1.744: a save, and what failing it does, for each use again before a rest.
+          const again = use?.againBeforeRest;
+          if (again !== undefined) {
+            const rests = new Set((document?.rests ?? []).map((one) => one?.id));
+            const tracks = new Set((document?.sheet?.live?.tracks ?? []).map((one) => one?.id));
+            const conditionIds = new Set((document?.combat?.conditions ?? []).map((one) => one?.condition));
+            if (
+              !again ||
+              typeof again !== "object" ||
+              Object.keys(again).some((key) => !["rests", "save", "tracks", "conditions"].includes(key)) ||
+              !Array.isArray(again.rests) ||
+              again.rests.length < 1 ||
+              !again.rests.every((one) => rests.has(one)) ||
+              !again.save ||
+              typeof again.save.save !== "string" ||
+              !Number.isInteger(again.save.difficulty) ||
+              (again.tracks === undefined && again.conditions === undefined) ||
+              (again.tracks !== undefined &&
+                (!Array.isArray(again.tracks) ||
+                  !again.tracks.every((one) => tracks.has(one?.track) && Number.isInteger(one?.by)))) ||
+              (again.conditions !== undefined &&
+                (!Array.isArray(again.conditions) ||
+                  !again.conditions.every((one) => conditionIds.has(one?.condition ?? one))))
+            )
+              throw new Error(
+                `${id} ${where} againBeforeRest is { rests, save: { save, difficulty }, tracks?: [{ track, by }], conditions? }, with tracks or conditions`,
+              );
+            lateGate(RULESET_AGAIN_BEFORE_REST_MIN, `has ${where} againBeforeRest, of 1.744`);
+          }
+          // 1.745: items its use makes.
+          const made = use?.makesItems;
+          if (made !== undefined) {
+            const ref = typeof made?.item === "string" ? made.item : "";
+            const catalog = (document?.catalogs ?? []).find((one) => one?.id === ref.slice(0, ref.indexOf("/")));
+            const found =
+              catalog &&
+              (catalogEntryList(catalog, catalogSources) ?? []).find(
+                (one) => one?.id === ref.slice(ref.indexOf("/") + 1),
+              );
+            if (
+              !found?.item ||
+              !Number.isInteger(made.count) ||
+              made.count < 1 ||
+              made.count > 100 ||
+              Object.keys(made).some((key) => !["item", "count", "lasts"].includes(key)) ||
+              (made.lasts !== undefined && !madeLastsOk(made.lasts))
+            )
+              throw new Error(
+                `${id} ${where} makesItems is { item: an item of the ruleset's catalogs, count: 1 to 100, lasts?: [{ label?, minutes }] }`,
+              );
+            lateGate(RULESET_ITEM_MAKES_ITEMS_MIN, `has ${where} makesItems, of 1.745`);
+            if (made.lasts !== undefined)
+              lateGate(RULESET_MADE_LASTS_MIN, `has ${where} made items that vanish, of 1.760`);
+          }
+        }
+        // 1.746: further uses' counts rolled by kind for each stack.
+        const byKind = entry?.item?.moreUsesRolled;
+        if (byKind !== undefined) {
+          const more = entry.item.moreUses ?? [];
+          if (
+            !byKind ||
+            typeof byKind !== "object" ||
+            Object.keys(byKind).some((key) => !["dice", "weights"].includes(key)) ||
+            typeof byKind.dice !== "string" ||
+            !/^[1-9]\d{0,2}(d[1-9]\d{0,3})?([+-]\d{1,4})?$/u.test(byKind.dice) ||
+            !Array.isArray(byKind.weights) ||
+            byKind.weights.length !== more.length ||
+            !byKind.weights.every((one, n) =>
+              more[n]?.usesOf !== undefined ? one === 0 : Number.isInteger(one) && one >= 1 && one <= 100,
+            ) ||
+            !more.every((one) => one?.uses !== undefined || one?.usesOf !== undefined)
+          )
+            throw new Error(
+              `${id} ${at} moreUsesRolled is { dice, weights: one 1 to 100 for each further use, 0 for one spending another's (usesOf) }, each further use counting its own uses or another's`,
+            );
+          lateGate(RULESET_MORE_USES_ROLLED_MIN, `has ${at} moreUsesRolled, of 1.746`);
+        }
+        (entry?.item?.moreUses ?? []).forEach((one, index) => {
+          if (one?.calls !== undefined) checkCalls(one.calls, `${at} moreUses ${index}`);
+          if (one?.use?.calls !== undefined) checkCalls(one.use.calls, `${at} moreUses ${index} use`);
+        });
+      }
+    }
+    if (calling) gate(RULESET_CATALOG_CALLS_MIN, `has ${calling}, of 1.394`);
+    if (reading) gate(RULESET_CALLS_FROM_MIN, `has ${reading}, of 1.402`);
+    if (rolling) gate(RULESET_ROLLED_CALLS_MIN, `has ${rolling}, of 1.559`);
+    if (commanding) gate(RULESET_COMMANDED_CALLS_MIN, `has ${commanding}, of 1.558`);
+    if (imaging) gate(RULESET_CALLED_IMAGES_MIN, `has ${imaging}, of 1.568`);
+    if (keeping) gate(RULESET_KEPT_ROLLS_MIN, `has ${keeping}, of 1.591`);
+  }
+  // 1.395: speeds a combat condition gives, in feet or as fast as its holder walks.
+  {
+    let moving;
+    for (const condition of document?.combat?.conditions ?? []) {
+      const { speeds, hover, levitates } = condition ?? {};
+      if (speeds === undefined && hover === undefined && levitates === undefined) continue;
+      const where = `${id} combat condition "${condition.condition}"`;
+      const ways = speeds === undefined ? [] : Object.entries(speeds ?? {});
+      if (
+        (speeds !== undefined &&
+          (!speeds ||
+            typeof speeds !== "object" ||
+            ways.length < 1 ||
+            ways.some(
+              ([way, speed]) =>
+                !["fly", "swim", "climb", "burrow"].includes(way) ||
+                (speed !== "walk" && (!Number.isFinite(speed) || speed <= 0 || speed > 10000)),
+            ))) ||
+        (hover !== undefined && hover !== true) ||
+        (levitates !== undefined && (levitates !== true || speeds?.fly === undefined))
+      )
+        throw new Error(
+          `${where} speeds are fly, swim, climb or burrow in feet or "walk"; hover is true; levitates is true beside a fly speed`,
+        );
+      moving ??= `${where} speeds`;
+    }
+    if (moving) gate(RULESET_CONDITION_SPEEDS_MIN, `has ${moving}, of 1.395`);
+  }
+  // 1.396: what a creature, a combat condition or a combat level regains as each of its turns starts.
+  {
+    let regaining;
+    const regains = (given, where, creature) => {
+      if (given === undefined) return;
+      const bad =
+        !given ||
+        typeof given !== "object" ||
+        Object.keys(given).some(
+          // 1.555: notIn (checked and gated with the newer keys).
+          (key) => !["flat", "dice", "add", "stoppedBy", "atMostHalf", "notAtZero", "keepsUp", "notIn"].includes(key),
+        ) ||
+        (given.flat === undefined && given.dice === undefined && given.add === undefined) ||
+        (given.flat !== undefined && (!Number.isInteger(given.flat) || given.flat < 0 || given.flat > 1000)) ||
+        (given.add !== undefined && creature) ||
+        (given.stoppedBy !== undefined &&
+          (!Array.isArray(given.stoppedBy) ||
+            given.stoppedBy.length < 1 ||
+            given.stoppedBy.length > 8 ||
+            given.stoppedBy.some((one) => typeof one !== "string"))) ||
+        ["atMostHalf", "notAtZero", "keepsUp"].some((key) => given[key] !== undefined && given[key] !== true) ||
+        (given.keepsUp && given.notAtZero);
+      if (bad)
+        throw new Error(
+          `${id} ${where} regenerates is { flat?, dice?, add? (never on a creature), stoppedBy?, atMostHalf?, notAtZero?, keepsUp? or notIn? }`,
+        );
+      regaining ??= `${where} regenerates`;
+    };
+    for (const condition of document?.combat?.conditions ?? [])
+      regains(condition?.regenerates, `combat condition "${condition?.condition}"`, false);
+    for (const level of document?.combat?.levels ?? []) regains(level?.regenerates, "combat level", false);
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? [])
+        regains(entry?.creature?.regenerates, `catalog "${catalog?.id}" entry "${entry?.id}"`, true);
+    if (regaining) gate(RULESET_REGENERATES_MIN, `has ${regaining}, of 1.396`);
+  }
+  // 1.392: a shape change, an entry's or a creature action's `forms` and a combat condition's `shape`;
+  // 1.401: forms read from a creature catalog. 1.400: hanging on at 1.
+  {
+    let shaping;
+    let readingForms;
+    let hanging;
+    // 1.596: hanging on that ends its condition, or wards off being slain outright.
+    let hangingEnds, hangingBecomes;
+    // 1.404: a hang-on only while holding a condition. 1.405: a better-of shape and a list row's pool.
+    let newer;
+    // 1.405: betterOf by proficiency, and row pools in catalog files.
+    let newest;
+    let swallowing;
+    // 1.407: riders waiting on a hold, ending one, or costing whoever pulls.
+    let pulling;
+    const shaped = new Set();
+    for (const condition of document?.combat?.conditions ?? []) {
+      const shape = condition?.shape;
+      if (shape === undefined) continue;
+      if (
+        !shape ||
+        typeof shape !== "object" ||
+        Object.keys(shape).some(
+          (key) => !["health", "keepsSaves", "keepsChecks", "keeps", "revert", "betterOf"].includes(key),
+        ) ||
+        (shape.health !== undefined && !["form", "own"].includes(shape.health)) ||
+        (shape.betterOf !== undefined && shape.betterOf !== true)
+      )
+        throw new Error(
+          `${id} combat condition "${condition.condition}" shape is { health?: "form" or "own", keepsSaves?, keepsChecks?, keeps?, revert?, betterOf?: true }`,
+        );
+      shaped.add(condition.condition);
+      shaping ??= `combat condition "${condition.condition}" shape`;
+      if (shape.betterOf) newest ??= `combat condition "${condition.condition}" shape betterOf`;
+    }
+    const creatureCatalogs = new Set(
+      (document?.catalogs ?? [])
+        .filter((one) => one?.holds === "creatures" || one?.id === "creatures")
+        .map((one) => one.id),
+    );
+    const checkForms = (forms, applies, where) => {
+      if (forms === undefined) return;
+      const bad =
+        !forms ||
+        typeof forms !== "object" ||
+        Object.keys(forms).some((key) => !["into", "from", "upTo", "without"].includes(key)) ||
+        (forms.into === undefined && forms.from === undefined) ||
+        (forms.from !== undefined &&
+          (!forms.from ||
+            Object.keys(forms.from).some((key) => !["catalog", "filters", "notFilters"].includes(key)) ||
+            !creatureCatalogs.has(forms.from.catalog))) ||
+        (forms.upTo !== undefined &&
+          (typeof forms.upTo?.filter !== "string" ||
+            (forms.upTo.at === undefined && forms.upTo.targetLevel === undefined))) ||
+        !(applies ?? []).some((one) => shaped.has(one?.condition));
+      if (bad)
+        throw new Error(
+          `${id} ${where} forms are { into? and/or from: a creature catalog, upTo?: { filter, at? or targetLevel? }, without? }, beside an "applies" of a condition with "shape"`,
+        );
+      shaping ??= `${where} forms`;
+      if (forms.from !== undefined) readingForms ??= `${where} forms from a catalog`;
+    };
+    const conditionIds = new Set((document?.combat?.conditions ?? []).map((one) => one?.condition));
+    const checkHangs = (hangs, where, creature, actions = []) => {
+      if (hangs === undefined) return;
+      const bad =
+        !hangs ||
+        typeof hangs !== "object" ||
+        Object.keys(hangs).some(
+          (key) =>
+            ![
+              "uses",
+              "spends",
+              "save",
+              "notFrom",
+              "notCritical",
+              "dealtAtMost",
+              "extraTurn",
+              "label",
+              "whileHolding",
+              "ends",
+              "outright",
+              "becomes",
+            ].includes(key),
+        ) ||
+        (hangs.becomes !== undefined &&
+          (!creature ||
+            !hangs.becomes ||
+            typeof hangs.becomes !== "object" ||
+            Object.keys(hangs.becomes).some((key) => !["action", "form"].includes(key)) ||
+            !actions.some(
+              (one) => one?.id === hangs.becomes.action && one?.forms?.into?.includes?.(hangs.becomes.form),
+            ))) ||
+        (hangs.ends !== undefined && (hangs.ends !== true || creature || where === "combat level")) ||
+        (hangs.outright !== undefined &&
+          (hangs.outright !== true ||
+            hangs.save !== undefined ||
+            hangs.notFrom !== undefined ||
+            hangs.notCritical !== undefined ||
+            hangs.dealtAtMost !== undefined)) ||
+        (hangs.uses === undefined && hangs.spends === undefined && hangs.save === undefined) ||
+        (creature && (hangs.spends !== undefined || hangs.save?.tally !== undefined)) ||
+        (hangs.uses !== undefined && (!Number.isInteger(hangs.uses) || hangs.uses < 1 || hangs.uses > 10)) ||
+        (hangs.dealtAtMost !== undefined && (!Number.isInteger(hangs.dealtAtMost) || hangs.dealtAtMost < 0)) ||
+        (hangs.save !== undefined &&
+          (typeof hangs.save?.save !== "string" || !Number.isInteger(hangs.save?.difficulty))) ||
+        (hangs.whileHolding !== undefined &&
+          (creature ||
+            !Array.isArray(hangs.whileHolding) ||
+            hangs.whileHolding.length === 0 ||
+            hangs.whileHolding.some((one) => !conditionIds.has(one))));
+      if (bad)
+        throw new Error(
+          `${id} ${where} hangsOn is { uses?, spends? (not on a creature), save?: { save, difficulty, plusDamage?, raisedBy?, tally? }, notFrom?, notCritical?, dealtAtMost?, extraTurn?, label?, whileHolding? (declared conditions, not on a creature), ends?: true (a condition's), outright?: true (without save, notFrom, notCritical or dealtAtMost), becomes?: { action: its own action with forms, form: one of that action's into } (a creature's) }, naming uses, spends or a save`,
+        );
+      hanging ??= `${where} hangsOn`;
+      // A pool named by a list row's name rather than a declared pool's id, or a hold while holding.
+      const declaredPools = new Set((document?.sheet?.live?.pools ?? []).map((one) => one?.id));
+      for (const pool of [hangs.spends, hangs.save?.tally])
+        if (typeof pool === "string" && !declaredPools.has(pool))
+          newest ??= `${where} hangsOn naming a list row's pool "${pool}"`;
+      if (hangs.whileHolding) newer ??= `${where} hangsOn whileHolding`;
+      // 1.596: ending its condition once it works, and warding off being slain outright.
+      if (hangs.ends !== undefined || hangs.outright !== undefined) hangingEnds ??= `${where} hangsOn ends or outright`;
+      if (hangs.becomes !== undefined) hangingBecomes ??= `${where} hangsOn becomes`;
+    };
+    for (const condition of document?.combat?.conditions ?? [])
+      checkHangs(condition?.hangsOn, `combat condition "${condition?.condition}"`, false);
+    for (const level of document?.combat?.levels ?? []) checkHangs(level?.hangsOn, "combat level", false);
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+        const at = `catalog "${catalog?.id}" entry "${entry?.id}"`;
+        checkForms(entry?.mechanics?.forms, entry?.mechanics?.applies, at);
+        checkHangs(entry?.creature?.hangsOn, at, true, entry?.creature?.actions ?? []);
+        for (const action of entry?.creature?.actions ?? [])
+          checkForms(action?.forms, action?.applies, `${at} action "${action?.id}"`);
+        // 1.405: aimed only at some targets, an engulf's room, and a sequence's all-hit rider.
+        for (const action of entry?.creature?.actions ?? []) {
+          const where = `${at} action "${action?.id}"`;
+          const types = action?.targetTypes;
+          // Its shape is checked with every other targetTypes, above.
+          if (types !== undefined) swallowing ??= `${where} targetTypes`;
+          if (action?.engulf?.room !== undefined) {
+            if (roomIssue(action.engulf.room, document) || action.engulf.atMost !== undefined)
+              throw new Error(
+                `${id} ${where} engulf room is { of: 1 to 20, takes?: { size: 1 to 20 } }, in place of atMost`,
+              );
+            swallowing ??= `${where} engulf room`;
+          }
+          const all = action?.allHit;
+          if (all !== undefined) {
+            const own = new Set((entry.creature.actions ?? []).filter((one) => !one?.sequence).map((one) => one?.id));
+            if (
+              !Array.isArray(action.sequence) ||
+              !all ||
+              typeof all !== "object" ||
+              Object.keys(all).some((key) => !["targetIs", "applies", "uses"].includes(key)) ||
+              (all.uses !== undefined && !own.has(all.uses)) ||
+              (all.applies !== undefined &&
+                (!Array.isArray(all.applies) || all.applies.some((one) => !conditionIds.has(one?.condition)))) ||
+              (all.applies === undefined && all.uses === undefined)
+            )
+              throw new Error(
+                `${id} ${where} allHit is { targetIs?, applies?: declared conditions, uses?: one of its own actions }, on a sequence, with applies or uses`,
+              );
+            swallowing ??= `${where} allHit`;
+          }
+          // 1.407: an applies entry that waits on a hold, takes conditions off, or costs a puller.
+          for (const one of action?.applies ?? []) {
+            const at = `${where} applies "${one?.condition}"`;
+            const named = (list) =>
+              Array.isArray(list) && list.length > 0 && list.every((condition) => conditionIds.has(condition));
+            if (one?.targetHolds !== undefined) {
+              const holds = one.targetHolds;
+              if (
+                !holds ||
+                typeof holds !== "object" ||
+                Object.keys(holds).some((key) => !["conditions", "fromSelf"].includes(key)) ||
+                (holds.conditions === undefined && holds.fromSelf === undefined) ||
+                (holds.conditions !== undefined && !named(holds.conditions)) ||
+                (holds.fromSelf !== undefined && !named(holds.fromSelf))
+              )
+                throw new Error(`${id} ${at} targetHolds is { conditions?, fromSelf? }, each declared conditions`);
+              pulling ??= `${at} targetHolds`;
+            }
+            if (one?.endsOnTarget !== undefined) {
+              if (!named(one.endsOnTarget))
+                throw new Error(`${id} ${at} endsOnTarget is a list of declared conditions`);
+              pulling ??= `${at} endsOnTarget`;
+            }
+            if (one?.harmsPuller !== undefined) {
+              const harm = one.harmsPuller;
+              const held = (document?.combat?.conditions ?? []).find(
+                (condition) => condition?.condition === one.condition,
+              );
+              if (
+                !held?.inside ||
+                !harm ||
+                typeof harm !== "object" ||
+                Object.keys(harm).some((key) => !["dice", "flat", "type"].includes(key)) ||
+                (harm.dice === undefined && harm.flat === undefined)
+              )
+                throw new Error(`${id} ${at} harmsPuller is { dice?, flat?, type? }, on an inside condition`);
+              pulling ??= `${at} harmsPuller`;
+            }
+          }
+        }
+      }
+    if (shaping) gate(RULESET_SHAPES_MIN, `has ${shaping}, of 1.392`);
+    if (hanging) gate(RULESET_HANGS_ON_MIN, `has ${hanging}, of 1.400`);
+    if (hangingEnds) gate(RULESET_HANGS_ON_ENDS_MIN, `has ${hangingEnds}, of 1.596`);
+    if (hangingBecomes) gate(RULESET_HANGS_ON_BECOMES_MIN, `has ${hangingBecomes}, of 1.548`);
+    if (readingForms) gate(RULESET_FORMS_FROM_MIN, `has ${readingForms}, of 1.401`);
+    if (sizedAt) gate(RULESET_TARGET_SIZES_MIN, `has ${sizedAt} reading a size, of 1.403`);
+    if (newer) gate(RULESET_HANGS_BY_ROW_MIN, `has ${newer}, of 1.404`);
+    if (newest) gate(RULESET_BETTER_OF_MIN, `has ${newest}, of 1.405`);
+    if (swallowing) gate(RULESET_SWALLOWING_MIN, `has ${swallowing}, of 1.405`);
+    // 1.406: a floor under defense anywhere a modifier stands (a condition, a level, an item's effect).
+    let floored;
+    const findFloor = (value, where) => {
+      if (floored || !value || typeof value !== "object") return;
+      if (Array.isArray(value)) return value.forEach((one) => findFloor(one, where));
+      if (value.to === "defense" && value.atLeast !== undefined) return void (floored = where);
+      for (const one of Object.values(value)) findFloor(one, where);
+    };
+    for (const condition of document?.combat?.conditions ?? [])
+      findFloor(condition?.modifiers, `combat condition "${condition?.condition}"`);
+    findFloor(document?.combat?.levels, "a combat level");
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? [])
+        findFloor(entry?.mechanics, `catalog "${catalog?.id}" entry "${entry?.id}"`);
+    if (floored) gate(RULESET_DEFENSE_FLOOR_MIN, `has ${floored} with a floor under defense, of 1.406`);
+    if (pulling) gate(RULESET_PULLS_MIN, `has ${pulling}, of 1.407`);
+    // 1.410: spent pools of one group given back within a budget its user's sheet reads (Arcane Recovery).
+    let recovering;
+    const recoverGroups = new Set((sheet.live?.pools ?? []).map((pool) => pool?.group).filter(Boolean));
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+        const recovers = entry?.mechanics?.recovers;
+        if (recovers === undefined) continue;
+        const at = `catalog "${catalog?.id}" entry "${entry?.id}" recovers`;
+        if (
+          !recovers ||
+          typeof recovers !== "object" ||
+          Array.isArray(recovers) ||
+          Object.keys(recovers).some((key) => !["group", "upTo", "most", "atRest"].includes(key))
+        )
+          throw new Error(`${id} ${at} is { group, upTo, most?, atRest? }`);
+        if (!recoverGroups.has(recovers.group))
+          throw new Error(`${id} ${at} names "${recovers.group}", no live pool group`);
+        const issue = refIssue(recovers.upTo);
+        if (recovers.upTo === undefined || issue)
+          throw new Error(`${id} ${at} upTo ${issue ?? "is a value off the sheet"}`);
+        if (
+          recovers.most !== undefined &&
+          (!Number.isInteger(recovers.most) || recovers.most < 1 || recovers.most > 100)
+        )
+          throw new Error(`${id} ${at} most is a whole number from 1 to 100`);
+        recovering ??= at;
+      }
+    if (recovering) gate(RULESET_RECOVERS_MIN, `has ${recovering}, of 1.410`);
+    // 1.411: a pool given back as initiative is rolled, when none of it is left.
+    let refilling;
+    const poolIds = new Set((sheet.live?.pools ?? []).map((pool) => pool?.id));
+    const rowPoolNames = new Set();
+    for (const list of sheet.lists ?? [])
+      if (list?.pools)
+        for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+          for (const entry of catalogEntryList(catalog, catalogSources) ?? [])
+            for (const row of entry?.rows ?? [])
+              if (row?.list === list.id && typeof row.values?.[list.pools.nameColumn] === "string")
+                rowPoolNames.add(row.values[list.pools.nameColumn].trim().toLowerCase());
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+        const refills = entry?.mechanics?.refillsAtInitiative;
+        if (refills === undefined) continue;
+        const at = `catalog "${catalog?.id}" entry "${entry?.id}" refillsAtInitiative`;
+        if (
+          !refills ||
+          typeof refills !== "object" ||
+          Array.isArray(refills) ||
+          Object.keys(refills).some((key) => !["pool", "amount"].includes(key)) ||
+          typeof refills.pool !== "string" ||
+          (refills.amount !== undefined &&
+            (!Number.isInteger(refills.amount) || refills.amount < 1 || refills.amount > 999))
+        )
+          throw new Error(`${id} ${at} is { pool, amount?: a whole number from 1 }`);
+        if (!poolIds.has(refills.pool) && !rowPoolNames.has(refills.pool.trim().toLowerCase()))
+          throw new Error(`${id} ${at} names "${refills.pool}", no live pool or row pool`);
+        refilling ??= at;
+      }
+    if (refilling) gate(RULESET_TEXTS_MIN, `has ${refilling}, of 1.411`);
+  }
+  // 1.236: what a condition gives its holder is an entry that does something, on a list a fight reads
+  // the holder's own numbers for (the spells list's casting).
+  const abilityLists = new Set((document?.combat?.abilities ?? []).map((one) => one?.list));
+  for (const condition of document?.combat?.conditions ?? []) {
+    for (const ref of condition?.actions ?? []) {
+      const [catalogId, entryId] = String(ref).split("/");
+      const catalog = (document?.catalogs ?? []).find((one) => one?.id === catalogId);
+      const list = catalog ? catalogEntryList(catalog, catalogSources) : null;
+      if (!list) continue;
+      const given = list.find((one) => one?.id === entryId);
+      if (!given?.mechanics || !(given.rows ?? []).some((row) => abilityLists.has(row?.list)))
+        throw new Error(
+          `${id} combat condition "${condition.condition}" gives ${ref}, which is not an entry with mechanics on a list the fight casts from`,
+        );
+    }
+  }
+  // SRD 5.1 Pact Magic: pact slots pay for a spell at their own level. A payer names other groups.
+  const pools = document?.sheet?.live?.pools ?? [];
+  const groups = new Set(pools.map((pool) => pool?.group).filter(Boolean));
+  for (const pool of pools) {
+    if (pool?.pays === undefined) continue;
+    if (!Array.isArray(pool.pays) || pool.pays.length < 1 || pool.pays.length > 4)
+      throw new Error(`${id} live pool "${pool.id}" pays for one to four groups`);
+    for (const group of pool.pays) {
+      if (!groups.has(group) || group === pool.group)
+        throw new Error(`${id} live pool "${pool.id}" pays for "${group}", which is not another pool group`);
+    }
+    gate(RULESET_POOL_PAYS_MIN, `has live pool "${pool.id}" paying for another group`);
+  }
+  if (byFilter) gate(RULESET_BY_FILTER_MIN, `has ${byFilter}, of 1.414`);
+  if (maximized) gate(RULESET_MAXIMIZED_MIN, `has ${maximized}, of 1.415`);
+  // 1.416: a missile caught and thrown back (the shape is checked with the reactions).
+  const catching = (Array.isArray(document?.catalogs) ? document.catalogs : [])
+    .filter((catalog) => catalog?.holds !== "creatures")
+    .flatMap((catalog) => (catalogEntryList(catalog, catalogSources) ?? []).map((entry) => [catalog, entry]))
+    .find(([, entry]) => {
+      const reaction = entry?.mechanics?.reaction;
+      const moments =
+        reaction && typeof reaction === "object"
+          ? [reaction, ...(Array.isArray(reaction.also) ? reaction.also : [])]
+          : [];
+      return (
+        entry?.mechanics?.throwsCaught !== undefined ||
+        moments.some((moment) => moment?.on === "caught" || moment?.freeSlot !== undefined)
+      );
+    });
+  if (catching)
+    gate(RULESET_CAUGHT_MIN, `has catalog "${catching[0].id}" entry "${catching[1].id}" catching a missile, of 1.416`);
+  // 1.419: what an untrained skill, save or section adds, and an ability check's own add.
+  let added;
+  const addSheet = document?.sheet ?? {};
+  const derivedList = addSheet.derived ?? [];
+  const readsSkill = (ref) => ref?.skillMod !== undefined || ref?.saveMod !== undefined;
+  const refsIn = (value, out = []) => {
+    if (Array.isArray(value)) value.forEach((one) => refsIn(one, out));
+    else if (value && typeof value === "object") {
+      if (VALUE_REF_KEYS.some((key) => value[key] !== undefined)) out.push(value);
+      Object.values(value).forEach((one) => refsIn(one, out));
+    }
+    return out;
+  };
+  const addIssue = (ref, where) => {
+    const issue = valueRefIssue(ref, sheetNames(document));
+    if (issue) throw new Error(`${where} ${issue}`);
+    if (readsSkill(ref)) throw new Error(`${where} cannot read a skill or save modifier`);
+    if (ref.derived === undefined) return;
+    const end = derivedList.findIndex((one) => one?.id === ref.derived);
+    for (const one of derivedList.slice(0, end + 1))
+      if (refsIn(one).some(readsSkill))
+        throw new Error(
+          `${where} reads "${ref.derived}", and "${one.id}", declared at or above it, reads a skill or save modifier`,
+        );
+  };
+  for (const key of ["skills", "saves", "sections"]) {
+    for (const entry of addSheet[key] ?? []) {
+      const untrained = entry?.untrained;
+      if (!untrained || typeof untrained !== "object" || !("add" in untrained)) continue;
+      const where = `${id} sheet ${key} "${entry.id}" untrained add`;
+      if (Object.keys(untrained).length !== 1) throw new Error(`${where} is { add } and nothing else`);
+      addIssue(untrained.add, where);
+      added ??= where;
+    }
+  }
+  for (const ability of addSheet.abilities ?? []) {
+    if (ability?.checkAdd === undefined) continue;
+    const where = `${id} sheet ability "${ability.id}" checkAdd`;
+    addIssue(ability.checkAdd, where);
+    added ??= where;
+  }
+  if (added) gate(RULESET_UNTRAINED_ADD_MIN, `has ${added}, of 1.419`);
+  // 1.420: a long range on a catalog entry, and a caught missile thrown back with a die of its own.
+  let ranged;
+  for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : []) {
+    if (catalog?.holds === "creatures") continue;
+    for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+      const mechanics = entry?.mechanics;
+      const where = `catalog "${catalog.id}" entry "${entry?.id}"`;
+      if (mechanics?.longRange !== undefined) {
+        if (
+          typeof mechanics.longRange !== "number" ||
+          !Number.isFinite(mechanics.longRange) ||
+          typeof mechanics.range !== "number" ||
+          mechanics.longRange <= mechanics.range
+        )
+          throw new Error(`${id} ${where} longRange is a number further than its range`);
+        ranged ??= `${where} longRange`;
+      }
+      if (mechanics?.throwsCaught?.die !== undefined) ranged ??= `${where} throwsCaught die`;
+    }
+  }
+  if (ranged) gate(RULESET_LONG_RANGE_MIN, `has ${ranged}, of 1.420`);
+  if (healing) gate(RULESET_HEAL_ADD_MIN, `has ${healing}, of 1.421`);
+  // 1.422: what an attack over, hit or missed, opens and how it is answered.
+  const answering = (Array.isArray(document?.catalogs) ? document.catalogs : [])
+    .filter((catalog) => catalog?.holds !== "creatures")
+    .flatMap((catalog) => (catalogEntryList(catalog, catalogSources) ?? []).map((entry) => [catalog, entry]))
+    .find(([, entry]) => {
+      const reaction = entry?.mechanics?.reaction;
+      const moments =
+        reaction && typeof reaction === "object"
+          ? [reaction, ...(Array.isArray(reaction.also) ? reaction.also : [])]
+          : [];
+      return (
+        entry?.mechanics?.strikesWith !== undefined ||
+        entry?.mechanics?.redirects !== undefined ||
+        moments.some(
+          (moment) =>
+            moment?.on === "attacked" ||
+            moment?.missed !== undefined ||
+            moment?.sourceIs !== undefined ||
+            (moment?.on === "harmed" && moment?.within !== undefined),
+        )
+      );
+    });
+  if (answering)
+    gate(
+      RULESET_STRIKES_BACK_MIN,
+      `has catalog "${answering[0].id}" entry "${answering[1].id}" answering an attack, of 1.422`,
+    );
+  // 1.425 and 1.426, gated after 1.424 below.
+  let foeReaching;
+  let restPutting;
+  // 1.423: a sanctuary, a save a known sheet save, a difficulty a derived value the sheet has, attackers
+  // of known creature types.
+  let warded;
+  for (const condition of document?.combat?.conditions ?? []) {
+    const ward = condition?.sanctuary;
+    if (ward === undefined) continue;
+    const where = `combat condition "${condition?.condition}" sanctuary`;
+    if (!ward || typeof ward !== "object" || Array.isArray(ward))
+      throw new Error(`${id} ${where} is { save, difficulty?, from?, immuneOnSave? }`);
+    if (Object.keys(ward).some((key) => !["save", "difficulty", "from", "immuneOnSave", "against"].includes(key)))
+      throw new Error(`${id} ${where} is { save, difficulty?, from?, immuneOnSave? }`);
+    // 1.425: what it stops, attacks and harmful entries of the ruleset's catalogs.
+    if (ward.against !== undefined) {
+      const ids = new Set((Array.isArray(document?.catalogs) ? document.catalogs : []).map((catalog) => catalog?.id));
+      const against = ward.against;
+      if (
+        !against ||
+        typeof against !== "object" ||
+        Object.keys(against).length < 1 ||
+        Object.keys(against).some((key) => !["attacks", "casts"].includes(key)) ||
+        (against.attacks !== undefined && against.attacks !== true) ||
+        (against.casts !== undefined &&
+          (!Array.isArray(against.casts) || against.casts.length < 1 || against.casts.some((one) => !ids.has(one))))
+      )
+        throw new Error(`${id} ${where} against is { attacks?: true, casts?: [catalogs] }`);
+      foeReaching ??= `${where} against`;
+    }
+    if (!(document?.sheet?.saves ?? []).some((one) => one?.id === ward.save))
+      throw new Error(`${id} ${where} save "${ward.save}" is not a sheet save`);
+    if (ward.difficulty !== undefined) {
+      const derived = ward.difficulty?.derived;
+      if (
+        !ward.difficulty ||
+        typeof ward.difficulty !== "object" ||
+        (derived !== undefined && !(document?.sheet?.derived ?? []).some((one) => one?.id === derived))
+      )
+        throw new Error(`${id} ${where} difficulty reads a value the sheet has`);
+    }
+    if (ward.from !== undefined) {
+      const types = new Set((document?.combat?.creatureTypes?.types ?? []).map((one) => one?.id ?? one));
+      if (!Array.isArray(ward.from?.types) || ward.from.types.some((type) => !types.has(type)))
+        throw new Error(`${id} ${where} from.types are creature types in combat.creatureTypes`);
+    }
+    if (ward.immuneOnSave !== undefined && ward.immuneOnSave !== true)
+      throw new Error(`${id} ${where} immuneOnSave is true when given`);
+    warded ??= where;
+  }
+  if (warded) gate(RULESET_SANCTUARY_MIN, `has ${warded}, of 1.423`);
+  // 1.424: ending what a catalog's entries put on, of catalogs the ruleset has; 1.427: the user's
+  // pick, a lasting area, and an item's use.
+  let dispelling;
+  let dispellingMore;
+  const dispelCatalogs = new Set(
+    (Array.isArray(document?.catalogs) ? document.catalogs : []).map((catalog) => catalog?.id),
+  );
+  const endsSpellsIn = (ends, where, onItem) => {
+    const shape = `${id} ${where} is { catalogs, count?, upTo?: "paid" or a number, above?: { check, dc }, chosen?: true, zones?: true }`;
+    if (!ends || typeof ends !== "object" || Array.isArray(ends)) throw new Error(shape);
+    if (Object.keys(ends).some((key) => !["catalogs", "count", "upTo", "above", "chosen", "zones"].includes(key)))
+      throw new Error(shape);
+    if (
+      !Array.isArray(ends.catalogs) ||
+      ends.catalogs.length === 0 ||
+      ends.catalogs.some((one) => !dispelCatalogs.has(one))
+    )
+      throw new Error(`${id} ${where} catalogs are catalogs the ruleset has`);
+    if (ends.count !== undefined && (!Number.isInteger(ends.count) || ends.count < 1)) throw new Error(shape);
+    if (ends.upTo !== undefined && ends.upTo !== "paid" && (!Number.isInteger(ends.upTo) || ends.upTo < 0))
+      throw new Error(shape);
+    if (onItem && ends.upTo === "paid")
+      throw new Error(`${id} ${where} upTo is a number on an item's use, which pays no slot`);
+    if (
+      ends.above !== undefined &&
+      (!ends.above ||
+        typeof ends.above.check !== "object" ||
+        !ends.above.check ||
+        typeof ends.above.dc !== "number" ||
+        ends.upTo === undefined)
+    )
+      throw new Error(`${id} ${where} above is { check, dc }, beside an upTo`);
+    for (const key of ["chosen", "zones"]) if (ends[key] !== undefined && ends[key] !== true) throw new Error(shape);
+    dispelling ??= where;
+    if (onItem || ends.chosen || ends.zones) dispellingMore ??= where;
+  };
+  for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : []) {
+    if (catalog?.holds === "creatures") continue;
+    for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+      const at = `catalog "${catalog.id}" entry "${entry?.id}"`;
+      if (entry?.mechanics?.endsSpells !== undefined)
+        endsSpellsIn(entry.mechanics.endsSpells, `${at} endsSpells`, false);
+      const uses = [
+        [entry?.item?.use, "use"],
+        ...(Array.isArray(entry?.item?.moreUses)
+          ? entry.item.moreUses.map((more, index) => [more?.use, `moreUses ${index} use`])
+          : []),
+      ];
+      for (const [use, label] of uses) {
+        if (use?.endsSpells === undefined) continue;
+        if (use.kind !== "utility") throw new Error(`${id} ${at} ${label} endsSpells is on a utility use`);
+        endsSpellsIn(use.endsSpells, `${at} ${label} endsSpells`, true);
+      }
+    }
+  }
+  if (dispelling) gate(RULESET_ENDS_SPELLS_MIN, `has ${dispelling}, of 1.424`);
+  // 1.425: a condition put on by an entry that ends only on a cast reaching a foe.
+  const castsAtFoes = (value) =>
+    !!value && typeof value === "object" && (value.castsAtFoes !== undefined || Object.values(value).some(castsAtFoes));
+  for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : []) {
+    const found = (catalogEntryList(catalog, catalogSources) ?? []).find(
+      (entry) => castsAtFoes(entry?.mechanics) || castsAtFoes(entry?.item) || castsAtFoes(entry?.creature),
+    );
+    if (found) foeReaching ??= `catalog "${catalog.id}" entry "${found.id}" endsWhenHolder castsAtFoes`;
+  }
+  if (foeReaching) gate(RULESET_REACHES_FOES_MIN, `has ${foeReaching}, of 1.425`);
+  // 1.426: a rest that puts conditions on, and a combat condition's own endsWhenHolder on attacks and casts.
+  const liveConditions = new Set((document?.sheet?.live?.conditions ?? []).map((one) => one?.id));
+  for (const rest of document?.rests ?? []) {
+    if (rest?.puts === undefined) continue;
+    const where = `rest "${rest?.id}" puts`;
+    if (
+      !Array.isArray(rest.puts) ||
+      rest.puts.length < 1 ||
+      rest.puts.some(
+        (one) =>
+          !one ||
+          Object.keys(one).some((key) => !["condition", "when"].includes(key)) ||
+          !liveConditions.has(one.condition) ||
+          (one.when !== undefined &&
+            (typeof one.when?.value !== "object" ||
+              Object.keys(one.when).some((key) => !["value", "atLeast", "atMost"].includes(key)) ||
+              (one.when.atLeast === undefined && one.when.atMost === undefined))),
+      )
+    )
+      throw new Error(
+        `${id} ${where} is [{ condition, when?: { value, atLeast?, atMost? } }] of the sheet's live conditions`,
+      );
+    restPutting ??= where;
+  }
+  for (const condition of document?.combat?.conditions ?? []) {
+    const ends = condition?.endsWhenHolder;
+    if (ends && typeof ends === "object" && (ends.attacks || ends.casts || ends.castsAtFoes))
+      restPutting ??= `combat condition "${condition.condition}" endsWhenHolder attacks or casts`;
+  }
+  if (restPutting) gate(RULESET_REST_PUTS_MIN, `has ${restPutting}, of 1.426`);
+  // Taken last, so an older Engine is asked for the oldest minor it lacks.
+  if (dispellingMore) gate(RULESET_DISPELS_MORE_MIN, `has ${dispellingMore}, of 1.427`);
+  // 1.428: a weapon strike over an area, and a strike again on a combat condition or level.
+  let areaStriking;
+  for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : []) {
+    if (catalog?.holds === "creatures") continue;
+    const found = (catalogEntryList(catalog, catalogSources) ?? []).find(
+      (entry) => entry?.mechanics?.strikesWith !== undefined && entry.mechanics.area !== undefined,
+    );
+    if (found) areaStriking ??= `catalog "${catalog.id}" entry "${found.id}" strikesWith over an area`;
+  }
+  for (const [kind, rules] of [
+    ["condition", document?.combat?.conditions ?? []],
+    ["level", document?.combat?.levels ?? []],
+  ])
+    for (const rule of rules) {
+      if (rule?.strikesAgain === undefined) continue;
+      const where = `combat ${kind} "${rule.condition ?? rule.derived}" strikesAgain`;
+      const again = rule.strikesAgain;
+      if (
+        !again ||
+        typeof again !== "object" ||
+        Object.keys(again).some((key) => key !== "within") ||
+        typeof again.within !== "number" ||
+        !(again.within > 0)
+      )
+        throw new Error(`${id} ${where} is { within: a distance above 0 }`);
+      areaStriking ??= where;
+    }
+  if (areaStriking) gate(RULESET_AREA_STRIKES_MIN, `has ${areaStriking}, of 1.428`);
+  // 1.429: choices on the sheet (atTypesIn, resistIn), values off it on attacks, checks and saves, once on
+  // the holder's own turn, onto damage, and only where proficient.
+  const modifierAt = (modifier, where) => {
+    if (!modifier || typeof modifier !== "object") return;
+    const fields = (key) => {
+      const value = modifier[key];
+      if (value === undefined) return;
+      if (!Array.isArray(value) || value.length === 0 || value.some((one) => !choiceFields.has(one)))
+        throw new Error(`${id} ${where} ${key} names text or enum fields of the sheet`);
+      sheetChoosing ??= `${where} ${key}`;
+    };
+    fields("atTypesIn");
+    if (modifier.atTypesIn !== undefined && !["attacks", "damage"].includes(modifier.to))
+      throw new Error(`${id} ${where} atTypesIn is on attacks or damage`);
+    if (modifier.add !== undefined && ["attacks", "checks", "saves"].includes(modifier.to))
+      sheetChoosing ??= `${where} add on ${modifier.to}`;
+    if (modifier.orDamage !== undefined) {
+      if (modifier.orDamage !== true || modifier.to !== "attacks" || modifier.rescue !== true)
+        throw new Error(`${id} ${where} orDamage is true, on a held-back change to attacks`);
+      sheetChoosing ??= `${where} orDamage`;
+    }
+    if (modifier.proficient !== undefined) {
+      if (modifier.proficient !== true || modifier.to !== "checks")
+        throw new Error(`${id} ${where} proficient is true, on a change to checks`);
+      sheetChoosing ??= `${where} proficient`;
+    }
+    if (modifier.oncePer === "own-turn") sheetChoosing ??= `${where} oncePer own-turn`;
+  };
+  for (const rule of [...(document?.combat?.conditions ?? []), ...(document?.combat?.levels ?? [])]) {
+    const where = `combat ${rule?.condition !== undefined ? `condition "${rule.condition}"` : `level "${rule?.derived}"`}`;
+    for (const modifier of Array.isArray(rule?.modifiers) ? rule.modifiers : []) modifierAt(modifier, where);
+    if (rule?.resistIn !== undefined) {
+      if (
+        !Array.isArray(rule.resistIn) ||
+        rule.resistIn.length === 0 ||
+        rule.resistIn.some((one) => !choiceFields.has(one))
+      )
+        throw new Error(`${id} ${where} resistIn names text or enum fields of the sheet`);
+      sheetChoosing ??= `${where} resistIn`;
+    }
+  }
+  for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : []) {
+    if (catalog?.holds === "creatures") continue;
+    for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+      const contextual = entry?.mechanics?.contextual;
+      for (const modifier of Array.isArray(contextual?.modifiers) ? contextual.modifiers : [])
+        modifierAt(modifier, `catalog "${catalog.id}" entry "${entry?.id}" contextual`);
+    }
+  }
+  if (sheetChoosing) gate(RULESET_SHEET_CHOICES_MIN, `has ${sheetChoosing}, of 1.429`);
+  // 1.430: defense against a creature that already hit its holder this turn, and attacks taken that
+  // are opportunity attacks.
+  let hitAfter;
+  for (const rule of [...(document?.combat?.conditions ?? []), ...(document?.combat?.levels ?? [])]) {
+    const where = `combat ${rule?.condition !== undefined ? `condition "${rule.condition}"` : `level "${rule?.derived}"`}`;
+    for (const modifier of Array.isArray(rule?.modifiers) ? rule.modifiers : []) {
+      if (!modifier || typeof modifier !== "object") continue;
+      if (modifier.afterHitBy !== undefined) {
+        if (modifier.afterHitBy !== true || modifier.to !== "defense")
+          throw new Error(`${id} ${where} afterHitBy is true, on a change to defense`);
+        hitAfter ??= `${where} afterHitBy`;
+      }
+      if (modifier.opportunity !== undefined) {
+        if (modifier.opportunity !== true || modifier.to !== "attacks-taken")
+          throw new Error(`${id} ${where} opportunity is true, on a change to attacks taken`);
+        hitAfter ??= `${where} opportunity`;
+      }
+    }
+  }
+  if (hitAfter) gate(RULESET_DEFENSE_AFTER_HIT_MIN, `has ${hitAfter}, of 1.430`);
+  // 1.432: hard ground walked as plain, and walls and water run across.
+  let striding;
+  for (const rule of [...(document?.combat?.conditions ?? []), ...(document?.combat?.levels ?? [])]) {
+    const where = `combat ${rule?.condition !== undefined ? `condition "${rule.condition}"` : `level "${rule?.derived}"`}`;
+    for (const key of ["ignoresHardGround", "runsAcross"]) {
+      if (rule?.[key] === undefined) continue;
+      if (rule[key] !== true) throw new Error(`${id} ${where} ${key} is true`);
+      striding ??= `${where} ${key}`;
+    }
+  }
+  if (striding) gate(RULESET_HARD_GROUND_MIN, `has ${striding}, of 1.432`);
+  // 1.431: an entry kept up on a budget while a condition it put on for some rounds lasts, and a
+  // creature spared only once it saved.
+  let sustaining;
+  for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : []) {
+    for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+      const mechanics = entry?.mechanics;
+      if (!mechanics || typeof mechanics !== "object") continue;
+      const where = `catalog "${catalog.id}" entry "${entry?.id}"`;
+      if (mechanics.sustains !== undefined) {
+        const sustains = mechanics.sustains;
+        if (
+          !sustains ||
+          typeof sustains !== "object" ||
+          Object.keys(sustains).some((key) => key !== "budget") ||
+          !["action", "bonus", "reaction"].includes(sustains.budget) ||
+          !(mechanics.applies ?? []).some((one) => one?.duration?.rounds !== undefined)
+        )
+          throw new Error(
+            `${id} ${where} sustains is { budget: action, bonus or reaction }, on an entry putting on a condition for some rounds`,
+          );
+        sustaining ??= `${where} sustains`;
+      }
+      if (mechanics.oncePerTarget?.whenSaved !== undefined) sustaining ??= `${where} oncePerTarget whenSaved`;
+    }
+  }
+  if (sustaining) gate(RULESET_SUSTAINS_MIN, `has ${sustaining}, of 1.431`);
+  // 1.433: far from its source or out of their sight, either one.
+  let awayOrUnseen;
+  for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : []) {
+    for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+      for (const carrier of [
+        entry?.mechanics,
+        entry?.item?.use,
+        ...(entry?.item?.moreUses ?? []).map((more) => more?.use),
+      ]) {
+        for (const applied of carrier?.applies ?? [])
+          if (applied?.endsAway?.orUnseen !== undefined)
+            awayOrUnseen ??= `catalog "${catalog.id}" entry "${entry?.id}" endsAway orUnseen`;
+      }
+    }
+  }
+  if (awayOrUnseen) gate(RULESET_AWAY_OR_UNSEEN_MIN, `has ${awayOrUnseen}, of 1.433`);
+  // 1.434: one named row given back, and a step given back only while a value says so.
+  let restRow;
+  for (const rest of Array.isArray(document?.rests) ? document.rests : []) {
+    for (const [index, step] of (Array.isArray(rest?.restore) ? rest.restore : []).entries()) {
+      const where = `rest "${rest?.id}" restore ${index + 1}`;
+      if (step?.row !== undefined) {
+        if (step.listPools === undefined) throw new Error(`${id} ${where} row only narrows listPools`);
+        if (typeof step.row !== "string" || step.row.trim() === "" || step.row.length > 80)
+          throw new Error(`${id} ${where} row is a name of up to 80 characters`);
+        restRow ??= `${where} row`;
+      }
+      if (step?.when !== undefined) {
+        const when = step.when;
+        const bound = (value) => value === undefined || (typeof value === "number" && Number.isFinite(value));
+        if (
+          !when ||
+          typeof when !== "object" ||
+          Object.keys(when).some((key) => !["value", "atLeast", "atMost"].includes(key)) ||
+          (when.atLeast === undefined && when.atMost === undefined) ||
+          !bound(when.atLeast) ||
+          !bound(when.atMost) ||
+          (when.atLeast !== undefined && when.atMost !== undefined && when.atLeast > when.atMost)
+        )
+          throw new Error(
+            `${id} ${where} when is { value, atLeast?, atMost? }, with one bound or both and the least no more than the most`,
+          );
+        const refIssue = valueRefIssue(when.value, sheetNames(document));
+        if (refIssue) throw new Error(`${id} ${where} when value ${refIssue}`);
+        restRow ??= `${where} when`;
+      }
+    }
+  }
+  if (restRow) gate(RULESET_REST_ROW_MIN, `has ${restRow}, of 1.434`);
+  // 1.435: kept in any shape, a whole catalog kept, and components waived.
+  let keptAnyShape;
+  const fightComponents = new Set((document?.combat?.components ?? []).map((one) => one?.id));
+  const fightCatalogs = new Set((Array.isArray(document?.catalogs) ? document.catalogs : []).map((one) => one?.id));
+  const keptIssue = (keeps) =>
+    !Array.isArray(keeps) ||
+    keeps.length === 0 ||
+    new Set(keeps).size !== keeps.length ||
+    keeps.some(
+      (one) =>
+        typeof one !== "string" ||
+        one.trim() === "" ||
+        one.length > 120 ||
+        (one.endsWith("/*") && !fightCatalogs.has(one.slice(0, -2))),
+    );
+  for (const rule of [...(document?.combat?.conditions ?? []), ...(document?.combat?.levels ?? [])]) {
+    const where = `combat ${rule?.condition !== undefined ? `condition "${rule.condition}"` : `level "${rule?.derived}"`}`;
+    if (rule?.shapeKeeps !== undefined) {
+      if (keptIssue(rule.shapeKeeps))
+        throw new Error(
+          `${id} ${where} shapeKeeps is a list of actions or entries, or "<catalog>/*" for a catalog of the ruleset`,
+        );
+      keptAnyShape ??= `${where} shapeKeeps`;
+    }
+    if (rule?.waives !== undefined) {
+      if (
+        !Array.isArray(rule.waives) ||
+        rule.waives.length === 0 ||
+        new Set(rule.waives).size !== rule.waives.length ||
+        rule.waives.some((one) => !fightComponents.has(one))
+      )
+        throw new Error(`${id} ${where} waives is a list of the fight's components`);
+      keptAnyShape ??= `${where} waives`;
+    }
+    for (const kept of rule?.shape?.keeps ?? [])
+      if (typeof kept === "string" && kept.endsWith("/*")) keptAnyShape ??= `${where} shape keeps ${kept}`;
+  }
+  if (keptAnyShape) gate(RULESET_SHAPE_KEEPS_MIN, `has ${keptAnyShape}, of 1.435`);
+  // 1.436: ended on an idle turn.
+  let idle;
+  for (const rule of document?.combat?.conditions ?? []) {
+    if (rule?.endsIdle === undefined) continue;
+    const where = `combat condition "${rule.condition}"`;
+    const ends = rule.endsIdle;
+    if (ends !== true) {
+      const unless = ends?.unless;
+      const bound = (value) => value === undefined || (typeof value === "number" && Number.isFinite(value));
+      if (
+        !ends ||
+        typeof ends !== "object" ||
+        Object.keys(ends).some((key) => key !== "unless") ||
+        !unless ||
+        typeof unless !== "object" ||
+        Object.keys(unless).some((key) => !["value", "atLeast", "atMost"].includes(key)) ||
+        (unless.atLeast === undefined && unless.atMost === undefined) ||
+        !bound(unless.atLeast) ||
+        !bound(unless.atMost)
+      )
+        throw new Error(`${id} ${where} endsIdle is true or { unless: { value, atLeast?, atMost? } }`);
+      const refIssue = valueRefIssue(unless.value, sheetNames(document));
+      if (refIssue) throw new Error(`${id} ${where} endsIdle unless value ${refIssue}`);
+    }
+    idle ??= `${where} endsIdle`;
+  }
+  if (idle) gate(RULESET_ENDS_IDLE_MIN, `has ${idle}, of 1.436`);
+  // 1.437: kept or waived only for some rows.
+  let narrowed;
+  for (const rule of [...(document?.combat?.conditions ?? []), ...(document?.combat?.levels ?? [])]) {
+    if (rule?.rowsWhere === undefined) continue;
+    const where = `combat ${rule?.condition !== undefined ? `condition "${rule.condition}"` : `level "${rule?.derived}"`}`;
+    const rows = rule.rowsWhere;
+    const list = (document?.sheet?.lists ?? []).find((one) => one?.id === rows?.list);
+    if (
+      (rule.shapeKeeps === undefined && rule.waives === undefined) ||
+      !rows ||
+      typeof rows !== "object" ||
+      Object.keys(rows).some((key) => !["list", "column", "is"].includes(key)) ||
+      !list ||
+      !(list.columns ?? []).some((column) => column?.id === rows.column) ||
+      !Array.isArray(rows.is) ||
+      rows.is.length === 0 ||
+      rows.is.some((value) => typeof value !== "string" || value.trim() === "")
+    )
+      throw new Error(
+        `${id} ${where} rowsWhere is { list, column, is: values } of a sheet list's column, beside shapeKeeps or waives`,
+      );
+    narrowed ??= `${where} rowsWhere`;
+  }
+  if (narrowed) gate(RULESET_ROWS_WHERE_MIN, `has ${narrowed}, of 1.438`);
+  // 1.438: no casting or concentrating, and an end when the holder goes down.
+  let limits;
+  for (const condition of document?.combat?.conditions ?? []) {
+    const where = `combat condition "${condition?.condition}"`;
+    if (condition?.forbids?.casts !== undefined) limits ??= `${where} forbids casts`;
+    if (condition?.forbids?.concentration !== undefined) limits ??= `${where} forbids concentration`;
+    if (condition?.endsWhenHolder?.downed !== undefined) limits ??= `${where} endsWhenHolder downed`;
+  }
+  if (limits) gate(RULESET_RAGE_LIMITS_MIN, `has ${limits}, of 1.438`);
+  // 1.439: a condition or level that makes its holder aware of the hidden.
+  for (const rule of [...(document?.combat?.conditions ?? []), ...(document?.combat?.levels ?? [])]) {
+    if (rule?.aware === undefined) continue;
+    const where = `combat ${rule?.condition !== undefined ? `condition "${rule.condition}"` : `level "${rule?.derived}"`}`;
+    const aware = rule.aware;
+    const conditionIds = new Set((document?.sheet?.live?.conditions ?? []).map((one) => one?.id));
+    if (
+      !document?.combat?.hiding ||
+      !aware ||
+      typeof aware !== "object" ||
+      Array.isArray(aware) ||
+      Object.keys(aware).some((key) => !["within", "lostWith", "of", "uncovered"].includes(key)) ||
+      typeof aware.within !== "number" ||
+      !(aware.within > 0) ||
+      aware.within > 10000 ||
+      (aware.lostWith !== undefined &&
+        (!Array.isArray(aware.lostWith) ||
+          aware.lostWith.length < 1 ||
+          aware.lostWith.length > 8 ||
+          aware.lostWith.some((condition) => !conditionIds.has(condition)))) ||
+      awareOfIssue(document, aware)
+    )
+      throw new Error(
+        `${id} ${where} aware is { within: 1 to 10000, lostWith?: conditions, of?: { types?: creature types, tags? }, uncovered?: true }, in a fight with combat.hiding`,
+      );
+    awareOf ??= `${where} aware`;
+  }
+  if (awareOf) gate(RULESET_AWARE_OF_MIN, `has ${awareOf}, of 1.439`);
+  if (endsChosen) gate(RULESET_ENDS_CHOSEN_MIN, `has ${endsChosen}, of 1.442`);
+  // 1.443: a use that works only on a roll, a failure spending only the row it names.
+  let chancy;
+  for (const [path, text] of catalogSources) {
+    let parsed;
+    try {
+      parsed = JSON.parse(String(text));
+    } catch {
+      continue;
+    }
+    for (const entry of parsed?.entries ?? []) {
+      const chance = entry?.mechanics?.chance;
+      if (chance === undefined) continue;
+      const at = `${id} ${path} ${entry?.id} mechanics.chance`;
+      const counters = (entry.rows ?? []).filter((row) => row?.list === "counters").map((row) => row?.values?.name);
+      const bound = (value) => value === undefined || (typeof value === "number" && Number.isFinite(value));
+      if (
+        !chance ||
+        typeof chance !== "object" ||
+        Object.keys(chance).some((key) => !["sides", "atMost", "sure", "failUses"].includes(key)) ||
+        !Number.isInteger(chance.sides) ||
+        chance.sides < 2 ||
+        chance.sides > 100 ||
+        (typeof chance.atMost === "number"
+          ? !Number.isInteger(chance.atMost) || chance.atMost < 1 || chance.atMost > chance.sides
+          : Boolean(valueRefIssue(chance.atMost, sheetNames(document)))) ||
+        (chance.sure !== undefined &&
+          (!chance.sure ||
+            Object.keys(chance.sure).some((key) => !["value", "atLeast", "atMost"].includes(key)) ||
+            Boolean(valueRefIssue(chance.sure.value, sheetNames(document))) ||
+            (chance.sure.atLeast === undefined && chance.sure.atMost === undefined) ||
+            !bound(chance.sure.atLeast) ||
+            !bound(chance.sure.atMost))) ||
+        (chance.failUses !== undefined && (!counters.includes(chance.failUses) || entry.mechanics.usesOf === undefined))
+      )
+        throw new Error(
+          `${at} is { sides: 2 to 100, atMost: up to sides or a sheet value, sure?: sheet bounds, failUses?: a counter row of its own beside usesOf }`,
+        );
+      chancy ??= `${path} ${entry.id} mechanics.chance`;
+    }
+  }
+  if (chancy) gate(RULESET_USE_CHANCE_MIN, `has ${chancy}, of 1.443`);
+  // 1.444: a condition that senses only presence.
+  for (const condition of document?.combat?.conditions ?? []) {
+    const presence = condition?.presence;
+    if (presence === undefined) continue;
+    const where = `combat condition "${condition?.condition}"`;
+    if (
+      !document?.combat?.creatureTypes ||
+      !presence ||
+      typeof presence !== "object" ||
+      Object.keys(presence).some((key) => !["within", "of"].includes(key)) ||
+      typeof presence.within !== "number" ||
+      !(presence.within > 0) ||
+      presence.of === undefined ||
+      awareOfIssue(document, { of: presence.of }) !== undefined
+    )
+      throw new Error(
+        `${id} ${where} presence is { within: a distance, of: a target test of the ruleset's creature types }, with combat.creatureTypes`,
+      );
+    gate(RULESET_PRESENCE_MIN, `has ${where} presence, of 1.444`);
+    break;
+  }
+  // 1.445: rows that recharge after days of game time.
+  for (const list of document?.sheet?.lists ?? []) {
+    const days = list?.pools?.rechargeDays;
+    if (days === undefined) continue;
+    const where = `sheet list "${list?.id}" pools.rechargeDays`;
+    const column = (list?.columns ?? []).find((one) => one?.id === list?.pools?.rechargeColumn);
+    if (
+      !days ||
+      typeof days !== "object" ||
+      Array.isArray(days) ||
+      Object.keys(days).length === 0 ||
+      column?.type !== "enum" ||
+      Object.entries(days).some(
+        ([value, count]) => !column.values?.includes(value) || !Number.isInteger(count) || count < 1 || count > 3650,
+      )
+    )
+      throw new Error(`${id} ${where} maps values of its recharge column's enum to 1-3650 days`);
+    gate(RULESET_TIMED_RECHARGE_MIN, `has ${where}, of 1.445`);
+    break;
+  }
+  // 1.446: a creature's calls by options, for rounds, bound to their caller; 1.449: sent away by it.
+  let calling;
+  let sendsAway;
+  for (const [path, text] of catalogSources) {
+    let parsed;
+    try {
+      parsed = JSON.parse(String(text));
+    } catch {
+      continue;
+    }
+    for (const entry of parsed?.entries ?? []) {
+      for (const action of entry?.creature?.actions ?? []) {
+        const calls = action?.calls;
+        if (
+          !calls ||
+          ![
+            "options",
+            "rounds",
+            "endsWithCaller",
+            "cantCall",
+            "dismissible",
+            "leash",
+            "arrivesIn",
+            "within",
+            "commandedBy",
+          ].some((key) => calls[key] !== undefined)
+        )
+          continue;
+        const at = `${path} ${entry?.id} action "${action?.id}" calls`;
+        const creatureIds = new Set((parsed.entries ?? []).map((one) => `${parsed.catalog ?? "creatures"}/${one?.id}`));
+        // 1.614: offered only out of some lights, or outdoors or indoors.
+        const callWhereOk = (where) =>
+          where &&
+          typeof where === "object" &&
+          !Array.isArray(where) &&
+          Object.keys(where).every((key) => ["notLight", "outdoors", "indoors"].includes(key)) &&
+          (where.notLight === undefined ||
+            (Array.isArray(where.notLight) &&
+              where.notLight.length >= 1 &&
+              where.notLight.length <= 4 &&
+              where.notLight.every((light) => ["sunlight", "bright", "dim", "dark"].includes(light)))) &&
+          [where.outdoors, where.indoors].every((flag) => flag === undefined || flag === true) &&
+          !(where.outdoors && where.indoors) &&
+          (where.notLight !== undefined || where.outdoors !== undefined || where.indoors !== undefined);
+        const budgetIds = new Set((document?.combat?.economy?.budgets ?? []).map((one) => one?.id));
+        const option = (one) =>
+          one &&
+          typeof one === "object" &&
+          Object.keys(one).every((key) => ["creature", "count", "label", "onlyWhere"].includes(key)) &&
+          (one.onlyWhere === undefined || callWhereOk(one.onlyWhere)) &&
+          typeof one.creature === "string" &&
+          creatureIds.has(one.creature) &&
+          one.count &&
+          typeof one.count === "object" &&
+          (one.label === undefined ||
+            (typeof one.label === "string" && one.label.trim().length > 0 && one.label.length <= 80));
+        if (
+          (calls.options !== undefined &&
+            (!Array.isArray(calls.options) ||
+              calls.options.length < 2 ||
+              calls.options.length > 8 ||
+              calls.creature !== undefined ||
+              calls.count !== undefined ||
+              !calls.options.every(option))) ||
+          (calls.rounds !== undefined &&
+            (!Number.isInteger(calls.rounds) || calls.rounds < 1 || calls.rounds > 14400)) ||
+          (calls.endsWithCaller !== undefined &&
+            calls.endsWithCaller !== true &&
+            calls.endsWithCaller !== "incapacitated") ||
+          (calls.cantCall !== undefined && calls.cantCall !== true) ||
+          // 1.736: acting only when their caller used one of its own actions.
+          (calls.commandedBy !== undefined &&
+            (!calls.commandedBy ||
+              typeof calls.commandedBy !== "object" ||
+              Object.keys(calls.commandedBy).some((key) => key !== "action") ||
+              !(entry.creature.actions ?? []).some((one) => one?.id === calls.commandedBy.action) ||
+              calls.commandedWith !== undefined)) ||
+          // 1.610: sent away on a budget of its own, and leashed.
+          (calls.dismissible !== undefined &&
+            calls.dismissible !== true &&
+            (!calls.dismissible ||
+              typeof calls.dismissible !== "object" ||
+              Object.keys(calls.dismissible).some((key) => key !== "budget") ||
+              !budgetIds.has(calls.dismissible.budget))) ||
+          (calls.leash !== undefined &&
+            (typeof calls.leash !== "number" || !(calls.leash > 0) || calls.leash > 10000)) ||
+          // 1.614: offered only where it says, arriving after their caller's turns.
+          (calls.onlyWhere !== undefined && !callWhereOk(calls.onlyWhere)) ||
+          // 1.621: set down within a distance of their caller.
+          (calls.within !== undefined && !callWithinOk(calls.within)) ||
+          (calls.arrivesIn !== undefined &&
+            (!calls.arrivesIn ||
+              typeof calls.arrivesIn !== "object" ||
+              Object.keys(calls.arrivesIn).some((key) => !["dice", "flat"].includes(key)) ||
+              (calls.arrivesIn.dice !== undefined && !/^\d+d\d+$/u.test(calls.arrivesIn.dice)) ||
+              (calls.arrivesIn.flat !== undefined &&
+                (!Number.isInteger(calls.arrivesIn.flat) || calls.arrivesIn.flat < 1))))
+        )
+          throw new Error(
+            `${id} ${at} is options (2 to 8 { creature, count, label?, onlyWhere? } in place of creature and count), rounds 1-14400, endsWithCaller true or "incapacitated", commandedBy { action } of its own and not with commandedWith, cantCall true, dismissible true or { budget }, leash a distance, onlyWhere { notLight?, outdoors?, indoors? } and arrivesIn { dice?, flat? }`,
+          );
+        if (calls.rounds > 1000) gate(RULESET_DAY_ROUNDS_MIN, `has ${at} rounds past 1000, of 1.482`);
+        if (calls.within !== undefined) gate(RULESET_CALL_WITHIN_MIN, `has ${at} within, of 1.621`);
+        if (calls.commandedBy !== undefined || calls.endsWithCaller === "incapacitated")
+          lateGate(
+            RULESET_CREATURE_CALLS_COMMANDED_MIN,
+            `has ${at} commandedBy or endsWithCaller "incapacitated", of 1.736`,
+          );
+        if (calls.leash !== undefined || (calls.dismissible && typeof calls.dismissible === "object"))
+          callLeash ??= `${at} leash or dismissible budget`;
+        if (
+          calls.onlyWhere !== undefined ||
+          calls.arrivesIn !== undefined ||
+          (calls.options ?? []).some((one) => one?.onlyWhere !== undefined)
+        )
+          callWhere ??= `${at} onlyWhere or arrivesIn`;
+        if (["options", "rounds", "endsWithCaller", "cantCall"].some((key) => calls[key] !== undefined)) calling ??= at;
+        if (calls.dismissible) sendsAway ??= at;
+      }
+    }
+  }
+  if (calling) gate(RULESET_CREATURE_CALL_OPTIONS_MIN, `has ${calling}, of 1.446`);
+  if (sendsAway) gate(RULESET_CALLS_DISMISSIBLE_MIN, `has ${sendsAway} dismissible, of 1.449`);
+  if (callLeash) gate(RULESET_CALL_LEASH_MIN, `has ${callLeash}, of 1.610`);
+  if (callWhere) gate(RULESET_CALL_WHERE_MIN, `has ${callWhere}, of 1.614`);
+  // 1.447, 1.448: durations that grow with the cost paid, and one of an entry's applies picked at use.
+  let perStepAt;
+  let oneOfAt;
+  let manyOneOfAt;
+  let byStepsAt;
+  let raisingAt;
+  for (const [path, text] of catalogSources) {
+    let parsed;
+    try {
+      parsed = JSON.parse(String(text));
+    } catch {
+      continue;
+    }
+    for (const entry of parsed?.entries ?? []) {
+      const mechanics = entry?.mechanics;
+      if (!mechanics || typeof mechanics !== "object") continue;
+      const at = `${path} ${entry?.id} mechanics`;
+      for (const applied of Array.isArray(mechanics.applies) ? mechanics.applies : []) {
+        // 1.616: for what was left of a condition of the fight's, beside rounds at most.
+        const remaining = applied?.duration?.remainingOf;
+        if (remaining !== undefined) {
+          if (
+            !(document?.combat?.conditions ?? []).some((one) => one?.condition === remaining) ||
+            !Number.isInteger(applied.duration.rounds) ||
+            applied.duration.rounds < 1
+          )
+            throw new Error(`${id} ${at} applies duration.remainingOf is a combat condition, beside rounds`);
+          remainingOfAt ??= `${at} applies duration.remainingOf`;
+        }
+        const perStep = applied?.duration?.perStep;
+        if (perStep === undefined) continue;
+        if (
+          !Number.isInteger(perStep) ||
+          perStep < 1 ||
+          perStep > 1000 ||
+          typeof applied.duration.rounds !== "number" ||
+          !Array.isArray(mechanics.cost) ||
+          mechanics.cost.length === 0
+        )
+          throw new Error(
+            `${id} ${at} applies duration.perStep is 1-1000 rounds on a rounds duration of an entry with a cost`,
+          );
+        perStepAt ??= `${at} applies duration.perStep`;
+      }
+      // 1.470: durations by the cost paid, and concentration below a step of it; 1.473: health maxima raised.
+      for (const carrier of [mechanics, entry?.item?.use]) {
+        if (!carrier || typeof carrier !== "object") continue;
+        const carrierAt = carrier === mechanics ? at : `${path} ${entry?.id} use`;
+        for (const applied of Array.isArray(carrier.applies) ? carrier.applies : []) {
+          const bySteps = applied?.duration?.bySteps;
+          if (bySteps !== undefined) {
+            if (
+              !Array.isArray(bySteps) ||
+              bySteps.length < 1 ||
+              bySteps.length > 9 ||
+              // 1.482: or no clock at all from that step.
+              bySteps.some(
+                (rounds) => rounds !== "until-dispelled" && (!Number.isInteger(rounds) || rounds < 1 || rounds > 14400),
+              ) ||
+              typeof applied.duration.rounds !== "number" ||
+              applied.duration.perStep !== undefined
+            )
+              throw new Error(
+                `${id} ${carrierAt} applies duration.bySteps is 1 to 9 of 1-14400 rounds or "until-dispelled", on a rounds duration with no perStep`,
+              );
+            byStepsAt ??= `${carrierAt} applies duration.bySteps`;
+          }
+          const raise = applied?.raisesMax;
+          if (raise !== undefined) {
+            const amount = (value) => Number.isInteger(value) && value >= 1 && value <= 1000;
+            if (
+              !raise ||
+              typeof raise !== "object" ||
+              Object.keys(raise).some((key) => !["dice", "flat", "perStep"].includes(key)) ||
+              (raise.dice === undefined && raise.flat === undefined) ||
+              (raise.dice !== undefined &&
+                (typeof raise.dice !== "string" || !/^\d{1,2}d\d{1,3}$/u.test(raise.dice))) ||
+              (raise.flat !== undefined && !amount(raise.flat)) ||
+              (raise.perStep !== undefined && !amount(raise.perStep))
+            )
+              throw new Error(
+                `${id} ${carrierAt} applies raisesMax is { dice?, flat?: 1-1000, perStep?: 1-1000 } with dice or flat`,
+              );
+            raisingAt ??= `${carrierAt} applies raisesMax`;
+          }
+        }
+        if (carrier.concentrationBelowStep !== undefined) {
+          const below = carrier.concentrationBelowStep;
+          if (!Number.isInteger(below) || below < 1 || below > 9 || carrier.concentration !== true)
+            throw new Error(`${id} ${carrierAt} concentrationBelowStep is 1 to 9, on a concentration entry`);
+          byStepsAt ??= `${carrierAt} concentrationBelowStep`;
+        }
+      }
+      if (mechanics.appliesOneOf === undefined) {
+        if (
+          Array.isArray(mechanics.applies) &&
+          mechanics.applies.length > 6 &&
+          // 1.525: up to twelve when each says the steps it is paid at.
+          (mechanics.applies.length > 12 || mechanics.applies.some((one) => one?.paidSteps === undefined))
+        )
+          throw new Error(
+            `${id} ${at} applies up to 6 conditions, or up to 12 with appliesOneOf or each with paidSteps`,
+          );
+        continue;
+      }
+      if (
+        mechanics.appliesOneOf !== true ||
+        !Array.isArray(mechanics.applies) ||
+        mechanics.applies.length < 2 ||
+        mechanics.applies.length > 12 ||
+        ["cureOneOf", "kindChoice", "forms", "calls", "conjures"].some((key) => mechanics[key] !== undefined)
+      )
+        throw new Error(
+          `${id} ${at} appliesOneOf is true over 2 to 12 applies, without cureOneOf, kindChoice, forms, calls or conjures`,
+        );
+      oneOfAt ??= `${at} appliesOneOf`;
+      if (mechanics.applies.length > 6) manyOneOfAt ??= `${at} appliesOneOf over ${mechanics.applies.length} applies`;
+    }
+  }
+  if (remainingOfAt) gate(RULESET_REMAINING_OF_MIN, `has ${remainingOfAt}, of 1.616`);
+  if (perStepAt) gate(RULESET_DURATION_PER_STEP_MIN, `has ${perStepAt}, of 1.447`);
+  // 1.450: by the health left, and sending away only some kinds.
+  let tiersAt;
+  for (const [path, text] of catalogSources) {
+    let parsed;
+    try {
+      parsed = JSON.parse(String(text));
+    } catch {
+      continue;
+    }
+    for (const entry of parsed?.entries ?? []) {
+      const mechanics = entry?.mechanics;
+      if (!mechanics || typeof mechanics !== "object") continue;
+      const at = `${path} ${entry?.id} mechanics`;
+      const tiered = (Array.isArray(mechanics.applies) ? mechanics.applies : []).filter(
+        (one) => one?.targetHealthAtMost !== undefined,
+      );
+      const whole = (value) => Number.isInteger(value) && value >= 1 && value <= 100000;
+      if (
+        tiered.some((one) => !whole(one.targetHealthAtMost)) ||
+        (mechanics.killsAtMost !== undefined && (!whole(mechanics.killsAtMost) || !mechanics.save)) ||
+        (mechanics.dismissesIs !== undefined &&
+          (mechanics.dismisses === undefined || awareOfIssue(document, { of: mechanics.dismissesIs }) !== undefined))
+      )
+        throw new Error(
+          `${id} ${at} targetHealthAtMost and killsAtMost (with a save) are whole health, and dismissesIs a target test of creature types beside dismisses`,
+        );
+      if (tiered.length > 0 || mechanics.killsAtMost !== undefined || mechanics.dismissesIs !== undefined)
+        tiersAt ??= at;
+    }
+  }
+  if (tiersAt) gate(RULESET_HEALTH_TIERS_MIN, `has ${tiersAt} by health left, of 1.450`);
+  // 1.451, checked where its zone is read above.
+  if (glyphing) gate(RULESET_GLYPHS_MIN, `has ${glyphing}, of 1.451`);
+  if (keepingOut) gate(RULESET_KEEPS_OUT_MIN, `has ${keepingOut}, of 1.452`);
+  if (reachBarrier) gate(RULESET_REACH_BARRIER_MIN, `has ${reachBarrier}, of 1.595`);
+  if (becoming) gate(RULESET_BECOMES_MIN, `has ${becoming}, of 1.453`);
+  if (storing) gate(RULESET_STORES_MIN, `has ${storing}, of 1.454`);
+  if (hiddenZone) gate(RULESET_HIDDEN_ZONES_MIN, `has ${hiddenZone}, of 1.455`);
+  if (outlasting) gate(RULESET_OUTLASTS_MIN, `has ${outlasting}, of 1.456`);
+  if (keepingIn) gate(RULESET_KEEPS_IN_WARDS_MIN, `has ${keepingIn}, of 1.458`);
+  if (freeing) gate(RULESET_FREES_MIN, `has ${freeing}, of 1.459`);
+  if (insideTest) gate(RULESET_INSIDE_TEST_MIN, `has ${insideTest}, of 1.460`);
+  if (castingOver) gate(RULESET_CASTING_ROUNDS_MIN, `has ${castingOver}, of 1.461`);
+  if (setUpBefore) gate(RULESET_BEFORE_FIGHT_MIN, `has ${setUpBefore}, of 1.462`);
+  if (steering) gate(RULESET_STEERS_MIN, `has ${steering}, of 1.464`);
+  if (setUpAny) gate(RULESET_BEFORE_FIGHT_ANY_MIN, `has ${setUpAny}, of 1.465`);
+  if (insideChoosing) gate(RULESET_INSIDE_CHOOSES_MIN, `has ${insideChoosing}, of 1.466`);
+  if (barring) gate(RULESET_FORBIDS_TELEPORT_MIN, `has ${barring}, of 1.467`);
+  if (raying) gate(RULESET_RAYS_MIN, `has ${raying}, of 1.468`);
+  if (manyOneOfAt) gate(RULESET_APPLIES_ONE_OF_MANY_MIN, `has ${manyOneOfAt}, of 1.469`);
+  if (byStepsAt) gate(RULESET_DURATION_BY_STEPS_MIN, `has ${byStepsAt}, of 1.470`);
+  {
+    const unrolled = (document.combat?.conditions ?? []).find((entry) =>
+      (Array.isArray(entry?.modifiers) ? entry.modifiers : []).some((one) => one?.alsoUnrolled !== undefined),
+    );
+    if (unrolled)
+      gate(
+        RULESET_ALSO_UNROLLED_MIN,
+        `has combat condition "${unrolled.condition}" with damage counted unrolled, of 1.471`,
+      );
+    const after = (document.combat?.conditions ?? []).find((entry) => entry?.behavior?.walks === "after");
+    if (after) gate(RULESET_WALKS_AFTER_MIN, `has combat condition "${after.condition}" walked after acting, of 1.472`);
+  }
+  if (raisingAt) gate(RULESET_RAISES_MAX_MIN, `has ${raisingAt}, of 1.473`);
+  {
+    // 1.474-1.483: Wish's duplicates, splitting creatures, wards by catalog, worn falls and holds,
+    // terrain holds, day-long clocks and saves on the source's turn.
+    const conditionIds = new Set((document?.combat?.conditions ?? []).map((one) => one?.condition));
+    const catalogIds = new Set((document?.catalogs ?? []).map((one) => one?.id));
+    let duplicating, splitting, byCatalog, itemHolding, offTerrain, dayLong, sourceTurn, toCalled, vanishing, lending;
+    let kindHeld,
+      undispelled,
+      freeMoving,
+      familiars,
+      lendingStrikes,
+      answering,
+      harmingBack,
+      layered,
+      layerBlocking,
+      endingLayers,
+      standingFor,
+      itemEndingLayers;
+    const creatureTypeIds = new Set((document?.combat?.creatureTypes?.types ?? []).map((one) => one?.id));
+    const budgetIds = new Set((document?.combat?.economy?.budgets ?? []).map((one) => one?.id));
+    const liveConditionIds = new Set((document?.sheet?.live?.conditions ?? []).map((one) => one?.id));
+    const saveIds = new Set((document?.sheet?.saves ?? []).map((one) => one?.id));
+    // 1.490: a zone's layers, each row's applies one of the entry's own, and its flash.
+    const layersOf = (mechanics, at) => {
+      const layers = mechanics?.zone?.layers;
+      if (layers === undefined) return;
+      const own = new Set((mechanics.applies ?? []).map((one) => one?.condition));
+      const rows = layers?.rows;
+      if (
+        !layers ||
+        typeof layers !== "object" ||
+        Object.keys(layers).some((key) => !["rows", "spares", "flash"].includes(key)) ||
+        !Array.isArray(rows) ||
+        rows.length < 1 ||
+        rows.length > 12 ||
+        new Set(rows.map((row) => row?.id)).size !== rows.length ||
+        (layers.spares !== undefined &&
+          !["caster", "allies"].includes(layers.spares) &&
+          !(
+            layers.spares &&
+            typeof layers.spares === "object" &&
+            Object.keys(layers.spares).every((key) => key === "chosen") &&
+            Number.isInteger(layers.spares.chosen) &&
+            layers.spares.chosen >= 1 &&
+            layers.spares.chosen <= 20
+          )) ||
+        !mechanics.area ||
+        !mechanics.save
+      )
+        throw new Error(
+          `${id} ${at} zone layers is { rows: 1 to 12 distinct layers, spares?: caster, allies or { chosen: 1 to 20 }, flash? }, on an entry with an area and a save`,
+        );
+      for (const row of rows) {
+        const ended = row?.endedBy;
+        if (
+          Object.keys(row ?? {}).some(
+            (key) => !["id", "label", "damageType", "applies", "save", "endedBy", "blocks"].includes(key),
+          ) ||
+          (row.blocks !== undefined &&
+            (!Array.isArray(row.blocks) ||
+              row.blocks.length < 1 ||
+              row.blocks.length > 3 ||
+              new Set(row.blocks).size !== row.blocks.length ||
+              row.blocks.some((one) => !["ranged-nonmagical", "ranged-magical", "spells"].includes(one)))) ||
+          typeof row.id !== "string" ||
+          typeof row.label !== "string" ||
+          (row.damageType !== undefined && !mechanics.amount) ||
+          (row.applies !== undefined && (!Array.isArray(row.applies) || row.applies.some((one) => !own.has(one)))) ||
+          (row.save !== undefined && saveIds.size > 0 && !saveIds.has(row.save)) ||
+          (ended !== undefined &&
+            (!ended ||
+              typeof ended !== "object" ||
+              Object.keys(ended).some((key) => !["damage", "entries", "wind"].includes(key)) ||
+              (!ended.damage && !ended.entries && !ended.wind) ||
+              (ended.damage !== undefined &&
+                (!Array.isArray(ended.damage.types) ||
+                  ended.damage.types.length < 1 ||
+                  !Number.isInteger(ended.damage.atLeast))) ||
+              (ended.entries !== undefined &&
+                (!Array.isArray(ended.entries) ||
+                  ended.entries.some((ref) => typeof ref !== "string" || !catalogIds.has(ref.split("/")[0])))) ||
+              (ended.wind !== undefined && ended.wind !== true)))
+        )
+          throw new Error(
+            `${id} ${at} zone layer "${row?.id}" is { id, label, damageType? with an amount, applies? of the entry's own, save?, blocks? ranged-nonmagical, ranged-magical or spells once each, endedBy? damage, entries of the ruleset's catalogs or wind }`,
+          );
+      }
+      const flash = layers.flash;
+      if (
+        flash !== undefined &&
+        (!flash ||
+          typeof flash !== "object" ||
+          typeof flash.within !== "number" ||
+          !(flash.within > 0) ||
+          (saveIds.size > 0 && !saveIds.has(flash.save)) ||
+          !Array.isArray(flash.applies) ||
+          flash.applies.length < 1 ||
+          flash.applies.some((one) => !conditionIds.has(one?.condition)) ||
+          !Array.isArray(flash.triggers) ||
+          flash.triggers.length < 1 ||
+          flash.triggers.some((one) => !["appears", "enter", "turn-start"].includes(one)))
+      )
+        throw new Error(
+          `${id} ${at} zone layers flash is { within, save, applies: combat conditions, triggers: appears, enter or turn-start }`,
+        );
+      layered ??= `${at} zone of layers`;
+      if (typeof layers.spares === "object" || rows.some((row) => row?.blocks !== undefined))
+        layerBlocking ??= `${at} zone layers that block or spare as picked`;
+    };
+    const conditionKinds = new Set(
+      (document?.combat?.conditions ?? []).flatMap((one) => (Array.isArray(one?.kinds) ? one.kinds : [])),
+    );
+    // 1.486: speed kept from catalogs and slipping free, on a condition or an item effect.
+    const freely = (carrier, at) => {
+      if (carrier?.speedKeptFrom !== undefined) {
+        const kept = carrier.speedKeptFrom;
+        if (
+          !kept ||
+          typeof kept !== "object" ||
+          Object.keys(kept).some((key) => key !== "catalogs") ||
+          !Array.isArray(kept.catalogs) ||
+          kept.catalogs.length < 1 ||
+          kept.catalogs.length > 8 ||
+          kept.catalogs.some((catalog) => !catalogIds.has(catalog))
+        )
+          throw new Error(`${id} ${at} speedKeptFrom is { catalogs: 1 to 8 of the ruleset's catalogs }`);
+        freeMoving ??= `${at} keeping its speed from magic`;
+      }
+      if (carrier?.slipsFree !== undefined) {
+        const slips = carrier.slipsFree;
+        if (
+          !slips ||
+          typeof slips !== "object" ||
+          Object.keys(slips).some((key) => !["conditions", "cost", "unlessCatalogs"].includes(key)) ||
+          !Array.isArray(slips.conditions) ||
+          slips.conditions.length < 1 ||
+          slips.conditions.length > 12 ||
+          slips.conditions.some((one) => !conditionIds.has(one)) ||
+          typeof slips.cost !== "number" ||
+          !(slips.cost >= 0 && slips.cost <= 10000) ||
+          (slips.unlessCatalogs !== undefined &&
+            (!Array.isArray(slips.unlessCatalogs) ||
+              slips.unlessCatalogs.length < 1 ||
+              slips.unlessCatalogs.length > 8 ||
+              slips.unlessCatalogs.some((catalog) => !catalogIds.has(catalog))))
+        )
+          throw new Error(
+            `${id} ${at} slipsFree is { conditions: 1 to 12 combat conditions, cost: 0 to 10000, unlessCatalogs?: 1 to 8 of the ruleset's catalogs }`,
+          );
+        freeMoving ??= `${at} slipping free`;
+      }
+    };
+    // Any rounds past 1000, anywhere in a duration or a bySteps that ends its clock.
+    const clocks = (value, at) => {
+      if (!value || typeof value !== "object") return;
+      if (Array.isArray(value)) return value.forEach((one) => clocks(one, at));
+      const duration = value.duration;
+      if (duration === "until-dispelled") undispelled ??= `${at} lasting until dispelled`;
+      if (duration && typeof duration === "object") {
+        if (typeof duration.rounds === "number" && duration.rounds > 1000) {
+          if (!Number.isInteger(duration.rounds) || duration.rounds > 14400)
+            throw new Error(`${id} ${at} duration rounds are 1 to 14400`);
+          dayLong ??= `${at} duration of ${duration.rounds} rounds`;
+        }
+        // bySteps reached 14400 rounds with 1.470; only a step with no clock is new.
+        if (Array.isArray(duration.bySteps) && duration.bySteps.includes("until-dispelled"))
+          dayLong ??= `${at} duration.bySteps until dispelled`;
+      }
+      const saveEnds = value.saveEnds;
+      if (saveEnds && typeof saveEnds === "object") {
+        if (saveEnds.at === "source-turn-start") sourceTurn ??= `${at} saveEnds at its source's turn`;
+        if (saveEnds.failures?.dismisses !== undefined) sourceTurn ??= `${at} saveEnds failures dismissing`;
+      }
+      for (const inner of Object.values(value)) clocks(inner, at);
+    };
+    for (const [path, text] of catalogSources) {
+      let parsed;
+      try {
+        parsed = JSON.parse(String(text));
+      } catch {
+        continue;
+      }
+      for (const entry of parsed?.entries ?? []) {
+        const at = `${path} ${entry?.id}`;
+        clocks(entry?.mechanics, `${at} mechanics`);
+        // 1.493: a row read in a fight as the entry it stands for.
+        for (const row of Array.isArray(entry?.rows) ? entry.rows : []) {
+          if (row?.standsFor === undefined) continue;
+          if (
+            typeof row.standsFor !== "string" ||
+            !/^[^/]+\/[^/]+$/u.test(row.standsFor) ||
+            !catalogIds.has(row.standsFor.split("/")[0])
+          )
+            throw new Error(
+              `${id} ${at} row standsFor is a <catalog>/<entry> reference to one of the ruleset's catalogs`,
+            );
+          standingFor ??= `${at} row standing for ${row.standsFor}`;
+        }
+        clocks(entry?.item, `${at} item`);
+        for (const mechanics of [entry?.mechanics, entry?.item?.use]) {
+          if (mechanics?.appliesToCalled !== undefined) {
+            if (
+              mechanics.appliesToCalled !== true ||
+              !mechanics.calls ||
+              !Array.isArray(mechanics.applies) ||
+              mechanics.applies.length === 0
+            )
+              throw new Error(`${id} ${at} appliesToCalled is true, on an entry that calls and applies`);
+            toCalled ??= `${at} applying to what it calls`;
+          }
+          if (mechanics?.calls?.initiative === "none") toCalled ??= `${at} calling what takes no turns`;
+          // 1.491: aimed at a standing layered wall to break the layer that names it.
+          if (mechanics?.endsLayers !== undefined) {
+            if (mechanics.endsLayers !== true) throw new Error(`${id} ${at} endsLayers is true`);
+            endingLayers ??= `${at} breaking a wall's layer`;
+            // 1.494: on an item's use, named as the entry a layer's endedBy.entries lists.
+            if (mechanics === entry?.item?.use) {
+              if (typeof mechanics.endsLayersAs !== "string" || !catalogIds.has(mechanics.endsLayersAs.split("/")[0]))
+                throw new Error(
+                  `${id} ${at} item use endsLayers names endsLayersAs, a <catalog>/<entry> of the ruleset's catalogs`,
+                );
+              itemEndingLayers ??= `${at} item use breaking a wall's layer`;
+            }
+          }
+          // 1.487: the types a call's creatures are instead of their own, and one's own called creature.
+          if (mechanics?.calls?.asTypes !== undefined) {
+            const asTypes = mechanics.calls.asTypes;
+            if (
+              !Array.isArray(asTypes) ||
+              asTypes.length < 1 ||
+              asTypes.length > 6 ||
+              new Set(asTypes).size !== asTypes.length ||
+              asTypes.some((type) => !creatureTypeIds.has(type))
+            )
+              throw new Error(`${id} ${at} calls asTypes is 1 to 6 declared creature types, each once`);
+            familiars ??= `${at} calling as other creature types`;
+          }
+          if (mechanics?.targetTypes?.calledBySelf !== undefined)
+            familiars ??= `${at} targeting only its user's called creatures`;
+          layersOf(mechanics, `${at} mechanics`);
+          if (mechanics?.conjures?.vanishes !== undefined) vanishing ??= `${at} conjuring what vanishes`;
+        }
+        const duplicates = entry?.mechanics?.duplicates;
+        if (duplicates !== undefined) {
+          if (
+            !duplicates ||
+            typeof duplicates !== "object" ||
+            Object.keys(duplicates).some((key) => !["catalog", "upTo", "only"].includes(key)) ||
+            !catalogIds.has(duplicates.catalog) ||
+            !Number.isInteger(duplicates.upTo) ||
+            duplicates.upTo < 1 ||
+            duplicates.upTo > 20 ||
+            (duplicates.only !== undefined &&
+              (!Array.isArray(duplicates.only) || duplicates.only.length < 1 || duplicates.only.length > 200))
+          )
+            throw new Error(
+              `${id} ${at} mechanics duplicates is { catalog: one of the ruleset's catalogs, upTo: 1 to 20, only?: 1 to 200 entry ids }`,
+            );
+          duplicating ??= `${at} duplicating ${duplicates.catalog}`;
+        }
+        const splits = entry?.creature?.splits ?? entry?.splits;
+        if (splits !== undefined) {
+          if (
+            !splits ||
+            typeof splits !== "object" ||
+            Object.keys(splits).some((key) => !["by", "atLeast", "smallest"].includes(key)) ||
+            !Array.isArray(splits.by) ||
+            splits.by.length < 1 ||
+            splits.by.length > 8 ||
+            splits.by.some((kind) => typeof kind !== "string" || kind.length < 1 || kind.length > 40) ||
+            !Number.isInteger(splits.atLeast) ||
+            splits.atLeast < 2 ||
+            splits.atLeast > 10000 ||
+            (splits.smallest !== undefined && typeof splits.smallest !== "string")
+          )
+            throw new Error(
+              `${id} ${at} splits is { by: 1 to 8 damage kinds, atLeast: 2 to 10000, smallest?: a size }`,
+            );
+          splitting ??= `${at} splitting`;
+        }
+        for (const hold of ["worn", "carried"]) {
+          const carrier = entry?.item?.[hold];
+          if (!carrier) continue;
+          if (carrier.fallsSafely !== undefined && carrier.fallsSafely !== true)
+            throw new Error(`${id} ${at} ${hold} fallsSafely is true when it is given`);
+          if (
+            carrier.suppresses !== undefined &&
+            (!Array.isArray(carrier.suppresses) ||
+              carrier.suppresses.length < 1 ||
+              carrier.suppresses.length > 12 ||
+              new Set(carrier.suppresses).size !== carrier.suppresses.length ||
+              // 1.484: or a kind of condition.
+              carrier.suppresses.some((held) => !conditionIds.has(held) && !conditionKinds.has(held)))
+          )
+            throw new Error(`${id} ${at} ${hold} suppresses is 1 to 12 combat conditions or kinds of them, each once`);
+          if (carrier.fallsSafely || carrier.suppresses)
+            itemHolding ??= `${at} ${hold} landing safely or holding conditions off`;
+          if ((carrier.suppresses ?? []).some((held) => !conditionIds.has(held)))
+            kindHeld ??= `${at} ${hold} holding off a kind of condition`;
+          freely(carrier, `${at} ${hold}`);
+          // 1.489: hard going ignored on an item.
+          if (carrier.ignoresHardGround !== undefined) {
+            if (carrier.ignoresHardGround !== true)
+              throw new Error(`${id} ${at} ${hold} ignoresHardGround is true when it is given`);
+            answering ??= `${at} ${hold} ignoring hard going`;
+          }
+          for (const ward of Array.isArray(carrier.conditionImmunitiesFrom) ? carrier.conditionImmunitiesFrom : []) {
+            if (
+              !Array.isArray(ward?.conditions) ||
+              ward.conditions.some((one) => !conditionIds.has(one)) ||
+              (ward.catalogs !== undefined &&
+                (!Array.isArray(ward.catalogs) || ward.catalogs.some((catalog) => !catalogIds.has(catalog))))
+            )
+              throw new Error(
+                `${id} ${at} ${hold} conditionImmunitiesFrom names combat conditions and the ruleset's catalogs`,
+              );
+            freeMoving ??= `${at} ${hold} warding conditions by their source`;
+          }
+        }
+      }
+    }
+    for (const entry of document?.combat?.conditions ?? []) {
+      const at = `combat condition "${entry?.condition}"`;
+      clocks(entry, at);
+      freely(entry, at);
+      if (entry?.lendsSenses !== undefined) {
+        if (entry.lendsSenses !== true) throw new Error(`${id} ${at} lendsSenses is true when it is given`);
+        lending ??= `${at} lending senses`;
+      }
+      // 1.488: an attack given up for one by a called creature, paid from its budget.
+      if (entry?.lendsStrikes !== undefined) {
+        const lends = entry.lendsStrikes;
+        if (
+          !lends ||
+          typeof lends !== "object" ||
+          Object.keys(lends).some((key) => key !== "budget") ||
+          (budgetIds.size > 0 && !budgetIds.has(lends.budget))
+        )
+          throw new Error(`${id} ${at} lendsStrikes is { budget: one of the economy's budgets }`);
+        lendingStrikes ??= `${at} lending strikes`;
+      }
+      // 1.489: an answer to a hit, the attacker saving or taking conditions; 1.508: or harmed with no save,
+      // from within a distance.
+      if (entry?.whenHit !== undefined) {
+        const hit = entry.whenHit;
+        const harm = hit?.harms;
+        if (
+          !hit ||
+          typeof hit !== "object" ||
+          Object.keys(hit).some(
+            (key) => !["blow", "from", "save", "applies", "harms", "within", "touches"].includes(key),
+          ) ||
+          (hit.blow !== undefined && !["melee", "ranged"].includes(hit.blow)) ||
+          (hit.from !== undefined && (hit.from?.types ?? []).some((type) => !creatureTypeIds.has(type))) ||
+          (hit.applies === undefined && harm === undefined) ||
+          (hit.save !== undefined &&
+            (hit.applies === undefined || (saveIds.size > 0 && !saveIds.has(hit.save?.save)))) ||
+          (hit.applies !== undefined &&
+            (!Array.isArray(hit.applies) ||
+              hit.applies.length < 1 ||
+              hit.applies.length > 4 ||
+              hit.applies.some((one) => !conditionIds.has(one?.condition)))) ||
+          (harm !== undefined &&
+            (!harm ||
+              typeof harm !== "object" ||
+              Object.keys(harm).some((key) => !["dice", "flat", "damageType"].includes(key)) ||
+              (harm.dice === undefined && harm.flat === undefined))) ||
+          (hit.within !== undefined && !(Number.isFinite(hit.within) && hit.within > 0 && hit.within <= 10000))
+        )
+          throw new Error(
+            `${id} ${at} whenHit is { blow?: melee or ranged, from?: declared types, save?: { save } with applies, applies?: 1 to 4 combat conditions, harms?: { dice?, flat?, damageType? }, within? }, applies or harms given`,
+          );
+        answering ??= `${at} answering a hit`;
+        if (harm !== undefined || hit.within !== undefined || hit.save === undefined)
+          harmingBack ??= `${at} whenHit harms, within or no save`;
+      }
+      if (entry?.whileOffTerrain !== undefined) {
+        if (
+          !Array.isArray(entry.whileOffTerrain) ||
+          entry.whileOffTerrain.length < 1 ||
+          entry.whileOffTerrain.length > 12 ||
+          entry.whileOffTerrain.some(
+            (terrain) => typeof terrain !== "string" || terrain.length < 1 || terrain.length > 40,
+          )
+        )
+          throw new Error(`${id} ${at} whileOffTerrain is 1 to 12 terrains`);
+        offTerrain ??= `${at} held off on terrain`;
+      }
+      for (const ward of Array.isArray(entry?.conditionImmunitiesFrom) ? entry.conditionImmunitiesFrom : []) {
+        if (ward?.catalogs === undefined) continue;
+        if (
+          !Array.isArray(ward.catalogs) ||
+          ward.catalogs.length < 1 ||
+          ward.catalogs.length > 8 ||
+          ward.catalogs.some((catalog) => !catalogIds.has(catalog))
+        )
+          throw new Error(`${id} ${at} conditionImmunitiesFrom catalogs is 1 to 8 of the ruleset's catalogs`);
+        byCatalog ??= `${at} warded against catalogs`;
+      }
+    }
+    for (const creature of document?.creatures ?? []) {
+      if (creature?.splits !== undefined) splitting ??= `creature "${creature.id}" splitting`;
+    }
+    // 1.495: walking through creatures and solid ground.
+    let passing;
+    const sizePassing = document?.combat?.sizes?.passing;
+    if (sizePassing !== undefined) {
+      const steps = (value, low, high) =>
+        value === undefined || (Number.isInteger(value) && value >= low && value <= high);
+      if (
+        !sizePassing ||
+        typeof sizePassing !== "object" ||
+        Object.keys(sizePassing).some((key) => !["apart", "crowded"].includes(key)) ||
+        (sizePassing.apart === undefined && sizePassing.crowded === undefined) ||
+        !steps(sizePassing.apart, 1, 9) ||
+        !steps(sizePassing.crowded, 2, 4)
+      )
+        throw new Error(`${id} combat sizes passing is { apart?: 1 to 9, crowded?: 2 to 4 }, one of them given`);
+      passing ??= "combat sizes passing";
+    }
+    for (const rule of [...(document?.combat?.conditions ?? []), ...(document?.combat?.levels ?? [])]) {
+      const at = `combat ${rule?.condition !== undefined ? `condition "${rule.condition}"` : `level "${rule?.derived}"`}`;
+      if (rule?.passesCreatures !== undefined) {
+        if (!["larger", "any"].includes(rule.passesCreatures))
+          throw new Error(`${id} ${at} passesCreatures is "larger" or "any"`);
+        passing ??= `${at} passing creatures`;
+      }
+    }
+    // 1.497: dragged along by whoever put it on.
+    let dragging;
+    for (const entry of document?.combat?.conditions ?? []) {
+      const at = `combat condition "${entry?.condition}"`;
+      if (entry?.passesObjects !== undefined) {
+        const objects = entry.passesObjects;
+        const harm = objects?.harm;
+        if (
+          !objects ||
+          typeof objects !== "object" ||
+          Object.keys(objects).some((key) => key !== "harm") ||
+          (harm !== undefined &&
+            (!harm ||
+              typeof harm !== "object" ||
+              Object.keys(harm).some((key) => !["dice", "flat", "damageType"].includes(key)) ||
+              (harm.dice === undefined && harm.flat === undefined) ||
+              (harm.dice !== undefined && (typeof harm.dice !== "string" || !/^\d+d\d+$/u.test(harm.dice))) ||
+              (harm.flat !== undefined && !Number.isInteger(harm.flat)) ||
+              (harm.damageType !== undefined && (typeof harm.damageType !== "string" || harm.damageType.length > 40))))
+        )
+          throw new Error(`${id} ${at} passesObjects is { harm?: { dice or flat, damageType? } }`);
+        passing ??= `${at} passing solid ground`;
+      }
+      if (entry?.dragged !== undefined) {
+        const dragged = entry.dragged;
+        if (
+          !dragged ||
+          typeof dragged !== "object" ||
+          Object.keys(dragged).some((key) => key !== "unlessSmaller") ||
+          (dragged.unlessSmaller !== undefined &&
+            (!Number.isInteger(dragged.unlessSmaller) || dragged.unlessSmaller < 1 || dragged.unlessSmaller > 9))
+        )
+          throw new Error(`${id} ${at} dragged is { unlessSmaller?: 1 to 9 }`);
+        dragging ??= `${at} dragged along`;
+      }
+    }
+    // 1.496: riding a willing creature of one's side.
+    let mounting, weaponChanging, trueStriking, ownHitting, entering, weighing;
+    let imaging, blinking, stoppingTime, criticalsNormal, takingAim, diceless, waterOnly, wornKeeping, suppressedHarmed;
+    let changingAbilities, raising, payingSteps, endingForAny, countingUses, wardingCondition, suppressing;
+    const abilityIdsAll = new Set((document?.sheet?.abilities ?? []).map((one) => one?.id));
+    // 1.515 and 1.516: ability changes by ability id.
+    const abilityChangesIssue = (changes, keys) =>
+      !changes ||
+      typeof changes !== "object" ||
+      Array.isArray(changes) ||
+      Object.keys(changes).length === 0 ||
+      Object.entries(changes).some(
+        ([ability, change]) =>
+          !abilityIdsAll.has(ability) ||
+          !change ||
+          typeof change !== "object" ||
+          Object.keys(change).length === 0 ||
+          Object.keys(change).some((key) => !keys.includes(key)) ||
+          // An `add` may take some off (Capability API 1.478 allows it): 5e's Strength Drain (0.430.0).
+          Object.entries(change).some(
+            ([key, one]) =>
+              !Number.isInteger(one) || one < (keys.includes("by") ? 1 : key === "add" ? -30 : 0) || one > 30,
+          ),
+      );
+    const mounts = document?.combat?.mounts;
+    if (mounts !== undefined) {
+      const standard = ["dash", "disengage", "dodge", "help", "hide", "ready", "search"];
+      const fall = mounts?.fall;
+      if (
+        !mounts ||
+        typeof mounts !== "object" ||
+        Object.keys(mounts).some((key) => !["larger", "controlled", "fall", "weights"].includes(key)) ||
+        (mounts.weights !== undefined &&
+          (!mounts.weights ||
+            typeof mounts.weights !== "object" ||
+            Object.keys(mounts.weights).some((key) => !["bySize", "sheet"].includes(key)) ||
+            !mounts.weights.bySize ||
+            typeof mounts.weights.bySize !== "object" ||
+            Object.entries(mounts.weights.bySize).some(
+              ([size, pounds]) =>
+                !(document?.combat?.sizes?.order ?? []).some((one) => one?.id === size) ||
+                typeof pounds !== "number" ||
+                !Number.isFinite(pounds) ||
+                pounds < 0 ||
+                pounds > 1000000,
+            ) ||
+            (mounts.weights.sheet !== undefined &&
+              (!mounts.weights.sheet || typeof mounts.weights.sheet !== "object")))) ||
+        !Number.isInteger(mounts.larger) ||
+        mounts.larger < 1 ||
+        mounts.larger > 9 ||
+        (mounts.controlled !== undefined &&
+          (!mounts.controlled ||
+            Object.keys(mounts.controlled).some((key) => key !== "standard") ||
+            !Array.isArray(mounts.controlled.standard) ||
+            mounts.controlled.standard.length > 7 ||
+            mounts.controlled.standard.some((one) => !standard.includes(one)))) ||
+        (fall !== undefined &&
+          (!fall ||
+            Object.keys(fall).some((key) => !["save", "difficulty", "applies", "when", "landsWith"].includes(key)) ||
+            (fall.landsWith !== undefined &&
+              !(document?.combat?.economy?.budgets ?? []).some((one) => one?.id === fall.landsWith)) ||
+            (saveIds.size > 0 && !saveIds.has(fall.save)) ||
+            !Number.isInteger(fall.difficulty) ||
+            fall.difficulty < 0 ||
+            fall.difficulty > 100 ||
+            (fall.applies !== undefined && !conditionIds.has(fall.applies)) ||
+            (fall.when !== undefined &&
+              (!Array.isArray(fall.when) ||
+                fall.when.length < 1 ||
+                fall.when.length > 8 ||
+                fall.when.some((one) => !conditionIds.has(one))))))
+      )
+        throw new Error(
+          `${id} combat mounts is { larger: 1 to 9, controlled?: { standard: standard actions }, fall?: { save, difficulty, applies?, when?, landsWith?: a budget } }`,
+        );
+      mounting ??= "combat mounts";
+      if (fall?.landsWith !== undefined) entering ??= "combat mounts fall landsWith";
+      if (mounts.weights !== undefined) weighing ??= "combat mounts weights";
+    }
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : []) {
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+        const carries = entry?.creature?.mountCarries;
+        if (carries !== undefined) {
+          const at = `catalog "${catalog.id}" entry "${entry.id}"`;
+          if (
+            !carries ||
+            typeof carries !== "object" ||
+            Object.keys(carries).some((key) => !["weight", "slowedUpTo", "slowedSpeed"].includes(key)) ||
+            typeof carries.weight !== "number" ||
+            !(carries.weight > 0) ||
+            carries.weight > 1000000 ||
+            (carries.slowedUpTo !== undefined &&
+              (typeof carries.slowedUpTo !== "number" ||
+                !(carries.slowedUpTo > carries.weight) ||
+                carries.slowedUpTo > 1000000)) ||
+            // 1.660: its speed bearing more than weight.
+            (carries.slowedSpeed !== undefined &&
+              (carries.slowedUpTo === undefined ||
+                typeof carries.slowedSpeed !== "number" ||
+                !(carries.slowedSpeed >= 0) ||
+                carries.slowedSpeed > RULESET_DISTANCE_MAX))
+          )
+            throw new Error(
+              `${id} ${at} mountCarries is { weight: above 0, slowedUpTo?: above weight, slowedSpeed?: a distance, beside slowedUpTo }`,
+            );
+          if (carries.slowedSpeed !== undefined)
+            lateGate(RULESET_SLOWED_SPEED_MIN, `has ${at} mountCarries slowedSpeed, of 1.660`);
+          if (mounts?.weights === undefined)
+            throw new Error(`${id} ${at} carries by weight with no combat mounts weights`);
+          weighing ??= `${at} mountCarries`;
+        }
+        if (entry?.creature?.mountIndependent === undefined) continue;
+        const at = `catalog "${catalog.id}" entry "${entry.id}"`;
+        if (entry.creature.mountIndependent !== true)
+          throw new Error(`${id} ${at} mountIndependent is true when it is given`);
+        mounting ??= `${at} ridden as it will`;
+      }
+    }
+    // 1.498: under water.
+    let underwater;
+    const water = document?.combat?.underwater;
+    if (water !== undefined) {
+      const texts = (list, most) =>
+        Array.isArray(list) &&
+        list.length >= 1 &&
+        list.length <= most &&
+        list.every((one) => typeof one === "string" && one.length >= 1 && one.length <= 40);
+      const unlessOk = (unless) =>
+        unless === undefined ||
+        (unless &&
+          typeof unless === "object" &&
+          Object.keys(unless).every((key) => ["names", "qualities"].includes(key)) &&
+          (unless.names === undefined || texts(unless.names, 16)) &&
+          (unless.qualities === undefined || texts(unless.qualities, 16)));
+      const modes = ["advantage", "disadvantage"];
+      const abilityIds = new Set((document?.sheet?.abilities ?? []).map((one) => one?.id));
+      const span = (value) =>
+        value &&
+        typeof value === "object" &&
+        Object.keys(value).every((key) => ["rounds", "perMod", "atLeast"].includes(key)) &&
+        Number.isInteger(value.rounds) &&
+        value.rounds >= 0 &&
+        value.rounds <= 10000 &&
+        (value.perMod === undefined ||
+          (Object.keys(value.perMod).every((key) => ["ability", "rounds"].includes(key)) &&
+            abilityIds.has(value.perMod.ability) &&
+            Number.isInteger(value.perMod.rounds) &&
+            value.perMod.rounds >= 1 &&
+            value.perMod.rounds <= 100)) &&
+        (value.atLeast === undefined ||
+          (Number.isInteger(value.atLeast) && value.atLeast >= 1 && value.atLeast <= 10000));
+      const breath = water?.breath;
+      const exempt = breath?.exempt;
+      if (
+        !water ||
+        typeof water !== "object" ||
+        Object.keys(water).some((key) => !["terrain", "melee", "ranged", "resist", "breath"].includes(key)) ||
+        !texts(water.terrain, 8) ||
+        (!water.melee && !water.ranged && !water.resist && !water.breath) ||
+        (water.melee !== undefined &&
+          (!water.melee ||
+            Object.keys(water.melee).some((key) => !["mode", "unless"].includes(key)) ||
+            !modes.includes(water.melee.mode) ||
+            !unlessOk(water.melee.unless))) ||
+        (water.ranged !== undefined &&
+          (!water.ranged ||
+            Object.keys(water.ranged).some((key) => !["pastNormal", "mode", "unless"].includes(key)) ||
+            (water.ranged.pastNormal !== undefined && water.ranged.pastNormal !== "never") ||
+            (water.ranged.mode !== undefined && !modes.includes(water.ranged.mode)) ||
+            (!water.ranged.pastNormal && !water.ranged.mode) ||
+            !unlessOk(water.ranged.unless))) ||
+        (water.resist !== undefined && !texts(water.resist, 8)) ||
+        (breath !== undefined &&
+          (!breath ||
+            Object.keys(breath).some((key) => !["holds", "then", "exempt", "waterOnly"].includes(key)) ||
+            (breath.waterOnly !== undefined &&
+              (!breath.waterOnly ||
+                Object.keys(breath.waterOnly).some((key) => key !== "tags") ||
+                !texts(breath.waterOnly.tags, 12))) ||
+            !span(breath.holds) ||
+            !span(breath.then) ||
+            (exempt !== undefined &&
+              (!exempt ||
+                Object.keys(exempt).some((key) => !["conditions", "tags"].includes(key)) ||
+                (exempt.conditions !== undefined &&
+                  (!Array.isArray(exempt.conditions) ||
+                    exempt.conditions.length < 1 ||
+                    exempt.conditions.length > 12 ||
+                    exempt.conditions.some((one) => !conditionIds.has(one)))) ||
+                (exempt.tags !== undefined && !texts(exempt.tags, 12))))))
+      )
+        throw new Error(
+          `${id} combat underwater is { terrain, melee?: { mode, unless? }, ranged?: { pastNormal?, mode?, unless? }, resist?, breath?: { holds, then, exempt? } }, saying at least one`,
+        );
+      underwater = "combat underwater";
+    }
+    // 1.499: jumps.
+    let jumping;
+    const jumps = document?.combat?.jumping;
+    if (jumps !== undefined) {
+      const abilityIds = new Set((document?.sheet?.abilities ?? []).map((one) => one?.id));
+      const checkIds = new Set((document?.combat?.checks ?? []).map((one) => one?.id));
+      const span = (value) =>
+        value &&
+        typeof value === "object" &&
+        Object.keys(value).every((key) => ["ability", "of", "plus"].includes(key)) &&
+        abilityIds.has(value.ability) &&
+        ["score", "modifier"].includes(value.of) &&
+        (value.plus === undefined || (Number.isInteger(value.plus) && value.plus >= -100 && value.plus <= 100));
+      const landing = jumps?.hardLanding;
+      if (
+        !jumps ||
+        typeof jumps !== "object" ||
+        Object.keys(jumps).some((key) => !["long", "high", "runUp", "standing", "hardLanding"].includes(key)) ||
+        !span(jumps.long) ||
+        !span(jumps.high) ||
+        !Number.isInteger(jumps.runUp) ||
+        jumps.runUp < 0 ||
+        jumps.runUp > 1000 ||
+        (jumps.standing !== undefined && jumps.standing !== "half") ||
+        (landing !== undefined &&
+          (!landing ||
+            Object.keys(landing).some((key) => !["check", "difficulty", "applies"].includes(key)) ||
+            !checkIds.has(landing.check) ||
+            !Number.isInteger(landing.difficulty) ||
+            landing.difficulty < 1 ||
+            landing.difficulty > 100 ||
+            !conditionIds.has(landing.applies)))
+      )
+        throw new Error(
+          `${id} combat jumping is { long, high: { ability, of: score or modifier, plus? }, runUp, standing?: half, hardLanding?: { check, difficulty, applies } }`,
+        );
+      jumping = "combat jumping";
+    }
+    // 1.500: dying rolls as saves, and a condition's death saves and healing at its most.
+    let deathSaving;
+    const dyingRule = document?.combat?.dying;
+    if (dyingRule?.asSave !== undefined) {
+      if (dyingRule.asSave !== true || dyingRule.kind !== "saves")
+        throw new Error(`${id} combat dying asSave is true, on dying by saves`);
+      deathSaving ??= "combat dying as a save";
+    }
+    for (const entry of document?.combat?.conditions ?? []) {
+      const at = `combat condition "${entry?.condition}"`;
+      if (entry?.jumps !== undefined) {
+        const rule = entry.jumps;
+        const abilityIds = new Set((document?.sheet?.abilities ?? []).map((one) => one?.id));
+        if (
+          !rule ||
+          typeof rule !== "object" ||
+          Object.keys(rule).some((key) => !["times", "plus"].includes(key)) ||
+          (rule.times === undefined && rule.plus === undefined) ||
+          (rule.times !== undefined && (!Number.isInteger(rule.times) || rule.times < 2 || rule.times > 10)) ||
+          (rule.plus !== undefined &&
+            (!rule.plus ||
+              Object.keys(rule.plus).some((key) => !["ability", "long"].includes(key)) ||
+              !abilityIds.has(rule.plus.ability) ||
+              (rule.plus.long !== undefined && rule.plus.long !== true)))
+        )
+          throw new Error(
+            `${id} ${at} jumps is { times?: 2 to 10, plus?: { ability, long?: true } }, one of them given`,
+          );
+        jumping ??= `${at} jumping further`;
+      }
+      if (entry?.deathSaves !== undefined) {
+        if (!["advantage", "disadvantage"].includes(entry.deathSaves))
+          throw new Error(`${id} ${at} deathSaves is advantage or disadvantage`);
+        deathSaving ??= `${at} rolling death saves twice`;
+      }
+      if (entry?.healedMax !== undefined) {
+        if (entry.healedMax !== true) throw new Error(`${id} ${at} healedMax is true when it is given`);
+        deathSaving ??= `${at} healed at its most`;
+      }
+      // 1.501: what a condition does to its holder's weapon blows.
+      if (entry?.weapon !== undefined) {
+        const rule = entry.weapon;
+        const fields = sheetNames(document).fields;
+        const abilityIds = new Set((document?.sheet?.abilities ?? []).map((one) => one?.id));
+        const words = (list, max) =>
+          Array.isArray(list) &&
+          list.length >= 1 &&
+          list.length <= max &&
+          list.every((one) => typeof one === "string" && one.trim() && one.length <= 40);
+        const items = rule?.items;
+        if (
+          !rule ||
+          typeof rule !== "object" ||
+          Object.keys(rule).some(
+            (key) => !["names", "items", "toHit", "damage", "ability", "abilityFrom", "die", "qualities"].includes(key),
+          ) ||
+          !["toHit", "damage", "ability", "abilityFrom", "die", "qualities"].some((key) => rule[key] !== undefined) ||
+          (rule.ability !== undefined && rule.abilityFrom !== undefined) ||
+          (rule.names !== undefined && !words(rule.names, 16)) ||
+          (items !== undefined &&
+            (!items ||
+              typeof items !== "object" ||
+              Object.keys(items).length < 1 ||
+              Object.keys(items).some((key) => !["names", "tags", "notTags"].includes(key)) ||
+              (items.names !== undefined && !words(items.names, 16)) ||
+              (items.tags !== undefined && !words(items.tags, 8)) ||
+              (items.notTags !== undefined && !words(items.notTags, 8)))) ||
+          ["toHit", "damage"].some(
+            (key) => rule[key] !== undefined && (!Number.isInteger(rule[key]) || rule[key] < -20 || rule[key] > 20),
+          ) ||
+          (rule.ability !== undefined && !abilityIds.has(rule.ability)) ||
+          (rule.abilityFrom !== undefined && !fields.has(rule.abilityFrom)) ||
+          (rule.die !== undefined && (!Number.isInteger(rule.die) || rule.die < 2 || rule.die > 100)) ||
+          (rule.qualities !== undefined && !words(rule.qualities, 8))
+        )
+          throw new Error(
+            `${id} ${at} weapon is { names?, items?: { names?, tags?, notTags? }, toHit?, damage?: -20 to 20, ability? or abilityFrom?: a sheet field, die?: 2 to 100, qualities? }, changing something`,
+          );
+        weaponChanging ??= `${at} changing its holder's weapons`;
+      }
+      // 1.502: advantage on attacks taken from its source only.
+      for (const modifier of Array.isArray(entry?.modifiers) ? entry.modifiers : [])
+        if (modifier?.fromSource && modifier.to === "attacks-taken") trueStriking ??= `${at} attacks-taken fromSource`;
+      // 1.503: what its holder's own hits put on.
+      if (entry?.onHit !== undefined) {
+        const rule = entry.onHit;
+        if (
+          !rule ||
+          typeof rule !== "object" ||
+          // Damage, a save, a worse failure and damage types since 1.683, checked further with the sheet hooks.
+          Object.keys(rule).some(
+            (key) => !["weapon", "blow", "applies", "damage", "save", "failedBy", "damageTypes"].includes(key),
+          ) ||
+          (rule.weapon !== undefined && rule.weapon !== true) ||
+          (rule.blow !== undefined && !["melee", "ranged"].includes(rule.blow)) ||
+          (rule.applies === undefined && rule.damage === undefined) ||
+          (rule.applies !== undefined &&
+            (!Array.isArray(rule.applies) ||
+              rule.applies.length < 1 ||
+              rule.applies.length > 4 ||
+              rule.applies.some((one) => !conditionIds.has(one?.condition) || appliesEndingIssue(one) !== null)))
+        )
+          throw new Error(
+            `${id} ${at} onHit is { weapon?: true, blow?: melee or ranged, applies?: 1 to 4 combat conditions, damage?, ... }`,
+          );
+        ownHitting ??= `${at} onHit`;
+      }
+      // 1.504: stopping in a foe's space, and what entering one does.
+      if (entry?.stopsInFoes !== undefined) {
+        if (entry.stopsInFoes !== true) throw new Error(`${id} ${at} stopsInFoes is true when it is given`);
+        entering ??= `${at} stopping in foes' spaces`;
+      }
+      if (entry?.entering !== undefined) {
+        const rule = entry.entering;
+        const harm = rule?.harm;
+        if (
+          !rule ||
+          typeof rule !== "object" ||
+          Object.keys(rule).some((key) => !["harm", "applies"].includes(key)) ||
+          (rule.harm === undefined && rule.applies === undefined) ||
+          (harm !== undefined &&
+            (!harm ||
+              typeof harm !== "object" ||
+              Object.keys(harm).some((key) => !["dice", "flat", "damageType"].includes(key)) ||
+              (harm.dice === undefined && harm.flat === undefined))) ||
+          (rule.applies !== undefined &&
+            (!Array.isArray(rule.applies) ||
+              rule.applies.length < 1 ||
+              rule.applies.length > 4 ||
+              rule.applies.some((one) => !conditionIds.has(one?.condition) || appliesEndingIssue(one) !== null)))
+        )
+          throw new Error(
+            `${id} ${at} entering is { harm?: { dice?, flat?, damageType? }, applies?: 1 to 4 combat conditions }, one of them given`,
+          );
+        entering ??= `${at} entering`;
+      }
+      // 1.505: illusory duplicates.
+      if (entry?.duplicates !== undefined) {
+        const rule = entry.duplicates;
+        const abilityIds = new Set((document?.sheet?.abilities ?? []).map((one) => one?.id));
+        const senseIds = new Set((document?.combat?.senses ?? []).map((one) => one?.id));
+        const sides = rule?.sides ?? 20;
+        if (
+          !rule ||
+          typeof rule !== "object" ||
+          Object.keys(rule).some((key) => !["count", "thresholds", "sides", "defense", "pierced"].includes(key)) ||
+          !Number.isInteger(rule.count) ||
+          rule.count < 1 ||
+          rule.count > 10 ||
+          (rule.sides !== undefined && (!Number.isInteger(rule.sides) || rule.sides < 2 || rule.sides > 100)) ||
+          !Array.isArray(rule.thresholds) ||
+          rule.thresholds.length !== rule.count ||
+          rule.thresholds.some((one) => !Number.isInteger(one) || one < 1 || one > sides) ||
+          !rule.defense ||
+          Object.keys(rule.defense).some((key) => !["flat", "ability"].includes(key)) ||
+          !Number.isInteger(rule.defense.flat) ||
+          (rule.defense.ability !== undefined && !abilityIds.has(rule.defense.ability)) ||
+          (rule.pierced !== undefined &&
+            (!Array.isArray(rule.pierced) ||
+              rule.pierced.length < 1 ||
+              new Set(rule.pierced).size !== rule.pierced.length ||
+              rule.pierced.some((one) => !senseIds.has(one))))
+        )
+          throw new Error(
+            `${id} ${at} duplicates is { count: 1 to 10, thresholds: one face for each count, sides?, defense: { flat, ability? }, pierced?: senses }`,
+          );
+        imaging ??= `${at} duplicates`;
+      }
+      // 1.506 and 1.507: blinking away, and turns in a row.
+      if (entry?.blinks !== undefined) {
+        const rule = entry.blinks;
+        if (
+          !rule ||
+          typeof rule !== "object" ||
+          Object.keys(rule).some((key) => !["sides", "atLeast"].includes(key)) ||
+          (rule.sides !== undefined && (!Number.isInteger(rule.sides) || rule.sides < 2 || rule.sides > 100)) ||
+          !Number.isInteger(rule.atLeast) ||
+          rule.atLeast < 1 ||
+          rule.atLeast > (rule.sides ?? 20)
+        )
+          throw new Error(`${id} ${at} blinks is { sides?, atLeast: a face of its die }`);
+        blinking ??= `${at} blinks`;
+      }
+      if (entry?.stopsTime !== undefined) {
+        const rule = entry.stopsTime;
+        if (
+          !rule ||
+          typeof rule !== "object" ||
+          Object.keys(rule).some((key) => !["dice", "flat"].includes(key)) ||
+          (rule.dice === undefined && rule.flat === undefined)
+        )
+          throw new Error(`${id} ${at} stopsTime is { dice?, flat? }, one of them given`);
+        stoppingTime ??= `${at} stopsTime`;
+      }
+      // 1.510: no critical hits on its holder.
+      if ((entry?.effects ?? []).includes("criticals-against-normal"))
+        criticalsNormal ??= `${at} criticals-against-normal`;
+      // 1.514: held off by damage until its holder's turn starts.
+      if (entry?.suppressedWhenHarmed !== undefined) {
+        if (entry.suppressedWhenHarmed !== "until-own-turn-start")
+          throw new Error(`${id} ${at} suppressedWhenHarmed is "until-own-turn-start"`);
+        suppressedHarmed ??= `${at} suppressedWhenHarmed`;
+      }
+      // 1.515: abilities changed while it holds.
+      if (entry?.abilities !== undefined) {
+        const changes = entry.abilities;
+        if (
+          abilityChangesIssue(changes, ["set", "add", "max", "to", "atMost"]) ||
+          Object.values(changes).some(
+            (change) =>
+              ["set", "add", "to", "atMost"].filter((key) => change[key] !== undefined).length !== 1 ||
+              (change.max !== undefined && change.add === undefined),
+          )
+        )
+          throw new Error(
+            `${id} ${at} abilities is, by ability, one of { set } { add, max? } { to } { atMost }, whole numbers 0 to 30 (an add -30 to 30)`,
+          );
+        changingAbilities ??= `${at} abilities`;
+        // 1.756: lowered to a number only where higher, Wish's stress.
+        if (Object.values(changes).some((change) => change.atMost !== undefined))
+          lateGate(RULESET_WISH_STRESS_MIN, `has ${at} an ability lowered to at most a number, of 1.756`);
+      }
+      // 1.520: spells up to a level ward off its holder.
+      if (entry?.wards !== undefined) {
+        const wards = entry.wards;
+        const catalogIds = new Set((document?.catalogs ?? []).map((one) => one?.id));
+        if (
+          !wards ||
+          typeof wards !== "object" ||
+          Object.keys(wards).some((key) => !["catalogs", "maxLevel", "by", "where", "entries"].includes(key)) ||
+          !Array.isArray(wards.catalogs) ||
+          wards.catalogs.length < 1 ||
+          new Set(wards.catalogs).size !== wards.catalogs.length ||
+          wards.catalogs.some((one) => !catalogIds.has(one)) ||
+          !Number.isInteger(wards.maxLevel) ||
+          wards.maxLevel < 0 ||
+          wards.maxLevel > 20 ||
+          (wards.by !== undefined && !["base", "paid"].includes(wards.by))
+        )
+          throw new Error(
+            `${id} ${at} wards is { catalogs: the ruleset's catalogs, maxLevel: 0 to 20, by?: base or paid }`,
+          );
+        // 1.645: only the entries its filter reads so, or only these.
+        if (wards.where !== undefined && whereIssue(wards.catalogs, wards.where))
+          throw new Error(`${id} ${at} wards where is { filter, equals } on a filter its catalogs declare`);
+        if (
+          wards.entries !== undefined &&
+          (!Array.isArray(wards.entries) ||
+            wards.entries.length < 1 ||
+            wards.entries.length > 20 ||
+            wards.entries.some((one) => typeof one !== "string" || !wards.catalogs.includes(one.split("/")[0])))
+        )
+          throw new Error(`${id} ${at} wards entries are <catalog>/<entry> of catalogs it wards`);
+        if (wards.where !== undefined || wards.entries !== undefined)
+          lateGate(RULESET_WARD_WHERE_MIN, `has ${at} wards where or entries, of 1.645`);
+        wardingCondition ??= `${at} wards`;
+      }
+    }
+    // 1.509 to 1.513, on catalog entries and items.
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : []) {
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+        const at = `catalog "${catalog.id}" entry "${entry.id}"`;
+        for (const [carrier, where] of [
+          [entry?.mechanics, at],
+          [entry?.item?.use, `${at} use`],
+          ...(entry?.item?.moreUses ?? []).map((more, index) => [more?.use, `${at} moreUses ${index}`]),
+        ]) {
+          // 1.516: raised for good, an item's use outside a fight.
+          if (carrier?.raises !== undefined) {
+            if (
+              carrier !== entry?.item?.use ||
+              carrier.kind !== "buff" ||
+              carrier.targets !== "self" ||
+              abilityChangesIssue(carrier.raises, ["by", "max"]) ||
+              Object.values(carrier.raises).some((change) => change.by === undefined)
+            )
+              throw new Error(
+                `${id} ${where} raises is an item's self buff, by ability { by: 1 to 30, max?: 1 to 30 }`,
+              );
+            raising ??= `${where} raises`;
+          }
+          // 1.517: put on by the steps paid.
+          for (const [index, applied] of (Array.isArray(carrier?.applies) ? carrier.applies : []).entries()) {
+            const steps = applied?.paidSteps;
+            if (steps === undefined) continue;
+            const bound = (one) => one === undefined || (Number.isInteger(one) && one >= 0 && one <= 20);
+            if (
+              !steps ||
+              typeof steps !== "object" ||
+              Object.keys(steps).length === 0 ||
+              Object.keys(steps).some((key) => !["atLeast", "atMost"].includes(key)) ||
+              !bound(steps.atLeast) ||
+              !bound(steps.atMost) ||
+              (steps.atLeast !== undefined && steps.atMost !== undefined && steps.atLeast > steps.atMost)
+            )
+              throw new Error(`${id} ${where} applies ${index} paidSteps is { atLeast?, atMost? }, 0 to 20, one given`);
+            payingSteps ??= `${where} applies ${index} paidSteps`;
+          }
+          if (carrier?.takesAim !== undefined) {
+            const moment = carrier.reaction;
+            if (
+              carrier.takesAim !== true ||
+              moment?.on !== "aimed" ||
+              !moment.for ||
+              moment.for === "self" ||
+              moment.cancels ||
+              carrier.amount ||
+              carrier.attackRoll
+            )
+              throw new Error(
+                `${id} ${where} takesAim is true, at an "aimed" moment for somebody else, calling nothing off and dealing nothing`,
+              );
+            takingAim ??= `${where} takesAim`;
+          }
+          if (carrier?.reaction?.on === "aimed" && carrier.reaction.blow !== undefined)
+            takingAim ??= `${where} an aimed moment's blow`;
+        }
+        for (const hold of ["worn", "carried"]) {
+          const carrier = entry?.item?.[hold];
+          if (!carrier) continue;
+          if ((carrier.modifiers ?? []).some((modifier) => modifier?.to === "defense" && modifier.blow !== undefined))
+            takingAim ??= `${at} ${hold} defense against one kind of attack`;
+          if ((carrier.effects ?? []).includes("criticals-against-normal"))
+            criticalsNormal ??= `${at} ${hold} criticals-against-normal`;
+          if (carrier.jumps !== undefined) {
+            const rule = carrier.jumps;
+            const abilityIds = new Set((document?.sheet?.abilities ?? []).map((one) => one?.id));
+            if (
+              !rule ||
+              typeof rule !== "object" ||
+              Object.keys(rule).some((key) => !["times", "plus"].includes(key)) ||
+              (rule.times === undefined && rule.plus === undefined) ||
+              (rule.times !== undefined && (!Number.isInteger(rule.times) || rule.times < 2 || rule.times > 10)) ||
+              (rule.plus !== undefined && (!rule.plus || !abilityIds.has(rule.plus.ability)))
+            )
+              throw new Error(
+                `${id} ${at} ${hold} jumps is { times?: 2 to 10, plus?: { ability, long? } }, one of them given`,
+              );
+            wornKeeping ??= `${at} ${hold} jumps`;
+          }
+          if (carrier.keepsOn !== undefined) {
+            if (
+              !Array.isArray(carrier.keepsOn) ||
+              carrier.keepsOn.length < 1 ||
+              carrier.keepsOn.length > 4 ||
+              new Set(carrier.keepsOn).size !== carrier.keepsOn.length ||
+              carrier.keepsOn.some((one) => !conditionIds.has(one))
+            )
+              throw new Error(`${id} ${at} ${hold} keepsOn is 1 to 4 combat conditions, each once`);
+            wornKeeping ??= `${at} ${hold} keepsOn`;
+          }
+        }
+        const attack = entry?.item?.attack;
+        if (attack) {
+          if (attack.damage && typeof attack.damage === "object" && attack.damage.dice === undefined)
+            diceless ??= `${at} attack with no damage dice`;
+          for (const [index, hit] of (Array.isArray(attack.onHit) ? attack.onHit : []).entries()) {
+            if (hit?.atLeast === 0) diceless ??= `${at} attack onHit ${index} atLeast 0`;
+            if (hit?.checkEnds !== undefined) {
+              const checkIds = new Set((document?.combat?.checks ?? []).map((one) => one?.id));
+              const ends = hit.checkEnds;
+              if (
+                !ends ||
+                typeof ends !== "object" ||
+                Object.keys(ends).some((key) => !["check", "difficulty", "by"].includes(key)) ||
+                !checkIds.has(ends.check) ||
+                !Number.isInteger(ends.difficulty) ||
+                ends.difficulty < 0 ||
+                ends.difficulty > 1000
+              )
+                throw new Error(
+                  `${id} ${at} attack onHit ${index} checkEnds is { check: one of the fight's checks, difficulty: 0 to 1000 }`,
+                );
+              diceless ??= `${at} attack onHit ${index} checkEnds`;
+            }
+          }
+        }
+      }
+    }
+    // 1.518: a check anybody next to its holder may make, wherever a checkEnds is.
+    const endsForAny = (value, where) => {
+      if (!value || typeof value !== "object") return;
+      if (Array.isArray(value)) return value.forEach((one) => endsForAny(one, where));
+      if (value.checkEnds && typeof value.checkEnds === "object" && value.checkEnds.by !== undefined) {
+        if (value.checkEnds.by !== "any") throw new Error(`${id} ${where} checkEnds by is "any"`);
+        endingForAny ??= `${where} checkEnds by`;
+      }
+      for (const one of Object.values(value)) endsForAny(one, where);
+    };
+    endsForAny(document?.combat, "combat");
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? [])
+        endsForAny(entry, `catalog "${catalog.id}" entry "${entry?.id}"`);
+    if (changingAbilities) gate(RULESET_CONDITION_ABILITIES_MIN, `has ${changingAbilities}, of 1.515`);
+    if (raising) gate(RULESET_ITEM_RAISES_MIN, `has ${raising}, of 1.516`);
+    if (payingSteps) gate(RULESET_PAID_STEPS_MIN, `has ${payingSteps}, of 1.517`);
+    if (endingForAny) gate(RULESET_CHECK_ENDS_BY_ANY_MIN, `has ${endingForAny}, of 1.518`);
+    // 1.529 to 1.534, below (1.533's in a zone's suppresses, here).
+    let walkingOnLiquid, excepting, cuttingFree, itemAround, settingAside, spendingUses;
+    // 1.519 and 1.521, wherever more uses or zones are.
+    const usesAndZones = (value, where) => {
+      if (!value || typeof value !== "object") return;
+      if (Array.isArray(value)) return value.forEach((one) => usesAndZones(one, where));
+      if (
+        Array.isArray(value.moreUses) &&
+        (value.moreUses.length > 8 || value.moreUses.some((more) => more?.uses !== undefined))
+      )
+        countingUses ??= `${where} moreUses`;
+      if (value.zone && typeof value.zone === "object") {
+        const zone = value.zone;
+        if (zone.suppresses !== undefined) {
+          const sup = zone.suppresses;
+          const catalogIds = new Set((document?.catalogs ?? []).map((one) => one?.id));
+          if (
+            !sup ||
+            typeof sup !== "object" ||
+            Object.keys(sup).some((key) => !["catalogs", "tags", "setsAsideCalled"].includes(key)) ||
+            (sup.setsAsideCalled !== undefined && (sup.setsAsideCalled !== true || sup.catalogs === undefined)) ||
+            (sup.catalogs === undefined && sup.tags === undefined) ||
+            (sup.catalogs !== undefined &&
+              (!Array.isArray(sup.catalogs) ||
+                sup.catalogs.length < 1 ||
+                sup.catalogs.some((one) => !catalogIds.has(one)))) ||
+            (sup.tags !== undefined &&
+              (!Array.isArray(sup.tags) ||
+                sup.tags.length < 1 ||
+                sup.tags.some((one) => typeof one !== "string" || one.length < 1)))
+          )
+            throw new Error(
+              `${id} ${where} zone suppresses is { catalogs?, tags?, setsAsideCalled?: true beside catalogs }, at least one`,
+            );
+          suppressing ??= `${where} zone suppresses`;
+          if (sup.setsAsideCalled) settingAside ??= `${where} zone suppresses setsAsideCalled`;
+        }
+        if (zone.forbids?.casts !== undefined) suppressing ??= `${where} zone forbids casts`;
+      }
+      for (const one of Object.values(value)) usesAndZones(one, where);
+    };
+    usesAndZones(document?.combat, "combat");
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? [])
+        usesAndZones(entry, `catalog "${catalog.id}" entry "${entry?.id}"`);
+    if (countingUses) gate(RULESET_MORE_USES_COUNT_MIN, `has ${countingUses}, of 1.519`);
+    if (wardingCondition) gate(RULESET_CONDITION_WARDS_MIN, `has ${wardingCondition}, of 1.520`);
+    if (suppressing) gate(RULESET_ZONE_SUPPRESSES_MIN, `has ${suppressing}, of 1.521`);
+    // 1.522 to 1.524: spells taken in, turned back and stored.
+    let absorbing,
+      turning,
+      storingSpell,
+      absorbingSeen,
+      absorbingLifetime,
+      payingSlots,
+      rollingCharges,
+      storesFound,
+      storesCastsOn,
+      rollingUses;
+    const budgetIdsAll = new Set((document?.combat?.economy?.budgets ?? []).map((one) => one?.id));
+    const catalogIdsAll = new Set((document?.catalogs ?? []).map((one) => one?.id));
+    const spellRule = (rule, where, key, withCharges) => {
+      if (
+        !rule ||
+        typeof rule !== "object" ||
+        Object.keys(rule).some(
+          (one) =>
+            ![
+              "catalogs",
+              "maxLevel",
+              "by",
+              ...(withCharges ? ["charges", "lifetime"] : []),
+              ...(key === "absorbs" ? ["seen", "spends"] : []),
+            ].includes(one),
+        ) ||
+        (rule.seen !== undefined && rule.seen !== true) ||
+        (rule.spends !== undefined && !budgetIdsAll.has(rule.spends)) ||
+        (rule.lifetime !== undefined &&
+          (!Number.isInteger(rule.lifetime) || rule.lifetime < 1 || rule.lifetime > 1000)) ||
+        !Array.isArray(rule.catalogs) ||
+        rule.catalogs.length < 1 ||
+        new Set(rule.catalogs).size !== rule.catalogs.length ||
+        rule.catalogs.some((one) => !catalogIdsAll.has(one)) ||
+        !Number.isInteger(rule.maxLevel) ||
+        rule.maxLevel < 0 ||
+        rule.maxLevel > 20 ||
+        (rule.by !== undefined && !["base", "paid"].includes(rule.by)) ||
+        (rule.charges !== undefined && !["spends", "gains"].includes(rule.charges))
+      )
+        throw new Error(
+          `${id} ${where} ${key} is { catalogs: the ruleset's catalogs, maxLevel: 0 to 20, by?: base or paid${withCharges ? ', charges?: "spends" or "gains" on an item with charges, lifetime?: 1 to 1000' : ""}${key === "absorbs" ? ", seen?: true, spends?: a combat budget" : ""} }`,
+        );
+      if (rule.seen !== undefined || rule.spends !== undefined) absorbingSeen ??= `${where} ${key} seen or spends`;
+      if (rule.lifetime !== undefined) absorbingLifetime ??= `${where} ${key} lifetime`;
+    };
+    const DICE_FOUND = /^[1-9]\d{0,2}d(?:[2-9]|[1-9]\d{1,3})(?:[+-]\d{1,4})?$/u;
+    const storesIssue = (rule) =>
+      !rule ||
+      typeof rule !== "object" ||
+      Object.keys(rule).some((one) => !["catalogs", "levels", "count", "found", "castsOn"].includes(one)) ||
+      (rule.castsOn !== undefined &&
+        (!rule.castsOn ||
+          typeof rule.castsOn !== "object" ||
+          Object.keys(rule.castsOn).some((one) => !["on", "at"].includes(one)) ||
+          !["harmed", "down"].includes(rule.castsOn.on) ||
+          (rule.castsOn.at !== undefined && !["self", "source"].includes(rule.castsOn.at)))) ||
+      (rule.found !== undefined &&
+        (!rule.found ||
+          typeof rule.found !== "object" ||
+          Object.keys(rule.found).some((one) => !["levels", "from"].includes(one)) ||
+          typeof rule.found.levels !== "string" ||
+          !DICE_FOUND.test(rule.found.levels) ||
+          !Array.isArray(rule.found.from) ||
+          rule.found.from.length < 1 ||
+          rule.found.from.length > 40 ||
+          rule.found.from.some(
+            (one) =>
+              !one ||
+              typeof one !== "object" ||
+              Object.keys(one).some((key) => !["entry", "level", "label"].includes(key)) ||
+              typeof one.entry !== "string" ||
+              !rule.catalogs?.includes?.(one.entry.split("/")[0]) ||
+              !Number.isInteger(one.level) ||
+              one.level < 1 ||
+              one.level > rule.levels,
+          ))) ||
+      !Array.isArray(rule.catalogs) ||
+      rule.catalogs.length < 1 ||
+      rule.catalogs.some((one) => !catalogIdsAll.has(one)) ||
+      !Number.isInteger(rule.levels) ||
+      rule.levels < 1 ||
+      rule.levels > 40 ||
+      (rule.count !== undefined && (!Number.isInteger(rule.count) || rule.count < 1 || rule.count > 20));
+    for (const entry of Array.isArray(document?.combat?.conditions) ? document.combat.conditions : []) {
+      const where = `combat condition "${entry?.condition}"`;
+      if (entry?.absorbs !== undefined) {
+        spellRule(entry.absorbs, where, "absorbs", false);
+        absorbing ??= `${where} absorbs`;
+      }
+      if (entry?.turns !== undefined) {
+        spellRule(entry.turns, where, "turns", false);
+        turning ??= `${where} turns`;
+      }
+    }
+    const aloneAgainst = (value, where) => {
+      if (!value || typeof value !== "object") return;
+      if (Array.isArray(value)) return value.forEach((one) => aloneAgainst(one, where));
+      if (value.against && typeof value.against === "object" && value.against.alone !== undefined)
+        turning ??= `${where} against alone`;
+      for (const one of Object.values(value)) aloneAgainst(one, where);
+    };
+    aloneAgainst(document?.combat, "combat");
+    // 1.619: the bestiary entries a worn item's ignoredBy may name.
+    const creatureRefsForIgnoring = new Set(
+      (Array.isArray(document?.catalogs) ? document.catalogs : []).flatMap((catalog) =>
+        (catalogEntryList(catalog, catalogSources) ?? [])
+          .filter((one) => one?.creature)
+          .map((one) => `${catalog.id}/${one.id}`),
+      ),
+    );
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+        const where = `catalog "${catalog.id}" entry "${entry?.id}"`;
+        aloneAgainst(entry, where);
+        const worn = entry?.item?.worn;
+        if (worn?.absorbs !== undefined) {
+          spellRule(worn.absorbs, `${where} worn`, "absorbs", true);
+          if (worn.absorbs.charges !== undefined && !entry.item.charges)
+            throw new Error(`${id} ${where} worn absorbs charges needs the item's charges`);
+          absorbing ??= `${where} worn absorbs`;
+        }
+        if (worn?.turns !== undefined) {
+          spellRule(worn.turns, `${where} worn`, "turns", false);
+          turning ??= `${where} worn turns`;
+        }
+        for (const holder of [entry?.item, entry?.creature])
+          if (holder?.stores !== undefined) {
+            if (storesIssue(holder.stores))
+              throw new Error(
+                `${id} ${where} stores is { catalogs: the ruleset's catalogs, levels: 1 to 40, count?: 1 to 20, found?: { levels: dice, from: 1 to 40 { entry of its catalogs, level up to its levels } }, castsOn?: { on: "harmed" | "down", at?: "self" | "source" } }`,
+              );
+            storingSpell ??= `${where} stores`;
+            if (holder.stores.found !== undefined) storesFound ??= `${where} stores found`;
+            if (holder.stores.castsOn !== undefined) storesCastsOn ??= `${where} stores castsOn`;
+          }
+        // 1.619: creatures made from these bestiary entries leave its wearer alone.
+        if (worn?.ignoredBy !== undefined) {
+          const by = worn.ignoredBy;
+          if (
+            !by ||
+            typeof by !== "object" ||
+            Object.keys(by).some((key) => !["entries", "untilHarmed"].includes(key)) ||
+            !Array.isArray(by.entries) ||
+            by.entries.length < 1 ||
+            by.entries.length > 12 ||
+            new Set(by.entries).size !== by.entries.length ||
+            by.entries.some((ref) => typeof ref !== "string" || !creatureRefsForIgnoring.has(ref)) ||
+            (by.untilHarmed !== undefined && by.untilHarmed !== true)
+          )
+            throw new Error(
+              `${id} ${where} worn ignoredBy is { entries: 1 to 12 bestiary entries, each once, untilHarmed?: true }`,
+            );
+          ignoredBy ??= `${where} worn ignoredBy`;
+        }
+        if (worn?.paysSlots !== undefined) {
+          if (
+            typeof worn.paysSlots !== "string" ||
+            !entry.item.charges ||
+            !(document?.sheet?.live?.pools ?? []).some((pool) => pool?.group === worn.paysSlots)
+          )
+            throw new Error(`${id} ${where} worn paysSlots names a pool group, on an item with charges`);
+          payingSlots ??= `${where} worn paysSlots`;
+        }
+        // 1.590: no slot past this pool of the group paid for.
+        if (worn?.paysSlotsMax !== undefined) {
+          const pool = (document?.sheet?.live?.pools ?? []).find((one) => one?.id === worn.paysSlotsMax);
+          if (worn.paysSlots === undefined || !pool || pool.group !== worn.paysSlots)
+            throw new Error(`${id} ${where} worn paysSlotsMax names a pool of its paysSlots group`);
+          gate(RULESET_PAYS_SLOTS_MAX_MIN, `has ${where} worn paysSlotsMax, of 1.590`);
+        }
+        if (entry?.item?.charges?.rolled !== undefined) {
+          if (typeof entry.item.charges.rolled !== "string" || !DICE_FOUND.test(entry.item.charges.rolled))
+            throw new Error(`${id} ${where} charges rolled is dice, like 1d10`);
+          rollingCharges ??= `${where} charges rolled`;
+        }
+        // 1.536: a further use's own count rolled as the item is found (a Helm of Brilliance's gems).
+        for (const more of entry?.item?.moreUses ?? [])
+          if (more?.uses?.rolled !== undefined) {
+            const found =
+              typeof more.uses.rolled === "string" && DICE_FOUND.test(more.uses.rolled)
+                ? /^(\d+)d(\d+)([+-]\d+)?$/u.exec(more.uses.rolled)
+                : null;
+            if (!found || Number(found[1]) * Number(found[2]) + Number(found[3] ?? 0) > more.uses.max)
+              throw new Error(
+                `${id} ${where} moreUses uses rolled is dice, like 2d10, that never come up past its max`,
+              );
+            rollingUses ??= `${where} moreUses uses rolled`;
+          }
+      }
+    if (absorbing) gate(RULESET_ABSORBS_MIN, `has ${absorbing}, of 1.522`);
+    if (turning) gate(RULESET_TURNS_MIN, `has ${turning}, of 1.523`);
+    if (storingSpell) gate(RULESET_STORED_SPELLS_MIN, `has ${storingSpell}, of 1.524`);
+    if (absorbingSeen) gate(RULESET_ABSORBS_SEEN_MIN, `has ${absorbingSeen}, of 1.570`);
+    if (absorbingLifetime) gate(RULESET_ABSORBS_LIFETIME_MIN, `has ${absorbingLifetime}, of 1.571`);
+    if (payingSlots) gate(RULESET_PAYS_SLOTS_MIN, `has ${payingSlots}, of 1.572`);
+    if (rollingCharges) gate(RULESET_ROLLED_CHARGES_MIN, `has ${rollingCharges}, of 1.573`);
+    if (rollingUses) gate(RULESET_ROLLED_USES_MIN, `has ${rollingUses}, of 1.536`);
+    if (storesFound) gate(RULESET_STORES_FOUND_MIN, `has ${storesFound}, of 1.576`);
+    if (storesCastsOn) gate(RULESET_STORES_CASTS_ON_MIN, `has ${storesCastsOn}, of 1.569`);
+    // 1.525 to 1.528: items forbidden and twelve conditions by the slot, saves made as days pass, touches
+    // answered, conditions held off while others hold.
+    let forbiddingItemsOrSteps, savingByDays, countingDaySaves, answeringTouch, heldOffWhileOthers;
+    const conditionIdsNow = new Set((document?.combat?.conditions ?? []).map((one) => one?.condition));
+    for (const entry of Array.isArray(document?.combat?.conditions) ? document.combat.conditions : []) {
+      const where = `combat condition "${entry?.condition}"`;
+      if (entry?.forbids?.items !== undefined) forbiddingItemsOrSteps ??= `${where} forbids items`;
+      if (entry?.whenHit?.touches !== undefined) {
+        if (entry.whenHit.touches !== true || (entry.whenHit.blow !== undefined && entry.whenHit.blow !== "melee"))
+          throw new Error(`${id} ${where} whenHit touches is true, with no blow or a melee one`);
+        answeringTouch ??= `${where} whenHit touches`;
+      }
+      // 1.605: held only in some light, read where its holder stands.
+      if (entry?.heldOnlyIn !== undefined) {
+        const light = entry.heldOnlyIn?.light;
+        if (
+          !entry.heldOnlyIn ||
+          typeof entry.heldOnlyIn !== "object" ||
+          Object.keys(entry.heldOnlyIn).some((key) => !["light", "allySeenWithin", "ground"].includes(key)) ||
+          (light === undefined &&
+            entry.heldOnlyIn.allySeenWithin === undefined &&
+            entry.heldOnlyIn.ground === undefined) ||
+          // 1.714: only on some ground, by tile, place or lasting area name.
+          (entry.heldOnlyIn.ground !== undefined &&
+            (!Array.isArray(entry.heldOnlyIn.ground) ||
+              entry.heldOnlyIn.ground.length < 1 ||
+              entry.heldOnlyIn.ground.length > 12 ||
+              entry.heldOnlyIn.ground.some((one) => typeof one !== "string" || one === "" || one.length > 60))) ||
+          (light !== undefined &&
+            (!Array.isArray(light) ||
+              light.length < 1 ||
+              new Set(light).size !== light.length ||
+              light.some((one) => !["sunlight", "bright", "dim", "dark"].includes(one))))
+        )
+          // An ally seen within a distance since 1.682, checked below.
+          throw new Error(
+            `${id} ${where} heldOnlyIn is { light?: sunlight|bright|dim|dark, each once, allySeenWithin?, ground?: names }`,
+          );
+        if (entry.heldOnlyIn.ground !== undefined)
+          lateGate(RULESET_HELD_ON_GROUND_MIN, `has ${where} held only on some ground, of 1.714`);
+      }
+      if (entry?.heldOffWhile !== undefined) {
+        const held = entry.heldOffWhile;
+        if (
+          !held ||
+          typeof held !== "object" ||
+          Object.keys(held).some((key) => !["conditions", "effects"].includes(key)) ||
+          (held.conditions === undefined && held.effects === undefined) ||
+          (held.conditions !== undefined &&
+            (!Array.isArray(held.conditions) ||
+              held.conditions.length < 1 ||
+              held.conditions.some((one) => !conditionIdsNow.has(one) || one === entry.condition))) ||
+          (held.effects !== undefined &&
+            (!Array.isArray(held.effects) ||
+              held.effects.length < 1 ||
+              held.effects.some((one) => typeof one !== "string")))
+        )
+          throw new Error(
+            `${id} ${where} heldOffWhile is { conditions?: other combat conditions, effects?: effect ids }, at least one`,
+          );
+        heldOffWhileOthers ??= `${where} heldOffWhile`;
+      }
+    }
+    const daysAndSteps = (value, where) => {
+      if (!value || typeof value !== "object") return;
+      if (Array.isArray(value)) return value.forEach((one) => daysAndSteps(one, where));
+      if (value.saveEnds && typeof value.saveEnds === "object" && value.saveEnds.at === "days") {
+        if (!Number.isInteger(value.saveEnds.days) || value.saveEnds.days < 1 || value.saveEnds.days > 3650)
+          throw new Error(`${id} ${where} saveEnds at days counts 1 to 3650 days`);
+        savingByDays ??= `${where} saveEnds at days`;
+        const { successes, harmsOnFail } = value.saveEnds;
+        if (successes !== undefined || harmsOnFail !== undefined) {
+          if (
+            (successes !== undefined && (!Number.isInteger(successes) || successes < 2 || successes > 10)) ||
+            (harmsOnFail !== undefined &&
+              (!harmsOnFail ||
+                typeof harmsOnFail !== "object" ||
+                Object.keys(harmsOnFail).some((key) => !["dice", "flat", "type"].includes(key)) ||
+                (harmsOnFail.dice === undefined && harmsOnFail.flat === undefined) ||
+                (harmsOnFail.dice !== undefined && !/^\d+d\d+$/u.test(String(harmsOnFail.dice))) ||
+                (harmsOnFail.flat !== undefined && !Number.isInteger(harmsOnFail.flat))))
+          )
+            throw new Error(
+              `${id} ${where} saveEnds at days counts 2 to 10 successes and harmsOnFail is { dice?, flat?, type? }`,
+            );
+          countingDaySaves ??= `${where} saveEnds at days counting successes or harming`;
+        }
+      }
+      if (Array.isArray(value.applies) && value.applies.length > 6 && value.appliesOneOf !== true)
+        forbiddingItemsOrSteps ??= `${where} ${value.applies.length} conditions by the steps paid`;
+      for (const one of Object.values(value)) daysAndSteps(one, where);
+    };
+    daysAndSteps(document?.combat, "combat");
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? [])
+        daysAndSteps(entry, `catalog "${catalog.id}" entry "${entry?.id}"`);
+    if (forbiddingItemsOrSteps) gate(RULESET_FORBIDS_ITEMS_MIN, `has ${forbiddingItemsOrSteps}, of 1.525`);
+    if (savingByDays) gate(RULESET_SAVE_DAYS_MIN, `has ${savingByDays}, of 1.526`);
+    if (countingDaySaves) lateGate(RULESET_DAY_SAVES_COUNTED_MIN, `has ${countingDaySaves}, of 1.750`);
+    if (answeringTouch) gate(RULESET_TOUCHES_MIN, `has ${answeringTouch}, of 1.527`);
+    if (heldOffWhileOthers) gate(RULESET_HELD_OFF_WHILE_MIN, `has ${heldOffWhileOthers}, of 1.528`);
+    // 1.529 to 1.534: walking on liquid, target tests' exceptions, conditions cut away, item uses around
+    // their user, called creatures set aside, weapon hits spending their own uses.
+    const tagIdsNow = new Set((document?.combat?.creatureTypes?.tags ?? []).map((one) => one?.id));
+    const sizeIdsNow = new Set((document?.combat?.sizes?.order ?? []).map((one) => one?.id));
+    for (const entry of Array.isArray(document?.combat?.conditions) ? document.combat.conditions : []) {
+      const where = `combat condition "${entry?.condition}"`;
+      if (entry?.walksOnLiquid !== undefined) {
+        if (entry.walksOnLiquid !== true) throw new Error(`${id} ${where} walksOnLiquid is true`);
+        walkingOnLiquid ??= `${where} walksOnLiquid`;
+      }
+      if (entry?.cutFree !== undefined) {
+        const cut = entry.cutFree;
+        if (
+          !cut ||
+          typeof cut !== "object" ||
+          Object.keys(cut).some((key) => !["defense", "health", "damageTypes"].includes(key)) ||
+          !Number.isInteger(cut.defense) ||
+          cut.defense < 0 ||
+          cut.defense > 100 ||
+          !Number.isInteger(cut.health) ||
+          cut.health < 1 ||
+          cut.health > 1000 ||
+          (cut.damageTypes !== undefined &&
+            (!Array.isArray(cut.damageTypes) ||
+              cut.damageTypes.length < 1 ||
+              cut.damageTypes.length > 8 ||
+              cut.damageTypes.some((one) => typeof one !== "string" || one.length < 1)))
+        )
+          throw new Error(`${id} ${where} cutFree is { defense: 0 to 100, health: 1 to 1000, damageTypes?: 1 to 8 }`);
+        cuttingFree ??= `${where} cutFree`;
+      }
+    }
+    const newerKeys = (value, where, parent) => {
+      if (!value || typeof value !== "object") return;
+      if (Array.isArray(value)) return value.forEach((one) => newerKeys(one, where, parent));
+      for (const key of ["targetIs", "from", "of", "is", "sourceIs"]) {
+        const test = value[key];
+        // 1.755: standing in, or in none of, the zones these entries leave: Magic Jar's "magic circle".
+        for (const one of test && typeof test === "object"
+          ? [test, test.except, ...(Array.isArray(test.anyOf) ? test.anyOf : [])]
+          : [])
+          for (const zoned of ["insideZoneOf", "outsideZoneOf"]) {
+            const list = one?.[zoned];
+            if (list === undefined) continue;
+            if (
+              !Array.isArray(list) ||
+              list.length < 1 ||
+              list.length > 8 ||
+              list.some((name) => typeof name !== "string" || !name.trim() || name.length > 80 || /[[\]\n]/u.test(name))
+            )
+              throw new Error(`${id} ${where} ${key} ${zoned} is 1 to 8 entry ids or names`);
+            lateGate(RULESET_ZONE_TESTS_MIN, `has ${where} ${key} a test of standing in a zone, of 1.755`);
+          }
+        if (!test || typeof test !== "object" || test.except === undefined) continue;
+        const except = test.except;
+        if (
+          !except ||
+          typeof except !== "object" ||
+          Object.keys(except).some(
+            (one) =>
+              !["types", "tags", "upToSize", "atLeastSize", "holding", "insideZoneOf", "outsideZoneOf"].includes(one),
+          ) ||
+          Object.keys(except).length < 1 ||
+          (except.tags !== undefined &&
+            (!Array.isArray(except.tags) || except.tags.some((one) => !tagIdsNow.has(one)))) ||
+          // Never one holding these (1.555 inside 1.530's except): Magic Jar's warded humanoids.
+          (except.holding !== undefined &&
+            (!Array.isArray(except.holding) ||
+              except.holding.length < 1 ||
+              except.holding.length > 12 ||
+              except.holding.some((one) => !conditionIdsNow.has(one)))) ||
+          ["upToSize", "atLeastSize"].some((one) => except[one] !== undefined && !sizeIdsNow.has(except[one]))
+        )
+          throw new Error(
+            `${id} ${where} ${key} except is { types?, tags?, upToSize?, atLeastSize?, holding? } of declared ones, at least one`,
+          );
+        excepting ??= `${where} ${key} except`;
+      }
+      for (const [key, one] of Object.entries(value)) newerKeys(one, where, key);
+    };
+    newerKeys(document?.combat, "combat");
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+        const where = `catalog "${catalog.id}" entry "${entry?.id}"`;
+        newerKeys(entry, where);
+        const item = entry?.item;
+        for (const [use, at] of [
+          [item?.use, "use"],
+          ...(Array.isArray(item?.moreUses)
+            ? item.moreUses.map((more, index) => [more?.use, `moreUses ${index}`])
+            : []),
+        ])
+          if (
+            use?.area &&
+            typeof use.area === "object" &&
+            (use.area.around !== undefined || use.area.throughWalls !== undefined)
+          )
+            itemAround ??= `${where} ${at} area around`;
+        for (const spend of Array.isArray(item?.attack?.spends) ? item.attack.spends : [])
+          if (
+            spend?.uses !== undefined ||
+            spend?.save !== undefined ||
+            spend?.drain !== undefined ||
+            spend?.amount === undefined ||
+            (spend?.onHit ?? []).some((hit) => hit?.of !== undefined || hit?.saveEnds !== undefined)
+          )
+            spendingUses ??= `${where} attack spends "${spend?.label}"`;
+      }
+    if (walkingOnLiquid) gate(RULESET_WALKS_ON_LIQUID_MIN, `has ${walkingOnLiquid}, of 1.529`);
+    if (excepting) gate(RULESET_TARGET_EXCEPT_MIN, `has ${excepting}, of 1.530`);
+    if (cuttingFree) gate(RULESET_CUT_FREE_MIN, `has ${cuttingFree}, of 1.531`);
+    if (itemAround) gate(RULESET_ITEM_AROUND_MIN, `has ${itemAround}, of 1.532`);
+    if (settingAside) gate(RULESET_SETS_ASIDE_CALLED_MIN, `has ${settingAside}, of 1.533`);
+    if (spendingUses) gate(RULESET_SPEND_USES_MIN, `has ${spendingUses}, of 1.534`);
+    // 1.535, 1.540 and 1.541: uses beside one another, creatures bursting as they die, damage that heals.
+    // 1.537 and 1.538 are checked with calls, 1.539 with summons; gated here, after everything older, so an
+    // older ruleset's error reads first.
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+        const carriers = [entry?.mechanics, entry?.item?.use, ...(entry?.item?.moreUses ?? []).map((one) => one?.use)];
+        for (const carrier of carriers.filter((one) => one?.calls && typeof one.calls === "object")) {
+          const calls = carrier.calls;
+          const where = `catalog "${catalog.id}" entry "${entry.id}" calls`;
+          if (
+            calls.perStep !== undefined ||
+            [...(Array.isArray(calls.options) ? calls.options : []), calls].some(
+              (one) => one?.upTo?.perStep !== undefined || one?.fromStep !== undefined || one?.perStep !== undefined,
+            )
+          )
+            gate(RULESET_CALLS_PER_STEP_MIN, `has ${where} growing with the slot, of 1.537`);
+          if (calls.hostileOnBreak !== undefined) {
+            if (!carrier.concentration)
+              throw new Error(`${id} ${where} hostileOnBreak needs the entry's concentration`);
+            gate(RULESET_HOSTILE_ON_BREAK_MIN, `has ${where} hostileOnBreak, of 1.538`);
+          }
+        }
+        const creature = entry?.creature;
+        if (creature?.whenHarmedBy !== undefined) {
+          const at = `catalog "${catalog.id}" entry "${entry.id}" whenHarmedBy`;
+          const known = new Set((document?.combat?.conditions ?? []).map((one) => one?.condition));
+          if (
+            !Array.isArray(creature.whenHarmedBy) ||
+            creature.whenHarmedBy.length < 1 ||
+            creature.whenHarmedBy.length > 4 ||
+            creature.whenHarmedBy.some(
+              (rule) =>
+                !rule ||
+                Object.keys(rule).some((key) => !["by", "applies"].includes(key)) ||
+                !Array.isArray(rule.by) ||
+                rule.by.length < 1 ||
+                rule.by.some((one) => typeof one !== "string" || one.length < 1) ||
+                !Array.isArray(rule.applies) ||
+                rule.applies.length < 1 ||
+                rule.applies.some((one) => !known.has(one?.condition)),
+            )
+          )
+            throw new Error(`${id} ${at} is 1 to 4 of { by: damage types, applies: declared conditions }`);
+          gate(RULESET_WHEN_HARMED_BY_MIN, `has ${at}, of 1.542`);
+        }
+        for (const action of Array.isArray(creature?.actions) ? creature.actions : []) {
+          const calls = action?.calls;
+          if (!calls || (calls.atCorpse === undefined && calls.atMost === undefined)) continue;
+          const at = `catalog "${catalog.id}" entry "${entry.id}" action "${action.id}" calls`;
+          const corpse = calls.atCorpse;
+          if (
+            (corpse !== undefined &&
+              (!corpse ||
+                typeof corpse !== "object" ||
+                Object.keys(corpse).some((key) => !["withinRounds", "is"].includes(key)) ||
+                !Number.isInteger(corpse.withinRounds) ||
+                corpse.withinRounds < 1 ||
+                corpse.withinRounds > 14400 ||
+                calls.options !== undefined)) ||
+            (calls.atMost !== undefined && (!Number.isInteger(calls.atMost) || calls.atMost < 1 || calls.atMost > 100))
+          )
+            throw new Error(
+              `${id} ${at} atCorpse is { withinRounds: 1 to 14400, is? } on one creature, atMost 1 to 100`,
+            );
+          gate(RULESET_CALLS_AT_CORPSE_MIN, `has ${at} atCorpse or atMost, of 1.554`);
+        }
+      }
+    // 1.543 to 1.549: berserk, surprised targets, rampage, what follows a charge, budgets every turn.
+    const budgetIdsNow = new Set((document?.combat?.economy?.budgets ?? []).map((one) => one?.id));
+    const berserkConditionIds = new Set((document?.combat?.conditions ?? []).map((one) => one?.condition));
+    for (const entry of Array.isArray(document?.combat?.conditions) ? document.combat.conditions : []) {
+      const where = `combat condition "${entry?.condition}"`;
+      if (entry?.endsAtFullHealth !== undefined) {
+        if (entry.endsAtFullHealth !== true) throw new Error(`${id} ${where} endsAtFullHealth is true`);
+        gate(RULESET_BERSERK_MIN, `has ${where} endsAtFullHealth, of 1.543`);
+      }
+      if (entry?.behavior?.nearest !== undefined) gate(RULESET_BERSERK_MIN, `has ${where} behavior nearest, of 1.543`);
+      if (entry?.behavior?.actions !== undefined)
+        gate(RULESET_BEHAVIOR_ACTIONS_MIN, `has ${where} behavior keeping its own actions, of 1.601`);
+      if (entry?.heldOnlyIn !== undefined) heldOnlyInLight ??= `${where} held only in some light`;
+      if (entry?.endsWhenHolder?.incapacitated !== undefined)
+        holderIncapacitated ??= `${where} ending as its holder is incapacitated`;
+      if ((entry?.auras ?? []).some((aura) => aura?.whileRidden !== undefined))
+        lateGate(RULESET_AURA_WHILE_RIDDEN_MIN, `has ${where} an aura while its holder is ridden, of 1.735`);
+      if (
+        (entry?.auras ?? []).some(
+          (aura) => aura?.seenByHolder !== undefined || aura?.targetTypes?.understands !== undefined,
+        )
+      )
+        auraSeenByHolder ??= `${where} an aura on whom its holder sees or who understands it`;
+      if ((entry?.modifiers ?? []).some((one) => one?.whenTarget !== undefined || one?.critical !== undefined))
+        gate(RULESET_WHEN_TARGET_MIN, `has ${where} modifiers on a surprised or not-yet-acted target, of 1.544`);
+    }
+    if (heldOnlyInLight) gate(RULESET_HELD_ONLY_IN_MIN, `has ${heldOnlyInLight}, of 1.605`);
+    if (freeBeforeAttack) gate(RULESET_FREE_BEFORE_ATTACK_MIN, `has ${freeBeforeAttack}, of 1.606`);
+    if (movesTowardSeen) gate(RULESET_MOVES_TOWARD_SEEN_MIN, `has ${movesTowardSeen}, of 1.607`);
+    if (holderIncapacitated || auraSeenByHolder)
+      gate(RULESET_LEADERSHIP_MIN, `has ${holderIncapacitated ?? auraSeenByHolder}, of 1.608`);
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+        const creature = entry?.creature;
+        if (!creature) continue;
+        const where = `catalog "${catalog.id}" entry "${entry.id}"`;
+        if (creature.rollsAtTurnStart !== undefined) {
+          const rules = creature.rollsAtTurnStart;
+          if (
+            !Array.isArray(rules) ||
+            rules.length < 1 ||
+            rules.length > 4 ||
+            rules.some(
+              (rule) =>
+                !rule ||
+                Object.keys(rule).some((key) => !["healthAtMost", "dice", "atLeast", "applies"].includes(key)) ||
+                !Number.isInteger(rule.healthAtMost) ||
+                rule.healthAtMost < 0 ||
+                typeof rule.dice !== "string" ||
+                !/^\d+d\d+([+-]\d+)?$/u.test(rule.dice) ||
+                !Number.isInteger(rule.atLeast) ||
+                rule.atLeast < 1 ||
+                !Array.isArray(rule.applies) ||
+                rule.applies.length < 1 ||
+                rule.applies.length > 4 ||
+                rule.applies.some((one) => !berserkConditionIds.has(one?.condition)),
+            )
+          )
+            throw new Error(
+              `${id} ${where} rollsAtTurnStart is 1 to 4 of { healthAtMost, dice, atLeast, applies: declared conditions }`,
+            );
+          gate(RULESET_BERSERK_MIN, `has ${where} rollsAtTurnStart, of 1.543`);
+        }
+        if (
+          (creature.attackModes ?? []).some((one) => one?.whenTarget !== undefined) ||
+          (creature.riders ?? []).some((one) =>
+            (one?.when ?? []).some?.((when) => ["target-surprised", "target-not-yet-acted"].includes(when)),
+          )
+        )
+          gate(RULESET_WHEN_TARGET_MIN, `has ${where} attacks on a surprised or not-yet-acted target, of 1.544`);
+        if (creature.rampage !== undefined) {
+          const rampage = creature.rampage;
+          if (
+            !rampage ||
+            typeof rampage !== "object" ||
+            Object.keys(rampage).some((key) => !["action", "budget", "move"].includes(key)) ||
+            !(creature.actions ?? []).some((one) => one?.id === rampage.action) ||
+            !budgetIdsNow.has(rampage.budget) ||
+            (rampage.move !== undefined && (!Number.isFinite(rampage.move) || rampage.move <= 0 || rampage.move > 1))
+          )
+            throw new Error(
+              `${id} ${where} rampage is { action: one of its own, budget: a declared one, move?: above 0 to 1 }`,
+            );
+          gate(RULESET_RAMPAGE_MIN, `has ${where} rampage, of 1.545`);
+        }
+        if ((creature.actions ?? []).some((one) => one?.charge?.then !== undefined))
+          gate(RULESET_CHARGE_THEN_MIN, `has ${where} charge then, of 1.546`);
+        if (creature.refillsEveryTurn !== undefined) {
+          const refills = creature.refillsEveryTurn;
+          if (
+            !Array.isArray(refills) ||
+            refills.length < 1 ||
+            refills.length > 4 ||
+            refills.some((one) => !budgetIdsNow.has(one))
+          )
+            throw new Error(`${id} ${where} refillsEveryTurn is 1 to 4 declared budgets`);
+          gate(RULESET_REFILLS_EVERY_TURN_MIN, `has ${where} refillsEveryTurn, of 1.549`);
+        }
+        if (creature.heads !== undefined) {
+          const heads = creature.heads;
+          const known = [
+            "count",
+            "max",
+            "lostAt",
+            "grows",
+            "growthStoppedBy",
+            "healsPerHead",
+            "opportunityReactions",
+            "whileMany",
+          ];
+          const whole = (value, low, high) => Number.isInteger(value) && value >= low && value <= high;
+          if (
+            !heads ||
+            typeof heads !== "object" ||
+            Array.isArray(heads) ||
+            Object.keys(heads).some((key) => !known.includes(key)) ||
+            !whole(heads.count, 2, 20) ||
+            (heads.max !== undefined && !whole(heads.max, heads.count, 40)) ||
+            !whole(heads.lostAt, 1, 100000) ||
+            (heads.grows !== undefined && !whole(heads.grows, 1, 4)) ||
+            (heads.growthStoppedBy !== undefined &&
+              (!Array.isArray(heads.growthStoppedBy) ||
+                heads.growthStoppedBy.length < 1 ||
+                heads.growthStoppedBy.length > 8 ||
+                heads.growthStoppedBy.some((one) => typeof one !== "string" || one.length === 0 || one.length > 40))) ||
+            (heads.healsPerHead !== undefined && !whole(heads.healsPerHead, 1, 1000)) ||
+            (heads.opportunityReactions !== undefined && heads.opportunityReactions !== true) ||
+            (heads.whileMany !== undefined &&
+              (!Array.isArray(heads.whileMany) ||
+                heads.whileMany.length < 1 ||
+                heads.whileMany.length > 4 ||
+                heads.whileMany.some((one) => !berserkConditionIds.has(one))))
+          )
+            throw new Error(
+              `${id} ${where} heads is { count: 2 to 20, max?: count to 40, lostAt, grows?: 1 to 4, growthStoppedBy?, healsPerHead?, opportunityReactions?: true, whileMany?: declared conditions }`,
+            );
+          gate(RULESET_HEADS_MIN, `has ${where} heads, of 1.550`);
+        }
+        if (
+          (creature.actions ?? []).some((action) =>
+            (action?.sequence ?? []).some((step) => step?.perHead !== undefined),
+          )
+        ) {
+          if (
+            creature.heads === undefined ||
+            creature.actions.some((action) =>
+              (action?.sequence ?? []).some((step) => step?.perHead !== undefined && step.perHead !== true),
+            )
+          )
+            throw new Error(`${id} ${where} strikes perHead only with heads, as true`);
+          gate(RULESET_HEADS_MIN, `has ${where} a sequence step made per head, of 1.550`);
+        }
+      }
+    // 1.553, after the older ones: attacks on a target their holder holds (Grappler).
+    for (const entry of Array.isArray(document?.combat?.conditions) ? document.combat.conditions : [])
+      if ((entry?.modifiers ?? []).some((one) => one?.targetHoldsFromSelf !== undefined)) {
+        const where = `combat condition "${entry?.condition}"`;
+        if (
+          entry.modifiers.some((one) => (one?.targetHoldsFromSelf ?? []).some((held) => !berserkConditionIds.has(held)))
+        )
+          throw new Error(`${id} ${where} targetHoldsFromSelf names declared conditions`);
+        gate(RULESET_HELD_BY_SELF_MIN, `has ${where} modifiers on a target it holds, of 1.553`);
+      }
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+        const modes = entry?.creature?.attackModes ?? [];
+        if (!modes.some((one) => one?.targetHoldsFromSelf !== undefined)) continue;
+        const where = `catalog "${catalog.id}" entry "${entry.id}"`;
+        if (modes.some((one) => (one?.targetHoldsFromSelf ?? []).some((held) => !berserkConditionIds.has(held))))
+          throw new Error(`${id} ${where} attackModes targetHoldsFromSelf names declared conditions`);
+        gate(RULESET_HELD_BY_SELF_MIN, `has ${where} attacks on a target it holds, of 1.553`);
+      }
+    // 1.555 and 1.556, after the older ones.
+    const conditionIdsWalled = new Set((document?.combat?.conditions ?? []).map((one) => one?.condition));
+    for (const entry of Array.isArray(document?.combat?.conditions) ? document.combat.conditions : [])
+      if (entry?.onlySpeeds !== undefined) {
+        if (entry.onlySpeeds !== true || entry.speeds === undefined)
+          throw new Error(`${id} combat condition "${entry?.condition}" onlySpeeds is true, beside its speeds`);
+        gate(RULESET_WALL_COVER_MIN, `has combat condition "${entry.condition}" onlySpeeds, of 1.555`);
+      }
+    const walledTests = (value, where) => {
+      if (!value || typeof value !== "object") return;
+      if (Array.isArray(value)) return value.forEach((one) => walledTests(one, where));
+      for (const key of ["targetIs", "is", "of"]) {
+        const test = value[key];
+        if (!test || typeof test !== "object" || Array.isArray(test)) continue;
+        const tests = [test, ...(Array.isArray(test.anyOf) ? test.anyOf : [])];
+        if (!tests.some((one) => one?.flying !== undefined || one?.holding !== undefined || one?.anyOf !== undefined))
+          continue;
+        if (tests.some((one) => (one?.holding ?? []).some?.((held) => !conditionIdsWalled.has(held))))
+          throw new Error(`${id} ${where} ${key} holding names declared conditions`);
+        gate(RULESET_WALL_COVER_MIN, `has ${where} ${key} with flying, holding or anyOf, of 1.555`);
+      }
+      for (const one of Object.values(value)) walledTests(one, where);
+    };
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+        const where = `catalog "${catalog.id}" entry "${entry?.id}"`;
+        walledTests(entry, where);
+        const zones = [
+          entry?.mechanics?.zone,
+          ...(entry?.mechanics?.variants ?? []).map((one) => one?.mechanics?.zone),
+        ].filter(Boolean);
+        for (const zone of zones)
+          if (zone.cover !== undefined) {
+            if (!["half", "three-quarters"].includes(zone.cover))
+              throw new Error(`${id} ${where} zone cover is "half" or "three-quarters"`);
+            gate(RULESET_WALL_COVER_MIN, `has ${where} zone cover, of 1.555`);
+          }
+        const regenerates = entry?.creature?.regenerates;
+        if (regenerates?.notIn !== undefined) {
+          const notIn = regenerates.notIn;
+          if (
+            !notIn ||
+            typeof notIn !== "object" ||
+            Object.keys(notIn).some((key) => !["light", "terrain"].includes(key)) ||
+            Object.keys(notIn).length === 0 ||
+            (notIn.light !== undefined &&
+              (!Array.isArray(notIn.light) ||
+                notIn.light.length < 1 ||
+                notIn.light.some((one) => !["sunlight", "bright", "dim", "dark"].includes(one)))) ||
+            (notIn.terrain !== undefined &&
+              (!Array.isArray(notIn.terrain) ||
+                notIn.terrain.length < 1 ||
+                notIn.terrain.some((one) => typeof one !== "string" || one.length === 0)))
+          )
+            throw new Error(`${id} ${where} regenerates notIn is { light?, terrain? }`);
+          gate(RULESET_WALL_COVER_MIN, `has ${where} regenerates notIn, of 1.555`);
+        }
+        const recharges = [
+          entry?.item?.charges?.recharge,
+          ...(entry?.item?.moreUses ?? []).map((more) => more?.uses?.recharge),
+        ].filter(Boolean);
+        for (const recharge of recharges)
+          if (recharge.after !== undefined) {
+            const after = recharge.after;
+            const hours = after?.hours;
+            if (
+              !after ||
+              typeof after !== "object" ||
+              Object.keys(after).some((key) => !["days", "hours", "fromDeparture"].includes(key)) ||
+              (after.days === undefined && after.hours === undefined) ||
+              // 1.612: from a called creature's departure, its stay counted in the fight's round length.
+              (after.fromDeparture !== undefined &&
+                (after.fromDeparture !== true || !document?.combat?.roundSeconds)) ||
+              (after.days !== undefined && (!Number.isInteger(after.days) || after.days < 1 || after.days > 3650)) ||
+              (hours !== undefined &&
+                !(
+                  hours &&
+                  typeof hours === "object" &&
+                  Object.keys(hours).every((key) => ["dice", "flat"].includes(key)) &&
+                  (hours.dice === undefined ||
+                    (typeof hours.dice === "string" && /^\d+d\d+([+-]\d+)?$/u.test(hours.dice))) &&
+                  (hours.flat === undefined || Number.isInteger(hours.flat)) &&
+                  (hours.dice !== undefined || hours.flat > 0)
+                ))
+            )
+              throw new Error(
+                `${id} ${where} recharge after is { days?, hours?: { dice?, flat? }, fromDeparture? } (fromDeparture with combat roundSeconds)`,
+              );
+            gate(RULESET_RECHARGE_AFTER_MIN, `has ${where} recharge after, of 1.556`);
+            if (after.fromDeparture !== undefined) itemDeparture ??= `${where} recharge after fromDeparture`;
+          }
+      }
+    // 1.612: how long a round lasts, in seconds.
+    if (document?.combat?.roundSeconds !== undefined) {
+      const seconds = document.combat.roundSeconds;
+      if (!Number.isInteger(seconds) || seconds < 1 || seconds > 3600)
+        throw new Error(`${id} combat roundSeconds is a whole number of seconds, 1 to 3600`);
+      itemDeparture ??= "combat roundSeconds";
+    }
+    if (notForCaster) gate(RULESET_NOT_FOR_CASTER_MIN, `has ${notForCaster}, of 1.609`);
+    if (hostileUnless) gate(RULESET_HOSTILE_UNLESS_MIN, `has ${hostileUnless}, of 1.611`);
+    if (callDisobeys) lateGate(RULESET_CALLS_DISOBEY_MIN, `has ${callDisobeys}, of 1.665`);
+    if (callEnds) lateGate(RULESET_ENTRY_CALLS_END_MIN, `has ${callEnds}, of 1.733`);
+    if (itemDeparture) gate(RULESET_ITEM_DEPARTURE_MIN, `has ${itemDeparture}, of 1.612`);
+    if (becomesItem) gate(RULESET_BECOMES_ITEM_MIN, `has ${becomesItem}, of 1.613`);
+    if (wildCalls) gate(RULESET_WILD_CALLS_MIN, `has ${wildCalls}, of 1.615`);
+    if (userHolds) gate(RULESET_USER_HOLDS_MIN, `has ${userHolds}, of 1.617`);
+    if (contestOnLose) gate(RULESET_CONTEST_ON_LOSE_MIN, `has ${contestOnLose}, of 1.618`);
+    if (ignoredBy) gate(RULESET_IGNORED_BY_MIN, `has ${ignoredBy}, of 1.619`);
+    if (commandedWithin) gate(RULESET_COMMANDED_WITHIN_MIN, `has ${commandedWithin}, of 1.620`);
+    if (callWithin) gate(RULESET_CALL_WITHIN_MIN, `has ${callWithin}, of 1.621`);
+    // 1.622 to 1.627.
+    {
+      const budgetIdsNow = new Set((document?.combat?.economy?.budgets ?? []).map((one) => one?.id));
+      const endableIds = new Set();
+      for (const condition of Array.isArray(document?.combat?.conditions) ? document.combat.conditions : []) {
+        if (condition?.endable === undefined) continue;
+        const ends = condition.endable;
+        if (
+          !ends ||
+          typeof ends !== "object" ||
+          Object.keys(ends).some((key) => key !== "budget") ||
+          !budgetIdsNow.has(ends.budget)
+        )
+          throw new Error(`${id} combat condition "${condition.condition}" endable is { budget: a combat budget }`);
+        endableIds.add(condition.condition);
+        gate(RULESET_ENDABLE_MIN, `has combat condition "${condition.condition}" endable, of 1.622`);
+      }
+      const dice = /^\d+d\d+([+-]\d+)?$/u;
+      const most = (rolled) => {
+        const [, count, sides, add] = /^(\d+)d(\d+)([+-]\d+)?$/u.exec(rolled);
+        return Number(count) * Number(sides) + Number(add ?? 0);
+      };
+      const timesIn = (value, where) => {
+        if (!value || typeof value !== "object") return;
+        if (Array.isArray(value)) return value.forEach((one) => timesIn(one, where));
+        if (value.duration && typeof value.duration === "object" && value.duration.times !== undefined) {
+          const { rounds, times } = value.duration;
+          if (
+            typeof times !== "string" ||
+            !dice.test(times) ||
+            !Number.isInteger(rounds) ||
+            rounds < 1 ||
+            rounds * most(times) > 14400
+          )
+            throw new Error(
+              `${id} ${where} duration times is dice beside rounds, at most a day (14400 rounds) at its most`,
+            );
+          gate(RULESET_DURATION_TIMES_MIN, `has ${where} a duration times dice, of 1.625`);
+        }
+        for (const one of Object.values(value)) timesIn(one, where);
+      };
+      const itemRefs = new Set(
+        (Array.isArray(document?.catalogs) ? document.catalogs : []).flatMap((catalog) =>
+          (catalogEntryList(catalog, catalogSources) ?? [])
+            .filter((one) => one?.item)
+            .map((one) => `${catalog.id}/${one.id}`),
+        ),
+      );
+      for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+        for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+          const where = `catalog "${catalog.id}" entry "${entry?.id}"`;
+          timesIn([entry?.mechanics, entry?.item, entry?.creature], where);
+          const overuse = entry?.item?.charges?.overuse;
+          if (overuse !== undefined) {
+            if (
+              !overuse ||
+              typeof overuse !== "object" ||
+              Object.keys(overuse).some((key) => !["chance", "cumulative"].includes(key)) ||
+              !Number.isInteger(overuse.chance) ||
+              overuse.chance < 1 ||
+              overuse.chance > 100 ||
+              (overuse.cumulative !== undefined && overuse.cumulative !== true)
+            )
+              throw new Error(`${id} ${where} charges overuse is { chance: 1 to 100, cumulative?: true }`);
+            gate(RULESET_OVERUSE_MIN, `has ${where} charges overuse, of 1.624`);
+          }
+          const uses = [
+            entry?.mechanics,
+            entry?.item?.use,
+            ...(entry?.item?.moreUses ?? []).map((one) => one?.use),
+          ].filter(Boolean);
+          for (const use of uses) {
+            if (use.chargesPerRound !== undefined) {
+              if (
+                use.chargesPerRound !== true ||
+                use === entry?.mechanics ||
+                !entry?.item?.charges ||
+                !(use.applies ?? []).some((one) => Number.isInteger(one?.duration?.rounds))
+              )
+                throw new Error(
+                  `${id} ${where} chargesPerRound is true, on an item use with charges putting on a condition for rounds`,
+                );
+              gate(RULESET_CHARGES_PER_ROUND_MIN, `has ${where} chargesPerRound, of 1.623`);
+            }
+            if (use.keepsCaught !== undefined) {
+              const keeps = use.keepsCaught;
+              const moments = [use.reaction, ...(use.reaction?.also ?? [])];
+              if (
+                !moments.some((one) => one?.on === "caught") ||
+                (keeps !== true &&
+                  (!keeps ||
+                    typeof keeps !== "object" ||
+                    Object.keys(keeps).some((key) => key !== "otherwise") ||
+                    !itemRefs.has(keeps.otherwise)))
+              )
+                throw new Error(
+                  `${id} ${where} keepsCaught is true or { otherwise: an item }, taken at a "caught" moment`,
+                );
+              gate(RULESET_KEEPS_CAUGHT_MIN, `has ${where} keepsCaught, of 1.626`);
+            }
+            if (use.dismisses?.while !== undefined && use.targets === "self") {
+              if (!endableIds.has(use.dismisses.while) || use.dismisses.turns !== true)
+                throw new Error(
+                  `${id} ${where} dismisses its own user only while an endable condition holds, with turns`,
+                );
+              gate(RULESET_SELF_AWAY_MIN, `has ${where} dismisses its own user, of 1.627`);
+            }
+          }
+        }
+    }
+    // 1.628 to 1.640.
+    {
+      const senseIds = new Set((document?.combat?.conditions ?? []).flatMap((condition) => condition?.lacks ?? []));
+      const conditionIdsNow = new Set((document?.combat?.conditions ?? []).map((one) => one?.condition));
+      const budgetIdsNow = new Set((document?.combat?.economy?.budgets ?? []).map((one) => one?.id));
+      const checkIdsNow = new Set((document?.combat?.checks ?? []).map((one) => one?.id));
+      const catalogIdsNow = new Set((Array.isArray(document?.catalogs) ? document.catalogs : []).map((one) => one?.id));
+      const entryRefs = new Set(
+        (Array.isArray(document?.catalogs) ? document.catalogs : []).flatMap((catalog) =>
+          (catalogEntryList(catalog, catalogSources) ?? []).map((one) => `${catalog.id}/${one.id}`),
+        ),
+      );
+      const dieSize = /^(\d+)d(\d+)$/u;
+      const amountOk = (amount) =>
+        !!amount &&
+        typeof amount === "object" &&
+        Object.keys(amount).every((key) => ["dice", "flat"].includes(key)) &&
+        (amount.dice === undefined || (typeof amount.dice === "string" && /^\d+d\d+([+-]\d+)?$/u.test(amount.dice))) &&
+        (amount.flat === undefined || Number.isInteger(amount.flat)) &&
+        (amount.dice !== undefined || amount.flat !== undefined);
+      const endings = [
+        "expired",
+        "save",
+        "damage",
+        "harmed",
+        "concentration",
+        "spent",
+        "cured",
+        "dispelled",
+        "contest",
+        "freed",
+        "slipped",
+        "endsWhenSource",
+        "cantHearSource",
+      ];
+      for (const condition of Array.isArray(document?.combat?.conditions) ? document.combat.conditions : []) {
+        const where = `combat condition "${condition?.condition}"`;
+        if (condition?.onEnd?.harm?.save !== undefined)
+          lateGate(RULESET_MIDNIGHT_MIN, `has ${where} onEnd harm saved against, of 1.751`);
+        if (condition?.onEnd?.when !== undefined) {
+          const when = condition.onEnd.when;
+          if (
+            !Array.isArray(when) ||
+            when.length < 1 ||
+            new Set(when).size !== when.length ||
+            when.some((one) => !endings.includes(one))
+          )
+            throw new Error(`${id} ${where} onEnd when is 1 or more distinct endings: ${endings.join(", ")}`);
+          lateGate(RULESET_ON_END_WHEN_MIN, `has ${where} onEnd when, of 1.632`);
+        }
+        for (const one of Array.isArray(condition?.actions) ? condition.actions : []) {
+          if (typeof one === "string") continue;
+          if (
+            !one ||
+            typeof one !== "object" ||
+            Object.keys(one).some((key) => !["entry", "saveDifficulty", "toHit"].includes(key)) ||
+            !entryRefs.has(one.entry) ||
+            (one.saveDifficulty !== undefined &&
+              (!Number.isInteger(one.saveDifficulty) || one.saveDifficulty < 1 || one.saveDifficulty > 40)) ||
+            (one.toHit !== undefined && (!Number.isInteger(one.toHit) || one.toHit < -10 || one.toHit > 30))
+          )
+            throw new Error(`${id} ${where} actions entry is a catalog entry or { entry, saveDifficulty?, toHit? }`);
+          lateGate(RULESET_ACTION_NUMBERS_MIN, `has ${where} actions at their own numbers, of 1.634`);
+        }
+        const drops = condition?.harms?.save?.drops;
+        if (drops !== undefined) {
+          const harmDice = dieSize.exec(condition.harms.dice ?? "");
+          const dropDice = dieSize.exec(typeof drops === "string" ? drops : "");
+          if (!harmDice || !dropDice || dropDice[2] !== harmDice[2] || Number(dropDice[1]) > Number(harmDice[1]))
+            throw new Error(`${id} ${where} harms save drops is dice of the size it harms with, no more of them`);
+          lateGate(RULESET_HARM_DROPS_MIN, `has ${where} harms save drops, of 1.635`);
+        }
+        if (condition?.onFirstSeen !== undefined) {
+          const seen = condition.onFirstSeen;
+          if (
+            !seen ||
+            typeof seen !== "object" ||
+            Object.keys(seen).some((key) => key !== "applies") ||
+            !seen.applies ||
+            typeof seen.applies !== "object" ||
+            Array.isArray(seen.applies) ||
+            !conditionIdsNow.has(seen.applies.condition)
+          )
+            throw new Error(`${id} ${where} onFirstSeen is { applies: one condition put on }`);
+          lateGate(RULESET_ON_FIRST_SEEN_MIN, `has ${where} onFirstSeen, of 1.638`);
+        }
+      }
+      for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+        for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+          const where = `catalog "${catalog.id}" entry "${entry?.id}"`;
+          for (const effect of [entry?.item?.worn, entry?.item?.carried]) {
+            if (effect?.proficiencyBonus === undefined) continue;
+            const bonus = effect.proficiencyBonus;
+            if (!Number.isInteger(bonus) || bonus === 0 || bonus < -6 || bonus > 6)
+              throw new Error(`${id} ${where} proficiencyBonus is a whole number -6 to 6, never 0`);
+            lateGate(RULESET_PROFICIENCY_BONUS_MIN, `has ${where} proficiencyBonus, of 1.639`);
+          }
+          const itemUses = [entry?.item?.use, ...(entry?.item?.moreUses ?? []).map((one) => one?.use)].filter(Boolean);
+          const uses = [entry?.mechanics, ...itemUses].filter(Boolean);
+          for (const use of uses) {
+            const onItem = use !== entry?.mechanics;
+            if (onItem && (use.needs !== undefined || use.needsAny !== undefined)) {
+              for (const list of [use.needs, use.needsAny].filter((one) => one !== undefined))
+                if (!Array.isArray(list) || list.length < 1 || list.some((one) => !senseIds.has(one)))
+                  throw new Error(`${id} ${where} needs and needsAny are sense words a condition lacks`);
+              lateGate(RULESET_ITEM_NEEDS_MIN, `has ${where} an item use that needs senses, of 1.628`);
+            }
+            if (use.oncePerTarget !== undefined && (use.area !== undefined || onItem))
+              lateGate(RULESET_ITEM_NEEDS_MIN, `has ${where} oncePerTarget beside an area, of 1.628`);
+            if (use.amountAgainst !== undefined) {
+              const against = use.amountAgainst;
+              if (
+                !against ||
+                typeof against !== "object" ||
+                Object.keys(against).some((key) => !["is", "amount"].includes(key)) ||
+                !against.is ||
+                typeof against.is !== "object" ||
+                !amountOk(against.amount) ||
+                !use.amount
+              )
+                throw new Error(`${id} ${where} amountAgainst is { is: a target test, amount }, beside an amount`);
+              lateGate(RULESET_AMOUNT_AGAINST_MIN, `has ${where} amountAgainst, of 1.629`);
+            }
+            if (use.backfires !== undefined) {
+              const back = use.backfires;
+              if (
+                !onItem ||
+                !back ||
+                typeof back !== "object" ||
+                Object.keys(back).some(
+                  (key) => !["chance", "amount", "damageType", "destroys", "instead"].includes(key),
+                ) ||
+                !Number.isInteger(back.chance) ||
+                back.chance < 1 ||
+                back.chance > 100 ||
+                !amountOk(back.amount) ||
+                (back.damageType !== undefined && typeof back.damageType !== "string") ||
+                (back.destroys !== undefined && back.destroys !== true) ||
+                (back.instead !== undefined && back.instead !== true)
+              )
+                throw new Error(
+                  `${id} ${where} backfires is { chance: 1 to 100, amount, damageType?, destroys?: true, instead?: true }, on an item use`,
+                );
+              lateGate(RULESET_BACKFIRES_MIN, `has ${where} backfires, of 1.630`);
+            }
+            if (use.pushesOutSaved !== undefined) {
+              if (use.pushesOutSaved !== true || !use.area || !use.save)
+                throw new Error(`${id} ${where} pushesOutSaved is true, beside an area and a save`);
+              lateGate(RULESET_PUSHES_OUT_SAVED_MIN, `has ${where} pushesOutSaved, of 1.631`);
+            }
+            if (use.targetTypes?.uncontrolled !== undefined) {
+              if (use.targetTypes.uncontrolled !== true)
+                throw new Error(`${id} ${where} targetTypes uncontrolled is true`);
+              lateGate(RULESET_UNCONTROLLED_MIN, `has ${where} targetTypes uncontrolled, of 1.633`);
+            }
+            for (const applied of Array.isArray(use.applies) ? use.applies : []) {
+              const ends = applied?.checkEnds;
+              if (ends?.spendsItem === undefined && ends?.failedRetryAfter === undefined) continue;
+              if (
+                (ends.spendsItem !== undefined && (ends.spendsItem !== true || !onItem)) ||
+                (ends.failedRetryAfter !== undefined &&
+                  (!Number.isInteger(ends.failedRetryAfter) ||
+                    ends.failedRetryAfter < 1 ||
+                    ends.failedRetryAfter > 14400))
+              )
+                throw new Error(
+                  `${id} ${where} checkEnds spendsItem is true on an item use, failedRetryAfter 1 to 14400 rounds`,
+                );
+              lateGate(RULESET_CHECK_ENDS_ITEM_MIN, `has ${where} checkEnds spendsItem or failedRetryAfter, of 1.636`);
+            }
+            const zone = use.zone;
+            if (zone?.close !== undefined || zone?.spreads !== undefined) {
+              const close = zone.close;
+              const spreads = zone.spreads;
+              if (
+                (close !== undefined &&
+                  (!close ||
+                    typeof close !== "object" ||
+                    Object.keys(close).some((key) => !["budget", "lingers"].includes(key)) ||
+                    !budgetIdsNow.has(close.budget) ||
+                    (close.lingers !== undefined &&
+                      (!Number.isInteger(close.lingers) || close.lingers < 1 || close.lingers > 14400)))) ||
+                (spreads !== undefined &&
+                  (!spreads ||
+                    typeof spreads !== "object" ||
+                    Object.keys(spreads).some((key) => !["by", "every", "upTo"].includes(key)) ||
+                    use.area?.shape !== "burst" ||
+                    ![spreads.by, spreads.every, spreads.upTo].every((one) => Number.isInteger(one) && one > 0) ||
+                    spreads.upTo <= use.area.size))
+              )
+                throw new Error(
+                  `${id} ${where} zone close is { budget, lingers? }, spreads { by, every, upTo above its size } on a burst`,
+                );
+              lateGate(RULESET_ZONE_CLOSE_MIN, `has ${where} zone close or spreads, of 1.637`);
+            }
+            if (onItem && use.duplicates !== undefined) {
+              const dup = use.duplicates;
+              if (
+                use.kind !== "utility" ||
+                !dup ||
+                typeof dup !== "object" ||
+                Object.keys(dup).some((key) => !["catalog", "upTo", "only"].includes(key)) ||
+                !catalogIdsNow.has(dup.catalog) ||
+                !Number.isInteger(dup.upTo) ||
+                dup.upTo < 1 ||
+                dup.upTo > 9
+              )
+                throw new Error(`${id} ${where} item use duplicates is { catalog, upTo, only? } on a utility use`);
+              lateGate(RULESET_ITEM_DUPLICATES_MIN, `has ${where} an item use that duplicates, of 1.640`);
+            }
+          }
+        }
+    }
+    // 1.205, checked with the newest so that older gates speak first.
+    if (countsRows) gate(RULESET_LIST_COUNT_MIN, `${countsRows}, of 1.205`);
+    // 1.557 to 1.574, after the older ones.
+    const stageSaves = new Set((document?.sheet?.saves ?? []).map((one) => one?.id));
+    // 1.580: breaksConcentration and disperses.
+    const stageKeys = [
+      "from",
+      "label",
+      "amount",
+      "damageType",
+      "save",
+      "onSave",
+      "count",
+      "difficult",
+      "obscures",
+      "noRanged",
+      "breaksConcentration",
+      "disperses",
+    ];
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+        const where = `catalog "${catalog.id}" entry "${entry?.id}"`;
+        const all = [entry?.mechanics, ...(entry?.mechanics?.variants ?? []).map((one) => one?.mechanics)].filter(
+          Boolean,
+        );
+        for (const mechanics of all) {
+          const stages = mechanics.zone?.stages;
+          if (stages !== undefined) {
+            if (
+              !Array.isArray(stages) ||
+              stages.length < 1 ||
+              stages.length > 10 ||
+              stages.some(
+                (stage, at) =>
+                  !stage ||
+                  typeof stage !== "object" ||
+                  Object.keys(stage).some((key) => !stageKeys.includes(key)) ||
+                  !Number.isInteger(stage.from) ||
+                  stage.from < 2 ||
+                  stage.from > 1000 ||
+                  (at > 0 && !(stage.from > stages[at - 1]?.from)) ||
+                  typeof stage.label !== "string" ||
+                  stage.label.length < 1 ||
+                  stage.label.length > 40 ||
+                  (stage.onSave !== undefined && (!["half", "none"].includes(stage.onSave) || !stage.save)) ||
+                  ((stage.save || stage.damageType || stage.count) && !stage.amount) ||
+                  (stage.save !== undefined && !stageSaves.has(stage.save)) ||
+                  (stage.count !== undefined &&
+                    (!Number.isInteger(stage.count) || stage.count < 1 || stage.count > 20)) ||
+                  ["difficult", "obscures", "noRanged", "breaksConcentration", "disperses"].some(
+                    (key) => stage[key] !== undefined && stage[key] !== true,
+                  ),
+              ) ||
+              (stages.some((stage) => stage.save) && !mechanics.save)
+            )
+              throw new Error(
+                `${id} ${where} zone stages are 1 to 10 in order, each { from: 2 to 1000, label, amount?, damageType?, save?, onSave?, count?, difficult?, obscures?, noRanged?, breaksConcentration?, disperses? }`,
+              );
+            gate(RULESET_ZONE_STAGES_MIN, `has ${where} zone stages, of 1.557`);
+            if (stages.some((stage) => stage.breaksConcentration !== undefined || stage.disperses !== undefined)) {
+              if (stages.some((stage) => stage.breaksConcentration) && document?.combat?.concentration === undefined)
+                throw new Error(`${id} ${where} zone stage breaksConcentration needs combat concentration`);
+              gate(
+                RULESET_STAGE_WIND_MIN,
+                `has ${where} a zone stage that breaks concentration or disperses, of 1.580`,
+              );
+            }
+          }
+          if (mechanics.sharesHeal !== undefined) {
+            if (mechanics.kind !== "heal" || ![true, "half"].includes(mechanics.sharesHeal))
+              throw new Error(`${id} ${where} sharesHeal is true or "half", on a heal`);
+            gate(RULESET_SHARES_HEAL_MIN, `has ${where} a heal shared out, of 1.563`);
+          }
+        }
+        // 1.586: a called creature's action keeping its caller's number off, or growing with the call's step.
+        if (
+          (entry?.creature?.actions ?? []).some(
+            (action) => action?.callerAdds !== undefined || action?.perCallerStep !== undefined,
+          )
+        )
+          gate(RULESET_CALLER_STEPS_MIN, `has ${where} an action with callerAdds or perCallerStep, of 1.586`);
+        if (entry?.creature?.doubleToObjects !== undefined) {
+          if (entry.creature.doubleToObjects !== true) throw new Error(`${id} ${where} doubleToObjects is true`);
+          gate(RULESET_DOUBLE_TO_OBJECTS_MIN, `has ${where} doubleToObjects, of 1.560`);
+        }
+      }
+    for (const entry of Array.isArray(document?.combat?.conditions) ? document.combat.conditions : [])
+      if (entry?.lifts !== undefined) {
+        if (!Number.isFinite(entry.lifts) || entry.lifts <= 0 || entry.lifts > RULESET_DISTANCE_MAX)
+          throw new Error(`${id} combat condition "${entry?.condition}" lifts a distance above 0`);
+        gate(RULESET_LIFTS_MIN, `has combat condition "${entry.condition}" lifts, of 1.566`);
+      }
+    // 1.562 to 1.578, after the older ones.
+    for (const entry of Array.isArray(document?.combat?.conditions) ? document.combat.conditions : []) {
+      if (entry?.harms?.at === "defies")
+        lateGate(
+          RULESET_DEFIED_COMMANDS_MIN,
+          `has combat condition "${entry.condition}" harms as its holder defies it, of 1.644`,
+        );
+      if (entry?.harms?.at === "casts" || entry?.harms?.unblockable !== undefined)
+        lateGate(
+          RULESET_FORBIDS_ENTRIES_MIN,
+          `has combat condition "${entry.condition}" harms as its holder casts, of 1.646`,
+        );
+      if (entry?.stasis !== undefined) {
+        if (entry.stasis !== true)
+          throw new Error(`${id} combat condition "${entry.condition}" stasis is true or left out`);
+        lateGate(RULESET_STASIS_MIN, `has combat condition "${entry.condition}" stasis, of 1.647`);
+      }
+      if (["attacks-source", "attacks-source-side"].includes(entry?.harms?.at) || entry?.harms?.once !== undefined)
+        gate(
+          RULESET_HARMS_DEFIANCE_MIN,
+          `has combat condition "${entry.condition}" harms as its holder attacks its source, of 1.562`,
+        );
+      // 1.652: a save modifier against what a save's against.qualities names.
+      if ((entry?.modifiers ?? []).some((one) => one?.against?.qualities !== undefined))
+        lateGate(
+          RULESET_SAVE_QUALITIES_MIN,
+          `has combat condition "${entry.condition}" a save modifier against qualities, of 1.652`,
+        );
+      // 1.648 to 1.651: languages understood, a height fallen safely, no breath and a save held back.
+      if (entry?.languages !== undefined) {
+        if (!["none", "all", "understands"].includes(entry.languages))
+          throw new Error(`${id} combat condition "${entry.condition}" languages is "none", "all" or "understands"`);
+        lateGate(RULESET_CONDITION_LANGUAGES_MIN, `has combat condition "${entry.condition}" languages, of 1.648`);
+        // 1.734: understanding without being understood.
+        if (entry.languages === "understands")
+          lateGate(
+            RULESET_LANGUAGES_UNDERSTANDS_MIN,
+            `has combat condition "${entry.condition}" understanding every language, of 1.734`,
+          );
+      }
+      // 1.655: attacks against its holder at disadvantage only from those who see them.
+      if (entry?.whenSeen === true && (entry.effects ?? []).includes("attacks-against-disadvantage"))
+        lateGate(
+          RULESET_SEEN_ATTACKS_MIN,
+          `has combat condition "${entry.condition}" whenSeen on attacks-against-disadvantage, of 1.655`,
+        );
+      if (entry?.fallsSafely !== undefined && entry.fallsSafely !== true)
+        lateGate(
+          RULESET_FALLS_SAFELY_UP_TO_MIN,
+          `has combat condition "${entry.condition}" fallsSafely up to a height, of 1.650`,
+        );
+      if (entry?.suffocates !== undefined || entry?.savesUnless !== undefined) {
+        const known = new Set((document?.sheet?.live?.conditions ?? []).map((one) => one?.id));
+        if (
+          entry.suffocates !== undefined &&
+          (entry.suffocates !== true || document?.combat?.underwater?.breath === undefined)
+        )
+          throw new Error(
+            `${id} combat condition "${entry.condition}" suffocates is true, with combat.underwater.breath`,
+          );
+        if (
+          entry.savesUnless !== undefined &&
+          (!Array.isArray(entry.savesUnless) ||
+            entry.savesUnless.length < 1 ||
+            entry.savesUnless.length > 8 ||
+            entry.savesUnless.some((one) => !known.has(one)))
+        )
+          throw new Error(`${id} combat condition "${entry.condition}" savesUnless names the sheet's conditions`);
+        lateGate(
+          RULESET_SUFFOCATES_MIN,
+          `has combat condition "${entry.condition}" suffocates or savesUnless, of 1.651`,
+        );
+      }
+    }
+    // 1.649: a sense that sees things as they truly are.
+    for (const sense of Array.isArray(document?.combat?.senses) ? document.combat.senses : [])
+      if (sense?.seesTrue !== undefined) {
+        if (sense.seesTrue !== true) throw new Error(`${id} combat sense "${sense.id}" seesTrue is true or left out`);
+        lateGate(RULESET_SEES_TRUE_MIN, `has combat sense "${sense.id}" seeing things as they truly are, of 1.649`);
+      }
+    // 1.761: minds, on the fight, its creature types and its stat blocks.
+    {
+      const minds = document?.combat?.minds;
+      if (minds !== undefined) {
+        const tiers = minds?.tiers;
+        if (
+          !minds ||
+          typeof minds !== "object" ||
+          Object.keys(minds).some((key) => !["ability", "tiers"].includes(key)) ||
+          typeof minds.ability !== "string" ||
+          !Array.isArray(tiers) ||
+          tiers.length < 1 ||
+          tiers.length > 5 ||
+          tiers.some(
+            (tier, index) =>
+              !tier ||
+              Object.keys(tier).some((key) => !["atLeast", "mind"].includes(key)) ||
+              !Number.isInteger(tier.atLeast) ||
+              tier.atLeast < 0 ||
+              tier.atLeast > 1000 ||
+              !RULESET_MINDS.includes(tier.mind) ||
+              (index > 0 && tier.atLeast <= tiers[index - 1].atLeast),
+          )
+        )
+          throw new Error(
+            `${id} combat.minds is { ability, tiers: 1 to 5 { atLeast, mind }, rising }, each mind one of ${RULESET_MINDS.join(", ")}`,
+          );
+        lateGate(RULESET_MINDS_MIN, `has combat.minds, of 1.761`);
+      }
+      for (const type of document?.combat?.creatureTypes?.types ?? [])
+        if (type?.mind !== undefined) {
+          if (!RULESET_MINDS.includes(type.mind))
+            throw new Error(`${id} combat creature type "${type.id}" mind is one of ${RULESET_MINDS.join(", ")}`);
+          lateGate(RULESET_MINDS_MIN, `has creature type "${type.id}" a mind, of 1.761`);
+        }
+      for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+        for (const entry of catalogEntryList(catalog, catalogSources) ?? [])
+          if (entry?.creature?.mind !== undefined) {
+            if (!RULESET_MINDS.includes(entry.creature.mind))
+              throw new Error(
+                `${id} catalog "${catalog.id}" entry "${entry.id}" mind is one of ${RULESET_MINDS.join(", ")}`,
+              );
+            lateGate(RULESET_MINDS_MIN, `has ${catalog.id} entry "${entry.id}" a mind, of 1.761`);
+          }
+    }
+    // 1.762: morale, and the leaders whose fall tests it.
+    {
+      const morale = document?.combat?.morale;
+      if (morale !== undefined) {
+        const check = morale?.check;
+        const saves = new Set(
+          (document?.combat?.saves ?? document?.sheet?.saves ?? []).map((one) => one?.id).filter(Boolean),
+        );
+        const checkOk =
+          check &&
+          typeof check === "object" &&
+          ((typeof check.roll === "string" && Object.keys(check).every((key) => ["roll", "score"].includes(key))) ||
+            (typeof check.save === "string" &&
+              Number.isInteger(check.difficulty) &&
+              check.difficulty >= 1 &&
+              check.difficulty <= 100 &&
+              Object.keys(check).every((key) => ["save", "difficulty"].includes(key))));
+        const on = morale?.on;
+        const conditionIds = new Set((document?.combat?.conditions ?? []).map((one) => one?.condition));
+        if (
+          !morale ||
+          typeof morale !== "object" ||
+          Object.keys(morale).some(
+            (key) =>
+              ![
+                "check",
+                "on",
+                "hurtBelow",
+                "halfDownUnanswered",
+                "surrenders",
+                "neverSurrender",
+                "unlessImmune",
+              ].includes(key),
+          ) ||
+          !checkOk ||
+          (saves.size > 0 && check.save !== undefined && !saves.has(check.save)) ||
+          !Array.isArray(on) ||
+          on.length < 1 ||
+          new Set(on).size !== on.length ||
+          on.some(
+            (one) => !["first-fall", "half-down", "leader-down", "hurt", "surprised", "helpless"].includes(one),
+          ) ||
+          (morale.halfDownUnanswered !== undefined &&
+            (morale.halfDownUnanswered !== true || !on.includes("half-down"))) ||
+          (morale.hurtBelow !== undefined &&
+            (typeof morale.hurtBelow !== "number" ||
+              morale.hurtBelow < 0.05 ||
+              morale.hurtBelow > 0.95 ||
+              !on.includes("hurt"))) ||
+          (morale.surrenders !== undefined &&
+            (!Array.isArray(morale.surrenders) || morale.surrenders.some((one) => !RULESET_MINDS.includes(one)))) ||
+          (morale.unlessImmune !== undefined && !conditionIds.has(morale.unlessImmune)) ||
+          (morale.neverSurrender !== undefined &&
+            (!Array.isArray(morale.neverSurrender) ||
+              morale.neverSurrender.length < 1 ||
+              morale.neverSurrender.length > 20 ||
+              new Set(morale.neverSurrender).size !== morale.neverSurrender.length ||
+              morale.neverSurrender.some(
+                (one) => !(document?.combat?.creatureTypes?.types ?? []).some((type) => type?.id === one),
+              )))
+        )
+          throw new Error(
+            `${id} combat.morale is { check: { roll, score? } or { save, difficulty }, on: first-fall, half-down, leader-down, hurt, surprised or helpless, hurtBelow?, halfDownUnanswered?: true with half-down, surrenders?: [minds], neverSurrender?: [creature types], unlessImmune?: a condition }`,
+          );
+        lateGate(RULESET_MORALE_MIN, `has combat.morale, of 1.762`);
+        // Losing heart when caught unaware or helpless, or half down only while unanswered (1.775).
+        if (on.some((one) => one === "surprised" || one === "helpless") || morale.halfDownUnanswered !== undefined)
+          lateGate(
+            RULESET_MORALE_UNAWARE_MIN,
+            `has combat.morale losing heart when surprised, helpless or half down unanswered, of 1.775`,
+          );
+        // Kinds that only ever flee (1.785).
+        if (morale.neverSurrender !== undefined)
+          lateGate(RULESET_NEVER_SURRENDER_MIN, `has combat.morale creature types that never surrender, of 1.785`);
+      }
+      for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+        for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+          const creature = entry?.creature;
+          if (creature?.leader === undefined && creature?.morale === undefined) continue;
+          if (
+            (creature.leader !== undefined && creature.leader !== true) ||
+            (creature.morale !== undefined &&
+              (!Number.isInteger(creature.morale) || creature.morale < 0 || creature.morale > 100))
+          )
+            throw new Error(
+              `${id} catalog "${catalog.id}" entry "${entry.id}" leader is true and morale a whole number`,
+            );
+          lateGate(RULESET_MORALE_MIN, `has ${catalog.id} entry "${entry.id}" a leader or a morale score, of 1.762`);
+        }
+    }
+    // 1.765: conditions put on along with another.
+    {
+      const conditions = Array.isArray(document?.combat?.conditions) ? document.combat.conditions : [];
+      const known = new Set(conditions.map((one) => one?.condition));
+      for (const entry of conditions)
+        if (entry?.alsoApplies !== undefined) {
+          const also = entry.alsoApplies;
+          if (
+            !Array.isArray(also) ||
+            also.length < 1 ||
+            also.length > 4 ||
+            new Set(also).size !== also.length ||
+            also.some((one) => typeof one !== "string" || one === entry.condition || !known.has(one))
+          )
+            throw new Error(
+              `${id} combat condition "${entry.condition}" alsoApplies is 1 to 4 other conditions of the ruleset's, each once`,
+            );
+          lateGate(
+            RULESET_ALSO_APPLIES_MIN,
+            `has combat condition "${entry.condition}" putting others on with it, of 1.765`,
+          );
+        }
+    }
+    // 1.763: how a creature goes about a fight, on the fight, its creature types and its stat blocks.
+    {
+      const shape =
+        "{ temperament?, role?, targets?: 1 to 4, opens?: 1 to 4 of its actions, pack?: true, ambush?: true, guards?: 1 to 3 of leader, casters, healers, shifts?: 1 to 4 { on, to }, territory?: 1 to 40 }, at least one";
+      if (document?.combat?.behavior !== undefined) {
+        if (!behaviorOk(document.combat.behavior)) throw new Error(`${id} combat.behavior is ${shape}`);
+        lateGate(RULESET_FIGHT_BEHAVIOR_MIN, `has combat.behavior, of 1.763`);
+        if (document.combat.behavior.role === "solo")
+          lateGate(RULESET_SOLO_ROLE_MIN, `has combat.behavior fighting a side alone, of 1.776`);
+        if (document.combat.behavior.guards) lateGate(RULESET_GUARDS_MIN, `has combat.behavior guarding, of 1.777`);
+        if (document.combat.behavior.temperament === "fanatical")
+          lateGate(RULESET_FANATICAL_MIN, `has combat.behavior fanatical, of 1.778`);
+        if (document.combat.behavior.shifts)
+          lateGate(RULESET_SHIFTS_MIN, `has combat.behavior turning mid-fight, of 1.779`);
+        if (arrogantIn(document.combat.behavior))
+          lateGate(RULESET_ARROGANT_MIN, `has combat.behavior arrogant, of 1.780`);
+        if (territorialIn(document.combat.behavior))
+          lateGate(RULESET_TERRITORIAL_MIN, `has combat.behavior territorial, of 1.781`);
+        if (cruelIn(document.combat.behavior)) lateGate(RULESET_CRUEL_MIN, `has combat.behavior cruel, of 1.782`);
+        if (honourableIn(document.combat.behavior))
+          lateGate(RULESET_HONOURABLE_MIN, `has combat.behavior honourable, of 1.783`);
+        if (hungryIn(document.combat.behavior)) lateGate(RULESET_HUNGRY_MIN, `has combat.behavior hungry, of 1.784`);
+      }
+      for (const type of document?.combat?.creatureTypes?.types ?? [])
+        if (type?.behavior !== undefined) {
+          if (!behaviorOk(type.behavior))
+            throw new Error(`${id} combat creature type "${type.id}" behavior is ${shape}`);
+          lateGate(RULESET_FIGHT_BEHAVIOR_MIN, `has creature type "${type.id}" a behavior, of 1.763`);
+          if (type.behavior.role === "solo")
+            lateGate(RULESET_SOLO_ROLE_MIN, `has creature type "${type.id}" fighting a side alone, of 1.776`);
+          if (type.behavior.guards) lateGate(RULESET_GUARDS_MIN, `has creature type "${type.id}" guarding, of 1.777`);
+          if (type.behavior.temperament === "fanatical")
+            lateGate(RULESET_FANATICAL_MIN, `has creature type "${type.id}" fanatical, of 1.778`);
+          if (type.behavior.shifts)
+            lateGate(RULESET_SHIFTS_MIN, `has creature type "${type.id}" turning mid-fight, of 1.779`);
+          if (arrogantIn(type.behavior))
+            lateGate(RULESET_ARROGANT_MIN, `has creature type "${type.id}" arrogant, of 1.780`);
+          if (territorialIn(type.behavior))
+            lateGate(RULESET_TERRITORIAL_MIN, `has creature type "${type.id}" territorial, of 1.781`);
+          if (cruelIn(type.behavior)) lateGate(RULESET_CRUEL_MIN, `has creature type "${type.id}" cruel, of 1.782`);
+          if (honourableIn(type.behavior))
+            lateGate(RULESET_HONOURABLE_MIN, `has creature type "${type.id}" honourable, of 1.783`);
+          if (hungryIn(type.behavior)) lateGate(RULESET_HUNGRY_MIN, `has creature type "${type.id}" hungry, of 1.784`);
+        }
+      for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+        for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+          const creature = entry?.creature;
+          if (creature?.behavior === undefined) continue;
+          if (!behaviorOk(creature.behavior, new Set((creature.actions ?? []).map((action) => action?.id))))
+            throw new Error(`${id} catalog "${catalog.id}" entry "${entry.id}" behavior is ${shape}`);
+          lateGate(RULESET_FIGHT_BEHAVIOR_MIN, `has ${catalog.id} entry "${entry.id}" a behavior, of 1.763`);
+          if (creature.behavior.role === "solo")
+            lateGate(RULESET_SOLO_ROLE_MIN, `has ${catalog.id} entry "${entry.id}" fighting a side alone, of 1.776`);
+          if (creature.behavior.guards)
+            lateGate(RULESET_GUARDS_MIN, `has ${catalog.id} entry "${entry.id}" guarding, of 1.777`);
+          if (creature.behavior.temperament === "fanatical")
+            lateGate(RULESET_FANATICAL_MIN, `has ${catalog.id} entry "${entry.id}" fanatical, of 1.778`);
+          if (creature.behavior.shifts)
+            lateGate(RULESET_SHIFTS_MIN, `has ${catalog.id} entry "${entry.id}" turning mid-fight, of 1.779`);
+          if (arrogantIn(creature.behavior))
+            lateGate(RULESET_ARROGANT_MIN, `has ${catalog.id} entry "${entry.id}" arrogant, of 1.780`);
+          if (territorialIn(creature.behavior))
+            lateGate(RULESET_TERRITORIAL_MIN, `has ${catalog.id} entry "${entry.id}" territorial, of 1.781`);
+          if (cruelIn(creature.behavior))
+            lateGate(RULESET_CRUEL_MIN, `has ${catalog.id} entry "${entry.id}" cruel, of 1.782`);
+          if (honourableIn(creature.behavior))
+            lateGate(RULESET_HONOURABLE_MIN, `has ${catalog.id} entry "${entry.id}" honourable, of 1.783`);
+          if (hungryIn(creature.behavior))
+            lateGate(RULESET_HUNGRY_MIN, `has ${catalog.id} entry "${entry.id}" hungry, of 1.784`);
+        }
+    }
+    // 1.378: the ruleset's own words on the sheet, the menu and the cards.
+    {
+      const sheet = document?.sheet ?? {};
+      const live = sheet.live ?? {};
+      const words = (where) => lateGate(RULESET_SHEET_WORDS_MIN, `has ${where}, of 1.378`);
+      const text = (value, max) => typeof value === "string" && value.trim().length > 0 && value.length <= max;
+      for (const pool of live.pools ?? [])
+        if (pool?.unit !== undefined || pool?.units !== undefined) {
+          if ((pool.unit !== undefined && !text(pool.unit, 40)) || (pool.units !== undefined && !text(pool.units, 40)))
+            throw new Error(`${id} pool "${pool.id}" unit and units are text of 1 to 40 characters`);
+          words(`pool "${pool.id}" naming one and several`);
+        }
+      for (const list of sheet.lists ?? [])
+        if (list?.display !== undefined) {
+          const display = list.display;
+          const column = (columnId, type) =>
+            (list.columns ?? []).some((one) => one?.id === columnId && one?.type === type);
+          if (
+            !display ||
+            typeof display !== "object" ||
+            Object.keys(display).some((key) => !["tab", "by", "mark"].includes(key)) ||
+            (display.tab !== undefined && !text(display.tab, 40)) ||
+            (display.mark !== undefined && !column(display.mark, "boolean")) ||
+            (display.by !== undefined &&
+              (!column(display.by.column, "number") ||
+                !Array.isArray(display.by.labels) ||
+                display.by.labels.length < 1 ||
+                display.by.labels.length > 21 ||
+                display.by.labels.some((one) => !text(one, 40))))
+          )
+            throw new Error(
+              `${id} list "${list.id}" display is { tab?, by?: { column: a number column, labels: 1 to 21 }, mark?: a yes-or-no column }`,
+            );
+          words(`list "${list.id}" with a display`);
+        }
+      const derivedIds = new Set((sheet.derived ?? []).map((one) => one?.id));
+      for (const field of live.text ?? [])
+        if (field?.hideWhen !== undefined) {
+          const hide = field.hideWhen;
+          if (hide?.derived !== undefined) {
+            const comparisons = ["equals", "notEquals", "in"].filter((key) => hide[key] !== undefined);
+            if (!derivedIds.has(hide.derived) || comparisons.length !== 1 || Object.keys(hide).length !== 2)
+              throw new Error(
+                `${id} live text "${field.id}" hideWhen names a derived value and exactly one of equals, notEquals or in`,
+              );
+          }
+          words(`live text "${field.id}" hidden`);
+        }
+      for (const condition of live.conditions ?? [])
+        if (condition?.pickable !== undefined) {
+          if (condition.pickable !== false)
+            throw new Error(`${id} condition "${condition.id}" pickable is only ever false`);
+          words(`condition "${condition.id}" kept out of the picker`);
+        }
+      for (const track of live.tracks ?? [])
+        if (track?.showWhenSet !== undefined) {
+          if (track.showWhenSet !== true || track.levels || track.kinds || track.boxes)
+            throw new Error(`${id} track "${track.id}" showWhenSet is true, on a track that is not a wound track`);
+          words(`track "${track.id}" shown once set`);
+        }
+      for (const derived of sheet.derived ?? [])
+        if (derived?.signed !== undefined) {
+          if (derived.signed !== true) throw new Error(`${id} derived "${derived.id}" signed is only ever true`);
+          words(`derived "${derived.id}" signed`);
+        }
+      for (const level of document?.combat?.levels ?? [])
+        for (const modifier of level?.modifiers ?? [])
+          if (modifier?.label !== undefined) words(`a combat level modifier with a label`);
+      for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+        for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+          const toggle = entry?.item?.toggle;
+          if (toggle?.onLabel !== undefined || toggle?.offLabel !== undefined) {
+            if (
+              (toggle.onLabel !== undefined && !text(toggle.onLabel, 40)) ||
+              (toggle.offLabel !== undefined && !text(toggle.offLabel, 40))
+            )
+              throw new Error(
+                `${id} ${catalog.id} entry "${entry.id}" toggle onLabel and offLabel are text of 1 to 40 characters`,
+              );
+            words(`${catalog.id} entry "${entry.id}" naming its switch's moves`);
+          }
+          const use = entry?.item?.use;
+          if (use?.title !== undefined) {
+            if (!text(use.title, 60))
+              throw new Error(`${id} ${catalog.id} entry "${entry.id}" use title is text of 1 to 60 characters`);
+            words(`${catalog.id} entry "${entry.id}" naming its use`);
+          }
+          for (const trait of entry?.creature?.traits ?? [])
+            if (typeof trait?.text === "string" && trait.text.length > 400) {
+              if (trait.text.length > 1200)
+                throw new Error(
+                  `${id} ${catalog.id} entry "${entry.id}" trait "${trait.name}" runs over 1200 characters`,
+                );
+              words(`${catalog.id} entry "${entry.id}" a trait over 400 characters`);
+            }
+        }
+    }
+    // 1.743: more than eight senses.
+    if (Array.isArray(document?.combat?.senses) && document.combat.senses.length > 8)
+      lateGate(RULESET_TWELVE_SENSES_MIN, `has ${document.combat.senses.length} combat senses, more than 8, of 1.743`);
+    // 1.719: a sense that walls do not stop.
+    for (const sense of Array.isArray(document?.combat?.senses) ? document.combat.senses : [])
+      if (sense?.throughWalls !== undefined) {
+        const through = sense.throughWalls;
+        // 1.759: or so many inches of each material.
+        const byMaterial =
+          through &&
+          typeof through === "object" &&
+          !Array.isArray(through) &&
+          Object.keys(through).length >= 1 &&
+          Object.keys(through).length <= 12 &&
+          Object.entries(through).every(
+            ([material, inches]) =>
+              /^[a-z][a-z0-9_]*$/u.test(material) && typeof inches === "number" && inches > 0 && inches <= 10000,
+          );
+        if ((through !== true && !byMaterial) || sense.blind)
+          throw new Error(
+            `${id} combat sense "${sense.id}" throughWalls is true or { material: inches }, on a sense that sees`,
+          );
+        lateGate(RULESET_SENSE_THROUGH_WALLS_MIN, `has combat sense "${sense.id}" seeing through walls, of 1.719`);
+        if (byMaterial)
+          lateGate(
+            RULESET_SIGHT_MATERIALS_MIN,
+            `has combat sense "${sense.id}" seeing through so much of each material, of 1.759`,
+          );
+      }
+    // 1.652: an item's save modifier against qualities.
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? [])
+        for (const key of ["worn", "carried"])
+          if ((entry?.item?.[key]?.modifiers ?? []).some((one) => one?.against?.qualities !== undefined))
+            lateGate(
+              RULESET_SAVE_QUALITIES_MIN,
+              `has catalog "${catalog.id}" entry "${entry.id}" ${key} a save modifier against qualities, of 1.652`,
+            );
+    // 1.656 to 1.658: an item's use giving back pools, ammunition riding a shot, attacks drawn to its holder.
+    {
+      const groups = new Set((document?.sheet?.live?.pools ?? []).map((one) => one?.group).filter(Boolean));
+      const damageTypes = new Set(document?.combat?.damageTypes ?? []);
+      for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+        for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+          const item = entry?.item;
+          if (!item) continue;
+          const at = `catalog "${catalog.id}" entry "${entry.id}"`;
+          for (const use of [item.use, ...(item.moreUses ?? []).map((one) => one?.use)].filter(Boolean)) {
+            if (use.recovers === undefined) continue;
+            const recovers = use.recovers;
+            if (
+              use.kind !== "buff" ||
+              use.targets !== "self" ||
+              !recovers ||
+              typeof recovers !== "object" ||
+              Object.keys(recovers).some((key) => !["group", "upTo", "most", "count"].includes(key)) ||
+              !groups.has(recovers.group) ||
+              recovers.upTo === undefined ||
+              refIssue(recovers.upTo) ||
+              !Number.isInteger(recovers.count) ||
+              recovers.count < 1 ||
+              recovers.count > 20 ||
+              (recovers.most !== undefined &&
+                (!Number.isInteger(recovers.most) || recovers.most < 1 || recovers.most > 100))
+            )
+              throw new Error(
+                `${id} ${at} use recovers is { group, upTo, most?, count: 1 to 20 }, on a buff that targets self`,
+              );
+            lateGate(RULESET_ITEM_RECOVERS_MIN, `has ${at} a use giving back pools, of 1.656`);
+          }
+          if (item.ammoRider !== undefined) {
+            const rider = item.ammoRider;
+            if (
+              !rider ||
+              typeof rider !== "object" ||
+              Object.keys(rider).some((key) => !["plus", "spentOnUse", "toHit"].includes(key)) ||
+              (rider.toHit !== undefined &&
+                (!Number.isInteger(rider.toHit) || rider.toHit < -20 || rider.toHit > 20)) ||
+              !Array.isArray(rider.plus) ||
+              rider.plus.length < 1 ||
+              rider.plus.length > 4 ||
+              rider.plus.some(
+                (one) =>
+                  !one || (typeof one.dice !== "string" && !Number.isInteger(one.flat)) || !damageTypes.has(one.type),
+              ) ||
+              (rider.spentOnUse !== undefined && rider.spentOnUse !== true) ||
+              !(item.tags ?? []).length
+            )
+              throw new Error(
+                `${id} ${at} ammoRider is { plus: 1 to 4 clauses with dice or a flat amount and a damage type, toHit?: -20 to 20, spentOnUse? }, on a tagged item`,
+              );
+            lateGate(RULESET_AMMO_RIDER_MIN, `has ${at} ammoRider, of 1.657`);
+            if (rider.toHit !== undefined) lateGate(RULESET_AMMO_TO_HIT_MIN, `has ${at} ammoRider.toHit, of 1.812`);
+          }
+          const aim = item.worn?.drawsAim;
+          if (aim !== undefined) {
+            if (
+              !aim ||
+              typeof aim !== "object" ||
+              Object.keys(aim).some((key) => !["within", "blow", "weapon"].includes(key)) ||
+              typeof aim.within !== "number" ||
+              !(aim.within > 0) ||
+              aim.within > RULESET_DISTANCE_MAX ||
+              (aim.blow !== undefined && !["melee", "ranged"].includes(aim.blow)) ||
+              (aim.weapon !== undefined && aim.weapon !== true)
+            )
+              throw new Error(
+                `${id} ${at} worn drawsAim is { within: a distance, blow?: melee or ranged, weapon?: true }`,
+              );
+            lateGate(RULESET_DRAWS_AIM_MIN, `has ${at} worn drawsAim, of 1.658`);
+          }
+        }
+    }
+    // 1.661: a starting gear option offered only while the sheet allows.
+    for (const gear of Array.isArray(document?.items?.startingGear) ? document.items.startingGear : [])
+      for (const choice of gear?.choices ?? [])
+        for (const option of choice?.options ?? [])
+          if (option?.offeredWhen !== undefined) {
+            const issue = refIssue(option.offeredWhen);
+            if (issue)
+              throw new Error(
+                `${id} starting gear "${gear.id}" ${choice.label} option "${option.label}" offeredWhen ${issue}`,
+              );
+            lateGate(
+              RULESET_GEAR_OFFERED_WHEN_MIN,
+              `has starting gear "${gear.id}" options offered while the sheet allows, of 1.661`,
+            );
+          }
+    // 1.662 to 1.668: derived values a condition changes, days and worn items keeping conditions on, and
+    // what an item asks of its bearer.
+    for (const entry of Array.isArray(document?.combat?.conditions) ? document.combat.conditions : [])
+      if (entry?.derivedChanges !== undefined) {
+        const changes = entry.derivedChanges;
+        if (
+          !changes ||
+          typeof changes !== "object" ||
+          Array.isArray(changes) ||
+          Object.keys(changes).length < 1 ||
+          Object.keys(changes).length > 12 ||
+          Object.entries(changes).some(
+            ([key, change]) =>
+              !names.derived.has(key) ||
+              !change ||
+              typeof change !== "object" ||
+              Object.keys(change).length < 1 ||
+              Object.keys(change).some((one) => !["times", "add"].includes(one)) ||
+              Object.values(change).some((one) => typeof one !== "number" || !Number.isFinite(one)),
+          )
+        )
+          throw new Error(
+            `${id} combat condition "${entry.condition}" derivedChanges are 1 to 12 derived values, each { times?, add? }`,
+          );
+        lateGate(RULESET_DERIVED_CHANGES_MIN, `has combat condition "${entry.condition}" derivedChanges, of 1.662`);
+      }
+    {
+      const lines = (value, out = []) => {
+        if (!value || typeof value !== "object") return out;
+        if (Array.isArray(value)) {
+          for (const one of value) lines(one, out);
+          return out;
+        }
+        if (typeof value.condition === "string" && value.duration !== undefined) out.push(value);
+        for (const one of Object.values(value)) lines(one, out);
+        return out;
+      };
+      for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+        for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+          const at = `catalog "${catalog.id}" entry "${entry?.id}"`;
+          for (const line of lines(entry)) {
+            if (line.lastsDays === "midnight") {
+              if (line.duration !== "until-dispelled")
+                throw new Error(
+                  `${id} ${at} "${line.condition}" lastsDays midnight is beside an until-dispelled duration`,
+                );
+              lateGate(RULESET_MIDNIGHT_MIN, `has ${at} a condition lasting to midnight, of 1.751`);
+            } else if (line.lastsDays && typeof line.lastsDays === "object" && line.lastsDays.dice !== undefined) {
+              // 1.756: days rolled as it goes on, resting days counting more: Wish's stress.
+              const days = line.lastsDays;
+              if (
+                line.duration !== "until-dispelled" ||
+                Object.keys(days).some((key) => !["dice", "restingCounts"].includes(key)) ||
+                typeof days.dice !== "string" ||
+                !/^\d+d\d+$/u.test(days.dice) ||
+                (days.restingCounts !== undefined &&
+                  (!Number.isInteger(days.restingCounts) || days.restingCounts < 2 || days.restingCounts > 7))
+              )
+                throw new Error(
+                  `${id} ${at} "${line.condition}" lastsDays is { dice, restingCounts?: 2 to 7 } beside an until-dispelled duration`,
+                );
+              lateGate(RULESET_WISH_STRESS_MIN, `has ${at} a condition lasting days rolled as it goes on, of 1.756`);
+            } else if (line.lastsDays !== undefined) {
+              const issue = refIssue(line.lastsDays);
+              if (line.duration !== "until-dispelled" || issue)
+                throw new Error(
+                  `${id} ${at} "${line.condition}" lastsDays ${issue ?? "is beside an until-dispelled duration"}`,
+                );
+              lateGate(RULESET_LASTS_DAYS_MIN, `has ${at} a condition lasting days, of 1.663`);
+            }
+            if (line.whileItemWorn !== undefined) {
+              const used = [entry?.item?.use, ...(entry?.item?.moreUses ?? []).map((one) => one?.use)];
+              if (
+                line.whileItemWorn !== true ||
+                !used.some((use) => lines(use).includes(line)) ||
+                (!entry.item.slots && !entry.item.binds)
+              )
+                throw new Error(
+                  `${id} ${at} "${line.condition}" whileItemWorn is true, on a use of an item that takes a slot or binds`,
+                );
+              lateGate(RULESET_WHILE_ITEM_WORN_MIN, `has ${at} a condition kept while the item is worn, of 1.664`);
+            }
+          }
+          // 1.667 binds and use needs; 1.691 any one of up to 8.
+          for (const [key, anyKey, bag] of [
+            ["needs", "needsAny", entry?.item?.binds],
+            ["userNeeds", "userNeedsAny", entry?.item],
+          ]) {
+            const needs = bag?.[key];
+            if (needs === undefined) continue;
+            const any = bag[anyKey];
+            if (any !== undefined && any !== true) throw new Error(`${id} ${at} ${anyKey} is true`);
+            if (
+              !Array.isArray(needs) ||
+              needs.length < 1 ||
+              needs.length > (any ? 8 : 4) ||
+              needs.some(
+                (one) =>
+                  !one ||
+                  typeof one !== "object" ||
+                  Object.keys(one).some((key) => !["value", "atLeast", "atMost"].includes(key)) ||
+                  refIssue(one.value) ||
+                  (one.atLeast === undefined && one.atMost === undefined),
+              )
+            )
+              throw new Error(
+                `${id} ${at} ${key} are 1 to 4 sheet bounds { value, atLeast?, atMost? }, or up to 8 with ${anyKey}`,
+              );
+            lateGate(RULESET_BEARER_NEEDS_MIN, `has ${at} ${key}, of 1.667`);
+            if (any) lateGate(RULESET_NEEDS_ANY_MIN, `has ${at} ${anyKey}, of 1.691`);
+          }
+          if (entry?.item?.binds?.needsAny !== undefined && entry.item.binds.needs === undefined)
+            throw new Error(`${id} ${at} binds needsAny goes with needs`);
+          if (entry?.item?.userNeedsAny !== undefined && entry.item.userNeeds === undefined)
+            throw new Error(`${id} ${at} userNeedsAny goes with userNeeds`);
+        }
+    }
+    // 1.671 to 1.674: a climb kept off slippery ground, fields held to a combined most, and creature saves
+    // failed badly or spared once.
+    for (const entry of Array.isArray(document?.combat?.conditions) ? document.combat.conditions : [])
+      if (entry?.climbNotOn !== undefined) {
+        const not = entry.climbNotOn;
+        if (
+          !not ||
+          typeof not !== "object" ||
+          Array.isArray(not) ||
+          Object.keys(not).length < 1 ||
+          Object.keys(not).some((key) => !["terrain", "slippery"].includes(key)) ||
+          (not.slippery !== undefined && not.slippery !== true) ||
+          (not.terrain !== undefined &&
+            (!Array.isArray(not.terrain) ||
+              not.terrain.length < 1 ||
+              not.terrain.some((one) => typeof one !== "string"))) ||
+          entry.speeds?.climb === undefined
+        )
+          throw new Error(
+            `${id} combat condition "${entry.condition}" climbNotOn is { terrain?, slippery?: true }, beside a climb in its speeds`,
+          );
+        lateGate(RULESET_CLIMB_NOT_ON_MIN, `has combat condition "${entry.condition}" climbNotOn, of 1.671`);
+      }
+    {
+      const walk = (value, visit) => {
+        if (!value || typeof value !== "object") return;
+        if (Array.isArray(value)) {
+          for (const one of value) walk(one, visit);
+          return;
+        }
+        visit(value);
+        for (const one of Object.values(value)) walk(one, visit);
+      };
+      for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+        for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+          const at = `catalog "${catalog.id}" entry "${entry?.id}"`;
+          walk(entry, (value) => {
+            if (
+              value.terrain &&
+              typeof value.terrain === "object" &&
+              !Array.isArray(value.terrain) &&
+              value.terrain.slippery !== undefined
+            ) {
+              if (value.terrain.slippery !== true) throw new Error(`${id} ${at} terrain slippery is true`);
+              lateGate(RULESET_CLIMB_NOT_ON_MIN, `has ${at} slippery ground, of 1.671`);
+            }
+            const failed = value.failedBy;
+            if (failed && typeof failed === "object" && failed.resultAtMost !== undefined) {
+              if (!Number.isInteger(failed.resultAtMost) || failed.atLeast !== undefined)
+                throw new Error(`${id} ${at} failedBy says atLeast or a whole resultAtMost`);
+              lateGate(RULESET_CREATURE_FAILED_BY_MIN, `has ${at} a save failed at a result, of 1.673`);
+            }
+          });
+          walk(entry?.creature, (value) => {
+            if (value.save?.failedBy !== undefined && typeof value.id === "string") {
+              const failed = value.save.failedBy;
+              if (
+                !failed ||
+                typeof failed !== "object" ||
+                (failed.atLeast === undefined) === (failed.resultAtMost === undefined) ||
+                !Array.isArray(failed.applies) ||
+                failed.applies.length < 1
+              )
+                throw new Error(
+                  `${id} ${at} action "${value.id}" save failedBy is { atLeast or resultAtMost, applies }`,
+                );
+              lateGate(RULESET_CREATURE_FAILED_BY_MIN, `has ${at} a creature save failed badly, of 1.673`);
+            }
+            const once = value.oncePerTarget;
+            if (
+              once !== undefined &&
+              typeof value.id === "string" &&
+              ["whenSaved", "whenEnds", "shared"].some((key) => once?.[key] !== undefined)
+            ) {
+              if (
+                !once ||
+                typeof once !== "object" ||
+                Object.keys(once).some((key) => !["whenSaved", "whenEnds", "until", "shared"].includes(key)) ||
+                (once.whenSaved !== undefined && once.whenSaved !== true) ||
+                (once.whenEnds !== undefined && once.whenEnds !== true) ||
+                (once.shared !== undefined &&
+                  (typeof once.shared !== "string" || !/^[a-z][a-z0-9_]*$/u.test(once.shared)))
+              )
+                throw new Error(
+                  `${id} ${at} action "${value.id}" oncePerTarget is { whenSaved?: true, whenEnds?: true, until?, shared? }`,
+                );
+              lateGate(
+                RULESET_ONCE_PER_TARGET_KINDS_MIN,
+                `has ${at} a creature action spared once saved or ended, of 1.674`,
+              );
+            }
+          });
+        }
+    }
+    // 1.675 to 1.682: pulls, hanging on, what a creature's blow does to whoever it drops, its slaying held
+    // to the low and its failed save dropping to no health, flyby, shared spaces, squeezing, and a condition
+    // held only near a seen ally.
+    {
+      const distance = (value) => Number.isFinite(value) && value > 0 && value <= 10000;
+      const conditionIds = new Set((document?.combat?.conditions ?? []).map((one) => one?.condition));
+      const sizeIds = new Set((document?.combat?.sizes?.order ?? []).map((one) => one?.id));
+      for (const entry of Array.isArray(document?.combat?.conditions) ? document.combat.conditions : []) {
+        const at = `combat condition "${entry?.condition}"`;
+        if (entry?.attaches !== undefined) {
+          const attaches = entry.attaches;
+          if (
+            !attaches ||
+            typeof attaches !== "object" ||
+            Object.keys(attaches).some((key) => !["sourceAttacks", "endsAfterHarm"].includes(key)) ||
+            !["none", "holder"].includes(attaches.sourceAttacks) ||
+            (attaches.endsAfterHarm !== undefined &&
+              (!Number.isInteger(attaches.endsAfterHarm) ||
+                attaches.endsAfterHarm < 1 ||
+                attaches.endsAfterHarm > 10000 ||
+                !entry.harms))
+          )
+            throw new Error(
+              `${id} ${at} attaches is { sourceAttacks: "none" or "holder", endsAfterHarm? beside its harms }`,
+            );
+          lateGate(RULESET_ATTACHES_MIN, `has ${at} hanging on, of 1.676`);
+        }
+        if (entry?.flyby !== undefined) {
+          if (entry.flyby !== true) throw new Error(`${id} ${at} flyby is true`);
+          lateGate(RULESET_FLYBY_MIN, `has ${at} flyby, of 1.679`);
+        }
+        if (entry?.sharesSpace !== undefined) {
+          if (entry.sharesSpace !== true) throw new Error(`${id} ${at} sharesSpace is true`);
+          lateGate(RULESET_SHARES_SPACE_MIN, `has ${at} sharing spaces, of 1.680`);
+        }
+        if (entry?.squeezesAs !== undefined) {
+          if (!sizeIds.has(entry.squeezesAs)) throw new Error(`${id} ${at} squeezesAs names a size of combat.sizes`);
+          lateGate(RULESET_SQUEEZING_MIN, `has ${at} moving as a smaller size, of 1.681`);
+        }
+        if (entry?.heldOnlyIn?.allySeenWithin !== undefined) {
+          if (!distance(entry.heldOnlyIn.allySeenWithin))
+            throw new Error(`${id} ${at} heldOnlyIn allySeenWithin is a distance`);
+          lateGate(RULESET_ALLY_SEEN_WITHIN_MIN, `has ${at} held only near a seen ally, of 1.682`);
+        }
+      }
+      const squeezing = document?.combat?.sizes?.squeezing;
+      if (squeezing !== undefined) {
+        if (
+          !squeezing ||
+          typeof squeezing !== "object" ||
+          Object.keys(squeezing).some((key) => !["costs", "condition"].includes(key)) ||
+          !Number.isInteger(squeezing.costs) ||
+          squeezing.costs < 1 ||
+          squeezing.costs > 4 ||
+          (squeezing.condition !== undefined && !conditionIds.has(squeezing.condition))
+        )
+          throw new Error(`${id} combat.sizes.squeezing is { costs: 1 to 4, condition? of combat.conditions }`);
+        lateGate(RULESET_SQUEEZING_MIN, `has squeezing, of 1.681`);
+      }
+      const walk = (value, visit) => {
+        if (!value || typeof value !== "object") return;
+        if (Array.isArray(value)) {
+          for (const one of value) walk(one, visit);
+          return;
+        }
+        visit(value);
+        for (const one of Object.values(value)) walk(one, visit);
+      };
+      for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+        for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+          const at = `catalog "${catalog.id}" entry "${entry?.id}"`;
+          walk(entry, (value) => {
+            if (value.pull !== undefined && (typeof value.pull === "number" || typeof value.id === "string")) {
+              if (!distance(value.pull) || value.push !== undefined)
+                throw new Error(`${id} ${at} pull is a distance, not beside a push`);
+              lateGate(RULESET_PULL_MIN, `has ${at} a pull, of 1.675`);
+            }
+            if (value.withAdvantage !== undefined && typeof value.condition === "string") {
+              if (value.withAdvantage !== true) throw new Error(`${id} ${at} applies withAdvantage is true`);
+              lateGate(RULESET_ATTACHES_MIN, `has ${at} a condition put on only with advantage, of 1.676`);
+            }
+          });
+          walk(entry?.creature, (value) => {
+            if (typeof value.id !== "string") return;
+            const action = `${at} action "${value.id}"`;
+            if (value.onFell !== undefined) {
+              const fell = value.onFell;
+              if (
+                !fell ||
+                typeof fell !== "object" ||
+                Object.keys(fell).some((key) => !["stabilizes", "applies"].includes(key)) ||
+                (fell.stabilizes !== undefined && fell.stabilizes !== true) ||
+                (fell.applies !== undefined &&
+                  (!Array.isArray(fell.applies) || fell.applies.length < 1 || fell.applies.length > 4)) ||
+                (!fell.stabilizes && !fell.applies)
+              )
+                throw new Error(`${id} ${action} onFell stabilizes, applies 1 to 4 conditions, or both`);
+              lateGate(RULESET_ON_FELL_MIN, `has ${action} what its blow does to whoever it drops, of 1.677`);
+            }
+            if (value.slaysHealthAtMost !== undefined) {
+              if (!Number.isInteger(value.slaysHealthAtMost) || value.slaysHealthAtMost < 0 || !value.slaysOnFailedSave)
+                throw new Error(`${id} ${action} slaysHealthAtMost is a whole health beside slaysOnFailedSave`);
+              lateGate(RULESET_CREATURE_SLAYING_MIN, `has ${action} slaying held to a health, of 1.678`);
+            }
+            if (value.dropsOnFailedSave !== undefined) {
+              if (value.dropsOnFailedSave !== true || !value.save || value.slaysOnFailedSave)
+                throw new Error(`${id} ${action} dropsOnFailedSave is true, with its own save and slaying nobody`);
+              lateGate(RULESET_CREATURE_SLAYING_MIN, `has ${action} a failed save dropping to no health, of 1.678`);
+            }
+          });
+        }
+    }
+    // 1.683 to 1.689: a weapon's poison, endings on healing, a creature leaving the fight, sixteen checks,
+    // an action whose uses each do something else, the periapt's stabilizing and Hit Die times, and careful
+    // or walk-ending ground.
+    {
+      const sides = (value) => Number.isInteger(value) && value >= 0 && value <= 1000;
+      for (const entry of Array.isArray(document?.combat?.conditions) ? document.combat.conditions : []) {
+        const at = `combat condition "${entry?.condition}"`;
+        const hit = entry?.onHit;
+        if (
+          hit &&
+          typeof hit === "object" &&
+          ["damage", "save", "failedBy", "damageTypes"].some((key) => hit[key] !== undefined)
+        ) {
+          if (
+            (hit.damage !== undefined &&
+              (!hit.damage ||
+                typeof hit.damage !== "object" ||
+                Object.keys(hit.damage).some((key) => !["dice", "flat", "type"].includes(key)) ||
+                (hit.damage.dice === undefined && hit.damage.flat === undefined))) ||
+            (hit.save !== undefined &&
+              (typeof hit.save?.save !== "string" ||
+                !sides(hit.save.difficulty) ||
+                !["half", "negates"].includes(hit.save.onSuccess))) ||
+            (hit.failedBy !== undefined &&
+              (!hit.save ||
+                !Number.isInteger(hit.failedBy?.atLeast) ||
+                !Array.isArray(hit.failedBy?.applies) ||
+                hit.failedBy.applies.length < 1)) ||
+            (hit.damageTypes !== undefined &&
+              (!Array.isArray(hit.damageTypes) ||
+                hit.damageTypes.length < 1 ||
+                hit.damageTypes.some((one) => typeof one !== "string"))) ||
+            (!hit.applies && !hit.damage)
+          )
+            throw new Error(
+              `${id} ${at} onHit is { damage?, save?, failedBy? beside a save, damageTypes?, applies? }, dealing or applying something`,
+            );
+          lateGate(RULESET_WEAPON_POISON_MIN, `has ${at} a poison on a weapon, of 1.683`);
+        }
+        if (
+          Array.isArray(entry?.endsWhen) &&
+          entry.endsWhen.some((one) => one === "healed" || one === "healed-by-magic")
+        )
+          lateGate(RULESET_ENDS_HEALED_MIN, `has ${at} ending when healed, of 1.684`);
+        if (Array.isArray(entry?.modifiers) && entry.modifiers.some((one) => one?.for !== undefined))
+          lateGate(RULESET_CHECKS_FOR_MIN, `has ${at} checks modifiers for some purposes, of 1.752`);
+        if (entry?.keepsDamage !== undefined) {
+          if (entry.keepsDamage !== true) throw new Error(`${id} ${at} keepsDamage is true`);
+          lateGate(RULESET_DAY_SAVES_COUNTED_MIN, `has ${at} damage kept from healing, of 1.750`);
+        }
+        if (entry?.stabilizesWhenDying !== undefined) {
+          if (entry.stabilizesWhenDying !== true) throw new Error(`${id} ${at} stabilizesWhenDying is true`);
+          lateGate(RULESET_WOUND_CLOSURE_MIN, `has ${at} stabilizing while dying, of 1.688`);
+        }
+      }
+      if ((document?.combat?.checks ?? []).length > 12)
+        lateGate(RULESET_CHECKS_16_MIN, `has more than 12 combat checks, of 1.686`);
+      if (
+        (document?.rests ?? []).some(
+          (rest) => Array.isArray(rest?.dice) && rest.dice.some((one) => one?.times !== undefined),
+        )
+      )
+        lateGate(RULESET_WOUND_CLOSURE_MIN, `has a rest's Hit Die healing multiplied, of 1.688`);
+      const walk = (value, visit) => {
+        if (!value || typeof value !== "object") return;
+        if (Array.isArray(value)) {
+          for (const one of value) walk(one, visit);
+          return;
+        }
+        visit(value);
+        for (const one of Object.values(value)) walk(one, visit);
+      };
+      for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+        for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+          const at = `catalog "${catalog.id}" entry "${entry?.id}"`;
+          walk(entry, (value) => {
+            // 1.732: an effect only while charges or a further use's are left.
+            if (value.whileLeft !== undefined) {
+              const lines = value.whileLeft;
+              if (
+                !Array.isArray(lines) ||
+                lines.length < 1 ||
+                lines.length > 4 ||
+                lines.some(
+                  (one) =>
+                    !one ||
+                    typeof one !== "object" ||
+                    Object.keys(one).some((key) => !["keys", "charges", "uses"].includes(key)) ||
+                    !Array.isArray(one.keys) ||
+                    one.keys.length < 1 ||
+                    one.keys.some((key) => typeof key !== "string" || value[key] === undefined) ||
+                    (one.charges === undefined) === (one.uses === undefined) ||
+                    (one.charges !== undefined && one.charges !== true) ||
+                    (one.uses !== undefined &&
+                      !(entry?.item?.moreUses ?? []).some(
+                        (more) => more?.label === one.uses && more?.uses !== undefined,
+                      )),
+                )
+              )
+                throw new Error(
+                  `${id} ${at} whileLeft is 1 to 4 of { keys: the effect's own keys, charges: true or uses: a further use's label }`,
+                );
+              lateGate(RULESET_WHILE_LEFT_MIN, `has ${at} an effect while something of it is left, of 1.732`);
+            }
+            // 1.738: an entry's or an item use's attack changed at some targets.
+            if (typeof value.kind === "string" && value.against !== undefined) {
+              const list = value.against;
+              if (
+                !Array.isArray(list) ||
+                list.length < 1 ||
+                list.length > 4 ||
+                list.some(
+                  (one) =>
+                    !one ||
+                    typeof one !== "object" ||
+                    (one.is === undefined && one.marked === undefined) ||
+                    Object.keys(one).some(
+                      (key) => !["is", "marked", "toHit", "mode", "ignoresCover", "ignoresLongRange"].includes(key),
+                    ) ||
+                    (one.mode !== undefined && !["advantage", "disadvantage"].includes(one.mode)) ||
+                    (one.toHit !== undefined &&
+                      (!Number.isInteger(one.toHit) || one.toHit === 0 || Math.abs(one.toHit) > 20)) ||
+                    (one.toHit === undefined &&
+                      one.mode === undefined &&
+                      one.ignoresCover !== true &&
+                      one.ignoresLongRange !== true),
+                )
+              )
+                throw new Error(
+                  `${id} ${at} against is 1 to 4 of { is or marked, toHit?, mode?, ignoresCover?, ignoresLongRange? }, changing something`,
+                );
+              lateGate(RULESET_ENTRY_AGAINST_MIN, `has ${at} an attack changed at some targets, of 1.738`);
+            }
+            // 1.726: a modifier narrowed to targets that are something.
+            if (Array.isArray(value.modifiers) && value.modifiers.some((one) => one?.at !== undefined))
+              lateGate(RULESET_MODIFIER_AT_MIN, `has ${at} modifiers narrowed to targets that are something, of 1.726`);
+            if (Array.isArray(value.modifiers) && value.modifiers.some((one) => one?.for !== undefined))
+              lateGate(RULESET_CHECKS_FOR_MIN, `has ${at} checks modifiers for some purposes, of 1.752`);
+            // 1.692: a contest's takes as a mode of its own.
+            if (value.takesMode !== undefined) {
+              const mode = value.takesMode;
+              if (
+                !value.takes ||
+                !mode ||
+                typeof mode !== "object" ||
+                Object.keys(mode).some((key) => !["label", "restLabel"].includes(key)) ||
+                [mode.label, mode.restLabel].some((one) => typeof one !== "string" || one.length < 1 || one.length > 40)
+              )
+                throw new Error(`${id} ${at} takesMode is { label, restLabel } beside takes`);
+              lateGate(RULESET_TAKES_MODE_MIN, `has ${at} a contest's takes as a mode, of 1.692`);
+            }
+            // 1.694: a lasting area anybody near moves on a check.
+            if (value.move && typeof value.move === "object" && value.move.check !== undefined) {
+              const rule = value.move.check;
+              const checkIds = new Set((document?.combat?.checks ?? []).map((one) => one?.id));
+              const feet = (one) => Number.isFinite(one) && one > 0 && one <= 10000;
+              if (
+                !rule ||
+                typeof rule !== "object" ||
+                Object.keys(rule).some(
+                  (key) => !["check", "difficulty", "within", "distanceBy", "failsToward", "holding"].includes(key),
+                ) ||
+                !checkIds.has(rule.check) ||
+                !Number.isInteger(rule.difficulty) ||
+                rule.difficulty < 1 ||
+                rule.difficulty > 100 ||
+                !feet(rule.within) ||
+                (rule.failsToward !== undefined && !feet(rule.failsToward)) ||
+                (rule.distanceBy !== undefined &&
+                  (!rule.distanceBy ||
+                    Object.keys(rule.distanceBy).some((key) => !["abilityMod", "times", "atLeast"].includes(key)) ||
+                    typeof rule.distanceBy.abilityMod !== "string" ||
+                    !feet(rule.distanceBy.times) ||
+                    (rule.distanceBy.atLeast !== undefined && !feet(rule.distanceBy.atLeast)))) ||
+                // 1.703: what holding a tagged item adds.
+                (rule.holding !== undefined &&
+                  (!rule.holding ||
+                    typeof rule.holding !== "object" ||
+                    Object.keys(rule.holding).some(
+                      (key) => !["tags", "adds", "advantage", "distanceBy"].includes(key),
+                    ) ||
+                    !Array.isArray(rule.holding.tags) ||
+                    rule.holding.tags.length < 1 ||
+                    rule.holding.tags.length > 8 ||
+                    rule.holding.tags.some((tag) => !(document?.items?.tags ?? []).some((one) => one?.id === tag)) ||
+                    (rule.holding.advantage !== undefined && rule.holding.advantage !== true) ||
+                    (rule.holding.adds === undefined && !rule.holding.advantage && !rule.holding.distanceBy) ||
+                    (rule.holding.distanceBy !== undefined &&
+                      (!rule.holding.distanceBy ||
+                        Object.keys(rule.holding.distanceBy).some(
+                          (key) => !["abilityMod", "times", "add", "atLeast"].includes(key),
+                        ) ||
+                        typeof rule.holding.distanceBy.abilityMod !== "string" ||
+                        !Number.isFinite(rule.holding.distanceBy.times) ||
+                        (rule.holding.distanceBy.add !== undefined && !feet(rule.holding.distanceBy.add))))))
+              )
+                throw new Error(
+                  `${id} ${at} zone move check is { check of combat.checks, difficulty 1-100, within, distanceBy?, failsToward?, holding? }`,
+                );
+              if (rule.holding !== undefined)
+                lateGate(
+                  RULESET_ZONE_MOVE_HOLDING_MIN,
+                  `has ${at} a zone moved better by what its mover holds, of 1.703`,
+                );
+              lateGate(RULESET_ZONE_MOVE_CHECK_MIN, `has ${at} a zone moved on a check, of 1.694`);
+            }
+            // 1.721: items a cast makes, named by catalog/entry.
+            if (value.makesItems !== undefined) {
+              const made = value.makesItems;
+              if (
+                !made ||
+                typeof made !== "object" ||
+                Object.keys(made).some((key) => !["item", "count", "lasts"].includes(key)) ||
+                typeof made.item !== "string" ||
+                !/^[a-z0-9_]+\/[a-z0-9_-]+$/u.test(made.item) ||
+                !Number.isInteger(made.count) ||
+                made.count < 1 ||
+                made.count > 100 ||
+                (made.lasts !== undefined && !madeLastsOk(made.lasts))
+              )
+                throw new Error(
+                  `${id} ${at} makesItems is { item: "<catalog>/<entry>", count 1 to 100, lasts?: 1 to 8 { label?, minutes }, labelled when several }`,
+                );
+              lateGate(RULESET_MAKES_ITEMS_MIN, `has ${at} items a cast makes, of 1.721`);
+              if (made.lasts !== undefined)
+                lateGate(RULESET_MADE_LASTS_MIN, `has ${at} made items that vanish, of 1.760`);
+            }
+            // 1.693: its user saves against what it puts on them.
+            if (value.appliesSelfSaves !== undefined) {
+              if (value.appliesSelfSaves !== true || !Array.isArray(value.appliesSelf) || !value.save)
+                throw new Error(`${id} ${at} appliesSelfSaves is true, beside appliesSelf and a save`);
+              lateGate(
+                RULESET_APPLIES_SELF_SAVES_MIN,
+                `has ${at} its user saving against what it puts on them, of 1.693`,
+              );
+            }
+            // 1.706: an item that hovers.
+            // 1.717: worn by the mount its holder rides, keeping conditions on it and nothing else.
+            if (value.worn && typeof value.worn === "object" && value.worn.wornBy !== undefined) {
+              if (
+                value.worn.wornBy !== "mount" ||
+                !Array.isArray(value.worn.keepsOn) ||
+                value.worn.keepsOn.length < 1 ||
+                Object.keys(value.worn).some((key) => !["wornBy", "keepsOn"].includes(key))
+              )
+                throw new Error(`${id} ${at} worn wornBy is "mount", beside keepsOn and nothing else`);
+              lateGate(RULESET_WORN_BY_MOUNT_MIN, `has ${at} worn by a mount, of 1.717`);
+            }
+            if (
+              value.toggle &&
+              typeof value.toggle === "object" &&
+              (value.toggle.freesSlots !== undefined || value.toggle.rounds !== undefined)
+            ) {
+              if (
+                (value.toggle.freesSlots !== undefined && value.toggle.freesSlots !== true) ||
+                (value.toggle.rounds !== undefined &&
+                  (!Number.isInteger(value.toggle.rounds) || value.toggle.rounds < 1))
+              )
+                throw new Error(`${id} ${at} toggle freesSlots is true and rounds a whole number`);
+              lateGate(RULESET_TOGGLE_FREES_SLOTS_MIN, `has ${at} an item that hovers, of 1.706`);
+            }
+            // 1.707: a call that strikes as its caller.
+            if (
+              value.calls &&
+              typeof value.calls === "object" &&
+              value.calls.fromCaller &&
+              typeof value.calls.fromCaller === "object" &&
+              value.calls.fromCaller.action !== undefined
+            ) {
+              if (typeof value.calls.fromCaller.action !== "string")
+                throw new Error(`${id} ${at} calls fromCaller.action is a string`);
+              lateGate(RULESET_CALLS_FROM_CALLER_MIN, `has ${at} a call striking as its caller, of 1.707`);
+            }
+            // 1.702: a burst of only its own cell.
+            if (value.area && typeof value.area === "object" && value.area.oneCell !== undefined) {
+              if (value.area.oneCell !== true || value.area.shape !== "burst" || value.area.around || value.area.copies)
+                throw new Error(`${id} ${at} area oneCell is true, on a single burst held at a point`);
+              lateGate(RULESET_ONE_CELL_MIN, `has ${at} an area of one cell, of 1.702`);
+            }
+            // 1.700 and 1.701: an item's stats for some wearers, and its harm to whoever takes it up.
+            for (const [key, gate, minor] of [
+              ["statsIf", RULESET_STATS_IF_MIN, 687],
+              ["touchHarms", RULESET_TOUCH_HARMS_MIN, 688],
+            ]) {
+              if (value[key] === undefined) continue;
+              const lines = value[key];
+              if (
+                !Array.isArray(lines) ||
+                lines.length < 1 ||
+                lines.length > 4 ||
+                lines.some((line) => !line || typeof line !== "object" || Array.isArray(line))
+              )
+                throw new Error(`${id} ${at} ${key} is 1 to 4 lines`);
+              lateGate(
+                gate,
+                `has ${at} ${key === "statsIf" ? "stats for some wearers only" : "harm to whoever takes it up"}, of 1.${minor}`,
+              );
+            }
+            const ground = value.terrain;
+            if (
+              ground &&
+              typeof ground === "object" &&
+              !Array.isArray(ground) &&
+              (ground.spareSlowWalkers !== undefined || ground.endsWalk !== undefined)
+            ) {
+              if (
+                (ground.spareSlowWalkers !== undefined && ground.spareSlowWalkers !== true) ||
+                (ground.endsWalk !== undefined && ground.endsWalk !== true)
+              )
+                throw new Error(`${id} ${at} terrain spareSlowWalkers and endsWalk are true`);
+              lateGate(RULESET_CAREFUL_GROUND_MIN, `has ${at} ground walked carefully or ending a walk, of 1.689`);
+            }
+          });
+          // 1.711: what a creature wears, by item tag.
+          if (entry?.creature?.wears !== undefined) {
+            const tags = new Set((document?.items?.tags ?? []).map((one) => one?.id));
+            const wears = entry.creature.wears;
+            if (
+              !Array.isArray(wears) ||
+              wears.length < 1 ||
+              wears.length > 8 ||
+              new Set(wears).size !== wears.length ||
+              wears.some((one) => !tags.has(one))
+            )
+              throw new Error(`${id} catalog creature "${entry.id}" wears is 1 to 8 of the ruleset's item tags`);
+            lateGate(RULESET_WEARS_MIN, `has creature "${entry.id}" wearing tagged gear, of 1.711`);
+          }
+          // 1.716: a creature's own jump.
+          if (entry?.creature?.jump !== undefined) {
+            const jump = entry.creature.jump;
+            if (
+              !jump ||
+              typeof jump !== "object" ||
+              Object.keys(jump).some((key) => !["long", "high", "withoutRunUp"].includes(key)) ||
+              (jump.long === undefined && jump.high === undefined) ||
+              [jump.long, jump.high].some((one) => one !== undefined && !(one > 0)) ||
+              (jump.withoutRunUp !== undefined && jump.withoutRunUp !== true)
+            )
+              throw new Error(`${id} catalog creature "${entry.id}" jump is { long?, high?, withoutRunUp? }`);
+            lateGate(RULESET_CREATURE_JUMP_MIN, `has creature "${entry.id}" jumping its own distances, of 1.716`);
+          }
+          const actions = entry?.creature?.actions ?? [];
+          for (const action of Array.isArray(actions) ? actions : []) {
+            const where = `${at} action "${action?.id}"`;
+            if (action?.dismisses !== undefined) {
+              const own = (action.applies ?? []).map((one) => one?.condition);
+              const away = action.dismisses;
+              if (
+                away !== true &&
+                (!away ||
+                  typeof away !== "object" ||
+                  Object.keys(away).some((key) => !["while", "gone", "turns", "carries", "possesses"].includes(key)) ||
+                  !own.includes(away.while) ||
+                  (away.turns !== undefined && away.turns !== true))
+              )
+                throw new Error(
+                  `${id} ${where} dismisses is true or { while: one of its own applies, gone?, turns?, carries?, possesses? }`,
+                );
+              lateGate(RULESET_CREATURE_DISMISSES_MIN, `has ${where} leaving the fight, of 1.685`);
+              // 1.696: the creature goes into whom it lands on.
+              if (away.possesses !== undefined) {
+                if (away.possesses !== true || away.turns || away.gone || away.carries || action.self)
+                  throw new Error(
+                    `${id} ${where} dismisses possesses is true, without turns, gone or carries, on an action not "self"`,
+                  );
+                lateGate(RULESET_POSSESSES_MIN, `has ${where} going into whom it lands on, of 1.696`);
+              }
+            }
+            // 1.695: riders that wait on a contest.
+            if (action?.contest !== undefined) {
+              const contest = action.contest;
+              const checkIds = new Set((document?.combat?.checks ?? []).map((one) => one?.id));
+              const side = (list) =>
+                Array.isArray(list) && list.length >= 1 && list.length <= 4 && list.every((one) => checkIds.has(one));
+              if (
+                !contest ||
+                typeof contest !== "object" ||
+                Object.keys(contest).some((key) => !["attacker", "defender", "ties"].includes(key)) ||
+                !side(contest.attacker) ||
+                !side(contest.defender) ||
+                (contest.ties !== undefined && !["attacker", "defender"].includes(contest.ties)) ||
+                action.save !== undefined
+              )
+                throw new Error(
+                  `${id} ${where} contest is { attacker, defender: combat checks, ties? }, never beside a save`,
+                );
+              lateGate(RULESET_CREATURE_CONTEST_MIN, `has ${where} riders that wait on a contest, of 1.695`);
+            }
+            // 1.715: offered only while its user imposes none of these on anybody.
+            if (action?.unlessImposing !== undefined) {
+              if (
+                !Array.isArray(action.unlessImposing) ||
+                action.unlessImposing.length < 1 ||
+                action.unlessImposing.some(
+                  (one) => !(document?.combat?.conditions ?? []).some((c) => c?.condition === one),
+                )
+              )
+                throw new Error(`${id} ${where} unlessImposing lists combat conditions`);
+              lateGate(RULESET_UNLESS_IMPOSING_MIN, `has ${where} offered only while holding nobody, of 1.715`);
+            }
+            // 1.728: a wall it lays.
+            if (action?.area?.shape === "wall")
+              lateGate(RULESET_CREATURE_WALLS_MIN, `has ${where} a wall it lays, of 1.728`);
+            // 1.740: a condition put on only while its applier holds none of these on anybody.
+            for (const applied of action?.applies ?? [])
+              if (applied?.unlessImposing !== undefined) {
+                if (
+                  !Array.isArray(applied.unlessImposing) ||
+                  applied.unlessImposing.length < 1 ||
+                  applied.unlessImposing.some(
+                    (one) => !(document?.combat?.conditions ?? []).some((c) => c?.condition === one),
+                  )
+                )
+                  throw new Error(`${id} ${where} applies unlessImposing lists combat conditions`);
+                lateGate(
+                  RULESET_APPLIES_UNLESS_IMPOSING_MIN,
+                  `has ${where} a condition put on only while holding nobody, of 1.740`,
+                );
+              }
+            // 1.741: an area that ends as its maker is incapacitated.
+            if (action?.zone?.endsWithCaller !== undefined) {
+              if (action.zone.endsWithCaller !== "incapacitated" || action.zone.outlasts !== undefined)
+                throw new Error(`${id} ${where} zone endsWithCaller is "incapacitated", never beside outlasts`);
+              lateGate(RULESET_ZONE_ENDS_WITH_CALLER_MIN, `has ${where} an area that ends with its maker, of 1.741`);
+            }
+            // 1.727: kept up on later turns with a budget, starting again the rounds of what it put on.
+            if (action?.sustains !== undefined) {
+              const budgets = new Set((document?.combat?.economy?.budgets ?? []).map((one) => one?.id));
+              if (
+                !action.sustains ||
+                typeof action.sustains !== "object" ||
+                Object.keys(action.sustains).some((key) => key !== "budget") ||
+                !budgets.has(action.sustains.budget) ||
+                !(action.applies ?? []).some(
+                  (one) => one?.duration && typeof one.duration === "object" && one.duration.rounds !== undefined,
+                )
+              )
+                throw new Error(
+                  `${id} ${where} sustains is { budget } on an action that applies a condition lasting some rounds`,
+                );
+              lateGate(RULESET_CREATURE_SUSTAINS_MIN, `has ${where} sustains, of 1.727`);
+            }
+            // 1.724: the target's choice of save.
+            if (action?.save?.or !== undefined) {
+              if (typeof action.save.or !== "string" || action.save.or === action.save.save)
+                throw new Error(`${id} ${where} save or names another save`);
+              lateGate(RULESET_SAVE_OR_MIN, `has ${where} a save of the target's choice, of 1.724`);
+            }
+            // 1.725: leaping onto others.
+            if (action?.leapsOnto !== undefined) {
+              const leap = action.leapsOnto;
+              if (
+                !leap ||
+                typeof leap !== "object" ||
+                Object.keys(leap).some((key) => !["atLeast", "noRoom"].includes(key)) ||
+                !(leap.atLeast > 0) ||
+                (leap.noRoom !== undefined &&
+                  !(document?.combat?.conditions ?? []).some((c) => c?.condition === leap.noRoom)) ||
+                action.area !== undefined ||
+                !document?.combat?.jumping
+              )
+                throw new Error(
+                  `${id} ${where} leapsOnto is { atLeast, noRoom?: a combat condition }, with no area, beside combat.jumping`,
+                );
+              lateGate(RULESET_LEAPS_ONTO_MIN, `has ${where} leaping onto others, of 1.725`);
+            }
+            // 1.698: riders that go only on some targets.
+            if (action?.ridersIs !== undefined) {
+              if (
+                !action.ridersIs ||
+                typeof action.ridersIs !== "object" ||
+                Array.isArray(action.ridersIs) ||
+                awareOfIssue(document, { of: action.ridersIs }) !== undefined
+              )
+                throw new Error(`${id} ${where} ridersIs is a target test`);
+              lateGate(RULESET_RIDERS_IS_MIN, `has ${where} riders for some targets only, of 1.698`);
+            }
+            if (action?.dismisses?.carries !== undefined) {
+              const carries = action.dismisses.carries;
+              if (
+                !action.self ||
+                !carries ||
+                typeof carries !== "object" ||
+                Object.keys(carries).some((key) => !["count", "within", "condition"].includes(key)) ||
+                !Number.isInteger(carries.count) ||
+                carries.count < 1 ||
+                carries.count > 20 ||
+                !(carries.within > 0) ||
+                typeof carries.condition !== "string"
+              )
+                throw new Error(`${id} ${where} dismisses carries is { count, within, condition } on a self action`);
+              lateGate(RULESET_CREATURE_DISMISSES_MIN, `has ${where} taking allies along, of 1.685`);
+            }
+            if (action?.byUse !== undefined) {
+              const ids = new Set(actions.map((one) => one?.id));
+              if (
+                !Array.isArray(action.byUse) ||
+                action.byUse.length < 2 ||
+                action.byUse.length > 6 ||
+                action.byUse.some((one) => !ids.has(one) || one === action.id) ||
+                !action.uses ||
+                ["toHit", "damage", "save", "applies", "sequence", "self"].some((key) => action[key] !== undefined)
+              )
+                throw new Error(
+                  `${id} ${where} byUse names 2 to 6 of the creature's other actions, on an action with uses and nothing of its own`,
+                );
+              lateGate(RULESET_BY_USE_MIN, `has ${where} uses that each do something else, of 1.687`);
+            }
+          }
+        }
+    }
+    const totals = document?.sheet?.totals;
+    if (totals !== undefined) {
+      const numbers = new Set(
+        (document.sheet.fields ?? []).filter((field) => field?.type === "number").map((field) => field.id),
+      );
+      if (
+        !Array.isArray(totals) ||
+        totals.length < 1 ||
+        totals.length > 8 ||
+        totals.some(
+          (one) =>
+            !one ||
+            typeof one !== "object" ||
+            Object.keys(one).some((key) => !["fields", "max", "label"].includes(key)) ||
+            !Array.isArray(one.fields) ||
+            one.fields.length < 2 ||
+            one.fields.length > 24 ||
+            new Set(one.fields).size !== one.fields.length ||
+            one.fields.some((field) => !numbers.has(field)) ||
+            typeof one.max !== "number" ||
+            (one.label !== undefined && (typeof one.label !== "string" || one.label.length > 40)),
+        )
+      )
+        throw new Error(`${id} sheet totals are 1 to 8 of { fields: 2 to 24 number fields, max, label? }`);
+      lateGate(RULESET_SHEET_TOTALS_MIN, `has sheet totals, of 1.672`);
+    }
+    if (document?.items?.needsWaivedBy !== undefined) {
+      const issue = refIssue(document.items.needsWaivedBy);
+      if (issue) throw new Error(`${id} items needsWaivedBy ${issue}`);
+      lateGate(RULESET_BEARER_NEEDS_MIN, `has items needsWaivedBy, of 1.667`);
+    }
+    const checkIdsNow = new Set((document?.combat?.checks ?? []).map((one) => one?.id));
+    const conditionIdsHeldForContests = new Set((document?.combat?.conditions ?? []).map((one) => one?.condition));
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+        const where = `catalog "${catalog.id}" entry "${entry?.id}"`;
+        for (const action of entry?.creature?.actions ?? [])
+          for (const moment of [action?.reaction, ...(action?.reaction?.also ?? [])].filter(
+            (one) => one && typeof one === "object",
+          )) {
+            if (moment.forHolds !== undefined) {
+              if (
+                !Array.isArray(moment.forHolds) ||
+                moment.forHolds.length < 1 ||
+                moment.forHolds.length > 8 ||
+                moment.for === undefined
+              )
+                throw new Error(
+                  `${id} ${where} action "${action.id}" reaction forHolds is 1 to 8 item tags, for others`,
+                );
+              gate(RULESET_REACTION_QUALITIES_MIN, `has ${where} a reaction for one holding an item, of 1.564`);
+            }
+            if (moment.against?.qualities !== undefined)
+              gate(RULESET_REACTION_QUALITIES_MIN, `has ${where} a reaction against qualities, of 1.564`);
+          }
+        const liveConditionIds = new Set((document?.sheet?.live?.conditions ?? []).map((one) => one?.id));
+        for (const use of [
+          entry?.mechanics,
+          entry?.item?.use,
+          ...(entry?.item?.moreUses ?? []).map((one) => one?.use),
+        ].filter(Boolean)) {
+          // 1.617: offered only while its user holds one of some conditions.
+          if (use.userHolds !== undefined) {
+            if (
+              !Array.isArray(use.userHolds) ||
+              use.userHolds.length < 1 ||
+              use.userHolds.length > 8 ||
+              new Set(use.userHolds).size !== use.userHolds.length ||
+              use.userHolds.some((one) => !liveConditionIds.has(one))
+            )
+              throw new Error(`${id} ${where} userHolds is 1 to 8 conditions of the sheet, each once`);
+            userHolds ??= `${where} userHolds`;
+          }
+          if (use.contest !== undefined) {
+            const contest = use.contest;
+            // 1.618: conditions put on a target its user loses to, for some rounds.
+            const onLose = contest?.onLose;
+            if (
+              onLose !== undefined &&
+              (!onLose ||
+                typeof onLose !== "object" ||
+                Object.keys(onLose).some((key) => key !== "applies") ||
+                !Array.isArray(onLose.applies) ||
+                onLose.applies.length < 1 ||
+                onLose.applies.length > 4 ||
+                onLose.applies.some(
+                  (one) =>
+                    !one ||
+                    Object.keys(one).some((key) => !["condition", "rounds"].includes(key)) ||
+                    !conditionIdsHeldForContests.has(one.condition) ||
+                    !Number.isInteger(one.rounds) ||
+                    one.rounds < 1 ||
+                    one.rounds > 14400,
+                ))
+            )
+              throw new Error(
+                `${id} ${where} contest onLose is { applies: 1 to 4 { condition of the fight's, rounds 1 to 14400 } }`,
+              );
+            if (onLose !== undefined) contestOnLose ??= `${where} contest onLose`;
+            const ids = (list) =>
+              Array.isArray(list) && list.length >= 1 && list.length <= 4 && list.every((one) => checkIdsNow.has(one));
+            if (
+              !contest ||
+              typeof contest !== "object" ||
+              Object.keys(contest).some(
+                (key) => !["attacker", "defender", "ties", "onLose", "takes", "takesMode"].includes(key),
+              ) ||
+              // 1.668: what it takes from the target, by slots and/or tags.
+              (contest.takes !== undefined &&
+                (!contest.takes ||
+                  typeof contest.takes !== "object" ||
+                  Object.keys(contest.takes).some((key) => !["slots", "tags"].includes(key)) ||
+                  Object.keys(contest.takes).length < 1 ||
+                  Object.values(contest.takes).some(
+                    (list) => !Array.isArray(list) || list.length < 1 || list.some((one) => typeof one !== "string"),
+                  ))) ||
+              !ids(contest.attacker) ||
+              !ids(contest.defender) ||
+              (contest.ties !== undefined && !["attacker", "defender"].includes(contest.ties)) ||
+              use.save !== undefined ||
+              use.attackRoll !== undefined
+            )
+              throw new Error(
+                `${id} ${where} contest is { attacker, defender: declared checks, ties? }, with no save or attack roll`,
+              );
+            gate(RULESET_ENTRY_CONTEST_MIN, `has ${where} a contest, of 1.565`);
+          }
+          if (use.movesTarget !== undefined) {
+            const moves = use.movesTarget;
+            if (
+              !moves ||
+              typeof moves !== "object" ||
+              Object.keys(moves).some((key) => !["distance", "up"].includes(key)) ||
+              !Number.isFinite(moves.distance) ||
+              moves.distance <= 0 ||
+              moves.distance > RULESET_DISTANCE_MAX ||
+              (moves.up !== undefined && moves.up !== true)
+            )
+              throw new Error(`${id} ${where} movesTarget is { distance, up?: true }`);
+            gate(RULESET_ENTRY_CONTEST_MIN, `has ${where} a target moved where its user picks, of 1.565`);
+          }
+        }
+      }
+    for (const entry of Array.isArray(document?.combat?.conditions) ? document.combat.conditions : [])
+      if ((entry?.modifiers ?? []).some((one) => one?.exceptSource !== undefined))
+        gate(
+          RULESET_EXCEPT_SOURCE_MIN,
+          `has combat condition "${entry.condition}" a check mode against anybody but its source, of 1.567`,
+        );
+    const conditionIdsHeld = new Set((document?.combat?.conditions ?? []).map((one) => one?.condition));
+    // 1.579, 1.581 and 1.582: on an entry's mechanics, its variants and its item uses alike.
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+        const where = `catalog "${catalog.id}" entry "${entry?.id}"`;
+        const carriers = [
+          entry?.mechanics,
+          ...(entry?.mechanics?.variants ?? []).map((one) => one?.mechanics),
+          entry?.item?.use,
+          ...(entry?.item?.moreUses ?? []).map((one) => one?.use),
+          ...(entry?.item?.useTable ?? []).map((one) => one?.use),
+        ].filter((one) => one && typeof one === "object");
+        for (const carrier of carriers) {
+          // 1.592: a save failed by at least so much puts these on in place of the entry's own.
+          const failedBy = carrier.save && typeof carrier.save === "object" ? carrier.save.failedBy : undefined;
+          if (failedBy !== undefined) {
+            if (
+              !failedBy ||
+              typeof failedBy !== "object" ||
+              Object.keys(failedBy).some((key) => !["atLeast", "applies"].includes(key)) ||
+              !Number.isInteger(failedBy.atLeast) ||
+              failedBy.atLeast < 1 ||
+              failedBy.atLeast > 30 ||
+              !Array.isArray(failedBy.applies) ||
+              failedBy.applies.length < 1 ||
+              failedBy.applies.length > 6 ||
+              failedBy.applies.some((one) => !conditionIdsHeld.has(one?.condition))
+            )
+              throw new Error(
+                `${id} ${where} save failedBy is { atLeast: 1 to 30, applies: 1 to 6 declared conditions }`,
+              );
+            gate(RULESET_FAILED_BY_MIN, `has ${where} a save failed by so much, of 1.592`);
+          }
+          // 1.593: an amount multiplied, and shared out evenly among those its area catches.
+          if (carrier.amountTimes !== undefined || carrier.dividedAmong !== undefined) {
+            if (
+              (carrier.amountTimes !== undefined &&
+                (!Number.isInteger(carrier.amountTimes) ||
+                  carrier.amountTimes < 2 ||
+                  carrier.amountTimes > 100 ||
+                  carrier.amount === undefined)) ||
+              (carrier.dividedAmong !== undefined &&
+                (carrier.dividedAmong !== "caught" ||
+                  carrier.area === undefined ||
+                  carrier.attackRoll !== undefined ||
+                  carrier.save !== undefined))
+            )
+              throw new Error(
+                `${id} ${where} amountTimes is 2 to 100 on an amount, and dividedAmong "caught" needs an area and no attack roll or save`,
+              );
+            gate(RULESET_AMOUNT_SHARED_MIN, `has ${where} an amount multiplied or shared out, of 1.593`);
+          }
+          if (carrier.zone?.inside?.save?.onCast !== undefined)
+            gate(RULESET_INSIDE_ON_CAST_MIN, `has ${where} a zone's inside save thrown as it is cast, of 1.579`);
+          const turns = carrier.zone?.turnsShots;
+          if (turns !== undefined) {
+            if (
+              !turns ||
+              typeof turns !== "object" ||
+              Array.isArray(turns) ||
+              Object.keys(turns).some((key) => key !== "spares") ||
+              (turns.spares !== undefined &&
+                (!Array.isArray(turns.spares) ||
+                  turns.spares.length < 1 ||
+                  turns.spares.length > 12 ||
+                  turns.spares.some((one) => typeof one !== "string" || one.length < 1 || one.length > 80)))
+            )
+              throw new Error(`${id} ${where} zone turnsShots is { spares?: 1 to 12 attack labels }`);
+            gate(RULESET_TURNS_SHOTS_MIN, `has ${where} a zone turning shots aside, of 1.581`);
+          }
+          if (carrier.targetTypes?.understands !== undefined)
+            gate(RULESET_LANGUAGES_MIN, `has ${where} a target that must understand its user, of 1.561`);
+          if (carrier !== entry?.mechanics && carrier.repeats !== undefined)
+            gate(RULESET_ITEM_REPEATS_MIN, `has ${where} an item use repeated, of 1.583`);
+          if (carrier.area?.ringOnly !== undefined)
+            gate(RULESET_RING_ONLY_MIN, `has ${where} a wall laid only as a ring, of 1.602`);
+          if (carrier.zone?.blocks?.includes("spells"))
+            gate(RULESET_RING_ONLY_MIN, `has ${where} a zone blocking spells, of 1.602`);
+          if (carrier.zone?.forbids?.teleport && typeof carrier.zone.forbids.teleport === "object")
+            gate(RULESET_TELEPORT_SAVE_MIN, `has ${where} a teleport ban a save gets past, of 1.603`);
+          if (carrier.zone?.forbids?.teleport === "into")
+            lateGate(RULESET_FORBIDDANCE_MIN, `has ${where} a zone nobody teleports into, of 1.753`);
+          if (carrier.healsAll !== undefined) {
+            if (
+              carrier.healsAll !== true ||
+              carrier.kind !== "heal" ||
+              carrier.sharesHeal !== undefined ||
+              carrier.usesChosen !== undefined
+            )
+              throw new Error(
+                `${id} ${where} healsAll is true, on a heal that neither shares it out nor takes uses for it`,
+              );
+            lateGate(RULESET_HEALS_ALL_MIN, `has ${where} a heal of all the health missing, of 1.757`);
+          }
+          if (carrier.damageTypeChoice !== undefined) {
+            const picks = carrier.damageTypeChoice;
+            const known = new Set(document?.combat?.damageTypes ?? []);
+            if (
+              !Array.isArray(picks) ||
+              picks.length < 2 ||
+              picks.length > 8 ||
+              new Set(picks).size !== picks.length ||
+              picks.some((one) => !known.has(one)) ||
+              (carrier.amount === undefined && carrier.zone === undefined) ||
+              carrier.kindChoice === true ||
+              ["appliesOneOf", "cureOneOf", "forms", "calls", "conjures", "takesMode"].some(
+                (key) => carrier[key] !== undefined,
+              ) ||
+              carrier.zone?.inside?.chooses !== undefined
+            )
+              throw new Error(
+                `${id} ${where} damageTypeChoice is 2 to 8 declared damage types, on mechanics with an amount or a zone and no other mode-picked choice`,
+              );
+            lateGate(RULESET_FORBIDDANCE_MIN, `has ${where} a damage type chosen as it is cast, of 1.753`);
+          }
+          if (carrier.repeats?.afterTargetDown !== undefined)
+            gate(RULESET_REPEATS_AFTER_DOWN_MIN, `has ${where} a repeat once its targets are down, of 1.604`);
+          const save = carrier.save;
+          if (save && typeof save === "object" && save.advantageIfFought !== undefined) {
+            if (save.advantageIfFought !== true)
+              throw new Error(`${id} ${where} save advantageIfFought is true when given`);
+            gate(
+              RULESET_ADVANTAGE_IF_FOUGHT_MIN,
+              `has ${where} a save with advantage for a creature being fought, of 1.582`,
+            );
+          }
+        }
+      }
+    // 1.584 and 1.585: a condition's endings on its source, and what it counts as.
+    {
+      const conditionIds = new Set((document?.combat?.conditions ?? []).map((one) => one?.condition));
+      const effectIds = new Set(RULESET_COMBAT_CONDITION_EFFECTS);
+      const senses = new Set(
+        (document?.combat?.conditions ?? [])
+          .flatMap((one) => [...(one?.lacks ?? []), ...(one?.needs ?? [])])
+          .concat(["hearing", "sight"]),
+      );
+      for (const entry of Array.isArray(document?.combat?.conditions) ? document.combat.conditions : []) {
+        const where = `combat condition "${entry?.condition}"`;
+        const ends = entry?.endsWhenSource;
+        if (ends !== undefined) {
+          const list = (value, ok) =>
+            value === undefined || (Array.isArray(value) && value.length >= 1 && value.length <= 8 && value.every(ok));
+          if (
+            !ends ||
+            typeof ends !== "object" ||
+            Array.isArray(ends) ||
+            Object.keys(ends).length === 0 ||
+            Object.keys(ends).some(
+              (key) => !["effects", "conditions", "components", "holderLacks", "acts", "lacks"].includes(key),
+            ) ||
+            !list(ends.lacks, (one) => conditionIds.has(one) && one !== entry?.condition) ||
+            (ends.acts !== undefined && ends.acts !== true) ||
+            !list(ends.effects, (one) => effectIds.has(one)) ||
+            !list(ends.conditions, (one) => conditionIds.has(one)) ||
+            !list(ends.components, (one) => typeof one === "string" && one.length > 0) ||
+            !list(ends.holderLacks, (one) => senses.has(one))
+          )
+            throw new Error(
+              `${id} ${where} endsWhenSource is { effects?, conditions?, components?, holderLacks?, acts?: true, lacks? }, each list 1 to 8 known names`,
+            );
+          // 1.617: once its source holds none of some conditions.
+          if (ends.lacks !== undefined)
+            gate(RULESET_USER_HOLDS_MIN, `has ${where} ending as its source lacks a condition, of 1.617`);
+          gate(RULESET_ENDS_WHEN_SOURCE_MIN, `has ${where} ending on its source, of 1.584`);
+          // 1.599: once its source acts again.
+          if (ends.acts !== undefined)
+            gate(RULESET_ENDS_WHEN_SOURCE_ACTS_MIN, `has ${where} ending as its source acts, of 1.599`);
+        }
+        // 1.588: cover against whoever applied it, or the creature that called them.
+        if (entry?.coverFor !== undefined) {
+          const cover = entry.coverFor;
+          if (
+            !cover ||
+            typeof cover !== "object" ||
+            Object.keys(cover).some((key) => !["tier", "who"].includes(key)) ||
+            !["half", "three-quarters"].includes(cover.tier) ||
+            (cover.who !== undefined && !["source", "caller"].includes(cover.who))
+          )
+            throw new Error(
+              `${id} ${where} coverFor is { tier: "half" or "three-quarters", who?: "source" or "caller" }`,
+            );
+          if (document?.combat?.cover === undefined)
+            throw new Error(`${id} ${where} coverFor reads cover, so the block declares "cover" too`);
+          gate(RULESET_COVER_FOR_MIN, `has ${where} giving cover against its source, of 1.588`);
+        }
+        if (entry?.countsAs !== undefined) {
+          const counts = entry.countsAs;
+          if (
+            !Array.isArray(counts) ||
+            counts.length < 1 ||
+            counts.length > 4 ||
+            counts.some((one) => !conditionIds.has(one) || one === entry.condition)
+          )
+            throw new Error(`${id} ${where} countsAs is 1 to 4 other declared conditions`);
+          gate(RULESET_COUNTS_AS_MIN, `has ${where} counting as another, of 1.585`);
+        }
+      }
+    }
+    for (const contest of Array.isArray(document?.combat?.contests) ? document.combat.contests : []) {
+      if (contest?.onWin?.both !== undefined)
+        gate(RULESET_HELD_BY_SELF_MIN, `has combat contest "${contest.id}" putting conditions on both, of 1.553`);
+      if (contest?.targetHeldBySelf !== undefined)
+        gate(
+          RULESET_HELD_BY_SELF_MIN,
+          `has combat contest "${contest.id}" offered only on a target its actor holds, of 1.553`,
+        );
+    }
+    for (const contest of Array.isArray(document?.combat?.contests) ? document.combat.contests : [])
+      if (contest?.actorHolds !== undefined) {
+        const holds = contest.actorHolds;
+        if (
+          !Array.isArray(holds) ||
+          holds.length < 1 ||
+          holds.length > 4 ||
+          holds.some((one) => !conditionIdsHeld.has(one))
+        )
+          throw new Error(`${id} combat contest "${contest.id}" actorHolds is 1 to 4 declared conditions`);
+        gate(RULESET_ACTOR_HOLDS_MIN, `has combat contest "${contest.id}" offered only to a holder, of 1.578`);
+      }
+    // 1.587: advantage against a target no bigger than a size, and a push read off the actor's sheet.
+    for (const contest of Array.isArray(document?.combat?.contests) ? document.combat.contests : []) {
+      const where = `combat contest "${contest?.id}"`;
+      if (contest?.advantageAtMostSize !== undefined) {
+        const sizes = new Set((document?.combat?.sizes?.order ?? []).map((one) => one?.id));
+        if (!sizes.has(contest.advantageAtMostSize))
+          throw new Error(`${id} ${where} advantageAtMostSize names a size of combat.sizes`);
+        gate(RULESET_CONTEST_SIZE_PUSH_MIN, `has ${where} with advantage against the small, of 1.587`);
+      }
+      const read = contest?.onWin?.pushRead;
+      if (read !== undefined) {
+        if (!read || typeof read !== "object" || Array.isArray(read) || Object.keys(read).length === 0)
+          throw new Error(`${id} ${where} onWin pushRead is a value read off a sheet`);
+        if (read.derived !== undefined && !(document?.sheet?.derived ?? []).some((one) => one?.id === read.derived))
+          throw new Error(`${id} ${where} onWin pushRead names unknown derived value "${read.derived}"`);
+        gate(RULESET_CONTEST_SIZE_PUSH_MIN, `has ${where} pushing as far as a sheet reads, of 1.587`);
+      }
+      // 1.598: the winner moving with the one it pushed.
+      if (contest?.onWin?.follows !== undefined) {
+        if (contest.onWin.follows !== true || contest.onWin.push === undefined)
+          throw new Error(`${id} ${where} onWin follows is true, beside a push`);
+        gate(RULESET_CONTEST_FOLLOWS_MIN, `has ${where} following whoever it pushed, of 1.598`);
+      }
+    }
+    // 1.597: more than 12 contests.
+    const contestCount = Array.isArray(document?.combat?.contests) ? document.combat.contests.length : 0;
+    if (contestCount > 12) gate(RULESET_MORE_CONTESTS_MIN, `declares ${contestCount} contests, over 12, of 1.597`);
+    // 1.600: a creature only some foes pass through, or filling none of its space (its shape is the
+    // creatures' check).
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? [])
+        if (entry?.creature && (entry.creature.passableBy !== undefined || entry.creature.fillsSpace !== undefined))
+          gate(
+            RULESET_PASSABLE_BY_MIN,
+            `has catalog "${catalog?.id}" entry "${entry?.id}" letting only some pass or filling none of its space, of 1.600`,
+          );
+    // 1.575: an item's other forms, each another item of the ruleset's that changes form itself never.
+    {
+      const budgets = new Set((document?.combat?.economy?.budgets ?? []).map((one) => one?.id));
+      const items = new Map();
+      for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+        for (const entry of catalogEntryList(catalog, catalogSources) ?? [])
+          if (entry?.item) items.set(`${catalog.id}/${entry.id}`, entry.item);
+      for (const [ref, item] of items) {
+        // An item whose hits count their own uses is one to a stack, as the Engine reads it.
+        if ((item.attack?.spends ?? []).some((one) => one?.uses !== undefined) && item.stack !== 1)
+          throw new Error(`${id} item "${ref}" attack spends count their own uses, so it is one to a stack`);
+        const forms = item.forms;
+        if (forms === undefined) continue;
+        if (
+          !forms ||
+          typeof forms !== "object" ||
+          Object.keys(forms).some((key) => !["label", "budget", "into"].includes(key)) ||
+          typeof forms.label !== "string" ||
+          forms.label.length < 1 ||
+          forms.label.length > 40 ||
+          !budgets.has(forms.budget) ||
+          !Array.isArray(forms.into) ||
+          forms.into.length < 1 ||
+          forms.into.length > 8 ||
+          forms.into.some(
+            (form) =>
+              !form ||
+              Object.keys(form).some((key) => !["label", "item"].includes(key)) ||
+              typeof form.label !== "string" ||
+              form.label.length < 1 ||
+              form.label.length > 40 ||
+              form.item === ref ||
+              !items.has(form.item) ||
+              items.get(form.item).forms !== undefined,
+          ) ||
+          item.stack !== 1
+        )
+          throw new Error(
+            `${id} item "${ref}" forms is { label, budget: an economy budget, into: 1 to 8 of { label, item: another item that changes form never } }, one to a stack`,
+          );
+        gate(RULESET_ITEM_FORMS_MIN, `has item "${ref}" changing form, of 1.575`);
+      }
+    }
+    // 1.561: where a character's languages are read, and each creature's own.
+    if (document?.combat?.languages !== undefined) {
+      const read = document.combat.languages;
+      const list = (document?.sheet?.lists ?? []).find((one) => one?.id === read?.list);
+      if (
+        !read ||
+        typeof read !== "object" ||
+        Object.keys(read).some((key) => !["list", "column", "prefix", "split"].includes(key)) ||
+        (read.split !== undefined &&
+          (!Array.isArray(read.split) ||
+            read.split.length < 1 ||
+            read.split.length > 4 ||
+            read.split.some((one) => typeof one !== "string" || one.length < 1 || one.length > 10))) ||
+        !list ||
+        !(list.columns ?? []).some((one) => one?.id === read.column) ||
+        (read.prefix !== undefined &&
+          (typeof read.prefix !== "string" || read.prefix.length < 1 || read.prefix.length > 40))
+      )
+        throw new Error(
+          `${id} combat languages is { list: a sheet list, column: one of its columns, prefix?: up to 40 characters, split?: 1 to 4 separators }`,
+        );
+      gate(RULESET_LANGUAGES_MIN, "has combat languages, of 1.561");
+      if (read.split !== undefined) gate(RULESET_LANGUAGE_SPLIT_MIN, "has combat languages split, of 1.589");
+    }
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+        const spoken = entry?.creature?.languages;
+        if (spoken === undefined) continue;
+        if (
+          !Array.isArray(spoken) ||
+          spoken.length > 30 ||
+          spoken.some((one) => typeof one !== "string" || one.length < 1 || one.length > 60) ||
+          new Set(spoken.map((one) => one.toLowerCase())).size !== spoken.length
+        )
+          throw new Error(
+            `${id} catalog "${catalog.id}" entry "${entry.id}" languages is up to 30 different names of up to 60 characters`,
+          );
+        gate(RULESET_LANGUAGES_MIN, `has catalog "${catalog.id}" entry "${entry.id}" languages, of 1.561`);
+      }
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? [])
+        if ((entry?.creature?.actions ?? []).some((action) => action?.charge?.then?.action === action.id))
+          gate(
+            RULESET_CHARGE_SELF_MIN,
+            `has catalog "${catalog.id}" entry "${entry.id}" a charge followed by itself, of 1.574`,
+          );
+    const conditionTotal = Array.isArray(document?.combat?.conditions) ? document.combat.conditions.length : 0;
+    if (conditionTotal > 320)
+      gate(RULESET_CONDITIONS_640_MIN, `declares ${conditionTotal} combat conditions, over 320, of 1.552`);
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? [])
+        if (entry?.mechanics?.summons?.strikesAtTurnStart !== undefined)
+          gate(
+            RULESET_STRIKES_AT_TURN_START_MIN,
+            `has catalog "${catalog.id}" entry "${entry.id}" summons strikesAtTurnStart, of 1.539`,
+          );
+    const saveIdsNow = new Set((document?.sheet?.saves ?? []).map((one) => one?.id));
+    const deathConditionIds = new Set((document?.sheet?.live?.conditions ?? []).map((one) => one?.id));
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+        const where = `catalog "${catalog.id}" entry "${entry?.id}"`;
+        const item = entry?.item;
+        const mores = Array.isArray(item?.moreUses) ? item.moreUses : [];
+        mores.forEach((more, index) => {
+          if (more?.alongside === undefined) return;
+          const at = `${where} moreUses ${index} alongside`;
+          if (!Array.isArray(more.alongside) || more.alongside.length < 1 || more.alongside.length > 3)
+            throw new Error(`${id} ${at} lists 1 to 3 of the item's other uses`);
+          for (const label of more.alongside) {
+            const wanted = typeof label === "string" ? label.trim().toLowerCase() : undefined;
+            const named =
+              item.use?.label?.trim().toLowerCase() === wanted
+                ? item.use
+                : mores.find((other) => other !== more && other?.label?.trim().toLowerCase() === wanted)?.use;
+            if (!named || more.label?.trim().toLowerCase() === wanted)
+              throw new Error(`${id} ${at} "${label}" is none of the item's other uses`);
+            if (!named.area?.around) throw new Error(`${id} ${at} "${label}" is centred on its user (area around)`);
+            if (mores.some((other) => other?.use === named && other.alongside))
+              throw new Error(`${id} ${at} "${label}" has nothing beside it itself`);
+          }
+          gate(RULESET_ALONGSIDE_MIN, `has ${at}, of 1.535`);
+        });
+        const creature = entry?.creature;
+        if (creature?.onDeath !== undefined) {
+          const death = creature.onDeath;
+          const at = `${where} onDeath`;
+          if (!death || typeof death !== "object" || !death.area?.around)
+            throw new Error(`${id} ${at} is a burst centred on it (area around)`);
+          if (typeof death.id !== "string" || !/^[a-z][a-z0-9_]*$/u.test(death.id))
+            throw new Error(`${id} ${at} id is lowercase letters, digits and underscores, starting with a letter`);
+          if (death.save?.save !== undefined && !saveIdsNow.has(death.save.save))
+            throw new Error(`${id} ${at} save "${death.save.save}" is not a declared save`);
+          for (const one of Array.isArray(death.applies) ? death.applies : [])
+            if (!deathConditionIds.has(one?.condition))
+              throw new Error(`${id} ${at} applies unknown condition "${one?.condition}"`);
+          gate(RULESET_ON_DEATH_MIN, `has ${at}, of 1.540`);
+        }
+        if (creature?.healedBy !== undefined) {
+          const at = `${where} healedBy`;
+          if (
+            !Array.isArray(creature.healedBy) ||
+            creature.healedBy.length < 1 ||
+            creature.healedBy.length > 12 ||
+            creature.healedBy.some((one) => typeof one !== "string" || one.length < 1 || one.length > 40)
+          )
+            throw new Error(`${id} ${at} lists 1 to 12 damage types`);
+          gate(RULESET_HEALED_BY_MIN, `has ${at}, of 1.541`);
+        }
+      }
+    // 1.512: breathing only water.
+    if (document?.combat?.underwater?.breath?.waterOnly !== undefined) waterOnly = "combat underwater breath waterOnly";
+    if (imaging) gate(RULESET_MIRROR_IMAGES_MIN, `has ${imaging}, of 1.505`);
+    if (blinking) gate(RULESET_BLINKS_MIN, `has ${blinking}, of 1.506`);
+    if (stoppingTime) gate(RULESET_STOPS_TIME_MIN, `has ${stoppingTime}, of 1.507`);
+    if (takingAim) gate(RULESET_TAKES_AIM_MIN, `has ${takingAim}, of 1.509`);
+    if (criticalsNormal) gate(RULESET_CRITICALS_NORMAL_MIN, `has ${criticalsNormal}, of 1.510`);
+    if (diceless) gate(RULESET_DICELESS_ATTACKS_MIN, `has ${diceless}, of 1.511`);
+    if (waterOnly) gate(RULESET_WATER_ONLY_MIN, `has ${waterOnly}, of 1.512`);
+    if (wornKeeping) gate(RULESET_WORN_KEEPS_MIN, `has ${wornKeeping}, of 1.513`);
+    if (suppressedHarmed) gate(RULESET_SUPPRESSED_WHEN_HARMED_MIN, `has ${suppressedHarmed}, of 1.514`);
+    if (underwater) gate(RULESET_UNDERWATER_MIN, `has ${underwater}, of 1.498`);
+    if (jumping) gate(RULESET_JUMPING_MIN, `has ${jumping}, of 1.499`);
+    if (deathSaving) gate(RULESET_DEATH_SAVES_MIN, `has ${deathSaving}, of 1.500`);
+    // 1.502 and 1.503: what ends a condition after an attack, wherever it is put on.
+    const endings = (value) => {
+      if (!value || typeof value !== "object") return;
+      if (Array.isArray(value)) return value.forEach(endings);
+      if (value.endsAfter === "attacked-by-source") trueStriking ??= `endsAfter "attacked-by-source"`;
+      if (value.endsAfter === "own-hit") ownHitting ??= `endsAfter "own-hit"`;
+      for (const inner of Object.values(value)) endings(inner);
+    };
+    endings(document);
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+      endings(catalogEntryList(catalog, catalogSources) ?? []);
+    if (weaponChanging) gate(RULESET_CONDITION_WEAPON_MIN, `has ${weaponChanging}, of 1.501`);
+    if (trueStriking) gate(RULESET_TRUE_STRIKE_MIN, `has ${trueStriking}, of 1.502`);
+    if (ownHitting) gate(RULESET_CONDITION_ON_HIT_MIN, `has ${ownHitting}, of 1.503`);
+    if (entering) gate(RULESET_ENTERING_MIN, `has ${entering}, of 1.504`);
+    if (passing) gate(RULESET_PASSING_MIN, `has ${passing}, of 1.495`);
+    if (mounting) gate(RULESET_MOUNTS_MIN, `has ${mounting}, of 1.496`);
+    if (weighing) gate(RULESET_MOUNT_WEIGHTS_MIN, `has ${weighing}, of 1.641`);
+    if (longZone) gate(RULESET_ZONE_CLOSE_MIN, `has ${longZone}, of 1.637`);
+    // 1.643: a sequence step rolled for, made on a hit, or optional.
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+        const stepped = (entry?.creature?.actions ?? []).some((action) =>
+          (action?.sequence ?? []).some(
+            (step) => step?.dice !== undefined || step?.ifHit !== undefined || step?.optional !== undefined,
+          ),
+        );
+        if (stepped) {
+          lateGate(
+            RULESET_SEQUENCE_STEPS_MIN,
+            `has ${catalog.id} entry "${entry.id}" sequence steps rolled for, made on a hit or optional, of 1.643`,
+          );
+          break;
+        }
+      }
+    // 1.754: more than twelve actions on one creature, gated with the newest.
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+        const count = entry?.creature?.actions?.length ?? 0;
+        if (count > 12) {
+          lateGate(
+            RULESET_SIXTEEN_ACTIONS_MIN,
+            `has ${catalog.id} entry "${entry.id}" carrying ${count} actions, more than twelve, of 1.754`,
+          );
+          break;
+        }
+      }
+    // 1.642: a creature's spell slots, or a spell of its trait at its own numbers.
+    for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+        const casting = entry?.creature?.spellcasting;
+        if (
+          casting &&
+          (casting.slots !== undefined ||
+            (casting.spells ?? []).some((one) => one?.saveDifficulty !== undefined || one?.toHit !== undefined))
+        ) {
+          lateGate(
+            RULESET_CREATURE_SLOTS_MIN,
+            `has ${catalog.id} entry "${entry.id}" spell slots or a spell at its own numbers, of 1.642`,
+          );
+          break;
+        }
+      }
+    // 1.787: an attack's damage that kills at 0, a creature action only while flying, a sequence a spell
+    // may follow, and a rescue narrowed to what the save is against.
+    {
+      let asked = rescueAgainst;
+      const fells = (where, mechanics) => {
+        if (mechanics?.fellsKill === undefined) return;
+        if (mechanics.fellsKill !== true || mechanics.kind !== "attack" || !mechanics.amount)
+          throw new Error(`${id} ${where} fellsKill is true, on an attack with an amount`);
+        asked ??= `${where} fellsKill`;
+      };
+      for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+        for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+          const where = `catalog "${catalog.id}" entry "${entry?.id}"`;
+          fells(where, entry?.mechanics);
+          fells(`${where} use`, entry?.item?.use);
+          for (const action of entry?.creature?.actions ?? []) {
+            if (action?.whileFlying !== undefined) {
+              if (action.whileFlying !== true)
+                throw new Error(`${id} ${where} action "${action.id}" whileFlying is true`);
+              asked ??= `${where} action "${action.id}" whileFlying`;
+            }
+            if (action?.castsOne !== undefined) {
+              if (action.castsOne !== true || !action.sequence || !entry.creature.spellcasting)
+                throw new Error(
+                  `${id} ${where} action "${action.id}" castsOne is true, on a sequence of a creature that casts`,
+                );
+              asked ??= `${where} action "${action.id}" castsOne`;
+            }
+          }
+        }
+      if (asked) lateGate(RULESET_ENGINE_ASKS_771_MIN, `has ${asked}, of 1.787`);
+    }
+    // 1.788: a fields step that waits while a field holds its default, entries a grant gives outright, a heal
+    // its user takes outside a fight, and an item's other names.
+    {
+      let asked;
+      const fieldsById = new Map((document?.sheet?.fields ?? []).map((field) => [field?.id, field]));
+      for (const step of document?.sheet?.builder?.steps ?? []) {
+        if (step?.unansweredAtDefault === undefined) continue;
+        const where = `builder step "${step.id}" unansweredAtDefault`;
+        if (
+          step.kind !== "fields" ||
+          !Array.isArray(step.unansweredAtDefault) ||
+          step.unansweredAtDefault.length < 1 ||
+          step.unansweredAtDefault.some(
+            (one) => !(step.fields ?? []).includes(one) || fieldsById.get(one)?.default === undefined,
+          )
+        )
+          throw new Error(`${id} ${where} names fields of its own step that have a default`);
+        asked ??= where;
+      }
+      const catalogIds = new Map(
+        (Array.isArray(document?.catalogs) ? document.catalogs : []).map((catalog) => [catalog?.id, catalog]),
+      );
+      const healsOutside = (where, mechanics) => {
+        if (mechanics?.outsideFight === undefined) return;
+        if (
+          mechanics.outsideFight !== true ||
+          mechanics.kind !== "heal" ||
+          mechanics.targets !== "self" ||
+          !mechanics.amount
+        )
+          throw new Error(`${id} ${where} outsideFight is true, on a heal of its user with an amount`);
+        asked ??= `${where} outsideFight`;
+      };
+      for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+        for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+          const where = `catalog "${catalog.id}" entry "${entry?.id}"`;
+          for (const added of entry?.grants?.entries?.add ?? []) {
+            const options = catalogEntryList(catalogIds.get(added?.catalog), catalogSources);
+            if (
+              !options ||
+              !Array.isArray(added.ids) ||
+              added.ids.length < 1 ||
+              added.ids.some((one) => !options.some((option) => option?.id === one))
+            )
+              throw new Error(`${id} ${where} entries.add names entries of a catalog`);
+            asked ??= `${where} entries.add`;
+          }
+          healsOutside(where, entry?.mechanics);
+          if (entry?.aliases !== undefined) {
+            if (
+              !entry.item ||
+              !Array.isArray(entry.aliases) ||
+              entry.aliases.length < 1 ||
+              entry.aliases.length > 8 ||
+              entry.aliases.some((one) => typeof one !== "string" || !one.trim() || one.length > 120)
+            )
+              throw new Error(`${id} ${where} aliases are 1 to 8 other names of an item`);
+            asked ??= `${where} aliases`;
+          }
+        }
+      if (asked) lateGate(RULESET_ENGINE_ASKS_772_MIN, `has ${asked}, of 1.788`);
+    }
+    // 1.789: a feature's recovery offered as a rest ends, never an item's.
+    {
+      let asked;
+      const rests = new Set((document?.rests ?? []).map((rest) => rest?.id));
+      for (const catalog of Array.isArray(document?.catalogs) ? document.catalogs : [])
+        for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+          const where = `catalog "${catalog.id}" entry "${entry?.id}"`;
+          if (entry?.item?.use?.recovers?.atRest !== undefined)
+            throw new Error(`${id} ${where} use recovers atRest: a rest offers a feature, not an item's use`);
+          const atRest = entry?.mechanics?.recovers?.atRest;
+          if (atRest === undefined) continue;
+          if (!rests.has(atRest)) throw new Error(`${id} ${where} recovers atRest names no rest "${atRest}"`);
+          asked ??= `${where} recovers atRest`;
+        }
+      if (asked) lateGate(RULESET_REST_RECOVERY_MIN, `has ${asked}, of 1.789`);
+    }
+    // 1.790: a priced material, in one of the ruleset's coins, of items the catalogs hold or tags the
+    // items block declares, never on an item's use.
+    {
+      let asked;
+      const units = new Set(
+        (document?.items?.currencies ?? []).flatMap((family) => (family?.units ?? []).map((unit) => unit?.id)),
+      );
+      const tags = new Set((document?.items?.tags ?? []).map((tag) => tag?.id));
+      const catalogs = Array.isArray(document?.catalogs) ? document.catalogs : [];
+      const itemRefs = new Set(
+        catalogs.flatMap((catalog) =>
+          (catalogEntryList(catalog, catalogSources) ?? [])
+            .filter((entry) => entry?.item)
+            .map((entry) => `${catalog.id}/${entry.id}`),
+        ),
+      );
+      for (const catalog of catalogs)
+        for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+          const where = `catalog "${catalog.id}" entry "${entry?.id}"`;
+          if (entry?.item?.use?.material !== undefined)
+            throw new Error(
+              `${id} ${where} use material: a priced material is for an entry cast from a sheet, not an item's use`,
+            );
+          const material = entry?.mechanics?.material;
+          if (material === undefined) continue;
+          if (typeof material?.label !== "string" || !material.label.trim() || material.label.length > 120)
+            throw new Error(`${id} ${where} material needs a label of up to 120 characters`);
+          const amount = material?.worth?.amount;
+          if (!Number.isInteger(amount) || amount < 1 || !units.has(material?.worth?.unit))
+            throw new Error(`${id} ${where} material is worth a whole amount of one of the ruleset's coins`);
+          if (!material.items && !material.tags)
+            throw new Error(`${id} ${where} material says what counts: items, tags or both`);
+          for (const ref of material.items ?? [])
+            if (!itemRefs.has(ref))
+              throw new Error(`${id} ${where} material counts "${ref}", which no catalog holds as an item`);
+          for (const tag of material.tags ?? [])
+            if (!tags.has(tag))
+              throw new Error(`${id} ${where} material counts tag "${tag}", which the items block does not declare`);
+          if (material.consumed !== undefined && material.consumed !== true)
+            throw new Error(`${id} ${where} material consumed is true or left out`);
+          asked ??= `${where} material`;
+        }
+      if (asked) lateGate(RULESET_MATERIAL_MIN, `has ${asked}, of 1.790`);
+    }
+    // 1.379: the styles a game may play, each once, Classic or Tactical among them.
+    {
+      const styles = document?.combat?.styles;
+      if (styles !== undefined) {
+        if (
+          !Array.isArray(styles) ||
+          styles.length < 1 ||
+          styles.length > 8 ||
+          new Set(styles).size !== styles.length ||
+          styles.some((one) => typeof one !== "string" || !/^[a-z][a-z0-9_-]{0,39}$/u.test(one)) ||
+          !styles.some((one) => one === "classic" || one === "tactical")
+        )
+          throw new Error(`${id} combat styles is 1 to 8 style ids, each once, with classic or tactical among them`);
+        lateGate(RULESET_COMBAT_STYLES_MIN, "has combat styles, of 1.379");
+      }
+    }
+    // 1.791: what a weight is counted in.
+    {
+      const unit = document?.items?.carry?.unit;
+      if (unit !== undefined) {
+        if (typeof unit !== "string" || !/^\p{L}{1,12}$/u.test(unit))
+          throw new Error(`${id} items carry unit is up to 12 letters`);
+        lateGate(RULESET_WEIGHT_UNIT_MIN, "has items carry unit, of 1.791");
+      }
+    }
+    // 1.792: a damage change only on blows of given types, or spent once it adds.
+    {
+      const typed = (document?.combat?.conditions ?? []).find((entry) =>
+        (Array.isArray(entry?.modifiers) ? entry.modifiers : []).some(
+          (one) => one?.onTypes !== undefined || one?.spentOnUse !== undefined,
+        ),
+      );
+      if (typed)
+        lateGate(
+          RULESET_DAMAGE_ON_TYPES_MIN,
+          `has combat condition "${typed.condition}" with damage on given types or spent once, of 1.792`,
+        );
+    }
+    // 1.801: a list's pools that count uses, read "Used N times".
+    {
+      const tallied = (document?.sheet?.lists ?? []).find((list) => list?.pools?.tallyColumn !== undefined);
+      if (tallied) lateGate(RULESET_TALLY_POOLS_MIN, `has list "${tallied.id}" whose pools count uses, of 1.801`);
+    }
+    // 1.800: a sheet value added to an attack list's roll to hit.
+    {
+      const bonused = (document?.combat?.attacks ?? []).find((one) => one?.toHit?.sheetBonus !== undefined);
+      if (bonused)
+        lateGate(
+          RULESET_ATTACK_SHEET_BONUS_MIN,
+          `has combat attacks list "${bonused.list}" adding a sheet value to hit, of 1.800`,
+        );
+    }
+    // 1.799: a rows step that starts with, and waits on, a count of rows read off the sheet.
+    {
+      const counted = (document?.sheet?.builder?.steps ?? []).find(
+        (step) => step?.kind === "rows" && step?.countFrom !== undefined,
+      );
+      if (counted)
+        lateGate(
+          RULESET_ROWS_COUNT_FROM_MIN,
+          `has builder rows step "${counted.id}" counting its rows off the sheet, of 1.799`,
+        );
+    }
+    // 1.797: how many of its suggestions a text field or text column has its holder pick, read off the sheet.
+    {
+      const known = new Set(
+        [...(document?.sheet?.fields ?? []), ...(document?.sheet?.derived ?? [])].map((one) => one?.id),
+      );
+      const picks = [
+        ...(document?.sheet?.fields ?? []).map((field) => [`field "${field?.id}"`, field]),
+        ...(document?.sheet?.lists ?? []).flatMap((list) =>
+          (list?.columns ?? []).map((column) => [`list "${list?.id}" column "${column?.id}"`, column]),
+        ),
+      ].filter(([, one]) => one?.pick !== undefined);
+      for (const [name, one] of picks) {
+        if (one.type !== "text" || one.suggestions === undefined)
+          throw new Error(`${id} ${name} says how many to pick, which only a text field with suggestions takes`);
+        const ref = one.pick;
+        const target = ref?.derived ?? ref?.field;
+        if (!ref || typeof ref !== "object" || typeof target !== "string" || !known.has(target))
+          throw new Error(`${id} ${name} pick reads no field or derived value of the sheet`);
+      }
+      if (picks.length) lateGate(RULESET_TEXT_PICK_MIN, `has ${picks[0][0]} with a pick count, of 1.797`);
+    }
+    // 1.796: words a text field or a list's text column offers as chips.
+    {
+      const texts = [
+        ...(document?.sheet?.fields ?? []).map((field) => [`field "${field?.id}"`, field]),
+        ...(document?.sheet?.lists ?? []).flatMap((list) =>
+          (list?.columns ?? []).map((column) => [`list "${list?.id}" column "${column?.id}"`, column]),
+        ),
+      ].filter(([, one]) => one?.suggestions !== undefined);
+      for (const [name, one] of texts) {
+        const words = one.suggestions;
+        if (one.type !== "text") throw new Error(`${id} ${name} offers suggestions, which only a text field takes`);
+        if (
+          !Array.isArray(words) ||
+          words.length < 1 ||
+          words.length > 40 ||
+          words.some((word) => typeof word !== "string" || !word.trim() || word.length > 80) ||
+          new Set(words).size !== words.length
+        )
+          throw new Error(`${id} ${name} suggestions are 1 to 40 different words of up to 80 characters`);
+      }
+      if (texts.length) lateGate(RULESET_TEXT_SUGGESTIONS_MIN, `has ${texts[0][0]} with suggestions, of 1.796`);
+    }
+    // 1.795: what a bestiary creature has on it, items of the package's own item catalogs or its loot tables.
+    {
+      const catalogs = document?.catalogs ?? [];
+      const itemCatalogs = new Map(
+        catalogs.filter((one) => one?.holds === "items").map((one) => [one.id, catalogEntryList(one, catalogSources)]),
+      );
+      const tables = new Set((document?.items?.lootTables ?? []).map((one) => one?.id));
+      let carried;
+      for (const catalog of catalogs.filter((one) => one?.holds === "creatures")) {
+        for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+          const lines = entry?.creature?.inventory;
+          if (lines === undefined) continue;
+          carried ??= entry.id;
+          const where = `${id} creature "${entry.id}" inventory`;
+          if (!Array.isArray(lines) || lines.length < 1 || lines.length > 16)
+            throw new Error(`${where} is 1 to 16 lines`);
+          for (const line of lines) {
+            if ((line?.item === undefined) === (line?.table === undefined))
+              throw new Error(`${where} line names an item or a loot table, one of them`);
+            if (line.item !== undefined) {
+              const [catalogId, entryId] = String(line.item).split("/");
+              const list = itemCatalogs.get(catalogId);
+              if (list && !list.some((one) => one?.id === entryId))
+                throw new Error(`${where} names unknown item "${line.item}"`);
+              if (!itemCatalogs.has(catalogId))
+                throw new Error(`${where} names "${line.item}", not of an item catalog`);
+            }
+            if (line.table !== undefined && !tables.has(line.table))
+              throw new Error(`${where} names unknown loot table "${line.table}"`);
+            if (line.chance !== undefined && (!Number.isInteger(line.chance) || line.chance < 1 || line.chance > 100))
+              throw new Error(`${where} chance is 1 to 100`);
+          }
+        }
+      }
+      if (carried) lateGate(RULESET_CREATURE_INVENTORY_MIN, `has creature "${carried}" carrying things, of 1.795`);
+    }
+    // 1.793: an attack list's value that stands for the better of several abilities.
+    (document?.combat?.attacks ?? []).forEach((source, index) => {
+      const choices = source?.abilityChoices;
+      if (choices === undefined) return;
+      const where = `${id} combat attacks[${index}].abilityChoices`;
+      if (!choices || typeof choices !== "object" || Array.isArray(choices)) throw new Error(`${where} is an object`);
+      const abilityIds = new Set((document?.sheet?.abilities ?? []).map((ability) => ability?.id));
+      const list = (document?.sheet?.lists ?? []).find((entry) => entry?.id === source.list);
+      const columns = [source?.toHit?.ability?.column, source?.damage?.ability?.column]
+        .map((column) => (list?.columns ?? []).find((entry) => entry?.id === column))
+        .filter(Boolean);
+      if (!columns.length) throw new Error(`${where} needs an ability column on "${source.list}"`);
+      for (const [value, abilities] of Object.entries(choices)) {
+        if (abilityIds.has(value)) throw new Error(`${where} "${value}" is an ability, not a choice of them`);
+        if (!columns.some((column) => !Array.isArray(column.values) || column.values.includes(value))) {
+          throw new Error(`${where} "${value}" is not a value of the list's ability column`);
+        }
+        if (
+          !Array.isArray(abilities) ||
+          abilities.length < 2 ||
+          new Set(abilities).size !== abilities.length ||
+          abilities.some((one) => !abilityIds.has(one))
+        ) {
+          throw new Error(`${where} "${value}" names two or more different abilities of the sheet`);
+        }
+      }
+      lateGate(RULESET_ABILITY_CHOICES_MIN, "has attack rows choosing the best of several abilities, of 1.793");
+    });
+    // The lowest of them first, so a ruleset is told the next Capability API it needs.
+    for (const [min, text] of [...lateGates].sort((a, b) => a[0].major - b[0].major || a[0].minor - b[0].minor))
+      gate(min, text);
+    if (dragging) gate(RULESET_DRAGGED_MIN, `has ${dragging}, of 1.497`);
+    if (duplicating) gate(RULESET_DUPLICATES_MIN, `has ${duplicating}, of 1.474`);
+    if (splitting) gate(RULESET_SPLITS_MIN, `has ${splitting}, of 1.475`);
+    if (byCatalog) gate(RULESET_WARDS_BY_CATALOG_MIN, `has ${byCatalog}, of 1.476`);
+    if (itemHolding) gate(RULESET_ITEM_FALLS_SUPPRESSES_MIN, `has ${itemHolding}, of 1.477`);
+    if (offTerrain) gate(RULESET_WHILE_OFF_TERRAIN_MIN, `has ${offTerrain}, of 1.478`);
+    if (toCalled) gate(RULESET_APPLIES_TO_CALLED_MIN, `has ${toCalled}, of 1.479`);
+    if (vanishing) gate(RULESET_CONJURED_VANISHES_MIN, `has ${vanishing}, of 1.480`);
+    if (lending) gate(RULESET_LENDS_SENSES_MIN, `has ${lending}, of 1.481`);
+    if (dayLong) gate(RULESET_DAY_ROUNDS_MIN, `has ${dayLong}, of 1.482`);
+    if (sourceTurn) gate(RULESET_SOURCE_TURN_SAVES_MIN, `has ${sourceTurn}, of 1.483`);
+    if (kindHeld) gate(RULESET_SUPPRESSES_KINDS_MIN, `has ${kindHeld}, of 1.484`);
+    if (undispelled) gate(RULESET_UNTIL_DISPELLED_MIN, `has ${undispelled}, of 1.485`);
+    if (freeMoving) gate(RULESET_FREE_MOVEMENT_MIN, `has ${freeMoving}, of 1.486`);
+    if (familiars) gate(RULESET_FAMILIARS_MIN, `has ${familiars}, of 1.487`);
+    if (lendingStrikes) gate(RULESET_LENDS_STRIKES_MIN, `has ${lendingStrikes}, of 1.488`);
+    if (answering) gate(RULESET_WHEN_HIT_MIN, `has ${answering}, of 1.489`);
+    if (harmingBack) gate(RULESET_WHEN_HIT_HARMS_MIN, `has ${harmingBack}, of 1.508`);
+    if (layered) gate(RULESET_ZONE_LAYERS_MIN, `has ${layered}, of 1.490`);
+    if (itemEndingLayers) gate(RULESET_ITEM_ENDS_LAYERS_MIN, `has ${itemEndingLayers}, of 1.494`);
+    if (standingFor) gate(RULESET_STANDS_FOR_MIN, `has ${standingFor}, of 1.493`);
+    if (endingLayers) gate(RULESET_ENDS_LAYERS_MIN, `has ${endingLayers}, of 1.491`);
+    if (layerBlocking) gate(RULESET_LAYER_BLOCKS_MIN, `has ${layerBlocking}, of 1.492`);
+  }
+  {
+    const behaving = (document.combat?.conditions ?? []).map((entry) => [entry?.condition, entry?.behavior ?? {}]);
+    const wasting = behaving.find(([, behavior]) => behavior.wastes !== undefined);
+    if (wasting) gate(RULESET_WASTES_MIN, `has combat condition "${wasting[0]}" wasting a budget, of 1.463`);
+    const walking = behaving.find(([, behavior]) => behavior.walks !== undefined || behavior.from === "steered");
+    if (walking) gate(RULESET_STEERS_MIN, `has combat condition "${walking[0]}" walked or steered, of 1.464`);
+  }
+  {
+    const harmless = (document.combat?.conditions ?? []).find(
+      (entry) => entry?.effects?.includes?.("cannot-harm") || entry?.behavior?.from !== undefined,
+    );
+    if (harmless)
+      gate(
+        RULESET_HARMLESS_MIN,
+        `has combat condition "${harmless.condition}" harming nobody or fleeing a point, of 1.457`,
+      );
+  }
+  if (oneOfAt) gate(RULESET_APPLIES_ONE_OF_MIN, `has ${oneOfAt}, of 1.448`);
+  // 1.440: an end on gaining a condition.
+  const gaining = (document?.combat?.conditions ?? []).find((one) => one?.endsWhenHolder?.gains !== undefined);
+  if (gaining)
+    gate(RULESET_ENDS_ON_GAIN_MIN, `has combat condition "${gaining.condition}" endsWhenHolder gains, of 1.440`);
+  return found;
 }
