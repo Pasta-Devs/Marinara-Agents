@@ -403,13 +403,18 @@ export function createImageClient({
   };
   return forgeWrapImageReferenceClient(client, logger, {
     logPrefix: "[otome-forge]",
-    async subjectReference(client, subject) {
+    /**
+     * Who he is. A card's neutral full body is the best likeness there is, but the avatar is only replaced by it when one
+     * of the two is all we have: a portrait gets BOTH (the full body first, then the avatar), so the paint has his build
+     * and his face. Scenes keep one per subject, because the four-reference budget is shared across the whole cast.
+     * Never a URL from sprite metadata: the file route is derived from the selected id and a verified filename.
+     */
+    async subjectReference(client, subject, { method } = {}) {
       const cardId = str(subject.cardId);
+      const both = method === "generatePortrait" || method === "generateOutfit";
       if (cardId && !cardId.includes("..") && !/[\\/]/u.test(cardId)) {
         try {
           const sprites: unknown = await request(`/api/sprites/${encodeURIComponent(cardId)}`);
-          // Only the selected card's exact neutral full-body raster is an identity reference. Never fetch a URL
-          // returned in metadata: derive its local file route from the selected id and a verified filename.
           const neutral = Array.isArray(sprites)
             ? sprites.find(
                 (sprite) =>
@@ -421,10 +426,16 @@ export function createImageClient({
             const image = await client.cardAvatarImage(
               `/api/sprites/${encodeURIComponent(cardId)}/file/${encodeURIComponent(str(neutral.filename))}`,
             );
-            if (image) return `data:${image.mime};base64,${image.base64}`;
+            if (image) {
+              const full = `data:${image.mime};base64,${image.base64}`;
+              if (!both) return full;
+              const avatar = await forgeSubjectReference(client, subject);
+              return avatar && avatar !== full ? [full, avatar] : full;
+            }
           }
-        } catch {
+        } catch (error) {
           // A missing card or sprite does not prevent a paint with this love interest's other retained likenesses.
+          logger?.debug?.("[otome-forge] no neutral full body for %s: %s", cardId, String(error));
         }
       }
       return forgeSubjectReference(client, subject);

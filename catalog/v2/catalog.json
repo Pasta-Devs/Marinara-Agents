@@ -1535,8 +1535,8 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "02e92280adca3853248a5f09b68c602c8fa510d18f7a4a78dbd2c87301ace168",
-            "bytes": 1032969
+            "sha256": "6e99135da7e14959257860002a4478b2414cb245ebb35af5d77636120d2b23fa",
+            "bytes": 1033225
           },
           {
             "path": "skill-aoe_damage-dark.webp",
@@ -2389,8 +2389,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/gacha-forge.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.27.5.zip",
-        "sha256": "1dda32ac38f9d7f3240065518c6290a5a9c14030c6476340b8c78bac9545d148",
-        "bytes": 9187129
+        "sha256": "a3a1581cb1d80e95ec491b57a64c7b8067120232c55051be68dab15d07849a0d",
+        "bytes": 9187385
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/gacha-forge/README.md"
     },
@@ -2692,8 +2692,8 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "3241078cd26a5faf8bc6f5df68a4a12d682dffc6d1b88cf1e1f2b492a24a0f1c",
-            "bytes": 521381
+            "sha256": "bbbfbf8754495938a5de210591d9806ba34d7cb0db3b5a0f1b8cdab40253700a",
+            "bytes": 521477
           },
           {
             "path": "client.js",
@@ -2715,8 +2715,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.5.24.zip",
-        "sha256": "a2201db2b774c2f17670cff61c480facfc9b6bb8d476a993de25b86837e58982",
-        "bytes": 1465108
+        "sha256": "24e3f9b8da7d5f042f20ce61a4b2edc3f2a5ca671a1c898c942c035837b2d805",
+        "bytes": 1465204
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },
@@ -3633,7 +3633,7 @@
         },
         "id": "slurp2",
         "name": "Slurp",
-        "version": "0.4.13",
+        "version": "0.4.14",
         "description": "A private social app for your characters. Turn characters and personas into Creators, post public or locked photos, and watch a simulated audience follow, subscribe, unlock, comment, and message them. By default, it is tuned for an adult experience. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
         "localizations": {
           "de": {
@@ -3702,13 +3702,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "4170d85083b62c9628030a0228be6e45c89ec500c2cb09733f28f78d6a62e81c",
-            "bytes": 2064243
+            "sha256": "7206324464ba5915ba6b5e3520ecfa3c0eced2b28109e2ecc42e83226f1342ab",
+            "bytes": 2065687
           },
           {
             "path": "client.js",
-            "sha256": "8d3476d280dd4654598784460f816790c50d50782f64608188d0b658daeb781f",
-            "bytes": 2904823
+            "sha256": "933ecfbe304416910a4afda3464f1daa458d5cda596f49e682a70995f35ab0cb",
+            "bytes": 2904965
           },
           {
             "path": "slurp2-logo.png",
@@ -3761,9 +3761,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp2.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.4.13.zip",
-        "sha256": "7b3412a3a16dc42a3c06ad8ce5dd45f7096b8b637f0048fa46ca3e35a4ff098a",
-        "bytes": 6022430
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.4.14.zip",
+        "sha256": "05eb4b6e27454552dd8b51682a144c1fafef199d17cc1b34b7d5246c3343e1aa",
+        "bytes": 6024016
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp2/README.md"
     },

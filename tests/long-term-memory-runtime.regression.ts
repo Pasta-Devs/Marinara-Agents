@@ -514,7 +514,12 @@ async function main() {
         await writeNote(
           note("char_t_keep", "chat-r", "", {
             ...forT,
-            sections: { history: { text: "char_t history keeps the cobalt archive and a few more words to take room", updatedAt: timestamp } },
+            sections: {
+              history: {
+                text: "char_t history keeps the cobalt archive and a few more words to take room",
+                updatedAt: timestamp,
+              },
+            },
           }),
         );
         invalidateLtmVaultSnapshot(recallRoot);
