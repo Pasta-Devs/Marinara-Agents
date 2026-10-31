@@ -1064,11 +1064,16 @@ export interface StoryArc {
   /** What of the mystery is revealed, and in which chapter. */
   reveals: Array<{ n: number; kind: "piece" | "truth"; li?: LiId; what: string }>;
   antagonist: { name: string; want: string; whyNow: string } | null;
-  /** How this arc was asked for (M2 adds "breathe" and "newcomer"). */
-  choice: { kind: "continue" };
+  /** The love interest this arc brings into the cast (#1983 M3), and the one scene they are met in. */
+  newcomer: { li: LiId; how: string } | null;
+  /** How this arc was asked for: the story goes on, a breathing room, or someone new arrives. */
+  choice: { kind: ArcChoice };
   plannedAt: string;
   connectionId: string;
 }
+
+/** How the player asks for the next arc, once one ends (#1983 M2). */
+export type ArcChoice = "continue" | "breathe" | "newcomer";
 
 /** The arc as a player sees it: its name, its range and how far in they are. Never its plan or hidden text. */
 export interface StoryArcView {
@@ -1093,6 +1098,8 @@ export interface StoryView {
   repairs: RepairEntry[];
   /** The story arc being played, or null before arcs existed in this run (a legacy run plans its first on demand). */
   arc: StoryArcView | null;
+  /** The ways on once an arc has ended, and no next arc is planned yet; null while one is being played. */
+  arcChoice: { options: ArcChoice[]; castFull: boolean } | null;
 }
 
 /** GET /runs/:run/chapters/:key */

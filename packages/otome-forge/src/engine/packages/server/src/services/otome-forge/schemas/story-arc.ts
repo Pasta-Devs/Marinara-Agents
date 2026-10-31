@@ -25,6 +25,9 @@ export const BREATHING_LENGTH_MAX = 5;
 export const ARC_PURPOSE_WORDS = 20;
 const PURPOSE = 240;
 
+/** The three ways a player may ask for the next arc (S/story/arcs #1983 M2). */
+export const ARC_CHOICES = ["continue", "breathe", "newcomer"] as const;
+
 /** How many arcs a run may hold (each is 8–12 chapters, so this is far beyond any played story). */
 export const ARCS_MAX = 40;
 
@@ -68,9 +71,13 @@ export function normalizeArc(data: unknown): StoryArc | null {
       reveals: (value) => validItems(RevealSchema, value, ARC_LENGTH_MAX),
       antagonist: (value) => (AntagonistSchema.safeParse(value).success ? (value as StoryArc["antagonist"]) : null),
       choice: (value) =>
-        isRecord(value) && value.kind === "continue"
-          ? ({ kind: "continue" } as StoryArc["choice"])
+        isRecord(value) && ARC_CHOICES.includes(value.kind as StoryArc["choice"]["kind"])
+          ? ({ kind: value.kind as StoryArc["choice"]["kind"] } as StoryArc["choice"])
           : ({ kind: "continue" } as StoryArc["choice"]),
+      newcomer: (value) =>
+        isRecord(value) && typeof value.li === "string"
+          ? { li: value.li, how: typeof value.how === "string" ? value.how.slice(0, 600) : "" }
+          : null,
       plannedAt: z.string(),
       connectionId: z.string(),
     },
@@ -87,6 +94,7 @@ export function normalizeArc(data: unknown): StoryArc | null {
       endsWith: null,
       reveals: [],
       antagonist: null,
+      newcomer: null,
       choice: { kind: "continue" },
       plannedAt: "",
       connectionId: "",
@@ -105,6 +113,7 @@ export function normalizeArc(data: unknown): StoryArc | null {
     arc.reveals = [];
     arc.endsWith = null;
     arc.antagonist = null;
+    arc.newcomer = null;
   }
   if (arc.kind === "story" && !arc.endsWith) arc.endsWith = { n: arc.endsAt, what: arc.goal };
   if (!arc.label.trim()) arc.label = String(arc.number);
@@ -123,6 +132,8 @@ export interface ArcPlanReply {
   /** A piece or the truth, with the 1-based position of the chapter that reveals it. */
   reveals: Array<{ chapter: number; kind: "piece" | "truth"; li?: string | null; what: string }>;
   antagonist: { name: string; want: string; whyNow: string } | null;
+  /** When a newcomer arrives, the one sentence naming the scene they are met in. */
+  newcomer?: { how: string } | null;
 }
 
 export const ArcPlanSchema = z.object({
@@ -143,6 +154,10 @@ export const ArcPlanSchema = z.object({
     )
     .max(24),
   antagonist: z.object({ name: text(200).min(1), want: text(400), whyNow: text(400) }).nullable(),
+  newcomer: z
+    .object({ how: text(600) })
+    .nullable()
+    .optional(),
 });
 
 /** The words a string holds (the purpose cap, the same counting the pack's prompts use). */
@@ -159,6 +174,10 @@ export interface ArcPlanContext {
   revealed: ReadonlySet<string>;
   /** The truth was already told: a new arc schedules no truth. */
   truthTold: boolean;
+  /** The newcomer this arc brings in (#1983 M3), when the player asked for one. */
+  newcomer?: { id: LiId; how?: string } | null;
+  /** How the player asked for this arc. */
+  choice?: StoryArc["choice"]["kind"];
 }
 
 /**
@@ -166,7 +185,9 @@ export interface ArcPlanContext {
  * model's 1-based positions become chapter numbers, and nothing it wrote as a number survives.
  */
 export function normalizeArcPlan(reply: z.infer<typeof ArcPlanSchema>, context: ArcPlanContext): StoryArc | string {
-  const kind = reply.kind;
+  // The player's choice decides the kind: breathing room is a breathing arc whatever the model wrote, and the story
+  // going on (or someone new) is a story arc.
+  const kind = context.choice === "breathe" ? "breathing" : context.choice ? "story" : reply.kind;
   const chapters = reply.chapters.map((purpose) => purpose.trim()).filter(Boolean);
   const count = chapters.length;
   const [min, max] =
@@ -196,7 +217,8 @@ export function normalizeArcPlan(reply: z.infer<typeof ArcPlanSchema>, context: 
       endsWith: null,
       reveals: [],
       antagonist: null,
-      choice: { kind: "continue" },
+      newcomer: null,
+      choice: { kind: context.choice ?? "continue" },
       plannedAt: "",
       connectionId: "",
     };
@@ -257,7 +279,10 @@ export function normalizeArcPlan(reply: z.infer<typeof ArcPlanSchema>, context: 
           whyNow: reply.antagonist.whyNow.trim(),
         }
       : null,
-    choice: { kind: "continue" },
+    newcomer: context.newcomer
+      ? { li: context.newcomer.id, how: (reply.newcomer?.how ?? context.newcomer.how ?? "").trim() }
+      : null,
+    choice: { kind: context.choice ?? "continue" },
     plannedAt: "",
     connectionId: "",
   };

@@ -10,6 +10,7 @@
 // The prompt asks for brevity on purpose: one short sentence per chapter purpose, and the normalizer refuses a longer
 // one. An arc is a direction, not twelve chapters written in advance.
 import type {
+  ArcChoice,
   LiId,
   Player,
   RunState,
@@ -20,7 +21,11 @@ import type {
 import { generateJson, type GenerationDeps } from "../generation.js";
 import { arcId, runDocTarget } from "../ids.js";
 import {
+  ARC_LENGTH_MAX,
+  ARC_LENGTH_MIN,
   ARC_PURPOSE_WORDS,
+  BREATHING_LENGTH_MAX,
+  BREATHING_LENGTH_MIN,
   ArcPlanSchema,
   normalizeArc,
   normalizeArcPlan,
@@ -102,19 +107,39 @@ export interface ArcPlanInput {
   chapters: ReadonlyArray<{ number?: number; key: string }>;
   number: number;
   from: number;
+  /** How the player asked for this arc (#1983 M2): the story goes on, a breathing room, or someone new arrives. */
+  choice?: ArcChoice;
+  /** The newcomer this arc brings in (#1983 M3), when the choice is "newcomer" and they are written already. */
+  newcomer?: { id: LiId; name: string } | null;
 }
 
 /**
  * The arc planner's prompt: the world, the mystery in full (this is the only writer that always sees the truth), what
  * each love interest wants, the arcs before this one so it does not repeat them, and the rule that keeps it brief.
  */
-export function arcPlanMessages({ world, player, units, state, memory, previous, number, from }: ArcPlanInput) {
+export function arcPlanMessages({
+  world,
+  player,
+  units,
+  state,
+  memory,
+  previous,
+  chapters: _chapters,
+  number,
+  from,
+  choice = "continue",
+  newcomer = null,
+}: ArcPlanInput) {
+  const breathing = choice === "breathe";
+  const count = breathing
+    ? `${BREATHING_LENGTH_MIN} to ${BREATHING_LENGTH_MAX}`
+    : `${ARC_LENGTH_MIN} to ${ARC_LENGTH_MAX}`;
   const system = [
     "You are the arc planner of an otome visual novel: a character-driven romance mystery. You plan one story arc: a run of main chapters with one goal, one big event near its end, and the mystery's reveals placed where they land. Each chapter is planned later from your outline, one at a time.",
     "Reply with ONLY a JSON object of this shape:",
-    '{"kind": "story", "label": "<2–5 words, spoiler-free; the player sees this>", "theme": "<one short sentence>", "goal": "<one short sentence: what the protagonist is after in this arc>", "chapters": ["<one short sentence per chapter, in play order>"], "endsWith": {"what": "<one short sentence: the big event the last chapter carries>", "chapter": 0}, "reveals": [{"chapter": 0, "kind": "piece|truth", "li": "<love interest id, piece only>", "what": "<one sentence: what the protagonist learns>"}], "antagonist": {"name": "<name>", "want": "<one short sentence>", "whyNow": "<one short sentence>"}}',
+    '{"kind": "<the kind asked for>", "label": "<2–5 words, spoiler-free; the player sees this>", "theme": "<one short sentence>", "goal": "<one short sentence: what the protagonist is after in this arc>", "chapters": ["<one short sentence per chapter, in play order>"], "endsWith": {"what": "<one short sentence: the big event the last chapter carries>", "chapter": 0}, "reveals": [{"chapter": 0, "kind": "piece|truth", "li": "<love interest id, piece only>", "what": "<one sentence: what the protagonist learns>"}], "antagonist": {"name": "<name>", "want": "<one short sentence>", "whyNow": "<one short sentence>"}}',
     "FIELDS",
-    `- chapters: ${8} to 12 short purposes, in play order. Each is one sentence of about 12 words and must not exceed ${ARC_PURPOSE_WORDS}. Say what happens in that chapter, not how it is written.`,
+    `- chapters: ${count} short purposes, in play order. Each is one sentence of about 12 words and must not exceed ${ARC_PURPOSE_WORDS}. Say what happens in that chapter, not how it is written.`,
     "- chapter positions are 1-based within this arc (1 is its first chapter): endsWith.chapter and each reveals[].chapter. Never write a chapter number of your own.",
     "- reveals: 1 to 4, in the order they land. kind piece reveals one love interest's part of the mystery (name them by id); kind truth reveals the whole answer, only in the last chapter and only once.",
     "- antagonist: a person or force standing against the protagonist this arc; null when the arc's trouble is not a person.",
@@ -122,6 +147,16 @@ export function arcPlanMessages({ world, player, units, state, memory, previous,
     "- One arc, one goal: every chapter moves toward it and none resolves it before the arc's last.",
     "- Do not repeat an earlier arc: not its antagonist, its theme, its ending shape, its mystery question or a reveal already played.",
     "- Every love interest keeps a stake in the arc; none is written out of it.",
+    ...(breathing
+      ? [
+          "- This is a BREATHING arc: no antagonist, no big event, no reveal and no new mystery. Its chapters are days with the people the protagonist loves, each one deepening a different person, and its last chapter lands warm, never on a cliffhanger.",
+        ]
+      : []),
+    ...(newcomer
+      ? [
+          `- ${newcomer.name} (id ${newcomer.id}) arrives in this arc. Its first chapter is where they meet the protagonist and at least one of the others on the page; later chapters show how each of the cast takes them. They are never the antagonist and never a plot device: they want something of their own.`,
+        ]
+      : []),
     "- The mystery's truth is yours to schedule, never to spend early: it is revealed in the last chapter, after the pieces.",
     `- Be brief. One sentence per field. No preamble, no restating the world, no explaining the outline. Every purpose over ${ARC_PURPOSE_WORDS} words is refused.`,
     `- Write the label, theme, goal, purposes, endsWith and reveals in ${world.language}.`,
@@ -215,6 +250,8 @@ export async function planArc(
     },
     revealed: pieces,
     truthTold: truth,
+    choice: input.choice ?? "continue",
+    ...(input.newcomer ? { newcomer: { id: input.newcomer.id } } : {}),
   };
   const { value, connectionId } = await generateJson(deps, {
     runId,

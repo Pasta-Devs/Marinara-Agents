@@ -165,23 +165,30 @@ export interface FakeRuntimeOptions {
  * The arc plan the fake model writes when a chapter plan asks for one (#1980): ten short chapters, a piece in the fifth
  * and the truth in the last. A test that wants a different arc can script its own reply.
  */
-export function fakeArcReply(): string {
-  const purposes = Array.from(
-    { length: 10 },
-    (_, index) => `The quay darkens on day ${index + 1} and someone lies about it.`,
+export function fakeArcReply(prompt = ""): string {
+  // The arc planner's prompt says which kind it was asked for; a breathing arc is four chapters, no plot.
+  const breathing = prompt.includes("BREATHING arc");
+  const purposes = Array.from({ length: breathing ? 4 : 10 }, (_, index) =>
+    breathing
+      ? `A quiet day with someone, the ${index + 1}th of the arc.`
+      : `The quay darkens on day ${index + 1} and someone lies about it.`,
   );
   return JSON.stringify({
-    kind: "story",
+    kind: breathing ? "breathing" : "story",
     label: "The drowned bell",
     theme: "trust paid for in secrets",
     goal: "The protagonist learns who rang the bell.",
     chapters: purposes,
-    endsWith: { what: "The bell is raised and the one who rang it is named.", chapter: 10 },
-    reveals: [
-      { chapter: 5, kind: "piece", li: "li-kai-ab12", what: "Kai knew it was rung on purpose." },
-      { chapter: 10, kind: "truth", what: "The harbour master gave the order." },
-    ],
-    antagonist: { name: "The harbour master", want: "The town stays quiet.", whyNow: "The bell has started again." },
+    endsWith: breathing ? null : { what: "The bell is raised and the one who rang it is named.", chapter: 10 },
+    reveals: breathing
+      ? []
+      : [
+          { chapter: 5, kind: "piece", li: "li-kai-ab12", what: "Kai knew it was rung on purpose." },
+          { chapter: 10, kind: "truth", what: "The harbour master gave the order." },
+        ],
+    antagonist: breathing
+      ? null
+      : { name: "The harbour master", want: "The town stays quiet.", whyNow: "The bell has started again." },
   });
 }
 
@@ -209,9 +216,8 @@ export function createFakeRuntime(options: FakeRuntimeOptions = {}) {
       // #1980: the chapter planner now plans its arc first (story/arc.ts). The fake answers that call itself, so every
       // test's scripted replies still line up with the calls it really cares about.
       const arcCall = messages.some((message) => message.content.includes("You are the arc planner"));
-      if (arcCall && !(replies[0] && typeof replies[0] === "function" && /arc/u.test(replies[0].name))) {
-        return { content: fakeArcReply(), finishReason: "stop" };
-      }
+      if (arcCall)
+        return { content: fakeArcReply(messages.map((message) => message.content).join("\n")), finishReason: "stop" };
       const reply = replies.shift();
       if (reply === undefined) throw new Error("The Otome Forge fake model has no scripted reply left");
       if (reply instanceof Error) throw reply;

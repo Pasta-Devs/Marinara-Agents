@@ -2,6 +2,9 @@
 // Otome Forge: the story routes (plan M2a "Routes")
 // ──────────────────────────────────────────────
 // GET  /runs/:run/story                                        → StoryView
+// POST /runs/:run/arcs {choice, newcomer?}                     → {arc: StoryArcView}: the next arc, once the last has ended
+//                                                                 (#1983 M2/M3: breathing room, the story goes on, or
+//                                                                 someone new arrives)
 // POST /runs/:run/prologue                                     → {chapter: ChapterView}: the prologue, made once
 //                                                                 with no model call (its scene is a beat like any)
 // POST /runs/:run/chapters/next {lead}                         → {chapter: ChapterView}
@@ -41,10 +44,32 @@ import { toBeatView, toChapterView } from "../schemas/story.js";
 import { toConfrontationView } from "../story/confrontation.js";
 import { normalizeWorld, toWorldView } from "../schemas/world.js";
 import { cancellable, chooseOption, easeOff, readTo, serveBeat } from "../story/beats.js";
-import { chapterDetail, planNextChapter, storyView } from "../story/chapters.js";
+import { chapterDetail, planNextChapter, startArc, storyView } from "../story/chapters.js";
+import { ARC_CHOICES, toArcView } from "../schemas/story-arc.js";
 import { ensurePrologue } from "../story/prologue.js";
+import { introduceLoveInterest } from "../story/introduce.js";
 
 const NextBody = z.object({ lead: z.string().min(1).max(80) });
+const ArcBody = z.object({
+  choice: z.enum(ARC_CHOICES),
+  /** M3: who arrives, when the choice is "newcomer". */
+  newcomer: z
+    .union([
+      z.object({ source: z.literal("card"), cardId: z.string().min(1).max(200) }),
+      z.object({
+        source: z.literal("archetype"),
+        archetype: z.string().min(1).max(80),
+        name: z.string().min(1).max(80),
+        pronouns: z.object({
+          subject: z.string().min(1).max(20),
+          object: z.string().min(1).max(20),
+          possessive: z.string().min(1).max(20),
+        }),
+        notes: z.string().max(500).optional(),
+      }),
+    ])
+    .optional(),
+});
 const BeatBody = z.object({ rewrite: z.boolean().optional() });
 const ChooseBody = z.object({ choice: z.string().min(1).max(40), option: z.string().min(1).max(40) });
 const SegmentBody = z.object({ segment: z.number().int().min(0).max(10_000) });
@@ -86,6 +111,33 @@ export const registerStoryRoutes: RegisterRoutes = (router, deps) => {
   router.get(
     "/runs/:run/story",
     handle(async (request) => storyView(deps, runParam(request).runId)),
+  );
+
+  router.post(
+    "/runs/:run/arcs",
+    handle(async (request) => {
+      const body = parseBody(ArcBody, request.body);
+      const { runId } = runParam(request);
+      const debugMode = debugModeOf(request);
+      // A malformed choice is refused before anything is read or written.
+      if (body.choice === "newcomer" && !body.newcomer) {
+        throw new OtomeForgeError(400, "Say who arrives, or choose another way on.", "bad-request");
+      }
+      let arrival: { id: string; name: string } | null = null;
+      const arc = await startArc(deps, runId, body.choice, {
+        debugMode,
+        // Written only once every gate has passed, so a refused choice leaves no half-arrived love interest.
+        ...(body.newcomer
+          ? {
+              arrive: async () => {
+                arrival = await introduceLoveInterest(deps, runId, body.newcomer!);
+                return arrival;
+              },
+            }
+          : {}),
+      });
+      return { arc: toArcView(arc, 0), ...(arrival ? { li: (arrival as { id: string }).id } : {}) };
+    }),
   );
 
   router.post(

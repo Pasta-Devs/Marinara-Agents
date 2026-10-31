@@ -29,6 +29,7 @@ import {
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/story-arc.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import {
+  arcChoiceFor,
   normalizeChapterPlan,
   type PlanContext,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/chapters.ts";
@@ -39,7 +40,7 @@ import {
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/prompts.ts";
 import { revealedSoFar } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/arc.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
-import { CAST, HE, KAI, MIR, SOL, bible, planReply } from "./fixtures/otome-forge-story.ts";
+import { CAST, HE, KAI, MIR, SOL, bible, json, planReply, storyWorld } from "./fixtures/otome-forge-story.ts";
 
 const at = "2026-10-31T10:00:00.000Z";
 
@@ -425,4 +426,68 @@ test("a broken arc document still reads, and its usable parts survive", () => {
     "the world has no truth to leak",
   );
   void SOL;
+});
+
+// ── M2: the end-of-arc choice (#1983) ──
+
+test("the ways on: breathing room and the story going on always, someone new only while the cast has room", () => {
+  const three = normalizeState({ lis: Object.fromEntries(CAST.map((li) => [li.id, defaultLiState()])) });
+  assert.deepEqual(arcChoiceFor(three).options, ["breathe", "continue", "newcomer"]);
+  assert.equal(arcChoiceFor(three).castFull, false);
+  const five = normalizeState({
+    lis: Object.fromEntries(
+      [...CAST, { id: "li-fourth-aaaa", name: "Fourth" }, { id: "li-fifth-bbbb", name: "Fifth" }].map((li) => [
+        li.id,
+        defaultLiState(),
+      ]),
+    ),
+  });
+  assert.deepEqual(arcChoiceFor(five).options, ["breathe", "continue"], "a full cast hides the newcomer");
+  assert.equal(arcChoiceFor(five).castFull, true);
+});
+
+test("the player's choice decides the arc's kind: breathing room is a breathing arc, whatever the model wrote", () => {
+  const breathing = normalizeArcPlan(
+    parse(
+      arcReply({
+        kind: "story",
+        chapters: purposes(4),
+        endsWith: null,
+        reveals: [],
+        antagonist: null,
+      }),
+    ),
+    { ...context(), choice: "breathe" },
+  );
+  assert.equal(typeof breathing, "object", String(breathing));
+  if (typeof breathing === "string") return;
+  assert.equal(breathing.kind, "breathing");
+  assert.deepEqual(breathing.reveals, []);
+  assert.equal(breathing.endsWith, null);
+  assert.deepEqual(breathing.choice, { kind: "breathe" });
+  const going = normalizeArcPlan(parse(arcReply({ kind: "breathing", chapters: purposes(9), reveals: [] })), {
+    ...context(),
+    choice: "continue",
+  });
+  assert.equal(typeof going, "object", String(going));
+  if (typeof going === "string") return;
+  assert.equal(going.kind, "story", "the story going on is always a story arc");
+  assert.deepEqual(going.choice, { kind: "continue" });
+});
+
+test("POST /arcs waits for a finished arc, and refuses a newcomer the player did not name", async () => {
+  const t = await storyWorld({ runKey: "r-arcs-aaaaaa", replies: [json(planReply())] });
+  assert.equal((await t.call("POST", "/runs/:run/chapters/next", { lead: KAI })).status, 200);
+  // The arc is still being played: there is nothing to choose yet.
+  const early = await t.call("POST", "/runs/:run/arcs", { choice: "continue" });
+  assert.equal(early.status, 409, JSON.stringify(early.body));
+  assert.equal(early.body.code, "conflict");
+  // The choice may not be "newcomer" without saying who arrives.
+  const bare = await t.call("POST", "/runs/:run/arcs", { choice: "newcomer" });
+  assert.equal(bare.status, 400, JSON.stringify(bare.body));
+  // A chapter may not be planned past an arc that has ended without the choice (here the arc covers 10 chapters, so
+  // chapter 2 is still inside it); the gate itself is exercised by the 409 above.
+  const story = await t.call("GET", "/runs/:run/story");
+  assert.equal(story.body.arc.number, 1);
+  assert.equal(story.body.arcChoice, null, "no choice is offered mid-arc");
 });
