@@ -92,10 +92,22 @@ async function main() {
   state.sharing = false;
   await intake.shareSlurpFact(db, fact());
   await intake.retractSlurpFact(db, "f1");
-  assert.equal(calls.length, 0, "with the switch off, no fact is sent or retracted");
+  assert.deepEqual(
+    calls.map((call) => [call.action, call.input.recordId]),
+    [["retract", "fact:f1"]],
+    "with the switch off, a fact that qualifies is not sent, and a retraction still goes out",
+  );
+  fake();
+  await intake.shareSlurpFact(db, fact({ audienceScope: "fan_private" }));
+  assert.deepEqual(
+    calls.map((call) => [call.action, call.input.recordId]),
+    [["retract", "fact:f1"]],
+    "with the switch off, an edit that stops qualifying takes the earlier record back",
+  );
 
   // --- 2. A qualifying fact is sent once; one that is private to a thread or fan is not ---------------------------
   state.sharing = true;
+  fake();
   await intake.shareSlurpFact(db, fact());
   assert.equal(calls.length, 1);
   assert.equal(calls[0]?.action, "submit");
@@ -208,6 +220,17 @@ async function main() {
   state.sharing = false;
   await intake.shareSlurpTieChanges(db, doc(), doc([couple({ stage: "together" })]));
   assert.equal(calls.length, 0, "ties send nothing while the switch is off");
+  fake();
+  await intake.shareSlurpTieChanges(
+    db,
+    doc([couple({ stage: "together" })]),
+    doc([couple({ stage: "split", ending: "fizzled" })]),
+  );
+  assert.deepEqual(
+    calls.map((call) => [call.action, call.input.recordId]),
+    [["retract", "couple:a1:a2"]],
+    "a tie that stops qualifying is taken back even while the switch is off",
+  );
   state.sharing = true;
 
   // --- 5. A storyline ending names its Creators and the ending --------------------------------------------------

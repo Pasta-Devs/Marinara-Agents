@@ -3,7 +3,7 @@
  * in-process `long-term-memory:intake` service. A record is `{ recordId, characterIds, text }`: a fact the
  * player wrote or promoted, a couple or bond between two Creators, or how a storyline ended.
  *
- * Behind `shareWithMemory` (off by default). Every send runs after the Slurp write has committed and is never
+ * Sending is behind `shareWithMemory` (off by default); taking a record back never is. Every send runs after the Slurp write has committed and is never
  * awaited by the caller; a missing service, a refusal or any failure is a debug line, never a failed action.
  * Nothing from fans or DM threads is sent, nor plans, promises, boundaries or business facts.
  */
@@ -85,18 +85,18 @@ export function slurpFactRecord(fact: SlurpContinuityFact): SlurpMemoryRecord | 
   };
 }
 
-/** A fact was written, edited or promoted: send it again when it qualifies, else take it back. */
+/**
+ * A fact was written, edited or promoted: send it again when it qualifies and the switch is on, else take it back.
+ * Taking back never waits for the switch: turning it off sends nothing new but must not strand an earlier record.
+ */
 export const shareSlurpFact = (db: DB, fact: SlurpContinuityFact) =>
   inOrder(async () => {
-    if (!(await slurpMemorySharingOn(db))) return;
     const record = slurpFactRecord(fact);
-    await (record ? sendSlurpRecord(record) : retractSlurpRecord(`fact:${fact.id}`));
+    if (record && (await slurpMemorySharingOn(db))) await sendSlurpRecord(record);
+    else if (!record) await retractSlurpRecord(`fact:${fact.id}`);
   });
 
-export const retractSlurpFact = (db: DB, factId: string) =>
-  inOrder(async () => {
-    if (await slurpMemorySharingOn(db)) await retractSlurpRecord(`fact:${factId}`);
-  });
+export const retractSlurpFact = (_db: DB, factId: string) => inOrder(() => retractSlurpRecord(`fact:${factId}`));
 
 type Account = { displayName: string; sourceKind?: string | null; sourceEntityId?: string | null };
 
@@ -163,18 +163,17 @@ async function shareTieChanges(db: DB, before: SlurpTiesDocument, after: SlurpTi
   try {
     const was = new Map(tiesOf(before).map((tie) => [tie.recordId, tie.template]));
     const changed = tiesOf(after).filter((tie) => (was.get(tie.recordId) ?? null) !== tie.template);
-    if (changed.length === 0 || !(await slurpMemorySharingOn(db))) return;
-    for (const tie of changed) {
-      if (!tie.template) {
-        await retractSlurpRecord(tie.recordId);
-        continue;
-      }
+    // Retractions go out whatever the switch says; only sends wait for it.
+    for (const tie of changed) if (!tie.template) await retractSlurpRecord(tie.recordId);
+    const sends = changed.filter((tie) => tie.template);
+    if (sends.length === 0 || !(await slurpMemorySharingOn(db))) return;
+    for (const tie of sends) {
       const who = await charactersOf(db, tie.ids);
       if (who) {
         await sendSlurpRecord({
           recordId: tie.recordId,
           characterIds: who.characterIds,
-          text: fill(tie.template, who.names[0]!, who.names[1]!),
+          text: fill(tie.template!, who.names[0]!, who.names[1]!),
         });
       }
     }
