@@ -556,7 +556,13 @@ async function main() {
 
       // Each of these runs on its own chat: a dropped candidate keeps a piece out of auto-apply, so the rejection
       // cannot share a chat with the committed link.
-      const importPieces = (chatId: string, first: string, second: string): Promise<any> => {
+      const importPieces = (
+        chatId: string,
+        first: string,
+        second: string,
+        applyLowRisk: boolean | "unset" = true,
+        importRoot = root,
+      ): Promise<any> => {
         chats.push({ ...sealChat, id: chatId });
         messages.set(chatId, [
           message(chatId, first, "user", `${"x".repeat(23_950)} The seal cracks at dawn.`),
@@ -569,10 +575,10 @@ async function main() {
             sourceIds: [`${chatId}:messages:${first}`, `${chatId}:messages:${second}`],
             destinationScope: { characterIds: ["character-kirei"] },
             extract: true,
-            applyLowRisk: true,
+            applyLowRisk: applyLowRisk === "unset" ? undefined : applyLowRisk,
             limit: 100,
           },
-          root,
+          importRoot,
           new AbortController().signal,
         );
       };
@@ -599,6 +605,25 @@ async function main() {
           .map((mutation: any) => [mutation.kind, mutation.noteId ?? mutation.note.id]),
         [["update_section", listedThread]],
         "reusing the listed subjectId updates that thread instead of adding another",
+      );
+
+      // Hands-off: with no explicit request, "Accept safe changes automatically" decides whether safe work applies.
+      // Each run uses its own store, so earlier fixtures cannot make its proposals ambiguous.
+      const appliedBy = (result: any) => result.imported.flatMap((item: any) => item.appliedMutationIds);
+      const handsOff = async (name: string, applyLowRisk: boolean | "unset", setting: boolean) => {
+        const importRoot = join(dataDir, name, "long-term-memory");
+        await updateLtmExtractionConfig({ autoAcceptSafeChanges: setting }, importRoot);
+        return appliedBy(await importPieces(`chat-${name}`, `${name}-1`, `${name}-2`, applyLowRisk, importRoot));
+      };
+      assert.deepEqual(await handsOff("review-first", "unset", false), [], "by default an import waits for review");
+      assert.ok(
+        (await handsOff("hands-off", "unset", true)).length > 0,
+        "with the setting on, an import accepts its safe proposals",
+      );
+      assert.deepEqual(
+        await handsOff("explicit-off", false, true),
+        [],
+        "an explicit applyLowRisk: false still wins over the setting",
       );
 
       // Chat import detail: each chat keeps the piece size of its first import.

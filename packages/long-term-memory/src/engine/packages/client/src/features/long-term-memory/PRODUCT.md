@@ -12,7 +12,7 @@ Primary: Marinara Engine end users — chat and roleplay users who curate durabl
 
 ## Product Purpose
 
-Long-Term Memory extracts durable memories from chat summaries, chat messages, character records, and lorebooks into a package-owned vault, and recalls relevant context into generation under per-chat enablement; users review proposed memory changes before they land. Success means users can inspect extraction evidence, accept or reject proposed changes with visible diagnostics, and trust that recalled context comes from reviewed, scoped memories — not silent autowrites. It is an Agent capability package (kind `agent`, category `misc`, phase `pre_generation`) published through the Marinara catalog; this record is package-scoped and sits alongside the repo-level PRODUCT.md, which governs the catalog as a whole.
+Long-Term Memory extracts durable memories from chat summaries, chat messages, character records, and lorebooks into a package-owned vault, and recalls relevant context into generation under per-chat enablement; users review proposed memory changes before they land by default; an explicit opt-in accepts low-risk extraction changes automatically. Success means users can inspect extraction evidence, accept or reject proposed changes with visible diagnostics, and trust that recalled context comes from scoped memories that were reviewed or, by opt-in, accepted as low risk and logged — not silent autowrites. It is an Agent capability package (kind `agent`, category `misc`, phase `pre_generation`) published through the Marinara catalog; this record is package-scoped and sits alongside the repo-level PRODUCT.md, which governs the catalog as a whole.
 
 ## Positioning
 
@@ -29,7 +29,7 @@ Three durable mechanisms together: evidence-led human review of proposed memory 
 - Server-side package runtime (`server.mjs`, capability API per `manifest.json`, engine `>= 2.4.1 < 4.0.0`, `restartRequired: true`) exposing `/api/long-term-memory` routes and registered `long-term-memory:recall` / `long-term-memory:runtime` services; extraction, evidence-unit compilation and validation, dedup, reconciliation, BM25/keyword/metadata/graph retrieval with token budgeting, debug log, backup/restore, legacy adoption and quarantine.
 - Client renders into the Agents panel and chat-settings slot via the capability host (`CapabilityProps`: chat, settings, confirm-action, and dirty-state callbacks; shipped locales are `en` and a machine-translated `ko` that awaits review by a Korean speaker; other languages are undecided).
 - Durable constraints: sources live under `src/engine/packages/{client,server,shared}`; `client.js`, `server.mjs`, and `agents.json` at the package root are generated bundles and must never be hand-edited. Catalog rules (engine range, lanes) come from the repo-level product record, which this package record inherits and does not restate.
-- Confirmed scope boundaries: review-always-before-accept is the policy for memory changes; health, freshness, and evidence stay visible ahead of destructive operations.
+- Confirmed scope boundaries: review-before-accept is the default for memory changes, and an explicit opt-in accepts low-risk extraction changes automatically, which stay visible in the Activity log and vault history; health, freshness, and evidence stay visible ahead of destructive operations.
 - Undecided: localization beyond English and Korean; no marketing or testimonial copy exists, so future surfaces must not fabricate it.
 
 ## Brand Commitments
@@ -44,7 +44,7 @@ Name "Long-Term Memory" (package id `long-term-memory`) is fixed by the manifest
 
 ## Product Principles
 
-- Evidence before persistence: memory changes are proposed and reviewed, never silently committed; freshness, confidence, dependencies, and index health stay visible ahead of destructive actions.
+- Evidence before persistence: memory changes are proposed and reviewed by default, and any automatic acceptance is an explicit opt-in that stays visible in the Activity log and vault history, never a silent commit; freshness, confidence, dependencies, and index health stay visible ahead of destructive actions.
 - Package-owned memory: the vault is scoped to chats, characters, and lorebooks and travels with the package (import, transfer, backup/restore), independent of an engine-side memory blob.
 - Deterministic recall: budgeted, inspectable retrieval (keyword/metadata/graph) that users can audit through the last-injection summary and debug log.
 - The package is a themed Engine contribution: it uses shared editor chrome and Engine theme tokens rather than its own global design language.

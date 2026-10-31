@@ -181,6 +181,14 @@ above the source tabs lists them. Each row opens the memory or removes it with
 its source (the usual delete confirmation); leaving a row alone keeps the
 memory and lists it again on the next preview. Searching hides the group.
 
+The Extraction tab ends its model settings with a Hands-off group. Accept safe
+changes automatically (off by default) accepts the low-risk proposals
+of a chat import or extraction (new notes and additions with no conflicts);
+rewrites, status changes, shared memories and anything with warnings wait in the
+Review Queue, and a draft that mixes them applies its safe part and keeps the
+rest pending. The Sources result then says how many were accepted and how many
+wait for review.
+
 ### Settings and Chat Settings
 
 Global settings and per-chat settings are distinct. Chat Settings shows whether

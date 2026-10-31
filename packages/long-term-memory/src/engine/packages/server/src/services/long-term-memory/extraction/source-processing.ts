@@ -470,9 +470,9 @@ async function commitPreparedLongTermMemorySource(
             rebuildIndexes: false,
             operationId: prepared.operationId,
           }).catch((error: unknown) => {
-            // Apply still refuses a status, title or subject change, or an anchor rewrite, beside other changes.
-            // It may also name a note only the previous piece's still-unapplied draft creates. The draft is
-            // already written, so it waits for review instead of failing the piece.
+            // Apply drops a rewrite from an auto-apply, so this is for other refusals: it may name a note only
+            // the previous piece's still-unapplied draft creates. The draft is already written, so it waits for
+            // review instead of failing the piece.
             if (
               error instanceof LtmDraftApplyError &&
               (error.code === "destructive_disposition_requires_explicit_review" ||

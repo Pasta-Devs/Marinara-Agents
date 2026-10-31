@@ -614,7 +614,7 @@ export function registerNotesRoutes(app: FastifyInstance, runtime: LtmRouteRunti
             extractionMode,
             instruction: body.instruction,
             operationId,
-            applyLowRisk: body.applyLowRisk,
+            applyLowRisk: body.applyLowRisk ?? extractionConfig.autoAcceptSafeChanges,
             signal: controller.signal,
             root,
             chatId: chat?.id,

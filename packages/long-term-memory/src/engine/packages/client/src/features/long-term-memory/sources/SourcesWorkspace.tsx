@@ -850,6 +850,12 @@ export default function SourcesWorkspace({
   );
   const proposalCount =
     importResult?.imported.reduce((count, item) => count + (item.draft?.mutations.length ?? 0), 0) ?? 0;
+  const appliedCount = importResult?.imported.reduce((count, item) => count + item.appliedMutationIds.length, 0) ?? 0;
+  const pendingProposalCount =
+    importResult?.imported.reduce(
+      (count, item) => count + (item.draft?.status === "pending" ? item.draft.mutations.length : 0),
+      0,
+    ) ?? 0;
   const importResultMessage = !importResult
     ? ""
     : importResult.counts.sourceNotesWritten === 0
@@ -864,11 +870,18 @@ export default function SourcesWorkspace({
           ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceRefreshCompletedWithFailures")
           : importResult.counts.failed || importResult.counts.cancelled
             ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceSavedExtractionFailed")
-            : proposalCount
-              ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceSavedProposalsReady", {
-                  count: proposalCount,
-                })
-              : localizeUi("ui.longTermMemory.sourcesworkspace.sourceSavedNoProposals");
+            : appliedCount
+              ? localizeUi(
+                  pendingProposalCount
+                    ? "ui.longTermMemory.sourcesworkspace.sourceSavedProposalsAccepted"
+                    : "ui.longTermMemory.sourcesworkspace.sourceSavedAllProposalsAccepted",
+                  { applied: appliedCount, count: pendingProposalCount },
+                )
+              : proposalCount
+                ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceSavedProposalsReady", {
+                    count: proposalCount,
+                  })
+                : localizeUi("ui.longTermMemory.sourcesworkspace.sourceSavedNoProposals");
   const importResultHeading = importResult
     ? localizeUi(
         importResultHeadingKeys[importResultContract?.action === "refresh" ? "refresh" : "import"][

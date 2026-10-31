@@ -34,6 +34,7 @@ export const DEFAULT_LTM_EXTRACTION_CONFIG = ltmResolvedExtractionSettingsSchema
   activePromptTemplateIdsByMode: {},
   aiKeywordExtraction: false,
   finishCutOffAnswers: false,
+  autoAcceptSafeChanges: false,
   chatImportDetail: "standard",
   useExtractionAgentOnGameMode: false,
 });
