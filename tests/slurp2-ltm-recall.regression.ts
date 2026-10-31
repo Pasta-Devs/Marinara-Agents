@@ -96,6 +96,7 @@ async function main() {
       mode: "roleplay",
       maxTokens: 4_000,
       whole: true,
+      excludeFrom: ["slurp2"],
       signal: undefined,
     },
   );
@@ -360,6 +361,36 @@ async function main() {
     confirm: 0,
     save: 0,
   });
+  // "Tell Long-Term Memory about your Creators" offers the other switch, and each offer looks only at its own.
+  const offerFor = (setting: string, read: () => Promise<unknown>) => {
+    const log = { confirm: 0, saved: 0 };
+    return offerLtmSharing({
+      setting,
+      read,
+      confirm: async () => (log.confirm++, true),
+      save: async () => void log.saved++,
+    }).then((outcome: string) => ({ outcome, ...log }));
+  };
+  assert.deepEqual(
+    await offerFor("longTermMemoryAcceptFromPackages", async () => ({
+      longTermMemoryShareWithPackages: true,
+      longTermMemoryAcceptFromPackages: false,
+    })),
+    { outcome: "enabled", confirm: 1, saved: 1 },
+  );
+  assert.deepEqual(
+    await offerFor("longTermMemoryAcceptFromPackages", async () => ({
+      longTermMemoryShareWithPackages: false,
+      longTermMemoryAcceptFromPackages: true,
+    })),
+    { outcome: "skipped", confirm: 0, saved: 0 },
+    "the read switch being off does not trigger the add offer",
+  );
+  assert.deepEqual(
+    await offerFor("longTermMemoryAcceptFromPackages", async () => ({})),
+    { outcome: "skipped", confirm: 0, saved: 0 },
+    "an unset switch asks nothing",
+  );
   assert.deepEqual(
     await offer(async () => {
       throw new Error("Long-Term Memory is not installed");
@@ -429,7 +460,15 @@ async function main() {
     "the status is read again once sharing is on",
   );
   assert.match(panel, /cancelLabel: t\("ui\.slurp\.settings\.prompts\.ltmSharingOfferCancel"\)/u);
-  assert.match(panel, /api\.put\("\/long-term-memory\/settings", \{ longTermMemoryShareWithPackages: true \}\)/u);
+  assert.match(
+    panel,
+    /api\.put\("\/long-term-memory\/settings", \{\s*\[setting \?\? "longTermMemoryShareWithPackages"\]: true/u,
+  );
+  assert.match(
+    panel,
+    /update\("shareWithMemory", value\);\s*if \(value\) void offerSharing\("longTermMemoryAcceptFromPackages"\);/u,
+    "turning on the Creator sharing offers Long-Term Memory's add switch",
+  );
 
   rmSync(storeDir, { recursive: true, force: true });
   console.log("slurp2 ltm recall regression OK");

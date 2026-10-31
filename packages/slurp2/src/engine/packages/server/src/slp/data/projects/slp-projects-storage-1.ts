@@ -38,6 +38,7 @@ import {
   SlurpResolvedArcConfig,
 } from "../../modules/projects/slp-arc-library.js";
 import { isSlurpCrossover } from "../../modules/projects/slp-project.js";
+import { sendSlurpStoryEnding } from "../creators/slp-ltm-intake.js";
 import {
   slurpProjectSync,
   slurpProjectWithType,
@@ -469,6 +470,14 @@ export function createProjectsStorage1(context: SlurpStorageContext) {
           sourceId: `${after.id}:${after.stage}`,
           label: after.title,
           at: new Date(),
+        });
+      const ending = finished ? after.storyline?.endings.find((entry) => entry.key === after.ending)?.label : null;
+      if (ending && settings?.shareWithMemory)
+        void sendSlurpStoryEnding(db, {
+          id: after.id,
+          title: after.title,
+          creatorIds: isSlurpCrossover(after) ? after.creatorIds : [creatorAccountId],
+          ending,
         });
       // A crossover moves every participant: mood and events reach each of them.
       for (const id of isSlurpCrossover(after) ? after.creatorIds : [creatorAccountId]) {

@@ -1,23 +1,29 @@
 /**
  * Turning on "What your other Agents know" does nothing for memories while Long-Term Memory's
- * "Other Agents can read memories" switch is off. This asks the player once, and only then writes
- * that one setting. Reads, asks and writes are injected so the decision runs without a DOM.
+ * "Other Agents can read memories" switch is off, and "Tell Long-Term Memory about your Creators" does
+ * nothing while its "Other Agents can add memories" is off. This asks the player once, and only then
+ * writes that one setting. Reads, asks and writes are injected so the decision runs without a DOM.
  */
 export type LtmSharingOfferResult = "skipped" | "declined" | "enabled";
+/** Long-Term Memory's switches: read memories (`longTermMemoryShareWithPackages`) and add them (`longTermMemoryAcceptFromPackages`). */
+export type LtmSharingSetting = "longTermMemoryShareWithPackages" | "longTermMemoryAcceptFromPackages";
 
 export async function offerLtmSharing(deps: {
-  read: () => Promise<{ longTermMemoryShareWithPackages?: boolean }>;
+  /** The Long-Term Memory switch the player's choice needs; the read switch when left out. */
+  setting?: LtmSharingSetting;
+  read: () => Promise<Partial<Record<LtmSharingSetting, boolean>>>;
   confirm: () => Promise<boolean>;
   save: () => Promise<unknown>;
 }): Promise<LtmSharingOfferResult> {
-  let settings: { longTermMemoryShareWithPackages?: boolean };
+  const setting = deps.setting ?? "longTermMemoryShareWithPackages";
+  let settings: Partial<Record<LtmSharingSetting, boolean>>;
   try {
     settings = await deps.read();
   } catch {
     // Long-Term Memory missing or unreadable: the memory status line already says so.
     return "skipped";
   }
-  if (settings.longTermMemoryShareWithPackages !== false) return "skipped";
+  if (settings[setting] !== false) return "skipped";
   if (!(await deps.confirm())) return "declined";
   await deps.save();
   return "enabled";
