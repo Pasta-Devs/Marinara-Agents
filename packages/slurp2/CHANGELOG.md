@@ -1,5 +1,10 @@
 # Slurp release notes
 
+## 0.4.14 — 2026-10-31
+
+- Fixed: nude and explicit pictures showed everyday clothes. A post at the nudity or explicit level (after access and intent) now picks only intimate wardrobe looks (lingerie, swimwear, a towel, nude and similar by name, summary, description or tag), never falls back to an everyday look, and the writer may return no look.
+- At those levels the writer is told the outfit is nothing or only what the scene needs, the Creator's usual wardrobe note is not a fallback, and an outfit of "nothing" adds no `Wearing` line to the picture prompt. Clothed and suggestive posts are unchanged.
+
 ## 0.4.13 — 2026-10-31
 
 - Wardrobe looks can be exported and imported as JSON. Export the whole wardrobe or a single look, and import a file back into the same review list as the AI import. No model call is needed, and {{random}} in a description stays as written.
