@@ -336,6 +336,8 @@ export interface Unit {
   notes?: string;
   /** "#rrggbb". */
   accent: string;
+  /** Which portrait picker chose `accent` (lib/accent.ts ACCENT_SAMPLER_VERSION); absent means an older one. */
+  accentSampler?: number;
   voiceGender: "male" | "female" | "";
   portrait?: string;
   portraitRef?: string;
@@ -1167,6 +1169,8 @@ export interface RunLiView {
   /** M2b: the voice pool for a love interest without an Engine voice. */
   voiceGender: Unit["voiceGender"];
   accent: string;
+  /** Which portrait picker chose `accent`; absent means an older one, so the client picks again. */
+  accentSampler?: number;
   portrait?: string;
   /** Visual intent only, safe to read without opening a spoiler-heavy Bible. */
   look?: Pick<Bible["look"], "identityLine" | "outfitLine">;

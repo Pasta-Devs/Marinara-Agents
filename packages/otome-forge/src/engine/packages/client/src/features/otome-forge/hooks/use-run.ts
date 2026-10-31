@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useOtomeApi } from "../api";
-import { accentIsPlaceholder, sampleAccent } from "../lib/accent";
+import { ACCENT_SAMPLER_VERSION, accentIsPlaceholder, castAccentFor, sampleAccent } from "../lib/accent";
 import type { RunView, SettingsInput, WorldView } from "../shared/api-types";
 import { forgeIsWorking } from "../shared/forge";
 
@@ -41,29 +41,45 @@ export function patchRun(queryClient: QueryClient, runKey: string, patch: (view:
 /**
  * Once an LI's portrait exists, samples his accent from it and saves it, once per portrait. A failed sample or save
  * leaves the colour from his name; the next portrait or visit tries again.
+ * The picks are made distinct against each other, not against the view the pass started with: every stale LI is
+ * sampled in one pass, so `picked` carries the colours already chosen (and not yet saved) synchronously, before the
+ * POST, and a pick that fails gives its colour back.
  */
 export function useSampledAccents(view: RunView | undefined) {
   const otome = useOtomeApi();
   const queryClient = useQueryClient();
   const tried = useRef(new Set<string>());
+  /** li id → the accent chosen for it in this page, saved or still in flight. */
+  const picked = useRef(new Map<string, string>());
   useEffect(() => {
     if (!view) return;
     for (const li of view.lis) {
       const key = `${li.id} ${li.portrait}`;
       if (!li.portrait || !accentIsPlaceholder(li) || tried.current.has(key)) continue;
       tried.current.add(key);
-      void sampleAccent(li.portrait).then(async (accent) => {
-        if (!accent) return;
+      void sampleAccent(li.portrait).then(async (sampled) => {
+        if (!sampled) return;
+        // No two name plates alike: his own colour unless it reads as one the rest of the cast already has. The siblings'
+        // latest cached accents come first, then this page's choices, so a pick made a moment ago counts even before its
+        // POST lands.
+        const latest = queryClient.getQueryData<RunView>(runQueryKey(view.runKey)) ?? view;
+        const accent = castAccentFor(li, sampled, latest.lis, picked.current);
+        picked.current.set(li.id, accent);
         try {
           const saved = await otome.post<{ accent: string }>(
             `/runs/${encodeURIComponent(view.runKey)}/lis/${encodeURIComponent(li.id)}/accent`,
-            { accent },
+            { accent, sampler: ACCENT_SAMPLER_VERSION },
           );
+          picked.current.set(li.id, saved.accent);
           patchRun(queryClient, view.runKey, (current) => ({
             ...current,
-            lis: current.lis.map((item) => (item.id === li.id ? { ...item, accent: saved.accent } : item)),
+            lis: current.lis.map((item) =>
+              item.id === li.id ? { ...item, accent: saved.accent, accentSampler: ACCENT_SAMPLER_VERSION } : item,
+            ),
           }));
         } catch (error) {
+          // Its colour goes back to the cast, so a later pick may take it.
+          picked.current.delete(li.id);
           console.warn("Otome Forge could not save an accent colour", error);
         }
       });
