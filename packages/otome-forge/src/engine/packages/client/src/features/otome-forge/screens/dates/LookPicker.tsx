@@ -1,8 +1,7 @@
 // ──────────────────────────────────────────────
-// Otome Forge: Date Night's looks. What each of them wears tonight, side by side: the painted look, or initials on
-// their colour when there is no image.
-// ponytail: only the base looks exist until M4's Wardrobe; the ceiling is one look each, and the upgrade path is
-// listing the looks each of them owns (by id) in the same radio groups.
+// Otome Forge: Date Night's looks. What each of them wears tonight, side by side: every look they own and can wear (the
+// Wardrobe's own list, GET /runs/:run/wardrobe), their everyday look first, or initials on their colour when a look has
+// no image. Starting the date wears the picks, as Wear at home does (S/routes/dates.ts), so they stay on afterwards.
 // ──────────────────────────────────────────────
 import { useId, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
@@ -10,54 +9,71 @@ import { Check, Shirt } from "lucide-react";
 import { accentOf, initialsOf } from "../../lib/accent";
 import { BASE_LOOK } from "../../shared/dates";
 import type { Player, RunLiView } from "../../shared/api-types";
+import type { LookView } from "../../shared/wardrobe";
 
 interface LookPickerProps {
   partner: RunLiView;
   player: Player;
+  /** Their looks and yours, from the Wardrobe; absent while it loads (only the everyday looks show). */
+  hisLooks?: LookView[];
+  herLooks?: LookView[];
   hisLook: string;
   herLook: string;
   onChange: (looks: { hisLook: string; herLook: string }) => void;
+}
+
+/** The looks a date may use: the everyday one, then every owned look that is painted (only those can be worn). */
+export function dateLooks(looks: readonly LookView[] | undefined): LookView[] {
+  return (looks ?? []).filter((look) => look.id === BASE_LOOK || look.wearable);
+}
+
+/** The look a person wears now, as a date's starting pick: their worn look when they may wear it, else the everyday. */
+export function wornDateLook(looks: readonly LookView[] | undefined): string {
+  return dateLooks(looks).find((look) => look.worn)?.id ?? BASE_LOOK;
 }
 
 interface LookCardProps {
   group: string;
   who: string;
   name: string;
+  /** The everyday look's image (their portrait), used when the Wardrobe has not loaded. */
   url?: string;
+  looks: LookView[];
   accent: string;
   value: string;
   onPick: (look: string) => void;
 }
 
-/** One person's looks as a radio group (one card per owned look). */
-function LookCard({ group, who, name, url, accent, value, onPick }: LookCardProps) {
+/** One person's looks as a radio group (one card per look they can wear). */
+function LookCard({ group, who, name, url, looks, accent, value, onPick }: LookCardProps) {
   const { t } = useTranslation();
-  const looks = [BASE_LOOK];
+  const shown = looks.length ? looks : [{ id: BASE_LOOK, name: "", url } as Pick<LookView, "id" | "name" | "url">];
   return (
     <fieldset className="of-looks-person" style={{ "--of-li-accent": accent } as CSSProperties}>
       <legend className="of-looks-who">{who}</legend>
-      {looks.map((look) => {
-        const checked = value === look;
+      {shown.map((look) => {
+        const checked = value === look.id;
+        const image = look.url ?? (look.id === BASE_LOOK ? url : undefined);
         return (
-          <label key={look} className="of-look" data-checked={checked}>
+          <label key={look.id} className="of-look" data-checked={checked}>
             <input
               type="radio"
               className="of-visually-hidden"
               name={group}
-              value={look}
+              value={look.id}
               checked={checked}
-              onChange={() => onPick(look)}
+              onChange={() => onPick(look.id)}
             />
             <span className="of-look-frame" aria-hidden="true">
-              {url ? (
-                <img src={url} alt="" loading="lazy" />
+              {image ? (
+                <img src={image} alt="" loading="lazy" />
               ) : (
                 <span className="of-look-initials">{initialsOf(name)}</span>
               )}
             </span>
             <span className="of-look-name">
               {checked ? <Check size={14} strokeWidth={3} aria-hidden="true" /> : null}
-              {t("ui.otomeForge.dateNight.lookBase")}
+              {look.id === BASE_LOOK ? t("ui.otomeForge.dateNight.lookBase") : look.name}
             </span>
           </label>
         );
@@ -66,9 +82,13 @@ function LookCard({ group, who, name, url, accent, value, onPick }: LookCardProp
   );
 }
 
-export function LookPicker({ partner, player, hisLook, herLook, onChange }: LookPickerProps) {
+export function LookPicker({ partner, player, hisLooks, herLooks, hisLook, herLook, onChange }: LookPickerProps) {
   const { t } = useTranslation();
   const id = useId();
+  const his = dateLooks(hisLooks);
+  const hers = dateLooks(herLooks);
+  // Owned looks that are not painted yet (opened in the Wardrobe they paint, and can then be worn).
+  const unpainted = [...(hisLooks ?? []), ...(herLooks ?? [])].some((look) => look.id !== BASE_LOOK && !look.wearable);
   return (
     <div className="of-looks">
       <div className="of-looks-pair">
@@ -77,6 +97,7 @@ export function LookPicker({ partner, player, hisLook, herLook, onChange }: Look
           who={t("ui.otomeForge.dateNight.lookTheirs", { name: partner.name })}
           name={partner.name}
           url={partner.portrait}
+          looks={his}
           accent={accentOf(partner)}
           value={hisLook}
           onPick={(look) => onChange({ hisLook: look, herLook })}
@@ -86,6 +107,7 @@ export function LookPicker({ partner, player, hisLook, herLook, onChange }: Look
           who={t("ui.otomeForge.dateNight.lookYours")}
           name={player.name}
           url={player.portrait}
+          looks={hers}
           accent="var(--of-champagne)"
           value={herLook}
           onPick={(look) => onChange({ hisLook, herLook: look })}
@@ -93,7 +115,9 @@ export function LookPicker({ partner, player, hisLook, herLook, onChange }: Look
       </div>
       <p className="of-hint of-looks-note">
         <Shirt size={14} strokeWidth={2} aria-hidden="true" />
-        <span>{t("ui.otomeForge.dateNight.lookWardrobeNote")}</span>
+        <span>
+          {t(unpainted ? "ui.otomeForge.dateNight.lookUnpaintedNote" : "ui.otomeForge.dateNight.lookWearNote")}
+        </span>
       </p>
     </div>
   );

@@ -97,7 +97,7 @@ Each love interest moves through six stages, from Mask to Bond.
 
 Everything works without images or sound: a place without art shows a gradient for its mood, a love interest without a portrait shows their initials in their own colour, and a key moment without a painting shows a quiet card.
 
-In **Your cast**, edit **Image appearance** above each love interest’s spoiler Bible to change their image description. Saving paints nothing and leaves their story Bible unchanged; explicit future painting uses the saved description. Clear the field and save to restore the Bible’s original image description. Open **Image description** in **Who’s home** or an owned Wardrobe look to read its intended appearance without opening Bible spoilers. The reader also offers the current location’s description while it has no painted background, and a key moment’s brief once you reach it, until its image is painted. These are the existing visual instructions, not a new generated caption; opening them makes no model calls.
+In **Your cast**, edit **Image appearance** above each love interest’s spoiler Bible to change how they look. Saving paints nothing and leaves the rest of their story Bible unchanged; future paintings and the story itself use the saved description from the next scene on, with the look they wear. Clear the field and save to restore the Bible’s original image description. Open **Image description** in **Who’s home** or an owned Wardrobe look to read its intended appearance without opening Bible spoilers. The reader also offers the current location’s description while it has no painted background, and a key moment’s brief once you reach it, until its image is painted. These are the existing visual instructions, not a new generated caption; opening them makes no model calls.
 
 You can add an image connection later in **Settings → Images**. Saving it paints nothing. Open **Your cast** to paint missing base portraits, open owned items from **Wardrobe** or **Album** to add their missing artwork, or use **Paint** beside a reached story location or key moment. Each action shows its image cost and uses the existing prompt-review setting. Existing artwork, story text, progress and Starlight stay intact.
 
@@ -193,7 +193,7 @@ Read Them in reverse: your love interest studies you and makes four guesses abou
 ### Date Night
 
 1. **Pick a place:** one of eight, one your love interest chooses, or a place your story has painted (shown with its picture).
-2. **Pick what you both wear:** your base looks. A date does not offer Wardrobe looks yet.
+2. **Pick what you both wear:** your everyday looks, or any painted look either of you owns in the Wardrobe (4★ and 5★). The date's scenes, key images and keepsake dress you both in them, each look worn over that person's own appearance, and the looks stay on at Home afterwards. A look you own appears once it is painted: open it in the Wardrobe.
 3. **Play three scenes of choices,** judged by what they like and voiced like any scene. You can ask for a keepsake image at the end.
 
 During a rift, Date Night becomes **Make it right**.

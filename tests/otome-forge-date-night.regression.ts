@@ -20,6 +20,7 @@ import type {
   LiState,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import { dateOutcome } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/dates.ts";
+import type { Item } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/wish.ts";
 import type {
   ImageClient,
   PortraitRequest,
@@ -30,11 +31,15 @@ import type {
   RouteHandler,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/http.ts";
 import {
+  itemId,
+  playerId,
   runDocTarget,
   stateId,
   unitId,
   worldId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
+import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
+import { normalizeItem } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/wish.ts";
 import { registerClawRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/claw.ts";
 import { registerDateRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/dates.ts";
 import { registerStoryRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/story.ts";
@@ -500,13 +505,60 @@ test("starting twice plans one date, and an open date is resumed rather than pla
 
   for (const [body, status] of [
     [{ ...START, place: "the moon" }, 400],
-    [{ ...START, hisLook: "tuxedo" }, 400],
+    [{ ...START, hisLook: "tuxedo" }, 404],
     [{ ...START, li: "li-nobody-zz99" }, 404],
   ] as const) {
     assert.equal((await t.call("POST", "/runs/:run/dates", body)).status, status);
   }
   assert.equal((await finish(t, "date-9")).status, 404);
   assert.equal((await finish(t, "main-1")).status, 404);
+});
+
+test("a date wears the owned looks picked for it, a 4★ included, and its plan and keepsake dress them in it", async () => {
+  const t = await dateWorld("r-datelook-aaaaaa", { images: true });
+  const look = (id: string, kind: Item["kind"], li: string, name: string, outfitLine: string): Item => ({
+    id,
+    kind,
+    banner: id.replace(/-(?:f|a[1-3])$/, ""),
+    li,
+    title: name,
+    look: { name, outfitLine },
+    art: { state: "ready", at, url: `/api/global-gallery/file/${id}.png`, ref: id },
+    story: null,
+    createdAt: at,
+  });
+  const his = look("his-wardrobe-0-a1", "his-look4", KAI, "Harbour Night", "HIS-LOOK: navy greatcoat, brass buttons");
+  const hers = look("my-wardrobe-0-a2", "her-look4", KAI, "Lantern Dress", "HER-LOOK: amber silk dress");
+  const unowned = look("his-wardrobe-0-a2", "his-look4", KAI, "Pier Shirt", "linen shirt");
+  for (const value of [his, hers, unowned]) {
+    await t.store.mutateDoc(runDocTarget("item", itemId(t.runId, value.id)), normalizeItem, () => value);
+  }
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+    ...state,
+    owned: { ...state.owned, items: [his.id, hers.id] },
+  }));
+  // A look nobody owns, or someone else's, is refused before anything is planned.
+  assert.equal((await t.call("POST", "/runs/:run/dates", { ...START, hisLook: unowned.id })).status, 409);
+  assert.equal((await t.call("POST", "/runs/:run/dates", { ...START, herLook: his.id })).status, 400);
+  assert.equal(t.calls.length, 0, "no plan for a refused look");
+  await startDate(t, { ...START, hisLook: his.id, herLook: hers.id });
+  // Worn now, as Wear at home wears them: Home, the faces and every image dress them in it.
+  const unit = (await t.store.readDoc(unitId(t.runId, KAI), normalizeUnit))!;
+  assert.equal(unit.wornOutfit, his.id);
+  const player = (await t.store.readDoc(playerId(t.runId), normalizePlayer))!;
+  assert.equal(player.wornOutfit, hers.id);
+  const plan = t.calls
+    .find((call) => isDatePlanner(call.messages))!
+    .messages.map((message) => message.content)
+    .join("\n");
+  assert.match(plan, /WHAT THEY WEAR[\s\S]*HIS-LOOK: navy greatcoat[\s\S]*HER-LOOK: amber silk dress/);
+  // The keepsake draws them in their looks, on top of who they are.
+  await playDate(t, "date-1", [1, 2, 1]);
+  assert.equal((await finish(t, "date-1")).status, 200);
+  const keepsake = (await t.call("POST", "/runs/:run/art/keepsake/prompt", { key: "date-1" })).body.prompt as string;
+  assert.match(keepsake, /Kai: tall man, salt-white hair, grey eyes; HIS-LOOK: navy greatcoat, brass buttons/);
+  assert.match(keepsake, /HER-LOOK: amber silk dress/);
+  assert.doesNotMatch(keepsake, /dark keeper's coat/, "never his everyday coat over the date look");
 });
 
 test("during a rupture the date is Make it right: a good or great outcome mends it, an awkward one does not", async () => {
