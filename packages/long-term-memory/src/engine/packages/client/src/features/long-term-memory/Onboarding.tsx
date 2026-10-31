@@ -160,6 +160,8 @@ export function Onboarding({
     }
   };
   const chooseChatMemories = (choice: LtmChatMemoriesMode) => {
+    // The locked buttons only set aria-disabled, so a click during a pending turn-on still arrives here.
+    if (activationPending) return;
     setChatMemoriesChoice(choice);
     void saveChatMemories(choice);
   };

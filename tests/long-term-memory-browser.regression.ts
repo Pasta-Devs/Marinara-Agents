@@ -3129,6 +3129,21 @@ async function main() {
       await page.keyboard.press("Space");
       await page.waitForTimeout(150);
       assert.deepEqual(desktopActivationChanges, [true], "a held turn-on sends exactly one request");
+      // #1980: a "Memories from chats" button pressed during the held turn-on changes nothing and saves nothing.
+      const heldChoiceButtons = page.locator('[data-ltm-surface="onboarding"] [data-ltm-chat-memories-choice] button');
+      const heldPressedBefore = await heldChoiceButtons.evaluateAll((buttons) =>
+        buttons.map((button) => button.getAttribute("aria-pressed")),
+      );
+      const heldWritesBefore = extractionWrites.length;
+      // force: Playwright treats aria-disabled as not enabled, but the real click still reaches the handler.
+      await heldChoiceButtons.nth(heldPressedBefore.indexOf("false")).click({ force: true });
+      await page.waitForTimeout(150);
+      assert.equal(extractionWrites.length, heldWritesBefore, "a choice pressed during a held turn-on saves nothing");
+      assert.deepEqual(
+        await heldChoiceButtons.evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-pressed"))),
+        heldPressedBefore,
+        "a choice pressed during a held turn-on leaves the shown choice alone",
+      );
       releaseHeldTurnOn();
       await page.waitForFunction(
         () => ![...document.querySelectorAll("button")].some((c) => /turn on for this chat/i.test(c.textContent ?? "")),
