@@ -14,7 +14,7 @@
 
 ## 0.450.0 - 2026-10-31
 
-- Capability API numbers follow the Engine's renumbering after it merged upstream staging (1.379-1.390 are upstream's): the 5e minors move from 1.379-1.804 to 1.391-1.811, and the package declares 1.811. Nothing plays differently.
+- Capability API numbers follow the Engine's renumbering after it merged upstream staging, where 1.379-1.390 are upstream's, so the 5e minors move up past them. Nothing plays differently.
 
 ## 0.449.0 - 2026-10-30
 
@@ -22,7 +22,7 @@
 
 ## 0.448.0 - 2026-10-30
 
-- Magic ammunition hits more often as well as harder: an Arrow, Crossbow Bolt, Sling Bullet or Blowgun Needle (+1, +2 or +3) adds its bonus to the attack roll as well as the damage (Capability API 1.811). It declares 1.811.
+- Magic ammunition hits more often as well as harder: an Arrow, Crossbow Bolt, Sling Bullet or Blowgun Needle (+1, +2 or +3) adds its bonus to the attack roll as well as the damage (Capability API 1.812). It declares 1.812.
 
 ## 0.447.0 - 2026-10-27
 
