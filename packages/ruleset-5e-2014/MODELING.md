@@ -288,7 +288,7 @@ zones on an item's use.
   Enfeeblement and Enlarge/Reduce scrolls now work. Scrolls of Moonbeam, Cloudkill, Spirit Guardians,
   Spike Growth and the other lasting areas leave their area, and Spirit Guardians and Guardian of
   Faith scrolls spare the reader's side.
-- Web, Entangle and Black Tentacles' restraint came in 0.74.0, below. Guardian of Faith's Large body
+- Web, Entangle and Black Tentacles' restraint came in [0.74.0](#holds-you-break-free-of-and-harder-ground). Guardian of Faith's Large body
   is a 10-foot burst around one cell.
 
 ### Every second slot level
@@ -515,7 +515,7 @@ magic.
   Magi give advantage on saves against magic while worn or held, and the Scarab of Protection while
   carried. The Belt of Dwarvenkind gives advantage on saves against poison and poison resistance.
 - **Protection from Poison** gives advantage on saves against being poisoned beside its resistance.
-- **Magic Resistance** on the 31 SRD creatures that print it holds from 0.188.0 (see below).
+- **Magic Resistance** on the 31 SRD creatures that print it holds from [0.188.0](#stat-block-traits).
 - The Necklace of Adaptation's saves against gases and the Holy Avenger's aura work since 0.300.0.
   The Ring of Spell Turning's single-target spells work since 0.257.0.
 
@@ -545,7 +545,7 @@ Capability API 1.186 lets actions share one recharge and a blow add more after a
   entries, one per choice, each advantage on that ability's checks for an hour, one more target
   per slot above 2nd; Bear's Endurance also gives 2d6 temporary hit points. Bull's Strength
   doubles carrying capacity since 0.302.0; Cat's Grace's safe fall of 20 feet or less works since 0.300.0.
-- A monster's own attacks reach Weakening Breath since 1.189 (0.87.0, below).
+- A monster's own attacks reach Weakening Breath since 1.189 ([0.87.0](#wounds-sworn-enemies-and-monster-attacks-by-ability)).
 
 ### Seeing
 
@@ -622,7 +622,7 @@ Capability API 1.173 lets a lasting area move and change the ground under it.
 - **Black Tentacles, Grease, Insect Plague and Sleet Storm** are difficult terrain, and **Spirit
   Guardians** make each step cost double for the creatures they affect (their half speed).
 - Flaming Sphere's ram, Spirit Guardians' half speed on difficult ground and Plant Growth came in
-  0.74.0, below.
+  [0.74.0](#holds-you-break-free-of-and-harder-ground).
 
 ### Spell areas that stay
 
@@ -639,7 +639,7 @@ Capability API 1.172 lets a spell's area stay for its duration and strike again.
 - Sleet Storm now resolves: a Dexterity save or fall prone.
 - Each lasts its duration (1 or 10 minutes), or until its concentration ends.
 - Sleet Storm's concentration save and the scrolls of these spells came in 0.73.0. Black Tentacles'
-  restraint is in "Escapes and zone rules (0.73.0)" below.
+  restraint is in [Holds you break free of, and harder ground (0.74.0)](#holds-you-break-free-of-and-harder-ground).
 
 ### Spells cast with a bonus action
 
@@ -1483,7 +1483,7 @@ wait for that action.
   bonus action for two unarmed strikes.
 - **Ki-Empowered Strikes (monk 6th level):** unarmed strikes count as magical against resistance.
 - Since 0.111.0 (Capability API 1.244) every character has the Unarmed Strike, and held monk weapons
-  get Martial Arts too (see below).
+  get Martial Arts too ([Unarmed strikes and held monk weapons](#unarmed-strikes-and-held-monk-weapons)).
 
 ### Metamagic
 
@@ -2082,7 +2082,7 @@ Contingency's material, an ivory statuette worth 1,500 gp, is a worn item in two
 
 _Added in 0.242.0._
 
-Bestow Curse: "choose the nature of the curse from the following options". The spell's own entry puts on one of three curses picked as it is cast (`appliesOneOf`, Capability API 1.448): disadvantage on attack rolls against its caster (`atSource`), a Wisdom save at the start of each turn that wastes the action on a failure (`"behavior": {"wastes": {"save": "wis_save", "budget": "action"}}`, 1.463), or an extra 1d8 necrotic damage from its caster's attacks (`damage-taken` `fromSource`). `bestow-curse-ability` picks one of six ability score curses, disadvantage on that ability's checks and saves. Sign of Ill Omen picks the same three. Signature Spells now has 48 picks. All nine curses on one entry, the longer durations of higher slots and the necrotic damage on spells with no attack roll came in 0.244.0 (below).
+Bestow Curse: "choose the nature of the curse from the following options". The spell's own entry puts on one of three curses picked as it is cast (`appliesOneOf`, Capability API 1.448): disadvantage on attack rolls against its caster (`atSource`), a Wisdom save at the start of each turn that wastes the action on a failure (`"behavior": {"wastes": {"save": "wis_save", "budget": "action"}}`, 1.463), or an extra 1d8 necrotic damage from its caster's attacks (`damage-taken` `fromSource`). `bestow-curse-ability` picks one of six ability score curses, disadvantage on that ability's checks and saves. Sign of Ill Omen picks the same three. Signature Spells now has 48 picks. All nine curses on one entry, the longer durations of higher slots and the necrotic damage on spells with no attack roll came in [0.244.0](#nine-curses-aid-and-raised-hit-point-maximums).
 
 Compulsion: "you can use a bonus action on each of your turns to designate a direction ... Each affected target must use as much of its movement as possible to move in that direction on its next turn." Targets that fail a Wisdom save are compelled (`"behavior": {"moves": "toward", "from": "steered", "walks": true}`, 1.464), with a new save at the end of each turn. A creature that can't be charmed is immune. Its caster holds Compulsion: Direct (`compulsion-direct`, `"steers": "compelled"`) for the spell's minute, a bonus action aimed at a point. Bewitching Whispers and the spell scroll steer the same way. Since 0.244.0 the target acts first and walks as its turn ends (`"walks": "after"`).
 
@@ -3404,7 +3404,7 @@ Capability API 1.184 lets a monster's action push, and an item's line be wider t
 - **Dragon turtle Tail:** on a hit, a creature fails a DC 20 Strength save or is pushed 10 feet
   and knocked prone.
 - **Scrolls** of Gust of Wind, Wall of Thorns and Blade Barrier can be read in a fight.
-- The metallic dragons' second breaths and the minotaurs' Charge came with 1.186 (below).
+- The metallic dragons' second breaths and the minotaurs' Charge came with 1.186 ([Second breaths, charges and Strength checks](#second-breaths-charges-and-strength-checks)).
 
 ### Monsters that hide and look
 
@@ -4127,7 +4127,7 @@ Water Walk (up to ten willing creatures, an hour) and a worn Ring of Water Walki
 
 The Staff of Thunder and Lightning adds Thunderclap, a 60-foot burst around its wielder (`area.around` on an item's use, 1.532), once a dawn, and on a melee hit Lightning (2d6 lightning) and Thunder (DC 17 Constitution or stunned until the end of the wielder's next turn), each once a dawn (`attack.spends[].uses`, 1.534). The Rod of Lordly Might is a +3 mace with Terrify (DC 17 Wisdom, frightened for a minute, within 30 feet) and, on a hit, Drain Life (DC 17 Constitution or 4d6 necrotic, half of it back as health) and Paralyze (DC 17 Strength or paralyzed for a minute, saving at the end of each turn), each once a dawn. Antimagic Field sets aside creatures that spells called while it covers them (`suppresses.setsAsideCalled`, 1.533). The Gem of Seeing gives True Seeing's own truesight, the Engine's 320 conditions being reached. The manifest declares Capability API 1.534.
 
-- The rod's buttons work since 0.270.0 (below); its ladder, ram and compass do nothing in a fight.
+- The rod's buttons work since [0.270.0](#the-rod-of-lordly-mights-buttons); its ladder, ram and compass do nothing in a fight.
 
 ### Weapons that deal extra damage
 
@@ -4145,8 +4145,8 @@ on a critical hit (a natural 20). Extra dice are doubled on a critical hit like 
   life stealing 3d6 necrotic (not to constructs or undead), and a mace of smiting 2d6 bludgeoning,
   4d6 against a construct. The mace also deals 2 more damage to a construct.
 - The giant slayer's prone save, the mace of smiting's +2 to hit, the instant kills, the sword of
-  life stealing's temporary hit points and the dwarven thrower came with 1.187 (0.86.0, below).
-  The sword of wounding and the oathbow came with 1.189 (0.87.0, below).
+  life stealing's temporary hit points and the dwarven thrower came with 1.187 ([0.86.0](#weapons-that-know-what-they-hit)).
+  The sword of wounding and the oathbow came with 1.189 ([0.87.0](#wounds-sworn-enemies-and-monster-attacks-by-ability)).
 - **Flame tongue (0.69.0, Capability API 1.170)**: "Ignite" is a switch on the sword, a bonus action
   either way in a fight or a button in the inventory, and while it burns every hit adds 2d6 fire. It
   stays lit between fights, as the sword stays drawn, and starts unlit.
