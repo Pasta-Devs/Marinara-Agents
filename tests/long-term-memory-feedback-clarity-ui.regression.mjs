@@ -126,14 +126,18 @@ assert.equal(locale["ui.longTermMemory.activityview.notKept"], "Not kept");
 assert.equal(locale["ui.longTermMemory.activityview.notAdded"], "Not added");
 assert.equal(locale["ui.longTermMemory.activityview.settingMinimumRelevance"], "Minimum relevance");
 assert.match(settings, /reasoningEffort: resolved\.reasoningEffort \?\? "low"/u);
-// Slurp's switch is offered only after the global PUT succeeded and only when sharing went from off to on.
+// Slurp's switches are offered only after the global PUT succeeded and only when a switch went from off to on.
 const globalSave = settings.slice(settings.indexOf("const saveSettings"), settings.indexOf("const discard"));
 assert.match(globalSave, /const sharingWasOff = savedGlobal\?\.longTermMemoryShareWithPackages === false/u);
 assert.match(globalSave, /sharingTurnedOn = sharingWasOff && saved\.longTermMemoryShareWithPackages/u);
+assert.match(globalSave, /const acceptWasOff = savedGlobal\?\.longTermMemoryAcceptFromPackages === false/u);
+assert.match(globalSave, /acceptTurnedOn = acceptWasOff && saved\.longTermMemoryAcceptFromPackages/u);
 assert.ok(
-  globalSave.indexOf('"PUT"') < globalSave.indexOf("if (sharingTurnedOn)") &&
-    globalSave.indexOf("if (sharingTurnedOn)") < globalSave.indexOf("offerSlurpMemories("),
-  "the Slurp offer must follow the global PUT and run only when sharing turned on",
+  globalSave.indexOf('"PUT"') < globalSave.indexOf("...(sharingTurnedOn") &&
+    globalSave.indexOf("...(sharingTurnedOn") < globalSave.indexOf('setting: "flavourFromAgents"') &&
+    globalSave.indexOf("...(acceptTurnedOn") < globalSave.indexOf('setting: "shareWithMemory"') &&
+    globalSave.indexOf('setting: "shareWithMemory"') < globalSave.indexOf("offerSlurpMemories("),
+  "each Slurp offer must follow the global PUT and run only when its switch turned on",
 );
 assert.equal(globalSave.match(/offerSlurpMemories\(/gu)?.length, 1);
 assert.match(settings, /memorySettingsSavedIndexRebuilt/u);

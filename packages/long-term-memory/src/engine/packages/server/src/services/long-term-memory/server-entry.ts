@@ -9,6 +9,7 @@ import {
   recordGenerationLongTermMemoryDispatch,
 } from "./recall/generation-injection.js";
 import { createLongTermMemoryRoutes } from "./routes.js";
+import { createLtmIntakeService } from "./services/intake.js";
 import { createLtmRecallService } from "./services/recall.js";
 import { adoptLegacyLongTermMemoryAgentConfig } from "./maintenance/legacy-adoption.js";
 import type { FastifyPluginAsync } from "fastify";
@@ -49,6 +50,7 @@ export async function activate({ api, dataDir }: ActivationContext) {
       prefix: "/api/long-term-memory",
     });
     const releaseRecallService = api.registerService("long-term-memory:recall", createLtmRecallService(active.storage));
+    const releaseIntakeService = api.registerService("long-term-memory:intake", createLtmIntakeService(active.storage));
     // Host-only from Capability API 1.388: only the Engine reads it. Older Engines ignore the option.
     const releaseRuntimeService = api.registerService(
       "long-term-memory:runtime",
@@ -79,6 +81,7 @@ export async function activate({ api, dataDir }: ActivationContext) {
       releaseRoutes();
       releaseRuntimeService();
       releaseRecallService();
+      releaseIntakeService();
       // A background import must not write after deactivation; the next reply after activation arms it again. It stops
       // first, so a rebuild it requests on the way out is stopped below.
       await stopLtmAutoImport(activationRoot);

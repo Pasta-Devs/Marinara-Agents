@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.5.22 — 2026-10-31
+
+- Slurp can add memories when you allow it in Memory Settings → Sharing. Off by default.
+
 ## 1.5.21 — 2026-10-31
 
 - Whole-number settings (memory budget, maximum memories, recall context messages and the Extraction token and note limits, including the per-chat budget and maximum memories) now round a typed decimal like `2.5` instead of failing to save.

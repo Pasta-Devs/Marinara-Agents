@@ -15,7 +15,7 @@ import { formatAge } from "./debug-activity";
 import { ExtractionPromptTemplates } from "./ExtractionPromptTemplates";
 import { MaintenancePanel } from "./MaintenancePanel";
 import { confirm, Toggle, type SettingsRebuildOutcome } from "./settings-shared";
-import { offerSlurpMemories } from "./slurp-memory-offer";
+import { offerSlurpMemories, type SlurpMemorySetting } from "./slurp-memory-offer";
 import { useLtmTranslation } from "../localization";
 import { recallStyleDescriptionKey } from "../recall-style";
 
@@ -36,6 +36,7 @@ type GlobalForm = {
   longTermMemoryRecallPreamble: string;
   longTermMemoryDebug: boolean;
   longTermMemoryShareWithPackages: boolean;
+  longTermMemoryAcceptFromPackages: boolean;
   longTermMemoryHideImportedMessages: boolean;
   sourcesAvailabilityModes?: ("conversation" | "roleplay" | "game")[];
 };
@@ -95,6 +96,7 @@ function settingsForm(settings: LtmGlobalSettings): GlobalForm {
     longTermMemoryRecallPreamble: settings.longTermMemoryRecallPreamble ?? "",
     longTermMemoryDebug: settings.longTermMemoryDebug ?? false,
     longTermMemoryShareWithPackages: settings.longTermMemoryShareWithPackages ?? true,
+    longTermMemoryAcceptFromPackages: settings.longTermMemoryAcceptFromPackages ?? false,
     longTermMemoryHideImportedMessages: settings.longTermMemoryHideImportedMessages ?? false,
     ...(settings.sourcesAvailabilityModes ? { sourcesAvailabilityModes: settings.sourcesAvailabilityModes } : {}),
   };
@@ -350,10 +352,12 @@ export default function MemorySettings({
     setMessage("");
     let rebuild: SettingsRebuildOutcome | null = null;
     let sharingTurnedOn = false;
+    let acceptTurnedOn = false;
     try {
       if (globalDirty && globalForm) {
         const submitted = globalForm;
         const sharingWasOff = savedGlobal?.longTermMemoryShareWithPackages === false;
+        const acceptWasOff = savedGlobal?.longTermMemoryAcceptFromPackages === false;
         const response = await request<LtmGlobalSettings & { rebuild?: SettingsRebuildOutcome | null }>(
           "/settings",
           "PUT",
@@ -361,6 +365,7 @@ export default function MemorySettings({
         );
         const saved = settingsForm(response);
         sharingTurnedOn = sharingWasOff && saved.longTermMemoryShareWithPackages;
+        acceptTurnedOn = acceptWasOff && saved.longTermMemoryAcceptFromPackages;
         setSavedGlobal(saved);
         // Saving now awaits an index rebuild, so only clear the form when no newer edit
         // arrived while it was in flight; otherwise those edits stay dirty.
@@ -392,25 +397,48 @@ export default function MemorySettings({
       } else {
         setMessage(localizeUi("ui.longTermMemory.memorysettings.memorySettingsSaved"), "success", surface);
       }
-      // Slurp's Creators need their own switch too, so the offer comes once the save has landed.
-      if (sharingTurnedOn) {
+      // Slurp's Creators need their own switches too, so each offer comes once the save has landed.
+      const slurpOffers: { setting: SlurpMemorySetting; title: string; message: string; failed: string }[] = [
+        ...(sharingTurnedOn
+          ? [
+              {
+                setting: "flavourFromAgents" as const,
+                title: localizeUi("ui.longTermMemory.memorysettings.slurpMemoryOfferTitle"),
+                message: localizeUi("ui.longTermMemory.memorysettings.slurpMemoryOfferMessage"),
+                failed: localizeUi("ui.longTermMemory.memorysettings.slurpMemoryOfferFailed"),
+              },
+            ]
+          : []),
+        ...(acceptTurnedOn
+          ? [
+              {
+                setting: "shareWithMemory" as const,
+                title: localizeUi("ui.longTermMemory.memorysettings.slurpAddOfferTitle"),
+                message: localizeUi("ui.longTermMemory.memorysettings.slurpAddOfferMessage"),
+                failed: localizeUi("ui.longTermMemory.memorysettings.slurpAddOfferFailed"),
+              },
+            ]
+          : []),
+      ];
+      for (const offer of slurpOffers) {
         try {
           await offerSlurpMemories({
-            read: () => requestHost<{ flavourFromAgents?: boolean }>("/api/slurp2/settings"),
+            setting: offer.setting,
+            read: () => requestHost<Partial<Record<SlurpMemorySetting, boolean>>>("/api/slurp2/settings"),
             confirm: () =>
               confirm(
                 props,
-                localizeUi("ui.longTermMemory.memorysettings.slurpMemoryOfferTitle"),
-                localizeUi("ui.longTermMemory.memorysettings.slurpMemoryOfferMessage"),
+                offer.title,
+                offer.message,
                 localizeUi("ui.longTermMemory.memorysettings.slurpMemoryOfferConfirm"),
                 false,
                 localizeUi("ui.longTermMemory.memorysettings.slurpMemoryOfferCancel"),
               ),
-            save: () => requestHost("/api/slurp2/settings", "PATCH", { flavourFromAgents: true }),
+            save: () => requestHost("/api/slurp2/settings", "PATCH", { [offer.setting]: true }),
           });
         } catch {
           // The fixed text keeps saying that Long-Term Memory itself saved.
-          setMessage(localizeUi("ui.longTermMemory.memorysettings.slurpMemoryOfferFailed"), "danger", surface);
+          setMessage(offer.failed, "danger", surface);
         }
       }
     } catch (error) {
@@ -956,6 +984,12 @@ export default function MemorySettings({
               )
             ) : null}
           </div>
+          <Toggle
+            label={localizeUi("ui.longTermMemory.memorysettings.otherAgentsCanAddMemories")}
+            help={localizeUi("ui.longTermMemory.memorysettings.otherAgentsCanAddMemoriesHelp")}
+            checked={globalForm.longTermMemoryAcceptFromPackages}
+            onChange={(value) => setGlobalForm({ ...globalForm, longTermMemoryAcceptFromPackages: value })}
+          />
         </div>
       </section>
 
