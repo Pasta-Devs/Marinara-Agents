@@ -3,8 +3,9 @@
 // persona, two love interests of different genders, content, connections) and the forge; a main chapter read to its
 // end; Home with his note and a tap; Reply into his thread; a wish; Wear at home; the Album; Read Them, Date Night and
 // a Claw round; Remind Me, the tracker and a Caring message. Starlight earned on one screen is spent and shown on the
-// next. A second walk, in the other look at each size, visits the screens around the loop: Who’s home, the cast and a
-// bible, Rough day?, every Settings tab, the reader's Backlog and Ease off, the Album's other tabs and Your stories.
+// next. A second walk, in the other look at each size, visits the screens around the loop: Who’s home, the cast (from
+// Settings → Stories) and a bible, Rough day?, every Settings tab, the reader's Backlog and Ease off, the Album's other
+// tabs and Your stories (from Settings → Stories too).
 // On every screen both check the release's accessibility rules: each control is reached by Tab and shows a focus ring,
 // nothing answers only a pointer, nothing animates at reduced motion, new lines reach a polite live region, and dialogs
 // hold focus and give it back.
@@ -1608,16 +1609,25 @@ test("Otome Hearth's screens around the loop, by keyboard: the cast, a bible, ev
   const home = root.getByRole("heading", { level: 1, name: "Ilvar Thorne" });
   await expect(home).toBeVisible();
 
-  await test.step("Who’s home, the cast and a bible behind its spoiler wall", async () => {
+  await test.step("Who’s home, then the cast from Settings → Stories and a bible behind its spoiler wall", async () => {
     const whoIsHome = root.getByRole("button", { name: "Who’s home" });
     await whoIsHome.click();
     const picker = page.getByRole("dialog", { name: "Who’s home" });
     await expectTrapped(page, picker);
+    // Who's home only picks who's home: the cast and the stories open from Settings.
+    await expect(picker.getByRole("button", { name: "Close", exact: true })).toBeVisible();
+    await expect(picker.getByRole("button", { name: /Your (cast|stories)/u })).toHaveCount(0);
     await page.keyboard.press("Escape");
     await expect(picker).toBeHidden();
     await expect(whoIsHome).toBeFocused();
-    await whoIsHome.click();
-    await picker.getByRole("button", { name: "Your cast" }).click();
+    await root.getByRole("button", { name: "Settings", exact: true }).click();
+    const stories = root.getByRole("tab", { name: "Stories", exact: true });
+    await stories.click();
+    const panel = root.getByRole("tabpanel");
+    await expect(panel.getByRole("heading", { name: "Your cast" })).toBeVisible();
+    await expect(panel.getByRole("heading", { name: "Your stories" })).toBeVisible();
+    await auditScreen(page, root, "settings: Stories", stories);
+    await panel.getByRole("button", { name: "Open your cast" }).click();
     await expect(root.getByRole("heading", { level: 1, name: "Your story is ready" })).toBeFocused();
     await auditScreen(page, root, "the cast");
     await root.getByRole("button", { name: "Open Rosalind Vey’s bible (spoilers)" }).click();
@@ -1644,7 +1654,17 @@ test("Otome Hearth's screens around the loop, by keyboard: the cast, a bible, ev
   await test.step("every Settings tab", async () => {
     await root.getByRole("button", { name: "Settings", exact: true }).click();
     const tabs = root.getByRole("tablist");
-    for (const name of ["Look", "Content", "Connections", "Images", "Audio", "Tracker", "Privacy & data", "Debug"]) {
+    for (const name of [
+      "Look",
+      "Stories",
+      "Content",
+      "Connections",
+      "Images",
+      "Audio",
+      "Tracker",
+      "Privacy & data",
+      "Debug",
+    ]) {
       const tab = tabs.getByRole("tab", { name, exact: true });
       await tab.click();
       await expect(tab).toHaveAttribute("aria-selected", "true");
@@ -1700,15 +1720,25 @@ test("Otome Hearth's screens around the loop, by keyboard: the cast, a bible, ev
     }
   });
 
-  await test.step("Your stories", async () => {
+  await test.step("Your stories, from Settings → Stories", async () => {
     await dock(root, "Album").click();
     await expect(home).toBeFocused();
-    await root.getByRole("button", { name: "Who’s home" }).click();
-    await page.getByRole("dialog", { name: "Who’s home" }).getByRole("button", { name: "Your stories" }).click();
-    await expect(root.getByRole("heading", { level: 1, name: "Your stories" })).toBeFocused();
+    await root.getByRole("button", { name: "Settings", exact: true }).click();
+    await root.getByRole("tab", { name: "Stories", exact: true }).click();
+    await root.getByRole("tabpanel").getByRole("button", { name: "Open your stories" }).click();
+    const stories = root.getByRole("heading", { level: 1, name: "Your stories" });
+    await expect(stories).toBeFocused();
     await expect(root.getByText("The Clockwork Masquerade")).toBeVisible();
     await auditScreen(page, root, "your stories");
     await page.screenshot({ path: testInfo.outputPath("stories.png") });
+    // Opened from Your stories, Settings → Stories offers the open story's cast, not Your stories again.
+    await root.getByRole("button", { name: "Settings", exact: true }).click();
+    await root.getByRole("tab", { name: "Stories", exact: true }).click();
+    const panel = root.getByRole("tabpanel");
+    await expect(panel.getByRole("button", { name: "Open your cast" })).toBeVisible();
+    await expect(panel.getByRole("button", { name: "Open your stories" })).toHaveCount(0);
+    await root.getByRole("button", { name: "Back", exact: true }).click();
+    await expect(stories).toBeFocused();
   });
 
   expect(pageErrors).toEqual([]);

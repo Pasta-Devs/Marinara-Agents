@@ -52,13 +52,13 @@ Forging writes the world and its central mystery: each love interest holds one p
 - how they stand with each of the others;
 - secrets that come out stage by stage.
 
-Bibles sit behind a spoiler gate, and you can edit them. A step that fails or is stopped waits for you to try it again. Base looks are painted only when you tap **Paint the cast**. To paint one again later, open **Your cast** from Home's **Who's home** and choose **Repaint**. Then choose **Begin**.
+Bibles sit behind a spoiler gate, and you can edit them. A step that fails or is stopped waits for you to try it again. Base looks are painted only when you tap **Paint the cast**. To paint one again later, open **Your cast** from **Settings → Stories** and choose **Repaint**. Then choose **Begin**.
 
 With **Expressions** on, **Repaint expressions** beside a love interest's repaint action replaces the five faces for the look they currently wear. It uses that look as the image reference and your configured image style. The current set stays available while replacements paint, and a failed replacement keeps it. With prompt review on, review all five prompts first; the last confirmation starts the five paid images. Canceling the review paints nothing. Reading or replaying a scene never triggers this replacement.
 
 **Begin** plays the **prologue** first: one short scene of your protagonist's own life, just before the story opens. No love interest is in it; you meet them in chapter 1, which picks up where the prologue ends. It is written once, and the Story screen offers it again. **Skip** goes straight Home.
 
-You can keep several stories. **Your stories** lists them, and deleting one asks you to type its title. **Settings** changes a story's content, connections, images and audio later. On desktop, Settings uses the available stage space. On phones, its categories form one horizontally scrolling row, and long settings pages remain vertically scrollable.
+You can keep several stories. **Your stories** lists them, and deleting one asks you to type its title; open it from **Settings → Stories**. **Settings** changes a story's content, connections, images and audio later. On desktop, Settings uses the available stage space. On phones, its categories form one horizontally scrolling row, and long settings pages remain vertically scrollable.
 
 In **Your cast**, open a love interest and choose their **Character card** to link an Engine card explicitly. Its assigned voice and image references apply without replacing the love interest's story, progress or saved pictures. **No linked card** removes the association. Future paints prefer the card's **Full Body → Neutral** sprite, then its current avatar, then the retained Otome look; linking never paints automatically.
 
@@ -276,7 +276,7 @@ Each story has its own content settings:
 
 - **Your role:** an optional Sub, Dom or Switch beside the Heat setting, in setup and **Settings → Content**. It is unspecified by default. It colours intimate scenes when they come, never every scene, and never decides what a love interest is like. Lowering Heat to SFW, or withdrawing the 18+ confirmation, clears it.
 - **Love interests' own tastes:** a new bible in an NSFW story gets a short intimacy part: what they are into, kinks included, and what draws them. They are tastes, not a checklist, and scenes and banner stories bring them in when a scene turns intimate, not in every scene. What a scene may hold is still up to your Heat, Darkness and Lines & Veils, consent toggles included.
-- **Older casts:** a love interest whose bible has none gets **Add intimacy preferences** on the forge's cast list (Home → **Who's home** → **Your cast**). It costs 1 call on the Planning connection, writes only that part, and keeps the rest of the bible, your story and your progress as they are. The text stays in the spoiler-gated bible.
+- **Older casts:** a love interest whose bible has none gets **Add intimacy preferences** on the forge's cast list (**Settings → Stories → Your cast**). It costs 1 call on the Planning connection, writes only that part, and keeps the rest of the bible, your story and your progress as they are. The text stays in the spoiler-gated bible.
 - **In the bible:** behind **Show spoilers**, an **Intimacy** part lists them as **Into** and **Drawn to**. Edit them there, or empty both to remove them; the cast then offers to add them again.
 - An SFW story never writes or sends any of it, even for a bible that kept it from before Heat was lowered.
 

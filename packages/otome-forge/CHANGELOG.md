@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.6.4 — 2026-10-31
+
+- **Your cast** and **Your stories** moved from **Who's home** to **Settings → Stories**, each with a line on what it's for. **Who's home** now only picks who's home.
+
 ## 0.6.3 — 2026-10-31
 
 - Date Night offers your Wardrobe looks: pick any painted look either of you owns, 4★ and 5★ alike. The date's scenes, key images and keepsake dress you both in them, and they stay on afterwards.
