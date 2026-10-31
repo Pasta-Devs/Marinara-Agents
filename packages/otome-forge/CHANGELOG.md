@@ -2,10 +2,10 @@
 
 ## 0.6.6 — 2026-10-31
 
-- **Banned phrases** when you start a new story: type them right under **How it's written**, and the world, every love interest's Bible and the whole story avoid them from the start. You can still change them later in Settings → Content.
-- Read Him and Read Me guess instead of repeating: the love interest makes one specific guess past what your persona already states ("your favourite sweet is the dark chocolate you do not admit to"), across what you want now, what you think, likes, dislikes, habits, fears, memories and things you would rather not admit. He never guesses what he already knows, and a right, close or wrong answer stays with him.
-- Group scenes: with two or more love interests established (stage 3 and up), a scene that fits may bring them into the same intimacy, a threesome or everyone present. Heat decides how far, each of them keeps their own tastes, and jealousy or ease between them colours the scene. Ordinary scenes are no longer capped to a couple of love interests either: a rescue, a party or a confrontation can hold the whole cast.
-- Narration now says what the protagonist feels in her body when something happens, not only the action.
+- **Banned phrases** when you start a new story: type them right under **How it's written**, so the world and every love interest's Bible avoid them from the start. Still in Settings → Content.
+- Read Him and Read Me guess instead of repeating: one specific guess past what your persona states, across wants, thoughts, likes, dislikes, habits, fears and memories. He never guesses what he already knows.
+- **Group scenes:** two or more love interests at stage 3 and up may share one intimacy when the scene fits. Heat decides how far, each keeps their own tastes, and scenes are no longer capped to a couple of love interests.
+- Narration says what the protagonist feels in her body, not only the action.
 
 ## 0.6.5 — 2026-10-31
 

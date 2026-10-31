@@ -44,8 +44,8 @@ export function intimacyLine(world: Pick<World, "content">, unit: Pick<Unit, "na
 
 /**
  * The group-intimacy line (#1975): with two or more love interests present who are established with the protagonist (stage
- * 3 and up: past the mask), a scene may bring them into one intimacy together, a threesome or all of them, when the beat
- * and the relationships fit. Heat decides how far, as ever; an SFW story and an unestablished cast get nothing.
+ * 3 and up: past the mask), a scene may bring them into one intimacy together, and only them: a love interest still early
+ * in her story stays out of it. Heat decides how far, as ever; an SFW story and an unestablished cast get nothing.
  */
 export function groupIntimacyLine(
   world: Pick<World, "content">,
@@ -56,7 +56,17 @@ export function groupIntimacyLine(
   const established = present.filter((unit, index) => stageOf(unit, index) >= 3);
   if (established.length < 2) return "";
   const names = established.map((unit) => unit.name);
-  return `Beyond one partner: ${names.join(", ")} are each established with the protagonist. When the chapter, the beat and their ties make it fit, a scene may bring two or more of them into the same intimacy (a threesome, or everyone present) — not in most scenes, and never against their own tastes or the content limits. The others' presence changes the tone: each has their own wants, their own jealousy or ease with the others.`;
+  // Only the love interests it names are invited: "everyone present" would wave in one still at an early stage (#1979).
+  const others = present.filter((unit, index) => stageOf(unit, index) < 3).map((unit) => unit.name);
+  const together =
+    names.length === 2 ? `a threesome with ${names.join(" and ")}` : `all of ${names.join(", ")} at once`;
+  const out =
+    others.length === 1
+      ? `${others[0]} is not yet at that point; they stay out of it if they are in the scene.`
+      : others.length
+        ? `${others.join(", ")} are not yet at that point; they stay out of it if they are in the scene.`
+        : "";
+  return `Beyond one partner: ${names.join(", ")} are each established with the protagonist. When the chapter, the beat and their ties make it fit, a scene may bring ${together} into the same intimacy — not in most scenes, and never against their own tastes or the content limits.${out ? ` ${out}` : ""} The others' presence changes the tone: each has their own wants, their own jealousy or ease with the others.`;
 }
 
 const IntimacyReplySchema: ZodType<{ intimacy: BibleIntimacy }> = z.object({
