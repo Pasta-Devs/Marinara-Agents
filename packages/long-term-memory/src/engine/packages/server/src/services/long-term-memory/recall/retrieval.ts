@@ -55,6 +55,8 @@ export type RetrieveLongTermMemoryInput = MemoryRecallEmbeddingOptions & {
   inheritedNoteIds?: ReadonlySet<string>;
   /** Notes never recalled here, such as this chat's own Advanced Memory recaps the host already puts in the prompt. */
   excludedNoteIds?: ReadonlySet<string>;
+  /** Chunks never recalled here, judged before ranking so they cannot take a budget slot from a chunk that is returned. */
+  excludedChunk?: (chunk: { noteId: string; sectionKey: string }) => boolean;
 };
 
 function cosine(a: number[], b: number[]) {
@@ -116,6 +118,7 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
       .filter((chunk) => !input.noteTypes || input.noteTypes.includes(chunk.noteType))
       .filter((chunk) => !input.noteIds || input.noteIds.has(chunk.noteId))
       .filter((chunk) => !input.excludedNoteIds?.has(chunk.noteId))
+      .filter((chunk) => !input.excludedChunk?.(chunk))
       .filter((chunk) => {
         const exclusiveCharacterIds = input.exclusiveCharacterIds;
         if (exclusiveCharacterIds !== undefined) {

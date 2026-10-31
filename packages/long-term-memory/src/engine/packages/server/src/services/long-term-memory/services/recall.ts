@@ -141,11 +141,19 @@ export function createLtmRecallService(storage: Pick<LongTermMemoryStorage, "lis
             graphWeight: settings.longTermMemoryGraphWeight,
             keywordWeight: settings.longTermMemoryKeywordWeight,
             signal,
+            // Judged before ranking, so an excluded chunk cannot spend the chunk or token budget.
+            ...(prefixes.length
+              ? {
+                  excludedChunk: (chunk: { noteId: string; sectionKey: string }) => {
+                    const note = notes.get(chunk.noteId);
+                    return !!note && fromExcluded(note, chunk.sectionKey, prefixes);
+                  },
+                }
+              : {}),
           });
           for (const { chunk } of retrieval.chunks) {
             const section = sections.get(chunk.noteId);
             const note = notes.get(chunk.noteId);
-            if (note && fromExcluded(note, chunk.sectionKey, prefixes)) continue;
             if (section) section.text += `\n${chunk.text}`;
             else if (note)
               sections.set(note.id, {

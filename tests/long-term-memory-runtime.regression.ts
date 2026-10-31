@@ -496,6 +496,27 @@ async function main() {
             sections: { from_slurp2: { text: slurpLine.text, updatedAt: timestamp, contributions: [slurpLine] } },
           }),
         );
+        // A strong intake chunk that nearly fills a 50-token budget, and one weaker manual chunk for the same account.
+        const forT = { scope: { characterIds: ["char-t"] }, type: "character", ...about("char-t") };
+        const bigSlurpText = Array.from({ length: 5 }, () => "char_t from_slurp2 cobalt archive").join(" ");
+        await writeNote(
+          note("char_t_slurp", "chat-r", "", {
+            ...forT,
+            sections: {
+              from_slurp2: {
+                text: bigSlurpText,
+                updatedAt: timestamp,
+                contributions: [{ ...slurpLine, text: bigSlurpText }],
+              },
+            },
+          }),
+        );
+        await writeNote(
+          note("char_t_keep", "chat-r", "", {
+            ...forT,
+            sections: { history: { text: "char_t history keeps the cobalt archive and a few more words to take room", updatedAt: timestamp } },
+          }),
+        );
         invalidateLtmVaultSnapshot(recallRoot);
         await rebuildLongTermMemoryIndexes({ root: recallRoot });
         const textOf = async (whole: boolean, input: Record<string, unknown> = {}) =>
@@ -520,6 +541,16 @@ async function main() {
           assert.match(kept, /history keeps/, `${label} recall must keep a section no excluded caller wrote`);
           assert.match(kept, /mixed keeps/, `${label} recall must keep a section with a manual line`);
         }
+        const tight = (input: Record<string, unknown> = {}) =>
+          recall
+            .recall({ queryText: "cobalt archive", characterIds: ["char-t"], maxTokens: 50, ...input })
+            .then((result) => (result as { sections: Array<{ text: string }> }).sections.map((s) => s.text).join("\n"));
+        assert.match(await tight(), /from_slurp2/, "the intake chunk must outrank and fill a tight ranked budget");
+        assert.match(
+          await tight({ excludeFrom: ["slurp2"] }),
+          /history keeps/,
+          "an excluded chunk must not spend the ranked budget before it is dropped",
+        );
         assert.equal(
           await recall.recall({ queryText: "cobalt archive", characterIds: ["char-s"], excludeFrom: ["Bad Name!"] }),
           null,
