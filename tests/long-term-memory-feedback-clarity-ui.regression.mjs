@@ -1377,9 +1377,38 @@ const localization = readFileSync(ltmSourcePaths.localization, "utf8");
 assert.match(localization, /import koreanCatalog from "\.\/locales\/ko\.json"/u);
 assert.match(localization, /ko: stringEntries\(koreanCatalog\)/u);
 
-// Issue #1964 (Dottore on #1970): the backfill route's `limit` is `.int()`, so a typed 2.5 must reach state as a whole number.
-assert.match(workspace, /onChange=\{\(value\) => setAdvancedMemoryBatchSize\(Math\.round\(value\)\)\}/u);
+// Issue #1964 (Dottore on #1970): the backfill route's `limit` is `.int()`, so the batch-size field must round
+// before it shows or reports a value (a typed 3.4 at size 3 must not leave "3.4" in the field).
+const batchField = workspace.match(/<NumberField[^>]*?advancedMemoryBatchSize[\s\S]*?\/>/u)?.[0] ?? "";
+assert.match(batchField, /\binteger\b/u);
+assert.match(batchField, /onChange=\{setAdvancedMemoryBatchSize\}/u);
 assert.match(workspace, /limit: advancedMemoryBatchSize,/u);
+assert.match(sharedControls, /integer\?: boolean;/u);
+const clampSource = sharedControls.match(/const clamped = (.+);/u)?.[1] ?? "";
+assert.match(
+  clampSource,
+  /integer \? Math\.round\(next\) : next/u,
+  "NumberField rounds before it stores and shows the value",
+);
+const commitBody = sharedControls.slice(
+  sharedControls.indexOf("const clamped ="),
+  sharedControls.indexOf("useEffect(() => {\n    setText(valueText)"),
+);
+assert.ok(
+  commitBody.indexOf("setText(String(clamped))") > 0 && commitBody.includes("onChange(clamped)"),
+  "NumberField shows and reports the same clamped value",
+);
+const clampOf = (next, size, integer) => {
+  const clamped = new Function("min", "max", "next", "integer", `return ${clampSource};`)(1, 100, next, integer);
+  return { shown: String(clamped), changed: String(clamped) !== String(size), clamped };
+};
+const stay = clampOf(3.4, 3, true);
+assert.equal(stay.shown, "3", "typing 3.4 at size 3 shows 3");
+assert.equal(stay.changed, false, "no state change is needed for the field to read 3");
+const halfUp = clampOf(2.5, 10, true);
+assert.equal(halfUp.shown, "3", "typing 2.5 from 10 shows 3");
+assert.ok(Number.isInteger(halfUp.clamped), "the request limit is a whole number");
+assert.equal(clampOf(2.5, 10, false).shown, "2.5", "other NumberFields keep decimals");
 
 process.stdout.write(
   "Long-Term Memory feedback clarity UI regression: labels, outcomes, usage, warnings, defaults, and scope loading ok\n",
