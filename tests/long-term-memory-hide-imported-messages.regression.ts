@@ -46,16 +46,18 @@ const chat = {
 async function main() {
   const [
     { configurePackageRuntime },
-    { previewPackageInterop, importPackageInterop, hideImportedChatMessages },
+    { previewPackageInterop, importPackageInterop, hideImportedChatMessages, hideImportedMessagesAfterReview },
     { ltmSetMessagesHiddenFromAI, readLtmHiddenMessages, showLtmHiddenMessages },
     { LongTermMemoryStorage },
     { updateLtmGlobalSettings, getLtmGlobalSettings },
+    { LongTermMemoryDraftStore },
   ] = await Promise.all([
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/package-runtime.ts"),
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/sources/interop.ts"),
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/persistence/hidden-messages.ts"),
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/persistence/storage.ts"),
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/settings.ts"),
+    import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/drafts/draft-store.ts"),
   ]);
 
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-hide-imported-"));
@@ -214,6 +216,42 @@ async function main() {
       assert.ok(!hiddenIds().includes("m6"), "a permanently deleted note's messages show again");
       assert.deepEqual(await owned(), ["m1", "m5"], "and its record is dropped");
 
+      // 9. A piece with suggestions waiting in review stays visible until they are accepted, skipped or deleted.
+      // Two new messages close the m7 piece (m7, m8); importing it with the setting off then turning it on mirrors
+      // an import whose extraction left a pending draft.
+      messages.push(message(chat.id, "m9"), message(chat.id, "m10"));
+      await updateLtmGlobalSettings({ longTermMemoryHideImportedMessages: false }, root);
+      await importIds(["chat-hide:messages:m7"]);
+      await updateLtmGlobalSettings({ longTermMemoryHideImportedMessages: true }, root);
+      const reviewNote = await sourceNote("m7");
+      const draftStore = new LongTermMemoryDraftStore(root);
+      const reviewDraft = await draftStore.createDraft({
+        source: { sourceNoteId: reviewNote.id, chatId: chat.id },
+        modes: ["roleplay"],
+        response: {
+          summary: "One suggestion waiting in review.",
+          mutations: [
+            {
+              id: "00000000-0000-4000-8000-000000000009",
+              kind: "add_link",
+              claimKind: "static",
+              risk: "medium",
+              confidence: 0.9,
+              summary: "Link the piece",
+              evidence: [`source_note:${reviewNote.id}`],
+              noteId: "world_lantern_house",
+              link: { target: "timeline_harbor_closing", relation: "evidenced_by" },
+            },
+          ],
+        } as never,
+      });
+      await hideImportedChatMessages(root);
+      assert.ok(!hiddenIds().includes("m7"), "a piece waiting in review keeps its messages visible");
+      await draftStore.deleteDraft(reviewDraft.id);
+      await hideImportedMessagesAfterReview(root, reviewNote.id);
+      assert.ok(hiddenIds().includes("m7") && hiddenIds().includes("m8"), "once the review is done its messages hide");
+      assert.ok(!hiddenIds().includes("m9") && !hiddenIds().includes("m10"), "the latest messages stay visible");
+
       // 4. Turning the setting off shows exactly the owned messages; m2 and the user's m4 stay hidden.
       await updateLtmGlobalSettings({ longTermMemoryHideImportedMessages: false }, root);
       await showLtmHiddenMessages(root);
@@ -223,7 +261,7 @@ async function main() {
     [() => releaseRuntime?.(), () => rm(dataDir, { recursive: true, force: true })],
   );
   process.stdout.write(
-    "Long-Term Memory hide imported messages regression: off by default, tail, ownership, re-preview, tail drift, manual choices, archive and delete, and missing host method ok\n",
+    "Long-Term Memory hide imported messages regression: off by default, tail, ownership, re-preview, tail drift, manual choices, archive and delete, waiting for review, and missing host method ok\n",
   );
 }
 

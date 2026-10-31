@@ -4,7 +4,10 @@ import type {
   LtmRecallAttempt,
   LtmRecallAttemptOutcome,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { resolveLongTermMemoryRecallSettings } from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
+import {
+  resolveLongTermMemoryRecallSettings,
+  resolveLtmChatMemories,
+} from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
 import {
   advancedMemoryEchoNoteIds,
   inheritedBranchLtmNoteIds,
@@ -248,7 +251,8 @@ export async function prepareGenerationLongTermMemory(input: {
   // Hands-off import runs after the reply's recall and never delays or fails it.
   void getLtmExtractionConfig(input.root)
     .then((config) => {
-      if (config.autoImportChatSources) armLtmAutoImport(input.root, input.chatId, mode);
+      if (resolveLtmChatMemories(parseLtmChatMetadata(chat.metadata), config).autoImport)
+        armLtmAutoImport(input.root, input.chatId, mode);
     })
     .catch((error) => logger.warn(error, "[ltm] Could not schedule background import for chat %s", input.chatId));
   const artifact = serializeLongTermMemoryPrompt(retrieval.chunks, {

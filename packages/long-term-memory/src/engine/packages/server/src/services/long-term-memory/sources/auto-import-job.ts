@@ -4,7 +4,8 @@ import type {
   LtmMode,
   LtmScope,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { resolveChatLtmScope } from "../identity/chat-scope.js";
+import { resolveLtmChatMemories } from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
+import { parseLtmChatMetadata, resolveChatLtmScope } from "../identity/chat-scope.js";
 import { getLtmExtractionConfig } from "../extraction/extraction-config.js";
 import { recordLtmDebugEvent } from "../maintenance/debug-log.js";
 import { getPackagePersistence, logger } from "../package-runtime.js";
@@ -120,11 +121,12 @@ async function pendingSources({ root, chatId, mode }: Job, sourceScope: LtmScope
 
 async function runLtmAutoImport(job: Job, key: string, signal: AbortSignal) {
   const { root, chatId, mode } = job;
-  // The setting can be turned off during the quiet period or a queued re-run.
+  // The choice, global or this chat's, can change during the quiet period or a queued re-run.
   const config = await getLtmExtractionConfig(root);
-  if (!config.autoImportChatSources) return;
   const chat = await getPackagePersistence().getChat(chatId);
   if (!chat) return;
+  const memories = resolveLtmChatMemories(parseLtmChatMetadata(chat.metadata), config);
+  if (!memories.autoImport) return;
   // The sources "Current chat" lists in Import; with chatId the import writes to the chat's own destination.
   const sourceScope = resolveChatLtmScope(chat);
   for (const source of SOURCES) {
@@ -152,6 +154,8 @@ async function runLtmAutoImport(job: Job, key: string, signal: AbortSignal) {
           chatId,
           mode,
           extract: true,
+          // This chat's choice decides whether safe changes are saved or wait for review.
+          applyLowRisk: memories.autoAccept,
           limit: BATCH,
           // Advanced Memory scenes without a block need a model call; only the Import panel's Backfill reads them.
           ...(source === "chats" ? { advancedMemoryBlocksOnly: true } : {}),

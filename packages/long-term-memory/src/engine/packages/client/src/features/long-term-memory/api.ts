@@ -102,6 +102,7 @@ export const queryKeys = {
   scopeTargets: (chatId: string | null | undefined) => ["long-term-memory", "scope-targets", chatId] as const,
   localCharacters: (chatId: string | null | undefined) => ["long-term-memory", "local-characters", chatId] as const,
   lastInjection: (chatId: string | null | undefined) => ["long-term-memory", "last-injection", chatId] as const,
+  chatMemories: (chatId: string | null | undefined) => ["long-term-memory", "chat-memories", chatId] as const,
 } as const;
 
 export const ltmScopeTargetsKey = (chatId: string | null | undefined) =>
@@ -110,8 +111,11 @@ export const ltmScopeTargetsKey = (chatId: string | null | undefined) =>
 /** One definition per shared query, so every screen reads and invalidates the same cache entry. */
 export const settingsQueryOptions = {
   queryKey: queryKeys.settings,
-  // hideImportedMessagesAvailable is false on an Engine that cannot hide chat messages.
-  queryFn: () => request<LtmGlobalSettings & { hideImportedMessagesAvailable?: boolean }>("/settings"),
+  // The flags are false on an Engine that cannot hide chat messages or provide Advanced Memory scene recaps.
+  queryFn: () =>
+    request<LtmGlobalSettings & { hideImportedMessagesAvailable?: boolean; advancedMemoryAvailable?: boolean }>(
+      "/settings",
+    ),
 };
 
 export const scopeTargetsQueryOptions = (chatId: string | null | undefined) => ({

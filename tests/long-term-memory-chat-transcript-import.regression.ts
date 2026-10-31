@@ -58,6 +58,7 @@ async function main() {
     { updateLtmExtractionConfig },
     { armLtmAutoImport, isLtmAutoImportArmed, LTM_AUTO_IMPORT_QUIET_MS },
     { readLtmDebugLog },
+    { LongTermMemoryDraftStore },
   ] = await Promise.all([
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/package-runtime.ts"),
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/sources/interop.ts"),
@@ -66,6 +67,7 @@ async function main() {
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/extraction/extraction-config.ts"),
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/sources/auto-import-job.ts"),
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/maintenance/debug-log.ts"),
+    import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/drafts/draft-store.ts"),
   ]);
 
   const speaker = (row: FixtureMessage) => row.role;
@@ -567,8 +569,9 @@ async function main() {
         second: string,
         applyLowRisk: boolean | "unset" = true,
         importRoot = root,
+        metadata: Record<string, unknown> = {},
       ): Promise<any> => {
-        chats.push({ ...sealChat, id: chatId });
+        chats.push({ ...sealChat, id: chatId, metadata });
         messages.set(chatId, [
           message(chatId, first, "user", `${"x".repeat(23_950)} The seal cracks at dawn.`),
           message(chatId, second, "assistant", "The seal holds."),
@@ -615,15 +618,27 @@ async function main() {
       // Hands-off: with no explicit request, "Accept safe changes automatically" decides whether safe work applies.
       // Each run uses its own store, so earlier fixtures cannot make its proposals ambiguous.
       const appliedBy = (result: any) => result.imported.flatMap((item: any) => item.appliedMutationIds);
-      const handsOff = async (name: string, applyLowRisk: boolean | "unset", setting: boolean) => {
+      const handsOff = async (
+        name: string,
+        applyLowRisk: boolean | "unset",
+        setting: boolean,
+        metadata: Record<string, unknown> = {},
+      ) => {
         const importRoot = join(dataDir, name, "long-term-memory");
-        await updateLtmExtractionConfig({ autoAcceptSafeChanges: setting }, importRoot);
-        return appliedBy(await importPieces(`chat-${name}`, `${name}-1`, `${name}-2`, applyLowRisk, importRoot));
+        await updateLtmExtractionConfig({ autoImportChatSources: true, autoAcceptSafeChanges: setting }, importRoot);
+        return appliedBy(
+          await importPieces(`chat-${name}`, `${name}-1`, `${name}-2`, applyLowRisk, importRoot, metadata),
+        );
       };
       assert.deepEqual(await handsOff("review-first", "unset", false), [], "by default an import waits for review");
       assert.ok(
         (await handsOff("hands-off", "unset", true)).length > 0,
         "with the setting on, an import accepts its safe proposals",
+      );
+      assert.deepEqual(
+        await handsOff("chat-review", "unset", true, { longTermMemoryChatMemories: "review" }),
+        [],
+        "an import of a chat set to review waits for review with the global setting on",
       );
       assert.deepEqual(
         await handsOff("explicit-off", false, true),
@@ -878,6 +893,61 @@ async function main() {
       assert.equal(await editedFreshness(), "source_updated", "the source still shows as edited");
       await autoImport(editedChat.id);
       assert.equal(prompts.length, 2, "the unfinished edit is not extracted on every reply");
+      respond = () => [];
+      prompts.length = 0;
+
+      // "Memories from this chat": the chat's choice beats the global one for the run's re-check and its accept step.
+      const memoriesChat = (id: string, choice?: string) => {
+        const chat = { ...roleplayChat, id, name: id, metadata: choice ? { longTermMemoryChatMemories: choice } : {} };
+        chats.push(chat);
+        messages.set(id, [message(id, `${id}-1`, "user", "x".repeat(23_990)), message(id, `${id}-2`, "user", "Tail.")]);
+        return chat;
+      };
+      respond = (prompt) => [
+        unit({
+          bucket: "timeline_event",
+          subjectId: `gate_${prompt.sourceNote.id.replace(/[^a-z0-9]/gi, "_").toLowerCase()}`,
+          sectionKey: "event",
+          title: "The gate opens",
+          text: "The gate opens.",
+          claimKind: "change",
+          links: [{ target: prompt.sourceNote.id, relation: "extracted_from" }],
+        }),
+      ];
+      const draftStore = new LongTermMemoryDraftStore(autoRoot);
+      const applied = async (chatId: string) => (await autoEvents(chatId)).at(-1)?.counts?.applied;
+      const pendingFor = async (chatId: string) =>
+        (await draftStore.listDrafts({ status: "pending", chatId })).filter((draft) => draft.mutations.length).length;
+      // Global: import on, accept off.
+      const inherits = memoriesChat("chat-memories-global");
+      const saves = memoriesChat("chat-memories-save", "save");
+      const manual = memoriesChat("chat-memories-manual", "manual");
+      prompts.length = 0;
+      await autoImport(inherits.id);
+      assert.equal(await applied(inherits.id), 0, "no chat choice: the global accept-off leaves changes for review");
+      assert.equal(await pendingFor(inherits.id), 1, "and they wait in review");
+      await autoImport(saves.id);
+      assert.ok(((await applied(saves.id)) ?? 0) > 0, "a chat set to save accepts safe changes with the global off");
+      assert.equal(await pendingFor(saves.id), 0, "and nothing waits for it");
+      const promptsBeforeManual = prompts.length;
+      await autoImport(manual.id);
+      assert.equal(prompts.length, promptsBeforeManual, "a chat set to manual imports nothing with the global on");
+      assert.deepEqual(await autoEvents(manual.id), [], "and logs nothing");
+      // Global: import off, accept on.
+      await updateLtmExtractionConfig({ autoImportChatSources: false, autoAcceptSafeChanges: true }, autoRoot);
+      const reviews = memoriesChat("chat-memories-review", "review");
+      const inheritsOff = memoriesChat("chat-memories-global-off");
+      await autoImport(reviews.id);
+      assert.equal(
+        await applied(reviews.id),
+        0,
+        "a chat set to review leaves changes for review with global accept on",
+      );
+      assert.equal(await pendingFor(reviews.id), 1);
+      const promptsBeforeOff = prompts.length;
+      await autoImport(inheritsOff.id);
+      assert.equal(prompts.length, promptsBeforeOff, "no chat choice falls back to the global import off");
+      await updateLtmExtractionConfig({ autoImportChatSources: true, autoAcceptSafeChanges: false }, autoRoot);
       respond = () => [];
       prompts.length = 0;
 
