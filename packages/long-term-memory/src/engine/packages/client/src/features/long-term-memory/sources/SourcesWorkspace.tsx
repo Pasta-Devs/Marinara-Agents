@@ -1710,7 +1710,8 @@ export default function SourcesWorkspace({
       if (stop.signal.aborted)
         setAdvancedMemoryBackfillMessage(
           localizeUi("ui.longTermMemory.sourcesworkspace.advancedMemoryBackfillStopped", {
-            value1: Math.max(0, total - read),
+            // Stopped before the first listing came back: the count the button showed is the only one known.
+            value1: total ? Math.max(0, total - read) : (advancedMemoryPending.data ?? 0),
           }),
         );
       else

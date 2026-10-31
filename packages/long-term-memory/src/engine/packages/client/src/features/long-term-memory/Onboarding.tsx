@@ -718,6 +718,7 @@ export function Onboarding({
                       key={choice}
                       primary={shownChatMemories === choice}
                       aria-pressed={shownChatMemories === choice}
+                      {...lockedActionProps(activationPending)}
                       onClick={() => chooseChatMemories(choice)}
                     >
                       {localizeUi(chatMemoriesLabelKey(choice))}

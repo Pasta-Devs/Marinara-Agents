@@ -6118,6 +6118,15 @@ async function main(routeScenario: RouteScenario) {
       assert.equal(dismissed.statusCode, 200, dismissed.body);
       assert.deepEqual(dismissed.json(), { deleted: true, id: groundingDraft.id });
       assert.equal(await storageService.drafts.getDraft(groundingDraft.id), null);
+      // A draft file that no longer parses can still be cleared: the source-note lookup is only for the hide step.
+      const unreadableDraftId = "10000000-0000-4000-8000-0000000000aa";
+      await writeFile(join(storageService.root, "drafts", `${unreadableDraftId}.json`), "{not-json", "utf8");
+      const unreadableDismissed = await app.inject({
+        method: "DELETE",
+        url: `/api/long-term-memory/drafts/${unreadableDraftId}`,
+        headers,
+      });
+      assert.equal(unreadableDismissed.statusCode, 200, unreadableDismissed.body);
       const reviewAfterDismissal = await app.inject({
         method: "GET",
         url: "/api/long-term-memory/drafts/review?includeInvalidated=true",
