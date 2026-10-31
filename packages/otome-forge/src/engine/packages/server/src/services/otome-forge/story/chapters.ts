@@ -464,6 +464,7 @@ export async function planNextChapter(
       kind: "main",
       number,
       lead,
+      arc: arc.number,
       ...plan,
       plannedAt: new Date().toISOString(),
       connectionId,

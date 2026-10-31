@@ -40,7 +40,10 @@ import {
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/prompts.ts";
 import { readRun } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import { introduceLoveInterest } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/introduce.ts";
-import { revealedSoFar } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/arc.ts";
+import {
+  planArc,
+  revealedSoFar,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/arc.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { CAST, HE, KAI, MIR, SOL, bible, json, planReply, storyWorld } from "./fixtures/otome-forge-story.ts";
 
@@ -551,4 +554,53 @@ test("a refused arrival is not invented: an unknown archetype is a 400 and write
     /Unknown archetype/u,
   );
   assert.equal(await count(), had, "nothing was written");
+});
+
+test("a later arc planned through planArc refuses a piece an earlier arc already played (Dottore's proof gap)", async () => {
+  // The first arc reveals Kai's piece in chapter 5 and the truth in chapter 10, and both chapters are read; a second arc
+  // that schedules Kai's piece again must be refused by the planner's own repeat check, not only by the helper.
+  const first = arc();
+  const t = await storyWorld({
+    runKey: "r-repeat-aaaaaa",
+    // The model's answer for the second arc: the same piece, again.
+    arcReply: () =>
+      JSON.stringify(
+        arcReply({
+          label: "A second tide",
+          reveals: [{ chapter: 3, kind: "piece", li: KAI, what: "the same piece again" }],
+        }),
+      ),
+  });
+  const run = (await readRun(t.store, t.runId))!;
+  const chapters = [
+    { number: 5, key: "main-5" },
+    { number: 10, key: "main-10" },
+  ];
+  const state = {
+    ...run.state,
+    chapters: {
+      "main-5": { beatsRead: 0, completed: "2026-10-30", applied: [] },
+      "main-10": { beatsRead: 0, completed: "2026-10-31", applied: [] },
+    },
+  };
+  await assert.rejects(
+    planArc(
+      t.deps,
+      t.runId,
+      {
+        world: run.world,
+        player: run.player,
+        units: run.units.filter((unit) => unit.bible),
+        state,
+        memory: "",
+        previous: [first],
+        chapters,
+        number: 2,
+        from: 11,
+        choice: "continue",
+      },
+      { debugMode: false },
+    ),
+    /already revealed|did not match/u,
+  );
 });
