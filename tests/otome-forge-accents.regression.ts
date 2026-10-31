@@ -14,12 +14,16 @@ import {
   accentFromPixels,
   accentIsPlaceholder,
   accentOf,
+  castAccentFor,
   hueGap,
   nameAccent,
   pickDistinctAccent,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/accent.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
-import { normalizeState, toRunView } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
+import {
+  normalizeState,
+  toRunView,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
 
@@ -39,8 +43,10 @@ const hueOfHex = (colour: string) => {
 };
 
 /** Pixels of RGBA: [r, g, b, a] entries. */
-const pixels = (entries: Array<[number, number, number, number?]>) => entries.flatMap(([r, g, b, a = 255]) => [r, g, b, a]);
-const repeat = (count: number, entry: [number, number, number, number?]) => pixels(Array.from({ length: count }, () => entry));
+const pixels = (entries: Array<[number, number, number, number?]>) =>
+  entries.flatMap(([r, g, b, a = 255]) => [r, g, b, a]);
+const repeat = (count: number, entry: [number, number, number, number?]) =>
+  pixels(Array.from({ length: count }, () => entry));
 
 test("a small vivid detail wins over a large dull area", () => {
   // A coat in every hue of the picture, and one bright cyan earring: the earring is who he is.
@@ -62,11 +68,81 @@ test("the chroma backdrop a look is painted on never becomes his colour", () => 
     const accent = accentFromPixels(picture);
     assert.ok(accent, "the look's own colour still votes");
     const gap = hueGap(hueOfHex(accent), hueOfHex(`#${matte.map((v) => v.toString(16).padStart(2, "0")).join("")}`));
-    assert.ok(gap > 40, `the detail's hue wins over matte ${matte.join(",")} (got ${accent}, ${Math.round(gap)}° away)`);
+    assert.ok(
+      gap > 40,
+      `the detail's hue wins over matte ${matte.join(",")} (got ${accent}, ${Math.round(gap)}° away)`,
+    );
   }
   assert.equal(accentFromPixels(repeat(400, [0, 255, 0])), null, "a backdrop alone picks nothing");
   assert.equal(accentFromPixels(repeat(400, [120, 120, 120])), null, "grey never votes");
   assert.equal(accentFromPixels(repeat(400, [0, 255, 0, 0])), null, "transparent pixels never vote");
+});
+
+test("a backdrop split either side of a bucket edge is still recognised and dropped", () => {
+  // A painted backdrop is not one exact RGB value: its pixels land on both sides of a 15° bucket edge. Matte hues are
+  // 120, 180 and 300, each exactly on an edge, so half the backdrop falls in each neighbour. Kept apart, neither half is
+  // most of the picture and the backdrop would win on vividness; added together, the backdrop is dropped.
+  const fromHsl = (hue: number) => {
+    const h = ((hue % 360) + 360) % 360;
+    const c = 1;
+    const x = 1 - Math.abs(((h / 60) % 2) - 1);
+    const [r, g, b] =
+      h < 60
+        ? [c, x, 0]
+        : h < 120
+          ? [x, c, 0]
+          : h < 180
+            ? [0, c, x]
+            : h < 240
+              ? [0, x, c]
+              : h < 300
+                ? [x, 0, c]
+                : [c, 0, x];
+    return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)] as [number, number, number];
+  };
+  const details = { 120: [0, 200, 255] as const, 180: [230, 60, 90] as const, 300: [60, 200, 90] as const };
+  for (const matte of [120, 180, 300] as const) {
+    const below = fromHsl(matte - 2);
+    const above = fromHsl(matte + 2);
+    assert.ok(hueGap(hueOfHex(`#${below.map((v) => v.toString(16).padStart(2, "0")).join("")}`), matte) < 5);
+    const picture = [...repeat(450, [...below]), ...repeat(450, [...above]), ...repeat(8, [...details[matte]])];
+    const accent = accentFromPixels(picture);
+    assert.ok(accent, "the look's own detail still votes");
+    assert.ok(
+      hueGap(hueOfHex(accent), matte) > 40,
+      `a split matte at ${matte}° is dropped, not picked (got ${accent})`,
+    );
+  }
+});
+
+test("a look dressed in its own matte colour keeps it when it is not most of the picture", () => {
+  // The matte rule drops a backdrop, not a costume: a green dress beside a larger dull coat is not most of the coloured
+  // picture, so its green is picked. Grey and skin never vote, so the coat has to be the other colour here.
+  const dress = repeat(60, [0, 255, 0]);
+  const coat = repeat(200, [120, 90, 40]);
+  const accent = accentFromPixels([...dress, ...coat, ...repeat(400, [120, 120, 120]), ...repeat(20, [230, 210, 197])]);
+  assert.ok(accent);
+  assert.ok(hueGap(hueOfHex(accent), 120) < 40, `the green dress keeps its green (got ${accent})`);
+});
+
+test("two LIs picked in one pass never share a colour, and a failed save hands its colour back", () => {
+  const kai = { id: "li-kai", name: "Kai", accent: "#E7A6B8" };
+  const mir = { id: "li-mir", name: "Mir", accent: "#E7A6B8" };
+  const cast = [kai, mir];
+  const picked = new Map<string, string>();
+  // Both portraits sample the same cyan in the same pass.
+  const first = castAccentFor(kai, "#2FB7D6", cast, picked);
+  picked.set(kai.id, first);
+  const second = castAccentFor(mir, "#2FB7D6", cast, picked);
+  assert.notEqual(second, first, "the second sibling cannot take the colour the first already chose");
+  assert.ok(hueGap(hueOfHex(first), hueOfHex(second)) >= 30);
+  // A save that fails gives its colour back: the next sibling may take it.
+  const third = { id: "li-sol", name: "Sol", accent: "#E7A6B8" };
+  const retried = new Map<string, string>();
+  const taken = castAccentFor(kai, "#2FB7D6", [kai, third], retried);
+  retried.set(kai.id, taken);
+  retried.delete(kai.id); // the POST failed
+  assert.equal(castAccentFor(third, "#2FB7D6", [kai, third], retried), taken, "the freed colour is available again");
 });
 
 test("the cast ends up with a different accent each", () => {
@@ -104,7 +180,13 @@ test("the unit keeps the picker version and the run view carries it to the clien
   assert.equal(normalizeUnit({}).accentSampler, 0, "an LI written before this change has no picker");
   assert.equal(normalizeUnit({ accent: "#112233", accentSampler: 2 }).accentSampler, 2);
   const world = normalizeWorld({ setting: "x" })!;
-  const player = normalizePlayer({ personaId: "", name: "Ines", pronouns: { subject: "she", object: "her", possessive: "her" }, goal: "", about: "" })!;
+  const player = normalizePlayer({
+    personaId: "",
+    name: "Ines",
+    pronouns: { subject: "she", object: "her", possessive: "her" },
+    goal: "",
+    about: "",
+  })!;
   const unit = normalizeUnit({ id: "li-kai", name: "Kai", accent: "#112233", accentSampler: 2 });
   const view = toRunView("run-key", world, player, [unit], normalizeState({ lis: { "li-kai": {} } }));
   assert.equal(view.lis[0]!.accentSampler, 2);

@@ -111,9 +111,13 @@ function looksLikeMatte(red: number, green: number, blue: number, chroma: number
   return MATTE_HUES.some((matte) => hueGap(hue, matte) <= 18);
 }
 
-/** 24 hues of 15° (a 360° wheel, so a 15° bucket keeps a red either side of 0 together). */
+/**
+ * 24 hues of 15°. The buckets are CENTRED on the matte hues (120, 180, 300) by the half-bucket offset below, so a painted
+ * backdrop whose pixels fall either side of a boundary is counted as one hue instead of being split in two.
+ */
 const BUCKETS = 24;
 const BUCKET_DEGREES = 360 / BUCKETS;
+const bucketOf = (hue: number) => Math.floor((hue + BUCKET_DEGREES / 2) / BUCKET_DEGREES) % BUCKETS;
 
 /**
  * His accent from RGBA pixels: the most vivid hue the picture actually carries (see the file header), in a soft,
@@ -135,7 +139,7 @@ export function accentFromPixels(data: ArrayLike<number>): string | null {
     // Grey (skin in shadow, hair, the surface) says nothing about who he is; only colour votes.
     if (alpha < 0.5 || chroma < 0.2) continue;
     const weight = alpha;
-    const bucket = Math.floor(hueOf(red, green, blue) / BUCKET_DEGREES) % BUCKETS;
+    const bucket = bucketOf(hueOf(red, green, blue));
     weightOf[bucket]! += weight;
     chromaOf[bucket]! += chroma * weight;
     const sums = sumOf[bucket]!;
@@ -145,8 +149,9 @@ export function accentFromPixels(data: ArrayLike<number>): string | null {
     total += weight;
   }
   if (total < 1) return null;
-  // The backdrop, when it is one: the biggest hue, in a matte colour and most of the picture. Dropped, so the backdrop
-  // never becomes his colour; a look dressed in its matte's own colour keeps it only when it is not most of the picture.
+  // The backdrop, when it is one: a matte hue that is most of the picture. Buckets are centred on the matte hues (below),
+  // so a painted backdrop whose pixels fall either side of an edge is counted as one, and the backdrop never becomes his
+  // colour. A look dressed in its matte's own colour keeps it when it is not most of the picture.
   let best = 0;
   for (let bucket = 1; bucket < BUCKETS; bucket += 1) if (weightOf[bucket]! > weightOf[best]!) best = bucket;
   if (weightOf[best]! > total / 2) {
@@ -220,11 +225,7 @@ export function pickDistinctAccent(sampled: string, name: string, others: readon
       (other) =>
         hueGap(
           hue,
-          hueOf(
-            parseInt(other.slice(1, 3), 16),
-            parseInt(other.slice(3, 5), 16),
-            parseInt(other.slice(5, 7), 16),
-          ),
+          hueOf(parseInt(other.slice(1, 3), 16), parseInt(other.slice(3, 5), 16), parseInt(other.slice(5, 7), 16)),
         ) < DISTINCT_GAP,
     );
   };
@@ -233,4 +234,18 @@ export function pickDistinctAccent(sampled: string, name: string, others: readon
     if (HEX.test(candidate) && !clashes(candidate)) return candidate;
   }
   return sampled;
+}
+
+/**
+ * The accent `me` gets from `sampled`, distinct from the rest of `cast`: a sibling's colour already chosen in this pass
+ * (`picked`) counts even before its save has landed, so two portraits that sample alike cannot both keep that colour.
+ */
+export function castAccentFor(
+  me: { id: string; name: string },
+  sampled: string,
+  cast: ReadonlyArray<{ id: string; name: string; accent: string; accentSampler?: number }>,
+  picked: ReadonlyMap<string, string>,
+): string {
+  const others = cast.filter((item) => item.id !== me.id).map((item) => picked.get(item.id) ?? accentOf(item));
+  return pickDistinctAccent(sampled, me.name, others);
 }
