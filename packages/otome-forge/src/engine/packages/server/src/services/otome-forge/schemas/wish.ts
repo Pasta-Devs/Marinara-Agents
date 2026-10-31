@@ -7,6 +7,7 @@ import { z, type ZodType } from "zod";
 import {
   BANNER_KINDS,
   ITEM_KINDS,
+  SEASONS,
   isItemId,
   type Banner,
   type Item,
@@ -53,6 +54,7 @@ export function normalizeBanner(data: unknown): Banner {
       rotation: z.number().int().min(0),
       startsDay: z.string().max(10),
       endsDay: z.string().max(10),
+      season: z.enum(SEASONS).optional(),
       featuredLi: z.string().max(80),
       items: (value) => ({
         five: itemIds(field(value, "five")),

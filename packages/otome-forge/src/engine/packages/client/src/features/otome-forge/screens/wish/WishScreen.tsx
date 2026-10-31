@@ -2,7 +2,8 @@
 // Otome Forge: Wish. This fortnight's banners (Memories, a love interest's Wardrobe, My Wardrobe) and every past one in
 // Echoes, each with the exact pity count; Starlight is the only currency, earned in play. A wish never calls a model:
 // the server charges and rolls in one write and answers with what arrived, which comes in a sealed letter, a 5★ reveal
-// for each 5★, and the results. Skip always goes straight to the results.
+// for each 5★, and the results. Skip always goes straight to the results. A month's seasonal banners (SH/wish.ts
+// rotationSeason) wear a badge naming the month and its theme, here and in Echoes.
 // ──────────────────────────────────────────────
 // Routes (S/routes/wish.ts): GET /runs/:run/wish → WishView; POST .../wish/open → WishOpenResult (writes the banners
 // this fortnight is missing: one model call, and their art unless Ask before painting holds it); POST .../wish/pull
@@ -50,6 +51,7 @@ import {
   type PullCount,
   type PullResult,
   type Rarity,
+  type Season,
   type SelectorView,
   type WishOpenResult,
   type WishPullResponse,
@@ -88,6 +90,27 @@ export function formatDay(dayKey: string, locale: string): string {
   if (!match) return dayKey;
   const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
   return new Intl.DateTimeFormat(locale, { month: "long", day: "numeric", timeZone: "UTC" }).format(date);
+}
+
+const SEASON_KEYS: Record<Season, string> = {
+  "new-year": "ui.otomeForge.wish.seasonNewYear",
+  "valentines-day": "ui.otomeForge.wish.seasonValentinesDay",
+  "white-day": "ui.otomeForge.wish.seasonWhiteDay",
+  "cherry-blossoms": "ui.otomeForge.wish.seasonCherryBlossoms",
+  "gardens-in-bloom": "ui.otomeForge.wish.seasonGardensInBloom",
+  "june-bride": "ui.otomeForge.wish.seasonJuneBride",
+  "summer-festival": "ui.otomeForge.wish.seasonSummerFestival",
+  "summer-nights": "ui.otomeForge.wish.seasonSummerNights",
+  "harvest-moon": "ui.otomeForge.wish.seasonHarvestMoon",
+  halloween: "ui.otomeForge.wish.seasonHalloween",
+  autumn: "ui.otomeForge.wish.seasonAutumn",
+  christmas: "ui.otomeForge.wish.seasonChristmas",
+};
+
+/** A seasonal banner's badge ("October · Halloween"); nothing for any other. */
+function SeasonBadge({ season }: { season: Season | undefined }) {
+  const { t } = useTranslation();
+  return season ? <span className="of-badge of-banner-season">{t(SEASON_KEYS[season])}</span> : null;
 }
 
 /** A pull's id: kept until the pull is answered, so a retry is the same pull. */
@@ -538,6 +561,7 @@ function BannerPanel({ view, banner, wish, actions, pulling, error, onPull, onBa
         )}
         <span className="of-banner-shade" aria-hidden="true" />
         <div className="of-banner-caption">
+          <SeasonBadge season={banner.season} />
           <p className="of-banner-eyebrow">
             {banner.echo
               ? t("ui.otomeForge.wish.echoDates", {
@@ -746,6 +770,7 @@ function EchoList({ view, wish, onOpen }: { view: RunView; wish: WishView; onOpe
                       to: formatDay(banner.endsDay, locale),
                     })}
                   </span>
+                  <SeasonBadge season={banner.season} />
                 </span>
                 {banner.five.owned ? (
                   <span className="of-badge of-badge--soft">{t("ui.otomeForge.wish.owned")}</span>

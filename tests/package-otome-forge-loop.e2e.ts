@@ -183,8 +183,10 @@ function memoriesBanner(): Json {
     key,
     kind: "memories",
     rotation: 1,
-    startsDay: "2026-10-28",
-    endsDay: "2026-11-10",
+    // A month's first rotation (it starts on the 1st to the 14th): seasonal, so it wears November's badge.
+    startsDay: "2026-11-04",
+    endsDay: "2026-11-17",
+    season: "autumn",
     featuredLi: ILVAR,
     title: "Clockwork Hearts",
     echo: false,
@@ -668,7 +670,7 @@ function createLoopStub({ seeded = false } = {}) {
           pity: wish ? { ...PITY, memories: { fiveIn: 60, fourIn: 10 } } : PITY,
           creating: false,
           missing: [],
-          rotation: { number: 1, startsDay: "2026-10-28", endsDay: "2026-11-10" },
+          rotation: { number: 1, startsDay: "2026-11-04", endsDay: "2026-11-17" },
           selectors: [],
         },
       };
@@ -1379,6 +1381,7 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await expect(root.getByRole("heading", { level: 1, name: "Wish" })).toBeFocused();
     const banner = root.getByRole("region", { name: "Clockwork Hearts" });
     await expect(banner.getByText("5★ in 37")).toBeVisible();
+    await expect(banner.locator(".of-banner-caption .of-banner-season")).toHaveText("November · Autumn");
     await auditScreen(page, root, "wish");
     const one = banner.getByRole("button", { name: /^Wish ×1,/u });
     await one.focus();

@@ -72,6 +72,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.6.5",
+          "date": "2026-10-31",
+          "notes": "- Seasonal banners: the first fortnight that starts in each month brings three banners on that month's theme, with a badge such as **October · Halloween**: New Year in January, Valentine's Day in February, through Halloween in October, autumn in November and Christmas in December. A world without the holiday gets its own version of it. Later fortnights that month are your model's free choice, as before.",
+          "highlight": false
+        },
+        {
           "version": "0.6.4",
           "date": "2026-10-31",
           "notes": "- **Your cast** and **Your stories** moved from **Who's home** to **Settings → Stories**, each with a line on what it's for. **Who's home** now only picks who's home.",
@@ -183,12 +189,6 @@
           "version": "0.1.15",
           "date": "2026-10-29",
           "notes": "- Opening narration no longer previews the portrait of a love interest whose speaking turn has not been reached. Established speakers can still stay visible during later narration.\n\n- The pre-chapter warning places its Ease off feather after the guidance sentence.\n\n- Harmful story/date choices and Confrontation outcomes can reduce Affection progress within the current level. Unlocked levels stay permanent, and replaying never repeats the deduction or refunds daily earning limits.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.14",
-          "date": "2026-10-29",
-          "notes": "- Album Memories can be filtered by 3★, 4★ or 5★, with unplayed content listed first.\n\n- Owned 3★ Snapshots can be illustrated on first opening through the existing image connection, confirmation and prompt review flow. Paintings are saved and reused; old vignettes and story progress stay intact.",
           "highlight": false
         }
       ]
