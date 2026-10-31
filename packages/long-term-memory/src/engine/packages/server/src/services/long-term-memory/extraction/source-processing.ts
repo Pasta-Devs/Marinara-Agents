@@ -483,7 +483,17 @@ async function commitPreparedLongTermMemorySource(
           })
         : null;
     const finalDraft = applyResult?.draft ?? draft;
-    return { draft: finalDraft, note, applyResult, response, diagnostics, outcome, accounting, reviewRequired };
+    return {
+      draft: finalDraft,
+      note,
+      fingerprintPersisted,
+      applyResult,
+      response,
+      diagnostics,
+      outcome,
+      accounting,
+      reviewRequired,
+    };
   });
 }
 
@@ -624,6 +634,7 @@ export async function processLongTermMemorySourceBatch(options: {
         accounting: committed.accounting,
         appliedMutationIds: committed.applyResult?.appliedMutationIds ?? [],
         skippedMutationIds: committed.applyResult?.skippedMutationIds ?? [],
+        markedCurrent: committed.fingerprintPersisted,
       } as LtmImportedSourceResult;
     } catch (error) {
       return failed(item, prepared.extractionMethod, "finalize", error, cancelled(error, options.signal), prepared);

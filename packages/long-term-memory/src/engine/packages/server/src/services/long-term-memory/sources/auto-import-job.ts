@@ -159,11 +159,11 @@ async function runLtmAutoImport(job: Job, key: string, signal: AbortSignal) {
       );
       // Deactivation returns the batch as cancelled instead of throwing; that is neither a failure nor a block.
       signal.throwIfAborted();
-      // A source whose extraction dropped units or logged an error is saved without a fingerprint and stays pending.
+      // An extraction that dropped units or logged an error does not save the source's fingerprint: a new source stays
+      // pending and an edited one keeps its old fingerprint, so both still show in the preview.
       const failed =
         result.writeFailures.length +
-        result.imported.filter((item) => item.extractionStatus !== "succeeded" || !item.note?.extractionFingerprint)
-          .length;
+        result.imported.filter((item) => item.extractionStatus !== "succeeded" || !item.markedCurrent).length;
       const complete = failed === 0;
       if (complete) blocked.delete(blockKey);
       else blocked.set(blockKey, signature);

@@ -849,6 +849,35 @@ async function main() {
       );
       await autoImport(droppingChat.id);
       assert.equal(prompts.length, 1, "the unfinished selection is not extracted on every reply");
+
+      // The same for an edited source, whose note keeps the fingerprint of the text it was imported from.
+      const dropping = respond;
+      respond = () => [];
+      const editedChat = {
+        ...roleplayChat,
+        id: "chat-auto-edited",
+        name: "Edited",
+        metadata: { summaryEntries: [{ id: "sum-edit", content: "The gate is shut." }] },
+      };
+      chats.push(editedChat);
+      messages.set(editedChat.id, [message(editedChat.id, "e1", "user", "The tail.")]);
+      const editedFreshness = async () =>
+        (await previewPackageInterop({ source: "chats", chatId: editedChat.id, limit: 100 }, autoRoot)).samples.find(
+          (sample) => sample.sourceId.startsWith(`${editedChat.id}:`),
+        )?.freshness;
+      prompts.length = 0;
+      await autoImport(editedChat.id);
+      assert.equal(prompts.length, 1, "the summary is imported");
+      assert.equal(await editedFreshness(), "current");
+      editedChat.metadata.summaryEntries[0]!.content = "The gate is open.";
+      assert.equal(await editedFreshness(), "source_updated");
+      respond = dropping;
+      await autoImport(editedChat.id);
+      assert.equal(prompts.length, 2, "the edited summary is extracted again");
+      assert.equal((await autoEvents(editedChat.id)).at(-1)?.status, "error", "a dropped unit is logged as unfinished");
+      assert.equal(await editedFreshness(), "source_updated", "the source still shows as edited");
+      await autoImport(editedChat.id);
+      assert.equal(prompts.length, 2, "the unfinished edit is not extracted on every reply");
       respond = () => [];
       prompts.length = 0;
 
