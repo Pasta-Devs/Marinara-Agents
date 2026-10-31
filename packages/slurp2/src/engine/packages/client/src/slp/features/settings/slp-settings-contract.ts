@@ -130,6 +130,7 @@ export type SlurpSettings = {
   enableLorebookContext: boolean;
   flavourFromAgents: boolean;
   memoryRecall: "whole" | "relevant";
+  shareWithMemory: boolean;
   postPlanner: "classic" | "beats";
   lifeMomentRate: "rarely" | "sometimes" | "often";
   /** One weight per Story job (0-10, 0 = never); `SLURP_STORY_JOB_DEFAULTS` is balanced. */

@@ -1,5 +1,10 @@
 # Slurp release notes
 
+## Unreleased
+
+- Slurp can tell Long-Term Memory what is true about your Creators, so chats know it too. A new "Tell Long-Term Memory about your Creators" switch in Backstage (Engine link) is off by default. From then on, facts you write or promote, couples and friendships between Creators, and how storylines end become memories. Nothing from fans or DM threads is sent. Turning it on asks whether to turn on Long-Term Memory's "Other Agents can add memories" when that is off.
+- Slurp's own facts no longer come back to Creators as memories, so they are not told twice.
+
 ## 0.4.14 — 2026-10-31
 
 - Fixed: nude and explicit pictures showed everyday clothes. A post at the nudity or explicit level (after access and intent) now picks only intimate wardrobe looks (lingerie, swimwear, a towel, nude and similar by name, summary, description or tag), never falls back to an everyday look, and the writer may return no look.

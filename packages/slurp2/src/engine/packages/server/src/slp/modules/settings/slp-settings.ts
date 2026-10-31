@@ -301,12 +301,10 @@ export const slurpSettingsSchema = z.object({
     )
     .max(100),
   enableLorebookContext: z.boolean(),
-  /**
-   * Let Creators read what the player's other Agents know about them (Long-Term Memory, trackers).
-   * Read-only. See `slp-agent-memory-source.ts`, `slp-ltm-recall.ts`; `memoryRecall` picks whole or relevant.
-   */
+  /** Creators read, read-only, what the player's other Agents know (`slp-agent-memory-source.ts`, `slp-ltm-recall.ts`). */
   flavourFromAgents: z.boolean(),
   memoryRecall: z.enum(["whole", "relevant"]),
+  shareWithMemory: z.boolean(), // Tell Long-Term Memory about the Creators; off by default (`slp-ltm-intake.ts`).
   /**
    * How ordinary posts are planned. `classic` lets the model pick the subject; `beats` picks a
    * concrete beat from the Creator's card first. See `modules/feed/slp-post-beat.ts`.
@@ -572,6 +570,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   enableLorebookContext: false,
   flavourFromAgents: true,
   memoryRecall: "relevant",
+  shareWithMemory: false,
   // Beats by default since 0.2.55: the fixes for same-y, canon-less, tame posts live there.
   postPlanner: "beats",
   lifeMomentRate: "sometimes",

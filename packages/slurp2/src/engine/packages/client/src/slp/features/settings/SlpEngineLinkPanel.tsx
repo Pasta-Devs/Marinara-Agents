@@ -20,20 +20,36 @@ export function SlpEngineLinkPanel({ t, settings, update }: SlpBackstagePageProp
   const reach = useSlurpCarryoverReach(settings.carryoverModes.length > 0).data;
   const memoryStatus = useSlurpMemoryStatus(settings.flavourFromAgents).data?.status;
   const queryClient = useQueryClient();
-  const offerSharing = () =>
+  const offerSharing = (setting?: "longTermMemoryAcceptFromPackages") =>
     offerLtmSharing({
-      read: () => api.get<{ longTermMemoryShareWithPackages?: boolean }>("/long-term-memory/settings"),
+      setting,
+      read: () =>
+        api.get<{ longTermMemoryShareWithPackages?: boolean; longTermMemoryAcceptFromPackages?: boolean }>(
+          "/long-term-memory/settings",
+        ),
       confirm: () =>
-        showConfirmDialog({
-          title: t("ui.slurp.settings.prompts.ltmSharingOfferTitle"),
-          message: t("ui.slurp.settings.prompts.ltmSharingOfferMessage"),
-          confirmLabel: t("ui.slurp.settings.prompts.ltmSharingOfferConfirm"),
-          cancelLabel: t("ui.slurp.settings.prompts.ltmSharingOfferCancel"),
+        showConfirmDialog(
+          setting
+            ? {
+                title: t("ui.slurp.settings.prompts.ltmAcceptOfferTitle"),
+                message: t("ui.slurp.settings.prompts.ltmAcceptOfferMessage"),
+                confirmLabel: t("ui.slurp.settings.prompts.ltmSharingOfferConfirm"),
+                cancelLabel: t("ui.slurp.settings.prompts.ltmSharingOfferCancel"),
+              }
+            : {
+                title: t("ui.slurp.settings.prompts.ltmSharingOfferTitle"),
+                message: t("ui.slurp.settings.prompts.ltmSharingOfferMessage"),
+                confirmLabel: t("ui.slurp.settings.prompts.ltmSharingOfferConfirm"),
+                cancelLabel: t("ui.slurp.settings.prompts.ltmSharingOfferCancel"),
+              },
+        ),
+      save: () =>
+        api.put("/long-term-memory/settings", {
+          [setting ?? "longTermMemoryShareWithPackages"]: true,
         }),
-      save: () => api.put("/long-term-memory/settings", { longTermMemoryShareWithPackages: true }),
     })
       .then((result) => {
-        if (result === "enabled")
+        if (result === "enabled" && !setting)
           void queryClient.invalidateQueries({ queryKey: [...slpKeys.settings(), "memory-status"] });
       })
       .catch((error) => toast.error(errorMessage(error)));
@@ -147,6 +163,16 @@ export function SlpEngineLinkPanel({ t, settings, update }: SlpBackstagePageProp
             )}
           </>
         )}
+        <Toggle
+          settingKey="shareWithMemory"
+          label={t("ui.slurp.settings.prompts.shareWithMemory")}
+          detail={t("ui.slurp.settings.prompts.shareWithMemoryDetail")}
+          value={settings.shareWithMemory}
+          onChange={(value) => {
+            update("shareWithMemory", value);
+            if (value) void offerSharing("longTermMemoryAcceptFromPackages");
+          }}
+        />
       </SettingsGroup>
     </div>
   );
