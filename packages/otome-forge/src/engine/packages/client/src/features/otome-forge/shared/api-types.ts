@@ -834,6 +834,11 @@ export interface Segment {
   place?: string;
   /** The speaker's voice ("male" | "female"), from the beat's `voices`. */
   gender?: string;
+  /**
+   * #2024: the love interests no longer with the protagonist from this line (they leave, or she leaves them behind); the
+   * stage stops showing them until they speak again.
+   */
+  exits?: LiId[];
 }
 
 export interface ChoiceOption {

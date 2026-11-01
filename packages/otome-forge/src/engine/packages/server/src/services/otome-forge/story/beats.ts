@@ -203,6 +203,17 @@ function speakerLi(context: BeatContext, speaker: string) {
   return context.units.find((unit) => sameName(speaker, unit.name));
 }
 
+/** The love interests a segment's raw `exits` names (#2024), as their ids, by id or name; anyone else is dropped. */
+function exitsOf(context: BeatContext, raw: unknown): LiId[] {
+  const ids = new Set<LiId>();
+  for (const value of Array.isArray(raw) ? raw : [raw]) {
+    const name = str(value, NAME_MAX);
+    const li = name ? (context.units.find((unit) => unit.id === name) ?? speakerLi(context, name)) : undefined;
+    if (li) ids.add(li.id);
+  }
+  return [...ids];
+}
+
 /**
  * Why the reply's thoughts break the rules (a love interest's thought before stage 2, or two in one scene), or "".
  * `counts` holds each love interest's thoughts read on the way to these segments, and gets theirs added.
@@ -224,8 +235,8 @@ function thoughtProblem(context: BeatContext, segments: unknown[], counts = new 
 
 /**
  * One segment list (the mainline, or a choice's branch) in its saved shape, GF's normalizer reduced to Otome's needs:
- * text required, faces only on a speaker's line, places resolved and carried over (at most four in a beat), and the
- * music cue and CG brief on the mainline. Null when nothing usable is left.
+ * text required, faces only on a speaker's line, exits only for known love interests, places resolved and carried over
+ * (at most four in a beat), and the music cue and CG brief on the mainline. Null when nothing usable is left.
  */
 export function normalizeBeatBody(raw: unknown, options: NormalizeOptions): BeatBody | null {
   if (!raw || typeof raw !== "object") return null;
@@ -260,6 +271,8 @@ export function normalizeBeatBody(raw: unknown, options: NormalizeOptions): Beat
     if (source.thought === true || source.thought === "true") segment.thought = true;
     const expression = segment.speaker ? normalizeForgeStoryExpression(source.expression, FACES) : "";
     if (expression) segment.expression = expression as Segment["expression"];
+    const exits = exitsOf(options.context, source.exits);
+    if (exits.length) segment.exits = exits;
     place = resolve(source.place) || place || (options.start ? resolve(options.start) : "");
     if (place) segment.place = place;
     segments.push(segment);
