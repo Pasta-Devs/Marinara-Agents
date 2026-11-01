@@ -3751,6 +3751,8 @@ test("Otome Hearth shows prestige past level 10 and writes an unlocked extra sto
   const fixture = createSceneStub({ images: false, audio: false });
   const lis = fixture.stub.view.lis as Json[];
   const MARIN = "li-marin-0004";
+  // A love interest below level 10 keeps the affection meter and gets no prestige row.
+  Object.assign(lis[0]!, { level: 4, affectionProgress: { current: 40, required: 300 } });
   lis.push({
     ...lis[2]!,
     id: MARIN,
