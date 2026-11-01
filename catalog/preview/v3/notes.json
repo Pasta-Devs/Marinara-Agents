@@ -72,9 +72,15 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.6.14",
+          "date": "2026-11-01",
+          "notes": "- **Confrontation and Closer choices speak to you.** Their option buttons sometimes talked about you in the third person (\"Say what she pays\") instead of speaking to you (\"Say what you pay\"), unlike every other choice in the story. They now always read as something you do, and an action you pick is told as \"you\", like the rest of the scene. Confrontations and Closers written before this update keep their old wording.",
+          "highlight": false
+        },
+        {
           "version": "0.6.13",
           "date": "2026-11-01",
-          "notes": "- **A love interest's sprite leaves the stage when he does.** When he walked out of a scene, or the heroine left him behind, his sprite used to stay on screen until the end of the beat, as if he were still there. The writer now marks who leaves on that line, and the stage clears from there; he comes back the moment he speaks again, and anyone still in the scene stays. Scenes written before this update keep their old staging.",
+          "notes": "- **A love interest's sprite leaves the stage when he does.** When he walked out of a scene, or you left him behind, his sprite used to stay on screen until the end of the beat, as if he were still there. The writer now marks who leaves on that line, and the stage clears from there; he comes back the moment he speaks again, and anyone still in the scene stays. Scenes written before this update keep their old staging.",
           "highlight": false
         },
         {
@@ -183,12 +189,6 @@
           "version": "0.4.2",
           "date": "2026-10-30",
           "notes": "- The Love Timeline shows every 4★ Moment and 5★ Memory you've won, on the day you won it, including ones won before this update. Each Snapshot, Moment and Memory says what it is and opens in the Album.",
-          "highlight": false
-        },
-        {
-          "version": "0.4.1",
-          "date": "2026-10-30",
-          "notes": "- The story's **Image description** shows only for a picture that isn't on screen: a painted background or key image no longer has its description under the chapter title, and one whose file fails to load gets it back.\n- NSFW stories now say outright that crude and vulgar words, swearing and dirty talk included, are fine wherever they fit a character's voice. In SFW stories characters may swear too, without the sexual words.\n- A 5★ reveal with a long premise fits on a phone: the card never grows past the screen, so the title shows whole and the premise scrolls inside it.",
           "highlight": false
         }
       ]

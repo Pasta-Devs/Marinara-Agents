@@ -1,8 +1,12 @@
 # Otome Hearth release notes
 
+## 0.6.14 — 2026-11-01
+
+- **Confrontation and Closer choices speak to you.** Their option buttons sometimes talked about you in the third person ("Say what she pays") instead of speaking to you ("Say what you pay"), unlike every other choice in the story. They now always read as something you do, and an action you pick is told as "you", like the rest of the scene. Confrontations and Closers written before this update keep their old wording.
+
 ## 0.6.13 — 2026-11-01
 
-- **A love interest's sprite leaves the stage when he does.** When he walked out of a scene, or the heroine left him behind, his sprite used to stay on screen until the end of the beat, as if he were still there. The writer now marks who leaves on that line, and the stage clears from there; he comes back the moment he speaks again, and anyone still in the scene stays. Scenes written before this update keep their old staging.
+- **A love interest's sprite leaves the stage when he does.** When he walked out of a scene, or you left him behind, his sprite used to stay on screen until the end of the beat, as if he were still there. The writer now marks who leaves on that line, and the stage clears from there; he comes back the moment he speaks again, and anyone still in the scene stays. Scenes written before this update keep their old staging.
 
 ## 0.6.12 — 2026-11-01
 
