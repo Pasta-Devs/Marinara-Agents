@@ -25,6 +25,8 @@
 // so the plans, scenes, Confrontations and Closers moved.
 // #2024: scenes, Confrontations and Closers mark the segment where a love interest leaves or the protagonist leaves
 // them behind (`exits`), so the beat, CG beat, confrontation and closer digests moved.
+// #2030: a Confrontation's and a Closer's option labels speak to the player as "you", never "she", so the confrontation
+// and closer digests moved.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
@@ -247,8 +249,8 @@ const EXPECTED_ANGST: Record<string, string> = {
   beat: "b9d41f52d74d34e5",
   beatWithCg: "e11fb5968884ff3e",
   chapterPlan: "74761bd5e5df5cd5",
-  closer: "744c792d2800c5f8",
-  confrontation: "d47297a01a3bba46",
+  closer: "02a539da5c6abab6",
+  confrontation: "ec2661b784e78c25",
   repairPlan: "d7ab0afffa32c5c2",
   routePlan: "2c67d3b53c9ef867",
 };
@@ -259,8 +261,8 @@ const EXPECTED_GENTLE: Record<string, string> = {
   beat: "1605bd5618584203",
   beatWithCg: "ac045989ddd56ba0",
   chapterPlan: "6bcb0a19cd26c4fe",
-  closer: "a3ff294fb5551d79",
-  confrontation: "2717379a9b2c5656",
+  closer: "580321b73773a580",
+  confrontation: "cbe64f0437cb7488",
   repairPlan: "2b00d0b73698377e",
   routePlan: "b103900d16ec32e9",
 };
