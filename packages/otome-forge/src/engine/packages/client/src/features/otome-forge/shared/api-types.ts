@@ -5,6 +5,7 @@
 import type { ClimaxEnding, ClimaxMove, RouteEntry } from "./arcs";
 import type { ContentSettings, ImageRating, LimitId } from "./content";
 import type { DatePlan, DateScore } from "./dates";
+import type { Prestige, PrestigeKind } from "./economy";
 import type { Face, MusicMood } from "./faces";
 import type { ClawRound } from "./claw";
 import type { ReadHimPaid } from "./read-him";
@@ -752,7 +753,7 @@ export interface WishPullRecord {
 }
 
 // ── Story (M2a): chapters, beats, choices. Chapter keys: `main-<n>`, `route-<li>-<stage>`, `repair-<li>-<n>`,
-// `story-<itemId>`, `date-<n>`. ──
+// `story-<itemId>`, `prestige-<li>-<n>` (#2025), `date-<n>`. ──
 
 export type ChapterKind = "prologue" | "main" | "route" | "repair" | "story" | "date";
 /** `confrontation` and `closer` (#1938) are a chapter's climax: a main chapter has exactly one of them. */
@@ -820,6 +821,11 @@ export interface Chapter {
   voicedLine?: string;
   /** A date's own plan (M5, SH/dates.ts); hidden from the chapter view. */
   date?: DatePlan;
+  /**
+   * An extra story (#2025, kind "story", key `prestige-<li>-<n>`): imagined together for fun, never canon. Its kind and
+   * premise frame every node.
+   */
+  prestige?: { kind: PrestigeKind; premise: string };
 }
 
 /** A segment of a beat: one line of dialogue, one thought, or one piece of narration. */
@@ -1006,7 +1012,7 @@ export type ChapterState = "unplanned" | "in-progress" | "done";
 export type BeatState = "unwritten" | "ready" | "read";
 
 /** A chapter as the client sees it: no guides and no ledger (the plan is the hidden story). */
-export type ChapterView = Omit<Chapter, "nodes" | "ledger" | "connectionId" | "date" | "music"> & {
+export type ChapterView = Omit<Chapter, "nodes" | "ledger" | "connectionId" | "date" | "music" | "prestige"> & {
   music?: Pick<ChapterMusic, "track">;
   nodes: Array<Pick<ChapterNode, "i" | "kind" | "moment" | "cg" | "gate">>;
 };
@@ -1109,6 +1115,17 @@ export interface StoryView {
   arc: StoryArcView | null;
   /** The ways on once an arc has ended, and no next arc is planned yet; null while one is being played. */
   arcChoice: { options: ArcChoice[]; castFull: boolean } | null;
+  /**
+   * #2025: each love interest with an extra story unlocked and not written yet, and the chapter key it will have (POST
+   * /runs/:run/prestige/:li writes it). Optional while an older view is cached.
+   */
+  prestige?: PrestigeEntry[];
+}
+
+/** An unlocked extra story waiting to be written (#2025). */
+export interface PrestigeEntry {
+  li: LiId;
+  key: string;
 }
 
 /** GET /runs/:run/chapters/:key */
@@ -1188,6 +1205,8 @@ export interface RunLiView {
   level: number;
   /** Current-level progress only; optional while a pre-update run view remains cached. */
   affectionProgress?: { current: number; required: number };
+  /** At level 10 only (#2025): prestige points, progress toward the next, and the extra stories unlocked. */
+  prestige?: Prestige;
   stage: number;
   /** M2b: his painted faces for the current look, once the whole set is ready and expressions are on. */
   expressions?: Partial<Record<Face, string>>;

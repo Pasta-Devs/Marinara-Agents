@@ -85,9 +85,12 @@ export const stateId = (runId: string) => `${runId}:state`;
 
 // ── The story (M2a). Kinds: "chapter", "beat", "memory". ──
 
-/** `prologue`, `main-<n>`, `route-<li>-<stage>`, `repair-<li>-<n>`, `story-<itemId>` or `date-<n>`. */
+/**
+ * `prologue`, `main-<n>`, `route-<li>-<stage>`, `repair-<li>-<n>`, `story-<itemId>`, `prestige-<li>-<n>` (#2025) or
+ * `date-<n>`.
+ */
 const CHAPTER_KEY =
-  /^(?:prologue|main-[1-9]\d{0,5}|route-li-[a-z0-9-]{3,40}-[1-6]|repair-li-[a-z0-9-]{3,40}-[1-9]\d{0,5}|story-[a-z0-9-]{1,60}|date-[1-9]\d{0,5})$/;
+  /^(?:prologue|main-[1-9]\d{0,5}|route-li-[a-z0-9-]{3,40}-[1-6]|repair-li-[a-z0-9-]{3,40}-[1-9]\d{0,5}|story-[a-z0-9-]{1,60}|prestige-li-[a-z0-9-]{3,40}-[1-9]\d{0,5}|date-[1-9]\d{0,5})$/;
 
 export function isChapterKey(value: unknown): value is string {
   return typeof value === "string" && CHAPTER_KEY.test(value);
@@ -101,10 +104,15 @@ export function mainChapterNumber(key: string): number | null {
   const match = /^main-(\d+)$/.exec(key);
   return match ? Number(match[1]) : null;
 }
-/** The love interest whose own chapter `key` is (`route-<li>-<stage>`, `repair-<li>-<n>`), or null for any other key. */
+/**
+ * The love interest whose own chapter `key` is (`route-<li>-<stage>`, `repair-<li>-<n>`, `prestige-<li>-<n>`), or null
+ * for any other key.
+ */
 export function chapterOwner(key: string): string | null {
-  return /^(?:route|repair)-(li-[a-z0-9-]+)-\d+$/.exec(key)?.[1] ?? null;
+  return /^(?:route|repair|prestige)-(li-[a-z0-9-]+)-\d+$/.exec(key)?.[1] ?? null;
 }
+/** `prestige-<li>-<n>` (#2025): his n-th extra story, unlocked by prestige (S/items/prestige.ts). */
+export const prestigeKey = (li: string, n: number) => `prestige-${li}-${n}`;
 
 /** `${R}:chapter:${key}`: a chapter's plan. */
 export const chapterId = (runId: string, key: string) => `${runId}:chapter:${key}`;

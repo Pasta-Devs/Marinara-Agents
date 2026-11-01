@@ -3,7 +3,8 @@
 // which plans or opens the repair chapter), the chapter being read (Continue), the next main chapter ("Who walks with
 // you this chapter?": the server offers two Leads, the one least recently with her and the one with the ripest
 // conflict; the planner adds a Foil), each love interest's route (his next free chapter, open from an affection level
-// and shut while a rupture is open), each one's affection, and every chapter so far as a path of its scenes.
+// and shut while a rupture is open), each one's affection (past level 10, prestige and the extra story it unlocks:
+// #2025), and every chapter so far as a path of its scenes.
 // Planning a chapter is one model call with Cancel while it runs; a chapter already planned opens with none.
 // ──────────────────────────────────────────────
 import { Fragment, useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
@@ -44,6 +45,7 @@ import type {
   ArcChoice,
   ChapterView,
   LeadReason,
+  PrestigeEntry,
   RepairEntry,
   RouteEntry,
   RunLiView,
@@ -52,6 +54,7 @@ import type {
   StoryView,
 } from "../../shared/api-types";
 import { stageRow, type StageName } from "../../shared/arcs";
+import { PRESTIGE_POINTS_PER_STORY } from "../../shared/economy";
 import { chapterEyebrowKey } from "../reader/ReaderControls";
 
 const MAX_LEVEL = 10;
@@ -133,6 +136,7 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
   const { chapters, next } = story.data;
   const routes = Array.isArray(story.data.routes) ? story.data.routes : [];
   const repairs = Array.isArray(story.data.repairs) ? story.data.repairs : [];
+  const prestige = Array.isArray(story.data.prestige) ? story.data.prestige : [];
   // A main chapter in progress is the one to continue; a route or repair chapter has its own card.
   const reading =
     chapters.find((chapter) => chapter.state === "in-progress" && chapter.kind === "main") ??
@@ -212,7 +216,12 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
           }}
         />
       ) : null}
-      <Affection lis={view.lis} />
+      <Affection
+        lis={view.lis}
+        images={view.world.images}
+        prestige={prestige}
+        onPrestige={(entry) => openArc({ kind: "prestige", li: entry.li, key: entry.key })}
+      />
       {chapters.length ? <ChapterList chapters={chapters} view={view} onOpen={onOpenChapter} /> : null}
       {arcPlan ? (
         <ArcPlanDialog
@@ -336,8 +345,21 @@ function NodePath({
   );
 }
 
-/** Each love interest's affection level (1–10, it only rises), as ten hearts. */
-function Affection({ lis }: { lis: RunLiView[] }) {
+/**
+ * Each love interest's affection level (1–10, it only rises), as ten hearts. At level 10 (#2025), prestige: three pips,
+ * progress toward the next one, and a way to the extra story three of them unlock, while it waits to be written.
+ */
+function Affection({
+  lis,
+  images,
+  prestige,
+  onPrestige,
+}: {
+  lis: RunLiView[];
+  images: RunView["world"]["images"];
+  prestige: PrestigeEntry[];
+  onPrestige: (entry: PrestigeEntry) => void;
+}) {
   const { t } = useTranslation();
   return (
     <section className="of-section of-glass" aria-labelledby="of-story-affection">
@@ -371,7 +393,25 @@ function Affection({ lis }: { lis: RunLiView[] }) {
               <span className="of-affection-level" aria-hidden="true">
                 {t("ui.otomeForge.story.level", { level })}
               </span>
-              {li.affectionProgress ? (
+              {level === MAX_LEVEL && li.prestige ? (
+                <span
+                  className="of-affection-progress"
+                  role="meter"
+                  aria-label={t("ui.otomeForge.story.prestigeProgress", { name: li.name })}
+                  aria-valuemin={0}
+                  aria-valuemax={li.prestige.required}
+                  aria-valuenow={li.prestige.current}
+                  aria-valuetext={t("ui.otomeForge.story.prestigeProgressValue", {
+                    current: li.prestige.current,
+                    required: li.prestige.required,
+                  })}
+                >
+                  {t("ui.otomeForge.story.affectionProgressCount", {
+                    current: li.prestige.current,
+                    required: li.prestige.required,
+                  })}
+                </span>
+              ) : li.affectionProgress ? (
                 <span
                   className="of-affection-progress"
                   role="meter"
@@ -388,12 +428,73 @@ function Affection({ lis }: { lis: RunLiView[] }) {
                   {t("ui.otomeForge.story.affectionProgressCount", li.affectionProgress)}
                 </span>
               ) : null}
+              {level === MAX_LEVEL && li.prestige ? (
+                <PrestigeRow
+                  li={li}
+                  images={images}
+                  entry={prestige.find((entry) => entry.li === li.id)}
+                  onOpen={onPrestige}
+                />
+              ) : null}
             </li>
           );
         })}
       </ul>
       <p className="of-hint">{t("ui.otomeForge.story.affectionHint")}</p>
+      {lis.some((li) => li.level >= MAX_LEVEL && li.prestige) ? (
+        <p className="of-hint">{t("ui.otomeForge.story.prestigeHint")}</p>
+      ) : null}
     </section>
+  );
+}
+
+/** "Prestige" and its pips, then "A new story with {{name}}" while an unlocked extra story waits to be written. */
+function PrestigeRow({
+  li,
+  images,
+  entry,
+  onOpen,
+}: {
+  li: RunLiView;
+  images: RunView["world"]["images"];
+  entry: PrestigeEntry | undefined;
+  onOpen: (entry: PrestigeEntry) => void;
+}) {
+  const { t } = useTranslation();
+  const points = li.prestige?.points ?? 0;
+  return (
+    <div className="of-prestige">
+      <span
+        className="of-prestige-pips"
+        role="img"
+        aria-label={t("ui.otomeForge.story.prestigeOf", { name: li.name, points, max: PRESTIGE_POINTS_PER_STORY })}
+      >
+        <span aria-hidden="true">{t("ui.otomeForge.story.prestige")}</span>
+        {Array.from({ length: PRESTIGE_POINTS_PER_STORY }, (_, index) => (
+          <Star
+            key={index}
+            size={11}
+            strokeWidth={2}
+            fill={index < points ? "currentColor" : "none"}
+            data-on={index < points}
+            aria-hidden="true"
+          />
+        ))}
+      </span>
+      {entry ? (
+        <>
+          <button type="button" className="of-button of-button--primary of-button--small" onClick={() => onOpen(entry)}>
+            <BookHeart size={14} strokeWidth={2} aria-hidden="true" />
+            {t("ui.otomeForge.story.prestigeNew", { name: li.name })}
+          </button>
+          <p className="of-cost">
+            <Feather size={14} strokeWidth={2} aria-hidden="true" />
+            <span>{t("ui.otomeForge.arcs.planCost")}</span>
+          </p>
+          <ChapterPaintCost images={images} />
+        </>
+      ) : null}
+    </div>
   );
 }
 
@@ -835,18 +936,36 @@ function useDialogFocus(
 
 // ── Arcs: routes, ruptures and repairs ──
 
-/** A route or repair chapter to open, planning it first when it has no plan yet. */
+/** A route or repair chapter, or an extra story (#2025), to open, planning it first when it has no plan yet. */
 interface ArcTarget {
-  kind: "route" | "repair";
+  kind: "route" | "repair" | "prestige";
   li: string;
   key: string;
 }
 
-/** POST /runs/:run/routes/:li/next, or /repairs/:li. */
+/** POST /runs/:run/routes/:li/next, /repairs/:li or /prestige/:li. */
 const arcPath = (target: ArcTarget) =>
   target.kind === "route"
     ? `/routes/${encodeURIComponent(target.li)}/next`
-    : `/repairs/${encodeURIComponent(target.li)}`;
+    : `/${target.kind === "prestige" ? "prestige" : "repairs"}/${encodeURIComponent(target.li)}`;
+
+const ARC_DIALOG_KEYS: Record<ArcTarget["kind"], { title: string; planning: string; locked: string }> = {
+  route: {
+    title: "ui.otomeForge.arcs.routeDialogTitle",
+    planning: "ui.otomeForge.arcs.planningRoute",
+    locked: "ui.otomeForge.arcs.lockedNow",
+  },
+  repair: {
+    title: "ui.otomeForge.arcs.repairDialogTitle",
+    planning: "ui.otomeForge.arcs.planningRepair",
+    locked: "ui.otomeForge.arcs.lockedNow",
+  },
+  prestige: {
+    title: "ui.otomeForge.story.prestigeNew",
+    planning: "ui.otomeForge.arcs.planningPrestige",
+    locked: "ui.otomeForge.story.prestigeLocked",
+  },
+};
 
 /** Pronoun-safe text for a love interest: the name, and the pronouns stored in the bible (never assumed). */
 const pronounValues = (li: RunLiView) => ({
@@ -1060,7 +1179,10 @@ function RouteCard({
   );
 }
 
-/** A route or repair chapter being planned (one model call, with Cancel); then it opens. A locked one says why. */
+/**
+ * A route or repair chapter, or an extra story, being planned (one model call, with Cancel); then it opens. A locked one
+ * says why.
+ */
 function ArcPlanDialog({
   view,
   target,
@@ -1083,11 +1205,7 @@ function ArcPlanDialog({
   return (
     <Dialog
       wide
-      title={
-        target.kind === "route"
-          ? t("ui.otomeForge.arcs.routeDialogTitle", values)
-          : t("ui.otomeForge.arcs.repairDialogTitle", values)
-      }
+      title={t(ARC_DIALOG_KEYS[target.kind].title, values)}
       onClose={planning ? undefined : onClose}
       actions={
         planning ? (
@@ -1118,17 +1236,13 @@ function ArcPlanDialog({
       {planning ? (
         <div className="of-planning" role="status">
           <Heart className="of-pulse" size={28} strokeWidth={1.6} fill="currentColor" aria-hidden="true" />
-          <p className="of-body">
-            {target.kind === "route"
-              ? t("ui.otomeForge.arcs.planningRoute", values)
-              : t("ui.otomeForge.arcs.planningRepair", values)}
-          </p>
+          <p className="of-body">{t(ARC_DIALOG_KEYS[target.kind].planning, values)}</p>
           <p className="of-hint">{t("ui.otomeForge.story.planningHint")}</p>
         </div>
       ) : locked ? (
         <p className="of-notice" role="alert">
           <Lock size={15} strokeWidth={2} aria-hidden="true" />
-          <span>{t("ui.otomeForge.arcs.lockedNow", values)}</span>
+          <span>{t(ARC_DIALOG_KEYS[target.kind].locked, values)}</span>
         </p>
       ) : failed ? (
         <DeclinedPanel error={failed.error} run={view} job="structured" onRetry={onRetry} />

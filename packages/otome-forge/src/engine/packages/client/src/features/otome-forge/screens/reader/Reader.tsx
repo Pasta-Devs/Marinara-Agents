@@ -51,7 +51,7 @@ import { useReader, useReducedMotion, type ReaderState } from "../../hooks/use-r
 import { accentOf } from "../../lib/accent";
 import { canonOption, readyUrl, sumGrants, voiceOf, type Voice } from "../../lib/reader-state";
 import { useOtomeProps } from "../../props";
-import type { Grant, RunView } from "../../shared/api-types";
+import type { Grant, RunLiView, RunView } from "../../shared/api-types";
 import { FACES, MUSIC_MOODS, type MusicMood } from "../../shared/faces";
 import { Backlog } from "./Backlog";
 import { ChoicePills, RememberToast } from "./ChoicePills";
@@ -130,8 +130,9 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
   // The last beat's music, kept while the next beat opens; none until the first beat is ready.
   const lastMood = useRef<MusicMood | undefined>(undefined);
   const [dialog, setDialog] = useState<"log" | "ease" | null>(null);
-  // Each love interest's level when the chapter opened, so the end card can say which one rose.
-  const [levelsBefore] = useState(() => new Map(view.lis.map((li) => [li.id, li.level])));
+  // Each love interest's level (and extra stories unlocked, #2025) when the chapter opened, so the end card can say
+  // which one rose.
+  const [levelsBefore] = useState<LevelsBefore>(() => new Map(view.lis.map((li) => [li.id, li])));
   const rootRef = useRef<HTMLDivElement>(null);
   const nextRef = useRef<HTMLButtonElement>(null);
   const choiceRef = useRef<HTMLButtonElement>(null);
@@ -543,7 +544,7 @@ interface BottomPanelProps {
   nextRef: RefObject<HTMLButtonElement | null>;
   choiceRef: RefObject<HTMLButtonElement | null>;
   firstChoice: ReturnType<typeof canonOption>;
-  levelsBefore: ReadonlyMap<string, number>;
+  levelsBefore: LevelsBefore;
   /** The love interest a Confrontation faces (its opponent, as the server set it). */
   facing: RunView["lis"][number] | null;
   /** Goes on (ends a CG's pan first). */
@@ -758,6 +759,9 @@ function BottomPanel(props: BottomPanelProps) {
   );
 }
 
+/** Each love interest's level and prestige when the chapter opened. */
+type LevelsBefore = ReadonlyMap<string, Pick<RunLiView, "level" | "prestige">>;
+
 interface ChapterEndProps {
   title: string;
   /** The prologue ends as itself, not as a chapter. */
@@ -765,7 +769,7 @@ interface ChapterEndProps {
   grants: Grant[];
   arcNews: ReaderState["arcNews"];
   view: RunView;
-  levelsBefore: ReadonlyMap<string, number>;
+  levelsBefore: LevelsBefore;
   onStory: () => void;
   storyLabel?: string;
   onHome: () => void;
@@ -827,20 +831,25 @@ function ChapterEnd({
           {affection.map(({ li: id, amount }) => {
             const li = view.lis.find((item) => item.id === id);
             if (!li) return null;
-            const rose = li.level > (levelsBefore.get(li.id) ?? li.level);
+            const before = levelsBefore.get(li.id);
+            const rose = li.level > (before?.level ?? li.level);
+            // #2025: past level 10, three prestige points unlock an extra story with them.
+            const unlocked = (li.prestige?.unlocked ?? 0) > (before ? (before.prestige?.unlocked ?? 0) : Infinity);
             return (
               <li
                 key={id}
                 className="of-grant"
                 style={{ "--of-li-accent": accentOf(li) } as CSSProperties}
-                data-rose={rose}
+                data-rose={rose || unlocked}
               >
                 <Avatar name={li.name} url={li.portrait} accent={accentOf(li)} size={30} />
                 <span>{t("ui.otomeForge.reader.grantAffection", { name: li.name, amount: number(amount) })}</span>
                 <span className="of-badge of-badge--soft">
-                  {rose
-                    ? t("ui.otomeForge.reader.levelUp", { level: li.level })
-                    : t("ui.otomeForge.story.level", { level: li.level })}
+                  {unlocked
+                    ? t("ui.otomeForge.reader.prestigeUnlocked")
+                    : rose
+                      ? t("ui.otomeForge.reader.levelUp", { level: li.level })
+                      : t("ui.otomeForge.story.level", { level: li.level })}
                 </span>
               </li>
             );

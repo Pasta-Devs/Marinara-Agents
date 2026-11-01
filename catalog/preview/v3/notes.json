@@ -72,9 +72,15 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.6.15",
+          "date": "2026-11-01",
+          "notes": "- **Prestige: your bond keeps growing past level 10.** Once a love interest reaches the top affection level, every 300 more affection earns a prestige point, shown as three stars under \"Between you\" on the Story screen. Every three points unlock an **extra story** with him, and the stars start over, as often as you like.\n- **Extra stories are something the two of you imagine for fun**, written like a Character Story: a what-if (a wedding, starting a family, a honeymoon), a mini AU (vampires, a modern-day life), or, in an NSFW story, something new to explore together. Each one is different from the last.\n- **They never change the main story.** Choices inside an extra story don't move his trust or open grievances, and later chapters never remember an AU as if it happened. A choice that costs affection can never take an unlocked story back.",
+          "highlight": true
+        },
+        {
           "version": "0.6.14",
           "date": "2026-11-01",
-          "notes": "- **Confrontation and Closer choices speak to you.** Their option buttons sometimes talked about you in the third person (\"Say what she pays\") instead of speaking to you (\"Say what you pay\"), unlike every other choice in the story. They now always read as something you do, and an action you pick is told as \"you\", like the rest of the scene. Confrontations and Closers written before this update keep their old wording.",
+          "notes": "- **Confrontation and Closer choices speak to you.** Their option buttons sometimes talked about you in the third person (\"Say what she pays\") instead of speaking to you (\"Say what you pay\"), unlike every other choice in the story. The writer is now asked to word them as something you do, and to tell an action you pick as \"you\", like the rest of the scene. Confrontations and Closers written before this update keep their old wording.",
           "highlight": false
         },
         {
@@ -184,12 +190,6 @@
           "date": "2026-10-30",
           "notes": "- **Read Me**, a new game in Dates: a love interest studies you and makes four guesses about you. Answer Spot on, Close or Not at all, and tell them the truth in your own words if you like.\n- They remember: each answer goes into their notebook of what they know about you (likes, dislikes, habits, fears, dreams), and they bring it up in scenes, Home notes, messages and dates. No other love interest ever sees it.\n- Open the notebook from Read Me to read it, rewrite your words or delete an entry. A delete is final.",
           "highlight": true
-        },
-        {
-          "version": "0.4.2",
-          "date": "2026-10-30",
-          "notes": "- The Love Timeline shows every 4★ Moment and 5★ Memory you've won, on the day you won it, including ones won before this update. Each Snapshot, Moment and Memory says what it is and opens in the Album.",
-          "highlight": false
         }
       ]
     },
