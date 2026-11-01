@@ -1504,7 +1504,8 @@ export function ClawMachine({ runKey, view, li, onExit }: ActivityScreenProps) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const queryClient = useQueryClient();
-  const reduced = useReducedMotion();
+  // The claw is play, not decoration: only the system's reduced motion changes how it moves.
+  const reduced = useReducedMotion({ ambient: false });
   const play = usePlay(runKey);
   const plushName = usePlushName();
   const accent = accentOf(li);

@@ -4,7 +4,8 @@
 // client-entry.tsx injects it as one <style> while an Otome Forge element is on the page. The look comes from
 // `.of-root[data-look]` (tokens.ts); the stage sizes itself from the panel the Engine gives it (container queries), not
 // from the window, because the Engine may show its sidebar beside the tab. Motion is calm (400–700 ms) and all of it
-// stops under prefers-reduced-motion.
+// stops under prefers-reduced-motion or the Engine's "Reduce Ambient Animations & Effects" (reducedRules).
+import { REDUCED_EFFECTS, reducedRules } from "../lib/reduced-motion";
 import { DATE_NIGHT_RULES } from "../screens/dates/date-night-styles";
 import { READ_HIM_RULES } from "../screens/dates/ReadHim";
 import { READ_ME_RULES } from "../screens/dates/ReadMe";
@@ -153,6 +154,12 @@ ${R} .of-glass--strong { background: var(--of-surface-strong); }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   ${R} .of-glass { background: var(--of-surface-solid); }
 }
+/* The Engine's "Reduce Ambient Animations & Effects" drops every backdrop blur, as it does its own (each one is
+   repainted over the moving layers behind it), and glass takes the fallback's solid surface. */
+${REDUCED_EFFECTS} ${R} { --of-glass-blur: none; }
+:where(${REDUCED_EFFECTS}) ${R} .of-glass { background: var(--of-surface-solid); }
+${REDUCED_EFFECTS} ${R} .of-reveal-card,
+${REDUCED_EFFECTS} ${R} .of-dialog-backdrop { -webkit-backdrop-filter: none; backdrop-filter: none; }
 ${R} .of-card { border-radius: 22px; padding: 18px 18px 16px; }`;
 
 const TOPBAR_RULES = `
@@ -1407,11 +1414,12 @@ ${R} .of-tells-item::before {
 @keyframes of-gather { from { opacity: 0; scale: 1.6; } to { opacity: 0.9; scale: 0.4; } }
 @keyframes of-flash { 0% { opacity: 0.95; scale: 0.4; } 40% { opacity: 1; scale: 1.1; } 100% { opacity: 0; scale: 1.5; } }
 @keyframes of-bars { from { background-size: 4px 30%, 4px 90%, 4px 60%; } to { background-size: 4px 90%, 4px 40%, 4px 100%; } }
-@media (prefers-reduced-motion: reduce) {
-  ${R} .of-reveal-card { opacity: 1; translate: none; }
-  ${R} .of-reveal-art { opacity: 1; }
-  ${R} .of-reveal-glow { display: none; }
-}`;
+${reducedRules(
+  (root) => `
+  ${root} .of-reveal-card { opacity: 1; translate: none; }
+  ${root} .of-reveal-art { opacity: 1; }
+  ${root} .of-reveal-glow { display: none; }`,
+)}`;
 
 // The Story screen: the next chapter, each love interest's affection, and every chapter as a path of its scenes.
 const STORY_RULES = `
@@ -2398,9 +2406,10 @@ ${R} .of-home-pick-mark { flex: none; color: var(--of-champagne-text); }
 @keyframes of-note-in {
   from { opacity: 0; transform: translateY(-10px) rotate(-3deg); } to { opacity: 1; transform: rotate(-1.2deg); }
 }
-@media (prefers-reduced-motion: reduce) {
-  ${R} :is(.of-home-l0, .of-home-l3, .of-figure-parallax) { transform: none !important; }
-}`;
+${reducedRules(
+  (root) => `
+  ${root} :is(.of-home-l0, .of-home-l3, .of-figure-parallax) { transform: none !important; }`,
+)}`;
 
 // The phone: the thread list, and one thread with bubbles in his accent colour, stickers, suggestions and the composer.
 const PHONE_RULES = `
@@ -3290,11 +3299,12 @@ const MOTION_RULES = `
   0% { opacity: 0; transform: translateY(8px) scale(0.97); } 12% { opacity: 1; transform: none; }
   82% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-6px); }
 }
-@media (prefers-reduced-motion: reduce) {
-  ${R}, ${R} *, ${R} *::before, ${R} *::after {
+${reducedRules(
+  (root) => `
+  ${root}, ${root} *, ${root} *::before, ${root} *::after {
     animation: none !important; transition: none !important; scroll-behavior: auto !important;
-  }
-}`;
+  }`,
+)}`;
 
 /** The whole stylesheet, fonts first. */
 export function otomeForgeStyles(): string {

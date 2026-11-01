@@ -606,6 +606,20 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
   expect(await root.locator(".of-home-stars").evaluate((element) => getComputedStyle(element).animationName)).not.toBe(
     "none",
   );
+  // The Engine's "Reduce Ambient Animations & Effects" stills them as reduced motion does, and drops the glass blur.
+  const reducedEffects = (on: boolean) =>
+    page.evaluate((value) => {
+      if (value) document.documentElement.dataset.marinaraReducedEffects = "true";
+      else delete document.documentElement.dataset.marinaraReducedEffects;
+    }, on);
+  await reducedEffects(true);
+  expect(await root.locator(".of-home-stars").evaluate((element) => getComputedStyle(element).animationName)).toBe(
+    "none",
+  );
+  expect(await root.locator(".of-home-plate").evaluate((element) => getComputedStyle(element).backdropFilter)).toBe(
+    "none",
+  );
+  await reducedEffects(false);
   expect(await starsUnder("day")).toBe(0);
   expect(await starsUnder("dawn")).toBe(0);
   expect(await starsUnder("night")).toBeGreaterThan(0.4);
