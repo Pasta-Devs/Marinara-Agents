@@ -15,6 +15,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { normalizeBible } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit";
+import { ACCENT_SAMPLER_VERSION } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/accent";
 
 const engineRoot = process.env.MARINARA_ENGINE_ROOT;
 if (!engineRoot) throw new Error("Set MARINARA_ENGINE_ROOT to a compatible Engine checkout");
@@ -143,6 +144,7 @@ function runView({ images, audio, places }: WorldOptions = {}): Json {
         cardId: "card-ilvar",
         voiceGender: "male",
         accent: "#9DB8F0",
+        accentSampler: ACCENT_SAMPLER_VERSION,
         level: 2,
         stage: 1,
         expressions: { cold: FACE_COLD, tender: FACE_TENDER, angry: FACE_ANGRY, hurt: FACE_HURT },
@@ -154,6 +156,7 @@ function runView({ images, audio, places }: WorldOptions = {}): Json {
         source: "archetype",
         voiceGender: "male",
         accent: "#E6C98A",
+        accentSampler: ACCENT_SAMPLER_VERSION,
         level: 5,
         stage: 2,
       },
@@ -164,6 +167,7 @@ function runView({ images, audio, places }: WorldOptions = {}): Json {
         source: "archetype",
         voiceGender: "female",
         accent: "#B79CF2",
+        accentSampler: ACCENT_SAMPLER_VERSION,
         level: 1,
         stage: 1,
       },
@@ -3447,6 +3451,7 @@ test("Otome Hearth Settings fills its frame and exposes every tab on desktop and
     await page.screenshot({ path: testInfo.outputPath(`settings-categories-${size.width}-${look.toLowerCase()}.png`) });
     expect(bounds.tabs).toHaveLength(names.length);
     if (isMobile) {
+      expect(await tabs.evaluate((element) => getComputedStyle(element).flexWrap)).toBe("nowrap");
       expect(
         Math.max(...bounds.tabs.map((tab) => tab.top)) - Math.min(...bounds.tabs.map((tab) => tab.top)),
       ).toBeLessThanOrEqual(1);
@@ -3468,6 +3473,8 @@ test("Otome Hearth Settings fills its frame and exposes every tab on desktop and
         expect(debug!.x + debug!.width).toBeLessThanOrEqual(strip!.x + strip!.width + 1);
       }
     } else {
+      // Desktop wraps rather than relying on the tabs fitting: Linux fonts run wider than macOS ones (CI saw 950 > 926).
+      expect(await tabs.evaluate((element) => getComputedStyle(element).flexWrap)).toBe("wrap");
       expect(bounds.scrollWidth).toBeLessThanOrEqual(bounds.clientWidth + 1);
       for (const tab of bounds.tabs) {
         expect(tab.left).toBeGreaterThanOrEqual(-1);

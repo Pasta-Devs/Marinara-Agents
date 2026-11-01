@@ -1088,8 +1088,12 @@ ${n} .of-bible-secret, ${n} .of-bible-stage {
 ${n} .of-tabs {
   display: flex; gap: 4px; padding: 4px; border-radius: 18px; overflow-x: auto; scrollbar-width: none; flex: none;
 }
-/* Keep the phone's categories in one scrolling strip; wide Settings can show them all at once. */
+/* Keep the phone's categories in one scrolling strip; wide Settings can show them all at once. A mouse shows them all at
+   any width: the strip hides its scrollbar, so a cut-off tab (wider system fonts, a narrow window) had no way in. */
 @container of-stage (min-width: 960px) {
+  ${n} .of-settings .of-tabs { flex-wrap: wrap; overflow: visible; }
+}
+@media (pointer: fine) {
   ${n} .of-settings .of-tabs { flex-wrap: wrap; overflow: visible; }
 }
 ${n} .of-settings .of-tab { min-height: 44px; }
