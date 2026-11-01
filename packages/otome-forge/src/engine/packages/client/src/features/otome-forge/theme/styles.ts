@@ -3299,8 +3299,17 @@ const MOTION_RULES = `
   0% { opacity: 0; transform: translateY(8px) scale(0.97); } 12% { opacity: 1; transform: none; }
   82% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-6px); }
 }
-${reducedRules(
-  (root) => `
+${reducedRules((root, engine) =>
+  engine
+    ? // The Engine's ambient setting stops decoration, not play: the claw machine keeps its game feedback (a shake,
+      // a prize tumbling out, a plush landing) and loses only its idle loops.
+      `
+  ${root}, ${root} *:not(.of-claw, .of-claw *), ${root} *:not(.of-claw, .of-claw *)::before,
+  ${root} *:not(.of-claw, .of-claw *)::after {
+    animation: none !important; transition: none !important; scroll-behavior: auto !important;
+  }
+  ${root} .of-claw-bulbs, ${root} .of-claw-hearts { animation: none !important; }`
+    : `
   ${root}, ${root} *, ${root} *::before, ${root} *::after {
     animation: none !important; transition: none !important; scroll-behavior: auto !important;
   }`,

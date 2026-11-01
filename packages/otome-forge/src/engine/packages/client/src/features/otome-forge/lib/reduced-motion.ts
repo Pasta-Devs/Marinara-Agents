@@ -11,9 +11,12 @@ export const REDUCED_EFFECTS_ATTRIBUTE = "data-marinara-reduced-effects";
 /** <html> while the Engine's "Reduce Ambient Animations & Effects" is on. */
 export const REDUCED_EFFECTS = `html[${REDUCED_EFFECTS_ATTRIBUTE}="true"]`;
 
-/** `rules(root)` under the system's query on `.of-root`, then again on `.of-root` under the Engine's flag. */
-export function reducedRules(rules: (root: string) => string): string {
-  return `@media ${REDUCED_MOTION_QUERY} {${rules(".of-root")}\n}\n${rules(`${REDUCED_EFFECTS} .of-root`)}`;
+/**
+ * `rules(root)` under the system's query on `.of-root`, then again on `.of-root` under the Engine's flag. `engine` is
+ * true for the second copy, for a rule that the Engine's ambient setting should apply more narrowly.
+ */
+export function reducedRules(rules: (root: string, engine: boolean) => string): string {
+  return `@media ${REDUCED_MOTION_QUERY} {${rules(".of-root", false)}\n}\n${rules(`${REDUCED_EFFECTS} .of-root`, true)}`;
 }
 
 /** True when the system asks for reduced motion or the Engine's flag is on <html> (its `dataset`). */
