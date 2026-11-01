@@ -72,6 +72,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.6.16",
+          "date": "2026-11-01",
+          "notes": "- **Otome Hearth follows \"Reduce Ambient Animations & Effects\".** Marinara Engine's setting now does in Otome Hearth what your device's reduce-motion setting already did: stars, drift, parallax, the typing text and the Wish and CG pans stop, and the frosted glass panels turn solid, as the Engine's own panels do. The claw machine keeps its normal motion, because it is a game rather than decoration; your device's reduce-motion setting still calms it.\n- **A finished setup leaves no old draft behind.** If you made your world within a moment of your last change in the wizard, the draft could be saved again afterwards, so the next setup opened with the old answers.",
+          "highlight": false
+        },
+        {
           "version": "0.6.15",
           "date": "2026-11-01",
           "notes": "- **Prestige: your bond keeps growing past level 10.** Once a love interest reaches the top affection level, every 300 more affection earns a prestige point, shown as three stars under \"Between you\" on the Story screen. Every three points unlock an **extra story** with him, and the stars start over, as often as you like.\n- **Extra stories are something the two of you imagine for fun**, written like a Character Story: a what-if (a wedding, starting a family, a honeymoon), a mini AU (vampires, a modern-day life), or, in an NSFW story, something new to explore together. Each one is different from the last.\n- **They never change the main story.** Choices inside an extra story don't move his trust or open grievances, and later chapters never remember an AU as if it happened. A choice that costs affection can never take an unlocked story back.",
@@ -184,12 +190,6 @@
           "date": "2026-10-30",
           "notes": "- Chapters no longer all end the same way. Each one builds differently, and its closing choice is a different kind of decision from the last few, not a love interest stepping in again to ask whom you'll go with. A rival love interest competes over more than just you, too.",
           "highlight": false
-        },
-        {
-          "version": "0.5.0",
-          "date": "2026-10-30",
-          "notes": "- **Read Me**, a new game in Dates: a love interest studies you and makes four guesses about you. Answer Spot on, Close or Not at all, and tell them the truth in your own words if you like.\n- They remember: each answer goes into their notebook of what they know about you (likes, dislikes, habits, fears, dreams), and they bring it up in scenes, Home notes, messages and dates. No other love interest ever sees it.\n- Open the notebook from Read Me to read it, rewrite your words or delete an entry. A delete is final.",
-          "highlight": true
         }
       ]
     },
