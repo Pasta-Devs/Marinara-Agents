@@ -296,6 +296,12 @@
     "hierarchical-maps": {
       "versions": [
         {
+          "version": "1.8.0",
+          "date": "2026-11-01",
+          "notes": "- **The Story Location bar always shows where you are.** In a deep map the bar used to show the path from the top, so the place you are actually in was cut off. It now shows as much of the path as fits, ending with your current place and starting with \"…\" when places above are left out. Open the bar to see the full path, and choose what the bar shows: as much as fits, your current place only, your place and the two above it, or the full path as before. The choice is kept on this device; hovering the bar still shows the full path.",
+          "highlight": true
+        },
+        {
           "version": "1.7.1",
           "date": "2026-10-23",
           "notes": "- Require the Engine version that supplies agent reference lorebooks, so an older Engine with a different capability update cannot accept an incompatible World Maps package. Update both the Engine and World Maps together.",
