@@ -3308,7 +3308,9 @@ ${reducedRules((root, engine) =>
   ${root} *:not(.of-claw, .of-claw *)::after {
     animation: none !important; transition: none !important; scroll-behavior: auto !important;
   }
-  ${root} .of-claw-bulbs, ${root} .of-claw-hearts { animation: none !important; }`
+  ${root} .of-claw-bulbs, ${root} .of-claw-hearts, ${root} .of-claw-pip[data-state="current"] {
+    animation: none !important;
+  }`
     : `
   ${root}, ${root} *, ${root} *::before, ${root} *::after {
     animation: none !important; transition: none !important; scroll-behavior: auto !important;

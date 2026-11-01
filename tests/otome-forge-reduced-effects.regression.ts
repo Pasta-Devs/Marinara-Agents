@@ -104,7 +104,11 @@ test("the Engine's flag drops every backdrop blur, and glass turns solid", () =>
 test("the Engine's ambient setting spares the claw machine's game feedback but stops its idle loops", () => {
   const styles = sources.find(({ file }) => file === "theme/styles.ts")!.text;
   assert.match(styles, /\*:not\(\.of-claw, \.of-claw \*\)/u, "the Engine-only stop rule skips the claw machine");
-  assert.match(styles, /\$\{root\} \.of-claw-bulbs, \$\{root\} \.of-claw-hearts \{ animation: none !important; \}/u);
+  // Its three idle loops: the marquee bulbs, the live meter's hearts and the current turn's pip.
+  assert.match(
+    styles,
+    /\$\{root\} \.of-claw-bulbs, \$\{root\} \.of-claw-hearts, \$\{root\} \.of-claw-pip\[data-state="current"\] \{\s*animation: none !important;/u,
+  );
   const css = reducedRules((root, engine) => (engine ? `${root} .engine {}` : `${root} .system {}`));
   assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{\.of-root \.system \{\}/u, "the system copy");
   assert.match(css, /html\[data-marinara-reduced-effects="true"\] \.of-root \.engine \{\}$/u, "the Engine copy");

@@ -3512,7 +3512,9 @@ ${fl((e,o)=>o?`
   ${e} *:not(.of-claw, .of-claw *)::after {
     animation: none !important; transition: none !important; scroll-behavior: auto !important;
   }
-  ${e} .of-claw-bulbs, ${e} .of-claw-hearts { animation: none !important; }`:`
+  ${e} .of-claw-bulbs, ${e} .of-claw-hearts, ${e} .of-claw-pip[data-state="current"] {
+    animation: none !important;
+  }`:`
   ${e}, ${e} *, ${e} *::before, ${e} *::after {
     animation: none !important; transition: none !important; scroll-behavior: auto !important;
   }`)}`;function Uy(){return[zy(),i2,Vy("midnight"),Vy("pearl"),s2,l2,u2,d2,c2,f2,p2,m2,h2,b2,y2,F2,k2,v2,C2,L2,Hy,Ab,Mb,I2,S2,A2].join(`
