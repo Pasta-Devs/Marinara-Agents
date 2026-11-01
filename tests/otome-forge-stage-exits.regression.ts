@@ -204,3 +204,43 @@ test("the scene, Confrontation and Closer writers each ask for exits once, also 
     assert.match(system, /or the protagonist leaves them behind/, kind);
   }
 });
+
+test("Confrontation and Closer options speak to the player as you, never about the heroine (#2030)", () => {
+  const world = normalizeWorld({ title: "Rain", premise: "Lanterns.", connections: { narration: "conn-text" } });
+  const units: Unit[] = CAST.map((cast) => ({
+    ...normalizeUnit({}),
+    id: cast.id,
+    name: cast.name,
+    pronouns: HE,
+    bible: bible(),
+  }));
+  const input = { world, units, player: { ...normalizePlayer({}), name: "Ines", pronouns: SHE }, state: context.state };
+  const node = (kind: ChapterNode["kind"]) => ({ i: 0, kind, guide: "Rain.", cast: [KAI] }) as ChapterNode;
+  const chapter = (one: ChapterNode) =>
+    ({ kind: "main", number: 2, title: "Rain", lead: KAI, foil: MIR, nodes: [one] }) as const;
+  const at = (kind: ChapterNode["kind"]) => ({
+    ...input,
+    chapter: chapter(node(kind)),
+    node: node(kind),
+    storySoFar: "",
+    memory: "",
+    li: KAI,
+  });
+  for (const [kind, messages] of [
+    ["confrontation", confrontationMessages(at("confrontation"))],
+    ["closer", closerMessages(at("closer"))],
+  ] as const) {
+    const system = messages[0]!.content;
+    assert.match(
+      system,
+      /label: [^.]*addressed to the player as a bare command or with "you"/u,
+      `${kind} labels speak to the player`,
+    );
+    assert.match(
+      system,
+      /never with the protagonist's name or "she", "he" or "they" for them/u,
+      `${kind} labels never say she`,
+    );
+    assert.match(system, /kind action, narrated to "you"/u, `${kind} actions are narrated to you`);
+  }
+});
