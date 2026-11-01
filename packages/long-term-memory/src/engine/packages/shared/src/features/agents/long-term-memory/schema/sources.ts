@@ -31,8 +31,6 @@ export const ltmInteropPreviewRequestSchema = z
     cursor: z.string().min(1).max(2048).optional(),
     // Chat Messages only: list the history of one branch of the scoped chat group.
     branchChatId: z.string().min(1).max(200).optional(),
-    // Chat Summaries only: list just the Advanced Memory scene records that carry a memory block.
-    advancedMemoryBlocksOnly: z.boolean().optional(),
   })
   .strict();
 
@@ -293,23 +291,6 @@ export const ltmSourceDetailsResponseSchema = z
   })
   .strict();
 
-export const ltmAdvancedMemoryBackfillRequestSchema = z
-  .object({
-    sourceScope: ltmScopeSchema.optional(),
-    chatId: z.string().min(1).max(120).optional(),
-    limit: z.number().int().min(1).max(100).default(10),
-  })
-  .strict();
-export type LtmAdvancedMemoryBackfillRequest = z.infer<typeof ltmAdvancedMemoryBackfillRequestSchema>;
-
-export const ltmAdvancedMemoryBackfillResponseSchema = z
-  .object({
-    sourceIds: z.array(z.string().min(1).max(120)).max(100),
-    remaining: z.number().int().min(0),
-  })
-  .strict();
-export type LtmAdvancedMemoryBackfillResponse = z.infer<typeof ltmAdvancedMemoryBackfillResponseSchema>;
-
 export const ltmImportSourceNotesRequestSchema = z
   .object({
     source: ltmInteropSourceSchema,
@@ -332,8 +313,6 @@ export const ltmImportSourceNotesRequestSchema = z
     importConcurrency: z.number().int().min(1).max(10).optional(),
     mode: ltmModeSchema.optional(),
     modes: z.array(ltmModeSchema).min(1).max(3).optional(),
-    // Chat Summaries only: import just the Advanced Memory scene records that carry a memory block.
-    advancedMemoryBlocksOnly: z.boolean().optional(),
   })
   .strict();
 

@@ -190,6 +190,8 @@ function normalizeLegacyExtractionSettings(value: unknown) {
   }
   delete normalized.refinePass;
   delete normalized.rejectPlaceholderOutput;
+  // The Advanced Memory scene recap import is gone; an older file or client may still send its switch.
+  delete normalized.useAdvancedMemory;
   // The broad existing-note prompt budget no longer exists (issue #1086); discard
   // stale persisted values instead of rejecting the whole strict settings object.
   delete normalized.maxExistingNoteTokens;
@@ -309,7 +311,6 @@ const ltmExtractionSettingsFields = {
   finishCutOffAnswers: z.boolean().optional(),
   autoAcceptSafeChanges: z.boolean().optional(),
   autoImportChatSources: z.boolean().optional(),
-  useAdvancedMemory: z.boolean().optional(),
   chatImportDetail: ltmChatImportDetailSchema.optional(),
   useExtractionAgentOnGameMode: z.boolean().optional(),
 };
@@ -360,7 +361,6 @@ export const ltmResolvedExtractionSettingsSchema = z
     finishCutOffAnswers: z.boolean(),
     autoAcceptSafeChanges: z.boolean(),
     autoImportChatSources: z.boolean(),
-    useAdvancedMemory: z.boolean(),
     chatImportDetail: ltmChatImportDetailSchema,
     useExtractionAgentOnGameMode: z.boolean(),
   })

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { mock } from "node:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { runRegressionToCompletion, runWithSafeCleanup } from "./regression-helpers.ts";
 
 type FixtureMessage = {
@@ -55,7 +55,7 @@ async function main() {
     { previewPackageInterop, sourcePackageDetails, importPackageInterop, transcriptPieces },
     { ltmImportSourceNotesResponseSchema, ltmInteropPreviewRequestSchema, ltmInteropPreviewResponseSchema },
     { LongTermMemoryStorage },
-    { updateLtmExtractionConfig },
+    { getLtmExtractionConfig, ltmExtractionConfigPath, updateLtmExtractionConfig },
     { armLtmAutoImport, isLtmAutoImportArmed, LTM_AUTO_IMPORT_QUIET_MS },
     { readLtmDebugLog },
     { LongTermMemoryDraftStore },
@@ -185,6 +185,28 @@ async function main() {
       ],
     ],
   ]);
+  // An Engine that lists Advanced Memory scene recaps: this package no longer reads them, so a chat using Advanced
+  // Memory still imports its own rolling summaries and messages.
+  const advancedMemoryHost = {
+    async listChatSummaries() {
+      return {
+        advancedMemory: [
+          {
+            id: "scene-1",
+            kind: "scene",
+            title: "Scene 1",
+            content: "Recap prose.",
+            startMessageId: "u1",
+            endMessageId: "u2",
+            audienceCharacterIds: [],
+            sourceFingerprint: "fp-1",
+            updatedAt: "2026-10-31T00:00:00.000Z",
+            memory: "## world_fact\nFact: The Moon Vault hums at night.",
+          },
+        ],
+      };
+    },
+  };
   let releaseRuntime: (() => void) | undefined;
   let messageReads = 0;
   // Each extraction prompt, and the units the fixture model answers it with.
@@ -232,6 +254,7 @@ async function main() {
             messageReads += 1;
             return messages.get(chatId) ?? [];
           },
+          ...advancedMemoryHost,
         },
         resources: {
           async listCharacters() {
@@ -736,9 +759,27 @@ async function main() {
         "a never-imported branch cuts at its chat's 12,000, so its shared pieces merge with the parent's",
       );
 
+      // A settings file saved while the Advanced Memory import existed still loads, and its switch is dropped.
+      const legacyRoot = join(dataDir, "legacy", "long-term-memory");
+      await mkdir(dirname(ltmExtractionConfigPath(legacyRoot)), { recursive: true });
+      await writeFile(
+        ltmExtractionConfigPath(legacyRoot),
+        JSON.stringify({ version: 1, useAdvancedMemory: true, autoImportChatSources: true }),
+      );
+      const legacyConfig = await getLtmExtractionConfig(legacyRoot);
+      assert.equal(legacyConfig.autoImportChatSources, true, "the rest of an old settings file is kept");
+      assert.equal("useAdvancedMemory" in legacyConfig, false, "the retired switch is not part of the settings");
+      const resaved = await updateLtmExtractionConfig({ useAdvancedMemory: true }, legacyRoot);
+      assert.equal("useAdvancedMemory" in resaved, false);
+      assert.equal(
+        "useAdvancedMemory" in JSON.parse(await readFile(ltmExtractionConfigPath(legacyRoot), "utf8")),
+        false,
+        "and the next save removes it from the file",
+      );
+
       // Hands-off import: a reply arms a quiet-period run that imports the chat's summaries and closed pieces.
       const autoRoot = join(dataDir, "auto", "long-term-memory");
-      await updateLtmExtractionConfig({ autoImportChatSources: true }, autoRoot);
+      await updateLtmExtractionConfig({ autoImportChatSources: true, useAdvancedMemory: true }, autoRoot);
       const autoChat = {
         ...roleplayChat,
         id: "chat-auto",
@@ -778,6 +819,14 @@ async function main() {
         "the summary and both closed pieces import, each source logged in Activity",
       );
       assert.equal(prompts.length, 3, "each imported source is extracted once");
+      assert.deepEqual(
+        (await new LongTermMemoryStorage(autoRoot).listNotes({ type: "source" }))
+          .filter((note) => note.provenance?.sourceId === autoChat.id)
+          .map((note) => note.provenance?.kind)
+          .sort(),
+        ["chat_summary", "chat_transcript", "chat_transcript"],
+        "a host's Advanced Memory scene recaps are not a source; the chat's own summary and messages are",
+      );
       assert.deepEqual(
         (await previewPackageInterop({ source: "messages", chatId: autoChat.id, limit: 100 }, autoRoot)).samples.map(
           ({ sourceId, status }) => ({ sourceId, status }),

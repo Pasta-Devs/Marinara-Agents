@@ -1,8 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import {
-  type LtmAdvancedMemoryBackfillRequest,
-  type LtmAdvancedMemoryBackfillResponse,
   type LtmImportSourceNotesRequest,
   type LtmImportSourceNotesResponse,
   type LtmSourceDetailsRequest,
@@ -19,7 +17,6 @@ import {
   type LtmSourceProvenance,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import {
-  chatOnlyLtmScope,
   getLtmScopeChatIds,
   getLtmScopeGroupIds,
   getLtmScopePersonaIds,
@@ -87,8 +84,6 @@ type Candidate = {
   deterministicSourceText?: string;
   // The chat piece before this one, so its extraction can start from where that one ended.
   previousPiece?: { sourceNoteId: string; tail: string };
-  // Advanced Memory scene records only: the host message ids the scene starts and ends at.
-  sceneMessageIds?: { first: string; last: string };
   lorebookEntryId?: string;
   lorebookEntryName?: string;
 };
@@ -389,7 +384,7 @@ function mode(candidate: Candidate, value?: LtmMode, availabilityModes?: LtmMode
   return { ...candidate, modes, extractionMode };
 }
 function isChatSource(kind: LtmSourceProvenance["kind"]) {
-  return kind === "chat_summary" || kind === "chat_transcript" || kind === "advanced_memory";
+  return kind === "chat_summary" || kind === "chat_transcript";
 }
 function importedSourceMode(source: Candidate["provenance"]["kind"], requested?: LtmMode) {
   return requested ?? (isChatSource(source) ? undefined : DEFAULT_LTM_IMPORTED_SOURCE_MODE);
@@ -593,89 +588,6 @@ async function requestedChats(request: { sourceScope?: LtmScope; chatId?: string
   });
 }
 
-type AdvancedMemoryRecord = {
-  id: string;
-  title: string;
-  content: string;
-  startMessageId: string;
-  endMessageId: string;
-  audienceCharacterIds: string[];
-  memory: string | null;
-};
-
-/**
- * Issue #1964: the chat's Advanced Memory scene records. Only Capability API 1.391 hosts return them, so an older
- * host, a failed read or a malformed record yields nothing and the chat imports as before.
- */
-export async function advancedMemoryRecords(chatId: string): Promise<AdvancedMemoryRecord[]> {
-  try {
-    const listed = await getPackagePersistence().listChatSummaries?.(chatId);
-    const records = listed && Array.isArray(listed.advancedMemory) ? listed.advancedMemory : [];
-    return records.flatMap((value) => {
-      const record = object(value),
-        id = text(record.id),
-        content = text(record.content);
-      if (!id || !content || record.enabled === false) return [];
-      if (record.kind !== undefined && record.kind !== "scene") return [];
-      return [
-        {
-          id,
-          title: text(record.title),
-          content,
-          startMessageId: text(record.startMessageId),
-          endMessageId: text(record.endMessageId),
-          audienceCharacterIds: stringArray(record.audienceCharacterIds),
-          memory: text(record.memory) || null,
-        },
-      ];
-    });
-  } catch (error) {
-    logger.warn({ err: error, chatId }, "[long-term-memory] Advanced Memory records could not be read");
-    return [];
-  }
-}
-
-const advancedMemoryHosts = new WeakMap<object, boolean>();
-
-/**
- * Whether this host returns Advanced Memory scene records (Capability API 1.391). `listChatSummaries` exists on older
- * hosts too, but only a 1.391 host answers with an `advancedMemory` list, so one real chat tells them apart. With no
- * chat or a failed read it stays available, since nothing could be read anyway, and only a settled answer is kept.
- */
-export async function advancedMemoryAvailable() {
-  try {
-    const persistence = getPackagePersistence();
-    const known = advancedMemoryHosts.get(persistence);
-    if (known !== undefined) return known;
-    if (!persistence.listChatSummaries) return remember(persistence, false);
-    const [chat] = await persistence.listChats();
-    const listed = chat ? await persistence.listChatSummaries(chat.id) : null;
-    return listed ? remember(persistence, Array.isArray(listed.advancedMemory)) : true;
-  } catch {
-    return true;
-  }
-}
-
-function remember(persistence: object, available: boolean) {
-  advancedMemoryHosts.set(persistence, available);
-  return available;
-}
-
-// A scene's audience narrows the chat's characters: an empty audience keeps the chat scope, and an audience of
-// characters no longer in the chat leaves no characters, so only the chat itself recalls the scene.
-function advancedMemoryScope(chat: Parameters<typeof resolveChatLtmScope>[0], audience: readonly string[]) {
-  const scope = resolveChatLtmScope(chat);
-  if (!audience.length) return scope;
-  const chatCharacters = new Set(normalizeLtmChatCharacterIds(chat.characterIds));
-  const characterIds = audience.filter((id) => chatCharacters.has(id));
-  const { characterIds: _chatCharacterIds, ...rest } = scope;
-  return (characterIds.length ? { ...rest, characterIds } : rest) satisfies LtmScope;
-}
-
-async function advancedMemoryEnabled(source: string, root: string) {
-  return (source === "chats" || source === "messages") && (await getLtmExtractionConfig(root)).useAdvancedMemory;
-}
-
 async function chatScopesById() {
   return new Map((await getPackagePersistence().listChats()).map((chat) => [chat.id, resolveChatLtmScope(chat)]));
 }
@@ -689,10 +601,6 @@ async function candidates(
     chatId?: string;
     query?: string;
     includeOutOfScope?: boolean;
-    // "Use Advanced Memory recaps": a chat's scene records replace its rolling summaries and Chat Messages pieces.
-    advancedMemory?: boolean;
-    // The automatic job: only scene records carrying a memory block, which import without a model call.
-    advancedMemoryBlocksOnly?: boolean;
   },
   selected?: Set<string>,
   pieces?: Awaited<ReturnType<typeof chatPieces>>,
@@ -730,38 +638,8 @@ async function candidates(
     for (const chat of await requestedChats(request)) {
       const metadata = parseLtmChatMetadata(chat.metadata),
         chatMode = ltmModeForChatMode(chat.mode),
-        chatDisplayName = getLtmChatDisplayName(chat) || "Chat",
-        scenes = request.advancedMemory ? await advancedMemoryRecords(chat.id) : [];
-      for (const record of scenes) {
-        if (request.advancedMemoryBlocksOnly && !record.memory) continue;
-        const entryId = boundedId(record.id, "scene"),
-          provenance = { kind: "advanced_memory" as const, sourceId: chat.id, entryId },
-          title = `${chatDisplayName}, ${record.title || "scene"}`.slice(0, 240);
-        result.push({
-          sourceId: boundedId(`${chat.id}:am-${record.id}`, `${chat.id.slice(0, 60)}:am`),
-          title,
-          summaryRange: { chatName: chatDisplayName.slice(0, 240), label: (record.title || "scene").slice(0, 80) },
-          sourceText: record.content,
-          sourceNoteId: sourceNoteIdForProvenance(provenance),
-          legacySourceNoteIds: [],
-          sourceTag: "imported_advanced_memory",
-          importTags: [],
-          evidence: [`chat:${chat.id}`, `chat_name:${chatDisplayName}`, `scene_record:${entryId}`],
-          provenance,
-          scope: advancedMemoryScope(chat, record.audienceCharacterIds),
-          modes: [chatMode],
-          extractionMode: chatMode,
-          mutationCount: 1,
-          summary: `Import ${title}`,
-          ...(record.memory ? { deterministicSourceText: record.memory } : {}),
-          ...(record.startMessageId && record.endMessageId
-            ? { sceneMessageIds: { first: record.startMessageId, last: record.endMessageId } }
-            : {}),
-        });
-      }
+        chatDisplayName = getLtmChatDisplayName(chat) || "Chat";
       for (const entry of summaries(metadata, chatMode)) {
-        // Scene records take over from the rolling summaries; Game Mode sessions and conversation summaries stay.
-        if (scenes.length && entry.origin !== "game_session" && entry.origin !== "conversation_summary") continue;
         const sourceId = `${chat.id}:${entry.id}`,
           provenance = {
             kind: "chat_summary" as const,
@@ -821,8 +699,6 @@ async function candidates(
       const scope = resolveChatLtmScope(chat);
       // Callers drop out-of-scope chat rows anyway; skipping them here avoids reading every chat's messages.
       if (request.sourceScope && !matchesChatSummaryScope(scope, request.sourceScope)) continue;
-      // A chat with Advanced Memory scene records imports those instead of its messages.
-      if (request.advancedMemory && (await advancedMemoryRecords(chat.id)).length) continue;
       const chatMode = ltmModeForChatMode(chat.mode),
         chatDisplayName = getLtmChatDisplayName(chat) || "Chat",
         speaker = (message: TranscriptMessage) =>
@@ -1211,8 +1087,7 @@ export async function previewPackageInterop(
   const sourceScope = requestedSourceScope(request);
   const matchExisting = await existingMatcher(new LongTermMemoryStorage(root));
   const pieces = await chatPieces(request.source, matchExisting, root);
-  const advancedMemory = await advancedMemoryEnabled(request.source, root);
-  const candidateRequest = { ...request, sourceScope, includeOutOfScope: sourceScope !== undefined, advancedMemory },
+  const candidateRequest = { ...request, sourceScope, includeOutOfScope: sourceScope !== undefined },
     found = await candidates(candidateRequest, undefined, pieces),
     resolved = resolvePreviewCandidates(
       found.filter((row) => candidateVisibleInScope(row, sourceScope)),
@@ -1231,10 +1106,7 @@ export async function previewPackageInterop(
       : outdatedSourceNotes(
           request.source,
           // ponytail: a mode filter reads the source a second time; one unfiltered walk would halve a messages preview.
-          // Advanced Memory precedence hides summaries and pieces that still exist, so it never makes them outdated.
-          request.mode || advancedMemory
-            ? await candidates({ ...candidateRequest, mode: undefined, advancedMemory: false }, undefined, pieces)
-            : found,
+          request.mode ? await candidates({ ...candidateRequest, mode: undefined }, undefined, pieces) : found,
           matchExisting,
           sourceScope,
           isChatSource(OUTDATED_PROVENANCE_KIND[request.source]) ? await chatScopesById() : new Map(),
@@ -1398,7 +1270,6 @@ export async function sourcePackageDetails(
         mode: request.mode,
         chatId: request.chatId,
         includeOutOfScope: sourceScope !== undefined,
-        advancedMemory: await advancedMemoryEnabled(request.source, root),
       },
       new Set(request.sourceIds),
       await chatPieces(request.source, matchExisting, root),
@@ -1415,85 +1286,6 @@ export async function sourcePackageDetails(
     details,
     missingSourceIds: request.sourceIds.filter((sourceId) => !resolvedIds.has(sourceId)),
   };
-}
-// The message numbers each earlier chat summary or Chat Messages piece of a chat covers, merged and sorted.
-function coveredMessageRanges(matchExisting: Awaited<ReturnType<typeof existingMatcher>>, chatId: string) {
-  const ranges = matchExisting.sourceNotes.flatMap(({ note, provenance }) => {
-    if (provenance.sourceId !== chatId || (provenance.kind !== "chat_summary" && provenance.kind !== "chat_transcript"))
-      return [];
-    const range = note.sections.source?.evidence
-      ?.find((entry) => entry.startsWith("message_range:"))
-      ?.match(/^message_range:(\d+)(?:-(\d+))?$/);
-    return range ? [[Number(range[1]), Number(range[2] ?? range[1])] as const] : [];
-  });
-  return ranges
-    .sort((left, right) => left[0] - right[0])
-    .reduce<Array<[number, number]>>((merged, [first, last]) => {
-      const previous = merged.at(-1);
-      if (previous && first <= previous[1] + 1) previous[1] = Math.max(previous[1], last);
-      else merged.push([first, last]);
-      return merged;
-    }, []);
-}
-
-/**
- * Issue #1964 backfill: the next Advanced Memory scene records without a memory block, which only the summary
- * extractor can read. A record already extracted at its current fingerprint is skipped, so pressing Backfill again
- * continues, and so is one whose messages an earlier chat summary or Chat Messages import already covers, so an event
- * enters memory once. Message numbers count every message, as Chat Messages pieces do.
- * ponytail: a chat summary numbered by another rule than the host's message order is not recognised as covering;
- * the scene then imports once more. Read the host's own summary ranges if that shows up.
- */
-export async function advancedMemoryBackfillBatch(
-  request: LtmAdvancedMemoryBackfillRequest,
-  root: string,
-): Promise<LtmAdvancedMemoryBackfillResponse> {
-  if (!(await getLtmExtractionConfig(root)).useAdvancedMemory) return { sourceIds: [], remaining: 0 };
-  const sourceScope = requestedSourceScope(request),
-    matchExisting = await existingMatcher(new LongTermMemoryStorage(root)),
-    rows = (
-      await candidates({
-        source: "chats",
-        sourceScope,
-        chatId: request.chatId,
-        includeOutOfScope: sourceScope !== undefined,
-        advancedMemory: true,
-      })
-    ).filter(
-      (row) =>
-        row.provenance.kind === "advanced_memory" &&
-        !row.deterministicSourceText &&
-        candidateVisibleInScope(row, sourceScope),
-    ),
-    coverage = new Map<string, Array<[number, number]>>(),
-    messageNumbers = new Map<string, Map<string, number>>(),
-    pending: string[] = [];
-  for (const row of rows) {
-    const existing = matchExisting(row);
-    if (existing && previewFreshness(existing, candidateFingerprintForNote(row, existing)) === "current") continue;
-    const chatId = row.provenance.sourceId;
-    if (row.sceneMessageIds) {
-      if (!messageNumbers.has(chatId))
-        messageNumbers.set(
-          chatId,
-          new Map(
-            (await getPackagePersistence().listMessages(chatId)).map((message, index) => [message.id, index + 1]),
-          ),
-        );
-      const numbers = messageNumbers.get(chatId)!,
-        first = numbers.get(row.sceneMessageIds.first),
-        last = numbers.get(row.sceneMessageIds.last);
-      if (!coverage.has(chatId)) coverage.set(chatId, coveredMessageRanges(matchExisting, chatId));
-      if (
-        first !== undefined &&
-        last !== undefined &&
-        coverage.get(chatId)!.some(([start, end]) => start <= Math.min(first, last) && end >= Math.max(first, last))
-      )
-        continue;
-    }
-    pending.push(row.sourceId);
-  }
-  return { sourceIds: pending.slice(0, request.limit), remaining: Math.max(0, pending.length - request.limit) };
 }
 
 export async function importPackageInterop(
@@ -1522,13 +1314,7 @@ export async function importPackageInterop(
     matchExisting = await existingMatcher(storage),
     extractionConfig = await getLtmExtractionConfig(root, request.mode),
     candidateRows = await candidates(
-      {
-        ...request,
-        sourceScope,
-        includeOutOfScope: sourceScope !== undefined,
-        advancedMemory:
-          (request.source === "chats" || request.source === "messages") && extractionConfig.useAdvancedMemory,
-      },
+      { ...request, sourceScope, includeOutOfScope: sourceScope !== undefined },
       selected,
       await chatPieces(request.source, matchExisting, root),
     ),
@@ -1552,32 +1338,23 @@ export async function importPackageInterop(
       };
     }),
     conflictingSourceIds = new Set<string>();
-  // An Advanced Memory scene keeps its audience scope unless the import names another destination than its own chat.
-  const rowDestination = (row: Candidate) =>
-    row.provenance.kind === "advanced_memory" &&
-    (request.destinationScope
-      ? scopeKey(request.destinationScope) === scopeKey(chatOnlyLtmScope(row.provenance.sourceId))
-      : !legacyScopeRequest)
-      ? row.scope
-      : destinationScope;
   throwIfAborted(signal);
-  if (rows.some((row) => !rowDestination(row) && !chat && !legacyScopeRequest && !isGlobalLtmScope(row.scope)))
+  if (!destinationScope && rows.some((row) => !chat && !legacyScopeRequest && !isGlobalLtmScope(row.scope)))
     throw new LtmServiceError(
       "Choose a destination before importing scoped memories.",
       400,
       "ltm_destination_scope_required",
     );
-  // A Game Mode session (unless the extraction agent is set to read them) and an Advanced Memory block need no model.
+  // A Game Mode session needs no model, unless the extraction agent is set to read them.
   const deterministic = (row: Candidate) =>
     Boolean(row.deterministicSourceText) &&
-    (row.provenance.kind === "advanced_memory" ||
-      (row.extractionMode === "game" && !extractionConfig.useExtractionAgentOnGameMode));
-  const useExtractionAgent = rows.some((row) =>
-    row.provenance.kind === "advanced_memory"
-      ? !deterministic(row)
-      : row.extractionMode !== "game" ||
-        !row.sourceId.includes(":game-session-") ||
-        extractionConfig.useExtractionAgentOnGameMode,
+    row.extractionMode === "game" &&
+    !extractionConfig.useExtractionAgentOnGameMode;
+  const useExtractionAgent = rows.some(
+    (row) =>
+      row.extractionMode !== "game" ||
+      !row.sourceId.includes(":game-session-") ||
+      extractionConfig.useExtractionAgentOnGameMode,
   );
   let languageModel = null;
   if (request.extract && useExtractionAgent) {
@@ -1590,17 +1367,11 @@ export async function importPackageInterop(
   throwIfAborted(signal);
   const written: ImportedSourceItem[] = [];
   for (const row of rows) {
-    const rowScope = rowDestination(row),
-      existing = rowScope ? matchExisting(row) : undefined;
-    if (!rowScope || !existing) continue;
+    const existing = destinationScope ? matchExisting(row) : undefined;
+    if (!destinationScope || !existing) continue;
     const existingDestinationScope =
       existing.destinationScope ?? existing.extractionFingerprint?.scope ?? existing.scope;
-    // A scene in its own chat follows its record: a changed audience or cast moves it instead of conflicting.
-    const followsRecord =
-      row.provenance.kind === "advanced_memory" &&
-      rowScope === row.scope &&
-      getLtmScopeChatIds(existingDestinationScope).join() === row.provenance.sourceId;
-    if (!followsRecord && scopeKey(existingDestinationScope) !== scopeKey(rowScope)) {
+    if (scopeKey(existingDestinationScope) !== scopeKey(destinationScope)) {
       conflictingSourceIds.add(row.sourceId);
       writeFailures.push({
         sourceId: row.sourceId,
@@ -1618,8 +1389,7 @@ export async function importPackageInterop(
   for (const row of rows) {
     if (conflictingSourceIds.has(row.sourceId)) continue;
     try {
-      const destinationScope = rowDestination(row),
-        sourceNoteScope = isChatSource(row.provenance.kind) ? { chatIds: [row.provenance.sourceId] } : row.scope,
+      const sourceNoteScope = isChatSource(row.provenance.kind) ? { chatIds: [row.provenance.sourceId] } : row.scope,
         scope = withMergedLtmScopeLinks(sourceNoteScope, destinationScope ?? row.scope),
         input = {
           id: row.sourceNoteId,

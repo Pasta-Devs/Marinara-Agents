@@ -182,7 +182,6 @@ function extractionForm(settings: LtmExtractionSettingsPatch): ExtractionForm {
     finishCutOffAnswers: resolved.finishCutOffAnswers ?? false,
     autoAcceptSafeChanges: resolved.autoAcceptSafeChanges ?? false,
     autoImportChatSources: resolved.autoImportChatSources ?? false,
-    useAdvancedMemory: resolved.useAdvancedMemory ?? false,
     chatImportDetail: resolved.chatImportDetail ?? "standard",
     useExtractionAgentOnGameMode: resolved.useExtractionAgentOnGameMode ?? false,
     ...(resolved.systemPrompt === undefined ? {} : { systemPrompt: resolved.systemPrompt }),
@@ -1228,22 +1227,6 @@ export default function MemorySettings({
               setExtractionFormState({
                 ...extractionFormState,
                 finishCutOffAnswers: value,
-              })
-            }
-          />
-          <Toggle
-            label={localizeUi("ui.longTermMemory.memorysettings.useAdvancedMemory")}
-            help={localizeUi(
-              global.data?.advancedMemoryAvailable === false
-                ? "ui.longTermMemory.memorysettings.useAdvancedMemoryUnavailable"
-                : "ui.longTermMemory.memorysettings.useAdvancedMemoryHelp",
-            )}
-            checked={extractionFormState.useAdvancedMemory}
-            disabled={global.data?.advancedMemoryAvailable === false}
-            onChange={(value) =>
-              setExtractionFormState({
-                ...extractionFormState,
-                useAdvancedMemory: value,
               })
             }
           />

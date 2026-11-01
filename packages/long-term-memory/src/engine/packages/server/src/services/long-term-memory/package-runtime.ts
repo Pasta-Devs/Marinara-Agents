@@ -115,8 +115,6 @@ export type CapabilityRuntimeHost = {
     >;
     /** Engines that have it skip messages the user hid or showed by hand and return the ids actually changed. */
     setMessagesHiddenFromAI?(chatId: string, messageIds: string[], hidden: boolean): Promise<string[]>;
-    /** Only `advancedMemory` is read, and only Capability API 1.391 hosts return it; records are validated on read. */
-    listChatSummaries?(chatId: string): Promise<{ advancedMemory?: unknown } | null | undefined>;
   };
 };
 
