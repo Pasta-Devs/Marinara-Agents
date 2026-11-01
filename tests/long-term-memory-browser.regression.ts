@@ -5089,195 +5089,17 @@ async function main() {
         assert.match(await note.innerText(), /returns to Balanced\./u, "the discarded pick is not remembered");
         await customPage.close();
       }
-      // The Advanced Memory toggle is disabled with a note on an Engine that cannot provide scene recaps.
-      for (const advancedMemoryAvailable of [false, true]) {
-        const recapPage = await browserContext.newPage();
-        await recapPage.setViewportSize({ width: 1280, height: 900 });
-        await recapPage.route("**/api/long-term-memory/settings", (route) =>
-          route.request().method() === "GET" ? route.fulfill({ json: { advancedMemoryAvailable } }) : route.continue(),
-        );
-        await recapPage.goto(`http://127.0.0.1:${address.port}/`);
-        await recapPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
-        await recapPage.evaluate(`(() => {
-          const element = document.createElement("marinara-capability-long-term-memory");
-          element.setAttribute("view", "detail");
-          element.capabilityProps = { confirmAction: () => true };
-          document.body.append(element);
-        })()`);
-        await recapPage.locator('[data-ltm-destination="settings"]:visible').first().click();
-        await recapPage.locator("#settings-tab-extraction").click();
-        const recapToggle = recapPage
-          .locator("#settings-panel-extraction")
-          .getByLabel("Use Advanced Memory recaps", { exact: true });
-        await recapToggle.waitFor({ state: "visible", timeout: 5_000 });
-        assert.equal(await recapToggle.isDisabled(), !advancedMemoryAvailable);
-        await recapPage.locator('[data-ltm-info="Use Advanced Memory recaps"]').click();
-        const recapNote = await recapPage.locator('[data-ltm-info-panel="Use Advanced Memory recaps"]').innerText();
-        assert.equal(
-          recapNote.includes("Update Marinara to use this setting"),
-          !advancedMemoryAvailable,
-          "only an Engine without scene recaps gets the update note",
-        );
-        await recapPage.close();
-      }
-      // Older Advanced Memory recaps: one press reads every batch with progress, Stop halts after the batch being
-      // read, and the next press resumes with what the route still lists.
-      {
-        const backfillPage = await browserContext.newPage();
-        await backfillPage.setViewportSize({ width: 1280, height: 900 });
-        let pending = Array.from({ length: 25 }, (_, index) => `recap-${index + 1}`);
-        const batchLimits: number[] = [];
-        const readBatches: string[][] = [];
-        let holdBatch: Promise<void> | null = null;
-        let batchStarted: (() => void) | null = null;
-        await backfillPage.route("**/api/long-term-memory/extraction-settings", (route) =>
-          route.request().method() === "GET" ? route.fulfill({ json: { useAdvancedMemory: true } }) : route.continue(),
-        );
-        await backfillPage.route("**/api/long-term-memory/import/advanced-memory/backfill-batch", (route) => {
-          const { limit } = route.request().postDataJSON() as { limit: number };
-          if (limit > 1) batchLimits.push(limit);
-          return route.fulfill({
-            json: { sourceIds: pending.slice(0, limit), remaining: Math.max(0, pending.length - limit) },
-          });
-        });
-        await backfillPage.route("**/api/long-term-memory/import/source-notes", async (route) => {
-          const { sourceIds, source } = route.request().postDataJSON() as { sourceIds: string[]; source: string };
-          batchStarted?.();
-          await holdBatch;
-          readBatches.push(sourceIds);
-          pending = pending.filter((id) => !sourceIds.includes(id));
-          return route.fulfill({
-            json: {
-              operationId: crypto.randomUUID(),
-              batchStatus: "completed",
-              source,
-              imported: [],
-              writeFailures: [],
-              missingSourceIds: [],
-              counts: {
-                requested: sourceIds.length,
-                sourceNotesWritten: sourceIds.length,
-                succeeded: sourceIds.length,
-                failed: 0,
-                cancelled: 0,
-                missing: 0,
-                sourceWriteFailed: 0,
-              },
-            },
-          });
-        });
-        await backfillPage.goto(`http://127.0.0.1:${address.port}/`);
-        await backfillPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
-        await backfillPage.evaluate(`(() => {
-          const element = document.createElement("marinara-capability-long-term-memory");
-          element.setAttribute("view", "detail");
-          element.capabilityProps = { chatId: "desktop-chat", confirmAction: () => true };
-          document.body.append(element);
-        })()`);
-        await backfillPage.locator('[data-ltm-destination="sources"]:visible').first().click();
-        const backfillGroup = backfillPage.locator("[data-ltm-advanced-memory-backfill]");
-        const backfillButton = backfillGroup.locator('[data-ltm-source-action="advanced-memory-backfill"]');
-        await backfillButton.waitFor({ timeout: 10_000 });
-        // The button shows before the count loads, with a plain label.
-        await backfillGroup
-          .getByRole("button", { name: "Read 25 older recaps", exact: true })
-          .waitFor({ timeout: 10_000 });
-        assert.equal(await backfillGroup.locator("input[type=number]").count(), 0, "no batch-size field");
-        // Stop while the first batch is being read: that batch finishes, no second one starts.
-        let releaseBatch!: () => void;
-        holdBatch = new Promise<void>((resolve) => {
-          releaseBatch = resolve;
-        });
-        const firstBatchStarted = new Promise<void>((resolve) => {
-          batchStarted = resolve;
-        });
-        await backfillButton.click();
-        await firstBatchStarted;
-        const backfillProgress = backfillGroup.locator("[data-ltm-advanced-memory-progress]");
-        assert.match(await backfillProgress.innerText(), /Read 0 of 25/u);
-        await backfillGroup.locator('[data-ltm-source-action="stop-backfill"]').click();
-        batchStarted = null;
-        releaseBatch();
-        await backfillGroup.getByText("Stopped. 15 recaps are left", { exact: false }).waitFor({ timeout: 10_000 });
-        assert.deepEqual(
-          readBatches.map((ids) => ids.length),
-          [10],
-          "Stop ends the loop after the batch being read",
-        );
-        // The next press resumes from what remains and reads the rest without another press.
-        holdBatch = null;
-        await backfillButton.waitFor({ timeout: 10_000 });
-        await backfillPage.waitForFunction(
-          () =>
-            document.querySelector('[data-ltm-source-action="advanced-memory-backfill"]')?.textContent ===
-            "Read 15 older recaps",
-        );
-        await backfillButton.click();
-        await backfillGroup.locator("[data-ltm-advanced-memory-done]").waitFor({ timeout: 10_000 });
-        assert.deepEqual(
-          readBatches.map((ids) => ids.length),
-          [10, 10, 5],
-          "one press reads every remaining batch",
-        );
-        assert.deepEqual([...new Set(batchLimits)], [10], "a fixed batch size");
-        assert.equal(await backfillButton.count(), 0, "nothing left to read hides the button");
-        await backfillPage.close();
-      }
-      // A recap the route lists again after a completed batch must not loop forever.
-      {
-        const stuckPage = await browserContext.newPage();
-        await stuckPage.setViewportSize({ width: 1280, height: 900 });
-        let stuckImports = 0;
-        await stuckPage.route("**/api/long-term-memory/extraction-settings", (route) =>
-          route.request().method() === "GET" ? route.fulfill({ json: { useAdvancedMemory: true } }) : route.continue(),
-        );
-        await stuckPage.route("**/api/long-term-memory/import/advanced-memory/backfill-batch", (route) =>
-          route.fulfill({ json: { sourceIds: ["stuck-recap"], remaining: 0 } }),
-        );
-        await stuckPage.route("**/api/long-term-memory/import/source-notes", (route) => {
-          stuckImports += 1;
-          const { source } = route.request().postDataJSON() as { source: string };
-          return route.fulfill({
-            json: {
-              operationId: crypto.randomUUID(),
-              batchStatus: "completed",
-              source,
-              imported: [],
-              writeFailures: [],
-              missingSourceIds: [],
-              counts: {
-                requested: 1,
-                sourceNotesWritten: 1,
-                succeeded: 1,
-                failed: 0,
-                cancelled: 0,
-                missing: 0,
-                sourceWriteFailed: 0,
-              },
-            },
-          });
-        });
-        await stuckPage.goto(`http://127.0.0.1:${address.port}/`);
-        await stuckPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
-        await stuckPage.evaluate(`(() => {
-          const element = document.createElement("marinara-capability-long-term-memory");
-          element.setAttribute("view", "detail");
-          element.capabilityProps = { chatId: "desktop-chat", confirmAction: () => true };
-          document.body.append(element);
-        })()`);
-        await stuckPage.locator('[data-ltm-destination="sources"]:visible').first().click();
-        const stuckGroup = stuckPage.locator("[data-ltm-advanced-memory-backfill]");
-        const stuckButton = stuckGroup.locator('[data-ltm-source-action="advanced-memory-backfill"]');
-        await stuckButton.waitFor({ timeout: 10_000 });
-        await stuckButton.click();
-        await stuckGroup.getByText("Some recaps could not be read", { exact: false }).waitFor({ timeout: 10_000 });
-        assert.equal(stuckImports, 1, "a recap that stays listed is read once, then the loop ends");
-        await stuckButton.waitFor({ timeout: 10_000 });
-        await stuckPage.close();
-      }
       // Background import: Chat Settings counts today's saved and waiting memories, and a missing extraction
       // connection is a warning with a Choose button in Chat Settings and in Extraction.
-      for (const scenario of ["connection-missing", "connection-chosen", "working"] as const) {
+      for (const scenario of [
+        "connection-missing",
+        "connection-chosen",
+        "working",
+        "review",
+        "empty",
+        "empty-save",
+        "manual",
+      ] as const) {
         const importPage = await browserContext.newPage();
         await importPage.setViewportSize({ width: 1280, height: 900 });
         const now = new Date().toISOString();
@@ -5291,28 +5113,34 @@ async function main() {
           ...fields,
         });
         const events =
-          scenario === "working"
-            ? [
-                event({ status: "ok", counts: { imported: 2, failed: 0, applied: 3, skipped: 1 } }),
-                event({ status: "ok", counts: { imported: 1, failed: 0, applied: 2, skipped: 0 } }),
-                event({ status: "ok", chatId: "other-chat", counts: { applied: 9 } }),
-                event({ status: "ok", ts: "2000-01-01T00:00:00.000Z", counts: { applied: 7 } }),
-              ]
-            : [event({ status: "error", error: { message: "No model", code: "ltm_model_configuration" } })];
+          scenario === "empty" || scenario === "empty-save"
+            ? []
+            : scenario === "working" || scenario === "review"
+              ? [
+                  event({ status: "ok", counts: { imported: 2, failed: 0, applied: 3, skipped: 1 } }),
+                  event({ status: "ok", counts: { imported: 1, failed: 0, applied: 2, skipped: 0 } }),
+                  event({ status: "ok", chatId: "other-chat", counts: { applied: 9 } }),
+                  event({ status: "ok", ts: "2000-01-01T00:00:00.000Z", counts: { applied: 7 } }),
+                ]
+              : [event({ status: "error", error: { message: "No model", code: "ltm_model_configuration" } })];
         await importPage.route("**/api/long-term-memory/extraction-settings", (route) =>
           route.request().method() === "GET"
             ? route.fulfill({
                 json: {
-                  autoImportChatSources: true,
+                  autoImportChatSources: scenario !== "manual",
+                  autoAcceptSafeChanges: scenario === "working" || scenario === "empty-save",
                   connectionId: scenario === "connection-chosen" ? "connection-1" : null,
                 },
               })
             : route.continue(),
         );
+        await importPage.route("**/api/long-term-memory/chat-memories/*", (route) =>
+          route.fulfill({ json: { chatMemories: null } }),
+        );
         await importPage.route("**/api/long-term-memory/debug-log?*", (route) => route.fulfill({ json: { events } }));
         await importPage.route("**/api/long-term-memory/drafts/pending-count?*", (route) => {
           assert.match(route.request().url(), /chatId=chat-import/u, "the waiting count is for this chat");
-          return route.fulfill({ json: { count: 4 } });
+          return route.fulfill({ json: { count: scenario === "empty" || scenario === "empty-save" ? 0 : 4 } });
         });
         await importPage.goto(`http://127.0.0.1:${address.port}/`);
         await importPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
@@ -5336,10 +5164,41 @@ async function main() {
         if (scenario === "working") {
           const status = importSettings.locator("[data-ltm-auto-import-status]");
           await status.waitFor({ timeout: 5_000 });
-          assert.match(await status.innerText(), /5 saved today · 4 wait for you/u, "only this chat's rows from today");
+          assert.match(
+            await status.innerText(),
+            /5 saved today\s*·\s*4 wait for you/u,
+            "only this chat's rows from today",
+          );
+          assert.equal(await status.locator("svg").count(), 2, "a check for saved and a clock for waiting");
           assert.equal(await importSettings.locator("[data-ltm-connection-warning]").count(), 0);
           await status.getByRole("button", { name: "Review", exact: true }).click();
           await importPage.locator('[data-ltm-destination="review"][aria-current="page"]:visible').first().waitFor({
+            timeout: 5_000,
+          });
+        } else if (scenario === "review") {
+          // Nothing saves on its own in review mode, so only the waiting part shows.
+          const status = importSettings.locator("[data-ltm-auto-import-status]");
+          await status.waitFor({ timeout: 5_000 });
+          assert.equal((await status.innerText()).replace(/\s+/gu, " ").trim(), "4 wait for you Review");
+        } else if (scenario === "empty") {
+          const status = importSettings.locator("[data-ltm-auto-import-status]");
+          await status.waitFor({ timeout: 5_000 });
+          assert.match(await status.innerText(), /Watching this chat · nothing new yet/u);
+          assert.equal(
+            await status.getByRole("button", { name: "Review" }).count(),
+            0,
+            "Review only when something waits",
+          );
+        } else if (scenario === "empty-save") {
+          const status = importSettings.locator("[data-ltm-auto-import-status]");
+          await status.waitFor({ timeout: 5_000 });
+          assert.equal((await status.innerText()).replace(/\s+/gu, " ").trim(), "0 saved today");
+        } else if (scenario === "manual") {
+          const status = importSettings.locator("[data-ltm-auto-import-status]");
+          await status.waitFor({ timeout: 5_000 });
+          assert.match(await status.innerText(), /Nothing is added on its own/u);
+          await status.getByRole("button", { name: "Import", exact: true }).click();
+          await importPage.locator('[data-ltm-destination="sources"][aria-current="page"]:visible').first().waitFor({
             timeout: 5_000,
           });
         } else if (scenario === "connection-chosen") {
@@ -5413,6 +5272,14 @@ async function main() {
             { timeout: 5_000 },
           );
         await chatChoiceIs("save");
+        assert.equal(
+          await memoriesPage.evaluate(() => {
+            const panel = document.querySelector('[data-ltm-surface="chat-settings"]')!;
+            return panel.firstElementChild?.hasAttribute("data-ltm-chat-memories-field");
+          }),
+          true,
+          "Memories from this chat comes first",
+        );
         assert.equal(await memoriesField.getByText("Global default", { exact: true }).count(), 0);
         await memoriesField.getByRole("button", { name: "Use global default" }).click();
         // With no override the chat shows the global choice: import on, accept off is "Collect them, I'll review".
@@ -5438,7 +5305,7 @@ async function main() {
         await globalChoice.selectOption("save");
         await memoriesPage
           .locator('#settings-panel-extraction [data-ltm-chat-memories-sample="save"]')
-          .getByText("2 saved · 1 waits for you")
+          .getByText("2 saved", { exact: true })
           .waitFor({ timeout: 5_000 });
         await memoriesPage.getByRole("button", { name: "Save settings" }).click();
         await memoriesPage.getByRole("button", { name: "Save settings" }).waitFor({ state: "detached" });
@@ -6202,7 +6069,7 @@ async function main() {
         })()`);
         const loadingSettings = loadingPage.locator('[data-ltm-surface="chat-settings"]');
         await loadingSettings.waitFor();
-        const loadingStyle = loadingSettings.locator('select[data-ltm-control="select"]').first();
+        const loadingStyle = loadingSettings.getByLabel("Recall style", { exact: true });
         const loadingBudget = loadingSettings.getByRole("spinbutton", { name: "Recall context budget" });
         const loadingMaxChunks = loadingSettings.getByRole("spinbutton", { name: "Maximum memories" });
         assert.equal(
@@ -6216,7 +6083,8 @@ async function main() {
         assert.equal(await loadingSettings.getByText("Global default").count(), 0);
         releaseDefaults();
         await loadingPage.waitForFunction(
-          () => document.querySelector('[data-ltm-surface="chat-settings"] select')?.value === "balanced",
+          (select) => (select as HTMLSelectElement).value === "balanced",
+          await loadingStyle.elementHandle(),
         );
         assert.equal(await loadingBudget.inputValue(), "4096");
         assert.equal(await loadingMaxChunks.inputValue(), "20");
@@ -9733,7 +9601,7 @@ async function main() {
       }, packageManifest.version);
       const heldChatSettings = mobilePage.locator('[data-ltm-surface="chat-settings"]');
       await heldChatSettings.waitFor();
-      const heldStyle = heldChatSettings.locator('select[data-ltm-control="select"]').first();
+      const heldStyle = heldChatSettings.getByLabel("Recall style", { exact: true });
       const heldBudget = heldChatSettings.getByRole("spinbutton", { name: "Recall context budget" });
       const heldMaxChunks = heldChatSettings.getByRole("spinbutton", { name: "Maximum memories" });
       const isFocused = (target: typeof heldBudget) => target.evaluate((element) => element === document.activeElement);
@@ -10040,11 +9908,20 @@ async function main() {
       await firstRunChoice.waitFor({ timeout: 5_000 });
       assert.equal(await firstRunChoice.innerText(), "Save them for me");
       assert.equal(await firstRunGuide.locator('[data-ltm-chat-memories-sample="save"]').count(), 1);
+      assert.match(
+        (await firstRunGuide.locator('[data-ltm-chat-memories-sample="save"]').innerText()).replace(/\s+/gu, " "),
+        /^after a reply 2 saved · 1 waits for you$/iu,
+      );
       const writesBeforeGuide = extractionWrites.length;
       await firstRunGuide.getByRole("button", { name: "Continue without a chat" }).click();
       for (let wait = 0; wait < 50 && extractionWrites.length === writesBeforeGuide; wait += 1)
         await firstRunPage.waitForTimeout(20);
       assert.deepEqual(extractionWrites.at(-1), { autoImportChatSources: true, autoAcceptSafeChanges: true });
+      // The import step follows the chosen way: new messages are already collected.
+      await firstRunGuide
+        .getByText("New messages in this chat are already being collected. Older ones can be imported here.")
+        .waitFor({ timeout: 5_000 });
+      assert.doesNotMatch(await firstRunGuide.innerText(), /Importing a Chat Summary saves the source/u);
       await firstRunGuide.getByRole("button", { name: "Next: Reviewing and saving memories" }).click();
       await firstRunGuide.getByRole("button", { name: "Next: Check it works" }).click();
       assert.equal(await firstRunGuide.getByRole("button", { name: "Choose a Source" }).count(), 1);

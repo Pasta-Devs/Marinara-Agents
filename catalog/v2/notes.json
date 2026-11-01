@@ -364,6 +364,48 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.5.29",
+          "date": "2026-11-01",
+          "notes": "- Long-Term Memory no longer imports Advanced Memory scene recaps. Chats that use Advanced Memory are extracted from their own summaries and messages, so their memories get keywords, links and threads, and \"Hide remembered messages\" works for them. Memories already imported from recaps stay.",
+          "highlight": false
+        },
+        {
+          "version": "1.5.28",
+          "date": "2026-11-01",
+          "notes": "- In a hands-off mode, one memory worded like a scene action now waits in Review on its own while the rest of that batch is still saved. Everyday habits such as \"keeps\", \"carries\" or \"wears\" no longer trigger the warning.",
+          "highlight": false
+        },
+        {
+          "version": "1.5.27",
+          "date": "2026-11-01",
+          "notes": "- Memory Settings → Sharing shows how many memories each other Agent added this week, and lists an Agent that has only added memories.",
+          "highlight": false
+        },
+        {
+          "version": "1.5.26",
+          "date": "2026-11-01",
+          "notes": "- The Memory Vault shows a Slurp or Advanced Memory chip on memories that Slurp or Advanced Memory added, in the list and at the top of the editor.",
+          "highlight": false
+        },
+        {
+          "version": "1.5.25",
+          "date": "2026-11-01",
+          "notes": "- Chat Settings puts \"Memories from this chat\" first and shows what happened in plain parts (saved today with a check, waiting for you with a clock, Review only when something waits), with clear lines when nothing is new or memories are added by hand; the \"After a reply\" sample in Extraction and the setup guide looks the same.\n- The setup guide's import step says new messages are already being collected when you chose a hands-off mode, and \"Hide imported messages from the AI\" is now \"Hide remembered messages from the AI\" with a short note that your latest messages always stay.",
+          "highlight": false
+        },
+        {
+          "version": "1.5.24",
+          "date": "2026-11-01",
+          "notes": "- An Agent that adds memories can ask recall to leave out what it added itself, so its own facts do not come back as new.",
+          "highlight": false
+        },
+        {
+          "version": "1.5.23",
+          "date": "2026-11-01",
+          "notes": "- Slurp can add memories when you allow it in Memory Settings → Sharing. Off by default.",
+          "highlight": false
+        },
+        {
           "version": "1.5.22",
           "date": "2026-10-31",
           "notes": "- Clearer hands-off wording: the background import help says it covers every chat, intro and re-extract text is right when safe changes are accepted automatically, and Advanced Memory scene recaps are disabled with a note on Engines that cannot provide them.\n- Chat Settings shows what background import did today and what waits for review, and both Chat Settings and Extraction warn with a \"Choose\" button when background import has no extraction connection.\n- Reading older Advanced Memory recaps is one button with progress, Stop and resume, instead of a batch-size field and repeated presses.\n- Memory Settings, Chat Settings and the setup guide offer one \"Memories from chats\" choice (I add them myself; Collect them, I'll review; Save them for me) with a per-chat override, and Hide imported messages now waits until a message's memories are saved.",
@@ -439,48 +481,6 @@
           "version": "1.5.10",
           "date": "2026-10-29",
           "notes": "- Long-Term Memory no longer offers the older way other Agents read memories. Slurp 0.4.8 and earlier stop adding memories to Creator posts; update Slurp to keep them.",
-          "highlight": false
-        },
-        {
-          "version": "1.5.9",
-          "date": "2026-10-29",
-          "notes": "- After you turn on \"Other Agents can read memories\" and save, Memory Settings offers to turn on Slurp's \"What your other Agents know\" switch too, since Slurp's Creators need both before they use memories.",
-          "highlight": false
-        },
-        {
-          "version": "1.5.8",
-          "date": "2026-10-29",
-          "notes": "- Other Agents that read memories, such as Slurp and Noodle, can ask for whole memories instead of the parts that fit what they are writing. The same memories are shared either way.",
-          "highlight": false
-        },
-        {
-          "version": "1.5.7",
-          "date": "2026-10-28",
-          "notes": "- Memory Settings → Recall → Sharing lists each Agent that has read memories with when it last did, how many times it read this week and how many memories it got, so you can tell whether an Agent such as Slurp is using them. The counts come from the Debug activity log, so clearing it or a very busy install can lower them.",
-          "highlight": false
-        },
-        {
-          "version": "1.5.6",
-          "date": "2026-10-28",
-          "notes": "- In Sources → Chat Messages, a row with a long chat name cuts the name and keeps the message range visible, so pieces of one chat can be told apart. The range label is also translated (English and Korean).",
-          "highlight": false
-        },
-        {
-          "version": "1.5.5",
-          "date": "2026-10-28",
-          "notes": "- A long chat imported from Chat Messages is read in order, one piece after another. From the second piece on, the model sees the end of the piece before it, that piece's events and its open threads, so a memory can say what caused an event or continue a thread across the cut. Different chats still import side by side.",
-          "highlight": false
-        },
-        {
-          "version": "1.5.4",
-          "date": "2026-10-28",
-          "notes": "- Re-extract says why it is waiting while settings load, and Run maintenance keeps your place after it finishes.\n- Loading placeholders stop pulsing when reduced motion is on, source tool results are announced to screen readers, and a save waiting on recall no longer ends in a stray colon.",
-          "highlight": false
-        },
-        {
-          "version": "1.5.3",
-          "date": "2026-10-27",
-          "notes": "- Long-Term Memory now has a Korean interface. It follows the Engine's language setting and shows English for any text without a Korean version. The translation is machine-made and awaits review by a Korean speaker.",
           "highlight": false
         }
       ]
@@ -834,6 +834,18 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.4.15",
+          "date": "2026-11-01",
+          "notes": "- Slurp can tell Long-Term Memory what is true about your Creators, so chats know it too. A new \"Tell Long-Term Memory about your Creators\" switch in Backstage (Engine link) is off by default. From then on, facts you write or promote, couples and friendships between Creators, and how storylines end become memories. Nothing from fans or DM threads is sent. Turning it on asks whether to turn on Long-Term Memory's \"Other Agents can add memories\" when that is off.\n- Slurp's own facts no longer come back to Creators as memories, so they are not told twice.",
+          "highlight": false
+        },
+        {
+          "version": "0.4.14",
+          "date": "2026-10-31",
+          "notes": "- Fixed: nude and explicit pictures showed everyday clothes. A post at the nudity or explicit level (after access and intent) now picks only intimate wardrobe looks (lingerie, swimwear, a towel, nude and similar by name, summary, description or tag), never falls back to an everyday look, and the writer may return no look.\n- At those levels the writer is told the outfit is nothing or only what the scene needs, the Creator's usual wardrobe note is not a fallback, and an outfit of \"nothing\" adds no `Wearing` line to the picture prompt. Clothed and suggestive posts are unchanged.",
+          "highlight": false
+        },
+        {
           "version": "0.4.13",
           "date": "2026-10-31",
           "notes": "- Wardrobe looks can be exported and imported as JSON. Export the whole wardrobe or a single look, and import a file back into the same review list as the AI import. No model call is needed, and {{random}} in a description stays as written.\n- Rewritten commission requests keep up to 1000 characters instead of being cut off at 400.\n- A scene's setting, action and visual direction may be up to 1500 characters, so a long visual direction no longer fails \"Post now\" on a collab.",
@@ -940,18 +952,6 @@
           "date": "2026-10-19",
           "notes": "- Added: tapping an ad (the button, the picture or a wall tile) opens an ad sheet with the picture, brand, product, copy and price feel, and still records the tap. The old \"Opening … promotion\" toast is gone.\n- Added: Settings › Fans & money › Collect has a \"Daily limit on Collect\" switch (`walletPayoutDailyLimit`, on by default). Off, Collect moves every whole coin of your Creator earnings at once.\n- Added: Messaging › \"What fans ask for\" is an editable list for the wish in a commission request (`messagesCommissionAsks`); empty keeps the built-in asks.",
           "highlight": false
-        },
-        {
-          "version": "0.3.49",
-          "date": "2026-10-19",
-          "notes": "- Fixed: restoring a backup checks each media file more closely. Only PNG, JPEG, WebP, GIF and AVIF pictures whose file extension matches their contents come back; anything else is skipped and listed with the skipped entries (#1476).\n- Fixed: AVIF pictures in a backup were dropped on restore. They now come back like the other formats.\n- Changed: Slurp sends every stored picture (posts, messages, avatars, banners, ads) as the image type its contents show (#1476).",
-          "highlight": false
-        },
-        {
-          "version": "0.3.48",
-          "date": "2026-10-19",
-          "notes": "- Changed: Creators whose character has a Conversation Schedule now follow it. Slurp only read a bare \"06:00\" and the Engine stores ranges (\"06:00-08:00\"), so every block was dropped and availability was guessed from the last post. Ranges, including ones past midnight, are now read as the Engine reads them. Time between blocks is free time, online; a block's status decides (offline and dnd are away, online and idle answer); a block without one falls back to its activity words. The post brief's day plan reads the same ranges (#1436).\n- Fixed: a promised follow-up could be postponed forever while the Creator read as away. More than 12 hours past its first due time, it now goes out at its next check even if they are away. A fan waiting for a reply, a cool-off and night quiet still hold it (#1436).\n- Fixed: a name only matches inside one tag or line (\"summer, rain\" is not \"Summer Rain\"), and companion reference pictures come only from the companions found in the scene.",
-          "highlight": true
         }
       ]
     },

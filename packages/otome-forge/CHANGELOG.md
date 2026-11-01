@@ -1,5 +1,27 @@
 # Otome Hearth release notes
 
+## 0.6.14 — 2026-11-01
+
+- **Confrontation and Closer choices speak to you.** Their option buttons sometimes talked about you in the third person ("Say what she pays") instead of speaking to you ("Say what you pay"), unlike every other choice in the story. They now always read as something you do, and an action you pick is told as "you", like the rest of the scene. Confrontations and Closers written before this update keep their old wording.
+
+## 0.6.13 — 2026-11-01
+
+- **A love interest's sprite leaves the stage when he does.** When he walked out of a scene, or you left him behind, his sprite used to stay on screen until the end of the beat, as if he were still there. The writer now marks who leaves on that line, and the stage clears from there; he comes back the moment he speaks again, and anyone still in the scene stays. Scenes written before this update keep their old staging.
+
+## 0.6.12 — 2026-11-01
+
+- **Every Settings category stays reachable with a mouse.** On a desktop window just under the wide layout, or with wider system fonts, the category bar could cut off its last tab with no scrollbar to reach it. With a mouse the categories now wrap onto a second row instead; phones keep their single swipeable strip.
+- **CGs show whole on a PC.** A CG is painted tall, and on a wide screen (fullscreen on a PC) it was zoomed to fill the width, cropping away its top and bottom and often the faces. On a wide stage the CG now shows in full, framed by a soft blurred copy of itself; phones still fill the screen with it.
+
+## 0.6.11 — 2026-10-31
+
+- **His portrait is painted from his card's full-body image and his avatar together**, instead of one standing in for the other. A love interest drawn from a character card now keeps both his build and his face, which the reference could only carry one of before. Scenes still send one likeness per person, so a large cast is not crowded out of the reference budget.
+
+## 0.6.10 — 2026-10-31
+
+- **Each love interest has his own colour again** on his name plate and in the glow behind his art. It is picked from a vivid detail of his portrait (an earring, his eyes) rather than averaged from the picture, so no two love interests in a cast share one, and the backdrop a look is painted on never becomes it.
+- Stories already in progress re-pick their colours when opened: an accent chosen by the old picker is treated as unset.
+
 ## 0.6.9 — 2026-10-31
 
 - The chapter list groups chapters under their arc, and a chapter's reader says which arc it belongs to ("Arc 2 · Chapter 4").

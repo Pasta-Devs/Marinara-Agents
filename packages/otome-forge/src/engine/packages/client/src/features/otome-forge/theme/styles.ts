@@ -751,8 +751,12 @@ ${R} .of-bible-secret, ${R} .of-bible-stage {
 ${R} .of-tabs {
   display: flex; gap: 4px; padding: 4px; border-radius: 18px; overflow-x: auto; scrollbar-width: none; flex: none;
 }
-/* Keep the phone's categories in one scrolling strip; wide Settings can show them all at once. */
+/* Keep the phone's categories in one scrolling strip; wide Settings can show them all at once. A mouse shows them all at
+   any width: the strip hides its scrollbar, so a cut-off tab (wider system fonts, a narrow window) had no way in. */
 @container of-stage (min-width: 960px) {
+  ${R} .of-settings .of-tabs { flex-wrap: wrap; overflow: visible; }
+}
+@media (pointer: fine) {
   ${R} .of-settings .of-tabs { flex-wrap: wrap; overflow: visible; }
 }
 ${R} .of-settings .of-tab { min-height: 44px; }
@@ -1667,11 +1671,12 @@ ${R} .of-face {
 }
 ${R} .of-face[data-speaking="false"] { filter: saturate(0.82) brightness(0.86); transform: scale(0.985); }
 ${R}[data-look="pearl"] .of-face[data-speaking="false"] { filter: saturate(0.8) brightness(0.97); }
-${R} .of-face[data-face="tender"] { --of-face-aura: rgb(255 182 202 / 0.95); }
-${R} .of-face[data-face="flustered"] { --of-face-aura: rgb(255 128 166 / 0.95); }
-${R} .of-face[data-face="cold"] { --of-face-aura: rgb(150 192 244 / 0.95); }
-${R} .of-face[data-face="hurt"] { --of-face-aura: rgb(164 142 222 / 0.95); }
-${R} .of-face[data-face="angry"] { --of-face-aura: rgb(244 92 92 / 0.95); }
+/* The glow behind his art is his own colour, and his face only warms or cools it: a blush is not a different person. */
+${R} .of-face[data-face="tender"] { --of-face-aura: color-mix(in srgb, rgb(255 182 202) 45%, var(--of-li-accent)); }
+${R} .of-face[data-face="flustered"] { --of-face-aura: color-mix(in srgb, rgb(255 128 166) 45%, var(--of-li-accent)); }
+${R} .of-face[data-face="cold"] { --of-face-aura: color-mix(in srgb, rgb(150 192 244) 45%, var(--of-li-accent)); }
+${R} .of-face[data-face="hurt"] { --of-face-aura: color-mix(in srgb, rgb(164 142 222) 45%, var(--of-li-accent)); }
+${R} .of-face[data-face="angry"] { --of-face-aura: color-mix(in srgb, rgb(244 92 92) 45%, var(--of-li-accent)); }
 ${R} .of-face-art { position: relative; flex: 1; min-height: 0; width: min(82%, 380px); }
 ${R} .of-face-art::before {
   content: ""; position: absolute; inset: 10% 6% 0; border-radius: 50%; filter: blur(30px); opacity: 0.55;
@@ -2559,13 +2564,25 @@ ${R} .of-reader[data-picture="true"] .of-choices-heading {
 /* A story CG takes the stage: letterbox bars close in, the image pans for about 6 s, then the box returns at 80%. */
 ${R} .of-cg {
   position: absolute; inset: 0; z-index: 1; margin: 0; overflow: clip; background: #07050f;
-  animation: of-fade-in 900ms var(--of-ease) both;
+  animation: of-fade-in 900ms var(--of-ease) both; container: of-cg / size;
 }
 ${R} .of-cg-img {
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%;
   transform: scale(1.04); transition: transform 1200ms var(--of-ease);
 }
 ${R} .of-cg[data-intro="true"] .of-cg-img { animation: of-cg-pan 6s cubic-bezier(0.32, 0.06, 0.3, 1) both; }
+/* A CG is painted portrait (9:16, S/art/prompts.ts SCENE_SIZE). In a box wider than 2:3, such as the stage in fullscreen
+   on a PC, cover would keep only a thin band of it and cut heads off (#2000), so the CG is shown whole there, over a
+   blurred copy of itself so the sides are not bare. The windowed 9:16 stage and a phone keep the full-bleed cover. The
+   query is the CG's own box: the frame around a windowed stage is wide while the stage itself is not. */
+${R} .of-cg-backdrop { display: none; }
+@container of-cg (min-aspect-ratio: 2 / 3) {
+  ${R} .of-cg-img { object-fit: contain; object-position: center; }
+  ${R} .of-cg-backdrop {
+    display: block; position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+    filter: blur(32px) brightness(0.5) saturate(1.1); transform: scale(1.2);
+  }
+}
 ${R} .of-cg-bar {
   position: absolute; inset-inline: 0; height: 11%; background: #050309; transform: scaleY(0);
   transition: transform 700ms var(--of-ease);

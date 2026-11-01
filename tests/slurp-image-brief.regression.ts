@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  slurpPictureOutfit,
   slurpImageBrief,
   slurpImageNegativePrompt,
   slurpImageNegativeWithCompany,
@@ -47,7 +48,7 @@ assert.match(slurpImageNegativePrompt("explicit"), /second person/u);
 assert.doesNotMatch(slurpImageNegativePrompt("explicit"), /nudity/u);
 
 // A callback keeps the shoot's place and clothes and never nests an earlier draft.
-const continuity = slurpShootContinuity({ scene, outfit: scene.outfit });
+const continuity = slurpShootContinuity({ scene });
 assert.ok(continuity?.includes(scene.setting) && continuity.includes(scene.outfit));
 const callback = slurpImageBrief({
   cameraPhoto: slurpCameraSourcePhoto("tripod"),
@@ -58,6 +59,44 @@ const callback = slurpImageBrief({
 });
 assert.ok(callback.includes(scene.setting) && !callback.includes("a different place"));
 assert.ok(!callback.includes("a different outfit"));
+const bareBrief = slurpImageBrief({
+  cameraPhoto: slurpCameraSourcePhoto("tripod"),
+  variation,
+  sexualLevel: "explicit",
+  stageFacts: { wardrobe: "hoodies and jeans" },
+  scene: { ...scene, outfit: "nothing" },
+});
+assert.doesNotMatch(
+  bareBrief,
+  /Wearing|hoodies/u,
+  "a body-showing level never dresses the picture from the usual wardrobe",
+);
+assert.equal(slurpShootContinuity({ scene: { ...scene, outfit: "nothing" }, bare: true })?.includes("Wearing"), false);
+assert.match(slurpShootContinuity({ scene: { ...scene, outfit: "nothing" } }) ?? "", /Wearing nothing/u);
+const clothedShoot = slurpShootContinuity({ scene: { ...scene, outfit: "hoodie and jeans" } });
+const bareCallback = slurpImageBrief({
+  cameraPhoto: slurpCameraSourcePhoto("tripod"),
+  variation,
+  sexualLevel: "explicit",
+  shoot: { place: "loft", company: "", brief: clothedShoot ?? "" },
+  scene,
+});
+assert.doesNotMatch(bareCallback, /hoodie/u, "a body-showing callback keeps the shoot's place, not its clothes");
+assert.equal(slurpPictureOutfit({ level: "nudity", scene: "Nothing but a towel" }), "Nothing but a towel");
+const wearingPlace = slurpShootContinuity({
+  scene: { ...scene, setting: "a loft, people wearing masks. Rain outside", outfit: "hoodie and jeans" },
+});
+const bareWearing = slurpImageBrief({
+  cameraPhoto: slurpCameraSourcePhoto("tripod"),
+  variation,
+  sexualLevel: "explicit",
+  shoot: { place: "loft", company: "", brief: wearingPlace ?? "" },
+  scene,
+});
+assert.match(bareWearing, /wearing masks/u, "only the Wearing clause is cut, not place text");
+assert.doesNotMatch(bareWearing, /hoodie/u);
+const periodShoot = slurpShootContinuity({ scene: { ...scene, outfit: "A red hoodie. Black jeans. Boots" } });
+assert.equal(periodShoot?.match(/Wearing [^.]*\./u)?.[0].includes("Boots"), true, "the clothes stay one sentence");
 const legacy = slurpImageBrief({
   cameraPhoto: slurpCameraSourcePhoto("tripod"),
   variation,

@@ -14,6 +14,7 @@ import {
 import { listSlurpOpportunities } from "../../data/feed/slp-opportunity-storage.js";
 import { listSlurpSignals } from "./slp-signals-service.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
+import { retractSlurpFact, shareSlurpFact } from "../../data/creators/slp-ltm-intake.js";
 import {
   slurpChatMomentKey,
   slurpContinuityIdentityOf,
@@ -119,6 +120,7 @@ export async function slpContinuityRoutes(app: FastifyInstance) {
       contribution: "manual",
     });
     if (!fact) return reply.code(400).send({ error: "Write something for the note to say." });
+    void shareSlurpFact(app.db, fact);
     return fact;
   });
 
@@ -193,6 +195,7 @@ export async function slpContinuityRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const fact = await editSlurpContinuityFact(app.db, id, body.data);
     if (!fact) return reply.code(404).send({ error: "Fact not found" });
+    void shareSlurpFact(app.db, fact);
     return fact;
   });
 
@@ -202,6 +205,7 @@ export async function slpContinuityRoutes(app: FastifyInstance) {
     if (target !== "facts" && target !== "events") return reply.code(404).send({ error: "Unknown record" });
     const moved = await moveSlurpContinuityStatus(app.db, target === "facts" ? "fact" : "event", id, "retracted");
     if (!moved) return reply.code(409).send({ error: "This record cannot be retracted." });
+    if (target === "facts") void retractSlurpFact(app.db, id);
     return { retracted: true };
   });
 
@@ -226,6 +230,9 @@ export async function slpContinuityRoutes(app: FastifyInstance) {
     const result = await promoteSlurpContinuityFact(app.db, id, body.data.audienceScope);
     if (result === "not_found") return reply.code(404).send({ error: "Fact not found" });
     if (result === "not_promotable") return reply.code(409).send({ error: "This fact cannot be promoted there." });
+    // The promoted copy carries the same line; the source may already be in memory under its own id.
+    void retractSlurpFact(app.db, id);
+    void shareSlurpFact(app.db, result);
     return result;
   });
 }

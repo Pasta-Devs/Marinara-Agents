@@ -111,11 +111,8 @@ export const ltmScopeTargetsKey = (chatId: string | null | undefined) =>
 /** One definition per shared query, so every screen reads and invalidates the same cache entry. */
 export const settingsQueryOptions = {
   queryKey: queryKeys.settings,
-  // The flags are false on an Engine that cannot hide chat messages or provide Advanced Memory scene recaps.
-  queryFn: () =>
-    request<LtmGlobalSettings & { hideImportedMessagesAvailable?: boolean; advancedMemoryAvailable?: boolean }>(
-      "/settings",
-    ),
+  // The flag is false on an Engine that cannot hide chat messages.
+  queryFn: () => request<LtmGlobalSettings & { hideImportedMessagesAvailable?: boolean }>("/settings"),
 };
 
 export const scopeTargetsQueryOptions = (chatId: string | null | undefined) => ({

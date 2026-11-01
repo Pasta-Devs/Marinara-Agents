@@ -24,6 +24,7 @@ export const VaultRow = memo(function VaultRow({
   label,
   previewLabel,
   previewText,
+  originLabel,
   selected,
   actionsOpen,
   selectMode,
@@ -35,6 +36,7 @@ export const VaultRow = memo(function VaultRow({
   label: string;
   previewLabel?: string;
   previewText?: string;
+  originLabel?: string;
   selected: boolean;
   actionsOpen: boolean;
   selectMode: boolean;
@@ -89,6 +91,11 @@ export const VaultRow = memo(function VaultRow({
             <span className="rounded border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5">
               {localizedLabel(note.status, localizeUi, labelKeys.status)}
             </span>
+            {originLabel ? (
+              <span className="rounded border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5">
+                {originLabel}
+              </span>
+            ) : null}
           </span>
           {previewText !== undefined ? (
             <span className="mt-1 line-clamp-2 break-words text-xs leading-5 text-[var(--muted-foreground)]">

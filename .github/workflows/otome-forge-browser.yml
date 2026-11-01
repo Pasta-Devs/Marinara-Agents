@@ -21,9 +21,14 @@ permissions:
 
 jobs:
   otome-forge-browser:
-    name: Otome Forge package browser
+    # One job per browser project: together they run ~85 minutes of tests, past one job's limit.
+    name: Otome Forge package browser (${{ matrix.project }})
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [desktop-chromium, mobile-chromium]
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Checkout Marinara Agents
@@ -79,11 +84,12 @@ jobs:
           MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
           # Until release 1 the package is uncatalogued, then staging-only (the preview overlay).
           MARINARA_CATALOG_INCLUDE_INCOMPLETE: "1"
-        run: npm run test:browser:otome-forge
+        run: npm run test:browser:otome-forge -- --project ${{ matrix.project }}
 
       # The same real-server visit with Gacha Forge installed beside it: its unprefixed `index` document must not
       # break Otome Forge's.
       - name: Open Otome Forge beside Gacha Forge
+        if: matrix.project == 'desktop-chromium'
         env:
           MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
           MARINARA_PACKAGE_IDS: gacha-forge
@@ -94,7 +100,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: otome-forge-browser-proof-${{ github.run_attempt }}
+          name: otome-forge-browser-proof-${{ matrix.project }}-${{ github.run_attempt }}
           path: test-results/
           if-no-files-found: ignore
           retention-days: 7

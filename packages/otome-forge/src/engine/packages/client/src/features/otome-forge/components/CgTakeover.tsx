@@ -50,6 +50,8 @@ export const CgTakeover = forwardRef<HTMLElement, CgTakeoverProps>(function CgTa
       // The faded header and box let taps through to the picture: a tap anywhere ends the pan.
       onClick={intro ? onIntroEnd : undefined}
     >
+      {/* A wide stage shows the portrait CG whole; this blurred copy fills the sides around it (styles.ts). */}
+      <img className="of-cg-backdrop" src={url} alt="" aria-hidden="true" decoding="async" />
       <img
         className="of-cg-img"
         src={url}

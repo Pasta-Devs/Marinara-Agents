@@ -246,6 +246,20 @@ function notesRequestPath(scope: LtmScope | null | undefined) {
   })}`;
 }
 
+const originLabelKeys = {
+  package_record: "ui.longTermMemory.memoryvault.originSlurp",
+  advanced_memory: "ui.longTermMemory.memoryvault.originAdvancedMemory",
+} as const;
+/** Where a memory came from, when another package or Advanced Memory added it: a source record's own provenance, else its `extracted_from` source's. */
+function originLabelKey(note: LtmNote, notesById: ReadonlyMap<string, LtmNote>) {
+  const source =
+    note.type === "source"
+      ? note
+      : notesById.get(note.links.find((link) => link.relation === "extracted_from")?.target ?? "");
+  const kind = source?.type === "source" ? source.provenance?.kind : undefined;
+  return kind === "package_record" || kind === "advanced_memory" ? originLabelKeys[kind] : undefined;
+}
+
 function subjectSearchValues(note: LtmNote, subjectLabels: (subject: LtmSubject) => string) {
   return (note.subjects ?? []).flatMap((subject) => [subject.key, subject.ref?.id, subjectLabels(subject)]);
 }
@@ -824,6 +838,7 @@ export default function MemoryVault({
         const shown = group.slice(0, shownRowCounts[type] ?? vaultGroupRowLimit).map((note) => ({
           note,
           preview: preview(note, deferredSearch, localizeUi, notesById, subjectSearchLabel),
+          originKey: originLabelKey(note, notesById),
         }));
         return [{ type, labelKey, count: group.length, shown, nextNoteId: group[shown.length]?.id }];
       }),
@@ -1273,6 +1288,7 @@ export default function MemoryVault({
       });
     return localizeUi("ui.longTermMemory.memoryvault.unresolvedSubject");
   };
+  const draftOriginKey = draft ? originLabelKey(draft, notesById) : undefined;
   const provenanceSourceLabel = () => {
     if (!draft?.provenance) return "";
     if (draft.provenance.kind === "character")
@@ -1288,6 +1304,7 @@ export default function MemoryVault({
       return localizeUi("ui.longTermMemory.memoryvault.chatMessages", {
         title: scopeTargetLabel("chat", draft.provenance.sourceId, targets),
       });
+    if (draft.provenance.kind === "package_record") return localizeUi("ui.longTermMemory.memoryvault.fromSlurp");
     return localizeUi("ui.longTermMemory.memoryvault.lorebook");
   };
 
@@ -2742,13 +2759,14 @@ export default function MemoryVault({
                         <span>{localizeUi(labelKey)}</span>
                         <span className="ml-auto text-[var(--muted-foreground)]">{count}</span>
                       </summary>
-                      {shown.map(({ note, preview: notePreview }) => (
+                      {shown.map(({ note, preview: notePreview, originKey }) => (
                         <VaultRow
                           key={note.id}
                           note={note}
                           label={memoryLabel(note)}
                           previewLabel={notePreview?.label}
                           previewText={notePreview?.text}
+                          originLabel={originKey ? localizeUi(originKey) : undefined}
                           selected={draft?.id === note.id}
                           actionsOpen={openActionNoteId === note.id}
                           selectMode={selectMode}
@@ -2873,24 +2891,34 @@ export default function MemoryVault({
                       <div className="min-w-0">
                         <h3 className="text-sm font-semibold">{memoryLabel(draft)}</h3>
                         <p className="mt-1 text-xs text-[var(--muted-foreground)]">{provenanceSourceLabel()}</p>
+                        {draftOriginKey ? (
+                          <span
+                            className="mt-2 inline-block rounded-full border px-2 py-1 text-xs"
+                            data-ltm-origin-chip
+                          >
+                            {localizeUi(draftOriginKey)}
+                          </span>
+                        ) : null}
                       </div>
-                      <Button
-                        onClick={() =>
-                          void onOpenSources?.(
-                            draft.provenance?.kind === "character" || draft.tags.includes("imported_character")
-                              ? "characters"
-                              : draft.provenance?.kind === "lorebook" || draft.tags.includes("imported_lorebook")
-                                ? "lorebooks"
-                                : draft.provenance?.kind === "chat_transcript"
-                                  ? "messages"
-                                  : "chats",
-                            draft.id,
-                          )
-                        }
-                      >
-                        <FileText aria-hidden="true" size="1rem" className="shrink-0" />
-                        {localizeUi("ui.longTermMemory.memoryvault.openInSources")}
-                      </Button>
+                      {draft.provenance?.kind !== "package_record" && (
+                        <Button
+                          onClick={() =>
+                            void onOpenSources?.(
+                              draft.provenance?.kind === "character" || draft.tags.includes("imported_character")
+                                ? "characters"
+                                : draft.provenance?.kind === "lorebook" || draft.tags.includes("imported_lorebook")
+                                  ? "lorebooks"
+                                  : draft.provenance?.kind === "chat_transcript"
+                                    ? "messages"
+                                    : "chats",
+                              draft.id,
+                            )
+                          }
+                        >
+                          <FileText aria-hidden="true" size="1rem" className="shrink-0" />
+                          {localizeUi("ui.longTermMemory.memoryvault.openInSources")}
+                        </Button>
+                      )}
                     </header>
                     <section className="space-y-2">
                       <h4 className="text-xs font-semibold">
@@ -2955,6 +2983,11 @@ export default function MemoryVault({
                           </p>
                         )}
                         <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
+                          {draftOriginKey ? (
+                            <span className="rounded-full border px-2 py-1" data-ltm-origin-chip>
+                              {localizeUi(draftOriginKey)}
+                            </span>
+                          ) : null}
                           {!hasExplicitScope(draft.scope) ? (
                             <span className="rounded-full border px-2 py-1">
                               {localizeUi("ui.longTermMemory.memoryvault.availableEverywhere")}

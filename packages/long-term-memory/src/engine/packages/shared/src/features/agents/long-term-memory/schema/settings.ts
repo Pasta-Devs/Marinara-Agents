@@ -34,6 +34,7 @@ const ltmGlobalSettingsShape = z
     longTermMemoryRecallPreamble: z.string().max(500).optional(),
     longTermMemoryDebug: z.boolean().optional(),
     longTermMemoryShareWithPackages: z.boolean().optional(),
+    longTermMemoryAcceptFromPackages: z.boolean().optional(),
     longTermMemoryHideImportedMessages: z.boolean().optional(),
     sourcesAvailabilityModes: z.array(ltmModeSchema).min(1).max(3).optional(),
   })
@@ -92,6 +93,8 @@ export const ltmResolvedGlobalSettingsSchema = z
     longTermMemoryDebug: z.boolean(),
     /** Other packages (Slurp, Noodle) may read memories available everywhere through the package services. */
     longTermMemoryShareWithPackages: z.boolean(),
+    /** Other packages (Slurp) may add memories through the intake service. */
+    longTermMemoryAcceptFromPackages: z.boolean(),
     /** Imported Chat Messages pieces are hidden from the AI, except the chat's recent tail. */
     longTermMemoryHideImportedMessages: z.boolean(),
     sourcesAvailabilityModes: z.array(ltmModeSchema).min(1).max(3).optional(),
@@ -116,6 +119,7 @@ export const DEFAULT_LTM_GLOBAL_SETTINGS = ltmResolvedGlobalSettingsSchema.parse
   longTermMemoryRecallPreamble: DEFAULT_LTM_RECALL_PREAMBLE,
   longTermMemoryDebug: false,
   longTermMemoryShareWithPackages: true,
+  longTermMemoryAcceptFromPackages: false,
   longTermMemoryHideImportedMessages: false,
 });
 
@@ -186,6 +190,8 @@ function normalizeLegacyExtractionSettings(value: unknown) {
   }
   delete normalized.refinePass;
   delete normalized.rejectPlaceholderOutput;
+  // The Advanced Memory scene recap import is gone; an older file or client may still send its switch.
+  delete normalized.useAdvancedMemory;
   // The broad existing-note prompt budget no longer exists (issue #1086); discard
   // stale persisted values instead of rejecting the whole strict settings object.
   delete normalized.maxExistingNoteTokens;
@@ -305,7 +311,6 @@ const ltmExtractionSettingsFields = {
   finishCutOffAnswers: z.boolean().optional(),
   autoAcceptSafeChanges: z.boolean().optional(),
   autoImportChatSources: z.boolean().optional(),
-  useAdvancedMemory: z.boolean().optional(),
   chatImportDetail: ltmChatImportDetailSchema.optional(),
   useExtractionAgentOnGameMode: z.boolean().optional(),
 };
@@ -356,7 +361,6 @@ export const ltmResolvedExtractionSettingsSchema = z
     finishCutOffAnswers: z.boolean(),
     autoAcceptSafeChanges: z.boolean(),
     autoImportChatSources: z.boolean(),
-    useAdvancedMemory: z.boolean(),
     chatImportDetail: ltmChatImportDetailSchema,
     useExtractionAgentOnGameMode: z.boolean(),
   })

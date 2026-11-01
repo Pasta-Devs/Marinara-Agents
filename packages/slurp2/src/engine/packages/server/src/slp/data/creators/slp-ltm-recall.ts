@@ -79,6 +79,8 @@ export async function recallSlurpMemories(input: {
       mode: "roleplay",
       maxTokens: whole ? WHOLE_TOKENS : RELEVANT_TOKENS,
       whole,
+      // Slurp's own records come back from Long-Term Memory as memories otherwise.
+      excludeFrom: ["slurp2"],
       signal,
     });
     // It also answers null when the call timed out, which is not the same as its sharing switch being off.

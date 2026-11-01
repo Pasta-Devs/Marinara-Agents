@@ -23,16 +23,21 @@ import {
 } from "./shared-controls";
 import type { CapabilityProps } from "./types";
 import { LastInjectionSummary } from "./LastInjectionSummary";
-import { selectLtmPluralForm, useLtmTranslation } from "./localization";
+import { useLtmTranslation } from "./localization";
 import { recallStyleDescriptionKey, recallStyles } from "./recall-style";
 import {
   ltmChatMemoriesModeOf,
   type LtmChatMemoriesMode,
 } from "../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
-import { chatMemoriesDescriptionKey, chatMemoriesLabelKey, chatMemoriesModes } from "./chat-memories";
+import {
+  ChatMemoriesStatusLine,
+  chatMemoriesDescriptionKey,
+  chatMemoriesLabelKey,
+  chatMemoriesModes,
+} from "./chat-memories";
 
 export function ChatSettings({ props }: { props: CapabilityProps }) {
-  const { t: localizeUi, locale } = useLtmTranslation();
+  const { t: localizeUi } = useLtmTranslation();
   const recallStyleLabelId = useId();
   const chatMemoriesLabelId = useId();
   const [pending, setPending] = useState(false);
@@ -119,6 +124,119 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
         <StatusSurface compact>
           {localizeUi("ui.longTermMemory.chatsettings.chatSettingsAreManagedByTheHostAndCannot")}
         </StatusSurface>
+      ) : null}
+      {props.chatId ? (
+        <div data-ltm-chat-memories-field className="space-y-1 text-[0.625rem] font-medium">
+          <span id={chatMemoriesLabelId} className="flex items-center gap-1 text-[var(--foreground)]">
+            {localizeUi("ui.longTermMemory.chatsettings.memoriesFromThisChat")}
+            <InfoPopover
+              label={localizeUi("ui.longTermMemory.chatsettings.memoriesFromThisChat")}
+              content={
+                <ul className="space-y-1.5">
+                  {chatMemoriesModes.map((mode) => (
+                    <li key={mode} data-ltm-chat-memories-option={mode}>
+                      <span className="font-semibold">{localizeUi(chatMemoriesLabelKey(mode))}</span>
+                      {" · "}
+                      {localizeUi(chatMemoriesDescriptionKey(mode))}
+                    </li>
+                  ))}
+                </ul>
+              }
+              compact
+            />
+          </span>
+          <select
+            aria-labelledby={chatMemoriesLabelId}
+            data-ltm-control="select"
+            data-ltm-chat-memories="chat"
+            className={`${compactInputClass}${pending ? " opacity-50" : ""}`}
+            style={compactInputStyle}
+            disabled={readOnly || !chatMemories.data}
+            aria-disabled={pending || undefined}
+            value={effectiveChatMemories ?? ""}
+            onChange={(event) => updateChatMemories(event.target.value as LtmChatMemoriesMode)}
+          >
+            {effectiveChatMemories === null ? (
+              <option value="" disabled hidden>
+                {localizeUi(
+                  chatMemories.isError || extraction.isError
+                    ? "ui.longTermMemory.chatsettings.defaultUnavailable"
+                    : "ui.longTermMemory.chatsettings.defaultLoading",
+                )}
+              </option>
+            ) : null}
+            {chatMemoriesModes.map((mode) => (
+              <option key={mode} value={mode}>
+                {localizeUi(chatMemoriesLabelKey(mode))}
+              </option>
+            ))}
+          </select>
+          {chatMemories.data && !chatMemoriesOverride && globalChatMemories ? (
+            <span className="text-[0.5625rem] text-[var(--muted-foreground)]">
+              <span className="inline-flex rounded border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5">
+                {localizeUi("ui.longTermMemory.chatsettings.globalDefault")}
+              </span>
+            </span>
+          ) : chatMemoriesOverride && !readOnly ? (
+            <Button
+              data-ltm-chat-memories-reset
+              onClick={() => updateChatMemories(null)}
+              aria-disabled={pending || undefined}
+            >
+              {localizeUi("ui.longTermMemory.chatsettings.useGlobalDefault")}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+      {autoImportOn &&
+      !extraction.data?.connectionId &&
+      autoImportNeedsConnection(autoImportEvents.data?.events ?? [], props.chatId) ? (
+        <StatusSurface tone="warning" compact data-ltm-connection-warning>
+          <span className="min-w-0 flex-1">
+            {localizeUi("ui.longTermMemory.chatsettings.autoImportNeedsConnection")}
+          </span>
+          <Button
+            onClick={() => {
+              requestLtmOpen("extraction");
+              props.onOpenAgentSettings?.();
+            }}
+            disabled={!props.onOpenAgentSettings}
+          >
+            {localizeUi("ui.longTermMemory.chatsettings.autoImportChooseConnection")}
+          </Button>
+        </StatusSurface>
+      ) : props.chatId && effectiveChatMemories === "manual" ? (
+        <ChatMemoriesStatusLine
+          mode="manual"
+          saved={0}
+          waiting={0}
+          compact
+          data-ltm-auto-import-status
+          onImport={
+            props.onOpenAgentSettings
+              ? () => {
+                  requestLtmOpen("sources");
+                  props.onOpenAgentSettings?.();
+                }
+              : undefined
+          }
+        />
+      ) : autoImportOn && props.chatId && effectiveChatMemories && autoImportEvents.data && waitingDrafts.data ? (
+        <ChatMemoriesStatusLine
+          mode={effectiveChatMemories}
+          saved={saved}
+          waiting={waiting}
+          compact
+          data-ltm-auto-import-status
+          onReview={
+            props.onOpenAgentSettings
+              ? () => {
+                  requestLtmOpen("review");
+                  props.onOpenAgentSettings?.();
+                }
+              : undefined
+          }
+        />
       ) : null}
       <div className="grid gap-1.5">
         <p className="px-0.5 text-[0.59375rem] leading-snug text-[var(--muted-foreground)]">
@@ -221,115 +339,6 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
           ) : null}
         </div>
       </div>
-      {props.chatId ? (
-        <div data-ltm-chat-memories-field className="space-y-1 text-[0.625rem] font-medium">
-          <span id={chatMemoriesLabelId} className="flex items-center gap-1 text-[var(--foreground)]">
-            {localizeUi("ui.longTermMemory.chatsettings.memoriesFromThisChat")}
-            <InfoPopover
-              label={localizeUi("ui.longTermMemory.chatsettings.memoriesFromThisChat")}
-              content={
-                <ul className="space-y-1.5">
-                  {chatMemoriesModes.map((mode) => (
-                    <li key={mode} data-ltm-chat-memories-option={mode}>
-                      <span className="font-semibold">{localizeUi(chatMemoriesLabelKey(mode))}</span>
-                      {" · "}
-                      {localizeUi(chatMemoriesDescriptionKey(mode))}
-                    </li>
-                  ))}
-                </ul>
-              }
-              compact
-            />
-          </span>
-          <select
-            aria-labelledby={chatMemoriesLabelId}
-            data-ltm-control="select"
-            data-ltm-chat-memories="chat"
-            className={`${compactInputClass}${pending ? " opacity-50" : ""}`}
-            style={compactInputStyle}
-            disabled={readOnly || !chatMemories.data}
-            aria-disabled={pending || undefined}
-            value={effectiveChatMemories ?? ""}
-            onChange={(event) => updateChatMemories(event.target.value as LtmChatMemoriesMode)}
-          >
-            {effectiveChatMemories === null ? (
-              <option value="" disabled hidden>
-                {localizeUi(
-                  chatMemories.isError || extraction.isError
-                    ? "ui.longTermMemory.chatsettings.defaultUnavailable"
-                    : "ui.longTermMemory.chatsettings.defaultLoading",
-                )}
-              </option>
-            ) : null}
-            {chatMemoriesModes.map((mode) => (
-              <option key={mode} value={mode}>
-                {localizeUi(chatMemoriesLabelKey(mode))}
-              </option>
-            ))}
-          </select>
-          {chatMemories.data && !chatMemoriesOverride && globalChatMemories ? (
-            <span className="text-[0.5625rem] text-[var(--muted-foreground)]">
-              <span className="inline-flex rounded border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5">
-                {localizeUi("ui.longTermMemory.chatsettings.globalDefault")}
-              </span>
-            </span>
-          ) : chatMemoriesOverride && !readOnly ? (
-            <Button
-              data-ltm-chat-memories-reset
-              onClick={() => updateChatMemories(null)}
-              aria-disabled={pending || undefined}
-            >
-              {localizeUi("ui.longTermMemory.chatsettings.useGlobalDefault")}
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-      {autoImportOn &&
-      !extraction.data?.connectionId &&
-      autoImportNeedsConnection(autoImportEvents.data?.events ?? [], props.chatId) ? (
-        <StatusSurface tone="warning" compact data-ltm-connection-warning>
-          <span className="min-w-0 flex-1">
-            {localizeUi("ui.longTermMemory.chatsettings.autoImportNeedsConnection")}
-          </span>
-          <Button
-            onClick={() => {
-              requestLtmOpen("extraction");
-              props.onOpenAgentSettings?.();
-            }}
-            disabled={!props.onOpenAgentSettings}
-          >
-            {localizeUi("ui.longTermMemory.chatsettings.autoImportChooseConnection")}
-          </Button>
-        </StatusSurface>
-      ) : autoImportOn && props.chatId && autoImportEvents.data && waitingDrafts.data ? (
-        <StatusSurface compact data-ltm-auto-import-status>
-          <span className="min-w-0 flex-1">
-            {localizeUi(
-              selectLtmPluralForm(locale, saved) === "one"
-                ? "ui.longTermMemory.chatsettings.autoImportSavedTodayOne"
-                : "ui.longTermMemory.chatsettings.autoImportSavedTodayOther",
-              { count: saved },
-            )}
-            {" · "}
-            {localizeUi(
-              selectLtmPluralForm(locale, waiting) === "one"
-                ? "ui.longTermMemory.chatsettings.autoImportWaitingOne"
-                : "ui.longTermMemory.chatsettings.autoImportWaitingOther",
-              { count: waiting },
-            )}
-          </span>
-          {props.onOpenAgentSettings ? (
-            <Button
-              onClick={() => {
-                requestLtmOpen("review");
-                props.onOpenAgentSettings?.();
-              }}
-            >
-              {localizeUi("ui.longTermMemory.chatsettings.autoImportReview")}
-            </Button>
-          ) : null}
-        </StatusSurface>
-      ) : null}
       {/* D27: initial load only, so a background refetch keeps the existing data and
           title instead of flashing the loading title; error/Retry behavior is unchanged. */}
       <LastInjectionSummary

@@ -29,10 +29,11 @@ async function main() {
   );
   const { withLtmVaultLock } = await import(`${source}/persistence/vault-lock.ts`);
   const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
-  const { isLtmNoteShareable, listLtmPackageReaders, recordLtmPackageRead } = await import(
+  const { isLtmNoteShareable, listLtmPackageReaders, recordLtmPackageAdd, recordLtmPackageRead } = await import(
     `${source}/services/storage-read.ts`
   );
   const { createLtmRecallService } = await import(`${source}/services/recall.ts`);
+  const { ltmPackageSourceNoteId } = await import(`${source}/services/intake.ts`);
   const { updateLtmGlobalSettings } = await import(`${source}/settings.ts`);
   const { getLongTermMemoryDirectories, notePathForId } = await import(`${source}/persistence/paths.ts`);
   const { invalidateLtmVaultSnapshot } = await import(`${source}/persistence/vault-snapshot.ts`);
@@ -324,6 +325,16 @@ async function main() {
         true,
         "other packages read recall, so it must stay open to them",
       );
+      assert.equal(
+        services.get("long-term-memory:intake")?.version,
+        1,
+        "the intake service other packages write through must carry its contract version",
+      );
+      assert.notEqual(
+        serviceOptions.get("long-term-memory:intake")?.hostOnly,
+        true,
+        "Slurp adds memories through intake, so it must stay open to packages",
+      );
       const recallRoot = await mkdtemp(join(tmpdir(), "marinara-ltm-shared-recall-"));
       const recallStorage = new LongTermMemoryStorage(recallRoot);
       try {
@@ -442,6 +453,114 @@ async function main() {
           "world_w_new keeps the cobalt archive",
         );
         assert.deepEqual(await wholeSections({ mode: "conversation" }), []);
+        // #1998: `excludeFrom` leaves out sections that hold only records the named callers added through intake.
+        const slurpLine = {
+          owner: "source",
+          sourceNoteId: ltmPackageSourceNoteId("slurp2", "fact:f1"),
+          sourceHash: "a".repeat(64),
+          text: "char_s from_slurp2 keeps the cobalt archive",
+          updatedAt: timestamp,
+        };
+        const manualLine = { owner: "manual", text: "char_s history keeps the cobalt archive", updatedAt: timestamp };
+        const forS = { scope: { characterIds: ["char-s"] }, type: "character", ...about("char-s") };
+        // The create API turns every contribution into a manual one, so the intake-owned notes are written directly.
+        const writeNote = (fixture: { id: string; type: string }) =>
+          writeFile(notePathForId(fixture.id, fixture.type, recallRoot), JSON.stringify(fixture));
+        await writeNote(
+          note("char_s_slurp", "chat-r", "", {
+            ...forS,
+            sections: {
+              from_slurp2: { text: slurpLine.text, updatedAt: timestamp, contributions: [slurpLine] },
+              history: { text: manualLine.text, updatedAt: timestamp },
+            },
+          }),
+        );
+        await writeNote(
+          note("char_s_mixed", "chat-r", "", {
+            ...forS,
+            sections: {
+              mixed: {
+                text: "char_s mixed-slurp keeps the cobalt archive\nchar_s mixed keeps the cobalt archive",
+                updatedAt: timestamp,
+                contributions: [
+                  { ...slurpLine, text: "char_s mixed-slurp keeps the cobalt archive" },
+                  { ...manualLine, text: "char_s mixed keeps the cobalt archive" },
+                ],
+              },
+            },
+          }),
+        );
+        await writeNote(
+          note("char_s_only", "chat-r", "", {
+            ...forS,
+            sections: { from_slurp2: { text: slurpLine.text, updatedAt: timestamp, contributions: [slurpLine] } },
+          }),
+        );
+        // A strong intake chunk that nearly fills a 50-token budget, and one weaker manual chunk for the same account.
+        const forT = { scope: { characterIds: ["char-t"] }, type: "character", ...about("char-t") };
+        const bigSlurpText = Array.from({ length: 5 }, () => "char_t from_slurp2 cobalt archive").join(" ");
+        await writeNote(
+          note("char_t_slurp", "chat-r", "", {
+            ...forT,
+            sections: {
+              from_slurp2: {
+                text: bigSlurpText,
+                updatedAt: timestamp,
+                contributions: [{ ...slurpLine, text: bigSlurpText }],
+              },
+            },
+          }),
+        );
+        await writeNote(
+          note("char_t_keep", "chat-r", "", {
+            ...forT,
+            sections: {
+              history: {
+                text: "char_t history keeps the cobalt archive and a few more words to take room",
+                updatedAt: timestamp,
+              },
+            },
+          }),
+        );
+        invalidateLtmVaultSnapshot(recallRoot);
+        await rebuildLongTermMemoryIndexes({ root: recallRoot });
+        const textOf = async (whole: boolean, input: Record<string, unknown> = {}) =>
+          (
+            (await recall.recall({ queryText: "cobalt archive", characterIds: ["char-s"], whole, ...input })) as {
+              sections: Array<{ noteId: string; text: string }>;
+            }
+          ).sections.map((section) => `${section.noteId}: ${section.text}`);
+        for (const whole of [true, false]) {
+          const label = whole ? "whole" : "ranked";
+          const all = (await textOf(whole)).join("\n");
+          assert.match(all, /from_slurp2 keeps/, `${label} recall without excludeFrom must keep the intake line`);
+          assert.match(all, /history keeps/, `${label} recall without excludeFrom must keep the history section`);
+          assert.match(all, /char_s_only:/, `${label} recall without excludeFrom must return a memory of intake lines`);
+          const kept = (await textOf(whole, { excludeFrom: ["slurp2"] })).join("\n");
+          assert.doesNotMatch(
+            kept,
+            /from_slurp2 keeps/,
+            `${label} recall must leave out a section that holds only slurp2's records`,
+          );
+          assert.doesNotMatch(kept, /char_s_only:/, `${label} recall must omit a memory with nothing left`);
+          assert.match(kept, /history keeps/, `${label} recall must keep a section no excluded caller wrote`);
+          assert.match(kept, /mixed keeps/, `${label} recall must keep a section with a manual line`);
+        }
+        const tight = (input: Record<string, unknown> = {}) =>
+          recall
+            .recall({ queryText: "cobalt archive", characterIds: ["char-t"], maxTokens: 50, ...input })
+            .then((result) => (result as { sections: Array<{ text: string }> }).sections.map((s) => s.text).join("\n"));
+        assert.match(await tight(), /from_slurp2/, "the intake chunk must outrank and fill a tight ranked budget");
+        assert.match(
+          await tight({ excludeFrom: ["slurp2"] }),
+          /history keeps/,
+          "an excluded chunk must not spend the ranked budget before it is dropped",
+        );
+        assert.equal(
+          await recall.recall({ queryText: "cobalt archive", characterIds: ["char-s"], excludeFrom: ["Bad Name!"] }),
+          null,
+          "a malformed excludeFrom entry must make the call invalid, not be dropped",
+        );
         assert.equal(
           await recall.recall({ queryText: "cobalt archive" }),
           null,
@@ -471,10 +590,17 @@ async function main() {
         );
         await recordLtmPackageRead(recallRoot, "package_recall", "tally", 3);
         await recordLtmPackageRead(recallRoot, "package_list", "tally", 2);
+        // Log timestamps have millisecond resolution; pauses keep the read, add and later add in a known order.
+        const pause = () => new Promise((done) => setTimeout(done, 5));
+        await pause();
+        const afterTallyReads = new Date().toISOString();
+        await pause();
+        await recordLtmPackageAdd(recallRoot, "tally", 2);
         const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
-        for (const [source, memories] of [
-          ["tally", 7],
-          ["stale", 4],
+        for (const [source, phase, action, memories] of [
+          ["tally", "retrieval", "package_list", 7],
+          ["tally", "apply", "package_add", 6],
+          ["stale", "retrieval", "package_list", 4],
         ] as const)
           await appendFile(
             getLongTermMemoryDirectories(recallRoot).debugLog,
@@ -482,37 +608,49 @@ async function main() {
               id: randomUUID(),
               ts: eightDaysAgo,
               operationId: randomUUID(),
-              phase: "retrieval",
-              action: "package_list",
+              phase,
+              action,
               status: "ok",
               source,
               counts: { memories },
             })}\n`,
           );
+        await pause();
+        await recordLtmPackageAdd(recallRoot, "adder", 1);
         const readers = (await listLtmPackageReaders(recallRoot)) as Array<{
           caller: string | null;
-          lastReadAt: string;
+          lastReadAt: string | null;
           reads: number;
           memories: number;
+          added: number;
         }>;
+        const tally = readers.find((reader) => reader.caller === "tally");
         assert.deepEqual(
-          readers.find((reader) => reader.caller === "tally"),
-          { caller: "tally", lastReadAt: readers[0].lastReadAt, reads: 2, memories: 5 },
-          "a reader's week must count the reads and returned memories from the last 7 days, not an older read",
+          tally,
+          { caller: "tally", lastReadAt: tally?.lastReadAt, reads: 2, memories: 5, added: 2 },
+          "a reader's week must count the reads, returned memories and added memories from the last 7 days, not older ones",
         );
-        assert.equal(readers[0].caller, "tally", "the reader that read last must come first");
+        assert.ok(
+          tally?.lastReadAt && tally.lastReadAt < afterTallyReads,
+          "an add must not move an Agent's last read, which stays at its newest read",
+        );
+        assert.deepEqual(
+          readers[0],
+          { caller: "adder", lastReadAt: null, reads: 0, memories: 0, added: 1 },
+          "an Agent that only added memories must be listed first when it added last, with no last read",
+        );
         assert.deepEqual(
           readers.find((reader) => reader.caller === "stale"),
-          { caller: "stale", lastReadAt: eightDaysAgo, reads: 0, memories: 0 },
+          { caller: "stale", lastReadAt: eightDaysAgo, reads: 0, memories: 0, added: 0 },
           "a reader whose only read is older than 7 days must still be listed, with no reads this week",
         );
         assert.deepEqual(
-          readers.map((reader) => reader.lastReadAt),
+          readers.flatMap((reader) => (reader.lastReadAt ? [reader.lastReadAt] : [])),
           readers
-            .map((reader) => reader.lastReadAt)
+            .flatMap((reader) => (reader.lastReadAt ? [reader.lastReadAt] : []))
             .sort()
             .reverse(),
-          "readers must be ordered by their last read, newest first",
+          "readers that have reads must keep last-read order, newest first",
         );
         assert.ok(noodleRead?.sections.length, "the noodle read must return memories for the sum to mean anything");
         assert.equal(

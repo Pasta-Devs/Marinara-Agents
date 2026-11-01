@@ -48,7 +48,7 @@ import only package source and Agents dependencies run from this checkout after
 
 ```bash
 set -e
-for test in advanced-memory-import candidate-reconciliation conversation-summary-import debug-log debug-activity delta-review extraction-graph extraction-reliability index-keys local-characters rebuild-job runtime review-queue-ambiguous-link scope-targets scope-fallback-labels source-pagination source-task tab-keys; do
+for test in candidate-reconciliation conversation-summary-import debug-log debug-activity delta-review extraction-graph extraction-reliability index-keys local-characters rebuild-job runtime review-queue-ambiguous-link scope-targets scope-fallback-labels source-pagination source-task tab-keys; do
   npx tsx "tests/long-term-memory-${test}.regression.ts"
 done
 node tests/long-term-memory-feedback-clarity-ui.regression.mjs
@@ -117,7 +117,7 @@ check exercises the same inputs and cannot pass while the removed check fails.
 
 | Layer | Owning suites (`long-term-memory-*.regression.*`) | Contracts |
 | --- | --- | --- |
-| Direct services | `storage`, `runtime`, `extraction-graph`, `extraction-reliability`, `conversation-summary-import`, `advanced-memory-import`, `candidate-reconciliation`, `branch-recall`, `rebuild-job`, `delta-review` | Storage recovery/quarantine, lineage-safe retraction, draft dependencies, activity persistence, retrieval lanes and scope, receipt idempotency/redaction, extraction graph validation, identity/dedup boundaries, bounded candidate reconciliation and recall beyond the prompt window, branch recall, index rebuild jobs, delta review, import invariants |
+| Direct services | `storage`, `runtime`, `extraction-graph`, `extraction-reliability`, `conversation-summary-import`, `candidate-reconciliation`, `branch-recall`, `rebuild-job`, `delta-review` | Storage recovery/quarantine, lineage-safe retraction, draft dependencies, activity persistence, retrieval lanes and scope, receipt idempotency/redaction, extraction graph validation, identity/dedup boundaries, bounded candidate reconciliation and recall beyond the prompt window, branch recall, index rebuild jobs, delta review, import invariants |
 | Focused helpers | `index-keys`, `local-characters`, `scope-targets`, `scope-fallback-labels`, `source-task`, `source-pagination`, `debug-log`, `debug-activity`, `tab-keys`, `review-queue-ambiguous-link`, `engine-fields` | Unsafe keys, per-lane score calibration, local identity isolation, scope selection/labels, task cancellation, source paging, debug persistence, debug event filtering/status and id lookup, Engine field contracts |
 | HTTP integration | `routes-imports`, `routes-scope-identity`, `routes-backup`, and the direct `routes` scenario | Auth/permissions, validation, statuses and client-consumed errors, request-to-service and response-to-persistence mapping, scope translation, applied mutation IDs, preflight, cancellation, backup semantics |
 | Browser | `browser`, `host-styles`, `feedback-clarity-ui` | Visible workflows, request construction, response consumption, archive undo/partial failure, review/re-extraction, activation, loading and layout; retain explicit static contracts where behavioral proof is absent |

@@ -23,6 +23,10 @@
 // moved once (the new line rides in the rules block of each prompt).
 // 0.6.3 (#1965): each love interest's card and bible carry how they look now (their Image appearance and worn outfit),
 // so the plans, scenes, Confrontations and Closers moved.
+// #2024: scenes, Confrontations and Closers mark the segment where a love interest leaves or the protagonist leaves
+// them behind (`exits`), so the beat, CG beat, confrontation and closer digests moved.
+// #2030: a Confrontation's and a Closer's option labels speak to the player as "you", never "she", so the confrontation
+// and closer digests moved.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
@@ -242,11 +246,11 @@ const EXPECTED_ANGST: Record<string, string> = {
   bannerHis: "fb4747abddc9e10f",
   bannerMemories: "46835995ce89e296",
   bannerMine: "a2a84917627d0a0e",
-  beat: "892e87bd6b552fda",
-  beatWithCg: "63f50919b26d7efd",
+  beat: "b9d41f52d74d34e5",
+  beatWithCg: "e11fb5968884ff3e",
   chapterPlan: "74761bd5e5df5cd5",
-  closer: "3b178308331e7820",
-  confrontation: "bdd9f6254055ad7d",
+  closer: "02a539da5c6abab6",
+  confrontation: "ec2661b784e78c25",
   repairPlan: "d7ab0afffa32c5c2",
   routePlan: "2c67d3b53c9ef867",
 };
@@ -254,11 +258,11 @@ const EXPECTED_GENTLE: Record<string, string> = {
   bannerHis: "4f63a1ffaf1a18d3",
   bannerMemories: "b1bef6f3499c9204",
   bannerMine: "9e5c84b88c22c555",
-  beat: "eff6921d2700cc81",
-  beatWithCg: "be43bd2b4a87748d",
+  beat: "1605bd5618584203",
+  beatWithCg: "ac045989ddd56ba0",
   chapterPlan: "6bcb0a19cd26c4fe",
-  closer: "d5b9e340c6de12c8",
-  confrontation: "aa0e05b2f50036c9",
+  closer: "580321b73773a580",
+  confrontation: "cbe64f0437cb7488",
   repairPlan: "2b00d0b73698377e",
   routePlan: "b103900d16ec32e9",
 };

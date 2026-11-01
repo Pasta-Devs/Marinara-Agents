@@ -2,15 +2,15 @@
   "schemaVersion": 2,
   "capabilityApi": {
     "major": 1,
-    "minor": 812
+    "minor": 813
   },
   "builtAgainst": {
     "engineVersion": "2.5.1",
-    "engineCommit": "262ef5d131553ae5b64ad66a9f6800f83526f27f"
+    "engineCommit": "05ad846e7615f72709949043d8d519f1f2e37505"
   },
   "id": "ruleset-5e-2014",
   "name": "5e (SRD 5.1)",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "description": "Play Game Mode by the 5e rules (SRD 5.1): ability checks, saving throws, a full character sheet with spells and class features, and 5e combat against 323 monsters, on a battle board or without positions. Its Equipment catalog puts the SRD's armor, weapons, gear and tools in your bag, and what you wear sets your Armor Class. Its Magic items catalog holds every SRD magic item and a spell scroll of every spell, and they work as printed: a potion of healing heals, a scroll casts its spell, and a +1 sword hits harder. Every item has a price, and a beaten creature can drop coins and, now and then, a potion, a scroll or a magic item. The Game Master buys and sells for you at the market, from a hamlet's general store to a city's magic dealer. Honest sellers warn before selling a wild chance item, and a town's fence may pass off a fake as the real thing. Its Races catalog has the SRD's nine races and their subraces, with your speed from the race you pick. A guided builder makes a character in steps: race, class, ability scores, background, proficiencies, features, spells and gear. Includes material from the System Reference Document 5.1 and 5.2.1 by Wizards of the Coast LLC (https://www.dndbeyond.com/srd), licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/legalcode). Not affiliated with or endorsed by Wizards of the Coast. After installing, choose it under Rules in the Game Mode setup wizard when you create a new game.",
   "engine": {
     "min": "2.5.1",
@@ -42,8 +42,8 @@
   "files": [
     {
       "path": "ruleset.json",
-      "sha256": "c0ebf19d7e9fa933cdd15a12b5a33834cc98594e92184be1a2433876f7786839",
-      "bytes": 402156
+      "sha256": "4b9a7960f244c08778194557ab770b189144622cfe6722d802bf55c77d152d59",
+      "bytes": 406542
     },
     {
       "path": "catalogs/spells.json",
@@ -72,8 +72,8 @@
     },
     {
       "path": "catalogs/magic_items.json",
-      "sha256": "9d862f7188c379a57fce09b586feb635f7aea07788a338b1cc0177982025ad94",
-      "bytes": 1432838
+      "sha256": "4e2fa042d6ffef360d8c3e7a6d801aa87906fa51a1e293f821874ed1ac9a53d7",
+      "bytes": 1449140
     },
     {
       "path": "catalogs/classes.json",

@@ -6,7 +6,7 @@ import { queryKeys, request } from "./api";
  * Chat Settings is its own host view and cannot navigate inside the detail view, so it leaves a short-lived request
  * that the detail view reads when it opens. A stale request (the detail view was already open) is ignored.
  */
-export type LtmOpenTarget = "review" | "extraction";
+export type LtmOpenTarget = "review" | "extraction" | "sources";
 
 const OPEN_REQUEST_MAX_AGE_MS = 5000;
 let openRequest: { target: LtmOpenTarget; at: number } | null = null;

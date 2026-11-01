@@ -59,6 +59,11 @@ pressed buttons and an "After a reply" sample. A new setup (empty vault, choice
 still I add them myself) starts on Save them for me; an existing one shows its
 stored choice. Pressing a choice saves it, and moving on from step 3 saves the
 choice it shows.
+Step 4 (Import) and step 7 (You're Set Up) follow that choice: when the choice
+collects new messages (Collect them, I'll review or Save them for me) the import
+step says new messages are already being collected, and step 7 says what waits
+for you or is saved on its own; I add them myself keeps the plain import and
+setup wording.
 
 ## Responsive Contract
 
@@ -165,14 +170,6 @@ in typing and keeps the current rows, marked busy, until its results arrive.
 Long-running source tasks expose running, completed, cancelled, partial-failure,
 and failed states through the Sources navigation and workspace feedback. A
 running task can be cancelled and its latest result can be revisited.
-With Use Advanced Memory recaps on, the Chats tab shows an Older scene recaps group. Its button
-reads "Read N older recaps" (N is what the batch route still lists), and one press
-reads them in batches of 10 until none are left, showing "Read X of Y" with a
-progress bar. Stop ends the loop after the batch being read; the next press
-resumes with what the route still lists, since it leaves out recaps already
-imported or covered by an earlier chat import. A failed or cancelled batch ends
-the loop and its result is listed in the task panel. When nothing is left the
-group says so instead of showing the button.
 The Chat Messages tab imports a chat's own messages in pieces of up to 24,000
 characters, or 12,000 when the Extraction setting Chat import detail is
 Detailed. Each chat keeps the piece size of its first import, and a branch
@@ -180,7 +177,7 @@ never imported uses its chat's size. When the selected chat also has summaries,
 it says that importing both can repeat memories in review. A chat with branches
 adds a Branch menu (this branch, each other branch, All branches); it filters
 the list to a branch's history, and the destination stays the whole chat.
-The Extraction setting Hide imported messages from the AI (off by default)
+The Extraction setting Hide remembered messages from the AI (off by default)
 hides each extracted piece's messages from the chat's prompt, except the last
 messages the chat's summary keeps (10 when unset). It records only the messages
 it hid; turning it off or permanently deleting a piece's source note shows
@@ -205,7 +202,7 @@ Review Queue) and Save them for me (background import, low-risk proposals are
 accepted). The choice is stored as the two extraction settings
 `autoImportChatSources` and `autoAcceptSafeChanges`; import off with accept on
 shows as I add them myself, and the next save writes accept off. Its hint says
-chats use this unless they choose otherwise, and an "After a reply" sample shows
+chats use this unless they choose otherwise, and an "After a reply" sample (a small label over the same status line, with example numbers) shows
 what the choice does. Accepting low-risk proposals covers new notes and
 additions with no conflicts; rewrites, status changes, shared memories and
 anything with warnings wait in the Review Queue, and a draft that mixes them
@@ -215,10 +212,7 @@ has one. Background import brings in each chat's new or changed summaries and
 finished message pieces a couple of seconds after the chat's latest generation
 starts and never the piece still being written, and each run is an "Imported
 automatically" row in Activity. A selection whose import failed is not retried
-until a source or the extraction connection changes. Use Advanced Memory recaps
-needs a Marinara version that provides the recaps (Capability API 1.391); on an
-older Engine the toggle is disabled with a note, the same way as Hide imported
-messages from the AI.
+until a source or the extraction connection changes.
 When background import is on and has no extraction connection, Extraction shows a warning
 (`StatusSurface` warning tone) with a Choose button that focuses the connection field; the same
 warning appears in Chat Settings, where Choose opens Extraction with that field focused. The warning
@@ -236,18 +230,23 @@ picks one of the three Memories from chats choices for the open chat; it shows t
 choice with the Global default chip until the chat has its own, then a "Use global default"
 button clears it. The Engine passes only the recall keys to Chat Settings, so the panel reads
 the chat's choice from `GET /chat-memories/:chatId` and writes it through the host's chat
-settings change. While background import is
-on for the chat it also shows one status line, "N saved today · N waits for you" with a Review button: the
-first count adds up the memories the chat's `auto_import` Activity rows applied since local
-midnight, the second is the chat's pending drafts. Review opens the Review Queue (it has no
-per-chat filter); Chat Settings is a separate host view, so it leaves a short-lived open request
-(`auto-import-status.ts`) that the detail view reads when it opens. It keeps one short
-explanation above the controls; the Recall style info popover lists every style
+settings change. Memories from this chat is the first field, followed by one status line
+(`ChatMemoriesStatusLine` in `chat-memories.tsx`, shared with the "After a reply" sample). Save them
+for me shows a check with "N saved today" in `--ltm-success` (also at 0), then a "·" and a clock with
+"N waits for you" when something waits; Collect them, I'll review shows only the waiting part, since
+nothing saves on its own, and with nothing waiting says "Watching this chat · nothing new yet"; I add them myself
+says "Nothing is added on its own" with an Import button that opens Sources. The first count adds up
+the memories the chat's `auto_import` Activity rows applied since local midnight, the second is the
+chat's pending drafts. Review (shown only when something waits) opens the Review Queue (it has no
+per-chat filter); Chat Settings is a separate host view, so Review and Import leave a short-lived open
+request (`auto-import-status.ts`) that the detail view reads when it opens. There is no "reading your
+latest messages" state: the Activity rows load once and carry no live signal for a run in progress.
+It keeps one short explanation above the recall controls; the Recall style info popover lists every style
 and marks the current one. While the global defaults have not arrived, an
 inherited value shows "Loading default…" (or "Default unavailable" after a
 failed load) instead of an invented number, and the controls stay usable. Memory Settings
 has Recall, Extraction, Maintenance, and Debug tabs; Recall is grouped under Budget, Ranking, Text filters, and
-Sharing headings (Sharing lists the Agents that read memories in a table of last read, reads this week and memories returned this week, counted from the Debug activity log), names the four weights in plain words (Meaning match, Exact words match, Linked memories
+Sharing headings (Sharing lists the Agents that read or added memories in a table under both switches: last read, reads this week, memories returned this week and memories added this week, counted from the Debug activity log), names the four weights in plain words (Meaning match, Exact words match, Linked memories
 match, Stored keywords match; the help keeps "graph weight" and "keyword weight"), and shows "Custom (edited
 weights)" with a Reset to preset button beside the style once an edited weight has flipped it to Custom (the
 button returns to the last named style, Balanced if none); Maintenance holds Backup (export, choose backup), Repair (integrity, selected repairs;

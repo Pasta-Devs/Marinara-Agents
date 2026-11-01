@@ -15,6 +15,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { normalizeBible } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit";
+import { ACCENT_SAMPLER_VERSION } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/accent";
 
 const engineRoot = process.env.MARINARA_ENGINE_ROOT;
 if (!engineRoot) throw new Error("Set MARINARA_ENGINE_ROOT to a compatible Engine checkout");
@@ -143,6 +144,7 @@ function runView({ images, audio, places }: WorldOptions = {}): Json {
         cardId: "card-ilvar",
         voiceGender: "male",
         accent: "#9DB8F0",
+        accentSampler: ACCENT_SAMPLER_VERSION,
         level: 2,
         stage: 1,
         expressions: { cold: FACE_COLD, tender: FACE_TENDER, angry: FACE_ANGRY, hurt: FACE_HURT },
@@ -154,6 +156,7 @@ function runView({ images, audio, places }: WorldOptions = {}): Json {
         source: "archetype",
         voiceGender: "male",
         accent: "#E6C98A",
+        accentSampler: ACCENT_SAMPLER_VERSION,
         level: 5,
         stage: 2,
       },
@@ -164,6 +167,7 @@ function runView({ images, audio, places }: WorldOptions = {}): Json {
         source: "archetype",
         voiceGender: "female",
         accent: "#B79CF2",
+        accentSampler: ACCENT_SAMPLER_VERSION,
         level: 1,
         stage: 1,
       },
@@ -2716,6 +2720,38 @@ test("Otome Forge reader: at reduced motion with Ask before painting, a CG and a
   await root.getByRole("button", { name: "Paint this moment" }).click();
   await expect(root.locator(".of-reader")).toHaveAttribute("data-cg", "shown");
   await expect(root.locator('.of-cg[data-intro="true"]')).toHaveCount(0);
+  // #2000: a CG is painted portrait. In a box wider than 2:3 (the stage in fullscreen on a PC) it shows whole over a
+  // blurred copy; cover there kept only a band of it. The windowed 9:16 stage and a phone keep the full-bleed cover.
+  const cgFit = () =>
+    root.locator(".of-cg").evaluate((cg) => {
+      const box = cg.getBoundingClientRect();
+      const image = cg.querySelector(".of-cg-img");
+      const backdrop = cg.querySelector(".of-cg-backdrop");
+      return {
+        wide: box.width / box.height >= 2 / 3,
+        objectFit: image ? getComputedStyle(image).objectFit : "",
+        backdrop: backdrop ? getComputedStyle(backdrop).display : "none",
+      };
+    });
+  const expectCgFit = async (where: string) => {
+    const shown = await cgFit();
+    expect(shown.objectFit, `${where}: the CG is ${shown.wide ? "whole" : "full-bleed"}`).toBe(
+      shown.wide ? "contain" : "cover",
+    );
+    expect(shown.backdrop, `${where}: the blurred copy shows only around a whole CG`).toBe(
+      shown.wide ? "block" : "none",
+    );
+    return shown.wide;
+  };
+  expect(await expectCgFit("windowed"), "the windowed stage is portrait, like the CG").toBe(false);
+  if (!testInfo.project.name.includes("mobile")) {
+    await root.getByRole("button", { name: /fullscreen/iu }).click();
+    await expect(root.locator(".of-frame")).toHaveAttribute("data-fullscreen", "true");
+    await expect.poll(async () => (await cgFit()).wide, "a PC's fullscreen stage is wider than the CG").toBe(true);
+    await expectCgFit("fullscreen");
+    await root.getByRole("button", { name: /fullscreen/iu }).click();
+    await expect(root.locator(".of-frame")).not.toHaveAttribute("data-fullscreen", /.*/);
+  }
   expect(posts(calls, "/art/cg")).toHaveLength(1);
   await expect.poll(() => posts(calls, "/art/cg/seen").length).toBe(1);
   // No audio was asked for: voices and music are off in this story.
@@ -3447,6 +3483,7 @@ test("Otome Hearth Settings fills its frame and exposes every tab on desktop and
     await page.screenshot({ path: testInfo.outputPath(`settings-categories-${size.width}-${look.toLowerCase()}.png`) });
     expect(bounds.tabs).toHaveLength(names.length);
     if (isMobile) {
+      expect(await tabs.evaluate((element) => getComputedStyle(element).flexWrap)).toBe("nowrap");
       expect(
         Math.max(...bounds.tabs.map((tab) => tab.top)) - Math.min(...bounds.tabs.map((tab) => tab.top)),
       ).toBeLessThanOrEqual(1);
@@ -3468,6 +3505,8 @@ test("Otome Hearth Settings fills its frame and exposes every tab on desktop and
         expect(debug!.x + debug!.width).toBeLessThanOrEqual(strip!.x + strip!.width + 1);
       }
     } else {
+      // Desktop wraps rather than relying on the tabs fitting: Linux fonts run wider than macOS ones (CI saw 950 > 926).
+      expect(await tabs.evaluate((element) => getComputedStyle(element).flexWrap)).toBe("wrap");
       expect(bounds.scrollWidth).toBeLessThanOrEqual(bounds.clientWidth + 1);
       for (const tab of bounds.tabs) {
         expect(tab.left).toBeGreaterThanOrEqual(-1);

@@ -1565,9 +1565,13 @@ function forgeWrapImageReferenceClient(
       );
       const identities = [],
         outfits = [];
+      let identified = 0;
       for (const subject of subjects) {
-        const identity = await subjectReference(client, subject);
-        if (identity) identities.push(identity);
+        // A subject may carry more than one likeness (a card's full body beside its avatar); a string is one.
+        const resolved = await subjectReference(client, subject, { method });
+        const picked = (Array.isArray(resolved) ? resolved : [resolved]).filter(Boolean);
+        if (picked.length) identified += 1;
+        identities.push(...picked);
         const outfit = scene && forgeWornOutfitPath(subject);
         if (outfit) {
           const image = await forgeReferenceImage(client, [outfit]);
@@ -1578,11 +1582,11 @@ function forgeWrapImageReferenceClient(
       const distinct = [...new Set([...identities, ...outfits])];
       const references = distinct.slice(0, FORGE_IMAGE_REFERENCES_MAX);
       if (subjects.length) {
-        const level = identities.length === subjects.length ? "debug" : "warn";
+        const level = identified === subjects.length ? "debug" : "warn";
         logger?.[level]?.(
           `${logPrefix} %s: identity references resolved for %d/%d subjects, %d worn outfit(s); sending %d distinct of at most %d (a provider may keep fewer)`,
           method,
-          identities.length,
+          identified,
           subjects.length,
           outfits.length,
           references.length,

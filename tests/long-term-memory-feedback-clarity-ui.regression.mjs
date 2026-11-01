@@ -126,14 +126,18 @@ assert.equal(locale["ui.longTermMemory.activityview.notKept"], "Not kept");
 assert.equal(locale["ui.longTermMemory.activityview.notAdded"], "Not added");
 assert.equal(locale["ui.longTermMemory.activityview.settingMinimumRelevance"], "Minimum relevance");
 assert.match(settings, /reasoningEffort: resolved\.reasoningEffort \?\? "low"/u);
-// Slurp's switch is offered only after the global PUT succeeded and only when sharing went from off to on.
+// Slurp's switches are offered only after the global PUT succeeded and only when a switch went from off to on.
 const globalSave = settings.slice(settings.indexOf("const saveSettings"), settings.indexOf("const discard"));
 assert.match(globalSave, /const sharingWasOff = savedGlobal\?\.longTermMemoryShareWithPackages === false/u);
 assert.match(globalSave, /sharingTurnedOn = sharingWasOff && saved\.longTermMemoryShareWithPackages/u);
+assert.match(globalSave, /const acceptWasOff = savedGlobal\?\.longTermMemoryAcceptFromPackages === false/u);
+assert.match(globalSave, /acceptTurnedOn = acceptWasOff && saved\.longTermMemoryAcceptFromPackages/u);
 assert.ok(
-  globalSave.indexOf('"PUT"') < globalSave.indexOf("if (sharingTurnedOn)") &&
-    globalSave.indexOf("if (sharingTurnedOn)") < globalSave.indexOf("offerSlurpMemories("),
-  "the Slurp offer must follow the global PUT and run only when sharing turned on",
+  globalSave.indexOf('"PUT"') < globalSave.indexOf("...(sharingTurnedOn") &&
+    globalSave.indexOf("...(sharingTurnedOn") < globalSave.indexOf('setting: "flavourFromAgents"') &&
+    globalSave.indexOf("...(acceptTurnedOn") < globalSave.indexOf('setting: "shareWithMemory"') &&
+    globalSave.indexOf('setting: "shareWithMemory"') < globalSave.indexOf("offerSlurpMemories("),
+  "each Slurp offer must follow the global PUT and run only when its switch turned on",
 );
 assert.equal(globalSave.match(/offerSlurpMemories\(/gu)?.length, 1);
 assert.match(settings, /memorySettingsSavedIndexRebuilt/u);
@@ -1377,11 +1381,7 @@ const localization = readFileSync(ltmSourcePaths.localization, "utf8");
 assert.match(localization, /import koreanCatalog from "\.\/locales\/ko\.json"/u);
 assert.match(localization, /ko: stringEntries\(koreanCatalog\)/u);
 
-// Issue #1964: the Advanced Memory backfill sends a fixed whole-number batch size (no field), and NumberField
-// rounds before it shows or reports a value (a typed 3.4 at size 3 must not leave "3.4" in the field).
-assert.match(workspace, /const ADVANCED_MEMORY_BACKFILL_BATCH = 10;/u);
-assert.match(workspace, /limit: ADVANCED_MEMORY_BACKFILL_BATCH,/u);
-assert.doesNotMatch(workspace, /advancedMemoryBatchSize/u);
+// NumberField rounds before it shows or reports a value (a typed 3.4 at size 3 must not leave "3.4" in the field).
 assert.match(sharedControls, /integer\?: boolean;/u);
 const clampSource = sharedControls.match(/const clamped = (.+);/u)?.[1] ?? "";
 assert.match(
@@ -1446,6 +1446,34 @@ for (const value of [
   assert.ok(field.includes(`value={${value}}`), `${value} field found`);
   assert.doesNotMatch(field, /^\s*integer$/mu, `${value} keeps decimals`);
 }
+
+// A memory another package or Advanced Memory added says so in the Vault list and editor header.
+assert.match(vaultRow, /originLabel\?: string/u, "VaultRow takes a plain origin label");
+assert.match(vaultRow, /originLabel \? \(/u, "VaultRow renders the origin chip");
+assert.match(vault, /function originLabelKey\(/u, "the vault derives the origin from the note");
+assert.match(
+  vault,
+  /function originLabelKey\([\s\S]*?link\.relation === "extracted_from"[\s\S]*?source\?\.type === "source"/u,
+  "a memory takes its origin from its extracted_from source note",
+);
+assert.match(vault, /package_record: "ui\.longTermMemory\.memoryvault\.originSlurp"/u, "Slurp provenance has a label");
+assert.match(
+  vault,
+  /advanced_memory: "ui\.longTermMemory\.memoryvault\.originAdvancedMemory"/u,
+  "Advanced Memory provenance has a label",
+);
+assert.match(
+  vault,
+  /originLabel=\{originKey \? localizeUi\(originKey\) : undefined\}/u,
+  "rows get the localized label as a string",
+);
+assert.equal(
+  (vault.match(/data-ltm-origin-chip/gu) ?? []).length,
+  2,
+  "the source and regular editor headers show the chip",
+);
+assert.equal(locale["ui.longTermMemory.memoryvault.originSlurp"], "Slurp");
+assert.equal(locale["ui.longTermMemory.memoryvault.originAdvancedMemory"], "Advanced Memory");
 
 process.stdout.write(
   "Long-Term Memory feedback clarity UI regression: labels, outcomes, usage, warnings, defaults, and scope loading ok\n",

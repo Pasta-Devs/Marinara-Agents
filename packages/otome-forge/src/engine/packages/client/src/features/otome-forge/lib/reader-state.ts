@@ -247,15 +247,20 @@ export interface OnStage {
 }
 
 /**
- * Who is on stage at line `at`: the love interest who spoke last (his face from that line; an untagged line shows his
- * plain portrait). Before a love interest's turn has been reached, show nobody: looking ahead would reveal a later
- * arrival during the opening narration.
+ * Who is on stage at line `at`: the love interest who spoke last and has not left since (his face from that line; an
+ * untagged line shows his plain portrait). A line's `exits` (#2024) takes them off the stage from that line on (after
+ * it, when the line is their own) until they speak again; a beat with none keeps whoever spoke last. Before a love
+ * interest's turn has been reached, show nobody: looking ahead would reveal a later arrival during the opening narration.
  */
 export function onStageAt(lines: readonly ReaderLine[], at: number, lis: readonly RunLiView[]): OnStage {
+  const gone = new Set<LiId>();
   for (let index = Math.min(at, lines.length - 1); index >= 0; index -= 1) {
     const segment = lines[index]!.segment;
     const li = speakerLi(segment, lis);
-    if (li) return { li, face: isFace(segment.expression) ? segment.expression : "", speaking: index === at };
+    if (li && !gone.has(li.id) && (index === at || !segment.exits?.includes(li.id))) {
+      return { li, face: isFace(segment.expression) ? segment.expression : "", speaking: index === at };
+    }
+    for (const id of segment.exits ?? []) gone.add(id);
   }
   return { li: null, face: "", speaking: false };
 }

@@ -27,7 +27,7 @@ import { formatAge } from "./debug-activity";
 import { ExtractionPromptTemplates } from "./ExtractionPromptTemplates";
 import { MaintenancePanel } from "./MaintenancePanel";
 import { confirm, Toggle, type SettingsRebuildOutcome } from "./settings-shared";
-import { offerSlurpMemories } from "./slurp-memory-offer";
+import { offerSlurpMemories, type SlurpMemorySetting } from "./slurp-memory-offer";
 import { useLtmTranslation } from "../localization";
 import { recallStyleDescriptionKey } from "../recall-style";
 
@@ -48,6 +48,7 @@ type GlobalForm = {
   longTermMemoryRecallPreamble: string;
   longTermMemoryDebug: boolean;
   longTermMemoryShareWithPackages: boolean;
+  longTermMemoryAcceptFromPackages: boolean;
   longTermMemoryHideImportedMessages: boolean;
   sourcesAvailabilityModes?: ("conversation" | "roleplay" | "game")[];
 };
@@ -107,6 +108,7 @@ function settingsForm(settings: LtmGlobalSettings): GlobalForm {
     longTermMemoryRecallPreamble: settings.longTermMemoryRecallPreamble ?? "",
     longTermMemoryDebug: settings.longTermMemoryDebug ?? false,
     longTermMemoryShareWithPackages: settings.longTermMemoryShareWithPackages ?? true,
+    longTermMemoryAcceptFromPackages: settings.longTermMemoryAcceptFromPackages ?? false,
     longTermMemoryHideImportedMessages: settings.longTermMemoryHideImportedMessages ?? false,
     ...(settings.sourcesAvailabilityModes ? { sourcesAvailabilityModes: settings.sourcesAvailabilityModes } : {}),
   };
@@ -180,7 +182,6 @@ function extractionForm(settings: LtmExtractionSettingsPatch): ExtractionForm {
     finishCutOffAnswers: resolved.finishCutOffAnswers ?? false,
     autoAcceptSafeChanges: resolved.autoAcceptSafeChanges ?? false,
     autoImportChatSources: resolved.autoImportChatSources ?? false,
-    useAdvancedMemory: resolved.useAdvancedMemory ?? false,
     chatImportDetail: resolved.chatImportDetail ?? "standard",
     useExtractionAgentOnGameMode: resolved.useExtractionAgentOnGameMode ?? false,
     ...(resolved.systemPrompt === undefined ? {} : { systemPrompt: resolved.systemPrompt }),
@@ -235,9 +236,15 @@ export default function MemorySettings({
   const packageReaders = useQuery({
     queryKey: queryKeys.packageReaders,
     queryFn: () =>
-      request<{ readers: Array<{ caller: string | null; lastReadAt: string; reads: number; memories: number }> }>(
-        "/settings/package-readers",
-      ),
+      request<{
+        readers: Array<{
+          caller: string | null;
+          lastReadAt: string | null;
+          reads: number;
+          memories: number;
+          added: number;
+        }>;
+      }>("/settings/package-readers"),
   });
   const availableConnections = (connections.data ?? []).filter(
     (connection) => connection.provider !== "image_generation" && connection.provider !== "video_generation",
@@ -369,10 +376,12 @@ export default function MemorySettings({
     setMessage("");
     let rebuild: SettingsRebuildOutcome | null = null;
     let sharingTurnedOn = false;
+    let acceptTurnedOn = false;
     try {
       if (globalDirty && globalForm) {
         const submitted = globalForm;
         const sharingWasOff = savedGlobal?.longTermMemoryShareWithPackages === false;
+        const acceptWasOff = savedGlobal?.longTermMemoryAcceptFromPackages === false;
         const response = await request<LtmGlobalSettings & { rebuild?: SettingsRebuildOutcome | null }>(
           "/settings",
           "PUT",
@@ -380,6 +389,7 @@ export default function MemorySettings({
         );
         const saved = settingsForm(response);
         sharingTurnedOn = sharingWasOff && saved.longTermMemoryShareWithPackages;
+        acceptTurnedOn = acceptWasOff && saved.longTermMemoryAcceptFromPackages;
         setSavedGlobal(saved);
         // Saving now awaits an index rebuild, so only clear the form when no newer edit
         // arrived while it was in flight; otherwise those edits stay dirty.
@@ -411,25 +421,48 @@ export default function MemorySettings({
       } else {
         setMessage(localizeUi("ui.longTermMemory.memorysettings.memorySettingsSaved"), "success", surface);
       }
-      // Slurp's Creators need their own switch too, so the offer comes once the save has landed.
-      if (sharingTurnedOn) {
+      // Slurp's Creators need their own switches too, so each offer comes once the save has landed.
+      const slurpOffers: { setting: SlurpMemorySetting; title: string; message: string; failed: string }[] = [
+        ...(sharingTurnedOn
+          ? [
+              {
+                setting: "flavourFromAgents" as const,
+                title: localizeUi("ui.longTermMemory.memorysettings.slurpMemoryOfferTitle"),
+                message: localizeUi("ui.longTermMemory.memorysettings.slurpMemoryOfferMessage"),
+                failed: localizeUi("ui.longTermMemory.memorysettings.slurpMemoryOfferFailed"),
+              },
+            ]
+          : []),
+        ...(acceptTurnedOn
+          ? [
+              {
+                setting: "shareWithMemory" as const,
+                title: localizeUi("ui.longTermMemory.memorysettings.slurpAddOfferTitle"),
+                message: localizeUi("ui.longTermMemory.memorysettings.slurpAddOfferMessage"),
+                failed: localizeUi("ui.longTermMemory.memorysettings.slurpAddOfferFailed"),
+              },
+            ]
+          : []),
+      ];
+      for (const offer of slurpOffers) {
         try {
           await offerSlurpMemories({
-            read: () => requestHost<{ flavourFromAgents?: boolean }>("/api/slurp2/settings"),
+            setting: offer.setting,
+            read: () => requestHost<Partial<Record<SlurpMemorySetting, boolean>>>("/api/slurp2/settings"),
             confirm: () =>
               confirm(
                 props,
-                localizeUi("ui.longTermMemory.memorysettings.slurpMemoryOfferTitle"),
-                localizeUi("ui.longTermMemory.memorysettings.slurpMemoryOfferMessage"),
+                offer.title,
+                offer.message,
                 localizeUi("ui.longTermMemory.memorysettings.slurpMemoryOfferConfirm"),
                 false,
                 localizeUi("ui.longTermMemory.memorysettings.slurpMemoryOfferCancel"),
               ),
-            save: () => requestHost("/api/slurp2/settings", "PATCH", { flavourFromAgents: true }),
+            save: () => requestHost("/api/slurp2/settings", "PATCH", { [offer.setting]: true }),
           });
         } catch {
           // The fixed text keeps saying that Long-Term Memory itself saved.
-          setMessage(localizeUi("ui.longTermMemory.memorysettings.slurpMemoryOfferFailed"), "danger", surface);
+          setMessage(offer.failed, "danger", surface);
         }
       }
     } catch (error) {
@@ -940,48 +973,62 @@ export default function MemorySettings({
               checked={globalForm.longTermMemoryShareWithPackages}
               onChange={(value) => setGlobalForm({ ...globalForm, longTermMemoryShareWithPackages: value })}
             />
-            {packageReaders.data ? (
-              packageReaders.data.readers.length ? (
-                <table
-                  aria-label={localizeUi("ui.longTermMemory.memorysettings.otherAgentsCanReadMemories")}
-                  className="w-full text-left text-xs text-[var(--muted-foreground)]"
-                >
-                  <thead>
-                    <tr>
-                      <th scope="col" className="py-1 pr-3 font-medium">
-                        {localizeUi("ui.longTermMemory.memorysettings.otherAgentsAgent")}
-                      </th>
-                      <th scope="col" className="py-1 pr-3 font-medium">
-                        {localizeUi("ui.longTermMemory.memorysettings.otherAgentsLastRead")}
-                      </th>
-                      <th scope="col" className="py-1 pr-3 text-right font-medium">
-                        {localizeUi("ui.longTermMemory.memorysettings.otherAgentsReadsThisWeek")}
-                      </th>
-                      <th scope="col" className="py-1 text-right font-medium">
-                        {localizeUi("ui.longTermMemory.memorysettings.otherAgentsMemoriesThisWeek")}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {packageReaders.data.readers.map((reader) => (
-                      <tr key={reader.caller ?? ""}>
-                        <th scope="row" className="py-1 pr-3 font-normal">
-                          {reader.caller ?? localizeUi("ui.longTermMemory.memorysettings.anAgentWithoutAName")}
-                        </th>
-                        <td className="py-1 pr-3">{formatAge(reader.lastReadAt, locale, Date.now())}</td>
-                        <td className="py-1 pr-3 text-right tabular-nums">{reader.reads.toLocaleString(locale)}</td>
-                        <td className="py-1 text-right tabular-nums">{reader.memories.toLocaleString(locale)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <p className="text-xs text-[var(--muted-foreground)]">
-                  {localizeUi("ui.longTermMemory.memorysettings.noOtherAgentHasReadMemoriesLately")}
-                </p>
-              )
-            ) : null}
           </div>
+          <Toggle
+            label={localizeUi("ui.longTermMemory.memorysettings.otherAgentsCanAddMemories")}
+            help={localizeUi("ui.longTermMemory.memorysettings.otherAgentsCanAddMemoriesHelp")}
+            checked={globalForm.longTermMemoryAcceptFromPackages}
+            onChange={(value) => setGlobalForm({ ...globalForm, longTermMemoryAcceptFromPackages: value })}
+          />
+          {packageReaders.data ? (
+            packageReaders.data.readers.length ? (
+              <table
+                aria-label={localizeUi("ui.longTermMemory.memorysettings.otherAgentsTable")}
+                className="w-full text-left text-xs text-[var(--muted-foreground)]"
+              >
+                <thead>
+                  <tr>
+                    <th scope="col" className="py-1 pr-3 font-medium">
+                      {localizeUi("ui.longTermMemory.memorysettings.otherAgentsAgent")}
+                    </th>
+                    <th scope="col" className="py-1 pr-3 font-medium">
+                      {localizeUi("ui.longTermMemory.memorysettings.otherAgentsLastRead")}
+                    </th>
+                    <th scope="col" className="py-1 pr-3 text-right font-medium">
+                      {localizeUi("ui.longTermMemory.memorysettings.otherAgentsReadsThisWeek")}
+                    </th>
+                    <th scope="col" className="py-1 pr-3 text-right font-medium">
+                      {localizeUi("ui.longTermMemory.memorysettings.otherAgentsMemoriesThisWeek")}
+                    </th>
+                    <th scope="col" className="py-1 text-right font-medium">
+                      {localizeUi("ui.longTermMemory.memorysettings.otherAgentsMemoriesAddedThisWeek")}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {packageReaders.data.readers.map((reader) => (
+                    <tr key={reader.caller ?? ""}>
+                      <th scope="row" className="py-1 pr-3 font-normal">
+                        {reader.caller ?? localizeUi("ui.longTermMemory.memorysettings.anAgentWithoutAName")}
+                      </th>
+                      <td className="py-1 pr-3">
+                        {reader.lastReadAt
+                          ? formatAge(reader.lastReadAt, locale, Date.now())
+                          : localizeUi("ui.longTermMemory.memorysettings.otherAgentsNoReads")}
+                      </td>
+                      <td className="py-1 pr-3 text-right tabular-nums">{reader.reads.toLocaleString(locale)}</td>
+                      <td className="py-1 pr-3 text-right tabular-nums">{reader.memories.toLocaleString(locale)}</td>
+                      <td className="py-1 text-right tabular-nums">{reader.added.toLocaleString(locale)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="text-xs text-[var(--muted-foreground)]">
+                {localizeUi("ui.longTermMemory.memorysettings.noOtherAgentHasUsedMemoriesLately")}
+              </p>
+            )
+          ) : null}
         </div>
       </section>
 
@@ -1180,22 +1227,6 @@ export default function MemorySettings({
               setExtractionFormState({
                 ...extractionFormState,
                 finishCutOffAnswers: value,
-              })
-            }
-          />
-          <Toggle
-            label={localizeUi("ui.longTermMemory.memorysettings.useAdvancedMemory")}
-            help={localizeUi(
-              global.data?.advancedMemoryAvailable === false
-                ? "ui.longTermMemory.memorysettings.useAdvancedMemoryUnavailable"
-                : "ui.longTermMemory.memorysettings.useAdvancedMemoryHelp",
-            )}
-            checked={extractionFormState.useAdvancedMemory}
-            disabled={global.data?.advancedMemoryAvailable === false}
-            onChange={(value) =>
-              setExtractionFormState({
-                ...extractionFormState,
-                useAdvancedMemory: value,
               })
             }
           />

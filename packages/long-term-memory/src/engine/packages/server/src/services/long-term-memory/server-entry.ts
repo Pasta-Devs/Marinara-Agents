@@ -9,20 +9,10 @@ import {
   recordGenerationLongTermMemoryDispatch,
 } from "./recall/generation-injection.js";
 import { createLongTermMemoryRoutes } from "./routes.js";
+import { createLtmIntakeService } from "./services/intake.js";
 import { createLtmRecallService } from "./services/recall.js";
 import { adoptLegacyLongTermMemoryAgentConfig } from "./maintenance/legacy-adoption.js";
 import type { FastifyPluginAsync } from "fastify";
-
-// Issue #1964: the block form `advancedMemoryUnits` reads. Names, not ids; no thread bucket, because Advanced Memory
-// recaps carry no open-thread lists and threads keep coming from chat extraction.
-const ADVANCED_MEMORY_BLOCK_INSTRUCTION = [
-  "After the recap, add a memory block made of short entries separated by blank lines. Each entry is one heading line and its fields, using only these forms:",
-  "## timeline_event\nSummary: one thing that happened in this scene\nWhen: when it happened in the story (optional)",
-  "## character_fact\nCharacter: the character's exact name\nFact: a lasting fact about that character",
-  "## relationship_state\nBetween: first exact name, second exact name\nState: how those two now stand with each other",
-  "## world_fact\nFact: a lasting fact about the world or setting",
-  "Use the names exactly as they appear in the chat. Write one fact per entry, only what the scene establishes, and leave out anything uncertain.",
-].join("\n\n");
 
 let active: Awaited<ReturnType<typeof activateLongTermMemoryStorage>> | null = null;
 
@@ -49,6 +39,7 @@ export async function activate({ api, dataDir }: ActivationContext) {
       prefix: "/api/long-term-memory",
     });
     const releaseRecallService = api.registerService("long-term-memory:recall", createLtmRecallService(active.storage));
+    const releaseIntakeService = api.registerService("long-term-memory:intake", createLtmIntakeService(active.storage));
     // Host-only from Capability API 1.388: only the Engine reads it. Older Engines ignore the option.
     const releaseRuntimeService = api.registerService(
       "long-term-memory:runtime",
@@ -69,9 +60,6 @@ export async function activate({ api, dataDir }: ActivationContext) {
           recordGenerationLongTermMemoryDispatch({ ...input, root: active!.root }),
         withVaultMutation: <T>(operation: () => Promise<T>) =>
           withLongTermMemoryVaultMutation(activationRoot, operation),
-        // Issue #1964: from Capability API 1.391 the Engine appends this to an Advanced Memory scene recap request and
-        // stores the reply as the record's block. Older Engines never call it.
-        summaryMemoryInstruction: () => ADVANCED_MEMORY_BLOCK_INSTRUCTION,
       },
       { hostOnly: true },
     );
@@ -79,6 +67,7 @@ export async function activate({ api, dataDir }: ActivationContext) {
       releaseRoutes();
       releaseRuntimeService();
       releaseRecallService();
+      releaseIntakeService();
       // A background import must not write after deactivation; the next reply after activation arms it again. It stops
       // first, so a rebuild it requests on the way out is stopped below.
       await stopLtmAutoImport(activationRoot);

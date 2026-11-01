@@ -72,6 +72,36 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.6.14",
+          "date": "2026-11-01",
+          "notes": "- **Confrontation and Closer choices speak to you.** Their option buttons sometimes talked about you in the third person (\"Say what she pays\") instead of speaking to you (\"Say what you pay\"), unlike every other choice in the story. They now always read as something you do, and an action you pick is told as \"you\", like the rest of the scene. Confrontations and Closers written before this update keep their old wording.",
+          "highlight": false
+        },
+        {
+          "version": "0.6.13",
+          "date": "2026-11-01",
+          "notes": "- **A love interest's sprite leaves the stage when he does.** When he walked out of a scene, or you left him behind, his sprite used to stay on screen until the end of the beat, as if he were still there. The writer now marks who leaves on that line, and the stage clears from there; he comes back the moment he speaks again, and anyone still in the scene stays. Scenes written before this update keep their old staging.",
+          "highlight": false
+        },
+        {
+          "version": "0.6.12",
+          "date": "2026-11-01",
+          "notes": "- **Every Settings category stays reachable with a mouse.** On a desktop window just under the wide layout, or with wider system fonts, the category bar could cut off its last tab with no scrollbar to reach it. With a mouse the categories now wrap onto a second row instead; phones keep their single swipeable strip.\n- **CGs show whole on a PC.** A CG is painted tall, and on a wide screen (fullscreen on a PC) it was zoomed to fill the width, cropping away its top and bottom and often the faces. On a wide stage the CG now shows in full, framed by a soft blurred copy of itself; phones still fill the screen with it.",
+          "highlight": false
+        },
+        {
+          "version": "0.6.11",
+          "date": "2026-10-31",
+          "notes": "- **His portrait is painted from his card's full-body image and his avatar together**, instead of one standing in for the other. A love interest drawn from a character card now keeps both his build and his face, which the reference could only carry one of before. Scenes still send one likeness per person, so a large cast is not crowded out of the reference budget.",
+          "highlight": false
+        },
+        {
+          "version": "0.6.10",
+          "date": "2026-10-31",
+          "notes": "- **Each love interest has his own colour again** on his name plate and in the glow behind his art. It is picked from a vivid detail of his portrait (an earring, his eyes) rather than averaged from the picture, so no two love interests in a cast share one, and the backdrop a look is painted on never becomes it.\n- Stories already in progress re-pick their colours when opened: an accent chosen by the old picker is treated as unset.",
+          "highlight": false
+        },
+        {
           "version": "0.6.9",
           "date": "2026-10-31",
           "notes": "- The chapter list groups chapters under their arc, and a chapter's reader says which arc it belongs to (\"Arc 2 · Chapter 4\").\n- A breathing-room arc says so: \"Take a breath\" arcs show a quiet-stretch badge, so a plot-free stretch is never mistaken for the story stalling.",
@@ -160,41 +190,23 @@
           "date": "2026-10-30",
           "notes": "- The Love Timeline shows every 4★ Moment and 5★ Memory you've won, on the day you won it, including ones won before this update. Each Snapshot, Moment and Memory says what it is and opens in the Album.",
           "highlight": false
-        },
-        {
-          "version": "0.4.1",
-          "date": "2026-10-30",
-          "notes": "- The story's **Image description** shows only for a picture that isn't on screen: a painted background or key image no longer has its description under the chapter title, and one whose file fails to load gets it back.\n- NSFW stories now say outright that crude and vulgar words, swearing and dirty talk included, are fine wherever they fit a character's voice. In SFW stories characters may swear too, without the sexual words.\n- A 5★ reveal with a long premise fits on a phone: the card never grows past the screen, so the title shows whole and the premise scrolls inside it.",
-          "highlight": false
-        },
-        {
-          "version": "0.4.0",
-          "date": "2026-10-30",
-          "notes": "- **The Closer:** a main chapter can now end on a warm climax instead of a Confrontation. Over three rounds the love interest offers something of themselves, and you answer: **Reassure**, **Tease**, **Mirror** (share something of your own) or **Ask**.\n- It ends **Opened up** (trust grows, and it's a first on your Love Timeline), **Almost** (nothing changes) or **Shut out** if it goes wrong (trust falls, and they hold it against you).\n- In NSFW stories, Opened up can turn intimate, drawing on their tastes and your role.\n- After two main chapters end the same way, the next ends with the other, so a story in progress gets its first Closer soon. Route chapters keep their Confrontations.",
-          "highlight": true
-        },
-        {
-          "version": "0.3.0",
-          "date": "2026-10-30",
-          "notes": "- NSFW stories give each new love interest's bible their tastes in sex and intimacy: what they're into, kinks included, and what draws them. Intimate scenes bring them in when they fit; your content settings still decide what a scene may hold.\n- An older cast gets **Add intimacy preferences** on Your cast (1 call). Read and edit them in the bible.\n- An optional Sub, Dom or Switch preference for your protagonist sits beside Heat.\n- SFW stories never write or send any of it.\n- Story memory keeps an NSFW story as it was written: summaries no longer turn it SFW, and a Veil is remembered as having happened off the page.\n- The planners no longer call every love interest a monster: each is a human, even if inside a monster.\n- A date inside a chapter can go as hoped: it stumbles only when the story gives it a reason, like Date Night.",
-          "highlight": true
-        },
-        {
-          "version": "0.2.2",
-          "date": "2026-10-30",
-          "notes": "- In stories, hide the header's Image description panel while a character sprite is shown; keep the description available without a sprite.\n- Four-star memories include artwork through the existing painting flow alongside their playable memory.\n- Round every corner of story character nameplates.",
-          "highlight": false
-        },
-        {
-          "version": "0.2.1",
-          "date": "2026-10-30",
-          "notes": "- Make desktop fullscreen fill the available Otome Hearth area across its screens. Leaving fullscreen restores ordinary portrait layouts while preserving drafts and the current reader line.",
-          "highlight": false
         }
       ]
     },
     "ruleset-5e-2014": {
       "versions": [
+        {
+          "version": "1.0.3",
+          "date": "2026-10-31",
+          "notes": "- The Low magic layer's name and summary, and the magic items' Spell level filter, are translated in all 11 language packs.",
+          "highlight": false
+        },
+        {
+          "version": "1.0.2",
+          "date": "2026-10-31",
+          "notes": "- A Low magic layer, turned on when a game is created: magic is rare and feared. No spell above 5th level is offered, and no spell scroll above 5th level is found or sold. Every magic item still exists, but no shop sells one (the magic dealer and the scribe are gone, and temples and alchemists sell only mundane goods), treasure drops one about a fifth as often, and a town's fence is the one shady way to buy one. The Game Master keeps creatures of magic out of random encounters, may still build a fight around one on purpose, and, when the player gives no reason, decides at game creation why magic is rare in this world. Magic items' spell scrolls carry a Spell level filter. It needs Capability API 1.813.",
+          "highlight": false
+        },
         {
           "version": "1.0.1",
           "date": "2026-10-31",
@@ -301,18 +313,6 @@
           "version": "0.436.0",
           "date": "2026-10-25",
           "notes": "- A long rest ends temporary hit points (Capability API 1.804): \"they last until they're depleted or you finish a long rest\".",
-          "highlight": true
-        },
-        {
-          "version": "0.435.0",
-          "date": "2026-10-25",
-          "notes": "- An encounter budget (Capability API 1.803): each challenge rating counts for its SRD 5.1 experience points, and a party may face up to SRD 5.2.1's XP Budget per Character (Low, Moderate, High) times its members, with no multiplier for numbers. Casual games play Low, normal Moderate, hard and brutal High; a boss fight may reach a step higher. The SRD 5.2.1 attribution is in LICENSE-SRD.md. A first class also writes its name into Class, so a sheet with only a class level still opens that class's spells.",
-          "highlight": true
-        },
-        {
-          "version": "0.434.0",
-          "date": "2026-10-25",
-          "notes": "- Caster archetypes the GM can pick instead of inventing one: Pyromancer, Cryomancer, Necromancer, Enchanter, Support Priest, Battle Priest and Nature Priest, each at novice (challenge 1/2), adept (1), veteran (3) and master (6) and as a legendary (12) with Legendary Resistance and a cantrip legendary action. Each casts from a wizard, cleric or druid sheet at a class level near its challenge, so its slots come back on that class's rests; save DC 12, 14, 16, 18 (19 legendary), 2-3 cantrips and 4-6 leveled SRD spells (8 when legendary), Counterspell only from master up. Mages keep their distance, support priests stay back and heal, battle priests wade in. Not SRD stat blocks; marked as such.",
           "highlight": true
         }
       ]

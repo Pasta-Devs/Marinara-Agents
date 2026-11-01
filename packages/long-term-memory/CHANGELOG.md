@@ -1,5 +1,34 @@
 # Long-Term Memory changelog
 
+## 1.5.29 — 2026-11-01
+
+- Long-Term Memory no longer imports Advanced Memory scene recaps. Chats that use Advanced Memory are extracted from their own summaries and messages, so their memories get keywords, links and threads, and "Hide remembered messages" works for them. Memories already imported from recaps stay.
+
+## 1.5.28 — 2026-11-01
+
+- In a hands-off mode, one memory worded like a scene action now waits in Review on its own while the rest of that batch is still saved. Everyday habits such as "keeps", "carries" or "wears" no longer trigger the warning.
+
+## 1.5.27 — 2026-11-01
+
+- Memory Settings → Sharing shows how many memories each other Agent added this week, and lists an Agent that has only added memories.
+
+## 1.5.26 — 2026-11-01
+
+- The Memory Vault shows a Slurp or Advanced Memory chip on memories that Slurp or Advanced Memory added, in the list and at the top of the editor.
+
+## 1.5.25 — 2026-11-01
+
+- Chat Settings puts "Memories from this chat" first and shows what happened in plain parts (saved today with a check, waiting for you with a clock, Review only when something waits), with clear lines when nothing is new or memories are added by hand; the "After a reply" sample in Extraction and the setup guide looks the same.
+- The setup guide's import step says new messages are already being collected when you chose a hands-off mode, and "Hide imported messages from the AI" is now "Hide remembered messages from the AI" with a short note that your latest messages always stay.
+
+## 1.5.24 — 2026-11-01
+
+- An Agent that adds memories can ask recall to leave out what it added itself, so its own facts do not come back as new.
+
+## 1.5.23 — 2026-11-01
+
+- Slurp can add memories when you allow it in Memory Settings → Sharing. Off by default.
+
 ## 1.5.22 — 2026-10-31
 
 - Clearer hands-off wording: the background import help says it covers every chat, intro and re-extract text is right when safe changes are accepted automatically, and Advanced Memory scene recaps are disabled with a note on Engines that cannot provide them.

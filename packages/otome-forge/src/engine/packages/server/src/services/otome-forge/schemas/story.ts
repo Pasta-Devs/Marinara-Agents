@@ -48,6 +48,7 @@ export const SegmentSchema: ZodType<Segment> = z.object({
   expression: z.union([z.enum(FACES), z.literal("")]).optional(),
   place: short(120).optional(),
   gender: short(20).optional(),
+  exits: z.array(z.string()).optional(),
 });
 
 const ChoiceSchema: ZodType<ForgeChoice> = z.object({
