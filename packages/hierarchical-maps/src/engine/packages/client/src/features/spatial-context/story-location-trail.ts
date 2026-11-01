@@ -41,7 +41,7 @@ export function saveStoryLocationDisplay(display: StoryLocationDisplay): void {
 /**
  * How many trailing crumbs fit in `available` pixels: the widths of the crumbs root to leaf, of one separator and of
  * the leading ellipsis that marks left-out ancestors. Always at least one, so the current location shows (it
- * truncates on its own when even it is too wide).
+ * truncates on its own when even it is too wide, and keeps the marker so it never reads as a top-level place).
  */
 export function trailingCrumbsThatFit(
   widths: readonly number[],
@@ -54,8 +54,8 @@ export function trailingCrumbsThatFit(
   for (let count = 1; count <= widths.length; count += 1) {
     used += widths[widths.length - count]! + (count > 1 ? separator : 0);
     const marker = count < widths.length ? ellipsis + separator : 0;
-    if (used + marker > available + 0.5) break;
-    fits = count;
+    // Keep going after a miss: the whole path drops the marker, so it can fit when a shorter trail does not.
+    if (used + marker <= available + 0.5) fits = count;
   }
   return fits;
 }

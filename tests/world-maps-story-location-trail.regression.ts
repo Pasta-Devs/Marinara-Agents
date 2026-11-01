@@ -58,6 +58,9 @@ assert.equal(
 );
 assert.equal(trailingCrumbsThatFit(widths, separator, ellipsis, whole - 1), widths.length - 1);
 assert.equal(trailingCrumbsThatFit([], separator, ellipsis, 500), 0);
+// A root narrower than the marker: the whole path (1 + 12 + 36 = 49) fits although "… › Room" (58) does not.
+assert.equal(trailingCrumbsThatFit([1, 36], separator, ellipsis, 49), 2, "a whole path that fits needs no marker");
+assert.equal(trailingCrumbsThatFit([1, 36], separator, ellipsis, 48), 1);
 
 // The bar wires it up: the trail shows, the full path stays in the title and label, and the options panel spells it out.
 const bar = readFileSync(

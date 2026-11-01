@@ -3490,25 +3490,24 @@ test("Story Location bar keeps the current place visible in a deep map, with eac
   });
   expect(chatResponse.ok(), await chatResponse.text()).toBeTruthy();
   const chat = (await chatResponse.json()) as { id: string };
-  await activateHierarchicalMaps(page, chat.id);
-  const saveResponse = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
-    data: {
-      expectedRevision: 0,
-      expectedCurrentLocationId: null,
-      definition: {
-        ...deepMapDefinition,
-        startingLocationId: "deep-07",
-        locations: deepMapDefinition.locations.slice(0, names.length).map((location, index) => ({
-          ...location,
-          name: names[index]!,
-          links: [],
-        })),
-      },
-    },
-  });
-  expect(saveResponse.ok(), await saveResponse.text()).toBeTruthy();
-
   try {
+    await activateHierarchicalMaps(page, chat.id);
+    const saveResponse = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+      data: {
+        expectedRevision: 0,
+        expectedCurrentLocationId: null,
+        definition: {
+          ...deepMapDefinition,
+          startingLocationId: "deep-07",
+          locations: deepMapDefinition.locations.slice(0, names.length).map((location, index) => ({
+            ...location,
+            name: names[index]!,
+            links: [],
+          })),
+        },
+      },
+    });
+    expect(saveResponse.ok(), await saveResponse.text()).toBeTruthy();
     await page.addInitScript((chatId) => {
       localStorage.setItem("marinara-active-chat-id", chatId);
       localStorage.setItem("marinara-engine-ui-updated-at", String(Date.now() + 60_000));
