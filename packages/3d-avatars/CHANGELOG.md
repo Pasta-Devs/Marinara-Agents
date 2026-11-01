@@ -1,3 +1,7 @@
+## 0.1.2 — 2026-11-01
+
+- The description now says which model files work: VRM everywhere, and MMD PMX plus rigged GLB and FBX on Marinara Engine versions after 2.5.1.
+
 ## 0.1.1 — 2026-10-14
 
 - Now in Download Agents for Engine staging testers.
