@@ -6,12 +6,12 @@
   },
   "package": {
     "name": "3D Avatars",
-    "description": "Shows your characters and personas as animated 3D models that blink, talk, and change faces with each reply. Uses VRM model files. Set up each avatar on the agent's page in Agents, then add the Agent in Chat Settings → Agents → Misc Agents for Roleplay and Game modes."
+    "description": "Shows your characters and personas as animated 3D models that blink, talk, and change faces with each reply. Uses VRM model files; Marinara Engine versions after 2.5.1 also take MMD PMX, GLB and FBX models. Set up each avatar on the agent's page in Agents, then add the Agent in Chat Settings → Agents → Misc Agents for Roleplay and Game modes."
   },
   "agents": {
     "3d-avatars": {
       "name": "3D Avatars",
-      "description": "Shows your characters and personas as animated 3D models that blink, talk, and change faces with each reply. Uses VRM model files."
+      "description": "Shows your characters and personas as animated 3D models that blink, talk, and change faces with each reply. Uses VRM model files; Marinara Engine versions after 2.5.1 also take MMD PMX, GLB and FBX models."
     }
   }
 }

@@ -26,6 +26,12 @@
     "3d-avatars": {
       "versions": [
         {
+          "version": "0.1.2",
+          "date": "2026-11-01",
+          "notes": "- The description now says which model files work: VRM everywhere, and MMD PMX, GLB and FBX on Marinara Engine versions after 2.5.1.",
+          "highlight": false
+        },
+        {
           "version": "0.1.1",
           "date": "2026-10-14",
           "notes": "- Now in Download Agents for Engine staging testers.\n- Checked against the Engine's live faces and lip sync.",
