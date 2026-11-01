@@ -333,7 +333,7 @@ async function seedTracker(page: Page, root: Locator, value: Json) {
     data: value,
   });
   await root.getByRole("button", { name: "Remind Me" }).click();
-  await root.getByRole("button", { name: "Back" }).click();
+  await root.getByRole("button", { name: "Back", exact: true }).click();
 }
 
 const tracker = (starts: string[], patch: Json = {}) => ({
@@ -476,7 +476,7 @@ test("Otome Forge Remind Me: the calendar, the tracker off by default, hearts, a
   await page.screenshot({ path: testInfo.outputPath("02-tracker-on.png") });
 
   // Back on Remind Me: filled hearts for the logged days, outlined ones labelled "predicted" for the rest.
-  await root.getByRole("button", { name: "Back" }).click();
+  await root.getByRole("button", { name: "Back", exact: true }).click();
   await expect(heading).toBeFocused();
   await expect(root.getByRole("group", { name: "What the hearts mean" })).toContainText("Logged");
   await expect(root.getByRole("group", { name: "What the hearts mean" })).toContainText("Predicted");
@@ -493,7 +493,7 @@ test("Otome Forge Remind Me: the calendar, the tracker off by default, hearts, a
   await page.screenshot({ path: testInfo.outputPath("03-remind-hearts.png") });
 
   // Home: Caring message, once. The request carries exactly one line about today and nothing else.
-  await root.getByRole("button", { name: "Back" }).click();
+  await root.getByRole("button", { name: "Back", exact: true }).click();
   const caring = root.getByRole("button", { name: "Caring message" });
   await expect(caring).toBeInViewport();
   await page.screenshot({ path: testInfo.outputPath("04-home-caring.png") });
@@ -540,7 +540,7 @@ test("Otome Forge Remind Me: the calendar, the tracker off by default, hearts, a
   await root.getByRole("tab", { name: "Tracker" }).click();
   await root.getByText("Keep it off the model", { exact: true }).click();
   await expect(root.getByRole("radio", { name: /Keep it off the model/ })).toBeChecked();
-  await root.getByRole("button", { name: "Back" }).click();
+  await root.getByRole("button", { name: "Back", exact: true }).click();
   await root.getByRole("button", { name: "Who’s home" }).click();
   await page
     .getByRole("dialog", { name: "Who’s home" })
@@ -563,7 +563,7 @@ test("Otome Forge Remind Me: the calendar, the tracker off by default, hearts, a
   await expect(root.getByRole("switch", { name: /Period tracker/ })).not.toBeChecked();
   expect(await stored(page, CYCLE_KEY)).toBeNull();
   expect(await stored(page, CARE_KEY)).toBeNull();
-  await root.getByRole("button", { name: "Back" }).click();
+  await root.getByRole("button", { name: "Back", exact: true }).click();
   await expect(root.getByRole("heading", { level: 1, name: "Cassian" })).toBeVisible();
   await expect(root.getByRole("button", { name: "Caring message" })).toHaveCount(0);
   expect(posts(stub, "/care-note")).toHaveLength(1);
@@ -683,7 +683,7 @@ test("Otome Forge Caring message across midnight: an open one closes rather than
   );
   // Home reads the tracker as it opens.
   await root.getByRole("button", { name: "Remind Me" }).click();
-  await root.getByRole("button", { name: "Back" }).click();
+  await root.getByRole("button", { name: "Back", exact: true }).click();
   await expect.poll(() => stored(page, CARE_KEY)).toBeNull();
 
   const caring = root.getByRole("button", { name: "Caring message" });
