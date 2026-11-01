@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.5.27 — 2026-11-01
 
 - Memory Settings → Sharing shows how many memories each other Agent added this week, and lists an Agent that has only added memories.
 

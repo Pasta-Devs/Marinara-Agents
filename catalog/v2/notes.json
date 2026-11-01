@@ -364,6 +364,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.5.27",
+          "date": "2026-11-01",
+          "notes": "- Memory Settings → Sharing shows how many memories each other Agent added this week, and lists an Agent that has only added memories.",
+          "highlight": false
+        },
+        {
           "version": "1.5.26",
           "date": "2026-11-01",
           "notes": "- The Memory Vault shows a Slurp or Advanced Memory chip on memories that Slurp or Advanced Memory added, in the list and at the top of the editor.",
@@ -475,12 +481,6 @@
           "version": "1.5.8",
           "date": "2026-10-29",
           "notes": "- Other Agents that read memories, such as Slurp and Noodle, can ask for whole memories instead of the parts that fit what they are writing. The same memories are shared either way.",
-          "highlight": false
-        },
-        {
-          "version": "1.5.7",
-          "date": "2026-10-28",
-          "notes": "- Memory Settings → Recall → Sharing lists each Agent that has read memories with when it last did, how many times it read this week and how many memories it got, so you can tell whether an Agent such as Slurp is using them. The counts come from the Debug activity log, so clearing it or a very busy install can lower them.",
           "highlight": false
         }
       ]
