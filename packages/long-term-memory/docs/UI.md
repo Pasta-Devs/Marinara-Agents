@@ -59,6 +59,11 @@ pressed buttons and an "After a reply" sample. A new setup (empty vault, choice
 still I add them myself) starts on Save them for me; an existing one shows its
 stored choice. Pressing a choice saves it, and moving on from step 3 saves the
 choice it shows.
+Step 4 (Import) and step 7 (You're Set Up) follow that choice: when the choice
+collects new messages (Collect them, I'll review or Save them for me) the import
+step says new messages are already being collected, and step 7 says what waits
+for you or is saved on its own; I add them myself keeps the plain import and
+setup wording.
 
 ## Responsive Contract
 
@@ -180,7 +185,7 @@ never imported uses its chat's size. When the selected chat also has summaries,
 it says that importing both can repeat memories in review. A chat with branches
 adds a Branch menu (this branch, each other branch, All branches); it filters
 the list to a branch's history, and the destination stays the whole chat.
-The Extraction setting Hide imported messages from the AI (off by default)
+The Extraction setting Hide remembered messages from the AI (off by default)
 hides each extracted piece's messages from the chat's prompt, except the last
 messages the chat's summary keeps (10 when unset). It records only the messages
 it hid; turning it off or permanently deleting a piece's source note shows
@@ -205,7 +210,7 @@ Review Queue) and Save them for me (background import, low-risk proposals are
 accepted). The choice is stored as the two extraction settings
 `autoImportChatSources` and `autoAcceptSafeChanges`; import off with accept on
 shows as I add them myself, and the next save writes accept off. Its hint says
-chats use this unless they choose otherwise, and an "After a reply" sample shows
+chats use this unless they choose otherwise, and an "After a reply" sample (a small label over the same status line, with example numbers) shows
 what the choice does. Accepting low-risk proposals covers new notes and
 additions with no conflicts; rewrites, status changes, shared memories and
 anything with warnings wait in the Review Queue, and a draft that mixes them
@@ -217,7 +222,7 @@ starts and never the piece still being written, and each run is an "Imported
 automatically" row in Activity. A selection whose import failed is not retried
 until a source or the extraction connection changes. Use Advanced Memory recaps
 needs a Marinara version that provides the recaps (Capability API 1.391); on an
-older Engine the toggle is disabled with a note, the same way as Hide imported
+older Engine the toggle is disabled with a note, the same way as Hide remembered
 messages from the AI.
 When background import is on and has no extraction connection, Extraction shows a warning
 (`StatusSurface` warning tone) with a Choose button that focuses the connection field; the same
@@ -236,13 +241,18 @@ picks one of the three Memories from chats choices for the open chat; it shows t
 choice with the Global default chip until the chat has its own, then a "Use global default"
 button clears it. The Engine passes only the recall keys to Chat Settings, so the panel reads
 the chat's choice from `GET /chat-memories/:chatId` and writes it through the host's chat
-settings change. While background import is
-on for the chat it also shows one status line, "N saved today · N waits for you" with a Review button: the
-first count adds up the memories the chat's `auto_import` Activity rows applied since local
-midnight, the second is the chat's pending drafts. Review opens the Review Queue (it has no
-per-chat filter); Chat Settings is a separate host view, so it leaves a short-lived open request
-(`auto-import-status.ts`) that the detail view reads when it opens. It keeps one short
-explanation above the controls; the Recall style info popover lists every style
+settings change. Memories from this chat is the first field, followed by one status line
+(`ChatMemoriesStatusLine` in `chat-memories.tsx`, shared with the "After a reply" sample). Save them
+for me shows a check with "N saved today" in `--ltm-success` (also at 0), then a "·" and a clock with
+"N waits for you" when something waits; Collect them, I'll review shows only the waiting part, since
+nothing saves on its own, and with nothing waiting says "Watching this chat · nothing new yet"; I add them myself
+says "Nothing is added on its own" with an Import button that opens Sources. The first count adds up
+the memories the chat's `auto_import` Activity rows applied since local midnight, the second is the
+chat's pending drafts. Review (shown only when something waits) opens the Review Queue (it has no
+per-chat filter); Chat Settings is a separate host view, so Review and Import leave a short-lived open
+request (`auto-import-status.ts`) that the detail view reads when it opens. There is no "reading your
+latest messages" state: the Activity rows load once and carry no live signal for a run in progress.
+It keeps one short explanation above the recall controls; the Recall style info popover lists every style
 and marks the current one. While the global defaults have not arrived, an
 inherited value shows "Loading default…" (or "Default unavailable" after a
 failed load) instead of an invented number, and the controls stay usable. Memory Settings
