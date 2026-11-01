@@ -1,8 +1,14 @@
 # Otome Hearth release notes
 
+## 0.6.15 — 2026-11-01 [highlight]
+
+- **Prestige: your bond keeps growing past level 10.** Once a love interest reaches the top affection level, every 300 more affection earns a prestige point, shown as three stars under "Between you" on the Story screen. Every three points unlock an **extra story** with him, and the stars start over, as often as you like.
+- **Extra stories are something the two of you imagine for fun**, written like a Character Story: a what-if (a wedding, starting a family, a honeymoon), a mini AU (vampires, a modern-day life), or, in an NSFW story, something new to explore together. Each one is different from the last.
+- **They never change the main story.** Choices inside an extra story don't move his trust or open grievances, and later chapters never remember an AU as if it happened. A choice that costs affection can never take an unlocked story back.
+
 ## 0.6.14 — 2026-11-01
 
-- **Confrontation and Closer choices speak to you.** Their option buttons sometimes talked about you in the third person ("Say what she pays") instead of speaking to you ("Say what you pay"), unlike every other choice in the story. They now always read as something you do, and an action you pick is told as "you", like the rest of the scene. Confrontations and Closers written before this update keep their old wording.
+- **Confrontation and Closer choices speak to you.** Their option buttons sometimes talked about you in the third person ("Say what she pays") instead of speaking to you ("Say what you pay"), unlike every other choice in the story. The writer is now asked to word them as something you do, and to tell an action you pick as "you", like the rest of the scene. Confrontations and Closers written before this update keep their old wording.
 
 ## 0.6.13 — 2026-11-01
 

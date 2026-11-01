@@ -685,7 +685,6 @@ DATE CHOICE (this node is one scene of a date with ${unit.name}):
 - ${goesWrong ? `This evening is planned to stumble: an option may open a grievance, and on a date it is at most "minor".` : "Nothing on this date opens a grievance: leave grievance out of every option's effects."}`;
 }
 
-/** #2024: who is no longer in the scene, so the reader takes them off the stage (S/story/beats.ts exitsOf). */
 /**
  * How a Confrontation's or Closer's option reads (#2030): the label is the player's own button, so it speaks to them
  * ("Say what you pay"), never about them ("Say what she pays"); an action selection is narrated to "you" like the scene.
@@ -693,6 +692,7 @@ DATE CHOICE (this node is one scene of a date with ${unit.name}):
 const optionVoice = (protagonist: string) =>
   `label: the pill's short intent, 2 to 6 words, addressed to the player as a bare command or with "you", never with the protagonist's name or "she", "he" or "they" for them (for example "Say what you pay", "Admit you are scared"). selection: what ${protagonist} says (kind dialogue) or does (kind action, narrated to "you", as in "You step closer."), one or two sentences.`;
 
+/** #2024: who is no longer in the scene, so the reader takes them off the stage (S/story/beats.ts exitsOf). */
 const EXITS_RULE =
   '- exits: only on the segment where love interests leave the scene, or the protagonist leaves them behind: the exact names of those no longer with the protagonist ("exits": ["Name"]). Omit it on every other segment.';
 
