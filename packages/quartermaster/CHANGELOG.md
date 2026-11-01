@@ -1,5 +1,22 @@
 # Quartermaster changelog
 
+## 0.1.33 — 2026-11-01
+- The item editor's Delete file / Unlink choice closes if the item's image changes while it's
+  open, so Delete never removes a different file than the one it names.
+- A failed Unlink in the item editor can be tried again.
+- The [i] details on bag cards stay inside the dock after they load.
+
+## 0.1.32 — 2026-10-28 [highlight]
+- Attempted fix for item images going missing. An uploaded or generated image now stays with its
+  item, even after a rename. Images uploaded before this update are kept on rename too.
+- A dropped connection no longer hides item images until you reload.
+- Item editor: a line under the name shows which image file the item uses. Unlink sends this
+  chat's item back to matching by name without deleting the file.
+- Bag cards have an [i] on the image with the same details. Deleting an image file moved to the
+  × in the item editor, which says the file is shared by every chat and offers Unlink instead.
+- A new image never replaces another item's file: it's saved as "apple (1).png" and so on.
+- Item names with characters like "/" upload correctly.
+
 ## 0.1.31 — 2026-10-25
 - No changes you'll notice: a code comment was corrected.
 

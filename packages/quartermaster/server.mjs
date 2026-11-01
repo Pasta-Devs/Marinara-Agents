@@ -42,8 +42,8 @@
 // never renamed (saved data stores them); only the display labels say
 // Inner/Mid/Outer. extra_wearable_1-3 hold worn items no other slot fits.
 import { randomUUID } from "node:crypto";
-import { join, dirname } from "node:path";
-import { mkdir, writeFile, readFile, readdir, unlink } from "node:fs/promises";
+import { join, dirname, relative, sep } from "node:path";
+import { mkdir, writeFile, readFile, readdir, unlink, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 // The order equippedItemNamesText (appearance macro, image prompts) lists
@@ -234,12 +234,16 @@ function galleryItemsDir(dataDir) {
 // Depth-first: files at each level before descending into subfolders, both
 // alphabetical, first match wins — same tie-break the outfit/item
 // name-matching (qmNormalizeMatchKey) already uses elsewhere in this file.
+// A folder that doesn't exist just has no match; any other read error throws,
+// so the image route answers 500 (worth retrying) rather than a 404 the client
+// would remember as "no image" for the rest of the session.
 async function findItemImageFile(dir, targetKey) {
   let entries;
   try {
     entries = await readdir(dir, { withFileTypes: true });
-  } catch {
-    return null;
+  } catch (error) {
+    if (error?.code === "ENOENT" || error?.code === "ENOTDIR") return null;
+    throw error;
   }
   const files = entries.filter((entry) => entry.isFile()).sort((a, b) => a.name.localeCompare(b.name));
   for (const entry of files) {
@@ -255,6 +259,117 @@ async function findItemImageFile(dir, targetKey) {
     if (found) return found;
   }
   return null;
+}
+
+// Since 0.1.32 an uploaded or generated image's filename is also saved on the
+// item (imageFile, with imageSource "uploaded" or "generated"), so a renamed
+// item keeps its picture. Name matching stays the fallback for everything else:
+// image packs, uploads from before 0.1.32, and items whose saved image was
+// unlinked. Only the server sets imageFile, always to a plain top-level file in
+// items/; the client may only clear it.
+const MAX_ITEM_IMAGE_FILE_LENGTH = 200;
+
+function normalizeItemImageFile(value) {
+  if (typeof value !== "string" || value.length === 0 || value.length > MAX_ITEM_IMAGE_FILE_LENGTH) return null;
+  if (/[/\\\x00-\x1f]/.test(value) || value.startsWith(".")) return null;
+  const dot = value.lastIndexOf(".");
+  if (dot <= 0 || !ITEM_IMAGE_EXT_TO_CONTENT_TYPE[value.slice(dot + 1).toLowerCase()]) return null;
+  return value;
+}
+
+// The saved-image fields to copy wherever an item is copied (outfit snapshots,
+// revert records, Export/Import), validated on the way in. Empty when there's
+// no valid saved image, so older shapes stay unchanged.
+function itemImageFields(source) {
+  const imageFile = normalizeItemImageFile(source?.imageFile);
+  if (!imageFile) return {};
+  return { imageFile, imageSource: source.imageSource === "generated" ? "generated" : "uploaded" };
+}
+
+function setItemImageFields(target, fields) {
+  delete target.imageFile;
+  delete target.imageSource;
+  Object.assign(target, fields);
+}
+
+// Outfits keep their own copy of each item (itemSlotSnapshot). Keep its image
+// fields in step, so an outfit that rebuilds a deleted item restores its image.
+function syncOutfitSnapshotImages(state, item) {
+  for (const outfit of state.outfits) {
+    for (const snapshot of Object.values(outfit.slots ?? {})) {
+      if (snapshot && typeof snapshot === "object" && snapshot.itemId === item.id) {
+        setItemImageFields(snapshot, itemImageFields(item));
+      }
+    }
+  }
+}
+
+// A new upload's filename stem: the item's match key, so same-named items in
+// other chats find it by name, minus anything a filename can't hold (which
+// also keeps "/" and ".." from ever reaching a path). A name with nothing safe
+// left becomes "item"; the saved imageFile shows the file either way.
+function itemImageStem(name) {
+  const stem = qmNormalizeMatchKey(name)
+    .replace(/[<>:"/\\|?*\x00-\x1f]/g, "")
+    .replace(/^\.+/, "")
+    .replace(/[. ]+$/, "")
+    .slice(0, 120);
+  if (!stem) return "item";
+  return /^(con|prn|aux|nul|com\d|lpt\d)$/i.test(stem) ? `${stem}item` : stem;
+}
+
+// Never overwrites: another chat's item may have that file saved. The first
+// image for a name gets the plain stem, so same-named items match it; later
+// ones get "stem (1)", "stem (2)" and so on, like a browser's repeat
+// downloads. Taken names are compared by match key, so "Apple.jpg" blocks
+// "apple.png" too (both would compete for the same name match).
+async function writeNewItemImage(dir, stem, ext, buffer) {
+  await mkdir(dir, { recursive: true });
+  const taken = new Set(
+    (await readdir(dir)).map((name) => {
+      const dot = name.lastIndexOf(".");
+      return qmNormalizeMatchKey(dot > 0 ? name.slice(0, dot) : name);
+    }),
+  );
+  for (let n = 0; n < 10000; n++) {
+    const candidate = n === 0 ? stem : `${stem} (${n})`;
+    if (taken.has(qmNormalizeMatchKey(candidate))) continue;
+    const filename = `${candidate}.${ext}`;
+    try {
+      await writeFile(join(dir, filename), buffer, { flag: "wx" });
+      return filename;
+    } catch (error) {
+      if (error?.code !== "EEXIST") throw error;
+    }
+  }
+  throw new Error("No free image filename");
+}
+
+async function fileExists(path) {
+  try {
+    return (await stat(path)).isFile();
+  } catch (error) {
+    if (error?.code === "ENOENT" || error?.code === "ENOTDIR") return false;
+    throw error;
+  }
+}
+
+// Which file an item shows: its saved image while that file exists, otherwise
+// its name match (image packs included). `file` is relative to items/ with
+// forward slashes; `pack` marks a match inside a subfolder (an image pack,
+// never deleted from Quartermaster); `savedMissing` flags a saved file that's
+// gone. Disk errors other than "not found" throw (see findItemImageFile).
+async function resolveItemImage(dataDir, item) {
+  const dir = galleryItemsDir(dataDir);
+  const saved = itemImageFields(item);
+  if (saved.imageFile && (await fileExists(join(dir, saved.imageFile)))) {
+    return { path: join(dir, saved.imageFile), file: saved.imageFile, source: saved.imageSource, pack: false, savedMissing: false };
+  }
+  const savedMissing = Boolean(saved.imageFile);
+  const found = await findItemImageFile(dir, qmNormalizeMatchKey(item.name));
+  if (!found) return { path: null, file: null, source: null, pack: false, savedMissing };
+  const file = relative(dir, found.path).split(sep).join("/");
+  return { path: found.path, file, source: "name", pack: file.includes("/"), savedMissing };
 }
 
 // ── Bundled slot icons ──────────────────────────────────────────────────────
@@ -408,6 +523,7 @@ function itemSlotSnapshot(item) {
     description: item.description,
     defaultSlot: item.defaultSlot ?? null,
     descriptionLocked: item.descriptionLocked === true,
+    ...itemImageFields(item),
   };
 }
 
@@ -440,6 +556,7 @@ function normalizeOutfitSlotSnapshot(value) {
       description: value.description ?? null,
       defaultSlot: normalizeDefaultSlot(value.defaultSlot) ?? null,
       descriptionLocked: value.descriptionLocked === true,
+      ...itemImageFields(value),
     };
   }
   return { itemId: null, name: null, description: null, defaultSlot: null, descriptionLocked: false };
@@ -521,6 +638,7 @@ function applyOutfitEquip(state, outfit) {
         defaultSlot: snapshot.defaultSlot ?? slot,
         favorite: false,
         descriptionLocked: snapshot.descriptionLocked,
+        ...itemImageFields(snapshot),
       };
       state.items.push(item);
     }
@@ -2023,10 +2141,23 @@ export async function activate(context) {
         const state = await loadInventoryState(documents, chatId, ownerId);
         const item = state.items.find((candidate) => candidate.id === itemId);
         if (!item) return reply.status(404).send({ error: "Item not found" });
+        // Only the server sets a saved image (upload, rename); the client can
+        // only clear it ("Unlink"), which goes back to name matching.
+        if (body.imageFile !== undefined && body.imageFile !== null) {
+          return reply.status(400).send({ error: "imageFile can only be cleared" });
+        }
 
         if (body.name !== undefined) {
           const name = normalizeText(body.name, MAX_ITEM_NAME_LENGTH);
           if (!name) return reply.status(400).send({ error: "Item name is required" });
+          // An image from before 0.1.32 has no saved filename: save the one
+          // this item shows now, so the rename doesn't lose it. Image-pack
+          // matches (in a subfolder) aren't saved, so renaming onto another
+          // pack image's name still switches to it.
+          if (!itemImageFields(item).imageFile && qmNormalizeMatchKey(name) !== qmNormalizeMatchKey(item.name)) {
+            const shown = await resolveItemImage(context.dataDir, item).catch(() => null);
+            if (shown?.path && !shown.pack) setItemImageFields(item, { imageFile: shown.file, imageSource: "uploaded" });
+          }
           item.name = name;
           // Outfit slots carry their own name/description snapshot, not a
           // live reference (see applyOutfitEquip's own comment) — a rename
@@ -2040,6 +2171,8 @@ export async function activate(context) {
             }
           }
         }
+        if (body.imageFile === null) setItemImageFields(item, {});
+        if (body.name !== undefined || body.imageFile === null) syncOutfitSnapshotImages(state, item);
         if (body.description !== undefined) item.description = normalizeText(body.description, MAX_ITEM_DESCRIPTION_LENGTH);
         if (body.quantity !== undefined) item.quantity = normalizeQuantity(body.quantity);
         if (body.location !== undefined) {
@@ -2172,6 +2305,7 @@ export async function activate(context) {
             favorite: saved.favorite === true,
             hidden: saved.hidden === true,
             descriptionLocked: saved.descriptionLocked === true,
+            ...itemImageFields(saved),
           };
           const location = normalizeLocation(entry.before.location, state);
           if (location !== null) applyLocation(state.items, item, location);
@@ -2294,37 +2428,65 @@ export async function activate(context) {
         return { pendingHiddenChanges: state.pendingHiddenChanges };
       });
 
-      // Serves an item's image, resolved by NAME (not a stored reference —
-      // see findItemImageFile's own comment). 404 with no body when nothing
-      // matches; the client swaps to its placeholder box on that, not an
-      // error state.
+      // Serves an item's image: its saved file, else its name match (see
+      // resolveItemImage). 404 only when there really is no image; the client
+      // remembers that for the session. A disk error is a 500, which the
+      // client retries.
       routes.get("/inventory/:chatId/:ownerId/items/:itemId/image", async (request, reply) => {
         const { chatId, ownerId, itemId } = request.params;
         const state = await loadInventoryState(documents, chatId, ownerId);
         const item = state.items.find((candidate) => candidate.id === itemId);
         if (!item) return reply.status(404).send({ error: "Item not found" });
 
-        const found = await findItemImageFile(galleryItemsDir(context.dataDir), qmNormalizeMatchKey(item.name));
-        if (!found) return reply.status(404).send({ error: "No matching image" });
-
         let buffer;
+        let shown;
         try {
-          buffer = await readFile(found.path);
-        } catch {
-          return reply.status(404).send({ error: "Image file missing" });
+          shown = await resolveItemImage(context.dataDir, item);
+          if (!shown.path) return reply.status(404).send({ error: "No matching image" });
+          buffer = await readFile(shown.path);
+        } catch (error) {
+          if (error?.code === "ENOENT") return reply.status(404).send({ error: "Image file missing" });
+          logger?.warn("[quartermaster] could not read an item image: %s", error instanceof Error ? error.message : String(error));
+          return reply.status(500).send({ error: "Couldn't read the image" });
         }
-        reply.header("Cache-Control", "public, max-age=300");
-        reply.type(ITEM_IMAGE_EXT_TO_CONTENT_TYPE[found.ext] ?? "application/octet-stream");
+        // The client keeps its own cache (QM.setImageSrc); a rename can change
+        // which file this same URL serves, so the browser mustn't keep one.
+        reply.header("Cache-Control", "no-store");
+        const ext = shown.file.slice(shown.file.lastIndexOf(".") + 1).toLowerCase();
+        reply.type(ITEM_IMAGE_EXT_TO_CONTENT_TYPE[ext] ?? "application/octet-stream");
         return reply.send(buffer);
       });
 
-      // Uploads an image for this item, straight into gallery/quartermaster/items/
-      // (never a subfolder — those are reserved for a hand-placed image pack,
-      // never touched by upload/remove). Named after the item's OWN normalized
-      // match key so it's found by the exact same lookup a pack image would be,
-      // and any existing top-level file(s) matching that key are removed first
-      // (an item has at most one uploaded image; re-uploading replaces it,
-      // even across a format change, e.g. a prior .png replaced by a .jpg).
+      // What the item editor's "Image file" line and a bag card's [i] show:
+      // { file, source: "uploaded" | "generated" | "name" | null, savedFile,
+      // savedMissing, deletable }. Image-pack files aren't deletable here.
+      routes.get("/inventory/:chatId/:ownerId/items/:itemId/image/info", async (request, reply) => {
+        const { chatId, ownerId, itemId } = request.params;
+        const state = await loadInventoryState(documents, chatId, ownerId);
+        const item = state.items.find((candidate) => candidate.id === itemId);
+        if (!item) return reply.status(404).send({ error: "Item not found" });
+        let shown;
+        try {
+          shown = await resolveItemImage(context.dataDir, item);
+        } catch {
+          return reply.status(500).send({ error: "Couldn't read the image folder" });
+        }
+        return {
+          file: shown.file,
+          source: shown.source,
+          savedFile: itemImageFields(item).imageFile ?? null,
+          savedMissing: shown.savedMissing,
+          deletable: Boolean(shown.path) && !shown.pack,
+        };
+      });
+
+      // Saves an uploaded or generated image (body.source) for this item,
+      // straight into gallery/quartermaster/items/ (never a subfolder: those are
+      // hand-placed image packs, never touched by upload or delete), under a new
+      // name that never overwrites another file (writeNewItemImage), and saves
+      // that filename on the item so it keeps the image if renamed.
+      // ponytail: a replaced image's old file stays on disk, since another
+      // chat's item may still have it saved; × in the editor deletes on purpose.
       routes.post("/inventory/:chatId/:ownerId/items/:itemId/image", async (request, reply) => {
         const { chatId, ownerId, itemId } = request.params;
         const body = request.body ?? {};
@@ -2335,23 +2497,15 @@ export async function activate(context) {
         const item = state.items.find((candidate) => candidate.id === itemId);
         if (!item) return reply.status(404).send({ error: "Item not found" });
 
-        const dir = galleryItemsDir(context.dataDir);
-        await mkdir(dir, { recursive: true });
-        const key = qmNormalizeMatchKey(item.name);
-        let existing;
-        try {
-          existing = await readdir(dir, { withFileTypes: true });
-        } catch {
-          existing = [];
-        }
-        for (const entry of existing) {
-          if (!entry.isFile()) continue;
-          const dot = entry.name.lastIndexOf(".");
-          if (dot <= 0 || qmNormalizeMatchKey(entry.name.slice(0, dot)) !== key) continue;
-          await removePortraitFileIfExists(join(dir, entry.name));
-        }
-        await writeFile(join(dir, `${key}.${decoded.ext}`), decoded.buffer);
-
+        const filename = await writeNewItemImage(
+          galleryItemsDir(context.dataDir),
+          itemImageStem(item.name),
+          decoded.ext,
+          decoded.buffer,
+        );
+        setItemImageFields(item, { imageFile: filename, imageSource: body.source === "generated" ? "generated" : "uploaded" });
+        syncOutfitSnapshotImages(state, item);
+        await persistState(chatId, ownerId, state);
         return { items: state.items, outfits: state.outfits };
       });
 
@@ -2415,33 +2569,28 @@ export async function activate(context) {
         }
       });
 
-      // Removes only an UPLOADED image (a top-level file matching this
-      // item's key) — never touches a subfolder, so this can never delete
-      // anything from a hand-placed image pack. If a pack image also
-      // happens to match this item's name, it'll still show afterward;
-      // that's a real, known limitation of matching purely by name rather
-      // than a per-item reference, not a bug.
+      // Deletes the image file this item shows (its saved file, else a
+      // top-level name match) and clears its saved filename. The file is shared:
+      // every item using it, in any chat, loses the image, which the editor's
+      // × window says before calling this. Image-pack files (in a subfolder)
+      // are never deleted. Another name match may show afterward.
       routes.delete("/inventory/:chatId/:ownerId/items/:itemId/image", async (request, reply) => {
         const { chatId, ownerId, itemId } = request.params;
         const state = await loadInventoryState(documents, chatId, ownerId);
         const item = state.items.find((candidate) => candidate.id === itemId);
         if (!item) return reply.status(404).send({ error: "Item not found" });
 
-        const dir = galleryItemsDir(context.dataDir);
-        const key = qmNormalizeMatchKey(item.name);
-        let entries;
+        let shown;
         try {
-          entries = await readdir(dir, { withFileTypes: true });
+          shown = await resolveItemImage(context.dataDir, item);
         } catch {
-          entries = [];
+          return reply.status(500).send({ error: "Couldn't read the image folder" });
         }
-        for (const entry of entries) {
-          if (!entry.isFile()) continue;
-          const dot = entry.name.lastIndexOf(".");
-          if (dot <= 0 || qmNormalizeMatchKey(entry.name.slice(0, dot)) !== key) continue;
-          await removePortraitFileIfExists(join(dir, entry.name));
-        }
-
+        if (shown.pack) return reply.status(400).send({ error: "Image pack files can't be deleted here" });
+        if (shown.path) await removePortraitFileIfExists(shown.path);
+        setItemImageFields(item, {});
+        syncOutfitSnapshotImages(state, item);
+        await persistState(chatId, ownerId, state);
         return { items: state.items, outfits: state.outfits };
       });
 
@@ -2884,6 +3033,7 @@ export async function activate(context) {
             favorite: Boolean(raw.favorite),
             hidden: raw.hidden === true,
             descriptionLocked: raw.descriptionLocked === true,
+            ...itemImageFields(raw),
           };
           applyLocation(nextItems, item, location);
           nextItems.push(item);
@@ -2906,6 +3056,7 @@ export async function activate(context) {
               description: normalizeText(snapshot.description, MAX_ITEM_DESCRIPTION_LENGTH),
               defaultSlot: normalizeDefaultSlot(snapshot.defaultSlot) ?? null,
               descriptionLocked: snapshot.descriptionLocked === true,
+              ...itemImageFields(snapshot),
             };
           }
           const outfitId = randomUUID();
