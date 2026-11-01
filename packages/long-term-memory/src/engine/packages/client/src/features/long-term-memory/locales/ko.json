@@ -619,6 +619,8 @@
   "ui.longTermMemory.memoryvault.importedFrom": "가져온 위치: {{source}}",
   "ui.longTermMemory.memoryvault.lorebook": "로어북",
   "ui.longTermMemory.memoryvault.fromSlurp": "Slurp에서 가져옴",
+  "ui.longTermMemory.memoryvault.originSlurp": "Slurp",
+  "ui.longTermMemory.memoryvault.originAdvancedMemory": "고급 기억",
   "ui.longTermMemory.memoryvault.retryMemoryScope": "기억 범위 다시 시도",
   "ui.longTermMemory.memoryvault.removeAvailability": "사용 가능 설정 제거",
   "ui.longTermMemory.memoryvault.removeValue1Section": "{{value1}} 세부 정보 제거",

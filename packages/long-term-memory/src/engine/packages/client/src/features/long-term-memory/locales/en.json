@@ -619,6 +619,8 @@
   "ui.longTermMemory.memoryvault.importedFrom": "Imported from: {{source}}",
   "ui.longTermMemory.memoryvault.lorebook": "Lorebook",
   "ui.longTermMemory.memoryvault.fromSlurp": "From Slurp",
+  "ui.longTermMemory.memoryvault.originSlurp": "Slurp",
+  "ui.longTermMemory.memoryvault.originAdvancedMemory": "Advanced Memory",
   "ui.longTermMemory.memoryvault.retryMemoryScope": "Retry memory scope",
   "ui.longTermMemory.memoryvault.removeAvailability": "Remove availability",
   "ui.longTermMemory.memoryvault.removeValue1Section": "Remove {{value1}} detail",
