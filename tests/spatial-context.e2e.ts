@@ -3475,6 +3475,111 @@ test("opening linked lore protects unsaved map edits", async ({ page }, testInfo
   }
 });
 
+// #1995: in a deep map the Story Location bar used to show the path from its root and cut off the place the story is in.
+// Every display ends with the current place, keeps parent-to-child order, and marks left-out ancestors with "…"; the
+// full path stays in the bar's title and label and is spelled out when the bar is opened.
+test("Story Location bar keeps the current place visible in a deep map, with each display", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "the bar's text is shown from the sm breakpoint up");
+  test.setTimeout(120_000);
+  const names = ["Continent", "Realm", "Province", "City", "District", "Building", "Floor", "Room"];
+  const full = names.join(" › ");
+  const chatResponse = await page.request.post("/api/chats", {
+    data: { name: `Story Location Trail ${testInfo.project.name}`, mode: "roleplay", characterIds: [] },
+  });
+  expect(chatResponse.ok(), await chatResponse.text()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+  await activateHierarchicalMaps(page, chat.id);
+  const saveResponse = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+    data: {
+      expectedRevision: 0,
+      expectedCurrentLocationId: null,
+      definition: {
+        ...deepMapDefinition,
+        startingLocationId: "deep-07",
+        locations: deepMapDefinition.locations.slice(0, names.length).map((location, index) => ({
+          ...location,
+          name: names[index]!,
+          links: [],
+        })),
+      },
+    },
+  });
+  expect(saveResponse.ok(), await saveResponse.text()).toBeTruthy();
+
+  try {
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem("marinara-engine-ui-updated-at", String(Date.now() + 60_000));
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: { hasCompletedOnboarding: true, rightPanelOpen: false, sidebarOpen: false },
+          version: 75,
+        }),
+      );
+    }, chat.id);
+    await page.goto("/");
+    await dismissOnboardingTutorial(page);
+    const region = page.getByRole("region", { name: "Story location" });
+    const bar = region.getByRole("button", { name: `Story location: ${full}`, exact: true });
+    const trail = region.locator("[data-story-location-trail]");
+    await expect(bar).toBeVisible();
+    await expect(bar, "hovering still shows the full path").toHaveAttribute("title", full);
+
+    // The Engine's chat-window intro can open over the chat after a resize; it is not part of this bar.
+    const intro = page.getByRole("button", { name: "Got it", exact: true });
+    const closeIntro = async () => {
+      if (await intro.isVisible().catch(() => false)) await intro.click();
+    };
+
+    // Adaptive (the default) at any width: it ends with the current place and is never cut off mid-text. The trail
+    // follows the bar's width on the next frame (a ResizeObserver), so it is read once it fits.
+    const expectAdaptive = async (width: number) => {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(trail).toHaveAttribute("data-story-location-trail", "adaptive");
+      await expect
+        .poll(() => trail.evaluate((element) => element.scrollWidth <= element.clientWidth + 1), {
+          message: `${width}px fits the trail without cutting it`,
+        })
+        .toBe(true);
+      const text = (await trail.textContent())!;
+      expect(text, `${width}px ends with the current place`).toMatch(/(?:^| › )Room$/u);
+      const shown = text.replace(/^… › /u, "").split(" › ");
+      expect(names.slice(names.length - shown.length), `${width}px keeps parent-to-child order`).toEqual(shown);
+      expect(text.startsWith("… › "), `${width}px marks left-out ancestors`).toBe(shown.length < names.length);
+      await closeIntro();
+      await page.screenshot({ path: testInfo.outputPath(`story-location-adaptive-${width}.png`) });
+      return shown.length;
+    };
+    const wide = await expectAdaptive(1440);
+    const narrow = await expectAdaptive(700);
+    expect(narrow, "a narrower bar keeps fewer levels").toBeLessThan(wide);
+
+    // Opening the bar spells out the whole path and offers the displays.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await closeIntro();
+    await bar.click();
+    await expect(region.locator("[data-story-location-full-path]")).toHaveText(full);
+    const display = region.getByRole("combobox", { name: "Show in bar" });
+    for (const [value, text] of [
+      ["current", "… › Room"],
+      ["nearby", "… › Building › Floor › Room"],
+      ["full", full],
+    ] as const) {
+      await display.selectOption(value);
+      await expect(trail).toHaveText(text);
+    }
+    await page.reload();
+    await dismissOnboardingTutorial(page);
+    await expect(trail, "the chosen display is kept on this device").toHaveText(full);
+    await expect(trail).toHaveAttribute("data-story-location-trail", "full");
+  } finally {
+    await expectDeletedInOrder(page, [`/api/chats/${chat.id}`]);
+  }
+});
+
 test("Deep maps and long labels remain keyboard and touch operable across themes", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   const chatResponse = await page.request.post("/api/chats", {
