@@ -3,6 +3,7 @@
 ## 0.6.12 — 2026-11-01
 
 - **Every Settings category stays reachable with a mouse.** On a desktop window just under the wide layout, or with wider system fonts, the category bar could cut off its last tab with no scrollbar to reach it. With a mouse the categories now wrap onto a second row instead; phones keep their single swipeable strip.
+- **CGs show whole on a PC.** A CG is painted tall, and on a wide screen (fullscreen on a PC) it was zoomed to fill the width, cropping away its top and bottom and often the faces. On a wide stage the CG now shows in full, framed by a soft blurred copy of itself; phones still fill the screen with it.
 
 ## 0.6.11 — 2026-10-31
 

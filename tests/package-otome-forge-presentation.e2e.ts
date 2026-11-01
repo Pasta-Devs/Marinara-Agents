@@ -2720,6 +2720,38 @@ test("Otome Forge reader: at reduced motion with Ask before painting, a CG and a
   await root.getByRole("button", { name: "Paint this moment" }).click();
   await expect(root.locator(".of-reader")).toHaveAttribute("data-cg", "shown");
   await expect(root.locator('.of-cg[data-intro="true"]')).toHaveCount(0);
+  // #2000: a CG is painted portrait. In a box wider than 2:3 (the stage in fullscreen on a PC) it shows whole over a
+  // blurred copy; cover there kept only a band of it. The windowed 9:16 stage and a phone keep the full-bleed cover.
+  const cgFit = () =>
+    root.locator(".of-cg").evaluate((cg) => {
+      const box = cg.getBoundingClientRect();
+      const image = cg.querySelector(".of-cg-img");
+      const backdrop = cg.querySelector(".of-cg-backdrop");
+      return {
+        wide: box.width / box.height >= 2 / 3,
+        objectFit: image ? getComputedStyle(image).objectFit : "",
+        backdrop: backdrop ? getComputedStyle(backdrop).display : "none",
+      };
+    });
+  const expectCgFit = async (where: string) => {
+    const shown = await cgFit();
+    expect(shown.objectFit, `${where}: the CG is ${shown.wide ? "whole" : "full-bleed"}`).toBe(
+      shown.wide ? "contain" : "cover",
+    );
+    expect(shown.backdrop, `${where}: the blurred copy shows only around a whole CG`).toBe(
+      shown.wide ? "block" : "none",
+    );
+    return shown.wide;
+  };
+  expect(await expectCgFit("windowed"), "the windowed stage is portrait, like the CG").toBe(false);
+  if (!testInfo.project.name.includes("mobile")) {
+    await root.getByRole("button", { name: /fullscreen/iu }).click();
+    await expect(root.locator(".of-frame")).toHaveAttribute("data-fullscreen", "true");
+    await expect.poll(async () => (await cgFit()).wide, "a PC's fullscreen stage is wider than the CG").toBe(true);
+    await expectCgFit("fullscreen");
+    await root.getByRole("button", { name: /fullscreen/iu }).click();
+    await expect(root.locator(".of-frame")).not.toHaveAttribute("data-fullscreen", /.*/);
+  }
   expect(posts(calls, "/art/cg")).toHaveLength(1);
   await expect.poll(() => posts(calls, "/art/cg/seen").length).toBe(1);
   // No audio was asked for: voices and music are off in this story.
