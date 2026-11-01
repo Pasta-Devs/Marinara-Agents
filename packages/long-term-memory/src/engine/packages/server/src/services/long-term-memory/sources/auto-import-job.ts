@@ -86,7 +86,7 @@ async function pendingSources({ root, chatId, mode }: Job, sourceScope: LtmScope
         limit: BATCH,
         sourceScope,
         mode,
-        ...(source === "messages" ? { branchChatId: chatId } : { advancedMemoryBlocksOnly: true }),
+        ...(source === "messages" ? { branchChatId: chatId } : {}),
         ...(cursor ? { cursor } : {}),
       },
       root,
@@ -157,8 +157,6 @@ async function runLtmAutoImport(job: Job, key: string, signal: AbortSignal) {
           // This chat's choice decides whether safe changes are saved or wait for review.
           applyLowRisk: memories.autoAccept,
           limit: BATCH,
-          // Advanced Memory scenes without a block need a model call; only the Import panel's Backfill reads them.
-          ...(source === "chats" ? { advancedMemoryBlocksOnly: true } : {}),
         },
         root,
         signal,

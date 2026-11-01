@@ -1,6 +1,4 @@
 import {
-  ltmAdvancedMemoryBackfillRequestSchema,
-  ltmAdvancedMemoryBackfillResponseSchema,
   ltmLorebookPreviewRequestSchema,
   ltmLorebookPreviewResponseSchema,
   ltmImportSourceNotesRequestSchema,
@@ -11,7 +9,6 @@ import {
   ltmSourceDetailsResponseSchema,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import {
-  advancedMemoryBackfillBatch,
   importPackageInterop,
   previewPackageInterop,
   previewPackageLorebooks,
@@ -46,20 +43,6 @@ export function registerImportRoutes(app: FastifyInstance, runtime: LtmRouteRunt
         );
       } catch (error) {
         const result = routeError(error, "Could not load long-term memory source details.");
-        return reply.status(result.statusCode).send(result.body);
-      }
-    },
-  );
-  app.post<{ Body: unknown }>(
-    "/import/advanced-memory/backfill-batch",
-    { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES },
-    async (request, reply) => {
-      try {
-        return ltmAdvancedMemoryBackfillResponseSchema.parse(
-          await advancedMemoryBackfillBatch(ltmAdvancedMemoryBackfillRequestSchema.parse(request.body ?? {}), root),
-        );
-      } catch (error) {
-        const result = routeError(error, "Could not list Advanced Memory scenes to backfill.");
         return reply.status(result.statusCode).send(result.body);
       }
     },

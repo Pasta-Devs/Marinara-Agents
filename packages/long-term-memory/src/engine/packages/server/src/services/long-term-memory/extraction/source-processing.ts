@@ -22,8 +22,6 @@ import {
 } from "./source-extraction.js";
 import { LongTermMemoryStorage } from "../persistence/storage.js";
 import { loadTrustedLtmSubjectCatalog } from "../identity/subject-catalog.js";
-import { prepareLtmSubjectIdentityContext } from "../identity/subject-identity.js";
-import { withMergedLtmScopeLinks } from "../../../../../shared/src/features/agents/long-term-memory/scope.js";
 import {
   compileEvidenceUnitExtraction,
   sourceHashForEvidenceUnitExtraction,
@@ -199,110 +197,12 @@ function directGameUnits(sourceNote: LtmNote, sourceText: string, sourceHash: st
   return units;
 }
 
-const ADVANCED_MEMORY_BUCKETS = new Set(["timeline_event", "character_fact", "relationship_state", "world_fact"]);
-
-function advancedMemoryBlockFields(block: string) {
-  const [heading, ...lines] = block.trim().split("\n");
-  const bucket = heading?.match(/^##\s+([a-z_]+)\s*$/)?.[1];
-  if (!bucket || !ADVANCED_MEMORY_BUCKETS.has(bucket)) return null;
-  const fields = new Map<string, string>();
-  let current: string | null = null;
-  for (const line of lines) {
-    const field = line.match(/^([A-Za-z]+):\s*(.*)$/);
-    if (field) {
-      current = field[1]!.toLowerCase();
-      fields.set(current, field[2]!.trim());
-    } else if (current && line.trim()) {
-      fields.set(current, `${fields.get(current)} ${line.trim()}`.trim());
-    }
-  }
-  return { bucket: bucket as "timeline_event" | "character_fact" | "relationship_state" | "world_fact", fields };
-}
-
-function subjectSlug(value: string) {
-  return (
-    value
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "")
-      .slice(0, 48) || "subject"
-  );
-}
-
-/**
- * Issue #1964: the `memory` block an Advanced Memory scene record carries, written to the block instruction the
- * package hands the host. Names resolve to the chat's characters and persona, case-insensitively and exactly; a
- * block naming anyone else is dropped rather than guessed.
- */
-export function advancedMemoryUnits(
-  sourceNote: LtmNote,
-  sourceText: string,
-  sourceHash: string,
-  knownNames: ReadonlyMap<string, string>,
-) {
-  const evidence = [`source_note:${sourceNote.id}`, ...(sourceNote.sections.source?.evidence ?? [])].slice(0, 20);
-  const units = [] as import("../../../../../shared/src/features/agents/long-term-memory/schema.js").LtmEvidenceUnit[];
-  const sourceSuffix = createHash("sha256").update(sourceNote.id).digest("hex").slice(0, 10);
-  const resolveName = (name: string | undefined) => (name ? knownNames.get(name.trim().toLowerCase()) : undefined);
-  let index = 0;
-  for (const block of sourceText.split(/\n\s*\n+/)) {
-    const parsed = advancedMemoryBlockFields(block);
-    if (!parsed) continue;
-    const { bucket, fields } = parsed;
-    let text = "";
-    let subjectNames: string[] | undefined;
-    if (bucket === "timeline_event") {
-      const summary = fields.get("summary") ?? "";
-      const when = fields.get("when");
-      text = summary && when ? `${summary} (${when})` : summary;
-    } else if (bucket === "world_fact") {
-      text = fields.get("fact") ?? "";
-    } else if (bucket === "character_fact") {
-      const name = resolveName(fields.get("character"));
-      if (!name) continue;
-      subjectNames = [name];
-      text = fields.get("fact") ?? "";
-    } else {
-      const raw = (fields.get("between") ?? "").split(/\s*(?:,|&|\band\b)\s*/i).filter(Boolean);
-      const names = raw.map(resolveName);
-      if (raw.length !== 2 || names.some((name) => !name) || names[0] === names[1]) continue;
-      subjectNames = (names as string[]).sort((left, right) => left.localeCompare(right));
-      text = fields.get("state") ?? "";
-    }
-    text = text.trim().slice(0, 2000);
-    if (!text) continue;
-    index += 1;
-    const subjectId = subjectNames
-      ? subjectNames.map(subjectSlug).join("_")
-      : `${bucket === "timeline_event" ? "scene_event" : "scene_fact"}_${index}_${sourceSuffix}`;
-    units.push({
-      id: deterministicUuid(`${sourceNote.id}:${sourceHash}:${bucket}:${subjectId}:${text}`),
-      bucket,
-      subjectId,
-      sectionKey: bucket === "timeline_event" ? "event" : bucket === "relationship_state" ? "state" : "facts",
-      text,
-      claimKind: bucket === "timeline_event" ? "change" : "static",
-      importance: bucket === "timeline_event" ? "major" : "moderate",
-      keywords: [],
-      evidence,
-      confidence: 0.9,
-      salience: 0.75,
-      status: "active",
-      links: bucket === "timeline_event" ? [{ target: sourceNote.id, relation: "extracted_from" }] : [],
-      sourceHash,
-      ...(subjectNames ? { subjectNames } : {}),
-    });
-  }
-  return units;
-}
-
 export async function prepareLongTermMemorySource(options: PrepareOptions): Promise<PreparedSource> {
   throwIfAborted(options.signal);
   const scope = options.scope ?? options.sourceNote.destinationScope ?? options.sourceNote.scope;
   const extractionMode = options.extractionMode ?? options.mode ?? options.sourceNote.modes[0] ?? "roleplay";
-  // Game Mode summaries and Advanced Memory blocks are ingested without a model call; the caller decides which.
+  // Game Mode summaries are ingested without a model call; the caller decides when.
   if (options.directGameMode) {
-    const advancedMemory = options.sourceNote.provenance?.kind === "advanced_memory";
     const requestedScope = options.scope ?? options.sourceNote.destinationScope ?? options.sourceNote.scope;
     const requestedModes = options.modes ?? options.sourceNote.modes;
     const sourceFingerprintBeforeBinding = extractionFingerprintForLtmSourceNote(options.sourceNote, {
@@ -318,53 +218,16 @@ export async function prepareLongTermMemorySource(options: PrepareOptions): Prom
     const existingNotes = (options.existingNotes ?? (await new LongTermMemoryStorage(options.root).listNotes())).filter(
       (note) => !isLtmSourceLikeNote(note) && canUpdateLtmScopedTarget(note.scope, requestedScope),
     );
-    let units = directGameUnits(options.sourceNote, sourceText, sourceHash);
-    let identity: ReturnType<ReturnType<typeof prepareLtmSubjectIdentityContext>["resolve"]> | undefined;
-    if (advancedMemory) {
-      const chatId = options.sourceNote.provenance!.sourceId;
-      const catalog = await loadTrustedLtmSubjectCatalog(
-        withMergedLtmScopeLinks(requestedScope, { chatIds: [chatId] }),
-        options.root,
-      );
-      // Only the chat's own characters and persona; local or group-wide subjects are not this chat's cast.
-      const knownNames = new Map<string, string>();
-      for (const entry of catalog.entries) {
-        if (entry.sourceScope !== undefined && entry.sourceScope !== "direct") continue;
-        if (entry.subject.ref?.kind !== "character" && entry.subject.ref?.kind !== "persona") continue;
-        for (const name of [entry.name, ...entry.aliases]) knownNames.set(name.trim().toLowerCase(), entry.name);
-      }
-      units = advancedMemoryUnits(options.sourceNote, sourceText, sourceHash, knownNames);
-      identity = prepareLtmSubjectIdentityContext({
-        units,
-        catalog,
-        scope: requestedScope,
-        mode: extractionMode,
-      }).resolve({
-        units,
-        existingNotes,
-        enforceTrustedSubjects: true,
-      });
-      units = identity.units;
-    }
     const response = {
-      summary: advancedMemory
-        ? "Directly ingested Advanced Memory scene recap."
-        : "Directly ingested Game Mode summary.",
+      summary: "Directly ingested Game Mode summary.",
       incomplete: false,
-      units,
+      units: directGameUnits(options.sourceNote, sourceText, sourceHash),
     };
     const compiled = compileEvidenceUnitExtraction({
       unitResponse: response,
-      ...(identity
-        ? {
-            userSkippedUnits: identity.skippedUnits,
-            preValidationDroppedCandidates: identity.droppedCandidates,
-            aliasChoices: identity.aliasChoices,
-          }
-        : {}),
       sourceText,
       sourceNote,
-      existingNotes: identity?.existingNotes ?? existingNotes,
+      existingNotes,
       scope: requestedScope,
       modes: requestedModes,
       mode: extractionMode,

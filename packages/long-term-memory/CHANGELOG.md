@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.5.29 — 2026-11-01
+
+- Long-Term Memory no longer imports Advanced Memory scene recaps. Chats that use Advanced Memory are extracted from their own summaries and messages, so their memories get keywords, links and threads, and "Hide remembered messages" works for them. Memories already imported from recaps stay.
+
 ## 1.5.28 — 2026-11-01
 
 - In a hands-off mode, one memory worded like a scene action now waits in Review on its own while the rest of that batch is still saved. Everyday habits such as "keeps", "carries" or "wears" no longer trigger the warning.

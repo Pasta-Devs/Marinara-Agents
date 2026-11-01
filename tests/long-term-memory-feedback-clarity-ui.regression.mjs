@@ -1381,11 +1381,7 @@ const localization = readFileSync(ltmSourcePaths.localization, "utf8");
 assert.match(localization, /import koreanCatalog from "\.\/locales\/ko\.json"/u);
 assert.match(localization, /ko: stringEntries\(koreanCatalog\)/u);
 
-// Issue #1964: the Advanced Memory backfill sends a fixed whole-number batch size (no field), and NumberField
-// rounds before it shows or reports a value (a typed 3.4 at size 3 must not leave "3.4" in the field).
-assert.match(workspace, /const ADVANCED_MEMORY_BACKFILL_BATCH = 10;/u);
-assert.match(workspace, /limit: ADVANCED_MEMORY_BACKFILL_BATCH,/u);
-assert.doesNotMatch(workspace, /advancedMemoryBatchSize/u);
+// NumberField rounds before it shows or reports a value (a typed 3.4 at size 3 must not leave "3.4" in the field).
 assert.match(sharedControls, /integer\?: boolean;/u);
 const clampSource = sharedControls.match(/const clamped = (.+);/u)?.[1] ?? "";
 assert.match(

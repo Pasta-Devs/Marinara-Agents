@@ -109,25 +109,6 @@ export function inheritedBranchLtmNoteIds(input: {
   return inherited;
 }
 
-/**
- * Issue #1964: in a chat using Advanced Memory, the host already puts that chat's scene recaps in the prompt, so recall
- * skips their source notes and every memory extracted only from them. The same notes still recall in other chats.
- */
-export function advancedMemoryEchoNoteIds(input: { chatId: string; notes: readonly LtmNote[] }) {
-  const sources = new Set(
-    input.notes
-      .filter((note) => note.provenance?.kind === "advanced_memory" && note.provenance.sourceId === input.chatId)
-      .map((note) => note.id),
-  );
-  const echoes = new Set(sources);
-  if (!sources.size) return echoes;
-  for (const note of input.notes) {
-    const links = note.links.filter((link) => link.relation === "extracted_from");
-    if (links.length && links.every((link) => sources.has(link.target))) echoes.add(note.id);
-  }
-  return echoes;
-}
-
 export function ltmScopeFamilyId(scope: Pick<LtmScope, "chatId" | "chatIds" | "groupId" | "groupIds">) {
   const groupIds = getScopeIds(scope.groupId, scope.groupIds);
   if (groupIds.length === 1) return `group_${normalizeLocalIdentityComponent(groupIds[0]!, 48)}`;
