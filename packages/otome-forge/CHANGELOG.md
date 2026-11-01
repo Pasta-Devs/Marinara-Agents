@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.6.16 — 2026-11-01
+
+- **Otome Hearth follows "Reduce Ambient Animations & Effects".** Marinara Engine's setting now does in Otome Hearth what your device's reduce-motion setting already did: stars, drift, parallax, the typing text and the Wish and CG pans stop, and the frosted glass panels turn solid, as the Engine's own panels do. The claw machine keeps its normal motion, because it is a game rather than decoration; your device's reduce-motion setting still calms it.
+- **A finished setup leaves no old draft behind.** If you made your world within a moment of your last change in the wizard, the draft could be saved again afterwards, so the next setup opened with the old answers.
+
 ## 0.6.15 — 2026-11-01 [highlight]
 
 - **Prestige: your bond keeps growing past level 10.** Once a love interest reaches the top affection level, every 300 more affection earns a prestige point, shown as three stars under "Between you" on the Story screen. Every three points unlock an **extra story** with him, and the stars start over, as often as you like.

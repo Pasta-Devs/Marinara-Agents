@@ -83,7 +83,12 @@ export function SetupWizard({ onCreated }: SetupWizardProps) {
   // Kept on this device as the player types, once they have entered something; never after the world is made.
   useEffect(() => {
     if (finished.current) return;
-    const timer = window.setTimeout(() => (isBlankDraft(draft) ? clearDraft() : saveDraft(draft)), SAVE_DELAY_MS);
+    // The world can be made while a save is pending: the timer checks again, so a made world never leaves a draft.
+    const timer = window.setTimeout(() => {
+      if (finished.current) return;
+      if (isBlankDraft(draft)) clearDraft();
+      else saveDraft(draft);
+    }, SAVE_DELAY_MS);
     return () => window.clearTimeout(timer);
   }, [draft]);
 

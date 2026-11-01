@@ -32,6 +32,7 @@ import {
   type Picks,
   type ReaderLine,
 } from "../lib/reader-state";
+import { REDUCED_EFFECTS_ATTRIBUTE, REDUCED_MOTION_QUERY, reducedFrom } from "../lib/reduced-motion";
 import type {
   BeatView,
   ChapterDetail,
@@ -89,26 +90,36 @@ export async function cancelStoryWork(post: ReturnType<typeof useOtomeApi>["post
   }
 }
 
-const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
+function reducedMotionQuery() {
+  try {
+    return typeof window.matchMedia === "function" ? window.matchMedia(REDUCED_MOTION_QUERY) : null;
+  } catch {
+    return null;
+  }
+}
 
-/** True while the system asks for reduced motion: lines then appear whole instead of typing themselves out. */
-export function useReducedMotion(): boolean {
-  const query = () => {
-    try {
-      return typeof window.matchMedia === "function" ? window.matchMedia(REDUCED_MOTION) : null;
-    } catch {
-      return null;
-    }
-  };
-  const [reduced, setReduced] = useState(() => query()?.matches ?? false);
+const readReducedMotion = (ambient: boolean) =>
+  reducedFrom(reducedMotionQuery()?.matches ?? false, ambient ? document.documentElement.dataset : undefined);
+
+/**
+ * True while the system asks for reduced motion or the Engine's "Reduce Ambient Animations & Effects" is on: lines
+ * then appear whole instead of typing themselves out. `{ ambient: false }` follows only the system, for motion that
+ * is play rather than decoration (the claw machine), which the Engine's setting does not promise to stop.
+ */
+export function useReducedMotion({ ambient = true }: { ambient?: boolean } = {}): boolean {
+  const [reduced, setReduced] = useState(() => readReducedMotion(ambient));
   useEffect(() => {
-    const media = query();
-    if (!media) return;
-    const update = () => setReduced(media.matches);
+    const media = reducedMotionQuery();
+    const update = () => setReduced(readReducedMotion(ambient));
     update();
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
-  }, []);
+    media?.addEventListener("change", update);
+    const flag = ambient ? new MutationObserver(update) : null;
+    flag?.observe(document.documentElement, { attributes: true, attributeFilter: [REDUCED_EFFECTS_ATTRIBUTE] });
+    return () => {
+      media?.removeEventListener("change", update);
+      flag?.disconnect();
+    };
+  }, [ambient]);
   return reduced;
 }
 
