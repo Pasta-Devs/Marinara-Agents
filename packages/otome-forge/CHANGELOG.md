@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.6.13 — 2026-11-01
+
+- **A love interest's sprite leaves the stage when he does.** When he walked out of a scene, or the heroine left him behind, his sprite used to stay on screen until the end of the beat, as if he were still there. The writer now marks who leaves on that line, and the stage clears from there; he comes back the moment he speaks again, and anyone still in the scene stays. Scenes written before this update keep their old staging.
+
 ## 0.6.12 — 2026-11-01
 
 - **Every Settings category stays reachable with a mouse.** On a desktop window just under the wide layout, or with wider system fonts, the category bar could cut off its last tab with no scrollbar to reach it. With a mouse the categories now wrap onto a second row instead; phones keep their single swipeable strip.

@@ -684,6 +684,10 @@ DATE CHOICE (this node is one scene of a date with ${unit.name}):
 - ${goesWrong ? `This evening is planned to stumble: an option may open a grievance, and on a date it is at most "minor".` : "Nothing on this date opens a grievance: leave grievance out of every option's effects."}`;
 }
 
+/** #2024: who is no longer in the scene, so the reader takes them off the stage (S/story/beats.ts exitsOf). */
+const EXITS_RULE =
+  '- exits: only on the segment where love interests leave the scene, or the protagonist leaves them behind: the exact names of those no longer with the protagonist ("exits": ["Name"]). Omit it on every other segment.';
+
 const VOICES_INSTRUCTION = `
 
 SPEAKER VOICES (extend the JSON shape above with an optional top-level "voices" object):
@@ -738,6 +742,7 @@ export function beatMessages({
     "- Each segment is one speaker's line or one piece of narration: a sentence or a few. Never put dialogue inside narration, and never mark it with dashes or quotes as prose.",
     `- thought: true for an inner line, in the thinker's own words, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in this node, and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
     `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}, when the face shows it. A face may contradict the words. Omit it for a neutral line and for narration.`,
+    EXITS_RULE,
     `- musicMood: the soundtrack cue for this node, one of ${MUSIC_MOODS.join(", ")}.`,
     `- places: every place the node happens in, in order (at most ${BEAT_PLACES_MAX}). A place is a room, a street, a garden: never the time of day or the mood. tags: the same place as 4-8 short comma-separated English tags for an image model, with "no humans". place on a segment: which place it happens in; omit it while the scene has not moved.`,
     ...(backgrounds ? [PLACE_REUSE_RULE] : []),
@@ -1214,6 +1219,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     '- speaker: who speaks the segment, written as their exact name every time; "" for narration. Each segment is one speaker\'s line or one piece of narration.',
     `- thought: true for an inner line, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in the whole confrontation, on any path a player can take through it (the opening, the rounds' lines, the answers to the stances taken and the ending together), and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
     `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}. A face may contradict the words. Omit it for a neutral line and for narration.`,
+    EXITS_RULE,
     `- places: where it happens (at most ${BEAT_PLACES_MAX}); tags: 4-8 short comma-separated English tags for an image model, with "no humans".`,
     ...(backgrounds ? [PLACE_REUSE_RULE] : []),
     ...(node.cg
@@ -1311,6 +1317,7 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
     '- speaker: who speaks the segment, written as their exact name every time; "" for narration. Each segment is one speaker\'s line or one piece of narration.',
     `- thought: true for an inner line, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in the whole closer, on any path a player can take through it (the opening, the rounds' lines, the answers given and the ending together), and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
     `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}. A face may contradict the words. Omit it for a neutral line and for narration.`,
+    EXITS_RULE,
     `- places: where it happens (at most ${BEAT_PLACES_MAX}); tags: 4-8 short comma-separated English tags for an image model, with "no humans".`,
     ...(backgrounds ? [PLACE_REUSE_RULE] : []),
     ...(node.cg
