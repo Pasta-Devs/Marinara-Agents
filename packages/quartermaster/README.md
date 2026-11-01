@@ -288,6 +288,16 @@ overwrite an already-released version's artifact file if you forget to bump `VER
 
 ## Changelog
 
+### 0.1.33
+- **Delete file always deletes the file it names.** If the item's image changed while the item
+  editor's Delete file / Unlink choice was open (an upload, a generation, or a rename), Delete file
+  removed the item's new image instead of the one in the message. The choice now closes whenever
+  the item's image changes.
+- **Unlink can be retried.** A failed Unlink in the item editor left its button disabled until the
+  editor was reopened.
+- The [i] details popover on bag cards is repositioned once its details load, so it no longer runs
+  past the bottom of the dock near the end of the bag.
+
 ### 0.1.32
 - **Item images stay with their item** (attempted fix for #1697, pending the reporter's
   confirmation). Uploading or generating an image saves its filename on the item, so renaming it no

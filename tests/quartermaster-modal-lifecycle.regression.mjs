@@ -1903,6 +1903,67 @@ await test("image details label the file, offer Unlink only for a saved one, and
   assert.equal(editorCorner.textContent, "×");
   editorCorner.listeners.click();
   assert.equal(removeAsked, 1);
+
+  // A failed Unlink (or one whose chat changed) leaves its button usable; a
+  // successful one stays disabled until the editor repaints the line.
+  let unlinkOutcome = { ok: false, error: "offline" };
+  api.state.unlinkItemImage = async (id) => {
+    calls.push(["unlink", id]);
+    return unlinkOutcome;
+  };
+  const unlinkLine = node();
+  answers.push(Promise.resolve({ file: "apple.png", source: "uploaded", savedFile: "apple.png" }));
+  await ui._fillItemImageDetails(unlinkLine, "item-a", { inline: true });
+  const unlinkButton = unlinkLine.children.at(-1);
+  await unlinkButton.listeners.click();
+  assert.equal(unlinkButton.disabled, false, "a failed unlink can be retried");
+  unlinkOutcome = undefined;
+  await unlinkButton.listeners.click();
+  assert.equal(unlinkButton.disabled, false, "an unlink dropped by a chat switch can be retried");
+  unlinkOutcome = { ok: true };
+  await unlinkButton.listeners.click();
+  assert.equal(unlinkButton.disabled, true);
+  calls.splice(0);
+
+  // In the item editor, a change to the item's image (here a rename) closes an
+  // open Delete/Unlink choice, so Delete can't remove a file the message
+  // doesn't name, and a choice still loading never opens afterwards.
+  const subscribers = [];
+  const apple = { id: "item-a", name: "Apple", imageFile: "apple.png", imageSource: "uploaded", location: "bag" };
+  Object.assign(api, { smallInput: () => node(), defaultSlotSelect: () => node(), descriptionTextarea: () => node() });
+  api.state.items = [apple];
+  api.state.subscribe = (listener) => {
+    subscribers.push(listener);
+    return () => {};
+  };
+  uiContext.document.createElementNS = () => node();
+  ui.root = node();
+  const noImage = () => Promise.resolve({ file: null, source: null, savedFile: null });
+  answers.push(noImage());
+  ui._openItemEditor(apple);
+  const [, imageRow, removeChoice] = ui.itemEditorBackdrop.children[0].children;
+  const corner = () => imageRow.children[0].children.at(-1);
+  answers.push(Promise.resolve({ file: "apple.png", source: "uploaded", savedFile: "apple.png", deletable: true }));
+  await corner().listeners.click();
+  assert.deepEqual(buttonsIn(removeChoice), ["Delete file", "Unlink", "Cancel"]);
+  api.state.items = [{ ...apple, name: "Orange", imageFile: undefined, imageSource: undefined }];
+  answers.push(noImage());
+  for (const listener of subscribers) listener();
+  assert.equal(removeChoice.style.display, "none");
+  assert.deepEqual(removeChoice.children, []);
+
+  let settleChoice;
+  answers.push(new Promise((resolve) => (settleChoice = resolve)));
+  const loading = corner().listeners.click();
+  api.state.items = [{ ...apple, name: "Pear", imageFile: undefined, imageSource: undefined }];
+  answers.push(noImage());
+  for (const listener of subscribers) listener();
+  settleChoice({ file: "orange.png", source: "name", savedFile: null, deletable: true });
+  await loading;
+  assert.equal(removeChoice.style.display, "none", "a stale choice never opens");
+  assert.deepEqual(removeChoice.children, [], "nor fills the hidden box");
+  assert.deepEqual(calls, []);
+  ui._closeItemEditor();
 });
 
 await test("the Bag's Hidden tab holds hidden items, and other tabs only when the setting allows", () => {

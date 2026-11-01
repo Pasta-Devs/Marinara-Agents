@@ -658,6 +658,12 @@
     "quartermaster": {
       "versions": [
         {
+          "version": "0.1.33",
+          "date": "2026-11-01",
+          "notes": "- The item editor's Delete file / Unlink choice closes if the item's image changes while it's\n  open, so Delete never removes a different file than the one it names.\n- A failed Unlink in the item editor can be tried again.\n- The [i] details on bag cards stay inside the dock after they load.",
+          "highlight": false
+        },
+        {
           "version": "0.1.32",
           "date": "2026-10-28",
           "notes": "- Attempted fix for item images going missing. An uploaded or generated image now stays with its\n  item, even after a rename. Images uploaded before this update are kept on rename too.\n- A dropped connection no longer hides item images until you reload.\n- Item editor: a line under the name shows which image file the item uses. Unlink sends this\n  chat's item back to matching by name without deleting the file.\n- Bag cards have an [i] on the image with the same details. Deleting an image file moved to the\n  × in the item editor, which says the file is shared by every chat and offers Unlink instead.\n- A new image never replaces another item's file: it's saved as \"apple (1).png\" and so on.\n- Item names with characters like \"/\" upload correctly.",
@@ -769,12 +775,6 @@
           "version": "0.1.14",
           "date": "2026-09-15",
           "notes": "- Attempted fix for the Recent Agent Update collapsed-box leak (0.1.13's attempt didn't fully\n  resolve it either).\n- Fixed tooltip text overflowing outside its own box.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.13",
-          "date": "2026-09-14",
-          "notes": "- Attempted fix for Recent Agent Update's collapsed box showing a sliver of Restore Inventory\n  underneath.\n- Info tooltips and card overflow menus no longer clip against the dock's edge.\n- Shrank the item card's quantity field to match the \"⋯\" button beside it.\n- \"+ Add Item\" is now green, matching Save Current Outfit.",
           "highlight": false
         }
       ]

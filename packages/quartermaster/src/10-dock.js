@@ -538,6 +538,13 @@ function qmItemImageDetailLines(info) {
 // replaces a newer one for the same box.
 const qmImageDetailRequests = new WeakMap();
 
+// Closes the item editor's Delete/Unlink choice, dropping any details still loading for it.
+function qmHideItemImageRemoveChoice(box) {
+  qmImageDetailRequests.delete(box);
+  box.style.display = "none";
+  box.replaceChildren();
+}
+
 function qmReadColumnCollapsed() {
   const result = { outfits: false, equipped: false, bag: false };
   try {
@@ -3384,29 +3391,34 @@ QM.dock = {
     });
     thumbButton.appendChild(placeholderMark);
 
-    const removeButton = document.createElement("button");
-    removeButton.type = "button";
-    removeButton.title = "Delete or unlink this image";
-    removeButton.textContent = "×";
-    Object.assign(removeButton.style, {
-      position: "absolute",
-      top: "-6px",
-      right: "-6px",
-      width: "14px",
-      height: "14px",
-      lineHeight: "12px",
-      padding: "0",
-      fontSize: "11px",
-      borderRadius: "50%",
-      cursor: "pointer",
-      background: QM_COLOR_DANGER,
-      color: QM_COLOR_DANGER_FG,
-      border: "none",
-      display: "none",
-    });
-    removeButton.addEventListener("click", () => onRemove?.());
+    // The editor gets ×, a bag card gets [i].
+    let cornerButton;
+    if (onRemove) {
+      cornerButton = document.createElement("button");
+      cornerButton.type = "button";
+      cornerButton.title = "Delete or unlink this image";
+      cornerButton.textContent = "×";
+      Object.assign(cornerButton.style, {
+        position: "absolute",
+        top: "-6px",
+        right: "-6px",
+        width: "14px",
+        height: "14px",
+        lineHeight: "12px",
+        padding: "0",
+        fontSize: "11px",
+        borderRadius: "50%",
+        cursor: "pointer",
+        background: QM_COLOR_DANGER,
+        color: QM_COLOR_DANGER_FG,
+        border: "none",
+        display: "none",
+      });
+      cornerButton.addEventListener("click", () => onRemove());
+    } else {
+      cornerButton = this._buildItemImageInfoBadge(item);
+    }
     // A saved file that's gone still gets its corner button, so it can be unlinked.
-    const cornerButton = onRemove ? removeButton : this._buildItemImageInfoBadge(item);
     if (item.imageFile) cornerButton.style.display = onRemove ? "block" : "inline-flex";
 
     // No matching image (uploaded or pack) — fall back to that item's own
@@ -3514,10 +3526,12 @@ QM.dock = {
     panel.addEventListener("click", (event) => event.stopPropagation());
 
     const panelDefaults = { left: "auto", right: "0", top: "100%", bottom: "auto" };
+    // Clamped again once the details load, since they're taller than "Loading…".
+    const clamp = () => qmClampPopoverToContainer(panel, this.body, panelDefaults);
     button.addEventListener("click", (event) =>
       qmTogglePopover(wrapper, "qm-overflow-open", event, () => {
-        qmClampPopoverToContainer(panel, this.body, panelDefaults);
-        this._fillItemImageDetails(panel, item.id, { onUnlink: qmClosePopover });
+        clamp();
+        this._fillItemImageDetails(panel, item.id, { onUnlink: qmClosePopover }).then(clamp);
       }),
     );
 
@@ -3566,7 +3580,9 @@ QM.dock = {
       unlink.addEventListener("click", async () => {
         unlink.disabled = true;
         onUnlink?.();
-        await QM.state.unlinkItemImage(itemId);
+        // On success the editor repaints this line; otherwise the button works again.
+        const outcome = await QM.state.unlinkItemImage(itemId);
+        if (!outcome?.ok) unlink.disabled = false;
       });
       nodes.push(unlink);
     }
@@ -3590,11 +3606,7 @@ QM.dock = {
     }
     if (qmImageDetailRequests.get(box) !== request) return;
 
-    const hide = () => {
-      qmImageDetailRequests.delete(box);
-      box.style.display = "none";
-      box.replaceChildren();
-    };
+    const hide = () => qmHideItemImageRemoveChoice(box);
     const message = document.createElement("div");
     Object.assign(message.style, { overflowWrap: "anywhere" });
     const buttons = document.createElement("div");
@@ -4470,7 +4482,10 @@ QM.dock = {
       marginTop: "-4px",
       fontSize: "11px",
     });
+    // Any repaint also closes an open Delete/Unlink choice (and drops its pending
+    // load), since the file it names may no longer be the one the item shows.
     const paintImage = () => {
+      qmHideItemImageRemoveChoice(removeChoice);
       imageRow.replaceChildren(
         this._buildItemImageControl(liveItem(), 96, {
           onRemove: () => this._showItemImageRemoveChoice(removeChoice, item.id, paintImage),
