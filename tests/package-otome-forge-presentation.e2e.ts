@@ -3742,6 +3742,70 @@ test("Otome Hearth affection shows per-level progress below Level beside its hea
   ).toEqual([]);
 });
 
+test("Otome Hearth shows prestige past level 10 and writes an unlocked extra story on its tap (#2025)", async ({
+  page,
+  isMobile,
+}, testInfo) => {
+  await page.setViewportSize({ width: isMobile ? 390 : 1280, height: isMobile ? 844 : 720 });
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+  const fixture = createSceneStub({ images: false, audio: false });
+  const lis = fixture.stub.view.lis as Json[];
+  const MARIN = "li-marin-0004";
+  lis.push({
+    ...lis[2]!,
+    id: MARIN,
+    name: "Marin",
+    level: 10,
+    affectionProgress: { current: 300, required: 300 },
+    prestige: { unlocked: 1, points: 2, current: 120, required: 300 },
+  });
+  const key = `prestige-${MARIN}-1`;
+  let release!: () => void;
+  const wait = new Promise<void>((resolve) => (release = resolve));
+  const answer = (call: Call): Answer | undefined => {
+    if (call.method === "POST" && call.path === `/api/otome-forge/runs/${RUN}/prestige/${MARIN}`) {
+      // As S/items/prestige.ts answers when the story is no longer unlocked: the dialog says why.
+      return { status: 409, json: { error: "No extra story with Marin is unlocked yet.", code: "locked" }, wait };
+    }
+    const reply = fixture.answer(call);
+    if (call.method === "GET" && call.path === `/api/otome-forge/runs/${RUN}/story` && reply?.json) {
+      return { ...reply, json: { ...(reply.json as Json), prestige: [{ li: MARIN, key }] } };
+    }
+    return reply;
+  };
+  const calls: Call[] = [];
+  await stubRoutes(page, answer, calls);
+  const root = await openStory(page);
+  const section = root.getByRole("region", { name: "Between you", exact: true });
+  const row = section.getByRole("listitem").filter({ hasText: "Marin" });
+  await row.scrollIntoViewIfNeeded();
+  const meter = row.getByRole("meter", { name: "Marin: prestige progress", exact: true });
+  await expect(meter).toHaveText("120 / 300");
+  await expect(meter).toHaveAttribute("aria-valuenow", "120");
+  await expect(meter).toHaveAttribute("aria-valuetext", "120 of 300 affection toward the next prestige point");
+  await expect(row.getByRole("meter", { name: "Marin: affection progress", exact: true })).toHaveCount(0);
+  await expect(row.getByRole("img", { name: "Marin: prestige 2 of 3", exact: true })).toBeVisible();
+  await expect(
+    section.getByText("Past level 10, every 300 affection earns a prestige point.", { exact: false }),
+  ).toBeVisible();
+  const other = section.getByRole("listitem").filter({ hasText: lis[0]!.name });
+  await expect(other.locator(".of-prestige")).toHaveCount(0);
+  await expect(other.getByRole("meter", { name: `${lis[0]!.name}: affection progress`, exact: true })).toBeVisible();
+  for (const look of ["midnight", "pearl"] as const) {
+    await page.emulateMedia({ colorScheme: look === "midnight" ? "dark" : "light" });
+    await expect(root).toHaveAttribute("data-look", look);
+    await page.screenshot({ path: testInfo.outputPath(`prestige-${look}.png`) });
+  }
+  expect(posts(calls, `/prestige/${MARIN}`)).toEqual([]);
+
+  await row.getByRole("button", { name: "A new story with Marin", exact: true }).click();
+  const dialog = root.getByRole("dialog", { name: "A new story with Marin", exact: true });
+  await expect(dialog.getByText("Imagining something new with Marin…", { exact: true })).toBeVisible();
+  release();
+  await expect(dialog.getByRole("alert")).toContainText("No new story with Marin is unlocked yet.");
+  expect(posts(calls, `/prestige/${MARIN}`)).toHaveLength(1);
+});
+
 test("Otome Hearth edits image appearance above Bible without spoilers or painting", async ({
   page,
   isMobile,

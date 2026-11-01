@@ -6,10 +6,13 @@
 //                                                                  rupture, or his route complete)
 // POST /runs/:run/repairs/:li                                   → {chapter: ChapterView}; the repair for the rupture
 //                                                                  with him ("Make it right"; 409 `conflict` when none)
+// POST /runs/:run/prestige/:li                                  → {chapter: ChapterView}; his next unlocked extra story
+//                                                                  (#2025), or his latest when nothing new is unlocked
+//                                                                  (409 `locked` before the first: S/items/prestige.ts)
 // POST /runs/:run/chapters/:key/beats/:i/stance {round, stance} → StanceResult {round (the played round's view),
 //                                                                  next?, ending?, confrontation, remembered,
 //                                                                  rememberedBy}
-// All three are idempotent: the chapter a key has is returned as it is, and a stance already taken returns what it
+// All four are idempotent: the chapter a key has is returned as it is, and a stance already taken returns what it
 // did (another stance for that round is a 409 `locked`). A Closer (#1938) takes its answers (reassure, tease,
 // mirror, ask) on the same route; a move of the other game is a 400 that saves nothing. Planning runs in the run's Cancel scope and may fail as any
 // plan does (503 `no-connection`, 422 `declined`, 502 `bad-format`). GET /runs/:run/story carries each love
@@ -17,6 +20,7 @@
 import { z } from "zod";
 import { ALL_CLIMAX_MOVES, CONFRONTATION_ROUNDS } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { debugModeOf, liParam, parseBody, reviewModeOf, runParam, type RegisterRoutes } from "../http.js";
+import { ensurePrestigeStory } from "../items/prestige.js";
 import { toChapterView } from "../schemas/story.js";
 import { cancellable, chooseStance } from "../story/beats.js";
 import { planRepairChapter, planRouteChapter } from "../story/routes-plan.js";
@@ -54,6 +58,20 @@ export const registerArcRoutes: RegisterRoutes = (router, deps) => {
       const debugMode = debugModeOf(request);
       const chapter = await cancellable(deps, runId, (signal) =>
         planRepairChapter(deps, runId, li, { debugMode, signal }),
+      );
+      return { chapter: toChapterView(chapter) };
+    }),
+  );
+
+  router.post(
+    "/runs/:run/prestige/:li",
+    handle(async (request) => {
+      parseBody(NoFields, request.body);
+      const { runId } = runParam(request);
+      const li = liParam(request);
+      const debugMode = debugModeOf(request);
+      const chapter = await cancellable(deps, runId, (signal) =>
+        ensurePrestigeStory(deps, runId, li, { debugMode, signal }),
       );
       return { chapter: toChapterView(chapter) };
     }),

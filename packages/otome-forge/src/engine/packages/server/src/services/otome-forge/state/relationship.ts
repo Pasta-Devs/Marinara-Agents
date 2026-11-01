@@ -7,7 +7,8 @@
 // opened it, and closes only on a node whose plan lists it in `resolves`. A grievance of severity `rupture` opens a
 // rupture, which shuts his gates until a scene forgives or addresses it; while another rupture-severity grievance is
 // still owed, the rupture moves to it instead of closing. A hostile pick costs 15 affection once per love interest,
-// stopping at the floor of the level already reached. Nothing here lowers a level or stage.
+// stopping at the floor of the level already reached (at level 10, of the last extra story unlocked: #2025). Nothing
+// here lowers a level or stage, or takes an unlocked extra story back.
 //
 // Every function is pure. The choose route applies a pick inside one revision-checked write of `${R}:state`, and the
 // pick's `${i}/${choiceId}` in `chapters[key].applied` makes a replay, or a request that lost a race, change nothing.
@@ -24,13 +25,11 @@ import type {
 import {
   BEAT_SHIFT_MAX,
   CHAPTER_SHIFT_MAX,
-  MIN_LEVEL,
-  POINTS_PER_LEVEL,
   TENSION_MAX,
   TENSION_MIN,
   TRUST_MAX,
   TRUST_MIN,
-  levelOf,
+  affectionFloorOf,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import { isChapterKey } from "../ids.js";
 
@@ -233,8 +232,7 @@ export function applyChoiceEffects(state: RunState, effects: readonly Effect[], 
 
   for (const id of harmed) {
     const li = lis[id]!;
-    const floor = (levelOf(li.points) - MIN_LEVEL) * POINTS_PER_LEVEL;
-    const points = Math.max(floor, li.points - 15);
+    const points = Math.max(affectionFloorOf(li.points), li.points - 15);
     if (points !== li.points) {
       lis[id] = { ...li, points };
       rememberedBy.add(id);

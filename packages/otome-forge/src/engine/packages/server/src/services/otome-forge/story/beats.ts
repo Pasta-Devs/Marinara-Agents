@@ -648,7 +648,9 @@ async function generateBeat(
       places: scene.places,
       segments: scene.segments,
       choices: scene.choices,
-      effects: effectsOf(value, scene.choices, context),
+      // #2025: an extra story is imagined, never canon: its picks move nothing between them (no trust, tension,
+      // grievance, disclosure or affection loss).
+      effects: chapter.prestige ? {} : effectsOf(value, scene.choices, context),
       ...(context.date ? { scores: scoresOf(value, scene.choices) } : {}),
       musicMood: scene.musicMood,
       ...(scene.cg ? { cg: scene.cg } : {}),

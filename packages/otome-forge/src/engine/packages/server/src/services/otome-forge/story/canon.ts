@@ -13,6 +13,7 @@
 // Memory sources are completed chapters only (the kit's "completed, first-canon snapshots"):
 //   main                        → kind "chapter", shared (the overview, the recent canon, recalled details)
 //   route, repair, story, date  → kind "chat", audience [their love interest's id]
+//   an extra story (#2025)      → none: it is imagined together for fun, never canon
 // A love interest's own chapter is the kit's `chat`, the one kind it keeps private everywhere: never in the overview
 // or the recent canon, and a recalled detail only for that love interest's own reader or a scene they are in. Its title
 // names whose it is and that it is private (titleOf), so a scene with others in it knows who else does not know it.
@@ -193,7 +194,8 @@ async function completedChapters(
   for (const { key, completed } of done) {
     const chapter = await readChapter(store, runId, key);
     // The prologue is no memory source: no love interest was there, and chapter 1's first scene is given it directly.
-    if (!chapter || chapter.kind === "prologue") continue;
+    // An extra story (#2025) is none either: it is imagined together for fun, and never canon.
+    if (!chapter || chapter.kind === "prologue" || chapter.prestige) continue;
     const audience = audienceOf(chapter);
     chapters.push({
       chapter,

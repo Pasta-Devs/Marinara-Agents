@@ -73,6 +73,59 @@ export function affectionProgressOf(points: number): { current: number; required
   };
 }
 
+// ── Prestige (#2025): past level 10, affection keeps counting. Every POINTS_PER_LEVEL is a prestige point, and every
+// PRESTIGE_POINTS_PER_STORY of them unlocks one extra story with him (S/items/prestige.ts); the pips then start again.
+// All of it is derived from his points, which are never capped, so no affection is lost and nothing is stored but
+// the stories written (their chapter keys `prestige-<li>-<n>`). ──
+
+/** The affection points at which level 10 is reached. */
+export const MAX_LEVEL_POINTS = (MAX_LEVEL - MIN_LEVEL) * POINTS_PER_LEVEL;
+export const PRESTIGE_POINTS_PER_STORY = 3;
+const PRESTIGE_CYCLE = PRESTIGE_POINTS_PER_STORY * POINTS_PER_LEVEL;
+
+/** An extra story's kind: a kink explored together (NSFW Heat only), a what-if of their future, or a mini AU. */
+export const PRESTIGE_KINDS = ["kink", "what-if", "au"] as const;
+export type PrestigeKind = (typeof PRESTIGE_KINDS)[number];
+
+export interface Prestige {
+  /** Extra stories unlocked so far (each one is written once, on the player's tap). */
+  unlocked: number;
+  /** Prestige points toward the next extra story, 0 to PRESTIGE_POINTS_PER_STORY - 1. */
+  points: number;
+  /** Affection toward the next prestige point. */
+  current: number;
+  required: number;
+}
+
+/** His prestige from his affection points: all zero below level 10 and at exactly level 10. */
+export function prestigeOf(points: number): Prestige {
+  const safe = Number.isFinite(points) ? Math.max(0, Math.floor(points)) : 0;
+  const over = Math.max(0, safe - MAX_LEVEL_POINTS);
+  return {
+    unlocked: Math.floor(over / PRESTIGE_CYCLE),
+    points: Math.floor(over / POINTS_PER_LEVEL) % PRESTIGE_POINTS_PER_STORY,
+    current: over % POINTS_PER_LEVEL,
+    required: POINTS_PER_LEVEL,
+  };
+}
+
+/** The number of the extra story to write next (from 1), or null while none is unlocked beyond the `written` ones. */
+export function nextPrestige(points: number, written: number): number | null {
+  return prestigeOf(points).unlocked > written ? written + 1 : null;
+}
+
+/**
+ * Where a choice loss stops: the floor of the level reached, and at level 10 the last extra story unlocked, so a loss
+ * never takes an unlocked story back (prestige points within the cycle may fall, as points within a level do).
+ */
+export function affectionFloorOf(points: number): number {
+  const safe = Number.isFinite(points) ? Math.max(0, Math.floor(points)) : 0;
+  const level = levelOf(safe);
+  return level < MAX_LEVEL
+    ? (level - MIN_LEVEL) * POINTS_PER_LEVEL
+    : MAX_LEVEL_POINTS + prestigeOf(safe).unlocked * PRESTIGE_CYCLE;
+}
+
 /**
  * Where an earning comes from. Story sources (a beat, a chapter, a route chapter, and its Lead and Foil affection) are
  * never capped; every other source is an activity, capped per local day.

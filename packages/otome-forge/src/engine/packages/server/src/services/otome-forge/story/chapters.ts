@@ -30,6 +30,7 @@ import type {
 import type { ClimaxKind } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { LIS_MAX } from "../../../../../client/src/features/otome-forge/shared/cast.js";
 import { LIMIT_IDS, type LimitId } from "../../../../../client/src/features/otome-forge/shared/content.js";
+import { nextPrestige } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import { generateJson, readOrGenerate, type GenerationDeps } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
 import {
@@ -39,6 +40,7 @@ import {
   chapterId,
   mainChapterKey,
   mainChapterNumber,
+  prestigeKey,
   runDocTarget,
   stateId,
 } from "../ids.js";
@@ -153,7 +155,10 @@ export const clean = (value: unknown, max = 4000) => (typeof value === "string" 
 export type PlannedChapter = Pick<Chapter, "title" | "tags" | "foil" | "summary" | "nodes" | "ledger">;
 
 /** The reply's nodes in the chapter's shape: casts resolved to ids, and `resolves` kept only for grievances still owed. */
-export function planNodes(reply: ChapterPlanReply, context: Pick<PlanContext, "units" | "state">): ChapterNode[] {
+export function planNodes(
+  reply: Pick<ChapterPlanReply, "nodes">,
+  context: Pick<PlanContext, "units" | "state">,
+): ChapterNode[] {
   const { units, state } = context;
   const grievanceIds = new Set(
     units.flatMap((unit) => unresolved(state.lis[unit.id] ?? defaultLiState()).map((item) => item.id)),
@@ -176,7 +181,7 @@ export function planNodes(reply: ChapterPlanReply, context: Pick<PlanContext, "u
 }
 
 /** The reply's content tags that exist, or the problem when one reaches for a Line. */
-export function planTags(reply: ChapterPlanReply, world: PlanContext["world"]): string[] | string {
+export function planTags(reply: Pick<ChapterPlanReply, "tags">, world: PlanContext["world"]): string[] | string {
   const tags = [
     ...new Set(reply.tags.map((tag) => tag.trim().toLowerCase()).filter((tag) => CHAPTER_TAGS.includes(tag))),
   ];
@@ -621,6 +626,16 @@ export async function storyView(deps: { store: OtomeStore }, runId: string): Pro
     repairs: ready ? repairOffers(chapters, run.state, cast) : [],
     arc,
     arcChoice,
+    // #2025: an extra story unlocked and not written yet, per love interest (S/items/prestige.ts writes it on the tap).
+    prestige: ready
+      ? cast.flatMap((li) => {
+          const n = nextPrestige(
+            run.state.lis[li]?.points ?? 0,
+            chapters.filter((chapter) => chapter.prestige && chapter.li === li).length,
+          );
+          return n ? [{ li, key: prestigeKey(li, n) }] : [];
+        })
+      : [],
   };
 }
 

@@ -9,6 +9,9 @@
 //   the Memory's title and premise from P20. A premise is a situation; how close they are follows his stage on the day
 //   it is first opened. It is private: only he is in it. The narrator writes its nodes with P6's Character Story
 //   framing (P22, P23). It carries his own notebook beside his bible (knowsAboutYou, Read Me #1945), as his scenes do.
+// - P25 (#2025, structured, 0.8, `planner`): an extra story, unlocked by prestige past level 10 (S/items/prestige.ts).
+//   P21's side story, but something the two of them imagine or play out for fun and never canon: a kink (NSFW Heat
+//   only), a what-if or a mini AU, picked by the planner and never one of his earlier extra stories, which it is given.
 // - P19 (chat job, 0.9, `home`: SFW whatever the Heat) and P24 (chat job, 0.9, `chat` for that love interest) write
 //   one line about the protagonist's look, from his scene card as his own reader sees it (S/story/prompts.ts ownView,
 //   as M3's P16 and P17). Neither is a scene: nothing happens because of it.
@@ -19,6 +22,8 @@ import { forgeChoicePlanMessages } from "@forge-kit/player-choices-server.mjs";
 import { z, type ZodType } from "zod";
 import type { Player, RunState, Unit, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { stageRow } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
+import { intimacyOpen } from "../../../../../client/src/features/otome-forge/shared/content.js";
+import { PRESTIGE_KINDS, type PrestigeKind } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import { FACES } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import {
   NOTICED_WORDS_MAX,
@@ -28,6 +33,7 @@ import {
 import type { Item, ItemLook } from "../../../../../client/src/features/otome-forge/shared/wish.js";
 import { otomeContentContract, otomeContractReminder } from "../content-contract.js";
 import type { OtomeMessage } from "../generation.js";
+import { intimacyLine } from "../intimacy.js";
 import { defaultLiState } from "../schemas/state.js";
 import {
   ANGST_TYPES,
@@ -148,6 +154,126 @@ export function storyPlanMessages({ world, player, unit, state, item, memory }: 
     item.premise?.trim() ? `Premise: ${item.premise.trim()}` : "",
     "",
     `Plan ${name}'s Character Story now (id ${li}).`,
+    otomeContractReminder("planner"),
+  ]
+    .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
+    .join("\n");
+  return forgeChoicePlanMessages(
+    [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+    true,
+  );
+}
+
+// ── P25 (#2025): an extra story, unlocked by prestige (structured, 0.8, planner contract) ──
+
+/** P25's reply: P21's plan without a ledger or a voiced line, with the story's kind and premise. */
+export interface PrestigePlanReply extends Pick<ChapterPlanReply, "title" | "tags" | "summary" | "nodes"> {
+  kind: string;
+  premise: string;
+}
+
+export const PrestigePlanSchema = z.object({
+  kind: z.string().max(40),
+  premise: z.string().min(1).max(600),
+  title: PLAN_FIELDS.title!,
+  tags: PLAN_FIELDS.tags!,
+  summary: PLAN_FIELDS.summary!,
+  nodes: PLAN_FIELDS.nodes!,
+}) as unknown as ZodType<PrestigePlanReply>;
+
+/** The extra story kinds this world may have: a kink only under NSFW Heat (intimacyOpen). */
+export function prestigeKindsFor(world: Pick<World, "content">): PrestigeKind[] {
+  return PRESTIGE_KINDS.filter((kind) => kind !== "kink" || intimacyOpen(world.content));
+}
+
+const PRESTIGE_KIND_TEXT: Record<PrestigeKind, (name: string) => string> = {
+  kink: (name) => `kink: the two of them explore a kink together, one ${name} is into or curious about.`,
+  "what-if": () =>
+    "what-if: a future they picture and play out together: their wedding, starting a family, a honeymoon trip, a first home, and the like.",
+  au: () =>
+    "au: a mini alternate universe they imagine themselves into: a vampire AU, a modern AU, a royal-court AU, and the like; the same two people at heart, in another world.",
+};
+
+export interface PrestigePlanInput {
+  world: World;
+  player: Player;
+  /** Whose extra story it is. */
+  unit: Unit;
+  state: RunState;
+  /** Which of his extra stories this is, from 1. */
+  n: number;
+  /** His extra stories already written, oldest first: never repeated. */
+  earlier: ReadonlyArray<{ title: string; kind: PrestigeKind; premise: string }>;
+  /** Recalled memory for [li] (the kit's text), or "". */
+  memory: string;
+}
+
+/** P25: a 3–5 node extra story of one love interest's, imagined together for fun (S/items/prestige.ts). */
+export function prestigePlanMessages({
+  world,
+  player,
+  unit,
+  state,
+  n,
+  earlier,
+  memory,
+}: PrestigePlanInput): OtomeMessage[] {
+  const name = unit.name;
+  const li = unit.id;
+  const liState = state.lis[li] ?? defaultLiState();
+  const kinds = prestigeKindsFor(world);
+  const known = knowsAboutYou(unit, liState);
+  const tastes = intimacyLine(world, unit);
+  const shape = `{"kind": "${kinds.join("|")}", "premise": "...", "title": "...", "tags": ["..."], "summary": "...", "nodes": [{"kind": "beat|moment", "moment": "read-him|call|date", "guide": "...", "cast": ["${li}"], "place": "..."}]}`;
+  const system = [
+    "You are the Extra Story planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic; each is a human, even if inside a monster.",
+    `${name} and the protagonist have reached the height of their bond, and it keeps growing. Plan EXTRA STORY ${n} with ${name}: something the two of them imagine or play out together, for fun, told as ${STORY_NODES_MIN} to ${STORY_NODES_MAX} nodes in play order; a narrator writes each node later as one scene the player reads.`,
+    "It is NOT canon for the main story: nothing in it happens there, changes the main plot or the mystery, or moves where they truly stand. Both of them know it is their game.",
+    "Reply with ONLY a JSON object of this shape:",
+    shape,
+    "KINDS (pick one)",
+    ...kinds.map((kind) => `- ${PRESTIGE_KIND_TEXT[kind](name)}`),
+    "FIELDS",
+    `- kind: one of ${kinds.join(", ")}. premise: one sentence on what they imagine (the player does not see it). title: a short title for it. summary: one or two lines on it, without giving away its turns (the player reads it).`,
+    `- tags: content tags a reader should see before it starts, from: ${CHAPTER_TAGS.join(", ")}. Only what the story really holds; [] when none apply.`,
+    "- nodes: kind beat is an ordinary scene; kind moment is a scene with a special framing, set by moment: read-him (the protagonist reads their face to see what they really feel), call (a phone call), date (time together that turns on something real).",
+    `- guide: what happens in that node, 2 to 4 sentences, for the narrator: who wants what, what changes, where it leaves things. cast: exactly ["${li}"]. place: where it opens (optional).`,
+    "RULES",
+    `- ${STORY_NODES_MIN} to ${STORY_NODES_MAX} nodes of kind beat or moment (no confrontation). ${name} is in every node, and no other love interest appears.`,
+    "- The first node shows how they slip into it (a conversation, a dare, a daydream, a story told in bed); from there it plays out as that future or that world, and the last may bring them back to themselves.",
+    `- Never repeat an earlier extra story of theirs (listed below): pick another kind, or a premise clearly unlike theirs.`,
+    `- ${name} stays ${name} at heart, in ${name}'s own voice, whatever the frame. It reveals no secret and resolves nothing of the main story.`,
+    `- Write every text field in ${world.language}.`,
+    "- Omit an optional field rather than writing null.",
+    "",
+    STORY_PACING_INSTRUCTION,
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
+    "",
+    otomeContentContract({ world, lis: [{ name }], kind: "planner" }),
+  ].join("\n");
+  const user = [
+    "WORLD",
+    world.setting.trim() || world.premise.trim(),
+    "",
+    "PROTAGONIST",
+    protagonistBlock(player),
+    "",
+    `${name.toUpperCase()} (stage ${liState.stage}; whose extra story this is)`,
+    bibleBlock(unit, state, [li], world),
+    ...(known ? [known] : []),
+    ...(tastes ? [tastes] : []),
+    "",
+    memory.trim() ? `STORY MEMORY\n${memory.trim()}` : "",
+    "",
+    "EARLIER EXTRA STORIES (never repeat one)",
+    earlier.length
+      ? earlier.map((story) => `- [${story.kind}] ${story.title}: ${story.premise}`).join("\n")
+      : "(none yet)",
+    "",
+    `Plan extra story ${n} with ${name} now (id ${li}).`,
     otomeContractReminder("planner"),
   ]
     .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")

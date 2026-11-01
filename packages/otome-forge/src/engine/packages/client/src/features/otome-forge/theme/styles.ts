@@ -1483,6 +1483,19 @@ ${R} .of-affection-progress {
 ${R} .of-hearts { grid-area: hearts; display: flex; flex-wrap: wrap; gap: 3px; color: var(--of-li-accent, var(--of-rose)); }
 ${R} .of-hearts svg[data-on="false"] { color: var(--of-border-strong); }
 ${R}[data-look="pearl"] .of-hearts { filter: brightness(0.8) saturate(1.35); }
+/* Prestige past level 10 (#2025): three pips, and the extra story they unlock. */
+${R} .of-affection:has(.of-prestige) {
+  grid-template-areas: "avatar name level" "avatar hearts progress" "avatar prestige prestige";
+}
+${R} .of-prestige {
+  grid-area: prestige; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding-top: 2px;
+}
+${R} .of-prestige-pips {
+  display: inline-flex; align-items: center; gap: 3px; font-size: 0.74rem; font-weight: 800;
+  color: var(--of-li-accent, var(--of-rose));
+}
+${R} .of-prestige-pips > span { margin-right: 3px; color: var(--of-accent-text); }
+${R} .of-prestige-pips svg[data-on="false"] { color: var(--of-border-strong); }
 /* "Who walks with you this chapter?" */
 ${R} .of-candidates {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px; margin: 0; padding: 0;

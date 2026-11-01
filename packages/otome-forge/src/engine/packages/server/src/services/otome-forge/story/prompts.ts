@@ -60,6 +60,7 @@ import { stillToMend } from "../../../../../client/src/features/otome-forge/shar
 import { revealAt } from "../schemas/story-arc.js";
 import { FACES, MUSIC_MOODS } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { LIMIT_IDS, intimacyOpen } from "../../../../../client/src/features/otome-forge/shared/content.js";
+import type { PrestigeKind } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import {
   NOTEBOOK_CATEGORIES,
   type NotebookEntry,
@@ -708,7 +709,7 @@ export interface BeatMessagesInput {
   state: RunState;
   chapter: Pick<
     Chapter,
-    "kind" | "number" | "title" | "lead" | "foil" | "nodes" | "li" | "stage" | "grievance" | "date"
+    "kind" | "number" | "title" | "lead" | "foil" | "nodes" | "li" | "stage" | "grievance" | "date" | "prestige"
   >;
   node: ChapterNode;
   /** The canonical story so far in this chapter, rendered (earlier beats), or "" for its first node. */
@@ -908,7 +909,9 @@ function chapterLabel(chapter: BeatMessagesInput["chapter"], units: readonly Uni
     return `${owner}'s route chapter, toward stage ${chapter.stage} (${stageTitle(chapter.stage)})`;
   }
   if (chapter.kind === "repair") return `a repair chapter with ${owner}`;
-  if (chapter.kind === "story") return `${owner}'s Character Story`;
+  if (chapter.kind === "story") {
+    return chapter.prestige ? `${owner}'s extra story, imagined together (not canon)` : `${owner}'s Character Story`;
+  }
   return `${chapter.kind} chapter`;
 }
 
@@ -923,6 +926,24 @@ function storyFraming(name: string, nodes: number): string[] {
       ? `This is ${name}'s CHARACTER STORY: a ${nodes}-scene side story between ${name} and the protagonist, outside the main plot. Each node is one of its scenes; it has its own small arc and ends on its last.`
       : `This is a ONE-SCENE side story of ${name}'s: one complete scene between ${name} and the protagonist, outside the main plot, with its own small beginning and end.`,
     `It is private: no other love interest appears in it or learns of it. It does not move ${name}'s stage: how close they are follows the scene card. It never resolves the mystery or reveals a secret before its stage, and it never contradicts the story so far.`,
+  ];
+}
+
+/** How P6 names each kind of extra story (#2025). English, never localized. */
+export const PRESTIGE_FRAMES: Record<PrestigeKind, string> = {
+  kink: "a kink they explore together",
+  "what-if": "a what-if of their life together",
+  au: "a mini AU, the two of them in another world",
+};
+
+/**
+ * #2025: what P6 adds to a node of an extra story (`prestige-<li>-<n>`, S/items/prestige.ts) in place of the Character
+ * Story's framing: something the two of them imagine or play out for fun, which is never canon.
+ */
+function prestigeFraming(name: string, prestige: NonNullable<Chapter["prestige"]>, nodes: number): string[] {
+  return [
+    `This is an EXTRA STORY of ${name}'s, ${PRESTIGE_FRAMES[prestige.kind]}: ${prestige.premise} It is something ${name} and the protagonist imagine or play out together, for fun, and both of them know it. It is NOT canon: nothing in it happens in the main story, and it changes nothing there.`,
+    `It is a ${nodes}-scene story with its own small arc, ending on its last. It is private: no other love interest appears in it. Whatever the frame, both stay themselves at heart; it reveals no secret and resolves nothing of the main story.`,
   ];
 }
 
@@ -959,7 +980,10 @@ function arcFraming({
       `This is a REPAIR chapter: a rupture stands between ${name} and the protagonist${grievance ? ` (${grievance.text})` : ""}. The repair costs ${name} something; it does not erase what happened, and nobody apologizes on the spot.`,
     );
   }
-  if (chapter.kind === "story") lines.push(...storyFraming(name, chapter.nodes.length));
+  if (chapter.kind === "story") {
+    const nodes = chapter.nodes.length;
+    lines.push(...(chapter.prestige ? prestigeFraming(name, chapter.prestige, nodes) : storyFraming(name, nodes)));
+  }
   // #1980: the arc's planned reveal, and its big event on the last chapter. Only a stamped node gets a reveal, so the
   // planner's schedule (normalizeChapterPlan) decides what may come out here; everything else stays hidden.
   if (node.reveal?.kind === "truth") {

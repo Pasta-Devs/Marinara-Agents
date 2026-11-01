@@ -56,14 +56,14 @@ export interface StoryPlanContext {
 }
 
 /**
- * P21's reply as a Character Story, or the first rule it breaks: 3–5 nodes of beats or moments, every one holding him
- * alone (another love interest named in a node is left out), no key image (the Memory has its own) and nothing
- * resolved in passing, tags without a Line, the ledger's rows about him alone, and a voiced line of at most 20 words.
+ * A side story's nodes and tags (a Memory's Character Story, or an extra story: S/items/prestige.ts), or the first rule
+ * they break: 3–5 nodes of beats or moments, every one holding him alone (another love interest named in a node is
+ * left out), no key image (a Memory has its own) and nothing resolved in passing, and tags without a Line.
  */
-export function normalizeStoryPlan(
-  reply: StoryPlanReply,
-  context: StoryPlanContext,
-): (Omit<PlannedChapter, "foil"> & { voicedLine: string }) | string {
+export function sideStoryNodes(
+  reply: Pick<StoryPlanReply, "nodes" | "tags">,
+  context: Pick<StoryPlanContext, "units" | "state" | "world" | "li">,
+): { nodes: ChapterNode[]; tags: string[] } | string {
   const { li } = context;
   if (reply.nodes.length < STORY_NODES_MIN || reply.nodes.length > STORY_NODES_MAX) {
     return `the story needs ${STORY_NODES_MIN} to ${STORY_NODES_MAX} nodes, not ${reply.nodes.length}`;
@@ -80,7 +80,21 @@ export function normalizeStoryPlan(
   }));
   if (nodes.some((node) => !node.guide)) return "every node needs a guide";
   const tags = planTags(reply, context.world);
-  if (typeof tags === "string") return tags;
+  return typeof tags === "string" ? tags : { nodes, tags };
+}
+
+/**
+ * P21's reply as a Character Story, or the first rule it breaks: the side story's nodes and tags (sideStoryNodes), the
+ * ledger's rows about him alone, and a voiced line of at most 20 words.
+ */
+export function normalizeStoryPlan(
+  reply: StoryPlanReply,
+  context: StoryPlanContext,
+): (Omit<PlannedChapter, "foil"> & { voicedLine: string }) | string {
+  const { li } = context;
+  const side = sideStoryNodes(reply, context);
+  if (typeof side === "string") return side;
+  const { nodes, tags } = side;
   // Number 0: a side story is never a main chapter, so no misunderstanding falls due in it.
   const ledger = planLedger(reply, { ...context, number: 0 }, new Set([li]), {
     main: false,

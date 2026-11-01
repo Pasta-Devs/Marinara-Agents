@@ -56,8 +56,10 @@ import {
   TENSION_MIN,
   TRUST_MAX,
   TRUST_MIN,
+  MAX_LEVEL,
   affectionProgressOf,
   levelOf,
+  prestigeOf,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import { FACES, type Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import {
@@ -562,6 +564,8 @@ export function toRunView(runKey: string, world: World, player: Player, units: U
           ...(unit.bible?.intimacy ? { intimacy: true as const } : {}),
           level: levelOf(progress.points),
           affectionProgress: affectionProgressOf(progress.points),
+          // #2025: past level 10, his affection fills prestige points (only the derived numbers, never the points).
+          ...(levelOf(progress.points) === MAX_LEVEL ? { prestige: prestigeOf(progress.points) } : {}),
           stage: progress.stage,
           ...(expressions ? { expressions } : {}),
           ...(worn && wornUrl ? { worn: { id: worn.id, url: wornUrl } } : {}),
