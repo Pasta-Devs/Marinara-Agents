@@ -214,6 +214,7 @@ jobs:
           # World Maps UI contracts and location limit.
           node tests/world-maps-ui-contract.regression.mjs
           npx tsx --tsconfig tests/tsconfig.regressions.json tests/map-location-limit.regression.ts
+          npx tsx --tsconfig tests/tsconfig.regressions.json tests/world-maps-story-location-trail.regression.ts
 
           # Noodle timeline context budget, writer images and image prompts.
           npx tsx --tsconfig tests/tsconfig.regressions.json tests/noodle-timeline-context-budget.regression.ts
