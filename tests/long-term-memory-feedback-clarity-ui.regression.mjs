@@ -1451,6 +1451,34 @@ for (const value of [
   assert.doesNotMatch(field, /^\s*integer$/mu, `${value} keeps decimals`);
 }
 
+// A memory another package or Advanced Memory added says so in the Vault list and editor header.
+assert.match(vaultRow, /originLabel\?: string/u, "VaultRow takes a plain origin label");
+assert.match(vaultRow, /originLabel \? \(/u, "VaultRow renders the origin chip");
+assert.match(vault, /function originLabelKey\(/u, "the vault derives the origin from the note");
+assert.match(
+  vault,
+  /function originLabelKey\([\s\S]*?link\.relation === "extracted_from"[\s\S]*?source\?\.type === "source"/u,
+  "a memory takes its origin from its extracted_from source note",
+);
+assert.match(vault, /package_record: "ui\.longTermMemory\.memoryvault\.originSlurp"/u, "Slurp provenance has a label");
+assert.match(
+  vault,
+  /advanced_memory: "ui\.longTermMemory\.memoryvault\.originAdvancedMemory"/u,
+  "Advanced Memory provenance has a label",
+);
+assert.match(
+  vault,
+  /originLabel=\{originKey \? localizeUi\(originKey\) : undefined\}/u,
+  "rows get the localized label as a string",
+);
+assert.equal(
+  (vault.match(/data-ltm-origin-chip/gu) ?? []).length,
+  2,
+  "the source and regular editor headers show the chip",
+);
+assert.equal(locale["ui.longTermMemory.memoryvault.originSlurp"], "Slurp");
+assert.equal(locale["ui.longTermMemory.memoryvault.originAdvancedMemory"], "Advanced Memory");
+
 process.stdout.write(
   "Long-Term Memory feedback clarity UI regression: labels, outcomes, usage, warnings, defaults, and scope loading ok\n",
 );

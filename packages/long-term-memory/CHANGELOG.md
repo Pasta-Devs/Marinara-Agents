@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.5.26 — 2026-11-01
+
+- The Memory Vault shows a Slurp or Advanced Memory chip on memories that Slurp or Advanced Memory added, in the list and at the top of the editor.
+
 ## 1.5.25 — 2026-11-01
 
 - Chat Settings puts "Memories from this chat" first and shows what happened in plain parts (saved today with a check, waiting for you with a clock, Review only when something waits), with clear lines when nothing is new or memories are added by hand; the "After a reply" sample in Extraction and the setup guide looks the same.
