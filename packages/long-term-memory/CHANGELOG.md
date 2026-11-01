@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.5.27 — 2026-11-01
+
+- Memory Settings → Sharing shows how many memories each other Agent added this week, and lists an Agent that has only added memories.
+
 ## 1.5.26 — 2026-11-01
 
 - The Memory Vault shows a Slurp or Advanced Memory chip on memories that Slurp or Advanced Memory added, in the list and at the top of the editor.

@@ -13,12 +13,14 @@ async function main() {
     { updateLtmGlobalSettings },
     intake,
     { notePathForId },
+    { listLtmPackageReaders },
   ] = await Promise.all([
     import(`${source}/package-runtime.ts`),
     import(`${source}/persistence/storage.ts`),
     import(`${source}/settings.ts`),
     import(`${source}/services/intake.ts`),
     import(`${source}/persistence/paths.ts`),
+    import(`${source}/services/storage-read.ts`),
   ]);
   const { createLtmIntakeService, ltmPackageSourceNoteId } = intake;
 
@@ -85,6 +87,13 @@ async function main() {
 
       // 3. A record becomes one source-owned line in the character's own memory.
       assert.deepEqual(await service.submit(record), { version: 1, status: "applied" });
+      const addedBy = async () =>
+        (await listLtmPackageReaders(root)).find((reader: any) => reader.caller === "slurp2")?.added;
+      assert.deepEqual(
+        (await listLtmPackageReaders(root)).find((reader: any) => reader.caller === "slurp2"),
+        { caller: "slurp2", lastReadAt: null, reads: 0, memories: 0, added: 1 },
+        "an applied record must show as one added memory for its caller, with no reads",
+      );
       const sourceNote = await storage.getNote(sourceId);
       assert.deepEqual(sourceNote?.provenance, { kind: "package_record", sourceId: "slurp2:fact:f1" });
       assert.deepEqual(sourceNote?.scope, { characterIds: ["char-a"] });
@@ -101,10 +110,12 @@ async function main() {
       const count = await noteCount();
       assert.deepEqual(await service.submit(record), { version: 1, status: "unchanged" });
       assert.equal(await noteCount(), count);
+      assert.equal(await addedBy(), 1, "an unchanged record must not count as added");
       assert.deepEqual(await service.submit({ ...record, text: "Ada posts at dusk." }), {
         version: 1,
         status: "applied",
       });
+      assert.equal(await addedBy(), 2, "a replaced line counts as added again");
       assert.equal((await ada()).sections.from_slurp2?.text, "Ada posts at dusk.", "new text replaces the line");
       assert.equal((await ada()).sections.from_slurp2?.contributions?.length, 1, "still one line from the record");
       assert.equal(await noteCount(), count);
@@ -135,6 +146,7 @@ async function main() {
         text: "Ada and Bea share a flat.",
       };
       assert.deepEqual(await service.submit(pair), { version: 1, status: "applied" });
+      assert.equal(await addedBy(), 4, "a record for two characters adds two memories; a retract adds none");
       assert.equal((await ada()).sections.from_slurp2?.text, "Ada and Bea share a flat.");
       const bea = (await storage.listNotes({ type: "character" })).find((note: any) =>
         note.subjects?.some((subject: any) => subject.ref?.id === "char-b"),
