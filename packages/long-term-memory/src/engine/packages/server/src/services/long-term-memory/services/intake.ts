@@ -15,6 +15,7 @@ import { renderSectionContributions } from "../persistence/section-contributions
 import type { LongTermMemoryStorage } from "../persistence/storage.js";
 import { withLtmVaultLock } from "../persistence/vault-lock.js";
 import { getLtmGlobalSettings } from "../settings.js";
+import { recordLtmPackageAdd } from "./storage-read.js";
 
 // ponytail: the Engine does not tell a service who calls it, so `caller` is self-reported and any package
 // can name itself "slurp2". The list only keeps unknown names out; a package that lies still needs the user's
@@ -275,7 +276,7 @@ export function createLtmIntakeService(storage: LongTermMemoryStorage, root = st
       );
       throw error;
     }
-    return "applied" as const;
+    return { applied: mutations.length };
   }
 
   return {
@@ -289,10 +290,16 @@ export function createLtmIntakeService(storage: LongTermMemoryStorage, root = st
       const signal = signalOf(input);
       const parsed = submitSchema.safeParse(input);
       if (!parsed.success) return null;
-      const status = await withLtmVaultLock(root, async () =>
+      const result = await withLtmVaultLock(root, async () =>
         signal?.aborted || !(await enabled()) ? null : submitUnlocked(parsed.data),
       );
-      return status && { version: 1, status };
+      if (!result) return null;
+      if (typeof result === "object") {
+        // Outside the lock: the debug log takes the vault lock itself. It never throws, so a failed log line never fails the add.
+        await recordLtmPackageAdd(root, parsed.data.caller, result.applied);
+        return { version: 1, status: "applied" };
+      }
+      return { version: 1, status: result };
     },
     /** Takes a package's line out again. `null` as for `submit`; `missing` when there was nothing to remove. */
     async retract(input: unknown): Promise<{ version: 1; status: "retracted" | "missing" } | null> {

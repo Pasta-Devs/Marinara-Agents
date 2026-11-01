@@ -237,9 +237,15 @@ export default function MemorySettings({
   const packageReaders = useQuery({
     queryKey: queryKeys.packageReaders,
     queryFn: () =>
-      request<{ readers: Array<{ caller: string | null; lastReadAt: string; reads: number; memories: number }> }>(
-        "/settings/package-readers",
-      ),
+      request<{
+        readers: Array<{
+          caller: string | null;
+          lastReadAt: string | null;
+          reads: number;
+          memories: number;
+          added: number;
+        }>;
+      }>("/settings/package-readers"),
   });
   const availableConnections = (connections.data ?? []).filter(
     (connection) => connection.provider !== "image_generation" && connection.provider !== "video_generation",
@@ -968,47 +974,6 @@ export default function MemorySettings({
               checked={globalForm.longTermMemoryShareWithPackages}
               onChange={(value) => setGlobalForm({ ...globalForm, longTermMemoryShareWithPackages: value })}
             />
-            {packageReaders.data ? (
-              packageReaders.data.readers.length ? (
-                <table
-                  aria-label={localizeUi("ui.longTermMemory.memorysettings.otherAgentsCanReadMemories")}
-                  className="w-full text-left text-xs text-[var(--muted-foreground)]"
-                >
-                  <thead>
-                    <tr>
-                      <th scope="col" className="py-1 pr-3 font-medium">
-                        {localizeUi("ui.longTermMemory.memorysettings.otherAgentsAgent")}
-                      </th>
-                      <th scope="col" className="py-1 pr-3 font-medium">
-                        {localizeUi("ui.longTermMemory.memorysettings.otherAgentsLastRead")}
-                      </th>
-                      <th scope="col" className="py-1 pr-3 text-right font-medium">
-                        {localizeUi("ui.longTermMemory.memorysettings.otherAgentsReadsThisWeek")}
-                      </th>
-                      <th scope="col" className="py-1 text-right font-medium">
-                        {localizeUi("ui.longTermMemory.memorysettings.otherAgentsMemoriesThisWeek")}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {packageReaders.data.readers.map((reader) => (
-                      <tr key={reader.caller ?? ""}>
-                        <th scope="row" className="py-1 pr-3 font-normal">
-                          {reader.caller ?? localizeUi("ui.longTermMemory.memorysettings.anAgentWithoutAName")}
-                        </th>
-                        <td className="py-1 pr-3">{formatAge(reader.lastReadAt, locale, Date.now())}</td>
-                        <td className="py-1 pr-3 text-right tabular-nums">{reader.reads.toLocaleString(locale)}</td>
-                        <td className="py-1 text-right tabular-nums">{reader.memories.toLocaleString(locale)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <p className="text-xs text-[var(--muted-foreground)]">
-                  {localizeUi("ui.longTermMemory.memorysettings.noOtherAgentHasReadMemoriesLately")}
-                </p>
-              )
-            ) : null}
           </div>
           <Toggle
             label={localizeUi("ui.longTermMemory.memorysettings.otherAgentsCanAddMemories")}
@@ -1016,6 +981,55 @@ export default function MemorySettings({
             checked={globalForm.longTermMemoryAcceptFromPackages}
             onChange={(value) => setGlobalForm({ ...globalForm, longTermMemoryAcceptFromPackages: value })}
           />
+          {packageReaders.data ? (
+            packageReaders.data.readers.length ? (
+              <table
+                aria-label={localizeUi("ui.longTermMemory.memorysettings.otherAgentsTable")}
+                className="w-full text-left text-xs text-[var(--muted-foreground)]"
+              >
+                <thead>
+                  <tr>
+                    <th scope="col" className="py-1 pr-3 font-medium">
+                      {localizeUi("ui.longTermMemory.memorysettings.otherAgentsAgent")}
+                    </th>
+                    <th scope="col" className="py-1 pr-3 font-medium">
+                      {localizeUi("ui.longTermMemory.memorysettings.otherAgentsLastRead")}
+                    </th>
+                    <th scope="col" className="py-1 pr-3 text-right font-medium">
+                      {localizeUi("ui.longTermMemory.memorysettings.otherAgentsReadsThisWeek")}
+                    </th>
+                    <th scope="col" className="py-1 pr-3 text-right font-medium">
+                      {localizeUi("ui.longTermMemory.memorysettings.otherAgentsMemoriesThisWeek")}
+                    </th>
+                    <th scope="col" className="py-1 text-right font-medium">
+                      {localizeUi("ui.longTermMemory.memorysettings.otherAgentsMemoriesAddedThisWeek")}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {packageReaders.data.readers.map((reader) => (
+                    <tr key={reader.caller ?? ""}>
+                      <th scope="row" className="py-1 pr-3 font-normal">
+                        {reader.caller ?? localizeUi("ui.longTermMemory.memorysettings.anAgentWithoutAName")}
+                      </th>
+                      <td className="py-1 pr-3">
+                        {reader.lastReadAt
+                          ? formatAge(reader.lastReadAt, locale, Date.now())
+                          : localizeUi("ui.longTermMemory.memorysettings.otherAgentsNoReads")}
+                      </td>
+                      <td className="py-1 pr-3 text-right tabular-nums">{reader.reads.toLocaleString(locale)}</td>
+                      <td className="py-1 pr-3 text-right tabular-nums">{reader.memories.toLocaleString(locale)}</td>
+                      <td className="py-1 text-right tabular-nums">{reader.added.toLocaleString(locale)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="text-xs text-[var(--muted-foreground)]">
+                {localizeUi("ui.longTermMemory.memorysettings.noOtherAgentHasUsedMemoriesLately")}
+              </p>
+            )
+          ) : null}
         </div>
       </section>
 

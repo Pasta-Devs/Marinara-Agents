@@ -29,7 +29,7 @@ async function main() {
   );
   const { withLtmVaultLock } = await import(`${source}/persistence/vault-lock.ts`);
   const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
-  const { isLtmNoteShareable, listLtmPackageReaders, recordLtmPackageRead } = await import(
+  const { isLtmNoteShareable, listLtmPackageReaders, recordLtmPackageAdd, recordLtmPackageRead } = await import(
     `${source}/services/storage-read.ts`
   );
   const { createLtmRecallService } = await import(`${source}/services/recall.ts`);
@@ -590,10 +590,17 @@ async function main() {
         );
         await recordLtmPackageRead(recallRoot, "package_recall", "tally", 3);
         await recordLtmPackageRead(recallRoot, "package_list", "tally", 2);
+        // Log timestamps have millisecond resolution; pauses keep the read, add and later add in a known order.
+        const pause = () => new Promise((done) => setTimeout(done, 5));
+        await pause();
+        const afterTallyReads = new Date().toISOString();
+        await pause();
+        await recordLtmPackageAdd(recallRoot, "tally", 2);
         const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
-        for (const [source, memories] of [
-          ["tally", 7],
-          ["stale", 4],
+        for (const [source, phase, action, memories] of [
+          ["tally", "retrieval", "package_list", 7],
+          ["tally", "apply", "package_add", 6],
+          ["stale", "retrieval", "package_list", 4],
         ] as const)
           await appendFile(
             getLongTermMemoryDirectories(recallRoot).debugLog,
@@ -601,37 +608,49 @@ async function main() {
               id: randomUUID(),
               ts: eightDaysAgo,
               operationId: randomUUID(),
-              phase: "retrieval",
-              action: "package_list",
+              phase,
+              action,
               status: "ok",
               source,
               counts: { memories },
             })}\n`,
           );
+        await pause();
+        await recordLtmPackageAdd(recallRoot, "adder", 1);
         const readers = (await listLtmPackageReaders(recallRoot)) as Array<{
           caller: string | null;
-          lastReadAt: string;
+          lastReadAt: string | null;
           reads: number;
           memories: number;
+          added: number;
         }>;
+        const tally = readers.find((reader) => reader.caller === "tally");
         assert.deepEqual(
-          readers.find((reader) => reader.caller === "tally"),
-          { caller: "tally", lastReadAt: readers[0].lastReadAt, reads: 2, memories: 5 },
-          "a reader's week must count the reads and returned memories from the last 7 days, not an older read",
+          tally,
+          { caller: "tally", lastReadAt: tally?.lastReadAt, reads: 2, memories: 5, added: 2 },
+          "a reader's week must count the reads, returned memories and added memories from the last 7 days, not older ones",
         );
-        assert.equal(readers[0].caller, "tally", "the reader that read last must come first");
+        assert.ok(
+          tally?.lastReadAt && tally.lastReadAt < afterTallyReads,
+          "an add must not move an Agent's last read, which stays at its newest read",
+        );
+        assert.deepEqual(
+          readers[0],
+          { caller: "adder", lastReadAt: null, reads: 0, memories: 0, added: 1 },
+          "an Agent that only added memories must be listed first when it added last, with no last read",
+        );
         assert.deepEqual(
           readers.find((reader) => reader.caller === "stale"),
-          { caller: "stale", lastReadAt: eightDaysAgo, reads: 0, memories: 0 },
+          { caller: "stale", lastReadAt: eightDaysAgo, reads: 0, memories: 0, added: 0 },
           "a reader whose only read is older than 7 days must still be listed, with no reads this week",
         );
         assert.deepEqual(
-          readers.map((reader) => reader.lastReadAt),
+          readers.flatMap((reader) => (reader.lastReadAt ? [reader.lastReadAt] : [])),
           readers
-            .map((reader) => reader.lastReadAt)
+            .flatMap((reader) => (reader.lastReadAt ? [reader.lastReadAt] : []))
             .sort()
             .reverse(),
-          "readers must be ordered by their last read, newest first",
+          "readers that have reads must keep last-read order, newest first",
         );
         assert.ok(noodleRead?.sections.length, "the noodle read must return memories for the sum to mean anything");
         assert.equal(
