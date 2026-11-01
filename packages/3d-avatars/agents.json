@@ -2,7 +2,7 @@
   {
     "id": "3d-avatars",
     "name": "3D Avatars",
-    "description": "Shows your characters and personas as animated 3D models that blink, talk, and change faces with each reply. Uses VRM model files; Marinara Engine versions after 2.5.1 also take MMD PMX, GLB and FBX models.",
+    "description": "Shows your characters and personas as animated 3D models that blink, talk, and change faces with each reply. Uses VRM model files; Marinara Engine versions after 2.5.1 also take MMD PMX models and rigged GLB and FBX models.",
     "phase": "parallel",
     "enabledByDefault": false,
     "category": "misc",

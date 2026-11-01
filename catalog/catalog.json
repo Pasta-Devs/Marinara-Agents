@@ -65,7 +65,7 @@
         "id": "3d-avatars",
         "name": "3D Avatars",
         "version": "0.1.2",
-        "description": "Shows your characters and personas as animated 3D models that blink, talk, and change faces with each reply. Uses VRM model files; Marinara Engine versions after 2.5.1 also take MMD PMX, GLB and FBX models. Set up each avatar on the agent's page in Agents, then add the Agent in Chat Settings → Agents → Misc Agents for Roleplay and Game modes.",
+        "description": "Shows your characters and personas as animated 3D models that blink, talk, and change faces with each reply. Uses VRM model files; Marinara Engine versions after 2.5.1 also take MMD PMX models and rigged GLB and FBX models. Set up each avatar on the agent's page in Agents, then add the Agent in Chat Settings → Agents → Misc Agents for Roleplay and Game modes.",
         "engine": {
           "min": "2.5.0",
           "maxExclusive": "4.0.0"
@@ -79,8 +79,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "6163aacba27cb418fdb09404b8bc39c513a4c3cfc4e68ba42b944405549afec2",
-            "bytes": 541
+            "sha256": "9f2af90ad2b4a3e7b637c94d53b898f324484195be23394d586465981badb9ac",
+            "bytes": 558
           }
         ],
         "permissions": [
@@ -95,8 +95,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/3d-avatars.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/3d-avatars-0.1.2.zip",
-        "sha256": "57a5498b280868d9476d63fd3bb915c8e37f6e5c96206338ea37d6e18d1396ba",
-        "bytes": 1134
+        "sha256": "e6a628cf9722768737db5a992b17bca6476fb576d6dff5e73d7a53a57ef3c72c",
+        "bytes": 1146
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#3d-avatars"
     },
