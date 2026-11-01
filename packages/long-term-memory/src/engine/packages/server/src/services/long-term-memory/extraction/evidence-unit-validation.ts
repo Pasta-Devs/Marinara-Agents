@@ -19,7 +19,7 @@ const PLACEHOLDER_UUID = "550e8400-e29b-41d4-a716-446655440000";
 const CHARACTER_FACT_EVENT_SECTION_KEYS = new Set(["facts", "core", "profile"]);
 const CHARACTER_FACT_DURABLE_SECTION_KEYS = new Set(["developments", "abilities", "items", "voice"]);
 const EVENT_SHAPED_CHARACTER_FACT_PATTERN =
-  /\b(?:arrived|departed|entered|left|went|came|returned|walked|walking|ran|fled|attacked|fought|killed|died|met|spoke|told|asked|answered|promised|decided|agreed|refused|accepted|rejected|gave|took|found|discovered|revealed|learned|opened|closed|escaped|rescued|betrayed|confronted|warned|saved|stopped|uses?|holds?|keeps?|wears?|carries?)\b/i;
+  /\b(?:arrived|departed|entered|left|went|came|returned|walked|walking|ran|fled|attacked|fought|killed|died|met|spoke|told|asked|answered|promised|decided|agreed|refused|accepted|rejected|gave|took|found|discovered|revealed|learned|opened|closed|escaped|rescued|betrayed|confronted|warned|saved|stopped)\b/i;
 const INCIDENTAL_CHARACTER_NARRATION_PATTERN = /\b(?:met|told)\b/gi;
 const DURABLE_CHARACTER_ASSERTION_PATTERN =
   /\b(?:(?:is|are|was|were|remains?|(?:works?|serves?)\s+as)\s+(?:an?\s+|the\s+|their\s+|his\s+|her\s+|its\s+)?(?:assigned\s+)?(?:case\s+)?(?:officer|member|ally|captain|guard|leader|partner|friend|sibling|parent|doctor|lawyer|teacher|owner|resident|citizen|exoneree)\b|belongs?\s+to\b|can\s+(?:read|speak|write|understand|control|operate)\b|knows?\s+(?:how\s+to|the|a|an)\b|lives?\s+in\b)/i;
@@ -91,6 +91,8 @@ function isSourceNote(note: LtmNote) {
 
 export function riskForEvidenceUnit(unit: LtmEvidenceUnit): "low" | "medium" | "high" {
   if (unit.bucket === "relationship_state") return "medium";
+  // An event-shaped character fact holds only its own mutation for review; the rest of the draft still applies.
+  if (isEventShapedCharacterFact(unit)) return "medium";
   return "low";
 }
 

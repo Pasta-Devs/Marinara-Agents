@@ -364,6 +364,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.5.28",
+          "date": "2026-11-01",
+          "notes": "- In a hands-off mode, one memory worded like a scene action now waits in Review on its own while the rest of that batch is still saved. Everyday habits such as \"keeps\", \"carries\" or \"wears\" no longer trigger the warning.",
+          "highlight": false
+        },
+        {
           "version": "1.5.27",
           "date": "2026-11-01",
           "notes": "- Memory Settings → Sharing shows how many memories each other Agent added this week, and lists an Agent that has only added memories.",
@@ -475,12 +481,6 @@
           "version": "1.5.9",
           "date": "2026-10-29",
           "notes": "- After you turn on \"Other Agents can read memories\" and save, Memory Settings offers to turn on Slurp's \"What your other Agents know\" switch too, since Slurp's Creators need both before they use memories.",
-          "highlight": false
-        },
-        {
-          "version": "1.5.8",
-          "date": "2026-10-29",
-          "notes": "- Other Agents that read memories, such as Slurp and Noodle, can ask for whole memories instead of the parts that fit what they are writing. The same memories are shared either way.",
           "highlight": false
         }
       ]
