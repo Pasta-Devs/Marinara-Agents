@@ -721,7 +721,7 @@
         "schemaVersion": 1,
         "id": "expression",
         "name": "Expression Engine",
-        "version": "1.0.5",
+        "version": "1.0.6",
         "description": "Changes character sprites to match how they feel. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
@@ -736,8 +736,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "3b54e55b8a66525491f241824f6313376c86b528b3783a7c1576b45ee4df6ef6",
-            "bytes": 1899
+            "sha256": "2444ad1361f4cfc86092674f1bae5aa3696a2f4b133ec03ee6a4a41720cdc831",
+            "bytes": 2514
           }
         ],
         "permissions": [
@@ -752,9 +752,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/expression.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/expression-1.0.5.zip",
-        "sha256": "7bad09b42129dad0899b305fe6023ba99e8254d30b4d69cb4a188c52aafaa6ed",
-        "bytes": 1572
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/expression-1.0.6.zip",
+        "sha256": "eef50911eedf43a9c45afa2f92e2f4f435edaa5a6ee139576b990a33035a08fe",
+        "bytes": 1820
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#expression-engine"
     },
@@ -4080,7 +4080,7 @@
         },
         "id": "hierarchical-maps",
         "name": "World Maps",
-        "version": "1.7.1",
+        "version": "1.8.0",
         "description": "Adds world maps to Roleplay and Game, from whole regions down to single rooms, with art and travel between places. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
         "engine": {
           "min": "2.5.1",
@@ -4121,8 +4121,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "6a38be8b9502cca77da968620c52532a132510e70a398a0ad7e228cfdb1cb330",
-            "bytes": 441581
+            "sha256": "94f946e904c6e6570a9f6a0cdf852d132ba1b878079352dc441c883ea9b9e09b",
+            "bytes": 444643
           }
         ],
         "permissions": [
@@ -4140,9 +4140,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/hierarchical-maps.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.7.1.zip",
-        "sha256": "04b45bf0d1d90041cc61d6d40e06a19c90a84130339a6d85fbddf888d66c6a82",
-        "bytes": 581365
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.8.0.zip",
+        "sha256": "20a4f7304221ef895ce98997200b3f0e411b085d3fd3ebdf3704da305a797a78",
+        "bytes": 584427
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md"
     },
