@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- In a hands-off mode, one memory worded like a scene action now waits in Review on its own while the rest of that batch is still saved. Everyday habits such as "keeps", "carries" or "wears" no longer trigger the warning.
+
 ## 1.5.27 — 2026-11-01
 
 - Memory Settings → Sharing shows how many memories each other Agent added this week, and lists an Agent that has only added memories.

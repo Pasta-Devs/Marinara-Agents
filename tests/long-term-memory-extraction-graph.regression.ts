@@ -1074,8 +1074,26 @@ async function main() {
   const mara = { subjectId: "mara", subjectNames: ["Mara"] };
   assertEventShapedWarningKept("Mara learned to read the observatory script.", mara);
   assertEventShapedWarningKept("Mara discovered she could read the observatory script.", mara);
-  assertEventShapedWarningKept("Mara carries the observatory key.", mara);
   assertEventShapedWarningKept("Mara returned to the observatory.", mara);
+  // Habit verbs (uses, holds, keeps, wears, carries) describe lasting traits, so they raise no event-shaped warning.
+  for (const habit of ["Mara keeps a journal of every case.", "Mara carries the observatory key."]) {
+    const habitResult = compile(chat, [
+      unit(chat, {
+        bucket: "character_fact",
+        subjectId: "mara",
+        sectionKey: "facts",
+        text: habit,
+        claimKind: "static",
+        subjectNames: ["Mara"],
+      }),
+    ]);
+    assert.equal(habitResult.accounting.keptUnits, 1, habit);
+    assert.equal(
+      habitResult.diagnostics.some((diagnostic) => diagnostic.code === "event_shaped_character_fact"),
+      false,
+      habit,
+    );
+  }
 
   {
     // A name that starts with a note prefix word keeps that word in the memory's id: "Char Aznable" is
@@ -1422,12 +1440,13 @@ async function main() {
     try {
       const storage = new LongTermMemoryStorage(root);
       const reviewSourceText = "Mara learned to read the observatory script.";
+      const worldFactText = "The observatory archive keeps a cobalt ledger.";
       await storage.createNote({
         ...chat,
         id: "source_event_shaped_review",
         title: "Event-shaped review source",
         scope: reviewScope,
-        sections: { source: { text: reviewSourceText, updatedAt: timestamp } },
+        sections: { source: { text: `${reviewSourceText} ${worldFactText}`, updatedAt: timestamp } },
       } as never);
       const reviewSource = (await storage.getNote("source_event_shaped_review"))!;
       const sourceHash = sourceHashForLtmSourceNote(reviewSource);
@@ -1450,7 +1469,7 @@ async function main() {
           async chatComplete() {
             return {
               content: JSON.stringify({
-                summary: "One durable outcome.",
+                summary: "One event-shaped outcome and one durable world fact.",
                 units: [
                   {
                     bucket: "character_fact",
@@ -1467,6 +1486,20 @@ async function main() {
                     subjectNames: ["Mara"],
                     sourceHash,
                   },
+                  {
+                    bucket: "world_fact",
+                    subjectId: "cobalt_ledger",
+                    sectionKey: "facts",
+                    text: worldFactText,
+                    claimKind: "static",
+                    importance: "major",
+                    evidence: [`source_note:${reviewSource.id}`],
+                    confidence: 0.95,
+                    salience: 0.8,
+                    status: "active",
+                    links: [],
+                    sourceHash,
+                  },
                 ],
               }),
               finishReason: "stop",
@@ -1481,18 +1514,24 @@ async function main() {
         root,
         applyLowRisk: true,
       });
-      assert.equal(committed.draft.reviewRequired, true, "event-shaped character facts must require review");
+      assert.equal(committed.draft.reviewRequired, false, "an event-shaped fact must not hold the whole draft");
       assert.ok(
         committed.diagnostics.some(
           (diagnostic) => diagnostic.code === "event_shaped_character_fact" && diagnostic.severity === "warning",
         ),
         "event-shaped character facts must warn without hard-dropping",
       );
-      assert.ok(committed.draft.mutations.length > 0, "event-shaped durable outcomes must remain available for review");
+      // Applied mutations leave the draft, so what remains is exactly what is held for review.
+      assert.deepEqual(
+        committed.draft.mutations.map((mutation) => mutation.risk),
+        ["medium"],
+        "the event-shaped fact must remain pending at medium risk",
+      );
+      assert.equal(committed.appliedMutationIds.length, 1, "the low-risk world fact must still auto-apply");
       assert.equal(
-        committed.appliedMutationIds.length,
-        0,
-        "event-shaped character facts must block low-risk auto-apply",
+        committed.appliedMutationIds.includes(committed.draft.mutations[0]!.id),
+        false,
+        "the event-shaped fact must not auto-apply",
       );
     } finally {
       releaseHost();
@@ -1882,8 +1921,10 @@ async function main() {
   }
 
   {
-    // Pad diagnostics past the retained-list bound so the event-shaped warning is truncated
-    // out of the bounded array but still forces requiresReview / blocks auto-apply.
+    // Pad diagnostics past the retained-list bound so the event-shaped warning is truncated out of the
+    // bounded array. Codes that still gate the draft (borrowed identity) must force requiresReview from the
+    // full diagnostics (the `borrowed-truncated` matrix row below is that proof); the event-shaped warning
+    // holds only its own mutation.
     const padUnits = Array.from({ length: 520 }, (_, index) =>
       unit(chat, {
         bucket: "world_fact",
@@ -1931,8 +1972,8 @@ async function main() {
     );
     assert.equal(
       truncatedCompile.requiresReview,
-      true,
-      "requiresReview must be computed from full diagnostics before truncation",
+      false,
+      "an event-shaped warning holds its own mutation, not the whole draft",
     );
 
     for (const reviewSignal of ["event", "borrowed", "borrowed-truncated", "control"] as const) {
@@ -2077,7 +2118,7 @@ async function main() {
         });
         assert.equal(
           committed.draft.reviewRequired,
-          reviewSignal !== "control",
+          reviewSignal.startsWith("borrowed"),
           `${reviewSignal}: required review must block auto-apply`,
         );
         assert.equal(
@@ -2089,20 +2130,35 @@ async function main() {
           reviewSignal === "borrowed",
           `${reviewSignal}: review signal must survive even when the diagnostic is truncated`,
         );
-        assert.ok(
-          committed.draft.mutations.some((mutation) => mutation.risk === "low"),
-          "fixture must still produce an otherwise low-risk mutation",
-        );
+        if (reviewSignal !== "event") {
+          assert.ok(
+            committed.draft.mutations.some((mutation) => mutation.risk === "low"),
+            "fixture must still produce an otherwise low-risk mutation",
+          );
+        }
         assert.equal(
           committed.appliedMutationIds.length > 0,
-          reviewSignal === "control",
-          `${reviewSignal}: only the control may auto-apply`,
+          reviewSignal === "control" || reviewSignal === "event",
+          `${reviewSignal}: only the control and the event-shaped hold may auto-apply the rest`,
         );
+        if (reviewSignal === "event") {
+          // Applied mutations leave the draft, so what remains is exactly what is held for review.
+          assert.deepEqual(
+            committed.draft.mutations.map((mutation) => mutation.risk),
+            ["medium"],
+            "event: exactly the event-shaped mutation is held for review",
+          );
+          assert.equal(
+            committed.appliedMutationIds.includes(committed.draft.mutations[0]!.id),
+            false,
+            "event: the event-shaped mutation stays pending",
+          );
+        }
         // #1364: extraction schedules a recall index rebuild only when it applied mutations.
         await flushLtmIndexRebuild(root);
         assert.equal(
           (await recallIndexMtime()) !== indexBeforeExtraction,
-          reviewSignal === "control",
+          reviewSignal === "control" || reviewSignal === "event",
           `${reviewSignal}: only extraction that applied mutations may rebuild the recall index`,
         );
       } finally {

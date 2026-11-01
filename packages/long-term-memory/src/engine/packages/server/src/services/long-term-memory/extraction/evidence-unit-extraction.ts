@@ -148,8 +148,7 @@ export function diagnosticsRequireExtractionReview(diagnostics: readonly LtmExtr
       diagnostic.code === "candidate_reconciliation_ambiguous" ||
       diagnostic.code === "candidate_reconciliation_incomplete" ||
       diagnostic.code === "ambiguous_subject_identity" ||
-      diagnostic.code === "borrowed_subject_identity" ||
-      diagnostic.code === "event_shaped_character_fact",
+      diagnostic.code === "borrowed_subject_identity",
   );
 }
 
