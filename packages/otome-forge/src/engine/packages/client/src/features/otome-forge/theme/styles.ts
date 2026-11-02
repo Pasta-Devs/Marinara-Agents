@@ -2654,7 +2654,10 @@ ${R} .of-cg-img {
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%;
   transform: scale(1.04); transition: transform 1200ms var(--of-ease);
 }
-${R} .of-cg[data-intro="true"] .of-cg-img { animation: of-cg-pan 6s cubic-bezier(0.32, 0.06, 0.3, 1) both; }
+/* The pan plays from the moment the picture has loaded, together with the 6 s timer it matches (CgTakeover). */
+${R} .of-cg[data-intro="true"][data-loaded="true"] .of-cg-img {
+  animation: of-cg-pan 6s cubic-bezier(0.32, 0.06, 0.3, 1) both;
+}
 /* A CG is painted portrait (9:16, S/art/prompts.ts SCENE_SIZE). In a box wider than 2:3, such as the stage in fullscreen
    on a PC, cover would keep only a thin band of it and cut heads off (#2000), so the CG is shown whole there, over a
    blurred copy of itself so the sides are not bare. The windowed 9:16 stage and a phone keep the full-bleed cover. The

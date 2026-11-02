@@ -35,6 +35,7 @@ import { forgeChoiceMessages, forgeChoicePlanMessages } from "@forge-kit/player-
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 import { z, type ZodType } from "zod";
 import type {
+  ArcJudgment,
   Chapter,
   ChapterNode,
   LiId,
@@ -115,6 +116,13 @@ const RECENT_LEDGER = 8;
  */
 const VARIED_DECISION =
   "a different kind of decision from the recent chapters' (the irrevocable player decisions in story memory list them): not always whom the protagonist goes with, and never a choice between love interests two chapters running";
+
+/**
+ * The last node's line when its chapter may close on the arc's judgment (#2047, S/story/chapters.ts judgmentFor): the
+ * question and the answers as the arc planner wrote them, never which is true (the narrator is never told).
+ */
+const judgmentLine = ({ question, answers }: ArcJudgment) =>
+  `- The big choice MAY be a judgment the protagonist can get wrong, its own kind of decision even when the answers name love interests: "${question}" If it is, give it exactly one option per answer and no others: ${answers.map((answer) => `"${answer}"`).join(", ")}, each as the protagonist's own intent like any big choice. One of them is true; you are not told which and neither is the protagonist, so neither the scene nor the labels or selections hint which is right. Whatever the player picks is canon, and the chapters after play it out. This is optional: a different kind of big choice, or none, is just as good.`;
 
 /** P5's, P10's and P11's line on time passing (#1955): the protagonist rests and sleeps, as people do. */
 const TIME_RULE =
@@ -517,6 +525,8 @@ export interface ChapterPlanInput {
   arc?: StoryArc | null;
   /** The last main chapter's climax, for a free pick. */
   lastClimax?: ClimaxKind | null;
+  /** This chapter's end may close on the arc's judgment (#2047, judgmentFor): only that, never its question or truth. */
+  judgment?: boolean;
 }
 
 export function chapterPlanMessages({
@@ -530,6 +540,7 @@ export function chapterPlanMessages({
   climax = null,
   lastClimax = null,
   arc: plannedArc = null,
+  judgment = false,
 }: ChapterPlanInput): OtomeMessage[] {
   const leadUnit = units.find((unit) => unit.id === lead);
   const others = units.filter((unit) => unit.id !== lead);
@@ -565,6 +576,12 @@ export function chapterPlanMessages({
       : `- Choose the climax the story calls for: open grievances and strain lean toward a confrontation, trust and calm toward a closer.${lastClimax ? ` The last main chapter ended with a ${lastClimax}.` : ""}`,
     "- The Lead is in most nodes and in the climax; the Foil appears in at least one node. The Foil's goal competes with the protagonist's or the Lead's, and not always for the protagonist: a rivalry over a goal, a secret, a duty or the mystery counts too.",
     `- Never plan a chapter on the template of the ones before it: vary what drives it and where its turn falls. When its last node leaves a lasting decision open, make it ${VARIED_DECISION}.`,
+    // #2047: a climax-last plan has no big choice at its end, so it could never close on the judgment.
+    ...(judgment
+      ? [
+          "- This chapter's end may close on a judgment the protagonist can get wrong (the narrator decides; it is optional): put the climax second-to-last, so the last node can hold a big choice.",
+        ]
+      : []),
     "- The world has other people: give named minor characters (friends, family, rivals, officials, locals) real parts where the story calls for them; they speak and can matter. Not every node needs a love interest: the protagonist has a life of their own, and a node may be theirs alone or with others (cast []). A moment node and the climax always have their love interest in cast.",
     "- No cap on the cast: when the beat needs everyone (a rescue, a party, a confrontation), a node may hold the whole cast, each with their own stake.",
     TIME_RULE,
@@ -810,7 +827,10 @@ export function beatMessages({
     "- Stay within this node's guide; do not skip ahead to later nodes.",
     // A planned chapter's last node; the prologue offers its own choices, and a date never ends on a big one.
     ...(last && !date && chapter.kind !== "prologue"
-      ? [`- This is the chapter's last node: if it ends on a big choice, make it ${VARIED_DECISION}.`]
+      ? [
+          `- This is the chapter's last node: if it ends on a big choice, make it ${VARIED_DECISION}.`,
+          ...(node.judgment ? [judgmentLine(node.judgment)] : []),
+        ]
       : []),
     `- Write every segment's text and every place name in ${world.language}; tags${node.cg ? " and the cg brief" : ""} in English.`,
     "",

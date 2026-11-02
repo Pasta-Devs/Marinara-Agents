@@ -34,14 +34,15 @@ export type SlurpImageCompanionCard = {
  * A companion in the picture brings their card picture, after the Creator's own (at most 6). Only the
  * ones Slurp found in the scene, the same ones that get a look and lift the one-person rule, and asked
  * for by name (0.3.47, player report): the Engine's own prompt match misses a tag-order name
- * ("ryuuzaki umi" for "Umi Ryuuzaki").
+ * ("ryuuzaki umi" for "Umi Ryuuzaki"). A Creator with no picture of their own still sends the companion's
+ * (0.4.16, player report): without it the image model drew the companion as a clone of the Creator.
  */
 export async function slurpCompanionReferenceImages(
   characters: Parameters<typeof resolveIllustratorCharacterReferences>[0]["charactersStore"],
   inPicture: readonly SlurpImageCompanionCard[],
   prompt: string,
-  own: string[],
-): Promise<string[]> {
+  own: string[] | undefined,
+): Promise<string[] | undefined> {
   const refs = inPicture.filter((companion) => companion.card);
   if (refs.length === 0) return own;
   const resolution = await resolveIllustratorCharacterReferences({
@@ -54,5 +55,6 @@ export async function slurpCompanionReferenceImages(
   });
   const named = new Set(refs.map((companion) => companion.name));
   const extra = resolution.referenceImages.filter((_, index) => named.has(resolution.referenceNames[index] ?? ""));
-  return Array.from(new Set([...own, ...extra])).slice(0, 6);
+  // No pictures at all stays undefined, so the provider sees no empty reference list.
+  return own?.length || extra.length ? Array.from(new Set([...(own ?? []), ...extra])).slice(0, 6) : own;
 }

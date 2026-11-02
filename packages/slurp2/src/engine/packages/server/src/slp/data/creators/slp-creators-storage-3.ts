@@ -1,4 +1,5 @@
 import { deleteSlurpThreadMessageDeepDetails } from "../messages/slp-message-deep-details-storage.js";
+import { PROFESSOR_MARI_ID } from "@marinara-engine/shared";
 import { slurpIsCouplePage } from "../../modules/projects/slp-creator-couples.js";
 import { and, desc, eq, inArray, or } from "../../../db/file-query.js";
 import { deleteSlurpCreatorPlanningRows } from "../continuity/slp-continuity-storage.js";
@@ -296,7 +297,10 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
                 ? appearanceEvidenceFromSource(currentSource, publicAccount.entityId)
                 : null,
           });
-          const baseline = account.settings.profile.noodlerSourceSnapshot;
+          // The Engine rewrites Professor Mari's built-in card on its own updates, and the player cannot
+          // act on that: her page follows her card instead of asking for attention.
+          const engineOwned = publicAccount?.kind === "character" && publicAccount.entityId === PROFESSOR_MARI_ID;
+          const baseline = engineOwned ? undefined : account.settings.profile.noodlerSourceSnapshot;
           return {
             id: account.id,
             sourceAccountId: account.sourceEntityId,
@@ -322,7 +326,7 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
                     ? "derived"
                     : "missing",
               text: appearance.text ?? "",
-              needsReview: appearance.needsReview,
+              needsReview: appearance.needsReview && !engineOwned,
               linkedAppearance: currentSource?.appearance ?? "",
               imageAppearance: publicAccount ? await resolveCreatorImageAppearance(db, publicAccount) : "",
               profile: appearance.profile,

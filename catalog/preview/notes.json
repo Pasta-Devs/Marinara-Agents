@@ -72,6 +72,30 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.6.23",
+          "date": "2026-11-02",
+          "notes": "- **Chibi stickers.** With images on, your five phone stickers are chibi busts of your protagonist, and each love interest gets nine of their own, one unlocked per affection level from 2 to 10 (\"You unlocked a new sticker\"). They're painted in the background, one at a time, and Ask before painting holds them for a tap; stories in progress catch up. Without images your five are simple labelled icons.\n- **Love interests send stickers too**, theirs or yours, by name in brackets, like `[dottore_pensive]`. Old face stickers still show.\n- **A Stickers tab in the Album** to view and save each sticker, named like `mari_laugh`.\n- **Messages a day from love interests**: in Settings → Connections, choose how many times a day one you've met may message you first (0 to 24, off by default). They're spread across your day and arrive unread.\n- **A love interest's thread header fits on one row on phones**, with **Close** beside their name.",
+          "highlight": false
+        },
+        {
+          "version": "0.6.21",
+          "date": "2026-11-02",
+          "notes": "- **A chapter may close on a judgment you can get wrong.** When an arc holds a mystery, a traitor or a disputed account, the end of a chapter can now ask you to judge it: who did it, who betrayed you, whom to believe. The true answer is always among the options, nothing hints which it is, and whatever you pick is what happens; a wrong guess plays out in the chapters after it. Arcs without such a question never get one.",
+          "highlight": false
+        },
+        {
+          "version": "0.6.20",
+          "date": "2026-11-02",
+          "notes": "- **A line under new scene art types out after the art appears.** When a scene's art arrives, the line in the dialogue box now waits until the picture has loaded and its reveal has finished, then types from the start, so you no longer find it already complete and scrolled to the end on phones.",
+          "highlight": false
+        },
+        {
+          "version": "0.6.19",
+          "date": "2026-11-02",
+          "notes": "- **\"What happened so far…\" reads as a recollection of your story.** It now tells what has happened so far in story order, with the choices you made woven in, instead of notes about your persona, a summary per chapter and bold labels. Stories already in progress rewrite it in the background the next time Otome Hearth writes; nothing you played is changed.",
+          "highlight": false
+        },
+        {
           "version": "0.6.18",
           "date": "2026-11-02",
           "notes": "- **\"What happened so far…\" while a chapter is planned.** Planning a new chapter (and a route, repair or extra story chapter) now shows the story's running summary to read while you wait. It scrolls on its own and appears once the first summary is ready.\n- **Who said what? while a scene is written.** Tap **Play Who said what?** under \"Writing the next scene…\" to guess which love interest said a line from the chapters you've read. It's optional, makes no model calls, saves nothing, and steps aside the moment the scene is ready.\n- **Keyboard focus on quotes.** The quoted line in the Wardrobe and in Who said what? now shows where keyboard focus is.",
@@ -165,30 +189,6 @@
           "version": "0.6.3",
           "date": "2026-10-31",
           "notes": "- Date Night offers your Wardrobe looks: pick any painted look either of you owns, 4★ and 5★ alike. The date's scenes, key images and keepsake dress you both in them, and they stay on afterwards.\n- The story now knows how each love interest looks: their Image appearance and the look they wear. Fixing their Image appearance changes how the story describes them from the next scene on, not only their pictures.\n- On a phone, the date's keepsake card no longer squeezes its title and **Paint the keepsake** button into columns.",
-          "highlight": false
-        },
-        {
-          "version": "0.6.2",
-          "date": "2026-10-31",
-          "notes": "- After a love interest's finale, the story no longer assumes they already confessed: if you eased off before the words came, they can still say it later.",
-          "highlight": false
-        },
-        {
-          "version": "0.6.1",
-          "date": "2026-10-30",
-          "notes": "- **Banned phrases** in Settings → Content: type the words and phrases you never want to read, separated by commas or one per line, and every scene, message and note avoids them.\n- Love interests no longer stop an intimate scene to check in or offer to stop, sex included. Ease off is still yours.\n- Your protagonist takes a moment to sit with what matters to them, a first kiss, a night together, a quarrel, a secret learned, in thoughts in their own voice, with their doubts and hopes showing, before the story moves on.\n- **Slow burn:** through a love interest's first two stages, neither of you says what you feel. From the third stage they may confess once the story has earned it, and by their route's finale at the latest. Desire can still come first, as your Heat allows.\n- Under NSFW: Explicit, sex scenes are no longer rushed: they take the room they need, from the build-up to the aftermath, with the characters talking, asking for what they want and saying what they feel along the way.",
-          "highlight": false
-        },
-        {
-          "version": "0.6.0",
-          "date": "2026-10-30",
-          "notes": "- Each love interest has their own Claw Machine plush: the animal that fits them best, in their colours (a cyan raven with red eyes, a black cat with violet eyes). Your Planning model draws it once, in the background, the first time you open Dates. Until then their plush wears their look, as before.",
-          "highlight": true
-        },
-        {
-          "version": "0.5.3",
-          "date": "2026-10-30",
-          "notes": "- Your protagonist knows only what the story has shown them: love interests no longer talk as if you already know their past, their habits or the words of their world, and a newcomer learns this world as they go.\n- A story set in an existing world, such as Teyvat from Genshin Impact, stays that world and keeps its canon.\n- Chapters make room for other people, scenes without a love interest, and rest or sleep after a long day.",
           "highlight": false
         }
       ]

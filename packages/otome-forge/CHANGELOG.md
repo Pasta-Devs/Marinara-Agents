@@ -1,12 +1,24 @@
 # Otome Hearth release notes
 
-## 0.6.19 — 2026-11-02 [highlight]
+## 0.6.23 — 2026-11-02
 
-- **Chibi stickers.** With images on, your five phone stickers are chibi busts of your protagonist, and each love interest gets nine of his own, one unlocked per affection level from 2 to 10 ("You unlocked a new sticker"). They're painted in the background, one at a time, and Ask before painting holds them for a tap; stories in progress catch up. Without images your five are simple labelled icons.
-- **He sends stickers too**, his or yours, by name in brackets, like `[dottore_pensive]`. Old face stickers still show.
+- **Chibi stickers.** With images on, your five phone stickers are chibi busts of your protagonist, and each love interest gets nine of their own, one unlocked per affection level from 2 to 10 ("You unlocked a new sticker"). They're painted in the background, one at a time, and Ask before painting holds them for a tap; stories in progress catch up. Without images your five are simple labelled icons.
+- **Love interests send stickers too**, theirs or yours, by name in brackets, like `[dottore_pensive]`. Old face stickers still show.
 - **A Stickers tab in the Album** to view and save each sticker, named like `mari_laugh`.
 - **Messages a day from love interests**: in Settings → Connections, choose how many times a day one you've met may message you first (0 to 24, off by default). They're spread across your day and arrive unread.
-- **His thread's header fits on one row on phones**, with **Close** beside his name.
+- **A love interest's thread header fits on one row on phones**, with **Close** beside their name.
+
+## 0.6.21 — 2026-11-02
+
+- **A chapter may close on a judgment you can get wrong.** When an arc holds a mystery, a traitor or a disputed account, the end of a chapter can now ask you to judge it: who did it, who betrayed you, whom to believe. The true answer is always among the options, nothing hints which it is, and whatever you pick is what happens; a wrong guess plays out in the chapters after it. Arcs without such a question never get one.
+
+## 0.6.20 — 2026-11-02
+
+- **A line under new scene art types out after the art appears.** When a scene's art arrives, the line in the dialogue box now waits until the picture has loaded and its reveal has finished, then types from the start, so you no longer find it already complete and scrolled to the end on phones.
+
+## 0.6.19 — 2026-11-02
+
+- **"What happened so far…" reads as a recollection of your story.** It now tells what has happened so far in story order, with the choices you made woven in, instead of notes about your persona, a summary per chapter and bold labels. Stories already in progress rewrite it in the background the next time Otome Hearth writes; nothing you played is changed.
 
 ## 0.6.18 — 2026-11-02
 
