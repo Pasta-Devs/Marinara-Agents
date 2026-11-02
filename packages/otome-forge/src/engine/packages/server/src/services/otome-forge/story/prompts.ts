@@ -116,14 +116,6 @@ const RECENT_LEDGER = 8;
 const VARIED_DECISION =
   "a different kind of decision from the recent chapters' (the irrevocable player decisions in story memory list them): not always whom the protagonist goes with, and never a choice between love interests two chapters running";
 
-/**
- * The last node's line on big choices the player can get wrong (#2047). The narrator never sees the mystery's truth, so
- * it offers every answer the clues support (the true one among them); the arc, which knows the truth, plays out a
- * wrong guess in the chapters after it.
- */
-const JUDGMENT_DECISION =
-  "A big choice may also be a judgment the protagonist can get wrong: solving the mystery, naming a traitor or a culprit, deciding whom to believe. Offer every answer the story's clues so far support, so the true one is among them, alongside believable wrong ones, and never hint which is right. Whatever the player picks is canon; a wrong guess plays out in the chapters after it.";
-
 /** P5's, P10's and P11's line on time passing (#1955): the protagonist rests and sleeps, as people do. */
 const TIME_RULE =
   "- Time passes as in a life: the protagonist eats, rests and sleeps. When a chapter runs through a night, a long day or an exhausting stretch, give a node, or part of one, to rest: settling down, sleep, waking up. It may be shared or interrupted.";
@@ -818,10 +810,7 @@ export function beatMessages({
     "- Stay within this node's guide; do not skip ahead to later nodes.",
     // A planned chapter's last node; the prologue offers its own choices, and a date never ends on a big one.
     ...(last && !date && chapter.kind !== "prologue"
-      ? [
-          `- This is the chapter's last node: if it ends on a big choice, make it ${VARIED_DECISION}.`,
-          `- ${JUDGMENT_DECISION}`,
-        ]
+      ? [`- This is the chapter's last node: if it ends on a big choice, make it ${VARIED_DECISION}.`]
       : []),
     `- Write every segment's text and every place name in ${world.language}; tags${node.cg ? " and the cg brief" : ""} in English.`,
     "",

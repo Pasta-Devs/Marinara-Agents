@@ -3,7 +3,6 @@
 ## 0.6.19 — 2026-11-02
 
 - **"What happened so far…" reads as a recollection of your story.** It now tells what has happened so far in story order, with the choices you made woven in, instead of notes about your persona, a summary per chapter and bold labels. Stories already in progress rewrite it in the background the next time Otome Hearth writes; nothing you played is changed.
-- **A chapter's closing decision can be a judgment you might get wrong:** solving the mystery, naming a traitor, deciding whom to believe. The right answer is always among the options, and a wrong guess plays out in the chapters after it.
 
 ## 0.6.18 — 2026-11-02
 

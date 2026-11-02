@@ -229,12 +229,6 @@ test("moment nodes are written as beats with their framing; a confrontation node
   assert.match(prompt(6), /the chapter's last/);
   assert.match(prompt(6), /ONE BIG choice/, "the last node may end on a big choice");
   assert.doesNotMatch(prompt(5), /ONE BIG choice/);
-  // #2047: on the last node only, a big choice may be a judgment the player can get wrong, the true answer offered.
-  const judgment =
-    "A big choice may also be a judgment the protagonist can get wrong: solving the mystery, naming a traitor";
-  assert.ok(prompt(6).includes(judgment), "the last node may offer a judgment the player can get wrong");
-  assert.ok(prompt(6).includes("so the true one is among them"), "the true answer is always one of the options");
-  assert.ok(!prompt(5).includes(judgment), "never before the last node");
   // #1949: the closing decision differs from the recent ones, in the plan and on the last node only.
   const varied =
     "not always whom the protagonist goes with, and never a choice between love interests two chapters running";
