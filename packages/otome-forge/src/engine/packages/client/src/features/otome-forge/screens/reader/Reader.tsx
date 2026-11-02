@@ -8,7 +8,8 @@
 // chapter (its next scene, or its gate's end): the reader says with whom, and leads back to the story to make it right.
 // M2b: a painted story CG takes over the stage when its line comes (components/CgTakeover.tsx); the beat's music cue
 // plays and each spoken line is voiced (hooks/use-otome-audio.ts), and Auto waits for the voice. Everything works the
-// same with no image, music or voice connection.
+// same with no image, music or voice connection. While a scene is written, Who said what? may be played under the
+// panel (#2041, WhoSaidWhat.tsx).
 // ──────────────────────────────────────────────
 import {
   useCallback,
@@ -62,6 +63,7 @@ import { EaseOffDialog } from "./EaseOffDialog";
 import { FACE_LABEL_KEYS, FacePlate, QuietCg } from "./FacePlate";
 import { ReaderControls } from "./ReaderControls";
 import { SpeakerPlate, useSpeakerSprite } from "./SpeakerPlate";
+import { WhoSaidWhat } from "./WhoSaidWhat";
 import { stageNameKey } from "../story/StoryHome";
 
 interface ReaderProps {
@@ -678,26 +680,31 @@ function BottomPanel(props: BottomPanelProps) {
   }
   if (!beat || !current || !props.voice || load?.status !== "ready") {
     const writing = load?.status === "loading" && load.writing;
+    // Who said what? comes after the panel, so focus that falls back into the reader lands on Cancel, never on the
+    // game; the game goes the moment the scene is ready.
     return (
-      <section className="of-reader-panel of-writing of-glass of-glass--strong" role="status">
-        <span className="of-quill" aria-hidden="true">
-          <Feather size={22} strokeWidth={1.7} />
-        </span>
-        <p className="of-section-title">
-          {writing ? t("ui.otomeForge.reader.writing") : t("ui.otomeForge.reader.opening")}
-        </p>
-        {writing ? <p className="of-hint">{t("ui.otomeForge.reader.writingHint")}</p> : null}
-        {writing ? (
-          <button
-            type="button"
-            className="of-button of-button--quiet of-glass of-button--small"
-            onClick={() => void reader.cancel()}
-          >
-            <X size={15} strokeWidth={2} aria-hidden="true" />
-            {t("ui.otomeForge.reader.cancel")}
-          </button>
-        ) : null}
-      </section>
+      <>
+        <section className="of-reader-panel of-writing of-glass of-glass--strong" role="status">
+          <span className="of-quill" aria-hidden="true">
+            <Feather size={22} strokeWidth={1.7} />
+          </span>
+          <p className="of-section-title">
+            {writing ? t("ui.otomeForge.reader.writing") : t("ui.otomeForge.reader.opening")}
+          </p>
+          {writing ? <p className="of-hint">{t("ui.otomeForge.reader.writingHint")}</p> : null}
+          {writing ? (
+            <button
+              type="button"
+              className="of-button of-button--quiet of-glass of-button--small"
+              onClick={() => void reader.cancel()}
+            >
+              <X size={15} strokeWidth={2} aria-hidden="true" />
+              {t("ui.otomeForge.reader.cancel")}
+            </button>
+          ) : null}
+        </section>
+        {writing ? <WhoSaidWhat runKey={view.runKey} lis={view.lis} /> : null}
+      </>
     );
   }
 

@@ -20,6 +20,8 @@
 // POST /runs/:run/cancel                                       → {ok}
 // POST /runs/:run/favorites {text, ref, li?, keep?}            → {favorites}; keeps the line (keep: false lets it go),
 //                                                                 so sending it twice changes nothing
+// GET  /runs/:run/who-said-what                                → WhoSaidWhatView (#2041, S/minigames/who-said-what.ts):
+//                                                                 no model call, no write
 // Writing a plan or a beat may fail with 503 `no-connection`, 422 `declined` (nothing is written) or 502
 // `bad-format`; a Cancel while it runs is a 409 `conflict`; a beat of a route chapter while a rupture stands is a 409
 // `locked`. Hidden parts (node guides, the ledger, effects, trust and tension, a confrontation's composure and the
@@ -48,6 +50,7 @@ import { chapterDetail, planNextChapter, startArc, storyView } from "../story/ch
 import { ARC_CHOICES, toArcView } from "../schemas/story-arc.js";
 import { ensurePrologue } from "../story/prologue.js";
 import { introduceLoveInterest } from "../story/introduce.js";
+import { whoSaidWhat } from "../minigames/who-said-what.js";
 
 const NextBody = z.object({ lead: z.string().min(1).max(80) });
 const ArcBody = z.object({
@@ -119,6 +122,11 @@ export const registerStoryRoutes: RegisterRoutes = (router, deps) => {
   router.get(
     "/runs/:run/story",
     handle(async (request) => storyView(deps, runParam(request).runId)),
+  );
+
+  router.get(
+    "/runs/:run/who-said-what",
+    handle(async (request) => whoSaidWhat(deps, runParam(request).runId)),
   );
 
   router.post(

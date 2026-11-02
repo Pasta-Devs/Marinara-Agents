@@ -1285,6 +1285,8 @@ ${R} .of-show-line .of-avatar--hero { width: 84px; height: 84px; font-size: 2rem
 ${R} .of-show-who { font-family: var(--of-font-display); font-weight: 600; font-size: 1.2rem; }
 ${R} .of-show-text { font-family: var(--of-font-display); font-style: italic; font-size: 1.22rem; line-height: 1.35; }
 ${R} .of-show-text:focus { outline: none; }
+/* The quote takes focus after the player's own press (Wardrobe, Who said what?): a keyboard player still sees where. */
+${R} .of-show-text:focus-visible { outline: 2px solid var(--of-focus); outline-offset: 3px; border-radius: 6px; }
 
 /* The Album. */
 ${R} .of-album-cgs {
@@ -1523,7 +1525,18 @@ ${R} .of-candidate-level {
   display: inline-flex; align-items: center; gap: 4px; font-size: 0.74rem; font-weight: 800; color: var(--of-accent-text);
 }
 ${R} .of-candidate-reason { font-size: 0.82rem; line-height: 1.35; font-style: italic; color: var(--of-text-soft); }
-${R} .of-planning { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 0; text-align: center; }`;
+${R} .of-planning { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 0; text-align: center; }
+/* "What happened so far…" while a chapter is planned (#2040): it scrolls on its own, and on a short screen it gives up
+   its height first (down to about three lines), so the status and Cancel stay on screen. */
+${R} .of-dialog-body:has(> .of-so-far) { min-height: 0; }
+${R} .of-so-far { display: flex; flex-direction: column; gap: 6px; min-height: 0; text-align: start; }
+${R} .of-so-far-text {
+  min-height: 6.6em; max-height: 16rem; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
+  scrollbar-color: var(--of-border-strong) transparent; padding: 10px 12px; border-radius: 14px;
+  border: 1px solid var(--of-border); background: var(--of-surface-hover); color: var(--of-text);
+  font-size: 0.92rem; line-height: 1.55; overflow-wrap: anywhere;
+}
+${R} .of-so-far-text > p + p { margin-top: 0.7em; }`;
 
 // Moods: each music cue's scene, until M2b paints places. Midnight's are deep; Pearl's are light.
 const MOODS: Record<Look, Record<string, string>> = {
@@ -1868,6 +1881,18 @@ ${R} .of-reader-panel {
   text-align: center;
 }
 ${R} .of-reader-panel .of-body { max-width: 36ch; }
+/* Who said what? (#2041) under the writing panel: it scrolls on its own when the bottom third runs out of room, and
+   while it plays the panel keeps only its title and Cancel. */
+${R} .of-wsw {
+  gap: 8px; min-height: 0; max-height: 62cqh; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
+  scrollbar-color: var(--of-border-strong) transparent;
+}
+${R} .of-wsw-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 4px 10px; }
+${R} .of-wsw-line { margin: 0; font-size: 1.1rem; overflow-wrap: anywhere; }
+${R} .of-wsw-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+${R} .of-wsw-choices > li { display: flex; min-width: 0; }
+${R} .of-wsw-play { align-self: center; }
+${R} .of-reader-bottom:has(.of-wsw) .of-writing :is(.of-quill, .of-hint) { display: none; }
 ${R} .of-quill {
   display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%; color: var(--of-accent-text);
   background: var(--of-tint); animation: of-write 1.8s ease-in-out infinite;

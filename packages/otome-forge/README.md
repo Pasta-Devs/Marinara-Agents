@@ -348,6 +348,7 @@ These never call a model or paint anything. With voices on, their lines are voic
 - Remind Me and the period tracker;
 - **Keep it off the model**;
 - browsing the Album, Echoes and the Wardrobe;
+- **What happened so far…** while a chapter is planned, and **Who said what?** while a scene is written;
 - claiming with a Memory Selector (opening the Memory afterwards costs what any first open does);
 - cut-outs (a love interest without the backdrop), which are the Engine's own sprite cleanup.
 

@@ -10,7 +10,9 @@
 // pick whose effects were lost lands when its beat is read; Ease off removes the lookahead on a retry, when the
 // lookahead is saved just after the cut, and when the cut lands between the lookahead's reads of the beat it follows;
 // a pick past the cut changes nothing, also when the cut lands while the pick is saved; an Ease off before a saved
-// pick keeps the pick; and a kept line is kept once.
+// pick keeps the pick; and a kept line is kept once. Who said what? (#2041) asks only a love interest's own spoken
+// lines of what was played in completed chapters (never an option or stance not taken, the prologue, an extra story or
+// a chapter still being read or written), each once, and hides with fewer than two love interests or too few lines.
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CapabilityLanguageModelMessage } from "@marinara-engine/shared";
@@ -20,6 +22,7 @@ import type {
   Beat,
   Chapter,
   ChapterNode,
+  Segment,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import type { NotebookEntry } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/read-me.ts";
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
@@ -30,6 +33,10 @@ import {
   createOtomeMemory,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/memory.ts";
 import { readMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/sources.ts";
+import {
+  WHO_SAID_WHAT_BATCH,
+  pickWhoSaidWhat,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/minigames/who-said-what.ts";
 import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
 import { normalizeState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import {
@@ -855,11 +862,11 @@ async function memorySettled(memory: ReturnType<typeof createOtomeMemory>, runId
   return (await memory.status(runId)).phase;
 }
 
-/** A chapter of one node, completed at `completed` with `text` as its one line (or its lines). */
+/** A chapter of one node, completed at `completed` with `text` as its one line (or its lines; a string is narration). */
 async function completeChapter(
   t: Awaited<ReturnType<typeof storyWorld>>,
   changes: Partial<Chapter> & Pick<Chapter, "key" | "kind" | "lead" | "title">,
-  text: string | string[],
+  text: string | Array<string | Segment>,
   completed: string,
 ) {
   const chapter: Chapter = {
@@ -877,7 +884,7 @@ async function completeChapter(
     i: 0,
     kind: "beat",
     places: [],
-    segments: [text].flat().map((line) => ({ speaker: "", text: line })),
+    segments: [text].flat().map((line) => (typeof line === "string" ? { speaker: "", text: line } : line)),
     choices: [],
     choiceCanon: {},
     effects: {},
@@ -897,6 +904,9 @@ async function completeChapter(
 /** How the story names Kai's date "Jellyfish Hour" (S/story/canon.ts titleOf). */
 const KAI_DATE =
   'Kai\'s own date chapter "Jellyfish Hour" (private: only the people in its scenes know what happened in it)';
+
+/** Sol's one line in chapter 1 (node 3), for Who said what?. */
+const SOL_SAID: Segment = { speaker: "Sol", text: "SOL-SAID: the pier lights fail one by one." };
 
 test("only what was played reaches a prompt: the previous chapter in full, its memory and summary, its decisions", async () => {
   const option = (text: string, said: string, branch?: string) => ({
@@ -932,15 +942,29 @@ test("only what was played reaches a prompt: the previous chapter in full, its m
               },
             ],
           })
-        : beatReply();
+        : i === 3
+          ? beatReply({ segments: [...beatReply().segments, SOL_SAID] })
+          : beatReply();
+  /** A line the next scene adds while it is written (the chapter in progress). */
+  let writing: Segment | null = null;
   const replies = Array.from({ length: 80 }, () => (messages: CapabilityLanguageModelMessage[]) => {
     if (system(messages).includes(SUMMARY_WORDING)) return markerSummary(messages);
-    if (isConfrontationPrompt(messages)) return json(confrontationReply());
+    if (isConfrontationPrompt(messages)) {
+      // Each stance's answer long enough for Who said what?, so only the canon keeps the ones not taken out of it.
+      const reply = confrontationReply();
+      for (const round of reply.rounds) {
+        for (const option of Object.values(round.options) as Array<{ segments: Segment[] }>) {
+          option.segments[0]!.text += ", and the lamp keeps turning.";
+        }
+      }
+      return json(reply);
+    }
     const number = Number(/main chapter (\d+)/.exec(messages.at(-1)!.content)?.[1] ?? 1);
     if (isPlanner(messages)) {
       return json(planReply({ title: `Night ${number}`, ledger: { relationship: [], conflict: [], offscreen: [] } }));
     }
-    return json(played(Number(/Narrate node (\d+) of/.exec(messages.at(-1)!.content)?.[1] ?? 1) - 1));
+    const reply = played(Number(/Narrate node (\d+) of/.exec(messages.at(-1)!.content)?.[1] ?? 1) - 1);
+    return json(writing ? { ...reply, segments: [...reply.segments, writing] } : reply);
   });
   const t = await storyWorld({ runKey: "r-played-aaaaaa", replies });
   const memory = createOtomeMemory({ runtime: t.runtime, store: t.store });
@@ -1000,6 +1024,31 @@ test("only what was played reaches a prompt: the previous chapter in full, its m
     );
     check("the summary's source", detail?.messages.at(-1)!.content);
 
+    // Who said what? (#2041): the love interests' own spoken lines of what was played, each once.
+    const game = async (params: Record<string, string> = {}) => {
+      const served = await t.call("GET", "/runs/:run/who-said-what", {}, params);
+      assert.equal(served.status, 200, JSON.stringify(served.body));
+      return served.body as { choices: string[]; lines: Array<{ li: string; text: string }> };
+    };
+    const asked = await game();
+    assert.deepEqual(asked.choices, [KAI, SOL], "the love interests who spoke, in cast order");
+    const texts = asked.lines.map((entry) => entry.text);
+    const by = (start: string) => asked.lines.filter((entry) => entry.text.startsWith(start)).map((entry) => entry.li);
+    assert.deepEqual(by("KEPT-BRANCH"), [KAI], "a picked option's branch");
+    assert.deepEqual(by("ANSWER-hold-3"), [KAI], "the stance taken");
+    assert.deepEqual(by("ENDING-STANDOFF"), [], "narration");
+    assert.deepEqual(by(SOL_SAID.text), [SOL]);
+    assert.deepEqual(by("You came back."), [KAI], "once, though every scene says it");
+    assert.deepEqual(
+      UNPLAYED.filter((marker) => texts.some((text) => text.includes(marker))),
+      [],
+      "nothing that was not played",
+    );
+    for (const never of ["KEPT-SAY", "KEPT-BIG-SAY", "The lamp hisses.", "Someone had to.", "Say it, then."]) {
+      assert.ok(!texts.some((text) => text.includes(never)), `${never} is the protagonist's, narration or too short`);
+    }
+    assert.equal((await t.call("GET", "/runs/:run/who-said-what", {}, { run: "r-nothing-zzzzzz" })).status, 404);
+
     assert.equal((await t.call("POST", "/runs/:run/chapters/next", { lead: KAI })).status, 200);
     const planner = t.calls
       .filter((call) => isPlanner(call.messages))
@@ -1016,9 +1065,194 @@ test("only what was played reaches a prompt: the previous chapter in full, its m
       [],
       "nothing that was not played anywhere in the next chapter's plan",
     );
+
+    // The chapter being written is never asked from: chapter 2's first scene has a new line, and the game is the same.
+    writing = { speaker: "Sol", text: "IN-PROGRESS: the pier bell rings for the chapter being written." };
+    assert.equal((await t.call("POST", beatPath, {}, { key: "main-2", i: "0" })).status, 200);
+    const scene = await t.store.readDoc(beatId(t.runId, "main-2", 0), normalizeBeat);
+    assert.ok(
+      scene?.segments.some((segment) => segment.text === writing!.text),
+      "the new line is in its scene",
+    );
+    const shown = (view: typeof asked) => new Set(view.lines.map((entry) => `${entry.li} ${entry.text}`));
+    assert.deepEqual(shown(await game()), shown(asked));
+    await t.settle();
   } finally {
     memory.dispose();
   }
+});
+
+test("Who said what? asks only from completed chapters: never the prologue, an extra story or one still being read", async () => {
+  const t = await storyWorld({ runKey: "r-asked-aaaaaa" });
+  const said = (marker: string, ...speakers: string[]): Segment[] =>
+    speakers.map((speaker, n) => ({ speaker, text: `${marker}-${n + 1}: the harbour keeps its lanterns lit.` }));
+  const done = (hour: number) => `2026-10-28T${String(hour).padStart(2, "0")}:00:00.000Z`;
+  await completeChapter(
+    t,
+    { key: "prologue", kind: "prologue", lead: KAI, title: "Prologue" },
+    said("PROLOGUE", "Kai", "Sol"),
+    done(9),
+  );
+  await completeChapter(
+    t,
+    { key: "main-1", kind: "main", number: 1, lead: KAI, title: "Night 1" },
+    said("MAIN", "Kai", "Sol", "Kai", "Sol", "Kai"),
+    done(10),
+  );
+  await completeChapter(
+    t,
+    { key: "date-1", kind: "date", li: SOL, lead: SOL, title: "The Pier" },
+    said("DATE", "Sol"),
+    done(11),
+  );
+  await completeChapter(
+    t,
+    {
+      key: `prestige-${KAI}-1`,
+      kind: "story",
+      li: KAI,
+      lead: KAI,
+      title: "A Quiet Life",
+      prestige: { kind: "what-if", premise: "They keep a lighthouse together." },
+    },
+    said("PRESTIGE", "Kai", "Sol"),
+    done(12),
+  );
+  // A completed chapter whose canon is not settled is left out whole, as the memory leaves it out: one with a scene
+  // missing, and one whose second scene still waits on a big choice.
+  const twoScenes = [0, 1].map((i) => ({ i, kind: "beat" as const, guide: "The scene.", cast: [KAI] }));
+  for (const [key, marker] of [
+    ["date-2", "MISSING"],
+    ["date-3", "UNSETTLED"],
+  ] as const) {
+    await completeChapter(
+      t,
+      { key, kind: "date", li: KAI, lead: KAI, title: marker, nodes: twoScenes },
+      said(marker, "Kai", "Sol"),
+      done(12),
+    );
+  }
+  const first = (await t.store.readDoc(beatId(t.runId, "date-3", 0), normalizeBeat))!;
+  const pending = { id: "option-1", text: "Stay", selection: { kind: "dialogue" as const, text: "I'll stay." } };
+  await t.store.mutateDoc(runDocTarget("beat", beatId(t.runId, "date-3", 1)), normalizeBeat, () => ({
+    ...first,
+    i: 1,
+    choices: [{ id: "choice-1", kind: "big", at: 0, options: [{ ...pending, segments: [] }] }],
+  }));
+  await completeChapter(
+    t,
+    { key: "main-2", kind: "main", number: 2, lead: SOL, title: "Night 2" },
+    said("READING", "Kai", "Sol"),
+    done(13),
+  );
+  // Main chapter 2 is still being read: its scene is there, the chapter is not completed.
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+    ...state,
+    chapters: { ...state.chapters, "main-2": { beatsRead: 0, applied: [] } },
+  }));
+
+  const served = await t.call("GET", "/runs/:run/who-said-what");
+  assert.equal(served.status, 200, JSON.stringify(served.body));
+  assert.deepEqual(served.body.choices, [KAI, SOL]);
+  const asked = (served.body.lines as Array<{ li: string; text: string }>).map((entry) => `${entry.li} ${entry.text}`);
+  assert.deepEqual(
+    asked.sort(),
+    [
+      `${KAI} MAIN-1: the harbour keeps its lanterns lit.`,
+      `${KAI} MAIN-3: the harbour keeps its lanterns lit.`,
+      `${KAI} MAIN-5: the harbour keeps its lanterns lit.`,
+      `${SOL} DATE-1: the harbour keeps its lanterns lit.`,
+      `${SOL} MAIN-2: the harbour keeps its lanterns lit.`,
+      `${SOL} MAIN-4: the harbour keeps its lanterns lit.`,
+    ],
+    "the main chapter and the date read to their ends, nothing else",
+  );
+});
+
+test("Who said what? takes a love interest's own spoken lines once, and a random line from a random one", () => {
+  const units = [
+    { id: "li-ilvar-0001", name: "Ilvar Thorne" },
+    { id: "li-cassian-0002", name: "Cassian" },
+    { id: "li-rowan-0003", name: "Rowan Hale" },
+    { id: "li-rowan-0004", name: "Rowan Pike" },
+  ];
+  const [ILVAR, CASSIAN] = [units[0]!.id, units[1]!.id];
+  const long = `Ilvar: ${"the lens remembers every star we named. ".repeat(8)}`;
+  const segments: Segment[] = [
+    { speaker: "", text: "Narration: the dome is quiet tonight, and so are you." },
+    { speaker: "Ilvar Thorne", text: "A thought he keeps to himself, and never says aloud.", thought: true },
+    { speaker: "Mira Vale", text: "The protagonist speaks at length about the stars." },
+    { speaker: "Mira", text: "Her first name alone is still the protagonist speaking." },
+    { speaker: "Harbour Master", text: "Someone who is not a love interest says something long." },
+    { speaker: "Rowan", text: "A first name two love interests share is never guessed." },
+    { speaker: "Ilvar", text: "Stay." },
+    { speaker: "Ilvar", text: "Say it, then." },
+    { speaker: "Ilvar", text: "His first name alone is still Ilvar speaking." },
+    { speaker: "Ilvar Thorne", text: "You came back.   How inefficient   of you." },
+    { speaker: "Ilvar Thorne", text: "you came back. how inefficient of you." },
+    { speaker: "Ilvar Thorne", text: "We both said this line, so nobody is asked it." },
+    { speaker: "Cassian", text: "We both said this line, so nobody is asked it." },
+    { speaker: "Ilvar Thorne", text: long },
+    { speaker: "Cassian", text: "The canal ices over every winter, without fail." },
+    { speaker: "Cassian", text: "I kept your letters in the clock tower drawer." },
+    { speaker: "Rowan Hale", text: "Under his whole name, Rowan Hale is himself." },
+  ];
+  let n = 0;
+  const cycle = (below: number) => n++ % below;
+  const view = pickWhoSaidWhat(segments, units, "Mira Vale", cycle);
+  assert.deepEqual(view.choices, [ILVAR, CASSIAN, "li-rowan-0003"], "in cast order, only who spoke");
+  const asked = new Map(view.lines.map((line) => [line.text, line.li]));
+  assert.equal(asked.size, view.lines.length, "each line once");
+  const cut = [...asked.keys()].find((text) => text.startsWith("Ilvar: the lens"));
+  assert.ok(cut && cut.length <= 161 && cut.endsWith("…") && !cut.endsWith(" …"), cut);
+  assert.deepEqual(
+    [...asked.entries()].filter(([text]) => text !== cut).sort(),
+    [
+      ["His first name alone is still Ilvar speaking.", ILVAR],
+      ["I kept your letters in the clock tower drawer.", CASSIAN],
+      ["The canal ices over every winter, without fail.", CASSIAN],
+      ["Under his whole name, Rowan Hale is himself.", "li-rowan-0003"],
+      ["You came back. How inefficient of you.", ILVAR],
+    ].sort(),
+    "no thought, narration, protagonist, other speaker, shared first name, short line or line two of them said",
+  );
+
+  // A random love interest each time: three lines of B's come up among 30 of A's.
+  const many: Segment[] = [
+    ...Array.from({ length: 30 }, (_, i) => ({
+      speaker: "Ilvar",
+      text: `Line number ${i + 1} from the dome, said by Ilvar.`,
+    })),
+    ...Array.from({ length: 3 }, (_, i) => ({
+      speaker: "Cassian",
+      text: `Line number ${i + 1} from the canal, by Cassian.`,
+    })),
+  ];
+  n = 0;
+  const batch = pickWhoSaidWhat(many, units.slice(0, 2), "Mira Vale", cycle);
+  assert.equal(batch.lines.length, WHO_SAID_WHAT_BATCH);
+  assert.equal(batch.lines.filter((line) => line.li === CASSIAN).length, 3);
+  assert.equal(new Set(batch.lines.map((line) => line.text)).size, WHO_SAID_WHAT_BATCH);
+  // A protagonist who shares his first name: "Cassian" is her, so he has no line and there is no game.
+  assert.deepEqual(pickWhoSaidWhat(many, units.slice(0, 2), "Cassian Grey"), { choices: [], lines: [] });
+
+  // No game with one love interest who spoke, or too few lines.
+  const empty = { choices: [], lines: [] };
+  assert.deepEqual(pickWhoSaidWhat(many.slice(0, 30), units, "Mira Vale"), empty, "one love interest");
+  assert.deepEqual(
+    pickWhoSaidWhat([...many.slice(0, 3), ...many.slice(30, 32)], units, "Mira Vale"),
+    empty,
+    "five lines",
+  );
+  assert.deepEqual(pickWhoSaidWhat([...many.slice(0, 4), ...many.slice(30, 32)], units, "Mira Vale").lines.length, 6);
+
+  // A long line with no space to cut at is cut by character: an emoji at the cut is kept whole, never split in half.
+  const spaceless = { speaker: "Cassian", text: `${"あ".repeat(159)}😀${"い".repeat(20)}` };
+  const served = pickWhoSaidWhat([spaceless, ...many.slice(0, 3), ...many.slice(30, 33)], units, "Mira Vale").lines;
+  assert.deepEqual(
+    served.filter((line) => line.text.startsWith("あ")),
+    [{ li: CASSIAN, text: `${"あ".repeat(159)}😀…` }],
+  );
 });
 
 test("with memory ready, every chapter is summarized into the overview; a love interest's own stays his beyond it", async () => {

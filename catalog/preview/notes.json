@@ -72,6 +72,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.6.18",
+          "date": "2026-11-02",
+          "notes": "- **\"What happened so far…\" while a chapter is planned.** Planning a new chapter (and a route, repair or extra story chapter) now shows the story's running summary to read while you wait. It scrolls on its own and appears once the first summary is ready.\n- **Who said what? while a scene is written.** Tap **Play Who said what?** under \"Writing the next scene…\" to guess which love interest said a line from the chapters you've read. It's optional, makes no model calls, saves nothing, and steps aside the moment the scene is ready.\n- **Keyboard focus on quotes.** The quoted line in the Wardrobe and in Who said what? now shows where keyboard focus is.",
+          "highlight": false
+        },
+        {
           "version": "0.6.17",
           "date": "2026-11-02",
           "notes": "- **Love interests remember the whole story.** Route, repair, date and Character Story chapters are now summarized too and included in the story's running summary, so long routes keep their early chapters. Their details still come back only in his chats and the scenes he is in.\n- **The last chapter is sent in full** when your model can hold it, with only the choices you made.\n- **Small memories come back when a scene touches them:** Read Me (your notebook as it is now, so deleted stays deleted), Read Him, dates, banner stories, phone talks, Snapshots and Claw rounds.\n- **Too long for your model?** The least relevant memories go first; if it still can't fit, you're asked for a bigger connection, not given a cut-off reply.\n- **Smaller summary models work:** a summary model with a 16k window no longer stops with an error. Memory status and Retry are in Settings → Connections.\n- Stories in progress catch up in the background; nothing you played is rewritten.",
@@ -183,12 +189,6 @@
           "version": "0.5.3",
           "date": "2026-10-30",
           "notes": "- Your protagonist knows only what the story has shown them: love interests no longer talk as if you already know their past, their habits or the words of their world, and a newcomer learns this world as they go.\n- A story set in an existing world, such as Teyvat from Genshin Impact, stays that world and keeps its canon.\n- Chapters make room for other people, scenes without a love interest, and rest or sleep after a long day.",
-          "highlight": false
-        },
-        {
-          "version": "0.5.2",
-          "date": "2026-10-30",
-          "notes": "- Memories banners follow your Heat: under NSFW: Fade their Memories and Moments mix SFW and suggestive situations, and under NSFW: Explicit explicit ones too. Snapshots stay SFW.\n- An explicit Memory's art can now be explicit under NSFW: Explicit with the Explicit image rating. Lower either setting before it's painted, and it shows the same moment clothed. Other Memory art stays clothed, as before.",
           "highlight": false
         }
       ]

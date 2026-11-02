@@ -5,11 +5,12 @@
 // conflict; the planner adds a Foil), each love interest's route (his next free chapter, open from an affection level
 // and shut while a rupture is open), each one's affection (past level 10, prestige and the extra story it unlocks:
 // #2025), and every chapter so far as a path of its scenes.
-// Planning a chapter is one model call with Cancel while it runs; a chapter already planned opens with none.
+// Planning a chapter is one model call with Cancel while it runs, with the story so far to read meanwhile (#2040); a
+// chapter already planned opens with none.
 // ──────────────────────────────────────────────
-import { Fragment, useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { Fragment, useEffect, useId, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BookHeart,
   BookOpen,
@@ -626,13 +627,16 @@ function LeadDialog({ runKey, view, next, onClose, onPlanned }: LeadDialogProps)
       }
     >
       {planning ? (
-        <div className="of-planning" role="status">
-          <Heart className="of-pulse" size={28} strokeWidth={1.6} fill="currentColor" aria-hidden="true" />
-          <p className="of-body">
-            {t("ui.otomeForge.story.planning", { number: next.number, name: planningLi?.name ?? "" })}
-          </p>
-          <p className="of-hint">{t("ui.otomeForge.story.planningHint")}</p>
-        </div>
+        <>
+          <div className="of-planning" role="status">
+            <Heart className="of-pulse" size={28} strokeWidth={1.6} fill="currentColor" aria-hidden="true" />
+            <p className="of-body">
+              {t("ui.otomeForge.story.planning", { number: next.number, name: planningLi?.name ?? "" })}
+            </p>
+            <p className="of-hint">{t("ui.otomeForge.story.planningHint")}</p>
+          </div>
+          <StorySoFar runKey={runKey} />
+        </>
       ) : failed ? (
         <DeclinedPanel error={failed.error} run={view} job="structured" onRetry={() => void plan(failed.id)} />
       ) : (
@@ -681,6 +685,38 @@ function LeadDialog({ runKey, view, next, onClose, onPlanned }: LeadDialogProps)
 }
 
 // ── Planning a chapter (shared by the Lead dialog, routes and repairs) ──
+
+/**
+ * "What happened so far…" (#2040): the story's running summary (the memory's saved overview, as written) to read while
+ * a chapter is planned. Read afresh on each wait and never kept; nothing shows before the first summary, or when it
+ * cannot be read. It scrolls on its own (a named, tabbable region, as the backlog's list is) under the planning status,
+ * outside its live region, so the long text is never announced as status.
+ */
+function StorySoFar({ runKey }: { runKey: string }) {
+  const { t } = useTranslation();
+  const otome = useOtomeApi();
+  const titleId = useId();
+  const { data: paragraphs } = useQuery({
+    queryKey: ["otome-forge", "memory-overview", runKey],
+    queryFn: async () => (await otome.get<{ paragraphs: string[] }>(`${runPath(runKey)}/memory/overview`)).paragraphs,
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+  });
+  if (!paragraphs?.length) return null;
+  return (
+    <div className="of-so-far">
+      <h3 id={titleId} className="of-eyebrow">
+        {t("ui.otomeForge.story.soFarTitle")}
+      </h3>
+      <div className="of-so-far-text" role="region" aria-labelledby={titleId} tabIndex={0}>
+        {paragraphs.map((text, index) => (
+          <p key={index}>{text}</p>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /**
  * Plans a chapter: one model call at a time, with Cancel (the server stops the write; the request is dropped). A
@@ -1234,11 +1270,14 @@ function ArcPlanDialog({
       }
     >
       {planning ? (
-        <div className="of-planning" role="status">
-          <Heart className="of-pulse" size={28} strokeWidth={1.6} fill="currentColor" aria-hidden="true" />
-          <p className="of-body">{t(ARC_DIALOG_KEYS[target.kind].planning, values)}</p>
-          <p className="of-hint">{t("ui.otomeForge.story.planningHint")}</p>
-        </div>
+        <>
+          <div className="of-planning" role="status">
+            <Heart className="of-pulse" size={28} strokeWidth={1.6} fill="currentColor" aria-hidden="true" />
+            <p className="of-body">{t(ARC_DIALOG_KEYS[target.kind].planning, values)}</p>
+            <p className="of-hint">{t("ui.otomeForge.story.planningHint")}</p>
+          </div>
+          <StorySoFar runKey={view.runKey} />
+        </>
       ) : locked ? (
         <p className="of-notice" role="alert">
           <Lock size={15} strokeWidth={2} aria-hidden="true" />

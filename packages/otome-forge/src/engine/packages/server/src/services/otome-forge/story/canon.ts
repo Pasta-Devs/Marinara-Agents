@@ -1,6 +1,7 @@
 // ──────────────────────────────────────────────
 // Otome Forge: first-play canon. What a beat says once its choices are made, the chapter so far, the story reader that
-// hands completed chapters to the kit's memory (S/memory/sources.ts), and the story before a prompt (recallText)
+// hands completed chapters to the kit's memory (S/memory/sources.ts) and to Who said what? (#2041,
+// S/minigames/who-said-what.ts), and the story before a prompt (recallText)
 // ──────────────────────────────────────────────
 // A beat's canon is the kit's forgeCanonicalSegments: the mainline with each first-play pick's marker, selection and
 // branch spliced in, and nothing while a big choice waits. A beat the player eased off is cut at that segment and ends
@@ -196,7 +197,7 @@ const storyline = (chapter: Chapter) => kindOf(chapter) === "chapter";
  * Every completed chapter of the run in story order: a main chapter at its number, any other kind just after the main
  * chapters completed before it.
  */
-async function completedChapters(
+export async function completedChapters(
   store: Pick<OtomeStore, "readDoc">,
   runId: string,
   state: RunState,
