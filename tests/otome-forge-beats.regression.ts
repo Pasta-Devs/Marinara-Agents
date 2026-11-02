@@ -13,6 +13,9 @@
 // pick keeps the pick; and a kept line is kept once. Who said what? (#2041) asks only a love interest's own spoken
 // lines of what was played in completed chapters (never an option or stance not taken, the prologue, an extra story or
 // a chapter still being read or written), each once, and hides with fewer than two love interests or too few lines.
+// Side with (#2046): a side-with node's reply needs ONE small choice with an option backing each love interest present
+// (a repair turn names what is missing); its effects are the game's, never the reply's; the pick moves affection once
+// (+ for the one backed, − for each one passed over, never below a level reached), and the decisions name it.
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CapabilityLanguageModelMessage } from "@marinara-engine/shared";
@@ -59,6 +62,7 @@ import {
 import {
   NO_CHOICES_SENTENCE,
   beatMessages,
+  sideWithInstruction,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/prompts.ts";
 import {
   beatId,
@@ -2211,4 +2215,225 @@ test("the art hears of every beat: faces when served, places and its CG once whe
   assert.equal(rewritten.status, 200);
   await t.settle();
   assert.equal(seen.filter(([kind]) => kind === "release").length, 2, "the replaced beat and the dropped lookahead");
+});
+
+/** #2046: a side-with reply between Kai and Mireille; `backs` per option, and a model's own effects on Kai's. */
+const sideReply = (backs: unknown[] = [KAI, "Mireille"], kind = "small") =>
+  beatReply({
+    segments: [
+      { speaker: "", text: "The tide map is spread across the lamp table.", place: "The Lamp Room" },
+      { speaker: "Kai", text: "We take the tunnels. Tonight.", expression: "angry" },
+      { speaker: "Mireille", text: "And drown in them? We wait for the ledger.", expression: "cold" },
+    ],
+    choices: [
+      {
+        kind,
+        at: 2,
+        options: [
+          {
+            text: "Back Kai's plan",
+            selection: { kind: "dialogue", text: "We take the tunnels." },
+            segments: kind === "big" ? [] : [{ speaker: "Kai", text: "KAI-BACKED: Finally, someone listens." }],
+            backs: backs[0],
+            effects: [{ li: KAI, trust: -1, affection: 999 }],
+          },
+          {
+            text: "Side with Mireille",
+            selection: { kind: "action", text: "You set your hand on the ledger beside Mireille's." },
+            segments: kind === "big" ? [] : [{ speaker: "Mireille", text: "MIR-BACKED: Thank you." }],
+            ...(backs.length > 1 ? { backs: backs[1] } : {}),
+          },
+        ],
+      },
+    ],
+  });
+
+test("Side with (#2046): the reply needs one small choice backing each love interest present", () => {
+  const units = [
+    { id: KAI, name: "Kai" },
+    { id: MIR, name: "Mireille" },
+    { id: SOL, name: "Sol" },
+  ];
+  const node = {
+    i: 1,
+    kind: "beat",
+    guide: "They argue over the tunnels.",
+    cast: [KAI, MIR],
+    sideWith: true,
+  } as ChapterNode;
+  const context = {
+    node,
+    units,
+    state: normalizeState({ lis: { [KAI]: {}, [MIR]: {} } }),
+    last: false,
+    sideWith: units.slice(0, 2),
+  };
+  const read = (reply: Record<string, any>) => normalizeBeatReply(reply as never, context);
+  const ok = read(sideReply());
+  assert.equal(typeof ok, "object", String(ok));
+  if (typeof ok !== "string") {
+    assert.deepEqual(ok.sideWith, { choice: "choice-1", backs: { "option-1": KAI, "option-2": MIR } }, "by id or name");
+  }
+  const rule =
+    /this node is a side-with scene: it needs ONE small choice with exactly 2 options, one per love interest present \(Kai, Mireille\)/;
+  assert.match(String(read(sideReply([KAI]))), rule);
+  assert.match(String(read(sideReply([KAI]))), /option 2 must back a love interest present/);
+  assert.match(
+    String(read(sideReply([KAI, KAI]))),
+    /option 2 must back a love interest present that no other option backs/,
+  );
+  assert.match(String(read(sideReply([KAI, SOL]))), /option 2 must back a love interest present/, "Sol is not here");
+  assert.match(String(read(sideReply([KAI, "li-nobody-zz99"]))), /option 2 must back/);
+  assert.match(String(read(beatReply())), /no option carries "backs"/);
+  const twice = sideReply();
+  twice.choices.push({ ...structuredClone(twice.choices[0]), at: 0 });
+  assert.match(String(read(twice)), /only one choice may carry "backs"/);
+  // A big choice may not end a node that is not the chapter's last; on the last, it is still no side-with choice.
+  assert.match(
+    String(normalizeBeatReply(sideReply(undefined, "big") as never, { ...context, last: true })),
+    /must be a small one/,
+  );
+  // Three love interests present: Sol must be backed too.
+  const three = { ...context, node: { ...node, cast: [KAI, MIR, SOL] }, sideWith: units };
+  assert.match(String(normalizeBeatReply(sideReply() as never, three)), /exactly 3 options[^;]*; missing: Sol/);
+  // Another small choice in the same scene stays allowed and keeps its own effects.
+  const more = sideReply();
+  more.choices.push({
+    kind: "small",
+    at: 0,
+    options: [
+      {
+        text: "Pour the tea",
+        selection: { kind: "action", text: "You pour." },
+        segments: [{ speaker: "", text: "Steam." }],
+      },
+      { text: "Wait", selection: { kind: "action", text: "You wait." }, segments: [{ speaker: "", text: "Silence." }] },
+    ],
+  });
+  const both = read(more);
+  assert.equal(typeof both === "object" && both.sideWith?.choice, "choice-1");
+  // An empty "backs" there (a JSON-mode reply filling every field it heard of) names no one, so it marks nothing.
+  const blank = structuredClone(more);
+  blank.choices[1].options[0].backs = null;
+  blank.choices[1].options[1].backs = " ";
+  const kept = read(blank);
+  assert.equal(typeof kept === "object" && kept.sideWith?.choice, "choice-1", String(kept));
+  // Without the node's side-with context, "backs" is just ignored.
+  assert.equal(typeof normalizeBeatReply(sideReply() as never, { ...context, sideWith: undefined }), "object");
+});
+
+test("Side with (#2046): the P6 rule, with no softening; only on a main chapter's marked node", () => {
+  const rule = sideWithInstruction(
+    [
+      { id: KAI, name: "Kai" },
+      { id: MIR, name: "Mireille" },
+    ],
+    "Ines",
+  );
+  assert.match(rule, /SIDE WITH \(this node\): Kai \(id li-kai-ab12\), Mireille \(id li-mireille-cd34\) disagree here/);
+  assert.match(rule, /exactly 2 options, one per love interest present/);
+  assert.match(rule, /No option stays out of it, splits the difference or backs no one/);
+  assert.match(rule, /"backs" field beside its "text" and "selection"/);
+  assert.match(rule, /text: the pill's short intent, 2 to 6 words, addressed to the player/);
+  assert.match(rule, /Leave "effects" out of that choice/);
+  assert.doesNotMatch(rule, /civil|calm|gentle|respectful|non-graphic|tone it down|mild|polite/i);
+});
+
+test("Side with (#2046): the game sets its effects, the pick moves affection once, and the decisions name it", async () => {
+  let sideCalls = 0;
+  const t = await storyWorld({
+    runKey: "r-side-aaaaaa",
+    // Mireille stands at the floor of level 2: passing her over costs nothing she reached.
+    lis: { [MIR]: { points: 300 } },
+    replies: Array.from({ length: 60 }, () => (messages: CapabilityLanguageModelMessage[]) => {
+      if (isPlanner(messages)) return json(planReply());
+      if (isConfrontationPrompt(messages)) return json(confrontationReply());
+      const at = Number(/Narrate node (\d+) of/.exec(messages.at(-1)!.content)?.[1] ?? 1) - 1;
+      const repairing = messages.length > 2;
+      if (at !== 1 && !repairing) return json(beatReply());
+      sideCalls += 1;
+      // The first try leaves Mireille's option without "backs": the repair turn names her.
+      return json(sideCalls === 1 ? sideReply([KAI]) : sideReply());
+    }),
+  });
+  assert.equal((await t.call("POST", "/runs/:run/chapters/next", { lead: KAI })).status, 200);
+  // The plan marks node 1 (Kai and Mireille).
+  await t.store.updateDoc(runDocTarget("chapter", chapterId(t.runId, "main-1")), normalizeChapter, (chapter) => ({
+    ...chapter,
+    nodes: chapter.nodes.map((node) => (node.i === 1 ? { ...node, sideWith: true as const } : node)),
+  }));
+  await readThrough(t, 0, 0);
+  const served = await t.call("POST", beatPath, {}, node(1));
+  assert.equal(served.status, 200, JSON.stringify(served.body));
+  const sideCall = t.calls.find((entry) => /Narrate node 2 of/.test(entry.messages.at(-1)!.content))!;
+  assert.match(system(sideCall.messages), /SIDE WITH \(this node\): Kai \(id li-kai-ab12\), Mireille/);
+  assert.doesNotMatch(
+    system(t.calls.find((entry) => /Narrate node 1 of/.test(entry.messages.at(-1)!.content))!.messages),
+    /SIDE WITH/,
+  );
+  assert.match(
+    t.calls
+      .filter((entry) => /Narrate node 2 of/.test(entry.messages[1]?.content ?? ""))
+      .at(-1)!
+      .messages.at(-1)!.content,
+    /side-with scene[\s\S]*option 2 must back a love interest present/,
+    "the repair turn names what is missing",
+  );
+  assert.deepEqual(served.body.beat.sideWith, { choice: "choice-1", backs: { "option-1": KAI, "option-2": MIR } });
+  assert.equal(served.body.beat.effects, undefined, "effects never reach the client");
+  const stored = (await t.store.readDoc(beatId(t.runId, "main-1", 1), normalizeBeat))!;
+  assert.deepEqual(
+    stored.effects["choice-1"],
+    {
+      "option-1": [
+        { li: KAI, trust: 1, affection: 30 },
+        { li: MIR, tension: 1, affection: -10 },
+      ],
+      "option-2": [
+        { li: MIR, trust: 1, affection: 30 },
+        { li: KAI, tension: 1, affection: -10 },
+      ],
+    },
+    "the model's own effects (trust -1, affection 999) are replaced by the game's",
+  );
+
+  const choose = (option: string) => t.call("POST", `${beatPath}/choose`, { choice: "choice-1", option }, node(1));
+  const before = await t.state();
+  const picked = await choose("option-1");
+  assert.equal(picked.status, 200, JSON.stringify(picked.body));
+  assert.deepEqual(picked.body.affection, [{ li: KAI, amount: 30 }], "Mireille keeps the level she reached");
+  const after = await t.state();
+  assert.equal(after.lis[KAI]!.points, before.lis[KAI]!.points + 30);
+  assert.equal(after.lis[KAI]!.trust, 1);
+  assert.equal(after.lis[MIR]!.points, 300);
+  assert.equal(after.lis[MIR]!.tension, 1);
+  assert.equal(after.lis[SOL]!.points, before.lis[SOL]!.points, "Sol was not in the scene");
+  const replay = await choose("option-2");
+  assert.deepEqual([replay.body.affection, replay.body.remembered], [[], false], "a replay moves nothing");
+  assert.deepEqual(replay.body.beat.choiceCanon, { "choice-1": "option-1" });
+  assert.deepEqual(await t.state(), after);
+
+  const canon = canonicalSegments((await t.store.readDoc(beatId(t.runId, "main-1", 1), normalizeBeat))!, "Ines")!;
+  assert.deepEqual(
+    canon.slice(3).map((segment) => segment.text),
+    [
+      "[Canonical player choice by Ines: Back Kai's plan.]",
+      "We take the tunnels.",
+      "KAI-BACKED: Finally, someone listens.",
+    ],
+    "the pick is canon like any other; the option not taken never is",
+  );
+  await readThrough(t, 1, 6);
+  assert.ok((await t.state()).chapters["main-1"]!.completed, "the chapter is done");
+  const { text } = await recallText({ store: t.store }, t.runId, { job: "narration", cast: [SOL], continues: "main" });
+  const decisions = text.slice(text.indexOf(DECISIONS_HEADING));
+  assert.ok(
+    decisions.includes(
+      `- Chapter 1 "The Dark Quay", node 2: sided with Kai over Mireille: Back Kai's plan. (dialogue: We take the tunnels.)`,
+    ),
+    decisions,
+  );
+  assert.ok(!text.includes("MIR-BACKED"), "the branch not taken never reaches a prompt");
+  const [source] = await readMemorySources(t.store, t.runId);
+  assert.ok(source!.content.includes("[Canonical player choice by Ines: Back Kai's plan.]"), "it is summarized too");
 });

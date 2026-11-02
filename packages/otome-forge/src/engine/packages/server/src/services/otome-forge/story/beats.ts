@@ -25,6 +25,11 @@
 //   (−1/0/1, how the date's love interest takes it; at least one scores 1), read by index like the effects and saved
 //   as `beat.scores`. A date never ends on a big choice, and an option opens a grievance only on a date planned to go
 //   wrong, and then at most a minor one. S/minigames/date-night.ts totals the scores of the first-play picks.
+// - A side-with node (#2046, a main chapter's node its plan marked: S/story/chapters.ts) has exactly one small choice
+//   with one option per love interest present, each naming in a raw `backs` whom it sides with, read by index and saved
+//   as `beat.sideWith`. Its effects are the game's (sideWithEffects), never the reply's: the one backed gains affection
+//   and trust, each one passed over loses some affection (never below the level reached) and the tension rises. It is
+//   a first-play pick like any other, so a replay changes nothing.
 // M2b:
 // - A confrontation node with a love interest in it is written by P12 as a stance game (S/story/confrontation.ts):
 //   the beat's segments are its opening. Each stance is saved on the beat once (chooseStance) and its effects reach
@@ -44,6 +49,7 @@ import { forgeNormalizeChoiceBeat, forgePendingChoice } from "@forge-kit/player-
 import type { ForgeStoryCancellation } from "@forge-kit/story-cancel-server.mjs";
 import { normalizeForgeStoryExpression } from "@forge-kit/story-expressions.mjs";
 import type {
+  AffectionChange,
   Beat,
   Chapter,
   ChapterNode,
@@ -59,6 +65,7 @@ import type {
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { stageRow, type ClimaxMove } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import type { DateScore } from "../../../../../client/src/features/otome-forge/shared/dates.js";
+import { SIDE_WITH_AFFECTION } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import { LIMIT_IDS, type LimitId } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import {
   FACES,
@@ -102,6 +109,7 @@ import {
   beatMessages,
   closerMessages,
   confrontationMessages,
+  sideWithCast,
   type BeatReply,
 } from "./prompts.js";
 
@@ -151,6 +159,8 @@ export interface BeatContext {
   mustChoose?: boolean;
   /** A date's beat (M5): one scored choice, no big choice, and a grievance only when the date was planned to go wrong. */
   date?: { goesWrong: boolean };
+  /** #2046: a side-with node's love interests (prompts.ts sideWithCast): one small choice, an option backing each. */
+  sideWith?: ReadonlyArray<Pick<Unit, "id" | "name">>;
 }
 
 interface NormalizeOptions {
@@ -201,6 +211,13 @@ function declaredPlaces(raw: unknown, known: World["places"] = {}) {
  */
 function speakerLi(context: BeatContext, speaker: string) {
   return context.units.find((unit) => sameName(speaker, unit.name));
+}
+
+/** A love interest present in the node, named by id or, failing that, by name (as a speaker is); else undefined. */
+function presentLi(context: BeatContext, value: unknown): LiId | undefined {
+  const key = str(value, NAME_MAX);
+  const present = context.units.filter((unit) => context.node.cast.includes(unit.id));
+  return (present.find((unit) => unit.id === key) ?? present.find((unit) => sameName(key, unit.name)))?.id;
 }
 
 /** The love interests a segment's raw `exits` names (#2024), as their ids, by id or name; anyone else is dropped. */
@@ -303,7 +320,7 @@ export function normalizeBeatBody(raw: unknown, options: NormalizeOptions): Beat
   return body;
 }
 
-type NormalizedBeat = BeatBody & { choices: ForgeChoice[] };
+type NormalizedBeat = BeatBody & { choices: ForgeChoice[]; sideWith?: Beat["sideWith"] };
 
 /** The reply as a beat body with its choices, or the reason it is refused (the repair turn names it). */
 export function normalizeBeatReply(reply: BeatReply, context: BeatContext): NormalizedBeat | string {
@@ -341,7 +358,10 @@ export function normalizeBeatReply(reply: BeatReply, context: BeatContext): Norm
     return "this node must end on ONE big choice (see the PLAYER CHOICES rules for a big choice)";
   }
   const dateProblem = context.date ? dateChoiceProblem(reply, choices) : "";
-  return dateProblem || { ...beat, choices };
+  if (dateProblem) return dateProblem;
+  const sideWith = context.sideWith ? readSideWith(reply, choices, context) : undefined;
+  if (typeof sideWith === "string") return sideWith;
+  return { ...beat, choices, ...(sideWith ? { sideWith } : {}) };
 }
 
 /** P6's segment rules, lent to P12 (S/story/confrontation.ts normalizes each of its lists with them). */
@@ -382,6 +402,40 @@ function dateChoiceProblem(reply: BeatReply, choices: readonly ForgeChoice[]): s
   return "";
 }
 
+/**
+ * #2046: a side-with beat's choice and whom each option backs, read from the raw reply at the indexes the kit numbered
+ * them by; or why the reply breaks its rules (exactly one choice carries "backs", a small one, with one option per love
+ * interest present, each backing a different one of them).
+ */
+function readSideWith(
+  reply: BeatReply,
+  choices: readonly ForgeChoice[],
+  context: BeatContext,
+): NonNullable<Beat["sideWith"]> | string {
+  const side = context.sideWith ?? [];
+  const rule = `this node is a side-with scene: it needs ONE small choice with exactly ${side.length} options, one per love interest present (${side.map((unit) => unit.name).join(", ")}), each with "backs" set to the id of the one it sides with`;
+  // A choice counts only when an option names someone: an empty "backs" (null, "") on another choice's options is noise.
+  const marked = (Array.isArray(reply.choices) ? reply.choices : []).flatMap((_, c) =>
+    rawOptionsOf(reply, c).some((option) => str((option as { backs?: unknown } | null)?.backs, NAME_MAX)) ? [c] : [],
+  );
+  if (marked.length !== 1)
+    return `${rule}; ${marked.length ? 'only one choice may carry "backs"' : 'no option carries "backs"'}`;
+  const c = marked[0]!;
+  const choice = choices.find((entry) => entry.id === `choice-${c + 1}`);
+  if (choice?.kind !== "small") return `${rule}; that choice must be a small one`;
+  const backs: Record<string, LiId> = {};
+  for (const [o, option] of rawOptionsOf(reply, c).entries()) {
+    const li = presentLi(context, (option as { backs?: unknown } | null)?.backs);
+    if (!li || Object.values(backs).includes(li)) {
+      return `${rule}; option ${o + 1} must back a love interest present that no other option backs`;
+    }
+    backs[`option-${o + 1}`] = li;
+  }
+  const missing = side.filter((unit) => !Object.values(backs).includes(unit.id)).map((unit) => unit.name);
+  if (missing.length) return `${rule}; missing: ${missing.join(", ")}`;
+  return { choice: choice.id, backs };
+}
+
 /** A date beat's hidden scores, read from the raw reply at the indexes the kit numbered the choices and options by. */
 export function scoresOf(reply: BeatReply, choices: readonly ForgeChoice[]): NonNullable<Beat["scores"]> {
   const scores: NonNullable<Beat["scores"]> = {};
@@ -409,11 +463,6 @@ const unitSign = (value: unknown): -1 | 0 | 1 => {
  * for a grievance the node may resolve; an option with nothing left has no entry.
  */
 export function effectsOf(reply: BeatReply, choices: readonly ForgeChoice[], context: BeatContext): Beat["effects"] {
-  const present = context.units.filter((unit) => context.node.cast.includes(unit.id));
-  const li = (value: unknown): LiId | undefined => {
-    const key = str(value, NAME_MAX);
-    return (present.find((unit) => unit.id === key) ?? present.find((unit) => sameName(key, unit.name)))?.id;
-  };
   const resolvable = new Set(context.node.resolves ?? []);
   const result: Beat["effects"] = {};
   const rawChoices = Array.isArray(reply.choices) ? reply.choices : [];
@@ -429,7 +478,7 @@ export function effectsOf(reply: BeatReply, choices: readonly ForgeChoice[], con
       for (const raw of rawEffects.slice(0, 6)) {
         if (!raw || typeof raw !== "object") continue;
         const source = raw as Record<string, unknown>;
-        const target = li(source.li);
+        const target = presentLi(context, source.li);
         if (!target) continue;
         const effect: Effect = { li: target };
         const trust = unitSign(source.trust);
@@ -464,6 +513,26 @@ export function effectsOf(reply: BeatReply, choices: readonly ForgeChoice[], con
     }
   }
   return result;
+}
+
+/**
+ * #2046: what each option of a side-with choice changes, set by the game: the one backed gains affection and trust;
+ * each one passed over loses some affection (never below the level reached, S/state/relationship.ts) and the tension
+ * between them rises. Trust is never lowered, as that is a hostile pick's (it would cost the hostile loss as well).
+ */
+export function sideWithEffects(side: NonNullable<Beat["sideWith"]>): Record<string, Effect[]> {
+  const lis = Object.values(side.backs);
+  return Object.fromEntries(
+    Object.entries(side.backs).map(([option, backed]): [string, Effect[]] => [
+      option,
+      [
+        { li: backed, trust: 1, affection: SIDE_WITH_AFFECTION.backed },
+        ...lis
+          .filter((li) => li !== backed)
+          .map((li): Effect => ({ li, tension: 1, affection: -SIDE_WITH_AFFECTION.passedOver })),
+      ],
+    ]),
+  );
 }
 
 // ── Writing a beat ──
@@ -559,6 +628,7 @@ async function generateBeat(
   const mustChoose =
     chapter.kind === "route" && !!node.gate && !!chapter.stage && stageRow(chapter.stage).gate === "confrontation";
   const cgExplicit = explicitCgAllowed(run.world);
+  const side = sideWithCast(chapter, node, units);
   const context: BeatContext = {
     node,
     units,
@@ -568,6 +638,7 @@ async function generateBeat(
     mustChoose,
     cgExplicit,
     ...(chapter.kind === "date" ? { date: { goesWrong: chapter.date?.goesWrong ?? false } } : {}),
+    ...(side ? { sideWith: side } : {}),
   };
   const opponent = confrontationOpponent(chapter, node, units);
   // Chapter 1 opens where the prologue ended, with the choices taken in it.
@@ -655,9 +726,16 @@ async function generateBeat(
       segments: scene.segments,
       choices: scene.choices,
       // #2025: an extra story is imagined, never canon: its picks move nothing between them (no trust, tension,
-      // grievance, disclosure or affection loss).
-      effects: chapter.prestige ? {} : effectsOf(value, scene.choices, context),
+      // grievance, disclosure or affection loss). #2046: a side-with choice's effects are the game's, replacing any the
+      // reply gave it.
+      effects: chapter.prestige
+        ? {}
+        : {
+            ...effectsOf(value, scene.choices, context),
+            ...(scene.sideWith ? { [scene.sideWith.choice]: sideWithEffects(scene.sideWith) } : {}),
+          },
       ...(context.date ? { scores: scoresOf(value, scene.choices) } : {}),
+      ...(scene.sideWith ? { sideWith: scene.sideWith } : {}),
       musicMood: scene.musicMood,
       ...(scene.cg ? { cg: scene.cg } : {}),
     };
@@ -899,6 +977,13 @@ interface Remembered {
 
 const NOTHING_REMEMBERED: Remembered = { remembered: false, rememberedBy: [] };
 
+/** What a choice's pick changed: as Remembered, and how far it moved each love interest's affection (#2046). */
+interface Picked extends Remembered {
+  affection: AffectionChange[];
+}
+
+const NOTHING_PICKED: Picked = { ...NOTHING_REMEMBERED, affection: [] };
+
 /** A pick's effects on the state, in its chapter and beat (applyChoiceEffects; a pick already applied is a no-op). */
 const applyPickTo = (state: RunState, chapter: Chapter, beat: Beat, choice: string, option: string, at: string) =>
   applyChoiceEffects(state, beat.effects[choice]?.[option] ?? [], {
@@ -917,12 +1002,17 @@ async function applyPick(
   beat: Beat,
   choiceId: string,
   optionId: string,
-): Promise<Remembered> {
-  let outcome = NOTHING_REMEMBERED;
+): Promise<Picked> {
+  let outcome = NOTHING_PICKED;
   const at = new Date().toISOString();
   const state = await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) => {
-    const { state: next, remembered, rememberedBy } = applyPickTo(current, chapter, beat, choiceId, optionId, at);
-    outcome = { remembered, rememberedBy };
+    const {
+      state: next,
+      remembered,
+      rememberedBy,
+      affection,
+    } = applyPickTo(current, chapter, beat, choiceId, optionId, at);
+    outcome = { remembered, rememberedBy, affection };
     return next;
   });
   if (!state) throw runNotFound();
@@ -945,7 +1035,7 @@ export async function chooseOption(
   i: number,
   choiceId: string,
   optionId: string,
-): Promise<{ beat: Beat } & Remembered> {
+): Promise<{ beat: Beat } & Picked> {
   const { run, chapter } = await load(deps, runId, key);
   let beat = await readBeat(deps.store, runId, key, i);
   if (!beat) throw beatNotFound();
@@ -959,7 +1049,7 @@ export async function chooseOption(
     if (choice.kind === "big" && canon !== optionId) throw new OtomeForgeError(409, "That choice is made.", "locked");
     // A pick saved by a request that stopped before its effects: apply them now (exactly once by `applied`).
     const pending = !progress?.applied.includes(`${i}/${choiceId}`);
-    const outcome = pending ? await applyPick(deps, runId, chapter, beat, choiceId, canon) : NOTHING_REMEMBERED;
+    const outcome = pending ? await applyPick(deps, runId, chapter, beat, choiceId, canon) : NOTHING_PICKED;
     return { beat: (await readBeat(deps.store, runId, key, i)) ?? beat, ...outcome };
   }
   // A choice past an Ease off cut is never canon, even while the cut beat is not counted as read yet.
@@ -967,7 +1057,7 @@ export async function chooseOption(
   const closed = !!progress?.completed || (progress?.beatsRead ?? 0) > i || pastCut(beat);
   if (closed) {
     if (choice.kind === "big") throw new OtomeForgeError(409, "That choice is made.", "locked");
-    return { beat, ...NOTHING_REMEMBERED };
+    return { beat, ...NOTHING_PICKED };
   }
   if ((progress?.beatsRead ?? 0) !== i) throw conflict("Choices are made on the beat being read.");
   if (forgePendingChoice(beat)?.id !== choiceId) throw conflict("An earlier choice in this beat comes first.");
@@ -985,7 +1075,7 @@ export async function chooseOption(
   // No pick saved: an Ease off cut the scene before this choice meanwhile, and the choice is closed as above.
   if (!picked || (picked !== optionId && choice.kind === "big")) {
     if (choice.kind === "big") throw new OtomeForgeError(409, "That choice is made.", "locked");
-    return { beat, ...NOTHING_REMEMBERED };
+    return { beat, ...NOTHING_PICKED };
   }
   const outcome = await applyPick(deps, runId, chapter, beat, choiceId, picked);
   return { beat: (await readBeat(deps.store, runId, key, i)) ?? beat, ...outcome };

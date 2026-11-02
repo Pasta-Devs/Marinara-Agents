@@ -2,8 +2,9 @@
 // and per chapter, also across a save; a grievance never closes in the beat that opened it, and closes only where its
 // node allows; a rupture never takes anything unlocked back, and moves to another rupture still owed instead of
 // closing; a pick applies once (first play only) and names whom it touched; reading pays each
-// beat and each chapter once; hostile first-play picks cost affection above the reached level's floor; and the daily
-// caps follow the player's own midnight in each zone.
+// beat and each chapter once; hostile first-play picks cost affection above the reached level's floor; a side-with
+// pick (#2046) gains uncapped and loses only above that floor, once; and the daily caps follow the player's own
+// midnight in each zone.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { forgeTimeZoneRoutes } from "@forge-kit/time-zone-server.mjs";
@@ -55,6 +56,7 @@ test("the economy's numbers are pinned", () => {
       levels: [economy.MIN_LEVEL, economy.MAX_LEVEL],
       affection: economy.AFFECTION_EARNINGS,
       outsideCap: economy.OUTSIDE_AFFECTION_DAILY_CAP,
+      sideWith: economy.SIDE_WITH_AFFECTION,
       trust: [economy.TRUST_MIN, economy.TRUST_MAX],
       tension: [economy.TENSION_MIN, economy.TENSION_MAX],
       shifts: [economy.BEAT_SHIFT_MAX, economy.CHAPTER_SHIFT_MAX],
@@ -91,6 +93,7 @@ test("the economy's numbers are pinned", () => {
         showHim: 20,
       },
       outsideCap: 300,
+      sideWith: { backed: 30, passedOver: 10 },
       trust: [-3, 3],
       tension: [0, 3],
       shifts: [1, 2],
@@ -549,4 +552,49 @@ test("daily caps follow the player's own midnight in each time zone", (t) => {
       zone,
     );
   }
+});
+
+test("Side with (#2046): the one backed gains past the daily cap; one passed over never loses a level or a story", () => {
+  const side = (backed: string, over: string): Effect[] => [
+    { li: backed, trust: 1, affection: economy.SIDE_WITH_AFFECTION.backed },
+    { li: over, tension: 1, affection: -economy.SIDE_WITH_AFFECTION.passedOver },
+  ];
+  for (const [points, expected] of [
+    [0, 0],
+    [5, 0],
+    [299, 289],
+    [300, 300],
+    [305, 300],
+    [315, 305],
+    [economy.MAX_LEVEL_POINTS + 5, economy.MAX_LEVEL_POINTS],
+    // At level 10 with one extra story unlocked (three prestige points, 900 past level 10), a loss never takes it back.
+    [economy.MAX_LEVEL_POINTS + 904, economy.MAX_LEVEL_POINTS + 900],
+    [economy.MAX_LEVEL_POINTS + 1400, economy.MAX_LEVEL_POINTS + 1390],
+  ] as const) {
+    const before = fresh();
+    before.lis[MIR] = { ...before.lis[MIR]!, points };
+    const outcome = pick(before, side(KAI, MIR), { i: 0 });
+    assert.equal(outcome.state.lis[MIR]!.points, expected, `loss from ${points}`);
+    assert.equal(economy.levelOf(outcome.state.lis[MIR]!.points), economy.levelOf(points));
+    assert.equal(economy.prestigeOf(outcome.state.lis[MIR]!.points).unlocked, economy.prestigeOf(points).unlocked);
+    assert.deepEqual(outcome.affection, [
+      { li: KAI, amount: 30 },
+      ...(expected !== points ? [{ li: MIR, amount: expected - points }] : []),
+    ]);
+  }
+  // A day's outside affection already spent: the side-with gain is a story's, never capped, and leaves the cap alone.
+  const capped = fresh();
+  capped.daily = { dayKey: DAY, starlight: 0, affection: { [KAI]: economy.OUTSIDE_AFFECTION_DAILY_CAP } };
+  capped.lis[KAI] = { ...capped.lis[KAI]!, points: 290 };
+  const first = pick(capped, side(KAI, MIR), { i: 0 });
+  assert.equal(first.state.lis[KAI]!.points, 320, "a level reached by siding with him");
+  assert.deepEqual(first.state.daily, capped.daily);
+  assert.deepEqual(first.rememberedBy, [KAI, MIR], "both will remember it (his trust, her tension)");
+  // Never a hostile pick: no 15-point loss on top, and trust is never lowered.
+  assert.equal(first.state.lis[MIR]!.trust, 0);
+  const replay = pick(saved(first.state), side(KAI, MIR), { i: 0 });
+  assert.equal(replay.replay, true);
+  assert.deepEqual(replay.affection, []);
+  assert.deepEqual(replay.state, saved(first.state), "a replay changes nothing");
+  assert.equal(saved(first.state).lis[KAI]!.points, 320, "the next request reads it back");
 });

@@ -8,6 +8,13 @@
 - **Messages a day from love interests**: in Settings → Connections, choose how many times a day one you've met may message you first (0 to 24, off by default). They're spread across your day and arrive unread.
 - **A love interest's thread header fits on one row on phones**, with **Close** beside their name.
 
+## 0.6.22 — 2026-11-02
+
+- **Love interests may be genuinely evil.** A villain or a monster stays one, and taming them is the point; as affection grows they may become a better partner to you, in their own way. Scenes, climaxes and phone replies now see their darkness.
+- **Angst and Dark say it plainly.** Under Angst, cruelty isn't sanitized within your Lines and Veils, and a love interest may be a villain to everyone but you. Under Dark romance, they can be the villain. Gentle is unchanged.
+- **Real villains are back**, and a moral code fits who they are: firm, far looser, or none at all. This applies to love interests written from now on.
+- **Side with one of them.** From chapter 4, at most once every four main chapters, when love interests disagree you choose whom to back: +30 affection for them, −10 for each one you pass over, never below a level they've reached.
+
 ## 0.6.21 — 2026-11-02
 
 - **A chapter may close on a judgment you can get wrong.** When an arc holds a mystery, a traitor or a disputed account, the end of a chapter can now ask you to judge it: who did it, who betrayed you, whom to believe. The true answer is always among the options, nothing hints which it is, and whatever you pick is what happens; a wrong guess plays out in the chapters after it. Arcs without such a question never get one.

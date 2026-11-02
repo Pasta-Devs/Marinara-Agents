@@ -13,7 +13,9 @@
 //                                                                 then the next node is queued (M2b: a confrontation
 //                                                                 node carries its stance game; S/routes/arcs.ts
 //                                                                 takes its stances)
-// POST /runs/:run/chapters/:key/beats/:i/choose {choice, option} → {beat: BeatView, remembered, rememberedBy}
+// POST /runs/:run/chapters/:key/beats/:i/choose {choice, option} → {beat: BeatView, remembered, rememberedBy,
+//                                                                 affection} (#2046: how far the pick moved each love
+//                                                                 interest's affection points)
 // POST /runs/:run/chapters/:key/beats/:i/read {segment}        → ReadResult {grants, starlight, chapterDone}
 // POST /runs/:run/chapters/:key/beats/:i/ease-off {segment}    → {beat: BeatView, veilSuggestions} & ReadResult
 // POST /runs/:run/veil {limits}                                → {world: WorldView}; only ever lowers allow → veil
@@ -216,8 +218,8 @@ export const registerStoryRoutes: RegisterRoutes = (router, deps) => {
       const { choice, option } = parseBody(ChooseBody, request.body);
       const { runId } = runParam(request);
       const { key, i } = beatParams(request);
-      const { beat, remembered, rememberedBy } = await chooseOption(deps, runId, key, i, choice, option);
-      return { beat: beatView(runId, beat), remembered, rememberedBy };
+      const { beat, remembered, rememberedBy, affection } = await chooseOption(deps, runId, key, i, choice, option);
+      return { beat: beatView(runId, beat), remembered, rememberedBy, affection };
     }),
   );
 

@@ -106,7 +106,7 @@ export function storyPlanMessages({ world, player, unit, state, item, memory }: 
   const row = stageRow(stage);
   const known = knowsAboutYou(unit, liState);
   const system = [
-    "You are the Character Story planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human, even if inside a monster, capable of earned, character-consistent change.",
+    "You are the Character Story planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human, even if a monster, capable of earned, character-consistent change.",
     `Plan ${name}'s CHARACTER STORY "${item.title}": a private side story between ${name} and the protagonist, outside the main plot, told as ${STORY_NODES_MIN} to ${STORY_NODES_MAX} nodes in play order; a narrator writes each node later as one scene the player reads.`,
     "Reply with ONLY a JSON object of this shape:",
     STORY_PLAN_SHAPE,
@@ -229,7 +229,7 @@ export function prestigePlanMessages({
   const tastes = intimacyLine(world, unit);
   const shape = `{"kind": "${kinds.join("|")}", "premise": "...", "title": "...", "tags": ["..."], "summary": "...", "nodes": [{"kind": "beat|moment", "moment": "read-him|call|date", "guide": "...", "cast": ["${li}"], "place": "..."}]}`;
   const system = [
-    "You are the Extra Story planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic; each is a human, even if inside a monster.",
+    "You are the Extra Story planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic; each is a human, even if a monster.",
     `${name} and the protagonist have reached the height of their bond, and it keeps growing. Plan EXTRA STORY ${n} with ${name}: something the two of them imagine or play out together, for fun, told as ${STORY_NODES_MIN} to ${STORY_NODES_MAX} nodes in play order; a narrator writes each node later as one scene the player reads.`,
     "It is NOT canon for the main story: nothing in it happens there, changes the main plot or the mystery, or moves where they truly stand. Both of them know it is their game.",
     "Reply with ONLY a JSON object of this shape:",

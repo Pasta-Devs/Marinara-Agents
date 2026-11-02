@@ -6,7 +6,8 @@
 // once the scene's end is saved, the chapter's Starlight and affection with focus on its heading; then a replay at
 // reduced motion that changes nothing, whose Ease off on a branch puts no line it skips in the backlog, and a chapter
 // with no title in the reader and on the Story screen; and the waits (#2040, #2041): "What happened so far…" while a
-// chapter is planned, and Who said what? while a scene is written, on a phone and a desktop.
+// chapter is planned, and Who said what? while a scene is written, on a phone and a desktop; and a side-with choice
+// (#2046), marked as one, each option naming whom it backs, with the affection it moved for each love interest.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-reader.e2e.ts
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
@@ -373,7 +374,14 @@ function createStoryStub({
       if (match[2] === "choose") {
         const remembered = !beat.choiceCanon[call.body!.choice];
         beat.choiceCanon[call.body!.choice] ??= call.body!.option;
-        return { status: 200, json: { beat, remembered, rememberedBy: remembered ? [ILVAR] : [] } };
+        // #2046: a side-with pick moves affection (S/state/relationship.ts): +30 for the one backed, −10 for the others.
+        const side = remembered && beat.sideWith?.choice === call.body!.choice ? beat.sideWith : null;
+        const backed = side?.backs[call.body!.option];
+        const affection = side
+          ? Object.values(side.backs as Record<string, string>).map((li) => ({ li, amount: li === backed ? 30 : -10 }))
+          : [];
+        const rememberedBy = side ? Object.values(side.backs) : remembered ? [ILVAR] : [];
+        return { status: 200, json: { beat, remembered, rememberedBy, affection } };
       }
       if (match[2] === "read") {
         const end = beat.easedOff?.at ?? beat.segments.length - 1;
@@ -1965,3 +1973,160 @@ for (const outcome of ["ready", "uncut"] as const) {
     expect(packagePosts(), "cleanup adds no POST beyond the single stored-beat open").toEqual(opened);
   });
 }
+
+/** #2046: the first beat as a side-with scene: Ilvar and Cassian disagree, and one small choice backs each. */
+const SIDE_BEAT: Json = {
+  ...BEATS[0],
+  segments: [
+    seg("", "The canal map is pinned to the dome's glass.", { place: "The Observation Room" }),
+    seg("Ilvar Thorne", "We open the locks tonight.", { expression: "angry" }),
+    seg("Cassian", "And flood the lower town? We wait for the thaw.", { expression: "cold" }),
+  ],
+  choices: [
+    {
+      id: "choice-1",
+      kind: "small",
+      at: 2,
+      options: [
+        {
+          id: "option-1",
+          text: "Back the plan to open the locks tonight, whatever the lower town says.",
+          selection: { kind: "dialogue", text: "We open them tonight." },
+          segments: [seg("Ilvar Thorne", "Finally, someone with nerve.", { expression: "tender" })],
+        },
+        {
+          id: "option-2",
+          text: "Side with waiting.",
+          selection: { kind: "action", text: "You fold the map along its creases." },
+          segments: [seg("Cassian", "Thank you.")],
+        },
+      ],
+    },
+  ],
+  sideWith: { choice: "choice-1", backs: { "option-1": ILVAR, "option-2": CASSIAN } },
+};
+
+test("Otome Hearth Side with: the choice says so, names whom each option backs, and shows the affection it moved", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  const mobile = testInfo.project.name.includes("mobile");
+  // A phone in the light look, a desktop in the dark one; both with reduced motion.
+  await page.emulateMedia({ colorScheme: mobile ? "light" : "dark", reducedMotion: "reduce" });
+  const stub = createStoryStub({ storyBeats: [SIDE_BEAT, ...BEATS.slice(1)] });
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await stubRoutes(page, stub);
+  const root = await openStory(page);
+  await expect(root).toHaveAttribute("data-look", mobile ? "pearl" : "midnight");
+  await root.getByRole("button", { name: "Choose who leads" }).click();
+  await page
+    .getByRole("dialog", { name: "Who walks with you this chapter?" })
+    .getByRole("button", { name: /Ilvar Thorne/ })
+    .click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  await expect(line(root)).toContainText("The canal map is pinned");
+  await next(root);
+  await next(root);
+  await expect(line(root)).toContainText("We wait for the thaw.");
+
+  const choice = root.getByRole("group", { name: "What do you do?" });
+  await expect(choice).toHaveAttribute("data-side", "true");
+  await expect(choice.locator(".of-choices-note")).toHaveText("Side with one of them");
+  // Focus lands on an option, so the marker is in the group's name for a screen reader.
+  await expect(choice).toHaveAccessibleName("What do you do? Side with one of them");
+  const pills = choice.getByRole("button");
+  // Each option names whom it backs, as part of its accessible name.
+  await expect(pills).toHaveText([/Back the plan to open the locks.*Ilvar Thorne$/, /Side with waiting\.Cassian$/]);
+  await expect(pills.first()).toHaveAccessibleName(/Back the plan to open the locks.*Ilvar Thorne/);
+  for (const pill of await pills.all()) {
+    const [box, badge] = [await pill.boundingBox(), await pill.locator(".of-choice-backs").boundingBox()];
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+    expect(badge!.x + badge!.width).toBeLessThanOrEqual(box!.x + box!.width);
+  }
+  const noSideways = async (width: number) =>
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+  await noSideways(page.viewportSize()!.width);
+  await page.screenshot({ path: testInfo.outputPath("side-with-choice.png") });
+
+  // Picked by touch on a phone, by keyboard (Enter on the focused first option) on a desktop.
+  if (mobile) await pills.first().tap();
+  else {
+    await pills.first().focus();
+    await page.keyboard.press("Enter");
+  }
+  const gained = root.locator(".of-toast--affection").filter({ hasText: "+30 affection with Ilvar Thorne" });
+  const lost = root.locator(".of-toast--affection").filter({ hasText: "−10 affection with Cassian" });
+  await expect(gained).toBeVisible();
+  await expect(lost).toBeVisible();
+  // The toast follows the answer, so the pick is recorded by now.
+  expect(posts(stub, "/choose")[0]!.body).toMatchObject({ choice: "choice-1", option: "option-1" });
+  await expect(root.locator(".of-toasts")).toHaveAttribute("aria-live", "polite");
+  await expect(root.getByText("They’ll remember that.")).toHaveCount(0);
+  // Reduced motion: the toasts appear without animating.
+  expect(await gained.evaluate((element) => getComputedStyle(element).animationName)).toBe("none");
+  await expect(line(root)).toContainText("We open them tonight.");
+  await page.screenshot({ path: testInfo.outputPath("side-with-toasts.png") });
+  // The levels follow from it: the run is read again.
+  await expect
+    .poll(() => stub.calls.filter((call) => call.method === "GET" && call.path.endsWith(`/runs/${RUN}`)).length)
+    .toBeGreaterThan(1);
+  if (mobile) {
+    await page.setViewportSize({ width: 320, height: 568 });
+    await noSideways(320);
+  }
+  expect(pageErrors).toEqual([]);
+});
+
+test("Otome Hearth Side with on a replay: the first pick's label keeps its room beside both badges", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  const mobile = testInfo.project.name.includes("mobile");
+  await page.emulateMedia({ colorScheme: mobile ? "dark" : "light", reducedMotion: "reduce" });
+  // The long option is the first pick: it carries "Ilvar Thorne" and "Your first choice".
+  const firstPicked = { ...SIDE_BEAT, choiceCanon: { "choice-1": "option-1" } };
+  const stub = createStoryStub({ done: true, storyBeats: [firstPicked, ...BEATS.slice(1)] });
+  await stubRoutes(page, stub);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  await expect(line(root)).toContainText("The canal map is pinned");
+  await next(root);
+  await next(root);
+  const choice = root.getByRole("group", { name: "What do you do? Side with one of them" });
+  const pill = choice.getByRole("button").first();
+  await expect(pill.locator(".of-choice-first")).toHaveText(/Your first choice/i);
+  for (const width of mobile ? [320, 390] : [page.viewportSize()!.width]) {
+    if (mobile) await page.setViewportSize({ width, height: 700 });
+    const label = await pill.locator(".of-choice-pill-text").boundingBox();
+    // Squeezed by both badges, the label went one word (or letter) a line and the pill grew over the reader's header.
+    expect(label!.width, `the label keeps room for a few words at ${width}px`).toBeGreaterThanOrEqual(100);
+    // Every badge corner lies inside the pill's rounded outline (a tall capsule's curve cut into a wrapped badge).
+    const outside = await pill.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      const radius = Math.min(parseFloat(getComputedStyle(element).borderTopLeftRadius), box.width / 2, box.height / 2);
+      return [...element.querySelectorAll(".of-choice-backs, .of-choice-first")].flatMap((badge) => {
+        const b = badge.getBoundingClientRect();
+        const corners: Array<[number, number]> = [
+          [b.left, b.top],
+          [b.right, b.top],
+          [b.left, b.bottom],
+          [b.right, b.bottom],
+        ];
+        return corners.some(([x, y]) => {
+          const nearX = Math.min(Math.max(x, box.left + radius), box.right - radius);
+          const nearY = Math.min(Math.max(y, box.top + radius), box.bottom - radius);
+          return Math.hypot(x - nearX, y - nearY) > radius + 0.5;
+        })
+          ? [badge.textContent]
+          : [];
+      });
+    });
+    expect(outside, `badges cut by the pill's outline at ${width}px`).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      page.viewportSize()!.width,
+    );
+    await page.screenshot({ path: testInfo.outputPath(`side-with-replay-${width}.png`) });
+  }
+});

@@ -84,6 +84,19 @@ test("an unrevealed secret shows only as its tells; a revealed one is what the p
   assert.doesNotMatch(wound, /Hidden/);
 });
 
+test("the card names a love interest's darkness after their red lines, and leaves it out when there is none (#2054)", () => {
+  const dark = otomeSceneCard(
+    unit({ darkness: { kinds: ["cruelty for its own sake", "experiments on the living"] } }),
+    {
+      stage: 1,
+    },
+  );
+  assert.match(dark, /Red lines: [^\n]*\. Darkness: cruelty for its own sake; experiments on the living\./);
+  // A card cut to fit loses the darkness before the red lines it kept before (CodeRabbit on #2055).
+  assert.ok(dark.indexOf("Red lines: ") < dark.indexOf("Darkness: "));
+  assert.doesNotMatch(otomeSceneCard(unit(), { stage: 1 }), /Darkness: /, "an empty list adds nothing");
+});
+
 test("every list keeps at most 3 items", () => {
   const card = otomeSceneCard(unit(), { stage: 1 });
   assert.match(card, /Never: says sorry; raises their voice; uses a pet name\./);

@@ -843,6 +843,11 @@ export interface ChapterNode {
   reveal?: { kind: "piece"; li: LiId } | { kind: "truth" };
   /** This node carries the arc's big event, on the arc's last chapter (hidden from the client). */
   arcEvent?: true;
+  /**
+   * #2046: a side-with scene. The love interests in it disagree, and one small choice lets the protagonist back one of
+   * them (a main chapter's beat node with two to four of them, S/story/chapters.ts; hidden from the client).
+   */
+  sideWith?: true;
   /** The chapter's last node may close on the arc's judgment (#2047), never knowing which answer is true (hidden). */
   judgment?: ArcJudgment;
 }
@@ -946,6 +951,17 @@ export interface Effect {
   /** Something the protagonist tells him: he may know it from now on. */
   disclose?: string;
   resolve?: { id: string; status: Exclude<GrievanceStatus, "open"> };
+  /**
+   * #2046: affection points a side-with pick moves (SH/economy.ts SIDE_WITH_AFFECTION). Set only by the game, never
+   * read from a reply; a loss stops at the floor of the level reached.
+   */
+  affection?: number;
+}
+
+/** How far a first-play pick moved a love interest's affection points (POST .../choose). */
+export interface AffectionChange {
+  li: LiId;
+  amount: number;
 }
 
 /** `${R}:beat:${key}:${i}`: one written node. */
@@ -984,6 +1000,8 @@ export interface Beat {
    * opening. Hidden: the client gets a view.
    */
   confrontation?: Confrontation;
+  /** #2046: this beat's side-with choice, and the love interest each of its options backs (optionId → LiId). */
+  sideWith?: { choice: string; backs: Record<string, LiId> };
 }
 
 // ── A chapter's climax game, one call: the Confrontation (M2b, P12: three rounds of Press, Hold, Yield or Reveal) or

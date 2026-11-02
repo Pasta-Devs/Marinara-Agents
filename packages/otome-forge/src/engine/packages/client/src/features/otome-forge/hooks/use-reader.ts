@@ -2,7 +2,8 @@
 // Otome Forge: the story's queries (GET /story, GET /chapters/:key) and the reader's state. The reader asks for one
 // beat at a time (POST .../beats/:i writes it if it is missing; the server then writes the next one ahead), plays it
 // line by line, saves first-play choices, tells the server how far it was read (Starlight and affection come back),
-// and handles Ease off, Rewrite beat and Cancel. A Confrontation node (M2b) is played as a beat whose choices are the
+// and handles Ease off, Rewrite beat and Cancel. A side-with pick (#2046) shows the affection it moved with each love
+// interest instead of "They'll remember that.". A Confrontation node (M2b) is played as a beat whose choices are the
 // four stances (lib/reader-state.ts confrontationBeat): each stance is sent once, and the server reveals the next round
 // or, after the third, the ending, which closes on its own card. A key image is marked seen once it has been shown,
 // after the server has heard the read reached it; a paint that waits for consent is painted on a tap.
@@ -34,6 +35,7 @@ import {
 } from "../lib/reader-state";
 import { REDUCED_EFFECTS_ATTRIBUTE, REDUCED_MOTION_QUERY, reducedFrom } from "../lib/reduced-motion";
 import type {
+  AffectionChange,
   BeatView,
   ChapterDetail,
   ChoiceOption,
@@ -149,6 +151,8 @@ interface Position {
 type ToastInput =
   | { kind: "remember"; li: LiId | null }
   | { kind: "starlight"; amount: number }
+  /** #2046: what a side-with pick moved with one love interest (+ for the one backed, − for each one passed over). */
+  | { kind: "affection"; li: LiId; amount: number }
   /** A key image unlocked in the Album. */
   | { kind: "cg" }
   /** Music or a voice could not play (the scene goes on without it). */
@@ -841,10 +845,12 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
         return;
       }
       try {
-        const result = await otome.post<{ beat: BeatView; remembered: boolean; rememberedBy?: LiId[] }>(
-          `${base}/beats/${node}/choose`,
-          { choice: choice.id, option: option.id },
-        );
+        const result = await otome.post<{
+          beat: BeatView;
+          remembered: boolean;
+          rememberedBy?: LiId[];
+          affection?: AffectionChange[];
+        }>(`${base}/beats/${node}/choose`, { choice: choice.id, option: option.id });
         const picked = result.beat.choiceCanon[choice.id] ?? option.id;
         setLoad({ status: "ready", node, beat: result.beat });
         // A big choice at the last line adds its selection after it: the new end is reported again.
@@ -853,9 +859,14 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
             ? { ...current, picks: { ...current.picks, [choice.id]: picked }, line: lineIndex + 1, ended: false }
             : current,
         );
+        // #2046: a side-with pick shows what it moved with each love interest, and the levels follow from it.
+        const moved =
+          result.beat.sideWith?.choice === choice.id && Array.isArray(result.affection) ? result.affection : [];
+        for (const { li, amount } of moved) pushToast({ kind: "affection", li, amount });
+        if (moved.length) void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
         // Named only when the pick touched one love interest; "They'll remember that." otherwise.
         const by = Array.isArray(result.rememberedBy) ? result.rememberedBy : [];
-        if (result.remembered) pushToast({ kind: "remember", li: by.length === 1 ? by[0]! : null });
+        if (result.remembered && !moved.length) pushToast({ kind: "remember", li: by.length === 1 ? by[0]! : null });
       } catch (error) {
         setChoiceError(otome.errorMessage(error));
       } finally {
@@ -863,7 +874,20 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
         setChoosing(null);
       }
     },
-    [base, beat, choosing, confrontation, lineIndex, node, otome, position, preparingBackground, pushToast],
+    [
+      base,
+      beat,
+      choosing,
+      confrontation,
+      lineIndex,
+      node,
+      otome,
+      position,
+      preparingBackground,
+      pushToast,
+      queryClient,
+      runKey,
+    ],
   );
 
   // ── Ease off and veils ──
