@@ -40,7 +40,7 @@ import { isRecord, readFields, validItems } from "../schemas/common.js";
 import { readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeWorld } from "../schemas/world.js";
 import type { OtomeStore } from "../store.js";
-import { recallText, type CanonBudget, type StoryMemory } from "../story/canon.js";
+import { recallText, type StoryMemory } from "../story/canon.js";
 import { ownView } from "../story/prompts.js";
 import { ChatReplySchema, SUGGESTIONS_MAX, chatReplyMessages, normalizeChatReply, type ChatReply } from "./prompts.js";
 
@@ -55,13 +55,6 @@ export const PAGE_SIZE = 80;
 export const TAIL_MESSAGES = 16;
 /** His newest closed conversations P17 lists in full (and recall leaves out). */
 export const LISTED_SESSIONS = 6;
-/**
- * The canon P17 reads in full: the latest chapter's end, and the canon before it when memory cannot answer; his newest
- * route, repair or date chapter goes in even when it is longer, as its end (S/story/canon.ts newestWithin). The
- * overview, the recalled details (older conversations among them) and the decisions always go in whole: the kit sizes
- * recall to the connection's context, as GF's chat fits its memory by dropping details, never by cutting the text.
- */
-export const CHAT_CANON_BUDGET: CanonBudget = { latest: 2000, earlier: 2000 };
 /** A client message id, or one this file makes. */
 export const MESSAGE_ID = /^[a-z0-9][a-z0-9-]{7,59}$/;
 // What a stored thread may hold: generous beside the prompt limits (S/phone/prompts.ts), so a later change of those
@@ -321,7 +314,6 @@ async function answer(
       query: forgeChatRecallQuery(tail, { speakers: [unit.name, run.player.name] }),
       listed: memories.map((session) => sessionSourceId(li, session)),
       debugMode,
-      budget: CHAT_CANON_BUDGET,
     });
     const { liState, offscreen } = ownView(run.state, li);
     const { value } = await generateJson(deps, {
@@ -335,9 +327,10 @@ async function answer(
         liState,
         tail,
         memories,
-        story,
+        story: story.text,
         offscreen,
       }),
+      memory: story,
       schema: ChatReplySchema,
       normalize: (raw) => normalizeChatReply(raw, names),
       temperature: 0.95,

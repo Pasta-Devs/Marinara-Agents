@@ -30,9 +30,9 @@
 //   left. The once-only mark is the finish's own entry in `chapters[key].applied` (`${nodes}/finish`, applied through
 //   applyChoiceEffects); a Make it right finish leaves what it found beside it (`${nodes}/make-it-right-mended` or
 //   `-standing`). A replay answers with the same outcome, the same mend and no grants.
-// - Privacy: a completed date is a `chat` memory source with `audience: [li]` (S/story/canon.ts readStorySources), so
-//   only that love interest's own readers and scenes he is in recall it, and it never reaches the shared overview. It
-//   is never an Engine Scene.
+// - Privacy: a completed date is a `character-story` memory source with `audience: [li]` (S/story/canon.ts
+//   readStorySources), as GF's bond chapter: summarized and folded into the shared overview, titled private, while only
+//   that love interest's own readers and scenes he is in recall it in detail. It is never an Engine Scene.
 // - Keepsake (POST /art/keepsake): painted only on the player's tap, through the M1 image client, once the date is
 //   finished; the client asks first when Ask before painting is on, and shows the prompt when the Engine reviews image
 //   prompts. Its record follows the paid-work rules (art/paint.ts): pending before the paid call, a failure saved and
@@ -546,8 +546,9 @@ export async function startDate(
         place: input.place,
         storyPlace,
         makeItRight,
-        memory,
+        memory: memory.text,
       }),
+      memory,
       schema: DatePlanReplySchema,
       normalize: (reply) => {
         const plan = normalizeDatePlanReply(reply, context);

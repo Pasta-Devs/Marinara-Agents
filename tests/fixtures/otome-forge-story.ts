@@ -2,6 +2,7 @@
 // story and arc routes on a fake router, scripted model replies, and builders for a chapter plan, a beat reply, a
 // Confrontation reply and a Closer's (#1938).
 import assert from "node:assert/strict";
+import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 import { createForgeStoryCancellation } from "@forge-kit/story-cancel-server.mjs";
 import type {
   Bible,
@@ -39,7 +40,12 @@ import {
 } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { createOtomeStore } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/store.ts";
-import { createFakeDocuments, createFakeRuntime, type FakeReply } from "./otome-forge-fakes.ts";
+import {
+  createFakeDocuments,
+  createFakeRuntime,
+  type FakeReply,
+  type FakeRuntimeOptions,
+} from "./otome-forge-fakes.ts";
 
 export const at = "2026-10-28T10:00:00.000Z";
 export const HE = { subject: "he", object: "him", possessive: "his" };
@@ -83,6 +89,7 @@ export async function storyWorld({
   cancellation = false,
   personas = [],
   arcReply,
+  model = {},
 }: {
   runKey: string;
   replies?: FakeReply[];
@@ -92,6 +99,8 @@ export async function storyWorld({
   personas?: Array<{ id: string; data: unknown }>;
   /** #1983 M4: the arc plan the fake writes, when a test needs one that differs from the default. */
   arcReply?: (prompt: string) => string;
+  /** The fake connection's context window, output cap and background admission (#2039). */
+  model?: Pick<FakeRuntimeOptions, "maxContext" | "maxOutputTokens" | "admissionRun">;
 }) {
   const fake = createFakeDocuments();
   const store = createOtomeStore(fake.documents);
@@ -100,6 +109,7 @@ export async function storyWorld({
     replies,
     personas,
     ...(arcReply ? { arcReply } : {}),
+    ...model,
   });
   const runId = runIdOf(runKey);
   await store.mutateDoc(INDEX_TARGET, normalizeIndex, (index) => ({
@@ -405,5 +415,37 @@ export function closerReply(
     grievance: { text: "She laughed when he finally spoke of his mother.", severity: "minor" },
     disclosure: "Ines said she is afraid of the dark.",
     ...changes,
+  };
+}
+
+/**
+ * A ready memory recalled for a reader whose window is `maxContext`, with one recalled detail of about 40000 tokens:
+ * only the fit the memory is handed to can leave that detail out, so a prompt sent on a far larger connection shows
+ * whether its caller handed it over.
+ */
+export function squeezedMemory(maxContext: number) {
+  const overview = "SQUEEZED-OVERVIEW: the lights of the quay fail one by one.";
+  const details = [
+    {
+      id: "phone-old",
+      kind: "chat",
+      title: "Kai's phone conversation",
+      content: `SQUEEZED-DETAIL ${Array.from({ length: 40_000 }, (_, n) => `tide${n % 97}`).join(" ")}`,
+    },
+  ];
+  assert.ok(estimateTextTokens(details[0]!.content) > 38_000);
+  return {
+    async recall() {
+      return {
+        status: { phase: "ready" as const, retryable: false },
+        lagging: false,
+        overview,
+        details,
+        maxContext,
+        text: "",
+        recent: [],
+      };
+    },
+    maintain: async () => true,
   };
 }

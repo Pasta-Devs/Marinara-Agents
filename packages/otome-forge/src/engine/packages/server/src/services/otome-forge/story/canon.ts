@@ -11,39 +11,54 @@
 // waits, so nothing is written after it before it ends. Eased off, it keeps what was played and closes on the marker.
 //
 // Memory sources are completed chapters only (the kit's "completed, first-canon snapshots"):
-//   main                        → kind "chapter", shared (the overview, the recent canon, recalled details)
-//   route, repair, story, date  → kind "chat", audience [their love interest's id]
-//   an extra story (#2025)      → none: it is imagined together for fun, never canon
-// A love interest's own chapter is the kit's `chat`, the one kind it keeps private everywhere: never in the overview
-// or the recent canon, and a recalled detail only for that love interest's own reader or a scene they are in. Its title
-// names whose it is and that it is private (titleOf), so a scene with others in it knows who else does not know it.
-// Audience entries are plain LI ids, so recall's `cast` and `reader` are LI ids too. Care data is never a source.
+//   main, route, repair      → kind "chapter": the story's own storylines, recalled in the chapter lane
+//   date, story              → kind "character-story": a love interest's date, or a Memory's Character Story or
+//                              Moment (GF's bond chapter), recalled as a side memory
+//   an extra story (#2025)   → none: it is imagined together for fun, never canon
+// The kit summarizes each one and folds every one into the shared overview, so every prompt knows the whole timeline,
+// as GF's overview holds its Character Stories (0.6.17; before it a love interest's own chapter was a `chat`, kept as
+// written and out of the overview, so long routes lost their history). Every chapter but a main one has audience [its
+// love interest's id]: its summary as a recalled detail, as recent canon and in full reaches only a prompt for his own
+// reader or a scene he is in (S/memory/memory.ts lists the others out of the kit's ranking, mayKnow here), and so do
+// its decisions. Another love interest knows it only through the overview, where its title (titleOf) names whose it
+// is and that it is private, and the knowledge boundary keeps him from claiming he was there. Audience entries are
+// plain LI ids, so recall's `cast` and `reader` are LI ids too. Care data is never a source.
 //
-// recallText gives every story prompt (P5, P6, and M2b's P10, P11, P12) and M3's chat reply (P17, as its love
-// interest's own reader, on a smaller CanonBudget) the story before it whatever state the memory is in, so first play
-// stays canon:
-// - memory ready: the kit's overview and recalled details, the summaries it does not cover yet, the latest completed
-//   chapter in full, and the private chapters the prompt may know in full, newest first, as the canonical history
-//   sends them (the kit hears they are listed, so it ranks only older ones); the newest always goes in, its end when
-//   a small budget cannot hold it whole (on both paths, when it is the newest canon before the latest chapter);
+// recallText gives every story prompt (P5, P6, P10, P11, P12, the date, Character Story, extra story and banner plans)
+// and the chat reply (P17, as its love interest's own reader) the story before it, whatever state the memory is in, as
+// the kit's memory context (forgeMemoryContext), which the generation core fits to the connection (S/generation.ts):
+// - the previous chapter in full (GF's "# Previous chapter in full"): the last completed chapter of the storyline the
+//   prompt continues (`continues`): the main story's for its plans and its scenes; a love interest's own route and
+//   repair chapters for his plans and their scenes (the main story's while he has none); and otherwise the newest
+//   main, route or repair chapter the prompt may know. Only what was played: each first-play pick with its branch,
+//   never an option not taken (forgeCanonicalSegments, confrontationCanon);
+// - memory ready: the kit's overview and recalled details (up to 3 chapters and 3 side memories, Read Me among them),
+//   and around the previous chapter, in story order, the canon the overview does not cover yet as its summary (a date
+//   or Character Story as written while it has none). The details give way first when the prompt does not fit; then,
+//   only while the reply would get less than its floor, the older storyline chapter summaries, oldest first. As in
+//   GF, the newest chapter summary and every date and Character Story always stay;
 // - no memory, memory not ready (stale, pending, a failed summary, an unknown context) or a recall that fails: the
-//   canonical history instead, GF's legacy history: the latest completed chapter in full and the canon before it, the
-//   oldest left out first. Stale or pending memory catches up in the background; a failed one waits for Retry;
-// - always: the irrevocable decisions, every big choice of a completed chapter (GF's continuity block), so a summary
-//   that drops one never undoes it.
-// The knowledge boundary (mayKnow, and the kit's `chat` audience): on both paths a love interest's route, repair, story
-// or date chapter, its summary and its decisions reach only a prompt for their own reader or a scene they are in, never
-// another love interest's scene, plan, note or chat reply. Main chapters stay shared.
-// ponytail: a private chapter is never summarized (the kit keeps a `chat` as written); the ceiling is that only the
-// newest fit in full and an older one is recalled whole or not at all. The upgrade path (R3) is a kit audience on
-// `character-story` that the overview and the recent canon honour, so private chapters get summaries too.
+//   canonical history instead, GF's legacy history: the previous chapter in full and the other chapters the prompt may
+//   know, newest first within EARLIER_CANON_TOKENS, each whole (the newest one however long). The previous chapter and
+//   everything after it always stay; the canon before it gives way at the reply floor, its storyline chapters first,
+//   then dates and Character Stories, each oldest first. Stale or pending memory catches up in the background; a
+//   failed one waits for Retry;
+// - always: the irrevocable decisions, every big choice of a completed chapter the prompt may know (GF's locked
+//   decisions, the context's `fate`), so a summary that drops one never undoes it.
 import { forgeCanonicalSegments } from "@forge-kit/player-choices-server.mjs";
-import { estimateTextTokens, sliceTextToTokenBudget } from "@forge-kit/shared-token-estimator.mjs";
-import type { ForgeMemorySource, ForgeRecallOptions } from "@forge-kit/story-memory.mjs";
+import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
+import { forgeMemoryContext, type ForgeMemoryContext } from "@forge-kit/story-memory-fit.mjs";
+import {
+  forgeStoryMemoryText,
+  type ForgeMemorySource,
+  type ForgeRecallOptions,
+  type ForgeRecallResult,
+} from "@forge-kit/story-memory.mjs";
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import type {
   Beat,
   Chapter,
+  LiId,
   RunState,
   Segment,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
@@ -170,6 +185,13 @@ interface Completed {
 const audienceOf = (chapter: Chapter): string[] | undefined =>
   chapter.kind === "main" ? undefined : [chapter.li ?? chapter.lead];
 
+/** The kit's kind of a chapter (see the header): a storyline's chapter, or a side story (GF's bond chapter). */
+const kindOf = (chapter: Chapter): ForgeMemorySource["kind"] =>
+  chapter.kind === "date" || chapter.kind === "story" ? "character-story" : "chapter";
+
+/** A storyline's chapter (main, route, repair): what the previous chapter in full may be. */
+const storyline = (chapter: Chapter) => kindOf(chapter) === "chapter";
+
 /**
  * Every completed chapter of the run in story order: a main chapter at its number, any other kind just after the main
  * chapters completed before it.
@@ -222,8 +244,8 @@ function titleOf({ chapter, owner }: Completed): string {
 }
 
 /**
- * The chapters as memory sources (their whole canon), in the order given; one not settled yet is left out. A private
- * chapter is a `chat` with its audience (see the header).
+ * The chapters as memory sources (their whole canon), in the order given; one not settled yet is left out. A love
+ * interest's own chapter carries its audience (see the header).
  */
 async function sourcesOf(
   store: Pick<OtomeStore, "readDoc">,
@@ -239,7 +261,7 @@ async function sourcesOf(
     const audience = audienceOf(chapter);
     sources.push({
       id: chapter.key,
-      kind: audience ? "chat" : "chapter",
+      kind: kindOf(chapter),
       title: titleOf(completed),
       content,
       order,
@@ -268,11 +290,11 @@ export type StoryMemory = Pick<OtomeMemory, "recall" | "maintain">;
 type Knowing = Pick<ForgeRecallOptions, "reader" | "cast">;
 
 /**
- * Whether canon with this audience may reach the prompt. Shared canon (no audience) always may; private canon only for
- * its own love interest's reader, or a scene they are in. Naming neither is a scene with nobody in it, as
- * S/memory/memory.ts recalls. The kit's recall of a `chat` source follows the same rule.
+ * Whether canon with this audience may reach the prompt beyond the overview. Shared canon (no audience) always may;
+ * private canon only for its own love interest's reader, or a scene they are in. Naming neither is a scene with nobody
+ * in it, as S/memory/memory.ts recalls. The kit's recall of a `chat` source follows the same rule.
  */
-function mayKnow({ reader, cast }: Knowing, audience: readonly string[] | undefined): boolean {
+export function mayKnow({ reader, cast }: Knowing, audience: readonly string[] | undefined): boolean {
   if (!audience) return true;
   return reader ? audience.includes(reader) : audience.some((id) => (cast ?? []).includes(id));
 }
@@ -289,9 +311,7 @@ const chapterName = (completed: Completed) =>
 /**
  * Every big choice of the completed chapters the prompt may know, in story order, with what the protagonist said or did;
  * "" when there are none. A big choice only ever ends a chapter (the kit's `terminal`), so each chapter's last beat is
- * the only one read; one eased off before its choice has none.
- * ponytail: a block of its own beside the recalled text; the upgrade path is the kit's forgeMemoryContext `fate` slot,
- * which keeps it whole while fitForgeMemoryPrompt trims the rest.
+ * the only one read; one eased off before its choice has none. The memory context's `fate`: it always stays whole.
  */
 async function decisionsText(
   store: Pick<OtomeStore, "readDoc">,
@@ -320,89 +340,98 @@ async function decisionsText(
 }
 
 /**
- * The latest completed chapter goes in whole, as the kit expects of its caller: nine nodes at the narrator's word cap
- * fit; a longer one keeps its end.
+ * The other canon the canonical history sends besides the previous chapter, newest first, each chapter whole: the
+ * bound of a memory that cannot answer (rule 7), as GF's legacy history.
+ * ponytail: a fixed bound, whatever the model's window; the fitter still leaves out what came before the previous
+ * chapter at the reply floor.
+ * The upgrade path is sizing it to the connection's context, as recall's own budget is.
  */
-const LATEST_CHAPTER_TOKENS = 12000;
-/** The canon before the latest chapter that the canonical history sends, newest first: the oldest is left out first. */
 const EARLIER_CANON_TOKENS = 12000;
 
-/**
- * How much canon a prompt reads in full: the latest chapter's end, and the canon before it when memory cannot answer.
- * The story prompts read the defaults; a smaller prompt (P17's chat reply) passes less. Recalled memory and the
- * decisions are never cut by it: the kit sizes recall to the connection's context.
- */
-export interface CanonBudget {
-  latest: number;
-  earlier: number;
+/** Who a prompt is written for, and the storyline it continues (see the header). */
+export type RecallTextOptions = Omit<ForgeRecallOptions, "runId"> & {
+  debugMode?: boolean;
+  /** "main" for the main story's plans and scenes, a love interest's id for his route and repair plans and scenes. */
+  continues?: "main" | LiId;
+};
+
+/** A block of the memory context's prefix, in story order. */
+interface Block {
+  order: number;
+  text: string;
+  /** A storyline chapter's (main, route, repair), not a date's or Character Story's. */
+  chapter?: boolean;
 }
 
-const STORY_BUDGET: CanonBudget = { latest: LATEST_CHAPTER_TOKENS, earlier: EARLIER_CANON_TOKENS };
+const byOrder = (a: Block, b: Block) => a.order - b.order;
 
-const latestBlock = (title: string, content: string, tokens: number) =>
-  `# Latest chapter: ${title}\n${sliceTextToTokenBudget(content, tokens, true)}`;
+/** The kit's text with every block trimmed, so the prompt's `memory.trim()` is the context's text exactly. */
+const renderMemory = (memory: Parameters<typeof forgeStoryMemoryText>[0]) => forgeStoryMemoryText(memory).trim();
 
-/** A source as shown: in full, or (the newest private chapter on a small budget) its end. */
-const canonBlock = (source: ForgeMemorySource, content: string) =>
-  `# ${content === source.content ? "Canon in full" : "The end of"}: ${source.title}\n${content}`;
+const block = (heading: string, title: string, content: string) => `# ${heading}: ${title}\n${content.trim()}`;
 
 /**
- * The newest of these sources that fit `budget.earlier` together, so the oldest is left out first, each with the text
- * shown. The newest goes in even when it does not fit, if it is a private chapter: its end within `budget.latest`, as
- * the latest chapter's, so a small budget (P17's) still reads the scene its love interest just played.
+ * The previous chapter in full (see the header): the last completed chapter of the storyline the prompt continues, of
+ * those it may know.
  */
-function newestWithin(sources: readonly ForgeMemorySource[], budget: CanonBudget): Map<ForgeMemorySource, string> {
-  const kept = new Map<ForgeMemorySource, string>();
+function previousOf(known: readonly Completed[], continues: RecallTextOptions["continues"]): Completed | undefined {
+  const chapters = known.filter(({ chapter }) => storyline(chapter));
+  const main = () => chapters.filter(({ chapter }) => chapter.kind === "main").at(-1);
+  if (continues === "main") return main();
+  if (continues) {
+    const his = chapters.filter(({ chapter }) => chapter.kind !== "main" && audienceOf(chapter)?.[0] === continues);
+    return his.at(-1) ?? main();
+  }
+  return chapters.at(-1);
+}
+
+/**
+ * The memory context of these blocks in story order. Only `optional` (some of them, in the order they go) may be left
+ * out by the fitter, and only while the reply would otherwise get less than its floor; every other block stays.
+ */
+function contextOf(
+  result: Pick<ForgeRecallResult, "overview" | "details" | "maxContext">,
+  blocks: Block[],
+  optional: Block[],
+  fate: string,
+): ForgeMemoryContext {
+  const prefix = [...blocks]
+    .sort(byOrder)
+    .map((entry) => entry.text)
+    .join("\n\n");
+  return forgeMemoryContext(result, { prefix, fate, optional: optional.map((entry) => entry.text), renderMemory });
+}
+
+/**
+ * The canonical history, for a memory that cannot answer (GF's legacy history): besides the previous chapter in full,
+ * the other chapters the prompt may know, newest first within EARLIER_CANON_TOKENS, each whole; the newest of them
+ * however long, as it is the one a prompt most needs.
+ */
+async function canonicalHistory(
+  store: Pick<OtomeStore, "readDoc">,
+  runId: string,
+  known: readonly Completed[],
+  previousKey: string | undefined,
+  protagonist: string,
+): Promise<Block[]> {
+  const kept: Block[] = [];
   let used = 0;
-  for (const source of [...sources].reverse()) {
-    used += estimateTextTokens(source.content);
-    if (used > budget.earlier) {
-      if (!kept.size && source.kind === "chat") {
-        kept.set(source, sliceTextToTokenBudget(source.content, budget.latest, true));
-      }
-      break;
-    }
-    kept.set(source, source.content);
+  for (const completed of [...known].reverse()) {
+    if (completed.chapter.key === previousKey) continue;
+    const content = await chapterCanon(store, runId, completed.chapter, protagonist);
+    if (!content?.trim()) continue;
+    const text = block("Canon in full", titleOf(completed), content);
+    used += estimateTextTokens(text);
+    if (used > EARLIER_CANON_TOKENS && kept.length) break;
+    kept.push({ order: completed.order, text, chapter: storyline(completed.chapter) });
   }
   return kept;
 }
 
 /**
- * The canonical history, for a memory that cannot answer: the canon the prompt may know in story order, the latest
- * completed chapter in full and the canon before it within `budget.earlier`, newest first (GF's legacy history).
- * ponytail: fixed budgets, then model.fitContext; the upgrade path is fitForgeMemoryPrompt with the connection's
- * context, which drops the oldest chapters only while the reply would otherwise get less than its floor.
- */
-async function canonicalHistory(
-  store: Pick<OtomeStore, "readDoc">,
-  runId: string,
-  chapters: readonly Completed[],
-  protagonist: string,
-  knowing: Knowing,
-  budget: CanonBudget,
-): Promise<string> {
-  const known = chapters.filter(({ chapter }) => mayKnow(knowing, audienceOf(chapter)));
-  const sources = await sourcesOf(store, runId, known, protagonist);
-  const latest = sources.filter((source) => source.kind === "chapter").at(-1);
-  const kept = newestWithin(
-    sources.filter((source) => source !== latest),
-    budget,
-  );
-  return sources
-    .filter((source) => source === latest || kept.has(source))
-    .map((source) =>
-      source === latest
-        ? latestBlock(source.title, source.content, budget.latest)
-        : canonBlock(source, kept.get(source)!),
-    )
-    .join("\n\n");
-}
-
-/**
- * The story before a prompt, as text (see the header): recalled memory when it is ready, else the canonical history,
- * then the irrevocable decisions. "" when nothing is completed yet; a failure is logged and never holds the story up.
- * ponytail: plain text fitted by model.fitContext; the upgrade path is the kit's forgeMemoryContext with
- * fitForgeMemoryPrompt in the generation core, which drops recalled details before trimming anything else.
+ * The story before a prompt, as the kit's memory context (see the header): the generation core fits it to the
+ * connection (pass it as generateJson's `memory`, and its `text` to the prompt builder). Its text is "" when nothing is
+ * completed yet; a failure is logged and never holds the story up.
  */
 export async function recallText(
   deps: {
@@ -411,83 +440,94 @@ export async function recallText(
     runtime?: Pick<CapabilityRuntimeHost, "logger">;
   },
   runId: string,
-  options: Omit<ForgeRecallOptions, "runId"> & { debugMode?: boolean; budget?: CanonBudget },
-): Promise<string> {
-  const { debugMode, budget = STORY_BUDGET, ...recall } = options;
+  options: RecallTextOptions,
+): Promise<ForgeMemoryContext> {
+  const { debugMode, continues, ...recall } = options;
   const warn = (what: string, error: unknown) =>
     deps.runtime?.logger.warn("[otome-forge] %s: %s", what, error instanceof Error ? error.message : String(error));
-  let story: Promise<{ chapters: Completed[]; protagonist: string }> | undefined;
-  const readStory = () =>
-    (story ??= (async () => {
-      const [state, player] = await Promise.all([
-        deps.store.readDoc(stateId(runId), normalizeState),
-        deps.store.readDoc(playerId(runId), normalizePlayer),
-      ]);
-      return {
-        chapters: state ? await completedChapters(deps.store, runId, state) : [],
-        protagonist: player?.name ?? "",
-      };
-    })());
+  const story = await (async () => {
+    const [state, player] = await Promise.all([
+      deps.store.readDoc(stateId(runId), normalizeState),
+      deps.store.readDoc(playerId(runId), normalizePlayer),
+    ]);
+    return {
+      chapters: state ? await completedChapters(deps.store, runId, state) : [],
+      protagonist: player?.name ?? "",
+    };
+  })().catch((error: unknown) => {
+    warn("The canonical history could not be read", error);
+    return { chapters: [] as Completed[], protagonist: "" };
+  });
+  const { chapters, protagonist } = story;
+  const known = chapters.filter(({ chapter }) => mayKnow(recall, audienceOf(chapter)));
+  const last = previousOf(known, continues);
+  const lastContent = last && (await chapterCanon(deps.store, runId, last.chapter, protagonist).catch(() => null));
+  const previous: Block | null =
+    last && lastContent?.trim()
+      ? { order: last.order, text: block("Previous chapter in full", titleOf(last), lastContent) }
+      : null;
+  const previousKey = previous ? last!.chapter.key : undefined;
+  const fate = await decisionsText(deps.store, runId, chapters, recall).catch((error: unknown) => {
+    warn("The saved decisions could not be read", error);
+    return "";
+  });
 
-  const recalled = async (memory: StoryMemory): Promise<string | null> => {
-    const { chapters, protagonist } = await readStory();
-    // The private chapters this prompt may know go in full, newest first, as the canonical history sends them. The kit
-    // hears they are listed, so it ranks only older ones, and never another love interest's (they are its `chat`).
-    const own = await sourcesOf(
-      deps.store,
-      runId,
-      chapters.filter(({ chapter }) => chapter.kind !== "main" && mayKnow(recall, audienceOf(chapter))),
-      protagonist,
-    );
-    const shown = newestWithin(own, budget);
+  const recalled = async (memory: StoryMemory): Promise<ForgeMemoryContext | null> => {
     const result = await memory.recall({
       ...recall,
       runId,
-      listed: [...(recall.listed ?? []), ...[...shown.keys()].map((source) => source.id)],
+      excludeChapterIds: [...(recall.excludeChapterIds ?? []), ...(previousKey ? [previousKey] : [])],
     });
     const phase = result.status?.phase;
     // Memory that fell behind catches up in the background; a failed summary or an unknown context waits for Retry.
     const lagging = phase === "ready" ? result.lagging : phase === "stale" || phase === "pending";
     if (lagging) void Promise.resolve(memory.maintain({ runId, debugMode })).catch(() => undefined);
     if (phase !== "ready") return null;
-    // In story order: the recent canon the kit requires (the latest chapter among it), and the private chapters shown.
+    // The canon the overview does not cover yet (S/memory/memory.ts keeps only what this prompt may know), around the
+    // previous chapter in story order: its summary, or as written while it has none.
     const orders = new Map(chapters.map(({ chapter, order }) => [chapter.key, order]));
-    const parts = own
-      .filter((source) => shown.has(source))
-      .map((source) => ({ order: source.order, text: canonBlock(source, shown.get(source)!) }));
+    const others: Block[] = [];
+    // GF: of these, only the older storyline chapter summaries may give way, oldest first; the newest stays, and so
+    // does every date and Character Story.
+    const summaries: Block[] = [];
     let order = -Infinity;
     for (const entry of result.recent ?? []) {
       order = orders.get(entry.id) ?? order;
-      if (entry.latest) {
-        const chapter = await readChapter(deps.store, runId, entry.id);
-        const content = chapter && (await chapterCanon(deps.store, runId, chapter, protagonist));
-        if (content) parts.push({ order, text: latestBlock(entry.title, content, budget.latest) });
-      } else if (entry.content) {
-        parts.push({ order, text: `# Recent canon: ${entry.title}\n${entry.content}` });
-      }
+      if (entry.id === previousKey || !entry.content?.trim()) continue;
+      const item = {
+        order,
+        text: block(entry.summary ? "Recent canon summary" : "Recent canon in full", entry.title, entry.content),
+      };
+      others.push(item);
+      if (entry.summary && entry.kind === "chapter") summaries.push(item);
     }
-    parts.sort((a, b) => a.order - b.order);
-    return [result.text, ...parts.map((part) => part.text)].filter((part) => part?.trim()).join("\n\n");
+    summaries.sort(byOrder);
+    return contextOf(result, [...(previous ? [previous] : []), ...others], summaries.slice(0, -1), fate);
   };
 
-  let memory: string | null = null;
   if (deps.memory) {
-    memory = await recalled(deps.memory).catch((error: unknown) => {
+    const memory = deps.memory;
+    const context = await recalled(memory).catch((error: unknown) => {
       warn("Story memory unavailable; using the canonical history", error);
       return null;
     });
+    if (context) return context;
   }
-  memory ??= await readStory()
-    .then(({ chapters, protagonist }) => canonicalHistory(deps.store, runId, chapters, protagonist, recall, budget))
-    .catch((error: unknown) => {
-      warn("The canonical history could not be read", error);
-      return "";
-    });
-  const decisions = await readStory()
-    .then(({ chapters }) => decisionsText(deps.store, runId, chapters, recall))
-    .catch((error: unknown) => {
-      warn("The saved decisions could not be read", error);
-      return "";
-    });
-  return [memory, decisions].filter((part) => part.trim()).join("\n\n");
+  const history = await canonicalHistory(deps.store, runId, known, previousKey, protagonist).catch((error: unknown) => {
+    warn("The canonical history could not be read", error);
+    return [] as Block[];
+  });
+  // GF's legacy history: the previous chapter and everything after it stay; the canon before it may give way, its
+  // storyline chapters first, then dates and Character Stories, each oldest first. With no previous chapter all stays.
+  const before = previous
+    ? history
+        .filter((entry) => entry.order < previous.order)
+        .sort((a, b) => Number(!a.chapter) - Number(!b.chapter) || byOrder(a, b))
+    : [];
+  return contextOf(
+    { overview: "", details: [], maxContext: null },
+    [...(previous ? [previous] : []), ...history],
+    before,
+    fate,
+  );
 }

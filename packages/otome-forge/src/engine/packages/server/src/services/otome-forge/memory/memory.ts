@@ -4,20 +4,35 @@
 // The kit's createForgeStoryMemory, wired to Otome's documents and generation core:
 // - `${R}:memory` holds the kit's store (records, overview, checkpoints, status), revision-checked. A write for a run
 //   that no longer exists is refused, and one that lands just after the run's delete is removed again.
-// - Sources come from S/memory/sources.ts. A `chat` source (a love interest's route, repair or date chapter, later a
-//   phone thread) never reaches the shared overview and is recalled only by that love interest's own reader or by a
-//   scene whose cast includes them. Recall always says who is present: a call that names neither `cast` nor
+// - Sources come from S/memory/sources.ts. Every chapter is summarized and folded into the shared overview
+//   (S/story/canon.ts: main, route and repair chapters are the kit's `chapter`, dates and Character Stories its
+//   `character-story`). A love interest's own source (audience [li]) reaches a prompt beyond the overview, as a
+//   recalled detail or recent canon, only for that love interest's own reader or a scene whose cast includes them:
+//   recall lists every other one out of the kit's ranking (the kit itself holds back only a `chat` and a reader's
+//   Character Story) and keeps it out of the recent canon. A `chat` (a phone session, a Snapshot, a Read Him set, a
+//   Claw round) stays out of the overview. Recall always says who is present: a call that names neither `cast` nor
 //   `reader` recalls as a scene with nobody in it, so no private source can reach it by omission. Care data is never
 //   a source.
+// - Recent canon (what the overview does not cover yet) is GF's: the newest chapter stands for the caller's previous
+//   chapter in full, or, when that is another one, comes as its summary until the overview covers it; a date or
+//   Character Story goes in as written only while it is the one newest without a summary, else recall answers
+//   "not ready" and the caller sends the bounded canonical history (S/story/canon.ts).
+// - Read Me (S/minigames/read-me.ts) is never a source: what the notebook holds beyond knowsAboutYou's newest entries
+//   is ranked live on each recall, in the side slots the kit leaves free (S/story/prompts.ts notebookMemories), so a
+//   deleted entry never comes back.
 // - Summaries run on job `compress` on the background lane. `maintain` queues one job per run on the background
 //   queue, which holds the compress connection's background admission slot for the whole job (generateJson with lane
 //   "background"); a second call while it waits or runs makes the job go round once more. Every summary prompt ends its
 //   system message with the `summary` content contract and SUMMARY_WORDING. The knowledge boundary is left out: the
 //   summarizer writes no character's words (plan §1.7).
 // - Each reader job's connection (structured, narration, chat) sizes the overview: a tenth of the smallest context.
+// - Every summary keeps GF's output reserve for thinking models: at least 10240 tokens (the connection's own cap when
+//   it is lower, never under the 8192 floor); a source too long for that is summarized in pieces (fitsSummary).
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 import {
   createForgeStoryMemory,
+  forgeStoryMemoryText,
+  rankForgeStoryMemories,
   type ForgeMemorySource,
   type ForgeMemoryStatus,
   type ForgeRecallOptions,
@@ -27,21 +42,26 @@ import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import { z } from "zod";
 import { createBackgroundQueue, type BackgroundQueue } from "../background-queue.js";
 import { SUMMARY_WORDING, otomeContentContract } from "../content-contract.js";
-import { generateJson, outputBudget, resolveConnectionId, type OtomeMessage } from "../generation.js";
-import { OTOME_FORGE_PACKAGE_ID, memoryId, runDocTarget, worldId } from "../ids.js";
+import { OUTPUT_FLOOR, generateJson, promptRoom, resolveConnectionId, type OtomeMessage } from "../generation.js";
+import { OTOME_FORGE_PACKAGE_ID, memoryId, runDocTarget, stateId, unitId, worldId } from "../ids.js";
+import { normalizeState } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
 import type { OtomeStore } from "../store.js";
+import { mayKnow } from "../story/canon.js";
+import { notebookMemories, type NotebookMemory } from "../story/prompts.js";
 import { readMemorySources } from "./sources.js";
 
 // Kept in content-contract.ts so the phone's prompts reach it without importing this file (sources.ts imports them).
 export { SUMMARY_WORDING };
 
-/** What a detail summary may write; an overview gets the kit's token budget instead. */
+/** What a detail summary may write; an overview gets the kit's token budget instead. generateJson sends more. */
 const DETAIL_SUMMARY_TOKENS = 2048;
+/** GF's summary reserve (story-memory-integration.mjs summaryBudget): thinking models reason before they write. */
+const SUMMARY_OUTPUT_TOKENS = 10240;
 const SUMMARY_TEMPERATURE = 0.3;
-/** Prompt room kept free besides the reply, as the kit's own summary budget keeps. */
-const SAFETY_TOKENS = 512;
+/** The side memories recall gives at most (the kit's cap), Read Me's among them. */
+const SIDE_RECALLS = 3;
 
 const SummarySchema = z.object({ summary: z.string().min(1) });
 
@@ -84,6 +104,12 @@ interface SummaryRequest {
   signal?: AbortSignal;
 }
 
+/** What recall reads of the kit's saved store (version 1). */
+interface SavedMemory {
+  records?: Array<{ key?: unknown; content?: unknown } | null>;
+  overview?: { content?: unknown; sources?: Array<[string, string] | null> } | null;
+}
+
 /** A run's compress connection, its model's limits, and the rules each summary prompt ends its system message with. */
 interface SummaryJob {
   connectionId: string;
@@ -94,6 +120,16 @@ interface SummaryJob {
 
 const replyTokens = (request: SummaryRequest) =>
   request.kind === "overview" && request.tokenBudget ? request.tokenBudget : DETAIL_SUMMARY_TOKENS;
+
+/**
+ * The reply room a summary needs, GF's summaryBudget reserve: at least SUMMARY_OUTPUT_TOKENS (an overview's own budget
+ * when larger), the connection's output cap when that is lower, and never under the 8192 floor every call keeps.
+ */
+const summaryReserve = (request: SummaryRequest, maxOutputTokens: number | null) =>
+  Math.max(
+    OUTPUT_FLOOR,
+    Math.min(Math.max(SUMMARY_OUTPUT_TOKENS, request.tokenBudget ?? 0), maxOutputTokens || Number.POSITIVE_INFINITY),
+  );
 
 const withRules = (messages: readonly OtomeMessage[], rules: string): OtomeMessage[] =>
   messages.map((message, index) =>
@@ -106,7 +142,8 @@ const withRules = (messages: readonly OtomeMessage[], rules: string): OtomeMessa
  * made ~300 of them (M7 probe). Sources come only from documents the store writes, so while its version has not moved
  * since a read began, that read is still current.
  * ponytail: any write drops every run's sources, and a change made around the store (a profile restore) shows after
- * the next write; the kit's fingerprints then re-summarize what changed. Upgrade path: a version per run.
+ * the next write. A source that already has a record keeps that first record (the kit's keepFirstCanon); only canon
+ * with no record yet is read again and summarized. Upgrade path: a version per run.
  */
 export function keptSources(store: Pick<OtomeStore, "readDoc" | "listRun" | "version">) {
   let kept = { version: -1, runs: new Map<string, Promise<ForgeMemorySource[]>>() };
@@ -209,17 +246,16 @@ export function createOtomeMemory({
         return { maxContext: null };
       }
     },
-    // The kit cuts a source into the largest piece whose prompt and reply fit the compress model; the reply is what
-    // generateJson will ask for (outputBudget), so a piece that fits here is never trimmed there.
+    // The kit cuts a source into the largest piece whose prompt leaves the summary its reserve, measured as
+    // generateJson fits it (promptRoom), so a piece that fits here is sent whole there with at least that reply room.
     async fitsSummary(value) {
       const request = value as SummaryRequest;
       const job = running.get(request.runId) ?? (await summaryJob(request.runId));
       if (!job?.maxContext) return false;
-      const prompt = withRules(request.messages, job.rules).reduce(
-        (sum, message) => sum + estimateTextTokens(message.content) + 4,
-        0,
+      return (
+        promptRoom(job.maxContext, withRules(request.messages, job.rules)) >=
+        summaryReserve(request, job.maxOutputTokens)
       );
-      return job.maxContext - prompt - SAFETY_TOKENS >= outputBudget(replyTokens(request), job.maxOutputTokens);
     },
     async summarize(value) {
       const request = value as SummaryRequest;
@@ -249,18 +285,121 @@ export function createOtomeMemory({
       runtime.logger.warn("[otome-forge] Story memory: %s", error instanceof Error ? error.message : String(error)),
   });
 
+  /**
+   * Read Me's older notebook entries for the love interests this recall is for, ranked into the side slots the kit left
+   * free within what is left of its budget (S/story/prompts.ts notebookMemories); live, never stored.
+   * ponytail: ranked apart from the kit's pool, so a notebook entry never outranks a saved side memory. The upgrade
+   * path is a kit source that is ranked but never saved, which would need a Gacha Forge re-sync.
+   */
+  async function notebookRecalls(
+    options: ForgeRecallOptions,
+    result: ForgeRecallResult,
+    recent: NonNullable<ForgeRecallResult["recent"]>,
+  ): Promise<ForgeRecallResult["details"]> {
+    const free = SIDE_RECALLS - result.details.filter((detail) => detail.kind !== "chapter").length;
+    const lis = options.reader ? [options.reader] : (options.cast ?? []);
+    if (free <= 0 || !lis.length || !result.budget) return [];
+    // What the prompt sends beside the overview, as the kit counts it; a chapter the caller sends in full (the kit's
+    // `latest`, no content) costs nothing here.
+    const budget =
+      result.budget +
+      2000 -
+      estimateTextTokens(result.text) -
+      recent.reduce(
+        (sum, entry) =>
+          entry.content ? sum + estimateTextTokens(`# Recent canon: ${entry.title}\n${entry.content}`) : sum,
+        0,
+      );
+    if (budget <= 64) return [];
+    const state = await store.readDoc(stateId(options.runId), normalizeState);
+    if (!state) return [];
+    const candidates: NotebookMemory[] = [];
+    for (const li of new Set(lis)) {
+      const liState = state.lis[li];
+      const unit = liState?.known?.length ? await store.readDoc(unitId(options.runId, li), normalizeUnit) : null;
+      if (liState && unit) candidates.push(...notebookMemories({ id: li, name: unit.name }, liState));
+    }
+    if (!candidates.length) return [];
+    return rankForgeStoryMemories(candidates, options.query, {
+      maxRecalls: 0,
+      maxSideRecalls: free,
+      budgetTokens: budget,
+      estimateTokens: estimateTextTokens,
+    }).map(({ id, kind, title, content }) => ({ id, kind, title, content }));
+  }
+
   return {
     async recall(options) {
-      // The caller sends the latest chapter in full (recall marks it `latest`), so it is never ranked as a detail too.
-      // ponytail: reads the sources once more for that id; the ceiling is one extra read per prompt, and the upgrade
-      // path is the kit leaving the latest chapter out of ranking by itself.
       const sources = await readSources(options.runId).catch((): ForgeMemorySource[] => []);
+      const knowing = options.reader || options.cast ? options : { cast: [] };
+      // The caller sends a chapter in full; the newest of all (recall marks it `latest`) it sends as recent canon when
+      // this prompt may know it, so it is never ranked as a detail too.
       const latest = sources.filter((source) => source.kind === "chapter").at(-1);
-      return memory.recall({
+      // The kit ranks a chapter for anyone and a Character Story for any cast: one this prompt may not know is listed,
+      // so it is never ranked (the kit holds back a `chat` itself).
+      const unknown = sources
+        .filter((source) => source.kind !== "chat" && !mayKnow(knowing, source.audience))
+        .map((source) => source.id);
+      const result = await memory.recall({
         ...options,
         ...(options.reader || options.cast ? {} : { cast: [] }),
+        listed: [...(options.listed ?? []), ...unknown],
         excludeChapterIds: [...(options.excludeChapterIds ?? []), ...(latest ? [latest.id] : [])],
       });
+      if (result.status.phase !== "ready") return result;
+      // Recent canon this prompt may know, in story order.
+      // ponytail: the kit sizes its recalled details after all the recent canon it returns, so another love interest's
+      // route or repair summary dropped here (only while the overview has not folded it in yet) still takes room from
+      // them. The upgrade path is a kit recall that leaves out what the caller may not know before it budgets, which
+      // needs a Gacha Forge re-sync.
+      const bySource = new Map(sources.map((source) => [JSON.stringify([source.kind, source.id]), source]));
+      let saved: Promise<SavedMemory | undefined> | undefined;
+      const readSaved = () =>
+        (saved ??= documents
+          .getById(OTOME_FORGE_PACKAGE_ID, memoryId(options.runId))
+          .then((document) => document?.data as SavedMemory | undefined));
+      const recent: NonNullable<ForgeRecallResult["recent"]> = [];
+      for (const entry of result.recent ?? []) {
+        const key = JSON.stringify([entry.kind, entry.id]);
+        const source = bySource.get(key);
+        if (!source || !mayKnow(knowing, source.audience)) continue;
+        // The kit's `latest` stands for the previous chapter in full, as in GF: kept so (no content) when the caller
+        // sends it. When the caller's previous chapter is another one (main after a route chapter, his route after a
+        // main one), this one is recent canon like any other: nothing beyond the overview once that covers it, else
+        // its saved summary, or as written until it has one.
+        // ponytail: reads the kit's v1 store (key JSON [kind, id], the overview's covered keys, a source's first record
+        // standing for it, as keepFirstCanon does); the upgrade path is the kit returning these with `latest`.
+        const canon = entry.latest && !options.excludeChapterIds?.includes(entry.id);
+        const data = canon ? await readSaved() : undefined;
+        const covered =
+          !!result.overview &&
+          data?.overview?.content === result.overview &&
+          !!data.overview.sources?.some((stamp) => stamp?.[0] === key);
+        if (!canon || covered) {
+          recent.push(entry);
+          continue;
+        }
+        const summary = (Array.isArray(data?.records) ? data.records : [])
+          .map((item) => (item?.key === key && typeof item.content === "string" ? item.content.trim() : ""))
+          .find(Boolean);
+        recent.push(summary ? { ...entry, content: summary, summary: true } : { ...entry, content: source.content });
+      }
+      // GF's rule for an earlier chapter with neither a summary nor the overview, kept for dates and Character Stories
+      // past the newest: the canonical history instead, bounded, until the background job catches up (a story saved by
+      // 0.6.16 stored them word for word), so they never all go into a prompt as written. Work is owed, so a kit
+      // result that is not lagging means a failed summary, which waits for Retry as the kit's own fallback does.
+      if (recent.filter((entry) => entry.kind === "character-story" && !entry.summary).length > 1) {
+        const phase = result.lagging ? "stale" : "error";
+        return { ...result, status: { ...result.status, phase }, overview: "", details: [], text: "" };
+      }
+      const notebook = await notebookRecalls(options, result, recent).catch((): ForgeRecallResult["details"] => []);
+      const details = [...result.details, ...notebook];
+      return {
+        ...result,
+        recent,
+        details,
+        text: notebook.length ? forgeStoryMemoryText({ overview: result.overview, details }) : result.text,
+      };
     },
 
     async maintain({ runId, debugMode = false }) {

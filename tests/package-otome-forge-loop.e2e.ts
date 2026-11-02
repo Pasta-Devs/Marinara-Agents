@@ -597,8 +597,15 @@ function createLoopStub({ seeded = false } = {}) {
       const li = lis().find((entry) => entry.id === bibleMatch[1])!;
       return { status: 200, json: { bible: bible(li.name, li.pronouns) } };
     }
+    // A failed summary: Settings → Connections (#2039) and Debug show it with its Retry.
     if (path === `${base}/memory/status`) {
-      return { status: 200, json: { status: { phase: "ready", retryable: false, recordCount: 3 } } };
+      return {
+        status: 200,
+        json: { status: { phase: "error", retryable: true, reason: "generation-failed", recordCount: 3 } },
+      };
+    }
+    if (path === `${base}/memory/retry`) {
+      return { status: 200, json: { status: { phase: "pending", retryable: false, recordCount: 3 } } };
     }
     if (path === `${base}/favorites`) return { status: 200, json: { favorites: [] } };
 
@@ -1684,6 +1691,13 @@ test("Otome Hearth's screens around the loop, by keyboard: the cast, a bible, ev
       await expect(tab).toHaveAttribute("aria-selected", "true");
       await expect(root.getByRole("tabpanel")).toBeVisible();
       await auditScreen(page, root, `settings: ${name}`, tab);
+      if (name === "Connections") {
+        // The story memory's status and Retry sit beside the connection that writes the summaries, outside Debug.
+        const memory = root.getByRole("tabpanel").getByRole("region", { name: "Story memory" });
+        await expect(memory).toContainText("A summary failed. Retry when you’re ready.");
+        await memory.getByRole("button", { name: "Retry memory upkeep" }).click();
+        await expect.poll(() => posts(stub, "/memory/retry").length).toBe(1);
+      }
     }
     await page.screenshot({ path: testInfo.outputPath("settings-debug.png") });
     await root.getByRole("button", { name: "Back", exact: true }).click();

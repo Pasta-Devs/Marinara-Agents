@@ -10,7 +10,8 @@
 //   the Heat, Lines and Veils kept) and the knowledge boundary. Each Snapshot is one love interest's private memory once
 //   owned (S/wish/banners.ts itemMemorySources), so the prompt carries only what the whole cast may know: scene cards
 //   without the secrets she learned in a route, the shared part of what stands between each of them and the
-//   protagonist, and recall as a scene with nobody in it (shared canon only). No love interest's own chapter reaches it.
+//   protagonist, and recall as a scene with nobody in it: the overview of the whole timeline, where a love interest's
+//   own chapter is titled private, and the main story's previous chapter, never one of his own chapters in detail.
 // - Outfit lines and key image briefs are English image text, held to the `image` contract's tags. Above SFW a look may
 //   be revealing but stays a complete clothed look. Memory art follows its premise: at most Suggestive, unless Explicit
 //   Heat and the Explicit rating both allow an explicit one and its brief sets `explicit` (content-contract.ts
@@ -160,7 +161,7 @@ export interface BannerPlanInput {
   partnerLook?: ItemLook & { title: string };
   /** Earlier banner titles of this kind, newest last. */
   earlierTitles: string[];
-  /** Shared canon (recall as a scene with nobody in it). */
+  /** The story so far (recall as a scene with nobody in it: the overview, the main story's previous chapter). */
   memory: string;
   /** A month's first rotation: its theme, and the titles of this kind's earlier banners of it, newest last. */
   season?: { id: Season; earlierTitles: string[] } | null;
@@ -260,7 +261,7 @@ export function bannerPlanMessages(input: BannerPlanInput): OtomeMessage[] {
     input.earlierTitles.length
       ? `EARLIER BANNERS OF THIS KIND (do not repeat): ${input.earlierTitles.slice(-EARLIER_TITLES).join("; ")}`
       : "",
-    input.memory.trim() ? `THE STORY SO FAR (what everyone knows)\n${input.memory.trim()}` : "",
+    input.memory.trim() ? `THE STORY SO FAR\n${input.memory.trim()}` : "",
     input.season ? seasonText(input.season) : "",
     `Plan the ${kind} banner featuring ${featured.name}. ${otomeContractReminder("planner")}`,
   ]

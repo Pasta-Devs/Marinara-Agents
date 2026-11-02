@@ -424,6 +424,7 @@
   "ui.otomeForge.errors.ageGate": "Confirm that you are 18 or older to open this.",
   "ui.otomeForge.errors.badFormat": "The model’s reply wasn’t in the expected format. Try again.",
   "ui.otomeForge.errors.badRequest": "That request wasn’t quite right. Try again.",
+  "ui.otomeForge.errors.capacity": "This request is too long for the model’s context window, with room left for its reply. Choose a connection with a larger context window in Settings, then try again.",
   "ui.otomeForge.errors.busy": "Still working on the last request. Try again in a moment.",
   "ui.otomeForge.errors.conflict": "That changed somewhere else. Try again.",
   "ui.otomeForge.errors.declined": "The model declined to write that. Try again, or ask for something else.",

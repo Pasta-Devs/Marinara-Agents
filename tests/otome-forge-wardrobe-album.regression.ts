@@ -603,7 +603,7 @@ test("a Character Story plays privately, and an already-read four-star Moment ga
   const sources = await readMemorySources(t.store, t.runId);
   const story = sources.find((source) => source.id === key);
   assert.ok(story, "the finished Moment is canon");
-  assert.equal(story.kind, "chat");
+  assert.equal(story.kind, "character-story", "a side story of his, as GF's Character Story");
   assert.deepEqual(story.audience, [MIR], "only Mireille may recall it");
   const snapshot = sources.find((source) => source.content.includes("SNAP-KAI"));
   assert.ok(snapshot, "the owned Snapshot is canon");

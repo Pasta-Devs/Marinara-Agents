@@ -3,21 +3,35 @@
 // ──────────────────────────────────────────────
 // 1. Connection: the request's own, else world.connections[job], else world.connections.narration; none is a 503.
 // 2. Model: runtime.languageModels.resolveForRequest({connectionId}).
-// 3. Fit: model.fitContext(messages, {maxTokens: outputBudget(...)}): the request's maxTokens is what the reply itself
-//    needs; every call asks for GF's floor and reasoning headroom on top (outputBudget).
+// 3. Fit, as GF's fitForgeMemoryPrompt does (the kit's own fitter): the request's maxTokens is what the reply itself
+//    needs, and every call asks for GF's floor and reasoning headroom on top (outputBudget). A prompt that fits with
+//    all of it is sent unchanged. Otherwise the story memory it carries (`memory`, recallText's context) gives way: its
+//    recalled details first, lowest-ranked first; then, only while the reply would get less than OUTPUT_FLOOR, its
+//    older uncovered summaries, oldest first. The overview, the previous chapter in full, the newest summary and the
+//    decisions always stay, and nothing outside the memory is ever cut. A prompt that still leaves the reply less than
+//    the floor (or the connection's own smaller cap) is a 413 `capacity` before anything is sent, never a request the
+//    Engine would cut: its fitter would shrink the reply to 128 tokens, then cut the rules. The margin kept is the
+//    Engine's (fitSafety) with some to spare, and model.fitContext checks the result: any trim there is `capacity` too.
 // 4. Log: logOtomePrompt (debugOverride in debug mode, `redact` strings replaced).
 // 5. Call: chatComplete with responseFormat json_object; an explicit HTTP 400/422 rejection of that optional hint
 //    allows one retry without it, also omitted from the repair turn. A background call holds its job's connection
 //    admission slot throughout; it names that connection and never takes a second slot here.
-// 6. Parse: parseJsonish, then the schema, then `normalize`. On failure exactly one repair turn; if that fails too, two
-//    declines are a 422 `declined` and anything else a 502 `bad-format`. A decline is an empty reply, a content
-//    filter, or refusal wording in a reply that is not a JSON object (inside one it is a character's own words). A
-//    reply cut off at the token limit is never parsed and never a decline. Text is never retried in any other way.
+// 6. Parse: parseJsonish, then the schema, then `normalize`. On failure exactly one repair turn (fitted the same way);
+//    if that fails too, two declines are a 422 `declined` and anything else a 502 `bad-format`. A decline is an empty
+//    reply, a content filter, or refusal wording in a reply that is not a JSON object (inside one it is a character's
+//    own words). A reply cut off at the token limit is never parsed and never a decline. Text is never retried in any
+//    other way.
 //
 // The foreground lane is serial per run: runForeground queues a task behind the run's earlier ones, and readOrGenerate
 // re-reads the stored result inside the queue, so a request that lands behind the lookahead returns what it wrote
 // instead of writing it twice. generateJson itself never queues: queue the task that calls it, or it would wait on
 // itself.
+import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
+import {
+  fitForgeMemoryPrompt,
+  forgeComposeMemoryPrompt,
+  type ForgeMemoryContext,
+} from "@forge-kit/story-memory-fit.mjs";
 import type { CapabilityResolvedLanguageModel, CapabilityRuntimeHost } from "@marinara-engine/shared";
 import type { ZodType } from "zod";
 import type {
@@ -33,8 +47,8 @@ import type { OtomeStore } from "./store.js";
 
 export type OtomeMessage = PromptMessage;
 export type GenerationLane = "foreground" | "background";
-/** The codes generateJson fails with: 503 `no-connection`, 422 `declined`, 502 `bad-format`. */
-export type GenerationFailureCode = Extract<OtomeErrorCode, "no-connection" | "declined" | "bad-format">;
+/** The codes generateJson fails with: 503 `no-connection`, 413 `capacity`, 422 `declined`, 502 `bad-format`. */
+export type GenerationFailureCode = Extract<OtomeErrorCode, "no-connection" | "capacity" | "declined" | "bad-format">;
 
 export interface GenerationDeps {
   runtime: Pick<CapabilityRuntimeHost, "languageModels" | "json" | "logger" | "isDebugAgentsEnabled">;
@@ -48,6 +62,11 @@ export interface GenerateJsonRequest<T extends object> {
   /** Names the prompt in the logs: `[debug/otome-forge/<label>]`. */
   label: string;
   messages: OtomeMessage[];
+  /**
+   * The story memory the messages carry (recallText's context, its `text` inserted as it is): what the fit may leave
+   * out when the prompt does not fit (see the header). Without it nothing in the prompt gives way.
+   */
+  memory?: ForgeMemoryContext;
   schema: ZodType<T>;
   /**
    * What the schema cannot check (an adult age, no school role…): return the value, possibly fixed, or a string naming
@@ -97,9 +116,8 @@ export const OUTPUT_FLOOR = 8192;
 /** …plus this much headroom, because a model that reasons by default spends its thinking inside maxTokens. */
 export const REASONING_HEADROOM = 16_000;
 
-// ponytail: a fixed headroom, and no capacity error when a connection caps output below the floor (the Engine caps
-// it, and a reply cut off there fails as bad-format); the upgrade path is GF's per-connection `learnedHeadroom` and
-// its `generation-output-capacity` error.
+// ponytail: a fixed headroom; a connection that caps output below the floor gets its cap (and a reply cut off there
+// fails as bad-format). The upgrade path is GF's per-connection `learnedHeadroom`.
 /**
  * The maxTokens every call sends: the reply's own need raised to the floor, plus the reasoning headroom, within the
  * connection's own output cap. The Engine adds thinking headroom only when the connection saved a reasoning effort.
@@ -108,6 +126,22 @@ export function outputBudget(maxTokens: number, connectionCap: number | null): n
   const budget = Math.max(OUTPUT_FLOOR, maxTokens) + REASONING_HEADROOM;
   return connectionCap && connectionCap > 0 ? Math.min(budget, connectionCap) : budget;
 }
+
+/** The Engine's per-message overhead (base-provider.ts MESSAGE_OVERHEAD_TOKENS), counted with the kit's estimator. */
+const MESSAGE_TOKENS = 6;
+
+const estimateMessages = (messages: readonly OtomeMessage[]) =>
+  messages.reduce((sum, message) => sum + estimateTextTokens(message.content) + MESSAGE_TOKENS, 0);
+
+/**
+ * The prompt room kept free besides the reply: the Engine's own margin (base-provider.ts: max(500, 2% of the context))
+ * with room to spare for the JSON hint it also counts, so the Engine's fitter never trims what this one fitted.
+ */
+export const fitSafety = (maxContext: number) => Math.max(512, Math.ceil(maxContext * 0.02)) + 64;
+
+/** What a context of `maxContext` leaves the reply after these messages and fitSafety. */
+export const promptRoom = (maxContext: number, messages: readonly OtomeMessage[]) =>
+  maxContext - fitSafety(maxContext) - estimateMessages(messages);
 
 type Attempt<T> = { ok: true; value: T } | { ok: false; declined: boolean; issues: string; content: string };
 
@@ -180,6 +214,49 @@ function rejectsJsonHint(error: unknown): boolean {
   );
 }
 
+/**
+ * The prompt as it is sent and the reply's maxTokens (step 3 of the header): `budget`, or less when the context leaves
+ * less, never below the floor. A context nobody knows sends the prompt as it is, as the Engine would.
+ */
+function fitPrompt(
+  model: CapabilityResolvedLanguageModel,
+  prompt: OtomeMessage[],
+  budget: number,
+  label: string,
+  memoryContext: number | null | undefined,
+): { messages: OtomeMessage[]; maxTokens: number } {
+  const known = [model.maxContext, memoryContext].filter(
+    (value): value is number => typeof value === "number" && Number.isFinite(value) && value > 0,
+  );
+  const maxContext = known.length ? Math.floor(Math.min(...known)) : null;
+  const floor = Math.min(OUTPUT_FLOOR, budget);
+  const capacity = (why: string) =>
+    new OtomeForgeError(
+      413,
+      `${label} does not fit the context window of ${model.model} (${maxContext ?? "unknown"} tokens): ${why}.`,
+      "capacity",
+    );
+  const fit = fitForgeMemoryPrompt(prompt, {
+    maxContext,
+    maxTokens: budget,
+    estimateMessages,
+    safetyTokens: fitSafety(maxContext ?? 0),
+    minOutputTokens: OUTPUT_FLOOR,
+  });
+  if (!fit.fits && fit.reason !== "context-unknown") throw capacity(fit.reason ?? "it does not fit");
+  // Plain messages: the memory context stays here, out of the logs and the provider call.
+  const messages = fit.messages.map(({ role, content }) => ({ role, content }));
+  if (maxContext === null) return { messages, maxTokens: budget };
+  const maxTokens = Math.min(fit.maxTokens ?? budget, promptRoom(maxContext, messages));
+  if (maxTokens < floor) throw capacity(`it leaves ${Math.max(0, maxTokens)} tokens for a reply that needs ${floor}`);
+  // The Engine fits every request again; one that would trim it, or cut the reply below the floor, is never sent.
+  const checked = model.fitContext(messages, { maxTokens });
+  if (checked.trimmed || (checked.maxTokens ?? maxTokens) < floor) {
+    throw capacity("the Engine would have to trim it");
+  }
+  return { messages, maxTokens: checked.maxTokens ?? maxTokens };
+}
+
 /** One JSON reply from the job's connection, validated; see the file header for every step. */
 export async function generateJson<T extends object>(
   deps: GenerationDeps,
@@ -198,6 +275,10 @@ export async function generateJson<T extends object>(
   const { runtime } = deps;
 
   const budget = outputBudget(request.maxTokens, model.maxOutputTokens);
+  // The memory context rides on the first message, so the repair turn (the same messages and two more) carries it too.
+  const messages = request.memory
+    ? forgeComposeMemoryPrompt(() => request.messages, [request.memory])
+    : request.messages;
   let useJsonHint = true;
   const mayCall = () => {
     request.signal?.throwIfAborted();
@@ -205,14 +286,14 @@ export async function generateJson<T extends object>(
       throw new OtomeForgeError(503, `${request.label} was held back before it was sent.`);
     }
   };
-  const complete = async (messages: OtomeMessage[], label: string) => {
+  const complete = async (prompt: OtomeMessage[], label: string) => {
     mayCall();
-    const fitted = model.fitContext(messages, { maxTokens: budget });
-    const sent = fitted.messages as OtomeMessage[];
+    const fitted = fitPrompt(model, prompt, budget, label, request.memory?.maxContext);
+    const sent = fitted.messages;
     logOtomePrompt(runtime, label, sent, { debugMode: request.debugMode, redact: request.redact });
     const options = {
       temperature: request.temperature,
-      maxTokens: fitted.maxTokens ?? budget,
+      maxTokens: fitted.maxTokens,
       debugMode: request.debugMode,
       signal: request.signal,
       ...(useJsonHint ? { responseFormat: { type: "json_object" } } : {}),
@@ -239,13 +320,13 @@ export async function generateJson<T extends object>(
     return check(request, runtime.json.parseJsonish, reply.content ?? "", reply.finishReason);
   };
 
-  const first = await complete(request.messages, request.label);
+  const first = await complete(messages, request.label);
   if (first.ok) return { value: first.value, connectionId, model: model.model };
 
   const note = `That reply did not match the required format: ${first.issues}. Reply again with ONLY the JSON object.`;
   const repair: OtomeMessage[] = first.content
-    ? [...request.messages, { role: "assistant", content: first.content }, { role: "user", content: note }]
-    : [...request.messages, { role: "user", content: note }];
+    ? [...messages, { role: "assistant", content: first.content }, { role: "user", content: note }]
+    : [...messages, { role: "user", content: note }];
   const second = await complete(repair, `${request.label}/repair`);
   if (second.ok) return { value: second.value, connectionId, model: model.model };
 

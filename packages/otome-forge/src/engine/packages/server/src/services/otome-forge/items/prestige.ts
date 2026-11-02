@@ -125,8 +125,9 @@ export async function ensurePrestigeStory(
           kind: chapter.prestige!.kind,
           premise: chapter.prestige!.premise,
         })),
-        memory,
+        memory: memory.text,
       }),
+      memory,
       schema: PrestigePlanSchema,
       normalize: (reply) => {
         const plan = normalizePrestigePlan(reply, context);

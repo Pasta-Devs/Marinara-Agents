@@ -17,7 +17,9 @@
 //   The set is marked finished after it.
 // - The notebook is the player's: they read it, rewrite or clear the words they gave, and delete an entry; the set's
 //   copy of those words follows, so a delete leaves none behind. Unlike Read Him, a set is never a story-memory source
-//   (S/memory/sources.ts): the notebook is the only copy a prompt sees, so a delete is final.
+//   (S/memory/sources.ts): the notebook is the only copy a prompt sees, so a delete is final. Recall ranks the entries
+//   knowsAboutYou no longer carries straight from the live notebook (S/memory/memory.ts notebookRecalls), so what he
+//   learned long ago can still come back as a small memory in his prompts, and never once it is deleted.
 // The prompt writes the love interest's words on the `chat` contract for them alone (it follows the story's Heat), with
 // the knowledge boundary and the writing rules. It sees the protagonist as the story knows them (their card and
 // persona), the love interest's own scene card, what stands between them, one thing they may know from their own

@@ -3,7 +3,9 @@
 // month and theme (a world without the holiday takes its own version of it), the banner keeps it as `season`, and its
 // view shows it, as an Echo too. The theme's earlier banners of the kind are named even once they are past the last
 // twelve, so next year's October is not this year's again. Any other rotation's P20 prompt is byte for byte the one it
-// was before: its digests were taken from the 0.6.3 builder before seasons were written.
+// was before: its digests were taken from the 0.6.3 builder before seasons were written, with 0.6.17's one change: the
+// story is headed "THE STORY SO FAR", no longer "(what everyone knows)", since its overview now tells every love
+// interest's own chapters too, titled private (#2039).
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test, { mock } from "node:test";
@@ -152,9 +154,9 @@ const digest = (messages: Array<{ role: string; content: string }>) =>
 
 /** Taken from the 0.6.3 builder, before seasons. */
 const BEFORE_SEASONS: Record<wish.BannerKind, string> = {
-  memories: "3d9a629fa21ccb04",
-  "his-wardrobe": "171c5b72a8a57171",
-  "my-wardrobe": "ec3c399ca14160c3",
+  memories: "02083d9017b0bcbe",
+  "his-wardrobe": "5f03d79f65db5d84",
+  "my-wardrobe": "09d762bf498eb7dc",
 };
 
 test("a rotation that is not seasonal sends the P20 prompt it sent before seasons", () => {

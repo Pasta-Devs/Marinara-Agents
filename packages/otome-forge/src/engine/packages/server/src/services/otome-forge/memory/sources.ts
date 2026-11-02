@@ -2,16 +2,17 @@
 // Otome Forge: every canonical memory source of a run, for the kit's createForgeStoryMemory (S/memory/memory.ts)
 // ──────────────────────────────────────────────
 // Each area exports one reader and this file concatenates them; a milestone that adds a kind of canon adds one line:
-//   M2a  story chapters (S/story/canon.ts readStorySources); M2b's route and repair chapters arrive through it as
-//        `chat` with audience [li], like a date, and a Confrontation as the rounds played and its ending
+//   M2a  story chapters (S/story/canon.ts readStorySources): main, route and repair chapters (a Confrontation as the
+//        rounds played and its ending) are the kit's `chapter`; a date, and a Memory's Character Story or Moment (a
+//        `story-<itemId>` chapter), its `character-story`. Each is summarized and folded into the shared overview
 //   M3   phone sessions (S/phone/memory.ts phoneMemorySources: `chat`, audience [their id])
-//   M4   owned Snapshots (S/wish/banners.ts itemMemorySources: `chat`, audience [their love interest]; a Character
-//        Story or Moment is a `story-<itemId>` chapter, so it arrives through readStorySources)
+//   M4   owned Snapshots (S/wish/banners.ts itemMemorySources: `chat`, audience [their love interest])
 //   M5   Read Him sets (S/minigames/read-him.ts readHimMemorySources) and Claw Machine rounds (S/minigames/claw.ts
-//        clawMemorySources), each `chat` with audience [their id] and titled private, as a phone session is; a date
-//        is a `date` chapter, which S/story/canon.ts already makes a private `chat` source for that love interest
-// Audience entries are plain LI ids: a `chat` source is recalled only by that LI's own readers and by scenes whose cast
-// includes them, never into the shared overview (plan §1.9, design: Private memory). Care data is never a source.
+//        clawMemorySources), each `chat` with audience [their id] and titled private, as a phone session is
+// Audience entries are plain LI ids. A `chat` is a short record kept as written, never in the shared overview; it and a
+// love interest's own chapter reach a prompt beyond the overview only for that LI's own readers and scenes whose cast
+// includes them (S/memory/memory.ts). Read Me is never a source: its notebook is ranked live on each recall
+// (S/memory/memory.ts notebookRecalls), so a deleted entry never comes back. Care data is never a source.
 import { orderForgeStorySources } from "@forge-kit/story-memory-integration.mjs";
 import type { ForgeMemorySource } from "@forge-kit/story-memory.mjs";
 import { playerId, stateId } from "../ids.js";

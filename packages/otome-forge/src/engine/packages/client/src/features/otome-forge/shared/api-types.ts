@@ -36,7 +36,8 @@ export type OtomeErrorCode =
   | "insufficient"
   | "declined"
   | "bad-format"
-  | "no-connection";
+  | "no-connection"
+  | "capacity";
 
 export interface OtomeRunEntry {
   runKey: string;

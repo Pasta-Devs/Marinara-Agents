@@ -1,7 +1,9 @@
 // ──────────────────────────────────────────────
 // Otome Forge Settings → Debug: whether prompts are being logged, the story's ids and connections, the raw error of
 // every step that failed (English, for logs and bug reports), with a copy button, and the story memory's status with
-// its Retry (a failed summary is never retried by itself). Polls every 2 s while memory upkeep runs.
+// its Retry (a failed summary is never retried by itself). Polls every 2 s while memory upkeep runs. The memory section
+// is also under Settings → Connections, beside the connection that writes the summaries, so a player sees a failed
+// summary and its Retry without opening Debug.
 // ──────────────────────────────────────────────
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -20,7 +22,7 @@ const MEMORY_PHASE_KEYS: Record<MemoryStatus["phase"], string> = {
   "context-unknown": "ui.otomeForge.settings.debugMemoryContextUnknown",
 };
 
-function MemorySection({ runKey }: { runKey: string }) {
+export function MemorySection({ runKey }: { runKey: string }) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const queryClient = useQueryClient();

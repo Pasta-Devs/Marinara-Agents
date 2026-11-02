@@ -9,6 +9,7 @@
 // itself on the run's serial lane and hang.
 // The prompt asks for brevity on purpose: one short sentence per chapter purpose, and the normalizer refuses a longer
 // one. An arc is a direction, not twelve chapters written in advance.
+import type { ForgeMemoryContext } from "@forge-kit/story-memory-fit.mjs";
 import type {
   ArcChoice,
   LiId,
@@ -228,13 +229,14 @@ export function arcPlanMessages({
 /**
  * Plans an arc for `from` and saves it, or returns the one a concurrent request already saved. Nothing else is written:
  * progress stays derived from the chapters, so a lost request cannot half-apply. One repair turn on a broken reply
- * comes from generateJson's own normalize, like every planner here.
+ * comes from generateJson's own normalize, like every planner here. `memory` is the context input.memory is the text
+ * of (recallText), so the generation core may fit it.
  */
 export async function planArc(
   deps: ArcDeps,
   runId: string,
   input: ArcPlanInput,
-  { debugMode, signal }: { debugMode: boolean; signal?: AbortSignal },
+  { debugMode, signal, memory }: { debugMode: boolean; signal?: AbortSignal; memory?: ForgeMemoryContext },
 ): Promise<StoryArc> {
   const target = runDocTarget("arc", arcId(runId, input.number));
   const existing = await deps.store.readDoc(target.id, normalizeArc);
@@ -261,6 +263,7 @@ export async function planArc(
     job: "structured",
     label: `arc-plan/${input.number}`,
     messages: arcPlanMessages(input),
+    ...(memory ? { memory } : {}),
     schema: ArcPlanSchema,
     normalize: (reply) => {
       const arc = normalizeArcPlan(reply, context);

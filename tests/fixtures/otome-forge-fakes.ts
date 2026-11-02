@@ -161,6 +161,8 @@ export interface FakeRuntimeOptions {
   personas?: Array<{ id: string; data: unknown }>;
   /** The connection's own output cap (the resolved model's maxOutputTokens); 4096 by default, null for none. */
   maxOutputTokens?: number | null;
+  /** The connection's context window (the resolved model's maxContext); 32768 by default, null for unknown. */
+  maxContext?: number | null;
 }
 
 /**
@@ -211,7 +213,7 @@ export function createFakeRuntime(options: FakeRuntimeOptions = {}) {
     name: `Fake ${connectionId}`,
     connectionId,
     model: "fake-model",
-    maxContext: 32768,
+    maxContext: options.maxContext === undefined ? 32768 : options.maxContext,
     maxOutputTokens: options.maxOutputTokens === undefined ? 4096 : options.maxOutputTokens,
     async chatComplete(messages, completionOptions) {
       calls.push({ connectionId, messages: structuredClone(messages), options: completionOptions });

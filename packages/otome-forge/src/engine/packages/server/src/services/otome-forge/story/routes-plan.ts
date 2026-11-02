@@ -216,6 +216,7 @@ export async function planRouteChapter(
     const memory = await recallText(deps, runId, {
       job: "structured",
       cast: [li],
+      continues: li,
       query: {
         plan: unit.bible?.arc[String(next.stage) as ArcStageKey]?.seed ?? unit.bible?.want ?? "",
         speakers: [unit.name],
@@ -243,8 +244,9 @@ export async function planRouteChapter(
         state,
         li,
         stage: next.stage,
-        memory,
+        memory: memory.text,
       }),
+      memory,
       schema: ChapterPlanSchema,
       normalize: (reply) => {
         const plan = normalizeRoutePlan(reply, context);
@@ -308,6 +310,7 @@ export async function planRepairChapter(
     const memory = await recallText(deps, runId, {
       job: "structured",
       cast: [li],
+      continues: li,
       query: { plan: grievance.text, speakers: [unit.name] },
       signal,
       debugMode,
@@ -325,7 +328,16 @@ export async function planRepairChapter(
       runId,
       job: "structured",
       label: `repair-plan/${offer.key}`,
-      messages: repairPlanMessages({ world: run.world, player: run.player, units, state, li, grievance, memory }),
+      messages: repairPlanMessages({
+        world: run.world,
+        player: run.player,
+        units,
+        state,
+        li,
+        grievance,
+        memory: memory.text,
+      }),
+      memory,
       schema: ChapterPlanSchema,
       normalize: (reply) => {
         const plan = normalizeRepairPlan(reply, context);

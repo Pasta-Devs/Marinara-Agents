@@ -1,10 +1,15 @@
 // Otome Forge's generation core (M1): a JSON reply is parsed, checked by its schema and `normalize`, and gets exactly
 // one repair turn; a refusal is a 422; every prompt is logged through debugOverride with care lines redacted; the
 // per-run queue reads the cache again, so a request behind the writer never writes twice; and the background queue
-// requeues a job only when admission refused it, so an admitted job never calls the model twice.
+// requeues a job only when admission refused it, so an admitted job never calls the model twice. #2039: a prompt
+// that fits is sent as it is; on overflow its story memory gives way as GF's fitForgeMemoryPrompt has it (recalled
+// details first, then only at the reply floor the oldest uncovered summaries), and one that still cannot fit, or that
+// the Engine would trim, is a 413 `capacity` that sends nothing.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { z } from "zod";
+import { forgeMemoryContext } from "@forge-kit/story-memory-fit.mjs";
+import { forgeStoryMemoryText } from "@forge-kit/story-memory.mjs";
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import {
   BACKGROUND_RETRY_MAX_MS,
@@ -46,7 +51,12 @@ delete process.env.DEBUG_AGENTS;
 
 async function setup(
   replies: FakeReply[],
-  options: { debugAgents?: boolean; enabledLevels?: string[]; maxOutputTokens?: number | null } = {},
+  options: {
+    debugAgents?: boolean;
+    enabledLevels?: string[];
+    maxOutputTokens?: number | null;
+    maxContext?: number | null;
+  } = {},
 ) {
   const fake = createFakeDocuments();
   const store = createOtomeStore(fake.documents);
@@ -350,6 +360,128 @@ test("every call asks for GF's output floor plus reasoning headroom, within the 
     [24_192, 24_192],
     "the repair turn gets the same room",
   );
+});
+
+// ── #2039: the story memory gives way as GF's fitForgeMemoryPrompt has it, and a prompt too big is a 413 ──
+
+/** About `tokens` tokens of Latin text after a marker (the kit's estimate: a quarter of a token per character). */
+const sized = (mark: string, tokens: number) => `${mark} ${"lamp ".repeat(Math.round((tokens * 4) / 5))}`.trim();
+
+/**
+ * A memory context as recallText builds it: the overview, the ranked details (Read Me's pick last), the recent canon
+ * around the previous chapter (older summaries optional), and the decisions.
+ */
+function memoryOf({
+  details = [] as Array<{ title: string; content: string; kind?: string }>,
+  recent = [] as string[],
+  optional = [] as string[],
+  previous = "",
+}) {
+  return forgeMemoryContext(
+    {
+      overview: sized("OVERVIEW-MARK", 400),
+      details: details.map(({ kind = "chapter", ...detail }) => ({ kind, ...detail })),
+    },
+    {
+      prefix: [...recent, `# Previous chapter in full: Night 9\n${previous}`].join("\n\n"),
+      optional,
+      fate: `${"# Irrevocable player decisions"}\n- FATE-MARK: she kept his secret.`,
+      renderMemory: (memory) => forgeStoryMemoryText(memory).trim(),
+    },
+  );
+}
+
+const withMemory = (memory: ReturnType<typeof memoryOf>) =>
+  request({
+    messages: [
+      { role: "system", content: "Reply with {premise}." },
+      { role: "user", content: `STORY MEMORY\n${memory.text}\n\nA premise, please.` },
+    ],
+    memory,
+  });
+
+test("a prompt that fits is sent as it is, with the whole reply budget; a long previous chapter goes in whole", async () => {
+  const small = await setup(['{"premise":"x"}']);
+  const memory = memoryOf({ details: [{ title: "A", content: sized("DETAIL-A", 500) }], previous: "PREVIOUS" });
+  const sent = withMemory(memory);
+  await generateJson(small.deps, sent);
+  assert.deepEqual(small.calls[0]!.messages, sent.messages, "byte for byte");
+  assert.equal(small.calls[0]!.options?.maxTokens, 4096, "the reply budget, the connection's own cap");
+  // 15k tokens of previous chapter on a 128k model: no fixed cap cuts it any more.
+  const wide = await setup(['{"premise":"x"}'], { maxOutputTokens: null, maxContext: 131_072 });
+  const long = memoryOf({ previous: sized("PREVIOUS-START", 15_000) + " PREVIOUS-END" });
+  await generateJson(wide.deps, withMemory(long));
+  const user = wide.calls[0]!.messages.at(-1)!.content;
+  assert.ok(user.includes(long.text), "the previous chapter in full");
+  assert.equal(wide.calls[0]!.options?.maxTokens, OUTPUT_FLOOR + REASONING_HEADROOM);
+});
+
+test("on overflow the recalled details give way first, the lowest-ranked first, and the rest stays", async () => {
+  // 32768 tokens, a 4096-token reply and the Engine's margin leave about 27950 for the prompt: 30500 asks two to go.
+  const t = await setup(['{"premise":"x"}']);
+  const memory = memoryOf({
+    details: [
+      { title: "A", content: sized("DETAIL-A", 2000) },
+      { title: "B", content: sized("DETAIL-B", 2000) },
+      { title: "Read Me", content: sized("READ-ME-C", 2000), kind: "chat" },
+    ],
+    previous: sized("PREVIOUS-MARK", 24_000),
+  });
+  await generateJson(t.deps, withMemory(memory));
+  const user = t.calls[0]!.messages.at(-1)!.content;
+  for (const kept of ["OVERVIEW-MARK", "DETAIL-A", "PREVIOUS-MARK", "FATE-MARK", "A premise, please."]) {
+    assert.ok(user.includes(kept), `${kept} stays`);
+  }
+  assert.ok(!user.includes("READ-ME-C") && !user.includes("DETAIL-B"), "the Read Me pick, then the lowest-ranked");
+  assert.equal(t.calls[0]!.options?.maxTokens, 4096, "with the whole reply budget");
+  assert.ok(!Object.getOwnPropertySymbols(t.calls[0]!.messages[0]!).length, "the provider gets plain messages");
+});
+
+test("at the reply floor the oldest uncovered summary gives way, never the newest or the previous chapter", async () => {
+  const t = await setup(['{"premise":"x"}'], { maxOutputTokens: null });
+  const summaries = [1, 2, 3].map((n) => `# Recent canon summary: Night ${n + 5}\n${sized(`SUMMARY-${n}`, 3000)}`);
+  const memory = memoryOf({
+    recent: summaries,
+    optional: summaries.slice(0, -1),
+    previous: sized("PREVIOUS-MARK", 15_500),
+  });
+  await generateJson(t.deps, withMemory(memory));
+  const user = t.calls[0]!.messages.at(-1)!.content;
+  assert.ok(!user.includes("SUMMARY-1"), "the oldest summary went");
+  for (const kept of ["SUMMARY-2", "SUMMARY-3", "PREVIOUS-MARK", "OVERVIEW-MARK", "FATE-MARK"]) {
+    assert.ok(user.includes(kept), `${kept} stays`);
+  }
+  const maxTokens = t.calls[0]!.options!.maxTokens!;
+  assert.ok(maxTokens >= OUTPUT_FLOOR && maxTokens < OUTPUT_FLOOR + REASONING_HEADROOM, `the floor kept: ${maxTokens}`);
+});
+
+test("a prompt whose required story cannot fit is a 413 `capacity` and is never sent", async () => {
+  const t = await setup(['{"premise":"x"}']);
+  const memory = memoryOf({ previous: sized("PREVIOUS-MARK", 30_000) });
+  await assert.rejects(generateJson(t.deps, withMemory(memory)), failsWith(413, "capacity"));
+  // Without any memory to give way the same holds: the Engine would cut the rules or the reply, so nothing goes.
+  await assert.rejects(
+    generateJson(t.deps, request({ messages: [{ role: "user", content: sized("HUGE", 30_000) }] })),
+    failsWith(413, "capacity"),
+  );
+  // And a prompt the Engine's own fit would still trim is never sent either.
+  const trimmed = await setup(['{"premise":"x"}']);
+  const models = trimmed.runtime.languageModels as {
+    resolveForRequest: typeof trimmed.runtime.languageModels.resolveForRequest;
+  };
+  const resolve = models.resolveForRequest.bind(models);
+  models.resolveForRequest = async (value) => ({
+    ...(await resolve(value)),
+    fitContext: (messages, options) => ({
+      messages,
+      maxTokens: options?.maxTokens,
+      estimatedTokensBefore: 2,
+      estimatedTokensAfter: 1,
+      trimmed: true,
+    }),
+  });
+  await assert.rejects(generateJson(trimmed.deps, request()), failsWith(413, "capacity"));
+  assert.equal(t.calls.length + trimmed.calls.length, 0, "no request was sent");
 });
 
 test("a job without a connection is a 503 `no-connection`, and jobs fall back to narration", async () => {

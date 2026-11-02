@@ -3,8 +3,9 @@
 // interest says on noticing her new look (P19) is Home's love interest's by default, shows on Me while she wears that
 // look, and Home is told while it is being written (also when it lands during a read: Home and the Wardrobe never
 // answer "none, and not noticing" then); Home's back layer takes his newest Album CG, an owned Memory's included, dated
-// when it was won (its art may be its banner's, painted before); and M4's Snapshots and Character Stories stay with their love interest in M3's own-reader prompts (P15,
-// P16, P17), as in M4's own P19 and P24.
+// when it was won (its art may be its banner's, painted before); and M4's Snapshots and Character Stories stay with
+// their love interest in M3's own-reader prompts (P15, P16, P17), as in M4's own P19 and P24, a Character Story but for
+// the overview of the whole timeline (0.6.17).
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CapabilityLanguageModelMessage } from "@marinara-engine/shared";
@@ -476,6 +477,8 @@ const KAI_ONLY = [
   "KAI-SNAPSHOT",
 ];
 const leaked = (prompt: string, markers = KAI_ONLY) => markers.filter((marker) => prompt.includes(marker));
+/** The prompt without its "# Canon to date" overview, which tells everyone the whole timeline (one line here). */
+const beyondOverview = (prompt: string) => prompt.replace(/# Canon to date\n[^\n]*/u, "");
 
 /** A run where Kai owns a Snapshot and finished a Character Story that left his rows; Mireille owns a Snapshot. */
 async function privateCanonWorld() {
@@ -590,7 +593,7 @@ async function privateCanonWorld() {
   return { ...t, memory, background, deps, prompts };
 }
 
-test("an owned Snapshot and a Character Story reach only their love interest's note, line pack and chat reply", async () => {
+test("an owned Snapshot and a Character Story reach only their love interest's prompts beyond the overview", async () => {
   const t = await privateCanonWorld();
   try {
     const sources = await readMemorySources(t.store, t.runId);
@@ -598,11 +601,11 @@ test("an owned Snapshot and a Character Story reach only their love interest's n
       sources.map((source) => [source.id, source.kind, source.audience ?? null]),
       [
         ["main-1", "chapter", null],
-        [STORY, "chat", [KAI]],
+        [STORY, "character-story", [KAI]],
         ["memories-0-s1", "chat", [KAI]],
         ["memories-0-s2", "chat", [MIR]],
       ],
-      "M4's canon is private to its love interest",
+      "M4's canon is its love interest's own",
     );
 
     // P16: Mireille's note knows nothing of Kai's; Kai's has his own story's rows (ownView keeps a story's rows with
@@ -625,10 +628,16 @@ test("an owned Snapshot and a Character Story reach only their love interest's n
     assert.ok(pack, "the line pack was written");
     assert.deepEqual(leaked(pack, [...KAI_ONLY, "MIR-SNAPSHOT"]), [], "a pack reads no canon at all");
 
-    // P17: Mireille's reply knows the shared story and her own Snapshot's world, never Kai's; Kai's knows his story.
+    // P17: Mireille's reply knows the shared story and her own Snapshot's world; Kai's Character Story only as the
+    // overview of the whole timeline tells it, titled his own, and his Snapshot not at all. Kai's knows his story.
     await sendMessage(t.deps, t.runId, MIR, { text: "Still up?" }, { debugMode: false });
     const [mirChat] = t.prompts("chat");
-    assert.deepEqual(leaked(mirChat!), [], "nothing of Kai's in Mireille's reply");
+    assert.deepEqual(leaked(beyondOverview(mirChat!)), [], "nothing of Kai's in Mireille's reply beyond the overview");
+    assert.match(
+      mirChat!,
+      /# Canon to date\n[^\n]*Kai's own story chapter "Lantern Vigil" \(private[^\n]*KAI-STORY-SCENE/u,
+    );
+    assert.ok(!mirChat!.includes("KAI-SNAPSHOT"), "his Snapshot never reaches the overview");
     assert.ok(mirChat!.includes("SHARED-QUAY"), "the shared story reaches her");
     await runForeground(t.runId, async () => undefined);
     await sendMessage(t.deps, t.runId, KAI, { text: "Are you awake?" }, { debugMode: false });
