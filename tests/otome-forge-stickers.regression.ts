@@ -601,18 +601,22 @@ test("a cut-out refresh keeps showing the sticker's old cut-out, so nothing she 
   // An Engine update advertises a newer cleanup: the next read rebuilds the cut-out (held here) from the original.
   t.cut.client.cleanupRevision = async () => 2;
   const kai = (stickers: StickerView[]) => stickers.filter((sticker) => sticker.owner === KAI).map((s) => s.url);
-  const during = await t.view();
-  assert.equal(during.cutoutsPending, true, "the refresh is on its way");
-  assert.deepEqual(kai(during.stickers), [old], "the read that queues it");
-  assert.deepEqual(kai((await t.view()).stickers), [old], "a read while it runs");
-  const album = (await t.album("GET", "/runs/:run/album")).body.stickers.filter(
-    (s: { owner: string }) => s.owner === KAI,
-  );
-  assert.deepEqual(
-    album.map((s: { url?: string; art?: unknown }) => [s.url, s.art ?? null]),
-    [[old, null]],
-  );
-  t.cut.release();
+  // Released however this ends: a held cut-out would hold back every later cut-out in this file.
+  try {
+    const during = await t.view();
+    assert.equal(during.cutoutsPending, true, "the refresh is on its way");
+    assert.deepEqual(kai(during.stickers), [old], "the read that queues it");
+    assert.deepEqual(kai((await t.view()).stickers), [old], "a read while it runs");
+    const album = (await t.album("GET", "/runs/:run/album")).body.stickers.filter(
+      (s: { owner: string }) => s.owner === KAI,
+    );
+    assert.deepEqual(
+      album.map((s: { url?: string; art?: unknown }) => [s.url, s.art ?? null]),
+      [[old, null]],
+    );
+  } finally {
+    t.cut.release();
+  }
   await t.settle();
   assert.deepEqual(kai((await t.view()).stickers), [`${art}.cut.png`], "the new cut-out once it lands");
 });
