@@ -11,8 +11,9 @@
 //
 // The kit builds one paint per unit; its client is made per run here, so each face's prompt reads that run's world
 // (rating, style) right before the call. createOtomeArt is created once per activation: queueExpressions after each
-// beat is served, queueScenePaints after each beat is written (art/cg.ts), dispose on teardown, after which nothing
-// more is paid for. queueStickers (#2044, art/stickers.ts) runs each run's sticker chain from GET /runs/:run.
+// beat is served, queueScenePaints for a beat's places once written and its CG once served (art/cg.ts), dispose on
+// teardown, after which nothing more is paid for. queueStickers (#2044, art/stickers.ts) runs each run's sticker chain
+// from GET /runs/:run.
 import { forgeLocalAvatarPath } from "@forge-kit/image-avatar-references.mjs";
 import { createForgeStoryExpressions, type ForgeStoryExpressions } from "@forge-kit/story-expressions-server.mjs";
 import type { Beat, Paint, Unit, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
@@ -68,7 +69,8 @@ export interface OtomeArt {
   queueExpressions(runId: string, beat: ExpressionBeat, options: { debugMode: boolean }): void;
   /**
    * Paints the beat's new places and its CG in the background, or leaves them waiting for the tap (Ask before
-   * painting, or `review`). Call it once after a beat is written or rewritten; do not await it. It never rejects.
+   * painting, or `review`). The beat writer calls it with the places once a beat is written or rewritten, and with the
+   * CG once it is served; do not await it. It never rejects.
    */
   queueScenePaints(runId: string, beat: Beat, options: Omit<PaintOptions, "active">): Promise<void>;
   /** Called outside the run queue before a fresh scene answers; only registration is awaited, never paid images. */

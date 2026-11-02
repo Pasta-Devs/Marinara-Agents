@@ -2,9 +2,10 @@
 // Otome Forge: story CGs (plan M2b "Story CGs"): painted onto the beat that holds them, unlocked once seen
 // ──────────────────────────────────────────────
 // A beat on a `cg` node may carry a brief (beat.cg: the segment it opens on, an English brief, the names of at most 3
-// people in the frame). When the beat is written, its CG is painted in the background (beat.cg.art), unless Ask
+// people in the frame). When the beat is first served, its CG is painted in the background (beat.cg.art), unless Ask
 // before painting is on or the player reviews image prompts; then it waits for the tap, as a failed or stopped one
-// does. The prompt is the brief plus each person's identity and outfit lines, the rating and an adult tag for every
+// does. A beat written ahead pays for no CG until it is served, so one an Ease off or a Rewrite drops never did. The
+// prompt is the brief plus each person's identity and outfit lines, the rating and an adult tag for every
 // person, sent as the prompt override, with each person's card, persona or portrait as a reference (at most 4). A brief
 // that set `explicit` is painted explicit only while Heat and the rating are both Explicit at the paid call, and then
 // without the outfit lines (S/art/prompts.ts cgPrompt).
@@ -12,7 +13,7 @@
 // image is deleted again. The album gains a CG only through POST .../art/cg/seen, once the CG is ready and the beat has
 // been read to the segment it opens on; a second report changes nothing. A beat eased off before the CG's segment never
 // shows it, so it is not painted (a paint still waiting in the lane stops). queueScenePaints is the one call the beat
-// writer makes after a beat is written: its places, then its CG.
+// writer makes: with a beat's places once it is written, and with its CG once it is served.
 import type {
   AlbumCg,
   Beat,
@@ -242,7 +243,7 @@ async function paintCg(
 }
 
 /**
- * Paints the CG of a beat just written, in the background, or leaves it waiting for the tap (Ask before painting, or
+ * Paints the CG of a beat just served, in the background, or leaves it waiting for the tap (Ask before painting, or
  * the player reviews image prompts). A CG that already has a record is left as it is. Never throws.
  */
 export async function paintBeatCg(deps: ArtDeps, runId: string, written: Beat, options: PaintOptions): Promise<void> {
@@ -318,9 +319,9 @@ export async function paintCgNow(
 }
 
 /**
- * The beat's places and its CG, painted in the background after the beat is written (or left waiting for the tap).
- * The beat writer calls it once per written beat, a rewrite included; it never throws. Resolves once every paint it
- * started has ended (tests wait on it; the writer does not).
+ * The beat's places and its CG, painted in the background (or left waiting for the tap). The beat writer calls it with
+ * the places once per written beat, a rewrite included, and with the CG once the beat is served; it never throws.
+ * Resolves once every paint it started has ended (tests wait on it; the writer does not).
  */
 export function queueScenePaints(deps: ArtDeps, runId: string, beat: Beat, options: PaintOptions): Promise<void> {
   return Promise.all([

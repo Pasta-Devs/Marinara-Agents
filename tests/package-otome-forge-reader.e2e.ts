@@ -620,6 +620,8 @@ test("Otome Forge reader: a stubbed chapter with faces, thoughts, a remembered c
   await setReaderControlsExpanded(root);
   await root.getByRole("button", { name: "Ease off" }).click();
   const ease = page.getByRole("dialog", { name: "Ease off?" });
+  // The scene written ahead followed the uncut one, so it is written again: the cost note says so.
+  await expect(ease).toContainText("If the model already wrote the next scene ahead, it writes that scene again");
   await ease.getByRole("button", { name: "Ease off" }).click();
   await ease.getByRole("button", { name: "Keep reading" }).click({ force: true });
   await expect(ease).toBeVisible();

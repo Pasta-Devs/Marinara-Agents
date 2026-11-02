@@ -2168,7 +2168,7 @@ test("keeping a line twice keeps it once; letting it go removes it", async () =>
   assert.deepEqual((await keep({ keep: false })).body.favorites, [], "letting it go twice changes nothing");
 });
 
-test("the art hears of every beat: faces when served, places and its CG once when written, a rewrite's release", async () => {
+test("the art hears of every beat: faces when served, places once when written, a rewrite's release", async () => {
   const t = await plannedWorld("r-arts-aaaaaa");
   const at = new Date().toISOString();
   const seen: Array<[string, string, number, boolean?]> = [];
