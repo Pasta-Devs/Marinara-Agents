@@ -1425,7 +1425,6 @@ test("the previous chapter goes in whole, however long, when the model's window 
     messages: sent,
     memory,
     schema: z.object({ premise: z.string() }),
-    temperature: 0.5,
     maxTokens: 600,
     debugMode: false,
     lane: "foreground",

@@ -41,7 +41,6 @@ import type { OtomeStore } from "../store.js";
 import { linePackMessages } from "../prompts.js";
 import { LinePackReplySchema, QUESTION_MARK, mentionsAbsence, type LinePackReply } from "./replies.js";
 
-export const LINE_PACK_TEMPERATURE = 0.9;
 /** What the reply itself needs: about sixty lines of fourteen words. */
 export const LINE_PACK_MAX_TOKENS = 3000;
 /** How long a love interest whose pack failed is left alone before another attempt. */
@@ -233,7 +232,6 @@ export async function writeLinePacks(
       const pack = normalizeLinePack(reply, { stage, withFixed, at });
       return typeof pack === "string" ? pack : reply;
     },
-    temperature: LINE_PACK_TEMPERATURE,
     maxTokens: LINE_PACK_MAX_TOKENS,
     debugMode,
     lane: "background",

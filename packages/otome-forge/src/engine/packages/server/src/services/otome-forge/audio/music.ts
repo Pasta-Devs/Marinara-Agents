@@ -65,7 +65,6 @@ export function createMusicBriefs(deps: MusicDeps) {
         schema: BriefSchema,
         normalize: (reply) =>
           normalizeForgeMusicPrompt(reply) ?? "prompt must be one non-empty string of at most 1000 characters",
-        temperature: 0.7,
         maxTokens: BRIEF_TOKENS,
         debugMode,
         lane: "foreground",
@@ -170,7 +169,6 @@ export async function chapterMusicBrief(
         }),
         schema: BriefSchema,
         normalize: (reply) => normalizeForgeMusicPrompt(reply) ?? "prompt must be one non-empty musical brief",
-        temperature: 0.7,
         maxTokens: 8192,
         debugMode,
         lane: "foreground",

@@ -684,7 +684,6 @@ async function generateBeat(
         const game = normalizeConfrontationReply(reply, shape, lists);
         return typeof game === "string" ? game : reply;
       },
-      temperature: 0.9,
       maxTokens: 7000,
       debugMode,
       lane: "foreground",
@@ -718,7 +717,6 @@ async function generateBeat(
         if (typeof beat === "string") return beat;
         return (chapter.kind === "prologue" && prologueProblem(beat, units)) || reply;
       },
-      temperature: 0.9,
       maxTokens: 6000,
       debugMode,
       lane: "foreground",

@@ -226,7 +226,7 @@ test("a send saves her message, then his reply once, and the same id again makes
   );
   assert.equal(sent.body.suggestions, undefined, "the player writes their own replies (#2066)");
   assert.equal(t.calls.length, 1);
-  assert.equal(t.calls[0]!.options?.temperature, 0.95);
+  assert.equal(t.calls[0]!.options?.temperature, undefined);
 
   const again = await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?", id: "c-0001-abcd" } });
   assert.equal(again.status, 200);
@@ -421,7 +421,6 @@ test("Close and remember: one session, P18 on the summary contract, the capped a
   const head = system(memoryCall.messages);
   assert.ok(head.includes(SUMMARY_WORDING) && head.includes("Heat: SFW"), "an SFW story's summary contract");
   assert.ok(!head.includes(forgeKnowledgeBoundary), "the summarizer writes no one's words");
-  assert.match(head, /- memory: 50 to 100 words in the third person/u, "the maintainer's length, said in the prompt");
   assert.ok(memoryCall.messages.at(-1)!.content.includes("Kai: Awake. Unfortunately."));
   assert.ok(t.logs.some((entry) => entry.level === "debugOverride" && entry.args[0] === `phone-memory/${KAI}`));
 

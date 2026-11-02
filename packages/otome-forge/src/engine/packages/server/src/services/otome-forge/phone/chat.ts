@@ -345,7 +345,6 @@ async function writeReply(
     memory: story,
     schema: ChatReplySchema,
     normalize: (raw) => normalizeChatReply(raw, names, [...stickers.his, ...stickers.yours]),
-    temperature: 0.95,
     maxTokens: 1200,
     debugMode,
     ...(connectionId ? { lane: "background" as const, connectionId } : { lane: "foreground" as const }),

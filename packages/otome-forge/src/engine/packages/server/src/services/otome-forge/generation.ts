@@ -15,10 +15,10 @@
 //    Engine's (fitSafety) with some to spare, and model.fitContext checks the result: any trim there is `capacity` too.
 // 4. Log: logOtomePrompt (debugOverride in debug mode, `redact` strings replaced). In debug mode the reply's prompt
 //    cache use is logged too, when the provider reports it.
-// 5. Call: chatComplete with responseFormat json_object; an explicit HTTP 400/422 rejection of that optional hint
-//    allows one retry without it, also omitted from the repair turn and from every later call on that connection and
-//    model. A background call holds its job's connection admission slot throughout; it names that connection and never
-//    takes a second slot here.
+// 5. Call: chatComplete with the reply's output size alone (the maintainer's rule): no temperature, no JSON mode, no
+//    other sampling or reasoning setting, so what the connection saves (its temperature, its reasoning effort) is what
+//    the Engine sends, and nothing of Otome's stands in for what it leaves unset. A background call holds its job's
+//    connection admission slot throughout; it names that connection and never takes a second slot here.
 // 6. Parse: parseJsonish, then the schema, then `normalize`. On failure exactly one repair turn (fitted the same way);
 //    if that fails too, two declines are a 422 `declined` and anything else a 502 `bad-format`. A decline is an empty
 //    reply, a content filter, or refusal wording in a reply that is not a JSON object (inside one it is a character's
@@ -77,7 +77,6 @@ export interface GenerateJsonRequest<T extends object> {
    * the problem, or null. A string or null sends the one repair turn.
    */
   normalize?: (value: T) => T | string | null;
-  temperature: number;
   /** What the reply itself needs; the call asks for outputBudget(maxTokens) so reasoning models have room to think. */
   maxTokens: number;
   debugMode: boolean;
@@ -139,7 +138,7 @@ const estimateMessages = (messages: readonly OtomeMessage[]) =>
 
 /**
  * The prompt room kept free besides the reply: the Engine's own margin (base-provider.ts: max(500, 2% of the context))
- * with room to spare for the JSON hint it also counts, so the Engine's fitter never trims what this one fitted.
+ * with some room to spare, so the Engine's fitter never trims what this one fitted.
  */
 export const fitSafety = (maxContext: number) => Math.max(512, Math.ceil(maxContext * 0.02)) + 64;
 
@@ -197,36 +196,6 @@ async function resolveModel(deps: GenerationDeps, connectionId: string): Promise
     const reason = error instanceof Error ? error.message : String(error);
     throw new OtomeForgeError(503, `Otome Forge could not use connection ${connectionId}: ${reason}`, "no-connection");
   }
-}
-
-/**
- * The connection and model pairs whose endpoint explicitly rejected the JSON hint, per host runtime: later calls on one
- * skip the hint instead of sending a request already known to fail first. A connection set to another model asks with
- * it again, since a rejection is often the model's.
- * ponytail: in memory until the package reloads; an endpoint changed meanwhile to accept the hint, or an aggregator
- * that refused it once from one routed provider, goes without it (its replies are validated either way). Upgrade path:
- * forget a pair when its connection's settings change, or retry the hint after a while.
- */
-const hintRejected = new WeakMap<object, Set<string>>();
-const hintKey = (connectionId: string, model: CapabilityResolvedLanguageModel) => `${connectionId}\n${model.model}`;
-
-/** Like LTM's compatibility fallback, remove only an explicitly rejected optional format, never a general failure. */
-function rejectsJsonHint(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const { status, message } = error as { status?: unknown; message?: unknown };
-  if ((status !== 400 && status !== 422) || typeof message !== "string") return false;
-  const text = message.replace(/["'`]/gu, "").replace(/\s+/gu, " ");
-  return (
-    /\b(?:response[_ -]?format(?:[. _-]type)?|json_object|json[ -]mode|structured[ -]output)\b\s*:?\s*(?:(?:is|are)\s+)?(?:unsupported|unrecognized|invalid|not\s+(?:supported|allowed|permitted)|must\s+be|can\s+only\s+be)\b/iu.test(
-      text,
-    ) ||
-    /\b(?:unsupported|unrecognized|invalid|unknown)\s+(?:(?:request\s+)?(?:parameter|argument|field|value|type)(?:\s+(?:supplied|for))?\s*:?\s*)?(?:response[_ -]?format(?:[. _-]type)?|json_object|json[ -]mode|structured[ -]output)\b/iu.test(
-      text,
-    ) ||
-    /\b(?:does not|doesnt|do not|dont)\s+support\s+(?:the\s+)?(?:response[_ -]?format(?:[. _-]type)?|json_object|json[ -]mode|structured[ -]output)\b/iu.test(
-      text,
-    )
-  );
 }
 
 /**
@@ -316,7 +285,6 @@ export async function generateJson<T extends object>(
   const messages = request.memory
     ? forgeComposeMemoryPrompt(() => request.messages, [request.memory, request.memory.recalls].filter(Boolean))
     : request.messages;
-  let useJsonHint = !hintRejected.get(runtime)?.has(hintKey(connectionId, model));
   const mayCall = () => {
     request.signal?.throwIfAborted();
     if (request.mayCall && !request.mayCall()) {
@@ -328,33 +296,12 @@ export async function generateJson<T extends object>(
     const fitted = fitPrompt(model, prompt, budget, label, request.memory?.maxContext);
     const sent = fitted.messages;
     logOtomePrompt(runtime, label, sent, { debugMode: request.debugMode, redact: request.redact });
-    const options = {
-      temperature: request.temperature,
+    // The output size alone (see the header); debugMode and signal are the Engine's own, never sent on.
+    const reply = await model.chatComplete(sent, {
       maxTokens: fitted.maxTokens,
       debugMode: request.debugMode,
       signal: request.signal,
-      ...(useJsonHint ? { responseFormat: { type: "json_object" } } : {}),
-    };
-    let reply;
-    try {
-      reply = await model.chatComplete(sent, options);
-    } catch (error) {
-      if (!useJsonHint || !rejectsJsonHint(error)) throw error;
-      useJsonHint = false;
-      hintRejected.set(runtime, (hintRejected.get(runtime) ?? new Set()).add(hintKey(connectionId, model)));
-      mayCall();
-      const debug = request.debugMode || runtime.isDebugAgentsEnabled();
-      if (debug || runtime.logger.isLevelEnabled?.("debug") !== false)
-        runtime.logger.debugOverride(
-          debug,
-          "[debug/otome-forge/%s] Endpoint rejected response_format; retrying once without the JSON hint.",
-          label,
-        );
-      logOtomePrompt(runtime, label, sent, { debugMode: request.debugMode, redact: request.redact });
-      const fallbackOptions = { ...options };
-      delete fallbackOptions.responseFormat;
-      reply = await model.chatComplete(sent, fallbackOptions);
-    }
+    });
     logCacheUse(runtime, label, request.debugMode, reply.usage);
     return check(request, runtime.json.parseJsonish, reply.content ?? "", reply.finishReason);
   };

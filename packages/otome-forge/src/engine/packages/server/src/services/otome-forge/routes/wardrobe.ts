@@ -65,7 +65,7 @@ import { isLiId, playerId, runDocTarget, stateId, unitId } from "../ids.js";
 import { STORY_KINDS } from "../items/character-story.js";
 import { couplesOf, ownedItems, readItem, readItems, readOwnedItem } from "../items/open.js";
 import { noticedMessages, showMessages } from "../prompts.js";
-import { LINE_TEMPERATURE, LINE_TOKENS, LineReplySchema, ShowReplySchema, checkLine } from "../items/replies.js";
+import { LINE_TOKENS, LineReplySchema, ShowReplySchema, checkLine } from "../items/replies.js";
 import { normalizePlayer } from "../schemas/player.js";
 import { normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
@@ -277,7 +277,6 @@ function noticeLook(deps: RouteDeps, runId: string, look: string, li: string | u
       messages: noticedMessages({ world: run.world, player: run.player, unit, state: run.state, look: item.look }),
       schema: LineReplySchema,
       normalize: (reply) => checkLine(reply.text, NOTICED_WORDS_MAX),
-      temperature: LINE_TEMPERATURE,
       maxTokens: LINE_TOKENS,
       debugMode,
       lane: "foreground",
@@ -368,7 +367,6 @@ export async function showLook(
           const line = checkLine(raw.text, SHOW_WORDS_MAX);
           return typeof line === "string" ? line : { text: line.text, face: raw.face };
         },
-        temperature: LINE_TEMPERATURE,
         maxTokens: LINE_TOKENS,
         debugMode,
         lane: "foreground",

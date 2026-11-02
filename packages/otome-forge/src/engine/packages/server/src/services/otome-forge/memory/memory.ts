@@ -82,7 +82,6 @@ import {
  * write, so this is never sized from the summary's word limit, which the prompt states.
  */
 const SUMMARY_OUTPUT_TOKENS = 10240;
-const SUMMARY_TEMPERATURE = 0.3;
 /**
  * #2066: the small memories that go beside the timeline, newest first, at most this many estimated tokens and
  * HEADROOM_TOKENS of leeway (S/memory/timeline.ts).
@@ -342,7 +341,6 @@ export function createOtomeMemory({
             label: `memory-${kind}`,
             messages,
             schema: SummarySchema,
-            temperature: SUMMARY_TEMPERATURE,
             maxTokens: SUMMARY_OUTPUT_TOKENS,
             debugMode: request.debugMode === true,
             lane: "background",

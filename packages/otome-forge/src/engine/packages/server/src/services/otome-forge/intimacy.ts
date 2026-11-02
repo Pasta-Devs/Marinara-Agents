@@ -63,7 +63,6 @@ export async function fillIntimacy(
         const intimacy = normalizeIntimacy(reply.intimacy);
         return typeof intimacy === "string" ? intimacy : { intimacy };
       },
-      temperature: 0.8,
       maxTokens: 1500,
       debugMode,
       lane: "foreground",

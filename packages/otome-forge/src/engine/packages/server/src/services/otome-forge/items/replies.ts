@@ -14,9 +14,7 @@ import { ChapterPlanSchema, type ChapterPlanReply } from "../story/replies.js";
 
 export const STORY_NODES_MIN = 3;
 export const STORY_NODES_MAX = 5;
-export const STORY_PLAN_TEMPERATURE = 0.8;
 export const STORY_PLAN_TOKENS = 3000;
-export const LINE_TEMPERATURE = 0.9;
 export const LINE_TOKENS = 300;
 const LINE_MAX = 400;
 

@@ -591,7 +591,7 @@ test("the prompt carries the boundary, the chat contract, their own notebook onl
     "nothing of Mireille's own chapters",
   );
   for (const marker of KAI_SHARED) assert.ok(sent.includes(marker), `his own ${marker}`);
-  assert.equal(call!.options?.temperature, 0.9);
+  assert.equal(call!.options?.temperature, undefined);
   assert.ok(t.logs.some((entry) => entry.level === "debugOverride" && entry.args[0] === `read-me/${KAI}`));
 
   // An empty notebook: no ALREADY KNOWN, and no rule naming it.

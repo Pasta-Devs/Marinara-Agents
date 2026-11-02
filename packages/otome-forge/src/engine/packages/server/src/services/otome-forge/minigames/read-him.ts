@@ -62,7 +62,6 @@ import { grant } from "../state/rewards.js";
 import type { OtomeStore } from "../store.js";
 import { READ_HIM_WORDS, ownView, readHimMessages } from "../prompts.js";
 
-export const READ_HIM_TEMPERATURE = 0.9;
 export const READ_HIM_MAX_TOKENS = 2400;
 /** His earlier sets whose moments P25 sees, so a new set never repeats them. */
 const RECENT_SETS = 2;
@@ -419,7 +418,6 @@ export async function startReadHim(
       }),
       schema: ReadHimReplySchema,
       normalize: checkReadHimReply(tells.length),
-      temperature: READ_HIM_TEMPERATURE,
       maxTokens: READ_HIM_MAX_TOKENS,
       debugMode,
       lane: "foreground",

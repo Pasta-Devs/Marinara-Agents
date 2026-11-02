@@ -582,7 +582,7 @@ test("line packs backfill every love interest once in the background, catch a ne
   const kai = await t.unit(KAI);
   assert.ok(kai.lines?.stages["1"] && kai.lines.stages["2"]);
   assert.equal(kai.lines!.fixed!.comfort[0], "Kai comfort line 1.", "the fixed lines are never replaced");
-  assert.ok(t.calls.every((entry) => entry.options?.temperature === 0.9));
+  assert.ok(t.calls.every((entry) => entry.options?.temperature === undefined));
 });
 
 test("a failed pack waits before it is tried again", async (context) => {

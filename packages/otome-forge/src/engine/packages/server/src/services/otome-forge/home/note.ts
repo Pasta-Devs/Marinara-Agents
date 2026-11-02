@@ -47,7 +47,6 @@ import type { OtomeStore } from "../store.js";
 import { type NoteDay, noteMessages, ownView } from "../prompts.js";
 import { NoteReplySchema, QUESTION_MARK, mentionsAbsence, type NoteReply } from "./replies.js";
 
-export const NOTE_TEMPERATURE = 0.9;
 export const NOTE_MAX_TOKENS = 400;
 /** One recalled line: about this many tokens of his top memory. */
 const RECALLED_TOKENS = 120;
@@ -240,7 +239,6 @@ export async function serveNote(
       }),
       schema: NoteReplySchema,
       normalize: checkNote(curt, recent),
-      temperature: NOTE_TEMPERATURE,
       maxTokens: NOTE_MAX_TOKENS,
       debugMode,
       lane: "foreground",

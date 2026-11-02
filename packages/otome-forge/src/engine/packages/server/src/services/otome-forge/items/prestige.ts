@@ -27,13 +27,7 @@ import { recallText } from "../story/canon.js";
 import { clean, type ChapterDeps, type PlannedChapter } from "../story/chapters.js";
 import { sideStoryNodes, type StoryPlanContext } from "./character-story.js";
 import { prestigePlanMessages } from "../prompts.js";
-import {
-  PrestigePlanSchema,
-  STORY_PLAN_TEMPERATURE,
-  STORY_PLAN_TOKENS,
-  prestigeKindsFor,
-  type PrestigePlanReply,
-} from "./replies.js";
+import { PrestigePlanSchema, STORY_PLAN_TOKENS, prestigeKindsFor, type PrestigePlanReply } from "./replies.js";
 
 const notFound = (what: string) => new OtomeForgeError(404, `No such ${what}.`, "not-found");
 const locked = (message: string) => new OtomeForgeError(409, message, "locked");
@@ -135,7 +129,6 @@ export async function ensurePrestigeStory(
         const plan = normalizePrestigePlan(reply, context);
         return typeof plan === "string" ? plan : reply;
       },
-      temperature: STORY_PLAN_TEMPERATURE,
       maxTokens: STORY_PLAN_TOKENS,
       debugMode,
       lane: "foreground",

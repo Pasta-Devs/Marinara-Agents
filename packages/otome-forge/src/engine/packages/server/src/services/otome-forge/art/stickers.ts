@@ -282,7 +282,6 @@ export function albumStickers(runId: string, run: Run): AlbumSticker[] {
 
 // ── His set: nine stickers designed in one background call ──
 
-export const STICKER_SET_TEMPERATURE = 0.8;
 export const STICKER_SET_MAX_TOKENS = 2000;
 /** How long a love interest whose set failed is left alone before another attempt. */
 export const STICKER_SET_RETRY_MS = 10 * 60_000;
@@ -389,7 +388,6 @@ export async function writeStickerSet(
       );
       return typeof set === "string" ? set : reply;
     },
-    temperature: STICKER_SET_TEMPERATURE,
     maxTokens: STICKER_SET_MAX_TOKENS,
     debugMode,
     lane: "background",

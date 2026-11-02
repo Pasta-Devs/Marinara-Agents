@@ -2819,9 +2819,6 @@ export function chatReplyMessages({
 
 // ── P18: chat memory (compress, summary contract) ──
 
-/** How long what he remembers of a conversation is (the maintainer's 50 to 100 words), said in P18's prompt. */
-export const CHAT_MEMORY_WORDS = { min: 50, max: 100 } as const;
-
 export interface ChatMemoryInput {
   world: Pick<World, "language" | "content" | "images" | "writingStyle" | "bannedPhrases">;
   names: ThreadNames;
@@ -2834,7 +2831,7 @@ export function chatMemoryMessages({ world, names, conversation }: ChatMemoryInp
     `Two people have just finished exchanging messages: ${names.li} and ${names.player}. Write what ${names.li} will remember of it.`,
     "Reply with ONLY a JSON object of this shape:",
     '{"memory": "...", "quote": "..."}',
-    `- memory: ${CHAT_MEMORY_WORDS.min} to ${CHAT_MEMORY_WORDS.max} words in the third person about what passed between them: what was said that matters, what changed, what was left unsaid. Not a transcript. Written in ${world.language}.`,
+    `- memory: 2 to 4 sentences in the third person about what passed between them: what was said that matters, what changed, what was left unsaid. Not a transcript. Written in ${world.language}.`,
     "- quote: ONE line copied word for word from the conversation, the one worth hearing again, without quotation marks around it. Leave it empty when nothing stands out.",
     "HARD RULES",
     "- It already happened: write it as a memory, never as a scene that is going on.",
@@ -3605,7 +3602,7 @@ export function stickerSetMessages({
 // ──────────────────────────────────────────────
 // (j) Wish banners
 // ──────────────────────────────────────────────
-// One structured call per banner, at temperature 0.8, when the banner is created (Wish open): the featured 5★ (a
+// One structured call per banner, when the banner is created (Wish open): the featured 5★ (a
 // Memory's title, premise and key image brief, or a look's name and English outfit line), three 4★s and six Snapshots.
 // Pulls never call a model: everything a pull hands out is written here.
 // - Premises take the `planner` contract; a premise is a situation, and how close they are follows their stage when

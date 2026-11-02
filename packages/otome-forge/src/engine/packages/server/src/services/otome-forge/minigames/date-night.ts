@@ -433,7 +433,6 @@ export async function startDate(
         const plan = normalizeDatePlanReply(reply, context);
         return typeof plan === "string" ? plan : reply;
       },
-      temperature: 0.9,
       maxTokens: 2000,
       debugMode,
       lane: "foreground",

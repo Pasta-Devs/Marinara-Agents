@@ -253,7 +253,6 @@ export async function planRouteChapter(
         const plan = normalizeRoutePlan(reply, context);
         return typeof plan === "string" ? plan : reply;
       },
-      temperature: 0.8,
       maxTokens: 3500,
       debugMode,
       lane: "foreground",
@@ -344,7 +343,6 @@ export async function planRepairChapter(
         const plan = normalizeRepairPlan(reply, context);
         return typeof plan === "string" ? plan : reply;
       },
-      temperature: 0.7,
       maxTokens: 2500,
       debugMode,
       lane: "foreground",
