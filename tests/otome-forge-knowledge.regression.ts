@@ -148,13 +148,14 @@ test("a love interest may be genuinely evil, a story may have real villains, and
   // The shared rule the bible also receives must not ask for red lines a love interest without a code does not have.
   assert.ok(bibleText.includes("the love interest keeps whatever red lines they have."));
   assert.ok(!bibleText.includes("the love interest keeps their red lines"));
-  // The mask may hide a monster, and the bible keeps the card's darkness as dark as the story's Darkness allows.
+  // The mask may hide a monster, and the bible keeps the card's darkness as dark as the story's Darkness allows. The
+  // scene card shows darkness at every stage, so it holds what they are, never a secret's events (CodeRabbit on #2055).
   assert.ok(
     bibleText.includes("mask.presents: the face they show, which may hide something kinder or something worse;"),
   );
   assert.ok(
     bibleText.includes(
-      "darkness.kinds: the kinds of darkness in them, as dark as the card or archetype makes them within this story's Darkness, never softened.",
+      "darkness.kinds: the kinds of darkness in them, as dark as the card or archetype makes them within this story's Darkness, never softened: what they are (cruelty, a hunger for control), never a secret's events, which belong in secrets.",
     ),
   );
   // Love alone does not make a monster good, but they may grow into a better partner as affection grows.
