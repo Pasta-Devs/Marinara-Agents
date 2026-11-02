@@ -1171,6 +1171,38 @@ test("Otome Hearth a line under a story CG types only after the art has loaded a
   await expect(line(root)).toContainText("sentence 12.");
 });
 
+test("Otome Hearth a story CG whose picture fails ends its pan at once and the line types (#2051)", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  const cgUrl = "/__otome-test/cg-2051-broken.png";
+  const fixture = createStoryStub({
+    done: true,
+    storyBeats: [
+      {
+        ...BEATS[0],
+        cg: {
+          at: 0,
+          brief: "Two figures under the glass dome.",
+          cast: ["Ilvar Thorne"],
+          art: { state: "ready", at: written.at, url: cgUrl },
+        },
+      },
+      ...BEATS.slice(1),
+    ],
+  });
+  await stubRoutes(page, fixture);
+  await page.route(`**/api/otome-forge/runs/${RUN}/art/cg/seen`, (route) => route.fulfill({ json: { ok: true } }));
+  await page.route(`**${cgUrl}`, (route) => route.fulfill({ status: 404, body: "" }));
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  // Well inside the 6 s pan: a broken picture never holds the box hidden.
+  await expect(root.locator(".of-reader")).toHaveAttribute("data-cg", "shown", { timeout: 2000 });
+  await expect(root.locator(".of-cg")).toHaveAttribute("data-loaded", "false");
+  await expect(root.locator('.of-dialogue .of-line > span[aria-hidden="true"]')).toHaveAttribute("data-done", "true");
+});
+
 for (const failure of ["missing sprite", "failed cleanup"] as const) {
   test(`Otome Hearth story header restores its description when NPC display fails (${failure})`, async ({
     page,

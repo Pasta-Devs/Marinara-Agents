@@ -1,9 +1,9 @@
 // ──────────────────────────────────────────────
 // Otome Forge: a story CG takes over the stage (plan M2b, design "CG moments"). The reader's UI fades, letterbox bars
 // close in, and the image pans slowly for about 6 s; then the bars open, the box returns at 80% and the image stays
-// behind the rest of the beat. The pan, and the line waiting under it (#2051), start once the picture has loaded (or
-// failed, so nothing waits forever). A tap anywhere, Enter or Space ends the pan at once; under reduced motion there is no pan
-// and the box is back straight away. While it plays the faded UI is inert and the picture holds focus (tabIndex −1),
+// behind the rest of the beat. The pan, and the line waiting under it (#2051), start once the picture has loaded; one
+// that fails ends it at once, with no pan over a broken picture. A tap anywhere, Enter or Space ends the pan at once;
+// under reduced motion there is no pan and the box is back straight away. While it plays the faded UI is inert and the picture holds focus (tabIndex −1),
 // so nothing unseen can be pressed. When the pan ends the reader marks the CG seen (the server unlocks it in the Album).
 // ──────────────────────────────────────────────
 import { forwardRef, useEffect, useRef, useState } from "react";
@@ -33,10 +33,10 @@ export const CgTakeover = forwardRef<HTMLElement, CgTakeoverProps>(function CgTa
   const ended = useRef(onIntroEnd);
   ended.current = onIntroEnd;
   // The pan counts from the moment the picture can be seen, not from the moment it was asked for.
-  const [settled, setSettled] = useState(false);
+  const [settled, setSettled] = useState<"loaded" | "failed" | null>(null);
   useEffect(() => {
     if (!intro || !settled) return;
-    const timer = window.setTimeout(() => ended.current(), reducedMotion ? 0 : CG_PAN_MS);
+    const timer = window.setTimeout(() => ended.current(), reducedMotion || settled === "failed" ? 0 : CG_PAN_MS);
     return () => window.clearTimeout(timer);
   }, [intro, reducedMotion, settled]);
   const label = names.length
@@ -47,7 +47,7 @@ export const CgTakeover = forwardRef<HTMLElement, CgTakeoverProps>(function CgTa
       ref={ref}
       className="of-cg"
       data-intro={intro}
-      data-loaded={settled}
+      data-loaded={settled === "loaded"}
       role="img"
       aria-label={label}
       tabIndex={-1}
@@ -66,11 +66,11 @@ export const CgTakeover = forwardRef<HTMLElement, CgTakeoverProps>(function CgTa
           void event.currentTarget
             .decode()
             .catch(() => undefined)
-            .then(() => setSettled(true));
+            .then(() => setSettled("loaded"));
           onArtStatus?.(url, true);
         }}
         onError={() => {
-          setSettled(true);
+          setSettled("failed");
           onArtStatus?.(url, false);
         }}
       />
