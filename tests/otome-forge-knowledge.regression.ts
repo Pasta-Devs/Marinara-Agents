@@ -145,6 +145,9 @@ test("a love interest may be genuinely evil, a story may have real villains, and
     ),
   );
   assert.ok(!/from their own integrity/u.test(bibleText));
+  // The shared rule the bible also receives must not ask for red lines a love interest without a code does not have.
+  assert.ok(bibleText.includes("the love interest keeps whatever red lines they have."));
+  assert.ok(!bibleText.includes("the love interest keeps their red lines"));
 });
 
 test("the world plan names an existing world as it is; the Surprise me premise stays original", () => {

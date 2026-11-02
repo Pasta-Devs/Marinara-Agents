@@ -5,8 +5,8 @@
 // twelve, so next year's October is not this year's again. Any other rotation's P20 prompt is byte for byte the one it
 // was before: its digests were taken from the 0.6.3 builder before seasons were written, with 0.6.17's one change: the
 // story is headed "THE STORY SO FAR", no longer "(what everyone knows)", since its overview now tells every love
-// interest's own chapters too, titled private (#2039); and 0.6.22's: the shared writing rules say a love interest may be
-// genuinely evil and that taming them is the point.
+// interest's own chapters too, titled private (#2039); and 0.6.22's (#2054): the shared writing rules say a love interest
+// may be genuinely evil, that taming them is the point, and that they keep whatever red lines they have.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test, { mock } from "node:test";
@@ -155,9 +155,9 @@ const digest = (messages: Array<{ role: string; content: string }>) =>
 
 /** Taken from the 0.6.3 builder, before seasons. */
 const BEFORE_SEASONS: Record<wish.BannerKind, string> = {
-  memories: "06c6704278c8412d",
-  "his-wardrobe": "6351a8c0f214515a",
-  "my-wardrobe": "8ed12db236a7a233",
+  memories: "1c1aacc6e9c4f2e3",
+  "his-wardrobe": "b47a124c26992bb5",
+  "my-wardrobe": "95be36e04b638e37",
 };
 
 test("a rotation that is not seasonal sends the P20 prompt it sent before seasons", () => {
