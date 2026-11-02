@@ -148,6 +148,22 @@ test("a love interest may be genuinely evil, a story may have real villains, and
   // The shared rule the bible also receives must not ask for red lines a love interest without a code does not have.
   assert.ok(bibleText.includes("the love interest keeps whatever red lines they have."));
   assert.ok(!bibleText.includes("the love interest keeps their red lines"));
+  // The mask may hide a monster, and the bible keeps the card's darkness as dark as the story's Darkness allows.
+  assert.ok(
+    bibleText.includes("mask.presents: the face they show, which may hide something kinder or something worse;"),
+  );
+  assert.ok(
+    bibleText.includes(
+      "darkness.kinds: the kinds of darkness in them, as dark as the card or archetype makes them within this story's Darkness, never softened.",
+    ),
+  );
+  // Love alone does not make a monster good, but they may grow into a better partner as affection grows.
+  const LOVE =
+    "Falling for the protagonist does not make a monster good or secretly kind at once; as affection grows and they come to know the protagonist, they may become a better partner to them, in their own way.";
+  for (const [kind, prompt] of Object.entries(prompts)) assert.ok(prompt.includes(LOVE), `${kind}: love rule`);
+  // Every planner reads the monster as a monster, not a human inside one.
+  assert.ok(prompts.chapterPlan!.includes("each is a human, even if a monster,"));
+  for (const prompt of Object.values(prompts)) assert.ok(!prompt.includes("even if inside a monster"));
 });
 
 test("the world plan names an existing world as it is; the Surprise me premise stays original", () => {

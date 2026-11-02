@@ -546,7 +546,7 @@ export function chapterPlanMessages({
     : null;
 
   const system = [
-    "You are the chapter planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human, even if inside a monster, capable of earned, character-consistent change.",
+    "You are the chapter planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human, even if a monster, capable of earned, character-consistent change.",
     `Plan main chapter ${number}: one Lead love interest (given) and one Foil you pick from the others. The chapter is told as ${NODES_MIN} to ${NODES_MAX} nodes in play order; a narrator writes each node later as one scene the player reads.`,
     "Reply with ONLY a JSON object of this shape:",
     '{"title": "...", "tags": ["..."], "foil": "<love interest id>", "summary": "...", "nodes": [{"kind": "beat|moment|confrontation|closer", "moment": "read-him|call|date", "guide": "...", "cast": ["<love interest id>"], "place": "...", "cg": true, "resolves": ["<grievance id>"]}], "ledger": {"relationship": [{"li": "<id>", "line": "..."}], "conflict": [{"id": "<conflict id>", "li": "<id>", "type": "...", "action": "plant|escalate|complicate|resolve"}], "offscreen": [{"li": "<id>", "line": "..."}]}}',
@@ -1141,7 +1141,7 @@ export function routePlanMessages(input: RoutePlanInput): OtomeMessage[] {
     (unit?.bible?.secrets ?? []).filter((secret) => secret.revealAt.stage === stage).map((secret) => secret.id),
   );
   const system = [
-    "You are the route planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human, even if inside a monster, capable of earned, character-consistent change.",
+    "You are the route planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human, even if a monster, capable of earned, character-consistent change.",
     `Plan one ROUTE CHAPTER of ${name}'s own story: a chapter for ${name} and the protagonist, told as ${ROUTE_NODES_MIN} to ${ROUTE_NODES_MAX} nodes in play order; a narrator writes each node later as one scene the player reads.`,
     "Reply with ONLY a JSON object of this shape:",
     PLAN_SHAPE,
@@ -1199,7 +1199,7 @@ export function repairPlanMessages(input: RepairPlanInput): OtomeMessage[] {
   const name = units.find((item) => item.id === li)?.name ?? li;
   const holder = grievance.by === "li" ? name : "the protagonist";
   const system = [
-    "You are the repair planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human, even if inside a monster, capable of earned, character-consistent change.",
+    "You are the repair planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human, even if a monster, capable of earned, character-consistent change.",
     `Plan one REPAIR chapter between ${name} and the protagonist after a rupture, told as ${REPAIR_NODES_MIN} to ${REPAIR_NODES_MAX} nodes in play order; a narrator writes each node later as one scene the player reads.`,
     "Reply with ONLY a JSON object of this shape:",
     PLAN_SHAPE,

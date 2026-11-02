@@ -28,8 +28,9 @@
 // #2030: a Confrontation's and a Closer's option labels speak to the player as "you", never "she", so the confrontation
 // and closer digests moved.
 // 0.6.22 (#2054): the shared writing rules say a love interest may be genuinely evil and that taming them is the point,
-// and keeps whatever red lines they have (they may have none), so every story and banner digest moved once (both lines
-// ride in the rules block of each prompt).
+// and keeps whatever red lines they have (they may have none); falling for the protagonist does not make a monster good
+// at once. Angst no longer sanitizes cruelty and lets a love interest be a villain to everyone else; the planners read
+// "even if a monster", not "inside" one. Every story and banner digest moved once.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
@@ -246,28 +247,28 @@ test("chapter and scene prompts keep emotional payoffs occasional and permit cha
 });
 
 const EXPECTED_ANGST: Record<string, string> = {
-  bannerHis: "8979bc5e5aaf1787",
-  bannerMemories: "a4faeb5dbc5d6be6",
-  bannerMine: "f039f48ab683b1e3",
-  beat: "69c9a2de3e6aa589",
-  beatWithCg: "4747da273ac7a179",
-  chapterPlan: "04353ac9e27d3c07",
-  closer: "a5a5f67694494184",
-  confrontation: "0288b00955386096",
-  repairPlan: "bf3802ab6504f3b6",
-  routePlan: "22b939343b87f7bf",
+  bannerHis: "2e251739fa0fc8bc",
+  bannerMemories: "f346793510f415df",
+  bannerMine: "cd6610a3b673ded5",
+  beat: "98b3dd0f1c1d1b73",
+  beatWithCg: "25f9c5b5ed5c1994",
+  chapterPlan: "d470fdd5de410f75",
+  closer: "affd27e4d5ab543a",
+  confrontation: "174278961fd39a5d",
+  repairPlan: "f9aa5b96a22ceaaa",
+  routePlan: "3c8d84e2fa214005",
 };
 const EXPECTED_GENTLE: Record<string, string> = {
-  bannerHis: "b18583f0a1d395ef",
-  bannerMemories: "1b2e817c77948884",
-  bannerMine: "cbe4aaf41bf4ac7c",
-  beat: "d088d6493761f69a",
-  beatWithCg: "78925cfc3044a7ca",
-  chapterPlan: "ff8b5aaff93d65e8",
-  closer: "0f396a1338742c0d",
-  confrontation: "2969ff1cb16e7d80",
-  repairPlan: "abd6f2e2fd1abce1",
-  routePlan: "c3ba2924e76b8fd2",
+  bannerHis: "809ecd2c7bf86f6f",
+  bannerMemories: "8eeeeb86201050aa",
+  bannerMine: "027e3d7c99ae9347",
+  beat: "0ba8e4cf6ce16996",
+  beatWithCg: "c780aa34d448ce2b",
+  chapterPlan: "b2ee4f169d4b695c",
+  closer: "82969d9bfcf450af",
+  confrontation: "28b75c4508bcd299",
+  repairPlan: "767bb1844cf35f4f",
+  routePlan: "635d6c8726049b93",
 };
 
 test("the SFW defaults pin scene pacing and earned character change in story and banner prompts", () => {
@@ -297,7 +298,9 @@ test("the SFW defaults' content contracts are the ones every prompt carried befo
     otomeContentContract({ world: inputs(content).world, lis, kind });
   const lines = (...rules: string[]) => [...FIXED, ...rules, ...CLOSING].join("\n");
   const angst = lines(
-    "- Darkness: Angst. Danger is aimed at the world, at the love interests' pasts and at their enemies, never at the protagonist. A love interest may be cold, ruthless with others or frightening, but never threatens or harms the protagonist.",
+    // 0.6.22 (#2054): Angst no longer sanitizes cruelty (within the Lines and Veils), and a love interest may be a
+    // villain to everyone else; the protagonist stays out of harm's way, as before.
+    "- Darkness: Angst. Danger is aimed at the world, at the love interests' pasts and at their enemies, never at the protagonist. Cruelty and violence are not sanitized within the Lines and Veils below, and always have consequences. A love interest may be a villain to everyone else: cold, ruthless with others or frightening, but never threatens or harms the protagonist.",
     SWEAR,
     "- Lines (never written, not even implied): a love interest's violence toward the protagonist; dubious consent; non-consent; pregnancy.",
     "- Veils (may happen only off the page; cut away and show at most the aftermath): gore; captivity; stalking; torture; self-harm.",

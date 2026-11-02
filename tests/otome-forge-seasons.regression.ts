@@ -6,7 +6,8 @@
 // was before: its digests were taken from the 0.6.3 builder before seasons were written, with 0.6.17's one change: the
 // story is headed "THE STORY SO FAR", no longer "(what everyone knows)", since its overview now tells every love
 // interest's own chapters too, titled private (#2039); and 0.6.22's (#2054): the shared writing rules say a love interest
-// may be genuinely evil, that taming them is the point, and that they keep whatever red lines they have.
+// may be genuinely evil, that taming them is the point, that they keep whatever red lines they have, and that love does
+// not make a monster good at once; Angst no longer sanitizes cruelty.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test, { mock } from "node:test";
@@ -155,9 +156,9 @@ const digest = (messages: Array<{ role: string; content: string }>) =>
 
 /** Taken from the 0.6.3 builder, before seasons. */
 const BEFORE_SEASONS: Record<wish.BannerKind, string> = {
-  memories: "1c1aacc6e9c4f2e3",
-  "his-wardrobe": "b47a124c26992bb5",
-  "my-wardrobe": "95be36e04b638e37",
+  memories: "f583bf094b91ee87",
+  "his-wardrobe": "1666293c16680877",
+  "my-wardrobe": "ce54c0880f0af121",
 };
 
 test("a rotation that is not seasonal sends the P20 prompt it sent before seasons", () => {

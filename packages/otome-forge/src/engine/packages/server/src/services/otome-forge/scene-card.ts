@@ -81,7 +81,11 @@ function render(unit: SceneCardUnit, stage: number, learnedTells: readonly numbe
     sentence(["The protagonist has learned to read these tells and may call them out: ", list(learned)]),
     sentence(["Hidden (never state it; it may show only as these tells): ", list(hidden)]),
     sentence(["The protagonist knows: ", list(known)]),
-    sentence(["Red lines: ", list(bible.redLines)], ["Moral code: ", one(bible.moralCode)]),
+    sentence(
+      ["Darkness: ", list(bible.darkness.kinds)],
+      ["Red lines: ", list(bible.redLines)],
+      ["Moral code: ", one(bible.moralCode)],
+    ),
   ]
     .filter(Boolean)
     .join("\n");

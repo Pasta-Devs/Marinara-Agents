@@ -80,13 +80,13 @@ const DARKNESS_TEXT: Record<Darkness, string> = {
   gentle:
     "Darkness: Gentle. Conflict is interpersonal: pride, misunderstanding, old hurts, rivalry. No menace on the page.",
   angst:
-    "Darkness: Angst. Danger is aimed at the world, at the love interests' pasts and at their enemies, never at the protagonist. A love interest may be cold, ruthless with others or frightening, but never threatens or harms the protagonist.",
-  dark: "Darkness: Dark romance. Anything dark may be explored within the Lines and Veils below: corruption, abuse, curses, deception, use, fear, betrayal, domination, ruin, harm, assault, mutilation and killing. Villains disregard boundaries and play dirty; adversaries are a genuine threat, to the protagonist too; even a love interest can have a dark side or break down under pressure. Menace and coercion may be aimed at the protagonist, who can be hurt, captured and endangered, but the story never ends the protagonist's life. Violence is graphic and consequential; gore is shown only where the Lines and Veils allow it.",
+    "Darkness: Angst. Danger is aimed at the world, at the love interests' pasts and at their enemies, never at the protagonist. Cruelty and violence are not sanitized within the Lines and Veils below, and always have consequences. A love interest may be a villain to everyone else: cold, ruthless with others or frightening, but never threatens or harms the protagonist.",
+  dark: "Darkness: Dark romance. Anything dark may be explored within the Lines and Veils below: corruption, abuse, curses, deception, use, fear, betrayal, domination, ruin, harm, assault, mutilation and killing. Villains disregard boundaries and play dirty; adversaries are a genuine threat, to the protagonist too; even a love interest can be a villain, have a dark side or break down under pressure. Menace and coercion may be aimed at the protagonist, who can be hurt, captured and endangered, but the story never ends the protagonist's life. Violence is graphic and consequential; gore is shown only where the Lines and Veils allow it.",
 };
 
-/** Angst under NSFW Heat, after its own wording: the danger stays aimed away from the protagonist, but is not softened. */
+/** Angst under NSFW Heat, after its own wording (which already says cruelty is not sanitized): villains play dirty. */
 const ANGST_NSFW =
-  "Villains play dirty and are a genuine threat to the world, the love interests and their pasts; even a love interest can have a dark side or break down under pressure. Cruelty and violence are not sanitized within the Lines and Veils below, and always have consequences.";
+  "Villains play dirty and are a genuine threat to the world, the love interests and their pasts; even a love interest can have a dark side or break down under pressure.";
 
 const DARK_ADDITION =
   "Dark romance: each love interest's darkness has a reason they believe, a hidden cost they pay, and whatever red lines they keep. The protagonist's options always include refusing, and the story honours what the player picks.";
