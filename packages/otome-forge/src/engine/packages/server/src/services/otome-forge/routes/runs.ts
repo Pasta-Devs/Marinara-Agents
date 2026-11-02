@@ -394,30 +394,36 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       if (confirmTitle.trim() !== (entry?.title ?? world?.title ?? "").trim()) {
         throw new OtomeForgeError(400, "The title typed to confirm the delete does not match.", "bad-request");
       }
+      // Its story writes and memory upkeep stop; anything they still save is refused or removed with the rest.
+      deps.cancellation?.cancel(runId);
+      deps.memory?.invalidate(runId);
+      // Each image is taken from the revision that went, and the images of every document that went are deleted even
+      // when the sweep stops part-way (a storage error, a conflict): what stays keeps its own for the next delete.
+      const images = new Set<string>();
+      try {
+        for (const kind of RUN_DOC_KINDS) {
+          for (const document of await store.listRun(kind, runId)) {
+            for (const id of galleryRefIds(await store.takeDoc(document.id, (data) => data))) images.add(id);
+          }
+        }
+      } finally {
+        let kept = 0;
+        for (const id of images) {
+          const deleted = await imagesOf(deps)
+            .deleteGalleryImage(id)
+            .catch(() => false);
+          if (!deleted) kept += 1;
+        }
+        if (kept)
+          runtime.logger.warn("[otome-forge] Deleted run %s kept %d gallery images it could not delete", runKey, kept);
+      }
+      // The index lets go of it last, so a delete that stopped part-way (or a restart in the middle) leaves it listed,
+      // and the picker's next delete finishes it.
       const next = await store.mutateDoc(INDEX_TARGET, normalizeIndex, (current) => ({
         ...current,
         runs: current.runs.filter((run) => run.runKey !== runKey),
         activeRun: current.activeRun === runKey ? null : current.activeRun,
       }));
-      // Its story writes and memory upkeep stop; anything they still save is refused or removed with the rest.
-      deps.cancellation?.cancel(runId);
-      deps.memory?.invalidate(runId);
-      const images = new Set<string>();
-      for (const kind of RUN_DOC_KINDS) {
-        for (const document of await store.listRun(kind, runId)) {
-          for (const id of galleryRefIds(document.data)) images.add(id);
-          await store.removeDoc(document.id);
-        }
-      }
-      let kept = 0;
-      for (const id of images) {
-        const deleted = await imagesOf(deps)
-          .deleteGalleryImage(id)
-          .catch(() => false);
-        if (!deleted) kept += 1;
-      }
-      if (kept)
-        runtime.logger.warn("[otome-forge] Deleted run %s kept %d gallery images it could not delete", runKey, kept);
       return { index: next };
     }),
   );

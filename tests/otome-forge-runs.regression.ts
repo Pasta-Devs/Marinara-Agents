@@ -677,3 +677,32 @@ test("delete: the typed title must match; then every document of the run and its
     [[RUN_KEY, 2]],
   );
 });
+
+test("delete: one that stops part-way still deletes the images it let go of, and the next delete finishes it", async () => {
+  const { call, fake, run, deleted } = await setup();
+  const mine = (id: string) => id.startsWith(`${runIdOf(RUN_KEY)}:`);
+  // Storage fails once while removing Kai's unit, after the world and the protagonist are gone.
+  const kai = unitId(runIdOf(RUN_KEY), KAI);
+  const remove = fake.documents.remove;
+  let failed = false;
+  fake.documents.remove = async (...args) => {
+    if (args[1] === kai && !failed) {
+      failed = true;
+      throw new Error("storage is down");
+    }
+    return remove(...args);
+  };
+  const confirm = { params: run, body: { confirmTitle: "Moonlit Court" } };
+  assert.equal((await call("POST", "/runs/:run/delete", confirm)).status, 500);
+  assert.deepEqual(deleted, ["player-1"], "the protagonist's portrait went with her; Kai's stays with his unit");
+  assert.ok(fake.rows.has(kai));
+  // Still listed, so the picker's delete (the same dialog, or after a restart) can finish it.
+  const retry = await call("POST", "/runs/:run/delete", confirm);
+  assert.equal(retry.status, 200, JSON.stringify(retry.body));
+  assert.deepEqual(
+    retry.body.index.runs.map((entry: { runKey: string }) => entry.runKey),
+    [OTHER_KEY, "r-empty-mnopqr"],
+  );
+  assert.deepEqual([...fake.rows.keys()].filter(mine), []);
+  assert.deepEqual(deleted, ["player-1", "kai-1"]);
+});
