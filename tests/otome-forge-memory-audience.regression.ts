@@ -6,7 +6,9 @@
 // reply (or the connection's own lower cap), also on a small context (#2039). The memory routes report the status and
 // queue a Retry, and give the overview as plain paragraphs for "What happened so far…" (#2040): [] before the first
 // one, no heading or source key, never the private chat, 404 for an unknown run. A request in the queue's release gap,
-// or a job admission refuses before it starts, never leaves the status pending.
+// or a job admission refuses before it starts, never leaves the status pending. An overview fold is told the overview is
+// the story's timeline, a recollection in prose (0.6.19); one saved before that is folded again from the records, once,
+// in the background; the panel shows no bold label or markdown emphasis.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs";
@@ -28,11 +30,15 @@ import {
   worldId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
 import {
+  OVERVIEW_WORDING,
   SUMMARY_WORDING,
   createOtomeMemory,
   type OtomeMemory,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/memory.ts";
-import { registerMemoryRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/memory.ts";
+import {
+  overviewParagraphs,
+  registerMemoryRoutes,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/memory.ts";
 import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
 import { normalizeState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import {
@@ -41,6 +47,7 @@ import {
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { createOtomeStore } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/store.ts";
+import { recallText } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/canon.ts";
 import {
   beatMessages,
   chapterPlanMessages,
@@ -166,6 +173,123 @@ test("summaries run on the background lane with the summary wording; a private c
   assert.ok(!saved.overview.content.includes(PRIVATE));
   assert.ok(saved.overview.sources.every(([key]) => JSON.parse(key)[0] !== "chat"));
   assert.ok(saved.records.some((record) => record.kind === "chat" && record.content.includes(PRIVATE)));
+});
+
+test("an overview fold is told the overview is the story's timeline; a detail summary is not", async () => {
+  const { memory, calls } = await setup();
+  assert.equal(await memory.maintain({ runId: RUN }), true);
+  assert.equal((await settle(memory)).phase, "ready");
+  const kinds = calls.map((call) => (JSON.parse(call.messages.at(-1)!.content).source ? "detail" : "overview"));
+  assert.deepEqual(kinds, ["detail", "detail", "overview", "overview"]);
+  for (const [index, call] of calls.entries()) {
+    const system = call.messages[0]!.content;
+    assert.equal(system.includes(OVERVIEW_WORDING), kinds[index] === "overview", `${kinds[index]} ${index}`);
+    assert.ok(system.includes(SUMMARY_WORDING), "every summary keeps the summary wording");
+  }
+});
+
+test("an overview saved before the timeline is folded again from the records in the background, once", async () => {
+  const { fake, store, memory, calls } = await setup();
+  const [main, route, chat] = SOURCES as [ForgeMemorySource, ForgeMemorySource, ForgeMemorySource];
+  const MAIN = "SUMMARY: the great telescope was sabotaged.";
+  const ROUTE = "SUMMARY: the forged ledger in the archive.";
+  const rangeOf = (text: string) => ({ from: 0, to: [...text].length, total: [...text].length });
+  const record = (source: ForgeMemorySource, content: string) => ({
+    id: source.id,
+    kind: source.kind,
+    title: source.title,
+    order: source.order,
+    key: JSON.stringify([source.kind, source.id]),
+    fingerprint: `fp-${source.id}`,
+    content,
+  });
+  // As 0.6.18 saved it: every record summarized, an overview over the shared ones that reads like notes, memory ready.
+  const old = {
+    version: 1,
+    records: [record(main, MAIN), record(route, ROUTE), record(chat, chat.content)],
+    work: [],
+    overview: {
+      content: "**Persona:** OLD-OVERVIEW Ava, a stargazer.\n**Choices:**\n- She trusted Mireille.",
+      sources: [
+        [JSON.stringify(["chapter", main.id]), `fp-${main.id}`],
+        [JSON.stringify(["character-story", route.id]), `fp-${route.id}`],
+      ],
+    },
+    status: { phase: "ready", retryable: false, operationId: "op-0.6.18" },
+  };
+  await fake.documents.create({
+    ...runDocTarget("memory", memoryId(RUN)),
+    packageId: "otome-forge",
+    description: "",
+    data: structuredClone(old),
+    createdAt: "2026-11-02T08:00:00.000Z",
+    updatedAt: "2026-11-02T08:00:00.000Z",
+  });
+  const saved = () =>
+    fake.rows.get(memoryId(RUN))!.data as typeof old & { overviewStyle?: number; overview: { content: string } };
+
+  // Until it is rebuilt, recall leaves the old overview out and sends the saved summaries beside the chapter instead.
+  const before = await memory.recall({ runId: RUN, job: "narration", cast: [MIR] });
+  assert.equal(before.status.phase, "ready");
+  assert.equal(before.overview, "");
+  assert.equal(before.lagging, true, "the rebuild is owed, so recall queues it");
+  assert.deepEqual(
+    before.recent?.map((entry) => [entry.id, entry.content]),
+    [
+      [main.id, MAIN],
+      [route.id, ROUTE],
+    ],
+  );
+  assert.ok(!before.text.includes("OLD-OVERVIEW"));
+  // The story's own recall queues it, with no Retry.
+  await recallText({ store, memory }, RUN, { job: "narration", cast: [MIR] });
+  for (let turn = 0; turn < 2000 && !calls.length; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal((await settle(memory)).phase, "ready");
+
+  // Folded from the records alone, one at a time, starting from nothing: no detail summary again, the old one unread.
+  const folded = (previousOverview: string, source: ForgeMemorySource, content: string) => ({
+    previousOverview,
+    records: [
+      { id: source.id, kind: source.kind, title: source.title, order: source.order, content, range: rangeOf(content) },
+    ],
+  });
+  assert.deepEqual(
+    calls.map((call) => JSON.parse(call.messages.at(-1)!.content)),
+    [folded("", main, MAIN), folded(MAIN, route, ROUTE)],
+  );
+  assert.ok(calls.every((call) => call.messages[0]!.content.includes(OVERVIEW_WORDING)));
+  assert.ok(!JSON.stringify(calls).includes("OLD-OVERVIEW"), "the old overview is never folded in");
+  assert.deepEqual(saved().records, old.records, "records and detail summaries are kept as they were");
+  assert.equal(saved().overviewStyle, 2, "the new overview carries its form");
+  assert.equal(saved().overview.content, `${MAIN} ${ROUTE}`);
+  const after = await memory.recall({ runId: RUN, job: "narration", cast: [MIR] });
+  assert.equal(after.overview, saved().overview.content);
+  assert.equal(after.lagging, false);
+
+  // Nothing is owed any more: another maintenance folds nothing, and the overview stays.
+  assert.equal(await memory.maintain({ runId: RUN }), true);
+  assert.equal((await settle(memory)).phase, "ready");
+  assert.equal(calls.length, 2, "no second rebuild");
+  assert.equal(saved().overview.content, after.overview);
+});
+
+test("What happened so far… reads as prose: no bold label line or markdown emphasis, every sentence kept", () => {
+  const content = [
+    "**Choices:**",
+    "- **Ava chose** to stay at the observatory with __Kai__.",
+    "__Persona__:",
+    "She *never* told Mireille about the _forged_ ledger; ***that*** night was hers.",
+    "**She left the pier before dawn.**",
+    "2 * 3 lanterns, and the snake_case_label on the crate, stay as written.",
+    "**Choices:** she kept the brass key.",
+  ].join("\n");
+  assert.deepEqual(overviewParagraphs({ overview: { content } }), [
+    "Ava chose to stay at the observatory with Kai.",
+    "She never told Mireille about the forged ledger; that night was hers.",
+    "She left the pier before dawn.",
+    "2 * 3 lanterns, and the snake_case_label on the crate, stay as written.",
+    "Choices: she kept the brass key.",
+  ]);
 });
 
 test("a private chat is recalled only for its own love interest, or a scene he is in", async () => {
@@ -402,7 +526,7 @@ test("the memory routes report the memory, queue a Retry and give the overview a
       },
     }),
   );
-  assert.deepEqual((await overview()).paragraphs, ["First.", "Second.", "The pier", "Third *as written*."]);
+  assert.deepEqual((await overview()).paragraphs, ["First.", "Second.", "The pier", "Third as written."]);
 
   // No connection to summarize with: the Retry says so.
   const bare = await setup({ narration: "" });

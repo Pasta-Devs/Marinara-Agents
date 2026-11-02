@@ -72,6 +72,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.6.19",
+          "date": "2026-11-02",
+          "notes": "- **\"What happened so far…\" reads as a recollection of your story.** It now tells what has happened so far in story order, with the choices you made woven in, instead of notes about your persona, a summary per chapter and bold labels. Stories already in progress rewrite it in the background the next time Otome Hearth writes; nothing you played is changed.\n- **A chapter's closing decision can be a judgment you might get wrong:** solving the mystery, naming a traitor, deciding whom to believe. The right answer is always among the options, and a wrong guess plays out in the chapters after it.",
+          "highlight": false
+        },
+        {
           "version": "0.6.18",
           "date": "2026-11-02",
           "notes": "- **\"What happened so far…\" while a chapter is planned.** Planning a new chapter (and a route, repair or extra story chapter) now shows the story's running summary to read while you wait. It scrolls on its own and appears once the first summary is ready.\n- **Who said what? while a scene is written.** Tap **Play Who said what?** under \"Writing the next scene…\" to guess which love interest said a line from the chapters you've read. It's optional, makes no model calls, saves nothing, and steps aside the moment the scene is ready.\n- **Keyboard focus on quotes.** The quoted line in the Wardrobe and in Who said what? now shows where keyboard focus is.",
@@ -184,12 +190,6 @@
           "date": "2026-10-30",
           "notes": "- Each love interest has their own Claw Machine plush: the animal that fits them best, in their colours (a cyan raven with red eyes, a black cat with violet eyes). Your Planning model draws it once, in the background, the first time you open Dates. Until then their plush wears their look, as before.",
           "highlight": true
-        },
-        {
-          "version": "0.5.3",
-          "date": "2026-10-30",
-          "notes": "- Your protagonist knows only what the story has shown them: love interests no longer talk as if you already know their past, their habits or the words of their world, and a newcomer learns this world as they go.\n- A story set in an existing world, such as Teyvat from Genshin Impact, stays that world and keeps its canon.\n- Chapters make room for other people, scenes without a love interest, and rest or sleep after a long day.",
-          "highlight": false
         }
       ]
     },
