@@ -115,6 +115,58 @@ test("every prompt that writes story or a love interest's words knows only what 
   }
 });
 
+test("a love interest may be genuinely evil, a story may have real villains, and a moral code may be none (#2054)", () => {
+  const input = inputs();
+  const { world, units, player } = input;
+  const kai = units.find((unit) => unit.id === KAI)!;
+  const node = { i: 0, kind: "beat" as const, guide: "Kai speaks of the harbour's old wards.", cast: [KAI] };
+  const EVIL =
+    "- A love interest may be genuinely evil, a monster or a villain, as dark as this story's Darkness allows: taming them is the point, so never soften them before the story earns it.";
+  const bibleText = text(bibleMessages({ world, player, member: { unit: kai }, others: [] }));
+  const prompts: Record<string, string> = {
+    bible: bibleText,
+    scene: text(
+      beatMessages({
+        ...input,
+        chapter: { kind: "main", number: 2, title: "Rain", lead: KAI, foil: MIR, nodes: [node] },
+        node,
+        storySoFar: "",
+        memory: "",
+      }),
+    ),
+    chapterPlan: text(chapterPlanMessages({ ...input, number: 2, lead: KAI, memory: "" })),
+  };
+  for (const [kind, prompt] of Object.entries(prompts)) assert.ok(prompt.includes(EVIL), kind);
+  const plan = text(worldPlanMessages({ world, player, cast: units.map((unit) => ({ unit })) }));
+  assert.ok(!/nobody is simply a villain/u.test(plan), "the world plan may have real villains");
+  assert.ok(
+    bibleText.includes(
+      "- moralCode: the code they live by, true to who they are: firm for a good person, far looser for a bad one, or none at all. redLines: what that code forbids them, if anything ([] when nothing does).",
+    ),
+  );
+  assert.ok(!/from their own integrity/u.test(bibleText));
+  // The shared rule the bible also receives must not ask for red lines a love interest without a code does not have.
+  assert.ok(bibleText.includes("the love interest keeps whatever red lines they have."));
+  assert.ok(!bibleText.includes("the love interest keeps their red lines"));
+  // The mask may hide a monster, and the bible keeps the card's darkness as dark as the story's Darkness allows. The
+  // scene card shows darkness at every stage, so it holds what they are, never a secret's events (CodeRabbit on #2055).
+  assert.ok(
+    bibleText.includes("mask.presents: the face they show, which may hide something kinder or something worse;"),
+  );
+  assert.ok(
+    bibleText.includes(
+      "darkness.kinds: the kinds of darkness in them, as dark as the card or archetype makes them within this story's Darkness, never softened: what they are (cruelty, a hunger for control), never a secret's events, which belong in secrets.",
+    ),
+  );
+  // Love alone does not make a monster good, but they may grow into a better partner as affection grows.
+  const LOVE =
+    "Falling for the protagonist does not make a monster good or secretly kind at once; as affection grows and they come to know the protagonist, they may become a better partner to them, in their own way.";
+  for (const [kind, prompt] of Object.entries(prompts)) assert.ok(prompt.includes(LOVE), `${kind}: love rule`);
+  // Every planner reads the monster as a monster, not a human inside one.
+  assert.ok(prompts.chapterPlan!.includes("each is a human, even if a monster,"));
+  for (const prompt of Object.values(prompts)) assert.ok(!prompt.includes("even if inside a monster"));
+});
+
 test("the world plan names an existing world as it is; the Surprise me premise stays original", () => {
   const { world, units, player } = inputs();
   const plan = text(worldPlanMessages({ world, player, cast: units.map((unit) => ({ unit })) }));

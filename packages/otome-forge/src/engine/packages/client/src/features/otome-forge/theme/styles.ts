@@ -1790,6 +1790,12 @@ ${R} .of-toast--remember {
 }
 ${R} .of-toast--remember svg { color: var(--of-accent-text); }
 ${R} .of-toast--starlight { font-weight: 800; font-size: 0.86rem; color: var(--of-champagne-text); }
+/* #2046: what a side-with pick moved with one love interest, in his colour. */
+${R} .of-toast--affection {
+  font-weight: 800; font-size: 0.86rem; color: var(--of-text);
+  border-color: color-mix(in srgb, var(--of-li-accent, var(--of-rose)) 55%, var(--of-border-strong));
+}
+${R} .of-toast--affection svg { flex: none; color: var(--of-li-accent, var(--of-rose)); }
 /* The bottom third: the dialogue box and its choices, or the panel that stands in for them. */
 ${R} .of-reader-bottom {
   position: relative; z-index: 2; min-height: 30%; display: flex; flex-direction: column; justify-content: flex-end;
@@ -1871,6 +1877,17 @@ ${R} .of-choice-first {
   flex: none; padding: 2px 8px; border-radius: 999px; font-size: 0.62rem; font-weight: 800; letter-spacing: 0.06em;
   text-transform: uppercase; color: var(--of-accent-text); background: var(--of-tint-strong);
 }
+/* #2046: whom a side-with option backs. On a replay "Your first choice" sits beside it; where the two would squeeze the
+   label (a phone, the desktop frame), the label keeps room for a few words and the badge that does not fit wraps under
+   it, at the end. A one-line pill keeps its capsule (24px is half its 48px); a taller one rounds its corners only, so
+   a capsule's curve never cuts into that badge. */
+${R} .of-choice-backs {
+  flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 8px;
+  border-radius: 999px; font-size: 0.7rem; font-weight: 800; color: var(--of-accent-text); background: var(--of-tint-strong);
+}
+${R} .of-choices-panel[data-side="true"] .of-choice-pill { flex-wrap: wrap; row-gap: 4px; border-radius: 24px; }
+${R} .of-choices-panel[data-side="true"] .of-choice-pill-text { flex-basis: 10ch; }
+${R} .of-choices-panel[data-side="true"] .of-choice-first { margin-inline-start: auto; }
 ${R} .of-choices-panel[data-kind="big"] .of-choice-pill {
   border-color: rgb(230 201 138 / 0.85); box-shadow: inset 0 0 0 1px rgb(230 201 138 / 0.35), 0 0 20px rgb(230 201 138 / 0.22);
 }
