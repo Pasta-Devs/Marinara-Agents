@@ -38,6 +38,7 @@ import {
 import { FACES, MUSIC_MOODS } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { isChapterKey } from "../ids.js";
 import { PaintSchema, isRecord, readFields, validItems } from "./common.js";
+import { JUDGMENT_ANSWER, JUDGMENT_QUESTION } from "./story-arc.js";
 import { TrackSchema } from "./world.js";
 
 const short = (max = 600) => z.string().max(max);
@@ -96,6 +97,10 @@ const NodeSchema: ZodType<ChapterNode> = z.object({
     .union([z.object({ kind: z.literal("piece"), li: z.string() }), z.object({ kind: z.literal("truth") })])
     .optional(),
   arcEvent: z.literal(true).optional(),
+  // The arc's caps (S/schemas/story-arc.ts judgmentOf), so a node carrying one is never dropped for it.
+  judgment: z
+    .object({ question: short(JUDGMENT_QUESTION), answers: z.array(short(JUDGMENT_ANSWER)).min(2).max(4) })
+    .optional(),
 });
 
 const LedgerSchema: ZodType<ChapterLedger> = z.object({

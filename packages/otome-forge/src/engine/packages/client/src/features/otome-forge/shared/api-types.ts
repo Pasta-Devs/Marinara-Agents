@@ -783,6 +783,14 @@ export interface ChapterNode {
   reveal?: { kind: "piece"; li: LiId } | { kind: "truth" };
   /** This node carries the arc's big event, on the arc's last chapter (hidden from the client). */
   arcEvent?: true;
+  /** The chapter's last node may close on the arc's judgment (#2047), never knowing which answer is true (hidden). */
+  judgment?: ArcJudgment;
+}
+
+/** A question the protagonist may answer wrong (#2047), and its plausible answers, the true one among them, unmarked. */
+export interface ArcJudgment {
+  question: string;
+  answers: string[];
 }
 
 /** What the planner wrote for the ledgers; saved to the state when the chapter's last node is read. */
@@ -1084,6 +1092,11 @@ export interface StoryArc {
   newcomer: { li: LiId; how: string } | null;
   /** How this arc was asked for: the story goes on, a breathing room, or someone new arrives. */
   choice: { kind: ArcChoice };
+  /**
+   * A story arc's optional judgment (#2047), and the main chapters whose end may close on it. Which answer is true is
+   * never stored with it: the world's truth, or the arc's ending or reveal that answers it, names it (S/story/arc.ts).
+   */
+  judgment?: ArcJudgment & { chapters: number[] };
   plannedAt: string;
   connectionId: string;
 }
