@@ -34,12 +34,19 @@ export const phonePath = (runKey: string, li?: LiId) =>
   li ? `${runPath(runKey)}/phone/${encodeURIComponent(li)}` : `${runPath(runKey)}/phone`;
 /** How often the open app asks whether a love interest writes first (GF's heartbeat; the server spaces the messages). */
 export const DAILY_POLL_MS = 60_000;
+/** Each run's newest daily message as this page last heard it, kept across remounts and restarts of the heartbeat. */
+const heardDaily = new Map<string, string | null>();
 
 /**
  * Settings → Connections' daily messages (S/phone/daily.ts): while the story is forged, its daily number is above 0
  * and the page is visible, asks POST .../phone/due every minute (the first a minute after it starts), naming the thread
  * the player has open, which never gets one. When a new daily message has landed, the thread list, Home's unread count
- * and his thread are read again, so it shows unread like a reply that landed after she left.
+ * and his thread are read again, so it shows unread like a reply that landed after she left. A message is new when it
+ * differs from the newest this page heard (heardDaily), so a remount or a restart (a language or debug change) reads
+ * nothing again for one it already heard.
+ * ponytail: the first answer since the page loaded only sets that mark, as the screens read fresh when they mounted; a
+ * message landing in the minute before that answer (a job queued before a reload) shows the next time Home, the list
+ * or his thread opens. Upgrade path: the run view names the newest daily message, and the mark starts from it.
  */
 export function useDailyMessages(runKey: string | null, view: RunView | null, open: LiId | null) {
   const otome = useOtomeApi();
@@ -50,15 +57,15 @@ export function useDailyMessages(runKey: string | null, view: RunView | null, op
   useEffect(() => {
     if (!on || !runKey) return;
     let stopped = false;
-    let latest: string | null = null;
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
       if (document.visibilityState === "visible") {
         try {
           const due = await otome.post<PhoneDueResult>(`${phonePath(runKey)}/due`, { open: openRef.current });
           const key = due.latest ? `${due.latest.li} ${due.latest.at}` : null;
-          if (!stopped && due.latest && key !== latest) {
-            latest = key;
+          const heard = heardDaily.get(runKey);
+          if (!stopped) heardDaily.set(runKey, key);
+          if (!stopped && due.latest && heard !== undefined && key !== heard) {
             void queryClient.invalidateQueries({ queryKey: phoneQueryKey(runKey) });
             void queryClient.invalidateQueries({ queryKey: homeQueryKey(runKey) });
             void queryClient.invalidateQueries({ queryKey: threadQueryKey(runKey, due.latest.li) });
