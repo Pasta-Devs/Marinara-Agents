@@ -187,6 +187,25 @@ test("format fallback preserves exactly one content repair and omits the hint fo
   assert.equal(bad.calls.length, 3);
 });
 
+test("a connection that rejected the JSON hint once sends it no more, while another connection still does", async () => {
+  // An endpoint that refuses response_format whenever it is sent, and answers without it.
+  const endpoint = (_messages: unknown, options?: { responseFormat?: unknown }) => {
+    if (options?.responseFormat) throw httpError(400, "response_format is not supported");
+    return '{"premise":"A masked ball."}';
+  };
+  const t = await setup(Array.from({ length: 6 }, () => endpoint));
+  for (let n = 0; n < 2; n += 1) {
+    assert.equal((await generateJson(t.deps, request({ connectionId: "conn-plain" }))).value.premise, "A masked ball.");
+  }
+  assert.deepEqual(
+    t.calls.map((call) => !!call.options?.responseFormat),
+    [true, false, false],
+    "the second generation goes straight to the request without the hint",
+  );
+  await generateJson(t.deps, request({ connectionId: "conn-other" }));
+  assert.deepEqual(t.calls.at(-2)!.options?.responseFormat, { type: "json_object" }, "another connection asks first");
+});
+
 test("unrelated provider, authentication, quota, network and statusless failures never authorize a format retry", async () => {
   const formatMessage = "response_format.type must be json_schema or text";
   const errors = [
