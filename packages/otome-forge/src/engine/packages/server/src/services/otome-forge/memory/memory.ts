@@ -25,13 +25,16 @@
 //   (0.6.19). An overview saved before that is read as none, so the next maintenance folds it again (OVERVIEW_STYLE).
 //   The knowledge boundary is left out: the summarizer writes no character's words (plan §1.7).
 // - #2066, the timeline: the kit's overview is the story's timeline (S/memory/timeline.ts). Each chapter's summary
-//   (the kit's detail record, written once, at most 500 words by its prompt) is appended to it as it is folded in,
-//   with no model call; only once the timeline crosses 10k tokens is everything but the newest entry condensed into
-//   at most 3000 words (one call), and appending goes on. Its size never follows the model's context: the kit is
-//   given a fixed context (MEMORY_CONTEXT), so its own budget only bounds a timeline that keeps failing to condense.
+//   (the kit's detail record, written once, at most 1000 words by its prompt) is appended to it as it is folded in,
+//   with no model call; only once the timeline passes 13k tokens and 1k of leeway (14k) is everything but the newest
+//   entry condensed into at most 3000 words, and appending goes on. The condensing goes in as few calls as the memory
+//   model's own context allows (a small one gets the oldest entries a few at a time). Its size never follows the
+//   model's context: the kit is given a fixed context (MEMORY_CONTEXT) once the memory model's own is known, so its
+//   budget only bounds a timeline that keeps failing to condense; a model of unknown context waits for configuration.
 // - #2066, the recall pool: recall sends no ranked chapter details. Beside the timeline go the newest small memories
 //   this prompt may know (phone sessions, Snapshots, Read Him sets, Claw rounds, Read Me notebook sets, and each date,
-//   Character Story and Moment by its summary), newest first within RECALL_TOKENS, the oldest left out. A date,
+//   Character Story and Moment by its summary), newest first within RECALL_TOKENS and 1k of leeway, the oldest left
+//   out, and none the prompt already lists in full (`listed`, P17's newest conversations). A date,
 //   Character Story or Moment (the kit's `character-story`) never joins the timeline: it is its love interest's own,
 //   and until it has a summary it goes in as recent canon (S/story/canon.ts). No embeddings are made, so none are paid
 //   for.
@@ -64,12 +67,14 @@ import type { OtomeStore } from "../store.js";
 import { mayKnow } from "../story/canon.js";
 import { readMemorySources } from "./sources.js";
 import {
+  HEADROOM_TOKENS,
   cleanSummary,
   crossedCeiling,
   foldedPart,
   parseTimeline,
   renderTimeline,
   serializeTimeline,
+  type Timeline,
 } from "./timeline.js";
 
 /**
@@ -77,12 +82,14 @@ import {
  * write, so this is never sized from the summary's word limit, which the prompt states.
  */
 const SUMMARY_OUTPUT_TOKENS = 10240;
-const SUMMARY_TEMPERATURE = 0.3;
-/** #2066: the small memories that go beside the timeline, at most this many estimated tokens, newest first. */
+/**
+ * #2066: the small memories that go beside the timeline, newest first, at most this many estimated tokens and
+ * HEADROOM_TOKENS of leeway (S/memory/timeline.ts).
+ */
 export const RECALL_TOKENS = 5000;
 /**
  * The context the kit is told every reader has (#2066). The kit sizes its overview at a tenth of it, so the timeline's
- * size never follows the model; the timeline's own ceiling keeps it near 10k, and this only bounds one that keeps
+ * size never follows the model; the timeline's own ceiling keeps it within 14k, and this only bounds one that keeps
  * failing to condense.
  * ponytail: a fixed stand-in for the kit's context-sized budget. The upgrade path is a kit option for a fixed budget,
  * which needs a Gacha Forge re-sync.
@@ -302,11 +309,14 @@ export function createOtomeMemory({
     },
     readSources: (runId) => readSources(runId),
     // #2066: every reader is told the same fixed context (MEMORY_CONTEXT), so the timeline's size never follows the
-    // model. A run with no connection for the job still has no memory, as before.
+    // model. A run with no connection for the job, or a model whose context is not known, still has no memory: the
+    // kit waits for configuration, as before.
     async resolveContext(runId, { job, connectionId }) {
       const world = connectionId ? null : await store.readDoc(worldId(runId), normalizeWorld);
       const id = connectionId || resolveConnectionId(world, job ?? "structured");
-      return { maxContext: id ? MEMORY_CONTEXT : null };
+      if (!id) return { maxContext: null };
+      const model = await runtime.languageModels.resolveForRequest({ connectionId: id }).catch(() => null);
+      return { maxContext: model?.maxContext ? MEMORY_CONTEXT : null };
     },
     // The kit cuts a chapter into the largest piece whose prompt leaves the summary its reserve, measured as
     // generateJson fits it (promptRoom), so a piece that fits here is sent whole there with at least that reply room.
@@ -331,7 +341,6 @@ export function createOtomeMemory({
             label: `memory-${kind}`,
             messages,
             schema: SummarySchema,
-            temperature: SUMMARY_TEMPERATURE,
             maxTokens: SUMMARY_OUTPUT_TOKENS,
             debugMode: request.debugMode === true,
             lane: "background",
@@ -349,9 +358,11 @@ export function createOtomeMemory({
         records?: Array<{ id: string; kind: string; title?: string; content?: string }>;
       };
       const timeline = parseTimeline(previousOverview);
+      let added = false;
       for (const record of records ?? []) {
         // A date, Character Story or Moment is a recall, never the timeline's (see the header).
         if (record.kind === "character-story") continue;
+        added = true;
         const key = JSON.stringify([record.kind, record.id]);
         const text = cleanSummary(record.content ?? "");
         const at = timeline.entries.findIndex((entry) => entry.key === key);
@@ -360,13 +371,23 @@ export function createOtomeMemory({
           timeline.entries[at] = { ...timeline.entries[at]!, text: `${timeline.entries[at]!.text}\n\n${text}` };
         else timeline.entries.push({ key, title: record.title ?? "", text });
       }
-      if (!crossedCeiling(timeline)) return serializeTimeline(timeline);
-      const folded = foldedPart(timeline);
-      const head = await ask(
-        "timeline",
-        withRules({ ...request, kind: "timeline", messages: timelineFoldMessages(renderTimeline(folded)) }, job),
-      );
-      return serializeTimeline({ head: cleanSummary(head), entries: timeline.entries.slice(-1) });
+      // Only a fold that added a summary condenses: one that added nothing (a date's) leaves the timeline as it was.
+      if (!added || !crossedCeiling(timeline)) return serializeTimeline(timeline);
+      const condense = (part: Timeline) =>
+        withRules({ ...request, kind: "timeline", messages: timelineFoldMessages(renderTimeline(part)) }, job);
+      const fits = (part: Timeline) =>
+        !job.maxContext || promptRoom(job.maxContext, condense(part)) >= summaryReserve(job.maxOutputTokens);
+      // As few calls as the memory model's context allows: each folds the head with the most of the oldest entries
+      // that fit beside it. Not even one fitting is a model too small for the story's memory.
+      let { head, entries: pending } = foldedPart(timeline);
+      while (pending.length) {
+        let take = pending.length;
+        while (take > 0 && !fits({ head, entries: pending.slice(0, take) })) take -= 1;
+        if (!take) throw new Error("summary-context-too-small");
+        head = cleanSummary(await ask("timeline", condense({ head, entries: pending.slice(0, take) })));
+        pending = pending.slice(take);
+      }
+      return serializeTimeline({ head, entries: timeline.entries.slice(-1) });
     },
     estimateTokens: estimateTextTokens,
     // #2066: recall ranks nothing by meaning any more, so no record is embedded and no query either.
@@ -380,7 +401,9 @@ export function createOtomeMemory({
    * story order. They are the `chat` sources (a phone session, a Snapshot, a Read Him set, a Claw round), each private
    * to its love interest; `told`, the dates, Character Stories and Moments by their summaries; and the Read Me notebook
    * sets of the love interests this recall is for (S/prompts.ts notebookMemories; live, never stored, so a deleted
-   * entry never comes back).
+   * entry never comes back). What the caller lists in full (`listed`) is left out. Each is counted as the prompt shows
+   * it (S/story/canon.ts renderMemory); one that alone could never fit is passed over, and the first other that does
+   * not fit ends the pool, so only the oldest are left out.
    */
   async function recallPool(
     options: ForgeRecallOptions,
@@ -388,6 +411,7 @@ export function createOtomeMemory({
     knowing: Pick<ForgeRecallOptions, "reader" | "cast">,
     told: readonly RecallItem[],
   ): Promise<RecallItem[]> {
+    const listed = new Set(options.listed ?? []);
     const items: RecallItem[] = sources
       .filter((source) => source.kind === "chat" && mayKnow(knowing, source.audience) && source.content.trim())
       .map(({ id, title, content, order }) => ({ id, title, content: content.trim(), order: order ?? 0 }));
@@ -404,13 +428,16 @@ export function createOtomeMemory({
       }
     }
     const kept: RecallItem[] = [];
+    const limit = RECALL_TOKENS + HEADROOM_TOKENS;
     let used = 0;
     // Newest first; items of the same moment keep the order they were listed in once turned back.
-    const newestFirst = items.map((item, index) => ({ item, index }));
+    const newestFirst = items.filter((item) => !listed.has(item.id)).map((item, index) => ({ item, index }));
     newestFirst.sort((a, b) => b.item.order - a.item.order || b.index - a.index);
     for (const { item } of newestFirst) {
-      used += estimateTextTokens(`# ${item.title}\n${item.content}`);
-      if (used > RECALL_TOKENS) break;
+      const cost = estimateTextTokens(`\n\n# Recalled memory: ${item.title}\n${item.content}`);
+      if (cost > limit) continue;
+      if (used + cost > limit) break;
+      used += cost;
       kept.push(item);
     }
     return kept.reverse();

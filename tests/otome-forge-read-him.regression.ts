@@ -540,7 +540,7 @@ test("P25 carries the boundary and the home contract, his tells by index, never 
   assert.ok(user!.includes("flinches at the bell"), "a hidden secret shows only as its tells");
   const sent = JSON.stringify(call!.messages);
   assert.ok(!sent.includes("HIDDEN-TRUTH") && !sent.includes("MYSTERY-TRUTH"), "never an unrevealed truth");
-  assert.equal(call!.options?.temperature, 0.9);
+  assert.equal(call!.options?.temperature, undefined);
   assert.ok(t.logs.some((entry) => entry.level === "debugOverride" && entry.args[0] === `read-him/${KAI}`));
 });
 

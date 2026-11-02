@@ -65,7 +65,6 @@ import type { OtomeStore } from "../store.js";
 import { READ_ME_WORDS, ownView, readMeMessages } from "../prompts.js";
 import { clean, recalledLine } from "./read-him.js";
 
-export const READ_ME_TEMPERATURE = 0.9;
 export const READ_ME_MAX_TOKENS = 2400;
 /** The `firsts` key and the Love Timeline kind of their first finished Read Me. */
 export const FIRST_READ_ME = "read-me";
@@ -379,7 +378,6 @@ export async function startReadMe(
       messages: readMeMessages({ world: run.world, player: run.player, unit, liState, recalled, lately }),
       schema: ReadMeReplySchema,
       normalize: checkReadMeReply,
-      temperature: READ_ME_TEMPERATURE,
       maxTokens: READ_ME_MAX_TOKENS,
       debugMode,
       lane: "foreground",

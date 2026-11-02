@@ -62,7 +62,6 @@ import { grant } from "../state/rewards.js";
 import type { OtomeStore } from "../store.js";
 import { READ_HIM_WORDS, ownView, readHimMessages } from "../prompts.js";
 
-export const READ_HIM_TEMPERATURE = 0.9;
 export const READ_HIM_MAX_TOKENS = 2400;
 /** His earlier sets whose moments P25 sees, so a new set never repeats them. */
 const RECENT_SETS = 2;
@@ -360,7 +359,8 @@ export async function recalledLine(
       query: { cues, speakers: [unit.name] },
     });
     if (result.lagging) void Promise.resolve(memory.maintain({ runId, debugMode })).catch(() => undefined);
-    const top = result.status.phase === "ready" ? (result.details[0]?.content ?? "").trim() : "";
+    // #2066: the newest small memory he holds (recalls come in story order).
+    const top = result.status.phase === "ready" ? (result.recalls?.at(-1)?.content ?? "").trim() : "";
     return top ? sliceTextToTokenBudget(top, RECALLED_TOKENS) : "";
   } catch {
     return "";
@@ -418,7 +418,6 @@ export async function startReadHim(
       }),
       schema: ReadHimReplySchema,
       normalize: checkReadHimReply(tells.length),
-      temperature: READ_HIM_TEMPERATURE,
       maxTokens: READ_HIM_MAX_TOKENS,
       debugMode,
       lane: "foreground",

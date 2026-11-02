@@ -254,7 +254,6 @@ async function writeWorldPlan(deps: ForgeDeps, runId: string, debugMode: boolean
       const plan = normalizeWorldPlan(reply, cast);
       return typeof plan === "string" ? plan : reply;
     },
-    temperature: 0.8,
     maxTokens: 3000,
     debugMode,
     lane: "foreground",
@@ -307,7 +306,6 @@ async function writeBible(deps: ForgeDeps, runId: string, li: LiId, debugMode: b
     messages: bibleMessages({ world, player, member, others: others.map((other) => ({ unit: other })) }),
     schema: BibleSchema,
     normalize: (bible) => checkBible(bible, context),
-    temperature: 0.8,
     maxTokens: 5000,
     debugMode,
     lane: "foreground",

@@ -136,7 +136,6 @@ export async function introduceLoveInterest(
           others: others.map(({ id, name: otherName }) => ({ id, name: otherName })),
           intimacy: intimacyOpen(worldHost.content),
         }),
-      temperature: 0.8,
       maxTokens: 5000,
       debugMode: !!debugMode,
       lane: "foreground",

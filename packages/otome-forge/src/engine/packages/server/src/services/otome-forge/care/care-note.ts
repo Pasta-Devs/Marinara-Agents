@@ -34,7 +34,6 @@ import {
   type CareNoteReply,
 } from "./care-line.js";
 
-export const CARE_NOTE_TEMPERATURE = 0.8;
 /** What the reply itself needs: forty words. */
 export const CARE_NOTE_MAX_TOKENS = 300;
 
@@ -131,7 +130,6 @@ export async function writeCareNote(deps: GenerationDeps, input: CareNoteInput):
     messages: careNoteMessages(input),
     schema: CareNoteReplySchema,
     normalize: checkCareNote,
-    temperature: CARE_NOTE_TEMPERATURE,
     maxTokens: CARE_NOTE_MAX_TOKENS,
     debugMode: false,
     lane: "foreground",

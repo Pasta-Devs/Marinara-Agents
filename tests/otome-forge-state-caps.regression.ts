@@ -89,7 +89,7 @@ test("the economy's numbers are pinned", () => {
         readMeRight: 10,
         readMeClose: 5,
         clawRound: 30,
-        closeAndRemember: 20,
+        closeAndRemember: 5,
         showHim: 20,
       },
       outsideCap: 300,

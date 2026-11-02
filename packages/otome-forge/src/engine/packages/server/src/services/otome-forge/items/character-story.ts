@@ -35,7 +35,6 @@ import { storyPlanMessages } from "../prompts.js";
 import {
   STORY_NODES_MAX,
   STORY_NODES_MIN,
-  STORY_PLAN_TEMPERATURE,
   STORY_PLAN_TOKENS,
   StoryPlanSchema,
   checkLine,
@@ -232,7 +231,6 @@ export async function ensureItemStory(
         const plan = normalizeStoryPlan(reply, context);
         return typeof plan === "string" ? plan : reply;
       },
-      temperature: STORY_PLAN_TEMPERATURE,
       maxTokens: STORY_PLAN_TOKENS,
       debugMode,
       lane: "foreground",

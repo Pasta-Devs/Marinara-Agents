@@ -2540,12 +2540,12 @@ export const OVERVIEW_WORDING =
   "The overview is the story's timeline and nothing else: a chronological recollection, in story order and in the past tense, of the events that have happened so far, with the choices the protagonist made woven into the narration. Write it as flowing prose paragraphs that read like remembering the story. It holds no character or persona profiles, no setting notes and no list of chapter or scene summaries (the prompts carry the cast separately), and no headings, labels, bullet points or markdown emphasis. Keep every established event, relationship turn and irrevocable decision, the chronology and the names, and who knows what: what happened in a record whose title says it is private is told as private, known only to those its title says know it.";
 
 /** The most a chapter summary may run to (#2066). Said in the prompt; the reply's own allowance stays 10240 tokens. */
-export const CHAPTER_SUMMARY_WORDS = 500;
+export const CHAPTER_SUMMARY_WORDS = 1000;
 /** The most a condensed timeline may run to (#2066), about 5000 tokens. Said in the prompt, as above. */
 export const TIMELINE_FOLD_WORDS = 3000;
 
 /**
- * What every chapter summary adds to the kit's detail prompt (#2066): one chapter, as played, in at most 500 words, with
+ * What every chapter summary adds to the kit's detail prompt (#2066): one chapter, as played, in at most 1000 words, with
  * the lines and choices that matter. Every choice is named here because the timeline is the only record of them that
  * reaches a prompt. A love interest's own chapter keeps its privacy in its own words.
  */
@@ -3602,7 +3602,7 @@ export function stickerSetMessages({
 // ──────────────────────────────────────────────
 // (j) Wish banners
 // ──────────────────────────────────────────────
-// One structured call per banner, at temperature 0.8, when the banner is created (Wish open): the featured 5★ (a
+// One structured call per banner, when the banner is created (Wish open): the featured 5★ (a
 // Memory's title, premise and key image brief, or a look's name and English outfit line), three 4★s and six Snapshots.
 // Pulls never call a model: everything a pull hands out is written here.
 // - Premises take the `planner` contract; a premise is a situation, and how close they are follows their stage when

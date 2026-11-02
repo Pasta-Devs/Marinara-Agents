@@ -278,7 +278,12 @@ test("P16 carries the home wording, the boundary and the no-absence rule; it rec
       return {
         status: { phase: "ready" as const, retryable: false },
         overview: "",
-        details: [{ id: "phone-1", kind: "chat", title: "A call", content: "RECALLED: the night on the pier." }],
+        details: [],
+        // #2066: the newest small memory he holds is the one the note may draw on.
+        recalls: [
+          { id: "phone-0", title: "An older call", content: "OLDER-RECALL: the first message.", order: 1 },
+          { id: "phone-1", title: "A call", content: "RECALLED: the night on the pier.", order: 2 },
+        ],
         text: "",
       };
     },
@@ -577,7 +582,7 @@ test("line packs backfill every love interest once in the background, catch a ne
   const kai = await t.unit(KAI);
   assert.ok(kai.lines?.stages["1"] && kai.lines.stages["2"]);
   assert.equal(kai.lines!.fixed!.comfort[0], "Kai comfort line 1.", "the fixed lines are never replaced");
-  assert.ok(t.calls.every((entry) => entry.options?.temperature === 0.9));
+  assert.ok(t.calls.every((entry) => entry.options?.temperature === undefined));
 });
 
 test("a failed pack waits before it is tried again", async (context) => {

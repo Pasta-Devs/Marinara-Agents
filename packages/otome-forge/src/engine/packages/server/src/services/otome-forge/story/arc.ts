@@ -35,7 +35,6 @@ import { arcPlanMessages } from "../prompts.js";
 
 /** The reply itself needs room for twelve short purposes and a small schedule; reasoning models need far more. */
 export const ARC_PLAN_TOKENS = 16000;
-export const ARC_PLAN_TEMPERATURE = 0.8;
 
 export interface ArcDeps extends GenerationDeps {
   store: OtomeStore;
@@ -149,7 +148,6 @@ export async function planArc(
       const arc = normalizeArcPlan(reply, context);
       return typeof arc === "string" ? arc : reply;
     },
-    temperature: ARC_PLAN_TEMPERATURE,
     maxTokens: ARC_PLAN_TOKENS,
     debugMode,
     lane: "foreground",

@@ -388,7 +388,7 @@ test("P20 keeps the knowledge boundary, the contracts and only what the whole ca
     assert.doesNotMatch(text, /PRIVATE-GRIEVANCE/, "no love interest's own chapter");
     assert.match(user!.content, /SHARED-GRIEVANCE/);
     assert.match(user!.content, /Keep to the CONTENT CONTRACT above, silently\.$/);
-    assert.equal(call.options?.temperature, 0.8);
+    assert.equal(call.options?.temperature, undefined, "the connection's own temperature, never one of Otome's");
   }
 });
 

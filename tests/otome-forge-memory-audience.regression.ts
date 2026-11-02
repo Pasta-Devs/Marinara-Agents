@@ -9,9 +9,12 @@
 // or a job admission refuses before it starts, never leaves the status pending. An overview fold is told the overview is
 // the story's timeline, a recollection in prose (0.6.19); one saved before that is folded again from the records, once,
 // in the background; the panel shows no bold label or markdown emphasis.
-// #2066: the overview is the story's timeline. A chapter's summary joins it with no model call, and only a timeline past
-// 10k tokens is condensed (one call, all but the newest entry); a date or Character Story is never in it. Recall sends
-// no ranked details: the small memories this prompt may know come back as `recalls`.
+// #2066: the overview is the story's timeline. A chapter's summary (at most 1000 words, said in its prompt) joins it with
+// no model call, and only a timeline past 13k tokens and 1k of leeway is condensed (all but the newest entry, in as
+// few calls as the memory model's context allows; a fold that adds nothing condenses nothing); a date or Character
+// Story is never in it, and a memory model of unknown context waits for configuration. Recall sends no ranked details:
+// the small memories this prompt may know come back as `recalls`, newest first within 5k tokens and 1k of leeway,
+// never one the caller lists in full; the Home note, Read Him and Read Me take the newest.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
@@ -43,10 +46,14 @@ import {
   chapterPlanMessages,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import {
+  HEADROOM_TOKENS,
   TIMELINE_CEILING,
   parseTimeline,
+  renderTimeline,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/timeline.ts";
+import { recalledLine } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/minigames/read-him.ts";
 import {
+  RECALL_TOKENS,
   createOtomeMemory,
   type OtomeMemory,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/memory.ts";
@@ -203,21 +210,39 @@ test("summaries run on the background lane with the summary wording; a private c
   assert.ok(saved.records.some((record) => record.kind === "chat" && record.content.includes(PRIVATE)));
 });
 
-test("the timeline grows with no call and is condensed only once past 10k tokens, all but its newest entry (#2066)", async () => {
-  // Three chapters whose summaries run to about 6000 tokens each: the second crosses the ceiling, and so does the third.
-  const long = (n: number) => `CHAPTER-${n} ${Array.from({ length: 3000 }, (_, w) => `tide${w % 89}`).join(" ")}`;
-  const chapters: ForgeMemorySource[] = [1, 2, 3].map((n) => ({
-    id: `main-${n}`,
+/**
+ * Filler that estimates to a known size (its made-up words cost about 1.72 estimated tokens each; real prose about
+ * 1.35, so 1000 words of a summary are some 1350 tokens).
+ */
+const filler = (marker: string, words: number) =>
+  `${marker} ${Array.from({ length: words }, (_, w) => `tide${w % 89}`).join(" ")}`;
+
+const mainChapters = (count: number): ForgeMemorySource[] =>
+  Array.from({ length: count }, (_, index) => ({
+    id: `main-${index + 1}`,
     kind: "chapter",
-    title: `Night ${n}`,
-    content: `NIGHT-${n}: the bell rings.`,
-    order: n * 10000,
+    title: `Night ${index + 1}`,
+    content: `NIGHT-${index + 1}: the bell rings.`,
+    order: (index + 1) * 10000,
   }));
+
+test("the timeline grows with no call, has 1k of leeway, and is condensed only past it, all but its newest entry (#2066)", async () => {
+  // Three summaries of about 6700 estimated tokens: the first two (about 13400) are past the 13k ceiling but within its
+  // leeway (14k at most), so nothing is condensed; the third takes it past, and the first two are condensed.
+  const long = (n: number) => filler(`CHAPTER-${n}`, 3900);
+  const two = renderTimeline({
+    head: "",
+    entries: [1, 2].map((n) => ({ key: `k${n}`, title: `Night ${n}`, text: long(n) })),
+  });
+  // The maintainer's sizes: the timeline at most 14k and the recalls at most 6k, leeway included, 20k together.
+  assert.deepEqual([TIMELINE_CEILING + HEADROOM_TOKENS, RECALL_TOKENS + HEADROOM_TOKENS], [14_000, 6_000]);
+  assert.ok(estimateTextTokens(two) > TIMELINE_CEILING, "past the ceiling");
+  assert.ok(estimateTextTokens(two) <= TIMELINE_CEILING + HEADROOM_TOKENS, "within its leeway");
   let condensed = 0;
   const { memory, calls, fake } = await setup(undefined, {
     maxContext: 131_072,
     maxOutputTokens: null,
-    sources: chapters,
+    sources: mainChapters(3),
     replies: Array.from({ length: 12 }, () => (messages: Array<{ content: string }>) => {
       const input = JSON.parse(messages.at(-1)!.content);
       if (input.source) return JSON.stringify({ summary: long(Number(input.source.id.slice(5))) });
@@ -229,30 +254,116 @@ test("the timeline grows with no call and is condensed only once past 10k tokens
   assert.equal((await settle(memory)).phase, "ready");
   const input = (call: (typeof calls)[number]) => JSON.parse(call.messages.at(-1)!.content);
   const kinds = calls.map((call) => (input(call).source ? "detail" : "timeline"));
-  assert.deepEqual(kinds, ["detail", "detail", "detail", "timeline", "timeline"]);
+  assert.deepEqual(kinds, ["detail", "detail", "detail", "timeline"]);
   for (const [index, call] of calls.entries()) {
     const system = call.messages[0]!.content;
     const detail = kinds[index] === "detail";
     assert.ok(system.includes(SUMMARY_WORDING), "every summary keeps the summary wording");
-    assert.equal(system.includes(CHAPTER_SUMMARY_WORDING), detail, "a chapter summary: at most 500 words, said");
-    assert.match(CHAPTER_SUMMARY_WORDING, /at most 500 words/u);
+    assert.equal(system.includes(CHAPTER_SUMMARY_WORDING), detail, "a chapter summary: at most 1000 words, said");
+    assert.match(CHAPTER_SUMMARY_WORDING, /at most 1000 words/u);
     assert.equal(system.includes(TIMELINE_FOLD_WORDING), !detail, "condensing: at most 3000 words, said");
     assert.equal(system.includes(OVERVIEW_WORDING), !detail, "the condensed part reads as a recollection");
     assert.ok(call.options!.maxTokens! >= 10240, "the word limits are the prompt's; the reply room stays 10240");
   }
-  // The first condensing folds Night 1 alone, never Night 2, which crossed the ceiling and stays whole after it; the
-  // second folds what the first wrote and Night 2.
-  const [first, second] = calls.slice(3).map((call) => input(call).timeline as string);
-  assert.ok(first!.includes("CHAPTER-1") && !first!.includes("CHAPTER-2"), first);
-  assert.ok(second!.includes("CONDENSED-1") && second!.includes("CHAPTER-2") && !second!.includes("CHAPTER-3"));
+  // The condensing folds Night 1 and Night 2, never Night 3, which took it past and stays whole after it.
+  const folded = input(calls[3]!).timeline as string;
+  assert.ok(folded.includes("CHAPTER-1") && folded.includes("CHAPTER-2") && !folded.includes("CHAPTER-3"));
   const saved = fake.rows.get(memoryId(RUN))!.data as { overview: { content: string } };
   const timeline = parseTimeline(saved.overview.content);
-  assert.equal(timeline.head, "CONDENSED-2");
+  assert.equal(timeline.head, "CONDENSED-1");
   assert.deepEqual(
     timeline.entries.map((entry) => [entry.title, entry.text.slice(0, 10)]),
     [["Night 3", "CHAPTER-3 "]],
   );
-  assert.ok(TIMELINE_CEILING === 10_000);
+});
+
+test("a small memory model condenses the timeline in pieces it can hold, each with its whole reply room (#2066)", async () => {
+  // A 16k compress model: about 5500 tokens of prompt fit beside a 10240-token reply. Eight summaries of about 2000
+  // tokens each take the timeline past 14k; the first seven are condensed a few at a time, oldest first.
+  const summary = (n: number) => filler(`CHAPTER-${n}`, 1150);
+  let condensed = 0;
+  const { memory, calls, fake } = await setup(undefined, {
+    maxContext: 16_384,
+    maxOutputTokens: null,
+    sources: mainChapters(8),
+    replies: Array.from({ length: 20 }, () => (messages: Array<{ content: string }>) => {
+      const input = JSON.parse(messages.at(-1)!.content);
+      if (input.source) return JSON.stringify({ summary: summary(Number(input.source.id.slice(5))) });
+      condensed += 1;
+      return JSON.stringify({ summary: `CONDENSED-${condensed}` });
+    }),
+  });
+  assert.equal(await memory.maintain({ runId: RUN }), true);
+  assert.equal((await settle(memory)).phase, "ready", "condensed, never failed");
+  const pieces = calls
+    .map((call) => JSON.parse(call.messages.at(-1)!.content).timeline as string | undefined)
+    .filter((timeline): timeline is string => timeline !== undefined);
+  assert.ok(pieces.length > 1, `more than one call: ${pieces.length}`);
+  for (const call of calls) assert.ok(call.options!.maxTokens! >= 10240, "every call keeps its whole reply room");
+  // Oldest first, each piece folding the head the one before wrote; Night 8 is never condensed.
+  const order = pieces.map((piece) => (piece.match(/CHAPTER-\d/gu) ?? []).join(","));
+  assert.deepEqual(order.join(",").split(",").filter(Boolean), [
+    "CHAPTER-1",
+    "CHAPTER-2",
+    "CHAPTER-3",
+    "CHAPTER-4",
+    "CHAPTER-5",
+    "CHAPTER-6",
+    "CHAPTER-7",
+  ]);
+  for (const [index, piece] of pieces.entries()) {
+    if (index) assert.ok(piece.startsWith(`CONDENSED-${index}`), "the head the piece before wrote comes first");
+  }
+  const timeline = parseTimeline(
+    (fake.rows.get(memoryId(RUN))!.data as { overview: { content: string } }).overview.content,
+  );
+  assert.equal(timeline.head, `CONDENSED-${pieces.length}`);
+  assert.deepEqual(
+    timeline.entries.map((entry) => entry.title),
+    ["Night 8"],
+  );
+});
+
+test("a condensed head that came back long is never condensed again by itself, and a date's fold condenses nothing", async () => {
+  // The condensing ignores its 3000 words and returns about 12000 tokens; then a date is folded in, which adds no
+  // summary to the timeline. Before #2066's follow-up that fold paid to condense the head again.
+  const sources: ForgeMemorySource[] = [
+    ...mainChapters(3),
+    {
+      id: "date-1",
+      kind: "character-story",
+      title: "Kai's date",
+      content: "DATE: tea.",
+      order: 35000,
+      audience: [KAI],
+    },
+  ];
+  const { memory, calls } = await setup(undefined, {
+    maxContext: 131_072,
+    maxOutputTokens: null,
+    sources,
+    replies: Array.from({ length: 12 }, () => (messages: Array<{ content: string }>) => {
+      const input = JSON.parse(messages.at(-1)!.content);
+      if (input.source) return JSON.stringify({ summary: filler(`SUMMARY-${input.source.id}`, 3000) });
+      return JSON.stringify({ summary: filler("LONG-HEAD", 7000) });
+    }),
+  });
+  assert.equal(await memory.maintain({ runId: RUN }), true);
+  assert.equal((await settle(memory)).phase, "ready");
+  const kinds = calls.map((call) => (JSON.parse(call.messages.at(-1)!.content).source ? "detail" : "timeline"));
+  assert.deepEqual(kinds, ["detail", "detail", "detail", "detail", "timeline"], "one condensing, for Night 3");
+  // Another maintenance owes nothing: no call at all.
+  assert.equal(await memory.maintain({ runId: RUN }), true);
+  assert.equal((await settle(memory)).phase, "ready");
+  assert.equal(calls.length, 5);
+});
+
+test("a memory model of unknown context waits for configuration, as before #2066, and summarizes nothing", async () => {
+  const { memory, calls } = await setup(undefined, { maxContext: null });
+  assert.equal(await memory.maintain({ runId: RUN }), true);
+  const status = await settle(memory);
+  assert.equal(status.phase, "context-unknown");
+  assert.equal(calls.length, 0);
 });
 
 test("a newcomer kept out of the cast after a failed arc plan is named in no summary's content contract", async () => {
@@ -449,8 +560,9 @@ test("a private chat is recalled only for its own love interest, or a scene he i
   }
 });
 
-test("the recalls are the newest small memories within 5000 tokens, the oldest left out, told oldest first (#2066)", async () => {
-  // Twelve of Kai's closed conversations of about 600 tokens each, oldest first, and one of Mireille's, newest of all.
+test("the recalls are the newest small memories within 5000 tokens and 1k of leeway, the oldest left out (#2066)", async () => {
+  // Twelve of Kai's closed conversations of about 600 tokens each, oldest first, one of Mireille's, newest of all, and
+  // one of his far too long to ever fit, newer than his twelve.
   const talk = (n: number) => `TALK-${n} ${Array.from({ length: 300 }, (_, w) => `lamp${(n + w) % 83}`).join(" ")}`;
   const sources: ForgeMemorySource[] = [
     ...Array.from({ length: 12 }, (_, n): ForgeMemorySource => ({
@@ -462,12 +574,21 @@ test("the recalls are the newest small memories within 5000 tokens, the oldest l
       audience: [KAI],
     })),
     { id: "phone-mir", kind: "chat", title: "Mireille's talk", content: "TALK-MIR", order: 20000, audience: [MIR] },
+    {
+      id: "phone-huge",
+      kind: "chat",
+      title: "Kai's long talk",
+      content: filler("TALK-HUGE", 4000),
+      order: 15000,
+      audience: [KAI],
+    },
   ];
   const { memory, calls } = await setup(undefined, { sources });
   assert.equal(await memory.maintain({ runId: RUN }), true);
   assert.equal((await settle(memory)).phase, "ready");
   assert.equal(calls.length, 0, "a conversation is its own record");
   const { recalls = [] } = await memory.recall({ runId: RUN, job: "chat", reader: KAI });
+  assert.ok(!recalls.some((item) => item.id === "phone-huge"), "one that could never fit is passed over");
   const kept = recalls.map((item) => Number(item.id.slice(6)));
   assert.ok(kept.length > 3 && kept.length < 12, `some, never all: ${kept}`);
   assert.deepEqual(
@@ -475,9 +596,30 @@ test("the recalls are the newest small memories within 5000 tokens, the oldest l
     Array.from({ length: kept.length }, (_, n) => 12 - kept.length + n),
     "the newest, in order",
   );
-  const tokens = recalls.reduce((sum, item) => sum + estimateTextTokens(`# ${item.title}\n${item.content}`), 0);
-  assert.ok(tokens <= 5000, `${tokens} tokens`);
+  // Counted as the prompt shows them (S/story/canon.ts renderMemory).
+  const shown = recalls.map((item) => `\n\n# Recalled memory: ${item.title}\n${item.content}`).join("");
+  assert.ok(estimateTextTokens(shown) <= 5000 + HEADROOM_TOKENS, `${estimateTextTokens(shown)} tokens`);
+  assert.ok(estimateTextTokens(shown) > 5000, "the leeway is used before the oldest are left out");
   assert.ok(!recalls.some((item) => item.content.includes("TALK-MIR")), "never another love interest's");
+
+  // What the caller lists in full (P17's newest conversations) is never recalled again, so older ones take its room.
+  const listed = await memory.recall({ runId: RUN, job: "chat", reader: KAI, listed: ["phone-11", "phone-10"] });
+  const without = (listed.recalls ?? []).map((item) => Number(item.id.slice(6)));
+  assert.ok(!without.includes(11) && !without.includes(10), `${without}`);
+  assert.equal(without.at(-1), 9);
+  assert.ok(Math.min(...without) < Math.min(...kept), "older ones take the listed ones' room");
+});
+
+test("the Home note, Read Him and Read Me draw on the newest small memory he holds (#2066)", async () => {
+  const { memory } = await setup();
+  assert.equal(await memory.maintain({ runId: RUN }), true);
+  assert.equal((await settle(memory)).phase, "ready");
+  // Kai holds his private conversation; Mireille her Character Story, by its summary.
+  assert.match(await recalledLine(memory, RUN, { id: KAI, name: "Kai" }, ["the key"], false), /brass lighthouse key/u);
+  assert.match(
+    await recalledLine(memory, RUN, { id: MIR, name: "Mireille" }, ["the ledger"], false),
+    /Mireille's Ledger: Mireille showed Ava the forged ledger/u,
+  );
 });
 
 test("a failed source read never recalls another love interest's canon: recall rejects and the caller falls back", async () => {

@@ -86,13 +86,7 @@ import { withPersonaImageAppearance } from "../setup/cast.js";
 import type { OtomeStore } from "../store.js";
 import { cancellable } from "../story/beats.js";
 import { recallText } from "../story/canon.js";
-import {
-  BANNER_PLAN_TEMPERATURE,
-  BANNER_PLAN_TOKENS,
-  BannerPlanSchema,
-  normalizeBannerPlan,
-  type BannerPlan,
-} from "./replies.js";
+import { BANNER_PLAN_TOKENS, BannerPlanSchema, normalizeBannerPlan, type BannerPlan } from "./replies.js";
 
 export type WishDeps = Pick<RouteDeps, "runtime" | "store" | "images" | "memory" | "cancellation">;
 
@@ -446,7 +440,6 @@ async function createBanner(
       const plan = normalizeBannerPlan(reply, context);
       return typeof plan === "string" ? plan : reply;
     },
-    temperature: BANNER_PLAN_TEMPERATURE,
     maxTokens: BANNER_PLAN_TOKENS,
     debugMode: options.debugMode,
     lane: "foreground",

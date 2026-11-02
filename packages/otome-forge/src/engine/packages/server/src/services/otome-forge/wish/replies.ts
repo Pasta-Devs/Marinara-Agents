@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // Otome Forge: what P20, the banner plan, sends back, and how a banner is written from it (plan M4 "P20 banner-plan")
 // ──────────────────────────────────────────────
-// One structured call per banner, at temperature 0.8, when the banner is created (Wish open); the prompt is in
+// One structured call per banner, when the banner is created (Wish open); the prompt is in
 // S/prompts.ts. normalizeBannerPlan reads the reply as the banner (love interests named by id or by name, every text
 // clipped to its document's limit) or names what is wrong for the repair turn. Pulls never call a model.
 import { z } from "zod";
@@ -14,7 +14,6 @@ import {
 } from "../../../../../client/src/features/otome-forge/shared/wish.js";
 import { ITEM_LIMITS } from "../schemas/wish.js";
 
-export const BANNER_PLAN_TEMPERATURE = 0.8;
 export const BANNER_PLAN_TOKENS = 3000;
 
 // ── The reply ──

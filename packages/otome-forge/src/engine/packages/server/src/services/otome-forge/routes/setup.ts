@@ -92,7 +92,6 @@ export const registerSetupRoutes: RegisterRoutes = (router, deps) => {
         messages: premiseMessages(language.trim()),
         schema: PremiseSchema,
         normalize: normalizePremise,
-        temperature: 0.9,
         maxTokens: 600,
         debugMode: debugModeOf(request),
         lane: "foreground",

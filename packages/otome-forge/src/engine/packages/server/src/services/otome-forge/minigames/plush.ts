@@ -23,7 +23,6 @@ import { PLUSH_ANIMAL_MAX, normalizeUnit } from "../schemas/unit.js";
 import type { OtomeStore } from "../store.js";
 import { plushMessages } from "../prompts.js";
 
-export const PLUSH_TEMPERATURE = 0.7;
 /** What the reply itself needs: an SVG of up to PLUSH_SVG_MAX characters in a JSON string. */
 export const PLUSH_MAX_TOKENS = 5000;
 /** How long a love interest whose plush failed is left alone before another attempt. */
@@ -121,7 +120,6 @@ export async function writePlushArt(
       const art = normalizePlushReply(reply, at);
       return typeof art === "string" ? art : reply;
     },
-    temperature: PLUSH_TEMPERATURE,
     maxTokens: PLUSH_MAX_TOKENS,
     debugMode,
     lane: "background",

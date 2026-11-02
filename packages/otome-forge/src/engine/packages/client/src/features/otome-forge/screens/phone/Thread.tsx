@@ -1,6 +1,7 @@
 // ──────────────────────────────────────────────
-// Otome Forge: one private thread. Bubbles in his accent colour, chibi stickers (#2044), a typing delay that feels human (lib/typing-delay.ts), earlier messages page by page, what he remembers of each closed
-// conversation, and Close and remember.
+// Otome Forge: one private thread. Bubbles in his accent colour, chibi stickers (#2044), a typing delay that feels
+// human (lib/typing-delay.ts), earlier messages page by page, and Close and remember: each closed conversation shows
+// that he remembers it and the line he keeps from it, never the summary written for his prompts.
 // ──────────────────────────────────────────────
 // One reply in flight per thread: a send waits for the last one (on this page, and on the server, which answers 409
 // busy and reports `busy` in the history, polled until it clears). Each message carries its own id, so the server
@@ -445,7 +446,6 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
                     <BookHeart size={13} strokeWidth={2} aria-hidden="true" />
                     {t("ui.otomeForge.phone.remembered", { name: session.name || li.name })}
                   </p>
-                  {session.memory.text ? <p className="of-memory-text">{session.memory.text}</p> : null}
                   {session.memory.quote ? (
                     <p className="of-memory-quote">
                       {t("ui.otomeForge.home.noteText", { text: session.memory.quote })}

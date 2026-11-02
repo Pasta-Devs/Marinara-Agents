@@ -1,5 +1,13 @@
 # Otome Hearth release notes
 
+## 0.7.1 — 2026-11-03
+
+- **Closing a conversation** now shows only that they remember it and the line they keep. It earns +5 affection.
+- **Your connection's settings decide.** Otome Hearth now sends only the reply's length, never its own temperature or JSON mode, so your connection's temperature, reasoning effort and other settings are what's used.
+- **Longer chapter summaries**, up to 1,000 words.
+- **More room before condensing.** The story's timeline can reach 14,000 tokens and recent memories 6,000 before anything is condensed or left out, 20,000 together at most.
+- **Fixes.** The daily note, Read Him and Read Me draw on recent memories again. Messages no longer repeat their newest conversations as memories. A small memory model condenses the timeline in steps instead of failing, and a model with an unknown context asks for it again.
+
 ## 0.7.0 — 2026-11-02
 
 - **A story memory that stays small.** Each chapter is summarized once, in up to 500 words with its key lines and every choice you made, and joins the story's timeline at no extra cost. Only once the timeline passes about 10,000 tokens is its older part condensed. Stories in progress switch over from their saved summaries without new summary calls.

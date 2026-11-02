@@ -534,7 +534,6 @@ export async function planNextChapter(
         const plan = normalizeChapterPlan(reply, context);
         return typeof plan === "string" ? plan : reply;
       },
-      temperature: 0.8,
       maxTokens: 10000,
       debugMode,
       lane: "foreground",

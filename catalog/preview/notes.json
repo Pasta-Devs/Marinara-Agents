@@ -72,6 +72,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.7.1",
+          "date": "2026-11-03",
+          "notes": "- **Closing a conversation** now shows only that they remember it and the line they keep. It earns +5 affection.\n- **Your connection's settings decide.** Otome Hearth now sends only the reply's length, never its own temperature or JSON mode, so your connection's temperature, reasoning effort and other settings are what's used.\n- **Longer chapter summaries**, up to 1,000 words.\n- **More room before condensing.** The story's timeline can reach 14,000 tokens and recent memories 6,000 before anything is condensed or left out, 20,000 together at most.\n- **Fixes.** The daily note, Read Him and Read Me draw on recent memories again. Messages no longer repeat their newest conversations as memories. A small memory model condenses the timeline in steps instead of failing, and a model with an unknown context asks for it again.",
+          "highlight": false
+        },
+        {
           "version": "0.7.0",
           "date": "2026-11-02",
           "notes": "- **A story memory that stays small.** Each chapter is summarized once, in up to 500 words with its key lines and every choice you made, and joins the story's timeline at no extra cost. Only once the timeline passes about 10,000 tokens is its older part condensed. Stories in progress switch over from their saved summaries without new summary calls.\n- **Recent small memories.** Messages, Snapshots, Read Me, Read Him, claw machine rounds, dates and Character Stories come back, newest first, to the love interest they belong to.\n- **Cheaper chapters.** A chapter's plan and scenes share one cached story context, so providers that cache, like Claude, charge less after the first call.\n- **No suggested replies** in Messages: you write your own.\n- **Stickers without white outlines.**\n- **A warning** when a story connection has under 32k tokens of context.",
@@ -183,12 +189,6 @@
           "version": "0.6.11",
           "date": "2026-10-31",
           "notes": "- **His portrait is painted from his card's full-body image and his avatar together**, instead of one standing in for the other. A love interest drawn from a character card now keeps both his build and his face, which the reference could only carry one of before. Scenes still send one likeness per person, so a large cast is not crowded out of the reference budget.",
-          "highlight": false
-        },
-        {
-          "version": "0.6.10",
-          "date": "2026-10-31",
-          "notes": "- **Each love interest has his own colour again** on his name plate and in the glow behind his art. It is picked from a vivid detail of his portrait (an earring, his eyes) rather than averaged from the picture, so no two love interests in a cast share one, and the backdrop a look is painted on never becomes it.\n- Stories already in progress re-pick their colours when opened: an accent chosen by the old picker is treated as unset.",
           "highlight": false
         }
       ]

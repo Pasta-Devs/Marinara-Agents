@@ -47,7 +47,6 @@ import type { OtomeStore } from "../store.js";
 import { type NoteDay, noteMessages, ownView } from "../prompts.js";
 import { NoteReplySchema, QUESTION_MARK, mentionsAbsence, type NoteReply } from "./replies.js";
 
-export const NOTE_TEMPERATURE = 0.9;
 export const NOTE_MAX_TOKENS = 400;
 /** One recalled line: about this many tokens of his top memory. */
 const RECALLED_TOKENS = 120;
@@ -176,7 +175,8 @@ async function recalledLine(
       query: { cues, speakers: [unit.name] },
     });
     if (result.lagging) void Promise.resolve(memory.maintain({ runId, debugMode })).catch(() => undefined);
-    const top = result.status.phase === "ready" ? (result.details[0]?.content ?? "") : "";
+    // #2066: the newest small memory he holds (recalls come in story order).
+    const top = result.status.phase === "ready" ? (result.recalls?.at(-1)?.content ?? "") : "";
     return top.trim() ? sliceTextToTokenBudget(top.trim(), RECALLED_TOKENS) : "";
   } catch {
     return "";
@@ -239,7 +239,6 @@ export async function serveNote(
       }),
       schema: NoteReplySchema,
       normalize: checkNote(curt, recent),
-      temperature: NOTE_TEMPERATURE,
       maxTokens: NOTE_MAX_TOKENS,
       debugMode,
       lane: "foreground",
