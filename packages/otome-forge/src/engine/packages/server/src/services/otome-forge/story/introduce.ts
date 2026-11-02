@@ -176,8 +176,8 @@ export async function introduceLoveInterest(
 /**
  * Takes back a newcomer whose arc never got planned (#1985 review): their ties in the world's web and their cast entry
  * go, so a failed or cancelled plan leaves no one in the cast that the story never introduces. Their unit stays, with
- * the bible paid for on it, out of the cast (readRun reads the cast's units only), and the same arrival again takes it
- * back (introduceLoveInterest). Best effort: a rollback never throws over the original failure.
+ * the bible paid for on it, out of the cast (whoever means the love interests reads readCastUnits, never every stored
+ * unit), and the same arrival again takes it back (introduceLoveInterest). Best effort: a rollback never throws over the original failure.
  */
 export async function removeLoveInterest(
   deps: { store: import("../store.js").OtomeStore },

@@ -26,6 +26,7 @@ import {
   memoryId,
   runDocTarget,
   runIdOf,
+  stateId,
   unitId,
   worldId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
@@ -40,7 +41,10 @@ import {
   registerMemoryRoutes,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/memory.ts";
 import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
-import { normalizeState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
+import {
+  defaultLiState,
+  normalizeState,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import {
   normalizeBible,
   normalizeUnit,
@@ -119,6 +123,10 @@ async function setup(
   ] as const) {
     await store.mutateDoc(runDocTarget("unit", unitId(RUN, id)), normalizeUnit, (unit) => ({ ...unit, id, name }));
   }
+  await store.mutateDoc(runDocTarget("state", stateId(RUN)), normalizeState, (state) => ({
+    ...state,
+    lis: { [KAI]: defaultLiState(), [MIR]: defaultLiState() },
+  }));
   // `failReads` makes the next reads of the wrapper fail while later ones (the kit's own) succeed.
   const reads = { fail: 0 };
   const memory = createOtomeMemory({
@@ -185,6 +193,25 @@ test("an overview fold is told the overview is the story's timeline; a detail su
     const system = call.messages[0]!.content;
     assert.equal(system.includes(OVERVIEW_WORDING), kinds[index] === "overview", `${kinds[index]} ${index}`);
     assert.ok(system.includes(SUMMARY_WORDING), "every summary keeps the summary wording");
+  }
+});
+
+test("a newcomer kept out of the cast after a failed arc plan is named in no summary's content contract", async () => {
+  const { store, memory, calls } = await setup();
+  // As a failed or cancelled arc plan leaves them (S/story/introduce.ts removeLoveInterest): a unit, not in state.lis.
+  const wren = "li-wren-ef56";
+  await store.mutateDoc(runDocTarget("unit", unitId(RUN, wren)), normalizeUnit, (unit) => ({
+    ...unit,
+    id: wren,
+    name: "Wren",
+  }));
+  assert.equal(await memory.maintain({ runId: RUN }), true);
+  assert.equal((await settle(memory)).phase, "ready");
+  assert.ok(calls.length > 0);
+  for (const call of calls) {
+    const system = call.messages[0]!.content;
+    assert.ok(system.includes("Kai, Mireille are adults"), "the cast is named");
+    assert.ok(!system.includes("Wren"), "and nobody the story never introduced");
   }
 });
 

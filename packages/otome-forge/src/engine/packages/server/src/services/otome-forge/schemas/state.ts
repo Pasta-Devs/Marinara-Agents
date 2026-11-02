@@ -597,11 +597,24 @@ export async function readRun(store: Pick<OtomeStore, "readDoc">, runId: string)
   ]);
   if (!world) return null;
   const state = stored ?? normalizeState(undefined);
-  const units = await Promise.all(Object.keys(state.lis).map((li) => store.readDoc(unitId(runId, li), normalizeUnit)));
   return {
     world,
     player: player ?? normalizePlayer(undefined),
-    units: units.filter((unit): unit is Unit => !!unit),
+    units: await readCastUnits(store, runId, state),
     state,
   };
+}
+
+/**
+ * The cast's units, in cast order (`state.lis`). Every caller that means the love interests reads these, never every
+ * stored unit: a newcomer whose arc plan failed keeps their unit and bible out of the cast (S/story/introduce.ts).
+ */
+export async function readCastUnits(
+  store: Pick<OtomeStore, "readDoc">,
+  runId: string,
+  state?: RunState | null,
+): Promise<Unit[]> {
+  const lis = (state ?? (await store.readDoc(stateId(runId), normalizeState)))?.lis ?? {};
+  const units = await Promise.all(Object.keys(lis).map((li) => store.readDoc(unitId(runId, li), normalizeUnit)));
+  return units.filter((unit): unit is Unit => !!unit);
 }

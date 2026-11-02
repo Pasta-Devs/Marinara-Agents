@@ -607,6 +607,25 @@ test("bibles: only behind the spoiler gate, validated on edit, and an edit is ma
   assert.equal(await store.readDoc(unitId(runIdOf(RUN_KEY), "li-nobody-zz99"), normalizeUnit), null, "nothing created");
 });
 
+test("a bible edit keeps no web row for a newcomer kept out of the cast after a failed arc plan", async () => {
+  const { call, store, run } = await setup();
+  // As a failed or cancelled arc plan leaves them (S/story/introduce.ts removeLoveInterest): a unit, not in state.lis.
+  const wren = "li-wren-ef56";
+  await store.mutateDoc(runDocTarget("unit", unitId(runIdOf(RUN_KEY), wren)), normalizeUnit, (unit) => ({
+    ...unit,
+    id: wren,
+    name: "Wren",
+    bible: bible(),
+  }));
+  const row = { history: "a duel", stance: "rivals", debt: "a life" };
+  const saved = await call("POST", "/runs/:run/lis/:li/bible", {
+    params: { ...run, li: KAI },
+    body: { bible: { ...bible(), web: { [MIR]: row, [wren]: row, Wren: row } } },
+  });
+  assert.equal(saved.status, 200, JSON.stringify(saved.body));
+  assert.deepEqual(saved.body.bible.web, { [MIR]: row }, "only rows for the cast, by id or by name");
+});
+
 test("accent: a hex colour, saved upper-case on the unit and shown in the run view", async () => {
   const { call, run } = await setup();
   const kai = { ...run, li: KAI };

@@ -22,6 +22,7 @@ import { OTOME_FORGE_PACKAGE_ID, runDocTarget, unitId, worldId } from "../ids.js
 import { OtomeForgeError } from "../http.js";
 import { wornLookUrl } from "../schemas/common.js";
 import { normalizeUnit } from "../schemas/unit.js";
+import { readCastUnits } from "../schemas/state.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { queueScenePaints, releaseBeatArt, startBeatCg } from "./cg.js";
 import { galleryRef, worldStyle, type GeneratedImage } from "./image-client.js";
@@ -167,10 +168,7 @@ export function createOtomeArt(deps: ArtDeps): OtomeArt {
           return unit ? { id, data: unit } : null;
         },
         async list() {
-          return (await store.listRun("unit", runId)).map((record) => ({
-            id: record.id,
-            data: normalizeUnit(record.data),
-          }));
+          return (await readCastUnits(store, runId)).map((unit) => ({ id: unitId(runId, unit.id), data: unit }));
         },
       },
       packageId: OTOME_FORGE_PACKAGE_ID,
@@ -232,7 +230,7 @@ export function createOtomeArt(deps: ArtDeps): OtomeArt {
         const run = await readRun(runId);
         if (!run || disposed) return;
         // Love interests only: the kit matches each line's speaker to these names.
-        const cast = (await store.listRun("unit", runId)).map((record) => ({ name: normalizeUnit(record.data).name }));
+        const cast = (await readCastUnits(store, runId)).map((unit) => ({ name: unit.name }));
         expressionsOf(runId).queue(runId, run, cast, beat);
       })().catch((error: unknown) =>
         runtime.logger.warn(

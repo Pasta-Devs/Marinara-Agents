@@ -70,6 +70,7 @@ import { PLAYER_GOAL_MAX, PLAYER_TRAITS_MAX, normalizePlayer } from "../schemas/
 import {
   defaultLiState,
   normalizeState,
+  readCastUnits,
   readRun,
   remapLearnedTells,
   toRunView,
@@ -552,9 +553,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       const body = parseBody(BibleBody, request.body);
       const { runId } = runParam(request);
       const li = liParam(request);
-      const others = (await store.listRun("unit", runId))
-        .map((record) => normalizeUnit(record.data))
-        .filter((unit) => unit.id !== li);
+      const others = (await readCastUnits(store, runId)).filter((unit) => unit.id !== li);
       // The player is the authority on an edit: no `pronouns` here, so the ones they set are kept. An SFW story takes no
       // intimacy block from an edit (#1936); one written before Heat was lowered is kept below.
       const world = await store.readDoc(worldId(runId), normalizeWorld);
