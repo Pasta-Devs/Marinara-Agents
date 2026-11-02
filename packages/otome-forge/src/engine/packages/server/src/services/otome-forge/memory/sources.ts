@@ -11,8 +11,8 @@
 //        clawMemorySources), each `chat` with audience [their id] and titled private, as a phone session is
 // Audience entries are plain LI ids. A `chat` is a short record kept as written, never in the shared overview; it and a
 // love interest's own chapter reach a prompt beyond the overview only for that LI's own readers and scenes whose cast
-// includes them (S/memory/memory.ts). Read Me is never a source: its notebook is ranked live on each recall
-// (S/memory/memory.ts notebookRecalls), so a deleted entry never comes back. Care data is never a source.
+// includes them (S/memory/memory.ts). Read Me is never a source: its notebook joins the recall pool live on each recall
+// (S/memory/memory.ts recallPool), so a deleted entry never comes back. Care data is never a source.
 import { orderForgeStorySources } from "@forge-kit/story-memory-integration.mjs";
 import type { ForgeMemorySource } from "@forge-kit/story-memory.mjs";
 import { playerId, stateId } from "../ids.js";

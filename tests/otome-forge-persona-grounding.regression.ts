@@ -53,7 +53,7 @@ const replies = () =>
   Array.from(
     { length: 20 },
     () => (messages: CapabilityLanguageModelMessage[]) =>
-      json(messages[0]!.content.includes("chapter planner") ? planReply() : beatReply()),
+      json(messages.some((message) => message.content.includes("chapter planner")) ? planReply() : beatReply()),
   );
 
 test("an existing run sends all current persona fields to chapter and scene generation without a prior UI read", async () => {

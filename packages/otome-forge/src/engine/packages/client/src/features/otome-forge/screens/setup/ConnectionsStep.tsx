@@ -1,7 +1,9 @@
 // ──────────────────────────────────────────────
 // Otome Forge setup, step 5: connections. One text connection for the story, optional ones for planning, the phone
 // and memory, and an optional image connection (the game is fully playable without one). "Edit" opens the Engine's
-// own connection editor. The same controls serve Settings → Connections and Settings → Images.
+// own connection editor. The same controls serve Settings → Connections and Settings → Images. A text connection set
+// to a context window under STORY_CONTEXT_MIN gets a warning (#2066): a story prompt carries the story's timeline and
+// the previous chapter in full, so a smaller one soon runs out of room. It is never refused.
 // ──────────────────────────────────────────────
 import { useTranslation } from "react-i18next";
 import { ImageOff, PlugZap } from "lucide-react";
@@ -11,6 +13,9 @@ import { useConnections, type ConnectionOption } from "../../hooks/use-engine-re
 import { IMAGE_STYLE_MAX } from "../../shared/content";
 import { FACES_PER_LOOK, type DraftConnections, type DraftImages, type SetupDraft } from "./draft";
 import { ConnectionSelect, Section, Switch, TextField } from "./parts";
+
+/** The context window, in tokens, a story's text connections should have (#2066). */
+const STORY_CONTEXT_MIN = 32_000;
 
 interface ConnectionControlsProps {
   value: DraftConnections;
@@ -39,6 +44,7 @@ export function ConnectionControls({ value, onChange, connections, onCheckAgain 
         hint={t("ui.otomeForge.setup.connectionNarrationHint")}
         value={value.narration}
         connections={connections}
+        minContext={STORY_CONTEXT_MIN}
         onChange={(narration) => onChange({ ...value, narration })}
       />
       <details className="of-details">
@@ -50,6 +56,7 @@ export function ConnectionControls({ value, onChange, connections, onCheckAgain 
             value={value.structured}
             connections={connections}
             emptyLabel={same}
+            minContext={STORY_CONTEXT_MIN}
             onChange={(structured) => onChange({ ...value, structured })}
           />
           <ConnectionSelect
@@ -58,6 +65,7 @@ export function ConnectionControls({ value, onChange, connections, onCheckAgain 
             value={value.chat}
             connections={connections}
             emptyLabel={same}
+            minContext={STORY_CONTEXT_MIN}
             onChange={(chat) => onChange({ ...value, chat })}
           />
           <ConnectionSelect
@@ -66,6 +74,7 @@ export function ConnectionControls({ value, onChange, connections, onCheckAgain 
             value={value.compress}
             connections={connections}
             emptyLabel={same}
+            minContext={STORY_CONTEXT_MIN}
             onChange={(compress) => onChange({ ...value, compress })}
           />
         </div>

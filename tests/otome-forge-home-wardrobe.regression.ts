@@ -422,7 +422,12 @@ test("A Memory won after a story CG of his stands behind him and ends the Album,
 
 // ── The knowledge boundary: M4's private canon in M3's own-reader prompts ──
 
-const system = (messages: Messages) => messages[0]!.content;
+// #2066: a story prompt opens with the shared story context, then its own instructions: both are system messages.
+const system = (messages: Messages) =>
+  messages
+    .filter((message) => message.role === "system")
+    .map((message) => message.content)
+    .join("\n\n");
 const text = (messages: Messages) => messages.map((message) => message.content).join("\n");
 const kindOf = (messages: Messages) =>
   system(messages).includes("message of the day")
@@ -477,8 +482,6 @@ const KAI_ONLY = [
   "KAI-SNAPSHOT",
 ];
 const leaked = (prompt: string, markers = KAI_ONLY) => markers.filter((marker) => prompt.includes(marker));
-/** The prompt without its "# Canon to date" overview, which tells everyone the whole timeline (one line here). */
-const beyondOverview = (prompt: string) => prompt.replace(/# Canon to date\n[^\n]*/u, "");
 
 /** A run where Kai owns a Snapshot and finished a Character Story that left his rows; Mireille owns a Snapshot. */
 async function privateCanonWorld() {
@@ -628,15 +631,12 @@ test("an owned Snapshot and a Character Story reach only their love interest's p
     assert.ok(pack, "the line pack was written");
     assert.deepEqual(leaked(pack, [...KAI_ONLY, "MIR-SNAPSHOT"]), [], "a pack reads no canon at all");
 
-    // P17: Mireille's reply knows the shared story and her own Snapshot's world; Kai's Character Story only as the
-    // overview of the whole timeline tells it, titled his own, and his Snapshot not at all. Kai's knows his story.
+    // P17: Mireille's reply knows the shared story and her own Snapshot's world; Kai's Character Story and his Snapshot
+    // not at all (#2066: a Character Story is his own small memory, never the timeline's). Kai's knows his story.
     await sendMessage(t.deps, t.runId, MIR, { text: "Still up?" }, { debugMode: false });
     const [mirChat] = t.prompts("chat");
-    assert.deepEqual(leaked(beyondOverview(mirChat!)), [], "nothing of Kai's in Mireille's reply beyond the overview");
-    assert.match(
-      mirChat!,
-      /# Canon to date\n[^\n]*Kai's own story chapter "Lantern Vigil" \(private[^\n]*KAI-STORY-SCENE/u,
-    );
+    assert.deepEqual(leaked(mirChat!), [], "nothing of Kai's in Mireille's reply");
+    assert.ok(!mirChat!.includes("KAI-STORY-SCENE"), "his Character Story never reaches her");
     assert.ok(!mirChat!.includes("KAI-SNAPSHOT"), "his Snapshot never reaches the overview");
     assert.ok(mirChat!.includes("SHARED-QUAY"), "the shared story reaches her");
     await runForeground(t.runId, async () => undefined);

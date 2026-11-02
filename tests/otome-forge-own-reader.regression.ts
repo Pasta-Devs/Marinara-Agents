@@ -37,7 +37,12 @@ import { recallText } from "../packages/otome-forge/src/engine/packages/server/s
 import { KAI, MIR, json, storyWorld } from "./fixtures/otome-forge-story.ts";
 
 type Messages = CapabilityLanguageModelMessage[];
-const system = (messages: Messages) => messages[0]!.content;
+// #2066: a story prompt opens with the shared story context, then its own instructions: both are system messages.
+const system = (messages: Messages) =>
+  messages
+    .filter((message) => message.role === "system")
+    .map((message) => message.content)
+    .join("\n\n");
 const text = (messages: Messages) => messages.map((message) => message.content).join("\n");
 const kindOf = (messages: Messages) =>
   system(messages).includes("message of the day")
@@ -101,8 +106,10 @@ function reply(messages: Messages): string {
   }
 }
 
-/** The prompt without its "# Canon to date" overview, which tells everyone the whole timeline (one line here). */
-const beyondOverview = (prompt: string) => prompt.replace(/# Canon to date\n[^\n]*/u, "");
+/** The prompt without its "# Canon to date" timeline, which tells everyone the storyline (#2066: up to the next block). */
+const beyondOverview = (prompt: string) => prompt.replace(/# Canon to date\n[^]*?(?=\n\n# |\n\n[A-Z]{2}|$)/u, "");
+/** The timeline alone. */
+const overviewOf = (prompt: string) => /# Canon to date\n([^]*?)(?=\n\n# |\n\n[A-Z]{2}|$)/u.exec(prompt)?.[1] ?? "";
 
 const at = (hour: number) => `2026-10-28T${String(hour).padStart(2, "0")}:00:00.000Z`;
 
@@ -329,7 +336,7 @@ test("another love interest's route or repair chapter never reaches a note, a li
     await sendMessage(t.deps, t.runId, KAI, { text: "Are you awake?" }, { debugMode: false });
     const [kaiChat] = t.prompts("chat");
     assert.deepEqual(leaked(beyondOverview(kaiChat!)), [], "nothing of Mireille's own chapters beyond the overview");
-    assert.match(kaiChat!, /# Canon to date\n[^\n]*Mireille's Ledger[^\n]*PRIVATE-LEDGER/u, "hers, titled private");
+    assert.match(overviewOf(kaiChat!), /Mireille's Ledger[^]*PRIVATE-LEDGER/u, "hers, titled private");
     assert.ok(kaiChat!.includes("SHARED-QUAY") && kaiChat!.includes("KAI-OWN-ROUTE"), "the shared story and his own");
     assert.ok(
       kaiChat!.includes('# Previous chapter in full: Kai\'s own route chapter "The Bell Tower"') &&

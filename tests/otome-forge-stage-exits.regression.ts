@@ -187,7 +187,7 @@ test("the scene, Confrontation and Closer writers each ask for exits once, also 
     ...input,
     chapter: chapter(node(kind)),
     node: node(kind),
-    storySoFar: "",
+    storySoFar: [],
     memory: "",
     li: KAI,
   });
@@ -197,7 +197,7 @@ test("the scene, Confrontation and Closer writers each ask for exits once, also 
     closer: closerMessages(at("closer")),
   };
   for (const [kind, messages] of Object.entries(prompts)) {
-    const system = messages[0]!.content;
+    const system = messages[1]!.content;
     assert.equal(system.split('"exits": ["Name"]').length - 1, 1, kind);
     assert.match(system, /- exits: only on the segment where love interests leave the scene/, kind);
     // The protagonist walking away leaves them behind just the same: they are no longer on her stage.
@@ -222,7 +222,7 @@ test("Confrontation and Closer options speak to the player as you, never about t
     ...input,
     chapter: chapter(node(kind)),
     node: node(kind),
-    storySoFar: "",
+    storySoFar: [],
     memory: "",
     li: KAI,
   });
@@ -230,7 +230,7 @@ test("Confrontation and Closer options speak to the player as you, never about t
     ["confrontation", confrontationMessages(at("confrontation"))],
     ["closer", closerMessages(at("closer"))],
   ] as const) {
-    const system = messages[0]!.content;
+    const system = messages[1]!.content;
     assert.match(
       system,
       /label: [^.]*addressed to the player as a bare command or with "you"/u,

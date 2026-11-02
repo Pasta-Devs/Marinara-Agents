@@ -1,5 +1,14 @@
 # Otome Hearth release notes
 
+## 0.7.0 — 2026-11-02
+
+- **A story memory that stays small.** Each chapter is summarized once, in up to 500 words with its key lines and every choice you made, and joins the story's timeline at no extra cost. Only once the timeline passes about 10,000 tokens is its older part condensed. Stories in progress switch over from their saved summaries without new summary calls.
+- **Recent small memories.** Messages, Snapshots, Read Me, Read Him, claw machine rounds, dates and Character Stories come back, newest first, to the love interest they belong to.
+- **Cheaper chapters.** A chapter's plan and scenes share one cached story context, so providers that cache, like Claude, charge less after the first call.
+- **No suggested replies** in Messages: you write your own.
+- **Stickers without white outlines.**
+- **A warning** when a story connection has under 32k tokens of context.
+
 ## 0.6.28 — 2026-11-02
 
 - **Newest CGs first.** The Album's CGs now open on the newest, with the oldest at the bottom; the full-screen viewer steps through them in the same order.

@@ -6,7 +6,7 @@
 // radio groups move with the arrow keys, switches toggle with Space.
 import { useId, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Lock, PencilLine, type LucideIcon } from "lucide-react";
+import { Lock, PencilLine, TriangleAlert, type LucideIcon } from "lucide-react";
 import { useOtomeProps } from "../../props";
 import type { ConnectionOption } from "../../hooks/use-engine-resources";
 import { PRONOUN_MAX, type PronounChoice } from "./draft";
@@ -310,9 +310,19 @@ interface ConnectionSelectProps {
   onChange: (id: string) => void;
   /** The first option, for "" (e.g. "Same as story", "No images"). Omitted: a connection must be chosen. */
   emptyLabel?: string;
+  /** The context window, in tokens, below which the chosen connection gets a warning (it is never refused). */
+  minContext?: number;
 }
 
-export function ConnectionSelect({ label, hint, value, connections, onChange, emptyLabel }: ConnectionSelectProps) {
+export function ConnectionSelect({
+  label,
+  hint,
+  value,
+  connections,
+  onChange,
+  emptyLabel,
+  minContext,
+}: ConnectionSelectProps) {
   const { t } = useTranslation();
   const { openConnection } = useOtomeProps();
   const id = useId();
@@ -321,6 +331,7 @@ export function ConnectionSelect({ label, hint, value, connections, onChange, em
   // choice: what the select shows is what is saved, and picking the empty choice really clears it.
   const missing = !!value && !selected;
   const editLabel = selected ? t("ui.otomeForge.setup.editConnection", { name: selected.name }) : "";
+  const small = !!minContext && !!selected?.maxContext && selected.maxContext < minContext;
   return (
     <div className="of-field">
       <label className="of-label" htmlFor={id}>
@@ -359,6 +370,15 @@ export function ConnectionSelect({ label, hint, value, connections, onChange, em
       {hint ? (
         <p id={`${id}-hint`} className="of-hint">
           {hint}
+        </p>
+      ) : null}
+      {small ? (
+        <p className="of-notice" role="status">
+          <TriangleAlert size={16} strokeWidth={2} aria-hidden="true" />
+          {t("ui.otomeForge.setup.smallContext", {
+            tokens: selected!.maxContext!.toLocaleString(),
+            min: minContext!.toLocaleString(),
+          })}
         </p>
       ) : null}
     </div>

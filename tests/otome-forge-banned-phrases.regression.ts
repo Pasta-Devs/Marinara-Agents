@@ -62,7 +62,7 @@ test("scenes, messages and caring messages all carry the player's own banned phr
         state: { lis: { [KAI]: defaultLiState() } } as never,
         chapter,
         node,
-        storySoFar: "",
+        storySoFar: [],
         memory: "",
       }),
     );

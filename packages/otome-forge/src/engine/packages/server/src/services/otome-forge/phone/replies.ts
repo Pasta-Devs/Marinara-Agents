@@ -16,9 +16,6 @@ export const MESSAGE_TEXT_MAX = 1000;
 export const NOTE_QUOTE_MAX = NOTE_TEXT_MAX;
 /** His messages in one reply. */
 export const REPLY_MESSAGES_MAX = 3;
-export const SUGGESTIONS_MAX = 3;
-/** Characters (code points) in one suggested reply. */
-export const SUGGESTION_CHARS_MAX = 40;
 /** A closed conversation's memory, and the line kept from it. */
 export const MEMORY_CHARS_MAX = 800;
 export const MEMORY_QUOTE_MAX = 200;
@@ -91,13 +88,11 @@ export function stickerMatcher(listed: readonly ReplySticker[]): (token: string)
 /** P17's reply as the model sends it (nulls allowed); normalizeChatReply makes it a ChatReply. */
 export interface ChatReplyRaw {
   messages: Array<{ text?: string | null; sticker?: string | null }>;
-  suggestions?: string[] | null;
 }
 
 export interface ChatReply {
   /** `sticker` is a listed sticker's id (S/art/stickers.ts). */
   messages: Array<{ text: string; sticker?: string }>;
-  suggestions: string[];
 }
 
 export const ChatReplySchema: ZodType<ChatReplyRaw> = z.object({
@@ -107,12 +102,11 @@ export const ChatReplySchema: ZodType<ChatReplyRaw> = z.object({
     )
     .min(1)
     .max(8),
-  suggestions: z.array(z.string().max(400)).max(12).nullable().optional(),
 });
 
 /**
  * His messages (a leading "Name:" taken off, at most one sticker, at most three messages, each cut to
- * MESSAGE_TEXT_MAX) and up to three distinct suggestions of at most 40 characters; longer ones are dropped. A message
+ * MESSAGE_TEXT_MAX). A message
  * written as the protagonist, or a reply with nothing in it, is refused (the repair turn names why). A sticker is the
  * first bracketed name of `listed` in the reply (either order; a `sticker` field is read the same way); every other
  * sticker-shaped bracketed name is taken out of the text, and other bracketed text stays.
@@ -162,18 +156,7 @@ export function normalizeChatReply(
     messages.push({ text: [...text].slice(0, MESSAGE_TEXT_MAX).join(""), ...(sticker ? { sticker } : {}) });
   }
   if (!messages.length) return `the reply had no message from ${names.li}`;
-  const seen = new Set<string>();
-  const suggestions: string[] = [];
-  for (const value of raw.suggestions ?? []) {
-    const suggestion = value
-      .trim()
-      .replace(/^["“”'‘’«»]+|["“”'‘’«»]+$/gu, "")
-      .trim();
-    if (!suggestion || chars(suggestion) > SUGGESTION_CHARS_MAX || seen.has(squash(suggestion))) continue;
-    seen.add(squash(suggestion));
-    suggestions.push(suggestion);
-  }
-  return { messages: messages.slice(0, REPLY_MESSAGES_MAX), suggestions: suggestions.slice(0, SUGGESTIONS_MAX) };
+  return { messages: messages.slice(0, REPLY_MESSAGES_MAX) };
 }
 
 // ── P18's reply: his chat memory (the prompt: S/prompts.ts chatMemoryMessages) ──

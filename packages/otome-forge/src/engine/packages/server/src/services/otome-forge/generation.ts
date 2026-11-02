@@ -6,13 +6,15 @@
 // 3. Fit, as GF's fitForgeMemoryPrompt does (the kit's own fitter): the request's maxTokens is what the reply itself
 //    needs, and every call asks for GF's floor and reasoning headroom on top (outputBudget). A prompt that fits with
 //    all of it is sent unchanged. Otherwise the story memory it carries (`memory`, recallText's context) gives way: its
-//    recalled details first, lowest-ranked first; then, only while the reply would get less than OUTPUT_FLOOR, its
-//    older uncovered summaries, oldest first. The overview, the previous chapter in full, the newest summary and the
-//    decisions always stay, and nothing outside the memory is ever cut. A prompt that still leaves the reply less than
+//    recalls first, oldest first; then, only while the reply would get less than OUTPUT_FLOOR, its older uncovered
+//    summaries, oldest first, and the previous chapter's earliest scenes. The timeline, the previous chapter's last
+//    scene and the newest summary always stay, and nothing outside the memory is ever cut. A message's
+//    `cacheBreakpoint` (#2066) is sent as it is. A prompt that still leaves the reply less than
 //    the floor (or the connection's own smaller cap) is a 413 `capacity` before anything is sent, never a request the
 //    Engine would cut: its fitter would shrink the reply to 128 tokens, then cut the rules. The margin kept is the
 //    Engine's (fitSafety) with some to spare, and model.fitContext checks the result: any trim there is `capacity` too.
-// 4. Log: logOtomePrompt (debugOverride in debug mode, `redact` strings replaced).
+// 4. Log: logOtomePrompt (debugOverride in debug mode, `redact` strings replaced). In debug mode the reply's prompt
+//    cache use is logged too, when the provider reports it.
 // 5. Call: chatComplete with responseFormat json_object; an explicit HTTP 400/422 rejection of that optional hint
 //    allows one retry without it, also omitted from the repair turn and from every later call on that connection and
 //    model. A background call holds its job's connection admission slot throughout; it names that connection and never
@@ -64,10 +66,11 @@ export interface GenerateJsonRequest<T extends object> {
   label: string;
   messages: OtomeMessage[];
   /**
-   * The story memory the messages carry (recallText's context, its `text` inserted as it is): what the fit may leave
-   * out when the prompt does not fit (see the header). Without it nothing in the prompt gives way.
+   * The story memory the messages carry (recallText's context, its `text` inserted as it is, and with `apart` its
+   * recalls' text too): what the fit may leave out when the prompt does not fit (see the header). Without it nothing in
+   * the prompt gives way.
    */
-  memory?: ForgeMemoryContext;
+  memory?: ForgeMemoryContext & { recalls?: ForgeMemoryContext };
   schema: ZodType<T>;
   /**
    * What the schema cannot check (an adult age, no school role…): return the value, possibly fixed, or a string naming
@@ -256,8 +259,10 @@ function fitPrompt(
     minOutputTokens: OUTPUT_FLOOR,
   });
   if (!fit.fits && fit.reason !== "context-unknown") throw capacity(fit.reason ?? "it does not fit");
-  // Plain messages: the memory context stays here, out of the logs and the provider call.
-  const messages = fit.messages.map(({ role, content }) => ({ role, content }));
+  // Plain messages: the memory context stays here, out of the logs and the provider call. A cache mark goes along.
+  const messages = fit.messages.map(({ role, content, cacheBreakpoint }) =>
+    cacheBreakpoint ? { role, content, cacheBreakpoint } : { role, content },
+  );
   if (maxContext === null) return { messages, maxTokens: budget };
   const maxTokens = Math.min(fit.maxTokens ?? budget, promptRoom(maxContext, messages));
   if (maxTokens < floor) throw capacity(`it leaves ${Math.max(0, maxTokens)} tokens for a reply that needs ${floor}`);
@@ -267,6 +272,26 @@ function fitPrompt(
     throw capacity("the Engine would have to trim it");
   }
   return { messages, maxTokens: checked.maxTokens ?? maxTokens };
+}
+
+/** Debug mode only: how much of the prompt the provider read from or wrote to its cache, when it says (#2066). */
+function logCacheUse(
+  runtime: GenerationDeps["runtime"],
+  label: string,
+  debugMode: boolean,
+  usage: { promptTokens?: number; cachedPromptTokens?: number; cacheWritePromptTokens?: number } | undefined,
+) {
+  const debug = debugMode || runtime.isDebugAgentsEnabled();
+  if (!usage || (usage.cachedPromptTokens === undefined && usage.cacheWritePromptTokens === undefined)) return;
+  if (!debug && runtime.logger.isLevelEnabled?.("debug") === false) return;
+  runtime.logger.debugOverride(
+    debug,
+    "[debug/otome-forge/%s] Prompt cache: %d tokens read, %d written (the provider counts %d prompt tokens).",
+    label,
+    usage.cachedPromptTokens ?? 0,
+    usage.cacheWritePromptTokens ?? 0,
+    usage.promptTokens ?? 0,
+  );
 }
 
 /** One JSON reply from the job's connection, validated; see the file header for every step. */
@@ -289,7 +314,7 @@ export async function generateJson<T extends object>(
   const budget = outputBudget(request.maxTokens, model.maxOutputTokens);
   // The memory context rides on the first message, so the repair turn (the same messages and two more) carries it too.
   const messages = request.memory
-    ? forgeComposeMemoryPrompt(() => request.messages, [request.memory])
+    ? forgeComposeMemoryPrompt(() => request.messages, [request.memory, request.memory.recalls].filter(Boolean))
     : request.messages;
   let useJsonHint = !hintRejected.get(runtime)?.has(hintKey(connectionId, model));
   const mayCall = () => {
@@ -330,6 +355,7 @@ export async function generateJson<T extends object>(
       delete fallbackOptions.responseFormat;
       reply = await model.chatComplete(sent, fallbackOptions);
     }
+    logCacheUse(runtime, label, request.debugMode, reply.usage);
     return check(request, runtime.json.parseJsonish, reply.content ?? "", reply.finishReason);
   };
 

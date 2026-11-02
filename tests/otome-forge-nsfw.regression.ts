@@ -101,7 +101,12 @@ const stored = (heat: Heat, darkness: Darkness, limits: Partial<Record<LimitId, 
 const contract = (content: ContentSettings, kind: ContractKind = "scene", lis: ReadonlyArray<{ name: string }> = LIS) =>
   otomeContentContract({ world: worldOf(content), lis, kind });
 const bulletIndex = (text: string, pattern: RegExp) => text.split("\n").findIndex((line) => pattern.test(line));
-const systemOf = (messages: Array<{ content: string }>) => messages[0]!.content;
+// #2066: a story prompt opens with the shared story context, then its own instructions: both are system messages.
+const systemOf = (messages: Array<{ content: string }>) =>
+  messages
+    .filter((message) => message.role === "system")
+    .map((message) => message.content)
+    .join("\n\n");
 
 test("each Heat and Darkness adds only its own wording, and only in NSFW mode (NSFW Heat or Dark romance)", () => {
   for (const heat of HEATS) {
@@ -222,7 +227,7 @@ test("under NSFW: Explicit, sex is never rushed: room to unfold, dialogue throug
     const input = storyInputs(content);
     const node = { ...cgNode("closer"), cg: false };
     const chapter = { kind: "main" as const, number: 2, title: "Rain", lead: KAI, foil: MIR, nodes: [node] };
-    return systemOf(closerMessages({ ...input, chapter, node, storySoFar: "", memory: "", li: KAI }));
+    return systemOf(closerMessages({ ...input, chapter, node, storySoFar: [], memory: "", li: KAI }));
   };
   const ROOM = /When it reaches sex, opened may run to 20 segments, so it is never rushed\./;
   assert.match(closer(stored("explicit", "angst")), ROOM);
@@ -315,8 +320,11 @@ function beatPrompt(content: ContentSettings, rating: ImageRating, kind: Chapter
   const input = storyInputs(content, rating);
   const node = cgNode(kind);
   const chapter = { kind: "main" as const, number: 2, title: "Rain", lead: KAI, foil: MIR, nodes: [node] };
-  const args = { ...input, chapter, node, storySoFar: "", memory: "" };
-  return systemOf(kind === "confrontation" ? confrontationMessages({ ...args, li: KAI }) : beatMessages(args));
+  const args = { ...input, chapter, node, storySoFar: [], memory: "" };
+  // #2066: the node's own rules (a beat's key image among them) go with its task, after the cached part.
+  return (kind === "confrontation" ? confrontationMessages({ ...args, li: KAI }) : beatMessages(args))
+    .map((message) => message.content)
+    .join("\n\n");
 }
 
 test("NSFW Heat and Dark romance reach the story prompts only with the 18+ confirmation and those settings", async () => {
@@ -336,9 +344,14 @@ test("NSFW Heat and Dark romance reach the story prompts only with the 18+ confi
   const scenePrompt = async () => {
     const run = (await readRun(t.store, t.runId))!;
     const chapter = { kind: "main" as const, number: 1, title: "Rain", lead: KAI, foil: MIR, nodes: [node] };
-    return systemOf(beatMessages({ ...run, chapter, node, storySoFar: "", memory: "" }));
+    return systemOf(beatMessages({ ...run, chapter, node, storySoFar: [], memory: "" }));
   };
-  const sfw = contract(defaultContent(), "scene", [{ name: "Kai" }]);
+  // #2066: the story context's contract names the whole cast, as every story prompt shares it.
+  const sfw = contract(
+    defaultContent(),
+    "scene",
+    (await readRun(t.store, t.runId))!.units.map((unit) => ({ name: unit.name })),
+  );
 
   // No gate: the raise is refused, the world keeps the SFW defaults, and so does every prompt built from it.
   const refused = await runs("POST", "/runs/:run/settings", { content: asked, images: { rating: "explicit" } });

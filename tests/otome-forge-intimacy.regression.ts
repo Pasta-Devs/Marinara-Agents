@@ -147,7 +147,9 @@ test("an older bible gains only its intimacy block, once, on request; the run vi
       calls += 1;
       return json({ intimacy: { ...INTIMACY, preferences: [...INTIMACY.preferences, ...OVERSHOOT] } });
     }
-    return messages[0]!.content.includes("chapter planner") ? json(planReply()) : json(beatReply());
+    return messages.some((message) => message.content.includes("chapter planner"))
+      ? json(planReply())
+      : json(beatReply());
   });
   const t = await storyWorld({ runKey, replies });
   const call = runRoutes(t, runKey);
@@ -234,7 +236,7 @@ test("scenes draw on the block now and then in an NSFW story; an SFW story's pro
     const replies = Array.from(
       { length: 30 },
       () => (messages: CapabilityLanguageModelMessage[]) =>
-        messages[0]!.content.includes("chapter planner") ? json(planReply()) : json(beatReply()),
+        messages.some((message) => message.content.includes("chapter planner")) ? json(planReply()) : json(beatReply()),
     );
     const t = await storyWorld({ runKey, replies, content });
     // A block kept from before Heat was lowered must not reach an SFW story's prompts.

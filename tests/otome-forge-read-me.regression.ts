@@ -693,13 +693,11 @@ test("what he learned in Read Me long ago comes back as a small memory in his pr
         })
       ).text;
     const kai = await scene([KAI]);
-    assert.ok(
-      kai.includes(
-        "# Recalled chat: What Kai learned about the protagonist in a Read Me (private: Kai's alone)\nlikes: LIGHTHOUSE-NOTE",
-      ),
-      kai,
-    );
-    assert.ok((kai.match(/^# Recalled /gmu) ?? []).length <= 3, "at most three side memories");
+    const OLDEST =
+      "# Recalled memory: What Kai learned about the protagonist in a Read Me (private: Kai's alone)\nlikes: LIGHTHOUSE-NOTE";
+    assert.ok(kai.includes(OLDEST), kai);
+    // #2066: the newest small memories within 5000 tokens, told in story order: here every older set fits.
+    assert.ok(kai.indexOf(OLDEST) < kai.indexOf("rmset2-0"), "oldest first");
     assert.ok(!kai.includes("rmset4"), "what knowsAboutYou carries is never recalled again");
     assert.ok(!(await scene([MIR])).includes("LIGHTHOUSE"), "his notebook never reaches a scene without him");
 

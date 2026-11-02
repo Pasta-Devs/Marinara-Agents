@@ -74,7 +74,7 @@ test("every prompt that writes story or a love interest's words knows only what 
         ...input,
         chapter: { kind: "main", number: 2, title: "Rain", lead: KAI, foil: MIR, nodes: [node] },
         node,
-        storySoFar: "",
+        storySoFar: [],
         memory: "",
       }),
     ),
@@ -127,7 +127,7 @@ test("a love interest may be genuinely evil, a story may have real villains, and
         ...input,
         chapter: { kind: "main", number: 2, title: "Rain", lead: KAI, foil: MIR, nodes: [node] },
         node,
-        storySoFar: "",
+        storySoFar: [],
         memory: "",
       }),
     ),
@@ -211,18 +211,19 @@ test("every scene writer asks the protagonist to sit with what matters to them, 
   const chapter = (nodes: Array<typeof node | typeof fight | typeof close>) =>
     ({ kind: "main", number: 2, title: "Rain", lead: KAI, foil: MIR, nodes }) as const;
   const prompts = {
-    scene: beatMessages({ ...input, chapter: chapter([node]), node, storySoFar: "", memory: "" }),
+    scene: beatMessages({ ...input, chapter: chapter([node]), node, storySoFar: [], memory: "" }),
     confrontation: confrontationMessages({
       ...input,
       chapter: chapter([fight]),
       node: fight,
-      storySoFar: "",
+      storySoFar: [],
       memory: "",
       li: KAI,
     }),
-    closer: closerMessages({ ...input, chapter: chapter([close]), node: close, storySoFar: "", memory: "", li: KAI }),
+    closer: closerMessages({ ...input, chapter: chapter([close]), node: close, storySoFar: [], memory: "", li: KAI }),
   };
-  for (const [kind, messages] of Object.entries(prompts)) assert.match(messages[0]!.content, THOUGHTS, kind);
+  // In each writer's own instructions, after the story context they share (#2066).
+  for (const [kind, messages] of Object.entries(prompts)) assert.match(messages[1]!.content, THOUGHTS, kind);
 });
 
 test("a slow burn through stage 2, a confession when earned from stage 3, by the finale at the latest (#1960)", () => {
@@ -252,7 +253,7 @@ test("a slow burn through stage 2, a confession when earned from stage 3, by the
   const input = inputs();
   const node = { i: 0, kind: "beat" as const, guide: "Late in the lamp room.", cast: [KAI] };
   const chapter = { kind: "main" as const, number: 2, title: "Rain", lead: KAI, foil: MIR, nodes: [node] };
-  const scene = beatMessages({ ...input, chapter, node, storySoFar: "", memory: "" });
+  const scene = beatMessages({ ...input, chapter, node, storySoFar: [], memory: "" });
   assert.match(text(scene), SLOW);
   assert.match(text(chapterPlanMessages({ ...input, number: 2, lead: KAI, memory: "" })), SLOW);
 });
@@ -269,7 +270,7 @@ test("the story describes a love interest from their current Image appearance an
   kai.wornOutfit = "his-wardrobe-0-a1";
   const node = { i: 0, kind: "beat" as const, guide: "Kai turns to face you.", cast: [KAI] };
   const chapter = { kind: "main" as const, number: 2, title: "Rain", lead: KAI, foil: MIR, nodes: [node] };
-  const scene = text(beatMessages({ ...input, chapter, node, storySoFar: "", memory: "" }));
+  const scene = text(beatMessages({ ...input, chapter, node, storySoFar: [], memory: "" }));
   const plan = text(chapterPlanMessages({ ...input, number: 2, lead: KAI, memory: "" }));
   for (const [kind, prompt] of Object.entries({ scene, plan })) {
     assert.match(

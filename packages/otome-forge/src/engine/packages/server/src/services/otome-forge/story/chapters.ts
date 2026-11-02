@@ -450,6 +450,8 @@ export async function planNextChapter(
       job: "structured",
       cast: [lead],
       continues: "main",
+      // The recalls follow the Lead, so they go after the story context the chapter's scenes share (#2066).
+      apart: true,
       query: { plan: units.find((unit) => unit.id === lead)?.bible?.want ?? "", speakers: units.map((u) => u.name) },
       signal,
       debugMode,
@@ -519,6 +521,7 @@ export async function planNextChapter(
         number,
         lead,
         memory: memory.text,
+        recalls: memory.recalls?.text ?? "",
         climax,
         lastClimax: climaxOfChapter(mains.at(-1)),
         arc,

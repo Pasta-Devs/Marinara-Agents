@@ -4,6 +4,7 @@
 import type {
   CapabilityDocumentRecord,
   CapabilityDocumentStore,
+  CapabilityLanguageModelCompletion,
   CapabilityLanguageModelCompletionOptions,
   CapabilityLanguageModelMessage,
   CapabilityResolvedLanguageModel,
@@ -138,10 +139,13 @@ export interface FakeLogEntry {
   override?: boolean;
 }
 
-/** One scripted model reply: text, text with its finish reason, an error to throw, or a function of the request. */
+/**
+ * One scripted model reply: text, text with its finish reason (and the usage the provider reports), an error to throw,
+ * or a function of the request.
+ */
 export type FakeReply =
   | string
-  | { content: string; finishReason: string }
+  | { content: string; finishReason: string; usage?: CapabilityLanguageModelCompletion["usage"] }
   | Error
   | ((messages: CapabilityLanguageModelMessage[], options?: CapabilityLanguageModelCompletionOptions) => string);
 

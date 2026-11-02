@@ -79,7 +79,12 @@ type World = Awaited<ReturnType<typeof storyWorld>>;
 type Messages = CapabilityLanguageModelMessage[];
 type Answer = "reassure" | "tease" | "mirror" | "ask";
 
-const system = (messages: Messages) => messages[0]!.content;
+// #2066: a story prompt opens with the shared story context, then its own instructions: both are system messages.
+const system = (messages: Messages) =>
+  messages
+    .filter((message) => message.role === "system")
+    .map((message) => message.content)
+    .join("\n\n");
 const beatPath = "/runs/:run/chapters/:key/beats/:i";
 const node = (i: number) => ({ key: "main-1", i: String(i) });
 const labels = (t: World, label: string) =>

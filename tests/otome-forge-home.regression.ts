@@ -82,7 +82,12 @@ import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/serv
 import { KAI, MIR, SOL, json, storyWorld } from "./fixtures/otome-forge-story.ts";
 
 type Messages = CapabilityLanguageModelMessage[];
-const system = (messages: Messages) => messages[0]!.content;
+// #2066: a story prompt opens with the shared story context, then its own instructions: both are system messages.
+const system = (messages: Messages) =>
+  messages
+    .filter((message) => message.role === "system")
+    .map((message) => message.content)
+    .join("\n\n");
 const isNote = (messages: Messages) => system(messages).includes("message of the day");
 const isPack = (messages: Messages) => system(messages).includes("pre-written Home lines");
 
@@ -1189,7 +1194,6 @@ test("Home shows the chosen love interest or the protagonist, and counts unread 
     ],
     sessions: [],
     seenAt: "2026-10-28T09:02:00.000Z",
-    suggestions: [],
   }));
   assert.equal((await t.call("GET", "/runs/:run/home")).body.unread, 1, "his replies after the thread was seen");
   assert.equal((await t.call("POST", "/runs/:run/home/note", note("li-nobody-zz99", "UTC"))).status, 404);

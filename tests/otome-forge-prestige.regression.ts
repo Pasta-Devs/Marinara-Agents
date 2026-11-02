@@ -57,7 +57,12 @@ function prestigePlan(changes: Partial<PrestigePlanReply> = {}): PrestigePlanRep
   };
 }
 
-const system = (messages: ReadonlyArray<{ content: string }>) => messages[0]!.content;
+// #2066: a story prompt opens with the shared story context, then its own instructions: both are system messages.
+const system = (messages: ReadonlyArray<{ content: string }>) =>
+  messages
+    .filter((message) => message.role === "system")
+    .map((message) => message.content)
+    .join("\n\n");
 const user = (messages: ReadonlyArray<{ content: string }>) => messages.at(-1)!.content;
 
 test("prestige is derived from his points: none below level 10, a point per 300 past it, a story per three", () => {

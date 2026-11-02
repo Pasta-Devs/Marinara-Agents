@@ -1,6 +1,5 @@
 // ──────────────────────────────────────────────
-// Otome Forge: one private thread. Bubbles in his accent colour, chibi stickers (#2044), suggested replies, a typing
-// delay that feels human (lib/typing-delay.ts), earlier messages page by page, what he remembers of each closed
+// Otome Forge: one private thread. Bubbles in his accent colour, chibi stickers (#2044), a typing delay that feels human (lib/typing-delay.ts), earlier messages page by page, what he remembers of each closed
 // conversation, and Close and remember.
 // ──────────────────────────────────────────────
 // One reply in flight per thread: a send waits for the last one (on this page, and on the server, which answers 409
@@ -32,7 +31,6 @@ import { homeQueryKey } from "../home/HomeScreen";
 import { CloseAndRemember } from "./CloseAndRemember";
 import { BUSY_POLL_MS, phonePath, phoneQueryKey, threadQueryKey } from "./PhoneScreen";
 import { Sticker, StickerArt, StickerPicker, stickerLabel, useStickers, type Stickers } from "./StickerPicker";
-import { SuggestionChips } from "./SuggestionChips";
 import { messageTime } from "./ThreadList";
 import { TypingIndicator } from "./TypingIndicator";
 
@@ -68,7 +66,6 @@ interface Incoming {
   /** How many of his messages have appeared. */
   shown: number;
   started: number;
-  suggestions: string[];
 }
 
 interface ThreadProps {
@@ -118,7 +115,6 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
   /** Her message on its way (null when asking again), from when it was sent. */
   const [outgoing, setOutgoing] = useState<{ local: PhoneMessage | null; started: number } | null>(null);
   const [incoming, setIncoming] = useState<Incoming | null>(null);
-  const [suggestions, setSuggestions] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [closedGrant, setClosedGrant] = useState(0);
   const [announce, setAnnounce] = useState("");
@@ -160,7 +156,7 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
   const busy = !!outgoing || remoteBusy;
   const canSend = !busy && draft.trim().length > 0;
 
-  /** `fromDraft`: the box's own words are sent (a sticker or a suggestion leaves them where they are). */
+  /** `fromDraft`: the box's own words are sent (a sticker leaves them where they are). */
   const send = async (body: SendBody, fromDraft = false) => {
     if (busy || sending.has(threadKey)) return;
     sending.add(threadKey);
@@ -180,7 +176,6 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
     stick.current = true;
     setOutgoing({ local, started });
     setError(null);
-    setSuggestions([]);
     setClosedGrant(0);
     setAnnounce(t("ui.otomeForge.phone.typing", { name: li.name }));
     if (local) {
@@ -195,7 +190,6 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
         his: rows.filter((row) => row.who === "li" && !before.has(row.id)),
         shown: 0,
         started,
-        suggestions: Array.isArray(result.suggestions) ? result.suggestions : [],
       });
     } catch (failure) {
       // Read the thread back to learn whether her message was saved; never send it again unasked.
@@ -207,7 +201,7 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
         // Unknown: keep her words.
       }
       if (local && !saved) {
-        // A suggestion's words return too; a sticker has none, and a newer draft is never overwritten.
+        // A sticker has no words, and a newer draft is never overwritten.
         setDraft((current) => current || local.text);
         if (local.quote) setQuote((current) => current ?? local.quote ?? null);
       }
@@ -253,7 +247,6 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
           }
         : page,
     );
-    setSuggestions(incoming.suggestions);
     setIncoming(null);
     setOutgoing(null);
     if (!incoming.his.length) setAnnounce("");
@@ -357,18 +350,15 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
         sessions: [...page.sessions, session],
         past: page.past + 1,
         activeCount: 0,
-        suggestions: [],
         retry: false,
       };
     });
-    setSuggestions([]);
     setClosedGrant(result.grants.reduce((sum, grant) => sum + (grant.affection ?? 0), 0));
     void queryClient.invalidateQueries({ queryKey: key });
     void queryClient.invalidateQueries({ queryKey: phoneQueryKey(runKey) });
     void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
   };
 
-  const chips = busy || incoming ? [] : (suggestions ?? latest.data?.suggestions ?? []);
   const askAgain = latest.data?.retry === true && !busy && !incoming;
   const activeCount = latest.data?.activeCount ?? 0;
 
@@ -488,15 +478,6 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
           {error}
         </p>
       ) : null}
-      <SuggestionChips
-        suggestions={chips}
-        disabled={busy}
-        onPick={(text) => {
-          void send({ text, id: messageId(), ...(quote ? { quote } : {}) });
-          input.current?.focus({ preventScroll: true });
-        }}
-      />
-
       <form
         className="of-composer of-glass of-glass--strong"
         onSubmit={(event) => {

@@ -280,7 +280,7 @@ test("the planner sees every open grievance; the narrator the newest three, the 
   const beat = (resolves?: string[]) => {
     const node = { i: 0, kind: "beat", guide: "Rain.", cast: [KAI], ...(resolves ? { resolves } : {}) } as ChapterNode;
     const chapter = { kind: "main" as const, number: 2, title: "Rain", lead: KAI, foil: MIR, nodes: [node] };
-    return beatMessages({ world, player, units, state, chapter, node, storySoFar: "", memory: "" });
+    return beatMessages({ world, player, units, state, chapter, node, storySoFar: [], memory: "" });
   };
   assert.deepEqual(shown(beat(["g1"])), [0, 1, 2, 3, 4], "a grievance the node may resolve keeps its text");
   assert.deepEqual(shown(beat()), [0, 2, 3, 4], "the rupture's grievance, and the newest three");
@@ -305,15 +305,25 @@ test("POST /chapters/next plans once, with the boundary, the contract and one re
   const planned = await t.call("POST", "/runs/:run/chapters/next", { lead: KAI });
   assert.equal(planned.status, 200, JSON.stringify(planned.body));
   assert.equal(t.calls.length, 3, "the arc, the plan, and one repair turn");
-  const planCall = t.calls.find((entry) => entry.messages[0]!.content.includes("chapter planner"))!;
-  const [system, user] = planCall.messages;
+  const planCall = t.calls.find((entry) =>
+    entry.messages.some((message) => message.content.includes("chapter planner")),
+  )!;
+  // #2066: the story context and the planner's instructions are the system part, the rest the last user turn.
+  const system = {
+    content: planCall.messages
+      .filter((message) => message.role === "system")
+      .map((message) => message.content)
+      .join("\n\n"),
+  };
+  const user = planCall.messages.at(-1);
+  assert.match(system.content, /^THE STORY: [^]*\n\nYou are the chapter planner/u, "the story context comes first");
   assert.ok(system!.content.includes(forgeKnowledgeBoundary), "P5 carries the knowledge boundary");
   assert.match(system!.content, /CONTENT CONTRACT/);
   assert.match(system!.content, /PLAYER AGENCY/);
   // #1980: the truth leaves the chapter planner; it is the arc planner's, and a chapter sees it only on the page it is
   // scheduled to reveal it (the fake arc schedules it in chapter 12, so chapter 1 gets none of it).
   assert.doesNotMatch(user!.content, /MYSTERY-TRUTH/, "no unscheduled chapter sees the hidden truth");
-  assert.match(user!.content, /The mystery: Who puts out the lanterns\?/, "it still knows the question");
+  assert.match(system.content, /The mystery: Who puts out the lanterns\?/, "it still knows the question");
   assert.match(user!.content, /HIDDEN-TRUTH/, "and the Lead's full bible");
   assert.equal(user!.content.split("BIBLE: ").length - 1, 3, "and every Foil candidate's full bible too");
   assert.match(user!.content, /Keep to the CONTENT CONTRACT above, silently\.$/);
@@ -427,7 +437,9 @@ test("Side with (#2046): the plan keeps one valid mark and drops every other, ne
       lead: KAI,
       memory: "",
       ...(sideWith === undefined ? {} : { sideWith }),
-    })[0]!.content;
+    })
+      .map((message) => message.content)
+      .join("\n\n");
   assert.match(prompt(true), /SIDE WITH \(optional, at most one node\)[^\n]*"sideWith": true/);
   assert.match(prompt(true), /never invent a disagreement to use it/);
   assert.doesNotMatch(prompt(false), /SIDE WITH|sideWith/);
@@ -442,9 +454,9 @@ test("Side with (#2046): the plan keeps one valid mark and drops every other, ne
     state: stateWith({}),
     chapter: { kind: "main", number: 4, title: "Rain", lead: KAI, foil: MIR, nodes: [node] },
     node,
-    storySoFar: "",
+    storySoFar: [],
     memory: "",
-  })[0]!.content;
+  }).at(-1)!.content;
   const side = scene.slice(scene.indexOf("SIDE WITH (this node)"));
   assert.match(side, /where it comes to the protagonist: exactly 2 options[^\n]*each the protagonist backing/);
   assert.match(side, /selection: what the protagonist says/);
@@ -490,8 +502,10 @@ test("Side with (#2046): POST /chapters/next lets chapter 4 keep its mark, and n
     }
     const planned = await t.call("POST", "/runs/:run/chapters/next", { lead: KAI });
     assert.equal(planned.status, 200, JSON.stringify(planned.body));
-    const planner = t.calls.find((entry) => entry.messages[0]!.content.includes("chapter planner"))!.messages[0]!
-      .content;
+    const planner = t.calls
+      .find((entry) => entry.messages.some((message) => message.content.includes("chapter planner")))!
+      .messages.map((message) => message.content)
+      .join("\n\n");
     const stored = (await t.store.readDoc(chapterId(t.runId, planned.body.chapter.key), normalizeChapter))!;
     return { planner, sides: stored.nodes.flatMap((node) => (node.sideWith ? [node.i] : [])), key: stored.key };
   };

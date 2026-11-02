@@ -86,8 +86,9 @@ import { withPersonaStoryAbout } from "../setup/cast.js";
 import { applyChoiceEffects } from "../state/relationship.js";
 import { readBeatToEnd } from "../state/rewards.js";
 import { countedNow, gateShut, healRupture, passGate } from "../state/stages.js";
+import { arcCovering, listArcs } from "./arc.js";
 import type { ChapterDeps } from "./chapters.js";
-import { chapterSoFar, readBeat, readChapter, recallText } from "./canon.js";
+import { chapterScenes, chapterSoFar, readBeat, readChapter, recallText } from "./canon.js";
 import { prologueProblem } from "./prologue.js";
 import {
   afterRound,
@@ -602,7 +603,7 @@ async function generateBeat(
   const basis = i > 0 ? await readBeat(deps.store, runId, key, i - 1) : null;
   const sameBasis = (current: Beat | null) =>
     !basis || (!!current && current.written.at === basis.written.at && cutShort(current) === cutShort(basis));
-  const storySoFar = await chapterSoFar(deps.store, runId, key, i, run.player.name);
+  const storySoFar = await chapterScenes(deps.store, runId, key, i, run.player.name);
   if (storySoFar === null) throw conflict("An earlier beat of this chapter is not settled yet.");
   const units = castUnits(run);
   const present = units.filter((unit) => node.cast.includes(unit.id));
@@ -611,10 +612,11 @@ async function generateBeat(
   const memory = await recallText(deps, runId, {
     job: "narration",
     cast: node.cast,
+    apart: true,
     ...(chapter.kind === "main" ? { continues: "main" as const } : {}),
     ...((chapter.kind === "route" || chapter.kind === "repair") && chapter.li ? { continues: chapter.li } : {}),
     query: {
-      cues: [storySoFar.slice(-2000), node.guide].filter(Boolean),
+      cues: [storySoFar.join("\n\n").slice(-2000), node.guide].filter(Boolean),
       plan: node.guide,
       speakers: [run.player.name, ...present.map((unit) => unit.name)].filter(Boolean),
     },
@@ -655,6 +657,12 @@ async function generateBeat(
     node,
     storySoFar,
     memory: memory.text,
+    recalls: memory.recalls?.text ?? "",
+    // The arc's line for a main chapter goes in the story context, as P5 sends it (#2066).
+    arc:
+      chapter.kind === "main" && chapter.number
+        ? (arcCovering(await listArcs(deps.store, runId), chapter.number) ?? null)
+        : null,
     prologue,
   };
   let body: Omit<Beat, "key" | "i" | "kind" | "choiceCanon" | "applied" | "readThrough" | "written" | "rewrites">;

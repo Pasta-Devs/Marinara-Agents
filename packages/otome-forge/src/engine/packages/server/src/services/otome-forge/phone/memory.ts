@@ -98,7 +98,7 @@ async function close(deps: PhoneDeps, runId: string, li: LiId, debugMode: boolea
     if (at === start && current.messages.length >= end) {
       appended = true;
       saved = session;
-      return { ...current, sessions: [...current.sessions, session], suggestions: [] };
+      return { ...current, sessions: [...current.sessions, session] };
     }
     // Another writer closed it first: its session is the one that counts.
     const theirs = current.sessions.find((entry) => entry.start === start);

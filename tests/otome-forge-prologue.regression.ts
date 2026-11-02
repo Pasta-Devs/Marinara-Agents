@@ -16,7 +16,8 @@ import { prologueProblem } from "../packages/otome-forge/src/engine/packages/ser
 import { KAI, beatReply, json, planReply, storyWorld } from "./fixtures/otome-forge-story.ts";
 
 const text = (messages: CapabilityLanguageModelMessage[]) => messages.map((message) => message.content).join("\n");
-const isPlanner = (messages: CapabilityLanguageModelMessage[]) => messages[0]!.content.includes("chapter planner");
+const isPlanner = (messages: CapabilityLanguageModelMessage[]) =>
+  messages.some((message) => message.content.includes("chapter planner"));
 const isPrologue = (messages: CapabilityLanguageModelMessage[]) => text(messages).includes("This is the PROLOGUE");
 const beatPath = "/runs/:run/chapters/:key/beats/:i";
 

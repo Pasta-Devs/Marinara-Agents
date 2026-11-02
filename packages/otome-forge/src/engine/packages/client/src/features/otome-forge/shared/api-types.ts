@@ -573,7 +573,6 @@ export interface PhoneThread {
   messages: PhoneMessage[];
   sessions: PhoneSession[];
   seenAt: string | null;
-  suggestions: string[];
 }
 
 /** GET /runs/:run/phone */
@@ -608,7 +607,6 @@ export interface PhoneHistoryPage {
   /** The protagonist's last message is still waiting for a reply: offer Retry. */
   retry: boolean;
   sessions: PhoneSession[];
-  suggestions: string[];
   seenAt: string | null;
 }
 
@@ -616,7 +614,6 @@ export interface PhoneHistoryPage {
 export interface PhoneSendResult {
   /** What this request added or found: the player's message (when it was new or named by `id`), then his reply. */
   messages: PhoneMessage[];
-  suggestions: string[];
 }
 
 /** Affection from Close and remember (the Grant shape, with its own source). */

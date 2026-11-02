@@ -6,7 +6,8 @@
 //   sessions     the closed conversations in order; session n covers `count` messages from `start`, and holds what he
 //                remembers of it (S/phone/memory.ts). The messages after the last one are the open conversation.
 //   seenAt       when the newest message the player has seen was sent; his messages after it are unread
-//   suggestions  the replies offered after his latest message (cleared by the next send or close)
+// No replies are suggested to the player: they write their own (#2066). A thread saved with suggestions reads without
+// them.
 // A thread is private: only its own love interest's prompts read it, and its closed sessions reach memory only with
 // `audience: [li]` (S/phone/memory.ts phoneMemorySources). His replies (P17) recall as his own reader, and read the
 // ledger lines and his grievances and disclosures his own reader may know (S/prompts.ts ownView), so another love
@@ -48,7 +49,7 @@ import { normalizeWorld } from "../schemas/world.js";
 import type { OtomeStore } from "../store.js";
 import { recallText, type StoryMemory } from "../story/canon.js";
 import { chatReplyMessages, ownView } from "../prompts.js";
-import { ChatReplySchema, SUGGESTIONS_MAX, normalizeChatReply, type ChatReply, type ReplyStickers } from "./replies.js";
+import { ChatReplySchema, normalizeChatReply, type ChatReply, type ReplyStickers } from "./replies.js";
 
 // ── The thread document (its wire shapes are in SH/api-types.ts) ──
 
@@ -116,7 +117,6 @@ export const emptyThread = (li: LiId = ""): PhoneThread => ({
   messages: [],
   sessions: [],
   seenAt: null,
-  suggestions: [],
 });
 
 /**
@@ -131,7 +131,6 @@ export function normalizeThread(data: unknown): PhoneThread {
       messages: (value) => validItems(MessageSchema, dropBadFields(value, MESSAGE_DISPLAY)),
       sessions: (value) => validItems(SessionSchema, dropBadFields(value, SESSION_DISPLAY)),
       seenAt: z.string().nullable(),
-      suggestions: (value) => validItems(z.string().max(200), value, SUGGESTIONS_MAX),
     },
     emptyThread,
     isRecord(data) ? data : undefined,
@@ -257,7 +256,6 @@ export async function threadPage(
     ...view,
     from: Math.max(0, end - PAGE_SIZE),
     sessions: thread.sessions,
-    suggestions: thread.suggestions,
     seenAt: thread.seenAt,
   };
 }
@@ -305,7 +303,7 @@ export function replyStickers(runId: string, run: RunDocuments, li: LiId): Reply
 }
 
 /**
- * P17 for his thread as read (`thread`, with `run` and his `unit`): his messages, not saved yet, and the suggestions.
+ * P17 for his thread as read (`thread`, with `run` and his `unit`): his messages, not saved yet.
  * The reply to her waits in the run's foreground queue (answer); a daily message (`first`) runs in a background job on
  * that job's connection (`connectionId`, S/phone/daily.ts). Both recall as his own reader, with his knowledge boundary.
  */
@@ -315,7 +313,7 @@ async function writeReply(
   li: LiId,
   { run, unit, thread }: { run: RunDocuments; unit: Unit; thread: PhoneThread },
   { debugMode, first = false, connectionId }: { debugMode: boolean; first?: boolean; connectionId?: string },
-): Promise<{ reply: PhoneMessage[]; suggestions: string[] }> {
+): Promise<PhoneMessage[]> {
   const names = { li: unit.name, player: run.player.name || "the protagonist" };
   const tail = openMessages(thread).slice(-TAIL_MESSAGES);
   const memories = thread.sessions.slice(-LISTED_SESSIONS);
@@ -355,26 +353,20 @@ async function writeReply(
   // generateJson returns what normalizeChatReply made of the reply.
   const written = value as ChatReply;
   const at = new Date().toISOString();
-  const reply: PhoneMessage[] = written.messages.map((message) => ({
+  return written.messages.map((message) => ({
     id: newMessageId(),
     who: "li",
     text: message.text,
     ...(message.sticker ? { sticker: message.sticker } : {}),
     at,
   }));
-  return { reply, suggestions: written.suggestions };
 }
 
 /**
  * Writes his reply to the open conversation (P17) in the run's foreground queue and appends it, unless a reply to the
  * same message landed first (then that one is returned). The open conversation must end on the player's message.
  */
-async function answer(
-  deps: PhoneDeps,
-  runId: string,
-  li: LiId,
-  debugMode: boolean,
-): Promise<{ reply: PhoneMessage[]; suggestions: string[] }> {
+async function answer(deps: PhoneDeps, runId: string, li: LiId, debugMode: boolean): Promise<PhoneMessage[]> {
   // ponytail: the reply waits behind the run's story writes (the plan's one foreground lane per run); the ceiling is a
   // reply that waits for a lookahead beat, and the upgrade path is a lane of the phone's own.
   return runForeground(runId, async () => {
@@ -391,11 +383,11 @@ async function answer(
         throw conflict("The thread changed while the reply was written.");
       const theirs = replyAfter(current, index);
       if (theirs.length) {
-        kept = { reply: theirs, suggestions: current.suggestions };
+        kept = theirs;
         return current;
       }
       kept = written;
-      return { ...current, messages: [...current.messages, ...written.reply], suggestions: written.suggestions };
+      return { ...current, messages: [...current.messages, ...written] };
     });
     return kept;
   });
@@ -422,9 +414,9 @@ export async function writeFirstMessage(
     if ((current.messages.at(-1)?.id ?? null) !== newest) {
       throw conflict("The thread changed while his message was written.");
     }
-    return { ...current, messages: [...current.messages, ...written.reply], suggestions: written.suggestions };
+    return { ...current, messages: [...current.messages, ...written] };
   });
-  return written.reply;
+  return written;
 }
 
 async function send(
@@ -442,17 +434,10 @@ async function send(
     const message = thread.messages[named]!;
     if (message.who !== "player") throw conflict("That message id belongs to another message.");
     const reply = replyAfter(thread, named);
-    const newest = reply.length > 0 && reply.at(-1) === thread.messages.at(-1);
-    if (reply.length || named < archivedCount(thread)) {
-      return { messages: [message, ...reply], suggestions: newest ? thread.suggestions : [] };
-    }
-    const answered = await answer(deps, runId, li, debugMode);
-    return { messages: [message, ...answered.reply], suggestions: answered.suggestions };
+    if (reply.length || named < archivedCount(thread)) return { messages: [message, ...reply] };
+    return { messages: [message, ...(await answer(deps, runId, li, debugMode))] };
   }
-  if (input.retry) {
-    const answered = await answer(deps, runId, li, debugMode);
-    return { messages: answered.reply, suggestions: answered.suggestions };
-  }
+  if (input.retry) return { messages: await answer(deps, runId, li, debugMode) };
   const text = (input.text ?? "").trim();
   if (!text && !input.sticker) throw new OtomeForgeError(400, "Write a message or pick a sticker.", "bad-request");
   if (input.sticker) {
@@ -475,12 +460,10 @@ async function send(
       : {
           ...current,
           messages: [...current.messages, message],
-          suggestions: [],
           seenAt: later(current.seenAt, message.at),
         },
   );
-  const answered = await answer(deps, runId, li, debugMode);
-  return { messages: [message, ...answered.reply], suggestions: answered.suggestions };
+  return { messages: [message, ...(await answer(deps, runId, li, debugMode))] };
 }
 
 /** POST .../send: the player's message, then his reply (P17). One send or close per thread at a time (409 `busy`). */
