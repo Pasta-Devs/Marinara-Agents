@@ -35,6 +35,7 @@ import {
   beatId,
   chapterId,
   chatId,
+  PROLOGUE_KEY,
   runDocTarget,
   stateId,
   unitId,
@@ -976,11 +977,14 @@ test("daily messages count each local day of the request's zone, and a spent att
 
 test("daily messages skip the open thread, a busy one and one waiting on her message, and never wait on the story", async () => {
   const t = await dailyWorld("r-daily3-aaaaaa", { limit: 24 });
-  // Nobody is met before a chapter is read: nothing is armed or spent.
+  // Nobody is met before a chapter is read, and the prologue meets no one: nothing is armed or spent.
   const chapters = (await t.store.readDoc(stateId(t.runId), normalizeState))!.chapters;
   await t.store.mutateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
     ...state,
-    chapters: { "main-1": { ...state.chapters["main-1"]!, completed: null } },
+    chapters: {
+      [PROLOGUE_KEY]: { beatsRead: 1, completed: "2026-11-02T08:00:00.000Z", applied: [] },
+      "main-1": { ...state.chapters["main-1"]!, completed: null },
+    },
   }));
   assert.equal((await t.due(T0 - 1_000, { open: null })).status, "no-eligible");
   await t.store.mutateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({ ...state, chapters }));
