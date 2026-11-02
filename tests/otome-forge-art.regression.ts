@@ -333,7 +333,16 @@ test("a scene written ahead pays for its CG only once it is served, so an Ease o
       const eased = await call("POST", `${beatPath}/ease-off`, { segment: 1 }, { key: KEY, i: "0" });
       assert.equal(eased.status, 200, JSON.stringify(eased.body));
     }
-    assert.equal((await call("POST", beatPath, {}, { key: KEY, i: "1" })).status, 200);
+    const served = await call("POST", beatPath, {}, { key: KEY, i: "1" });
+    assert.equal(served.status, 200);
+    // The reader reads the scene's art once as it opens and polls again only while something is pending, so the CG's
+    // record is written before the scene answers: without it the reader offers Paint while the paint runs unseen.
+    const scene = await routesOf(registerArtRoutes, t.deps, runKey)("GET", "/runs/:run/art/scene", {
+      key: KEY,
+      i: "1",
+    });
+    assert.ok(scene.body.cg?.art, "the reader's first art read already finds the CG's record");
+    assert.ok(served.body.beat.cg?.art, "and so does the scene served");
     await until(
       async () => (await readStoredBeat(t.store, t.runId, 1))?.cg?.art?.state === "ready",
       "the CG painted once its scene is served",

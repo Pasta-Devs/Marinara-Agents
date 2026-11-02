@@ -778,7 +778,7 @@ async function generateBeat(
     throw basisChanged();
   }
   // Only the write that was saved paints its places: a request that lost the race to another write hands nothing on.
-  // Its CG waits until it is served (paintCg). The beat a rewrite replaced lets its CG go.
+  // Its CG waits until it is served (prepareCg). The beat a rewrite replaced lets its CG go.
   if (saved?.written.at === beat.written.at) {
     paintPlaces(deps, runId, saved, { debugMode, review });
     if (replaced) releaseArt(deps, runId, replaced);
@@ -813,12 +813,18 @@ function paintPlaces(deps: BeatDeps, runId: string, beat: Beat, mode: PaintMode)
 
 /**
  * The CG of a beat being read, painted (or left waiting for the tap) once it is served, never when it is written: a
- * lookahead that an Ease off or a Rewrite drops unread has paid for no image. A CG with a record is left as it is.
+ * lookahead that an Ease off or a Rewrite drops unread has paid for no image. Only its record is awaited, so the
+ * reader's first art read sees it pending or waiting; the paid paint goes on in the background. Resolves the beat with
+ * that record. A CG with a record is left as it is.
  */
-function paintCg(deps: BeatDeps, runId: string, beat: Beat, mode: PaintMode): void {
+async function prepareCg(deps: BeatDeps, runId: string, beat: Beat, mode: PaintMode): Promise<Beat> {
   const art = deps.art;
-  if (art && beat.cg && !beat.cg.art) {
-    inBackground(deps, beat, "cg", () => art.queueScenePaints(runId, { ...beat, places: [] }, mode));
+  if (!art?.prepareSceneCg || !beat.cg || beat.cg.art) return beat;
+  try {
+    return await art.prepareSceneCg(runId, beat, mode);
+  } catch (error) {
+    artFailed(deps, beat, "cg")(error);
+    return beat;
   }
 }
 
@@ -973,7 +979,7 @@ export async function serveBeat(
     // generateBeat may itself run inside the foreground queue. Await its place registration only after that lock
     // has been released; the reader's first art response must distinguish pending from no image/description.
     await deps.art?.prepareScenePlaces?.(runId, beat, { debugMode, review });
-    paintCg(deps, runId, beat, { debugMode, review });
+    beat = await prepareCg(deps, runId, beat, { debugMode, review });
   }
   queueFaces(deps, runId, beat, debugMode);
   if (!run.state.chapters[key]?.completed) queueLookahead(deps, runId, chapter, beat, { debugMode, review });

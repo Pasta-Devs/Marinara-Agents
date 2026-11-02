@@ -11,9 +11,9 @@
 //
 // The kit builds one paint per unit; its client is made per run here, so each face's prompt reads that run's world
 // (rating, style) right before the call. createOtomeArt is created once per activation: queueExpressions after each
-// beat is served, queueScenePaints for a beat's places once written and its CG once served (art/cg.ts), dispose on
-// teardown, after which nothing more is paid for. queueStickers (#2044, art/stickers.ts) runs each run's sticker chain
-// from GET /runs/:run.
+// beat is served, queueScenePaints for a beat's places once written and prepareSceneCg for its CG once served
+// (art/cg.ts), dispose on teardown, after which nothing more is paid for. queueStickers (#2044, art/stickers.ts) runs
+// each run's sticker chain from GET /runs/:run.
 import { forgeLocalAvatarPath } from "@forge-kit/image-avatar-references.mjs";
 import { createForgeStoryExpressions, type ForgeStoryExpressions } from "@forge-kit/story-expressions-server.mjs";
 import type { Beat, Paint, Unit, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
@@ -23,7 +23,7 @@ import { OtomeForgeError } from "../http.js";
 import { wornLookUrl } from "../schemas/common.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
-import { queueScenePaints, releaseBeatArt } from "./cg.js";
+import { queueScenePaints, releaseBeatArt, startBeatCg } from "./cg.js";
 import { galleryRef, worldStyle, type GeneratedImage } from "./image-client.js";
 import { imagesOf, paintSlot, updateIfChanged, type ArtDeps } from "./paint.js";
 import { paintBeatPlaces, type PaintOptions } from "./places.js";
@@ -69,12 +69,17 @@ export interface OtomeArt {
   queueExpressions(runId: string, beat: ExpressionBeat, options: { debugMode: boolean }): void;
   /**
    * Paints the beat's new places and its CG in the background, or leaves them waiting for the tap (Ask before
-   * painting, or `review`). The beat writer calls it with the places once a beat is written or rewritten, and with the
-   * CG once it is served; do not await it. It never rejects.
+   * painting, or `review`). The beat writer calls it with the places once a beat is written or rewritten; do not await
+   * it. It never rejects.
    */
   queueScenePaints(runId: string, beat: Beat, options: Omit<PaintOptions, "active">): Promise<void>;
   /** Called outside the run queue before a fresh scene answers; only registration is awaited, never paid images. */
   prepareScenePlaces?(runId: string, beat: Beat, options: Omit<PaintOptions, "active">): Promise<void>;
+  /**
+   * Called as a beat being read is served: writes its CG's record (pending, or waiting for the tap) and resolves the
+   * beat with it, the paid paint going on in the background. A CG with a record is left as it is; it never rejects.
+   */
+  prepareSceneCg?(runId: string, beat: Beat, options: Omit<PaintOptions, "active">): Promise<Beat>;
   /**
    * #2044: paints the run's owed stickers one at a time in the background (or leaves them waiting for the tap). Call
    * it on each read of the run; it never rejects, and resolves once the chain ends.
@@ -242,6 +247,8 @@ export function createOtomeArt(deps: ArtDeps): OtomeArt {
       disposed
         ? Promise.resolve()
         : paintBeatPlaces(deps, runId, beat.places, { ...options, active, registrationOnly: true }),
+    prepareSceneCg: async (runId, beat, options) =>
+      disposed ? beat : (await startBeatCg(deps, runId, beat, { ...options, active })).beat,
     releaseBeatArt: (runId, beat) => releaseBeatArt(deps, runId, beat),
     queueStickers: (runId, options) =>
       disposed ? Promise.resolve() : queueStickers(deps, runId, { ...options, active }),
