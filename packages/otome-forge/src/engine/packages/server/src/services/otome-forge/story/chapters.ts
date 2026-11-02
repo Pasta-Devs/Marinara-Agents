@@ -16,6 +16,7 @@
 // other mark is dropped without a repair turn.
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import type {
+  ArcJudgment,
   Chapter,
   ChapterDetail,
   ChapterLedger,
@@ -55,7 +56,7 @@ import type { OtomeStore } from "../store.js";
 import { withPersonaStoryAbout } from "../setup/prompts.js";
 import { cancellable } from "./beats.js";
 import { removeLoveInterest } from "./introduce.js";
-import { recallText, type StoryMemory } from "./canon.js";
+import { readBeat, recallText, type StoryMemory } from "./canon.js";
 import {
   ANGST_TYPES,
   CHAPTER_TAGS,
@@ -125,6 +126,8 @@ export interface PlanContext {
   arc?: StoryArc | null;
   /** #2046: this chapter may hold a side-with scene (sideWithOpen); without it every side-with mark is dropped. */
   sideWith?: boolean;
+  /** The arc's judgment this chapter may close on (#2047, judgmentFor): its question and answers, never which is true. */
+  judgment?: ArcJudgment;
 }
 
 /** How many main chapters in a row may end with the same climax (the maintainer's 2, so the two alternate often). */
@@ -357,6 +360,11 @@ export function normalizeChapterPlan(reply: ChapterPlanReply, context: PlanConte
     ? nodes.find((node) => reply.nodes[node.i]?.sideWith === true && sideWithFits(node, units))
     : undefined;
   if (side) side.sideWith = true;
+  // #2047: the last node may close on the arc's judgment, unless it is the climax: a stance game holds no big choice.
+  const final = nodes.at(-1)!;
+  if (context.judgment && final.kind !== "confrontation" && final.kind !== "closer") {
+    final.judgment = { question: context.judgment.question, answers: [...context.judgment.answers] };
+  }
   const tags = planTags(reply, context.world);
   if (typeof tags === "string") return tags;
   const ledger = planLedger(reply, context, present, { main: true, idPrefix: `c${number}`, knows: [context.lead] });
@@ -372,6 +380,35 @@ async function mainChapters(store: OtomeStore, runId: string): Promise<Chapter[]
     .map((record) => normalizeChapter(record.data))
     .filter((chapter): chapter is Chapter => !!chapter && chapter.kind === "main")
     .sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
+}
+
+/**
+ * The arc's judgment (#2047) main chapter `number` may close on: only in a chapter the arc planner listed, and only while
+ * no earlier chapter of the arc whose last node carried it ended on a picked big choice. Every earlier chapter is
+ * complete when the next is planned (nextMain), so its canon is settled.
+ */
+export async function judgmentFor(
+  store: Pick<OtomeStore, "readDoc">,
+  runId: string,
+  arc: StoryArc,
+  mains: readonly Chapter[],
+  number: number,
+): Promise<ArcJudgment | null> {
+  const judgment = arc.judgment;
+  if (!judgment?.chapters.includes(number)) return null;
+  // ponytail: any big choice picked on a last node that carried the judgment spends it, because a beat does not record
+  // which kind of big choice it was; that keeps it to once per arc and errs toward offering it less. Upgrade path: the
+  // narrator tags its judgment choice and the beat keeps the tag.
+  for (const chapter of mains) {
+    if ((chapter.number ?? 0) < arc.from || !chapter.nodes.at(-1)?.judgment) continue;
+    const beat = await readBeat(store, runId, chapter.key, chapter.nodes.length - 1);
+    const cut = beat?.easedOff?.at ?? Infinity;
+    const picked = beat?.choices.some(
+      (choice) => choice.kind === "big" && choice.at <= cut && !!beat.choiceCanon[choice.id],
+    );
+    if (picked) return null;
+  }
+  return { question: judgment.question, answers: judgment.answers };
 }
 
 /** The number the next main chapter takes, and whether the player may start it (the latest one is done). */
@@ -459,6 +496,7 @@ export async function planNextChapter(
         },
         { debugMode, ...(signal ? { signal } : {}), memory: arcMemory! },
       ));
+    const judgment = await judgmentFor(deps.store, runId, arc, mains, number);
     const context: PlanContext = {
       units,
       state: run.state,
@@ -468,6 +506,7 @@ export async function planNextChapter(
       arc,
       sideWith,
       ...(climax ? { climax } : {}),
+      ...(judgment ? { judgment } : {}),
     };
     const { value, connectionId } = await generateJson(deps, {
       runId,
@@ -485,6 +524,7 @@ export async function planNextChapter(
         lastClimax: climaxOfChapter(mains.at(-1)),
         arc,
         sideWith,
+        judgment: !!judgment,
       }),
       memory,
       schema: ChapterPlanSchema,
