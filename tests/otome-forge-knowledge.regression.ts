@@ -121,7 +121,7 @@ test("a love interest may be genuinely evil, a story may have real villains, and
   const kai = units.find((unit) => unit.id === KAI)!;
   const node = { i: 0, kind: "beat" as const, guide: "Kai speaks of the harbour's old wards.", cast: [KAI] };
   const EVIL =
-    "- A love interest may be genuinely evil, a monster or a villain: taming them is the point, so never soften them before the story earns it.";
+    "- A love interest may be genuinely evil, a monster or a villain, as dark as this story's Darkness allows: taming them is the point, so never soften them before the story earns it.";
   const bibleText = text(bibleMessages({ world, player, member: { unit: kai }, others: [] }));
   const prompts: Record<string, string> = {
     bible: bibleText,

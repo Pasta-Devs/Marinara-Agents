@@ -19,7 +19,7 @@ export const WRITING_RULES = [
   "A love interest wants something besides the protagonist in every scene.",
   "Care is shown in the love interest's own register, never in borrowed comfort lines.",
   "Every cruelty has a reason the love interest believes, and the love interest keeps whatever red lines they have.",
-  "A love interest may be genuinely evil, a monster or a villain: taming them is the point, so never soften them before the story earns it.",
+  "A love interest may be genuinely evil, a monster or a villain, as dark as this story's Darkness allows: taming them is the point, so never soften them before the story earns it.",
   "A face may contradict the words it speaks.",
   "Write what the protagonist feels in their body when something happens to them, not only the action.",
   "All characters, player included, can change; for better, or worse.",

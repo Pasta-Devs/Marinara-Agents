@@ -156,9 +156,9 @@ const digest = (messages: Array<{ role: string; content: string }>) =>
 
 /** Taken from the 0.6.3 builder, before seasons. */
 const BEFORE_SEASONS: Record<wish.BannerKind, string> = {
-  memories: "f583bf094b91ee87",
-  "his-wardrobe": "1666293c16680877",
-  "my-wardrobe": "ce54c0880f0af121",
+  memories: "d3f2ff4f491e1103",
+  "his-wardrobe": "0210e76f92b0c5ad",
+  "my-wardrobe": "7c9f3bed25caa02a",
 };
 
 test("a rotation that is not seasonal sends the P20 prompt it sent before seasons", () => {
