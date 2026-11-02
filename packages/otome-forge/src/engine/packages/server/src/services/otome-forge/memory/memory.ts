@@ -80,20 +80,27 @@ export const OVERVIEW_WORDING =
  * no overview every source is owed, so recall reports the memory lagging and queues that (S/story/canon.ts recallText).
  * Records, detail summaries and status are read as saved. Every overview the kit writes after that was folded over the
  * empty one, so its write stamps the form, and the reads after it use the overview again: one rebuild, never a second.
+ * Until then the earlier overview is kept beside it as `legacyOverview` (the kit carries fields it does not know), so
+ * What happened so far… can still show it when a fold fails before the first new one lands; the stamp drops it.
  */
 const OVERVIEW_STYLE = 2;
 
-type SavedForm = { overview?: unknown; overviewStyle?: unknown } | null | undefined;
+type SavedForm = { overview?: unknown; overviewStyle?: unknown; legacyOverview?: unknown } | null | undefined;
 
-/** The saved memory as the kit reads it: an overview of an earlier form counts as none. */
+/** The saved memory as the kit reads it: an overview of an earlier form counts as none, and is kept aside. */
 const currentForm = (data: unknown) => {
   const saved = data as SavedForm;
-  return saved?.overview && saved.overviewStyle !== OVERVIEW_STYLE ? { ...saved, overview: null } : (data ?? null);
+  return saved?.overview && saved.overviewStyle !== OVERVIEW_STYLE
+    ? { ...saved, overview: null, legacyOverview: saved.overview }
+    : (data ?? null);
 };
 
-/** The memory as the kit writes it: one with an overview carries its form. */
-const stampedForm = (data: unknown) =>
-  (data as SavedForm)?.overview ? { ...(data as object), overviewStyle: OVERVIEW_STYLE } : data;
+/** The memory as the kit writes it: one with an overview carries its form, and the earlier one is let go. */
+const stampedForm = (data: unknown) => {
+  if (!(data as SavedForm)?.overview) return data;
+  const { legacyOverview: _earlier, ...rest } = data as Record<string, unknown>;
+  return { ...rest, overviewStyle: OVERVIEW_STYLE };
+};
 
 export type MemoryRuntime = Pick<
   CapabilityRuntimeHost,

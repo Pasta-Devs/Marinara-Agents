@@ -40,7 +40,12 @@ const EMPHASIS = /(?<![\p{L}\p{N}])([*_])(?=\S)(.+?)(?<=\S)\1(?![\p{L}\p{N}])/gu
  * saved before, until the background rebuild replaces it.
  */
 export function overviewParagraphs(data: unknown): string[] {
-  const content = (data as { overview?: { content?: unknown } | null } | null)?.overview?.content;
+  // A story rebuilding its overview in the new form (memory.ts) shows the earlier one, tidied, until the first lands.
+  const saved = data as {
+    overview?: { content?: unknown } | null;
+    legacyOverview?: { content?: unknown } | null;
+  } | null;
+  const content = saved?.overview?.content || saved?.legacyOverview?.content;
   if (typeof content !== "string") return [];
   return content
     .split(/\n+/u)

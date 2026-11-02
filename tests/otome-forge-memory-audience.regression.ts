@@ -273,6 +273,48 @@ test("an overview saved before the timeline is folded again from the records in 
   assert.equal(saved().overview.content, after.overview);
 });
 
+test("while the rebuild has not folded anything yet, What happened so far… keeps the earlier overview, tidied", async () => {
+  // Every summary call fails, so the rebuild never writes a new overview.
+  const { fake, memory } = await setup(undefined, {
+    replies: Array.from({ length: 12 }, () => new Error("the summary model is down")),
+  });
+  const [main] = SOURCES as [ForgeMemorySource];
+  const MAIN = "SUMMARY: the great telescope was sabotaged.";
+  await fake.documents.create({
+    ...runDocTarget("memory", memoryId(RUN)),
+    packageId: "otome-forge",
+    description: "",
+    data: {
+      version: 1,
+      records: [
+        {
+          id: main.id,
+          kind: main.kind,
+          title: main.title,
+          order: main.order,
+          key: JSON.stringify([main.kind, main.id]),
+          fingerprint: `fp-${main.id}`,
+          content: MAIN,
+        },
+      ],
+      work: [],
+      overview: {
+        content: "**Choices:**\nShe trusted **Mireille** with the key.",
+        sources: [[JSON.stringify(["chapter", main.id]), `fp-${main.id}`]],
+      },
+      status: { phase: "ready", retryable: false, operationId: "op-0.6.18" },
+    },
+    createdAt: "2026-11-02T08:00:00.000Z",
+    updatedAt: "2026-11-02T08:00:00.000Z",
+  });
+  await memory.maintain({ runId: RUN });
+  const status = await settle(memory);
+  assert.notEqual(status.phase, "ready", "the fold failed");
+  const stored = fake.rows.get(memoryId(RUN))!.data;
+  assert.equal((stored as { overviewStyle?: number }).overviewStyle, undefined, "nothing new was written");
+  assert.deepEqual(overviewParagraphs(stored), ["She trusted Mireille with the key."], "the earlier one still shows");
+});
+
 test("What happened so far… reads as prose: no bold label line or markdown emphasis, every sentence kept", () => {
   const content = [
     "**Choices:**",
