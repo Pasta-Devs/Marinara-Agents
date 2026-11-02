@@ -34,7 +34,7 @@ import type { ClimaxKind } from "../../../../../client/src/features/otome-forge/
 import { LIS_MAX } from "../../../../../client/src/features/otome-forge/shared/cast.js";
 import { LIMIT_IDS, type LimitId } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import { nextPrestige } from "../../../../../client/src/features/otome-forge/shared/economy.js";
-import { generateJson, readOrGenerate, type GenerationDeps } from "../generation.js";
+import { generateJson, readOrGenerate, runForeground, type GenerationDeps } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
 import {
   PROLOGUE_KEY,
@@ -566,8 +566,10 @@ export async function planNextChapter(
 
 /**
  * POST /runs/:run/arcs {choice} (#1983 M2): plan the arc that follows a finished one, as the player asked. One document
- * is written and nothing else, so a lost request cannot half-apply; a repeat call returns the arc already there
- * (planArc re-reads inside the run's queue). 409 while the current arc is unfinished or a next arc already exists.
+ * is written and nothing else, so a lost request cannot half-apply. The gates, the newcomer's arrival and the plan are
+ * one task in the run's queue: a repeat call made while the first plans (another tab, a tap after coming back to Story)
+ * waits, then gets the 409 without a model call or a second newcomer. 409 while the current arc is unfinished or a next
+ * arc already exists.
  */
 export async function startArc(
   deps: ChapterDeps,
@@ -586,65 +588,68 @@ export async function startArc(
     arrive?: () => Promise<{ id: LiId; name: string }>;
   },
 ): Promise<StoryArc> {
-  const run = await readRun(deps.store, runId);
-  if (!run) throw notFound("Otome Forge run");
-  if (run.world.forge.phase !== "ready") throw new OtomeForgeError(409, "The world is still being forged.", "conflict");
-  const arcs = await listArcs(deps.store, runId);
-  const latest = arcs.at(-1);
-  if (!latest) throw new OtomeForgeError(409, "This story has no arc yet: plan a chapter first.", "conflict");
-  const mains = await mainChapters(deps.store, runId);
-  if (arcRead(latest, mains, run.state) < latest.plan.length) {
-    throw new OtomeForgeError(409, "Finish the current arc before choosing the next one.", "conflict");
-  }
-  if (arcs.some((arc) => arc.number === latest.number + 1)) {
-    throw new OtomeForgeError(409, "The next arc is already planned.", "conflict");
-  }
-  if (choice === "newcomer" && !newcomer && !arrive) {
-    throw new OtomeForgeError(400, "Say who arrives, or choose another way on.", "bad-request");
-  }
-  const arriving = newcomer ?? (arrive ? await arrive() : undefined);
-  // The newcomer is written before the arc, so a plan that fails, is declined or is cancelled takes them back: nobody
-  // stays in the cast that no arc introduces (#1985 review). A rollback never hides the original failure.
-  const rollback = async () => {
-    if (!arriving || newcomer) return;
-    await removeLoveInterest(deps, runId, arriving.id).catch(() => undefined);
-  };
-  const cast = Object.keys(run.state.lis).filter((li) => run.units.some((unit) => unit.id === li && unit.bible));
-  const units = cast.map((li) => run.units.find((unit) => unit.id === li)!);
-  const from = mains.at(-1) ? (mains.at(-1)!.number ?? mains.length) + 1 : 1;
-  try {
-    return await cancellable(deps, runId, async (stop) => {
-      const memory = await recallText(deps, runId, {
-        job: "structured",
-        cast: [],
-        continues: "main",
-        query: { plan: run.player.goal ?? "", speakers: units.map((unit) => unit.name) },
-        signal: stop,
-        debugMode,
+  return runForeground(runId, async () => {
+    const run = await readRun(deps.store, runId);
+    if (!run) throw notFound("Otome Forge run");
+    if (run.world.forge.phase !== "ready")
+      throw new OtomeForgeError(409, "The world is still being forged.", "conflict");
+    const arcs = await listArcs(deps.store, runId);
+    const latest = arcs.at(-1);
+    if (!latest) throw new OtomeForgeError(409, "This story has no arc yet: plan a chapter first.", "conflict");
+    const mains = await mainChapters(deps.store, runId);
+    if (arcRead(latest, mains, run.state) < latest.plan.length) {
+      throw new OtomeForgeError(409, "Finish the current arc before choosing the next one.", "conflict");
+    }
+    if (arcs.some((arc) => arc.number === latest.number + 1)) {
+      throw new OtomeForgeError(409, "The next arc is already planned.", "conflict");
+    }
+    if (choice === "newcomer" && !newcomer && !arrive) {
+      throw new OtomeForgeError(400, "Say who arrives, or choose another way on.", "bad-request");
+    }
+    const arriving = newcomer ?? (arrive ? await arrive() : undefined);
+    // The newcomer is written before the arc, so a plan that fails, is declined or is cancelled takes them back: nobody
+    // stays in the cast that no arc introduces (#1985 review). A rollback never hides the original failure.
+    const rollback = async () => {
+      if (!arriving || newcomer) return;
+      await removeLoveInterest(deps, runId, arriving.id).catch(() => undefined);
+    };
+    const cast = Object.keys(run.state.lis).filter((li) => run.units.some((unit) => unit.id === li && unit.bible));
+    const units = cast.map((li) => run.units.find((unit) => unit.id === li)!);
+    const from = mains.at(-1) ? (mains.at(-1)!.number ?? mains.length) + 1 : 1;
+    try {
+      return await cancellable(deps, runId, async (stop) => {
+        const memory = await recallText(deps, runId, {
+          job: "structured",
+          cast: [],
+          continues: "main",
+          query: { plan: run.player.goal ?? "", speakers: units.map((unit) => unit.name) },
+          signal: stop,
+          debugMode,
+        });
+        return planArc(
+          deps,
+          runId,
+          {
+            world: run.world,
+            player: await withPersonaStoryAbout(deps.runtime, run.player),
+            units,
+            state: run.state,
+            memory: memory.text,
+            previous: arcs,
+            chapters: mains,
+            number: latest.number + 1,
+            from,
+            choice,
+            ...(arriving && choice === "newcomer" ? { newcomer: arriving } : {}),
+          },
+          { debugMode, signal: stop, memory },
+        );
       });
-      return planArc(
-        deps,
-        runId,
-        {
-          world: run.world,
-          player: await withPersonaStoryAbout(deps.runtime, run.player),
-          units,
-          state: run.state,
-          memory: memory.text,
-          previous: arcs,
-          chapters: mains,
-          number: latest.number + 1,
-          from,
-          choice,
-          ...(arriving && choice === "newcomer" ? { newcomer: arriving } : {}),
-        },
-        { debugMode, signal: stop, memory },
-      );
-    });
-  } catch (error) {
-    await rollback();
-    throw error;
-  }
+    } catch (error) {
+      await rollback();
+      throw error;
+    }
+  });
 }
 
 // ── The story view ──
