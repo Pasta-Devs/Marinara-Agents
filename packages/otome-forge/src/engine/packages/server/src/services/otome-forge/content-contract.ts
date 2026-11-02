@@ -89,7 +89,7 @@ const ANGST_NSFW =
   "Villains play dirty and are a genuine threat to the world, the love interests and their pasts; even a love interest can have a dark side or break down under pressure. Cruelty and violence are not sanitized within the Lines and Veils below, and always have consequences.";
 
 const DARK_ADDITION =
-  "Dark romance: each love interest's darkness has a reason they believe, a hidden cost they pay, and red lines they keep. The protagonist's options always include refusing, and the story honours what the player picks.";
+  "Dark romance: each love interest's darkness has a reason they believe, a hidden cost they pay, and whatever red lines they keep. The protagonist's options always include refusing, and the story honours what the player picks.";
 
 // NSFW mode only (planner, scene and chat), from the maintainer's NSFW prompt, mapped onto Otome's settings: rape is
 // the non-consent Line; torture, gore and mutilation, self-harm and a love interest's violence toward the protagonist

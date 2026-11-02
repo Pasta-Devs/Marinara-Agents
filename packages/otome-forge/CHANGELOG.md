@@ -1,5 +1,11 @@
 # Otome Hearth release notes
 
+## 0.6.22 — 2026-11-02
+
+- **Love interests may be genuinely evil.** Every writer now knows a love interest can be a real villain or a monster, and that taming them is the point, so the story no longer softens them before it has earned it. Your story's content settings still decide how far it goes.
+- **Real villains are back.** New stories no longer insist that nobody is simply a villain.
+- **A love interest's moral code fits who they are.** It is firm for a good person, far looser for a bad one, or none at all. Their red lines come from that code, if they have any. This applies to love interests written from now on.
+
 ## 0.6.19 — 2026-11-02
 
 - **"What happened so far…" reads as a recollection of your story.** It now tells what has happened so far in story order, with the choices you made woven in, instead of notes about your persona, a summary per chapter and bold labels. Stories already in progress rewrite it in the background the next time Otome Hearth writes; nothing you played is changed.

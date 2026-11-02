@@ -27,6 +27,8 @@
 // them behind (`exits`), so the beat, CG beat, confrontation and closer digests moved.
 // #2030: a Confrontation's and a Closer's option labels speak to the player as "you", never "she", so the confrontation
 // and closer digests moved.
+// 0.6.22: the shared writing rules say a love interest may be genuinely evil and that taming them is the point, so every
+// story and banner digest moved once (the new line rides in the rules block of each prompt).
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
@@ -243,28 +245,28 @@ test("chapter and scene prompts keep emotional payoffs occasional and permit cha
 });
 
 const EXPECTED_ANGST: Record<string, string> = {
-  bannerHis: "fb4747abddc9e10f",
-  bannerMemories: "46835995ce89e296",
-  bannerMine: "a2a84917627d0a0e",
-  beat: "b9d41f52d74d34e5",
-  beatWithCg: "e11fb5968884ff3e",
-  chapterPlan: "74761bd5e5df5cd5",
-  closer: "02a539da5c6abab6",
-  confrontation: "ec2661b784e78c25",
-  repairPlan: "d7ab0afffa32c5c2",
-  routePlan: "2c67d3b53c9ef867",
+  bannerHis: "c986cfbfb69293c6",
+  bannerMemories: "d20d603b29b49a1e",
+  bannerMine: "b3d43c945b1eda92",
+  beat: "4b7db1b9c67cf0bb",
+  beatWithCg: "8865dfa5a2fb192f",
+  chapterPlan: "80b916d1c45085a3",
+  closer: "e7646bbfe232c347",
+  confrontation: "f0062598911fa8f1",
+  repairPlan: "55d9dda904b79263",
+  routePlan: "75898de610174bd4",
 };
 const EXPECTED_GENTLE: Record<string, string> = {
-  bannerHis: "4f63a1ffaf1a18d3",
-  bannerMemories: "b1bef6f3499c9204",
-  bannerMine: "9e5c84b88c22c555",
-  beat: "1605bd5618584203",
-  beatWithCg: "ac045989ddd56ba0",
-  chapterPlan: "6bcb0a19cd26c4fe",
-  closer: "580321b73773a580",
-  confrontation: "cbe64f0437cb7488",
-  repairPlan: "2b00d0b73698377e",
-  routePlan: "b103900d16ec32e9",
+  bannerHis: "233e5e2487c98410",
+  bannerMemories: "6197296c4df1a1fc",
+  bannerMine: "856ee0e8cfa01a1d",
+  beat: "cbb8a1909c96b5eb",
+  beatWithCg: "d8d8ed6c736865bf",
+  chapterPlan: "0c8c2a723109e8d4",
+  closer: "e202c021d13f052a",
+  confrontation: "3ae8da80d341f275",
+  repairPlan: "1505a019ea4430a6",
+  routePlan: "ebbbe7bd23fbf92e",
 };
 
 test("the SFW defaults pin scene pacing and earned character change in story and banner prompts", () => {

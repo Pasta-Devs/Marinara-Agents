@@ -115,6 +115,38 @@ test("every prompt that writes story or a love interest's words knows only what 
   }
 });
 
+test("a love interest may be genuinely evil, a story may have real villains, and a moral code may be none (#2054)", () => {
+  const input = inputs();
+  const { world, units, player } = input;
+  const kai = units.find((unit) => unit.id === KAI)!;
+  const node = { i: 0, kind: "beat" as const, guide: "Kai speaks of the harbour's old wards.", cast: [KAI] };
+  const EVIL =
+    "- A love interest may be genuinely evil, a monster or a villain: taming them is the point, so never soften them before the story earns it.";
+  const bibleText = text(bibleMessages({ world, player, member: { unit: kai }, others: [] }));
+  const prompts: Record<string, string> = {
+    bible: bibleText,
+    scene: text(
+      beatMessages({
+        ...input,
+        chapter: { kind: "main", number: 2, title: "Rain", lead: KAI, foil: MIR, nodes: [node] },
+        node,
+        storySoFar: "",
+        memory: "",
+      }),
+    ),
+    chapterPlan: text(chapterPlanMessages({ ...input, number: 2, lead: KAI, memory: "" })),
+  };
+  for (const [kind, prompt] of Object.entries(prompts)) assert.ok(prompt.includes(EVIL), kind);
+  const plan = text(worldPlanMessages({ world, player, cast: units.map((unit) => ({ unit })) }));
+  assert.ok(!/nobody is simply a villain/u.test(plan), "the world plan may have real villains");
+  assert.ok(
+    bibleText.includes(
+      "- moralCode: the code they live by, true to who they are: firm for a good person, far looser for a bad one, or none at all. redLines: what that code forbids them, if anything ([] when nothing does).",
+    ),
+  );
+  assert.ok(!/from their own integrity/u.test(bibleText));
+});
+
 test("the world plan names an existing world as it is; the Surprise me premise stays original", () => {
   const { world, units, player } = inputs();
   const plan = text(worldPlanMessages({ world, player, cast: units.map((unit) => ({ unit })) }));
