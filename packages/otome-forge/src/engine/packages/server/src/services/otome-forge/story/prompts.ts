@@ -35,6 +35,7 @@ import { forgeChoiceMessages, forgeChoicePlanMessages } from "@forge-kit/player-
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 import { z, type ZodType } from "zod";
 import type {
+  ArcJudgment,
   Chapter,
   ChapterNode,
   LiId,
@@ -115,6 +116,13 @@ const RECENT_LEDGER = 8;
  */
 const VARIED_DECISION =
   "a different kind of decision from the recent chapters' (the irrevocable player decisions in story memory list them): not always whom the protagonist goes with, and never a choice between love interests two chapters running";
+
+/**
+ * The last node's line when its chapter may close on the arc's judgment (#2047, S/story/chapters.ts judgmentFor): the
+ * question and the answers as the arc planner wrote them, never which is true (the narrator is never told).
+ */
+const judgmentLine = ({ question, answers }: ArcJudgment) =>
+  `- The big choice MAY be a judgment the protagonist can get wrong, its own kind of decision even when the answers name love interests: "${question}" If it is, give it exactly one option per answer and no others: ${answers.map((answer) => `"${answer}"`).join(", ")}, each as the protagonist's own intent like any big choice. One of them is true; you are not told which and neither is the protagonist, so neither the scene nor the labels or selections hint which is right. Whatever the player picks is canon, and the chapters after play it out. This is optional: a different kind of big choice, or none, is just as good.`;
 
 /** P5's, P10's and P11's line on time passing (#1955): the protagonist rests and sleeps, as people do. */
 const TIME_RULE =
@@ -810,7 +818,10 @@ export function beatMessages({
     "- Stay within this node's guide; do not skip ahead to later nodes.",
     // A planned chapter's last node; the prologue offers its own choices, and a date never ends on a big one.
     ...(last && !date && chapter.kind !== "prologue"
-      ? [`- This is the chapter's last node: if it ends on a big choice, make it ${VARIED_DECISION}.`]
+      ? [
+          `- This is the chapter's last node: if it ends on a big choice, make it ${VARIED_DECISION}.`,
+          ...(node.judgment ? [judgmentLine(node.judgment)] : []),
+        ]
       : []),
     `- Write every segment's text and every place name in ${world.language}; tags${node.cg ? " and the cg brief" : ""} in English.`,
     "",

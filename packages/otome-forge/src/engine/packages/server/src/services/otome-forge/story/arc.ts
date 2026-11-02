@@ -140,12 +140,15 @@ export function arcPlanMessages({
     "Reply with ONLY a JSON object of this shape:",
     '{"kind": "<the kind asked for>", "label": "<2–5 words, spoiler-free; the player sees this>", "theme": "<one short sentence>", "goal": "<one short sentence: what the protagonist is after in this arc>", "chapters": ["<one short sentence per chapter, in play order>"], "endsWith": {"what": "<one short sentence: the big event the last chapter carries>", "chapter": 0}, "reveals": [{"chapter": 0, "kind": "piece|truth", "li": "<love interest id, piece only>", "what": "<one sentence: what the protagonist learns>"}], "antagonist": {"name": "<name>", "want": "<one short sentence>", "whyNow": "<one short sentence>"}' +
       (newcomer ? ', "newcomer": {"how": "<one short sentence: the scene they are met in>"}' : "") +
-      "}",
+      ', "judgment": {"question": "<one short question>", "answers": ["<plausible answer>", "<plausible answer>"], "chapters": [0]}}',
     "FIELDS",
     `- chapters: ${count} short purposes, in play order. Each is one sentence of about 12 words and must not exceed ${ARC_PURPOSE_WORDS}. Say what happens in that chapter, not how it is written.`,
-    "- chapter positions are 1-based within this arc (1 is its first chapter): endsWith.chapter and each reveals[].chapter. Never write a chapter number of your own.",
+    "- chapter positions are 1-based within this arc (1 is its first chapter): endsWith.chapter, each reveals[].chapter and judgment.chapters. Never write a chapter number of your own.",
     "- reveals: 1 to 4, in the order they land. kind piece reveals one love interest's part of the mystery (name them by id); kind truth reveals the whole answer, only in the last chapter and only once.",
     "- antagonist: a person or force standing against the protagonist this arc; null when the arc's trouble is not a person.",
+    // #2047: only this writer knows which answer is true, so only it can promise the true one is among the options;
+    // the narrator sees the question and the answers alone.
+    '- judgment: OPTIONAL. Only when this arc holds a mystery, suspects, a traitor or a disputed account the protagonist could judge (who did it, who betrayed them, whom to believe). question: that question, short ("Who betrayed the guild?"). answers: 2 to 4 plausible answers, worded the same way; the true one (what the hidden truth, your reveals and your ending make true) is always among them, and you never mark which. chapters: the 1-based positions of the chapters whose end may close on it, once the clues allow a real guess and before a reveal or the ending answers it. The scene writer sees only the question and the answers, the player may guess wrong, and whatever they pick is canon: write the later purposes so they hold either way. Never in a breathing arc, and never invented to fill the field: when the arc has no such question, omit judgment.',
     "RULES",
     "- One arc, one goal: every chapter moves toward it and none resolves it before the arc's last.",
     "- Do not repeat an earlier arc: not its antagonist, its theme, its ending shape, its mystery question or a reveal already played.",
@@ -163,7 +166,7 @@ export function arcPlanMessages({
       : []),
     "- The mystery's truth is yours to schedule, never to spend early: it is revealed in the last chapter, after the pieces.",
     `- Be brief. One sentence per field. No preamble, no restating the world, no explaining the outline. Every purpose over ${ARC_PURPOSE_WORDS} words is refused.`,
-    `- Write the label, theme, goal, purposes, endsWith and reveals in ${world.language}.`,
+    `- Write the label, theme, goal, purposes, endsWith, reveals and the judgment's question and answers in ${world.language}.`,
     "- Omit an optional field rather than writing null.",
     "",
     STORY_PACING_INSTRUCTION,

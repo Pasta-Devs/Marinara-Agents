@@ -6,9 +6,14 @@
 // node (with its holder, for a piece) and putting the arc's big event in the last chapter's climax. A node in a chapter
 // that reveals nothing never carries a reveal, so an early reveal cannot land. Nothing hidden reaches the client: the
 // arc view carries its name, its range and how far in the player is, and toChapterView drops both stamped fields.
+// #2047: an arc may hold one optional judgment (a question and 2–4 answers, the true one among them, unmarked); the last
+// node of a chapter it lists may close on it once per arc, and the narrator sees the answers, never which is true.
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { StoryArc } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
+import type {
+  ChapterNode,
+  StoryArc,
+} from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import { defaultContent } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/content.ts";
 import {
   defaultLiState,
@@ -30,17 +35,21 @@ import {
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import {
   arcChoiceFor,
+  judgmentFor,
   normalizeChapterPlan,
   type PlanContext,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/chapters.ts";
 import {
+  beatMessages,
   chapterPlanMessages,
   ChapterPlanSchema,
   type ChapterPlanReply,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/prompts.ts";
+import { beatId, chapterId } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
 import { readRun } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import { introduceLoveInterest } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/introduce.ts";
 import {
+  arcPlanMessages,
   planArc,
   revealedSoFar,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/arc.ts";
@@ -603,4 +612,258 @@ test("a later arc planned through planArc refuses a piece an earlier arc already
     ),
     /already revealed|did not match/u,
   );
+});
+
+// ── #2047: a judgment the protagonist may get wrong ──
+
+/** The planner's judgment: the true answer (the harbour master) listed first, as a planner tends to. */
+const judgment = {
+  chapters: [6, 8, 6, 10, 0, 11],
+  question: " Who rang the bell? ",
+  answers: ["The harbour master", "Kai", "Mireille"],
+};
+/** What the narrator gets: the question and the answers, sorted, and nothing else. */
+const asked = { question: "Who rang the bell?", answers: ["Kai", "Mireille", "The harbour master"] };
+
+const ines = normalizePlayer({
+  personaId: "",
+  name: "Ines",
+  pronouns: { subject: "she", object: "her", possessive: "her" },
+  goal: "Find out why the lights die.",
+  about: "",
+})!;
+
+test("an arc keeps a valid judgment, its chapters before the truth, and drops a broken one without refusing the arc", () => {
+  const planned = arc({ judgment });
+  assert.deepEqual(
+    planned.judgment,
+    { ...asked, chapters: [6, 8] },
+    "trimmed, the answers sorted so the true one no longer leads, and only chapters inside the arc before its truth",
+  );
+  assert.deepEqual(arc({ judgment }, { number: 3, from: 21 }).judgment?.chapters, [26, 28], "positions are 1-based");
+  for (const broken of [
+    { ...judgment, answers: ["Kai"] },
+    { ...judgment, answers: ["Kai", "Mireille", "Sol", "The harbour master", "The keeper"] },
+    { ...judgment, answers: ["Kai", " kai"] },
+    { ...judgment, answers: ["Kai", "  "] },
+    { ...judgment, answers: ["Kai", 3] },
+    { ...judgment, answers: ["Kai", "x".repeat(161)] },
+    { ...judgment, question: "   " },
+    { ...judgment, chapters: [10] },
+    { ...judgment, chapters: [] },
+    { question: judgment.question, answers: judgment.answers },
+    "Kai did it",
+    null,
+  ]) {
+    assert.equal("judgment" in arc({ judgment: broken }), false, `dropped: ${JSON.stringify(broken)}`);
+  }
+  assert.equal("judgment" in arc(), false, "an arc with no such question has none");
+  const breathing = normalizeArcPlan(
+    parse(
+      arcReply({
+        kind: "breathing",
+        chapters: purposes(4),
+        endsWith: null,
+        reveals: [],
+        antagonist: null,
+        judgment: { ...judgment, chapters: [2] },
+      }),
+    ),
+    { ...context(), choice: "breathe" },
+  );
+  assert.equal(typeof breathing, "object", String(breathing));
+  assert.equal("judgment" in (breathing as StoryArc), false, "a breathing arc never has one");
+  // Stored: the same rules on absolute chapter numbers, and an arc from before #2047 reads without one.
+  assert.deepEqual(normalizeArc(planned)!.judgment, planned.judgment, "a saved judgment reads back as it was");
+  assert.deepEqual(
+    normalizeArc({ ...planned, judgment: { ...asked, chapters: [6, 30, 10] } })!.judgment?.chapters,
+    [6],
+  );
+  assert.equal("judgment" in normalizeArc(arc())!, false, "a legacy arc keeps working without one");
+  assert.equal("judgment" in normalizeArc({ ...planned, kind: "breathing" })!, false);
+  // Nothing marks the true answer, and nothing of it reaches the player.
+  assert.deepEqual(Object.keys(planned.judgment!).sort(), ["answers", "chapters", "question"]);
+  assert.deepEqual(Object.keys(toArcView(planned, 4)).sort(), [
+    "done",
+    "endsAt",
+    "from",
+    "kind",
+    "label",
+    "number",
+    "read",
+  ]);
+});
+
+test("the arc planner is told the judgment is optional, only for a real mystery, and never in a breathing arc", () => {
+  for (const choice of ["continue", "breathe"] as const) {
+    const system = arcPlanMessages({
+      world: world(),
+      player: ines,
+      units,
+      state: planContext(null, 1).state,
+      memory: "",
+      previous: [],
+      chapters: [],
+      number: 1,
+      from: 1,
+      choice,
+    })[0]!.content;
+    assert.match(system, /"judgment": \{"question"/u, `${choice}: the shape names it`);
+    assert.match(
+      system,
+      /- judgment: OPTIONAL\. Only when this arc holds a mystery, suspects, a traitor or a disputed account/u,
+    );
+    assert.match(system, /2 to 4 plausible answers, worded the same way; the true one .* is always among them/u);
+    assert.match(system, /Never in a breathing arc, and never invented to fill the field/u);
+    assert.match(system, /when the arc has no such question, omit judgment\./u);
+  }
+});
+
+const judgedChapter = (nodes: ChapterNode[]) =>
+  normalizeChapter({
+    key: "main-6",
+    kind: "main",
+    number: 6,
+    lead: KAI,
+    foil: MIR,
+    title: "The Bell",
+    tags: [],
+    summary: "…",
+    nodes,
+    ledger: { relationship: [], conflict: [], offscreen: [] },
+    plannedAt: at,
+    connectionId: "c1",
+  })!;
+
+const narration = (chapter: ReturnType<typeof judgedChapter>, i: number) =>
+  shown(
+    beatMessages({
+      world: world(),
+      player: ines,
+      units,
+      state: planContext(null, 6).state,
+      chapter,
+      node: chapter.nodes[i]!,
+      storySoFar: "",
+      memory: "",
+    }),
+  );
+
+test("the last node of a chapter listed for the judgment may close on it: every answer, optional, no hint of the truth", () => {
+  const planned = arc({ judgment });
+  const plan = normalizeChapterPlan(reply(), { ...planContext(planned, 6), judgment: asked });
+  assert.equal(typeof plan, "object", String(plan));
+  if (typeof plan === "string") return;
+  assert.deepEqual(plan.nodes.at(-1)!.judgment, asked, "the question and the answers, never the chapters");
+  assert.equal(plan.nodes.filter((node) => node.judgment).length, 1, "the last node only");
+  // The stored chapter keeps it for the narrator, and the client never sees it.
+  const chapter = judgedChapter(plan.nodes);
+  assert.deepEqual(chapter.nodes.at(-1)!.judgment, asked);
+  assert.equal("judgment" in toChapterView(chapter).nodes.at(-1)!, false);
+  const last = narration(chapter, chapter.nodes.length - 1);
+  assert.ok(last.includes("This is the chapter's last node: if it ends on a big choice, make it a different kind"));
+  const line = last.split("\n").find((entry) => entry.startsWith("- The big choice MAY be a judgment"));
+  assert.ok(line, "the judgment line follows the varied-decision line");
+  assert.ok(line.includes('"Who rang the bell?"'));
+  assert.ok(line.includes('one option per answer and no others: "Kai", "Mireille", "The harbour master",'));
+  for (const answer of asked.answers) assert.equal(line.split(`"${answer}"`).length, 2, `"${answer}" once`);
+  assert.match(line, /you are not told which and neither is the protagonist/u);
+  assert.match(line, /Whatever the player picks is canon, and the chapters after play it out/u);
+  assert.match(line, /This is optional: a different kind of big choice, or none, is just as good\./u);
+  assert.doesNotMatch(last, /gave the order/u, "the truth never reaches the narrator");
+  assert.doesNotMatch(narration(chapter, 0), /MAY be a judgment/u, "a node before the last has no line");
+  // A climax cannot hold a big choice, so a chapter that ends on its climax is not stamped (nor spends the judgment).
+  const nodes = planReply().nodes;
+  const climaxLast = normalizeChapterPlan(reply({ nodes: [...nodes.slice(0, 5), nodes[6], nodes[5]] }), {
+    ...planContext(planned, 6),
+    judgment: asked,
+  });
+  assert.equal(typeof climaxLast, "object", String(climaxLast));
+  if (typeof climaxLast === "string") return;
+  assert.equal(climaxLast.nodes.at(-1)!.kind, "confrontation");
+  assert.equal(
+    climaxLast.nodes.some((node) => node.judgment),
+    false,
+  );
+});
+
+const noDocs = { readDoc: async () => null };
+
+test("a chapter in an arc without a judgment, or one not listed for it, gets no line at all", async () => {
+  assert.equal(await judgmentFor(noDocs, "r", arc(), [], 6), null, "no judgment in the arc");
+  assert.equal(await judgmentFor(noDocs, "r", arc({ judgment }), [], 7), null, "chapter 7 is not listed");
+  assert.deepEqual(await judgmentFor(noDocs, "r", arc({ judgment }), [], 6), asked, "chapter 6 is");
+  const plan = normalizeChapterPlan(reply(), planContext(arc(), 6));
+  assert.equal(typeof plan, "object", String(plan));
+  if (typeof plan === "string") return;
+  assert.equal(
+    plan.nodes.some((node) => "judgment" in node),
+    false,
+  );
+  const last = narration(judgedChapter(plan.nodes), plan.nodes.length - 1);
+  assert.ok(last.includes("This is the chapter's last node: if it ends on a big choice, make it a different kind"));
+  assert.doesNotMatch(last, /judgment/u);
+});
+
+test("a judgment already asked is not offered again in the arc", async () => {
+  const planned = arc({ judgment });
+  const runId = "r-judged-aaaaaa";
+  const docs = new Map<string, unknown>();
+  const store = {
+    readDoc: async <T>(id: string, normalize: (data: unknown) => T | null) => normalize(docs.get(id) ?? null),
+  };
+  const stamped = judgedChapter([
+    { i: 0, kind: "beat", guide: "…", cast: [KAI] },
+    { i: 1, kind: "beat", guide: "…", cast: [KAI], judgment: asked },
+  ]);
+  const big = {
+    id: "c1",
+    kind: "big",
+    at: 1,
+    options: asked.answers.map((answer, index) => ({
+      id: `o${index}`,
+      text: `Name ${answer}.`,
+      selection: { kind: "dialogue", text: `It was ${answer}.` },
+      segments: [],
+    })),
+  };
+  const lastBeat = (changes: Record<string, unknown>) =>
+    docs.set(beatId(runId, "main-6", 1), {
+      key: "main-6",
+      i: 1,
+      kind: "beat",
+      segments: [
+        { speaker: "", text: "The bell is silent." },
+        { speaker: "Ines", text: "I know who it was." },
+      ],
+      choices: [big],
+      choiceCanon: {},
+      ...changes,
+    });
+  lastBeat({ choiceCanon: { c1: "o1" } });
+  assert.equal(await judgmentFor(store, runId, planned, [stamped], 8), null, "picked in chapter 6: spent");
+  lastBeat({});
+  assert.deepEqual(await judgmentFor(store, runId, planned, [stamped], 8), asked, "left unpicked: offered again");
+  lastBeat({ choices: [{ ...big, kind: "small" }], choiceCanon: { c1: "o1" } });
+  assert.deepEqual(await judgmentFor(store, runId, planned, [stamped], 8), asked, "only a small choice: not asked");
+  lastBeat({ choiceCanon: { c1: "o1" }, easedOff: { at: 0 } });
+  assert.deepEqual(await judgmentFor(store, runId, planned, [stamped], 8), asked, "eased off before it: not asked");
+  // An earlier arc's chapter never spends a later arc's judgment.
+  lastBeat({ choiceCanon: { c1: "o1" } });
+  const later = arc({ judgment }, { number: 2, from: 11 });
+  assert.deepEqual(await judgmentFor(store, runId, later, [stamped], 16), asked);
+});
+
+test("POST /chapters/next stamps the arc's judgment on a listed chapter's last node, and the player never sees it", async () => {
+  const t = await storyWorld({
+    runKey: "r-judge-aaaaaa",
+    replies: [json(planReply())],
+    arcReply: () => JSON.stringify(arcReply({ judgment: { ...judgment, chapters: [1, 4] } })),
+  });
+  const planned = await t.call("POST", "/runs/:run/chapters/next", { lead: KAI });
+  assert.equal(planned.status, 200, JSON.stringify(planned.body));
+  const stored = (await t.store.readDoc(chapterId(t.runId, "main-1"), normalizeChapter))!;
+  assert.deepEqual(stored.nodes.at(-1)!.judgment, asked, "chapter 1 is listed: its last node may close on it");
+  assert.equal(stored.nodes.filter((node) => node.judgment).length, 1);
+  assert.doesNotMatch(JSON.stringify(planned.body), /Who rang the bell|judgment/u, "nothing of it reaches the client");
 });
