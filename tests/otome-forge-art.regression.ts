@@ -308,6 +308,50 @@ test("unknown background references use only the existing content repair and sav
   assert.equal(t.paid.length, 0);
 });
 
+test("a scene written ahead pays for its CG only once it is served, so an Ease off that drops it wastes no image", async (context) => {
+  for (const easeOff of [false, true]) {
+    const runKey = easeOff ? "r-cgahead-bbbbbb" : "r-cgahead-aaaaaa";
+    const t = await artWorld({
+      runKey,
+      images: { expressions: false },
+      replies: Array.from({ length: 4 }, () => json(beatReply({ cg: CG }))),
+    });
+    await seedChapter(t.store, t.runId);
+    const art = createOtomeArt(t.deps);
+    context.after(() => art.dispose());
+    const call = storyRoutes({ ...t.deps, art }, runKey);
+    const beatPath = "/runs/:run/chapters/:key/beats/:i";
+    const cgs = () => t.paid.filter((paid) => paid.method === "generateBannerArt").length;
+    assert.equal((await call("POST", beatPath, {}, { key: KEY, i: "0" })).status, 200);
+    await t.settle();
+    assert.ok(await readStoredBeat(t.store, t.runId, 1), "the lookahead wrote the scene with the CG");
+    // Its place is painted as it is written; give any other paint it started the time to end (the fake answers at once).
+    await until(() => t.paid.length > 0, "the place painted");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(cgs(), 0, "nothing is paid for a CG nobody has been shown");
+    if (easeOff) {
+      const eased = await call("POST", `${beatPath}/ease-off`, { segment: 1 }, { key: KEY, i: "0" });
+      assert.equal(eased.status, 200, JSON.stringify(eased.body));
+    }
+    const served = await call("POST", beatPath, {}, { key: KEY, i: "1" });
+    assert.equal(served.status, 200);
+    // The reader reads the scene's art once as it opens and polls again only while something is pending, so the CG's
+    // record is written before the scene answers: without it the reader offers Paint while the paint runs unseen.
+    const scene = await routesOf(registerArtRoutes, t.deps, runKey)("GET", "/runs/:run/art/scene", {
+      key: KEY,
+      i: "1",
+    });
+    assert.ok(scene.body.cg?.art, "the reader's first art read already finds the CG's record");
+    assert.ok(served.body.beat.cg?.art, "and so does the scene served");
+    await until(
+      async () => (await readStoredBeat(t.store, t.runId, 1))?.cg?.art?.state === "ready",
+      "the CG painted once its scene is served",
+    );
+    assert.equal(cgs(), 1, easeOff ? "one CG, for the scene written again" : "one CG, for the scene served");
+    assert.deepEqual(t.deleted, [], "and no paid image was thrown away");
+  }
+});
+
 test("genuinely different numbered rooms keep separate backgrounds even with identical tags", async () => {
   const t = await sceneWorld("r-bgrooms-aaaaaa");
   for (const [i, name] of ["Room 4", "Room 5"].entries()) {

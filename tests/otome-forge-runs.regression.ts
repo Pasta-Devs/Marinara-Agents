@@ -607,6 +607,25 @@ test("bibles: only behind the spoiler gate, validated on edit, and an edit is ma
   assert.equal(await store.readDoc(unitId(runIdOf(RUN_KEY), "li-nobody-zz99"), normalizeUnit), null, "nothing created");
 });
 
+test("a bible edit keeps no web row for a newcomer kept out of the cast after a failed arc plan", async () => {
+  const { call, store, run } = await setup();
+  // As a failed or cancelled arc plan leaves them (S/story/introduce.ts removeLoveInterest): a unit, not in state.lis.
+  const wren = "li-wren-ef56";
+  await store.mutateDoc(runDocTarget("unit", unitId(runIdOf(RUN_KEY), wren)), normalizeUnit, (unit) => ({
+    ...unit,
+    id: wren,
+    name: "Wren",
+    bible: bible(),
+  }));
+  const row = { history: "a duel", stance: "rivals", debt: "a life" };
+  const saved = await call("POST", "/runs/:run/lis/:li/bible", {
+    params: { ...run, li: KAI },
+    body: { bible: { ...bible(), web: { [MIR]: row, [wren]: row, Wren: row } } },
+  });
+  assert.equal(saved.status, 200, JSON.stringify(saved.body));
+  assert.deepEqual(saved.body.bible.web, { [MIR]: row }, "only rows for the cast, by id or by name");
+});
+
 test("accent: a hex colour, saved upper-case on the unit and shown in the run view", async () => {
   const { call, run } = await setup();
   const kai = { ...run, li: KAI };
@@ -677,3 +696,41 @@ test("delete: the typed title must match; then every document of the run and its
     [[RUN_KEY, 2]],
   );
 });
+
+for (const stop of ["a storage error", "a restart"]) {
+  test(`delete: one that stops part-way (${stop}) has deleted the images it let go of, and the next delete finishes it`, async () => {
+    const { call, fake, run, deleted } = await setup();
+    const mine = (id: string) => id.startsWith(`${runIdOf(RUN_KEY)}:`);
+    // It stops once while removing Kai's unit, after the world and the protagonist are gone. A restart is a remove that
+    // never returns: nothing after it in that delete runs.
+    const kai = unitId(runIdOf(RUN_KEY), KAI);
+    const remove = fake.documents.remove;
+    let failed = false;
+    let stopped = () => {};
+    const reached = new Promise<void>((resolve) => (stopped = resolve));
+    fake.documents.remove = async (...args) => {
+      if (args[1] === kai && !failed) {
+        failed = true;
+        stopped();
+        if (stop === "a restart") return new Promise<never>(() => {});
+        throw new Error("storage is down");
+      }
+      return remove(...args);
+    };
+    const confirm = { params: run, body: { confirmTitle: "Moonlit Court" } };
+    const first = call("POST", "/runs/:run/delete", confirm);
+    if (stop === "a storage error") assert.equal((await first).status, 500);
+    else await reached;
+    assert.deepEqual(deleted, ["player-1"], "the protagonist's portrait went with her; Kai's stays with his unit");
+    assert.ok(fake.rows.has(kai));
+    // Still listed, so the picker's delete (the same dialog, or after a restart) can finish it.
+    const retry = await call("POST", "/runs/:run/delete", confirm);
+    assert.equal(retry.status, 200, JSON.stringify(retry.body));
+    assert.deepEqual(
+      retry.body.index.runs.map((entry: { runKey: string }) => entry.runKey),
+      [OTHER_KEY, "r-empty-mnopqr"],
+    );
+    assert.deepEqual([...fake.rows.keys()].filter(mine), []);
+    assert.deepEqual(deleted, ["player-1", "kai-1"]);
+  });
+}

@@ -1246,6 +1246,83 @@ test("Otome Hearth Album: the Stickers tab shows hers and his cut out, saves one
   expect(overflow, `no sideways scroll at ${width} px`).toBeLessThanOrEqual(0);
 });
 
+// With a mouse the Album's seven tabs wrap inside the strip, whose scrollbar is hidden; a phone keeps one native swipe
+// strip. Measured before any click: Playwright would otherwise scroll an off-screen tab into view for the test.
+test("Otome Hearth Album: every tab is in reach with a mouse, and a phone keeps one swipeable strip", async ({
+  page,
+  isMobile,
+}, testInfo) => {
+  const calls: Call[] = [];
+  const { answer } = wishStub();
+  await stubRoutes(
+    page,
+    (call) => (call.path.endsWith("/album") ? { status: 200, json: albumView() } : answer(call)),
+    calls,
+  );
+  const root = await openOtome(page);
+  await openDock(root, "Album");
+  const tabs = root.getByRole("tablist", { name: "Album" });
+  const names = ["CGs", "Stickers", "Memories", "Love Timeline", "Favourite lines", "Soundtrack", "Tells"];
+  for (const [colorScheme, look] of [
+    ["dark", "midnight"],
+    ["light", "pearl"],
+  ] as const) {
+    // At reduced motion the look changes at once, so its screenshot is the look itself, not a transition.
+    await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+    await expect(root).toHaveAttribute("data-look", look);
+    const bounds = await tabs.evaluate((element) => {
+      const strip = element.getBoundingClientRect();
+      return {
+        wrap: getComputedStyle(element).flexWrap,
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+        tabs: [...element.querySelectorAll('[role="tab"]')].map((tab) => {
+          const box = tab.getBoundingClientRect();
+          return { left: box.left - strip.left, right: box.right - strip.right, top: box.top };
+        }),
+      };
+    });
+    await page.screenshot({ path: testInfo.outputPath(`album-tabs-${look}.png`) });
+    expect(bounds.tabs).toHaveLength(names.length);
+    if (isMobile) {
+      expect(bounds.wrap).toBe("nowrap");
+      expect(
+        Math.max(...bounds.tabs.map((tab) => tab.top)) - Math.min(...bounds.tabs.map((tab) => tab.top)),
+      ).toBeLessThanOrEqual(1);
+      expect(bounds.scrollWidth).toBeGreaterThan(bounds.clientWidth + 1);
+      const strip = (await tabs.boundingBox())!;
+      await page.mouse.move(strip.x + strip.width / 2, strip.y + strip.height / 2);
+      await page.mouse.wheel(bounds.scrollWidth, 0);
+      await expect
+        .poll(() => tabs.evaluate((element) => element.scrollWidth - element.clientWidth - element.scrollLeft))
+        .toBeLessThanOrEqual(1);
+      const last = (await tabs.getByRole("tab", { name: "Tells" }).boundingBox())!;
+      expect(last.x).toBeGreaterThanOrEqual(strip.x - 1);
+      expect(last.x + last.width).toBeLessThanOrEqual(strip.x + strip.width + 1);
+    } else {
+      expect(bounds.wrap).toBe("wrap");
+      expect(bounds.scrollWidth).toBeLessThanOrEqual(bounds.clientWidth + 1);
+      for (const tab of bounds.tabs) {
+        expect(tab.left).toBeGreaterThanOrEqual(-1);
+        expect(tab.right).toBeLessThanOrEqual(1);
+      }
+    }
+  }
+  for (const name of names) {
+    const tab = tabs.getByRole("tab", { name, exact: true });
+    await tab.click();
+    await expect(tab).toHaveAttribute("aria-selected", "true");
+    await expect(root.getByRole("tabpanel")).toBeVisible();
+  }
+  // The arrow keys still move along the row, wrapped or not.
+  await page.keyboard.press("ArrowRight");
+  await expect(tabs.getByRole("tab", { name: "CGs" })).toBeFocused();
+  await page.keyboard.press("ArrowLeft");
+  await expect(tabs.getByRole("tab", { name: "Tells" })).toHaveAttribute("aria-selected", "true");
+  const overflow = await root.evaluate((element) => element.scrollWidth - element.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+});
+
 test("Otome Hearth Wish: a long 5★ premise fits a phone: the title shows whole and Continue is reachable (#1944)", async ({
   page,
 }) => {

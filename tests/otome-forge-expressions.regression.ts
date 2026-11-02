@@ -165,6 +165,29 @@ test("a speaking love interest gets his five faces once, nonsexual adult edits o
   t.art.dispose();
 });
 
+test("a newcomer kept out of the cast never makes a cast member's first name ambiguous to the faces", async () => {
+  const t = await facesWorld("r-m2bexpr0-aaaaaa");
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    name: "Kai Lune",
+  }));
+  // As a failed or cancelled arc plan leaves them (S/story/introduce.ts removeLoveInterest): a unit, not in state.lis.
+  const kept = "li-kai-brand-ef56";
+  await t.store.mutateDoc(runDocTarget("unit", unitId(t.runId, kept)), normalizeUnit, (unit) => ({
+    ...unit,
+    id: kept,
+    name: "Kai Brand",
+    portrait: "/api/global-gallery/file/kai-brand-look.png",
+  }));
+  // The beat's line is spoken by "Kai": only Kai Lune is in the cast.
+  t.art.queueExpressions(t.runId, beat(0), { debugMode: false });
+  await until(async () => settled(await t.set()), "Kai Lune's faces");
+  assert.equal((await t.set())!.state, "ready");
+  assert.equal(t.paid.length, 5, "his five faces, and none for someone the story never introduced");
+  assert.equal(Object.keys((await t.unit(kept)).expressions).length, 0);
+  t.art.dispose();
+});
+
 test("a failed set is never repainted by itself; turning expressions on again paints only its missing faces", async () => {
   const t = await facesWorld("r-m2bexpr2-bbbbbb", (_call, n) => {
     if (n === 2) throw new Error("provider down");

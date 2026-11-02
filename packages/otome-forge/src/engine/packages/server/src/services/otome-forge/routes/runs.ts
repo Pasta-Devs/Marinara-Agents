@@ -70,6 +70,7 @@ import { PLAYER_GOAL_MAX, PLAYER_TRAITS_MAX, normalizePlayer } from "../schemas/
 import {
   defaultLiState,
   normalizeState,
+  readCastUnits,
   readRun,
   remapLearnedTells,
   toRunView,
@@ -394,30 +395,40 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       if (confirmTitle.trim() !== (entry?.title ?? world?.title ?? "").trim()) {
         throw new OtomeForgeError(400, "The title typed to confirm the delete does not match.", "bad-request");
       }
+      // Its story writes and memory upkeep stop; anything they still save is refused or removed with the rest.
+      deps.cancellation?.cancel(runId);
+      deps.memory?.invalidate(runId);
+      // A document's images go as soon as it does (taken from the revision that went), so a sweep that stops part-way
+      // (a storage error, a conflict, a restart) has already let go of the images of what it removed, and what stays
+      // keeps its own for the next delete. The Engine refuses an image a document still refers to, so one shared with
+      // a later document is deleted when that one goes.
+      // ponytail: a restart between a document's removal and its images' deletion orphans that one document's images;
+      // the upgrade path is noting the ids in the index entry before the sweep.
+      const kept = new Set<string>();
+      for (const kind of RUN_DOC_KINDS) {
+        for (const document of await store.listRun(kind, runId)) {
+          for (const id of galleryRefIds(await store.takeDoc(document.id, (data) => data))) {
+            const deleted = await imagesOf(deps)
+              .deleteGalleryImage(id)
+              .catch(() => false);
+            if (deleted) kept.delete(id);
+            else kept.add(id);
+          }
+        }
+      }
+      if (kept.size)
+        runtime.logger.warn(
+          "[otome-forge] Deleted run %s kept %d gallery images it could not delete",
+          runKey,
+          kept.size,
+        );
+      // The index lets go of it last, so a delete that stopped part-way (or a restart in the middle) leaves it listed,
+      // and the picker's next delete finishes it.
       const next = await store.mutateDoc(INDEX_TARGET, normalizeIndex, (current) => ({
         ...current,
         runs: current.runs.filter((run) => run.runKey !== runKey),
         activeRun: current.activeRun === runKey ? null : current.activeRun,
       }));
-      // Its story writes and memory upkeep stop; anything they still save is refused or removed with the rest.
-      deps.cancellation?.cancel(runId);
-      deps.memory?.invalidate(runId);
-      const images = new Set<string>();
-      for (const kind of RUN_DOC_KINDS) {
-        for (const document of await store.listRun(kind, runId)) {
-          for (const id of galleryRefIds(document.data)) images.add(id);
-          await store.removeDoc(document.id);
-        }
-      }
-      let kept = 0;
-      for (const id of images) {
-        const deleted = await imagesOf(deps)
-          .deleteGalleryImage(id)
-          .catch(() => false);
-        if (!deleted) kept += 1;
-      }
-      if (kept)
-        runtime.logger.warn("[otome-forge] Deleted run %s kept %d gallery images it could not delete", runKey, kept);
       return { index: next };
     }),
   );
@@ -542,9 +553,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       const body = parseBody(BibleBody, request.body);
       const { runId } = runParam(request);
       const li = liParam(request);
-      const others = (await store.listRun("unit", runId))
-        .map((record) => normalizeUnit(record.data))
-        .filter((unit) => unit.id !== li);
+      const others = (await readCastUnits(store, runId)).filter((unit) => unit.id !== li);
       // The player is the authority on an edit: no `pronouns` here, so the ones they set are kept. An SFW story takes no
       // intimacy block from an edit (#1936); one written before Heat was lowered is kept below.
       const world = await store.readDoc(worldId(runId), normalizeWorld);

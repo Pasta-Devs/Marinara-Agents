@@ -391,7 +391,7 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
         <CloseAndRemember
           runKey={runKey}
           li={li}
-          disabled={busy || !!incoming || activeCount === 0}
+          blocked={busy || incoming ? "waiting" : activeCount === 0 ? "empty" : null}
           onClosed={closed}
         />
       </header>

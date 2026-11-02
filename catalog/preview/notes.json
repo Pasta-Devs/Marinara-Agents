@@ -72,6 +72,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.6.27",
+          "date": "2026-11-02",
+          "notes": "- **Fewer wasted calls.** Picking how the story goes on twice no longer plans the arc twice. A newcomer whose arc failed to plan keeps their character sheet for the next try. A scene written ahead paints its key moment only once you reach it. A connection that refuses JSON mode is asked without it from then on.\n- **Daily messages wait for chapter 1.** Love interests you haven't met yet no longer text you after the prologue.\n- **Stickers stay put.** While their backgrounds are cut out again, your stickers keep showing and never read as newly unlocked.\n- **Fixes.** Every Album tab can be reached with a mouse. A story delete that stops partway can be finished. Close says to wait for the reply while one is on its way. Cost notes count 2 calls where 2 are made.",
+          "highlight": false
+        },
+        {
           "version": "0.6.26",
           "date": "2026-11-02",
           "notes": "- **Every prompt in one place.** All of Otome Hearth's prompts now live in one file, `prompts.ts`, in story order with a table of contents, so they can be read and rewritten in one place. Nothing the models receive changed.",
@@ -183,12 +189,6 @@
           "version": "0.6.8",
           "date": "2026-10-31",
           "notes": "- **The end of an arc is a choice:** when one closes, pick **Take a breath** (a few quiet chapters with the people you love), **Go on with the story** (a new arc with a new threat), or **Meet someone new**. The next arc is planned from your answer.\n- **Meet someone new:** bring in one of your character cards, or someone invented for this story. They meet you and the others on the page, and the story writes how each of the cast takes them. The cast holds five love interests at most.",
-          "highlight": false
-        },
-        {
-          "version": "0.6.7",
-          "date": "2026-10-31",
-          "notes": "- **Story arcs:** each stretch of main chapters now follows a plan made before it starts: a goal, a big event near the end, and where the mystery's answers come out. The Story screen shows the arc's name and how far you are (\"Arc The drowned bell · chapter 4 of 10\"). Before this, no plan looked past the next chapter and the mystery's answer was never allowed to be said.",
           "highlight": false
         }
       ]

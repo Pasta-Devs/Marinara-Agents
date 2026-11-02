@@ -2,17 +2,19 @@
 // Otome Forge: story CGs (plan M2b "Story CGs"): painted onto the beat that holds them, unlocked once seen
 // ──────────────────────────────────────────────
 // A beat on a `cg` node may carry a brief (beat.cg: the segment it opens on, an English brief, the names of at most 3
-// people in the frame). When the beat is written, its CG is painted in the background (beat.cg.art), unless Ask
+// people in the frame). When the beat is first served, its CG is painted in the background (beat.cg.art), unless Ask
 // before painting is on or the player reviews image prompts; then it waits for the tap, as a failed or stopped one
-// does. The prompt is the brief plus each person's identity and outfit lines, the rating and an adult tag for every
+// does. A beat written ahead pays for no CG until it is served, so one an Ease off or a Rewrite drops never did. The
+// prompt is the brief plus each person's identity and outfit lines, the rating and an adult tag for every
 // person, sent as the prompt override, with each person's card, persona or portrait as a reference (at most 4). A brief
 // that set `explicit` is painted explicit only while Heat and the rating are both Explicit at the paid call, and then
 // without the outfit lines (S/prompts.ts cgPrompt).
 // The paint belongs to the beat as it was written (`written.at`): a rewrite while it paints gets nothing, and the
 // image is deleted again. The album gains a CG only through POST .../art/cg/seen, once the CG is ready and the beat has
 // been read to the segment it opens on; a second report changes nothing. A beat eased off before the CG's segment never
-// shows it, so it is not painted (a paint still waiting in the lane stops). queueScenePaints is the one call the beat
-// writer makes after a beat is written: its places, then its CG.
+// shows it, so it is not painted (a paint still waiting in the lane stops). The beat writer calls queueScenePaints with
+// a beat's places once it is written, and startBeatCg (OtomeArt.prepareSceneCg) once it is served, awaiting only the
+// CG's record so the reader's first art read sees it pending or waiting.
 import type {
   AlbumCg,
   Beat,
@@ -242,35 +244,54 @@ async function paintCg(
 }
 
 /**
- * Paints the CG of a beat just written, in the background, or leaves it waiting for the tap (Ask before painting, or
- * the player reviews image prompts). A CG that already has a record is left as it is. Never throws.
+ * Writes the record of a served beat's CG: pending, or waiting for the tap (Ask before painting, or the player reviews
+ * image prompts). Resolves once it is written, with the beat as it stands, while the paid paint goes on in
+ * `painting`. A CG that already has a record is left as it is. Never throws.
  */
-export async function paintBeatCg(deps: ArtDeps, runId: string, written: Beat, options: PaintOptions): Promise<void> {
-  if (!written.cg || written.cg.art) return;
+export async function startBeatCg(
+  deps: ArtDeps,
+  runId: string,
+  written: Beat,
+  options: PaintOptions,
+): Promise<{ beat: Beat; painting: Promise<void> }> {
+  const idle = { beat: written, painting: Promise.resolve() };
+  if (!written.cg || written.cg.art) return idle;
   const writtenAt = written.written.at;
-  const owner = ownerOf(written.key, written.i, writtenAt);
-  const release = startPaint(runId, owner);
-  if (!release) return;
-  try {
-    const run = await readRun(deps.store, runId);
-    const connectionId = run?.world.images.connectionId;
-    if (!run || !connectionId) return;
-    const wait = run.world.images.ask || options.review === true;
-    const at = new Date().toISOString();
-    const saved = await updateCg(deps, runId, written, writtenAt, (cg) =>
-      cg.art ? null : { ...cg, art: { state: wait ? "waiting-consent" : "pending", at } },
-    );
-    if (!saved?.changed || wait) return;
-    await paintCg(deps, runId, saved.beat, at, connectionId, { ...options, consent: false });
-  } catch (error) {
+  const release = startPaint(runId, ownerOf(written.key, written.i, writtenAt));
+  if (!release) return idle;
+  const stopped = (error: unknown) =>
     deps.runtime.logger.warn(
       "[otome-forge] painting cg %s stopped: %s",
       albumKey(written.key, written.i),
       error instanceof Error ? error.message : String(error),
     );
+  let painting: Promise<void> | null = null;
+  try {
+    const run = await readRun(deps.store, runId);
+    const connectionId = run?.world.images.connectionId;
+    if (!run || !connectionId) return idle;
+    const wait = run.world.images.ask || options.review === true;
+    const at = new Date().toISOString();
+    const saved = await updateCg(deps, runId, written, writtenAt, (cg) =>
+      cg.art ? null : { ...cg, art: { state: wait ? "waiting-consent" : "pending", at } },
+    );
+    if (!saved?.changed || wait) return { ...idle, beat: saved?.beat ?? written };
+    painting = paintCg(deps, runId, saved.beat, at, connectionId, { ...options, consent: false })
+      .then(() => undefined, stopped)
+      .finally(release);
+    return { beat: saved.beat, painting };
+  } catch (error) {
+    stopped(error);
+    return idle;
   } finally {
-    release();
+    if (!painting) release();
   }
+}
+
+/** startBeatCg, resolved once the paint it started has ended. Never throws. */
+export async function paintBeatCg(deps: ArtDeps, runId: string, written: Beat, options: PaintOptions): Promise<void> {
+  const { painting } = await startBeatCg(deps, runId, written, options);
+  await painting;
 }
 
 /**
@@ -318,9 +339,9 @@ export async function paintCgNow(
 }
 
 /**
- * The beat's places and its CG, painted in the background after the beat is written (or left waiting for the tap).
- * The beat writer calls it once per written beat, a rewrite included; it never throws. Resolves once every paint it
- * started has ended (tests wait on it; the writer does not).
+ * The beat's places and its CG, painted in the background (or left waiting for the tap). The beat writer calls it with
+ * the places once per written beat, a rewrite included (the CG goes through startBeatCg once served); it never throws.
+ * Resolves once every paint it started has ended (tests wait on it; the writer does not).
  */
 export function queueScenePaints(deps: ArtDeps, runId: string, beat: Beat, options: PaintOptions): Promise<void> {
   return Promise.all([

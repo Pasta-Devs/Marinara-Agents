@@ -46,7 +46,7 @@ import { createBackgroundQueue, type BackgroundQueue } from "../background-queue
 import { type NotebookMemory, SUMMARY_WORDING, notebookMemories, otomeContentContract, withRules } from "../prompts.js";
 import { OUTPUT_FLOOR, generateJson, promptRoom, resolveConnectionId, type OtomeMessage } from "../generation.js";
 import { OTOME_FORGE_PACKAGE_ID, memoryId, runDocTarget, stateId, unitId, worldId } from "../ids.js";
-import { normalizeState } from "../schemas/state.js";
+import { normalizeState, readCastUnits } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
 import type { OtomeStore } from "../store.js";
@@ -205,7 +205,7 @@ export function createOtomeMemory({
     const connectionId = resolveConnectionId(world, "compress");
     if (!world || !connectionId) return null;
     const model = await runtime.languageModels.resolveForRequest({ connectionId }).catch(() => null);
-    const lis = (await store.listRun("unit", runId)).map((record) => ({ name: normalizeUnit(record.data).name }));
+    const lis = (await readCastUnits(store, runId)).map((unit) => ({ name: unit.name }));
     return {
       connectionId,
       maxContext: model?.maxContext ?? null,

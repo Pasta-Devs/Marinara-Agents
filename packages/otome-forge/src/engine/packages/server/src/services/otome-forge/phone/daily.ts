@@ -17,8 +17,9 @@
 //   costs that day's slot, and a crash never pays twice.
 // - The writer is picked at random (Fisher–Yates) among the love interests the player has met, never the one whose
 //   thread she has open, whose reply is being written, or whose open conversation ends on her unanswered message.
-//   ponytail: "met" is a cast member once any chapter is read, so a newcomer may write before the scene they are met
-//   in is read; the upgrade path is the arc's newcomer chapter.
+//   ponytail: "met" is a cast member once any chapter but the prologue is read (the prologue meets no one, chapter 1
+//   brings the cast in), so a newcomer may write before the scene they are met in is read; the upgrade path is the
+//   arc's newcomer chapter.
 // Otome's own: the message is written by a background-queue job (the Engine's background admission on the chat
 // connection), never in the run's foreground queue, so no story write or phone reply waits on it. The job writes P17
 // with `first` (S/phone/chat.ts writeFirstMessage) inside the thread's lock, so his thread shows him typing and a send
@@ -35,7 +36,7 @@ import type {
 import type { BackgroundQueue } from "../background-queue.js";
 import { resolveConnectionId } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
-import { runDocTarget, worldId } from "../ids.js";
+import { PROLOGUE_KEY, runDocTarget, worldId } from "../ids.js";
 import { readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { emptyThread, inThreadLock, openMessages, readThread, writeFirstMessage, type PhoneDeps } from "./chat.js";
@@ -84,7 +85,9 @@ export async function dailyCandidates(
   run: RunDocuments,
 ): Promise<LiId[]> {
   if (run.world.forge.phase !== "ready") return [];
-  if (!Object.values(run.state.chapters).some((chapter) => !!chapter.completed)) return [];
+  if (!Object.entries(run.state.chapters).some(([key, chapter]) => key !== PROLOGUE_KEY && !!chapter.completed)) {
+    return [];
+  }
   const open = openThreads.get(runId) ?? null;
   const cast = Object.keys(run.state.lis).filter(
     (li) => li !== open && run.units.some((unit) => unit.id === li && !!unit.bible) && !forgeChatReplyBusy(runId, li),

@@ -10,8 +10,9 @@
 // - GET /runs/:run designs his nine in the background once he reaches level 2 with images on, paints one sticker per
 //   level reached (levels a story already reached included) one at a time in the low lane, the protagonist's five only
 //   after the phone opened with images on, leaves them waiting for a tap under Ask or review (no paid call), lists a
-//   sticker only once its cut-out settled (hers too; the Album shows it painting meanwhile), rests 10 minutes after a
-//   failed paint, and a restart leaves at most one stopped. Images off paints nothing.
+//   sticker only once its cut-out settled (hers too; the Album shows it painting meanwhile) and keeps its old cut-out
+//   shown while a newer cleanup rebuilds it, rests 10 minutes after a failed paint, and a restart leaves at most one
+//   stopped. Images off paints nothing.
 // - The sticker prompt is a chibi bust on the look's matte with the look's rating and adult tags; an edit keeps them.
 // - A tap paints once; the Album lists the stickers she has and those waiting for a tap.
 import assert from "node:assert/strict";
@@ -584,6 +585,40 @@ test("a sticker is listed only after its cut-out settles, and a restart leaves a
     ["kai_pensive", "shown"],
   ]);
   assert.equal(u.stickerPaints().length, 2);
+});
+
+test("a cut-out refresh keeps showing the sticker's old cut-out, so nothing she has reads as new or painting", async () => {
+  const t = await stickerWorld("r-strefresh-aaaaaa", { hold: true });
+  await giveSet(t);
+  await setLevel(t, KAI, 2);
+  const art = "/api/global-gallery/file/g.png";
+  const old = "/api/global-gallery/file/g.old-cut.png";
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    stickers: { ...unit.stickers!, art: { guarded: { state: "ready", at, url: art } } },
+    cutouts: { [art]: { state: "ready", at, url: old, cleanupRevision: 1 } },
+  }));
+  // An Engine update advertises a newer cleanup: the next read rebuilds the cut-out (held here) from the original.
+  t.cut.client.cleanupRevision = async () => 2;
+  const kai = (stickers: StickerView[]) => stickers.filter((sticker) => sticker.owner === KAI).map((s) => s.url);
+  // Released however this ends: a held cut-out would hold back every later cut-out in this file.
+  try {
+    const during = await t.view();
+    assert.equal(during.cutoutsPending, true, "the refresh is on its way");
+    assert.deepEqual(kai(during.stickers), [old], "the read that queues it");
+    assert.deepEqual(kai((await t.view()).stickers), [old], "a read while it runs");
+    const album = (await t.album("GET", "/runs/:run/album")).body.stickers.filter(
+      (s: { owner: string }) => s.owner === KAI,
+    );
+    assert.deepEqual(
+      album.map((s: { url?: string; art?: unknown }) => [s.url, s.art ?? null]),
+      [[old, null]],
+    );
+  } finally {
+    t.cut.release();
+  }
+  await t.settle();
+  assert.deepEqual(kai((await t.view()).stickers), [`${art}.cut.png`], "the new cut-out once it lands");
 });
 
 test("a failed sticker paint rests the chain, so a broken image connection fails one sticker, not every one owed", async () => {

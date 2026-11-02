@@ -950,7 +950,7 @@ test("Otome Forge phone: a thread with typing, his sticker, suggestions, her sti
   expect(pageErrors).toEqual([]);
 });
 
-test("Otome Forge phone: a reply that lands after the player left his thread is there when it opens again", async ({
+test("Otome Forge phone: a reply that lands after the player left his thread is there when it opens again; Close says why it waits", async ({
   page,
 }) => {
   test.setTimeout(120_000);
@@ -971,6 +971,11 @@ test("Otome Forge phone: a reply that lands after the player left his thread is 
   await root.getByRole("textbox", { name: "Message Ilvar Thorne" }).fill("Still up?");
   await root.getByRole("button", { name: "Send" }).click();
   await expect.poll(() => stub.state.replying).toBe(true);
+  // Meanwhile Close waits for his reply, and says so: there is a conversation to remember.
+  const close = root.getByRole("button", { name: "Close and remember" });
+  await expect(close).toHaveAttribute("aria-disabled", "true");
+  await expect(close).toHaveAttribute("title", "Wait until Ilvar Thorne has finished writing.");
+  await expect(close).toHaveAccessibleDescription("Wait until Ilvar Thorne has finished writing.");
   await root.getByRole("button", { name: "All messages" }).click();
   await expect(row).toContainText("Ilvar Thorne is typing…");
   const replied = page.waitForResponse((response) => response.url().endsWith(`/phone/${ILVAR}/send`));
@@ -982,6 +987,65 @@ test("Otome Forge phone: a reply that lands after the player left his thread is 
   await row.click();
   await expect(log).toContainText("Still up?");
   await expect(log).toContainText("Barely. The data kept me company.");
+  await expect(close).toHaveAttribute("aria-disabled", "false");
+  // Only a thread with no open conversation has nothing to remember.
+  await root.getByRole("button", { name: "All messages" }).click();
+  await root
+    .locator(".of-threads")
+    .getByRole("button", { name: /Cassian/ })
+    .click();
+  await expect(root.getByRole("heading", { level: 1, name: "Cassian" })).toBeFocused();
+  await expect(close).toHaveAttribute("aria-disabled", "true");
+  await expect(close).toHaveAttribute("title", "There is nothing new to remember yet.");
+  await expect(close).toHaveAccessibleDescription("There is nothing new to remember yet.");
+});
+
+test("Otome Forge daily messages: the first heartbeat reads nothing again for an old message; a new one reads Home again", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  // Settings → Connections' daily messages on, and one that landed yesterday, long before Home was read. `events`
+  // keeps, in order, each heartbeat with the message it named and each read of Home.
+  const stub = createHomeStub();
+  const OLD = "2026-11-01T08:00:00.000Z";
+  const NEW = "2026-11-02T08:00:00.000Z";
+  let latest = OLD;
+  const events: string[] = [];
+  const answer = stub.answer;
+  stub.answer = async (call) => {
+    if (call.path === `/api/otome-forge/runs/${RUN}/phone/due`) {
+      stub.calls.push(call);
+      events.push(`due ${latest}`);
+      return { status: 200, json: { status: "waiting", latest: { li: ILVAR, at: latest } } };
+    }
+    if (call.method === "GET" && call.path.endsWith("/home")) events.push("home");
+    const response = await answer(call);
+    if (call.path === `/api/otome-forge/runs/${RUN}`) (response.json as Json).view.world.dailyMessages = 3;
+    return response;
+  };
+  await page.clock.install();
+  await stubRoutes(page, stub, []);
+  const root = await openHome(page);
+  await expect(root.getByRole("article", { name: "A note from Ilvar Thorne" })).toContainText(NOTE);
+  /** Moves the page's clock a minute at a time until the heartbeat has named `at`. */
+  const heartbeat = (at: string) =>
+    expect
+      .poll(
+        async () => {
+          await page.clock.fastForward(60_000);
+          return events.includes(`due ${at}`);
+        },
+        { intervals: [250] },
+      )
+      .toBe(true);
+  // The first heartbeat names the old message: Home already read it, so nothing is read again.
+  await heartbeat(OLD);
+  // A new one lands: the next heartbeat reads Home again, once.
+  latest = NEW;
+  await heartbeat(NEW);
+  await expect.poll(() => events.lastIndexOf("home")).toBeGreaterThan(events.indexOf(`due ${NEW}`));
+  const heard = events.slice(events.indexOf(`due ${OLD}`));
+  expect(heard.filter((event) => event === "home")).toHaveLength(1);
 });
 
 test("Otome Forge phone: his thread's header keeps Close beside his name on one row, at every width in both looks", async ({

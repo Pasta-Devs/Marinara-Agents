@@ -14,8 +14,9 @@
 //    Engine's (fitSafety) with some to spare, and model.fitContext checks the result: any trim there is `capacity` too.
 // 4. Log: logOtomePrompt (debugOverride in debug mode, `redact` strings replaced).
 // 5. Call: chatComplete with responseFormat json_object; an explicit HTTP 400/422 rejection of that optional hint
-//    allows one retry without it, also omitted from the repair turn. A background call holds its job's connection
-//    admission slot throughout; it names that connection and never takes a second slot here.
+//    allows one retry without it, also omitted from the repair turn and from every later call on that connection and
+//    model. A background call holds its job's connection admission slot throughout; it names that connection and never
+//    takes a second slot here.
 // 6. Parse: parseJsonish, then the schema, then `normalize`. On failure exactly one repair turn (fitted the same way);
 //    if that fails too, two declines are a 422 `declined` and anything else a 502 `bad-format`. A decline is an empty
 //    reply, a content filter, or refusal wording in a reply that is not a JSON object (inside one it is a character's
@@ -195,6 +196,17 @@ async function resolveModel(deps: GenerationDeps, connectionId: string): Promise
   }
 }
 
+/**
+ * The connection and model pairs whose endpoint explicitly rejected the JSON hint, per host runtime: later calls on one
+ * skip the hint instead of sending a request already known to fail first. A connection set to another model asks with
+ * it again, since a rejection is often the model's.
+ * ponytail: in memory until the package reloads; an endpoint changed meanwhile to accept the hint, or an aggregator
+ * that refused it once from one routed provider, goes without it (its replies are validated either way). Upgrade path:
+ * forget a pair when its connection's settings change, or retry the hint after a while.
+ */
+const hintRejected = new WeakMap<object, Set<string>>();
+const hintKey = (connectionId: string, model: CapabilityResolvedLanguageModel) => `${connectionId}\n${model.model}`;
+
 /** Like LTM's compatibility fallback, remove only an explicitly rejected optional format, never a general failure. */
 function rejectsJsonHint(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
@@ -279,7 +291,7 @@ export async function generateJson<T extends object>(
   const messages = request.memory
     ? forgeComposeMemoryPrompt(() => request.messages, [request.memory])
     : request.messages;
-  let useJsonHint = true;
+  let useJsonHint = !hintRejected.get(runtime)?.has(hintKey(connectionId, model));
   const mayCall = () => {
     request.signal?.throwIfAborted();
     if (request.mayCall && !request.mayCall()) {
@@ -304,6 +316,7 @@ export async function generateJson<T extends object>(
     } catch (error) {
       if (!useJsonHint || !rejectsJsonHint(error)) throw error;
       useJsonHint = false;
+      hintRejected.set(runtime, (hintRejected.get(runtime) ?? new Set()).add(hintKey(connectionId, model)));
       mayCall();
       const debug = request.debugMode || runtime.isDebugAgentsEnabled();
       if (debug || runtime.logger.isLevelEnabled?.("debug") !== false)
