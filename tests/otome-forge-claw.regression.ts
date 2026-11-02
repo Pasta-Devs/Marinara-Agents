@@ -512,8 +512,14 @@ test("each round is his private memory, recalled only by him, and upkeep makes n
   for (let turn = 0; turn < 2000 && (await memory.status(t.runId)).phase === "pending"; turn += 1) {
     await new Promise((resolve) => setImmediate(resolve));
   }
+  // #2066: a round comes back among the recalls, the newest small memories the prompt may know.
   const recall = async (who: { reader?: string; cast?: string[] }) =>
-    (await memory.recall({ runId: t.runId, job: "chat", query: { cues: ["claw machine plush"] }, ...who })).text;
+    (
+      (await memory.recall({ runId: t.runId, job: "chat", query: { cues: ["claw machine plush"] }, ...who })).recalls ??
+      []
+    )
+      .map((item) => `${item.title}\n${item.content}`)
+      .join("\n");
   assert.match(await recall({ reader: KAI }), /bunny plush/u);
   assert.doesNotMatch(await recall({ reader: KAI }), /Neither of them won/u);
   assert.match(await recall({ reader: MIR }), /Neither of them won/u);

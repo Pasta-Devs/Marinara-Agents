@@ -509,11 +509,17 @@ test("a finished set is a chat source for its love interest only: recalled by hi
   for (let turn = 0; turn < 2000 && (await memory.status(t.runId)).phase === "pending"; turn += 1) await tick();
   assert.equal((await memory.status(t.runId)).phase, "ready");
   const recall = async (who: { reader?: string; cast?: string[] }) =>
-    (await memory.recall({ runId: t.runId, job: "chat", query: { cues: ["the bell on the quay"] }, ...who })).text;
+    // #2066: a closed conversation comes back among the recalls.
+    (
+      (await memory.recall({ runId: t.runId, job: "chat", query: { cues: ["the bell on the quay"] }, ...who }))
+        .recalls ?? []
+    )
+      .map((item) => `${item.title}\n${item.content}`)
+      .join("\n");
   assert.ok((await recall({ reader: KAI })).includes("THOUGHT-KAI"));
   // A small side memory, as it was written: its few lines, never a summary of a summary or a chapter's prose.
   assert.ok(
-    (await recall({ reader: KAI })).includes(`# Recalled chat: ${own.title}\n${own.content}`),
+    (await recall({ reader: KAI })).includes(`${own.title}\n${own.content}`),
     "recalled as its own short record",
   );
   assert.ok(!(await recall({ reader: KAI })).includes("THOUGHT-MIR"));

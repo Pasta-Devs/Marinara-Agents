@@ -14,6 +14,8 @@ export interface ConnectionOption {
   model: string;
   provider: string;
   isDefault: boolean;
+  /** The context window the connection is set to, in tokens, when the Engine lists one. */
+  maxContext: number | null;
 }
 
 export interface PickerItem {
@@ -131,6 +133,7 @@ function toConnectionLists(rows: Row[]): ConnectionLists {
       model: text(row.model),
       provider,
       isDefault: row.isDefault === "true" || row.isDefault === true,
+      maxContext: Number(row.maxContext) > 0 ? Number(row.maxContext) : null,
     };
     if (provider === IMAGE_PROVIDER) lists.image.push(option);
     else if (provider === AUDIO_PROVIDER) {

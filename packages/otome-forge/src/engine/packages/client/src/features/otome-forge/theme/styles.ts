@@ -2472,7 +2472,7 @@ ${reducedRules(
   ${root} :is(.of-home-l0, .of-home-l3, .of-figure-parallax) { transform: none !important; }`,
 )}`;
 
-// The phone: the thread list, and one thread with bubbles in his accent colour, stickers, suggestions and the composer.
+// The phone: the thread list, and one thread with bubbles in his accent colour, stickers and the composer.
 const PHONE_RULES = `
 ${R} .of-threads { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
 ${R} .of-thread-row {
@@ -2575,13 +2575,6 @@ ${R} .of-typing-dot:nth-child(2) { animation-delay: 0.15s; }
 ${R} .of-typing-dot:nth-child(3) { animation-delay: 0.3s; }
 ${R} .of-memory-text { font-size: 0.86rem; color: var(--of-text-soft); }
 ${R} .of-memory-quote { font-family: var(--of-font-hand); font-size: 1.22rem; line-height: 1.12; color: var(--of-accent-text); }
-${R} .of-suggestions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin: 0; padding: 0; list-style: none; }
-${R} .of-suggestion {
-  min-height: 34px; padding: 0 14px; border-radius: 999px; font-weight: 700; font-size: 0.84rem; cursor: pointer;
-  border-color: color-mix(in srgb, var(--of-li-accent) 55%, transparent);
-}
-${R} .of-suggestion:hover { background: var(--of-surface-strong); }
-${R} .of-suggestion[aria-disabled="true"] { opacity: 0.6; cursor: default; }
 ${R} .of-composer { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 6px; border-radius: 24px; }
 ${R} .of-composer-row { display: flex; align-items: flex-end; gap: 6px; }
 ${R} .of-composer-input {

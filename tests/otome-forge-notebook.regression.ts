@@ -134,7 +134,7 @@ function ownPrompts(li: LiId, notebooks?: Partial<Record<LiId, NotebookEntry[]>>
   const unit = unitOf(units, li);
   const own = ownView(state, li).liState;
   const scene = (chapter: BeatMessagesInput["chapter"]) =>
-    text(beatMessages({ ...input, chapter, node: chapter.nodes[0]!, storySoFar: "", memory: "" }));
+    text(beatMessages({ ...input, chapter, node: chapter.nodes[0]!, storySoFar: [], memory: "" }));
   const arc = { ...input, li, memory: "" };
   const fight: ChapterNode = { i: 0, kind: "confrontation", guide: "Ines confronts them.", cast: [KAI, MIR] };
   return {
@@ -196,7 +196,7 @@ function ownPrompts(li: LiId, notebooks?: Partial<Record<LiId, NotebookEntry[]>>
         ...input,
         chapter: { kind: "main", number: 2, title: "Rain", lead: li, foil: li === KAI ? MIR : KAI, nodes: [fight] },
         node: fight,
-        storySoFar: "",
+        storySoFar: [],
         memory: "",
         li,
       }),
@@ -214,7 +214,7 @@ function ownPrompts(li: LiId, notebooks?: Partial<Record<LiId, NotebookEntry[]>>
           nodes: [{ ...fight, kind: "closer" }],
         },
         node: { ...fight, kind: "closer" },
-        storySoFar: "",
+        storySoFar: [],
         memory: "",
         li,
       }),
@@ -246,7 +246,7 @@ test("a main-chapter scene carries each present love interest's own notebook bes
   const input = inputs();
   const node: ChapterNode = { i: 0, kind: "beat", guide: "Rain on the quay.", cast: [KAI, MIR] };
   const chapter = { kind: "main" as const, number: 2, title: "Rain", lead: KAI, foil: MIR, nodes: [node] };
-  const prompt = text(beatMessages({ ...input, chapter, node, storySoFar: "", memory: "" }));
+  const prompt = text(beatMessages({ ...input, chapter, node, storySoFar: [], memory: "" }));
   // Each card block (id line, card, what stands between them, then their notebook) is its own paragraph.
   const block = (li: LiId) => prompt.split("\n\n").find((part) => `\n${part}`.includes(`\nid ${li}:\n`)) ?? "";
   const kai = block(KAI);
@@ -379,7 +379,7 @@ test("the story routes, the Home note and a Messages reply pass each love intere
   const replies = Array.from(
     { length: 20 },
     () => (messages: CapabilityLanguageModelMessage[]) =>
-      messages[0]!.content.includes("chapter planner")
+      messages.some((message) => message.content.includes("chapter planner"))
         ? json(planReply())
         : messages[0]!.content.includes("message of the day")
           ? json({ text: "The lamp room was warm today.", face: "tender", mood: { word: "calm", reason: "quiet" } })

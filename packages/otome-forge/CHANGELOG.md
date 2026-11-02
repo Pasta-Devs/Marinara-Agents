@@ -1,5 +1,14 @@
 # Otome Hearth release notes
 
+## 0.7.0 — 2026-11-02
+
+- **A story memory that stays small.** Each chapter is summarized once, in up to 500 words with its key lines and every choice you made, and joins the story's timeline at no extra cost. Only once the timeline passes about 10,000 tokens is its older part condensed. Stories in progress switch over from their saved summaries without new summary calls.
+- **Recent small memories.** Messages, Snapshots, Read Me, Read Him, claw machine rounds, dates and Character Stories come back, newest first, to the love interest they belong to.
+- **Cheaper chapters.** A chapter's plan and scenes share one cached story context, so providers that cache, like Claude, charge less after the first call.
+- **No suggested replies** in Messages: you write your own.
+- **Stickers without white outlines.**
+- **A warning** when a story connection has under 32k tokens of context.
+
 ## 0.6.27 — 2026-11-02
 
 - **Fewer wasted calls.** Picking how the story goes on twice no longer plans the arc twice. A newcomer whose arc failed to plan keeps their character sheet for the next try. A scene written ahead paints its key moment only once you reach it. A connection that refuses JSON mode is asked without it from then on.

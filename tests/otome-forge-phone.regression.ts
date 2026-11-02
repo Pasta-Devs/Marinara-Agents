@@ -21,7 +21,6 @@ import type {
   PhoneThread,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import { NOTE_TEXT_MAX } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/home.ts";
-import { forgeStoryMemoryText } from "@forge-kit/story-memory.mjs";
 import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs";
 import { forgeTimeZoneRoutes } from "@forge-kit/time-zone-server.mjs";
 import {
@@ -78,14 +77,20 @@ import type { FakeReply, FakeRuntimeOptions } from "./fixtures/otome-forge-fakes
 import { KAI, MIR, SOL, json, squeezedMemory, storyWorld } from "./fixtures/otome-forge-story.ts";
 
 type Messages = CapabilityLanguageModelMessage[];
-const system = (messages: Messages) => messages[0]!.content;
+// #2066: a story prompt opens with the shared story context, then its own instructions: both are system messages.
+const system = (messages: Messages) =>
+  messages
+    .filter((message) => message.role === "system")
+    .map((message) => message.content)
+    .join("\n\n");
 const isReplyPrompt = (messages: Messages) => system(messages).includes("in your private message thread");
 const isMemoryPrompt = (messages: Messages) => system(messages).includes("have just finished exchanging messages");
 
 const REPLY = {
   // #2044: a sticker is its bracketed name; the second one in a reply is dropped.
   messages: [{ text: "Kai: Awake. Unfortunately." }, { text: "[ines_laugh]" }, { text: "[laugh_ines]" }],
-  suggestions: ["Go to sleep.", "Me too.", "This one is far too long to be offered as a reply chip", "me too."],
+  // #2066: no replies are suggested any more; a model that still writes them is read without them.
+  suggestions: ["Go to sleep.", "Me too."],
 };
 const MEMORY = {
   memory: "Kai admitted he had stayed up. Ines told him to sleep, and he did not argue.",
@@ -211,7 +216,7 @@ test("a send saves her message, then his reply once, and the same id again makes
   assert.equal(sent.status, 200, JSON.stringify(sent.body));
   const [mine, ...his] = sent.body.messages as PhoneMessage[];
   assert.deepEqual([mine!.who, mine!.text, mine!.id], ["player", "Are you awake?", "c-0001-abcd"]);
-  // "Kai:" is taken off, one sticker is kept, a suggestion over 40 characters and a repeat are dropped.
+  // "Kai:" is taken off, and one sticker is kept.
   assert.deepEqual(
     his.map((message) => [message.who, message.text, message.sticker ?? null]),
     [
@@ -219,7 +224,7 @@ test("a send saves her message, then his reply once, and the same id again makes
       ["li", "", "you:laugh"],
     ],
   );
-  assert.deepEqual(sent.body.suggestions, ["Go to sleep.", "Me too."]);
+  assert.equal(sent.body.suggestions, undefined, "the player writes their own replies (#2066)");
   assert.equal(t.calls.length, 1);
   assert.equal(t.calls[0]!.options?.temperature, 0.95);
 
@@ -229,14 +234,15 @@ test("a send saves her message, then his reply once, and the same id again makes
     (again.body.messages as PhoneMessage[]).map((message) => message.id),
     (sent.body.messages as PhoneMessage[]).map((message) => message.id),
   );
-  assert.deepEqual(again.body.suggestions, ["Go to sleep.", "Me too."]);
+  assert.equal(again.body.suggestions, undefined);
   assert.equal(t.calls.length, 1, "no second call");
   assert.equal((await t.thread(KAI))!.messages.length, 3, "no second message");
 
   const view = await t.phone("GET", page, { li: KAI });
   assert.equal(view.status, 200);
   assert.deepEqual([view.body.activeCount, view.body.past, view.body.busy, view.body.retry], [3, 0, false, false]);
-  assert.deepEqual(view.body.suggestions, ["Go to sleep.", "Me too."]);
+  assert.equal(view.body.suggestions, undefined);
+  assert.ok(!t.calls[0]!.messages.some((message) => /suggestion/iu.test(message.content)), "P17 asks for none");
 
   const bad = await t.phone("POST", send, { li: KAI, body: { text: "   " } });
   assert.deepEqual([bad.status, bad.body.code], [400, "bad-request"]);
@@ -320,11 +326,11 @@ test("a reply written as the protagonist on a later line is refused, an ordinary
   assert.match(refused("Kai: hey\nInes: fine, I'll sleep.") as string, /^a message was written as Ines/);
   assert.match(refused("He waits.\nInes: fine") as string, /^a message was written as Ines/);
   const kept = refused("Kai: Meet at 7:30\nBring the key.");
-  assert.deepEqual(kept, { messages: [{ text: "Meet at 7:30\nBring the key." }], suggestions: [] });
+  assert.deepEqual(kept, { messages: [{ text: "Meet at 7:30\nBring the key." }] });
 });
 
 test("P17 is a message from him alone: boundary, chat contract, comfort rule, stage, rupture, the note, nothing hidden", async () => {
-  const asHer = { messages: [{ text: "Ines: Fine, I'll sleep." }], suggestions: [] };
+  const asHer = { messages: [{ text: "Ines: Fine, I'll sleep." }] };
   const t = await phoneWorld("r-phone4-aaaaaa", { replies: [json(asHer), ...phoneModel()] });
   await t.store.mutateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
     ...state,
@@ -409,7 +415,7 @@ test("Close and remember: one session, P18 on the summary contract, the capped a
     thread.sessions.map((session) => [session.start, session.count, session.name]),
     [[0, 3, "Kai"]],
   );
-  assert.deepEqual(thread.suggestions, []);
+  assert.equal("suggestions" in thread, false);
 
   const memoryCall = t.calls.find((call) => isMemoryPrompt(call.messages))!;
   const head = system(memoryCall.messages);
@@ -563,7 +569,13 @@ test("a closed session is a chat source for its love interest only: recalled by 
   for (let turn = 0; turn < 2000 && (await memory.status(t.runId)).phase === "pending"; turn += 1) await tick();
   assert.equal((await memory.status(t.runId)).phase, "ready");
   const recall = async (who: { reader?: string; cast?: string[] }) =>
-    (await memory.recall({ runId: t.runId, job: "chat", query: { cues: ["what we talked about"] }, ...who })).text;
+    // #2066: a closed conversation comes back among the recalls.
+    (
+      (await memory.recall({ runId: t.runId, job: "chat", query: { cues: ["what we talked about"] }, ...who }))
+        .recalls ?? []
+    )
+      .map((item) => `${item.title}\n${item.content}`)
+      .join("\n");
   assert.ok((await recall({ reader: KAI })).includes("PRIVATE-LIGHTHOUSE"));
   assert.ok(!(await recall({ reader: KAI })).includes("PRIVATE-LEDGER"));
   assert.ok((await recall({ reader: MIR })).includes("PRIVATE-LEDGER"));
@@ -576,7 +588,7 @@ test("a closed session is a chat source for its love interest only: recalled by 
   );
   const together = await recall({ cast: [KAI, MIR] });
   assert.ok(
-    together.includes(`# Recalled chat: ${KAI}'s message exchange (private: only ${KAI} and the protagonist know`),
+    together.includes(`${KAI}'s message exchange (private: only ${KAI} and the protagonist know`),
     "its title marks it private in a shared scene",
   );
 
@@ -712,25 +724,21 @@ test("P17 keeps the overview and recalled details whole beside the previous chap
     ...state,
     chapters: { ...state.chapters, [key]: { beatsRead: 6, completed: done, applied: [] } },
   }));
-  // A ready memory: the overview, an older conversation recalled as a detail (past the six P17 lists), the chapter.
+  // A ready memory: the timeline, an older conversation among the recalls (past the six P17 lists), the chapter.
   const memory = {
     async recall() {
       const overview = "OVERVIEW-MARK: she came to the harbour city.";
-      const details = [
-        {
-          id: "phone-old",
-          kind: "chat",
-          title: "Kai's phone conversation",
-          content: "OLD-SESSION-MARK: her sister Mina.",
-        },
+      const recalls = [
+        { id: "phone-old", title: "Kai's phone conversation", content: "OLD-SESSION-MARK: her sister Mina.", order: 1 },
       ];
       return {
         status: { phase: "ready" as const, retryable: false },
         lagging: false,
         overview,
-        details,
+        details: [],
+        recalls,
         maxContext: 32768,
-        text: forgeStoryMemoryText({ overview, details }),
+        text: "",
         recent: [{ id: key, kind: "chapter" as const, title: "Harbour", latest: true }],
       };
     },
@@ -816,7 +824,6 @@ test("Reply from Home quotes a note of any stored length", async () => {
 
 const DAILY = {
   messages: [{ text: "The quay was quiet tonight. I kept a lantern lit for you." }],
-  suggestions: ["Was it?", "Thank you."],
 };
 const FIRST_LINE = "you are writing to Ines first, on your own, and it answers nothing they sent";
 const HOUR = 3_600_000;
@@ -911,7 +918,7 @@ test("daily messages: off by default, armed a minute after the app opens, spread
     thread.messages.map((message) => [message.who, message.text]),
     [["li", DAILY.messages[0]!.text]],
   );
-  assert.deepEqual([thread.seenAt, unreadCount(thread), thread.suggestions], [null, 1, DAILY.suggestions]);
+  assert.deepEqual([thread.seenAt, unreadCount(thread), "suggestions" in thread], [null, 1, false]);
   assert.equal(await t.thread(KAI), null);
   const latest = (await t.daily())!.last!;
   assert.deepEqual([latest.li, latest.at], [MIR, thread.messages[0]!.at]);

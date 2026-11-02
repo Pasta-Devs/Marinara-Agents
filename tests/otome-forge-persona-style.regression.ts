@@ -43,7 +43,7 @@ test("the persona's whole description and the player's writing style reach the s
   const replies = Array.from(
     { length: 20 },
     () => (messages: CapabilityLanguageModelMessage[]) =>
-      messages[0]!.content.includes("chapter planner") ? json(planReply()) : json(beatReply()),
+      messages.some((message) => message.content.includes("chapter planner")) ? json(planReply()) : json(beatReply()),
   );
   const t = await storyWorld({
     runKey,

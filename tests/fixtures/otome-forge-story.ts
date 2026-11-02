@@ -326,11 +326,11 @@ export function closerPlanReply(changes: Record<string, unknown> = {}): Record<s
 
 /** True for a P12 call (the Confrontation narrator). */
 export const isConfrontationPrompt = (messages: Array<{ content: string }>) =>
-  messages[0]!.content.includes("stance game");
+  messages.some((message) => message.content.includes("stance game"));
 
 /** True for a P12c call (the Closer narrator, #1938). */
 export const isCloserPrompt = (messages: Array<{ content: string }>) =>
-  messages[0]!.content.includes("the warm climax of a chapter");
+  messages.some((message) => message.content.includes("the warm climax of a chapter"));
 
 type Move = -1 | 0 | 1;
 
@@ -419,28 +419,29 @@ export function closerReply(
 }
 
 /**
- * A ready memory recalled for a reader whose window is `maxContext`, with one recalled detail of about 40000 tokens:
- * only the fit the memory is handed to can leave that detail out, so a prompt sent on a far larger connection shows
- * whether its caller handed it over.
+ * A ready memory recalled for a reader whose window is `maxContext`, with one recall of about 40000 tokens: only the fit
+ * the memory is handed to can leave that recall out, so a prompt sent on a far larger connection shows whether its
+ * caller handed it over (#2066: also when the recalls go after the cached part, as their own context).
  */
 export function squeezedMemory(maxContext: number) {
   const overview = "SQUEEZED-OVERVIEW: the lights of the quay fail one by one.";
-  const details = [
+  const recalls = [
     {
       id: "phone-old",
-      kind: "chat",
       title: "Kai's phone conversation",
       content: `SQUEEZED-DETAIL ${Array.from({ length: 40_000 }, (_, n) => `tide${n % 97}`).join(" ")}`,
+      order: 1,
     },
   ];
-  assert.ok(estimateTextTokens(details[0]!.content) > 38_000);
+  assert.ok(estimateTextTokens(recalls[0]!.content) > 38_000);
   return {
     async recall() {
       return {
         status: { phase: "ready" as const, retryable: false },
         lagging: false,
         overview,
-        details,
+        details: [],
+        recalls,
         maxContext,
         text: "",
         recent: [],

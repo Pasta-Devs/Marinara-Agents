@@ -174,7 +174,7 @@ test("the bracket parser reads either order, one sticker a reply, and drops name
   assert.deepEqual(parse("[well-known] spot").messages, [{ text: "[well-known] spot" }]);
   // The JSON field is read the same way; a bare face name is no longer a sticker.
   const field = normalizeChatReply({ messages: [{ text: "", sticker: "dottore_pensive" }] }, names, listed);
-  assert.deepEqual(field, { messages: [{ text: "", sticker: "li-dottore-ab12:pensive" }], suggestions: [] });
+  assert.deepEqual(field, { messages: [{ text: "", sticker: "li-dottore-ab12:pensive" }] });
   assert.equal(typeof normalizeChatReply({ messages: [{ text: "", sticker: "cold" }] }, names, listed), "string");
 });
 
@@ -277,6 +277,9 @@ test("the sticker prompt is a chibi bust on the look's matte, with the look's ra
   });
   assert.ok(built.prompt.startsWith("soft watercolor, tall man, green eyes, black hair, smirking"), built.prompt);
   assert.ok(built.prompt.includes(STICKER_FRAMING), built.prompt);
+  // #2066: one sticker set, one look: no white die-cut outline around some of them and not others.
+  assert.match(built.prompt, /no white outline around the figure/u);
+  assert.match(built.negativePrompt, /white outline, white border, sticker border, die-cut border/u);
   assert.match(built.prompt, /plain flat solid chroma magenta #FF00FF background/, "green and blue are named: magenta");
   assert.match(built.prompt, /safe for work, fully clothed, adult man/);
   assert.match(built.negativePrompt, /child, childlike, minor/);

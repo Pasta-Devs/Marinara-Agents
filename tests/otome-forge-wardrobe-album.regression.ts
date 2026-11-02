@@ -585,7 +585,11 @@ test("a Character Story plays privately, and an already-read four-star Moment ga
 
   const written = await t.call("POST", "/runs/:run/chapters/:key/beats/:i", {}, { key, i: "0" });
   assert.equal(written.status, 200, JSON.stringify(written.body));
-  const [system, user] = t.calls[0]!.messages.map((message) => message.content);
+  // #2066: the story context and the narrator's instructions, then the node's task.
+  const system = t.calls[0]!.messages.filter((message) => message.role === "system")
+    .map((message) => message.content)
+    .join("\n\n");
+  const user = t.calls[0]!.messages.at(-1)!.content;
   assert.ok(user!.includes("Mireille's Character Story"), "P23 names whose side story it is");
   assert.ok(user!.includes("ONE-SCENE side story of Mireille's"));
   assert.ok(user!.includes("no other love interest appears"));

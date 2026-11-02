@@ -90,6 +90,38 @@ const failsWith = (status: number, code: string) => (error: unknown) =>
   error instanceof OtomeForgeError && error.statusCode === status && error.code === code;
 const httpError = (status: number, message: string) => Object.assign(new Error(message), { status });
 
+test("a cache mark is sent as it is, through the fit and the repair turn, and debug mode logs what was cached (#2066)", async () => {
+  const usage = { promptTokens: 40, cachedPromptTokens: 9000, cacheWritePromptTokens: 120 };
+  const { deps, calls, logs } = await setup([
+    { content: "not json", finishReason: "stop", usage },
+    { content: '{"premise":"A masked ball."}', finishReason: "stop", usage },
+  ]);
+  const messages = [
+    { role: "system" as const, content: "THE STORY: the shared context.", cacheBreakpoint: true },
+    { role: "system" as const, content: "Reply with {premise}.", cacheBreakpoint: true },
+    { role: "user" as const, content: "A premise, please." },
+  ];
+  await generateJson(deps, request({ messages, debugMode: true }));
+  for (const call of calls) {
+    assert.deepEqual(
+      call.messages.slice(0, 3),
+      messages,
+      "both marks reach the Engine, and the part that changes has none",
+    );
+  }
+  assert.equal(calls[1]!.messages.length, 5, "the repair turn adds its two messages after them");
+  const cached = logs.filter((entry) => entry.level === "debugOverride" && /Prompt cache/u.test(entry.message));
+  assert.equal(cached.length, 2);
+  assert.deepEqual(cached[0]!.args, ["premise-suggest", 9000, 120, 40]);
+  assert.equal(cached[0]!.override, true);
+
+  // A prompt without marks is sent as before: no field added.
+  const plain = await setup(['{"premise":"A masked ball."}']);
+  await generateJson(plain.deps, request());
+  assert.ok(plain.calls[0]!.messages.every((message) => !("cacheBreakpoint" in message)));
+  assert.ok(!plain.logs.some((entry) => /Prompt cache/u.test(entry.message)), "nothing reported, nothing logged");
+});
+
 test("a reply is parsed, checked by its schema and normalize, and gets exactly one repair turn", async () => {
   const { deps, calls } = await setup(['Sure! ```json\n{"premise": 42}\n```', '{"premise":"A masked ball."}']);
   const result = await generateJson(deps, request());

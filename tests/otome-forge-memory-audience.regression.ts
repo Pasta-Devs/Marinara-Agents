@@ -9,8 +9,12 @@
 // or a job admission refuses before it starts, never leaves the status pending. An overview fold is told the overview is
 // the story's timeline, a recollection in prose (0.6.19); one saved before that is folded again from the records, once,
 // in the background; the panel shows no bold label or markdown emphasis.
+// #2066: the overview is the story's timeline. A chapter's summary joins it with no model call, and only a timeline past
+// 10k tokens is condensed (one call, all but the newest entry); a date or Character Story is never in it. Recall sends
+// no ranked details: the small memories this prompt may know come back as `recalls`.
 import assert from "node:assert/strict";
 import test from "node:test";
+import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs";
 import type { ForgeMemorySource } from "@forge-kit/story-memory.mjs";
 import type {
@@ -31,11 +35,17 @@ import {
   worldId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
 import {
+  CHAPTER_SUMMARY_WORDING,
   OVERVIEW_WORDING,
   SUMMARY_WORDING,
+  TIMELINE_FOLD_WORDING,
   beatMessages,
   chapterPlanMessages,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
+import {
+  TIMELINE_CEILING,
+  parseTimeline,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/timeline.ts";
 import {
   createOtomeMemory,
   type OtomeMemory,
@@ -71,8 +81,8 @@ const SOURCES: ForgeMemorySource[] = [
     content: "Ava met Kai and Mireille at the observatory. The great telescope had been sabotaged.",
     order: 10000,
   },
-  // A side story of the kit's own kind, as Otome's dates and Character Stories are (S/story/canon.ts): in the overview,
-  // recalled in detail only for its love interest; otome-forge-beats.regression.ts checks them with memory ready.
+  // A side story of the kit's own kind, as Otome's dates and Character Stories are (S/story/canon.ts): summarized, never
+  // in the timeline, recalled only for its love interest; otome-forge-beats.regression.ts checks them with memory ready.
   {
     id: "route-li-mireille-cd34-2",
     kind: "character-story",
@@ -91,12 +101,11 @@ const SOURCES: ForgeMemorySource[] = [
   },
 ];
 
-/** The fake summarizer: a detail echoes its source, an overview joins the previous one with its records. */
+/** The fake summarizer: a detail echoes its source, a condensing says what it condensed. */
 function summarizer(messages: Array<{ content: string }>) {
   const input = JSON.parse(messages.at(-1)!.content);
   if (input.source) return JSON.stringify({ summary: `${input.source.title}: ${input.source.content}` });
-  const records = input.records.map((record: { content: string }) => record.content).join(" ");
-  return JSON.stringify({ summary: [input.previousOverview, records].filter(Boolean).join(" ") });
+  return JSON.stringify({ summary: `CONDENSED ${[...input.timeline].length}` });
 }
 
 async function setup(
@@ -159,8 +168,9 @@ test("summaries run on the background lane with the summary wording; a private c
   const status = await settle(memory);
   assert.equal(status.phase, "ready");
 
-  // Two detail summaries and two overview folds; the chat is its own record, so it is never summarized.
-  assert.equal(calls.length, 4);
+  // Two detail summaries; each joins the timeline with no call (#2066), and the chat is its own record, so it is never
+  // summarized.
+  assert.equal(calls.length, 2);
   assert.ok(calls.every((call) => call.connectionId === "conn-memory"));
   assert.deepEqual(admissions, [{ connectionId: "conn-memory", mode: { kind: "background" } }]);
   for (const call of calls) {
@@ -171,29 +181,78 @@ test("summaries run on the background lane with the summary wording; a private c
     assert.ok(!JSON.stringify(call.messages).includes(PRIVATE), "the private chat reaches no summary prompt");
   }
   const logged = logs.filter((entry) => entry.level === "debugOverride" && entry.override === true);
-  assert.deepEqual(new Set(logged.map((entry) => entry.args[0])), new Set(["memory-detail", "memory-overview"]));
+  assert.deepEqual(new Set(logged.map((entry) => entry.args[0])), new Set(["memory-detail"]));
 
   const saved = fake.rows.get(memoryId(RUN))!.data as {
     overview: { content: string; sources: Array<[string, string]> };
     records: Array<{ kind: string; content: string }>;
   };
-  assert.ok(saved.overview.content.includes("forged ledger"), "a Character Story is shared canon");
+  assert.deepEqual(parseTimeline(saved.overview.content), {
+    head: "",
+    entries: [
+      {
+        key: JSON.stringify(["chapter", "main-1"]),
+        title: "The Observatory",
+        text: `The Observatory: ${SOURCES[0]!.content}`,
+      },
+    ],
+  });
+  assert.ok(!saved.overview.content.includes("forged ledger"), "a Character Story is its love interest's own (#2066)");
   assert.ok(!saved.overview.content.includes(PRIVATE));
   assert.ok(saved.overview.sources.every(([key]) => JSON.parse(key)[0] !== "chat"));
   assert.ok(saved.records.some((record) => record.kind === "chat" && record.content.includes(PRIVATE)));
 });
 
-test("an overview fold is told the overview is the story's timeline; a detail summary is not", async () => {
-  const { memory, calls } = await setup();
+test("the timeline grows with no call and is condensed only once past 10k tokens, all but its newest entry (#2066)", async () => {
+  // Three chapters whose summaries run to about 6000 tokens each: the second crosses the ceiling, and so does the third.
+  const long = (n: number) => `CHAPTER-${n} ${Array.from({ length: 3000 }, (_, w) => `tide${w % 89}`).join(" ")}`;
+  const chapters: ForgeMemorySource[] = [1, 2, 3].map((n) => ({
+    id: `main-${n}`,
+    kind: "chapter",
+    title: `Night ${n}`,
+    content: `NIGHT-${n}: the bell rings.`,
+    order: n * 10000,
+  }));
+  let condensed = 0;
+  const { memory, calls, fake } = await setup(undefined, {
+    maxContext: 131_072,
+    maxOutputTokens: null,
+    sources: chapters,
+    replies: Array.from({ length: 12 }, () => (messages: Array<{ content: string }>) => {
+      const input = JSON.parse(messages.at(-1)!.content);
+      if (input.source) return JSON.stringify({ summary: long(Number(input.source.id.slice(5))) });
+      condensed += 1;
+      return JSON.stringify({ summary: `CONDENSED-${condensed}` });
+    }),
+  });
   assert.equal(await memory.maintain({ runId: RUN }), true);
   assert.equal((await settle(memory)).phase, "ready");
-  const kinds = calls.map((call) => (JSON.parse(call.messages.at(-1)!.content).source ? "detail" : "overview"));
-  assert.deepEqual(kinds, ["detail", "detail", "overview", "overview"]);
+  const input = (call: (typeof calls)[number]) => JSON.parse(call.messages.at(-1)!.content);
+  const kinds = calls.map((call) => (input(call).source ? "detail" : "timeline"));
+  assert.deepEqual(kinds, ["detail", "detail", "detail", "timeline", "timeline"]);
   for (const [index, call] of calls.entries()) {
     const system = call.messages[0]!.content;
-    assert.equal(system.includes(OVERVIEW_WORDING), kinds[index] === "overview", `${kinds[index]} ${index}`);
+    const detail = kinds[index] === "detail";
     assert.ok(system.includes(SUMMARY_WORDING), "every summary keeps the summary wording");
+    assert.equal(system.includes(CHAPTER_SUMMARY_WORDING), detail, "a chapter summary: at most 500 words, said");
+    assert.match(CHAPTER_SUMMARY_WORDING, /at most 500 words/u);
+    assert.equal(system.includes(TIMELINE_FOLD_WORDING), !detail, "condensing: at most 3000 words, said");
+    assert.equal(system.includes(OVERVIEW_WORDING), !detail, "the condensed part reads as a recollection");
+    assert.ok(call.options!.maxTokens! >= 10240, "the word limits are the prompt's; the reply room stays 10240");
   }
+  // The first condensing folds Night 1 alone, never Night 2, which crossed the ceiling and stays whole after it; the
+  // second folds what the first wrote and Night 2.
+  const [first, second] = calls.slice(3).map((call) => input(call).timeline as string);
+  assert.ok(first!.includes("CHAPTER-1") && !first!.includes("CHAPTER-2"), first);
+  assert.ok(second!.includes("CONDENSED-1") && second!.includes("CHAPTER-2") && !second!.includes("CHAPTER-3"));
+  const saved = fake.rows.get(memoryId(RUN))!.data as { overview: { content: string } };
+  const timeline = parseTimeline(saved.overview.content);
+  assert.equal(timeline.head, "CONDENSED-2");
+  assert.deepEqual(
+    timeline.entries.map((entry) => [entry.title, entry.text.slice(0, 10)]),
+    [["Night 3", "CHAPTER-3 "]],
+  );
+  assert.ok(TIMELINE_CEILING === 10_000);
 });
 
 test("a newcomer kept out of the cast after a failed arc plan is named in no summary's content contract", async () => {
@@ -270,33 +329,35 @@ test("an overview saved before the timeline is folded again from the records in 
   assert.ok(!before.text.includes("OLD-OVERVIEW"));
   // The story's own recall queues it, with no Retry.
   await recallText({ store, memory }, RUN, { job: "narration", cast: [MIR] });
-  for (let turn = 0; turn < 2000 && !calls.length; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+  for (let turn = 0; turn < 2000 && saved().overviewStyle !== 3; turn += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
   assert.equal((await settle(memory)).phase, "ready");
 
-  // Folded from the records alone, one at a time, starting from nothing: no detail summary again, the old one unread.
-  const folded = (previousOverview: string, source: ForgeMemorySource, content: string) => ({
-    previousOverview,
-    records: [
-      { id: source.id, kind: source.kind, title: source.title, order: source.order, content, range: rangeOf(content) },
-    ],
-  });
-  assert.deepEqual(
-    calls.map((call) => JSON.parse(call.messages.at(-1)!.content)),
-    [folded("", main, MAIN), folded(MAIN, route, ROUTE)],
-  );
-  assert.ok(calls.every((call) => call.messages[0]!.content.includes(OVERVIEW_WORDING)));
-  assert.ok(!JSON.stringify(calls).includes("OLD-OVERVIEW"), "the old overview is never folded in");
+  // #2066: rebuilt from the saved summaries alone, with no model call at all: nothing is summarized again, the old
+  // overview is never read, and the Character Story stays out of the timeline.
+  assert.equal(calls.length, 0, "no call: the saved summaries are the timeline");
   assert.deepEqual(saved().records, old.records, "records and detail summaries are kept as they were");
-  assert.equal(saved().overviewStyle, 2, "the new overview carries its form");
-  assert.equal(saved().overview.content, `${MAIN} ${ROUTE}`);
+  assert.equal(saved().overviewStyle, 3, "the new overview carries its form");
+  assert.deepEqual(parseTimeline(saved().overview.content), {
+    head: "",
+    entries: [{ key: JSON.stringify(["chapter", main.id]), title: main.title, text: MAIN }],
+  });
+  assert.ok(!saved().overview.content.includes("OLD-OVERVIEW"), "the old overview is never folded in");
+  assert.equal(rangeOf(MAIN).total, [...MAIN].length);
   const after = await memory.recall({ runId: RUN, job: "narration", cast: [MIR] });
   assert.equal(after.overview, saved().overview.content);
   assert.equal(after.lagging, false);
+  assert.deepEqual(
+    after.recalls?.map((item) => [item.id, item.content]),
+    [[route.id, ROUTE]],
+    "her Character Story comes back to her as a small memory, by its saved summary",
+  );
 
   // Nothing is owed any more: another maintenance folds nothing, and the overview stays.
   assert.equal(await memory.maintain({ runId: RUN }), true);
   assert.equal((await settle(memory)).phase, "ready");
-  assert.equal(calls.length, 2, "no second rebuild");
+  assert.equal(calls.length, 0, "no second rebuild");
   assert.equal(saved().overview.content, after.overview);
 });
 
@@ -379,12 +440,44 @@ test("a private chat is recalled only for its own love interest, or a scene he i
   ] as const) {
     const result = await recall(who);
     assert.equal(result.status.phase, "ready", JSON.stringify(who));
-    assert.equal(result.text.includes(PRIVATE), sees, JSON.stringify(who));
+    const recalled = (result.recalls ?? []).map((item) => item.content).join("\n");
+    assert.equal(recalled.includes(PRIVATE), sees, JSON.stringify(who));
     assert.ok(!result.overview.includes(PRIVATE), "never in the overview");
     // The latest chapter is the caller's to send in full: marked, and never ranked as a detail.
     assert.ok(result.recent?.some((entry) => entry.id === "main-1" && entry.latest));
     assert.ok(result.details.every((detail) => detail.id !== "main-1"));
   }
+});
+
+test("the recalls are the newest small memories within 5000 tokens, the oldest left out, told oldest first (#2066)", async () => {
+  // Twelve of Kai's closed conversations of about 600 tokens each, oldest first, and one of Mireille's, newest of all.
+  const talk = (n: number) => `TALK-${n} ${Array.from({ length: 300 }, (_, w) => `lamp${(n + w) % 83}`).join(" ")}`;
+  const sources: ForgeMemorySource[] = [
+    ...Array.from({ length: 12 }, (_, n): ForgeMemorySource => ({
+      id: `phone-${n}`,
+      kind: "chat",
+      title: `Kai's talk ${n}`,
+      content: talk(n),
+      order: 10000 + n,
+      audience: [KAI],
+    })),
+    { id: "phone-mir", kind: "chat", title: "Mireille's talk", content: "TALK-MIR", order: 20000, audience: [MIR] },
+  ];
+  const { memory, calls } = await setup(undefined, { sources });
+  assert.equal(await memory.maintain({ runId: RUN }), true);
+  assert.equal((await settle(memory)).phase, "ready");
+  assert.equal(calls.length, 0, "a conversation is its own record");
+  const { recalls = [] } = await memory.recall({ runId: RUN, job: "chat", reader: KAI });
+  const kept = recalls.map((item) => Number(item.id.slice(6)));
+  assert.ok(kept.length > 3 && kept.length < 12, `some, never all: ${kept}`);
+  assert.deepEqual(
+    kept,
+    Array.from({ length: kept.length }, (_, n) => 12 - kept.length + n),
+    "the newest, in order",
+  );
+  const tokens = recalls.reduce((sum, item) => sum + estimateTextTokens(`# ${item.title}\n${item.content}`), 0);
+  assert.ok(tokens <= 5000, `${tokens} tokens`);
+  assert.ok(!recalls.some((item) => item.content.includes("TALK-MIR")), "never another love interest's");
 });
 
 test("a failed source read never recalls another love interest's canon: recall rejects and the caller falls back", async () => {
@@ -416,7 +509,7 @@ test("every summary leaves a thinking model at least 10240 tokens to reply, or t
     const sent = calls.map((call) => [JSON.parse(call.messages.at(-1)!.content).source ? "detail" : "overview", call]);
     assert.deepEqual(
       sent.map(([kind]) => kind),
-      ["detail", "detail", "overview", "overview"],
+      ["detail", "detail"],
     );
     for (const [kind, call] of sent as Array<[string, (typeof calls)[number]]>) {
       const maxTokens = call.options!.maxTokens!;
@@ -462,15 +555,15 @@ test("a second request while maintenance waits or runs folds into the same job a
   );
   assert.equal((await settle(memory)).phase, "ready");
   assert.equal(admissions.length, 1);
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 2);
 });
 
 const shown = ({ phase, retryable }: { phase: string; retryable: boolean }) => ({ phase, retryable });
 
 test("a request in the queue's release gap never leaves the status pending, so a failed summary offers Retry", async () => {
-  // The host still holds the admission slot a moment after the job body ends, and the overview's last fold fails.
+  // The host still holds the admission slot a moment after the job body ends, and the last detail summary fails.
   let failing = true;
-  let overviews = 0;
+  let details = 0;
   let held = true;
   let bodyDone!: () => void;
   const ended = new Promise<void>((resolve) => (bodyDone = resolve));
@@ -478,8 +571,8 @@ test("a request in the queue's release gap never leaves the status pending, so a
   const gate = new Promise<void>((resolve) => (release = resolve));
   const gap = await setup(undefined, {
     replies: Array.from({ length: 12 }, () => (messages: Array<{ content: string }>) => {
-      const overview = !JSON.parse(messages.at(-1)!.content).source;
-      if (failing && overview && (overviews += 1) > 1) throw new Error("The summary failed");
+      const detail = !!JSON.parse(messages.at(-1)!.content).source;
+      if (failing && detail && (details += 1) > 1) throw new Error("The summary failed");
       return summarizer(messages);
     }),
     admissionRun: async (operation) => {
@@ -580,7 +673,8 @@ test("the memory routes report the memory, queue a Retry and give the overview a
   const shown = await overview();
   assert.deepEqual(Object.keys(shown), ["paragraphs"]);
   const text = shown.paragraphs.join("\n");
-  assert.ok(text.includes("The Observatory") && text.includes("forged ledger"), text);
+  assert.ok(text.includes("The Observatory"), text);
+  assert.ok(!text.includes("forged ledger"), "a Character Story is never the timeline's (#2066)");
   assert.ok(!text.includes(PRIVATE), "the private chat is never in the overview");
   assert.ok(!text.includes("main-1") && !text.includes("Canon to date"), "no source key or heading");
   // A heading or bullet a model wrote is dropped from its line, and each line is a paragraph.
@@ -650,13 +744,15 @@ test("the chapter planner (P5) and the beat narrator (P6) carry the knowledge bo
     state,
     chapter: { kind: "main", number: 1, title: "The Observatory", lead: KAI, foil: MIR, nodes },
     node: nodes[0]!,
-    storySoFar: "",
+    storySoFar: [],
     memory: "",
   });
   for (const [name, messages] of [
     ["P5", plan],
     ["P6", beat],
   ] as const) {
+    // In the story context they share (#2066).
     assert.ok(messages[0]!.content.includes(forgeKnowledgeBoundary), `${name} carries the knowledge boundary`);
+    assert.equal(messages[0]!.cacheBreakpoint, true);
   }
 });

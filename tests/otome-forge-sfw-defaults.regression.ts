@@ -34,6 +34,9 @@
 // "even if a monster", not "inside" one. Every story and banner digest moved once.
 // 0.6.25 (#2061): the maintainer's own edit of the shared writing rules (a love interest wants something besides the
 // protagonist in every chapter; the knowledge and canon rules shortened), so every story and banner digest moved once.
+// #2066: the chapter plan, beat, CG beat, confrontation and closer use the cached layout (the shared story context first,
+// with the whole cast's contract; each node's own rules after the cached part), so those digests moved once; the
+// route, repair and banner prompts are untouched.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
@@ -110,7 +113,7 @@ function storyPrompts(content: ContentSettings): Record<string, string> {
   const beat = (changes: Partial<ChapterNode>) => {
     const one = node(changes);
     return text(
-      beatMessages({ world, player, units, state, chapter: chapter([one]), node: one, storySoFar: "", memory: "" }),
+      beatMessages({ world, player, units, state, chapter: chapter([one]), node: one, storySoFar: [], memory: "" }),
     );
   };
   const fight = node({ kind: "confrontation", cg: true });
@@ -142,7 +145,7 @@ function storyPrompts(content: ContentSettings): Record<string, string> {
         state,
         chapter: chapter([fight]),
         node: fight,
-        storySoFar: "",
+        storySoFar: [],
         memory: "",
         li: KAI,
       }),
@@ -155,7 +158,7 @@ function storyPrompts(content: ContentSettings): Record<string, string> {
         state,
         chapter: chapter([close]),
         node: close,
-        storySoFar: "",
+        storySoFar: [],
         memory: "",
         li: KAI,
       }),
@@ -185,7 +188,7 @@ test("chapter and scene prompts keep emotional payoffs occasional and permit cha
       cast: [KAI],
     }));
     const scene = (chapter: BeatMessagesInput["chapter"]) =>
-      text(beatMessages({ ...input, chapter, node: chapter.nodes[0]!, storySoFar: "", memory: "" }));
+      text(beatMessages({ ...input, chapter, node: chapter.nodes[0]!, storySoFar: [], memory: "" }));
     const sideStory = { kind: "story" as const, li: KAI, lead: KAI, title: "Rain", nodes };
     const prompts = {
       ...storyPrompts(content),
@@ -251,11 +254,11 @@ const EXPECTED_ANGST: Record<string, string> = {
   bannerHis: "99875a4c5f987c66",
   bannerMemories: "d627bf7d140b7654",
   bannerMine: "249a5d45cf7934a0",
-  beat: "cc73931f208fc6af",
-  beatWithCg: "e927f1f780682b99",
-  chapterPlan: "5c2ade7c5040b345",
-  closer: "8e6fd54b59b495b3",
-  confrontation: "ff856b068cc0b9c3",
+  beat: "1f995e600f5a7c74",
+  beatWithCg: "85d319984270ee92",
+  chapterPlan: "3fb0fc6896268a98",
+  closer: "a46ffcf8b64126a9",
+  confrontation: "7ba4288b8dfaf088",
   repairPlan: "8b01a20e6b566a07",
   routePlan: "5ee99e80b265372d",
 };
@@ -263,11 +266,11 @@ const EXPECTED_GENTLE: Record<string, string> = {
   bannerHis: "08b8abf10a38b78a",
   bannerMemories: "3933a752f49d1bdf",
   bannerMine: "66aae49d0a525c21",
-  beat: "10242eac395b87f8",
-  beatWithCg: "0f5016b5908800d0",
-  chapterPlan: "7e6bc7fa6c50027a",
-  closer: "84399afd0a711a3c",
-  confrontation: "e36dda5ffd81ba8f",
+  beat: "983defca128ddae0",
+  beatWithCg: "4219b85b580649cd",
+  chapterPlan: "dcbe53dd1f876a18",
+  closer: "9fa2592c1aa6822c",
+  confrontation: "517b71f99a32bca1",
   repairPlan: "0b626fe8bd7b1f7c",
   routePlan: "b0ae82afbd80090a",
 };

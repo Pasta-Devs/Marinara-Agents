@@ -819,12 +819,12 @@ test("the arc planner is told the judgment is optional, only for a real mystery,
 });
 
 test("the chapter planner of a listed chapter is told to leave its last node free for a big choice, and no other is", () => {
-  const listed = prompt(null, 4, true)[0]!.content;
+  const listed = shown(prompt(null, 4, true));
   assert.match(
     listed,
     /- This chapter's end may close on a judgment the protagonist can get wrong \(the narrator decides; it is optional\): put the climax second-to-last, so the last node can hold a big choice\./u,
   );
-  assert.doesNotMatch(prompt(null, 4)[0]!.content, /close on a judgment/u, "an unlisted chapter plans as before");
+  assert.doesNotMatch(shown(prompt(null, 4)), /close on a judgment/u, "an unlisted chapter plans as before");
 });
 
 const judgedChapter = (nodes: ChapterNode[]) =>
@@ -852,7 +852,7 @@ const narration = (chapter: ReturnType<typeof judgedChapter>, i: number) =>
       state: planContext(null, 6).state,
       chapter,
       node: chapter.nodes[i]!,
-      storySoFar: "",
+      storySoFar: [],
       memory: "",
     }),
   );
@@ -968,7 +968,7 @@ test("POST /chapters/next stamps the arc's judgment on a listed chapter's last n
     runKey: "r-judge-aaaaaa",
     replies: [
       (messages) => {
-        planPrompt = String(messages[0]!.content);
+        planPrompt = messages.map((message) => String(message.content)).join("\n");
         return json(planReply());
       },
     ],

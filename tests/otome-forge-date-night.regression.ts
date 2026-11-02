@@ -70,7 +70,12 @@ import {
   withMireillesPrivateRows,
 } from "./fixtures/otome-forge-story.ts";
 
-const system = (messages: CapabilityLanguageModelMessage[]) => messages[0]!.content;
+// #2066: a story prompt opens with the shared story context, then its own instructions: both are system messages.
+const system = (messages: CapabilityLanguageModelMessage[]) =>
+  messages
+    .filter((message) => message.role === "system")
+    .map((message) => message.content)
+    .join("\n\n");
 const isDatePlanner = (messages: CapabilityLanguageModelMessage[]) => system(messages).includes("You plan one DATE");
 const nodeOf = (messages: CapabilityLanguageModelMessage[]) =>
   Number(/Narrate node (\d+) of/.exec(messages.at(-1)!.content)?.[1] ?? 1) - 1;
@@ -406,9 +411,10 @@ test("a date is 4 model calls, pays once whatever the outcome, and keeps its ans
   // One plan and three beats (the lookahead wrote each next beat once).
   assert.equal(t.calls.length, 4);
   const beatPrompt = t.calls[1]!.messages;
-  assert.ok(system(beatPrompt).includes("DATE CHOICE"));
-  assert.ok(system(beatPrompt).includes("old harbour maps"));
-  assert.ok(system(beatPrompt).includes("being pitied"));
+  // A date's own choice rules go with the node's task (#2066).
+  assert.ok(beatPrompt.at(-1)!.content.includes("DATE CHOICE"));
+  assert.ok(beatPrompt.at(-1)!.content.includes("old harbour maps"));
+  assert.ok(beatPrompt.at(-1)!.content.includes("being pitied"));
   assert.ok(beatPrompt.at(-1)!.content.includes("This chapter is a DATE"));
   // The last scene is never offered a big choice.
   const lastPrompt = t.calls.find((call) => nodeOf(call.messages) === 2 && !isDatePlanner(call.messages))!;

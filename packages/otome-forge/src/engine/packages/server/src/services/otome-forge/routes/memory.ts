@@ -21,6 +21,7 @@ import {
 } from "../http.js";
 import { memoryId, worldId } from "../ids.js";
 import type { OtomeMemory } from "../memory/memory.js";
+import { parseTimeline, timelineParagraphs } from "../memory/timeline.js";
 import { normalizeWorld } from "../schemas/world.js";
 import type { OtomeStore } from "../store.js";
 
@@ -36,8 +37,10 @@ const EMPHASIS = /(?<![\p{L}\p{N}])([*_])(?=\S)(.+?)(?<=\S)\1(?![\p{L}\p{N}])/gu
  * The kit's saved overview (`${R}:memory` overview.content) as the player reads it: its paragraphs, with a leading
  * markdown heading or bullet marker, a line that is only a bold label and an echoed "Canon to date" heading dropped,
  * and markdown emphasis taken off its words; [] before the first overview. The text is otherwise as saved, whatever the
- * Heat. An overview is written as plain paragraphs since 0.6.19 (S/prompts.ts OVERVIEW_WORDING); this tidies one
- * saved before, until the background rebuild replaces it.
+ * Heat. Since #2066 the overview is the story's timeline (S/memory/timeline.ts), read here as its condensed part and
+ * then each chapter's summary; an overview of an earlier form reads as one text. An overview is written as plain
+ * paragraphs since 0.6.19 (S/prompts.ts OVERVIEW_WORDING); this tidies one saved before, until the background rebuild
+ * replaces it.
  */
 export function overviewParagraphs(data: unknown): string[] {
   // A story rebuilding its overview in the new form (memory.ts) shows the earlier one, tidied, until the first lands.
@@ -47,7 +50,8 @@ export function overviewParagraphs(data: unknown): string[] {
   } | null;
   const content = saved?.overview?.content || saved?.legacyOverview?.content;
   if (typeof content !== "string") return [];
-  return content
+  return timelineParagraphs(parseTimeline(content))
+    .join("\n")
     .split(/\n+/u)
     .map((line) => line.replace(/^\s*(?:#{1,6}|[-*•])\s+/u, "").trim())
     .filter((line) => !BOLD_LABEL.test(line))

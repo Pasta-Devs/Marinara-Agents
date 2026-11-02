@@ -12,6 +12,8 @@ export const REDACTED = "[cycle state redacted]";
 export interface PromptMessage {
   role: "system" | "user" | "assistant";
   content: string;
+  /** Capability API 1.814: the prompt up to and including this message is the same from call to call (#2066). */
+  cacheBreakpoint?: boolean;
 }
 
 export function redactMessages<M extends PromptMessage>(messages: readonly M[], redact: readonly string[] = []): M[] {
