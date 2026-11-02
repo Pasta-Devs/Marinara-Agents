@@ -19,6 +19,7 @@ export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
     date: "2026-11-02",
     notes: [
       "Pulse no longer shows a Creator's first post as still running after it is out, and a second Creator in a picture brings their own picture along.",
+      "Professor Mari no longer asks for attention when the Engine updates her card.",
     ],
   },
   {

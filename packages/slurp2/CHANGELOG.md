@@ -4,6 +4,7 @@
 
 - Fixed: Pulse kept a made first post as "Creating first post… running" for a day. The server reports a made first post as `generated`, and Pulse now counts that as done.
 - Fixed: a second Creator in a picture lost their reference picture when the posting Creator had none of their own (no linked card, or no picture). Their picture now goes along when avatar references are on and the provider takes them.
+- Fixed: Professor Mari's page asked for attention whenever the Engine updated her built-in card, and the player could not act on it. Her page now follows her card without a "card changed" or appearance review flag.
 
 ## 0.4.15 — 2026-11-01
 

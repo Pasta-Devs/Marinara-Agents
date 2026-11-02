@@ -132,6 +132,20 @@ assert.match(
   /sourceStatus: slurpIsCouplePage\(account\)\s*\? \{ state: "current" as const \}/u,
 );
 
+// ── Professor Mari's Engine-updated card never asks for attention (0.4.16, player report) ──
+{
+  const storage = server("data/creators/slp-creators-storage-3.ts");
+  assert.match(
+    storage,
+    /engineOwned = publicAccount\?\.kind === "character" && publicAccount\.entityId === PROFESSOR_MARI_ID;/u,
+  );
+  assert.match(
+    storage,
+    /const baseline = engineOwned \? undefined : account\.settings\.profile\.noodlerSourceSnapshot;/u,
+  );
+  assert.match(storage, /needsReview: appearance\.needsReview && !engineOwned,/u);
+}
+
 // ── A model that is off gets a clear sign-up error (#74) ──
 const refused = new TypeError("fetch failed", {
   cause: Object.assign(new Error("connect ECONNREFUSED ::1:5001"), { code: "ECONNREFUSED" }),
