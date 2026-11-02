@@ -1,5 +1,12 @@
 # Otome Hearth release notes
 
+## 0.6.27 — 2026-11-02
+
+- **Fewer wasted calls.** Picking how the story goes on twice no longer plans the arc twice. A newcomer whose arc failed to plan keeps their character sheet for the next try. A scene written ahead paints its key moment only once you reach it. A connection that refuses JSON mode is asked without it from then on.
+- **Daily messages wait for chapter 1.** Love interests you haven't met yet no longer text you after the prologue.
+- **Stickers stay put.** While their backgrounds are cut out again, your stickers keep showing and never read as newly unlocked.
+- **Fixes.** Every Album tab can be reached with a mouse. A story delete that stops partway can be finished. Close says to wait for the reply while one is on its way. Cost notes count 2 calls where 2 are made.
+
 ## 0.6.26 — 2026-11-02
 
 - **Every prompt in one place.** All of Otome Hearth's prompts now live in one file, `prompts.ts`, in story order with a table of contents, so they can be read and rewritten in one place. Nothing the models receive changed.
