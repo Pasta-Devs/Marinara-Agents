@@ -30,7 +30,8 @@ import { ReadHim } from "./screens/dates/ReadHim";
 import { ReadMe } from "./screens/dates/ReadMe";
 import { ForgeProgress } from "./screens/ForgeProgress";
 import { HomeScreen, useHomeLi } from "./screens/home/HomeScreen";
-import { PhoneScreen, type PhoneOpen } from "./screens/phone/PhoneScreen";
+import { PhoneScreen, useDailyMessages, type PhoneOpen } from "./screens/phone/PhoneScreen";
+import { StickerNotice } from "./screens/phone/StickerPicker";
 import { Placeholder } from "./screens/Placeholder";
 import { Album } from "./screens/album/Album";
 import { Reader } from "./screens/reader/Reader";
@@ -99,6 +100,8 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
   // A failed background refetch keeps the screen it already loaded; only a first load that failed shows the error.
   const failed = index.isError && index.data === undefined;
   const shown = waiting ? "loading" : failed ? "error" : screen;
+  // Settings → Connections' daily messages, on any screen; the thread open on the phone never gets one.
+  useDailyMessages(activeRun, view, screen === "phone" ? (phoneOpen?.li ?? null) : null);
 
   // Once the active story has loaded, its opening screen stays put: a world that finishes forging while the player
   // watches keeps showing the forge (its cast and paint offer) until they choose to go Home.
@@ -379,6 +382,8 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
       >
         {content}
       </div>
+      {/* "You unlocked a new sticker" (#2044), over whichever screen is open. */}
+      {view && activeRun ? <StickerNotice view={view} /> : null}
       {DOCKED.has(screen) ? <Dock active={screen} onSelect={selectDockScreen} /> : null}
     </OtomeAudioProvider>
   );

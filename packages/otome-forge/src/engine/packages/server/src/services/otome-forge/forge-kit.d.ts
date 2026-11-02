@@ -15,6 +15,8 @@ declare module "@forge-kit/time-zone-server.mjs" {
   export function forgeWallDate(value?: number | Date, timeZone?: string): Date;
   /** Monday 0 … Sunday 6, in the request's time zone. */
   export function forgeWeekday(value?: number | Date): number;
+  /** Milliseconds from the instant to the next local midnight (or week, or month) in the request's time zone. */
+  export function forgeResetIn(value?: number, period?: "day" | "week" | "month"): number;
 }
 
 declare module "@forge-kit/character-card-context.mjs" {

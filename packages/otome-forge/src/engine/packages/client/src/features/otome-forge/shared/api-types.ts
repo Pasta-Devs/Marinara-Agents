@@ -11,6 +11,7 @@ import type { ClawRound } from "./claw";
 import type { ReadHimPaid } from "./read-him";
 import type { NotebookEntry, ReadMePaid } from "./read-me";
 import type { ClawLineKind, TapZone, TimeOfDay } from "./home";
+import type { PlayerSticker } from "./stickers";
 import type { BannerKind, PityCounter, Rarity } from "./wish";
 
 export type {
@@ -202,6 +203,20 @@ export interface World {
   audio: WorldAudio;
   /** Keyed by S/art/places.ts placeKey(name), which keeps the letters of any script; clients look places up by name. */
   places: Record<string, PlaceArt>;
+  /**
+   * Settings → Connections (#2044): how many times a local day a love interest may write to the player first, on
+   * their own (SH/home.ts DAILY_MESSAGES_MAX at most); absent or 0: never.
+   */
+  dailyMessages?: number;
+  /** The daily messages' quota and the newest one sent (S/phone/daily.ts); never sent to the client. */
+  phoneDaily?: PhoneDaily;
+}
+
+/** `world.phoneDaily`: per local day ("YYYY-MM-DD"), the attempts spent and when the next may start (epoch ms). */
+export interface PhoneDaily {
+  days: Record<string, { attempts: number; nextAt?: number }>;
+  /** The newest daily message: whose thread it landed in, and when. */
+  last?: { li: LiId; at: string };
 }
 
 /**
@@ -253,6 +268,11 @@ export interface Player {
   wornOutfit?: string;
   /** M4: his line about the look she wears now (P19), or null. */
   noticed: Noticed | null;
+  /**
+   * #2044: her five chibi stickers' paints (S/art/stickers.ts). Set to {} the first time the phone opens with images
+   * on, which starts them; absent: the built-in set only.
+   */
+  stickers?: Partial<Record<PlayerSticker, Paint>>;
 }
 
 export type ArcStageKey = "1" | "2" | "3" | "4" | "5" | "6";
@@ -362,6 +382,34 @@ export interface Unit {
   cutouts: Record<string, Cutout>;
   /** Their Claw Machine plush (#1954): the animal that fits them, drawn as SVG in the background; absent until then. */
   plushArt?: PlushArt;
+  /** #2044: his nine chibi stickers, designed once he reaches level 2 with images on (S/art/stickers.ts). */
+  stickers?: StickerSet;
+}
+
+/**
+ * A love interest's stickers: `set[i]` unlocks at affection level i + 2 (SH/stickers.ts), and `art` holds the paint of
+ * each emotion owed so far. `emotion` is one lowercase English word, `label` is in the world's language and `look` is
+ * English, visual only.
+ */
+export interface StickerSet {
+  set: Array<{ emotion: string; label: string; look: string }>;
+  at: string;
+  art: Record<string, Paint>;
+}
+
+/**
+ * A sticker the player has (GET /runs/:run, S/art/stickers.ts stickerBook): the protagonist's five, then each love
+ * interest's painted ones in level order. `name` is its prompt name (mari_laugh). The protagonist's have no `label`
+ * (the client labels them) and no `url` until painted (the built-in set shows instead).
+ */
+export interface StickerView {
+  id: string;
+  owner: "you" | LiId;
+  emotion: string;
+  name: string;
+  label?: string;
+  level?: number;
+  url?: string;
 }
 
 /** A love interest's own plush: the animal (English, one or two words) and its sanitized SVG (S/art/plush-svg.ts). */
@@ -497,8 +545,11 @@ export interface PhoneMessage {
   who: "player" | "li";
   /** "" for a sticker on its own. */
   text: string;
-  /** One of his faces, sent as a sticker (by either of them). */
-  sticker?: Face;
+  /**
+   * A sticker id (SH/stickers.ts: `you:laugh`, `li-kai-ab12:smug`), or, in messages saved before #2044, one of his
+   * faces.
+   */
+  sticker?: Face | string;
   /** ISO time it was saved. */
   at: string;
   /** The note of the day this message replies to (Reply on Home). */
@@ -528,6 +579,15 @@ export interface PhoneThread {
 /** GET /runs/:run/phone */
 export interface PhoneListView {
   threads: Array<{ li: LiId; last: PhoneMessage | null; unread: number; busy: boolean }>;
+}
+
+/**
+ * POST /runs/:run/phone/due {open?} (S/phone/daily.ts): what the daily-message heartbeat did, and the newest daily
+ * message, so the client reads the phone again when it changes.
+ */
+export interface PhoneDueResult {
+  status: "disabled" | "no-connection" | "busy" | "no-eligible" | "quota" | "scheduled" | "waiting" | "queued";
+  latest: { li: LiId; at: string } | null;
 }
 
 /** GET /runs/:run/phone/:li?page= : the kit's forgeChatHistoryPage, plus what the thread screen shows around it. */
@@ -1214,8 +1274,8 @@ export interface MemoryStatus {
 
 // ── Wire shapes ──
 
-/** The world as the client sees it: no mystery truth or pieces, no web secrets, no music briefs. */
-export type WorldView = Omit<World, "mystery" | "web" | "audio"> & {
+/** The world as the client sees it: no mystery truth or pieces, no web secrets, no music briefs, no message quota. */
+export type WorldView = Omit<World, "mystery" | "web" | "audio" | "phoneDaily"> & {
   mystery: { question: string };
   web: Omit<WebRow, "secret">[];
   audio: Omit<WorldAudio, "briefs">;
@@ -1264,6 +1324,10 @@ export interface RunView {
   forge: ForgeStatus;
   /** Free sprite cleanup is still running; poll the run until the retained look's derivative is ready. */
   cutoutsPending?: true;
+  /** GET /runs/:run (#2044): every sticker the player has, the protagonist's five first. */
+  stickers?: StickerView[];
+  /** A sticker set is being designed or a sticker painted in the background: poll the run until it lands. */
+  stickersPending?: true;
   starlight: number;
   /** GET /runs/:run: the prologue has been read to its end (Begin then goes straight Home). */
   prologue?: boolean;
@@ -1295,4 +1359,6 @@ export interface SettingsInput {
   language?: string;
   writingStyle?: string;
   bannedPhrases?: string;
+  /** 0 to DAILY_MESSAGES_MAX (SH/home.ts). */
+  dailyMessages?: number;
 }

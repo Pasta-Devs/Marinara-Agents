@@ -1,5 +1,13 @@
 # Otome Hearth release notes
 
+## 0.6.23 — 2026-11-02
+
+- **Chibi stickers.** With images on, your five phone stickers are chibi busts of your protagonist, and each love interest gets nine of their own, one unlocked per affection level from 2 to 10 ("You unlocked a new sticker"). They're painted in the background, one at a time, and Ask before painting holds them for a tap; stories in progress catch up. Without images your five are simple labelled icons.
+- **Love interests send stickers too**, theirs or yours, by name in brackets, like `[dottore_pensive]`. Old face stickers still show.
+- **A Stickers tab in the Album** to view and save each sticker, named like `mari_laugh`.
+- **Messages a day from love interests**: in Settings → Connections, choose how many times a day one you've met may message you first (0 to 24, off by default). They're spread across your day and arrive unread.
+- **A love interest's thread header fits on one row on phones**, with **Close** beside their name.
+
 ## 0.6.22 — 2026-11-02
 
 - **Love interests may be genuinely evil.** A villain or a monster stays one, and taming them is the point; as affection grows they may become a better partner to you, in their own way. Scenes, climaxes and phone replies now see their darkness.

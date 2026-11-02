@@ -9,6 +9,10 @@
 // POST /runs/:run/art/cg {key, i, prompt?, negativePrompt?}  → {art}; paints that beat's CG now (the tap)
 // POST /runs/:run/art/cg/prompt {key, i}                   → {prompt, negativePrompt}
 // POST /runs/:run/art/cg/seen {key, i}                     → {unlocked, album}; 409 until it is ready and shown
+// POST /runs/:run/stickers                                 → {started}; the phone opened: with images on, the
+//                                                            protagonist's five stickers start (#2044, once)
+// POST /runs/:run/art/sticker {sticker, prompt?, negativePrompt?} → {art}; paints that sticker now (the tap)
+// POST /runs/:run/art/sticker/prompt {sticker}             → {prompt, negativePrompt}
 // A tap is the consent Ask before painting waits for, and the Retry for a failed or stopped paint: it waits for the
 // paint and answers with the record as left (`ready`, or `failed` with Retry). A tap on a ready image changes nothing,
 // and a second tap while one paints waits for that same paint, so no tap pays twice. An edited prompt keeps its
@@ -18,6 +22,8 @@ import { z } from "zod";
 import type { SceneArt } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { cutoutsPending, queueCutouts } from "../art/cutout.js";
 import { cgPromptFor, cgView, markCgSeen, paintCgNow } from "../art/cg.js";
+import { paintStickerNow, startPlayerStickers, stickerPromptFor } from "../art/stickers.js";
+import { STICKER_ID } from "../../../../../client/src/features/otome-forge/shared/stickers.js";
 import { paintPlaceNow, placePromptFor, readPlace, withPlaceViews } from "../art/places.js";
 import { OtomeForgeError, debugModeOf, parseBody, runParam, type OtomeRequest, type RegisterRoutes } from "../http.js";
 import { isChapterKey } from "../ids.js";
@@ -37,6 +43,10 @@ const PlacePromptBody = z.object({ place: z.string().min(1).max(120) });
 const BeatRef = { key: z.string().min(1).max(120), i: z.number().int().min(0).max(BEAT_MAX) };
 const CgBody = z.object({ ...BeatRef, ...Edited });
 const CgRefBody = z.object(BeatRef);
+const StickerRef = { sticker: z.string().regex(STICKER_ID) };
+const StickerBody = z.object({ ...StickerRef, ...Edited });
+const StickerRefBody = z.object(StickerRef);
+const NoFields = z.object({});
 
 const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
 
@@ -131,6 +141,37 @@ export const registerArtRoutes: RegisterRoutes = (router, deps) => {
       const { runId } = runParam(request);
       const { key, i } = beatRef(body.key, body.i);
       const { prompt, negativePrompt } = await cgPromptFor(deps, runId, key, i);
+      return { prompt, negativePrompt };
+    }),
+  );
+
+  router.post(
+    "/runs/:run/stickers",
+    handle(async (request) => {
+      parseBody(NoFields, request.body);
+      return { started: await startPlayerStickers(deps, runParam(request).runId) };
+    }),
+  );
+
+  router.post(
+    "/runs/:run/art/sticker",
+    handle(async (request) => {
+      const body = parseBody(StickerBody, request.body);
+      const { runId } = runParam(request);
+      const art = await paintStickerNow(deps, runId, body.sticker, {
+        debugMode: debugModeOf(request),
+        edited: { prompt: body.prompt, negativePrompt: body.negativePrompt },
+        active: deps.art?.active,
+      });
+      return { art };
+    }),
+  );
+
+  router.post(
+    "/runs/:run/art/sticker/prompt",
+    handle(async (request) => {
+      const { sticker } = parseBody(StickerRefBody, request.body);
+      const { prompt, negativePrompt } = await stickerPromptFor(deps, runParam(request).runId, sticker);
       return { prompt, negativePrompt };
     }),
   );

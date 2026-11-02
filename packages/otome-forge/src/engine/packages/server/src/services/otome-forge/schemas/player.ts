@@ -3,6 +3,7 @@
 // ──────────────────────────────────────────────
 import { z } from "zod";
 import type { Player } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import { isPlayerSticker } from "../../../../../client/src/features/otome-forge/shared/stickers.js";
 import { BASE_LOOK } from "../../../../../client/src/features/otome-forge/shared/wardrobe.js";
 import {
   OUTFITS_MAX,
@@ -13,6 +14,7 @@ import {
   field,
   isRecord,
   normalizeCutouts,
+  normalizePaints,
   readFields,
   readWornOutfit,
   text,
@@ -71,10 +73,13 @@ export function normalizePlayer(data: unknown): Player {
       cutouts: normalizeCutouts,
       wornOutfit: z.string().optional(),
       noticed: NoticedSchema.nullable(),
+      // #2044: absent until the phone first opens with images on (S/art/stickers.ts).
+      stickers: (value) => (isRecord(value) ? normalizePaints(value, isPlayerSticker) : undefined),
     },
     defaultPlayer,
     isRecord(data) ? data : undefined,
   );
+  if (!player.stickers) delete player.stickers;
   const { wornOutfit: _worn, ...rest } = player;
   const worn = readWornOutfit(player.outfits, field(data, "wornOutfit"));
   // A line about a look she no longer wears is not shown (a later wear writes a new one).

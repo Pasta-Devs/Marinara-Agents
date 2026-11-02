@@ -607,6 +607,18 @@ function createLoopStub({ seeded = false } = {}) {
     if (path === `${base}/memory/retry`) {
       return { status: 200, json: { status: { phase: "pending", retryable: false, recordCount: 3 } } };
     }
+    // Settings → Connections (#2044): the connections and the daily messages, saved as the server does.
+    if (path === `${base}/settings`) {
+      const { connections, dailyMessages } = call.body!;
+      view.world = {
+        ...view.world,
+        ...(connections ? { connections } : {}),
+        ...(dailyMessages === undefined ? {} : { dailyMessages }),
+      };
+      return { status: 200, json: { world: structuredClone(view.world) } };
+    }
+    // Their heartbeat, once the number is above 0: nothing due in this walk.
+    if (path === `${base}/phone/due`) return { status: 200, json: { status: "waiting", latest: null } };
     if (path === `${base}/favorites`) return { status: 200, json: { favorites: [] } };
 
     // ── Home and the phone ──
@@ -1697,6 +1709,41 @@ test("Otome Hearth's screens around the loop, by keyboard: the cast, a bible, ev
         await expect(memory).toContainText("A summary failed. Retry when you’re ready.");
         await memory.getByRole("button", { name: "Retry memory upkeep" }).click();
         await expect.poll(() => posts(stub, "/memory/retry").length).toBe(1);
+        // Messages a day from love interests (#2044): 0, off, until the player sets it; by keyboard, 0 to 24 only.
+        const panel = root.getByRole("tabpanel");
+        const daily = panel.getByRole("spinbutton", { name: "Messages a day from love interests" });
+        const save = panel.getByRole("button", { name: "Save changes" });
+        await expect(daily).toHaveValue("0");
+        await expect(daily).toHaveAccessibleDescription(/0 turns it off/u);
+        await expect(daily).not.toHaveAttribute("aria-invalid");
+        await expect(save).toHaveAttribute("aria-disabled", "true");
+        await daily.focus();
+        await page.keyboard.type("30");
+        await expect(daily).toHaveAccessibleDescription("Enter a whole number from 0 to 24.");
+        await expect(daily).toHaveAttribute("aria-invalid", "true");
+        await expect(save).toHaveAttribute("aria-disabled", "true");
+        for (let press = 0; press < 4; press += 1) await page.keyboard.press("Backspace");
+        await expect(daily).toHaveValue("");
+        await expect(save).toHaveAttribute("aria-disabled", "true");
+        await page.keyboard.type("2");
+        await page.keyboard.press("ArrowUp");
+        await expect(daily).toHaveValue("3");
+        await expect(daily).not.toHaveAttribute("aria-invalid");
+        await expect(save).toHaveAttribute("aria-disabled", "false");
+        await save.focus();
+        await page.keyboard.press("Enter");
+        await expect
+          .poll(() => posts(stub, "/settings").at(-1)?.body)
+          .toMatchObject({
+            dailyMessages: 3,
+            connections: { narration: "conn-text" },
+          });
+        // Only the daily number changed: its own note, not the connections' one about scenes.
+        await expect(panel.getByText("Saved. Love interests follow it from now on.")).toBeVisible();
+        await expect(daily).toHaveValue("3");
+        await expect(save).toBeFocused();
+        await expect(save).toHaveAttribute("aria-disabled", "true");
+        await auditScreen(page, root, "settings: Connections, saved", tab);
       }
     }
     await page.screenshot({ path: testInfo.outputPath("settings-debug.png") });

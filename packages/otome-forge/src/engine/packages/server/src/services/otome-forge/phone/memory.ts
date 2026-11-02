@@ -49,6 +49,7 @@ import {
   type PhoneDeps,
 } from "./chat.js";
 import { ChatMemorySchema, chatMemoryMessages, normalizeChatMemory, renderThread } from "./prompts.js";
+import { stickerLookup } from "../art/stickers.js";
 
 const said = (message: PhoneMessage) => !!message.text.trim() || !!message.sticker;
 
@@ -65,7 +66,7 @@ async function close(deps: PhoneDeps, runId: string, li: LiId, debugMode: boolea
   }
   const end = start + open.length;
   const names = { li: unit.name, player: run.player.name || "the protagonist" };
-  const conversation = renderThread(open, names, "told");
+  const conversation = renderThread(open, names, "told", stickerLookup(run));
   const { value } = await generateJson(deps, {
     runId,
     job: "compress",

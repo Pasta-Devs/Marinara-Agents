@@ -15,6 +15,7 @@ const SOURCE_KEYS: Record<AlbumImage["source"], string> = {
   story: "ui.otomeForge.album.sourceStory",
   memory: "ui.otomeForge.album.sourceMemory",
   pair: "ui.otomeForge.album.sourcePair",
+  sticker: "ui.otomeForge.album.sourceSticker",
 };
 
 interface CgViewerProps {
@@ -48,7 +49,10 @@ export function CgViewer({ view, images, index, onIndex, onClose }: CgViewerProp
   const image = images[index] ?? null;
   const li = image?.li ? view.lis.find((item) => item.id === image.li) : null;
   const title = image?.title || (li ? t("ui.otomeForge.album.cgWith", { name: li.name }) : t("ui.otomeForge.album.cg"));
-  const download = useImageDownload(image?.url ?? null, imageFilename(image?.url ?? "", `otome-forge-${title}`));
+  // A sticker saves under its own name (mari_laugh.png).
+  const extension = /\.(png|jpe?g|webp|gif|avif)$/iu.exec(image?.url ?? "")?.[1]?.toLowerCase() ?? "png";
+  const filename = image?.name ? `${image.name}.${extension}` : imageFilename(image?.url ?? "", `otome-forge-${title}`);
+  const download = useImageDownload(image?.url ?? null, filename);
 
   // Not while a save is in flight: its result would settle under the next image.
   const step = (delta: number) => {

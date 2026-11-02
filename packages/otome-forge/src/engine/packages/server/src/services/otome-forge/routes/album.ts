@@ -11,6 +11,8 @@
 // - tells: per love interest, the tells she has learned to read: the mask tells Read Him taught (M5), and those of each
 //   secret of his she has learned (its truth is out, so what gave it away reads plainly now). The seed of the R2
 //   Dossier.
+// - stickers (#2044): the protagonist's five, and each love interest's unlocked ones that are painted, or that wait for
+//   a tap to paint (S/art/stickers.ts albumStickers). Kept out of `cgs`, which Home's back layer reads.
 // Nothing the player has not won, seen or learned is listed: no banner item not owned, no CG not seen, no tell of a
 // secret still hidden.
 import type {
@@ -31,6 +33,7 @@ import { playableTracks } from "../audio/music.js";
 import { OtomeForgeError, runParam, type RegisterRoutes, type RouteDeps } from "../http.js";
 import { couplesOf, itemView, ownedItems, readItems } from "../items/open.js";
 import { readRun, type RunDocuments } from "../schemas/state.js";
+import { albumStickers } from "../art/stickers.js";
 
 const MEMORY_KINDS: ReadonlySet<Item["kind"]> = new Set(["memory5", "moment4", "snapshot3"]);
 
@@ -125,6 +128,7 @@ export async function albumView(deps: Pick<RouteDeps, "store">, runId: string): 
     favorites: run.state.favorites,
     soundtrack: MUSIC_MOODS.map((cue) => ({ cue, track: tracks.find((track) => track.cue === cue) ?? null })),
     tells,
+    stickers: albumStickers(runId, run),
   };
 }
 

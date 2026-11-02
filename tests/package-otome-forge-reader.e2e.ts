@@ -2061,7 +2061,8 @@ test("Otome Hearth Side with: the choice says so, names whom each option backs, 
   await expect(lost).toBeVisible();
   // The toast follows the answer, so the pick is recorded by now.
   expect(posts(stub, "/choose")[0]!.body).toMatchObject({ choice: "choice-1", option: "option-1" });
-  await expect(root.locator(".of-toasts")).toHaveAttribute("aria-live", "polite");
+  // The reader's own toasts, not the app-wide sticker notice (.of-toasts--app, #2044).
+  await expect(root.locator(".of-toasts:not(.of-toasts--app)")).toHaveAttribute("aria-live", "polite");
   await expect(root.getByText("They’ll remember that.")).toHaveCount(0);
   // Reduced motion: the toasts appear without animating.
   expect(await gained.evaluate((element) => getComputedStyle(element).animationName)).toBe("none");

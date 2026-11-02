@@ -6,10 +6,17 @@
 // Routes (S/routes/phone.ts): GET /runs/:run/phone → PhoneListView; GET .../phone/:li?page= → PhoneHistoryPage (the
 // kit's forgeChatHistoryPage, page 1 newest); POST .../phone/:li/send {text?, quote?, sticker?, id?, retry?} →
 // PhoneSendResult (409 busy while his reply or a close is being written); POST .../close → PhoneCloseResult;
-// POST .../seen {last?} → {}.
+// POST .../seen {last?} → {}; POST /runs/:run/phone/due {open?} → PhoneDueResult (useDailyMessages, #2044).
+// #2044: the first time the phone opens with images on, POST /runs/:run/stickers starts the protagonist's five chibi
+// stickers (S/art/stickers.ts), and the run view is read again so it polls until they land.
 import { useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useOtomeApi } from "../../api";
+import { imagesOn } from "../../hooks/use-items";
 import { runPath } from "../../hooks/use-reader";
-import type { LiId, RunView } from "../../shared/api-types";
+import { runQueryKey } from "../../hooks/use-run";
+import type { LiId, PhoneDueResult, RunView } from "../../shared/api-types";
+import { homeQueryKey } from "../home/HomeScreen";
 import { Thread } from "./Thread";
 import { ThreadList } from "./ThreadList";
 
@@ -25,6 +32,50 @@ export const BUSY_POLL_MS = 2_000;
 export const threadQueryKey = (runKey: string, li: LiId) => ["otome-forge", "thread", runKey, li] as const;
 export const phonePath = (runKey: string, li?: LiId) =>
   li ? `${runPath(runKey)}/phone/${encodeURIComponent(li)}` : `${runPath(runKey)}/phone`;
+/** How often the open app asks whether a love interest writes first (GF's heartbeat; the server spaces the messages). */
+export const DAILY_POLL_MS = 60_000;
+
+/**
+ * Settings → Connections' daily messages (S/phone/daily.ts): while the story is forged, its daily number is above 0
+ * and the page is visible, asks POST .../phone/due every minute (the first a minute after it starts), naming the thread
+ * the player has open, which never gets one. When a new daily message has landed, the thread list, Home's unread count
+ * and his thread are read again, so it shows unread like a reply that landed after she left.
+ */
+export function useDailyMessages(runKey: string | null, view: RunView | null, open: LiId | null) {
+  const otome = useOtomeApi();
+  const queryClient = useQueryClient();
+  const openRef = useRef(open);
+  openRef.current = open;
+  const on = !!runKey && view?.forge.phase === "ready" && (view.world.dailyMessages ?? 0) > 0;
+  useEffect(() => {
+    if (!on || !runKey) return;
+    let stopped = false;
+    let latest: string | null = null;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      if (document.visibilityState === "visible") {
+        try {
+          const due = await otome.post<PhoneDueResult>(`${phonePath(runKey)}/due`, { open: openRef.current });
+          const key = due.latest ? `${due.latest.li} ${due.latest.at}` : null;
+          if (!stopped && due.latest && key !== latest) {
+            latest = key;
+            void queryClient.invalidateQueries({ queryKey: phoneQueryKey(runKey) });
+            void queryClient.invalidateQueries({ queryKey: homeQueryKey(runKey) });
+            void queryClient.invalidateQueries({ queryKey: threadQueryKey(runKey, due.latest.li) });
+          }
+        } catch {
+          // The server spends an attempt before any work, so a failed heartbeat simply waits for the next one.
+        }
+      }
+      if (!stopped) timer = setTimeout(() => void poll(), DAILY_POLL_MS);
+    };
+    timer = setTimeout(() => void poll(), DAILY_POLL_MS);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [on, otome, queryClient, runKey]);
+}
 
 interface PhoneScreenProps {
   runKey: string;
@@ -34,7 +85,26 @@ interface PhoneScreenProps {
   onOpenChange: (open: PhoneOpen | null) => void;
 }
 
+/** Starts the protagonist's stickers once, the first time the phone opens with images on (#2044). */
+function useStartStickers(runKey: string, view: RunView) {
+  const otome = useOtomeApi();
+  const queryClient = useQueryClient();
+  const asked = useRef<string | null>(null);
+  const due = imagesOn(view) && !view.player.stickers && view.forge.phase === "ready";
+  useEffect(() => {
+    if (!due || asked.current === runKey) return;
+    asked.current = runKey;
+    otome
+      .post<{ started: boolean }>(`${runPath(runKey)}/stickers`)
+      .then(({ started }) => {
+        if (started) void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
+      })
+      .catch((failure: unknown) => console.warn("Otome Forge could not start the protagonist's stickers", failure));
+  }, [due, otome, queryClient, runKey]);
+}
+
 export function PhoneScreen({ runKey, view, open, onOpenChange }: PhoneScreenProps) {
+  useStartStickers(runKey, view);
   // Focus follows the player inside the phone: into a thread they opened here, back to its row when they leave it.
   // A thread opened from Home's Reply leaves for a list read for the first time, whose rows come after it loads: the
   // list's heading holds focus meanwhile, and the row takes it as it is drawn.
@@ -64,6 +134,7 @@ export function PhoneScreen({ runKey, view, open, onOpenChange }: PhoneScreenPro
       <Thread
         key={li.id}
         runKey={runKey}
+        view={view}
         li={li}
         quote={open.quote}
         focusHeading={openedHere.current}
