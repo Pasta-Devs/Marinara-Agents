@@ -137,6 +137,8 @@ export function slpPulseTaskDone(status: string) {
     "cancelled",
     // A Stir play taken back with Undo (task C).
     "undone",
+    // A first post that was made: the server reports "generated"; Pulse kept it "running" for a day.
+    "generated",
     // A fan run that found nothing to do ends as "skipped"; Pulse showed it "Working" forever (R1-103).
     "skipped",
   ]).has(status);

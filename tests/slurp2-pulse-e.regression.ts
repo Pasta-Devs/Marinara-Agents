@@ -35,6 +35,7 @@ import {
   slpPulseServerSection,
   slpPulseServerTarget,
   slpPulseSummaryCounts,
+  slpPulseTaskDone,
 } from "../packages/slurp2/src/engine/packages/client/src/slp/modules/chrome/slp-pulse-model.ts";
 import {
   SLP_TASKS_MAX,
@@ -338,6 +339,8 @@ const client = (path: string) => slurp2Source(new URL(`client/src/slp/${path}`, 
   assert.equal(slpPulseServerSection("completed", true), "done");
   assert.equal(slpPulseServerSection("undone", true), "done");
   assert.equal(slpPulseServerSection("scheduled", false), "scheduled");
+  // A made first post reports "generated"; it is done, not running.
+  assert.equal(slpPulseServerSection("generated", slpPulseTaskDone("generated")), "done");
 
   const own = new Set(["me"]);
   assert.deepEqual(slpPulseServerTarget({ accountIds: ["mira"], postId: "p1" }, own), {

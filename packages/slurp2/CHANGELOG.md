@@ -1,5 +1,11 @@
 # Slurp release notes
 
+## 0.4.16 — 2026-11-02
+
+- Fixed: Pulse kept a made first post as "Creating first post… running" for a day. The server reports a made first post as `generated`, and Pulse now counts that as done.
+- Fixed: a second Creator in a picture lost their reference picture when the posting Creator had none of their own (no linked card, or no picture). Their picture now goes along when avatar references are on and the provider takes them.
+- Fixed: Professor Mari's page asked for attention whenever the Engine updated her built-in card, and the player could not act on it. Her page now follows her card without a "card changed" or appearance review flag.
+
 ## 0.4.15 — 2026-11-01
 
 - Slurp can tell Long-Term Memory what is true about your Creators, so chats know it too. A new "Tell Long-Term Memory about your Creators" switch in Backstage (Engine link) is off by default. From then on, facts you write or promote, couples and friendships between Creators, and how storylines end become memories. Nothing from fans or DM threads is sent. Turning it on asks whether to turn on Long-Term Memory's "Other Agents can add memories" when that is off.
