@@ -24,7 +24,7 @@ import {
   MUSIC_SCENES,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/cues.ts";
 import { MUSIC_MOODS } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/faces.ts";
-import { musicBriefMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/audio/music.ts";
+import { musicBriefMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import { worldId } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
 import { registerAudioRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/audio.ts";
 import {

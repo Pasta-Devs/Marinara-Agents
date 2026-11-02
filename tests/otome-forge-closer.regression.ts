@@ -55,7 +55,7 @@ import {
 import {
   CLOSER_INTIMATE_ENDING_MAX,
   type ConfrontationReply,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/prompts.ts";
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/replies.ts";
 import {
   normalizeRepairPlan,
   normalizeRoutePlan,

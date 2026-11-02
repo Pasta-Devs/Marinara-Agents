@@ -24,26 +24,18 @@
 // the knowledge boundary and the writing rules. It sees the protagonist as the story knows them (their card and
 // persona), the love interest's own scene card, what stands between them, one thing they may know from their own
 // recall and their own notebook, so no guess repeats one already known; the state reaches it as their own reader may
-// know it (story/prompts.ts ownView): nothing another love interest's own chapter or notebook holds. Its one narrow
+// know it (S/prompts.ts ownView): nothing another love interest's own chapter or notebook holds. Its one narrow
 // rule: no guess about health, illness or medication, or anyone's period or cycle; nothing from the period tracker
 // ever reaches the server. Prompts are English and never localized; the set is written in the world's language.
 import { randomInt } from "node:crypto";
 import { forgeDayKey } from "@forge-kit/time-zone-server.mjs";
 import { z, type ZodType } from "zod";
-import type {
-  ActivityGrant,
-  LiId,
-  LiState,
-  Player,
-  RunState,
-  Unit,
-  World,
-} from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import type { ActivityGrant, LiId, RunState } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import {
   AFFECTION_EARNINGS,
   STARLIGHT_EARNINGS,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
-import { FACES, isFace, type Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
+import { isFace, type Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { soundsMedical, wordCount } from "../../../../../client/src/features/otome-forge/shared/home.js";
 import {
   NOTEBOOK_CATEGORIES,
@@ -62,25 +54,19 @@ import {
   type ReadMeVerdict,
 } from "../../../../../client/src/features/otome-forge/shared/read-me.js";
 import { updateIfChanged } from "../art/paint.js";
-import { otomeContentContract, otomeContractReminder } from "../content-contract.js";
-import { generateJson, readOrGenerate, type GenerationDeps, type OtomeMessage } from "../generation.js";
-import { NO_ABSENCE_RULE } from "../home/prompts.js";
+import { generateJson, readOrGenerate, type GenerationDeps } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
 import { runDocTarget, stateId, worldId } from "../ids.js";
 import type { OtomeMemory } from "../memory/memory.js";
-import { otomeSceneCard } from "../scene-card.js";
 import { STATE_LIMITS, clipText, keepNewest, keepTimeline, normalizeState, readRun } from "../schemas/state.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { grant } from "../state/rewards.js";
 import type { OtomeStore } from "../store.js";
-import { betweenYou, knowsAboutYou, ownView, protagonistBlock } from "../story/prompts.js";
-import { otomeWritingRules } from "../writing-rules.js";
+import { READ_ME_WORDS, ownView, readMeMessages } from "../prompts.js";
 import { clean, recalledLine } from "./read-him.js";
 
 export const READ_ME_TEMPERATURE = 0.9;
 export const READ_ME_MAX_TOKENS = 2400;
-/** Word limits a set's fields keep; a reply over them gets the repair turn. */
-export const READ_ME_WORDS = { context: 60, line: 40, fact: 25, reaction: 40 } as const;
 /** The `firsts` key and the Love Timeline kind of their first finished Read Me. */
 export const FIRST_READ_ME = "read-me";
 export const FIRST_READ_ME_TIMELINE = "first-read-me";
@@ -325,85 +311,6 @@ export function checkReadMeReply(reply: ReadMeReply): ReadMeReply | string {
     return "every guess must be about something different";
   }
   return { context, guesses };
-}
-
-export interface ReadMePromptInput {
-  world: Pick<World, "content" | "images" | "language" | "setting" | "premise" | "writingStyle" | "bannedPhrases">;
-  player: Player;
-  unit: Pick<Unit, "name" | "pronouns" | "bible">;
-  /** Their state as their own reader may know it (ownView), their own notebook with it. */
-  liState: LiState;
-  /** One thing they may know, from their own recall (reader: them), or "". */
-  recalled: string;
-  /** Their newest relationship and off-screen ledger lines among those they may know (ownView). */
-  lately: string[];
-}
-
-/** The Read Me prompt: the READ_ME_GUESSES guesses of one set, as `messages` in the plan's order (§1.7). */
-export function readMeMessages({ world, player, unit, liState, recalled, lately }: ReadMePromptInput): OtomeMessage[] {
-  const name = unit.name;
-  const them = player.name || "the protagonist";
-  const voice = `${name}'s own voice, said to the protagonist ("you")`;
-  const reaction = `{"line": "...", "face": "${FACES.join("|")}|"}`;
-  // ponytail: knowsAboutYou carries only the newest entries within its token budget, so a guess an older entry holds may
-  // come again; the upgrade path is a compact list of every entry's text for this prompt alone.
-  const known = knowsAboutYou(unit, liState);
-  const system = [
-    `You write one set of "Read Me", a mini-game in an otome visual novel: ${name} studies the protagonist and makes ${READ_ME_GUESSES} guesses about them, out loud. The player answers each guess (right, close or wrong), then ${name} reacts to the answer.`,
-    "Reply with ONLY a JSON object of this shape:",
-    `{"context": "...", "guesses": [{"category": "${NOTEBOOK_CATEGORIES.join("|")}", "line": "...", "face": "${FACES.join("|")}|", "fact": "...", "reactions": {"right": ${reaction}, "close": ${reaction}, "wrong": ${reaction}}}]}`,
-    "FIELDS",
-    `- context: where and how ${name} sits down to study the protagonist, in one or two sentences of narration to "you", present tense, at most ${READ_ME_WORDS.context} words.`,
-    `- guesses: exactly ${READ_ME_GUESSES} guesses, each about something different.`,
-    `- category: what the guess is about, exactly one of ${NOTEBOOK_CATEGORIES.join(", ")} (always in English).`,
-    `- line: the guess in one or two sentences, at most ${READ_ME_WORDS.line} words, in ${voice}.`,
-    `- face: the face ${name} wears making the guess, one of ${FACES.join(", ")}, or "" for a plain look.`,
-    `- fact: what the guess claims, as one short sentence in the third person about ${them} by name, at most ${READ_ME_WORDS.fact} words (for example "${them} takes ${player.pronouns.possessive} tea bitter.").`,
-    `- reactions: ${name}'s reaction to each answer: right (the guess was right), close (nearly right) and wrong (not at all). Each line at most ${READ_ME_WORDS.reaction} words, in ${voice}; each face as above.`,
-    "RULES",
-    `- Read the protagonist the way ${name} reads people, but guess past what is already known. What the persona states and what ${name} has been told or seen are where a guess starts, never the guess itself: a persona who loves sweets is never answered with "you like sweets", but with "your favourite sweet is the dark chocolate you do not admit to".`,
-    `- One step further: every guess claims something specific and checkable that ${name} does not know yet, so the answer teaches ${name} something new.`,
-    `- Vary the angle: what the protagonist wants right now, what they are thinking, what they like or dislike, a habit, a fear, a memory, something they would rather not admit. Different categories where you can, some safe and some daring.`,
-    ...(known
-      ? [
-          `- Never guess again what ${name} already knows (ALREADY KNOWN); if a fact is already there, guess something else. A new guess may build on it.`,
-        ]
-      : []),
-    `- Fit stage ${liState.stage}: only what ${name} would say to the protagonist at this stage.`,
-    "- Small moments only: nothing in the set changes the story, and no new event happens because of it.",
-    "- Never guess about the protagonist's health, illness or medication, or about anyone's period or cycle.",
-    `- ${NO_ABSENCE_RULE}`,
-    `- Write every field but category in ${world.language}.`,
-    "",
-    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
-    "",
-    otomeContentContract({ world, lis: [{ name }], kind: "chat" }),
-  ].join("\n");
-  const user = [
-    "WORLD",
-    world.setting.trim() || world.premise.trim(),
-    "",
-    'PROTAGONIST (addressed as "you")',
-    protagonistBlock(player),
-    "",
-    "LOVE INTEREST",
-    otomeSceneCard(unit, liState),
-    betweenYou(unit, liState),
-    lately.length ? `\nLately: ${lately.join(" ")}` : "",
-    recalled.trim()
-      ? `\nWhat ${name} may know of the story (${name} remembers only what ${name} was there for or was told):\n${recalled.trim()}`
-      : "",
-    known ? `\nALREADY KNOWN (never guess these again)\n${known}` : "",
-    "",
-    `Write ${name}'s ${READ_ME_GUESSES} guesses of Read Me now.`,
-    otomeContractReminder("chat"),
-  ]
-    .filter((line, index, all) => line !== "" || all[index - 1] !== "")
-    .join("\n");
-  return [
-    { role: "system", content: system },
-    { role: "user", content: user },
-  ];
 }
 
 // ── Start, answer, finish ──

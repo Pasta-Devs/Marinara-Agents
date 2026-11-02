@@ -13,7 +13,7 @@
 //   stillToMend): mended or moved on elsewhere meanwhile, its later scenes, the hub and its finish are an ordinary
 //   date's. The place is one of the picker's, the love interest's own pick, or one the story has painted (M2b's
 //   world.places): the date then goes there under the name the story gave it, so its scenes open on that place's art.
-// - P26 and the date's scenes see the state as the date's love interest may know it (story/prompts.ts ownView, M3's
+// - P26 and the date's scenes see the state as the date's love interest may know it (S/prompts.ts ownView, M3's
 //   rule): no grievance, disclosure or ledger line another love interest's own chapter left behind reaches them. Both
 //   carry that love interest's own notebook beside their bible or card (knowsAboutYou, Read Me #1945), so the evening
 //   can turn on what they have come to know about the protagonist.
@@ -45,13 +45,9 @@ import type {
   Beat,
   Chapter,
   ChapterNode,
-  Grievance,
   LiId,
   LiState,
-  Outfit,
   Paint,
-  PlaceArt,
-  Player,
   RunState,
   Unit,
   World,
@@ -59,7 +55,6 @@ import type {
 import { LIMIT_IDS, type LimitId } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import {
   DATE_BEATS,
-  PARTNER_CHOICE,
   STORY_PLACE,
   dateOutcome,
   standingRupture,
@@ -68,7 +63,6 @@ import {
   type DateFinishResult,
   type DateOutcome,
   type DatePick,
-  type DatePlace,
   type DatePlan,
   type DateStartInput,
   type DatesView,
@@ -80,32 +74,33 @@ import {
 import { sameName } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { galleryRef, worldStyle, type ImageClient, type ImageSubject } from "../art/image-client.js";
 import { imagesOf, type ArtDeps } from "../art/paint.js";
-import { SCENE_SIZE, keepsakePrompt, type ImagePrompt, type KeepsakePerson } from "../art/prompts.js";
-import { otomeContentContract, otomeContractReminder } from "../content-contract.js";
-import { generateJson, runForeground, type OtomeMessage } from "../generation.js";
+import {
+  type ImagePrompt,
+  type KeepsakePerson,
+  SCENE_SIZE,
+  datePlanMessages,
+  keepsakePrompt,
+  wornOutfitLine,
+} from "../prompts.js";
+import { generateJson, runForeground } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
 import { chapterId, runDocTarget, stateId } from "../ids.js";
 import { defaultLiState, keepTimeline, normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeChapter } from "../schemas/story.js";
-import { withPersonaImageAppearance } from "../setup/prompts.js";
+import { withPersonaImageAppearance } from "../setup/cast.js";
 import { applyChoiceEffects } from "../state/relationship.js";
 import { grant } from "../state/rewards.js";
 import type { OtomeStore } from "../store.js";
 import { canonPicks, type BeatDeps } from "../story/beats.js";
 import { canonicalSegments, readBeat, readChapter, recallText } from "../story/canon.js";
-import { ANGST_TYPES, CHAPTER_TAGS, bibleBlock, knowsAboutYou, ownView, protagonistBlock } from "../story/prompts.js";
-import { withPersonaStoryAbout } from "../setup/prompts.js";
-import { STORY_PACING_INSTRUCTION, otomeWritingRules } from "../writing-rules.js";
+import { ANGST_TYPES, CHAPTER_TAGS } from "../story/replies.js";
+import { withPersonaStoryAbout } from "../setup/cast.js";
 
 export type DateDeps = BeatDeps & {
   runtime: ArtDeps["runtime"];
   /** The loopback image client by default; tests pass a fake. */
   images?: ImageClient;
 };
-
-/** The outfit line of the look someone wears now (Wear at home, or a date's pick), or "" in their base look. */
-const wornOutfitLine = (person: { outfits: readonly Outfit[]; wornOutfit?: string }) =>
-  (person.wornOutfit ? person.outfits.find((outfit) => outfit.id === person.wornOutfit)?.outfitLine : "") ?? "";
 
 /** The finish's entry in `chapters[key].applied`, after the beats' own `${i}/choice-<n>` picks. */
 const FINISH_CHOICE = "finish";
@@ -143,18 +138,6 @@ function mendFound(state: RunState, chapter: Chapter): keyof typeof MEND_MARKS |
 
 // ── P26 date-plan (structured, 0.9, planner contract) ──
 
-/** What each place is, for the planner; it adapts the place to the world and names it in the world's language. */
-const PLACE_SPIRIT: Record<Exclude<DatePlace, typeof PARTNER_CHOICE | typeof STORY_PLACE>, string> = {
-  aquarium: "a night aquarium after closing: blue light through the tanks, jellyfish drifting, footsteps echoing",
-  rooftop: "a rooftop garden above the lights of the city: strung lanterns, potted lemon trees, the wind",
-  bookshop: "an old bookshop after hours: narrow aisles, a hidden reading nook, the smell of paper",
-  "night-market": "a night market: lanterns, food stalls, a crowd to get lost in together",
-  observatory: "an observatory on a hill: a great telescope, a dome opened to the stars",
-  seaside: "the seaside at dusk: a long shore, cold water at their feet, the last of the light",
-  cafe: "a small café on a rainy evening: fogged windows, a corner table, something warm to drink",
-  fairground: "a fairground at night: a Ferris wheel, games of chance, sugar in the air",
-};
-
 export interface DatePlanReply {
   title: string;
   place: string;
@@ -182,110 +165,6 @@ export const DatePlanReplySchema: ZodType<DatePlanReply> = z.object({
     .max(6),
   keepsake: z.object({ brief: text(1200).min(1) }),
 });
-
-export interface DatePlanInput {
-  world: World;
-  player: Player;
-  unit: Unit;
-  /** The run's state; the planner sees it as the date's love interest may know it (ownView). */
-  state: RunState;
-  place: DatePlace;
-  /** With place "story": the painted place the date goes to. */
-  storyPlace?: Pick<PlaceArt, "name" | "tags"> | null;
-  /** The rupture's grievance this date tries to mend, or null. */
-  makeItRight: Grievance | null;
-  /** Recalled memory (the kit's text), or "". */
-  memory: string;
-}
-
-/** P26: the date's plan. Messages in the plan's order (§1.7); the planner gets the full bible. */
-export function datePlanMessages({
-  world,
-  player,
-  unit,
-  state,
-  place,
-  storyPlace = null,
-  makeItRight,
-  memory,
-}: DatePlanInput): OtomeMessage[] {
-  const name = unit.name;
-  const { liState } = ownView(state, unit.id);
-  const recent = liState.angst.slice(-2);
-  const known = knowsAboutYou(unit, liState);
-  // The rupture is always named (it is how they are now), with who holds it; its grievance only when it came from what
-  // they may know.
-  const mendText = makeItRight ? liState.grievances.find((item) => item.id === makeItRight.id)?.text : undefined;
-  const system = [
-    `You plan one DATE in an otome visual novel, a character-driven romance: an evening the protagonist and ${name} spend together. A narrator writes it later as ${DATE_BEATS} scenes the player reads, each with one choice the player makes.`,
-    "Reply with ONLY a JSON object of this shape:",
-    '{"title": "...", "place": "...", "tags": ["..."], "goesWrong": false, "seed": {"type": "...", "text": "..."}, "beats": [{"guide": "..."}, {"guide": "..."}, {"guide": "..."}], "keepsake": {"brief": "..."}}',
-    "FIELDS",
-    `- title: the date's name, 2 to 6 words; it never gives away how the evening turns.`,
-    storyPlace
-      ? "- place: the name of the place given below, exactly as written there."
-      : "- place: where the date happens, named as this world would name it.",
-    `- beats: exactly ${DATE_BEATS} guides in play order, 2 to 4 sentences each, for the narrator: what happens, what ${name} wants in that scene besides the protagonist, the moment where what the protagonist does matters to ${name} (the scene's one choice goes there), and where it leaves things. The evening builds: arriving, the heart of it, how it ends.`,
-    `- goesWrong: true when the evening should stumble somewhere real (an old wound brushed, a jealousy, an interruption, a misread), when the story so far gives it a reason; false for an evening that goes as hoped.`,
-    `- seed: only when goesWrong: the conflict the stumble plants. type from: ${ANGST_TYPES.join(", ")}${recent.length ? `, never one of ${name}'s last kinds of angst (${recent.join(", ")})` : ""}; text: one line on it. Omit it otherwise.`,
-    `- keepsake.brief: one or two plain English sentences on the picture that would remember this date: where and how it is shot (place, light, framing, what the two of them are doing), never anyone's looks.`,
-    `- tags: content tags a reader should see before it starts, from: ${CHAPTER_TAGS.join(", ")}. [] when none apply.`,
-    "RULES",
-    `- The date is the protagonist and ${name}; anyone else stays at the edges of it.`,
-    `- It does not move ${name}'s stage, never reveals a secret before its stage, and never solves the story's mystery.`,
-    "- A stumble is small: at most a minor hurt, never a break-up and never a rupture.",
-    ...(makeItRight
-      ? [
-          makeItRight.by === "protagonist"
-            ? `- This is a MAKE IT RIGHT date: a rupture stands between them, and it is the protagonist who was hurt. Plan the evening as ${name}'s attempt to earn back the protagonist's trust: each scene gives ${name} a real chance to make amends in their own way, and the protagonist's hurt is honest. Whether it mends is decided by the player's choices, never by the guides: no guide resolves it.`
-            : `- This is a MAKE IT RIGHT date: a rupture stands between them. Plan the evening as the protagonist's attempt to mend it: each scene gives them a real chance to make amends in their own way, and ${name}'s hurt is honest. Whether it mends is decided by the player's choices, never by the guides: no guide resolves it.`,
-        ]
-      : []),
-    `- Write the title, the place and every guide in ${world.language}; the keepsake brief in English.`,
-    "- Omit an optional field rather than writing null.",
-    "",
-    STORY_PACING_INSTRUCTION,
-    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
-    "",
-    otomeContentContract({ world, lis: [{ name }], kind: "planner" }),
-  ].join("\n");
-  const wear = (who: string, line: string) => (line.trim() ? `- ${who}: ${line.trim()}` : "");
-  const user = [
-    "WORLD",
-    world.setting.trim() || world.premise.trim(),
-    world.mystery.question ? `The mystery: ${world.mystery.question}` : "",
-    "",
-    "PROTAGONIST",
-    protagonistBlock(player),
-    "",
-    `THE DATE'S LOVE INTEREST (full bible; this date does not move the stage)`,
-    bibleBlock(unit, state, [unit.id], world),
-    ...(known ? [known] : []),
-    "",
-    "THE PLACE",
-    place === PARTNER_CHOICE
-      ? `${name} chooses where to take the protagonist: somewhere that says something true about ${name} (from their likes, their past or their world).`
-      : place === STORY_PLACE
-        ? `"${storyPlace?.name ?? ""}", a place in this world${storyPlace?.tags.trim() ? ` (${storyPlace.tags.trim()})` : ""}. The date goes there: keep that name for it.`
-        : `${PLACE_SPIRIT[place]}. Adapt it to this world's setting and era, keeping its spirit.`,
-    "",
-    "WHAT THEY WEAR (image tags; describe them in words if at all)",
-    wear(name, wornOutfitLine(unit) || unit.outfitLine || unit.bible?.look.outfitLine || ""),
-    wear(player.name || "The protagonist", wornOutfitLine(player) || player.look.outfitLine),
-    makeItRight ? `\nMAKE IT RIGHT\nThe rupture (${makeItRight.id})${mendText ? `: ${mendText}` : ""}` : "",
-    "",
-    memory.trim() ? `STORY MEMORY\n${memory.trim()}` : "",
-    "",
-    `Plan the date with ${name} (id ${unit.id}) now.`,
-    otomeContractReminder("planner"),
-  ]
-    .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
-    .join("\n");
-  return [
-    { role: "system", content: system },
-    { role: "user", content: user },
-  ];
-}
 
 export interface PlannedDate {
   title: string;

@@ -6,16 +6,14 @@ import {
   runDocTarget,
   worldId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
-import {
-  aboutLine,
-  normalizePlayer,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
+import { aboutLine } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
+import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import {
   readPersona,
   withPersonaImageAppearance,
   withPersonaStoryAbout,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/setup/prompts.ts";
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/setup/cast.ts";
 import { KAI, beatReply, json, planReply, storyWorld } from "./fixtures/otome-forge-story.ts";
 
 const body = (messages: CapabilityLanguageModelMessage[]) => messages.map((message) => message.content).join("\n");

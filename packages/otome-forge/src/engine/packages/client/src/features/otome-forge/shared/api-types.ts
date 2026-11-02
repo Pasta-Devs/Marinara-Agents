@@ -712,7 +712,7 @@ export interface LiState {
   tellsLearned: number[];
   /**
    * What they have come to know about the protagonist (Read Me, #1945), newest last: theirs alone. Only prompts about
-   * them carry it (S/story/prompts.ts knowsAboutYou); the player reads, rewrites and deletes it.
+   * them carry it (S/prompts.ts knowsAboutYou); the player reads, rewrites and deletes it.
    */
   known: NotebookEntry[];
 }
@@ -984,7 +984,7 @@ export interface Beat {
   /**
    * A key image's brief: `at` is the segment it opens on; `brief` is English. `art` is its paint (M2b, S/art/cg.ts).
    * `explicit`: the brief shows sex or nudity on the page; kept only when Heat and the image rating were both Explicit
-   * as it was written, and painted explicit only while they still are (S/content-contract.ts effectiveImageRating).
+   * as it was written, and painted explicit only while they still are (S/prompts.ts effectiveImageRating).
    */
   cg?: { at: number; brief: string; cast: string[]; explicit?: true; art?: Paint };
   /** The furthest mainline segment read (skip-read starts here). */

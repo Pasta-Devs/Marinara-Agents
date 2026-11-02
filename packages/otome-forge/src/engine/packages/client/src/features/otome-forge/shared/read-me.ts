@@ -8,8 +8,8 @@
 //
 // The notebook (`LiState.known`) is what that love interest has come to know about the protagonist. Finishing a set
 // writes one entry per answered guess, in the same state write as its pay. The player can read every entry, change
-// the words they gave, and delete it. It is that love interest's alone: only prompts about them carry it (story/
-// prompts.ts knowsAboutYou), never another love interest's, a planner's view of others, a banner or a care note, and
+// the words they gave, and delete it. It is that love interest's alone: only prompts about them carry it
+// (S/prompts.ts knowsAboutYou), never another love interest's, a planner's view of others, a banner or a care note, and
 // it is never a story-memory source, so a delete is final. Nothing from the period tracker ever reaches it.
 import type { ActivityGrant, LiId } from "./api-types";
 import type { Face } from "./faces";

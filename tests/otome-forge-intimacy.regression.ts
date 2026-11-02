@@ -13,7 +13,11 @@ import {
   normalizeContent,
   type ContentSettings,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/content.ts";
-import { otomeContentContract } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/content-contract.ts";
+import {
+  bannerPlanMessages,
+  bibleMessages,
+  otomeContentContract,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import { createHandle } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/http.ts";
 import {
   runDocTarget,
@@ -29,8 +33,6 @@ import {
 import { readRun } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { checkBible } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/setup/bible.ts";
-import { bibleMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/setup/prompts.ts";
-import { bannerPlanMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/wish/prompts.ts";
 import { KAI, MIR, bible, beatReply, json, planReply, storyWorld } from "./fixtures/otome-forge-story.ts";
 
 const text = (messages: CapabilityLanguageModelMessage[]) => messages.map((message) => message.content).join("\n");

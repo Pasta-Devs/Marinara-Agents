@@ -16,11 +16,7 @@ import {
 } from "@forge-kit/audio-prompts.mjs";
 import { availableForgeSoundtracks, recordForgeSoundtrack } from "@forge-kit/audio-settings.mjs";
 import { z } from "zod";
-import type {
-  SoundtrackTrack,
-  World,
-  WorldAudio,
-} from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import type { SoundtrackTrack, WorldAudio } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { MUSIC_MEDIUM, MUSIC_SCENES } from "../../../../../client/src/features/otome-forge/shared/cues.js";
 import { MUSIC_MOODS, type MusicMood } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { chapterMusicCue } from "../../../../../client/src/features/otome-forge/shared/audio.js";
@@ -31,6 +27,7 @@ import { normalizeChapter } from "../schemas/story.js";
 import { keepNewest } from "../schemas/state.js";
 import { TRACKS_MAX, normalizeWorld } from "../schemas/world.js";
 import type { OtomeStore } from "../store.js";
+import { musicScenario } from "../prompts.js";
 
 const BRIEF_TOKENS = 600;
 
@@ -38,18 +35,6 @@ const BriefSchema = z.object({ prompt: z.string() });
 
 export interface MusicDeps extends GenerationDeps {
   store: OtomeStore;
-}
-
-/** What the brief describes: the premise, then the setting the world plan wrote. */
-export const musicScenario = (world: Pick<World, "premise" | "setting">) =>
-  [world.premise.trim(), world.setting.trim()].filter(Boolean).join("\n\n");
-
-/** P14: the brief messages for one cue. */
-export function musicBriefMessages(world: Pick<World, "premise" | "setting">, cue: MusicMood) {
-  return forgeMusicBriefMessages({ scenario: musicScenario(world) }, cue, null, {
-    scenes: MUSIC_SCENES,
-    medium: MUSIC_MEDIUM,
-  });
 }
 
 const worldTarget = (runId: string) => runDocTarget("world", worldId(runId));

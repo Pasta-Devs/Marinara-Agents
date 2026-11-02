@@ -7,8 +7,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Unit } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
-import { noteMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/home/prompts.ts";
-import { chatReplyMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/prompts.ts";
+import {
+  appearanceLine,
+  bannerPlanMessages,
+  beatMessages,
+  betweenYou,
+  bibleMessages,
+  chapterPlanMessages,
+  chatReplyMessages,
+  closerMessages,
+  confrontationMessages,
+  noteMessages,
+  premiseMessages,
+  repairPlanMessages,
+  routePlanMessages,
+  stageGoal,
+  worldPlanMessages,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
 import {
   defaultLiState,
@@ -16,23 +31,6 @@ import {
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
-import {
-  bibleMessages,
-  premiseMessages,
-  worldPlanMessages,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/setup/prompts.ts";
-import {
-  betweenYou,
-  appearanceLine,
-  beatMessages,
-  chapterPlanMessages,
-  closerMessages,
-  confrontationMessages,
-  repairPlanMessages,
-  routePlanMessages,
-  stageGoal,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/prompts.ts";
-import { bannerPlanMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/wish/prompts.ts";
 import { CAST, HE, KAI, MIR, SHE, at, bible } from "./fixtures/otome-forge-story.ts";
 
 const text = (messages: Array<{ content: string }>) => messages.map((message) => message.content).join("\n");

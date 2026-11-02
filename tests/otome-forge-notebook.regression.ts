@@ -26,14 +26,27 @@ import {
   READ_ME_WORDS_MAX,
   type NotebookEntry,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/read-me.ts";
-import { careNoteMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/care/prompts.ts";
+import {
+  type BeatMessagesInput,
+  KNOWN_TOKENS,
+  bannerPlanMessages,
+  beatMessages,
+  careNoteMessages,
+  chapterPlanMessages,
+  chatReplyMessages,
+  closerMessages,
+  confrontationMessages,
+  datePlanMessages,
+  knowsAboutYou,
+  noteMessages,
+  ownView,
+  readHimMessages,
+  repairPlanMessages,
+  routePlanMessages,
+  storyPlanMessages,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import { serveNote } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/home/note.ts";
-import { noteMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/home/prompts.ts";
-import { storyPlanMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/items/prompts.ts";
-import { datePlanMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/minigames/date-night.ts";
-import { readHimMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/minigames/read-him.ts";
 import { sendMessage } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/chat.ts";
-import { chatReplyMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/prompts.ts";
 import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
 import {
   defaultLiState,
@@ -41,19 +54,6 @@ import {
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
-import {
-  beatMessages,
-  chapterPlanMessages,
-  closerMessages,
-  confrontationMessages,
-  KNOWN_TOKENS,
-  knowsAboutYou,
-  ownView,
-  repairPlanMessages,
-  routePlanMessages,
-  type BeatMessagesInput,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/prompts.ts";
-import { bannerPlanMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/wish/prompts.ts";
 import {
   CAST,
   HE,

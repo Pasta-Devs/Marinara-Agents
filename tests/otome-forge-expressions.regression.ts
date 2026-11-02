@@ -5,7 +5,7 @@ import test from "node:test";
 import type { Unit } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import { FACES } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/faces.ts";
 import { createOtomeArt } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/expressions.ts";
-import { expressionPrompt } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/prompts.ts";
+import { expressionPrompt } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import {
   runDocTarget,
   unitId,

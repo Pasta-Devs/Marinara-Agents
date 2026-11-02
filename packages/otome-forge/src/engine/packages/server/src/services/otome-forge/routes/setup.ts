@@ -18,7 +18,8 @@ import { generateJson } from "../generation.js";
 import { OtomeForgeError, debugModeOf, parseBody, runParam, type RegisterRoutes } from "../http.js";
 import { isLiId } from "../ids.js";
 import { consentForge, paintWithStep, retryForgeStep } from "../setup/forge.js";
-import { normalizePremise, premiseMessages, PremiseSchema } from "../setup/prompts.js";
+import { premiseMessages } from "../prompts.js";
+import { normalizePremise, PremiseSchema } from "../setup/cast.js";
 
 const STEP_ID = z.string().min(1).max(80);
 const PremiseBody = z.object({ language: z.string().min(1).max(80), connectionId: z.string().min(1).max(200) });

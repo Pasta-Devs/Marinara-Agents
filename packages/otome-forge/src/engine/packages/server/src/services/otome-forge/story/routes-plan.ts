@@ -35,7 +35,7 @@ import { chapterId, mainChapterNumber, runDocTarget, stateId } from "../ids.js";
 import { defaultLiState, normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeChapter } from "../schemas/story.js";
 import { repairOffers } from "../state/stages.js";
-import { withPersonaStoryAbout } from "../setup/prompts.js";
+import { withPersonaStoryAbout } from "../setup/cast.js";
 import { recallText } from "./canon.js";
 import {
   clean,
@@ -46,7 +46,8 @@ import {
   type PlanContext,
   type PlannedChapter,
 } from "./chapters.js";
-import { ChapterPlanSchema, repairPlanMessages, routePlanMessages, type ChapterPlanReply } from "./prompts.js";
+import { repairPlanMessages, routePlanMessages } from "../prompts.js";
+import { ChapterPlanSchema, type ChapterPlanReply } from "./replies.js";
 
 const notFound = (what: string) => new OtomeForgeError(404, `No such ${what}.`, "not-found");
 const locked = (message: string) => new OtomeForgeError(409, message, "locked");

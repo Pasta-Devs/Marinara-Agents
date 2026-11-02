@@ -33,10 +33,10 @@ import {
 import {
   COMFORT_RULE,
   CONTRACT_KINDS,
+  type ContractKind,
   otomeContentContract,
   otomeContractReminder,
-  type ContractKind,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/content-contract.ts";
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 
 const LIS = [
   { name: "Kai", presentation: "man" as const },

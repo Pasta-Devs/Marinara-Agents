@@ -22,7 +22,7 @@ import type {
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { forgePrerequisite } from "../../../../../client/src/features/otome-forge/shared/forge.js";
 import { claimPaint, paintClaimed, paintIsLive, type ArtDeps, type LookOwner } from "../art/paint.js";
-import type { ImagePrompt } from "../art/prompts.js";
+import { type ImagePrompt, bibleMessages, worldPlanMessages } from "../prompts.js";
 import { generateJson, runForeground } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
 import { ID_PREFIX, INDEX_ID, INDEX_TARGET, runDocTarget, unitId, worldId } from "../ids.js";
@@ -31,15 +31,7 @@ import { readRun } from "../schemas/state.js";
 import { BibleSchema, normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { checkBible } from "./bible.js";
-import {
-  bibleMessages,
-  castOf,
-  normalizeWorldPlan,
-  withPersonaStoryAbout,
-  worldPlanMessages,
-  WorldPlanSchema,
-  type WorldPlan,
-} from "./prompts.js";
+import { castOf, normalizeWorldPlan, withPersonaStoryAbout, WorldPlanSchema, type WorldPlan } from "./cast.js";
 import { intimacyOpen } from "../../../../../client/src/features/otome-forge/shared/content.js";
 
 export type ForgeDeps = ArtDeps;
