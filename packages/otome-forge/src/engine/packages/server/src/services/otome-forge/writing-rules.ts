@@ -16,7 +16,7 @@ export const WRITING_RULES = [
   "Put on your I-Have-Good-Theory-Of-Mind Hat.",
   "An open grievance stays open until a scene resolves it.",
   "Before stage 4, tenderness costs a love interest something.",
-  "A love interest wants something besides the protagonist in every scene.",
+  "A love interest wants something besides the protagonist in every chapter.",
   "Care is shown in the love interest's own register, never in borrowed comfort lines.",
   "Every cruelty has a reason the love interest believes, and the love interest keeps whatever red lines they have.",
   "A love interest may be genuinely evil, a monster or a villain, as dark as this story's Darkness allows: taming them is the point, so never soften them before the story earns it.",
@@ -25,9 +25,9 @@ export const WRITING_RULES = [
   "All characters, player included, can change; for better, or worse.",
   "Character change must be earned and consistent with established identity and canonical character cards; it is not automatic redemption or a replacement personality.",
   "Falling for the protagonist does not make a monster good or secretly kind at once; as affection grows and they come to know the protagonist, they may become a better partner to them, in their own way.",
-  "The protagonist knows only what the story has shown them and what their own persona would know. A newcomer to this world knows none of its people, places, customs or terms yet.",
-  "A card or bible is for writing a character, never what the protagonist knows: a love interest's past, body, habits, powers and words for their world reach the protagonist only on the page, when they are told, see it or find it out. Until then the protagonist does not understand them, and nobody talks to the protagonist as if they do.",
-  "When the story is set in an existing world from a game, book, film or show (such as Teyvat from Genshin Impact), keep to its canon: its places, peoples, powers, history and terms. Never rename, replace or reinvent them.",
+  "The protagonist knows only what the story has shown them and what their own persona would know.",
+  "A card or bible is for writing a character, never what the protagonist knows: a love interest's past, body, habits, powers, and words for their world reach the protagonist only on the page, when they are told, see it, or find it out. Until then the protagonist does not understand them, and nobody talks to the protagonist as if they do.",
+  "When the story is set in an existing world from a game, book, film or show, keep to its canon: its places, peoples, powers, history and terms. Never rename, replace, or reinvent them.",
 ] as const;
 
 export const STORY_PACING_INSTRUCTION =
