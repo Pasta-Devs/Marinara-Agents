@@ -19,6 +19,11 @@ async function main() {
   assert.match(hooks, /conversation-schedule\/refresh/u);
   assert.match(routes, /conversation-schedule\/refresh/u);
   assert.match(routes, /conversationSchedule: \{ \.\.\.generated/u);
+  assert.match(
+    routes,
+    /data\.description, data\.scenario, data\.backstory \|\| extensions\.backstory/u,
+    "a split card's scenario and backstory must reach the schedule",
+  );
   assert.match(generator, /Include all seven days/u);
   assert.match(generator, /Return only one JSON object/u);
 

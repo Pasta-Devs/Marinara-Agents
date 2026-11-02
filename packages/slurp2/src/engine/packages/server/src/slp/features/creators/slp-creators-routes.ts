@@ -223,7 +223,10 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
         connection,
         {
           name: String(data.name ?? source.displayName),
-          description: String(data.description ?? ""),
+          // An Engine card split (#8543) moves scenario and backstory out of the description.
+          description: [data.description, data.scenario, data.backstory || extensions.backstory]
+            .filter((part) => typeof part === "string" && part.trim())
+            .join("\n\n"),
           personality: String(data.personality ?? ""),
         },
         scheduleSettings.simulationTuning.prompts.scheduleExtra,
