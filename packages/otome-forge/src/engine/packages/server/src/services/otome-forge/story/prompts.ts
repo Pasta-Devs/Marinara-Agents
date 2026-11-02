@@ -525,6 +525,8 @@ export interface ChapterPlanInput {
   arc?: StoryArc | null;
   /** The last main chapter's climax, for a free pick. */
   lastClimax?: ClimaxKind | null;
+  /** This chapter's end may close on the arc's judgment (#2047, judgmentFor): only that, never its question or truth. */
+  judgment?: boolean;
 }
 
 export function chapterPlanMessages({
@@ -538,6 +540,7 @@ export function chapterPlanMessages({
   climax = null,
   lastClimax = null,
   arc: plannedArc = null,
+  judgment = false,
 }: ChapterPlanInput): OtomeMessage[] {
   const leadUnit = units.find((unit) => unit.id === lead);
   const others = units.filter((unit) => unit.id !== lead);
@@ -573,6 +576,12 @@ export function chapterPlanMessages({
       : `- Choose the climax the story calls for: open grievances and strain lean toward a confrontation, trust and calm toward a closer.${lastClimax ? ` The last main chapter ended with a ${lastClimax}.` : ""}`,
     "- The Lead is in most nodes and in the climax; the Foil appears in at least one node. The Foil's goal competes with the protagonist's or the Lead's, and not always for the protagonist: a rivalry over a goal, a secret, a duty or the mystery counts too.",
     `- Never plan a chapter on the template of the ones before it: vary what drives it and where its turn falls. When its last node leaves a lasting decision open, make it ${VARIED_DECISION}.`,
+    // #2047: a climax-last plan has no big choice at its end, so it could never close on the judgment.
+    ...(judgment
+      ? [
+          "- This chapter's end may close on a judgment the protagonist can get wrong (the narrator decides; it is optional): put the climax second-to-last, so the last node can hold a big choice.",
+        ]
+      : []),
     "- The world has other people: give named minor characters (friends, family, rivals, officials, locals) real parts where the story calls for them; they speak and can matter. Not every node needs a love interest: the protagonist has a life of their own, and a node may be theirs alone or with others (cast []). A moment node and the climax always have their love interest in cast.",
     "- No cap on the cast: when the beat needs everyone (a rescue, a party, a confrontation), a node may hold the whole cast, each with their own stake.",
     TIME_RULE,

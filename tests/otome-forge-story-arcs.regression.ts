@@ -307,7 +307,7 @@ function world(content = defaultContent()) {
 
 const units = CAST.map((li) => ({ ...normalizeUnit({}), id: li.id, name: li.name, pronouns: HE, bible: bible() }));
 
-function prompt(arc: StoryArc | null, number: number) {
+function prompt(arc: StoryArc | null, number: number, judgment = false) {
   const parsed = ChapterPlanSchema.safeParse(planReply());
   assert.ok(parsed.success);
   return chapterPlanMessages({
@@ -325,6 +325,7 @@ function prompt(arc: StoryArc | null, number: number) {
     lead: KAI,
     memory: "",
     arc,
+    judgment,
   } satisfies Parameters<typeof chapterPlanMessages>[0]);
 }
 
@@ -714,9 +715,23 @@ test("the arc planner is told the judgment is optional, only for a real mystery,
       /- judgment: OPTIONAL\. Only when this arc holds a mystery, suspects, a traitor or a disputed account/u,
     );
     assert.match(system, /2 to 4 plausible answers, worded the same way; the true one .* is always among them/u);
+    assert.match(
+      system,
+      /Name the true answer in endsWith\.what or in the reveal that answers it, since later writers see only those/u,
+      "a wrong guess can only play out when a later writer knows the answer",
+    );
     assert.match(system, /Never in a breathing arc, and never invented to fill the field/u);
     assert.match(system, /when the arc has no such question, omit judgment\./u);
   }
+});
+
+test("the chapter planner of a listed chapter is told to leave its last node free for a big choice, and no other is", () => {
+  const listed = prompt(null, 4, true)[0]!.content;
+  assert.match(
+    listed,
+    /- This chapter's end may close on a judgment the protagonist can get wrong \(the narrator decides; it is optional\): put the climax second-to-last, so the last node can hold a big choice\./u,
+  );
+  assert.doesNotMatch(prompt(null, 4)[0]!.content, /close on a judgment/u, "an unlisted chapter plans as before");
 });
 
 const judgedChapter = (nodes: ChapterNode[]) =>
@@ -855,9 +870,15 @@ test("a judgment already asked is not offered again in the arc", async () => {
 });
 
 test("POST /chapters/next stamps the arc's judgment on a listed chapter's last node, and the player never sees it", async () => {
+  let planPrompt = "";
   const t = await storyWorld({
     runKey: "r-judge-aaaaaa",
-    replies: [json(planReply())],
+    replies: [
+      (messages) => {
+        planPrompt = String(messages[0]!.content);
+        return json(planReply());
+      },
+    ],
     arcReply: () => JSON.stringify(arcReply({ judgment: { ...judgment, chapters: [1, 4] } })),
   });
   const planned = await t.call("POST", "/runs/:run/chapters/next", { lead: KAI });
@@ -865,5 +886,7 @@ test("POST /chapters/next stamps the arc's judgment on a listed chapter's last n
   const stored = (await t.store.readDoc(chapterId(t.runId, "main-1"), normalizeChapter))!;
   assert.deepEqual(stored.nodes.at(-1)!.judgment, asked, "chapter 1 is listed: its last node may close on it");
   assert.equal(stored.nodes.filter((node) => node.judgment).length, 1);
+  assert.match(planPrompt, /This chapter's end may close on a judgment .* put the climax second-to-last/u);
+  assert.doesNotMatch(planPrompt, /Who rang the bell/u, "the chapter planner learns only that it is listed");
   assert.doesNotMatch(JSON.stringify(planned.body), /Who rang the bell|judgment/u, "nothing of it reaches the client");
 });

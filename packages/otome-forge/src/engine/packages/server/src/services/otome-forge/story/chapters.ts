@@ -494,6 +494,7 @@ export async function planNextChapter(
         climax,
         lastClimax: climaxOfChapter(mains.at(-1)),
         arc,
+        judgment: !!judgment,
       }),
       memory,
       schema: ChapterPlanSchema,

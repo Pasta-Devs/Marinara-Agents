@@ -1094,7 +1094,7 @@ export interface StoryArc {
   choice: { kind: ArcChoice };
   /**
    * A story arc's optional judgment (#2047), and the main chapters whose end may close on it. Which answer is true is
-   * never stored: the truth and the decisions block carry it.
+   * never stored with it: the world's truth, or the arc's ending or reveal that answers it, names it (S/story/arc.ts).
    */
   judgment?: ArcJudgment & { chapters: number[] };
   plannedAt: string;
