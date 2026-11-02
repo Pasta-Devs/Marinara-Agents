@@ -123,7 +123,9 @@ const replyTokens = (request: SummaryRequest) =>
 
 /**
  * The reply room a summary needs, GF's summaryBudget reserve: at least SUMMARY_OUTPUT_TOKENS (an overview's own budget
- * when larger), the connection's output cap when that is lower, and never under the 8192 floor every call keeps.
+ * when larger), the connection's output cap when that is lower, and never under OUTPUT_FLOOR, even when the cap is
+ * lower still (the maintainer's rule for thinking models). generateJson itself would send such a call with only the
+ * cap as its floor, so on a connection capped below 8192 summary pieces are just cut smaller than strictly needed.
  */
 const summaryReserve = (request: SummaryRequest, maxOutputTokens: number | null) =>
   Math.max(
