@@ -72,6 +72,18 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.6.25",
+          "date": "2026-11-02",
+          "notes": "- **Updated writing rules.** A love interest now wants something of their own in every chapter, not every scene, and the rules about what your protagonist knows and an existing world's canon are shorter.",
+          "highlight": false
+        },
+        {
+          "version": "0.6.24",
+          "date": "2026-11-02",
+          "notes": "- **Long lines show in full on iPhone.** On iPhone, a line longer than the dialogue box could come back cut off mid-word, with only its final period showing, although the Log had all of it. Every row now shows as it types, and a click on a line that is still typing still shows it whole.",
+          "highlight": false
+        },
+        {
           "version": "0.6.23",
           "date": "2026-11-02",
           "notes": "- **Chibi stickers.** With images on, your five phone stickers are chibi busts of your protagonist, and each love interest gets nine of their own, one unlocked per affection level from 2 to 10 (\"You unlocked a new sticker\"). They're painted in the background, one at a time, and Ask before painting holds them for a tap; stories in progress catch up. Without images your five are simple labelled icons.\n- **Love interests send stickers too**, theirs or yours, by name in brackets, like `[dottore_pensive]`. Old face stickers still show.\n- **A Stickers tab in the Album** to view and save each sticker, named like `mari_laugh`.\n- **Messages a day from love interests**: in Settings → Connections, choose how many times a day one you've met may message you first (0 to 24, off by default). They're spread across your day and arrive unread.\n- **A love interest's thread header fits on one row on phones**, with **Close** beside their name.",
@@ -177,18 +189,6 @@
           "version": "0.6.6",
           "date": "2026-10-31",
           "notes": "- **Banned phrases** when you start a new story: type them right under **How it's written**, so the world and every love interest's Bible avoid them from the start. Still in Settings → Content.\n- Read Him and Read Me guess instead of repeating: one specific guess past what your persona states, across wants, thoughts, likes, dislikes, habits, fears and memories. He never guesses what he already knows.\n- **Group scenes:** two or more love interests at stage 3 and up may share one intimacy when the scene fits. Heat decides how far, each keeps their own tastes, and scenes are no longer capped to a couple of love interests.\n- Narration says what the protagonist feels in her body, not only the action.",
-          "highlight": false
-        },
-        {
-          "version": "0.6.5",
-          "date": "2026-10-31",
-          "notes": "- Seasonal banners: the first fortnight that starts in each month brings three banners on that month's theme, with a badge such as “October · Halloween”: New Year in January, Valentine's Day in February, through Halloween in October, autumn in November and Christmas in December. A world without the holiday gets its own version of it. Later fortnights that month are your model's free choice, as before.",
-          "highlight": false
-        },
-        {
-          "version": "0.6.4",
-          "date": "2026-10-31",
-          "notes": "- **Your cast** and **Your stories** moved from **Who's home** to **Settings → Stories**, each with a line on what it's for. **Who's home** now only picks who's home.",
           "highlight": false
         }
       ]

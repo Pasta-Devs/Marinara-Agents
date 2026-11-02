@@ -1246,6 +1246,80 @@ test("Otome Hearth under reduced motion a story CG never holds the box while its
   await expect(root.locator('.of-dialogue .of-line > span[aria-hidden="true"]')).toHaveAttribute("data-done", "true");
 });
 
+// The maintainer's narration line, too long for the box.
+const LONG_LINE =
+  "Before you can move, he lifts the fox hood up over your left ear and presses the felt seam flat to the stone, the way you'd cap a pen. Then he draws the coat off your left shoulder and works the hoodie down after it. Air finds bare skin and raises gooseflesh to the elbow. Your bra strap sits right there in the lamplight, grey from two days' wear, and under it, across the collarbone, runs a raw red band where the rope sawed in, weeping at the edges. Heat climbs from your chest into your throat.";
+// Opens the long line's beat on a frozen clock, at Before you begin.
+async function openLongLine(page: Page) {
+  const stub = createStoryStub({
+    done: true,
+    storyBeats: [
+      { ...BEATS[0], segments: [seg("", LONG_LINE, { place: "The Observation Room" })], choices: [] },
+      ...BEATS.slice(1),
+    ],
+  });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.clock.install();
+  await stubRoutes(page, stub);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+  await expect(root.getByRole("heading", { name: "Before you begin" })).toBeVisible();
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 60_000));
+  return root;
+}
+
+test("Otome Hearth a long line types as new text at every step, never text changed in place", async ({ page }) => {
+  // On an iPhone the rows the long line typed while scrolled out of the box's view came back blank, all but the final
+  // "." (WebKit repaints text changed in place only where the box shows it, and a removed element whole), so the box
+  // must never change its text in place.
+  const root = await openLongLine(page);
+  // Every change to the dialogue box's line from Begin to the line's end: a step that replaced the typed span, or text
+  // changed inside it.
+  await root.evaluate((element) => {
+    const changes = { replaced: 0, inPlace: 0 };
+    Object.assign(window, { lineChanges: changes });
+    new MutationObserver((records) => {
+      for (const { target, removedNodes } of records) {
+        const node = target instanceof Element ? target : target.parentElement;
+        if (node?.matches(".of-line")) changes.replaced += removedNodes.length;
+        else if (node?.closest(".of-line > [aria-hidden='true']")) changes.inPlace += 1;
+      }
+    }).observe(element, { subtree: true, childList: true, characterData: true });
+  });
+  await root.getByRole("button", { name: "Begin" }).click();
+  const typed = line(root).locator(":scope > [aria-hidden='true']");
+  await expect(typed).toHaveAttribute("data-done", "false");
+  for (let step = 0; step < 100 && (await typed.getAttribute("data-done")) !== "true"; step += 1) {
+    await page.clock.runFor(200);
+  }
+  await expect(typed).toHaveAttribute("data-done", "true");
+  await expect(typed).toHaveText(LONG_LINE);
+  await expect(typed.locator(".of-line-rest")).toHaveCount(0);
+  const changes = await page.evaluate(() => (window as unknown as { lineChanges: Record<string, number> }).lineChanges);
+  expect(changes.inPlace, "no text in the box changed in place").toBe(0);
+  expect(changes.replaced, "the line typed in steps").toBeGreaterThan(5);
+});
+
+test("Otome Hearth a click held on a typing line still shows it whole", async ({ page }) => {
+  // The reveal replaces its span at every step; a button held across a step must still click (a click whose pressed
+  // element is gone by the release never fires).
+  const root = await openLongLine(page);
+  await root.getByRole("button", { name: "Begin" }).click();
+  const typed = line(root).locator(":scope > [aria-hidden='true']");
+  const untyped = async () => (await typed.locator(".of-line-rest").textContent())!.length;
+  await page.clock.runFor(400);
+  await expect(typed).toHaveAttribute("data-done", "false");
+  const box = (await line(root).boundingBox())!;
+  await page.mouse.move(box.x + 24, box.y + 12);
+  await page.mouse.down();
+  const before = await untyped();
+  await page.clock.runFor(200);
+  await expect.poll(untyped, "the reveal stepped while the button was held").toBeLessThan(before);
+  await page.mouse.up();
+  await expect(typed).toHaveAttribute("data-done", "true");
+  await expect(typed).toHaveText(LONG_LINE);
+});
+
 for (const failure of ["missing sprite", "failed cleanup"] as const) {
   test(`Otome Hearth story header restores its description when NPC display fails (${failure})`, async ({
     page,
