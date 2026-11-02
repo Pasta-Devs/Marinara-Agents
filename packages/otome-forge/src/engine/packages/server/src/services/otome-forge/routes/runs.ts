@@ -397,26 +397,30 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       // Its story writes and memory upkeep stop; anything they still save is refused or removed with the rest.
       deps.cancellation?.cancel(runId);
       deps.memory?.invalidate(runId);
-      // Each image is taken from the revision that went, and the images of every document that went are deleted even
-      // when the sweep stops part-way (a storage error, a conflict): what stays keeps its own for the next delete.
-      const images = new Set<string>();
-      try {
-        for (const kind of RUN_DOC_KINDS) {
-          for (const document of await store.listRun(kind, runId)) {
-            for (const id of galleryRefIds(await store.takeDoc(document.id, (data) => data))) images.add(id);
+      // A document's images go as soon as it does (taken from the revision that went), so a sweep that stops part-way
+      // (a storage error, a conflict, a restart) has already let go of the images of what it removed, and what stays
+      // keeps its own for the next delete. The Engine refuses an image a document still refers to, so one shared with
+      // a later document is deleted when that one goes.
+      // ponytail: a restart between a document's removal and its images' deletion orphans that one document's images;
+      // the upgrade path is noting the ids in the index entry before the sweep.
+      const kept = new Set<string>();
+      for (const kind of RUN_DOC_KINDS) {
+        for (const document of await store.listRun(kind, runId)) {
+          for (const id of galleryRefIds(await store.takeDoc(document.id, (data) => data))) {
+            const deleted = await imagesOf(deps)
+              .deleteGalleryImage(id)
+              .catch(() => false);
+            if (deleted) kept.delete(id);
+            else kept.add(id);
           }
         }
-      } finally {
-        let kept = 0;
-        for (const id of images) {
-          const deleted = await imagesOf(deps)
-            .deleteGalleryImage(id)
-            .catch(() => false);
-          if (!deleted) kept += 1;
-        }
-        if (kept)
-          runtime.logger.warn("[otome-forge] Deleted run %s kept %d gallery images it could not delete", runKey, kept);
       }
+      if (kept.size)
+        runtime.logger.warn(
+          "[otome-forge] Deleted run %s kept %d gallery images it could not delete",
+          runKey,
+          kept.size,
+        );
       // The index lets go of it last, so a delete that stopped part-way (or a restart in the middle) leaves it listed,
       // and the picker's next delete finishes it.
       const next = await store.mutateDoc(INDEX_TARGET, normalizeIndex, (current) => ({
