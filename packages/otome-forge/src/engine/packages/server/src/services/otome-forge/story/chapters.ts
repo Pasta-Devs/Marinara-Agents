@@ -608,7 +608,8 @@ export async function startArc(
     }
     const arriving = newcomer ?? (arrive ? await arrive() : undefined);
     // The newcomer is written before the arc, so a plan that fails, is declined or is cancelled takes them back: nobody
-    // stays in the cast that no arc introduces (#1985 review). A rollback never hides the original failure.
+    // stays in the cast that no arc introduces (#1985 review). Their paid bible is kept for the same arrival's next
+    // attempt. A rollback never hides the original failure.
     const rollback = async () => {
       if (!arriving || newcomer) return;
       await removeLoveInterest(deps, runId, arriving.id).catch(() => undefined);

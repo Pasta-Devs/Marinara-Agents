@@ -512,13 +512,16 @@ test("POST /arcs waits for a finished arc, and refuses a newcomer the player did
   assert.equal(story.body.arcChoice, null, "no choice is offered mid-arc");
 });
 
-test("two end-of-arc choices at once plan one arc and bring in one newcomer: the second waits and pays for nothing", async () => {
-  // A second tab, or a tap after coming back to Story during the long plan: both requests arrive before an arc is saved.
-  const t = await storyWorld({
-    runKey: "r-arcs-bbbbbb",
-    replies: [json(planReply()), json(bible()), json(bible())],
-    arcReply: () => json(arcReply({ reveals: [], newcomer: { how: "Wren walks in out of the rain." } })),
-  });
+const WREN = {
+  source: "archetype",
+  archetype: "brilliant-monster",
+  name: "Wren",
+  pronouns: { subject: "they", object: "them", possessive: "their" },
+};
+const ARC_WITH_WREN = json(arcReply({ reveals: [], newcomer: { how: "Wren walks in out of the rain." } }));
+
+/** Plans chapter 1 (and with it the first arc), then plays out the arc's ten chapters: the end-of-arc choice is open. */
+async function finishFirstArc(t: Awaited<ReturnType<typeof storyWorld>>) {
   assert.equal((await t.call("POST", "/runs/:run/chapters/next", { lead: KAI })).status, 200);
   const first = (await t.store.readDoc(chapterId(t.runId, "main-1"), normalizeChapter))!;
   for (let n = 2; n <= 10; n += 1) {
@@ -534,14 +537,19 @@ test("two end-of-arc choices at once plan one arc and bring in one newcomer: the
       Array.from({ length: 10 }, (_, i) => [`main-${i + 1}`, { beatsRead: 7, completed: at, applied: [] }]),
     ),
   }));
+}
+
+test("two end-of-arc choices at once plan one arc and bring in one newcomer: the second waits and pays for nothing", async () => {
+  // A second tab, or a tap after coming back to Story during the long plan: both requests arrive before an arc is saved.
+  const t = await storyWorld({
+    runKey: "r-arcs-bbbbbb",
+    replies: [json(planReply()), json(bible()), json(bible())],
+    arcReply: () => ARC_WITH_WREN,
+  });
+  await finishFirstArc(t);
   const paid = () => t.calls.length;
   const before = paid();
-  const newcomer = {
-    source: "archetype",
-    archetype: "brilliant-monster",
-    name: "Wren",
-    pronouns: { subject: "they", object: "them", possessive: "their" },
-  };
+  const newcomer = WREN;
   const answers = await Promise.all([
     t.call("POST", "/runs/:run/arcs", { choice: "newcomer", newcomer }),
     t.call("POST", "/runs/:run/arcs", { choice: "newcomer", newcomer }),
@@ -555,6 +563,39 @@ test("two end-of-arc choices at once plan one arc and bring in one newcomer: the
   const run = (await readRun(t.store, t.runId))!;
   assert.deepEqual(Object.keys(run.state.lis), [...CAST.map((li) => li.id), answers[0]!.body.li]);
   assert.equal(run.units.filter((unit) => unit.name === "Wren").length, 1, "nobody stays in the cast unintroduced");
+});
+
+test("a failed newcomer arc takes them out of the cast but keeps their bible, and the same arrival again reuses it", async () => {
+  // Arc plans: chapter 1's is good; the newcomer's first plan and its repair turn do not match; the next one does.
+  let arcCalls = 0;
+  const t = await storyWorld({
+    runKey: "r-arcs-cccccc",
+    replies: [json(planReply()), json(bible()), json(bible())],
+    arcReply: () => ((arcCalls += 1) === 2 || arcCalls === 3 ? json({}) : ARC_WITH_WREN),
+  });
+  await finishFirstArc(t);
+  const cast = CAST.map((li) => li.id);
+  const failed = await t.call("POST", "/runs/:run/arcs", { choice: "newcomer", newcomer: WREN });
+  assert.equal(failed.status, 502, JSON.stringify(failed.body));
+  const after = (await readRun(t.store, t.runId))!;
+  assert.deepEqual(Object.keys(after.state.lis), cast, "out of the cast");
+  assert.ok(
+    after.world.web.every((row) => cast.includes(row.a) && cast.includes(row.b)),
+    "and out of the world's web",
+  );
+  const kept = (await t.store.listRun("unit", t.runId))
+    .map((record) => normalizeUnit(record.data))
+    .filter((unit) => unit.name === "Wren");
+  assert.equal(kept.length, 1, "their unit stays");
+  assert.ok(kept[0]!.bible, "with the bible already paid for");
+  const before = t.calls.length;
+  const again = await t.call("POST", "/runs/:run/arcs", { choice: "newcomer", newcomer: WREN });
+  assert.equal(again.status, 200, JSON.stringify(again.body));
+  assert.equal(t.calls.length - before, 1, "the arc plan alone: no second bible");
+  assert.equal(again.body.li, kept[0]!.id, "the same newcomer, under the same id");
+  const run = (await readRun(t.store, t.runId))!;
+  assert.deepEqual(Object.keys(run.state.lis), [...cast, kept[0]!.id], "back in the cast, last");
+  assert.equal(run.world.web.filter((row) => row.a === kept[0]!.id).length, CAST.length, "with a tie to each of them");
 });
 
 // ── M3: someone new arrives (#1983) ──

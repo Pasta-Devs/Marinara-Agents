@@ -6,7 +6,9 @@
 // safe everywhere). Nothing here touches world.forge.steps: the forge phase turns "forging" the moment a text step is
 // pending, and the whole app would drop the player onto a progress screen mid-arc. A love interest only exists once
 // their bible does (the cast is state.lis filtered by unit.bible), so a failed arrival degrades to "not yet": the unit
-// sits without a bible, out of the cast, and the next attempt writes the bible.
+// sits without a bible, out of the cast, and the next attempt writes the bible. A newcomer whose arc plan fails or is
+// cancelled leaves the cast and the web but keeps their unit and bible (removeLoveInterest), so the same arrival again
+// takes that unit back and pays for no second bible.
 // Their bible is checked with every existing love interest as `others`, or its web silently empties; their ties go into
 // world.web as rows against each of them, which the planner and the narrator already read.
 import type { Player, Pronouns, Unit, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
@@ -29,6 +31,9 @@ export type Arrival =
   | { source: "archetype"; archetype: string; name: string; pronouns: Pronouns; notes?: string };
 
 const VOICE_GENDER = { man: "male", woman: "female", person: "" } as const;
+
+const samePronouns = (a: Pronouns, b: Pronouns) =>
+  a.subject === b.subject && a.object === b.object && a.possessive === b.possessive;
 
 /** The control characters a name may never carry (the setup route's rule). */
 const CONTROL = /[\u0000-\u001f\u007f]/u;
@@ -69,68 +74,88 @@ export async function introduceLoveInterest(
   if (CONTROL.test(name) || name.includes(".."))
     throw new OtomeForgeError(400, "That name cannot be used.", "bad-request");
 
-  const li = newLiId(
-    name,
-    run.units.map((unit) => unit.id),
+  // A unit out of the cast for the same arrival (the same card, or archetype, name and notes, with the same pronouns) is
+  // taken back with its bible, when it has one, instead of writing another.
+  const stored = (await deps.store.listRun("unit", runId)).map((record) => normalizeUnit(record.data));
+  const notes = arrival.source === "archetype" ? (arrival.notes?.trim() ?? "") : "";
+  const kept = stored.find(
+    (candidate) =>
+      !Object.hasOwn(run.state.lis, candidate.id) &&
+      candidate.source === arrival.source &&
+      candidate.name === name &&
+      samePronouns(candidate.pronouns, arrival.pronouns) &&
+      (arrival.source === "card"
+        ? candidate.cardId === arrival.cardId
+        : candidate.archetype === arrival.archetype && (candidate.notes ?? "") === notes),
   );
+  const li =
+    kept?.id ??
+    newLiId(
+      name,
+      stored.map((unit) => unit.id),
+    );
   const at = new Date().toISOString();
-  const unit: Unit = {
-    ...normalizeUnit({}),
-    id: li,
-    kind: "character",
-    name,
-    // The player's pick for a card, exactly as setup asks (a card carries no pronouns of its own).
-    pronouns: arrival.pronouns,
-    source: arrival.source,
-    ...(arrival.source === "card" ? { cardId: arrival.cardId } : {}),
-    ...(arrival.source === "archetype"
-      ? { archetype: arrival.archetype, ...(arrival.notes?.trim() ? { notes: arrival.notes.trim() } : {}) }
-      : {}),
-    createdAt: at,
-  } as Unit;
-  await deps.store.mutateDoc(runDocTarget("unit", unitId(runId, li)), normalizeUnit, () => unit);
+  const unit: Unit =
+    kept ??
+    ({
+      ...normalizeUnit({}),
+      id: li,
+      kind: "character",
+      name,
+      // The player's pick for a card, exactly as setup asks (a card carries no pronouns of its own).
+      pronouns: arrival.pronouns,
+      source: arrival.source,
+      ...(arrival.source === "card" ? { cardId: arrival.cardId } : {}),
+      ...(arrival.source === "archetype"
+        ? { archetype: arrival.archetype, ...(arrival.notes?.trim() ? { notes: arrival.notes.trim() } : {}) }
+        : {}),
+      createdAt: at,
+    } as Unit);
+  if (!kept) await deps.store.mutateDoc(runDocTarget("unit", unitId(runId, li)), normalizeUnit, () => unit);
 
   const others = run.units.filter((candidate) => candidate.id !== li);
   const [member] = await castOf(deps.runtime, [unit]);
   const worldHost = run.world;
   const player: Player = run.player;
-  const { value: bible } = await generateJson(deps, {
-    runId,
-    job: "structured",
-    label: `bible/${li}`,
-    messages: bibleMessages({
-      world: worldHost as World,
-      player,
-      member: member!,
-      others: others.map((other) => ({ unit: other })),
-    }),
-    schema: BibleSchema,
-    normalize: (reply) =>
-      checkBible(reply, {
-        pronouns: unit.pronouns,
-        others: others.map(({ id, name: otherName }) => ({ id, name: otherName })),
-        intimacy: intimacyOpen(worldHost.content),
+  if (!unit.bible) {
+    const { value: bible } = await generateJson(deps, {
+      runId,
+      job: "structured",
+      label: `bible/${li}`,
+      messages: bibleMessages({
+        world: worldHost as World,
+        player,
+        member: member!,
+        others: others.map((other) => ({ unit: other })),
       }),
-    temperature: 0.8,
-    maxTokens: 5000,
-    debugMode: !!debugMode,
-    lane: "foreground",
-    ...(signal ? { signal } : {}),
-  });
-  await deps.store.updateDoc(runDocTarget("unit", unitId(runId, li)), normalizeUnit, (current) => ({
-    ...current,
-    bible,
-    bibleEdited: false,
-    identityLine: bible.look.identityLine,
-    outfitLine: bible.look.outfitLine,
-    voiceGender: current.voiceGender || VOICE_GENDER[bible.look.presentation],
-  }));
+      schema: BibleSchema,
+      normalize: (reply) =>
+        checkBible(reply, {
+          pronouns: unit.pronouns,
+          others: others.map(({ id, name: otherName }) => ({ id, name: otherName })),
+          intimacy: intimacyOpen(worldHost.content),
+        }),
+      temperature: 0.8,
+      maxTokens: 5000,
+      debugMode: !!debugMode,
+      lane: "foreground",
+      ...(signal ? { signal } : {}),
+    });
+    await deps.store.updateDoc(runDocTarget("unit", unitId(runId, li)), normalizeUnit, (current) => ({
+      ...current,
+      bible,
+      bibleEdited: false,
+      identityLine: bible.look.identityLine,
+      outfitLine: bible.look.outfitLine,
+      voiceGender: current.voiceGender || VOICE_GENDER[bible.look.presentation],
+    }));
+  }
   // Their ties to the cast, in the world's own web: what the planner and the narrator read, and what a bible's own web
   // cannot carry (it keeps only rows for ids it was written with).
   await deps.store.updateDoc(runDocTarget("world", worldId(runId)), normalizeWorld, (world) => ({
     ...world,
     web: [
-      ...world.web,
+      ...world.web.filter((row) => row.a !== li),
       ...others.map((other) => ({
         a: li,
         b: other.id,
@@ -149,16 +174,16 @@ export async function introduceLoveInterest(
 }
 
 /**
- * Takes back a newcomer whose arc never got planned (#1985 review): their unit, their ties in the world's web and their
- * cast entry go, so a failed or cancelled plan leaves no one in the cast that the story never introduces. Their bible
- * lives on the unit that goes with it. Best effort: a rollback never throws over the original failure.
+ * Takes back a newcomer whose arc never got planned (#1985 review): their ties in the world's web and their cast entry
+ * go, so a failed or cancelled plan leaves no one in the cast that the story never introduces. Their unit stays, with
+ * the bible paid for on it, out of the cast (readRun reads the cast's units only), and the same arrival again takes it
+ * back (introduceLoveInterest). Best effort: a rollback never throws over the original failure.
  */
 export async function removeLoveInterest(
   deps: { store: import("../store.js").OtomeStore },
   runId: string,
   li: string,
 ): Promise<void> {
-  await deps.store.removeDoc(unitId(runId, li)).catch(() => false);
   await deps.store
     .updateDoc(runDocTarget("world", worldId(runId)), normalizeWorld, (world) => ({
       ...world,
