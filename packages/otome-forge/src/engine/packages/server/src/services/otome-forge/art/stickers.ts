@@ -165,12 +165,15 @@ const ownerDoc = (run: Pick<Run, "player" | "units">, owner: Owner) =>
     ? { id: "player", cutouts: run.player.cutouts ?? {} }
     : run.units.find((unit) => unit.id === owner);
 
-/** A ready sticker as shown: its cut-out once settled, the original when its cleanup failed; null while it is cut. */
+/**
+ * A ready sticker as shown: its cut-out (the old one while a refresh is cut, as stage art keeps it), the original when
+ * its cleanup failed; null while its first cut-out is cut.
+ */
 function shownUrl(runId: string, run: Pick<Run, "player" | "units">, sticker: OwedSticker): string | null {
   const doc = ownerDoc(run, sticker.owner);
   if (!doc || sticker.art?.state !== "ready" || !sticker.art.url) return null;
   const cut = cutoutView(runId, doc, sticker.art.url);
-  return cut.state === "pending" ? null : (cut.cutout ?? sticker.art.url);
+  return cut.cutout ?? (cut.state === "pending" ? null : sticker.art.url);
 }
 
 /** Every painted sticker's image, by owner: what GET /runs/:run has cut out. */
