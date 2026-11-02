@@ -332,7 +332,9 @@ export function createOtomeMemory({
 
   return {
     async recall(options) {
-      const sources = await readSources(options.runId).catch((): ForgeMemorySource[] => []);
+      // A failed read rejects: without the sources nothing here can tell what this prompt may not know, so the caller
+      // falls back to its bounded canonical history instead of a recall with the private-canon filters off.
+      const sources = await readSources(options.runId);
       const knowing = options.reader || options.cast ? options : { cast: [] };
       // The caller sends a chapter in full; the newest of all (recall marks it `latest`) it sends as recent canon when
       // this prompt may know it, so it is never ranked as a detail too.

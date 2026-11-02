@@ -111,12 +111,20 @@ async function setup(
   ] as const) {
     await store.mutateDoc(runDocTarget("unit", unitId(RUN, id)), normalizeUnit, (unit) => ({ ...unit, id, name }));
   }
+  // `failReads` makes the next reads of the wrapper fail while later ones (the kit's own) succeed.
+  const reads = { fail: 0 };
   const memory = createOtomeMemory({
     runtime: runtime.runtime,
     store,
-    readSources: async () => options.sources ?? SOURCES,
+    readSources: async () => {
+      if (reads.fail > 0) {
+        reads.fail -= 1;
+        throw new Error("the sources could not be read");
+      }
+      return options.sources ?? SOURCES;
+    },
   });
-  return { fake, store, memory, ...runtime };
+  return { fake, store, memory, reads, ...runtime };
 }
 
 /** Waits for the queued maintenance to finish (status leaves `pending`). */
@@ -183,6 +191,23 @@ test("a private chat is recalled only for its own love interest, or a scene he i
     assert.ok(result.recent?.some((entry) => entry.id === "main-1" && entry.latest));
     assert.ok(result.details.every((detail) => detail.id !== "main-1"));
   }
+});
+
+test("a failed source read never recalls another love interest's canon: recall rejects and the caller falls back", async () => {
+  const { memory, reads } = await setup();
+  await memory.maintain({ runId: RUN });
+  await settle(memory);
+  // Only the wrapper's own read fails; the kit's read a moment later would succeed.
+  reads.fail = 1;
+  await assert.rejects(
+    memory.recall({
+      runId: RUN,
+      job: "narration",
+      query: { cues: [`the brass ${PRIVATE} key Kai keeps`] },
+      cast: [MIR],
+    }),
+    /the sources could not be read/u,
+  );
 });
 
 test("every summary leaves a thinking model at least 10240 tokens to reply, or the connection's lower cap", async () => {
