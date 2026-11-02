@@ -1,5 +1,9 @@
 # Slurp release notes
 
+## 0.4.17 — 2026-11-02
+
+- Fixed: refreshing a Creator's conversation schedule read only the card description and personality. An Engine card split (Engine #8543) moves scenario and backstory into their own fields, so the schedule lost them. It now reads description, scenario and backstory (top-level or `extensions.backstory`). The canon reading, picture look and flavour brief already read the split fields.
+
 ## 0.4.16 — 2026-11-02
 
 - Fixed: Pulse kept a made first post as "Creating first post… running" for a day. The server reports a made first post as `generated`, and Pulse now counts that as done.
