@@ -45,7 +45,8 @@
 //   then dates and Character Stories, each oldest first. Stale or pending memory catches up in the background; a
 //   failed one waits for Retry;
 // - always: the irrevocable decisions, every big choice of a completed chapter the prompt may know (GF's locked
-//   decisions, the context's `fate`), so a summary that drops one never undoes it.
+//   decisions, the context's `fate`), and every side-with pick (#2046: whom the protagonist backed, over whom), so a
+//   summary that drops one never undoes it.
 import { forgeCanonicalSegments } from "@forge-kit/player-choices-server.mjs";
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 import { forgeMemoryContext, type ForgeMemoryContext } from "@forge-kit/story-memory-fit.mjs";
@@ -59,6 +60,7 @@ import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import type {
   Beat,
   Chapter,
+  ForgeChoice,
   LiId,
   RunState,
   Segment,
@@ -309,10 +311,21 @@ const chapterName = (completed: Completed) =>
     ? `Chapter ${completed.chapter.number ?? ""} "${completed.chapter.title}"`
     : titleOf(completed);
 
+/** The option first play picked for `choice`, while it is in the beat's canon (at or before an Ease off cut). */
+const pickedIn = (beat: Beat, choice: ForgeChoice) =>
+  choice.at > (beat.easedOff?.at ?? Infinity)
+    ? undefined
+    : choice.options.find((item) => item.id === beat.choiceCanon[choice.id]);
+
+/** "Sol", "Sol and Mireille", "Sol, Mireille and Ash". */
+const andList = (names: readonly string[]) =>
+  names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : (names[0] ?? "");
+
 /**
  * Every big choice of the completed chapters the prompt may know, in story order, with what the protagonist said or did;
  * "" when there are none. A big choice only ever ends a chapter (the kit's `terminal`), so each chapter's last beat is
- * the only one read; one eased off before its choice has none. The memory context's `fate`: it always stays whole.
+ * the only one read; one eased off before its choice has none. #2046: a side-with pick is a small choice, so it is read
+ * from its own node's beat, and named with whom it backed over whom. The memory context's `fate`: it always stays whole.
  */
 async function decisionsText(
   store: Pick<OtomeStore, "readDoc">,
@@ -321,15 +334,26 @@ async function decisionsText(
   knowing: Knowing,
 ): Promise<string> {
   const lines: string[] = [];
+  const nameOf = async (li: LiId) => (await store.readDoc(unitId(runId, li), normalizeUnit))?.name || li;
   for (const completed of chapters) {
     const { chapter } = completed;
     if (!chapter.nodes.length || !mayKnow(knowing, audienceOf(chapter))) continue;
+    const sideNode = chapter.nodes.find((node) => node.sideWith);
+    const side = sideNode ? await readBeat(store, runId, chapter.key, sideNode.i) : null;
+    const sideChoice = side?.choices.find((choice) => choice.id === side.sideWith?.choice);
+    const sided = side && sideChoice ? pickedIn(side, sideChoice) : undefined;
+    const backed = sided && side?.sideWith?.backs[sided.id];
+    if (side && sided && backed) {
+      const over = Object.values(side.sideWith!.backs).filter((li) => li !== backed);
+      lines.push(
+        `- ${chapterName(completed)}, node ${side.i + 1}: sided with ${await nameOf(backed)} over ${andList(await Promise.all(over.map(nameOf)))}: ${sided.text} (${sided.selection.kind}: ${sided.selection.text})`,
+      );
+    }
     const beat = await readBeat(store, runId, chapter.key, chapter.nodes.length - 1);
     if (!beat) continue;
-    const cut = beat.easedOff?.at ?? Infinity;
     for (const choice of beat.choices) {
-      if (choice.kind !== "big" || choice.at > cut) continue;
-      const option = choice.options.find((item) => item.id === beat.choiceCanon[choice.id]);
+      if (choice.kind !== "big") continue;
+      const option = pickedIn(beat, choice);
       if (option) {
         lines.push(
           `- ${chapterName(completed)}, node ${beat.i + 1}: ${option.text} (${option.selection.kind}: ${option.selection.text})`,

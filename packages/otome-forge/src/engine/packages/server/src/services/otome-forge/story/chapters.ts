@@ -11,7 +11,9 @@
 // main chapters in a row ended with the same one (requiredClimax), at most two CG nodes, the Lead and the Foil each in at least one node, every love interest in chapter 1,
 // an off-screen line for each absent one, no tag for a Line, and conflict seeds that never repeat that love interest's
 // last two kinds of angst, counting the seeds planted earlier in the same plan (at most one open misunderstanding
-// each, resolved within two chapters). A failed check is the generation core's one repair turn.
+// each, resolved within two chapters). A failed check is the generation core's one repair turn. A side-with mark
+// (#2046) is kept on the first beat node with two to four love interests while one may come (sideWithOpen), and every
+// other mark is dropped without a repair turn.
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import type {
   Chapter,
@@ -62,6 +64,7 @@ import {
   NODES_MIN,
   chapterPlanMessages,
   knownRows,
+  sideWithFits,
   type ChapterPlanReply,
 } from "./prompts.js";
 
@@ -120,6 +123,8 @@ export interface PlanContext {
   climax?: ClimaxKind;
   /** The story arc this chapter belongs to (#1980), when the run has one. */
   arc?: StoryArc | null;
+  /** #2046: this chapter may hold a side-with scene (sideWithOpen); without it every side-with mark is dropped. */
+  sideWith?: boolean;
 }
 
 /** How many main chapters in a row may end with the same climax (the maintainer's 2, so the two alternate often). */
@@ -138,6 +143,22 @@ export function requiredClimax(mains: ReadonlyArray<Pick<Chapter, "nodes">>): Cl
   const first = last[0];
   if (!first || last.some((kind) => kind !== first)) return null;
   return first === "closer" ? "confrontation" : "closer";
+}
+
+/** #2046: main chapters that complete between two side-with scenes, so there is one every SIDE_WITH_GAP + 1 at most. */
+export const SIDE_WITH_GAP = 3;
+
+/**
+ * Whether main chapter `number` may hold a side-with scene: SIDE_WITH_GAP main chapters have completed since the last
+ * chapter planned with one. The marker is the stored plans themselves, so nothing new is kept in the run's state. A
+ * story with none counts from before chapter 1: chapter 4 is the first that may, and a story already past it (one
+ * begun before this) may in its next chapter. Only when the planner finds a real disagreement there; it is never forced.
+ * ponytail: a planned side-with scene counts even when it was eased off, or declined, before its pick, so that chapter
+ * still spends the gap. Upgrade path: count only chapters whose side-with beat holds a first-play pick.
+ */
+export function sideWithOpen(mains: ReadonlyArray<Pick<Chapter, "number" | "nodes">>, number: number): boolean {
+  const last = mains.filter((chapter) => chapter.nodes.some((node) => node.sideWith)).at(-1)?.number ?? 0;
+  return number - last > SIDE_WITH_GAP;
 }
 
 /** A love interest named by id or, failing that, by exact name (case-insensitive). */
@@ -330,6 +351,12 @@ export function normalizeChapterPlan(reply: ChapterPlanReply, context: PlanConte
     if (reply.eventNode !== climax.i) return "this is the arc's last chapter: set eventNode to the climax node's index";
     climax.arcEvent = true;
   }
+  // #2046: one side-with scene at most, on the first marked node it fits, and only while one may come. Any other mark
+  // is dropped, never repaired, so the scene is never forced.
+  const side = context.sideWith
+    ? nodes.find((node) => reply.nodes[node.i]?.sideWith === true && sideWithFits(node, units))
+    : undefined;
+  if (side) side.sideWith = true;
   const tags = planTags(reply, context.world);
   if (typeof tags === "string") return tags;
   const ledger = planLedger(reply, context, present, { main: true, idPrefix: `c${number}`, knows: [context.lead] });
@@ -392,6 +419,7 @@ export async function planNextChapter(
       debugMode,
     });
     const climax = requiredClimax(mains);
+    const sideWith = sideWithOpen(mains, number);
     // #1980: the arc this chapter belongs to, planned right here when the run has none covering it (the first arc, or
     // the one after a finished one). Planned inline, never through a nested readOrGenerate: that would queue behind
     // this task on the run's serial lane and hang.
@@ -438,6 +466,7 @@ export async function planNextChapter(
       number,
       lead,
       arc,
+      sideWith,
       ...(climax ? { climax } : {}),
     };
     const { value, connectionId } = await generateJson(deps, {
@@ -455,6 +484,7 @@ export async function planNextChapter(
         climax,
         lastClimax: climaxOfChapter(mains.at(-1)),
         arc,
+        sideWith,
       }),
       memory,
       schema: ChapterPlanSchema,

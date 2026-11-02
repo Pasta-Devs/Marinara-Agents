@@ -2,10 +2,10 @@
 
 ## 0.6.22 — 2026-11-02
 
-- **Love interests may be genuinely evil.** A love interest can be a real villain or a monster, and taming them is the point. Love doesn't make them good overnight, but as affection grows they may become a better partner to you, in their own way.
-- **Scenes see their darkness.** Every scene, climax and phone reply knows what is dark about a love interest, not only their red lines.
-- **Angst and Dark say it plainly.** Under Angst, cruelty is no longer sanitized within your Lines and Veils, and a love interest may be a villain to everyone but you. Under Dark romance, they can be the villain. Gentle is unchanged.
+- **Love interests may be genuinely evil.** A villain or a monster stays one, and taming them is the point; as affection grows they may become a better partner to you, in their own way. Scenes, climaxes and phone replies now see their darkness.
+- **Angst and Dark say it plainly.** Under Angst, cruelty isn't sanitized within your Lines and Veils, and a love interest may be a villain to everyone but you. Under Dark romance, they can be the villain. Gentle is unchanged.
 - **Real villains are back**, and a moral code fits who they are: firm, far looser, or none at all. This applies to love interests written from now on.
+- **Side with one of them.** From chapter 4, at most once every four main chapters, when love interests disagree you choose whom to back: +30 affection for them, −10 for each one you pass over, never below a level they've reached.
 
 ## 0.6.20 — 2026-11-02
 

@@ -1,8 +1,9 @@
 // ──────────────────────────────────────────────
 // Otome Forge: Starlight and affection grants (plan §1.11, M2a "Rewards")
 // ──────────────────────────────────────────────
-// grant() is the one place Starlight and affection are added. Story earnings (a beat, a chapter, and the chapter's Lead
-// and Foil) are never capped. Activity earnings are capped per local day: Starlight at 400 in all, affection at 300 per
+// grant() is the one place Starlight and affection are added, but for a side-with pick's gain (#2046), which lands with
+// its pick (S/state/relationship.ts). Story earnings (a beat, a chapter, and the chapter's Lead and Foil) are never
+// capped. Activity earnings are capped per local day: Starlight at 400 in all, affection at 300 per
 // love interest. The day is forgeDayKey(Date.now()) in the request's time zone (every route runs inside
 // forgeTimeZoneRoutes), so it ends at the player's own midnight. Choice losses are separate from earnings and never
 // refund those caps; the affection level already reached is their floor.
