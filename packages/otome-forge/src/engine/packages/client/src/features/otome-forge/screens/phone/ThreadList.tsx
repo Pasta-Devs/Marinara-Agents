@@ -12,8 +12,8 @@ import { Avatar } from "../../components/Avatar";
 import { accentOf } from "../../lib/accent";
 import { useOtomeProps } from "../../props";
 import type { LiId, PhoneListView, PhoneMessage, RunView } from "../../shared/api-types";
-import { FACE_LABEL_KEYS } from "../reader/FacePlate";
 import { BUSY_POLL_MS, phonePath, phoneQueryKey } from "./PhoneScreen";
+import { stickerLabel, useStickers } from "./StickerPicker";
 
 /** "14:05" for today, else a short date, in the player's zone. */
 export function messageTime(at: string, locale: string, timeZone: string, now = new Date()): string {
@@ -43,6 +43,7 @@ export function ThreadList({ runKey, view, onOpen, rowRef, headingRef }: ThreadL
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const { localization, timeZone } = useOtomeProps();
+  const stickers = useStickers(view);
   // Read again whenever the list opens, and while a reply is being written: one that lands after the player left its
   // thread (that page wrote nothing then) moves the preview.
   const threads = useQuery({
@@ -64,7 +65,7 @@ export function ThreadList({ runKey, view, onOpen, rowRef, headingRef }: ThreadL
     const said = last.text.trim()
       ? last.text
       : last.sticker
-        ? t("ui.otomeForge.phone.sticker", { face: t(FACE_LABEL_KEYS[last.sticker]) })
+        ? t("ui.otomeForge.phone.sticker", { face: stickerLabel(t, stickers, last.sticker) })
         : "";
     return last.who === "player" ? t("ui.otomeForge.phone.youSaid", { text: said }) : said;
   };

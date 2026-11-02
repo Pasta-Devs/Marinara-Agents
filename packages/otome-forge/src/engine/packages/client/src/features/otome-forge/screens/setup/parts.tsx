@@ -17,6 +17,7 @@ interface TextFieldProps {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  /** The most characters, or for a number field its highest value. */
   max?: number;
   rows?: number;
   placeholder?: string;
@@ -26,6 +27,8 @@ interface TextFieldProps {
   list?: string;
   type?: "text" | "number";
   min?: number;
+  /** The value cannot be saved as it is: screen readers say so, and the hint says why. */
+  invalid?: boolean;
 }
 
 export function TextField({
@@ -40,6 +43,7 @@ export function TextField({
   list,
   type,
   min,
+  invalid,
 }: TextFieldProps) {
   const id = useId();
   const hintId = `${id}-hint`;
@@ -66,10 +70,11 @@ export function TextField({
           className="of-input"
           type={type ?? "text"}
           min={min}
+          {...(type === "number" ? { max, inputMode: "numeric" as const } : { maxLength: max })}
           value={value}
-          maxLength={max}
           placeholder={placeholder}
           list={list}
+          aria-invalid={invalid || undefined}
           aria-describedby={describedBy}
           onChange={(event) => onChange(event.target.value)}
         />

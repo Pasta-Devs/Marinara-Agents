@@ -20,6 +20,8 @@
 // would dress the moment). The adult negatives stay on every image, whatever the rating or the player's edit, and
 // above SFW no part of a prompt names a minor (adultsOnly). At SFW every prompt is what it was before.
 // M5 adds a date's keepsake: a story CG of the two of them (never explicit) with the keepsake's own framing.
+// #2044 adds chat stickers: a 2D anime chibi bust of one person (the protagonist or a love interest) on the look's
+// chroma matte for the cut-out, with the look's own tags (`clothed`); the sticker's English look sets the expression.
 import { forgeStoryExpressionPrompt } from "@forge-kit/story-expressions-server.mjs";
 import type { Presentation, Unit, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import type { ImageRating } from "../../../../../client/src/features/otome-forge/shared/content.js";
@@ -365,4 +367,58 @@ export function expressionPrompt(input: ExpressionInput): ImagePrompt {
       input.edited?.negativePrompt ?? "",
     ),
   };
+}
+
+// ── #2044: chat stickers ──
+
+/** A sticker's size: square, cut out of its matte afterwards (art/cutout.ts). */
+export const STICKER_SIZE = { width: 1024, height: 1024 } as const;
+export const STICKER_FRAMING =
+  "2D anime chibi sticker, chibi bust, head and shoulders only, big head, expressive face, thick clean outline, flat cel shading";
+const STICKER_NEGATIVE =
+  "text, letters, captions, logos, watermarks, frame, collage layouts, multiple characters, extra people, full body, scenery, busy background";
+
+export interface StickerInput extends Omit<LookInput, "matte"> {
+  /** English, visual only: the sticker's expression and pose (SH/stickers.ts, or his set's `look`). */
+  look: string;
+}
+
+/**
+ * A chat sticker of one person: the style, who they are, then the sticker's look, their outfit, the chibi framing on
+ * the matte their look names least, and the look's rating and adult tags. An edited prompt keeps its wording with
+ * every required tag put back.
+ */
+export function stickerPrompt(input: StickerInput, edited: Partial<ImagePrompt> = {}): ImagePrompt {
+  const { world, style } = input;
+  const required = otomeImageTags({
+    world,
+    people: [{ name: input.name, presentation: input.presentation }],
+    use: "clothed",
+    tagged: style.tagged === true,
+  });
+  const negative = requiredNegative(world, "clothed");
+  const matte = lookMatte(`${input.identityLine} ${input.outfitLine}`);
+  return finish(
+    world,
+    () => ({
+      prompt: [
+        style.styleText,
+        input.identityLine.trim(),
+        mergeTags(
+          input.look,
+          input.outfitLine,
+          STICKER_FRAMING,
+          `plain flat solid ${matte} background`,
+          required,
+          style.positiveTags,
+        ),
+      ]
+        .filter(Boolean)
+        .join(", "),
+      negativePrompt: mergeTags(STICKER_NEGATIVE, MATTE_NEGATIVE, negative, style.negativeTags),
+    }),
+    required,
+    negative,
+    edited,
+  );
 }

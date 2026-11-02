@@ -1,6 +1,8 @@
 // Otome Forge's run routes (M1): the 18+ gate is stored with a timestamp and enforced by the server (raising a gated
 // setting needs it, lowering never does, revoking drops every world), bibles stay behind the spoiler gate and are
 // validated on edit, and deleting a run removes every one of its documents and gallery images and nothing else.
+// Settings → Connections' messages a day from love interests (#2044) is 0 to 24, off by default, kept by every other
+// save, and its quota never reaches the client.
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Bible } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
@@ -411,6 +413,37 @@ test("settings: raising a gated setting needs the gate, lowering never does, and
   );
   assert.equal(await world("r-empty-mnopqr"), null);
   assert.equal((await call("POST", "/runs/:run/settings", { params: { run: "../index" }, body: {} })).status, 404);
+});
+
+test("settings: messages a day from love interests is 0 to 24, off by default, kept by other saves, its quota hidden", async () => {
+  const { call, world, run, store } = await setup();
+  assert.equal((await world())!.dailyMessages, undefined, "off by default");
+  assert.equal((await call("GET", "/runs/:run", { params: run })).body.view.world.dailyMessages, undefined);
+  for (const value of [24, 3]) {
+    const saved = await call("POST", "/runs/:run/settings", { params: run, body: { dailyMessages: value } });
+    assert.equal(saved.status, 200, JSON.stringify(saved.body));
+    assert.equal(saved.body.world.dailyMessages, value);
+  }
+  for (const bad of [25, -1, 1.5, "3", null]) {
+    const refused = await call("POST", "/runs/:run/settings", { params: run, body: { dailyMessages: bad } });
+    assert.deepEqual([refused.status, refused.body.code], [400, "bad-request"], String(bad));
+  }
+  assert.equal((await world())!.dailyMessages, 3);
+  // Other saves keep it, and S/phone/daily.ts's quota stays on the server.
+  await store.mutateDoc(runDocTarget("world", worldId(runIdOf(RUN_KEY))), normalizeWorld, (current) => ({
+    ...current,
+    phoneDaily: { days: { "2026-11-02": { attempts: 1, nextAt: 1 } }, last: { li: KAI, at } },
+  }));
+  const other = await call("POST", "/runs/:run/settings", {
+    params: run,
+    body: { language: "Deutsch", connections: { narration: "conn-b" } },
+  });
+  assert.equal(other.body.world.dailyMessages, 3);
+  assert.equal(other.body.world.phoneDaily, undefined);
+  assert.equal((await call("GET", "/runs/:run", { params: run })).body.view.world.phoneDaily, undefined);
+  const off = await call("POST", "/runs/:run/settings", { params: run, body: { dailyMessages: 0 } });
+  assert.equal(off.body.world.dailyMessages, 0);
+  assert.equal((await world())!.phoneDaily!.days["2026-11-02"]!.attempts, 1, "turning it off keeps today's count");
 });
 
 test("revoking the gate drops every world to SFW, Angst at most and SFW images; changes after it lower without asking", async () => {

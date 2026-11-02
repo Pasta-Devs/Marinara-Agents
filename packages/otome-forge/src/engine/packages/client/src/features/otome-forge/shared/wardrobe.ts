@@ -119,9 +119,27 @@ export interface AlbumImage {
   ref?: string;
   at: string;
   li?: LiId;
-  source: "story" | "memory" | "pair";
+  source: "story" | "memory" | "pair" | "sticker";
   /** A Memory's title, or the couple set's look names. */
   title?: string;
+  /** A sticker's prompt name (mari_laugh), which its saved file is named after. */
+  name?: string;
+}
+
+/**
+ * A sticker in the Album (#2044): one the player has (`url`, the cut-out once ready), or one of his owed stickers whose
+ * paint waits for a tap (`art`: waiting for consent, failed or stopped). `label` is his sticker's own; the protagonist's
+ * are labelled by the client.
+ */
+export interface AlbumSticker {
+  id: string;
+  owner: "you" | LiId;
+  emotion: string;
+  name: string;
+  label?: string;
+  level?: number;
+  url?: string;
+  art?: Paint;
 }
 
 /** An owned Memory, Moment or Snapshot, with how far its story has been read (null: it has none, or not yet). */
@@ -143,6 +161,8 @@ export interface AlbumView {
   favorites: Favorite[];
   soundtrack: SoundtrackEntry[];
   tells: Record<LiId, string[]>;
+  /** #2044: the protagonist's five, then each love interest's owed stickers in level order. */
+  stickers: AlbumSticker[];
 }
 
 /** POST /runs/:run/items/:item/open */

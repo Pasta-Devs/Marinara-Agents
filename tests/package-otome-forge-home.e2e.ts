@@ -4,7 +4,9 @@
 // each voiced with his card's Engine voice under a cache key and cut short by Me, Play (cached), Him / Me, Home read
 // again on each visit under the Engine's 30 s cache (a rupture that opens brings a curt note, its repair a new warm one
 // the same day), Reply into his thread with the note quoted; a thread with typing, his messages one by one, his
-// sticker, suggestions, a sticker of hers, read receipts and Close and remember; Home without images at reduced motion,
+// sticker, suggestions, a sticker of hers, read receipts and Close and remember (#2044: her five and his chibi stickers
+// in the picker, his bracketed sticker in a bubble, an old face sticker as before, and "You unlocked a new sticker");
+// Home without images at reduced motion,
 // during a rupture, with Rough day? voiced with no cache key; and his faces' cut-outs arriving while Home is open.
 // M4: what the Wardrobe's Wear at home put on stands on Home (his look's cut-out, her look on Me), with the line he
 // noticed about hers arriving while Home is open; on a small phone the longest line stands beside the rail without
@@ -101,6 +103,10 @@ const AVATAR = png(8, 8, [231, 166, 184]);
 const HIS_WORN = png(13, 19, [90, 110, 170]);
 const HIS_WORN_CUT = png(13, 19, [80, 100, 160]);
 const HER_WORN = png(13, 19, [200, 150, 90]);
+// #2044: her painted laugh sticker and two chibi stickers of his (cut-outs).
+const HER_LAUGH = png(16, 16, [250, 210, 150]);
+const HIS_SMUG = png(16, 16, [120, 150, 220]);
+const HIS_PENSIVE = png(16, 16, [110, 130, 200]);
 const NOTICED_LINE = "Amber suits you. Do not let it go to your head.";
 // The longest of each (P16 writes up to 30 words, P19 up to 20): on a small phone they still leave the rail its room.
 const LONG_NOTE = "You left the lab light on again tonight, so I turned it off and locked up after you. Sleep, please.";
@@ -196,7 +202,28 @@ function createHomeStub({
     ],
     forge: { phase: "ready", steps: [] },
     starlight: 2000,
+    // #2044: her five (the laugh painted; the rest the built-in set) and his level 2 sticker.
+    stickers: [
+      ...["laugh", "love", "shy", "sad", "pout"].map((emotion) => ({
+        id: `you:${emotion}`,
+        owner: "you",
+        emotion,
+        name: `mira_vale_${emotion}`,
+        ...(emotion === "laugh" ? { url: HER_LAUGH } : {}),
+      })),
+      {
+        id: `${ILVAR}:smug`,
+        owner: ILVAR,
+        emotion: "smug",
+        name: "ilvar_thorne_smug",
+        label: "Smug",
+        level: 2,
+        url: HIS_SMUG,
+      },
+    ],
   };
+  // #2044: POST .../stickers (the phone opened with images on); with `unlock`, the next read brings his level 3 sticker.
+  const stickerState = { unlock: false, starts: 0 };
   const index = {
     version: 1,
     runs: [{ runKey: RUN, title: "The Clockwork Masquerade", createdAt: now(), lastPlayedAt: null }],
@@ -256,7 +283,26 @@ function createHomeStub({
     const path = call.path.replace(/^\/api\/otome-forge/u, "");
     const base = `/runs/${RUN}`;
     if (path === "/index" || path === "/index/opened") return { status: 200, json: { index } };
-    if (path === base) return { status: 200, json: { view: structuredClone(view) } };
+    if (path === base) {
+      if (stickerState.unlock && stickerState.starts > 0) {
+        stickerState.unlock = false;
+        view.stickers.push({
+          id: `${ILVAR}:pensive`,
+          owner: ILVAR,
+          emotion: "pensive",
+          name: "ilvar_thorne_pensive",
+          label: "Pensive",
+          level: 3,
+          url: HIS_PENSIVE,
+        });
+      }
+      return { status: 200, json: { view: structuredClone(view) } };
+    }
+    if (path === `${base}/stickers`) {
+      stickerState.starts += 1;
+      view.player.stickers = {};
+      return { status: 200, json: { started: true } };
+    }
     if (path === `${base}/home`) {
       const look =
         home.show === "me"
@@ -410,7 +456,8 @@ function createHomeStub({
           text: replies === 1 ? "Barely. The data kept me company." : "Noted.",
           at: now(),
         },
-        { id: `m-r${replies}b`, who: "li", text: "", sticker: "tender", at: now() },
+        // His first sticker is an old face (a message from before #2044), his second his own chibi sticker.
+        { id: `m-r${replies}b`, who: "li", text: "", sticker: replies === 1 ? "tender" : `${ILVAR}:smug`, at: now() },
       ];
       messages.push(...reply);
       suggestions = replies === 1 ? ["Go to sleep, Ilvar.", "Tell me about the data."] : [];
@@ -439,7 +486,7 @@ function createHomeStub({
     }
     return { status: 404, json: { error: `No stub for ${call.method} ${call.path}`, code: "not-found" } };
   };
-  return { calls, answer, notes, state };
+  return { calls, answer, notes, state, stickerState };
 }
 
 type Stub = ReturnType<typeof createHomeStub>;
@@ -742,9 +789,11 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
 test("Otome Forge phone: a thread with typing, his sticker, suggestions, her sticker and Close and remember", async ({
   page,
 }, testInfo) => {
-  test.setTimeout(120_000);
+  // #2044's sticker steps (the unlock notice's 4 s, the picker by touch and keyboard) make this the longest phone walk.
+  test.setTimeout(180_000);
   await page.emulateMedia({ colorScheme: "dark" });
   const stub = createHomeStub();
+  stub.stickerState.unlock = true;
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await stubRoutes(page, stub, []);
@@ -758,6 +807,13 @@ test("Otome Forge phone: a thread with typing, his sticker, suggestions, her sti
   await expect(row).toContainText("The light was on again.");
   await expect(row).toContainText("1 unread");
   await expect(threads.getByRole("button", { name: /Cassian/ })).toContainText("No messages yet.");
+  // #2044: the phone opened with images on starts her stickers once, and his newly painted one is announced.
+  await expect.poll(() => posts(stub, `/runs/${RUN}/stickers`).length).toBe(1);
+  const notice = root.locator(".of-toasts--app");
+  await expect(notice).toHaveAttribute("role", "status");
+  await expect(notice).toContainText("You unlocked a new sticker · Ilvar Thorne");
+  await page.screenshot({ path: testInfo.outputPath("03-sticker-unlocked.png") });
+  await expect(root.locator(".of-toasts--app .of-toast")).toHaveCount(0, { timeout: 8_000 });
   await row.click();
   await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeFocused();
 
@@ -790,17 +846,62 @@ test("Otome Forge phone: a thread with typing, his sticker, suggestions, her sti
   await expect(log.getByText("Noted.")).toBeVisible();
   expect(posts(stub, "/send")[1]!.body).toMatchObject({ text: "Go to sleep, Ilvar." });
   await expect(box).toHaveValue("Half a thought");
+  // His own sticker (his bracketed [ilvar_thorne_smug]) shows whole as its cut-out.
+  const smug = log.getByRole("img", { name: "Sticker: Smug" });
+  await expect(smug).toHaveAttribute("src", HIS_SMUG);
+  await expect(smug).toHaveAttribute("data-kind", "chibi");
 
-  // Her sticker: one of his painted faces.
+  // Her sticker: her own five (the laugh painted, the rest the built-in set), then his two.
   await expect(root.locator(".of-typing")).toHaveCount(0);
   await root.getByRole("button", { name: "Stickers" }).click();
-  await root.getByRole("button", { name: "Send the Flustered sticker" }).click();
+  const yours = root.getByRole("group", { name: "Your stickers" });
+  const his = root.getByRole("group", { name: "Ilvar Thorne’s stickers" });
+  await expect(yours.getByRole("button")).toHaveCount(5);
+  await expect(yours.getByRole("button", { name: "Send the Laughing sticker" }).locator("img")).toHaveAttribute(
+    "src",
+    HER_LAUGH,
+  );
+  await expect(yours.getByRole("button", { name: "Send the Pouting sticker" })).toHaveAttribute("data-kind", "builtin");
+  await expect(his.getByRole("button")).toHaveCount(2);
+  await expect(his.getByRole("button", { name: "Send the Pensive sticker" })).toBeVisible();
+  await expect(root.getByRole("button", { name: "Send the Flustered sticker" })).toHaveCount(0);
+  // 44 px targets (the Stickers button and Send too), and the panel stays on the stage.
+  for (const target of [
+    yours.getByRole("button").first(),
+    root.getByRole("button", { name: "Stickers" }),
+    root.getByRole("button", { name: "Send", exact: true }),
+  ]) {
+    const box = (await target.boundingBox())!;
+    expect(box.width).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBeGreaterThanOrEqual(44);
+  }
+  // A solid panel: the messages behind it never show through its titles or the cut-outs (glass inside the composer's
+  // glass never blurs them).
+  const surface = await root.locator(".of-sticker-panel").evaluate((element) => {
+    const style = getComputedStyle(element);
+    const parts = style.backgroundColor.match(/[\d.]+/gu)!.map(Number);
+    return { alpha: parts.length > 3 ? parts[3]! : 1, blur: style.backdropFilter };
+  });
+  expect(surface.alpha).toBeGreaterThanOrEqual(0.95);
+  expect(surface.blur).toBe("none");
+  await page.screenshot({ path: testInfo.outputPath("04b-sticker-picker.png") });
+  await yours.getByRole("button", { name: "Send the Laughing sticker" }).click();
   // The pressed sticker leaves with its panel: focus goes on to the message box, never to the page.
   await expect(box).toBeFocused();
   await expect.poll(() => posts(stub, "/send").length).toBe(3);
-  expect(posts(stub, "/send")[2]!.body).toMatchObject({ text: "", sticker: "flustered" });
-  await expect(log.getByRole("img", { name: "Sticker: Flustered" })).toBeVisible();
+  expect(posts(stub, "/send")[2]!.body).toMatchObject({ text: "", sticker: "you:laugh" });
+  await expect(log.getByRole("img", { name: "Sticker: Laughing" }).first()).toHaveAttribute("src", HER_LAUGH);
   await expect(box).toHaveValue("Half a thought");
+  // By keyboard, once his reply has landed (the picker waits while he writes): it opens on its first sticker, and
+  // Escape closes it and gives focus back.
+  await expect(root.locator(".of-typing")).toHaveCount(0);
+  await expect(root.getByRole("button", { name: "Stickers" })).toHaveAttribute("aria-disabled", "false");
+  await root.getByRole("button", { name: "Stickers" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(yours.getByRole("button", { name: "Send the Laughing sticker" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(root.getByRole("button", { name: "Stickers" })).toBeFocused();
+  await expect(yours).toHaveCount(0);
 
   // Her words fail to send and the server never saved them: they come back to the box, unsent.
   await expect(root.locator(".of-typing")).toHaveCount(0);
@@ -881,6 +982,87 @@ test("Otome Forge phone: a reply that lands after the player left his thread is 
   await row.click();
   await expect(log).toContainText("Still up?");
   await expect(log).toContainText("Barely. The data kept me company.");
+});
+
+test("Otome Forge phone: his thread's header keeps Close beside his name on one row, at every width in both looks", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  const stub = createHomeStub();
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await stubRoutes(page, stub, []);
+  const root = await openHome(page);
+  await root.getByRole("button", { name: /Messages/ }).click();
+  await root
+    .locator(".of-threads")
+    .getByRole("button", { name: /Ilvar Thorne/ })
+    .click();
+  const title = root.getByRole("heading", { level: 1, name: "Ilvar Thorne" });
+  await expect(title).toBeFocused();
+  // Its label is just "Close"; its accessible name and tooltip still say it remembers the talk.
+  const close = root.getByRole("button", { name: "Close and remember" });
+  await expect(close).toHaveText("Close");
+  await expect(close).toHaveAttribute("title", "Close and remember");
+  const back = root.getByRole("button", { name: "All messages" });
+  for (const [width, height] of [
+    [320, 640],
+    [390, 844],
+    [1280, 800],
+  ] as const) {
+    for (const colorScheme of ["light", "dark"] as const) {
+      await page.setViewportSize({ width, height });
+      await page.emulateMedia({ colorScheme, reducedMotion: colorScheme === "dark" ? "reduce" : "no-preference" });
+      const where = `${width} px, ${colorScheme}`;
+      await expect(close).toBeInViewport();
+      const [head, name, button, backButton] = await Promise.all(
+        [root.locator(".of-thread-head"), title, close, back].map(async (item) => (await item.boundingBox())!),
+      );
+      const middle = (box: { y: number; height: number }) => box.y + box.height / 2;
+      // One row: Close, the back button and his name share a line, and the header is no taller than one control.
+      expect(Math.abs(middle(button!) - middle(name!)), where).toBeLessThan(8);
+      expect(Math.abs(middle(backButton!) - middle(name!)), where).toBeLessThan(8);
+      expect(head!.height, where).toBeLessThan(64);
+      expect(button!.x, where).toBeGreaterThan(name!.x + name!.width - 1);
+      expect(head!.x + head!.width, where).toBeLessThanOrEqual(width);
+      // 44 px touch targets.
+      for (const target of [button!, backButton!]) {
+        expect(target.height, where).toBeGreaterThanOrEqual(44);
+        expect(target.width, where).toBeGreaterThanOrEqual(44);
+      }
+      // His name never wraps: it ends in an ellipsis when it runs out of room.
+      const fits = await title.evaluate((element) => ({
+        lines: Math.round(element.getBoundingClientRect().height / parseFloat(getComputedStyle(element).lineHeight)),
+        clipped: element.scrollWidth > element.clientWidth,
+        ellipsis: getComputedStyle(element).textOverflow,
+      }));
+      expect(fits.lines, where).toBe(1);
+      expect(fits.ellipsis, where).toBe("ellipsis");
+      if (width === 320) expect(fits.clipped, where).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath(`thread-head-${width}-${colorScheme}.png`) });
+    }
+  }
+  // Keyboard: from his name, Tab reaches Close, and Enter opens its dialog.
+  await title.focus();
+  await page.keyboard.press("Tab");
+  await expect(close).toBeFocused();
+  await page.keyboard.press("Enter");
+  const dialog = page.getByRole("dialog", { name: "Close and remember?" });
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  // "You unlocked a new sticker" landing while his thread is open (the close reads the run again) sits below its
+  // header, so his name and Close stay in view.
+  await page.setViewportSize({ width: 320, height: 640 });
+  stub.stickerState.unlock = true;
+  await close.click();
+  await dialog.getByRole("button", { name: "Close and remember" }).click();
+  const toast = root.locator(".of-toasts--app .of-toast");
+  await expect(toast).toContainText("You unlocked a new sticker · Ilvar Thorne");
+  const [toastBox, headBox] = await Promise.all([toast.boundingBox(), root.locator(".of-thread-head").boundingBox()]);
+  expect(toastBox!.y).toBeGreaterThanOrEqual(headBox!.y + headBox!.height);
+  await page.screenshot({ path: testInfo.outputPath("thread-head-sticker-notice.png") });
+  expect(pageErrors).toEqual([]);
 });
 
 test("Otome Forge Home without images, at reduced motion, during a rupture: initials, cold lines, Rough day?", async ({
@@ -1107,7 +1289,7 @@ for (const images of [true, false]) {
 }
 
 for (const cleanup of ["pending", "failed"] as const) {
-  test(`Otome Hearth phone stickers keep their original face when cleanup is ${cleanup}`, async ({
+  test(`Otome Hearth phone: an old face sticker in a bubble keeps its original face when cleanup is ${cleanup}`, async ({
     page,
   }, testInfo) => {
     const stub = createHomeStub({ faceCutouts: true });
@@ -1152,10 +1334,10 @@ for (const cleanup of ["pending", "failed"] as const) {
     const log = root.getByRole("list", { name: "Messages with Ilvar Thorne" });
     await expect(log.getByRole("img", { name: "Sticker: Tender" })).toHaveAttribute("src", TENDER);
     await expect(log.getByRole("img", { name: "Sticker: Tender" })).toBeVisible();
+    // #2044: the picker offers her stickers and his, never his faces.
     await root.getByRole("button", { name: "Stickers" }).click();
-    const choice = root.getByRole("button", { name: "Send the Tender sticker" });
-    await expect(choice).toBeVisible();
-    await expect(choice.locator("img")).toHaveAttribute("src", TENDER);
+    await expect(root.getByRole("button", { name: "Send the Laughing sticker" })).toBeVisible();
+    await expect(root.getByRole("button", { name: "Send the Tender sticker" })).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath(`phone-original-sticker-${cleanup}.png`) });
     expect(posts(stub, "/send")).toHaveLength(0);
     expect(stub.calls.filter((call) => call.method === "POST" && call.path.includes("/art/"))).toHaveLength(0);

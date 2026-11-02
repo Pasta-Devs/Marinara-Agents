@@ -2,8 +2,9 @@
 // Otome Forge: requests to the package's routes, through the Engine's own API client
 // ──────────────────────────────────────────────
 // Every request carries `timeZone` and `debugMode` (in the query for GET, in the body for POST), so the server can work
-// out the player's local day and log prompts in debug mode. A POST also says when the player reviews image prompts
-// before they are sent, so the paints a story write starts wait for the tap instead. A failed route answers
+// out the player's local day and log prompts in debug mode. Every request also says when the player reviews image
+// prompts before they are sent, so the paints a story write (or a read of the run, #2044's stickers) starts wait for
+// the tap instead. A failed route answers
 // `{error, code?}`: the client shows the localized message for `code`; `error` is English text for logs, shown here
 // only in debug mode.
 import { useMemo } from "react";
@@ -31,6 +32,7 @@ export function otomeGet<T>(context: RequestContext, path: string, query: QueryV
   }
   params.set("timeZone", context.timeZone);
   params.set("debugMode", String(context.debugMode));
+  if (context.reviewImagePrompts) params.set("reviewImagePrompts", "true");
   return api.get<T>(`${ROUTE_PREFIX}${path}?${params.toString()}`, init);
 }
 

@@ -1307,6 +1307,21 @@ ${R} .of-album-cg-caption {
 }
 ${R} .of-album-cg-title { font-family: var(--of-font-display); font-weight: 600; font-size: 0.98rem; line-height: 1.1; }
 ${R} .of-album-cg-date { font-size: 0.68rem; opacity: 0.8; }
+/* #2044: stickers, square and whole (they are cut-outs) on a soft surface. */
+${R} .of-album-stickers { display: flex; flex-direction: column; gap: 12px; }
+${R} .of-album-stickers-title { margin: 0; font-family: var(--of-font-display); font-weight: 600; font-size: 1.15rem; }
+${R} .of-album-cgs--sticker { grid-template-columns: repeat(auto-fill, minmax(min(132px, 42%), 1fr)); }
+${R} .of-album-cgs--sticker .of-album-cg {
+  aspect-ratio: 1; background: var(--of-tint); box-shadow: inset 0 0 0 1px var(--of-border);
+}
+${R} .of-album-cgs--sticker .of-album-cg img { inset: 8px 8px 30px; width: calc(100% - 16px); height: calc(100% - 38px); object-fit: contain; }
+${R} .of-album-sticker--quiet {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 10px;
+  text-align: center; cursor: default; color: var(--of-text);
+}
+${R} .of-album-sticker--quiet svg { color: var(--of-accent-text); }
+${R} .of-album-sticker--quiet .of-button { min-height: 44px; }
+${R} .of-album-sticker--quiet .of-cost { justify-content: center; }
 ${R} .of-viewer { display: flex; flex-direction: column; gap: 10px; }
 ${R} .of-viewer-figure { display: flex; flex-direction: column; gap: 6px; margin: 0; }
 ${R} .of-viewer-img {
@@ -1790,6 +1805,9 @@ ${R} .of-toast--remember {
 }
 ${R} .of-toast--remember svg { color: var(--of-accent-text); }
 ${R} .of-toast--starlight { font-weight: 800; font-size: 0.86rem; color: var(--of-champagne-text); }
+/* #2044's "You unlocked a new sticker", over any screen, below the top bar; StickerNotice moves it below a taller
+   header (his thread's, the reader's) so his name, Close and the reader's tools stay in view. */
+${R} .of-toasts--app { top: 64px; z-index: 8; }
 /* The bottom third: the dialogue box and its choices, or the panel that stands in for them. */
 ${R} .of-reader-bottom {
   position: relative; z-index: 2; min-height: 30%; display: flex; flex-direction: column; justify-content: flex-end;
@@ -2456,18 +2474,19 @@ ${R} .of-thread {
   flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px;
   padding: 0 10px max(10px, env(safe-area-inset-bottom));
 }
-/* At phone width Close and remember wraps under his name rather than cutting it short. */
+/* One row at every width: Close stays beside his name, and a long name ends in an ellipsis instead of wrapping. */
 ${R} .of-thread-head {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 6px 8px; border-radius: 22px;
+  display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 22px;
   border-bottom: 2px solid color-mix(in srgb, var(--of-li-accent) 55%, transparent);
 }
 ${R} .of-thread-title {
-  flex: 1 1 8rem; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  flex: 1 1 0; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
   font-family: var(--of-font-display); font-weight: 600; font-size: 1.3rem; line-height: 1.1;
 }
 ${R} .of-thread-title:focus { outline: none; }
 ${R} .of-thread-title:focus-visible { outline: 2px solid var(--of-focus); outline-offset: 3px; border-radius: 6px; }
-${R} .of-thread-close { flex: none; margin-inline-start: auto; padding: 0 12px; }
+${R} .of-thread-head .of-icon-button { width: 44px; height: 44px; }
+${R} .of-thread-close { flex: none; margin-inline-start: auto; padding: 0 12px; min-height: 44px; }
 ${R} .of-thread-close[aria-disabled="true"] { opacity: 0.55; cursor: default; }
 ${R} .of-thread-log {
   flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 4px;
@@ -2518,6 +2537,10 @@ ${R} .of-sticker {
   display: block; width: 112px; height: 112px; object-fit: cover; object-position: 50% 12%; border-radius: 22px;
   box-shadow: 0 0 0 3px var(--of-wish-ring), 0 8px 18px rgb(0 0 0 / 0.2);
 }
+/* #2044: a chibi sticker is a cut-out, shown whole on both looks with a soft shadow instead of a frame. */
+${R} .of-sticker[data-kind="chibi"] {
+  object-fit: contain; border-radius: 0; box-shadow: none; filter: drop-shadow(0 4px 10px rgb(0 0 0 / 0.22));
+}
 ${R} .of-sticker--quiet {
   display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; width: 96px;
   height: 96px; font-weight: 800; font-size: 0.74rem; color: ${PALETTE.ink};
@@ -2544,7 +2567,7 @@ ${R} .of-suggestion[aria-disabled="true"] { opacity: 0.6; cursor: default; }
 ${R} .of-composer { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 6px; border-radius: 24px; }
 ${R} .of-composer-row { display: flex; align-items: flex-end; gap: 6px; }
 ${R} .of-composer-input {
-  flex: 1; min-width: 0; min-height: 40px; max-height: 7.6em; resize: none; padding: 9px 14px; border-radius: 18px;
+  flex: 1; min-width: 0; min-height: 44px; max-height: 7.6em; resize: none; padding: 11px 14px; border-radius: 18px;
   field-sizing: content;
 }
 ${R} .of-send {
@@ -2566,17 +2589,31 @@ ${R} .of-quote-label {
 ${R} .of-quote-chip q { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-family: var(--of-font-hand); font-size: 1.15rem; }
 ${R} .of-quote-chip .of-icon-button { width: 32px; height: 32px; }
 ${R} .of-stickers { position: relative; flex: none; }
+/* 44px touch targets: the Stickers button, and Send and the box beside it so the row stays even. */
+${R} .of-stickers > .of-icon-button, ${R} .of-composer-row > .of-send { width: 44px; height: 44px; }
 ${R} .of-stickers .of-icon-button[aria-disabled="true"] { opacity: 0.5; cursor: default; }
+/* #2044: her stickers, then his, four 56px choices a row (fits a 320px phone), scrolling when there are many. Solid,
+   not glass: inside the composer's own backdrop filter its blur never reaches the messages, which would show through
+   its titles and the cut-outs. */
 ${R} .of-sticker-panel {
-  position: absolute; bottom: calc(100% + 8px); inset-inline-start: 0; z-index: 5; display: grid;
-  grid-template-columns: repeat(3, 64px); gap: 6px; padding: 8px; border-radius: 18px;
-  animation: of-rise 300ms var(--of-ease) both;
+  position: absolute; bottom: calc(100% + 8px); inset-inline-start: 0; z-index: 5; display: flex;
+  flex-direction: column; gap: 8px; max-height: min(300px, 52vh); overflow-y: auto; overscroll-behavior: contain;
+  padding: 8px; border-radius: 18px; animation: of-rise 300ms var(--of-ease) both;
+  background: var(--of-surface-solid); -webkit-backdrop-filter: none; backdrop-filter: none;
 }
+${R} .of-sticker-group { display: flex; flex-direction: column; gap: 4px; }
+${R} .of-sticker-group-title {
+  margin: 0; padding-inline: 2px; font-size: 0.66rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--of-text-soft);
+}
+${R} .of-sticker-grid { display: grid; grid-template-columns: repeat(4, 56px); gap: 6px; }
 ${R} .of-sticker-choice {
-  width: 64px; height: 64px; padding: 0; border: 0; border-radius: 16px; overflow: hidden; cursor: pointer;
-  background: transparent; transition: transform 300ms var(--of-ease);
+  display: grid; place-items: center; width: 56px; height: 56px; padding: 0; border: 0; border-radius: 16px;
+  overflow: hidden; cursor: pointer; color: var(--of-accent-text); background: transparent;
+  transition: transform 300ms var(--of-ease);
 }
-${R} .of-sticker-choice img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 12%; }
+${R} .of-sticker-choice[data-kind="builtin"] { background: var(--of-tint); box-shadow: inset 0 0 0 1px var(--of-border); }
+${R} .of-sticker-choice img { width: 100%; height: 100%; object-fit: contain; }
 ${R} .of-sticker-choice:hover { transform: scale(1.05); }
 @keyframes of-bubble-in { from { opacity: 0; transform: translateY(6px) scale(0.97); } to { opacity: 1; transform: none; } }
 @keyframes of-typing { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-4px); opacity: 1; } }`;

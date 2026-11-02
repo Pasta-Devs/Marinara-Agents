@@ -7,10 +7,16 @@
 // `chat` contract for him alone; the user turn holds his scene card with what stands between them, the story as he may
 // know it (recall with `reader: li`), the conversations that are over, the thread now, and the task, ending with the
 // contract reminder. The comfort rule applies whenever the protagonist says they are unwell or had a hard day.
+// With `first` (a daily message, S/phone/daily.ts) he writes first, on his own: the thread may be empty or end on his
+// own message, and only the task line changes (GF's forgeProactiveChatMessages: an instruction, never an invented
+// message of hers). His recall, knowledge boundary, hard rules and contract are the same.
 // Read Me (#1945): P17 carries his own notebook beside his card (story/prompts.ts knowsAboutYou), so a reply may show
 // what he has come to know about the protagonist; P18 writes no one's words and gets none.
 // P18 is GF's sv(): what he will remember of a closed conversation, on the `summary` contract with the summary wording
 // and no knowledge boundary (it writes no one's words). Its quote must be a line the conversation really holds.
+// Stickers (#2044): P17 lists the stickers he and the protagonist may send now (S/art/stickers.ts sendableStickers), by
+// their `[name_emotion]` names, and he sends one by writing its name in brackets; the parser reads either order and
+// drops a sticker-shaped name that is not listed. A face sticker from before #2044 still reads as his face.
 // Prompts are English and never localized; messages, suggestions and memories are written in the world's language.
 import { z, type ZodType } from "zod";
 import type {
@@ -21,7 +27,7 @@ import type {
   Unit,
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
-import { FACES, isFace, sameName, type Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
+import { isFace, sameName } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { NOTE_TEXT_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
 import { COMFORT_RULE, SUMMARY_WORDING, otomeContentContract, otomeContractReminder } from "../content-contract.js";
 import type { OtomeMessage } from "../generation.js";
@@ -29,6 +35,7 @@ import { otomeSceneCard } from "../scene-card.js";
 import { betweenYou, knowsAboutYou } from "../story/prompts.js";
 import { otomeWritingRules } from "../writing-rules.js";
 import { aboutLine } from "../schemas/player.js";
+import type { StickerLookup } from "../art/stickers.js";
 
 /** A message's text, the player's or his (the route's body limit, and the cut on his). */
 export const MESSAGE_TEXT_MAX = 1000;
@@ -60,28 +67,95 @@ export interface ThreadNames {
   player: string;
 }
 
+/** A sticker in the thread as prompt text: an old face as before, a #2044 sticker by name (or "[a sticker]"). */
+function stickerText(
+  message: PhoneMessage,
+  own: string,
+  voice: "his" | "told",
+  stickers: StickerLookup | undefined,
+): string {
+  const sticker = message.sticker!;
+  if (isFace(sticker)) {
+    return message.who === "player" ? `[sends a sticker of ${own} ${sticker} face]` : `[sticker: ${sticker} face]`;
+  }
+  const named = stickers?.(sticker);
+  if (!named) return "[a sticker]";
+  if (voice === "told") return `[sticker: ${named.ownerName}, ${named.about}]`;
+  return message.who === "player" ? `[sends the sticker [${named.name}] (${named.about})]` : `[${named.name}]`;
+}
+
 /**
  * The thread as prompt text, oldest first: `Name: text`, with a sticker and a quoted note in brackets. `voice: "his"`
- * writes them for him (your note, your face), `"told"` for the summarizer (Kai's note, Kai's face).
+ * writes them for him (your note, [kai_smug]), `"told"` for the summarizer (Kai's note, [sticker: Kai, smug]).
+ * `stickers` names #2044 stickers (S/art/stickers.ts stickerLookup).
  */
-export function renderThread(messages: readonly PhoneMessage[], names: ThreadNames, voice: "his" | "told"): string {
+export function renderThread(
+  messages: readonly PhoneMessage[],
+  names: ThreadNames,
+  voice: "his" | "told",
+  stickers?: StickerLookup,
+): string {
   const own = voice === "his" ? "your" : `${names.li}'s`;
   return messages
     .map((message) => {
       const parts: string[] = [];
       if (message.quote) parts.push(`(replying to ${own} note: "${message.quote}")`);
       if (message.text) parts.push(message.text);
-      if (message.sticker) {
-        parts.push(
-          message.who === "player"
-            ? `[sends a sticker of ${own} ${message.sticker} face]`
-            : `[sticker: ${message.sticker} face]`,
-        );
-      }
+      if (message.sticker) parts.push(stickerText(message, own, voice, stickers));
       return `${message.who === "player" ? names.player : names.li}: ${parts.join(" ")}`;
     })
     .join("\n");
 }
+
+// ── Stickers in his replies (#2044) ──
+
+/** A sticker P17 lists: its id, its `name_emotion` name and what it shows (English). */
+export interface ReplySticker {
+  id: string;
+  name: string;
+  about: string;
+}
+
+/** What P17 offers: his own, and the protagonist's, which he may send too; `name` renders the thread's stickers. */
+export interface ReplyStickers {
+  his: readonly ReplySticker[];
+  yours: readonly ReplySticker[];
+  name: StickerLookup;
+}
+
+/** Accents and case folded. */
+const folded = (value: string) =>
+  value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+/** A bracketed name as the parser compares it: accents and case folded, spaces and hyphens as "_". */
+export function stickerToken(value: string): string {
+  return folded(value).replace(/[\s-]+/g, "_");
+}
+
+const BRACKETED = /\[([^[\]\n]{1,60})\]/gu;
+/**
+ * What a sticker name looks like as written: words joined by "_", with no space or hyphen (a name the model made up is
+ * dropped, as an unknown one is). Bracketed words like [laughs softly] or [Café Lumière] are text, and stay.
+ */
+const STICKER_SHAPED = /^[a-z0-9]+(?:_[a-z0-9]+)+$/;
+
+/** The listed sticker a token names, `name_emotion` or `emotion_name`, or null. */
+export function stickerMatcher(listed: readonly ReplySticker[]): (token: string) => string | null {
+  const byToken = new Map<string, string>();
+  for (const sticker of listed) {
+    const cut = sticker.name.lastIndexOf("_");
+    const reversed = `${sticker.name.slice(cut + 1)}_${sticker.name.slice(0, cut)}`;
+    for (const token of [sticker.name, reversed]) if (!byToken.has(token)) byToken.set(token, sticker.id);
+  }
+  return (token) => byToken.get(stickerToken(token)) ?? null;
+}
+
+const stickerList = (stickers: readonly ReplySticker[]) =>
+  stickers.map((sticker) => `[${sticker.name}] (${sticker.about})`).join(", ");
 
 // ── P17: chat reply (chat, 0.95, chat contract) ──
 
@@ -103,7 +177,7 @@ export interface ChatReplyInput {
   player: Pick<Player, "name" | "pronouns" | "traits" | "about">;
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   liState: LiState;
-  /** The open conversation's newest messages, oldest first; the last is the protagonist's. */
+  /** The open conversation's newest messages, oldest first; the last is the protagonist's unless he writes first. */
   tail: readonly PhoneMessage[];
   /** His memories of conversations that are over, oldest first. */
   memories: readonly PhoneSession[];
@@ -111,6 +185,10 @@ export interface ChatReplyInput {
   story: string;
   /** His latest off-screen line from the ledgers, or "". */
   offscreen?: string;
+  /** He writes first, on his own (a daily message): his message answers nothing she sent. */
+  first?: boolean;
+  /** #2044: the stickers he may send, and the thread's sticker names; without it no sticker is offered. */
+  stickers?: ReplyStickers;
 }
 
 export function chatReplyMessages({
@@ -122,16 +200,29 @@ export function chatReplyMessages({
   memories,
   story,
   offscreen = "",
+  first = false,
+  stickers,
 }: ChatReplyInput): OtomeMessage[] {
   const name = unit.name;
   const them = player.name || "the protagonist";
   const known = knowsAboutYou(unit, liState);
+  const example = stickers?.his[0] ?? stickers?.yours[0];
+  const stickerRule = example
+    ? [
+        `- To send a sticker, write its name in square brackets in a message, e.g. "[${example.name}]".`,
+        stickers!.his.length ? `Your stickers: ${stickerList(stickers!.his)}.` : "",
+        stickers!.yours.length ? `${them}'s stickers, which you may send too: ${stickerList(stickers!.yours)}.` : "",
+        "At most one sticker in a reply, only from these lists, when a picture says it better than words; it may stand alone.",
+      ]
+        .filter(Boolean)
+        .join(" ")
+    : "";
   const system = [
     `You are ${name} (${pronounText(unit.pronouns)}), a love interest in an otome visual novel: a character-driven romance. You are writing to ${them} in your private message thread, by whatever carries messages in this world (never a phone or a screen unless the world has them). This is a MESSAGE, not a scene: write as ${name}, in the first person, in your own voice.`,
     "Reply with ONLY a JSON object of this shape:",
-    `{"messages": [{"text": "...", "sticker": "${FACES.join("|")}"}], "suggestions": ["...", "..."]}`,
+    `{"messages": [{"text": "..."}], "suggestions": ["...", "..."]}`,
     `- messages: 1 to ${REPLY_MESSAGES_MAX} messages sent one after another, usually 1 or 2, each short: a line or a few, the way people text.`,
-    `- sticker: optional, one of your own faces sent as a sticker (${FACES.join(", ")}) when a face says it better than words; at most one in a reply. A sticker may stand alone with "text": "".`,
+    stickerRule,
     `- suggestions: 2 or 3 short replies ${them} might send next, each at most ${SUGGESTION_CHARS_MAX} characters, different from one another in tone, in ${them}'s voice. They are only offers: ${them} may write anything.`,
     `- Write every message and suggestion in ${world.language}.`,
     "",
@@ -185,9 +276,11 @@ export function chatReplyMessages({
       : "",
     "",
     "THE THREAD NOW (oldest first)",
-    renderThread(tail, { li: name, player: them }, "his"),
+    tail.length ? renderThread(tail, { li: name, player: them }, "his", stickers?.name) : "(no messages yet)",
     "",
-    `Write ${name}'s next message now, answering ${them}.`,
+    first
+      ? `Write ${name}'s next message now: you are writing to ${them} first, on your own, and it answers nothing they sent. Make it natural, in your own voice: something from the story you were there for or heard about, how they are, or a small thought of yours. One or two short messages.`
+      : `Write ${name}'s next message now, answering ${them}.`,
     otomeContractReminder("chat"),
   ]
     .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
@@ -205,7 +298,8 @@ export interface ChatReplyRaw {
 }
 
 export interface ChatReply {
-  messages: Array<{ text: string; sticker?: Face }>;
+  /** `sticker` is a listed sticker's id (S/art/stickers.ts). */
+  messages: Array<{ text: string; sticker?: string }>;
   suggestions: string[];
 }
 
@@ -222,13 +316,39 @@ export const ChatReplySchema: ZodType<ChatReplyRaw> = z.object({
 /**
  * His messages (a leading "Name:" taken off, at most one sticker, at most three messages, each cut to
  * MESSAGE_TEXT_MAX) and up to three distinct suggestions of at most 40 characters; longer ones are dropped. A message
- * written as the protagonist, or a reply with nothing in it, is refused (the repair turn names why).
+ * written as the protagonist, or a reply with nothing in it, is refused (the repair turn names why). A sticker is the
+ * first bracketed name of `listed` in the reply (either order; a `sticker` field is read the same way); every other
+ * sticker-shaped bracketed name is taken out of the text, and other bracketed text stays.
  */
-export function normalizeChatReply(raw: ChatReplyRaw, names: ThreadNames): ChatReply | string {
+export function normalizeChatReply(
+  raw: ChatReplyRaw,
+  names: ThreadNames,
+  listed: readonly ReplySticker[] = [],
+): ChatReply | string {
   const messages: ChatReply["messages"] = [];
+  const match = stickerMatcher(listed);
   let stickers = 0;
   for (const entry of raw.messages) {
     let text = (entry.text ?? "").trim();
+    let sticker: string | undefined;
+    const take = (id: string | null) => {
+      if (id && stickers === 0) {
+        sticker = id;
+        stickers += 1;
+      }
+    };
+    const before = text;
+    text = text.replace(BRACKETED, (whole, inner: string) => {
+      const id = match(inner);
+      take(id);
+      return id || STICKER_SHAPED.test(folded(inner)) ? " " : whole;
+    });
+    if (text !== before)
+      text = text
+        .replace(/[ \t]+/g, " ")
+        .replace(/ ?\n ?/g, "\n")
+        .trim();
+    if (entry.sticker) take(match(entry.sticker.replace(/^\[|\]$/g, "")));
     // Any line of the message may be the protagonist's, not only the first.
     const asPlayer =
       !!names.player &&
@@ -241,8 +361,6 @@ export function normalizeChatReply(raw: ChatReplyRaw, names: ThreadNames): ChatR
     }
     const prefix = speakerPrefix(text);
     if (prefix && sameName(prefix.speaker, names.li)) text = prefix.rest;
-    const sticker = isFace(entry.sticker) && stickers === 0 ? entry.sticker : undefined;
-    if (sticker) stickers += 1;
     if (!text && !sticker) continue;
     messages.push({ text: [...text].slice(0, MESSAGE_TEXT_MAX).join(""), ...(sticker ? { sticker } : {}) });
   }

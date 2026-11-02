@@ -12,7 +12,7 @@
 // The kit builds one paint per unit; its client is made per run here, so each face's prompt reads that run's world
 // (rating, style) right before the call. createOtomeArt is created once per activation: queueExpressions after each
 // beat is served, queueScenePaints after each beat is written (art/cg.ts), dispose on teardown, after which nothing
-// more is paid for.
+// more is paid for. queueStickers (#2044, art/stickers.ts) runs each run's sticker chain from GET /runs/:run.
 import { forgeLocalAvatarPath } from "@forge-kit/image-avatar-references.mjs";
 import { createForgeStoryExpressions, type ForgeStoryExpressions } from "@forge-kit/story-expressions-server.mjs";
 import type { Beat, Paint, Unit, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
@@ -27,6 +27,7 @@ import { galleryRef, worldStyle, type GeneratedImage } from "./image-client.js";
 import { imagesOf, paintSlot, updateIfChanged, type ArtDeps } from "./paint.js";
 import { paintBeatPlaces, type PaintOptions } from "./places.js";
 import { LOOK_SIZE, expressionPrompt, type ImagePrompt } from "./prompts.js";
+import { queueStickers, type StickerQueueOptions } from "./stickers.js";
 
 export type ExpressionPrompts = Partial<Record<Face, ImagePrompt>>;
 
@@ -72,6 +73,11 @@ export interface OtomeArt {
   queueScenePaints(runId: string, beat: Beat, options: Omit<PaintOptions, "active">): Promise<void>;
   /** Called outside the run queue before a fresh scene answers; only registration is awaited, never paid images. */
   prepareScenePlaces?(runId: string, beat: Beat, options: Omit<PaintOptions, "active">): Promise<void>;
+  /**
+   * #2044: paints the run's owed stickers one at a time in the background (or leaves them waiting for the tap). Call
+   * it on each read of the run; it never rejects, and resolves once the chain ends.
+   */
+  queueStickers?(runId: string, options: Omit<StickerQueueOptions, "active">): Promise<void>;
   /** A beat replaced by a rewrite or removed: deletes its CG's gallery image unless the album keeps it. */
   releaseBeatArt(runId: string, beat: Pick<Beat, "cg">): Promise<void>;
   /** False once torn down: an item's paint (M4, S/art/outfits.ts) still waiting in its lane stops before its paid call. */
@@ -235,6 +241,8 @@ export function createOtomeArt(deps: ArtDeps): OtomeArt {
         ? Promise.resolve()
         : paintBeatPlaces(deps, runId, beat.places, { ...options, active, registrationOnly: true }),
     releaseBeatArt: (runId, beat) => releaseBeatArt(deps, runId, beat),
+    queueStickers: (runId, options) =>
+      disposed ? Promise.resolve() : queueStickers(deps, runId, { ...options, active }),
     active,
     dispose() {
       disposed = true;

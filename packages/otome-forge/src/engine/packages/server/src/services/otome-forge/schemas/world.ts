@@ -3,7 +3,7 @@
 // ──────────────────────────────────────────────
 // The mystery's truth and pieces and the web's secrets are the hidden story: toWorldView strips them before anything
 // reaches the client. `audio` and `places` (M2b) are read here so every normalized write keeps them; S/art and
-// S/audio write them.
+// S/audio write them. `phoneDaily` (#2044) is S/phone/daily.ts's quota, and stays on the server too.
 import { normalizeOtomeAudio } from "../../../../../client/src/features/otome-forge/shared/audio.js";
 import { z, type ZodType } from "zod";
 import type {
@@ -11,6 +11,7 @@ import type {
   ForgeStatus,
   ForgeStep,
   ImageSettings,
+  PhoneDaily,
   PlaceArt,
   SoundtrackTrack,
   WebRow,
@@ -34,6 +35,7 @@ import {
   type ContentSettings,
   type LimitId,
 } from "../../../../../client/src/features/otome-forge/shared/content.js";
+import { DAILY_MESSAGES_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
 import { PaintSchema, field, isRecord, readFields, text, validItems } from "./common.js";
 
 export const DEFAULT_LANGUAGE = "English";
@@ -152,6 +154,15 @@ export function normalizeWorldAudio(data: unknown): WorldAudio {
   };
 }
 
+/** The daily messages' quota (S/phone/daily.ts keeps four local days); one that fails its schema starts over. */
+const PhoneDailySchema: ZodType<PhoneDaily> = z.object({
+  days: z.record(
+    z.string().regex(/^\d{4}-\d{2}-\d{2}$/u),
+    z.object({ attempts: z.number().int().min(0), nextAt: z.number().optional() }),
+  ),
+  last: z.object({ li: z.string().min(1).max(80), at: z.string().min(1).max(40) }).optional(),
+});
+
 function normalizePlaces(data: unknown): World["places"] {
   const places: World["places"] = {};
   for (const [slug, raw] of Object.entries(isRecord(data) ? data : {}).slice(0, PLACES_MAX)) {
@@ -200,15 +211,20 @@ export function normalizeWorld(data: unknown): World {
       forge: normalizeForge,
       audio: normalizeWorldAudio,
       places: normalizePlaces,
+      dailyMessages: z.number().int().min(0).max(DAILY_MESSAGES_MAX).optional(),
+      phoneDaily: PhoneDailySchema.optional(),
     },
     defaultWorld,
     isRecord(data) ? data : undefined,
   );
 }
 
-/** The world without its hidden story (no mystery truth or pieces, no web secrets), and without the music briefs. */
+/**
+ * The world without its hidden story (no mystery truth or pieces, no web secrets), and without the music briefs or the
+ * daily messages' quota.
+ */
 export function toWorldView(world: World): WorldView {
-  const { mystery, web, audio, ...rest } = world;
+  const { mystery, web, audio, phoneDaily: _phoneDaily, ...rest } = world;
   const { briefs: _briefs, ...shownAudio } = audio;
   return {
     ...rest,

@@ -1,5 +1,13 @@
 # Otome Hearth release notes
 
+## 0.6.19 — 2026-11-02 [highlight]
+
+- **Chibi stickers.** With images on, your five phone stickers are chibi busts of your protagonist, and each love interest gets nine of his own, one unlocked per affection level from 2 to 10 ("You unlocked a new sticker"). They're painted in the background, one at a time, and Ask before painting holds them for a tap; stories in progress catch up. Without images your five are simple labelled icons.
+- **He sends stickers too**, his or yours, by name in brackets, like `[dottore_pensive]`. Old face stickers still show.
+- **A Stickers tab in the Album** to view and save each sticker, named like `mari_laugh`.
+- **Messages a day from love interests**: in Settings → Connections, choose how many times a day one you've met may message you first (0 to 24, off by default). They're spread across your day and arrive unread.
+- **His thread's header fits on one row on phones**, with **Close** beside his name.
+
 ## 0.6.18 — 2026-11-02
 
 - **"What happened so far…" while a chapter is planned.** Planning a new chapter (and a route, repair or extra story chapter) now shows the story's running summary to read while you wait. It scrolls on its own and appears once the first summary is ready.

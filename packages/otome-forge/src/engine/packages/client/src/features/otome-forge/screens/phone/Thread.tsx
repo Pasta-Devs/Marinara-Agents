@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────
-// Otome Forge: one private thread. Bubbles in his accent colour, his faces as stickers, suggested replies, a typing
+// Otome Forge: one private thread. Bubbles in his accent colour, chibi stickers (#2044), suggested replies, a typing
 // delay that feels human (lib/typing-delay.ts), earlier messages page by page, what he remembers of each closed
 // conversation, and Close and remember.
 // ──────────────────────────────────────────────
@@ -25,13 +25,13 @@ import type {
   PhoneSendResult,
   PhoneSession,
   RunLiView,
+  RunView,
 } from "../../shared/api-types";
-import type { Face } from "../../shared/faces";
+import { isFace } from "../../shared/faces";
 import { homeQueryKey } from "../home/HomeScreen";
-import { FACE_LABEL_KEYS } from "../reader/FacePlate";
 import { CloseAndRemember } from "./CloseAndRemember";
 import { BUSY_POLL_MS, phonePath, phoneQueryKey, threadQueryKey } from "./PhoneScreen";
-import { Sticker, StickerPicker } from "./StickerPicker";
+import { Sticker, StickerArt, StickerPicker, stickerLabel, useStickers, type Stickers } from "./StickerPicker";
 import { SuggestionChips } from "./SuggestionChips";
 import { messageTime } from "./ThreadList";
 import { TypingIndicator } from "./TypingIndicator";
@@ -44,7 +44,7 @@ const NEAR_BOTTOM_PX = 96;
 const sending = new Set<string>();
 
 type Row = PhoneMessage & { archived?: boolean };
-type SendBody = { text: string; quote?: string; sticker?: Face; id: string } | { retry: true };
+type SendBody = { text: string; quote?: string; sticker?: string; id: string } | { retry: true };
 
 /** A message id the server accepts as the client's own (S/phone/chat.ts MESSAGE_ID). */
 const messageId = () => `p-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10).padEnd(8, "0")}`;
@@ -73,6 +73,8 @@ interface Incoming {
 
 interface ThreadProps {
   runKey: string;
+  /** The run, for its stickers. */
+  view: Pick<RunView, "world" | "stickers">;
   li: RunLiView;
   quote?: string;
   /** Opened from the thread list: focus moves to the heading (a screen change already does). */
@@ -82,8 +84,9 @@ interface ThreadProps {
   onQuoteChange: (quote: string | null) => void;
 }
 
-export function Thread({ runKey, li, quote: initialQuote, focusHeading, onBack, onQuoteChange }: ThreadProps) {
+export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, onBack, onQuoteChange }: ThreadProps) {
   const { t } = useTranslation();
+  const stickers = useStickers(view, li);
   const otome = useOtomeApi();
   const queryClient = useQueryClient();
   const { localization, timeZone } = useOtomeProps();
@@ -229,7 +232,7 @@ export function Thread({ runKey, li, quote: initialQuote, focusHeading, onBack, 
             next.text.trim()
               ? t("ui.otomeForge.phone.said", { name: li.name, text: next.text })
               : next.sticker
-                ? t("ui.otomeForge.phone.saidSticker", { name: li.name, face: t(FACE_LABEL_KEYS[next.sticker]) })
+                ? t("ui.otomeForge.phone.saidSticker", { name: li.name, face: stickerLabel(t, stickers, next.sticker) })
                 : "",
           );
         },
@@ -442,6 +445,7 @@ export function Thread({ runKey, li, quote: initialQuote, focusHeading, onBack, 
               <Bubble
                 row={row}
                 li={li}
+                stickers={stickers}
                 pending={!incoming && outgoing?.local?.id === row.id}
                 time={!next || next.who !== row.who ? messageTime(row.at, localization.locale, timeZone) : ""}
               />
@@ -522,10 +526,11 @@ export function Thread({ runKey, li, quote: initialQuote, focusHeading, onBack, 
         ) : null}
         <div className="of-composer-row">
           <StickerPicker
-            li={li}
+            stickers={stickers}
+            name={li.name}
             disabled={busy}
-            onPick={(face) => {
-              void send({ text: "", sticker: face, id: messageId(), ...(quote ? { quote } : {}) });
+            onPick={(sticker) => {
+              void send({ text: "", sticker, id: messageId(), ...(quote ? { quote } : {}) });
               input.current?.focus({ preventScroll: true });
             }}
           />
@@ -564,7 +569,19 @@ export function Thread({ runKey, li, quote: initialQuote, focusHeading, onBack, 
   );
 }
 
-function Bubble({ row, li, pending, time }: { row: Row; li: RunLiView; pending: boolean; time: string }) {
+function Bubble({
+  row,
+  li,
+  stickers,
+  pending,
+  time,
+}: {
+  row: Row;
+  li: RunLiView;
+  stickers: Stickers;
+  pending: boolean;
+  time: string;
+}) {
   const { t } = useTranslation();
   const text = row.text.trim();
   return (
@@ -579,7 +596,13 @@ function Bubble({ row, li, pending, time }: { row: Row; li: RunLiView; pending: 
           {row.who === "li" ? t("ui.otomeForge.phone.from", { name: li.name }) : t("ui.otomeForge.phone.fromYou")}
         </span>
         {row.quote ? <q className="of-bubble-quote">{row.quote}</q> : null}
-        {row.sticker ? <Sticker li={li} face={row.sticker} /> : null}
+        {row.sticker ? (
+          isFace(row.sticker) ? (
+            <Sticker li={li} face={row.sticker} />
+          ) : (
+            <StickerArt stickers={stickers} id={row.sticker} />
+          )
+        ) : null}
         {text ? <span className="of-bubble-text">{row.text}</span> : null}
       </div>
       {time ? (

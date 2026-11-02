@@ -1145,6 +1145,107 @@ test("Otome Forge Album: a CG opens large and saves through the Engine; the Time
   await expect(page.getByRole("dialog").getByText("Writes its story")).toHaveCount(0);
 });
 
+test("Otome Hearth Album: the Stickers tab shows hers and his cut out, saves one under its name, and paints a waiting one", async ({
+  page,
+}, testInfo) => {
+  // #2044: her five (one painted, one the built-in set), his unlocked ones, and one of his waiting for the tap.
+  const calls: Call[] = [];
+  const view = runView(2000);
+  const LAUGH = "/api/gallery/file/sticker-mira-laugh.png";
+  const SMUG = "/api/gallery/file/sticker-ilvar-smug.png";
+  const PENSIVE = "/api/gallery/file/sticker-ilvar-pensive.png";
+  for (const url of [LAUGH, SMUG, PENSIVE]) {
+    await page.route(`**${url}`, (route) => route.fulfill({ body: PNG, contentType: "image/png" }));
+  }
+  let painted = false;
+  const album = () => ({
+    ...albumView(),
+    stickers: [
+      { id: "you:laugh", owner: "you", emotion: "laugh", name: "mira_vale_laugh", url: LAUGH },
+      { id: "you:love", owner: "you", emotion: "love", name: "mira_vale_love" },
+      {
+        id: `${ILVAR}:smug`,
+        owner: ILVAR,
+        emotion: "smug",
+        name: "ilvar_thorne_smug",
+        label: "Smug",
+        level: 2,
+        url: SMUG,
+      },
+      {
+        id: `${ILVAR}:pensive`,
+        owner: ILVAR,
+        emotion: "pensive",
+        name: "ilvar_thorne_pensive",
+        label: "Pensive",
+        level: 3,
+        ...(painted ? { url: PENSIVE } : { art: { state: "waiting-consent", at: "2026-11-02T10:00:00.000Z" } }),
+      },
+    ],
+  });
+  await stubRoutes(
+    page,
+    (call) => {
+      const path = call.path.replace("/api/otome-forge", "");
+      if (path === "/index" || path === "/index/opened") return { status: 200, json: { index: index() } };
+      if (path === `/runs/${RUN}`) return { status: 200, json: { view } };
+      if (path === `/runs/${RUN}/album`) return { status: 200, json: album() };
+      if (path === `/runs/${RUN}/art/sticker`) {
+        painted = true;
+        return {
+          status: 200,
+          json: { art: { state: "ready", at: "2026-11-02T10:01:00.000Z", url: PENSIVE } },
+          delay: 300,
+        };
+      }
+      return undefined;
+    },
+    calls,
+  );
+  const reduced = testInfo.project.name.startsWith("mobile");
+  await page.emulateMedia({
+    colorScheme: reduced ? "light" : "dark",
+    reducedMotion: reduced ? "reduce" : "no-preference",
+  });
+  const root = await openOtome(page);
+  await openDock(root, "Album");
+  // By keyboard: the Stickers tab comes right after CGs.
+  const tabs = root.getByRole("tablist", { name: "Album" });
+  await tabs.getByRole("tab", { name: "CGs" }).focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(tabs.getByRole("tab", { name: "Stickers" })).toHaveAttribute("aria-selected", "true");
+  const panel = root.getByRole("tabpanel");
+  await expect(panel.getByRole("heading", { name: "Yours" })).toBeVisible();
+  await expect(panel.getByRole("heading", { name: "Ilvar Thorne" })).toBeVisible();
+  // The built-in one has nothing to save; the painted ones open large.
+  await expect(panel.getByText("Mira Vale · In love")).toBeVisible();
+  await expect(panel.getByRole("button", { name: "View: Mira Vale · In love" })).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath("album-stickers.png") });
+  await panel.getByRole("button", { name: "View: Mira Vale · Laughing" }).click();
+  await expect(page.getByRole("dialog", { name: "Mira Vale · Laughing" })).toContainText("A chat sticker");
+  await page.keyboard.press("ArrowRight");
+  const viewer = page.getByRole("dialog", { name: "Ilvar Thorne · Smug" });
+  await expect(viewer.getByText("2 of 2")).toBeVisible();
+  const download = page.waitForEvent("download");
+  await viewer.getByRole("button", { name: "Save image" }).click();
+  // Saved through the Engine's image saving, under the sticker's own name.
+  expect((await download).suggestedFilename()).toBe("ilvar_thorne_smug.png");
+  await page.keyboard.press("Escape");
+  await expect(viewer).toHaveCount(0);
+  // His level 3 sticker waits for the tap (Ask before painting): Paint it paints that one sticker, then it opens.
+  const paint = panel.getByRole("button", { name: "Paint it" });
+  await expect(paint).toHaveAccessibleDescription("Ilvar Thorne · Pensive");
+  await expect(panel.getByText("Paints 1 image")).toBeVisible();
+  const box = await paint.boundingBox();
+  expect(box!.height).toBeGreaterThanOrEqual(44);
+  await paint.click();
+  await expect(panel.getByRole("button", { name: "View: Ilvar Thorne · Pensive" })).toBeVisible();
+  expect(posts(calls, "/art/sticker").map((call) => call.body?.sticker)).toEqual([`${ILVAR}:pensive`]);
+  const width = page.viewportSize()!.width;
+  const overflow = await root.evaluate((element) => element.scrollWidth - element.clientWidth);
+  expect(overflow, `no sideways scroll at ${width} px`).toBeLessThanOrEqual(0);
+});
+
 test("Otome Hearth Wish: a long 5★ premise fits a phone: the title shows whole and Continue is reachable (#1944)", async ({
   page,
 }) => {

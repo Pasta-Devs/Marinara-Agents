@@ -65,10 +65,11 @@ const notFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not
 // ── Live paints in this process ──
 
 /**
- * Whose paint: a look (`player`, `li:<id>`), a place (`place:<key>`), a story CG (`cg:<key>/<i>@<written at>`), or (M4,
- * S/art/outfits.ts) an item's art (`item:<item id>`) or a couple set's pair portrait (`item:<her look's id>/pair`).
+ * Whose paint: a look (`player`, `li:<id>`), a place (`place:<key>`), a story CG (`cg:<key>/<i>@<written at>`), (M4,
+ * S/art/outfits.ts) an item's art (`item:<item id>`) or a couple set's pair portrait (`item:<her look's id>/pair`), or
+ * (#2044, S/art/stickers.ts) a chat sticker (`sticker:<sticker id>`).
  */
-export type PaintOwner = LookOwner | `place:${string}` | `cg:${string}` | `item:${string}`;
+export type PaintOwner = LookOwner | `place:${string}` | `cg:${string}` | `item:${string}` | `sticker:${string}`;
 
 const live = new Map<string, { settled: Promise<void>; settle: () => void }>();
 const liveKey = (runId: string, owner: PaintOwner) => `${runId}|${owner}`;
@@ -230,18 +231,21 @@ export interface PaintRecordJob {
   save: (art: Paint) => Promise<boolean>;
   /** False once the art service is torn down: nothing more is paid for. */
   active?: () => boolean;
+  /** The connection's lane: `high` by default; background stickers (S/art/stickers.ts) wait in `low`, as faces do. */
+  lane?: PaintLane;
 }
 
 const failure = (error: unknown) => (error instanceof Error ? error.message : String(error)).slice(0, ERROR_MAX);
 
 /**
- * One paid image for a record its caller has just marked pending, in the connection's `high` lane. Resolves the record
- * as left: `ready`, `failed` (never repainted without a tap), `stopped` or `waiting-consent` (nothing was paid for), or
- * null when the record is gone. An image that could not be saved onto its record is deleted from the gallery.
+ * One paid image for a record its caller has just marked pending, in the job's lane (`high` unless it names one).
+ * Resolves the record as left: `ready`, `failed` (never repainted without a tap), `stopped` or `waiting-consent`
+ * (nothing was paid for), or null when the record is gone. An image that could not be saved onto its record is deleted
+ * from the gallery.
  */
 export function paintRecord(deps: ArtDeps, job: PaintRecordJob): Promise<Paint | null> {
   const images = imagesOf(deps);
-  return paintSlot(job.connectionId, async () => {
+  const paint = async (): Promise<Paint | null> => {
     const check = job.active && !job.active() ? "stopped" : await job.check();
     if (check !== "paint") {
       if (check === "gone") return null;
@@ -267,7 +271,8 @@ export function paintRecord(deps: ArtDeps, job: PaintRecordJob): Promise<Paint |
       if (!kept && image.id) await images.deleteGalleryImage(image.id);
     }
     return kept ? ready : null;
-  });
+  };
+  return paintSlot(job.connectionId, paint, job.lane);
 }
 
 // ── Whose look, and how it reads ──

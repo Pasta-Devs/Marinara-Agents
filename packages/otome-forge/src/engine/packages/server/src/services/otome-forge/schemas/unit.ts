@@ -15,8 +15,10 @@ import type {
   LinePacks,
   PlushArt,
   StageLines,
+  StickerSet,
   Unit,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import { STICKER_EMOTION, STICKERS_PER_LI } from "../../../../../client/src/features/otome-forge/shared/stickers.js";
 import {
   BIRTHDAY_PATTERN,
   MASK_TELLS_MAX,
@@ -34,6 +36,7 @@ import {
   defaultPronouns,
   field,
   isRecord,
+  normalizePaints,
   normalizeCutouts,
   readFields,
   readWornOutfit,
@@ -220,6 +223,31 @@ export function normalizePlushArt(value: unknown): PlushArt | undefined {
   return { animal, svg: clean.svg, at: typeof value.at === "string" ? value.at : "" };
 }
 
+/** His sticker set's design, at most STICKERS_PER_LI. A label counts characters (code points), as the reply's check does. */
+export const STICKER_LABEL_MAX = 24;
+export const STICKER_LOOK_MAX = 160;
+const StickerDesignSchema = z.object({
+  emotion: z.string().regex(STICKER_EMOTION),
+  label: z
+    .string()
+    .min(1)
+    .refine((label) => [...label].length <= STICKER_LABEL_MAX),
+  look: z.string().min(1).max(STICKER_LOOK_MAX),
+});
+
+/** A stored sticker set (#2044): its valid designs in order, and the paints of the emotions it holds. */
+export function normalizeStickerSet(value: unknown): StickerSet | undefined {
+  if (!isRecord(value)) return undefined;
+  const set = validItems(StickerDesignSchema, value.set, STICKERS_PER_LI);
+  if (!set.length) return undefined;
+  const emotions = new Set(set.map((entry) => entry.emotion));
+  return {
+    set,
+    at: typeof value.at === "string" ? value.at : "",
+    art: normalizePaints(value.art, (emotion) => emotions.has(emotion)),
+  };
+}
+
 /** Stored line packs, each stage on its own: one damaged pack is dropped (and written again), the others kept. */
 export function normalizeLinePacks(value: unknown): LinePacks | undefined {
   if (!isRecord(value)) return undefined;
@@ -280,6 +308,7 @@ export function normalizeUnit(data: unknown): Unit {
       lines: normalizeLinePacks,
       cutouts: normalizeCutouts,
       plushArt: normalizePlushArt,
+      stickers: normalizeStickerSet,
     },
     defaultUnit,
     isRecord(data) ? data : undefined,
@@ -287,6 +316,7 @@ export function normalizeUnit(data: unknown): Unit {
   // An LI with no pack yet has no `lines` key at all, as before M3; one with no plush drawn, no `plushArt`.
   if (!unit.lines) delete unit.lines;
   if (!unit.plushArt) delete unit.plushArt;
+  if (!unit.stickers) delete unit.stickers;
   // A worn look that is not one of theirs (a damaged document) wears the base portrait.
   const { wornOutfit: _worn, ...rest } = unit;
   const worn = readWornOutfit(unit.outfits, field(data, "wornOutfit"));

@@ -81,6 +81,17 @@ const CutoutSchema = PaintSchema.and(
   }),
 );
 
+/** Paint records keyed by name (#2044's sticker art), each read on its own; `keep` names the keys kept. */
+export function normalizePaints(value: unknown, keep: (key: string) => boolean): Record<string, Paint> {
+  const paints: Record<string, Paint> = {};
+  if (!isRecord(value)) return paints;
+  for (const [key, record] of Object.entries(value)) {
+    const parsed = PaintSchema.safeParse(record);
+    if (keep(key) && parsed.success) paints[key] = parsed.data;
+  }
+  return paints;
+}
+
 /** Cut-outs are keyed by their retained source URL; preserve only valid records and optional host revisions. */
 export function normalizeCutouts(value: unknown): Record<string, Cutout> {
   const cutouts: Record<string, Cutout> = {};
