@@ -413,10 +413,10 @@ test("A Memory won after a story CG of his stands behind him and ends the Album,
   assert.deepEqual(
     (await albumView(t.deps, t.runId)).cgs.map((cg) => [cg.key, cg.at]),
     [
-      [story.key, story.at],
       [`item:${featured.id}`, won],
+      [story.key, story.at],
     ],
-    "the Album dates it when it was won",
+    "the Album dates it when it was won, newest first",
   );
 });
 

@@ -663,6 +663,9 @@ export async function startArc(
  */
 /** The prologue first, then main chapters by number, then every other chapter. */
 const storyOrder = (key: string) => (key === PROLOGUE_KEY ? 0 : (mainChapterNumber(key) ?? Infinity));
+/** The Story screen's chapter order: storyOrder, then the order planned. The Album's chapter themes keep it too. */
+export const byStoryOrder = (a: Chapter, b: Chapter) =>
+  storyOrder(a.key) - storyOrder(b.key) || a.plannedAt.localeCompare(b.plannedAt);
 
 export async function storyView(deps: { store: OtomeStore }, runId: string): Promise<StoryView> {
   const run = await readRun(deps.store, runId);
@@ -671,7 +674,7 @@ export async function storyView(deps: { store: OtomeStore }, runId: string): Pro
   const chapters = (await deps.store.listRun("chapter", runId))
     .map((record) => normalizeChapter(record.data))
     .filter((chapter): chapter is Chapter => !!chapter && chapter.kind !== "date")
-    .sort((a, b) => storyOrder(a.key) - storyOrder(b.key) || a.plannedAt.localeCompare(b.plannedAt));
+    .sort(byStoryOrder);
   const arcs = await listArcs(deps.store, runId);
   const entries: StoryChapterEntry[] = chapters.map((chapter) => {
     const progress = run.state.chapters[chapter.key];
