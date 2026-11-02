@@ -1108,6 +1108,69 @@ for (const colorScheme of ["dark", "light"] as const) {
   });
 }
 
+test("Otome Hearth a line under a story CG types only after the art has loaded and its pan has ended (#2051)", async ({
+  page,
+}, testInfo) => {
+  // Motion on: the pan and the typing are what this checks.
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  const long = Array.from({ length: 12 }, (_, i) => `The dome hums over the two of them, sentence ${i + 1}.`).join(" ");
+  const cgUrl = "/__otome-test/cg-2051.png";
+  const fixture = createStoryStub({
+    done: true,
+    storyBeats: [
+      {
+        ...BEATS[0],
+        segments: [seg("Ilvar Thorne", long)],
+        choices: [],
+        cg: {
+          at: 0,
+          brief: "Two figures under the glass dome.",
+          cast: ["Ilvar Thorne"],
+          art: { state: "ready", at: written.at, url: cgUrl },
+        },
+      },
+      ...BEATS.slice(1),
+    ],
+  });
+  await stubRoutes(page, fixture);
+  await page.route(`**/api/otome-forge/runs/${RUN}/art/cg/seen`, (route) => route.fulfill({ json: { ok: true } }));
+  // The picture is held: neither the pan nor the line may start before it arrives.
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  await page.route(`**${cgUrl}`, async (route) => {
+    await gate;
+    await route.fulfill({ contentType: "image/png", body: Buffer.from(SPEAKER_PNG, "base64") });
+  });
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  const reader = root.locator(".of-reader");
+  const typed = root.locator('.of-dialogue .of-line > span[aria-hidden="true"]');
+  await expect(reader).toHaveAttribute("data-cg", "intro");
+  await expect(root.locator(".of-cg")).toHaveAttribute("data-loaded", "false");
+  // The untyped rest is laid out hidden in .of-line-rest, so what has typed is the whole minus the rest.
+  const untyped = async () => ((await typed.locator(".of-line-rest").textContent()) ?? "").length;
+  // Well past what the whole line takes to type: it must still be waiting behind the pan.
+  await page.waitForTimeout(1500);
+  expect(await untyped(), "nothing types behind an unloaded CG").toBe(long.length);
+  release();
+  await expect(root.locator(".of-cg")).toHaveAttribute("data-loaded", "true");
+  await expect(reader).toHaveAttribute("data-cg", "intro");
+  await page.waitForTimeout(1500);
+  expect(await untyped(), "the line still waits while the pan plays").toBe(long.length);
+  // A tap on the stage ends the pan; the line then types from its first word, scrolled to the top.
+  await root.locator(".of-reader-stage").click();
+  await expect(reader).toHaveAttribute("data-cg", "shown");
+  await expect(typed).toHaveAttribute("data-done", "false");
+  expect(await root.locator(".of-dialogue .of-line").evaluate((element) => element.scrollTop)).toBe(0);
+  await page.screenshot({ path: testInfo.outputPath("cg-line-starts-after-pan.png") });
+  // Next shows the rest whole, as after any line, without waiting out the typing.
+  await setReaderControlsExpanded(root, false);
+  await root.locator(".of-next").click();
+  await expect(typed).toHaveAttribute("data-done", "true");
+  await expect(line(root)).toContainText("sentence 12.");
+});
+
 for (const failure of ["missing sprite", "failed cleanup"] as const) {
   test(`Otome Hearth story header restores its description when NPC display fails (${failure})`, async ({
     page,
