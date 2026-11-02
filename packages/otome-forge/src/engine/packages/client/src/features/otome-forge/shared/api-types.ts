@@ -1163,6 +1163,15 @@ export interface ReadResult {
   repaired?: LiId;
 }
 
+/**
+ * GET /runs/:run/who-said-what (#2041): lines the love interests said in the story read so far, shuffled, each with who
+ * said it, and the love interests to choose from in cast order; both empty when there is too little to play.
+ */
+export interface WhoSaidWhatView {
+  choices: LiId[];
+  lines: Array<{ li: LiId; text: string }>;
+}
+
 /** GET /runs/:run/memory/status and POST .../memory/retry → {status}: the kit's story memory status (Debug only). */
 export interface MemoryStatus {
   phase: "ready" | "pending" | "stale" | "error" | "context-unknown";

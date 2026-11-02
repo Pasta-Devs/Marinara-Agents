@@ -4,8 +4,9 @@
 // Summaries run on the background lane with the `summary` contract and its summary wording, never with the knowledge
 // boundary, which the story's own writers (P5, P6) carry, and each leaves a thinking model at least 10240 tokens to
 // reply (or the connection's own lower cap), also on a small context (#2039). The memory routes report the status and
-// queue a Retry. A request in the queue's release gap, or a job admission refuses before it starts, never leaves the
-// status pending.
+// queue a Retry, and give the overview as plain paragraphs for "What happened so far…" (#2040): [] before the first
+// one, no heading or source key, never the private chat, 404 for an unknown run. A request in the queue's release gap,
+// or a job admission refuses before it starts, never leaves the status pending.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs";
@@ -335,7 +336,7 @@ test("maintenance needs a world with a connection, and recall before it holds no
   assert.equal(calls.length, 0);
 });
 
-test("the memory routes report the memory and queue a Retry", async () => {
+test("the memory routes report the memory, queue a Retry and give the overview as paragraphs", async () => {
   const { store, memory, runtime } = await setup();
   const routes = new Map<string, RouteHandler>();
   registerMemoryRoutes(
@@ -367,11 +368,41 @@ test("the memory routes report the memory and queue a Retry", async () => {
 
   const missing = await call("GET", "/runs/:run/memory/status", "r-nothing-zzzzzz");
   assert.deepEqual([missing.status, (missing.payload as { code: string }).code], [404, "not-found"]);
+  const nowhere = await call("GET", "/runs/:run/memory/overview", "r-nothing-zzzzzz");
+  assert.deepEqual([nowhere.status, (nowhere.payload as { code: string }).code], [404, "not-found"]);
+  const overview = async () => {
+    const result = await call("GET", "/runs/:run/memory/overview", "r-memory-abcdef");
+    assert.equal(result.status, 200);
+    return result.payload as { paragraphs: string[] };
+  };
+  assert.deepEqual(await overview(), { paragraphs: [] }, "nothing before the first summary");
   const before = await call("GET", "/runs/:run/memory/status", "r-memory-abcdef");
   assert.deepEqual((before.payload as { status: { phase: string; reason: string } }).status.phase, "stale");
   const retry = await call("POST", "/runs/:run/memory/retry", "r-memory-abcdef");
   assert.equal((retry.payload as { status: { phase: string } }).status.phase, "pending");
   assert.equal((await settle(memory)).phase, "ready");
+
+  // What happened so far: the saved overview as written, with the shared chapters and never the private chat; only the
+  // paragraphs leave the server.
+  const shown = await overview();
+  assert.deepEqual(Object.keys(shown), ["paragraphs"]);
+  const text = shown.paragraphs.join("\n");
+  assert.ok(text.includes("The Observatory") && text.includes("forged ledger"), text);
+  assert.ok(!text.includes(PRIVATE), "the private chat is never in the overview");
+  assert.ok(!text.includes("main-1") && !text.includes("Canon to date"), "no source key or heading");
+  // A heading or bullet a model wrote is dropped from its line, and each line is a paragraph.
+  await store.mutateDoc(
+    runDocTarget("memory", memoryId(RUN)),
+    (data) => data as Record<string, any>,
+    (data) => ({
+      ...data,
+      overview: {
+        ...data.overview,
+        content: "# Canon to date\nFirst.\n\n- Second.\n  ## The pier\nCanon to date:\nThird *as written*.",
+      },
+    }),
+  );
+  assert.deepEqual((await overview()).paragraphs, ["First.", "Second.", "The pier", "Third *as written*."]);
 
   // No connection to summarize with: the Retry says so.
   const bare = await setup({ narration: "" });

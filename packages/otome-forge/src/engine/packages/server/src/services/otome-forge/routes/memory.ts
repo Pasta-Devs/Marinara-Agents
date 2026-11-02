@@ -3,6 +3,9 @@
 // ──────────────────────────────────────────────
 // GET  /runs/:run/memory/status → {status}  the kit's memory status (phase ready | pending | stale | error |
 //                                           context-unknown, with its reason and counts)
+// GET  /runs/:run/memory/overview → {paragraphs}  the saved overview as plain paragraphs, [] before the first one
+//                                           ("What happened so far…" while a chapter is planned, #2040): read as
+//                                           saved, never written or summarized here; no source key leaves the server
 // POST /runs/:run/memory/retry  → {status}  queues maintenance again on the background lane: a failed summary waits
 //                                           for this tap and is never retried by itself; 503 `no-connection` when the
 //                                           world names no connection to summarize with
@@ -16,12 +19,26 @@ import {
   type OtomeRequest,
   type OtomeRouter,
 } from "../http.js";
-import { worldId } from "../ids.js";
+import { memoryId, worldId } from "../ids.js";
 import type { OtomeMemory } from "../memory/memory.js";
 import { normalizeWorld } from "../schemas/world.js";
 import type { OtomeStore } from "../store.js";
 
 const NoFields = z.object({});
+
+/**
+ * The kit's saved overview (`${R}:memory` overview.content) as the player reads it: its paragraphs, with a leading
+ * markdown heading or bullet marker and an echoed "Canon to date" heading dropped; [] before the first overview. The
+ * text is otherwise as saved, whatever the Heat.
+ */
+export function overviewParagraphs(data: unknown): string[] {
+  const content = (data as { overview?: { content?: unknown } | null } | null)?.overview?.content;
+  if (typeof content !== "string") return [];
+  return content
+    .split(/\n+/u)
+    .map((line) => line.replace(/^\s*(?:#{1,6}|[-*•])\s+/u, "").trim())
+    .filter((line) => line && line.replace(/:\s*$/u, "").toLowerCase() !== "canon to date");
+}
 
 export interface MemoryRouteDeps {
   store: Pick<OtomeStore, "readDoc">;
@@ -42,6 +59,13 @@ export function registerMemoryRoutes(router: OtomeRouter, { store, handle, memor
   router.get(
     "/runs/:run/memory/status",
     handle(async (request) => ({ status: await memory.status(await runOf(request)) })),
+  );
+
+  router.get(
+    "/runs/:run/memory/overview",
+    handle(async (request) => ({
+      paragraphs: (await store.readDoc(memoryId(await runOf(request)), overviewParagraphs)) ?? [],
+    })),
   );
 
   router.post(

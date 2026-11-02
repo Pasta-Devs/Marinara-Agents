@@ -5,7 +5,8 @@
 // Retry, Ease off with "Veil this from now on" (neither closes while its request runs), a big choice, Ease off gone
 // once the scene's end is saved, the chapter's Starlight and affection with focus on its heading; then a replay at
 // reduced motion that changes nothing, whose Ease off on a branch puts no line it skips in the backlog, and a chapter
-// with no title in the reader and on the Story screen.
+// with no title in the reader and on the Story screen; and the waits (#2040, #2041): "What happened so far…" while a
+// chapter is planned, and Who said what? while a scene is written, on a phone and a desktop.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-reader.e2e.ts
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
@@ -142,8 +143,31 @@ const CHAPTER = {
   plannedAt: "2026-10-28T09:59:00.000Z",
 };
 
-/** The M2a story routes, answered in memory by the server's rules (S/story/beats.ts). */
-function createStoryStub({ done = false, title = CHAPTER.title, pendingCutouts = false, storyBeats = BEATS } = {}) {
+/** The story so far (#2040): long enough to scroll on any screen. */
+const SO_FAR = Array.from(
+  { length: 24 },
+  (_, i) =>
+    `SO-FAR-${i + 1}: Mira climbed to the observatory again, and Ilvar Thorne pretended not to have waited for her while the clockwork canals turned below.`,
+);
+/** Who said what? (#2041): the server's shuffled batch. */
+const WSW_LINES = [
+  { li: ILVAR, text: "You came back. How inefficient of you." },
+  { li: CASSIAN, text: "The canal ices over every winter, without fail." },
+  { li: ILVAR, text: "Stay, then. The data can wait until morning." },
+  { li: CASSIAN, text: "I kept your letters in the clock tower drawer." },
+];
+
+/**
+ * The M2a story routes, answered in memory by the server's rules (S/story/beats.ts). `waits` answers the story so far
+ * and Who said what?; without it they are 404s, as on a run with nothing to show, and the waits look as before.
+ */
+function createStoryStub({
+  done = false,
+  title = CHAPTER.title,
+  pendingCutouts = false,
+  storyBeats = BEATS,
+  waits = false,
+} = {}) {
   const calls: Call[] = [];
   const now = () => new Date().toISOString();
   const limits: Json = {
@@ -328,6 +352,10 @@ function createStoryStub({ done = false, title = CHAPTER.title, pendingCutouts =
       return { status: 200, json: { favorites } };
     }
     if (path === `${base}/cancel`) return { status: 200, json: { ok: true } };
+    if (waits && path === `${base}/memory/overview`) return { status: 200, json: { paragraphs: SO_FAR } };
+    if (waits && path === `${base}/who-said-what`) {
+      return { status: 200, json: { choices: [ILVAR, CASSIAN], lines: WSW_LINES } };
+    }
     const match = /^\/runs\/[^/]+\/chapters\/main-1\/beats\/(\d+)(?:\/(choose|read|ease-off))?$/u.exec(path);
     if (match) {
       const i = Number(match[1]);
@@ -636,6 +664,138 @@ test("Otome Forge reader: a stubbed chapter with faces, thoughts, a remembered c
   await page.screenshot({ path: testInfo.outputPath("05-chapter-end.png") });
   await root.getByRole("button", { name: "Back to the story" }).click();
   await expect(root.getByText("2,250")).toBeVisible();
+  expect(pageErrors).toEqual([]);
+});
+
+test("Otome Hearth waits: What happened so far… while a chapter is planned, Who said what? while a scene is written", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(180_000);
+  const mobile = testInfo.project.name.includes("mobile");
+  await page.emulateMedia({ colorScheme: mobile ? "light" : "dark", reducedMotion: "reduce" });
+  const stub = createStoryStub({ waits: true });
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await stubRoutes(page, stub);
+  const root = await openStory(page);
+  const size = page.viewportSize()!;
+  const noSideways = async (width: number) =>
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+  const press = (target: Locator) => (mobile ? target.tap() : target.click());
+  const tall = async (target: Locator) => expect((await target.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+
+  // Planning the chapter: the status and Cancel, with the story so far in its own labelled scroll region.
+  const planning = await hold(page, "**/chapters/next");
+  await root.getByRole("button", { name: "Choose who leads" }).click();
+  const lead = page.getByRole("dialog", { name: "Who walks with you this chapter?" });
+  await lead.getByRole("button", { name: /Ilvar Thorne/ }).click();
+  const status = lead.getByRole("status");
+  await expect(status).toContainText("Planning chapter 1 with Ilvar Thorne…");
+  const cancel = lead.getByRole("button", { name: "Cancel" });
+  await expect(cancel).toBeFocused();
+  const soFar = lead.getByRole("region", { name: "What happened so far…" });
+  await expect(soFar).toContainText(SO_FAR[0]!);
+  await expect(soFar.locator("p")).toHaveCount(SO_FAR.length);
+  await expect(lead.getByRole("heading", { name: "What happened so far…" })).toBeVisible();
+  await expect(status, "the summary is never announced as status").not.toContainText("SO-FAR");
+  // By keyboard: it is the stop before Cancel, and End scrolls it.
+  await page.keyboard.press("Shift+Tab");
+  await expect(soFar).toBeFocused();
+  await page.keyboard.press("End");
+  await expect.poll(() => soFar.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  await page.keyboard.press("Home");
+  await expect.poll(() => soFar.evaluate((element) => element.scrollTop)).toBe(0);
+  if (!mobile) {
+    await soFar.hover();
+    await page.mouse.wheel(0, 400);
+    await expect.poll(() => soFar.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  }
+  await expect(status).toBeInViewport({ ratio: 1 });
+  await expect(cancel).toBeInViewport({ ratio: 1 });
+  await page.screenshot({ path: testInfo.outputPath("01-so-far.png") });
+  // A narrow phone: the status and Cancel stay on screen, nothing scrolls sideways.
+  await page.setViewportSize({ width: 320, height: 568 });
+  await expect(status).toBeInViewport({ ratio: 1 });
+  await expect(cancel).toBeInViewport({ ratio: 1 });
+  await noSideways(320);
+  await page.screenshot({ path: testInfo.outputPath("02-so-far-320.png") });
+  await page.setViewportSize(size);
+
+  // The scene is written: Who said what? waits under the panel, and takes no focus.
+  const writing = await hold(page, "**/chapters/main-1/beats/0");
+  planning();
+  await root.getByRole("button", { name: "Begin" }).click();
+  const panel = root.locator(".of-writing");
+  await expect(panel).toContainText("Writing the next scene…");
+  const play = root.getByRole("button", { name: "Play Who said what?" });
+  await expect(play).toBeVisible();
+  // Focus stays where the reader put it (its title, as before this game existed).
+  await expect(root.locator(".of-reader-title")).toBeFocused();
+  await expect(play).not.toBeFocused();
+  await tall(play);
+  await page.screenshot({ path: testInfo.outputPath("03-play.png") });
+
+  // By keyboard: the line takes focus, a love interest is picked with Enter, the answer is read out, Next goes on.
+  await play.click();
+  const game = root.getByRole("region", { name: "Who said what?" });
+  const quote = game.locator(".of-wsw-line");
+  await expect(quote).toBeFocused();
+  await expect(quote).toContainText(WSW_LINES[0]!.text);
+  // The quote shows a focus ring only to a keyboard player (Play was a pointer press).
+  const ring = () => quote.evaluate((element) => getComputedStyle(element).outlineStyle);
+  expect(await ring()).toBe("none");
+  const choices = game.getByRole("list", { name: "Who said what?" }).getByRole("button");
+  await expect(choices).toHaveText(["Ilvar Thorne", "Cassian"]);
+  for (const choice of await choices.all()) await tall(choice);
+  await page.keyboard.press("Tab");
+  await expect(choices.first()).toBeFocused();
+  await page.keyboard.press("Enter");
+  const verdict = game.getByRole("status");
+  await expect(verdict).toHaveText("Right! Ilvar Thorne said it.");
+  const nextLine = game.getByRole("button", { name: "Next line" });
+  await expect(nextLine).toBeFocused();
+  await tall(nextLine);
+  expect(await game.locator(".of-rh-verdict").evaluate((element) => getComputedStyle(element).animationName)).toBe(
+    "none",
+  );
+  expect(posts(stub, "/who-said-what"), "nothing is sent").toHaveLength(0);
+  await page.keyboard.press("Enter");
+  await expect(quote).toBeFocused();
+  expect(await ring(), "a keyboard player sees where focus went").toBe("solid");
+  await expect(quote).toContainText(WSW_LINES[1]!.text);
+  await expect(verdict).toHaveText("");
+
+  // By pointer (a tap on a phone): a wrong pick says who really said it, and keeps the tally.
+  await press(choices.first());
+  await expect(verdict).toHaveText("Not quite. Cassian said it.");
+  await expect(game).toContainText("1 of 2 right");
+  await expect(choices.first()).toHaveAttribute("data-state", "wrong");
+  await expect(choices.last()).toHaveAttribute("data-state", "true");
+  await page.screenshot({ path: testInfo.outputPath("04-wrong.png") });
+
+  // A narrow phone: no sideways scroll, Cancel stays on screen, every choice can be reached.
+  await page.setViewportSize({ width: 320, height: 568 });
+  await press(nextLine);
+  await expect(quote).toContainText(WSW_LINES[2]!.text);
+  await noSideways(320);
+  expect(await game.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await expect(panel.getByRole("button", { name: "Cancel" })).toBeInViewport({ ratio: 1 });
+  await press(choices.last());
+  await expect(verdict).toHaveText("Not quite. Ilvar Thorne said it.");
+  for (const choice of await choices.all()) {
+    await choice.scrollIntoViewIfNeeded();
+    await expect(choice).toBeInViewport({ ratio: 1 });
+  }
+  await page.screenshot({ path: testInfo.outputPath("05-game-320.png") });
+  await page.setViewportSize(size);
+
+  // The scene arrives: the game goes at once, and focus lands on the story.
+  writing();
+  await expect(line(root)).toContainText("Rain needles the glass dome.");
+  await expect(root.locator(".of-wsw")).toHaveCount(0);
+  await expect(play).toHaveCount(0);
+  await expect(root.locator(".of-next")).toBeFocused();
+  expect(stub.calls.filter((call) => call.path.endsWith("/who-said-what"))).toHaveLength(1);
   expect(pageErrors).toEqual([]);
 });
 

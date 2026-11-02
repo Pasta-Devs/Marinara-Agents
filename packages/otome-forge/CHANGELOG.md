@@ -1,5 +1,11 @@
 # Otome Hearth release notes
 
+## 0.6.18 — 2026-11-02
+
+- **"What happened so far…" while a chapter is planned.** Planning a new chapter (and a route, repair or extra story chapter) now shows the story's running summary to read while you wait. It scrolls on its own and appears once the first summary is ready.
+- **Who said what? while a scene is written.** Tap **Play Who said what?** under "Writing the next scene…" to guess which love interest said a line from the chapters you've read. It's optional, makes no model calls, saves nothing, and steps aside the moment the scene is ready.
+- **Keyboard focus on quotes.** The quoted line in the Wardrobe and in Who said what? now shows where keyboard focus is.
+
 ## 0.6.17 — 2026-11-02
 
 - **Love interests remember the whole story.** Route, repair, date and Character Story chapters are now summarized too and included in the story's running summary, so long routes keep their early chapters. Their details still come back only in his chats and the scenes he is in.
