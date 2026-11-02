@@ -846,6 +846,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.4.16",
+          "date": "2026-11-02",
+          "notes": "- Fixed: Pulse kept a made first post as \"Creating first post… running\" for a day. The server reports a made first post as `generated`, and Pulse now counts that as done.\n- Fixed: a second Creator in a picture lost their reference picture when the posting Creator had none of their own (no linked card, or no picture). Their picture now goes along when avatar references are on and the provider takes them.",
+          "highlight": false
+        },
+        {
           "version": "0.4.15",
           "date": "2026-11-01",
           "notes": "- Slurp can tell Long-Term Memory what is true about your Creators, so chats know it too. A new \"Tell Long-Term Memory about your Creators\" switch in Backstage (Engine link) is off by default. From then on, facts you write or promote, couples and friendships between Creators, and how storylines end become memories. Nothing from fans or DM threads is sent. Turning it on asks whether to turn on Long-Term Memory's \"Other Agents can add memories\" when that is off.\n- Slurp's own facts no longer come back to Creators as memories, so they are not told twice.",
@@ -957,12 +963,6 @@
           "version": "0.3.51",
           "date": "2026-10-20",
           "notes": "- Changed: Slurp now uses Marinara Engine's own settings, dialogs, notifications, Local Model and connection queue instead of carrying copies of them. It no longer resets your Engine settings or starts a second Local Model, its background work waits while a chat on the same connection is replying, and its notifications appear where you put yours. The download is smaller. It needs a Marinara Engine release after 2.5.0. On 2.5.0 and older, the version you already have keeps working. (#1478, #1487)\n- Changed: the sticker and emoji pickers no longer show the chat emoji-selection settings. Those belong to a chat, and Slurp has none.",
-          "highlight": false
-        },
-        {
-          "version": "0.3.50",
-          "date": "2026-10-19",
-          "notes": "- Added: tapping an ad (the button, the picture or a wall tile) opens an ad sheet with the picture, brand, product, copy and price feel, and still records the tap. The old \"Opening … promotion\" toast is gone.\n- Added: Settings › Fans & money › Collect has a \"Daily limit on Collect\" switch (`walletPayoutDailyLimit`, on by default). Off, Collect moves every whole coin of your Creator earnings at once.\n- Added: Messaging › \"What fans ask for\" is an editable list for the wish in a commission request (`messagesCommissionAsks`); empty keeps the built-in asks.",
           "highlight": false
         }
       ]
