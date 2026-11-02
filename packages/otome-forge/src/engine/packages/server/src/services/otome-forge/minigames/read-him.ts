@@ -360,7 +360,8 @@ export async function recalledLine(
       query: { cues, speakers: [unit.name] },
     });
     if (result.lagging) void Promise.resolve(memory.maintain({ runId, debugMode })).catch(() => undefined);
-    const top = result.status.phase === "ready" ? (result.details[0]?.content ?? "").trim() : "";
+    // #2066: the newest small memory he holds (recalls come in story order).
+    const top = result.status.phase === "ready" ? (result.recalls?.at(-1)?.content ?? "").trim() : "";
     return top ? sliceTextToTokenBudget(top, RECALLED_TOKENS) : "";
   } catch {
     return "";

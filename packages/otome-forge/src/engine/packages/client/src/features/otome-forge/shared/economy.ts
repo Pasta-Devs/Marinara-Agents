@@ -49,8 +49,8 @@ export const AFFECTION_EARNINGS = {
   readMeClose: 5,
   /** proposal */
   clawRound: 30,
-  /** A phone thread closed with "Close and remember" (proposal). */
-  closeAndRemember: 20,
+  /** A phone thread closed with "Close and remember", for an exchange with words from both of them (the maintainer's). */
+  closeAndRemember: 5,
   /** The first Show him for a look (proposal). */
   showHim: 20,
 } as const;

@@ -2573,7 +2573,6 @@ ${R} .of-typing-dot {
 }
 ${R} .of-typing-dot:nth-child(2) { animation-delay: 0.15s; }
 ${R} .of-typing-dot:nth-child(3) { animation-delay: 0.3s; }
-${R} .of-memory-text { font-size: 0.86rem; color: var(--of-text-soft); }
 ${R} .of-memory-quote { font-family: var(--of-font-hand); font-size: 1.22rem; line-height: 1.12; color: var(--of-accent-text); }
 ${R} .of-composer { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 6px; border-radius: 24px; }
 ${R} .of-composer-row { display: flex; align-items: flex-end; gap: 6px; }

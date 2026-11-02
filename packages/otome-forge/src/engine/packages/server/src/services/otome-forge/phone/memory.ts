@@ -1,9 +1,10 @@
 // ──────────────────────────────────────────────
 // Otome Forge: Close and remember, and the phone's memory sources (plan M3 "Phone server", design: Private memory)
 // ──────────────────────────────────────────────
-// Close and remember turns the open conversation into a session: P18 writes what he will remember of it (a few
-// sentences and one line quoted from it), the session is appended once, and he earns Close and remember's affection
-// (SH/economy.ts, within the per-LI daily cap for everything outside the story; S/state/rewards.ts grant).
+// Close and remember turns the open conversation into a session: P18 writes what he will remember of it (50 to 100
+// words, for his prompts; the thread shows only that he remembers it and the line quoted from it), the session is
+// appended once, and he earns Close and remember's affection (SH/economy.ts, within the per-LI daily cap for
+// everything outside the story; S/state/rewards.ts grant).
 // - It holds the thread's one write in flight, as a send does (S/phone/chat.ts inThreadLock), so no reply lands while
 //   it is summarized. It does not wait in the run's foreground queue: it reads nothing a beat, a plan or the lookahead
 //   writes; its thread's other writers are a send (held off by the lock) and a seen mark (a revision-checked write

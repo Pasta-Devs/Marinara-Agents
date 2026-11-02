@@ -4,7 +4,8 @@
 // each voiced with his card's Engine voice under a cache key and cut short by Me, Play (cached), Him / Me, Home read
 // again on each visit under the Engine's 30 s cache (a rupture that opens brings a curt note, its repair a new warm one
 // the same day), Reply into his thread with the note quoted; a thread with typing, his messages one by one, his
-// sticker, suggestions, a sticker of hers, read receipts and Close and remember (#2044: her five and his chibi stickers
+// sticker, no suggested replies, a sticker of hers, read receipts and Close and remember, which shows only that he
+// remembers it and the line he keeps (#2044: her five and his chibi stickers
 // in the picker, his bracketed sticker in a bubble, an old face sticker as before, and "You unlocked a new sticker");
 // Home without images at reduced motion,
 // during a rupture, with Rough day? voiced with no cache key; and his faces' cut-outs arriving while Home is open.
@@ -260,7 +261,6 @@ function createHomeStub({
     },
   ];
   let seenAt: string | null = minutesAgo(200);
-  let suggestions: string[] = [];
   let replies = 0;
   const archived = () => sessions.reduce((sum, session) => sum + session.count, 0);
   const unread = () => messages.filter((m) => m.who === "li" && (!seenAt || m.at > seenAt)).length;
@@ -274,7 +274,6 @@ function createHomeStub({
     busy: state.replying,
     retry: messages.at(-1)?.who === "player",
     sessions,
-    suggestions,
     seenAt,
   });
 
@@ -460,8 +459,7 @@ function createHomeStub({
         { id: `m-r${replies}b`, who: "li", text: "", sticker: replies === 1 ? "tender" : `${ILVAR}:smug`, at: now() },
       ];
       messages.push(...reply);
-      suggestions = replies === 1 ? ["Go to sleep, Ilvar.", "Tell me about the data."] : [];
-      return { status: 200, json: { messages: [mine, ...reply], suggestions } };
+      return { status: 200, json: { messages: [mine, ...reply] } };
     }
     if (path === `${base}/phone/${ILVAR}/close`) {
       if (state.closeFailures > 0) {
@@ -475,12 +473,11 @@ function createHomeStub({
         memory: { text: "She wrote late; he admitted he had not slept.", quote: "Barely." },
         closedAt: now(),
       });
-      suggestions = [];
       return {
         status: 200,
         json: {
           memory: sessions.at(-1)!.memory,
-          grants: [{ source: "close-and-remember", li: ILVAR, affection: 20 }],
+          grants: [{ source: "close-and-remember", li: ILVAR, affection: 5 }],
         },
       };
     }
@@ -786,7 +783,7 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
   expect(pageErrors).toEqual([]);
 });
 
-test("Otome Forge phone: a thread with typing, his sticker, suggestions, her sticker and Close and remember", async ({
+test("Otome Forge phone: a thread with typing, his sticker, her sticker and Close and remember", async ({
   page,
 }, testInfo) => {
   // #2044's sticker steps (the unlock notice's 4 s, the picker by touch and keyboard) make this the longest phone walk.
@@ -817,14 +814,16 @@ test("Otome Forge phone: a thread with typing, his sticker, suggestions, her sti
   await row.click();
   await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeFocused();
 
-  // What he remembers of the closed conversation, then the open one; his new message is marked seen.
+  // That he remembers the closed conversation and the line he keeps from it, never the summary written for his
+  // prompts; then the open one. His new message is marked seen.
   const log = root.getByRole("list", { name: "Messages with Ilvar Thorne" });
   await expect(log).toContainText("Remembered by Ilvar Thorne");
-  await expect(log).toContainText("She asked where he was; he pretended not to be pleased.");
+  await expect(log).toContainText("Where else would I be.");
+  await expect(log).not.toContainText("She asked where he was; he pretended not to be pleased.");
   await expect.poll(() => posts(stub, "/seen").at(-1)?.body?.last).toBe("m-a3");
 
-  // He types, then his messages arrive one at a time: words, then his face as a sticker; suggestions follow. Her own
-  // words leave the box with the message.
+  // He types, then his messages arrive one at a time: words, then his face as a sticker. Her own words leave the box
+  // with the message, and no reply is suggested to her.
   const box = root.getByRole("textbox", { name: "Message Ilvar Thorne" });
   await box.fill("Did you sleep at all?");
   await root.getByRole("button", { name: "Send" }).click();
@@ -839,13 +838,13 @@ test("Otome Forge phone: a thread with typing, his sticker, suggestions, her sti
   expect(sent.id).toMatch(/^[a-z0-9][a-z0-9-]{7,59}$/u);
   await page.screenshot({ path: testInfo.outputPath("04-thread.png") });
 
-  // A suggestion sends as it is, and leaves what she was typing in the box.
-  const suggestions = root.getByRole("list", { name: "Suggested replies" });
-  await box.fill("Half a thought");
-  await suggestions.getByRole("button", { name: "Go to sleep, Ilvar." }).click();
+  // She writes her own reply: nothing offers one.
+  await expect(root.locator(".of-suggestions")).toHaveCount(0);
+  await box.fill("Go to sleep, Ilvar.");
+  await root.getByRole("button", { name: "Send", exact: true }).click();
   await expect(log.getByText("Noted.")).toBeVisible();
   expect(posts(stub, "/send")[1]!.body).toMatchObject({ text: "Go to sleep, Ilvar." });
-  await expect(box).toHaveValue("Half a thought");
+  await box.fill("Half a thought");
   // His own sticker (his bracketed [ilvar_thorne_smug]) shows whole as its cut-out.
   const smug = log.getByRole("img", { name: "Sticker: Smug" });
   await expect(smug).toHaveAttribute("src", HIS_SMUG);
@@ -926,8 +925,9 @@ test("Otome Forge phone: a thread with typing, his sticker, suggestions, her sti
   await expect(dialog).toContainText("Ilvar Thorne");
   await expect(dialog.getByRole("alert")).toHaveCount(0);
   await dialog.getByRole("button", { name: "Close and remember" }).click();
-  await expect(log).toContainText("She wrote late; he admitted he had not slept.");
-  await expect(log).toContainText("+20 affection");
+  await expect(log).toContainText("Barely.");
+  await expect(log).not.toContainText("She wrote late; he admitted he had not slept.");
+  await expect(log).toContainText("+5 affection");
   expect(posts(stub, "/close")).toHaveLength(2); // The one that failed, then the one that landed.
   await page.screenshot({ path: testInfo.outputPath("05-remembered.png") });
 

@@ -278,7 +278,12 @@ test("P16 carries the home wording, the boundary and the no-absence rule; it rec
       return {
         status: { phase: "ready" as const, retryable: false },
         overview: "",
-        details: [{ id: "phone-1", kind: "chat", title: "A call", content: "RECALLED: the night on the pier." }],
+        details: [],
+        // #2066: the newest small memory he holds is the one the note may draw on.
+        recalls: [
+          { id: "phone-0", title: "An older call", content: "OLDER-RECALL: the first message.", order: 1 },
+          { id: "phone-1", title: "A call", content: "RECALLED: the night on the pier.", order: 2 },
+        ],
         text: "",
       };
     },

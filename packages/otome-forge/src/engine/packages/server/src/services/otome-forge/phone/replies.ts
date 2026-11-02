@@ -16,8 +16,11 @@ export const MESSAGE_TEXT_MAX = 1000;
 export const NOTE_QUOTE_MAX = NOTE_TEXT_MAX;
 /** His messages in one reply. */
 export const REPLY_MESSAGES_MAX = 3;
-/** A closed conversation's memory, and the line kept from it. */
-export const MEMORY_CHARS_MAX = 800;
+/**
+ * A closed conversation's memory, and the line kept from it. P18 asks for 50 to 100 words (S/prompts.ts
+ * CHAT_MEMORY_WORDS); this only refuses a reply far past that, in any language's word length.
+ */
+export const MEMORY_CHARS_MAX = 1200;
 export const MEMORY_QUOTE_MAX = 200;
 
 const chars = (value: string) => [...value].length;
@@ -183,7 +186,7 @@ export function normalizeChatMemory(
   const memory = raw.memory.replace(/\s+/gu, " ").trim();
   if (!memory) return "the memory was empty";
   if (chars(memory) > MEMORY_CHARS_MAX) {
-    return `the memory is too long: 2 to 4 sentences, at most ${MEMORY_CHARS_MAX} characters`;
+    return `the memory is too long: 50 to 100 words, at most ${MEMORY_CHARS_MAX} characters`;
   }
   let quote = (raw.quote ?? "")
     .trim()

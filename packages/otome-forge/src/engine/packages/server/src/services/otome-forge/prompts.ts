@@ -2540,12 +2540,12 @@ export const OVERVIEW_WORDING =
   "The overview is the story's timeline and nothing else: a chronological recollection, in story order and in the past tense, of the events that have happened so far, with the choices the protagonist made woven into the narration. Write it as flowing prose paragraphs that read like remembering the story. It holds no character or persona profiles, no setting notes and no list of chapter or scene summaries (the prompts carry the cast separately), and no headings, labels, bullet points or markdown emphasis. Keep every established event, relationship turn and irrevocable decision, the chronology and the names, and who knows what: what happened in a record whose title says it is private is told as private, known only to those its title says know it.";
 
 /** The most a chapter summary may run to (#2066). Said in the prompt; the reply's own allowance stays 10240 tokens. */
-export const CHAPTER_SUMMARY_WORDS = 500;
+export const CHAPTER_SUMMARY_WORDS = 1000;
 /** The most a condensed timeline may run to (#2066), about 5000 tokens. Said in the prompt, as above. */
 export const TIMELINE_FOLD_WORDS = 3000;
 
 /**
- * What every chapter summary adds to the kit's detail prompt (#2066): one chapter, as played, in at most 500 words, with
+ * What every chapter summary adds to the kit's detail prompt (#2066): one chapter, as played, in at most 1000 words, with
  * the lines and choices that matter. Every choice is named here because the timeline is the only record of them that
  * reaches a prompt. A love interest's own chapter keeps its privacy in its own words.
  */
@@ -2819,6 +2819,9 @@ export function chatReplyMessages({
 
 // ── P18: chat memory (compress, summary contract) ──
 
+/** How long what he remembers of a conversation is (the maintainer's 50 to 100 words), said in P18's prompt. */
+export const CHAT_MEMORY_WORDS = { min: 50, max: 100 } as const;
+
 export interface ChatMemoryInput {
   world: Pick<World, "language" | "content" | "images" | "writingStyle" | "bannedPhrases">;
   names: ThreadNames;
@@ -2831,7 +2834,7 @@ export function chatMemoryMessages({ world, names, conversation }: ChatMemoryInp
     `Two people have just finished exchanging messages: ${names.li} and ${names.player}. Write what ${names.li} will remember of it.`,
     "Reply with ONLY a JSON object of this shape:",
     '{"memory": "...", "quote": "..."}',
-    `- memory: 2 to 4 sentences in the third person about what passed between them: what was said that matters, what changed, what was left unsaid. Not a transcript. Written in ${world.language}.`,
+    `- memory: ${CHAT_MEMORY_WORDS.min} to ${CHAT_MEMORY_WORDS.max} words in the third person about what passed between them: what was said that matters, what changed, what was left unsaid. Not a transcript. Written in ${world.language}.`,
     "- quote: ONE line copied word for word from the conversation, the one worth hearing again, without quotation marks around it. Leave it empty when nothing stands out.",
     "HARD RULES",
     "- It already happened: write it as a memory, never as a scene that is going on.",

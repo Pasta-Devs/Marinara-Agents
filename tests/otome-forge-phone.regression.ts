@@ -396,7 +396,7 @@ test("Close and remember: one session, P18 on the summary contract, the capped a
   const today = localDay("UTC");
   await t.store.mutateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
     ...state,
-    daily: { dayKey: today, starlight: 0, affection: { [KAI]: 290 } },
+    daily: { dayKey: today, starlight: 0, affection: { [KAI]: 297 } },
   }));
   assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
   const points = (await t.state()).lis[KAI]!.points;
@@ -406,10 +406,10 @@ test("Close and remember: one session, P18 on the summary contract, the capped a
   assert.deepEqual(closed.body.memory, { text: MEMORY.memory, quote: "Awake. Unfortunately." });
   assert.deepEqual(
     closed.body.grants,
-    [{ source: "close-and-remember", li: KAI, affection: 10 }],
+    [{ source: "close-and-remember", li: KAI, affection: 3 }],
     "capped at 300 a day",
   );
-  assert.equal((await t.state()).lis[KAI]!.points, points + 10);
+  assert.equal((await t.state()).lis[KAI]!.points, points + 3);
   const thread = (await t.thread(KAI))!;
   assert.deepEqual(
     thread.sessions.map((session) => [session.start, session.count, session.name]),
@@ -421,6 +421,7 @@ test("Close and remember: one session, P18 on the summary contract, the capped a
   const head = system(memoryCall.messages);
   assert.ok(head.includes(SUMMARY_WORDING) && head.includes("Heat: SFW"), "an SFW story's summary contract");
   assert.ok(!head.includes(forgeKnowledgeBoundary), "the summarizer writes no one's words");
+  assert.match(head, /- memory: 50 to 100 words in the third person/u, "the maintainer's length, said in the prompt");
   assert.ok(memoryCall.messages.at(-1)!.content.includes("Kai: Awake. Unfortunately."));
   assert.ok(t.logs.some((entry) => entry.level === "debugOverride" && entry.args[0] === `phone-memory/${KAI}`));
 
@@ -445,7 +446,7 @@ test("Close and remember: one session, P18 on the summary contract, the capped a
       [3, 3],
     ],
   );
-  assert.equal((await t.state()).lis[KAI]!.points, points + 10);
+  assert.equal((await t.state()).lis[KAI]!.points, points + 3);
 });
 
 test("Close and remember never waits behind the run's story queue, and its thread still takes one write at a time", async () => {
@@ -468,7 +469,7 @@ test("Close and remember never waits behind the run's story queue, and its threa
     release();
     const closed = await closing;
     assert.equal(closed.status, 200, JSON.stringify(closed.body));
-    assert.deepEqual(closed.body.grants, [{ source: "close-and-remember", li: KAI, affection: 20 }]);
+    assert.deepEqual(closed.body.grants, [{ source: "close-and-remember", li: KAI, affection: 5 }]);
     assert.equal((await t.thread(KAI))!.sessions.length, 1, "remembered while the story write still runs");
   } finally {
     release();
@@ -525,10 +526,10 @@ test("the grant lands once through a stale write, a one-sided talk earns nothing
   const before = (await t.state()).lis[KAI]!.points;
   const closed = await t.phone("POST", close, { li: KAI, timeZone: early });
   assert.equal(closed.status, 200, JSON.stringify(closed.body));
-  assert.deepEqual(closed.body.grants, [{ source: "close-and-remember", li: KAI, affection: 20 }]);
+  assert.deepEqual(closed.body.grants, [{ source: "close-and-remember", li: KAI, affection: 5 }]);
   const state = await t.state();
-  assert.equal(state.lis[KAI]!.points, before + 20);
-  assert.deepEqual(state.daily, { dayKey: localDay(early), starlight: 0, affection: { [KAI]: 20 } });
+  assert.equal(state.lis[KAI]!.points, before + 5);
+  assert.deepEqual(state.daily, { dayKey: localDay(early), starlight: 0, affection: { [KAI]: 5 } });
   assert.equal((await t.thread(KAI))!.sessions.length, 2);
 });
 
@@ -796,7 +797,7 @@ test("a card name of any length never costs a session: clipped as written, the m
   assert.equal(archivedCount(thread), 2, "nothing reopens");
   const replay = await t.phone("POST", close, { li: KAI });
   assert.deepEqual([replay.status, replay.body.grants], [200, []], "a second Close earns nothing");
-  assert.equal((await t.state()).lis[KAI]!.points, before + 20);
+  assert.equal((await t.state()).lis[KAI]!.points, before + 5);
 
   // A stored session or message with a display field out of bounds keeps its place; only that field is dropped.
   const read = normalizeThread({

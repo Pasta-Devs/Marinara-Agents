@@ -433,7 +433,6 @@ function createLoopStub({ seeded = false } = {}) {
     busy: false,
     retry: false,
     sessions: [],
-    suggestions: [],
     seenAt: null,
   });
 
@@ -675,7 +674,7 @@ function createLoopStub({ seeded = false } = {}) {
         const mine = { id, who: "player", text, at: now(), ...(quote ? { quote } : {}) };
         const his = { id: `m-r${messages.length}`, who: "li", text: REPLY, at: now() };
         messages.push(mine, his);
-        return { status: 200, json: { messages: [mine, his], suggestions: [] } };
+        return { status: 200, json: { messages: [mine, his] } };
       }
     }
 
