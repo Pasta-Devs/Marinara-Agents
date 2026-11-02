@@ -944,7 +944,9 @@ test("Otome Forge phone: a thread with typing, his sticker, her sticker and Clos
   await root.getByRole("button", { name: "Settings", exact: true }).click();
   await root.getByRole("button", { name: "Back", exact: true }).click();
   await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeFocused();
-  await expect(log).toContainText("She wrote late; he admitted he had not slept.");
+  // Both closed conversations still show that he remembers them, and only that.
+  await expect(log.locator(".of-thread-divider")).toHaveCount(2);
+  await expect(log).not.toContainText("She wrote late; he admitted he had not slept.");
   await root.getByRole("button", { name: "All messages" }).click();
   await expect(root.locator(".of-threads").getByRole("button", { name: /Ilvar Thorne/ })).toBeFocused();
   expect(pageErrors).toEqual([]);
