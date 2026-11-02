@@ -23,8 +23,10 @@
 // - Summaries run on job `compress` on the background lane. `maintain` queues one job per run on the background
 //   queue, which holds the compress connection's background admission slot for the whole job (generateJson with lane
 //   "background"); a second call while it waits or runs makes the job go round once more. Every summary prompt ends its
-//   system message with the `summary` content contract and SUMMARY_WORDING. The knowledge boundary is left out: the
-//   summarizer writes no character's words (plan §1.7).
+//   system message with the `summary` content contract and SUMMARY_WORDING, an overview fold's with OVERVIEW_WORDING
+//   too: the overview is the story's timeline told as a recollection, which "What happened so far…" shows as written
+//   (0.6.19). An overview saved before that is read as none, so the next maintenance folds it again (OVERVIEW_STYLE).
+//   The knowledge boundary is left out: the summarizer writes no character's words (plan §1.7).
 // - Each reader job's connection (structured, narration, chat) sizes the overview: a tenth of the smallest context.
 // - Every summary keeps GF's output reserve for thinking models: at least 10240 tokens (the connection's own cap when
 //   it is lower, never under the 8192 floor); a source too long for that is summarized in pieces (fitsSummary).
@@ -64,6 +66,41 @@ const SUMMARY_TEMPERATURE = 0.3;
 const SIDE_RECALLS = 3;
 
 const SummarySchema = z.object({ summary: z.string().min(1) });
+
+/**
+ * What an overview fold adds to its system message. The kit asks only for a "canon-to-date overview", so models kept
+ * persona facts, a summary per chapter and markdown labels in it; the prompts carry the cast on their own.
+ */
+export const OVERVIEW_WORDING =
+  "The overview is the story's timeline and nothing else: a chronological recollection, in story order and in the past tense, of the events that have happened so far, with the choices the protagonist made woven into the narration. Write it as flowing prose paragraphs that read like remembering the story. It holds no character or persona profiles, no setting notes and no list of chapter or scene summaries (the prompts carry the cast separately), and no headings, labels, bullet points or markdown emphasis. Keep every established event, relationship turn and irrevocable decision, the chronology and the names, and who knows what: what happened in a record whose title says it is private is told as private, known only to those its title says know it.";
+
+/**
+ * The overview's form, kept on the memory document: 2 is the timeline (OVERVIEW_WORDING, 0.6.19). A document without it
+ * is read with no overview, so the kit's next maintenance folds a new one from the saved records, one at a time; with
+ * no overview every source is owed, so recall reports the memory lagging and queues that (S/story/canon.ts recallText).
+ * Records, detail summaries and status are read as saved. Every overview the kit writes after that was folded over the
+ * empty one, so its write stamps the form, and the reads after it use the overview again: one rebuild, never a second.
+ * Until then the earlier overview is kept beside it as `legacyOverview` (the kit carries fields it does not know), so
+ * What happened so far… can still show it when a fold fails before the first new one lands; the stamp drops it.
+ */
+const OVERVIEW_STYLE = 2;
+
+type SavedForm = { overview?: unknown; overviewStyle?: unknown; legacyOverview?: unknown } | null | undefined;
+
+/** The saved memory as the kit reads it: an overview of an earlier form counts as none, and is kept aside. */
+const currentForm = (data: unknown) => {
+  const saved = data as SavedForm;
+  return saved?.overview && saved.overviewStyle !== OVERVIEW_STYLE
+    ? { ...saved, overview: null, legacyOverview: saved.overview }
+    : (data ?? null);
+};
+
+/** The memory as the kit writes it: one with an overview carries its form, and the earlier one is let go. */
+const stampedForm = (data: unknown) => {
+  if (!(data as SavedForm)?.overview) return data;
+  const { legacyOverview: _earlier, ...rest } = data as Record<string, unknown>;
+  return { ...rest, overviewStyle: OVERVIEW_STYLE };
+};
 
 export type MemoryRuntime = Pick<
   CapabilityRuntimeHost,
@@ -133,10 +170,13 @@ const summaryReserve = (request: SummaryRequest, maxOutputTokens: number | null)
     Math.min(Math.max(SUMMARY_OUTPUT_TOKENS, request.tokenBudget ?? 0), maxOutputTokens || Number.POSITIVE_INFINITY),
   );
 
-const withRules = (messages: readonly OtomeMessage[], rules: string): OtomeMessage[] =>
-  messages.map((message, index) =>
-    index === 0 && message.role === "system" ? { ...message, content: `${message.content}\n\n${rules}` } : message,
+/** The request's messages, its system message ending with the job's rules (and an overview fold's OVERVIEW_WORDING). */
+const withRules = (request: SummaryRequest, { rules }: SummaryJob): OtomeMessage[] => {
+  const ending = request.kind === "overview" ? `${rules}\n${OVERVIEW_WORDING}` : rules;
+  return request.messages.map((message, index) =>
+    index === 0 && message.role === "system" ? { ...message, content: `${message.content}\n\n${ending}` } : message,
   );
+};
 
 /**
  * readMemorySources, kept per run until the store writes anything. The kit reads every source before each paid summary
@@ -196,10 +236,11 @@ export function createOtomeMemory({
   const memory = createForgeStoryMemory({
     async readMemory(runId) {
       const document = await documents.getById(OTOME_FORGE_PACKAGE_ID, memoryId(runId));
-      return { data: document?.data ?? null, revision: document?.revision ?? null };
+      return { data: currentForm(document?.data), revision: document?.revision ?? null };
     },
-    async updateMemory(runId, { expectedRevision, data }) {
+    async updateMemory(runId, { expectedRevision, data: written }) {
       if (!(await runExists(runId))) return false;
+      const data = stampedForm(written);
       const { id, kind, name } = runDocTarget("memory", memoryId(runId));
       const at = new Date().toISOString();
       let saved: boolean;
@@ -254,10 +295,7 @@ export function createOtomeMemory({
       const request = value as SummaryRequest;
       const job = running.get(request.runId) ?? (await summaryJob(request.runId));
       if (!job?.maxContext) return false;
-      return (
-        promptRoom(job.maxContext, withRules(request.messages, job.rules)) >=
-        summaryReserve(request, job.maxOutputTokens)
-      );
+      return promptRoom(job.maxContext, withRules(request, job)) >= summaryReserve(request, job.maxOutputTokens);
     },
     async summarize(value) {
       const request = value as SummaryRequest;
@@ -269,7 +307,7 @@ export function createOtomeMemory({
           runId: request.runId,
           job: "compress",
           label: `memory-${request.kind}`,
-          messages: withRules(request.messages, job.rules),
+          messages: withRules(request, job),
           schema: SummarySchema,
           temperature: SUMMARY_TEMPERATURE,
           maxTokens: replyTokens(request),

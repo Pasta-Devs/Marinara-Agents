@@ -26,17 +26,32 @@ import type { OtomeStore } from "../store.js";
 
 const NoFields = z.object({});
 
+/** A line that is only a bold label, such as "**Choices:**" or "__Choices__:". */
+const BOLD_LABEL = /^(\*\*|__)[^*_]+?(?::\1|\1:)$/u;
+/** Markdown strong emphasis around some words, then single `*` or `_` emphasis that is not inside a word. */
+const STRONG = /(\*\*|__)(?=\S)(.+?)(?<=\S)\1/gu;
+const EMPHASIS = /(?<![\p{L}\p{N}])([*_])(?=\S)(.+?)(?<=\S)\1(?![\p{L}\p{N}])/gu;
+
 /**
  * The kit's saved overview (`${R}:memory` overview.content) as the player reads it: its paragraphs, with a leading
- * markdown heading or bullet marker and an echoed "Canon to date" heading dropped; [] before the first overview. The
- * text is otherwise as saved, whatever the Heat.
+ * markdown heading or bullet marker, a line that is only a bold label and an echoed "Canon to date" heading dropped,
+ * and markdown emphasis taken off its words; [] before the first overview. The text is otherwise as saved, whatever the
+ * Heat. An overview is written as plain paragraphs since 0.6.19 (S/memory/memory.ts OVERVIEW_WORDING); this tidies one
+ * saved before, until the background rebuild replaces it.
  */
 export function overviewParagraphs(data: unknown): string[] {
-  const content = (data as { overview?: { content?: unknown } | null } | null)?.overview?.content;
+  // A story rebuilding its overview in the new form (memory.ts) shows the earlier one, tidied, until the first lands.
+  const saved = data as {
+    overview?: { content?: unknown } | null;
+    legacyOverview?: { content?: unknown } | null;
+  } | null;
+  const content = saved?.overview?.content || saved?.legacyOverview?.content;
   if (typeof content !== "string") return [];
   return content
     .split(/\n+/u)
     .map((line) => line.replace(/^\s*(?:#{1,6}|[-*•])\s+/u, "").trim())
+    .filter((line) => !BOLD_LABEL.test(line))
+    .map((line) => line.replace(STRONG, "$2").replace(EMPHASIS, "$2"))
     .filter((line) => line && line.replace(/:\s*$/u, "").toLowerCase() !== "canon to date");
 }
 
