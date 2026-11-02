@@ -1,11 +1,13 @@
 // ──────────────────────────────────────────────
 // Otome Forge: a story CG takes over the stage (plan M2b, design "CG moments"). The reader's UI fades, letterbox bars
 // close in, and the image pans slowly for about 6 s; then the bars open, the box returns at 80% and the image stays
-// behind the rest of the beat. A tap anywhere, Enter or Space ends the pan at once; under reduced motion there is no pan
-// and the box is back straight away. While it plays the faded UI is inert and the picture holds focus (tabIndex −1),
-// so nothing unseen can be pressed. When the pan ends the reader marks the CG seen (the server unlocks it in the Album).
+// behind the rest of the beat. The pan, and the line waiting under it (#2051), start once the picture has loaded; one
+// that fails ends it at once, with no pan over a broken picture. A tap anywhere, Enter or Space ends the pan at once;
+// under reduced motion there is no pan and the box is back straight away, loaded or not. While it plays the faded UI
+// is inert and the picture holds focus (tabIndex −1), so nothing unseen can be pressed. When the pan ends the reader
+// marks the CG seen (the server unlocks it in the Album).
 // ──────────────────────────────────────────────
-import { forwardRef, useEffect, useRef } from "react";
+import { forwardRef, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 /** How long the pan holds the stage before the box returns. */
@@ -31,11 +33,14 @@ export const CgTakeover = forwardRef<HTMLElement, CgTakeoverProps>(function CgTa
   const { t } = useTranslation();
   const ended = useRef(onIntroEnd);
   ended.current = onIntroEnd;
+  // The pan counts from the moment the picture can be seen, not from the moment it was asked for.
+  const [settled, setSettled] = useState<"loaded" | "failed" | null>(null);
   useEffect(() => {
-    if (!intro) return;
-    const timer = window.setTimeout(() => ended.current(), reducedMotion ? 0 : CG_PAN_MS);
+    // Under reduced motion there is no pan to wait for, so the box is back at once, loaded or not.
+    if (!intro || (!settled && !reducedMotion)) return;
+    const timer = window.setTimeout(() => ended.current(), reducedMotion || settled === "failed" ? 0 : CG_PAN_MS);
     return () => window.clearTimeout(timer);
-  }, [intro, reducedMotion]);
+  }, [intro, reducedMotion, settled]);
   const label = names.length
     ? t("ui.otomeForge.reader.cgLabel", { names: names.join(", ") })
     : t("ui.otomeForge.reader.cgLabelPlain");
@@ -44,6 +49,7 @@ export const CgTakeover = forwardRef<HTMLElement, CgTakeoverProps>(function CgTa
       ref={ref}
       className="of-cg"
       data-intro={intro}
+      data-loaded={settled === "loaded"}
       role="img"
       aria-label={label}
       tabIndex={-1}
@@ -57,8 +63,18 @@ export const CgTakeover = forwardRef<HTMLElement, CgTakeoverProps>(function CgTa
         src={url}
         alt=""
         decoding="async"
-        onLoad={() => onArtStatus?.(url, true)}
-        onError={() => onArtStatus?.(url, false)}
+        onLoad={(event) => {
+          // decoding="async" may still be drawing it at load: wait for the decode, and let a failed one go too.
+          void event.currentTarget
+            .decode()
+            .catch(() => undefined)
+            .then(() => setSettled("loaded"));
+          onArtStatus?.(url, true);
+        }}
+        onError={() => {
+          setSettled("failed");
+          onArtStatus?.(url, false);
+        }}
       />
       <span className="of-cg-bar of-cg-bar--top" aria-hidden="true" />
       <span className="of-cg-bar of-cg-bar--bottom" aria-hidden="true" />
