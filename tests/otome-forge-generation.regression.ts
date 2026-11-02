@@ -484,6 +484,13 @@ test("a prompt whose required story cannot fit is a 413 `capacity` and is never 
   assert.equal(t.calls.length + trimmed.calls.length, 0, "no request was sent");
 });
 
+test("a repair turn that cannot fit reports the malformed reply, not `capacity`", async () => {
+  // The first call fits; its long, malformed reply makes the repair turn too big for the window.
+  const t = await setup([sized("NOT-JSON", 30_000)]);
+  await assert.rejects(generateJson(t.deps, request()), failsWith(502, "bad-format"));
+  assert.equal(t.calls.length, 1, "the repair turn that cannot fit is never sent");
+});
+
 test("a job without a connection is a 503 `no-connection`, and jobs fall back to narration", async () => {
   assert.equal(resolveConnectionId(null, "chat"), null);
   assert.equal(resolveConnectionId({ connections: { narration: "n" } }, "chat"), "n");

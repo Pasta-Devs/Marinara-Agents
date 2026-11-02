@@ -327,15 +327,20 @@ export async function generateJson<T extends object>(
   const repair: OtomeMessage[] = first.content
     ? [...messages, { role: "assistant", content: first.content }, { role: "user", content: note }]
     : [...messages, { role: "user", content: note }];
-  const second = await complete(repair, `${request.label}/repair`);
-  if (second.ok) return { value: second.value, connectionId, model: model.model };
+  // A repair turn that cannot fit (the prompt plus that long, malformed reply) reports what went wrong, the reply,
+  // rather than a `capacity` the first call already passed.
+  const second = await complete(repair, `${request.label}/repair`).catch((error: unknown) => {
+    if (error instanceof OtomeForgeError && error.code === "capacity") return null;
+    throw error;
+  });
+  if (second?.ok) return { value: second.value, connectionId, model: model.model };
 
-  if (first.declined && second.declined) {
+  if (first.declined && (!second || second.declined)) {
     throw new OtomeForgeError(422, `The model declined ${request.label}.`, "declined");
   }
   throw new OtomeForgeError(
     502,
-    `The model's reply for ${request.label} did not match: ${second.issues}`,
+    `The model's reply for ${request.label} did not match: ${second?.issues ?? first.issues}`,
     "bad-format",
   );
 }

@@ -394,7 +394,11 @@ export function createOtomeMemory({
         const phase = result.lagging ? "stale" : "error";
         return { ...result, status: { ...result.status, phase }, overview: "", details: [], text: "" };
       }
-      const notebook = await notebookRecalls(options, result, recent).catch((): ForgeRecallResult["details"] => []);
+      // A Read Me recall that fails only loses its side slots; the prompt still goes out with everything else.
+      const notebook = await notebookRecalls(options, result, recent).catch((error): ForgeRecallResult["details"] => {
+        runtime.logger.warn("[otome-forge] Read Me recall: %s", error instanceof Error ? error.message : String(error));
+        return [];
+      });
       const details = [...result.details, ...notebook];
       return {
         ...result,
