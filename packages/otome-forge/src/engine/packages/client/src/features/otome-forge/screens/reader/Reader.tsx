@@ -484,6 +484,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
             firstChoice={firstChoice}
             levelsBefore={levelsBefore}
             facing={facing}
+            cgIntro={cgIntro}
             onAdvance={advance}
             onExit={onExit}
             exitLabel={exitLabel}
@@ -549,6 +550,8 @@ interface BottomPanelProps {
   levelsBefore: LevelsBefore;
   /** The love interest a Confrontation faces (its opponent, as the server set it). */
   facing: RunView["lis"][number] | null;
+  /** A story CG's pan hides the box: its line waits to type until the pan ends (#2051). */
+  cgIntro: boolean;
   /** Goes on (ends a CG's pan first). */
   onAdvance: () => void;
   onExit: () => void;
@@ -756,6 +759,7 @@ function BottomPanel(props: BottomPanelProps) {
           lineKey={reader.lineKey}
           instant={reader.instant}
           finishToken={reader.finishToken}
+          paused={props.cgIntro}
           onTyped={reader.markTyped}
           aftermath={props.aftermath}
           canAdvance={!(pending && reader.typed)}

@@ -1,7 +1,8 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the dialogue box (the bottom of the stage, frosted). A name plate in the speaker's accent colour; the
 // protagonist's thoughts in pale italics; a love interest's rare thought line set apart in his colour; narration
-// plain. A line types itself out (whole under reduced motion); the Next button, or a tap, shows it whole first.
+// plain. A line types itself out (whole under reduced motion); the Next button, or a tap, shows it whole first. While
+// a story CG's pan hides the box (`paused`), its line waits, and types from the top once the box is back (#2051).
 // Screen readers get the whole line at once, never the typing. A line too long for the box scrolls with its typing,
 // so the newest words stay in view, until the player touches or scrolls the box themselves.
 // ──────────────────────────────────────────────
@@ -22,6 +23,8 @@ interface DialogueBoxProps {
   instant: boolean;
   /** Bumped to show the current line whole. */
   finishToken: number;
+  /** The box is hidden behind a story CG's pan: the line waits, and starts typing when this turns false. */
+  paused?: boolean;
   onTyped: (lineKey: string) => void;
   /** The aftermath line after Ease off. */
   aftermath?: boolean;
@@ -31,29 +34,49 @@ interface DialogueBoxProps {
 }
 
 export const DialogueBox = forwardRef<HTMLButtonElement, DialogueBoxProps>(function DialogueBox(
-  { voice, protagonist, text, lineKey, instant, finishToken, onTyped, aftermath, canAdvance, onAdvance },
+  {
+    voice,
+    protagonist,
+    text,
+    lineKey,
+    instant,
+    finishToken,
+    paused = false,
+    onTyped,
+    aftermath,
+    canAdvance,
+    onAdvance,
+  },
   nextRef,
 ) {
   const { t } = useTranslation();
   const chars = useMemo(() => Array.from(text), [text]);
-  const [typing, setTyping] = useState(() => ({ key: lineKey, count: 0, token: finishToken, start: Date.now() }));
-  // A new line starts from nothing; Next (a new token) shows the current one whole.
+  const [typing, setTyping] = useState(() => ({
+    key: lineKey,
+    count: 0,
+    token: finishToken,
+    start: Date.now(),
+    paused,
+  }));
+  // A new line starts from nothing; Next (a new token) shows the current one whole. A line held behind a CG's pan
+  // starts its clock when the box comes back, so none of it is typed out of sight.
   let count = typing.count;
-  if (typing.key !== lineKey || typing.token !== finishToken) {
-    count = typing.key !== lineKey ? 0 : chars.length;
-    setTyping({ key: lineKey, count, token: finishToken, start: Date.now() });
+  if (typing.key !== lineKey || typing.token !== finishToken || typing.paused !== paused) {
+    count = typing.key !== lineKey || (typing.paused && !paused) ? 0 : chars.length;
+    if (paused) count = 0;
+    setTyping({ key: lineKey, count, token: finishToken, start: Date.now(), paused });
   }
-  const visible = instant ? chars.length : Math.min(count, chars.length);
+  const visible = instant ? chars.length : paused ? 0 : Math.min(count, chars.length);
   const done = visible >= chars.length;
 
   const lineRef = useRef<HTMLParagraphElement>(null);
   const restRef = useRef<HTMLSpanElement>(null);
   const following = useRef(true);
-  // A new line opens at its top and follows its typing again.
+  // A new line, or one back from behind a CG's pan, opens at its top and follows its typing again.
   useEffect(() => {
     following.current = true;
     if (lineRef.current) lineRef.current.scrollTop = 0;
-  }, [lineKey]);
+  }, [lineKey, paused]);
   // The untyped rest is laid out (hidden), so the box is already as tall as the whole line: scroll so the row being
   // typed sits at the bottom edge.
   useEffect(() => {
@@ -70,6 +93,7 @@ export const DialogueBox = forwardRef<HTMLButtonElement, DialogueBoxProps>(funct
 
   // The pace comes from the clock, not from frames: a slow frame shows more characters at once, never fewer per second.
   useEffect(() => {
+    if (paused) return;
     if (done) {
       onTyped(lineKey);
       return;
@@ -84,7 +108,7 @@ export const DialogueBox = forwardRef<HTMLButtonElement, DialogueBoxProps>(funct
       40,
     );
     return () => window.clearInterval(timer);
-  }, [done, lineKey, onTyped]);
+  }, [done, lineKey, onTyped, paused]);
 
   const thought = voice.kind !== "narration" && voice.thought;
   const plate =

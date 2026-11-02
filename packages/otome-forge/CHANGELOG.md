@@ -7,6 +7,10 @@
 - **Angst and Dark say it plainly.** Under Angst, cruelty is no longer sanitized within your Lines and Veils, and a love interest may be a villain to everyone but you. Under Dark romance, they can be the villain. Gentle is unchanged.
 - **Real villains are back**, and a moral code fits who they are: firm, far looser, or none at all. This applies to love interests written from now on.
 
+## 0.6.20 — 2026-11-02
+
+- **A line under new scene art types out after the art appears.** When a scene's art arrives, the line in the dialogue box now waits until the picture has loaded and its reveal has finished, then types from the start, so you no longer find it already complete and scrolled to the end on phones.
+
 ## 0.6.19 — 2026-11-02
 
 - **"What happened so far…" reads as a recollection of your story.** It now tells what has happened so far in story order, with the choices you made woven in, instead of notes about your persona, a summary per chapter and bold labels. Stories already in progress rewrite it in the background the next time Otome Hearth writes; nothing you played is changed.
