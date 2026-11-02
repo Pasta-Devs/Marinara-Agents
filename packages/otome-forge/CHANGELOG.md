@@ -1,5 +1,14 @@
 # Otome Hearth release notes
 
+## 0.6.17 — 2026-11-02
+
+- **Love interests remember the whole story.** Route, repair, date and Character Story chapters are now summarized too and included in the story's running summary, so long routes keep their early chapters. Their details still come back only in his chats and the scenes he is in.
+- **The last chapter is sent in full** when your model can hold it, with only the choices you made.
+- **Small memories come back when a scene touches them:** Read Me (your notebook as it is now, so deleted stays deleted), Read Him, dates, banner stories, phone talks, Snapshots and Claw rounds.
+- **Too long for your model?** The least relevant memories go first; if it still can't fit, you're asked for a bigger connection, not given a cut-off reply.
+- **Smaller summary models work:** a summary model with a 16k window no longer stops with an error. Memory status and Retry are in Settings → Connections.
+- Stories in progress catch up in the background; nothing you played is rewritten.
+
 ## 0.6.16 — 2026-11-01
 
 - **Otome Hearth follows "Reduce Ambient Animations & Effects".** Marinara Engine's setting now does in Otome Hearth what your device's reduce-motion setting already did: stars, drift, parallax, the typing text and the Wish and CG pans stop, and the frosted glass panels turn solid, as the Engine's own panels do. The claw machine keeps its normal motion, because it is a game rather than decoration; your device's reduce-motion setting still calms it.

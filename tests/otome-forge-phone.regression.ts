@@ -4,8 +4,9 @@
 // never the protagonist's words), Close and remember (one session, P18 on the summary contract, a verbatim quote, the
 // capped affection once, a replay earning nothing, the cap on the player's own day), a closed session as a `chat`
 // source recalled only by its own love interest, unread and seen, and a run deleted mid-reply leaving no thread; P17
-// keeps recalled memory whole beside a long latest chapter; a card name of any length never costs a session; a note's
-// full length fits the Reply quote.
+// keeps recalled memory whole beside the previous chapter in full; a card name of any length never costs a session; a
+// note's full length fits the Reply quote; Close and remember never waits behind the run's story queue, yet still holds
+// its thread, and P18 gets a thinking model's summary room (#2039).
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CapabilityLanguageModelMessage } from "@marinara-engine/shared";
@@ -57,8 +58,9 @@ import {
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/story.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
-import type { FakeReply } from "./fixtures/otome-forge-fakes.ts";
-import { KAI, MIR, json, storyWorld } from "./fixtures/otome-forge-story.ts";
+import { runForeground } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/generation.ts";
+import type { FakeReply, FakeRuntimeOptions } from "./fixtures/otome-forge-fakes.ts";
+import { KAI, MIR, json, squeezedMemory, storyWorld } from "./fixtures/otome-forge-story.ts";
 
 type Messages = CapabilityLanguageModelMessage[];
 const system = (messages: Messages) => messages[0]!.content;
@@ -131,8 +133,15 @@ function phoneRoutes(deps: RouteDeps, runKey: string) {
   };
 }
 
-async function phoneWorld(runKey: string, options: { replies?: FakeReply[]; withMemory?: boolean } = {}) {
-  const t = await storyWorld({ runKey, replies: options.replies ?? phoneModel() });
+async function phoneWorld(
+  runKey: string,
+  options: {
+    replies?: FakeReply[];
+    withMemory?: boolean;
+    model?: Pick<FakeRuntimeOptions, "maxContext" | "maxOutputTokens">;
+  } = {},
+) {
+  const t = await storyWorld({ runKey, replies: options.replies ?? phoneModel(), model: options.model ?? {} });
   let memory: OtomeMemory | undefined;
   if (options.withMemory) {
     memory = createOtomeMemory({
@@ -412,6 +421,51 @@ test("Close and remember: one session, P18 on the summary contract, the capped a
   assert.equal((await t.state()).lis[KAI]!.points, points + 10);
 });
 
+test("Close and remember never waits behind the run's story queue, and its thread still takes one write at a time", async () => {
+  const t = await phoneWorld("r-phoneq-aaaaaa");
+  assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
+  // A story write (a lookahead beat, say) holds the run's foreground queue the whole time.
+  let free!: () => void;
+  const story = runForeground(t.runId, () => new Promise<void>((resolve) => (free = resolve)));
+  const release = gateFirstCall(t.runtime);
+  try {
+    const closing = t.phone("POST", close, { li: KAI });
+    const started = await Promise.race([
+      release.reached.then(() => true),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1000)),
+    ]);
+    assert.ok(started, "P18 is written at once, not behind the story write");
+    // While it is summarized, the thread takes no other write.
+    const busy = await t.phone("POST", send, { li: KAI, body: { text: "Wait." } });
+    assert.deepEqual([busy.status, busy.body.code], [409, "busy"]);
+    release();
+    const closed = await closing;
+    assert.equal(closed.status, 200, JSON.stringify(closed.body));
+    assert.deepEqual(closed.body.grants, [{ source: "close-and-remember", li: KAI, affection: 20 }]);
+    assert.equal((await t.thread(KAI))!.sessions.length, 1, "remembered while the story write still runs");
+  } finally {
+    release();
+    free();
+    await story;
+  }
+});
+
+test("P18 is a summary: it may write at least 10240 tokens for a thinking model, or the connection's lower cap", async () => {
+  for (const [maxOutputTokens, least] of [
+    [null, 10240],
+    [65536, 10240],
+    [4096, 4096],
+  ] as const) {
+    const t = await phoneWorld(`r-phone${maxOutputTokens ?? 0}-aaaaaa`, { model: { maxOutputTokens } });
+    assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
+    const closed = await t.phone("POST", close, { li: KAI });
+    assert.equal(closed.status, 200, JSON.stringify(closed.body));
+    const maxTokens = t.calls.find((call) => isMemoryPrompt(call.messages))!.options!.maxTokens!;
+    assert.ok(maxTokens >= least, `cap ${maxOutputTokens}: P18 may write ${maxTokens}`);
+    if (maxOutputTokens) assert.ok(maxTokens <= maxOutputTokens);
+  }
+});
+
 test("the grant lands once through a stale write, a one-sided talk earns nothing, and the day follows her zone", async () => {
   const late = "Etc/GMT+12";
   const early = "Etc/GMT-14";
@@ -591,7 +645,7 @@ test("a run deleted while he writes leaves no thread; an unknown love interest i
   assert.equal(u.calls.length, 0);
 });
 
-test("P17 keeps the overview and recalled details whole beside a latest chapter longer than its canon budget", async () => {
+test("P17 keeps the overview and recalled details whole beside the previous chapter in full, however long", async () => {
   const t = await phoneWorld("r-phonea-aaaaaa");
   const done = "2026-10-27T10:00:00.000Z";
   const key = "main-1";
@@ -609,7 +663,7 @@ test("P17 keeps the overview and recalled details whole beside a latest chapter 
     connectionId: "conn-text",
   };
   await t.store.mutateDoc(runDocTarget("chapter", chapterId(t.runId, key)), normalizeChapter, () => chapter);
-  // Six beats of about 650 words (the narrator's cap): far past the 2000 tokens P17 reads of the latest chapter.
+  // Six beats of about 650 words (the narrator's cap): far past the 2000 tokens P17 read of it before 0.6.17.
   const words = Array.from({ length: 65 }, () => "harbour").join(" ");
   for (let i = 0; i < 6; i += 1) {
     const segments = Array.from({ length: 10 }, (_, n) => ({
@@ -640,15 +694,22 @@ test("P17 keeps the overview and recalled details whole beside a latest chapter 
   // A ready memory: the overview, an older conversation recalled as a detail (past the six P17 lists), the chapter.
   const memory = {
     async recall() {
+      const overview = "OVERVIEW-MARK: she came to the harbour city.";
+      const details = [
+        {
+          id: "phone-old",
+          kind: "chat",
+          title: "Kai's phone conversation",
+          content: "OLD-SESSION-MARK: her sister Mina.",
+        },
+      ];
       return {
         status: { phase: "ready" as const, retryable: false },
         lagging: false,
-        overview: "",
-        details: [],
-        text: forgeStoryMemoryText({
-          overview: "OVERVIEW-MARK: she came to the harbour city.",
-          details: [{ kind: "chat", title: "Kai's phone conversation", content: "OLD-SESSION-MARK: her sister Mina." }],
-        }),
+        overview,
+        details,
+        maxContext: 32768,
+        text: forgeStoryMemoryText({ overview, details }),
         recent: [{ id: key, kind: "chapter" as const, title: "Harbour", latest: true }],
       };
     },
@@ -658,10 +719,26 @@ test("P17 keeps the overview and recalled details whole beside a latest chapter 
   const sent = await phone("POST", send, { li: KAI, body: { text: "Do you remember my sister's name?" } });
   assert.equal(sent.status, 200, JSON.stringify(sent.body));
   const user = t.calls.find((call) => isReplyPrompt(call.messages))!.messages.at(-1)!.content;
-  for (const mark of ["OVERVIEW-MARK", "OLD-SESSION-MARK", "# Latest chapter: Harbour", "LATEST-END-MARK"]) {
+  for (const mark of ["OVERVIEW-MARK", "OLD-SESSION-MARK", "# Previous chapter in full: Harbour", "LATEST-END-MARK"]) {
     assert.ok(user.includes(mark), `P17 holds ${mark}`);
   }
-  assert.ok(!user.includes("LATEST-START-MARK"), "the latest chapter keeps its end within the budget");
+  assert.ok(user.includes("LATEST-START-MARK"), "the previous chapter goes in whole, as GF's chat gets it");
+});
+
+test("P17 hands its memory to the fit: a recalled detail too big for the reader's window gives way", async () => {
+  // A 1M-token connection, memory recalled for a 60k reader: only the fit it is handed to leaves the detail out.
+  const t = await phoneWorld("r-phonesq-aaaaaa", { model: { maxContext: 1_000_000, maxOutputTokens: null } });
+  const phone = phoneRoutes(
+    { ...t.deps, memory: squeezedMemory(60_000) as unknown as OtomeMemory },
+    "r-phonesq-aaaaaa",
+  );
+  const sent = await phone("POST", send, { li: KAI, body: { text: "Do you remember the quay?" } });
+  assert.equal(sent.status, 200, JSON.stringify(sent.body));
+  const reply = t.calls.find((call) => isReplyPrompt(call.messages))!;
+  const text = reply.messages.map((message) => message.content).join("\n");
+  assert.ok(text.includes("SQUEEZED-OVERVIEW"), "the overview stays");
+  assert.ok(!text.includes("SQUEEZED-DETAIL"), "the recalled detail gives way");
+  assert.ok(reply.options!.maxTokens! >= 24_192, "with the whole reply budget");
 });
 
 test("a card name of any length never costs a session: clipped as written, the memory kept, the grant paid once", async () => {

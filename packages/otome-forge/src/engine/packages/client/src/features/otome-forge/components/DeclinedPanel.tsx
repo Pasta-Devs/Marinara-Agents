@@ -1,8 +1,9 @@
 // ──────────────────────────────────────────────
 // Otome Forge: a scene (or chapter plan) that could not be written. A refusal is said honestly ("Your model declined
 // this scene") with Ease off, Retry and Switch connection; any other failure says why, with Ease off (a scene), Retry,
-// and Switch connection when no connection is set or the reply was malformed. Switching saves the story's connection
-// for that job (Settings → Connections does the same) and tries again.
+// and Switch connection when no connection is set, the reply was malformed, or the prompt no longer fits the model's
+// context window (`capacity`). Switching saves the story's connection for that job (Settings → Connections does the
+// same) and tries again.
 // ──────────────────────────────────────────────
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -29,7 +30,7 @@ export function DeclinedPanel({ error, run, job, onRetry, onEaseOff }: DeclinedP
   const code = otomeErrorCode(error);
   const declined = code === "declined";
   const [switching, setSwitching] = useState(false);
-  const canSwitch = declined || code === "no-connection" || code === "bad-format";
+  const canSwitch = declined || code === "no-connection" || code === "bad-format" || code === "capacity";
   const Icon = declined ? ShieldAlert : CircleAlert;
   return (
     <section className="of-declined of-glass of-glass--strong" role="alert">

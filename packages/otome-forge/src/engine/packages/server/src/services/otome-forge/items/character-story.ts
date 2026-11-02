@@ -224,8 +224,9 @@ export async function ensureItemStory(
         unit,
         state: now.state,
         item,
-        memory,
+        memory: memory.text,
       }),
+      memory,
       schema: StoryPlanSchema,
       normalize: (reply) => {
         const plan = normalizeStoryPlan(reply, context);

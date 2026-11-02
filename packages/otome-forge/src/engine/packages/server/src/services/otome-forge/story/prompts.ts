@@ -266,24 +266,70 @@ export const KNOWN_TOKENS = 500;
  */
 export function knowsAboutYou(unit: Pick<Unit, "name">, liState: Pick<LiState, "known">): string {
   const known = (liState.known ?? []).slice(-KNOWN_SHOWN);
-  if (!known.length) return "";
-  const item = (entry: NotebookEntry) => {
-    // JSON-quoted, so a quote mark the player typed cannot end their words early.
-    const words = entry.words ? ` (in the protagonist's own words: ${JSON.stringify(entry.words)})` : "";
-    const guess =
-      entry.verdict === "right" ? entry.text : `${entry.verdict === "close" ? "nearly" : "not so"}: ${entry.text}`;
-    return `${guess}${words}`;
-  };
-  const line = (entries: readonly NotebookEntry[]) => {
-    const sections = NOTEBOOK_CATEGORIES.flatMap((category) => {
-      const items = entries.filter((entry) => entry.category === category).map(item);
-      return items.length ? [`${category}: ${items.join("; ")}`] : [];
-    });
-    return `What ${unit.name} has come to know about the protagonist (${unit.name}'s alone; let it show where it fits, never recite it): ${sections.join(" | ")}`;
-  };
+  return known.length ? knownLine(unit, known.slice(-knownShown(unit, known))) : "";
+}
+
+/** A notebook entry as the prompts give it: the guess, how right it was, and the protagonist's own words. */
+function notebookItem(entry: NotebookEntry): string {
+  // JSON-quoted, so a quote mark the player typed cannot end their words early.
+  const words = entry.words ? ` (in the protagonist's own words: ${JSON.stringify(entry.words)})` : "";
+  const guess =
+    entry.verdict === "right" ? entry.text : `${entry.verdict === "close" ? "nearly" : "not so"}: ${entry.text}`;
+  return `${guess}${words}`;
+}
+
+function knownLine(unit: Pick<Unit, "name">, entries: readonly NotebookEntry[]): string {
+  const sections = NOTEBOOK_CATEGORIES.flatMap((category) => {
+    const items = entries.filter((entry) => entry.category === category).map(notebookItem);
+    return items.length ? [`${category}: ${items.join("; ")}`] : [];
+  });
+  return `What ${unit.name} has come to know about the protagonist (${unit.name}'s alone; let it show where it fits, never recite it): ${sections.join(" | ")}`;
+}
+
+/** How many of the newest entries knowsAboutYou carries: at least one, and as many as fit KNOWN_TOKENS. */
+function knownShown(unit: Pick<Unit, "name">, known: readonly NotebookEntry[]): number {
   let count = 1;
-  while (count < known.length && estimateTextTokens(line(known.slice(-(count + 1)))) <= KNOWN_TOKENS) count += 1;
-  return line(known.slice(-count));
+  while (count < known.length && estimateTextTokens(knownLine(unit, known.slice(-(count + 1)))) <= KNOWN_TOKENS) {
+    count += 1;
+  }
+  return count;
+}
+
+/** One Read Me set's older notebook entries as a record recall can rank (S/memory/memory.ts). */
+export interface NotebookMemory {
+  id: string;
+  kind: "chat";
+  key: string;
+  title: string;
+  content: string;
+  order: number;
+}
+
+/**
+ * What a love interest learned in Read Me that knowsAboutYou no longer carries (its older entries), one record per set,
+ * for recall to bring back when the scene touches it (S/memory/memory.ts ranks them in the side slots the kit leaves
+ * free). Built from the live notebook on every recall and never stored, so an entry the player deleted is gone from
+ * every later prompt.
+ */
+export function notebookMemories(unit: Pick<Unit, "id" | "name">, liState: Pick<LiState, "known">): NotebookMemory[] {
+  const all = liState.known ?? [];
+  const older = all.slice(0, all.length - (all.length ? knownShown(unit, all.slice(-KNOWN_SHOWN)) : 0));
+  const sets = new Map<string, NotebookEntry[]>();
+  for (const entry of older) {
+    const set = entry.id.slice(0, Math.max(0, entry.id.lastIndexOf("/"))) || entry.id;
+    sets.set(set, [...(sets.get(set) ?? []), entry]);
+  }
+  return [...sets].map(([set, entries], index) => {
+    const id = `readme-${unit.id}-${set}`;
+    return {
+      id,
+      kind: "chat",
+      key: JSON.stringify(["chat", id]),
+      title: `What ${unit.name} learned about the protagonist in a Read Me (private: ${unit.name}'s alone)`,
+      content: entries.map((entry) => `${entry.category}: ${notebookItem(entry)}`).join("\n"),
+      order: index,
+    };
+  });
 }
 
 /** Who the protagonist is (name, pronouns, traits, goal), for every story prompt. */

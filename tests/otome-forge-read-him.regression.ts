@@ -509,6 +509,11 @@ test("a finished set is a chat source for its love interest only: recalled by hi
   const recall = async (who: { reader?: string; cast?: string[] }) =>
     (await memory.recall({ runId: t.runId, job: "chat", query: { cues: ["the bell on the quay"] }, ...who })).text;
   assert.ok((await recall({ reader: KAI })).includes("THOUGHT-KAI"));
+  // A small side memory, as it was written: its few lines, never a summary of a summary or a chapter's prose.
+  assert.ok(
+    (await recall({ reader: KAI })).includes(`# Recalled chat: ${own.title}\n${own.content}`),
+    "recalled as its own short record",
+  );
   assert.ok(!(await recall({ reader: KAI })).includes("THOUGHT-MIR"));
   assert.ok((await recall({ reader: MIR })).includes("THOUGHT-MIR"));
   assert.ok(!(await recall({ reader: MIR })).includes("THOUGHT-KAI"));

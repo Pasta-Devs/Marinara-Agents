@@ -385,10 +385,12 @@ async function createBanner(
     featured = wearer;
   }
 
-  // Shared canon only: recall as a scene with nobody in it, so no love interest's own chapter reaches the plan.
+  // Recall as a scene with nobody in it: the overview of the whole timeline (a love interest's own chapter only as the
+  // overview tells it, titled private) and the main story's previous chapter, never his own details.
   const memory = await recallText(deps, runId, {
     job: "structured",
     cast: [],
+    continues: "main",
     query: { plan: featured.bible?.want ?? "", speakers: cast.map((unit) => unit.name) },
     debugMode: options.debugMode,
     signal: options.signal,
@@ -429,9 +431,10 @@ async function createBanner(
       featured,
       ...(partner?.look ? { partnerLook: { ...partner.look, title: partner.title } } : {}),
       earlierTitles,
-      memory,
+      memory: memory.text,
       ...(season ? { season: { id: season, earlierTitles: seasonTitles } } : {}),
     }),
+    memory,
     schema: BannerPlanSchema,
     normalize: (reply) => {
       const plan = normalizeBannerPlan(reply, context);

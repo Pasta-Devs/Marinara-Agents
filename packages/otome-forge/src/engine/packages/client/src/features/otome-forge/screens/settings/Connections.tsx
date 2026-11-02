@@ -1,5 +1,6 @@
 // ──────────────────────────────────────────────
-// Otome Forge Settings → Connections: the story's text connection for each job ("Same as story" by default)
+// Otome Forge Settings → Connections: the story's text connection for each job ("Same as story" by default), and the
+// story memory's status with its Retry (Debug's MemorySection), next to the connection that writes the summaries
 // ──────────────────────────────────────────────
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -10,6 +11,7 @@ import type { Connections, RunView } from "../../shared/api-types";
 import { ConnectionControls } from "../setup/ConnectionsStep";
 import type { DraftConnections } from "../setup/draft";
 import { NoStory, SaveBar, storedKey } from "./ContentSettings";
+import { MemorySection } from "./Debug";
 
 const toForm = (connections: Connections): DraftConnections => ({
   narration: connections.narration,
@@ -75,7 +77,10 @@ export function ConnectionsSettings({ run }: { run: RunView | null }) {
     <div className="of-step-body">
       <p className="of-hint">{t("ui.otomeForge.settings.connectionsIntro")}</p>
       {run ? (
-        <StoryConnections key={storedKey(run.runKey, run.world.connections)} run={run} settings={settings} />
+        <>
+          <StoryConnections key={storedKey(run.runKey, run.world.connections)} run={run} settings={settings} />
+          <MemorySection runKey={run.runKey} />
+        </>
       ) : (
         <NoStory />
       )}

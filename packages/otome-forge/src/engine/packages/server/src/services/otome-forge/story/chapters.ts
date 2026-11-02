@@ -386,6 +386,7 @@ export async function planNextChapter(
     const memory = await recallText(deps, runId, {
       job: "structured",
       cast: [lead],
+      continues: "main",
       query: { plan: units.find((unit) => unit.id === lead)?.bible?.want ?? "", speakers: units.map((u) => u.name) },
       signal,
       debugMode,
@@ -402,6 +403,16 @@ export async function planNextChapter(
     if (!covering && latest && nextMain(mains, run.state).number > latest.endsAt) {
       throw new OtomeForgeError(409, "Choose how the story goes on.", "conflict");
     }
+    const arcMemory = covering
+      ? null
+      : await recallText(deps, runId, {
+          job: "structured",
+          cast: [],
+          continues: "main",
+          query: { plan: run.player.goal ?? "", speakers: units.map((unit) => unit.name) },
+          signal,
+          debugMode,
+        });
     const arc: StoryArc =
       covering ??
       (await planArc(
@@ -412,19 +423,13 @@ export async function planNextChapter(
           player: await withPersonaStoryAbout(deps.runtime, run.player),
           units,
           state: run.state,
-          memory: await recallText(deps, runId, {
-            job: "structured",
-            cast: [],
-            query: { plan: run.player.goal ?? "", speakers: units.map((unit) => unit.name) },
-            signal,
-            debugMode,
-          }),
+          memory: arcMemory!.text,
           previous: arcs,
           chapters: mains,
           number: arcs.length + 1,
           from: number,
         },
-        { debugMode, ...(signal ? { signal } : {}) },
+        { debugMode, ...(signal ? { signal } : {}), memory: arcMemory! },
       ));
     const context: PlanContext = {
       units,
@@ -446,11 +451,12 @@ export async function planNextChapter(
         state: run.state,
         number,
         lead,
-        memory,
+        memory: memory.text,
         climax,
         lastClimax: climaxOfChapter(mains.at(-1)),
         arc,
       }),
+      memory,
       schema: ChapterPlanSchema,
       normalize: (reply) => {
         const plan = normalizeChapterPlan(reply, context);
@@ -537,8 +543,16 @@ export async function startArc(
   const units = cast.map((li) => run.units.find((unit) => unit.id === li)!);
   const from = mains.at(-1) ? (mains.at(-1)!.number ?? mains.length) + 1 : 1;
   try {
-    return await cancellable(deps, runId, async (stop) =>
-      planArc(
+    return await cancellable(deps, runId, async (stop) => {
+      const memory = await recallText(deps, runId, {
+        job: "structured",
+        cast: [],
+        continues: "main",
+        query: { plan: run.player.goal ?? "", speakers: units.map((unit) => unit.name) },
+        signal: stop,
+        debugMode,
+      });
+      return planArc(
         deps,
         runId,
         {
@@ -546,13 +560,7 @@ export async function startArc(
           player: await withPersonaStoryAbout(deps.runtime, run.player),
           units,
           state: run.state,
-          memory: await recallText(deps, runId, {
-            job: "structured",
-            cast: [],
-            query: { plan: run.player.goal ?? "", speakers: units.map((unit) => unit.name) },
-            signal: stop,
-            debugMode,
-          }),
+          memory: memory.text,
           previous: arcs,
           chapters: mains,
           number: latest.number + 1,
@@ -560,9 +568,9 @@ export async function startArc(
           choice,
           ...(arriving && choice === "newcomer" ? { newcomer: arriving } : {}),
         },
-        { debugMode, signal: stop },
-      ),
-    );
+        { debugMode, signal: stop, memory },
+      );
+    });
   } catch (error) {
     await rollback();
     throw error;

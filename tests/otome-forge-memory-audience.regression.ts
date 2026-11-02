@@ -1,9 +1,11 @@
-// Otome Forge's private memory (M2a): each love interest knows only what he saw or was told. A `chat` source (a date)
-// with audience [A] is recalled only for reader A or a scene whose cast includes A, never into the shared overview and
-// never by a call that names nobody; the latest chapter is left to the caller, who sends it in full. Summaries run on
-// the background lane with the `summary` contract and its summary wording, never with the knowledge boundary, which
-// the story's own writers (P5, P6) carry. The Debug routes report the status and queue a Retry. A request in the
-// queue's release gap, or a job admission refuses before it starts, never leaves the status pending.
+// Otome Forge's private memory (M2a): each love interest knows only what he saw or was told. A `chat` source (a phone
+// session) with audience [A] is recalled only for reader A or a scene whose cast includes A, never into the shared
+// overview and never by a call that names nobody; the latest chapter is left to the caller, who sends it in full.
+// Summaries run on the background lane with the `summary` contract and its summary wording, never with the knowledge
+// boundary, which the story's own writers (P5, P6) carry, and each leaves a thinking model at least 10240 tokens to
+// reply (or the connection's own lower cap), also on a small context (#2039). The memory routes report the status and
+// queue a Retry. A request in the queue's release gap, or a job admission refuses before it starts, never leaves the
+// status pending.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs";
@@ -57,8 +59,8 @@ const SOURCES: ForgeMemorySource[] = [
     content: "Ava met Kai and Mireille at the observatory. The great telescope had been sabotaged.",
     order: 10000,
   },
-  // A shared side record of the kit's own kind. Otome's route and repair chapters are `chat` sources, held to their
-  // love interest (S/story/canon.ts); otome-forge-beats.regression.ts checks them with memory ready.
+  // A side story of the kit's own kind, as Otome's dates and Character Stories are (S/story/canon.ts): in the overview,
+  // recalled in detail only for its love interest; otome-forge-beats.regression.ts checks them with memory ready.
   {
     id: "route-li-mireille-cd34-2",
     kind: "character-story",
@@ -87,7 +89,9 @@ function summarizer(messages: Array<{ content: string }>) {
 
 async function setup(
   connections: Record<string, string> = { narration: "conn-story", compress: "conn-memory" },
-  options: Pick<FakeRuntimeOptions, "replies" | "admissionRun"> = {},
+  options: Pick<FakeRuntimeOptions, "replies" | "admissionRun" | "maxContext" | "maxOutputTokens"> & {
+    sources?: ForgeMemorySource[];
+  } = {},
 ) {
   const fake = createFakeDocuments();
   fake.seedGachaForgeIndex();
@@ -107,8 +111,20 @@ async function setup(
   ] as const) {
     await store.mutateDoc(runDocTarget("unit", unitId(RUN, id)), normalizeUnit, (unit) => ({ ...unit, id, name }));
   }
-  const memory = createOtomeMemory({ runtime: runtime.runtime, store, readSources: async () => SOURCES });
-  return { fake, store, memory, ...runtime };
+  // `failReads` makes the next reads of the wrapper fail while later ones (the kit's own) succeed.
+  const reads = { fail: 0 };
+  const memory = createOtomeMemory({
+    runtime: runtime.runtime,
+    store,
+    readSources: async () => {
+      if (reads.fail > 0) {
+        reads.fail -= 1;
+        throw new Error("the sources could not be read");
+      }
+      return options.sources ?? SOURCES;
+    },
+  });
+  return { fake, store, memory, reads, ...runtime };
 }
 
 /** Waits for the queued maintenance to finish (status leaves `pending`). */
@@ -175,6 +191,73 @@ test("a private chat is recalled only for its own love interest, or a scene he i
     assert.ok(result.recent?.some((entry) => entry.id === "main-1" && entry.latest));
     assert.ok(result.details.every((detail) => detail.id !== "main-1"));
   }
+});
+
+test("a failed source read never recalls another love interest's canon: recall rejects and the caller falls back", async () => {
+  const { memory, reads } = await setup();
+  await memory.maintain({ runId: RUN });
+  await settle(memory);
+  // Only the wrapper's own read fails; the kit's read a moment later would succeed.
+  reads.fail = 1;
+  await assert.rejects(
+    memory.recall({
+      runId: RUN,
+      job: "narration",
+      query: { cues: [`the brass ${PRIVATE} key Kai keeps`] },
+      cast: [MIR],
+    }),
+    /the sources could not be read/u,
+  );
+});
+
+test("every summary leaves a thinking model at least 10240 tokens to reply, or the connection's lower cap", async () => {
+  for (const [maxOutputTokens, least] of [
+    [null, 10240],
+    [65536, 10240],
+    [4096, 4096],
+  ] as const) {
+    const { memory, calls } = await setup(undefined, { maxContext: 131_072, maxOutputTokens });
+    assert.equal(await memory.maintain({ runId: RUN }), true);
+    assert.equal((await settle(memory)).phase, "ready", `cap ${maxOutputTokens}: summarized, never failed`);
+    const sent = calls.map((call) => [JSON.parse(call.messages.at(-1)!.content).source ? "detail" : "overview", call]);
+    assert.deepEqual(
+      sent.map(([kind]) => kind),
+      ["detail", "detail", "overview", "overview"],
+    );
+    for (const [kind, call] of sent as Array<[string, (typeof calls)[number]]>) {
+      const maxTokens = call.options!.maxTokens!;
+      assert.ok(maxTokens >= least, `cap ${maxOutputTokens}: a ${kind} summary may write ${maxTokens}`);
+      if (maxOutputTokens) assert.ok(maxTokens <= maxOutputTokens, "never past the connection's own cap");
+    }
+  }
+});
+
+test("a small-context summary model still summarizes, with 10240 tokens of reply room, not GF's 24k headroom", async () => {
+  // About 2000 tokens of source on a 16k compress model with no output cap: before #2039 every summary asked for
+  // outputBudget's 24192, so no piece ever fit and memory stopped at summary-context-too-small.
+  const long: ForgeMemorySource = {
+    id: "main-1",
+    kind: "chapter",
+    title: "The Observatory",
+    content: `Ava met Kai at the observatory. ${"The great telescope turned through the night. ".repeat(180)}`,
+    order: 10000,
+  };
+  // A summary much shorter than its source, as a real one is (the overview has a tenth of the context).
+  const short = (messages: Array<{ content: string }>) => {
+    const input = JSON.parse(messages.at(-1)!.content);
+    return JSON.stringify({ summary: input.source ? "Ava met Kai at the observatory." : "Ava met Kai." });
+  };
+  const { memory, calls, logs } = await setup(undefined, {
+    maxContext: 16_384,
+    maxOutputTokens: null,
+    sources: [long],
+    replies: Array.from({ length: 4 }, () => short),
+  });
+  assert.equal(await memory.maintain({ runId: RUN }), true);
+  const status = await settle(memory);
+  assert.equal(status.phase, "ready", JSON.stringify(logs.filter((entry) => entry.level === "warn")));
+  const detail = calls.find((call) => JSON.parse(call.messages.at(-1)!.content).source)!;
+  assert.ok(detail.options!.maxTokens! >= 10240, `the detail may write ${detail.options!.maxTokens}`);
 });
 
 test("a second request while maintenance waits or runs folds into the same job and summarizes nothing twice", async () => {
@@ -252,7 +335,7 @@ test("maintenance needs a world with a connection, and recall before it holds no
   assert.equal(calls.length, 0);
 });
 
-test("the Debug routes report the memory and queue a Retry", async () => {
+test("the memory routes report the memory and queue a Retry", async () => {
   const { store, memory, runtime } = await setup();
   const routes = new Map<string, RouteHandler>();
   registerMemoryRoutes(

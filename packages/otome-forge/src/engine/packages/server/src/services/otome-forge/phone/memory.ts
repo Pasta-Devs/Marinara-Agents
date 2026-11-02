@@ -5,7 +5,13 @@
 // sentences and one line quoted from it), the session is appended once, and he earns Close and remember's affection
 // (SH/economy.ts, within the per-LI daily cap for everything outside the story; S/state/rewards.ts grant).
 // - It holds the thread's one write in flight, as a send does (S/phone/chat.ts inThreadLock), so no reply lands while
-//   it is summarized.
+//   it is summarized. It does not wait in the run's foreground queue: it reads nothing a beat, a plan or the lookahead
+//   writes; its thread's other writers are a send (held off by the lock) and a seen mark (a revision-checked write
+//   applied again to the latest thread, as this one is); and its affection is the state's own revision-checked write,
+//   applied again to the latest state, so a story write meanwhile is never lost. The player waits for the summary
+//   alone, never behind a lookahead beat, and the next beat never waits behind it.
+// - P18 is a summary: like every summary it gets generateJson's output room (at least 10240 tokens when the connection
+//   allows it); its wanted length is in its prompt's wording.
 // - The session covers the messages that were summarized, and only a request whose write appended it earns the
 //   affection: a replay (nothing left open) returns the newest memory with no grant. A conversation with nothing from
 //   one of them earns nothing. The grant is the state's own revision-checked write; one that still fails after the
@@ -25,7 +31,7 @@ import type {
   RunState,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { AFFECTION_EARNINGS } from "../../../../../client/src/features/otome-forge/shared/economy.js";
-import { generateJson, runForeground } from "../generation.js";
+import { generateJson } from "../generation.js";
 import { chatId, runDocTarget, stateId } from "../ids.js";
 import { normalizeState } from "../schemas/state.js";
 import { grant } from "../state/rewards.js";
@@ -60,20 +66,18 @@ async function close(deps: PhoneDeps, runId: string, li: LiId, debugMode: boolea
   const end = start + open.length;
   const names = { li: unit.name, player: run.player.name || "the protagonist" };
   const conversation = renderThread(open, names, "told");
-  const { value } = await runForeground(runId, () =>
-    generateJson(deps, {
-      runId,
-      job: "compress",
-      label: `phone-memory/${li}`,
-      messages: chatMemoryMessages({ world: run.world, names, conversation }),
-      schema: ChatMemorySchema,
-      normalize: (raw) => normalizeChatMemory(raw, names, conversation),
-      temperature: 0.5,
-      maxTokens: 600,
-      debugMode,
-      lane: "foreground",
-    }),
-  );
+  const { value } = await generateJson(deps, {
+    runId,
+    job: "compress",
+    label: `phone-memory/${li}`,
+    messages: chatMemoryMessages({ world: run.world, names, conversation }),
+    schema: ChatMemorySchema,
+    normalize: (raw) => normalizeChatMemory(raw, names, conversation),
+    temperature: 0.5,
+    maxTokens: 600,
+    debugMode,
+    lane: "foreground",
+  });
   // generateJson returns what normalizeChatMemory made of the reply.
   const memory = { text: value.memory, quote: value.quote ?? "" };
   const session: PhoneSession = {

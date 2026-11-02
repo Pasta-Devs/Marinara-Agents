@@ -21,6 +21,10 @@ import type {
   Chapter,
   ChapterNode,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
+import type { NotebookEntry } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/read-me.ts";
+import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
+import { z } from "zod";
+import { generateJson } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/generation.ts";
 import {
   SUMMARY_WORDING,
   createOtomeMemory,
@@ -52,6 +56,7 @@ import {
 import {
   beatId,
   chapterId,
+  memoryId,
   playerId,
   runDocTarget,
   stateId,
@@ -67,6 +72,7 @@ import {
   json,
   closerPlanReply,
   planReply,
+  squeezedMemory,
   storyWorld,
 } from "./fixtures/otome-forge-story.ts";
 
@@ -748,7 +754,11 @@ test("every story prompt keeps the earlier chapters and their big choices when m
       ["P6", narrator.messages.at(-1)!.content],
     ] as const) {
       assert.ok(prompt.includes("CANON-1-0") && prompt.includes("CANON-2-0"), `${name} keeps both earlier chapters`);
-      assert.match(prompt, /# Latest chapter: Night 2/, `${name} has the latest chapter in full`);
+      assert.match(
+        prompt,
+        /# Previous chapter in full: Night 2\nCANON-2-0/,
+        `${name} has the previous chapter in full`,
+      );
       assert.ok(prompt.includes(DECISIONS_HEADING), `${name} carries the irrevocable decisions`);
       assert.match(prompt, /Chapter 1 "Night 1", node 7: Keep Kai's secret 1\. \(dialogue: I'll say nothing\.\)/);
       assert.match(prompt, /Chapter 2 "Night 2", node 7: Keep Kai's secret 2/);
@@ -814,115 +824,860 @@ test("every story prompt keeps the earlier chapters and their big choices when m
     [{ cast: [KAI, MIR] }, true],
     [{ reader: MIR }, true],
   ] as const) {
-    const text = await recallText({ store: t.store }, t.runId, { job: "narration", ...who });
+    const { text } = await recallText({ store: t.store }, t.runId, { job: "narration", ...who });
     assert.equal(text.includes("PRIVATE-LEDGER"), sees, `the private canon, for ${JSON.stringify(who)}`);
     assert.equal(text.includes("Burn the ledger"), sees, `the private decision, for ${JSON.stringify(who)}`);
     assert.ok(text.includes("Keep Kai's secret 1"), "a main chapter's decision is everyone's");
-    // Whose it is and that it is private, so a scene with others in it keeps to the knowledge boundary.
+    // Whose it is and that it is private, so a scene with others in it keeps to the knowledge boundary. It completed
+    // with Night 2, so it sorts before it: Night 2 is the previous chapter in full, and it the canon before.
     assert.equal(text.includes(`# Canon in full: ${MIREILLE_LEDGER}\nPRIVATE-LEDGER`), sees, "its heading");
     assert.equal(text.includes(`- ${MIREILLE_LEDGER}, node 1: Burn the ledger`), sees, "its decision's");
   }
 });
 
-test("with memory ready, a love interest's route chapter reaches only the scenes and plans they are in", async () => {
-  // The fake summarizer: a detail echoes its source, an overview joins the previous one with its records.
-  const summarizer = (messages: CapabilityLanguageModelMessage[]) => {
-    const input = JSON.parse(messages.at(-1)!.content);
-    if (input.source) return json({ summary: `${input.source.title}: ${input.source.content}` });
-    const records = input.records.map((record: { content: string }) => record.content).join(" ");
-    return json({ summary: [input.previousOverview, records].filter(Boolean).join(" ") });
-  };
-  const t = await storyWorld({ runKey: "r-ready-aaaaaa", replies: Array.from({ length: 40 }, () => summarizer) });
-  const chapterOf = (changes: Partial<Chapter> & Pick<Chapter, "key" | "kind" | "lead" | "title">): Chapter => ({
+/** The fake summarizer: a detail keeps only its source's MARKERS (never the prose around them), an overview joins. */
+function markerSummary(messages: CapabilityLanguageModelMessage[]): string {
+  const input = JSON.parse(messages.at(-1)!.content);
+  const markers = (text: string) => (text.match(/\b[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+\b/g) ?? []).join(" ");
+  if (input.source) return json({ summary: `SUMMARY: ${markers(input.source.content)}` });
+  const records = input.records.map((record: { content: string }) => record.content);
+  return json({ summary: [input.previousOverview, ...records].filter(Boolean).join(" ") });
+}
+
+/** The prompt without its "# Canon to date" overview (the fake's is one line). */
+const beyondOverview = (text: string) => text.replace(/# Canon to date\n[^\n]*/u, "");
+
+/** Waits for the memory's queued upkeep to finish; its phase then. */
+async function memorySettled(memory: ReturnType<typeof createOtomeMemory>, runId: string) {
+  for (let turn = 0; turn < 4000 && (await memory.status(runId)).phase === "pending"; turn += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  return (await memory.status(runId)).phase;
+}
+
+/** A chapter of one node, completed at `completed` with `text` as its one line (or its lines). */
+async function completeChapter(
+  t: Awaited<ReturnType<typeof storyWorld>>,
+  changes: Partial<Chapter> & Pick<Chapter, "key" | "kind" | "lead" | "title">,
+  text: string | string[],
+  completed: string,
+) {
+  const chapter: Chapter = {
     tags: [],
     summary: "",
     nodes: [{ i: 0, kind: "beat", guide: "The scene.", cast: [changes.lead] }],
     ledger: { relationship: [], conflict: [], offscreen: [] },
-    plannedAt: "2026-10-28T10:00:00.000Z",
+    plannedAt: completed,
     connectionId: "conn-text",
     ...changes,
-  });
-  const complete = async (chapter: Chapter, text: string, completed: string) => {
-    await t.store.mutateDoc(runDocTarget("chapter", chapterId(t.runId, chapter.key)), normalizeChapter, () => chapter);
-    const beat: Beat = {
-      key: chapter.key,
-      i: 0,
-      kind: "beat",
-      places: [],
-      segments: [{ speaker: "", text }],
-      choices: [],
-      choiceCanon: {},
-      effects: {},
-      applied: {},
-      musicMood: "tense",
-      readThrough: 0,
-      written: { at: completed, connectionId: "conn-text", model: "fake" },
-      rewrites: 0,
-    };
-    await t.store.mutateDoc(runDocTarget("beat", beatId(t.runId, chapter.key, 0)), normalizeBeat, () => beat);
-    await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
-      ...state,
-      chapters: { ...state.chapters, [chapter.key]: { beatsRead: 1, completed, applied: [] } },
-    }));
   };
-  await complete(
-    chapterOf({ key: "main-1", kind: "main", number: 1, lead: KAI, title: "Night 1" }),
+  await t.store.mutateDoc(runDocTarget("chapter", chapterId(t.runId, chapter.key)), normalizeChapter, () => chapter);
+  const beat: Beat = {
+    key: chapter.key,
+    i: 0,
+    kind: "beat",
+    places: [],
+    segments: [text].flat().map((line) => ({ speaker: "", text: line })),
+    choices: [],
+    choiceCanon: {},
+    effects: {},
+    applied: {},
+    musicMood: "tense",
+    readThrough: 0,
+    written: { at: completed, connectionId: "conn-text", model: "fake" },
+    rewrites: 0,
+  };
+  await t.store.mutateDoc(runDocTarget("beat", beatId(t.runId, chapter.key, 0)), normalizeBeat, () => beat);
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+    ...state,
+    chapters: { ...state.chapters, [chapter.key]: { beatsRead: 1, completed, applied: [] } },
+  }));
+}
+
+/** How the story names Kai's date "Jellyfish Hour" (S/story/canon.ts titleOf). */
+const KAI_DATE =
+  'Kai\'s own date chapter "Jellyfish Hour" (private: only the people in its scenes know what happened in it)';
+
+test("only what was played reaches a prompt: the previous chapter in full, its memory and summary, its decisions", async () => {
+  const option = (text: string, said: string, branch?: string) => ({
+    text,
+    selection: { kind: "dialogue", text: said },
+    // A big choice ends its chapter, so its options have no branch.
+    segments: branch ? [{ speaker: "Kai", text: branch }] : [],
+  });
+  const played = (i: number) =>
+    i === 0
+      ? beatReply({
+          choices: [
+            {
+              kind: "small",
+              at: 1,
+              options: [
+                option("Ask about the lamp", "KEPT-SAY: why the lamp?", "KEPT-BRANCH: he shrugs."),
+                option("Leave", "UNPICKED-SAY: I'm going.", "UNPICKED-BRANCH: he lets her go."),
+              ],
+            },
+          ],
+        })
+      : i === 6
+        ? beatReply({
+            choices: [
+              {
+                kind: "big",
+                at: 2,
+                options: [
+                  option("KEPT-BIG", "KEPT-BIG-SAY: I'll stay."),
+                  option("UNPICKED-BIG", "UNPICKED-BIG-SAY: I'll tell them."),
+                ],
+              },
+            ],
+          })
+        : beatReply();
+  const replies = Array.from({ length: 80 }, () => (messages: CapabilityLanguageModelMessage[]) => {
+    if (system(messages).includes(SUMMARY_WORDING)) return markerSummary(messages);
+    if (isConfrontationPrompt(messages)) return json(confrontationReply());
+    const number = Number(/main chapter (\d+)/.exec(messages.at(-1)!.content)?.[1] ?? 1);
+    if (isPlanner(messages)) {
+      return json(planReply({ title: `Night ${number}`, ledger: { relationship: [], conflict: [], offscreen: [] } }));
+    }
+    return json(played(Number(/Narrate node (\d+) of/.exec(messages.at(-1)!.content)?.[1] ?? 1) - 1));
+  });
+  const t = await storyWorld({ runKey: "r-played-aaaaaa", replies });
+  const memory = createOtomeMemory({ runtime: t.runtime, store: t.store });
+  t.deps.memory = memory;
+  // Every option not taken: the small choice's and the big one's, and the Confrontation's untaken stances and endings.
+  const UNPLAYED = [
+    "UNPICKED-SAY",
+    "UNPICKED-BRANCH",
+    "UNPICKED-BIG",
+    "PRESS-1:",
+    "YIELD-2:",
+    "REVEAL-3:",
+    "ANSWER-press-1",
+    "ANSWER-yield-2",
+    "ANSWER-reveal-3",
+    "ENDING-TRUTH",
+    "ENDING-WALKOUT",
+  ];
+  const PLAYED = ["KEPT-SAY", "KEPT-BRANCH", "KEPT-BIG-SAY", "HOLD-1:", "ANSWER-hold-3", "ENDING-STANDOFF"];
+  const check = (what: string, text: string | undefined) => {
+    assert.ok(text, `${what} is there`);
+    assert.deepEqual(
+      PLAYED.filter((marker) => !text.includes(marker)),
+      [],
+      `${what} holds every pick and its branch`,
+    );
+    assert.deepEqual(
+      UNPLAYED.filter((marker) => text.includes(marker)),
+      [],
+      `${what} holds nothing that was not played`,
+    );
+  };
+  try {
+    assert.equal((await t.call("POST", "/runs/:run/chapters/next", { lead: KAI })).status, 200);
+    const at = (i: number) => ({ key: "main-1", i: String(i) });
+    for (let i = 0; i <= 6; i += 1) {
+      const served = await t.call("POST", beatPath, {}, at(i));
+      assert.equal(served.status, 200, JSON.stringify(served.body));
+      for (let round = 1; served.body.confrontation && round <= 3; round += 1) {
+        assert.equal((await t.call("POST", `${beatPath}/stance`, { round, stance: "hold" }, at(i))).status, 200);
+      }
+      if (i === 0 || i === 6) {
+        const pick = { choice: "choice-1", option: "option-1" };
+        assert.equal((await t.call("POST", `${beatPath}/choose`, pick, at(i))).status, 200);
+      }
+      assert.equal((await t.call("POST", `${beatPath}/read`, { segment: 99 }, at(i))).status, 200);
+    }
+    await t.settle();
+    assert.equal(await memorySettled(memory, t.runId), "ready");
+
+    const [source] = await readMemorySources(t.store, t.runId);
+    check("the memory source", source?.content);
+    const detail = t.calls.find(
+      (call) =>
+        system(call.messages).includes(SUMMARY_WORDING) &&
+        JSON.parse(call.messages.at(-1)!.content).source?.id === "main-1",
+    );
+    check("the summary's source", detail?.messages.at(-1)!.content);
+
+    assert.equal((await t.call("POST", "/runs/:run/chapters/next", { lead: KAI })).status, 200);
+    const planner = t.calls
+      .filter((call) => isPlanner(call.messages))
+      .at(-1)!
+      .messages.at(-1)!.content;
+    check(
+      "the previous chapter in full",
+      /# Previous chapter in full: Night 1\n[^]*?(?=\n\n# Irrevocable)/u.exec(planner)?.[0],
+    );
+    const decisions = planner.slice(planner.indexOf(DECISIONS_HEADING));
+    assert.match(decisions, /- Chapter 1 "Night 1", node 7: KEPT-BIG\.? \(dialogue: KEPT-BIG-SAY: I'll stay\.\)/u);
+    assert.deepEqual(
+      UNPLAYED.filter((marker) => planner.includes(marker)),
+      [],
+      "nothing that was not played anywhere in the next chapter's plan",
+    );
+  } finally {
+    memory.dispose();
+  }
+});
+
+test("with memory ready, every chapter is summarized into the overview; a love interest's own stays his beyond it", async () => {
+  const t = await storyWorld({ runKey: "r-ready-aaaaaa", replies: Array.from({ length: 40 }, () => markerSummary) });
+  await completeChapter(
+    t,
+    { key: "main-1", kind: "main", number: 1, lead: KAI, title: "Night 1" },
     "SHARED-QUAY: the lanterns along the quay go dark.",
     "2026-10-28T10:00:00.000Z",
   );
-  // Mireille's route chapter, completed after it.
-  await complete(
-    chapterOf({ key: `route-${MIR}-2`, kind: "route", li: MIR, lead: MIR, stage: 2, title: "Mireille's Ledger" }),
+  // Mireille's route chapter, then Kai's date, completed after it.
+  await completeChapter(
+    t,
+    { key: `route-${MIR}-2`, kind: "route", li: MIR, lead: MIR, stage: 2, title: "Mireille's Ledger" },
     "PRIVATE-LEDGER: Mireille shows Ines the forged pages of the harbour ledger.",
     "2026-10-28T11:00:00.000Z",
+  );
+  await completeChapter(
+    t,
+    { key: "date-1", kind: "date", li: KAI, lead: KAI, title: "Jellyfish Hour" },
+    "KAI-DATE: Kai counts jellyfish under the pier lights.",
+    "2026-10-28T12:00:00.000Z",
   );
   const memory = createOtomeMemory({ runtime: t.runtime, store: t.store });
   try {
     assert.equal(await memory.maintain({ runId: t.runId }), true);
-    for (let turn = 0; turn < 2000 && (await memory.status(t.runId)).phase === "pending"; turn += 1) {
-      await new Promise((resolve) => setImmediate(resolve));
-    }
-    assert.equal((await memory.status(t.runId)).phase, "ready");
-    // The kit's source carries the same name, so a detail it recalls (older, by relevance) says whose it is too.
+    assert.equal(await memorySettled(memory, t.runId), "ready");
+    // A route chapter is the story's own chapter, a date is a side story (GF's Character Story); each is his own.
     const sources = await readMemorySources(t.store, t.runId);
     assert.deepEqual(
-      sources.map((source) => [source.kind, source.title]),
+      sources.map((source) => [source.kind, source.title, source.audience ?? null]),
       [
-        ["chapter", "Night 1"],
-        ["chat", MIREILLE_LEDGER],
+        ["chapter", "Night 1", null],
+        ["chapter", MIREILLE_LEDGER, [MIR]],
+        ["character-story", KAI_DATE, [KAI]],
       ],
     );
-    // A plan's recall (P10, P11 and P5 recall with `cast` and a plan), and a scene's (P6, P12).
+    // Each one gets its detail summary and joins the overview of the whole timeline.
+    const summarized = t.calls.flatMap((call) => {
+      const source = JSON.parse(call.messages.at(-1)!.content).source;
+      return source ? [source.id] : [];
+    });
+    assert.deepEqual(summarized, ["main-1", `route-${MIR}-2`, "date-1"]);
+    const saved = t.fake.rows.get(memoryId(t.runId))!.data as { overview: { sources: Array<[string, string]> } };
+    assert.deepEqual(
+      saved.overview.sources.map(([key]) => JSON.parse(key)),
+      [
+        ["chapter", "main-1"],
+        ["chapter", `route-${MIR}-2`],
+        ["character-story", "date-1"],
+      ],
+    );
+
+    // A plan's recall (P10, P11 and P5 recall with `cast` and a plan), a scene's (P6, P12) and a chat reply's (P17).
     const plan = (li: string, name: string) => ({
       job: "structured" as const,
       cast: [li],
       query: { plan: `${name} and the forged harbour ledger`, speakers: [name] },
     });
-    for (const [who, sees] of [
+    for (const [who, hers] of [
       [{ job: "narration", cast: [KAI] }, false],
       [plan(KAI, "Kai"), false],
       [{ job: "narration", cast: [] }, false],
-      [{ job: "narration", reader: KAI }, false],
+      [{ job: "chat", reader: KAI }, false],
       [{ job: "narration", cast: [MIR] }, true],
       [{ job: "narration", cast: [KAI, MIR] }, true],
       [plan(MIR, "Mireille"), true],
-      [{ job: "narration", reader: MIR }, true],
+      [{ job: "chat", reader: MIR }, true],
     ] as const) {
-      const text = await recallText({ store: t.store, memory, runtime: t.runtime }, t.runId, who);
+      const { text } = await recallText({ store: t.store, memory, runtime: t.runtime }, t.runId, who);
       const label = JSON.stringify(who);
-      assert.match(text, /# Canon to date\n/, `the ready memory answers, for ${label}`);
-      assert.ok(text.includes("SHARED-QUAY"), `a main chapter is everyone's, for ${label}`);
-      // The fake summarizer echoes a source, so its text stands for its summary too (in the overview or a detail).
-      assert.equal(text.includes("PRIVATE-LEDGER"), sees, `the route chapter or its summary, for ${label}`);
-      assert.equal(text.includes("Mireille's Ledger"), sees, `the route chapter's title, for ${label}`);
-      if (sees) {
-        assert.equal(text.split("PRIVATE-LEDGER").length, 2, `in full once, never ranked again, for ${label}`);
-        assert.ok(text.indexOf("# Latest chapter: Night 1") < text.indexOf("PRIVATE-LEDGER"), "in story order");
-        assert.ok(text.includes(`# Canon in full: ${MIREILLE_LEDGER}\nPRIVATE-LEDGER`), `whose it is, for ${label}`);
-      }
+      // Everyone knows the whole timeline through the overview: her route chapter and his date as their summaries.
+      assert.match(text, /# Canon to date\n[^\n]*SHARED-QUAY[^\n]*PRIVATE-LEDGER[^\n]*KAI-DATE/u, label);
+      assert.ok(!text.includes("Canon in full"), `no chapter goes in word for word but the previous one, ${label}`);
+      assert.equal(text.includes("forged pages"), hers, `her route's prose only as her previous chapter, ${label}`);
+      // Beyond it, her route chapter reaches only a prompt for her: as the previous chapter in full there.
+      const beyond = beyondOverview(text);
+      assert.equal(beyond.includes("PRIVATE-LEDGER"), hers, `her route chapter beyond the overview, for ${label}`);
+      assert.equal(beyond.includes("Mireille's Ledger"), hers, `its title, for ${label}`);
+      if (hers) assert.ok(beyond.includes(`# Previous chapter in full: ${MIREILLE_LEDGER}\nPRIVATE-LEDGER`), label);
+      else assert.match(beyond, /# Previous chapter in full: Night 1\nSHARED-QUAY/u, label);
     }
+
+    // His date comes back for him as a small side memory, its summary, never its scenes; for her only in the overview.
+    const asked = (reader: string) =>
+      recallText({ store: t.store, memory, runtime: t.runtime }, t.runId, {
+        job: "chat",
+        reader,
+        query: { cues: ["Do you remember the jellyfish under the pier?"] },
+      });
+    const kai = (await asked(KAI)).text;
+    assert.ok(kai.includes(`# Recalled character-story: ${KAI_DATE}\nSUMMARY: KAI-DATE`), kai);
+    assert.ok(!kai.includes("counts jellyfish"), "never its raw scenes");
+    assert.ok(!beyondOverview((await asked(MIR)).text).includes("KAI-DATE"));
   } finally {
     memory.dispose();
+  }
+});
+
+test("the previous chapter goes in whole, however long, when the model's window holds it", async () => {
+  // About 15000 tokens of chapter on a 128k model: before #2039 only its last 12000 went in, whatever the window.
+  const t = await storyWorld({
+    runKey: "r-long-aaaaaa",
+    replies: ['{"premise":"x"}'],
+    model: { maxContext: 131_072, maxOutputTokens: null },
+  });
+  // A hundred lines of about 150 tokens each, as a narrator writes them.
+  const lines = Array.from({ length: 100 }, (_, n) =>
+    Array.from({ length: 100 }, (_, w) => `tide${(n * 100 + w) % 97}`).join(" "),
+  );
+  await completeChapter(
+    t,
+    { key: "main-1", kind: "main", number: 1, lead: KAI, title: "Night 1" },
+    ["LONG-START: the tide turns.", ...lines, "LONG-END: dawn."],
+    "2026-10-28T10:00:00.000Z",
+  );
+  const memory = await recallText({ store: t.store }, t.runId, { job: "narration", cast: [KAI], continues: "main" });
+  assert.ok(estimateTextTokens(memory.text) > 14_000, `a long chapter: ${estimateTextTokens(memory.text)} tokens`);
+  assert.match(memory.text, /^# Previous chapter in full: Night 1\nLONG-START: the tide turns\./u);
+  assert.ok(memory.text.includes("LONG-END: dawn."));
+  const sent = [
+    { role: "system" as const, content: "Reply with {premise}." },
+    { role: "user" as const, content: `STORY MEMORY\n${memory.text}` },
+  ];
+  await generateJson(t.deps, {
+    runId: t.runId,
+    job: "narration",
+    label: "long",
+    messages: sent,
+    memory,
+    schema: z.object({ premise: z.string() }),
+    temperature: 0.5,
+    maxTokens: 600,
+    debugMode: false,
+    lane: "foreground",
+  });
+  assert.deepEqual(t.calls[0]!.messages, sent, "sent whole, with the whole reply room");
+  assert.equal(t.calls[0]!.options?.maxTokens, 24_192);
+});
+
+test("a story saved by 0.6.16 catches up in the background: its own chapters are summarized into the overview", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const replies = Array.from({ length: 80 }, () => (messages: CapabilityLanguageModelMessage[]) => {
+    if (system(messages).includes(SUMMARY_WORDING)) return markerSummary(messages);
+    if (isPlanner(messages)) {
+      return json(planReply({ title: "Night 3", ledger: { relationship: [], conflict: [], offscreen: [] } }));
+    }
+    return json(beatReply());
+  });
+  // Background upkeep waits at the Engine's admission until the test lets it through.
+  const t = await storyWorld({
+    runKey: "r-upgrade-aaaaaa",
+    replies,
+    model: {
+      admissionRun: async (operation) => {
+        await gate;
+        return operation();
+      },
+    },
+  });
+  const route = `route-${MIR}-2`;
+  await completeChapter(
+    t,
+    { key: "main-1", kind: "main", number: 1, lead: KAI, title: "Night 1" },
+    "SHARED-QUAY: the lanterns go dark.",
+    "2026-10-28T09:00:00.000Z",
+  );
+  await completeChapter(
+    t,
+    { key: route, kind: "route", li: MIR, lead: MIR, stage: 2, title: "Mireille's Ledger" },
+    "PRIVATE-LEDGER: Mireille shows Ines the forged pages.",
+    "2026-10-28T10:00:00.000Z",
+  );
+  await completeChapter(
+    t,
+    { key: "date-1", kind: "date", li: KAI, lead: KAI, title: "Jellyfish Hour" },
+    "KAI-DATE: Kai counts jellyfish under the pier lights.",
+    "2026-10-28T11:00:00.000Z",
+  );
+  await completeChapter(
+    t,
+    { key: "main-2", kind: "main", number: 2, lead: KAI, title: "Night 2" },
+    "SECOND-NIGHT: the bell rings at midnight.",
+    "2026-10-28T12:00:00.000Z",
+  );
+  // The memory as 0.6.16 kept it: both main chapters summarized and in the overview; her route chapter and his date
+  // stored word for word as `chat` records, out of the overview; ready.
+  const key = (kind: string, id: string) => JSON.stringify([kind, id]);
+  const old = {
+    version: 1,
+    records: [
+      {
+        id: "main-1",
+        kind: "chapter",
+        title: "Night 1",
+        order: 10000,
+        key: key("chapter", "main-1"),
+        fingerprint: "fp-main-1",
+        content: "SUMMARY: SHARED-QUAY",
+      },
+      {
+        id: route,
+        kind: "chat",
+        title: MIREILLE_LEDGER,
+        order: 15000,
+        key: key("chat", route),
+        fingerprint: "fp-route",
+        content: "PRIVATE-LEDGER: Mireille shows Ines the forged pages.",
+      },
+      {
+        id: "date-1",
+        kind: "chat",
+        title: KAI_DATE,
+        order: 15001,
+        key: key("chat", "date-1"),
+        fingerprint: "fp-date",
+        content: "KAI-DATE: Kai counts jellyfish under the pier lights.",
+      },
+      {
+        id: "main-2",
+        kind: "chapter",
+        title: "Night 2",
+        order: 20000,
+        key: key("chapter", "main-2"),
+        fingerprint: "fp-main-2",
+        content: "SUMMARY: SECOND-NIGHT",
+      },
+    ],
+    work: [],
+    overview: {
+      content: "OLD-OVERVIEW: SUMMARY: SHARED-QUAY SUMMARY: SECOND-NIGHT",
+      sources: [
+        [key("chapter", "main-1"), "fp-main-1"],
+        [key("chapter", "main-2"), "fp-main-2"],
+      ],
+    },
+    status: { phase: "ready", retryable: false, operationId: "op-0.6.16" },
+  };
+  const target = runDocTarget("memory", memoryId(t.runId));
+  await t.fake.documents.create({
+    ...target,
+    packageId: "otome-forge",
+    description: "",
+    data: structuredClone(old),
+    createdAt: "2026-10-28T12:00:00.000Z",
+    updatedAt: "2026-10-28T12:00:00.000Z",
+  });
+  const memory = createOtomeMemory({ runtime: t.runtime, store: t.store });
+  t.deps.memory = memory;
+  try {
+    // Before the catch-up: recall answers at once, on the bounded canonical history, and queues the upkeep.
+    const before = await recallText(t.deps, t.runId, { job: "narration", cast: [MIR], continues: "main" });
+    assert.match(before.text, /# Previous chapter in full: Night 2\nSECOND-NIGHT/u);
+    assert.ok(before.text.includes(`# Canon in full: ${MIREILLE_LEDGER}\nPRIVATE-LEDGER`));
+    assert.equal((await memory.status(t.runId)).phase, "pending", "the catch-up is queued in the background");
+    // A real prompt meanwhile: P5 is sent whole within the connection's context, the previous chapter in it.
+    const sent = await t.call("POST", "/runs/:run/chapters/next", { lead: KAI });
+    assert.equal(sent.status, 200, JSON.stringify(sent.body));
+    const planner = t.calls.filter((call) => isPlanner(call.messages)).at(-1)!;
+    assert.ok(planner.messages.at(-1)!.content.includes("# Previous chapter in full: Night 2\nSECOND-NIGHT"));
+    // The Engine's own count (base-provider.ts: 6 a message, a margin of max(500, 2%)), so nothing of it is trimmed.
+    const tokens = planner.messages.reduce((sum, message) => sum + estimateTextTokens(message.content) + 6, 0);
+    const margin = Math.max(500, Math.ceil(32768 * 0.02));
+    assert.ok(tokens + planner.options!.maxTokens! + margin <= 32768, "it fits the context window untrimmed");
+    assert.ok(!t.calls.some((call) => system(call.messages).includes(SUMMARY_WORDING)), "no summary has run yet");
+
+    release();
+    assert.equal(await memorySettled(memory, t.runId), "ready");
+    const saved = t.fake.rows.get(memoryId(t.runId))!.data as typeof old;
+    // First canon stays canon: every 0.6.16 record is kept as it was; only the missing summaries are added.
+    assert.deepEqual(saved.records.slice(0, 4), old.records);
+    assert.deepEqual(
+      saved.records.slice(4).map((record) => [record.key, record.content]),
+      [
+        [key("chapter", route), "SUMMARY: PRIVATE-LEDGER"],
+        [key("character-story", "date-1"), "SUMMARY: KAI-DATE"],
+      ],
+    );
+    // The overview is folded again over the whole timeline, her route and his date in their places.
+    assert.deepEqual(
+      saved.overview.sources.map(([source]) => source),
+      [key("chapter", "main-1"), key("chapter", route), key("character-story", "date-1"), key("chapter", "main-2")],
+    );
+    // Recall now answers under the new rules: the overview, no chapter word for word but the previous one.
+    const mir = (await recallText(t.deps, t.runId, { job: "narration", cast: [MIR], continues: "main" })).text;
+    assert.match(mir, /# Canon to date\n[^\n]*PRIVATE-LEDGER[^\n]*KAI-DATE/u);
+    assert.match(mir, /# Previous chapter in full: Night 2\nSECOND-NIGHT/u);
+    assert.ok(!mir.includes("Canon in full") && !mir.includes("forged pages"));
+    const kai = await recallText(t.deps, t.runId, {
+      job: "chat",
+      reader: KAI,
+      query: { cues: ["Do you remember the jellyfish under the pier?"] },
+    });
+    assert.ok(kai.text.includes(`# Recalled character-story: ${KAI_DATE}\nSUMMARY: KAI-DATE`), kai.text);
+  } finally {
+    release();
+    memory.dispose();
+  }
+});
+
+/** How the story names Kai's route chapter "Kai's Lamp" (S/story/canon.ts titleOf). */
+const KAI_ROUTE =
+  "Kai's own route chapter \"Kai's Lamp\" (private: only the people in its scenes know what happened in it)";
+
+test("the previous chapter in full is the last of the storyline the prompt continues, and what may give way", async () => {
+  // No memory: the canonical history, GF's legacy one. Kai's date after Night 1, his route chapter after Night 2.
+  const t = await storyWorld({ runKey: "r-storyline-aaaaaa", replies: [] });
+  await completeChapter(
+    t,
+    { key: "main-1", kind: "main", number: 1, lead: KAI, title: "Night 1" },
+    "NIGHT-ONE: the quay goes dark.",
+    "2026-10-28T09:00:00.000Z",
+  );
+  await completeChapter(
+    t,
+    { key: "date-1", kind: "date", li: KAI, lead: KAI, title: "Jellyfish Hour" },
+    "KAI-DATE: Kai counts jellyfish.",
+    "2026-10-28T10:00:00.000Z",
+  );
+  await completeChapter(
+    t,
+    { key: "main-2", kind: "main", number: 2, lead: KAI, title: "Night 2" },
+    "NIGHT-TWO: the bell rings.",
+    "2026-10-28T11:00:00.000Z",
+  );
+  await completeChapter(
+    t,
+    { key: `route-${KAI}-3`, kind: "route", li: KAI, lead: KAI, stage: 3, title: "Kai's Lamp" },
+    "KAI-ROUTE: Kai lights the lamp for her.",
+    "2026-10-28T12:00:00.000Z",
+  );
+  const recall = (options: Parameters<typeof recallText>[2]) => recallText({ store: t.store }, t.runId, options);
+  const full = (title: string, text: string) => `# Canon in full: ${title}\n${text}`;
+  // The main story's plans and scenes continue Night 2, his route's his route chapter; one who has none, Night 2; a
+  // chat reply the newest he may know.
+  for (const [options, previous] of [
+    [{ cast: [KAI], continues: "main" }, "Night 2\nNIGHT-TWO"],
+    [{ cast: [KAI], continues: KAI }, `${KAI_ROUTE}\nKAI-ROUTE`],
+    [{ cast: [MIR], continues: MIR }, "Night 2\nNIGHT-TWO"],
+    [{ reader: KAI }, `${KAI_ROUTE}\nKAI-ROUTE`],
+  ] as const) {
+    const { text } = await recall({ job: "structured", ...options });
+    assert.ok(text.includes(`# Previous chapter in full: ${previous}`), `${JSON.stringify(options)}: ${text}`);
+  }
+  // GF's legacy rule: the previous chapter and all after it stay; what came before it may give way at the reply floor,
+  // the storyline chapters first, then the dates, each oldest first.
+  const main = await recall({ job: "structured", cast: [KAI], continues: "main" });
+  assert.deepEqual(main.optional, [
+    full("Night 1", "NIGHT-ONE: the quay goes dark."),
+    full(KAI_DATE, "KAI-DATE: Kai counts jellyfish."),
+  ]);
+  assert.ok(main.text.includes(full(KAI_ROUTE, "KAI-ROUTE: Kai lights the lamp for her.")), "after it, it stays");
+  const route = await recall({ job: "structured", cast: [KAI], continues: KAI });
+  assert.deepEqual(route.optional, [
+    full("Night 1", "NIGHT-ONE: the quay goes dark."),
+    full("Night 2", "NIGHT-TWO: the bell rings."),
+    full(KAI_DATE, "KAI-DATE: Kai counts jellyfish."),
+  ]);
+
+  // The newest of the others goes in however long, past the bound the older ones keep to.
+  const long = Array.from({ length: 140 }, (_, n) =>
+    Array.from({ length: 100 }, (_, w) => `lamp${(n + w) % 89}`).join(" "),
+  );
+  await completeChapter(
+    t,
+    { key: `route-${KAI}-4`, kind: "route", li: KAI, lead: KAI, stage: 4, title: "Kai's Long Watch" },
+    ["LONG-WATCH-START", ...long, "LONG-WATCH-END"],
+    "2026-10-28T13:00:00.000Z",
+  );
+  const after = await recall({ job: "structured", cast: [KAI], continues: "main" });
+  assert.ok(estimateTextTokens(after.text) > 14_000, "a chapter past the bound");
+  assert.ok(after.text.includes("LONG-WATCH-START") && after.text.includes("LONG-WATCH-END"), "kept whole");
+  assert.ok(!after.optional.some((block) => block.includes("LONG-WATCH")), "after the previous chapter, so it stays");
+});
+
+test("with memory ready, recent canon is GF's: only older chapter summaries may give way, nothing twice", async () => {
+  // The overview fold is refused, so everything but the newest chapter is recent canon beside the summaries.
+  const replies = Array.from(
+    { length: 40 },
+    () => (messages: CapabilityLanguageModelMessage[]) =>
+      JSON.parse(messages.at(-1)!.content).source ? markerSummary(messages) : "I can't help with summarizing this.",
+  );
+  const t = await storyWorld({ runKey: "r-lagging-aaaaaa", replies });
+  await completeChapter(
+    t,
+    { key: "main-1", kind: "main", number: 1, lead: KAI, title: "Night 1" },
+    "NIGHT-ONE: dark.",
+    "2026-10-28T09:00:00.000Z",
+  );
+  await completeChapter(
+    t,
+    { key: "main-2", kind: "main", number: 2, lead: KAI, title: "Night 2" },
+    "NIGHT-TWO: bell.",
+    "2026-10-28T10:00:00.000Z",
+  );
+  await completeChapter(
+    t,
+    { key: "date-1", kind: "date", li: KAI, lead: KAI, title: "Jellyfish Hour" },
+    "KAI-DATE: Kai counts jellyfish.",
+    "2026-10-28T11:00:00.000Z",
+  );
+  await completeChapter(
+    t,
+    { key: "main-3", kind: "main", number: 3, lead: KAI, title: "Night 3" },
+    "NIGHT-THREE: dawn.",
+    "2026-10-28T12:00:00.000Z",
+  );
+  const memory = createOtomeMemory({ runtime: t.runtime, store: t.store });
+  try {
+    assert.equal(await memory.maintain({ runId: t.runId }), true);
+    assert.equal(await memorySettled(memory, t.runId), "error", "the overview never folded");
+    const context = await recallText({ store: t.store, memory }, t.runId, {
+      job: "structured",
+      cast: [KAI],
+      continues: "main",
+    });
+    for (const block of [
+      "# Recent canon summary: Night 1\nSUMMARY: NIGHT-ONE",
+      "# Recent canon summary: Night 2\nSUMMARY: NIGHT-TWO",
+      `# Recent canon summary: ${KAI_DATE}\nSUMMARY: KAI-DATE`,
+      "# Previous chapter in full: Night 3\nNIGHT-THREE: dawn.",
+    ]) {
+      assert.ok(context.text.includes(block), `${block}\n---\n${context.text}`);
+    }
+    // Night 2 is the newest chapter summary though his date is newer, and the date is a Character Story: both stay.
+    assert.deepEqual(context.optional, ["# Recent canon summary: Night 1\nSUMMARY: NIGHT-ONE"]);
+  } finally {
+    memory.dispose();
+  }
+
+  // Memory caught up: the newest chapter is never repeated beside the overview when the prompt continues another one.
+  const ready = await storyWorld({
+    runKey: "r-covered-aaaaaa",
+    replies: Array.from({ length: 40 }, () => markerSummary),
+  });
+  await completeChapter(
+    ready,
+    { key: "main-1", kind: "main", number: 1, lead: KAI, title: "Night 1" },
+    "NIGHT-ONE: dark.",
+    "2026-10-28T09:00:00.000Z",
+  );
+  await completeChapter(
+    ready,
+    { key: `route-${MIR}-2`, kind: "route", li: MIR, lead: MIR, stage: 2, title: "Mireille's Ledger" },
+    "PRIVATE-LEDGER: Mireille shows Ines the forged pages of the harbour ledger.",
+    "2026-10-28T10:00:00.000Z",
+  );
+  await completeChapter(
+    ready,
+    { key: "main-2", kind: "main", number: 2, lead: KAI, title: "Night 2" },
+    "NIGHT-TWO: bell.",
+    "2026-10-28T11:00:00.000Z",
+  );
+  await completeChapter(
+    ready,
+    { key: `route-${KAI}-3`, kind: "route", li: KAI, lead: KAI, stage: 3, title: "Kai's Lamp" },
+    "KAI-ROUTE: Kai lights the lamp for her.",
+    "2026-10-28T12:00:00.000Z",
+  );
+  const caught = createOtomeMemory({ runtime: ready.runtime, store: ready.store });
+  try {
+    assert.equal(await caught.maintain({ runId: ready.runId }), true);
+    assert.equal(await memorySettled(caught, ready.runId), "ready");
+    const recall = (options: Parameters<typeof recallText>[2]) =>
+      recallText({ store: ready.store, memory: caught }, ready.runId, options);
+    for (const options of [
+      { job: "structured", cast: [KAI], continues: "main" },
+      { job: "structured", cast: [KAI], continues: KAI },
+    ] as const) {
+      const { text } = await recall(options);
+      assert.match(text, /# Canon to date\n[^\n]*NIGHT-TWO[^\n]*KAI-ROUTE/u, JSON.stringify(options));
+      assert.ok(!text.includes("# Recent canon"), `the overview covers it: ${JSON.stringify(options)}\n${text}`);
+    }
+    // Another love interest's route chapter never comes back to Kai as a recalled detail, whatever the cue; for her
+    // the same cue brings it back.
+    const cued = (cast: string[]) =>
+      recall({
+        job: "narration",
+        cast,
+        continues: "main",
+        query: { cues: ["the forged pages of the harbour ledger"] },
+      });
+    const kai = beyondOverview((await cued([KAI])).text);
+    assert.ok(!kai.includes("PRIVATE-LEDGER") && !kai.includes("Mireille's Ledger"), kai);
+    assert.ok((await cued([MIR])).text.includes(`# Recalled chapter: ${MIREILLE_LEDGER}\nSUMMARY: PRIVATE-LEDGER`));
+  } finally {
+    caught.dispose();
+  }
+});
+
+test("dates a 0.6.16 story kept word for word wait on the bounded history, never all as written", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const t = await storyWorld({
+    runKey: "r-olddates-aaaaaa",
+    replies: Array.from({ length: 40 }, () => markerSummary),
+    model: {
+      admissionRun: async (operation) => {
+        await gate;
+        return operation();
+      },
+    },
+  });
+  await completeChapter(
+    t,
+    { key: "main-1", kind: "main", number: 1, lead: KAI, title: "Night 1" },
+    "NIGHT-ONE: dark.",
+    "2026-10-28T09:00:00.000Z",
+  );
+  for (const [n, title, text] of [
+    [1, "Jellyfish Hour", "KAI-DATE-ONE: Kai counts jellyfish."],
+    [2, "Tide Pools", "KAI-DATE-TWO: Kai names the crabs."],
+  ] as const) {
+    await completeChapter(
+      t,
+      { key: `date-${n}`, kind: "date", li: KAI, lead: KAI, title },
+      text,
+      `2026-10-28T1${n}:00:00.000Z`,
+    );
+  }
+  await completeChapter(
+    t,
+    { key: "main-2", kind: "main", number: 2, lead: KAI, title: "Night 2" },
+    "NIGHT-TWO: bell.",
+    "2026-10-28T13:00:00.000Z",
+  );
+  // As 0.6.16 kept it: the main chapters summarized and in the overview, the dates word for word as `chat` records.
+  const key = (kind: string, id: string) => JSON.stringify([kind, id]);
+  const record = (kind: string, id: string, order: number, content: string) => ({
+    id,
+    kind,
+    title: id,
+    order,
+    key: key(kind, id),
+    fingerprint: `fp-${id}`,
+    content,
+  });
+  await t.fake.documents.create({
+    ...runDocTarget("memory", memoryId(t.runId)),
+    packageId: "otome-forge",
+    description: "",
+    data: {
+      version: 1,
+      records: [
+        record("chapter", "main-1", 10000, "SUMMARY: NIGHT-ONE"),
+        record("chat", "date-1", 15000, "KAI-DATE-ONE: Kai counts jellyfish."),
+        record("chat", "date-2", 15001, "KAI-DATE-TWO: Kai names the crabs."),
+        record("chapter", "main-2", 20000, "SUMMARY: NIGHT-TWO"),
+      ],
+      work: [],
+      overview: {
+        content: "SUMMARY: NIGHT-ONE SUMMARY: NIGHT-TWO",
+        sources: [
+          [key("chapter", "main-1"), "fp-main-1"],
+          [key("chapter", "main-2"), "fp-main-2"],
+        ],
+      },
+      status: { phase: "ready", retryable: false, operationId: "op-0.6.16" },
+    },
+    createdAt: "2026-10-28T13:00:00.000Z",
+    updatedAt: "2026-10-28T13:00:00.000Z",
+  });
+  const memory = createOtomeMemory({ runtime: t.runtime, store: t.store });
+  try {
+    const before = (
+      await recallText({ store: t.store, memory }, t.runId, { job: "narration", cast: [KAI], continues: "main" })
+    ).text;
+    assert.ok(!before.includes("# Recent canon in full") && !before.includes("# Canon to date"), before);
+    assert.ok(before.includes('# Canon in full: Kai\'s own date chapter "Tide Pools"'), "the bounded history instead");
+    assert.equal((await memory.status(t.runId)).phase, "pending", "the catch-up is queued");
+    release();
+    assert.equal(await memorySettled(memory, t.runId), "ready");
+    const after = (
+      await recallText({ store: t.store, memory }, t.runId, { job: "narration", cast: [KAI], continues: "main" })
+    ).text;
+    assert.match(after, /# Canon to date\n[^\n]*KAI-DATE-ONE[^\n]*KAI-DATE-TWO/u);
+    assert.ok(!after.includes("Canon in full") && !after.includes("names the crabs"), after);
+  } finally {
+    release();
+    memory.dispose();
+  }
+});
+
+test("what he learned in Read Me still comes back while the chapter just played has no summary yet", async () => {
+  // Background upkeep never runs here, so the long chapter just completed keeps no summary.
+  const t = await storyWorld({
+    runKey: "r-readmelatest-aaaaaa",
+    replies: [],
+    model: { admissionRun: () => new Promise(() => undefined) },
+  });
+  const lines = Array.from({ length: 70 }, (_, n) =>
+    Array.from({ length: 100 }, (_, w) => `wave${(n + w) % 83}`).join(" "),
+  );
+  await completeChapter(
+    t,
+    { key: "main-1", kind: "main", number: 1, lead: KAI, title: "Night 1" },
+    lines,
+    "2026-10-28T09:00:00.000Z",
+  );
+  const entry = (set: string, i: number, text: string): NotebookEntry => ({
+    id: `${set}/${i}`,
+    category: (["likes", "fears", "habits", "dreams"] as const)[i % 4]!,
+    text,
+    verdict: "right",
+    at: "2026-10-28T08:00:00.000Z",
+  });
+  const known = [
+    entry("rmold1", 0, "LIGHTHOUSE-NOTE: Ines climbs to the lighthouse lamp when she cannot sleep."),
+    ...["rmset2", "rmset3", "rmset4"].flatMap((set) =>
+      [0, 1, 2, 3].map((i) => entry(set, i, `${set}-${i}: Ines likes tea.`)),
+    ),
+  ];
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+    ...state,
+    lis: { ...state.lis, [KAI]: { ...state.lis[KAI]!, known } },
+  }));
+  const memory = createOtomeMemory({ runtime: t.runtime, store: t.store });
+  try {
+    const { text } = await recallText({ store: t.store, memory }, t.runId, {
+      job: "narration",
+      cast: [KAI],
+      continues: "main",
+      query: { cues: ["Ines cannot sleep, so she climbs toward the lighthouse lamp."] },
+    });
+    assert.ok(estimateTextTokens(text) > 6000 && text.includes("# Previous chapter in full: Night 1"), "sent in full");
+    assert.ok(text.includes("likes: LIGHTHOUSE-NOTE"), "the chapter sent in full costs the side memories nothing");
+  } finally {
+    memory.dispose();
+  }
+});
+
+test("the chapter plan, its scenes and its Confrontation hand their memory to the fit", async () => {
+  // A connection with a 1M-token window, and memory recalled for a 60k one: the prompt fits the smaller with its whole
+  // reply budget only once the recalled detail gives way. A caller that kept its memory from the fit would send it.
+  const t = await storyWorld({
+    runKey: "r-squeeze-aaaaaa",
+    replies: router(),
+    model: { maxContext: 1_000_000, maxOutputTokens: null },
+  });
+  t.deps.memory = squeezedMemory(60_000);
+  assert.equal((await t.call("POST", "/runs/:run/chapters/next", { lead: KAI })).status, 200);
+  await readThrough(t, 0, 4);
+  const served = await t.call("POST", beatPath, {}, node(5));
+  assert.equal(served.status, 200, JSON.stringify(served.body));
+  assert.ok(served.body.confrontation, "node 6 is the Confrontation");
+  const prompts = [
+    ["P5", t.calls.filter((call) => isPlanner(call.messages))],
+    ["P6", t.calls.filter((call) => /Narrate node \d+ of/.test(call.messages.at(-1)!.content))],
+    ["P12", t.calls.filter((call) => isConfrontationPrompt(call.messages))],
+  ] as const;
+  for (const [name, calls] of prompts) {
+    assert.ok(calls.length, `${name} was sent`);
+    for (const call of calls) {
+      const text = call.messages.map((message) => message.content).join("\n");
+      assert.ok(text.includes("SQUEEZED-OVERVIEW"), `${name} keeps the overview`);
+      assert.ok(!text.includes("SQUEEZED-DETAIL"), `${name} lets the recalled detail give way`);
+      assert.ok(call.options!.maxTokens! >= 24_192, `${name} keeps its whole reply budget`);
+    }
   }
 });
 

@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────
-// Otome Forge: story memory status and Retry (shown only under Settings → Debug)
+// Otome Forge: story memory status and Retry (shown under Settings → Connections and Settings → Debug)
 // ──────────────────────────────────────────────
 // GET  /runs/:run/memory/status → {status}  the kit's memory status (phase ready | pending | stale | error |
 //                                           context-unknown, with its reason and counts)

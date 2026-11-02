@@ -59,6 +59,7 @@ const ERROR_MESSAGE_KEYS: Record<OtomeErrorCode, string> = {
   declined: "ui.otomeForge.errors.declined",
   "bad-format": "ui.otomeForge.errors.badFormat",
   "no-connection": "ui.otomeForge.errors.noConnection",
+  capacity: "ui.otomeForge.errors.capacity",
 };
 
 function isErrorCode(value: unknown): value is OtomeErrorCode {

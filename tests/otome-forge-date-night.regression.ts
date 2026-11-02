@@ -5,9 +5,9 @@
 // only (easing off a scene before its choice never mends it), and says it mended only when no rupture is left (another
 // one still owed keeps it standing, as M2b's repair does); a date open before a rupture keeps its kind (the hub says
 // so), and one whose rupture is mended elsewhere goes on as an ordinary date (its later scenes, the hub, its finish);
-// the plan and scenes say who holds the rupture (the love interest's hurt, or the protagonist's); a date is private
-// memory (a `chat` source with audience [li], titled private) that another love
-// interest's prompts never see; P26 and the date's scenes see the state as its love interest may know it (M3's
+// the plan and scenes say who holds the rupture (the love interest's hurt, or the protagonist's); a date is his own
+// memory (a `character-story` source with audience [li], titled private) that another love interest's prompts never
+// see beyond the overview; P26 and the date's scenes see the state as its love interest may know it (M3's
 // ownView); a date can go to a place the story painted (M2b's world.places), under its own name; starting twice plans
 // once; and the keepsake paints only on request, once, through the image client.
 import assert from "node:assert/strict";
@@ -775,7 +775,7 @@ test("a date open when a rupture starts keeps its kind, and the hub says so unti
   assert.equal(await makeItRight(), true);
 });
 
-test("a date is private memory: a chat source for its love interest that no one else's prompt sees", async () => {
+test("a date is his own memory: a Character Story source for its love interest, in no one else's prompt", async () => {
   const t = await dateWorld("r-mg5date-aa0004");
   const { date } = await startDate(t);
   await playDate(t, date.key, [1, 1, 1]);
@@ -784,7 +784,8 @@ test("a date is private memory: a chat source for its love interest that no one 
   const sources = await readStorySources(t.store, t.runId, await t.state(), "Ines");
   const source = sources.find((item) => item.id === date.key);
   assert.ok(source);
-  assert.equal(source.kind, "chat");
+  // GF's bond chapter (0.6.17): summarized and folded into the overview, recalled in detail only by its love interest.
+  assert.equal(source.kind, "character-story");
   // Private, as M3 titles a love interest's own chapter: a scene with others in it knows nobody else was there.
   assert.equal(
     source.title,
@@ -793,7 +794,7 @@ test("a date is private memory: a chat source for its love interest that no one 
   assert.deepEqual(source.audience, [KAI]);
   assert.ok(source.content.includes("Line 1 from Kai."));
 
-  const recall = (cast: string[]) => recallText(t.deps, t.runId, { job: "narration", cast });
+  const recall = async (cast: string[]) => (await recallText(t.deps, t.runId, { job: "narration", cast })).text;
   assert.ok((await recall([KAI])).includes("Line 2 from Kai."));
   assert.equal((await recall([MIR])).includes("Line 2 from Kai."), false);
   assert.equal((await recall([])).includes("Line 2 from Kai."), false);

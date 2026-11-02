@@ -540,9 +540,13 @@ async function generateBeat(
   if (storySoFar === null) throw conflict("An earlier beat of this chapter is not settled yet.");
   const units = castUnits(run);
   const present = units.filter((unit) => node.cast.includes(unit.id));
+  // The previous chapter in full is the one this chapter's storyline continues: the main story's for a main chapter,
+  // his own for his route or repair chapter; a date or a story takes the newest the scene may know.
   const memory = await recallText(deps, runId, {
     job: "narration",
     cast: node.cast,
+    ...(chapter.kind === "main" ? { continues: "main" as const } : {}),
+    ...((chapter.kind === "route" || chapter.kind === "repair") && chapter.li ? { continues: chapter.li } : {}),
     query: {
       cues: [storySoFar.slice(-2000), node.guide].filter(Boolean),
       plan: node.guide,
@@ -582,7 +586,7 @@ async function generateBeat(
     chapter,
     node,
     storySoFar,
-    memory,
+    memory: memory.text,
     prologue,
   };
   let body: Omit<Beat, "key" | "i" | "kind" | "choiceCanon" | "applied" | "readThrough" | "written" | "rewrites">;
@@ -598,6 +602,7 @@ async function generateBeat(
       job: "narration",
       label: `${climax}/${key}/${i}`,
       messages: (climax === "closer" ? closerMessages : confrontationMessages)({ ...input, li: opponent }),
+      memory,
       schema: ConfrontationReplySchema,
       normalize: (reply) => {
         const game = normalizeConfrontationReply(reply, shape, lists);
@@ -630,6 +635,7 @@ async function generateBeat(
       job: "narration",
       label: `beat/${key}/${i}`,
       messages: beatMessages(input),
+      memory,
       schema: BeatReplySchema,
       normalize: (reply) => {
         const beat = normalizeBeatReply(reply, context);
