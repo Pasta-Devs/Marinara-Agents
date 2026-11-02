@@ -81,11 +81,12 @@ function render(unit: SceneCardUnit, stage: number, learnedTells: readonly numbe
     sentence(["The protagonist has learned to read these tells and may call them out: ", list(learned)]),
     sentence(["Hidden (never state it; it may show only as these tells): ", list(hidden)]),
     sentence(["The protagonist knows: ", list(known)]),
-    // Shown at every stage, so the bible keeps it to what they are; a secret's events stay in secrets (setup/prompts.ts).
+    // Darkness comes last, so a card cut to fit keeps the red lines and moral code it kept before. It shows at every
+    // stage, so the bible keeps it to what they are; a secret's events stay in secrets (setup/prompts.ts).
     sentence(
-      ["Darkness: ", list(bible.darkness.kinds)],
       ["Red lines: ", list(bible.redLines)],
       ["Moral code: ", one(bible.moralCode)],
+      ["Darkness: ", list(bible.darkness.kinds)],
     ),
   ]
     .filter(Boolean)
