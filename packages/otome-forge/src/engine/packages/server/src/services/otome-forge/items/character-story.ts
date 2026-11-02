@@ -31,6 +31,7 @@ import { normalizeChapter } from "../schemas/story.js";
 import { normalizeItem } from "../schemas/wish.js";
 import { recallText } from "../story/canon.js";
 import { clean, planLedger, planNodes, planTags, type ChapterDeps, type PlannedChapter } from "../story/chapters.js";
+import { storyPlanMessages } from "../prompts.js";
 import {
   STORY_NODES_MAX,
   STORY_NODES_MIN,
@@ -38,9 +39,8 @@ import {
   STORY_PLAN_TOKENS,
   StoryPlanSchema,
   checkLine,
-  storyPlanMessages,
   type StoryPlanReply,
-} from "./prompts.js";
+} from "./replies.js";
 
 /** The item kinds whose first open writes a chapter. */
 export const STORY_KINDS: ReadonlySet<Item["kind"]> = new Set(["memory5", "moment4", "his-look5"]);
@@ -105,7 +105,7 @@ export function normalizeStoryPlan(
   const line = checkLine(reply.voicedLine, NOTICED_WORDS_MAX);
   if (typeof line === "string") return `voicedLine: ${line}`;
   // Only his rows are kept: a ledger row of a `story-` chapter is read as private to the love interest it names
-  // (S/story/prompts.ts knownTo), so a row about anyone else would carry his private story into their plans.
+  // (S/prompts.ts knownTo), so a row about anyone else would carry his private story into their plans.
   const own = {
     relationship: ledger.relationship.filter((row) => row.li === li),
     conflict: ledger.conflict.filter((row) => row.li === li),

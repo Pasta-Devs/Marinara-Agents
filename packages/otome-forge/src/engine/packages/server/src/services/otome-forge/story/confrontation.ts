@@ -64,7 +64,7 @@ import {
   CONFRONTATION_HIS_MAX,
   CONFRONTATION_OPENING_MAX,
   type ConfrontationReply,
-} from "./prompts.js";
+} from "./replies.js";
 
 const LABEL_MAX = 200;
 const SELECTION_MAX = 400;

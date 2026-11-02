@@ -9,7 +9,7 @@
 //   suggestions  the replies offered after his latest message (cleared by the next send or close)
 // A thread is private: only its own love interest's prompts read it, and its closed sessions reach memory only with
 // `audience: [li]` (S/phone/memory.ts phoneMemorySources). His replies (P17) recall as his own reader, and read the
-// ledger lines and his grievances and disclosures his own reader may know (story/prompts.ts ownView), so another love
+// ledger lines and his grievances and disclosures his own reader may know (S/prompts.ts ownView), so another love
 // interest's route, repair or date chapter never reaches him here.
 //
 // Send (P17) and close (P18) each hold the thread's one write in flight (the kit's withForgeChatSend): a second while
@@ -47,15 +47,8 @@ import { readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeWorld } from "../schemas/world.js";
 import type { OtomeStore } from "../store.js";
 import { recallText, type StoryMemory } from "../story/canon.js";
-import { ownView } from "../story/prompts.js";
-import {
-  ChatReplySchema,
-  SUGGESTIONS_MAX,
-  chatReplyMessages,
-  normalizeChatReply,
-  type ChatReply,
-  type ReplyStickers,
-} from "./prompts.js";
+import { chatReplyMessages, ownView } from "../prompts.js";
+import { ChatReplySchema, SUGGESTIONS_MAX, normalizeChatReply, type ChatReply, type ReplyStickers } from "./replies.js";
 
 // ── The thread document (its wire shapes are in SH/api-types.ts) ──
 
@@ -70,7 +63,7 @@ export const TAIL_MESSAGES = 16;
 export const LISTED_SESSIONS = 6;
 /** A client message id, or one this file makes. */
 export const MESSAGE_ID = /^[a-z0-9][a-z0-9-]{7,59}$/;
-// What a stored thread may hold: generous beside the prompt limits (S/phone/prompts.ts), so a later change of those
+// What a stored thread may hold: generous beside the prompt limits (S/phone/replies.ts), so a later change of those
 // never drops a saved message.
 const STORED_TEXT_MAX = 4000;
 const STORED_QUOTE_MAX = 1200;

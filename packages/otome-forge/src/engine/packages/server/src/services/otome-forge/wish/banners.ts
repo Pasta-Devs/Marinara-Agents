@@ -8,7 +8,7 @@
 // A month's first rotation (its start day the 1st to the 14th, SH/wish.ts rotationSeason) is seasonal: its three banners
 // are planned on that month's theme and keep it as `season`, which their views (Echoes too) carry for the badge. Any
 // later rotation that month is the planner's free choice, as before; a banner written before 0.6.5 has no season.
-// Creating a banner is one P20 call (S/wish/prompts.ts) in the run's foreground queue (readOrGenerate), so two opens at
+// Creating a banner is one P20 call (S/prompts.ts bannerPlanMessages) in the run's foreground queue (readOrGenerate), so two opens at
 // once write it once: the second finds it stored. Its items are written first and the banner last, so a banner that
 // exists always has its items; ids follow the banner (`memories-3-f`), so a retry after a failed write rewrites the
 // same documents. A run deleted meanwhile gets nothing back: what was written is removed again.
@@ -63,8 +63,17 @@ import {
   updateIfChanged,
   type PaintCheck,
 } from "../art/paint.js";
-import { LOOK_SIZE, SCENE_SIZE, cgPrompt, lookPrompt, type ImagePrompt } from "../art/prompts.js";
-import { memoryArtBrief } from "../content-contract.js";
+import {
+  type ImagePrompt,
+  LOOK_SIZE,
+  SCENE_SIZE,
+  bannerPlanMessages,
+  cgPrompt,
+  explicitMemoryArt,
+  lookPrompt,
+  memoryArtBrief,
+  momentBriefs,
+} from "../prompts.js";
 import { generateJson, readOrGenerate } from "../generation.js";
 import { itemView } from "../items/open.js";
 import { OtomeForgeError, type RouteDeps } from "../http.js";
@@ -73,7 +82,7 @@ import { normalizeState, readRun, type RunDocuments } from "../schemas/state.js"
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeBanner, normalizeItem } from "../schemas/wish.js";
 import { normalizeWorld } from "../schemas/world.js";
-import { withPersonaImageAppearance } from "../setup/prompts.js";
+import { withPersonaImageAppearance } from "../setup/cast.js";
 import type { OtomeStore } from "../store.js";
 import { cancellable } from "../story/beats.js";
 import { recallText } from "../story/canon.js";
@@ -81,12 +90,9 @@ import {
   BANNER_PLAN_TEMPERATURE,
   BANNER_PLAN_TOKENS,
   BannerPlanSchema,
-  bannerPlanMessages,
-  explicitMemoryArt,
-  momentBriefs,
   normalizeBannerPlan,
   type BannerPlan,
-} from "./prompts.js";
+} from "./replies.js";
 
 export type WishDeps = Pick<RouteDeps, "runtime" | "store" | "images" | "memory" | "cancellation">;
 

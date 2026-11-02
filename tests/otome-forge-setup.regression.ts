@@ -33,7 +33,10 @@ import type {
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/image-client.ts";
 import { createImageClient } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/image-client.ts";
 import { paintView } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/paint.ts";
-import { lookPrompt } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/prompts.ts";
+import {
+  bannedPhrasesRule,
+  lookPrompt,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import {
   createHandle,
   type OtomeReply,
@@ -61,8 +64,7 @@ import {
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { checkBible } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/setup/bible.ts";
-import { WorldPlanSchema } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/setup/prompts.ts";
-import { bannedPhrasesRule } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/writing-rules.ts";
+import { WorldPlanSchema } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/setup/cast.ts";
 import {
   forgeSettled,
   initialForge,

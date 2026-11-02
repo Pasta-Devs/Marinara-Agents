@@ -44,14 +44,6 @@ const NoticedSchema = z.object({
   at: z.string(),
 });
 
-/** The persona's full authored story fields, as every protagonist block carries them, or "" without them. */
-export function aboutLine(player: Pick<Player, "about">): string {
-  const about = player.about?.trim();
-  return about
-    ? `Who they are (their persona): ${about}\nTreat these authored fields as the protagonist's canon; do not invent conflicting biography or permanent traits. When authoring the protagonist's dialogue, thoughts, reactions, choice-option intents/labels or performed choice selections, ground their voice, motives and behaviour in these fields. Keep choice options meaningfully distinct and preserve the player's agency; never override or rewrite an accepted choice to fit the persona.`
-    : "";
-}
-
 export function normalizePlayer(data: unknown): Player {
   const player = readFields<Player>(
     {

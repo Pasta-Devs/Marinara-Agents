@@ -40,11 +40,14 @@ import {
   type PlanContext,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/chapters.ts";
 import {
+  arcPlanMessages,
   beatMessages,
   chapterPlanMessages,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
+import {
   ChapterPlanSchema,
   type ChapterPlanReply,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/prompts.ts";
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/replies.ts";
 import {
   beatId,
   chapterId,
@@ -54,7 +57,6 @@ import {
 import { readRun } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import { introduceLoveInterest } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/introduce.ts";
 import {
-  arcPlanMessages,
   planArc,
   revealedSoFar,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/arc.ts";

@@ -206,7 +206,7 @@ export function possessiveOf(protagonist: CareProtagonist): string {
 /**
  * "{Name} has told you: today is day {n} of their period." (or "…their period is due in {n} days." / "…due around
  * today."). In English whatever the locale: it is prompt text, which is never localized. Because she told him, he may
- * know it. S/care/prompts.ts accepts exactly these (allowedCareLines mirrors careLines; a regression pins the two).
+ * know it. S/care/care-line.ts accepts exactly these (allowedCareLines mirrors careLines; a regression pins the two).
  */
 export function careLine(state: CycleToday, protagonist: CareProtagonist): string {
   const name = protagonist.name.trim() || "The protagonist";

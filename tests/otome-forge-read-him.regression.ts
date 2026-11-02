@@ -41,6 +41,9 @@ import {
 import { createOtomeMemory } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/memory.ts";
 import {
   READ_HIM_WORDS,
+  otomeSceneCard,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
+import {
   ReadHimReplySchema,
   checkReadHimReply,
   normalizeSet,
@@ -50,7 +53,6 @@ import {
   type ReadHimReply,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/minigames/read-him.ts";
 import { registerReadHimRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/read-him.ts";
-import { otomeSceneCard } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/scene-card.ts";
 import { normalizeState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import type { FakeReply } from "./fixtures/otome-forge-fakes.ts";

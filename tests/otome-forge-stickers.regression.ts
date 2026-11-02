@@ -26,8 +26,10 @@ import type { CutoutClient } from "../packages/otome-forge/src/engine/packages/s
 import { cutoutsSettled } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cutout.ts";
 import {
   STICKER_FRAMING,
+  chatReplyMessages,
+  renderThread,
   stickerPrompt,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/prompts.ts";
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import {
   normalizeStickerSetReply,
   queueStickers,
@@ -46,11 +48,9 @@ import {
   sendMessage,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/chat.ts";
 import {
-  chatReplyMessages,
   normalizeChatReply,
-  renderThread,
   type ReplySticker,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/prompts.ts";
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/replies.ts";
 import { registerAlbumRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/album.ts";
 import { registerArtRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/art.ts";
 import { registerRunRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/runs.ts";

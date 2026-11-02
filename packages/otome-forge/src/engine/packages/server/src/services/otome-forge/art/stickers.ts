@@ -15,7 +15,7 @@
 //
 // Names: in prompts a sticker is `[name_emotion]`: the protagonist's slug (SH ids nameSlug with "_"), or his, which
 // takes `_<the last 4 characters of his id>` when the protagonist or another love interest has the same slug, so
-// every name is one sticker. P17 lists only stickers that exist, and its parser (phone/prompts.ts) reads either order.
+// every name is one sticker. P17 lists only stickers that exist, and its parser (phone/replies.ts) reads either order.
 // ponytail: the chain and the set jobs' cool-down live in this process; a restart stops them and the next read of the
 // run starts them again (a stopped sticker waits for a tap). Upgrade path: a job document.
 import { z } from "zod";
@@ -24,7 +24,6 @@ import type {
   Paint,
   StickerSet,
   StickerView,
-  Unit,
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { levelOf } from "../../../../../client/src/features/otome-forge/shared/economy.js";
@@ -41,7 +40,7 @@ import {
 } from "../../../../../client/src/features/otome-forge/shared/stickers.js";
 import type { AlbumSticker } from "../../../../../client/src/features/otome-forge/shared/wardrobe.js";
 import type { BackgroundQueue } from "../background-queue.js";
-import { generateJson, resolveConnectionId, type GenerationDeps, type OtomeMessage } from "../generation.js";
+import { generateJson, resolveConnectionId, type GenerationDeps } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
 import { nameSlug, playerId, runDocTarget, unitId } from "../ids.js";
 import { normalizePlayer } from "../schemas/player.js";
@@ -62,7 +61,7 @@ import {
   type PaintCheck,
   type PaintOwner,
 } from "./paint.js";
-import { STICKER_SIZE, stickerPrompt, type ImagePrompt } from "./prompts.js";
+import { type ImagePrompt, STICKER_SIZE, stickerPrompt, stickerSetMessages } from "../prompts.js";
 
 type Run = Pick<RunDocuments, "world" | "player" | "units" | "state">;
 type Owner = typeof PLAYER_STICKER_OWNER | LiId;
@@ -320,68 +319,6 @@ export function normalizeStickerSetReply(
   if (others.some((emotions) => [...emotions].sort().join(" ") === mine))
     return "this set is the same as another love interest's: choose nine that are his own";
   return set;
-}
-
-/** The design prompt: who he is, from his card and bible, and the other love interests' sets to differ from. */
-export function stickerSetMessages({
-  unit,
-  language,
-  others,
-}: {
-  unit: Pick<Unit, "name" | "pronouns" | "identityLine" | "outfitLine" | "bible">;
-  language: string;
-  others: ReadonlyArray<{ name: string; emotions: readonly string[] }>;
-}): OtomeMessage[] {
-  const bible = unit.bible;
-  const look = [unit.identityLine || bible?.look.identityLine, unit.outfitLine || bible?.look.outfitLine]
-    .map((line) => line?.trim())
-    .filter(Boolean)
-    .join("; ");
-  const who = bible
-    ? [
-        bible.role && `Role: ${bible.role}`,
-        bible.publicFace && `How they come across: ${bible.publicFace}`,
-        bible.archetype && `Archetype: ${bible.archetype}`,
-        bible.mask.presents && `Manner: ${bible.mask.presents}`,
-        bible.trueSelf.is && `Underneath: ${bible.trueSelf.is}`,
-        bible.voice.register && `Voice: ${bible.voice.register}`,
-        bible.voice.tics.length ? `Habits of speech: ${bible.voice.tics.join("; ")}` : "",
-        bible.likes.length ? `Likes: ${bible.likes.join("; ")}` : "",
-        bible.dislikes.length ? `Dislikes: ${bible.dislikes.join("; ")}` : "",
-      ].filter(Boolean)
-    : [];
-  const system = [
-    `You design the chat stickers of one love interest in an otome game: ${STICKERS_PER_LI} 2D anime chibi stickers of ${unit.name}, in the spirit of a game's character sticker sets (Genshin Impact's, for example). Each one is a reaction ${unit.name} would really send in a private chat, true to who they are.`,
-    'Reply with ONLY a JSON object: {"stickers": [{"emotion": "...", "label": "...", "look": "..."}]}',
-    "FIELDS",
-    `- stickers: exactly ${STICKERS_PER_LI}, ordered from the most guarded (the first, sent while the two barely know each other) to the closest (the last, sent once they are very close).`,
-    "- emotion: one lowercase English word naming the reaction (for example smug, pensive, sulking, delighted); all different.",
-    `- label: the sticker's caption, in ${language}, at most ${STICKER_LABEL_MAX} characters.`,
-    `- look: English, visual only, at most ${STICKER_LOOK_MAX} characters: the expression and pose of a chibi bust, with at most one small prop or symbol. No text or lettering.`,
-    "RULES",
-    `- Choose the reactions from ${unit.name}'s personality, manner and voice: the range ${unit.name}'s own sticker set would have, never a generic set.`,
-    others.length
-      ? `- The other love interests' sets are listed below: ${unit.name}'s nine must be clearly their own.`
-      : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
-  const user = [
-    `LOVE INTEREST: ${unit.name} (${unit.pronouns.subject}/${unit.pronouns.object})`,
-    look ? `Look: ${look}` : "",
-    ...who,
-    ...(others.length
-      ? ["", "OTHER SETS", ...others.map((other) => `- ${other.name}: ${other.emotions.join(", ")}`)]
-      : []),
-    "",
-    `Design ${unit.name}'s ${STICKERS_PER_LI} stickers now.`,
-  ]
-    .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
-    .join("\n");
-  return [
-    { role: "system", content: system },
-    { role: "user", content: user },
-  ];
 }
 
 /** The design job's dependencies: the text call's, the store's writes, and the background lane. */

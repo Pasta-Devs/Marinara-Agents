@@ -7,7 +7,7 @@
 // image and each face is filed as it lands; a failed set, or one a restart left pending, is never repainted until
 // expressions are turned on again after it (images.expressionsSince), and then only its missing faces; turning
 // expressions off parks the set as stopped before the next paid call. Only love interests get faces in R1, so the
-// cast holds no protagonist. Every face carries the world's image rating and an adult tag (art/prompts.ts).
+// cast holds no protagonist. Every face carries the world's image rating and an adult tag (S/prompts.ts expressionPrompt).
 //
 // The kit builds one paint per unit; its client is made per run here, so each face's prompt reads that run's world
 // (rating, style) right before the call. createOtomeArt is created once per activation: queueExpressions after each
@@ -28,7 +28,7 @@ import { queueScenePaints, releaseBeatArt, startBeatCg } from "./cg.js";
 import { galleryRef, worldStyle, type GeneratedImage } from "./image-client.js";
 import { imagesOf, paintSlot, updateIfChanged, type ArtDeps } from "./paint.js";
 import { paintBeatPlaces, type PaintOptions } from "./places.js";
-import { LOOK_SIZE, expressionPrompt, type ImagePrompt } from "./prompts.js";
+import { type ImagePrompt, LOOK_SIZE, expressionPrompt } from "../prompts.js";
 import { queueStickers, type StickerQueueOptions } from "./stickers.js";
 
 export type ExpressionPrompts = Partial<Record<Face, ImagePrompt>>;

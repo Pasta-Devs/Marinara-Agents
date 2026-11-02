@@ -28,7 +28,7 @@ import {
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
 import { normalizeStoryPlan } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/items/character-story.ts";
 import { withCoupleTimeline } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/items/open.ts";
-import type { StoryPlanReply } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/items/prompts.ts";
+import type { StoryPlanReply } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/items/replies.ts";
 import { readMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/sources.ts";
 import { registerAlbumRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/album.ts";
 import { registerItemRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/items.ts";

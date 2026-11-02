@@ -8,6 +8,7 @@
 // interest's own chapters too, titled private (#2039); and 0.6.22's (#2054): the shared writing rules say a love interest
 // may be genuinely evil, that taming them is the point, that they keep whatever red lines they have, and that love does
 // not make a monster good at once; Angst no longer sanitizes cruelty.
+// 0.6.25 (#2061): the maintainer's own edit of the shared writing rules.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test, { mock } from "node:test";
@@ -33,7 +34,7 @@ import {
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/wish.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { readBanner } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/wish/banners.ts";
-import { bannerPlanMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/wish/prompts.ts";
+import { bannerPlanMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import { CAST, HE, SHE, bible } from "./fixtures/otome-forge-story.ts";
 import { KAI, MIR, SOL, rotationReplies, wishWorld } from "./fixtures/otome-forge-wish.ts";
 
@@ -156,9 +157,9 @@ const digest = (messages: Array<{ role: string; content: string }>) =>
 
 /** Taken from the 0.6.3 builder, before seasons. */
 const BEFORE_SEASONS: Record<wish.BannerKind, string> = {
-  memories: "d3f2ff4f491e1103",
-  "his-wardrobe": "0210e76f92b0c5ad",
-  "my-wardrobe": "7c9f3bed25caa02a",
+  memories: "651df596917aa4ac",
+  "his-wardrobe": "678982b8deb8ad1d",
+  "my-wardrobe": "3a1d657cbfc9bf9f",
 };
 
 test("a rotation that is not seasonal sends the P20 prompt it sent before seasons", () => {

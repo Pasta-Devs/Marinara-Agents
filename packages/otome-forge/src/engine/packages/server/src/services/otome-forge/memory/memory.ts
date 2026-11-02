@@ -18,7 +18,7 @@
 //   Character Story goes in as written only while it is the one newest without a summary, else recall answers
 //   "not ready" and the caller sends the bounded canonical history (S/story/canon.ts).
 // - Read Me (S/minigames/read-me.ts) is never a source: what the notebook holds beyond knowsAboutYou's newest entries
-//   is ranked live on each recall, in the side slots the kit leaves free (S/story/prompts.ts notebookMemories), so a
+//   is ranked live on each recall, in the side slots the kit leaves free (S/prompts.ts notebookMemories), so a
 //   deleted entry never comes back.
 // - Summaries run on job `compress` on the background lane. `maintain` queues one job per run on the background
 //   queue, which holds the compress connection's background admission slot for the whole job (generateJson with lane
@@ -43,7 +43,7 @@ import {
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import { z } from "zod";
 import { createBackgroundQueue, type BackgroundQueue } from "../background-queue.js";
-import { SUMMARY_WORDING, otomeContentContract } from "../content-contract.js";
+import { type NotebookMemory, SUMMARY_WORDING, notebookMemories, otomeContentContract, withRules } from "../prompts.js";
 import { OUTPUT_FLOOR, generateJson, promptRoom, resolveConnectionId, type OtomeMessage } from "../generation.js";
 import { OTOME_FORGE_PACKAGE_ID, memoryId, runDocTarget, stateId, unitId, worldId } from "../ids.js";
 import { normalizeState, readCastUnits } from "../schemas/state.js";
@@ -51,11 +51,7 @@ import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
 import type { OtomeStore } from "../store.js";
 import { mayKnow } from "../story/canon.js";
-import { notebookMemories, type NotebookMemory } from "../story/prompts.js";
 import { readMemorySources } from "./sources.js";
-
-// Kept in content-contract.ts so the phone's prompts reach it without importing this file (sources.ts imports them).
-export { SUMMARY_WORDING };
 
 /** What a detail summary may write; an overview gets the kit's token budget instead. generateJson sends more. */
 const DETAIL_SUMMARY_TOKENS = 2048;
@@ -66,13 +62,6 @@ const SUMMARY_TEMPERATURE = 0.3;
 const SIDE_RECALLS = 3;
 
 const SummarySchema = z.object({ summary: z.string().min(1) });
-
-/**
- * What an overview fold adds to its system message. The kit asks only for a "canon-to-date overview", so models kept
- * persona facts, a summary per chapter and markdown labels in it; the prompts carry the cast on their own.
- */
-export const OVERVIEW_WORDING =
-  "The overview is the story's timeline and nothing else: a chronological recollection, in story order and in the past tense, of the events that have happened so far, with the choices the protagonist made woven into the narration. Write it as flowing prose paragraphs that read like remembering the story. It holds no character or persona profiles, no setting notes and no list of chapter or scene summaries (the prompts carry the cast separately), and no headings, labels, bullet points or markdown emphasis. Keep every established event, relationship turn and irrevocable decision, the chronology and the names, and who knows what: what happened in a record whose title says it is private is told as private, known only to those its title says know it.";
 
 /**
  * The overview's form, kept on the memory document: 2 is the timeline (OVERVIEW_WORDING, 0.6.19). A document without it
@@ -132,7 +121,7 @@ export interface OtomeMemory {
 }
 
 /** What the kit passes to summarize and fitsSummary. */
-interface SummaryRequest {
+export interface SummaryRequest {
   runId: string;
   kind: string;
   messages: OtomeMessage[];
@@ -148,7 +137,7 @@ interface SavedMemory {
 }
 
 /** A run's compress connection, its model's limits, and the rules each summary prompt ends its system message with. */
-interface SummaryJob {
+export interface SummaryJob {
   connectionId: string;
   maxContext: number | null;
   maxOutputTokens: number | null;
@@ -169,14 +158,6 @@ const summaryReserve = (request: SummaryRequest, maxOutputTokens: number | null)
     OUTPUT_FLOOR,
     Math.min(Math.max(SUMMARY_OUTPUT_TOKENS, request.tokenBudget ?? 0), maxOutputTokens || Number.POSITIVE_INFINITY),
   );
-
-/** The request's messages, its system message ending with the job's rules (and an overview fold's OVERVIEW_WORDING). */
-const withRules = (request: SummaryRequest, { rules }: SummaryJob): OtomeMessage[] => {
-  const ending = request.kind === "overview" ? `${rules}\n${OVERVIEW_WORDING}` : rules;
-  return request.messages.map((message, index) =>
-    index === 0 && message.role === "system" ? { ...message, content: `${message.content}\n\n${ending}` } : message,
-  );
-};
 
 /**
  * readMemorySources, kept per run until the store writes anything. The kit reads every source before each paid summary
@@ -327,7 +308,7 @@ export function createOtomeMemory({
 
   /**
    * Read Me's older notebook entries for the love interests this recall is for, ranked into the side slots the kit left
-   * free within what is left of its budget (S/story/prompts.ts notebookMemories); live, never stored.
+   * free within what is left of its budget (S/prompts.ts notebookMemories); live, never stored.
    * ponytail: ranked apart from the kit's pool, so a notebook entry never outranks a saved side memory. The upgrade
    * path is a kit source that is ranked but never saved, which would need a Gacha Forge re-sync.
    */

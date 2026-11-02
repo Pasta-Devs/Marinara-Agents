@@ -30,7 +30,7 @@ import {
   normalizeItem,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/wish.ts";
 import { enforceContent } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/content.ts";
-import { memoryArtBrief } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/content-contract.ts";
+import { memoryArtBrief } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import {
   paintBannerArtNow,
@@ -41,7 +41,7 @@ import {
   BannerPlanSchema,
   normalizeBannerPlan,
   type BannerPlan,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/wish/prompts.ts";
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/wish/replies.ts";
 import { pullWish } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/wish/pull.ts";
 import { setImages, until } from "./fixtures/otome-forge-art.ts";
 import {

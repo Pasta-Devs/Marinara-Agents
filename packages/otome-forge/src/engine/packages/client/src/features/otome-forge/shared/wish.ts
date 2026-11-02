@@ -120,7 +120,7 @@ export function rotationWindow(createdDay: string, rotation: number): { startsDa
 }
 
 /**
- * Each month's seasonal theme, January first (Northern Hemisphere): the planner's English cue is in S/wish/prompts.ts,
+ * Each month's seasonal theme, January first (Northern Hemisphere): the planner's English cue is in S/prompts.ts,
  * the badge's label in the locale. A banner stores the id, not the cue, so its badge reads in the player's language.
  */
 export const SEASONS = [

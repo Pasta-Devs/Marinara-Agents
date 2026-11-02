@@ -25,7 +25,7 @@ import { isLiId, playerId, runDocTarget, unitId, worldId } from "../ids.js";
 import { normalizePlayer } from "../schemas/player.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
-import { readPersona } from "../setup/prompts.js";
+import { readPersona } from "../setup/cast.js";
 import type { DocTarget, Normalize, OtomeStore } from "../store.js";
 import {
   GALLERY_REF_PREFIX,
@@ -36,7 +36,7 @@ import {
   worldStyle,
   type PaintedImage,
 } from "./image-client.js";
-import { LOOK_SIZE, lookPrompt, type ImagePrompt } from "./prompts.js";
+import { type ImagePrompt, LOOK_SIZE, lookPrompt } from "../prompts.js";
 
 /** Whose look: the protagonist, or `li:<li id>`. */
 export type LookOwner = "player" | `li:${LiId}`;

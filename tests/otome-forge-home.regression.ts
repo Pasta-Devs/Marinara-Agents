@@ -41,7 +41,10 @@ import {
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cutout.ts";
 import { createBackgroundQueue } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/background-queue.ts";
 import { galleryRefIds } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/image-client.ts";
-import { COMFORT_RULE } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/content-contract.ts";
+import {
+  COMFORT_RULE,
+  NO_ABSENCE_RULE,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import { runForeground } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/generation.ts";
 import {
   LINE_RETRY_MS,
@@ -53,10 +56,7 @@ import {
   noteDay,
   serveNote,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/home/note.ts";
-import {
-  mentionsAbsence,
-  NO_ABSENCE_RULE,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/home/prompts.ts";
+import { mentionsAbsence } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/home/replies.ts";
 import type {
   OtomeReply,
   RouteHandler,

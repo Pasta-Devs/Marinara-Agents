@@ -1,5 +1,13 @@
 # Otome Hearth release notes
 
+## 0.6.26 — 2026-11-02
+
+- **Every prompt in one place.** All of Otome Hearth's prompts now live in one file, `prompts.ts`, in story order with a table of contents, so they can be read and rewritten in one place. Nothing the models receive changed.
+
+## 0.6.25 — 2026-11-02
+
+- **Updated writing rules.** A love interest now wants something of their own in every chapter, not every scene, and the rules about what your protagonist knows and an existing world's canon are shorter.
+
 ## 0.6.24 — 2026-11-02
 
 - **Long lines show in full on iPhone.** On iPhone, a line longer than the dialogue box could come back cut off mid-word, with only its final period showing, although the Log had all of it. Every row now shows as it types, and a click on a line that is still typing still shows it whole.

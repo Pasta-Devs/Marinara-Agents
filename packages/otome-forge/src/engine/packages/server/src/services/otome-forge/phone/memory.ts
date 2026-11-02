@@ -48,7 +48,8 @@ import {
   sessionSourceId,
   type PhoneDeps,
 } from "./chat.js";
-import { ChatMemorySchema, chatMemoryMessages, normalizeChatMemory, renderThread } from "./prompts.js";
+import { chatMemoryMessages, renderThread } from "../prompts.js";
+import { ChatMemorySchema, normalizeChatMemory } from "./replies.js";
 import { stickerLookup } from "../art/stickers.js";
 
 const said = (message: PhoneMessage) => !!message.text.trim() || !!message.sticker;

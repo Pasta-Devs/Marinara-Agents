@@ -7,12 +7,12 @@ import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs";
 import type { Bible } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import {
-  otomeSceneCard,
   SCENE_CARD_MAX_TOKENS,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/scene-card.ts";
+  otomeSceneCard,
+  otomeWritingRules,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import { remapLearnedTells } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import { normalizeBible } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
-import { otomeWritingRules } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/writing-rules.ts";
 
 const THEY = { subject: "they", object: "them", possessive: "their" };
 

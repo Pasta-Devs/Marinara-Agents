@@ -19,10 +19,8 @@ import {
   stateId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
 import { normalizePrestigePlan } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/items/prestige.ts";
-import {
-  prestigePlanMessages,
-  type PrestigePlanReply,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/items/prompts.ts";
+import { prestigePlanMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
+import type { PrestigePlanReply } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/items/replies.ts";
 import { readMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/sources.ts";
 import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
 import {

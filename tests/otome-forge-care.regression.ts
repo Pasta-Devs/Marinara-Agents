@@ -31,11 +31,13 @@ import {
   writeCareNote,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/care/care-note.ts";
 import {
+  COMFORT_RULE,
+  careNoteMessages,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
+import {
   allowedCareLines,
   careLineFor,
-  careNoteMessages,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/care/prompts.ts";
-import { COMFORT_RULE } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/content-contract.ts";
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/care/care-line.ts";
 import {
   createHandle,
   type OtomeReply,

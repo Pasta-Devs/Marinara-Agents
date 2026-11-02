@@ -2676,7 +2676,7 @@ ${R} .of-cg-img {
 ${R} .of-cg[data-intro="true"][data-loaded="true"] .of-cg-img {
   animation: of-cg-pan 6s cubic-bezier(0.32, 0.06, 0.3, 1) both;
 }
-/* A CG is painted portrait (9:16, S/art/prompts.ts SCENE_SIZE). In a box wider than 2:3, such as the stage in fullscreen
+/* A CG is painted portrait (9:16, S/prompts.ts SCENE_SIZE). In a box wider than 2:3, such as the stage in fullscreen
    on a PC, cover would keep only a thin band of it and cut heads off (#2000), so the CG is shown whole there, over a
    blurred copy of itself so the sides are not bare. The windowed 9:16 stage and a phone keep the full-bleed cover. The
    query is the CG's own box: the frame around a windowed stage is wide while the stage itself is not. */

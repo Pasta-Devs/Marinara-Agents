@@ -7,8 +7,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Unit } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
-import { noteMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/home/prompts.ts";
-import { chatReplyMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/prompts.ts";
+import {
+  appearanceLine,
+  bannerPlanMessages,
+  beatMessages,
+  betweenYou,
+  bibleMessages,
+  chapterPlanMessages,
+  chatReplyMessages,
+  closerMessages,
+  confrontationMessages,
+  noteMessages,
+  premiseMessages,
+  repairPlanMessages,
+  routePlanMessages,
+  stageGoal,
+  worldPlanMessages,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
 import {
   defaultLiState,
@@ -16,32 +31,14 @@ import {
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
-import {
-  bibleMessages,
-  premiseMessages,
-  worldPlanMessages,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/setup/prompts.ts";
-import {
-  betweenYou,
-  appearanceLine,
-  beatMessages,
-  chapterPlanMessages,
-  closerMessages,
-  confrontationMessages,
-  repairPlanMessages,
-  routePlanMessages,
-  stageGoal,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/prompts.ts";
-import { bannerPlanMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/wish/prompts.ts";
 import { CAST, HE, KAI, MIR, SHE, at, bible } from "./fixtures/otome-forge-story.ts";
 
 const text = (messages: Array<{ content: string }>) => messages.map((message) => message.content).join("\n");
 
 const KNOWS = "The protagonist knows only what the story has shown them and what their own persona would know.";
-const NEWCOMER = "A newcomer to this world knows none of its people, places, customs or terms yet.";
 const CARD = "A card or bible is for writing a character, never what the protagonist knows:";
 const UNTIL = "Until then the protagonist does not understand them, and nobody talks to the protagonist as if they do.";
-const CANON = "When the story is set in an existing world from a game, book, film or show (such as Teyvat from Genshin";
+const CANON = "When the story is set in an existing world from a game, book, film or show, keep to its canon:";
 const OTHERS = "- The world has other people: give named minor characters";
 const ALONE = "a node may be theirs alone or with others (cast [])";
 const TIME = "- Time passes as in a life: the protagonist eats, rests and sleeps.";
@@ -111,7 +108,7 @@ test("every prompt that writes story or a love interest's words knows only what 
     bible: text(bibleMessages({ world, player, member: { unit: kai }, others: [] })),
   };
   for (const [kind, prompt] of Object.entries(prompts)) {
-    for (const rule of [KNOWS, NEWCOMER, CARD, UNTIL, CANON]) assert.ok(prompt.includes(rule), `${kind}: ${rule}`);
+    for (const rule of [KNOWS, CARD, UNTIL, CANON]) assert.ok(prompt.includes(rule), `${kind}: ${rule}`);
   }
 });
 

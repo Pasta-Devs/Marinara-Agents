@@ -10,19 +10,19 @@ import {
   OWN_BANNED_PHRASES_MAX,
   parseBannedPhrases,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/banned-phrases.ts";
-import { careNoteMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/care/prompts.ts";
+import {
+  BANNED_PHRASES_RULE,
+  bannedPhrasesRule,
+  beatMessages,
+  careNoteMessages,
+  chatReplyMessages,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import { worldId } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
-import { chatReplyMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/prompts.ts";
 import { registerRunRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/runs.ts";
 import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
 import { defaultLiState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
-import { beatMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/prompts.ts";
-import {
-  BANNED_PHRASES_RULE,
-  bannedPhrasesRule,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/writing-rules.ts";
 import { routesOf } from "./fixtures/otome-forge-art.ts";
 import { CAST, HE, KAI, SHE, at, bible, storyWorld } from "./fixtures/otome-forge-story.ts";
 

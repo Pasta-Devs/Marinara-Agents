@@ -8,7 +8,7 @@
 // prompt is the brief plus each person's identity and outfit lines, the rating and an adult tag for every
 // person, sent as the prompt override, with each person's card, persona or portrait as a reference (at most 4). A brief
 // that set `explicit` is painted explicit only while Heat and the rating are both Explicit at the paid call, and then
-// without the outfit lines (S/art/prompts.ts cgPrompt).
+// without the outfit lines (S/prompts.ts cgPrompt).
 // The paint belongs to the beat as it was written (`written.at`): a rewrite while it paints gets nothing, and the
 // image is deleted again. The album gains a CG only through POST .../art/cg/seen, once the CG is ready and the beat has
 // been read to the segment it opens on; a second report changes nothing. A beat eased off before the CG's segment never
@@ -27,7 +27,7 @@ import { OtomeForgeError } from "../http.js";
 import { beatId, runDocTarget, stateId } from "../ids.js";
 import { STATE_LIMITS, keepNewest, normalizeState, readRun } from "../schemas/state.js";
 import { normalizeBeat } from "../schemas/story.js";
-import { withPersonaImageAppearance } from "../setup/prompts.js";
+import { withPersonaImageAppearance } from "../setup/cast.js";
 import { readBeat, readChapter } from "../story/canon.js";
 import { GALLERY_REF_PREFIX, worldStyle, type ImageSubject } from "./image-client.js";
 import {
@@ -42,7 +42,7 @@ import {
   type PaintOwner,
 } from "./paint.js";
 import { paintBeatPlaces, type PaintOptions } from "./places.js";
-import { CG_PEOPLE_MAX, SCENE_SIZE, cgPrompt, type CgPerson, type ImagePrompt } from "./prompts.js";
+import { CG_PEOPLE_MAX, type CgPerson, type ImagePrompt, SCENE_SIZE, cgPrompt } from "../prompts.js";
 
 type BeatCg = NonNullable<Beat["cg"]>;
 

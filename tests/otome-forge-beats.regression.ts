@@ -32,9 +32,12 @@ import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 import { z } from "zod";
 import { generateJson } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/generation.ts";
 import {
+  NO_CHOICES_SENTENCE,
   SUMMARY_WORDING,
-  createOtomeMemory,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/memory.ts";
+  beatMessages,
+  sideWithInstruction,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
+import { createOtomeMemory } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/memory.ts";
 import { readMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/sources.ts";
 import {
   WHO_SAID_WHAT_BATCH,
@@ -59,11 +62,6 @@ import {
   readChapter,
   recallText,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/canon.ts";
-import {
-  NO_CHOICES_SENTENCE,
-  beatMessages,
-  sideWithInstruction,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/prompts.ts";
 import {
   beatId,
   chapterId,

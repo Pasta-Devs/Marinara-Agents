@@ -53,21 +53,20 @@ import { defaultLiState, normalizeState, readRun } from "../schemas/state.js";
 import { normalizeBeat, normalizeChapter, toChapterView } from "../schemas/story.js";
 import { repairOffers, routeEntries } from "../state/stages.js";
 import type { OtomeStore } from "../store.js";
-import { withPersonaStoryAbout } from "../setup/prompts.js";
+import { withPersonaStoryAbout } from "../setup/cast.js";
 import { cancellable } from "./beats.js";
 import { removeLoveInterest } from "./introduce.js";
 import { readBeat, recallText, type StoryMemory } from "./canon.js";
+import { chapterPlanMessages, knownRows } from "../prompts.js";
 import {
   ANGST_TYPES,
   CHAPTER_TAGS,
   ChapterPlanSchema,
   NODES_MAX,
   NODES_MIN,
-  chapterPlanMessages,
-  knownRows,
   sideWithFits,
   type ChapterPlanReply,
-} from "./prompts.js";
+} from "./replies.js";
 
 export interface ChapterDeps extends GenerationDeps {
   runtime: GenerationDeps["runtime"] & Pick<CapabilityRuntimeHost, "resources">;
@@ -234,7 +233,7 @@ export function planLedger(
     const line = clean(row.line, 600);
     if (li && line) ledger.relationship.push({ li, line });
   }
-  // Only the conflicts the planner was shown (prompts.ts knownRows): one from another love interest's own chapter is
+  // Only the conflicts the planner was shown (S/prompts.ts knownRows): one from another love interest's own chapter is
   // neither escalated, resolved nor owed here.
   const openConflicts = knownRows(state.ledgers.conflicts, knows).filter((row) => row.status === "open");
   const resolved = new Set<string>();
@@ -445,7 +444,7 @@ export async function planNextChapter(
     const units = cast.map((li) => run.units.find((unit) => unit.id === li)!);
     // ponytail: recalls for the Lead only, since the planner picks the Foil (plan M2a "Recall": cast [lead, foil]).
     // The Lead's own route and repair chapters reach the plan; the Foil's and everyone else's never do, in recall
-    // (S/story/canon.ts mayKnow) or in the ledgers (prompts.ts knownTo). Upgrade path: a second recall for the Foil
+    // (S/story/canon.ts mayKnow) or in the ledgers (S/prompts.ts knownTo). Upgrade path: a second recall for the Foil
     // after the plan names them, or keep [lead] so another love interest's private canon never reaches the node guides.
     const memory = await recallText(deps, runId, {
       job: "structured",

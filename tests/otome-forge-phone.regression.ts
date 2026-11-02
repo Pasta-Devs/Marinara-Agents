@@ -24,7 +24,11 @@ import { NOTE_TEXT_MAX } from "../packages/otome-forge/src/engine/packages/clien
 import { forgeStoryMemoryText } from "@forge-kit/story-memory.mjs";
 import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs";
 import { forgeTimeZoneRoutes } from "@forge-kit/time-zone-server.mjs";
-import { COMFORT_RULE } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/content-contract.ts";
+import {
+  COMFORT_RULE,
+  SUMMARY_WORDING,
+  chatReplyMessages,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import {
   createHandle,
   type OtomeReply,
@@ -42,7 +46,6 @@ import {
   worldId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
 import {
-  SUMMARY_WORDING,
   createOtomeMemory,
   type OtomeMemory,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/memory.ts";
@@ -61,10 +64,7 @@ import {
   phoneDue,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/daily.ts";
 import { phoneMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/memory.ts";
-import {
-  chatReplyMessages,
-  normalizeChatReply,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/prompts.ts";
+import { normalizeChatReply } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/replies.ts";
 import { registerPhoneRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/phone.ts";
 import { normalizeState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import {

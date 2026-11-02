@@ -89,7 +89,7 @@ import {
 } from "../schemas/world.js";
 import { checkBible } from "../setup/bible.js";
 import { initialForge, settleForge, startForge, withPaintSteps } from "../setup/forge.js";
-import { personaStoryAbout, readCard, readPersona, withPersonaStoryAbout } from "../setup/prompts.js";
+import { personaStoryAbout, readCard, readPersona, withPersonaStoryAbout } from "../setup/cast.js";
 import type { OtomeStore } from "../store.js";
 import { cutoutsPending, queueCutouts } from "../art/cutout.js";
 import { PLAYER_STICKER_OWNER } from "../../../../../client/src/features/otome-forge/shared/stickers.js";
