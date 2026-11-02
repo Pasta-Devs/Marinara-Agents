@@ -238,6 +238,7 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
           runKey={runKey}
           view={view}
           next={next}
+          opensArc={!story.data.arc}
           onClose={() => setChoosing(false)}
           onPlanned={(key) => {
             setChoosing(false);
@@ -585,12 +586,17 @@ interface LeadDialogProps {
   runKey: string;
   view: RunView;
   next: NonNullable<StoryView["next"]>;
+  /** No arc covers the next chapter yet (the story's first): the server plans the arc before the chapter. */
+  opensArc: boolean;
   onClose: () => void;
   onPlanned: (key: string) => void;
 }
 
-/** "Who walks with you this chapter?": picking a Lead plans the chapter (one model call), with Cancel while it runs. */
-function LeadDialog({ runKey, view, next, onClose, onPlanned }: LeadDialogProps) {
+/**
+ * "Who walks with you this chapter?": picking a Lead plans the chapter (one model call, two when its arc is planned
+ * first), with Cancel while it runs.
+ */
+function LeadDialog({ runKey, view, next, opensArc, onClose, onPlanned }: LeadDialogProps) {
   const { t } = useTranslation();
   const actionRef = useRef<HTMLButtonElement>(null);
   const { planning, failed, stopped, plan: planChapter, cancel } = usePlanChapter(runKey);
@@ -603,6 +609,7 @@ function LeadDialog({ runKey, view, next, onClose, onPlanned }: LeadDialogProps)
   const plan = (li: string) => planChapter(li, "/chapters/next", { lead: li }, onPlanned);
 
   const planningLi = candidates.find((candidate) => candidate.li.id === planning)?.li ?? null;
+  const costNote = opensArc ? "ui.otomeForge.story.planArcCostNote" : "ui.otomeForge.story.planCostNote";
   return (
     <Dialog
       wide
@@ -669,7 +676,7 @@ function LeadDialog({ runKey, view, next, onClose, onPlanned }: LeadDialogProps)
             <Feather size={14} strokeWidth={2} aria-hidden="true" />
             <span>
               {t("ui.otomeForge.story.planCost")}
-              <span className="of-cost-note"> · {t("ui.otomeForge.story.planCostNote")}</span>
+              <span className="of-cost-note"> · {t(costNote)}</span>
             </span>
           </p>
           <ChapterPaintCost images={view.world.images} />
@@ -761,13 +768,17 @@ function ArcChoiceCard({ runKey, options }: { runKey: string; options: { options
         ]
       : []),
   ];
+  // Someone new is written first, then the arc that brings them in (#1983 M3).
+  const cost = options.options.includes("newcomer")
+    ? "ui.otomeForge.story.arcChoiceNewcomerCost"
+    : "ui.otomeForge.story.arcChoiceCost";
   return (
     <section className="of-section of-glass of-story-next" aria-labelledby="of-arc-choice">
       <p className="of-eyebrow">{t("ui.otomeForge.story.arcChoiceTitle")}</p>
       <h2 id="of-arc-choice" className="of-section-title">
         {t("ui.otomeForge.story.arcChoiceText")}
       </h2>
-      <p className="of-hint">{t("ui.otomeForge.story.arcChoiceCost")}</p>
+      <p className="of-hint">{t(cost)}</p>
       {failed ? <p className="of-notice of-notice--error">{otome.errorMessage(failed)}</p> : null}
       <div className="of-choices">
         {ways.map((way) => (

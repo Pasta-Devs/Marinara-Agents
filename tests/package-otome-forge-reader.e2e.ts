@@ -531,6 +531,8 @@ test("Otome Forge reader: a stubbed chapter with faces, thoughts, a remembered c
   const lead = page.getByRole("dialog", { name: "Who walks with you this chapter?" });
   await expect(lead).toContainText("You haven’t walked with Cassian in a while.");
   await expect(lead).toContainText("Something between you and Ilvar Thorne is still unresolved.");
+  // No arc covers chapter 1 yet: the server plans the arc before the chapter.
+  await expect(lead).toContainText("2 model calls on your planning connection");
   await page.screenshot({ path: testInfo.outputPath("01-lead.png") });
   await lead.getByRole("button", { name: /Ilvar Thorne/ }).click();
   expect(posts(stub, "/chapters/next")[0]!.body).toMatchObject({ lead: ILVAR });
@@ -1860,6 +1862,51 @@ test("Otome Forge reader: a replay at reduced motion offers the first choice aga
   await expect(backlog).not.toContainText("Of course. Curiosity.");
   expect(posts(stub, "/ease-off"), "a replay's Ease off changes no canon").toHaveLength(0);
 });
+
+for (const ended of [false, true]) {
+  test(`Otome Hearth's planning cost counts what is planned ${ended ? "at an arc's end" : "inside an arc"}`, async ({
+    page,
+  }) => {
+    const arc = { number: 1, kind: "story", label: "The drowned bell", from: 1, endsAt: 10, read: 0, done: false };
+    await stubRoutes(page, createStoryStub());
+    await page.route(
+      (url) => url.pathname.endsWith(`/runs/${RUN}/story`),
+      (route) =>
+        route.fulfill({
+          json: {
+            chapters: [],
+            routes: [],
+            repairs: [],
+            arc: ended ? { ...arc, read: 10, done: true } : arc,
+            next: ended
+              ? null
+              : {
+                  kind: "main",
+                  number: 1,
+                  candidates: [
+                    { li: CASSIAN, reason: "least-recent" },
+                    { li: ILVAR, reason: "ripe-conflict" },
+                  ],
+                },
+            arcChoice: ended ? { options: ["breathe", "continue", "newcomer"], castFull: false } : null,
+          },
+        }),
+    );
+    const root = await openStory(page);
+    if (ended) {
+      // Someone new is two calls: their bible, then the arc.
+      await expect(root.getByRole("region", { name: "How does the story go on?" })).toContainText(
+        "1 model call to plan, 2 to meet someone new",
+      );
+    } else {
+      // The arc already covers chapter 1: planning it is the chapter's call alone.
+      await root.getByRole("button", { name: "Choose who leads" }).click();
+      await expect(page.getByRole("dialog", { name: "Who walks with you this chapter?" })).toContainText(
+        "Plans the chapter · 1 model call on your planning connection",
+      );
+    }
+  });
+}
 
 test("Otome Forge reader: a chapter with no title is named as untitled, never as loading or blank", async ({
   page,
