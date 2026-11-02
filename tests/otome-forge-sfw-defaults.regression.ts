@@ -47,28 +47,26 @@ import {
   type ContentSettings,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/content.ts";
 import {
+  type BeatMessagesInput,
+  bannerPlanMessages,
+  beatMessages,
   cgPrompt,
+  chapterPlanMessages,
+  closerMessages,
+  confrontationMessages,
+  datePlanMessages,
   expressionPrompt,
   lookPrompt,
+  otomeContentContract,
   placePrompt,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/prompts.ts";
-import { otomeContentContract } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/content-contract.ts";
-import { storyPlanMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/items/prompts.ts";
-import { datePlanMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/minigames/date-night.ts";
+  repairPlanMessages,
+  routePlanMessages,
+  storyPlanMessages,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
 import { normalizeState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
-import {
-  beatMessages,
-  chapterPlanMessages,
-  closerMessages,
-  confrontationMessages,
-  repairPlanMessages,
-  routePlanMessages,
-  type BeatMessagesInput,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/prompts.ts";
-import { bannerPlanMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/wish/prompts.ts";
 import { CAST, HE, KAI, MIR, SHE, bible } from "./fixtures/otome-forge-story.ts";
 
 const gentle: ContentSettings = { ...defaultContent(), darkness: "gentle", limits: { ...LIMIT_DEFAULTS.gentle } };

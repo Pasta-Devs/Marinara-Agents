@@ -19,10 +19,8 @@ import {
   readRun,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
-import {
-  bibleMessages,
-  castOf,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/setup/prompts.ts";
+import { bibleMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
+import { castOf } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/setup/cast.ts";
 import { createOtomeStore } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/store.ts";
 import { artWorld, routesOf } from "./fixtures/otome-forge-art.ts";
 import { at, KAI, MIR } from "./fixtures/otome-forge-story.ts";

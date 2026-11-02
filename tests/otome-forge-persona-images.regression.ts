@@ -21,7 +21,7 @@ import {
   normalizeBanner,
   normalizeItem,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/wish.ts";
-import { readPersona } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/setup/prompts.ts";
+import { readPersona } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/setup/cast.ts";
 import { paintBannerArtNow } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/wish/banners.ts";
 import { artWorld, beat, KEY, saveBeat, seedChapter } from "./fixtures/otome-forge-art.ts";
 import { KAI } from "./fixtures/otome-forge-story.ts";

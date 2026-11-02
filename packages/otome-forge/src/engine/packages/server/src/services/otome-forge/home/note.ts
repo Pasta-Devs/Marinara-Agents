@@ -14,7 +14,7 @@
 // a phone thread, a date, a route or a repair chapter of another love interest never reaches it; shared canon is
 // framed as news unless he was there), his latest off-screen line, and his last RECENT_NOTES notes so he does not
 // repeat himself. The ledger lines and his grievances and disclosures are the ones his own reader may know
-// (story/prompts.ts ownView, M2b's rule): none from another love interest's own chapter. Care data is never part of
+// (S/prompts.ts ownView, M2b's rule): none from another love interest's own chapter. Care data is never part of
 // a note.
 import { sliceTextToTokenBudget } from "@forge-kit/shared-token-estimator.mjs";
 import { forgeDayKey, forgeWallDate, forgeWeekday } from "@forge-kit/time-zone-server.mjs";
@@ -44,15 +44,8 @@ import type { OtomeMemory } from "../memory/memory.js";
 import { normalizeState, readRun } from "../schemas/state.js";
 import { normalizeWorld } from "../schemas/world.js";
 import type { OtomeStore } from "../store.js";
-import { ownView } from "../story/prompts.js";
-import {
-  NoteReplySchema,
-  QUESTION_MARK,
-  mentionsAbsence,
-  noteMessages,
-  type NoteDay,
-  type NoteReply,
-} from "./prompts.js";
+import { type NoteDay, noteMessages, ownView } from "../prompts.js";
+import { NoteReplySchema, QUESTION_MARK, mentionsAbsence, type NoteReply } from "./replies.js";
 
 export const NOTE_TEMPERATURE = 0.9;
 export const NOTE_MAX_TOKENS = 400;

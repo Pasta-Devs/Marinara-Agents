@@ -34,7 +34,7 @@ import {
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/wish.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { readBanner } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/wish/banners.ts";
-import { bannerPlanMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/wish/prompts.ts";
+import { bannerPlanMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import { CAST, HE, SHE, bible } from "./fixtures/otome-forge-story.ts";
 import { KAI, MIR, SOL, rotationReplies, wishWorld } from "./fixtures/otome-forge-wish.ts";
 

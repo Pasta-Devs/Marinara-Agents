@@ -41,7 +41,7 @@ import {
 import {
   noticedMessages,
   showMessages,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/items/prompts.ts";
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import { createOtomeMemory } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/memory.ts";
 import { readMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/sources.ts";
 import { sendMessage } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/chat.ts";

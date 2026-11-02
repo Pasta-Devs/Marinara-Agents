@@ -36,7 +36,7 @@ const EMPHASIS = /(?<![\p{L}\p{N}])([*_])(?=\S)(.+?)(?<=\S)\1(?![\p{L}\p{N}])/gu
  * The kit's saved overview (`${R}:memory` overview.content) as the player reads it: its paragraphs, with a leading
  * markdown heading or bullet marker, a line that is only a bold label and an echoed "Canon to date" heading dropped,
  * and markdown emphasis taken off its words; [] before the first overview. The text is otherwise as saved, whatever the
- * Heat. An overview is written as plain paragraphs since 0.6.19 (S/memory/memory.ts OVERVIEW_WORDING); this tidies one
+ * Heat. An overview is written as plain paragraphs since 0.6.19 (S/prompts.ts OVERVIEW_WORDING); this tidies one
  * saved before, until the background rebuild replaces it.
  */
 export function overviewParagraphs(data: unknown): string[] {

@@ -75,20 +75,20 @@ import {
 } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { generateJson, readOrGenerate, runForeground } from "../generation.js";
 import type { OtomeArt } from "../art/expressions.js";
-import { explicitCgAllowed } from "../content-contract.js";
+import { beatMessages, closerMessages, confrontationMessages, explicitCgAllowed, prologueEnding } from "../prompts.js";
 import { OtomeForgeError } from "../http.js";
 import { PROLOGUE_KEY, beatId, mainChapterKey, runDocTarget, stateId, unitId, worldId } from "../ids.js";
 import { normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeBeat } from "../schemas/story.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
-import { withPersonaStoryAbout } from "../setup/prompts.js";
+import { withPersonaStoryAbout } from "../setup/cast.js";
 import { applyChoiceEffects } from "../state/relationship.js";
 import { readBeatToEnd } from "../state/rewards.js";
 import { countedNow, gateShut, healRupture, passGate } from "../state/stages.js";
 import type { ChapterDeps } from "./chapters.js";
 import { chapterSoFar, readBeat, readChapter, recallText } from "./canon.js";
-import { prologueEnding, prologueProblem } from "./prologue.js";
+import { prologueProblem } from "./prologue.js";
 import {
   afterRound,
   applyConfrontation,
@@ -106,12 +106,9 @@ import {
   BEAT_SEGMENTS_MAX,
   BeatReplySchema,
   ConfrontationReplySchema,
-  beatMessages,
-  closerMessages,
-  confrontationMessages,
   sideWithCast,
   type BeatReply,
-} from "./prompts.js";
+} from "./replies.js";
 
 export interface BeatDeps extends ChapterDeps {
   /** The run-scoped Cancel (forge-kit story-cancel-server); without one, writes simply run. */
@@ -147,7 +144,7 @@ const nameKey = (value: unknown) => str(value, NAME_MAX).normalize("NFKC").toLow
 /** What normalizing a reply needs to know about the node and its cast. */
 export interface BeatContext {
   node: ChapterNode;
-  /** The world allowed an explicit key image as the beat was written (content-contract.ts explicitCgAllowed). */
+  /** The world allowed an explicit key image as the beat was written (S/prompts.ts explicitCgAllowed). */
   cgExplicit?: boolean;
   /** Every love interest, so a speaker's name can be matched to his stage. */
   units: ReadonlyArray<Pick<Unit, "id" | "name">>;
@@ -159,7 +156,7 @@ export interface BeatContext {
   mustChoose?: boolean;
   /** A date's beat (M5): one scored choice, no big choice, and a grievance only when the date was planned to go wrong. */
   date?: { goesWrong: boolean };
-  /** #2046: a side-with node's love interests (prompts.ts sideWithCast): one small choice, an option backing each. */
+  /** #2046: a side-with node's love interests (S/story/replies.ts sideWithCast): one small choice, an option backing each. */
   sideWith?: ReadonlyArray<Pick<Unit, "id" | "name">>;
 }
 

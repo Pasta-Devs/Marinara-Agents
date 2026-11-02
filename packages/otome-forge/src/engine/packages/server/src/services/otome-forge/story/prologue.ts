@@ -10,7 +10,6 @@
 //   - chapter 1's first scene is given its canon, the choices taken included, to pick up from (beats.ts).
 // POST /runs/:run/prologue makes the chapter without a model call; its scene is written when the reader asks for it.
 import type {
-  Beat,
   Chapter,
   ForgeChoice,
   Segment,
@@ -22,12 +21,7 @@ import { PROLOGUE_KEY, chapterId, runDocTarget, stateId } from "../ids.js";
 import { normalizeState, readRun } from "../schemas/state.js";
 import { normalizeChapter } from "../schemas/story.js";
 import type { OtomeStore } from "../store.js";
-
-/** How much of the prologue's canon chapter 1's first scene is given. */
-const ENDING_CHARS = 1800;
-
-const GUIDE =
-  "The prologue: an ordinary stretch of the protagonist's own life in this world, just before the story opens. Show who they are through what they do and choose.";
+import { GUIDE } from "../prompts.js";
 
 /** The prologue chapter, made once; 409 `conflict` while the world is still being forged. */
 export async function ensurePrologue(deps: { store: OtomeStore }, runId: string): Promise<Chapter> {
@@ -118,34 +112,4 @@ export function prologueProblem(
     }
   }
   return null;
-}
-
-/** The prologue's own framing in its scene's user turn (beatMessages). */
-export function prologueFraming(openingSituation: string, units: readonly Pick<Unit, "name">[]): string[] {
-  return [
-    "This is the PROLOGUE: the protagonist is alone in their own life, before the story begins. Anyone else who speaks belongs to that life (a neighbour, a colleague, a stranger).",
-    "Show who the protagonist is through what they do: what they are good at, what they want and what they lack. Their traits and goal show in action, never as a list.",
-    "Offer choices about who the protagonist is (how they meet a small trouble, what they put first); what is picked is who they are from now on.",
-    `No love interest appears, speaks, is named or is hinted at: the story meets them in chapter 1. Never name ${units.map((unit) => unit.name).join(", ")}.`,
-    openingSituation.trim()
-      ? `End where the story opens, right after the prologue, without playing it out: ${openingSituation.trim()}`
-      : "End where the story is about to begin.",
-  ];
-}
-
-/**
- * The prologue as chapter 1's first scene is given it, or "" without a written one: every choice taken in it (canon,
- * which a long scene's ending alone could lose), then its canon's last part.
- */
-export function prologueEnding(beat: Pick<Beat, "choices" | "choiceCanon"> | null, canon: string | null): string {
-  const text = (canon ?? "").trim();
-  if (!beat || !text) return "";
-  const chosen = beat.choices.flatMap((choice) => {
-    const option = choice.options.find((candidate) => candidate.id === beat.choiceCanon[choice.id]);
-    return option ? [`- ${option.text} ${option.selection.text}`] : [];
-  });
-  return [
-    ...(chosen.length ? ["What the protagonist chose in it (who they are from now on):", ...chosen, ""] : []),
-    text.length > ENDING_CHARS ? `…${text.slice(-ENDING_CHARS)}` : text,
-  ].join("\n");
 }

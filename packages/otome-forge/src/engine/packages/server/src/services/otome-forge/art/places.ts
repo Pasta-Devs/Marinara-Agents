@@ -15,7 +15,7 @@ import { OtomeForgeError } from "../http.js";
 import { runDocTarget, worldId } from "../ids.js";
 import { PLACES_MAX, normalizeWorld } from "../schemas/world.js";
 import { worldStyle } from "./image-client.js";
-import { SCENE_SIZE, placePrompt, type ImagePrompt } from "./prompts.js";
+import { type ImagePrompt, SCENE_SIZE, placePrompt } from "../prompts.js";
 import {
   imagesOf,
   paintRecord,

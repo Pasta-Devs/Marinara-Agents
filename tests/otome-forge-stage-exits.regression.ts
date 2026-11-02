@@ -32,7 +32,7 @@ import {
   beatMessages,
   closerMessages,
   confrontationMessages,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/prompts.ts";
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import { CAST, HE, KAI, MIR, SHE, beatReply, bible, confrontationReply } from "./fixtures/otome-forge-story.ts";
 
 const li = (id: string, name: string): RunLiView => ({

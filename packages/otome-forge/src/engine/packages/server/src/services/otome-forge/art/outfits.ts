@@ -39,7 +39,7 @@ import { STATE_LIMITS, keepNewest, normalizeState, readRun } from "../schemas/st
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeBanner, normalizeItem } from "../schemas/wish.js";
 import { normalizeWorld } from "../schemas/world.js";
-import { withPersonaImageAppearance } from "../setup/prompts.js";
+import { withPersonaImageAppearance } from "../setup/cast.js";
 import type { OtomeArt } from "./expressions.js";
 import { cgSubjects } from "./cg.js";
 import { galleryRef, worldStyle, type ImageSubject, type PaintedImage } from "./image-client.js";
@@ -58,8 +58,15 @@ import {
   type PaintCheck,
   type PaintOwner,
 } from "./paint.js";
-import { LOOK_SIZE, SCENE_SIZE, cgPrompt, lookPrompt, type CgPerson, type ImagePrompt } from "./prompts.js";
-import { memoryArtBrief } from "../content-contract.js";
+import {
+  type CgPerson,
+  type ImagePrompt,
+  LOOK_SIZE,
+  SCENE_SIZE,
+  cgPrompt,
+  lookPrompt,
+  memoryArtBrief,
+} from "../prompts.js";
 
 export interface ItemArtDeps extends ArtDeps {
   /** The activation's art service: once torn down, nothing more is paid for. */

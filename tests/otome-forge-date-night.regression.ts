@@ -58,7 +58,7 @@ import {
   readStorySources,
   recallText,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/canon.ts";
-import type { BeatReply } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/prompts.ts";
+import type { BeatReply } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/replies.ts";
 import {
   KAI,
   MIR,

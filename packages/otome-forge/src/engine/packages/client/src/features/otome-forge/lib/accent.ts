@@ -5,7 +5,7 @@
 // the client picks it from the portrait and saves it (POST .../lis/:li/accent). Gallery URLs are same-origin, so the
 // canvas is never tainted.
 // The pick is a detail, not an average: the most vivid hue a look carries (an earring, the eyes) rather than the mean of
-// everything coloured, which is mud. A look is painted on a chroma matte (S/art/prompts.ts MATTES: green, magenta or
+// everything coloured, which is mud. A look is painted on a chroma matte (S/prompts.ts MATTES: green, magenta or
 // cyan), so the one hue that is both a matte colour and most of the picture is the backdrop and is dropped, and the
 // next hue the look actually carries wins. Grey and transparent pixels never vote.
 
@@ -101,7 +101,7 @@ export function hueGap(a: number, b: number): number {
   return gap > 180 ? 360 - gap : gap;
 }
 
-/** The mattes a look is painted on (S/art/prompts.ts MATTES), as hues: chroma green, cyan, magenta. */
+/** The mattes a look is painted on (S/prompts.ts MATTES), as hues: chroma green, cyan, magenta. */
 const MATTE_HUES = [120, 180, 300] as const;
 
 /** A pixel that could be the backdrop: pure and very saturated at one of the matte hues. */

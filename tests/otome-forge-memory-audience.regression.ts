@@ -32,6 +32,10 @@ import {
 import {
   OVERVIEW_WORDING,
   SUMMARY_WORDING,
+  beatMessages,
+  chapterPlanMessages,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
+import {
   createOtomeMemory,
   type OtomeMemory,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/memory.ts";
@@ -48,10 +52,6 @@ import {
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { createOtomeStore } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/store.ts";
 import { recallText } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/canon.ts";
-import {
-  beatMessages,
-  chapterPlanMessages,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/prompts.ts";
 import { createFakeDocuments, createFakeRuntime, type FakeRuntimeOptions } from "./fixtures/otome-forge-fakes.ts";
 
 const RUN = runIdOf("r-memory-abcdef");

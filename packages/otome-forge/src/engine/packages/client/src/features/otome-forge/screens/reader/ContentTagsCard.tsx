@@ -8,7 +8,7 @@ import { BookOpen, Feather, Undo2 } from "lucide-react";
 import { LIMIT_IDS, type LimitId } from "../../shared/content";
 import { LIMIT_LABEL_KEYS } from "../setup/ContentStep";
 
-/** The planner's extra tags, beside the Lines & Veils catalog (S/story/prompts.ts lists the same five). */
+/** The planner's extra tags, beside the Lines & Veils catalog (S/story/replies.ts lists the same five). */
 const STORY_TAG_KEYS: Record<string, string> = {
   jealousy: "ui.otomeForge.reader.tagJealousy",
   grief: "ui.otomeForge.reader.tagGrief",

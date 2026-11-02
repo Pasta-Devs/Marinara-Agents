@@ -38,13 +38,8 @@ import { runDocTarget, unitId } from "../ids.js";
 import { readRun } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import type { OtomeStore } from "../store.js";
-import {
-  LinePackReplySchema,
-  QUESTION_MARK,
-  linePackMessages,
-  mentionsAbsence,
-  type LinePackReply,
-} from "./prompts.js";
+import { linePackMessages } from "../prompts.js";
+import { LinePackReplySchema, QUESTION_MARK, mentionsAbsence, type LinePackReply } from "./replies.js";
 
 export const LINE_PACK_TEMPERATURE = 0.9;
 /** What the reply itself needs: about sixty lines of fourteen words. */

@@ -7,8 +7,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { CapabilityLanguageModelMessage } from "@marinara-engine/shared";
 import { cutoutsSettled } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cutout.ts";
-import { lookMatte } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/prompts.ts";
-import { careNoteMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/care/prompts.ts";
+import {
+  careNoteMessages,
+  lookMatte,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import {
   playerId,
   runDocTarget,

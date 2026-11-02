@@ -18,7 +18,7 @@ import { field } from "../schemas/common.js";
 import { MESSAGE_ID, markSeen, phoneList, sendMessage, threadPage } from "../phone/chat.js";
 import { noteOpenThread, phoneDue } from "../phone/daily.js";
 import { closeAndRemember } from "../phone/memory.js";
-import { MESSAGE_TEXT_MAX, NOTE_QUOTE_MAX } from "../phone/prompts.js";
+import { MESSAGE_TEXT_MAX, NOTE_QUOTE_MAX } from "../phone/replies.js";
 
 const SendBody = z.object({
   text: z.string().max(MESSAGE_TEXT_MAX).optional(),

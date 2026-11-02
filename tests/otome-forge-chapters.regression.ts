@@ -38,11 +38,13 @@ import {
   type PlanContext,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/chapters.ts";
 import {
-  ChapterPlanSchema,
   beatMessages,
   chapterPlanMessages,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
+import {
+  ChapterPlanSchema,
   type ChapterPlanReply,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/prompts.ts";
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/replies.ts";
 import { CAST, HE, KAI, MIR, SOL, bible, json, planReply, storyWorld } from "./fixtures/otome-forge-story.ts";
 
 function stateWith(lis: Record<string, Partial<RunState["lis"][string]>>, changes: Partial<RunState> = {}): RunState {

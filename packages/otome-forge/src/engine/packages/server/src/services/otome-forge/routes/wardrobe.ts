@@ -64,15 +64,8 @@ import { OtomeForgeError, debugModeOf, parseBody, runParam, type RegisterRoutes,
 import { isLiId, playerId, runDocTarget, stateId, unitId } from "../ids.js";
 import { STORY_KINDS } from "../items/character-story.js";
 import { couplesOf, ownedItems, readItem, readItems, readOwnedItem } from "../items/open.js";
-import {
-  LINE_TEMPERATURE,
-  LINE_TOKENS,
-  LineReplySchema,
-  ShowReplySchema,
-  checkLine,
-  noticedMessages,
-  showMessages,
-} from "../items/prompts.js";
+import { noticedMessages, showMessages } from "../prompts.js";
+import { LINE_TEMPERATURE, LINE_TOKENS, LineReplySchema, ShowReplySchema, checkLine } from "../items/replies.js";
 import { normalizePlayer } from "../schemas/player.js";
 import { normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";

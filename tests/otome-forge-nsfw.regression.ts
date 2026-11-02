@@ -28,24 +28,28 @@ import {
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/content.ts";
 import { cgPromptFor } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cg.ts";
 import {
+  ADULT_SENTENCE,
+  type ContractKind,
+  type ImagePrompt,
+  bannerPlanMessages,
+  beatMessages,
   cgPrompt,
+  chapterPlanMessages,
+  chatMemoryMessages,
+  closerMessages,
+  confrontationMessages,
   expressionPrompt,
   keepsakePrompt,
   lookPrompt,
-  placePrompt,
-  type ImagePrompt,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/prompts.ts";
-import {
-  ADULT_SENTENCE,
   otomeContentContract,
-  type ContractKind,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/content-contract.ts";
+  placePrompt,
+  routePlanMessages,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import {
   runDocTarget,
   unitId,
   worldId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
-import { chatMemoryMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/prompts.ts";
 import { registerRunRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/runs.ts";
 import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
 import {
@@ -55,14 +59,6 @@ import {
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { normalizeBeatReply } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/beats.ts";
-import {
-  beatMessages,
-  chapterPlanMessages,
-  closerMessages,
-  confrontationMessages,
-  routePlanMessages,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/prompts.ts";
-import { bannerPlanMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/wish/prompts.ts";
 import { KEY, artWorld, beat, routesOf, saveBeat } from "./fixtures/otome-forge-art.ts";
 import {
   CAST,
