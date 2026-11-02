@@ -555,6 +555,7 @@
   "ui.otomeForge.phone.closeRemember": "Close and remember",
   "ui.otomeForge.phone.closeText": "This conversation becomes a memory that only {{name}} recalls. The thread stays, and you can write again any time.",
   "ui.otomeForge.phone.closeTitle": "Close and remember?",
+  "ui.otomeForge.phone.closeWait": "Wait until {{name}} has finished writing.",
   "ui.otomeForge.phone.closing": "Remembering…",
   "ui.otomeForge.phone.empty": "No messages yet.",
   "ui.otomeForge.phone.from": "{{name}}:",

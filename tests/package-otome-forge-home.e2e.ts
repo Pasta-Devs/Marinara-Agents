@@ -950,7 +950,7 @@ test("Otome Forge phone: a thread with typing, his sticker, suggestions, her sti
   expect(pageErrors).toEqual([]);
 });
 
-test("Otome Forge phone: a reply that lands after the player left his thread is there when it opens again", async ({
+test("Otome Forge phone: a reply that lands after the player left his thread is there when it opens again; Close says why it waits", async ({
   page,
 }) => {
   test.setTimeout(120_000);
@@ -971,6 +971,11 @@ test("Otome Forge phone: a reply that lands after the player left his thread is 
   await root.getByRole("textbox", { name: "Message Ilvar Thorne" }).fill("Still up?");
   await root.getByRole("button", { name: "Send" }).click();
   await expect.poll(() => stub.state.replying).toBe(true);
+  // Meanwhile Close waits for his reply, and says so: there is a conversation to remember.
+  const close = root.getByRole("button", { name: "Close and remember" });
+  await expect(close).toHaveAttribute("aria-disabled", "true");
+  await expect(close).toHaveAttribute("title", "Wait until Ilvar Thorne has finished writing.");
+  await expect(close).toHaveAccessibleDescription("Wait until Ilvar Thorne has finished writing.");
   await root.getByRole("button", { name: "All messages" }).click();
   await expect(row).toContainText("Ilvar Thorne is typing…");
   const replied = page.waitForResponse((response) => response.url().endsWith(`/phone/${ILVAR}/send`));
@@ -982,6 +987,17 @@ test("Otome Forge phone: a reply that lands after the player left his thread is 
   await row.click();
   await expect(log).toContainText("Still up?");
   await expect(log).toContainText("Barely. The data kept me company.");
+  await expect(close).toHaveAttribute("aria-disabled", "false");
+  // Only a thread with no open conversation has nothing to remember.
+  await root.getByRole("button", { name: "All messages" }).click();
+  await root
+    .locator(".of-threads")
+    .getByRole("button", { name: /Cassian/ })
+    .click();
+  await expect(root.getByRole("heading", { level: 1, name: "Cassian" })).toBeFocused();
+  await expect(close).toHaveAttribute("aria-disabled", "true");
+  await expect(close).toHaveAttribute("title", "There is nothing new to remember yet.");
+  await expect(close).toHaveAccessibleDescription("There is nothing new to remember yet.");
 });
 
 test("Otome Forge phone: his thread's header keeps Close beside his name on one row, at every width in both looks", async ({
