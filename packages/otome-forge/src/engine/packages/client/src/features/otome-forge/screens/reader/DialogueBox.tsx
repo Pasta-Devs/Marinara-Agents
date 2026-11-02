@@ -152,7 +152,17 @@ export const DialogueBox = forwardRef<HTMLButtonElement, DialogueBoxProps>(funct
       ) : null}
       <p ref={lineRef} className={lineClass} onTouchStart={stopFollowing} onWheel={stopFollowing}>
         <span className="of-visually-hidden">{spoken}</span>
-        <span aria-hidden="true" data-done={done}>
+        {/* A new span for every step of the reveal, never text changed in place: iOS Safari repaints text changed in
+            place only where the box shows it, so rows that typed while scrolled out of view came back blank. A
+            removed span is repainted whole. While it types it takes no pointer events, so a held click lands on the
+            line itself, which stays, and still shows the line whole (a click whose pressed element is gone never
+            fires). */}
+        <span
+          key={`${lineKey}:${visible}`}
+          aria-hidden="true"
+          data-done={done}
+          style={done ? undefined : { pointerEvents: "none" }}
+        >
           {done ? text : chars.slice(0, visible).join("")}
           {done ? null : (
             <span ref={restRef} className="of-line-rest">
