@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.6.28 — 2026-11-02
+
+- **Newest CGs first.** The Album's CGs now open on the newest, with the oldest at the bottom; the full-screen viewer steps through them in the same order.
+- **Chapter themes in the Soundtrack.** A chapter's own theme now appears in the Album's Soundtrack after the six moods, under the chapter's title, once you've reached that chapter, and plays like the others.
+
 ## 0.6.27 — 2026-11-02
 
 - **Fewer wasted calls.** Picking how the story goes on twice no longer plans the arc twice. A newcomer whose arc failed to plan keeps their character sheet for the next try. A scene written ahead paints its key moment only once you reach it. A connection that refuses JSON mode is asked without it from then on.

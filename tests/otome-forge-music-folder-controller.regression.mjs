@@ -249,3 +249,31 @@ test("a manifest arriving after disposal cannot start folder playback", async ()
   assert.equal(f.calls.play.length, 0);
   assert.equal(f.calls.api.length + f.calls.brief.length, 0);
 });
+
+test("a saved chapter theme held from the Album plays its own track with chapter themes off, and nothing is made", async (t) => {
+  const theme = {
+    cue: "chapter-main-1",
+    connectionId: "connection-1",
+    tag: "music:contexts:otome-forge:theme",
+    path: "music/contexts/otome-forge/theme.mp3",
+  };
+  const f = fixture(() => ({ assets: { ...manifest.assets, [theme.tag]: { path: theme.path } } }));
+  t.after(() => f.controller.dispose());
+  f.controller.configure(f.settings({ generate: false, chapterThemes: false }));
+  f.controller.setBaseCue("home");
+  await settle();
+  assert.equal(f.calls.play.at(-1).tag, stockTag);
+  const held = f.controller.claim({ chapterKey: "main-1", mood: "home", track: theme });
+  await settle();
+  assert.equal(f.calls.play.at(-1).tag, theme.tag, "the chapter's saved theme, not Home's mood");
+  held.release();
+  await settle();
+  assert.equal(f.calls.play.at(-1).tag, stockTag, "Stop lets the music beneath play on");
+  f.controller.configure(f.settings({ musicFolder: "music/custom" }));
+  await settle();
+  assert.match(f.calls.play.at(-1).tag, /^music:custom:/u);
+  f.controller.claim({ chapterKey: "main-1", mood: "home", track: theme });
+  await settle();
+  assert.equal(f.calls.play.at(-1).tag, theme.tag, "a chosen music folder never stands in for the theme");
+  assert.equal(f.calls.api.length + f.calls.brief.length, 0);
+});

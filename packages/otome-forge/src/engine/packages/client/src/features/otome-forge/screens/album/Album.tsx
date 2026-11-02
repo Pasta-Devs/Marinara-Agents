@@ -1,8 +1,10 @@
 // ──────────────────────────────────────────────
-// Otome Forge: the Album. CGs (story CGs once seen, Memories' CGs once painted, pair portraits), chat stickers (#2044:
-// the protagonist's five and each love interest's unlocked ones, cut out), Memories (each one's Character Story or
-// Moment to read, and Snapshots), the Love Timeline, favourite lines, the soundtrack, and the Tells journal. Only what is unlocked is listed; every image saves to the device through the Engine. Everything reads
-// without images or audio: a Memory without art shows a quiet card in their colour.
+// Otome Forge: the Album. CGs (newest first: story CGs once seen, Memories' CGs once painted, pair portraits), chat
+// stickers (#2044: the protagonist's five and each love interest's unlocked ones, cut out), Memories (each one's
+// Character Story or Moment to read, and Snapshots), the Love Timeline, favourite lines, the soundtrack (the moods,
+// then each begun chapter's theme), and the Tells journal. Only what is unlocked is listed; every image saves to the
+// device through the Engine. Everything reads without images or audio: a Memory without art shows a quiet card in their
+// colour.
 // ──────────────────────────────────────────────
 // Route (S/routes/album.ts): GET /runs/:run/album → AlbumView. An unopened Memory is opened here as anywhere else.
 import { useId, useState, type CSSProperties } from "react";
@@ -31,7 +33,6 @@ import { runPath } from "../../hooks/use-reader";
 import { accentOf } from "../../lib/accent";
 import { albumMemories, isUnplayedMemory, type MemoryRarityFilter } from "../../lib/album-memories";
 import type { RunView } from "../../shared/api-types";
-import type { MusicMood } from "../../shared/faces";
 import { PLAYER_STICKER_OWNER } from "../../shared/stickers";
 import type { AlbumImage, AlbumMemory, AlbumSticker, AlbumView } from "../../shared/wardrobe";
 import { useStickers } from "../phone/StickerPicker";
@@ -105,9 +106,18 @@ export function Album({ runKey, view, onOpenStory }: AlbumProps) {
   const [viewingSticker, setViewingSticker] = useState<number | null>(null);
   const stickers = useStickerImages(view, album.data?.stickers ?? []);
   const [memory, setMemory] = useState<string | null>(null);
-  const [playing, setPlaying] = useState<MusicMood | null>(null);
-  // The soundtrack's chosen mood plays while the Album is open; none lets the story's own music go on.
-  useMusicCue(playing ?? undefined);
+  const [playing, setPlaying] = useState<string | null>(null);
+  // The soundtrack's chosen row plays while the Album is open; none lets the story's own music go on. A chapter's theme
+  // is held as the reader holds it, with its saved track, so it is never made again (Home's mood stands in only while
+  // its file is gone and nothing else plays).
+  const song = album.data?.soundtrack.find((entry) => entry.cue === playing);
+  useMusicCue(
+    !song
+      ? undefined
+      : "chapter" in song
+        ? { chapterKey: song.chapter.key, mood: "home", track: song.track }
+        : song.cue,
+  );
 
   const head = (
     <div className="of-page-head of-page-head--tight">

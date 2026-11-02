@@ -5,12 +5,17 @@ import {
   chapterMusicCue,
   normalizeOtomeAudio,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/audio.ts";
+import type { Chapter } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
+import { MUSIC_MOODS } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/faces.ts";
 import {
   chapterId,
   runDocTarget,
+  stateId,
   worldId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
+import { albumView } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/album.ts";
 import { registerAudioRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/audio.ts";
+import { normalizeState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import {
   normalizeBeat,
   normalizeChapter,
@@ -120,4 +125,52 @@ test("chapter tracks validate run, chapter and package ownership, keep the first
   assert.deepEqual(toChapterView((await t.chapter())!).music?.track, track);
   const world = (await t.store.readDoc(worldId(t.runId), normalizeWorld))!;
   assert.deepEqual(world.audio.tracks, [], "chapter tracks do not enter the bounded global mood cache");
+});
+
+test("the Album's Soundtrack lists each begun chapter's saved theme after the moods, in story order", async () => {
+  const t = await fixture("r-chapmusic4-dddddd");
+  const { number: _number, ...main } = (await t.chapter())!;
+  const seed = (key: string, changes: Partial<Chapter>) =>
+    t.store.mutateDoc(runDocTarget("chapter", chapterId(t.runId, key)), normalizeChapter, () => ({
+      ...main,
+      key,
+      ...changes,
+    }));
+  // Planned out of story order: the Story screen's order (the prologue, the main chapters, then the rest) wins.
+  await seed("date-1", { kind: "date", title: "Lanterns on the Water", plannedAt: "2026-10-01T10:00:00.000Z" });
+  await seed("main-2", { number: 2, title: "Low Tide", plannedAt: "2026-10-02T10:00:00.000Z" });
+  await seed("prologue", { kind: "prologue", title: "Arrival", plannedAt: "2026-10-03T10:00:00.000Z" });
+  await seed("main-3", { number: 3, title: "NEVER-BEGUN", plannedAt: "2026-10-04T10:00:00.000Z" });
+  const theme = (key: string) => {
+    const context = forgeSoundtrackContextKey(t.runId, "conn-audio", chapterMusicCue(key));
+    return {
+      cue: chapterMusicCue(key),
+      connectionId: "conn-audio",
+      tag: `music:contexts:otome-forge:${context}:take-1`,
+      path: `music/contexts/otome-forge/${context}/take-1.mp3`,
+    };
+  };
+  for (const key of ["date-1", "main-2", "prologue", "main-3"])
+    assert.equal((await t.call("POST", "/runs/:run/audio/track", { chapterKey: key, ...theme(key) })).status, 200);
+  const begun = { beatsRead: 1, completed: null, applied: [] };
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+    ...state,
+    // main-1 is begun without a theme, as in a run from before chapter themes; main-3 is never begun.
+    chapters: { ...state.chapters, "date-1": begun, "main-1": begun, "main-2": begun, prologue: begun },
+  }));
+  const { soundtrack } = await albumView(t.deps, t.runId);
+  assert.deepEqual(
+    soundtrack.slice(0, MUSIC_MOODS.length).map((entry) => entry.cue),
+    [...MUSIC_MOODS],
+    "the six moods come first, as before",
+  );
+  assert.deepEqual(
+    soundtrack.slice(MUSIC_MOODS.length),
+    [
+      ["prologue", "Arrival"],
+      ["main-2", "Low Tide"],
+      ["date-1", "Lanterns on the Water"],
+    ].map(([key, title]) => ({ cue: chapterMusicCue(key!), track: theme(key!), chapter: { key, title } })),
+    "each begun chapter's saved theme, by its title; none without a theme, none never begun",
+  );
 });

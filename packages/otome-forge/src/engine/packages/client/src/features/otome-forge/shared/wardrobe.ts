@@ -147,11 +147,13 @@ export interface AlbumMemory extends ItemView {
   read: "unread" | "in-progress" | "done" | null;
 }
 
-/** One soundtrack cue: its generated track, or null (the client plays the stock one). */
-export interface SoundtrackEntry {
-  cue: MusicMood;
-  track: SoundtrackTrack | null;
-}
+/**
+ * One soundtrack row: a mood cue with its generated track, or null (the client plays the stock one); or a begun
+ * chapter's saved theme, cue `chapter-<key>` (SH/audio.ts chapterMusicCue), named by its chapter.
+ */
+export type SoundtrackEntry =
+  | { cue: MusicMood; track: SoundtrackTrack | null }
+  | { cue: string; track: SoundtrackTrack; chapter: { key: string; title: string } };
 
 /** GET /runs/:run/album: only what is unlocked. `tells` are the tells she has learned to read, per love interest. */
 export interface AlbumView {
