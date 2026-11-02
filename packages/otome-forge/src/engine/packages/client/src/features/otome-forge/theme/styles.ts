@@ -754,17 +754,18 @@ ${R} .of-bible-list { margin: 0; padding-inline-start: 18px; }
 ${R} .of-bible-secret, ${R} .of-bible-stage {
   display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 14px; background: var(--of-surface-hover);
 }
-/* Settings. */
+/* Settings, and the tab rows Wish and the Album share (BannerTabs.tsx TabList). */
 ${R} .of-tabs {
   display: flex; gap: 4px; padding: 4px; border-radius: 18px; overflow-x: auto; scrollbar-width: none; flex: none;
 }
-/* Keep the phone's categories in one scrolling strip; wide Settings can show them all at once. A mouse shows them all at
-   any width: the strip hides its scrollbar, so a cut-off tab (wider system fonts, a narrow window) had no way in. */
+/* Keep a phone's tabs in one scrolling strip; a wide stage can show them all at once. A mouse shows them all at any
+   width: the strip hides its scrollbar, so a cut-off tab (the Album's seven, wider system fonts, a narrow window) had
+   no way in. */
 @container of-stage (min-width: 960px) {
-  ${R} .of-settings .of-tabs { flex-wrap: wrap; overflow: visible; }
+  ${R} .of-tabs { flex-wrap: wrap; overflow: visible; }
 }
 @media (pointer: fine) {
-  ${R} .of-settings .of-tabs { flex-wrap: wrap; overflow: visible; }
+  ${R} .of-tabs { flex-wrap: wrap; overflow: visible; }
 }
 ${R} .of-settings .of-tab { min-height: 44px; }
 ${R} .of-tabs::-webkit-scrollbar { display: none; }
