@@ -57,6 +57,13 @@ export const AFFECTION_EARNINGS = {
 /** Affection from outside the story, per love interest per local day (proposal: the design's cap read as per LI). */
 export const OUTSIDE_AFFECTION_DAILY_CAP = 300;
 
+/**
+ * #2046: what siding with one love interest in an argument moves (proposal). The one backed gains, as a story earning
+ * (never capped; twice what a hostile pick costs); each one passed over loses less than a hostile pick, since backing
+ * someone else is not hostile, and never below the level reached.
+ */
+export const SIDE_WITH_AFFECTION = { backed: 30, passedOver: 10 } as const;
+
 /** Affection level 1–10 from points. Choice losses stop at the current level's floor. */
 export function levelOf(points: number): number {
   const safe = Number.isFinite(points) ? Math.max(0, points) : 0;

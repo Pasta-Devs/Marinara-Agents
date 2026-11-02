@@ -9,7 +9,8 @@
 // M2b: a painted story CG takes over the stage when its line comes (components/CgTakeover.tsx); the beat's music cue
 // plays and each spoken line is voiced (hooks/use-otome-audio.ts), and Auto waits for the voice. Everything works the
 // same with no image, music or voice connection. While a scene is written, Who said what? may be played under the
-// panel (#2041, WhoSaidWhat.tsx).
+// panel (#2041, WhoSaidWhat.tsx). A side-with choice (#2046) is marked as one, each option names whom it backs, and its
+// pick shows the affection it moved with each love interest.
 // ──────────────────────────────────────────────
 import {
   useCallback,
@@ -26,6 +27,8 @@ import {
   BookHeart,
   Eye,
   Feather,
+  Heart,
+  HeartCrack,
   HeartHandshake,
   House,
   Images,
@@ -52,7 +55,7 @@ import { useReader, useReducedMotion, type ReaderState } from "../../hooks/use-r
 import { accentOf } from "../../lib/accent";
 import { canonOption, readyUrl, sumGrants, voiceOf, type Voice } from "../../lib/reader-state";
 import { useOtomeProps } from "../../props";
-import type { Grant, RunLiView, RunView } from "../../shared/api-types";
+import type { Grant, LiId, RunLiView, RunView } from "../../shared/api-types";
 import { FACES, MUSIC_MOODS, type MusicMood } from "../../shared/faces";
 import { Backlog } from "./Backlog";
 import { ChoicePills, RememberToast } from "./ChoicePills";
@@ -445,6 +448,8 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
                   <span className="of-toast-note"> · {t("ui.otomeForge.reader.cgNewNote")}</span>
                 </span>
               </p>
+            ) : toast.kind === "affection" ? (
+              <AffectionToast key={toast.id} li={view.lis.find((li) => li.id === toast.li)} amount={toast.amount} />
             ) : toast.kind === "audio" ? (
               <p key={toast.id} className="of-toast of-toast--audio">
                 <VolumeX size={14} strokeWidth={2} aria-hidden="true" />
@@ -534,6 +539,32 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
         />
       ) : null}
     </div>
+  );
+}
+
+/** #2046: the name of the love interest each option of a side-with choice backs. */
+function sideWithNames(backs: Record<string, LiId>, view: RunView): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(backs).flatMap(([option, id]) => {
+      const name = view.lis.find((li) => li.id === id)?.name;
+      return name ? [[option, name]] : [];
+    }),
+  );
+}
+
+/** "+30 affection with Kai" or "−10 affection with Sol": what a side-with pick moved, in his colour (#2046). */
+function AffectionToast({ li, amount }: { li: RunLiView | undefined; amount: number }) {
+  const { t } = useTranslation();
+  if (!li) return null;
+  const Icon = amount > 0 ? Heart : HeartCrack;
+  return (
+    <p className="of-toast of-toast--affection" style={{ "--of-li-accent": accentOf(li) } as CSSProperties}>
+      <Icon size={15} strokeWidth={2} aria-hidden="true" />
+      {t(amount > 0 ? "ui.otomeForge.reader.affectionGained" : "ui.otomeForge.reader.affectionLost", {
+        name: li.name,
+        amount: Math.abs(amount),
+      })}
+    </p>
   );
 }
 
@@ -744,6 +775,7 @@ function BottomPanel(props: BottomPanelProps) {
           firstChoice={props.firstChoice}
           busy={reader.choosing === pending.id}
           error={reader.choiceError}
+          backs={beat.sideWith?.choice === pending.id ? sideWithNames(beat.sideWith.backs, view) : undefined}
           onChoose={(option) => void reader.choose(pending, option)}
         />
       ) : null}

@@ -31,6 +31,9 @@
 // 0.5.3 (#1955): P5 gives minor characters real parts and lets a node go without any love interest (never a moment or
 // the climax, S/story/chapters.ts); P5, P10 and P11 let time pass, with rest or sleep after a night, a long day or an
 // exhausting stretch (TIME_RULE).
+// #2046 (Side with): while a side-with scene may come (S/story/chapters.ts sideWithOpen), P5 may mark one beat node
+// where two to four love interests disagree; P6 on that node offers ONE choice with an option per love interest present,
+// each naming whom it backs, and the game, never the reply, sets what siding changes. Other prompts are unchanged.
 import { forgeChoiceMessages, forgeChoicePlanMessages } from "@forge-kit/player-choices-server.mjs";
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 import { z, type ZodType } from "zod";
@@ -445,6 +448,8 @@ export interface ChapterPlanReply {
     place?: string | null;
     cg?: boolean | null;
     resolves?: string[] | null;
+    /** #2046: P5 only, and only while one may come (S/story/chapters.ts sideWithOpen). */
+    sideWith?: boolean | null;
   }>;
   /** The node that carries this chapter's scheduled reveal (#1980), when the arc schedules one here. */
   revealNode?: number | null;
@@ -481,6 +486,7 @@ export const ChapterPlanSchema: ZodType<ChapterPlanReply> = z.object({
         place: text(120).nullable().optional(),
         cg: z.boolean().nullable().optional(),
         resolves: z.array(text(80)).max(6).nullable().optional(),
+        sideWith: z.boolean().nullable().optional(),
       }),
     )
     .min(1)
@@ -517,7 +523,33 @@ export interface ChapterPlanInput {
   arc?: StoryArc | null;
   /** The last main chapter's climax, for a free pick. */
   lastClimax?: ClimaxKind | null;
+  /** #2046: this chapter may hold a side-with scene (S/story/chapters.ts sideWithOpen); the planner hears of it only then. */
+  sideWith?: boolean;
 }
+
+/** #2046: a side-with scene is one choice of two to SIDE_WITH_MAX options, one per love interest (the kit allows 4). */
+export const SIDE_WITH_MAX = 4;
+
+/** The love interests present in `node` when a side-with scene fits it (a beat node with 2 to SIDE_WITH_MAX), or null. */
+export function sideWithFits<U extends Pick<Unit, "id">>(
+  node: Pick<ChapterNode, "kind" | "cast">,
+  units: readonly U[],
+): U[] | null {
+  const present = units.filter((unit) => node.cast.includes(unit.id));
+  return node.kind === "beat" && present.length >= 2 && present.length <= SIDE_WITH_MAX ? present : null;
+}
+
+/** The love interests a node's side-with scene is between: a main chapter's marked node that fits, or null. */
+export function sideWithCast<U extends Pick<Unit, "id">>(
+  chapter: Pick<Chapter, "kind">,
+  node: Pick<ChapterNode, "kind" | "cast" | "sideWith">,
+  units: readonly U[],
+): U[] | null {
+  return chapter.kind === "main" && node.sideWith ? sideWithFits(node, units) : null;
+}
+
+/** P5's rule, while a side-with scene may come; the story's content settings decide how heated the argument gets. */
+const SIDE_WITH_PLAN_RULE = `- SIDE WITH (optional, at most one node): when two to ${SIDE_WITH_MAX} love interests share a beat node and the story gives them a real disagreement (they argue, or want to handle something differently), you may set "sideWith": true on that node; its guide says what they disagree on and where each of them stands. The narrator then lets the protagonist side with one of them. Only when it rises from the story; never invent a disagreement to use it.`;
 
 export function chapterPlanMessages({
   world,
@@ -530,6 +562,7 @@ export function chapterPlanMessages({
   climax = null,
   lastClimax = null,
   arc: plannedArc = null,
+  sideWith = false,
 }: ChapterPlanInput): OtomeMessage[] {
   const leadUnit = units.find((unit) => unit.id === lead);
   const others = units.filter((unit) => unit.id !== lead);
@@ -567,6 +600,7 @@ export function chapterPlanMessages({
     `- Never plan a chapter on the template of the ones before it: vary what drives it and where its turn falls. When its last node leaves a lasting decision open, make it ${VARIED_DECISION}.`,
     "- The world has other people: give named minor characters (friends, family, rivals, officials, locals) real parts where the story calls for them; they speak and can matter. Not every node needs a love interest: the protagonist has a life of their own, and a node may be theirs alone or with others (cast []). A moment node and the climax always have their love interest in cast.",
     "- No cap on the cast: when the beat needs everyone (a rescue, a party, a confrontation), a node may hold the whole cast, each with their own stake.",
+    ...(sideWith ? [SIDE_WITH_PLAN_RULE] : []),
     TIME_RULE,
     number === 1
       ? "- This is the first chapter: every love interest appears in at least one node, and it opens on the opening situation."
@@ -732,11 +766,29 @@ DATE CHOICE (this node is one scene of a date with ${unit.name}):
 }
 
 /**
- * How a Confrontation's or Closer's option reads (#2030): the label is the player's own button, so it speaks to them
- * ("Say what you pay"), never about them ("Say what she pays"); an action selection is narrated to "you" like the scene.
+ * How a Confrontation's or Closer's option reads (#2030), and a side-with option's (#2046, whose label is the kit's
+ * "text"): the label is the player's own button, so it speaks to them ("Say what you pay"), never about them ("Say what
+ * she pays"); an action selection is narrated to "you" like the scene.
  */
-const optionVoice = (protagonist: string) =>
-  `label: the pill's short intent, 2 to 6 words, addressed to the player as a bare command or with "you", never with the protagonist's name or "she", "he" or "they" for them (for example "Say what you pay", "Admit you are scared"). selection: what ${protagonist} says (kind dialogue) or does (kind action, narrated to "you", as in "You step closer."), one or two sentences.`;
+const optionVoice = (protagonist: string, field = "label") =>
+  `${field}: the pill's short intent, 2 to 6 words, addressed to the player as a bare command or with "you", never with the protagonist's name or "she", "he" or "they" for them (for example "Say what you pay", "Admit you are scared"). selection: what ${protagonist} says (kind dialogue) or does (kind action, narrated to "you", as in "You step closer."), one or two sentences.`;
+
+/**
+ * P6 on a side-with node (#2046): the love interests present disagree, and ONE small choice lets the protagonist back
+ * one of them, each option naming whom it backs in "backs" (S/story/beats.ts checks it). The game, not the reply, sets
+ * what siding changes. How heated the argument gets is the story's content settings', as in any scene.
+ */
+export function sideWithInstruction(present: ReadonlyArray<Pick<Unit, "id" | "name">>, protagonist: string): string {
+  const who = present.map((unit) => `${unit.name} (id ${unit.id})`).join(", ");
+  return `
+
+SIDE WITH (this node): ${who} disagree here: they argue, or want to handle something differently (the node's guide says over what). Play the disagreement out on the page, each of them pressing their own view.
+- Offer exactly ONE small choice where it comes to ${protagonist}: exactly ${present.length} options, one per love interest present, each ${protagonist} backing that love interest's view. No option stays out of it, splits the difference or backs no one.
+- Give each of those options a "backs" field beside its "text" and "selection": the id of the love interest it sides with.
+- ${optionVoice(protagonist, "text")} Name whom the option backs in its text (for example "Back ${present[0]!.name}'s plan", "Side with ${present[1]!.name}").
+- Each branch shows how the one backed and the ones passed over take it.
+- Leave "effects" out of that choice: the game settles what siding with them changes.`;
+}
 
 /** #2024: who is no longer in the scene, so the reader takes them off the stage (S/story/beats.ts exitsOf). */
 const EXITS_RULE =
@@ -889,8 +941,13 @@ export function beatMessages({
     { enabled: true, terminal: last && !date },
   );
   const dateChoice = date && partner ? dateChoiceInstruction(partner, date.goesWrong) : "";
+  const side = sideWithCast(chapter, node, units);
+  const sideWith = side ? sideWithInstruction(side, player.name || "the protagonist") : "";
   return [
-    { ...messages[0], content: messages[0].content + CHOICE_EFFECTS_INSTRUCTION + dateChoice + VOICES_INSTRUCTION },
+    {
+      ...messages[0],
+      content: messages[0].content + CHOICE_EFFECTS_INSTRUCTION + dateChoice + sideWith + VOICES_INSTRUCTION,
+    },
     ...messages.slice(1),
   ];
 }

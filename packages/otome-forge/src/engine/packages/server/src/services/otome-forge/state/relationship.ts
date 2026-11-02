@@ -7,13 +7,16 @@
 // opened it, and closes only on a node whose plan lists it in `resolves`. A grievance of severity `rupture` opens a
 // rupture, which shuts his gates until a scene forgives or addresses it; while another rupture-severity grievance is
 // still owed, the rupture moves to it instead of closing. A hostile pick costs 15 affection once per love interest,
-// stopping at the floor of the level already reached (at level 10, of the last extra story unlocked: #2025). Nothing
-// here lowers a level or stage, or takes an unlocked extra story back.
+// stopping at the floor of the level already reached (at level 10, of the last extra story unlocked: #2025). A
+// side-with pick (#2046) moves affection by its effects' `affection`, which only the game sets: the one backed gains, a
+// story earning never capped, and each one passed over loses, stopping at that same floor. Nothing here lowers a level
+// or stage, or takes an unlocked extra story back.
 //
 // Every function is pure. The choose route applies a pick inside one revision-checked write of `${R}:state`, and the
 // pick's `${i}/${choiceId}` in `chapters[key].applied` makes a replay, or a request that lost a race, change nothing.
 import { z, type ZodType } from "zod";
 import type {
+  AffectionChange,
   ChapterProgress,
   ChapterShift,
   Effect,
@@ -95,6 +98,8 @@ export interface ChoiceOutcome {
   remembered: boolean;
   /** The love interests that pick changed something with, in the order of its effects (the toast names a lone one). */
   rememberedBy: LiId[];
+  /** How far it moved each love interest's affection points, in the order of its effects; none when nothing moved. */
+  affection: AffectionChange[];
   /** True when this pick was applied before: the state is returned unchanged. */
   replay: boolean;
 }
@@ -149,13 +154,15 @@ function boundGrievances(grievances: Grievance[]): Grievance[] {
 /**
  * Applies the effects of a first-play pick, clamped, in one pure step, and records the pick in `chapters[key].applied`.
  * Effects for a love interest the state does not have are skipped. A pick already in `applied` changes nothing.
- * A hostile pick loses affection once per love interest, without losing a level or stage.
+ * A hostile pick loses affection once per love interest, without losing a level or stage; so does a side-with pick's
+ * loss, while its gain is never capped.
  */
 export function applyChoiceEffects(state: RunState, effects: readonly Effect[], context: ChoiceContext): ChoiceOutcome {
   const { key, i, choice, at } = context;
   const pick = `${i}/${choice}`;
   const progress: ChapterProgress = state.chapters[key] ?? { beatsRead: 0, completed: null, applied: [] };
-  if (progress.applied.includes(pick)) return { state, remembered: false, rememberedBy: [], replay: true };
+  if (progress.applied.includes(pick))
+    return { state, remembered: false, rememberedBy: [], affection: [], replay: true };
 
   const here = `${key}/${i}`;
   const resolvable = new Set(context.resolves ?? []);
@@ -166,6 +173,8 @@ export function applyChoiceEffects(state: RunState, effects: readonly Effect[], 
   );
   const rememberedBy = new Set<LiId>();
   const harmed = new Set<LiId>();
+  /** #2046: a side-with pick's affection per love interest, from its game-made effects. */
+  const moved = new Map<LiId, number>();
 
   for (const effect of effects) {
     const current = lis[effect.li];
@@ -173,6 +182,7 @@ export function applyChoiceEffects(state: RunState, effects: readonly Effect[], 
     const delta = deltaFor(current, key, i);
     const li: LiState = { ...current, grievances: [...current.grievances], disclosures: [...current.disclosures] };
     if (effect.trust === -1) harmed.add(effect.li);
+    if (effect.affection) moved.set(effect.li, (moved.get(effect.li) ?? 0) + effect.affection);
 
     const trust = shift(effect.trust ?? 0, li.trust, delta.trust, delta.beat.trust, TRUST_MIN, TRUST_MAX);
     const tension = shift(effect.tension ?? 0, li.tension, delta.tension, delta.beat.tension, TENSION_MIN, TENSION_MAX);
@@ -238,6 +248,18 @@ export function applyChoiceEffects(state: RunState, effects: readonly Effect[], 
       rememberedBy.add(id);
     }
   }
+  for (const [id, amount] of moved) {
+    const li = lis[id]!;
+    const points = amount > 0 ? li.points + amount : Math.max(affectionFloorOf(li.points), li.points + amount);
+    if (points !== li.points) {
+      lis[id] = { ...li, points };
+      rememberedBy.add(id);
+    }
+  }
+  const affection = [...new Set(effects.map((effect) => effect.li))].flatMap((id) => {
+    const amount = (lis[id]?.points ?? 0) - (state.lis[id]?.points ?? 0);
+    return state.lis[id] && amount ? [{ li: id, amount }] : [];
+  });
 
   return {
     state: {
@@ -247,6 +269,7 @@ export function applyChoiceEffects(state: RunState, effects: readonly Effect[], 
     },
     remembered: rememberedBy.size > 0,
     rememberedBy: [...rememberedBy],
+    affection,
     replay: false,
   };
 }

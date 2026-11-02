@@ -3,8 +3,8 @@
 // ──────────────────────────────────────────────
 // Both are written once by the story (S/story/*) and only ever read here, so a damaged list item is dropped and a
 // damaged field takes its default; a document with no key or no index reads as missing (null), and is written again.
-// The hidden parts (node guides, the ledger, a beat's effects, a date's plan and its scores) are stripped by
-// toChapterView and toBeatView before anything reaches the client.
+// The hidden parts (node guides, the ledger, a node's side-with mark, a beat's effects, a date's plan and its scores)
+// are stripped by toChapterView and toBeatView before anything reaches the client.
 import { z, type ZodType } from "zod";
 import type {
   Beat,
@@ -79,6 +79,7 @@ export const EffectSchema: ZodType<Effect> = z.object({
     .optional(),
   disclose: short().optional(),
   resolve: z.object({ id: short(80), status: z.enum(["addressed", "forgiven", "festering"]) }).optional(),
+  affection: z.number().int().min(-300).max(300).optional(),
 });
 
 const NodeSchema: ZodType<ChapterNode> = z.object({
@@ -96,6 +97,7 @@ const NodeSchema: ZodType<ChapterNode> = z.object({
     .union([z.object({ kind: z.literal("piece"), li: z.string() }), z.object({ kind: z.literal("truth") })])
     .optional(),
   arcEvent: z.literal(true).optional(),
+  sideWith: z.literal(true).optional(),
 });
 
 const LedgerSchema: ZodType<ChapterLedger> = z.object({
@@ -288,6 +290,7 @@ export function normalizeBeat(data: unknown): Beat | null {
       rewrites: z.number().int().min(0),
       shown: z.literal(true).optional(),
       confrontation: ConfrontationSchema.optional(),
+      sideWith: z.object({ choice: short(40), backs: z.record(z.string(), z.string()) }).optional(),
     },
     () => ({
       key: data.key as string,
