@@ -1,7 +1,9 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the story's soundtrack. Each mood's track, written for this world once it has been generated, or the
-// Engine's own music for that mood until then. Play holds the mood while the Album is open (the story's audio
-// controller plays it, as a scene would); nothing is generated from here that the settings would not generate anyway.
+// Engine's own music for that mood until then; then each begun chapter's saved theme, named by its chapter, in story
+// order. Play holds the row's music while the Album is open (the story's audio controller plays it, as a scene would,
+// and a chapter's theme as its reader does: Album.tsx); nothing is generated from here that the settings would not
+// generate anyway, and a chapter's theme is never made again.
 // ──────────────────────────────────────────────
 import { useTranslation } from "react-i18next";
 import { Music, Pause, Play } from "lucide-react";
@@ -20,8 +22,9 @@ const CUE_KEYS: Record<MusicMood, string> = {
 
 interface SoundtrackProps {
   entries: SoundtrackEntry[];
-  playing: MusicMood | null;
-  onPlay: (cue: MusicMood | null) => void;
+  /** The cue of the row playing (a mood, or a chapter's `chapter-<key>`), or null. */
+  playing: string | null;
+  onPlay: (cue: string | null) => void;
 }
 
 export function Soundtrack({ entries, playing, onPlay }: SoundtrackProps) {
@@ -41,7 +44,7 @@ export function Soundtrack({ entries, playing, onPlay }: SoundtrackProps) {
       <ul className="of-songs">
         {entries.map((entry) => {
           const on = playing === entry.cue;
-          const name = t(CUE_KEYS[entry.cue]);
+          const name = "chapter" in entry ? entry.chapter.title : t(CUE_KEYS[entry.cue]);
           return (
             <li key={entry.cue} className="of-song of-glass" data-playing={on}>
               <button
@@ -61,7 +64,11 @@ export function Soundtrack({ entries, playing, onPlay }: SoundtrackProps) {
               <span className="of-song-text">
                 <span className="of-song-name">{name}</span>
                 <span className="of-song-source">
-                  {entry.track ? t("ui.otomeForge.album.trackOwn") : t("ui.otomeForge.album.trackStock")}
+                  {"chapter" in entry
+                    ? t("ui.otomeForge.album.trackChapter")
+                    : entry.track
+                      ? t("ui.otomeForge.album.trackOwn")
+                      : t("ui.otomeForge.album.trackStock")}
                 </span>
               </span>
               {on ? <span className="of-song-bars" aria-hidden="true" /> : null}

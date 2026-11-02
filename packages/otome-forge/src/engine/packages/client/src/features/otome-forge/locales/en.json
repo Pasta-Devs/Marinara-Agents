@@ -56,6 +56,7 @@
   "ui.otomeForge.album.tellsNone": "You haven’t learned to read {{name}} yet.",
   "ui.otomeForge.album.timelineEmpty": "As your firsts together happen, the Love Timeline dates them here.",
   "ui.otomeForge.album.timelineWho": "Whose timeline",
+  "ui.otomeForge.album.trackChapter": "Chapter theme",
   "ui.otomeForge.album.trackOwn": "Written for this world",
   "ui.otomeForge.album.trackStock": "The Engine’s own music",
   "ui.otomeForge.album.unopened": "Not opened",

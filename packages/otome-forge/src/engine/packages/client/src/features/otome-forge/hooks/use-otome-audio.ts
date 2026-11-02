@@ -8,7 +8,9 @@
 //   is recorded on the story (POST .../audio/track). A track the Engine already filed under the story's key (a record
 //   that failed last time) is reused, never paid for twice. A failed generation is not tried again until the music
 //   settings change; stock music plays meanwhile. Nothing is generated while generation is off, muted or silent as
-//   saved: Settings → Audio's unsaved preview of Mute and the volumes changes only what is heard.
+//   saved: Settings → Audio's unsaved preview of Mute and the volumes changes only what is heard. A chapter's theme is
+//   held with its chapter: its saved track plays wherever it is held (the reader, the Album's Soundtrack), never a
+//   chosen music folder in its place, and a new one is made only while chapter themes are on.
 // - Voices: the kit's voice picking over the Engine's TTS settings (explicit assignments win; the protagonist uses her
 //   persona's voice or stays silent; love interests and, with "voice everyone else", anyone else get the Engine's pool
 //   voice for their gender). Narration and thoughts are never voiced. Each line has a cache key, so a replay from the
@@ -364,7 +366,10 @@ export class OtomeAudioController {
     if (!this.player || this.disposed) return;
     const held = this.effectiveCue();
     const descriptor = held && typeof held === "object" ? held : null;
-    const chapter = descriptor && this.saved.generate && this.saved.chapterThemes ? descriptor : null;
+    // A saved theme plays wherever it is held (the Album's Soundtrack holds one whatever the settings are now); only
+    // making one waits for chapter themes.
+    const chapter =
+      descriptor && (descriptor.track || (this.saved.generate && this.saved.chapterThemes)) ? descriptor : null;
     const cue = descriptor ? descriptor.mood : (held as MusicMood | null);
     const identity = chapter ? `${chapterMusicCue(chapter.chapterKey)}:${chapter.track?.tag ?? ""}` : cue;
     if (!force && identity === this.currentCue) return;
@@ -384,7 +389,9 @@ export class OtomeAudioController {
     }
     const manifest = await this.manifest;
     if (this.disposed || revision !== this.revision) return;
-    if (!this.saved.generate && this.saved.musicFolder) {
+    // A held chapter theme is that track, so a chosen folder never stands in for it (the reader holds one only while
+    // generation is on, when no folder plays).
+    if (!this.saved.generate && this.saved.musicFolder && !chapter) {
       if (!manifest) return;
       const assets = musicAssetsInFolder(manifest.assets, this.saved.musicFolder);
       const tags = Object.keys(assets);

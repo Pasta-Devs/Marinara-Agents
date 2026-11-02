@@ -991,9 +991,10 @@ test("the Album lists only what is unlocked: owned Memories, seen and painted CG
   assert.deepEqual(
     album.cgs.map((cg: { key: string; source: string }) => [cg.key, cg.source]),
     [
-      ["main-1/1", "story"],
       [`item:${ITEMS.memory.id}`, "memory"],
+      ["main-1/1", "story"],
     ],
+    "the CGs newest first, the oldest at the bottom",
   );
   assert.deepEqual(album.tells[KAI], ["flinches at the bell"], "the tells of a secret she has learned");
   assert.deepEqual(album.tells[MIR], [], "no tell of a secret still hidden");
