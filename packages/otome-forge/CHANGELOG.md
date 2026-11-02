@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.6.23 — 2026-11-02
+
+- **Side with one of them.** Now and then, when two or more love interests in a scene disagree on what to do, you choose whom to back. The one you side with gains 30 affection; each one you pass over loses 10, but never a level, a route stage or an unlocked story. It comes at most once every four main chapters, from chapter 4, and only when the story gives them a real reason to argue. Replaying a chapter changes nothing.
+
 ## 0.6.19 — 2026-11-02
 
 - **"What happened so far…" reads as a recollection of your story.** It now tells what has happened so far in story order, with the choices you made woven in, instead of notes about your persona, a summary per chapter and bold labels. Stories already in progress rewrite it in the background the next time Otome Hearth writes; nothing you played is changed.
