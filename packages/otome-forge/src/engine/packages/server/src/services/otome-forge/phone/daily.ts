@@ -1,6 +1,6 @@
 // ──────────────────────────────────────────────
-// Otome Forge: daily messages from love interests (#2044), Settings → Connections' "Messages a day from love
-// interests" (world.dailyMessages, 0 to 24; absent or 0 is off)
+// Otome Forge: daily messages from love interests (#2044), Settings → Connections' "Love interests who message you
+// each day" (world.dailyMessages, 0 to 24; absent or 0 is off)
 // ──────────────────────────────────────────────
 // ponytail: a port of Gacha Forge's createForgeProactiveMessages (packages/gacha-forge/src/proactive-messages-server.mjs)
 // rather than a shared kit module: GF's is bound to its index, session and roster documents, its transaction and its
@@ -11,6 +11,10 @@
 // - The quota is per local day in the request's time zone (forgeDayKey; every route runs in it): at most `limit`
 //   attempts a day, max(60 s, 24 h / limit) apart and never past the next local midnight (forgeResetIn), so they
 //   spread over the day and the count starts again each day. world.phoneDaily keeps four local days, as GF does.
+// - The limit is how many love interests write first a day, not how many messages (the maintainer's, 2026-11-03):
+//   one who wrote first today is not picked again until tomorrow, and each writes one to REPLY_MESSAGES_MAX messages
+//   (S/phone/replies.ts). The day's `wrote` lists them; an attempt that sent nothing names no one. Attempts are spread
+//   by the limit or the number met, whichever is smaller, so a limit above the cast still spreads over the day.
 // - The first heartbeat of a visit (none within 120 s) arms the next attempt at least 60 s away, never sooner than one
 //   already set, so opening the app never delivers at once and re-arming never shortens an interval.
 // - An attempt is spent when it is reserved, before any provider work, and never retried: a failed or dropped message
@@ -78,20 +82,24 @@ function shuffled<T>(items: readonly T[], random: () => number): T[] {
   return result;
 }
 
+/** The love interests the player has met, in cast order (see the header). */
+const metLis = (run: RunDocuments) =>
+  Object.keys(run.state.lis).filter((li) => run.units.some((unit) => unit.id === li && !!unit.bible));
+
 /** The love interests who may write first now, in cast order (see the header). */
 export async function dailyCandidates(
   deps: Pick<PhoneDeps, "store">,
   runId: string,
   run: RunDocuments,
+  day: string,
 ): Promise<LiId[]> {
   if (run.world.forge.phase !== "ready") return [];
   if (!Object.entries(run.state.chapters).some(([key, chapter]) => key !== PROLOGUE_KEY && !!chapter.completed)) {
     return [];
   }
   const open = openThreads.get(runId) ?? null;
-  const cast = Object.keys(run.state.lis).filter(
-    (li) => li !== open && run.units.some((unit) => unit.id === li && !!unit.bible) && !forgeChatReplyBusy(runId, li),
-  );
+  const wrote = new Set(run.world.phoneDaily?.days[day]?.wrote);
+  const cast = metLis(run).filter((li) => li !== open && !wrote.has(li) && !forgeChatReplyBusy(runId, li));
   const waiting = await Promise.all(
     cast.map(
       async (li) => openMessages((await readThread(deps.store, runId, li)) ?? emptyThread(li)).at(-1)?.who === "player",
@@ -109,7 +117,7 @@ export function dailyDecision(
 ): DailyDecision {
   const day = forgeDayKey(now);
   const days = { ...daily?.days };
-  const quota: { attempts: number; nextAt?: number } = { ...days[day], attempts: days[day]?.attempts ?? 0 };
+  const quota: PhoneDaily["days"][string] = { ...days[day], attempts: days[day]?.attempts ?? 0 };
   const older = Object.keys(days)
     .filter((key) => key !== day)
     .sort();
@@ -152,34 +160,40 @@ export async function phoneDue(
   if (answering.has(runId) || background.has(key)) return result("busy");
   answering.add(runId);
   try {
-    const candidates = await dailyCandidates(deps, runId, run);
+    const day = forgeDayKey(now);
+    const candidates = await dailyCandidates(deps, runId, run, day);
     if (!candidates.length) return result("no-eligible");
     const seen = heartbeats.get(runId);
     heartbeats.set(runId, now);
-    const first = dailyDecision(run.world.phoneDaily, { now, seen, limit });
+    const spread = (setting: number) => Math.min(setting, metLis(run).length);
+    const first = dailyDecision(run.world.phoneDaily, { now, seen, limit: spread(limit) });
     if (!("next" in first)) return result(first.status);
     // Decided again on the stored world, so a write that landed meanwhile (a settings save) counts.
     let decided: DailyDecision = first;
     const saved = await deps.store.updateDoc(runDocTarget("world", worldId(runId)), normalizeWorld, (current) => {
-      decided = dailyDecision(current.phoneDaily, { now, seen, limit: current.dailyMessages ?? 0 });
+      decided = dailyDecision(current.phoneDaily, { now, seen, limit: spread(current.dailyMessages ?? 0) });
       return "next" in decided ? { ...current, phoneDaily: decided.next } : current;
     });
     if (!saved) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
     if (decided.status !== "queued") return result(decided.status);
     const order = shuffled(candidates, random);
-    background.ensure({ key, connectionId, run: () => writeDaily(deps, runId, order, { connectionId, debugMode }) });
+    background.ensure({
+      key,
+      connectionId,
+      run: () => writeDaily(deps, runId, order, { connectionId, debugMode, day }),
+    });
     return result("queued");
   } finally {
     answering.delete(runId);
   }
 }
 
-/** The job: the first love interest still free writes first, so one attempt pays for one message at most. */
+/** The job: the first love interest still free writes first, so one attempt pays for one of them at most. */
 async function writeDaily(
   deps: DailyDeps,
   runId: string,
   order: readonly LiId[],
-  { connectionId, debugMode }: { connectionId: string; debugMode: boolean },
+  { connectionId, debugMode, day }: { connectionId: string; debugMode: boolean; day: string },
 ): Promise<void> {
   for (const li of order) {
     // While the job waited the player may have opened his thread, or a reply there may have started.
@@ -198,10 +212,16 @@ async function writeDaily(
     // Her message was waiting there after all: nothing was sent, so the next one may write.
     if (!sent?.length) continue;
     const at = sent.at(-1)!.at;
-    await deps.store.updateDoc(runDocTarget("world", worldId(runId)), normalizeWorld, (current) => ({
-      ...current,
-      phoneDaily: { ...current.phoneDaily, days: current.phoneDaily?.days ?? {}, last: { li, at } },
-    }));
+    await deps.store.updateDoc(runDocTarget("world", worldId(runId)), normalizeWorld, (current) => {
+      const days = current.phoneDaily?.days ?? {};
+      // The day the attempt was spent on, so a message that lands past midnight still counts there.
+      const today = days[day] ?? { attempts: 1 };
+      const wrote = [...new Set([...(today.wrote ?? []), li])];
+      return {
+        ...current,
+        phoneDaily: { ...current.phoneDaily, days: { ...days, [day]: { ...today, wrote } }, last: { li, at } },
+      };
+    });
     return;
   }
 }

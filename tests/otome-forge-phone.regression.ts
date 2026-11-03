@@ -951,9 +951,62 @@ test("daily messages: off by default, armed a minute after the app opens, spread
   // …and at 17:02 the next attempt is capped at the local midnight, so the third waits for tomorrow's count.
   assert.equal(await status(T0 + 120_000 + 8 * HOUR, { random: () => 0.999 }), "queued");
   await t.drain();
-  assert.deepEqual((await t.daily())!.days["2026-11-02"], { attempts: 2, nextAt: Date.UTC(2026, 10, 3) });
+  assert.deepEqual((await t.daily())!.days["2026-11-02"], {
+    attempts: 2,
+    nextAt: Date.UTC(2026, 10, 3),
+    wrote: [MIR, KAI],
+  });
   assert.equal((await t.thread(KAI))!.messages.length, 1, "random 0.999 keeps the cast order: Kai");
   assert.equal(await status(T0 + 180_000 + 8 * HOUR), "waiting");
+});
+
+test("daily messages: the limit is how many love interests write first a day, each once, spread over those met", async () => {
+  // The maintainer's setting of 2: two love interests a day, never one of them twice.
+  const t = await dailyWorld("r-daily6-aaaaaa", { limit: 2 });
+  const status = async (now: number) => (await t.due(now, { random: () => 0 })).status;
+  assert.equal(await status(T0), "scheduled");
+  assert.equal(await status(T0 + 60_000), "queued");
+  await t.drain();
+  // Random 0 puts Mireille first whenever she may write; 24 h / 2 to the next.
+  assert.deepEqual((await t.daily())!.days["2026-11-02"], {
+    attempts: 1,
+    nextAt: T0 + 60_000 + 12 * HOUR,
+    wrote: [MIR],
+  });
+  assert.equal(await status(T0 + 60_000 + 12 * HOUR), "scheduled");
+  assert.equal(await status(T0 + 120_000 + 12 * HOUR), "queued");
+  await t.drain();
+  assert.equal((await t.thread(MIR))!.messages.length, 1, "Mireille wrote first today already");
+  assert.equal((await t.thread(SOL))!.messages.length, 1, "random 0 among the others puts Sol first");
+  assert.deepEqual((await t.daily())!.days["2026-11-02"]!.wrote, [MIR, SOL]);
+  assert.equal(await status(T0 + 180_000 + 12 * HOUR), "quota");
+  // The next day she may write again.
+  const tomorrow = Date.UTC(2026, 10, 3, 9);
+  assert.equal(await status(tomorrow), "scheduled");
+  assert.equal(await status(tomorrow + 60_000), "queued");
+  await t.drain();
+  assert.equal((await t.thread(MIR))!.messages.length, 2);
+  assert.deepEqual((await t.daily())!.days["2026-11-03"]!.wrote, [MIR]);
+});
+
+test("daily messages: a limit above the cast spreads over those met, and nobody writes first twice a day", async () => {
+  const t = await dailyWorld("r-daily7-aaaaaa", { limit: 24 });
+  const status = async (now: number) => (await t.due(now, { random: () => 0 })).status;
+  /** 01:00 UTC, so three attempts 8 h apart fit in the day. */
+  const early = Date.UTC(2026, 10, 2, 1);
+  assert.equal(await status(early), "scheduled");
+  assert.equal(await status(early + 60_000), "queued");
+  await t.drain();
+  // 24 h over the three met, not over 24.
+  assert.equal((await t.daily())!.days["2026-11-02"]!.nextAt, early + 60_000 + 8 * HOUR);
+  for (const at of [early + 8 * HOUR, early + 16 * HOUR]) {
+    assert.equal(await status(at + 60_000), "scheduled");
+    assert.equal(await status(at + 120_000), "queued");
+    await t.drain();
+  }
+  assert.deepEqual((await t.daily())!.days["2026-11-02"]!.wrote, [MIR, SOL, KAI]);
+  for (const li of [MIR, SOL, KAI]) assert.equal((await t.thread(li))!.messages.length, 1, li);
+  assert.equal((await t.due(early + 16 * HOUR + 180_000)).status, "no-eligible", "each of them wrote today");
 });
 
 test("daily messages count each local day of the request's zone, and a spent attempt is never retried", async () => {
@@ -1022,13 +1075,14 @@ test("daily messages skip the open thread, a busy one and one waiting on her mes
   releaseStory();
   await story;
 
-  // Leaving Mireille's thread (the heartbeat says none is open) lets her write; Kai still waits on Ines.
+  // Leaving Mireille's thread (the heartbeat says none is open) lets her write; Kai still waits on Ines. The limit of
+  // 24 spreads over the three met: 8 h apart.
   await t.store.mutateDoc(chatTarget(t.runId, SOL), normalizeThread, (thread) => ({
     ...thread,
     messages: [...thread.messages, { id: "m-her-0002", who: "player", text: "Hi Sol", at: "2026-11-02T09:05:00.000Z" }],
   }));
-  assert.equal((await t.due(T0 + 61_000 + HOUR, { open: null })).status, "scheduled");
-  assert.equal((await t.due(T0 + 121_000 + HOUR, { open: null })).status, "queued");
+  assert.equal((await t.due(T0 + 61_000 + 8 * HOUR, { open: null })).status, "scheduled");
+  assert.equal((await t.due(T0 + 121_000 + 8 * HOUR, { open: null })).status, "queued");
   await t.drain();
   assert.equal((await t.thread(MIR))!.messages.length, 1);
   assert.equal(t.firstCalls().length, 2);

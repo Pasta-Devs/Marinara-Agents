@@ -261,7 +261,7 @@ test("the timeline grows with no call, has 1k of leeway, and is condensed only p
     assert.ok(system.includes(SUMMARY_WORDING), "every summary keeps the summary wording");
     assert.equal(system.includes(CHAPTER_SUMMARY_WORDING), detail, "a chapter summary: at most 1000 words, said");
     assert.match(CHAPTER_SUMMARY_WORDING, /at most 1000 words/u);
-    assert.equal(system.includes(TIMELINE_FOLD_WORDING), !detail, "condensing: at most 3000 words, said");
+    assert.equal(system.includes(TIMELINE_FOLD_WORDING), !detail, "condensing: about 5000 words, said");
     assert.equal(system.includes(OVERVIEW_WORDING), !detail, "the condensed part reads as a recollection");
     assert.ok(call.options!.maxTokens! >= 10240, "the word limits are the prompt's; the reply room stays 10240");
   }
@@ -325,7 +325,7 @@ test("a small memory model condenses the timeline in pieces it can hold, each wi
 });
 
 test("a condensed head that came back long is never condensed again by itself, and a date's fold condenses nothing", async () => {
-  // The condensing ignores its 3000 words and returns about 12000 tokens; then a date is folded in, which adds no
+  // The condensing ignores its 5000 words and returns about 12000 tokens; then a date is folded in, which adds no
   // summary to the timeline. Before #2066's follow-up that fold paid to condense the head again.
   const sources: ForgeMemorySource[] = [
     ...mainChapters(3),

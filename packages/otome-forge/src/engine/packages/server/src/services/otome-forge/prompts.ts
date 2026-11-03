@@ -2541,8 +2541,11 @@ export const OVERVIEW_WORDING =
 
 /** The most a chapter summary may run to (#2066). Said in the prompt; the reply's own allowance stays 10240 tokens. */
 export const CHAPTER_SUMMARY_WORDS = 1000;
-/** The most a condensed timeline may run to (#2066), about 5000 tokens. Said in the prompt, as above. */
-export const TIMELINE_FOLD_WORDS = 3000;
+/**
+ * What a condensed timeline runs to (#2066): about half the 13–14k tokens it condenses at (S/memory/timeline.ts), some
+ * 6750 tokens (the maintainer's, 2026-11-03). Said in the prompt, as above.
+ */
+export const TIMELINE_FOLD_WORDS = 5000;
 
 /**
  * What every chapter summary adds to the kit's detail prompt (#2066): one chapter, as played, in at most 1000 words, with
@@ -2555,7 +2558,7 @@ export const CHAPTER_SUMMARY_WORDING = `Summarize this one chapter, as it was pl
  * What condensing the timeline asks for (#2066): everything but the newest chapter, retold shorter. The newest stays as
  * it is, so the timeline goes on in order.
  */
-export const TIMELINE_FOLD_WORDING = `Condense the story's timeline below into at most ${TIMELINE_FOLD_WORDS} words. Keep every event that still matters, every relationship turn, every choice the protagonist made (big choices, judgments, whom they sided with) and the names, in story order. A part that begins "Private: only … know this." stays private: keep that opening for it.`;
+export const TIMELINE_FOLD_WORDING = `Condense the story's timeline below to about ${TIMELINE_FOLD_WORDS} words, and no more. Keep every event that still matters, every relationship turn, every choice the protagonist made (big choices, judgments, whom they sided with) and the names, in story order. A part that begins "Private: only … know this." stays private: keep that opening for it.`;
 
 /** The timeline-condensing call (#2066): the timeline as data, and the kit's summary rules in Otome's words. */
 export function timelineFoldMessages(timeline: string): OtomeMessage[] {

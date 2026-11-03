@@ -1845,8 +1845,12 @@ ${R} .of-nameplate-tag {
 }
 ${R} .of-line {
   max-height: 9.8em; margin: 0; padding-inline-end: 34px; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere;
-  font-size: 1.02rem; line-height: 1.62; color: var(--of-text);
+  font-size: 1.02rem; line-height: 1.62; color: var(--of-text); scrollbar-gutter: stable;
 }
+/* While the box follows a line it clips, and DialogueBox lifts the text instead of scrolling (iOS undid the scrolls).
+   The gutter stays, so the text keeps its width when the box scrolls again. */
+${R} .of-line[data-lifting="true"] { overflow-y: hidden; }
+${R} .of-line > [aria-hidden="true"] { display: block; }
 ${R} .of-line-rest { visibility: hidden; }
 ${R} .of-line--thought { font-style: italic; color: var(--of-text-soft); }
 ${R} .of-line--thought > [aria-hidden="true"]::before { content: "("; }

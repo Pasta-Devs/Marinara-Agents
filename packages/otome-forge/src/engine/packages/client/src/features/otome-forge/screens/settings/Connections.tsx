@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // Otome Forge Settings → Connections: the story's text connection for each job ("Same as story" by default), how many
-// times a day a love interest may write first (#2044, S/phone/daily.ts; 0, the default, is off), and the story memory's
-// status with its Retry (Debug's MemorySection), next to the connection that writes the summaries
+// love interests may write first each day, each once (#2044, S/phone/daily.ts; 0, the default, is off), and the story
+// memory's status with its Retry (Debug's MemorySection), next to the connection that writes the summaries
 // ──────────────────────────────────────────────
 import { useState } from "react";
 import { useTranslation } from "react-i18next";

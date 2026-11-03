@@ -1708,9 +1708,9 @@ test("Otome Hearth's screens around the loop, by keyboard: the cast, a bible, ev
         await expect(memory).toContainText("A summary failed. Retry when you’re ready.");
         await memory.getByRole("button", { name: "Retry memory upkeep" }).click();
         await expect.poll(() => posts(stub, "/memory/retry").length).toBe(1);
-        // Messages a day from love interests (#2044): 0, off, until the player sets it; by keyboard, 0 to 24 only.
+        // Love interests who message you each day (#2044): 0, off, until the player sets it; by keyboard, 0 to 24 only.
         const panel = root.getByRole("tabpanel");
-        const daily = panel.getByRole("spinbutton", { name: "Messages a day from love interests" });
+        const daily = panel.getByRole("spinbutton", { name: "Love interests who message you each day" });
         const save = panel.getByRole("button", { name: "Save changes" });
         await expect(daily).toHaveValue("0");
         await expect(daily).toHaveAccessibleDescription(/0 turns it off/u);

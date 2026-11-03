@@ -212,9 +212,12 @@ export interface World {
   phoneDaily?: PhoneDaily;
 }
 
-/** `world.phoneDaily`: per local day ("YYYY-MM-DD"), the attempts spent and when the next may start (epoch ms). */
+/**
+ * `world.phoneDaily`: per local day ("YYYY-MM-DD"), the attempts spent, when the next may start (epoch ms), and the
+ * love interests who wrote first that day.
+ */
 export interface PhoneDaily {
-  days: Record<string, { attempts: number; nextAt?: number }>;
+  days: Record<string, { attempts: number; nextAt?: number; wrote?: LiId[] }>;
   /** The newest daily message: whose thread it landed in, and when. */
   last?: { li: LiId; at: string };
 }
