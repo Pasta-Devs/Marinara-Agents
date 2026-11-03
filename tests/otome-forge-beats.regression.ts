@@ -725,6 +725,14 @@ test("a chapter's plan and scenes share their cached prefix byte for byte; only 
     "PRIVATE-LEDGER: she burns a page.",
     "2026-10-28T08:00:00.000Z",
   );
+  // The Lead's own route chapter too: the plan (cast [lead]) may know it, so it goes after the plan's cached part, as
+  // after every scene's.
+  await completeChapter(
+    t,
+    { key: `route-${KAI}-2`, kind: "route", li: KAI, lead: KAI, stage: 2, title: "Kai's Lamp" },
+    "KAI-ROUTE: Kai lights the lamp for her.",
+    "2026-10-28T08:30:00.000Z",
+  );
   assert.equal((await t.call("POST", "/runs/:run/chapters/next", { lead: KAI })).status, 200);
   await readThrough(t, 0, 6);
   await t.settle();
@@ -756,8 +764,13 @@ test("a chapter's plan and scenes share their cached prefix byte for byte; only 
   for (const messages of scenes.slice(0, -1)) {
     assert.ok(messages.at(-1)!.content.includes("- This is NOT the last story beat."));
   }
-  // Her chapter is never in it: it goes with the task of each scene she is in, and of no other.
+  // Her chapter is never in it: it goes with the task of each scene she is in, and of no other. His goes with the
+  // plan's task and every scene's.
   assert.ok(!whole(plan).includes("PRIVATE-LEDGER"));
+  for (const messages of [plan, ...scenes]) {
+    assert.ok(!messages[0]!.content.includes("KAI-ROUTE"));
+    assert.ok(messages.at(-1)!.content.includes(`# Canon in full: ${KAI_ROUTE}\nKAI-ROUTE`));
+  }
   const nodes = (await readChapter(t.store, t.runId, "main-1"))!.nodes;
   const withHer = [0, 1, 2, 3, 4, 6].map((i) => nodes[i]!.cast.includes(MIR));
   assert.ok(withHer.includes(true) && withHer.includes(false), "she is in some scenes and not others");
@@ -2540,7 +2553,7 @@ test("Side with (#2046): the game sets its effects, the pick moves affection onc
 });
 
 test("a cached story context is what every call of its chapter may know, whatever the cast; the rest follows each call (#2091)", async () => {
-  const t = await storyWorld({ runKey: "r-held-aaaaaa" });
+  const t = await storyWorld({ runKey: "r-cached-aaaaaa" });
   await completeChapter(
     t,
     { key: "main-1", kind: "main", number: 1, lead: KAI, title: "Night 1" },
@@ -2577,7 +2590,16 @@ test("a cached story context is what every call of its chapter may know, whateve
       recent: [
         { id: "main-1", kind: "chapter", title: "Night 1", content: "NIGHT-ONE-SUMMARY", summary: true },
         ...((options.cast ?? []).includes(MIR) && !covered
-          ? [{ id: `route-${MIR}-3`, kind: "chapter", title: MIREILLE_LEDGER, content: "LEDGER-RECENT", summary: true }]
+          ? [
+              { id: `route-${MIR}-2`, kind: "chapter", title: "Her first", content: "FIRST-RECENT", summary: true },
+              {
+                id: `route-${MIR}-3`,
+                kind: "chapter",
+                title: MIREILLE_LEDGER,
+                content: "LEDGER-RECENT",
+                summary: true,
+              },
+            ]
           : []),
       ],
       recalls: (options.cast ?? []).map((li) => ({ id: `note-${li}`, title: `${li}'s note`, content: `NOTE-${li}` })),
@@ -2600,6 +2622,11 @@ test("a cached story context is what every call of its chapter may know, whateve
   assert.doesNotMatch(kai.recalls!.text, new RegExp(`NOTE-${MIR}|LEDGER`, "u"), "only what Kai's scene may know");
   assert.match(mir.recalls!.text, new RegExp(`NOTE-${MIR}`, "u"));
   assert.doesNotMatch(mir.recalls!.text, new RegExp(`NOTE-${KAI}`, "u"));
+  // Each part keeps its own newest summary: of hers, only the older may give way.
+  assert.deepEqual(
+    mir.recalls!.optional.map((text) => text.split("\n")[0]),
+    ["# Recent canon summary: Her first"],
+  );
   // In her own chapter she is in every scene: her canon is cached with the rest.
   assert.ok((await call([MIR], { li: MIR })).text.includes("LEDGER-RECENT"));
   // Once her chapter's summary is in the timeline, every call has it there, as before.
@@ -2634,4 +2661,91 @@ test("a cached story context is what every call of its chapter may know, whateve
     kaiHistory.recalls!.text.includes("KAI-DATE-START") && !kaiHistory.recalls!.text.includes("PRIVATE-LEDGER"),
   );
   assert.ok(mirHistory.recalls!.text.includes("PRIVATE-LEDGER") && !mirHistory.recalls!.text.includes("KAI-DATE"));
+});
+
+test("a cached prompt's own canon has a bound of its own in the canonical history (#2091)", async () => {
+  const t = await storyWorld({ runKey: "r-ownbound-aaaaaa" });
+  const words = (tag: string, lines: number) => [
+    `${tag}-START`,
+    ...Array.from({ length: lines }, (_, n) =>
+      Array.from({ length: 100 }, (__, w) => `${tag.toLowerCase()}${(n + w) % 89}`).join(" "),
+    ),
+  ];
+  // Two main chapters before the previous one fill most of the bound; two dates of his come after the previous one.
+  for (const [n, at] of [
+    [1, "2026-10-28T09:00:00.000Z"],
+    [2, "2026-10-28T10:00:00.000Z"],
+  ] as const) {
+    await completeChapter(
+      t,
+      { key: `main-${n}`, kind: "main", number: n, lead: KAI, title: `Night ${n}` },
+      words(`NIGHT${n}`, 18),
+      at,
+    );
+  }
+  await completeChapter(
+    t,
+    { key: "main-3", kind: "main", number: 3, lead: KAI, title: "Night 3" },
+    "NIGHT-THREE: dawn.",
+    "2026-10-28T11:00:00.000Z",
+  );
+  for (const [n, at] of [
+    [1, "2026-10-28T12:00:00.000Z"],
+    [2, "2026-10-28T13:00:00.000Z"],
+  ] as const) {
+    await completeChapter(
+      t,
+      { key: `date-${n}`, kind: "date", li: KAI, lead: KAI, title: `Date ${n}` },
+      words(`DATE${n}`, 25),
+      at,
+    );
+  }
+  const context = await recallText({ store: t.store }, t.runId, {
+    job: "narration",
+    cast: [KAI],
+    continues: "main",
+    cached: {},
+  });
+  assert.ok(
+    context.text.includes("NIGHT1-START") && context.text.includes("NIGHT2-START"),
+    "the shared part's own bound",
+  );
+  // Both his dates, played after the previous chapter, stay, however much of the bound the shared part took.
+  assert.ok(context.recalls!.text.includes("DATE1-START") && context.recalls!.text.includes("DATE2-START"));
+});
+
+test("in his own route chapter, a love interest's own canon is cached with the rest (#2091)", async () => {
+  const route = {
+    title: "The North Light",
+    tags: [],
+    summary: "Kai takes her up to the lamp.",
+    nodes: [
+      { kind: "beat", guide: "Kai at the lamp, pretending not to wait.", cast: [KAI] },
+      { kind: "beat", guide: "Mireille interrupts with the ledger.", cast: [KAI, MIR] },
+      { kind: "beat", guide: "The gate: the mask cracks for one breath.", cast: [KAI] },
+      { kind: "beat", guide: "He lets her stay.", cast: [KAI] },
+    ],
+    ledger: { relationship: [], conflict: [], offscreen: [] },
+  };
+  const replies = Array.from(
+    { length: 40 },
+    () => (messages: CapabilityLanguageModelMessage[]) =>
+      system(messages).includes("route planner") ? json(route) : json(beatReply()),
+  );
+  const t = await storyWorld({ runKey: "r-routecache-aaaaaa", replies, lis: { [KAI]: { points: 600 } } });
+  await completeChapter(
+    t,
+    { key: "date-1", kind: "date", li: KAI, lead: KAI, title: "Jellyfish Hour" },
+    "KAI-DATE: Kai counts jellyfish.",
+    "2026-10-28T09:00:00.000Z",
+  );
+  const planned = await t.call("POST", "/runs/:run/routes/:li/next", {}, { li: KAI });
+  assert.equal(planned.status, 200, JSON.stringify(planned.body));
+  await readThrough(t, 0, planned.body.chapter.nodes.length - 1, planned.body.chapter.key);
+  const scenes = t.calls.filter((call) => /Narrate node \d+ of/u.test(call.messages.at(-1)!.content));
+  assert.equal(scenes.length, route.nodes.length);
+  for (const call of scenes) {
+    assert.equal(call.messages[0]!.content, scenes[0]!.messages[0]!.content, "one story context, whoever is present");
+    assert.ok(call.messages[0]!.content.includes("KAI-DATE"), "his own date is cached in his own chapter");
+  }
 });

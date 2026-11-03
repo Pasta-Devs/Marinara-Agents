@@ -325,6 +325,40 @@ test("at the reply floor the oldest uncovered summary gives way, never the newes
   assert.ok(maxTokens >= OUTPUT_FLOOR && maxTokens < OUTPUT_FLOOR + REASONING_HEADROOM, `the floor kept: ${maxTokens}`);
 });
 
+test("a cached prompt's own canon gives way before the cached part's summaries (#2091)", async () => {
+  const t = await setup(['{"premise":"x"}'], { maxOutputTokens: null });
+  const older = `# Recent canon summary: Night 6\n${sized("MAIN-OLD", 3000)}`;
+  const main = memoryOf({
+    recent: [older, `# Recent canon summary: Night 8\n${sized("MAIN-NEW", 3000)}`],
+    optional: [older],
+    previous: sized("PREVIOUS-MARK", 15_500),
+  });
+  // The recalls' context (S/story/canon.ts `cached`): another love interest's own summaries, after the cached part.
+  const own = `# Recent canon summary: Mireille's own route chapter\n${sized("OWN-OLD", 3000)}`;
+  const recalls = forgeMemoryContext(
+    { overview: "", details: [] },
+    {
+      prefix: [own, "# Recent canon summary: Mireille's next\nOWN-NEW"].join("\n\n"),
+      optional: [own],
+      renderMemory: (memory) => forgeStoryMemoryText(memory).trim(),
+    },
+  );
+  await generateJson(
+    t.deps,
+    request({
+      messages: [
+        { role: "system", content: `STORY MEMORY\n${main.text}`, cacheBreakpoint: true },
+        { role: "user", content: `${recalls.text}\n\nA premise, please.` },
+      ],
+      memory: { ...main, recalls },
+    }),
+  );
+  const [context, task] = t.calls[0]!.messages.map((message) => message.content);
+  assert.ok(!task!.includes("OWN-OLD"), "the own canon's older summary went first");
+  assert.ok(task!.includes("OWN-NEW"));
+  for (const kept of ["MAIN-OLD", "MAIN-NEW", "PREVIOUS-MARK"]) assert.ok(context!.includes(kept), `${kept} stays`);
+});
+
 test("a prompt whose required story cannot fit is a 413 `capacity` and is never sent", async () => {
   const t = await setup(['{"premise":"x"}']);
   const memory = memoryOf({ previous: sized("PREVIOUS-MARK", 30_000) });

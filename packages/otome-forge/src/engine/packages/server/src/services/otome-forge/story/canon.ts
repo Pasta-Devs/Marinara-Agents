@@ -34,7 +34,7 @@
 //   never an option not taken (forgeCanonicalSegments, confrontationCanon);
 // - memory ready (#2066): the story's timeline (S/memory/timeline.ts) without the previous chapter's own entry, which
 //   goes in full; the recall pool (S/memory/memory.ts: the newest small memories this prompt may know, within 5k
-//   tokens), after the timeline or, with `apart`, as a context of its own that the prompt sends after its cached part;
+//   tokens), after the timeline or, when `cached`, as a context of its own that the prompt sends after its cached part;
 //   and around the previous chapter, in story order, the canon the timeline does not cover yet as its summary (a date
 //   or Character Story as written while it has none). The recalls give way first when the prompt does not fit; then,
 //   only while the reply would get less than its floor, the older storyline chapter summaries, oldest first, and then
@@ -53,11 +53,15 @@
 // chapter), and the canon not covered yet that is shared, or the chapter's own love interest's. What only some may know
 // (another love interest's own canon not covered yet, in the canonical history his chapters in full) goes with the
 // recalls, for the call's own cast, which the prompt sends after its cached part. The rules that decide what gives way
-// are worked out within each part, so neither follows the other: in the canonical history the shared chapters are taken
-// first, and each part keeps its own newest summary.
+// are worked out within each part, so neither follows the other: in the canonical history each part has its own bound,
+// and each part keeps its own newest summary. The fitter is given the recalls' part first (S/generation.ts), so its
+// optional blocks give way before the cached part's.
 // ponytail: whether the memory is ready still follows the call (S/memory/memory.ts: two dates or Character Stories it
 // may know without a summary; the job's memory model of unknown context), so on such a call the context switches to
 // the canonical history and back. The upgrade path is deciding it from what every call of the chapter may know.
+// ponytail: the canon only some may know is told after the cached part, so it no longer sits in story order among the
+// rest; its titles say whose it is, and its blocks keep their own order. The upgrade path is naming each block's place
+// in the story (after which chapter it happened).
 import { forgeCanonicalSegments } from "@forge-kit/player-choices-server.mjs";
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 import { forgeMemoryContext, type ForgeMemoryContext } from "@forge-kit/story-memory-fit.mjs";
@@ -412,8 +416,10 @@ function contextOf(
  * The canonical history, for a memory that cannot answer (GF's legacy history): besides the previous chapter in full,
  * the other chapters the prompt may know, newest first within EARLIER_CANON_TOKENS, each whole; the newest of them
  * however long, as it is the one a prompt most needs. With `own` (a `cached` prompt), the chapters only some may know
- * come after the rest, within what the rest left, their newest however long too: what every call is given never
- * follows who knows the others.
+ * are a part of their own, with a bound of their own, so what every call is given never follows who knows the others,
+ * and a love interest's own chapters played since the previous chapter still come first among his (#2091).
+ * ponytail: the two parts may hold twice the bound together, while the memory is not ready. The upgrade path is
+ * sharing one bound that the shared part takes from first only for its chapters before the previous one.
  */
 async function canonicalHistory(
   store: Pick<OtomeStore, "readDoc">,
@@ -424,20 +430,20 @@ async function canonicalHistory(
   own?: (chapter: Chapter) => boolean,
 ): Promise<Block[]> {
   const kept: Block[] = [];
-  let used = 0;
   const newest = [...known].reverse();
-  for (const part of own
+  const parts = own
     ? [newest.filter(({ chapter }) => !own(chapter)), newest.filter(({ chapter }) => own(chapter))]
-    : [newest]) {
-    let first = true;
+    : [newest];
+  for (const part of parts) {
+    let used = 0;
     for (const completed of part) {
       if (completed.chapter.key === previousKey) continue;
       const content = await chapterCanon(store, runId, completed.chapter, protagonist);
       if (!content?.trim()) continue;
       const text = block("Canon in full", titleOf(completed), content);
-      used += estimateTextTokens(text);
-      if (used > EARLIER_CANON_TOKENS && !first) break;
-      first = false;
+      const cost = estimateTextTokens(text);
+      if (used && used + cost > EARLIER_CANON_TOKENS) break;
+      used += cost;
       kept.push({
         order: completed.order,
         text,

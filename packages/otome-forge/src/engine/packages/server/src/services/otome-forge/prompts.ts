@@ -1390,9 +1390,9 @@ export function sceneCardBlock(unit: Unit, liState: LiState, resolves: readonly 
 // message; then, in P6, P12 and P12c, the chapter's settled scenes, one message each; then everything that changes from
 // call to call: the newest scene, who is present, the recalls with the canon only some may know (S/story/canon.ts
 // `cached`), the task. Each of the first three parts ends where the provider may cache the prompt (cacheBreakpoint,
-// capability API 1.814; P5, P12 and P12c mark the story context alone, as no later call shares the rest), so after a
-// chapter's first call its story context is sent at the cached price. Nothing in the story context may follow the node,
-// its cast or the prompt's kind.
+// capability API 1.814; P5, P12 and P12c mark the story context alone, as no later call shares the rest, and P5 on a
+// connection of its own marks nothing), so after a chapter's first call its story context is sent at the cached price.
+// Nothing in the story context may follow the node, its cast or the prompt's kind.
 
 export interface StoryContextInput {
   world: World;
@@ -1455,20 +1455,24 @@ function chapterTexts(
  * A story prompt in the cached layout (see above). Of the chapter so far (`texts`, chapterTexts), all but the newest are
  * settled, a message each with the cache mark on the last; the newest opens the last message with `rest`, since the
  * lookahead may write the next node before its picks are made, and a pick changes how it reads. A prompt whose
- * instructions no later call shares (`alone`: P5, P12, P12c) marks its story context alone: a mark is a cache write,
- * at twice the price for the hour-long cache, and nothing would read the rest (#2091).
+ * instructions no later call shares (P5, P12, P12c) marks its story context alone (`marks` "context"), and one whose
+ * story context nothing reads either (P5 on a connection of its own) marks nothing ("none"): a mark is a cache write,
+ * at twice the price for the hour-long cache (#2091).
  */
 function storyMessages(
   context: string,
   instructions: string,
   texts: readonly string[],
   rest: readonly string[],
-  { alone = false }: { alone?: boolean } = {},
+  { marks = "all" }: { marks?: "all" | "context" | "none" } = {},
 ): OtomeMessage[] {
   const settled = texts.slice(0, -1);
-  const marked = (message: OtomeMessage): OtomeMessage => (alone ? message : { ...message, cacheBreakpoint: true });
+  const marked = (message: OtomeMessage): OtomeMessage =>
+    marks === "all" ? { ...message, cacheBreakpoint: true } : message;
   return [
-    { role: "system", content: context, cacheBreakpoint: true },
+    marks === "none"
+      ? { role: "system", content: context }
+      : { role: "system", content: context, cacheBreakpoint: true },
     marked({ role: "system", content: instructions }),
     ...settled.map((content, index): OtomeMessage =>
       index === settled.length - 1 ? marked({ role: "user", content }) : { role: "user", content },
@@ -1612,9 +1616,9 @@ export interface ChapterPlanInput {
   state: RunState;
   number: number;
   lead: LiId;
-  /** The story memory's text (S/story/canon.ts recallText with `apart`), or "". */
+  /** The story memory's text (S/story/canon.ts recallText with `cached`), or "". */
   memory: string;
-  /** The recalls' text (recallText with `apart`), or "". */
+  /** The recalls' text (recallText with `cached`): the recalls and the canon only some may know, or "". */
   recalls?: string;
   /** The climax this chapter must use (S/story/chapters.ts requiredClimax), or null when the planner picks. */
   climax?: ClimaxKind | null;
@@ -1626,6 +1630,11 @@ export interface ChapterPlanInput {
   sideWith?: boolean;
   /** This chapter's end may close on the arc's judgment (#2047, judgmentFor): only that, never its question or truth. */
   judgment?: boolean;
+  /**
+   * Whether the chapter's scenes are written on this plan's connection (S/generation.ts resolveConnectionId), so they
+   * can read the story context it caches. Otherwise nothing is marked: nothing would read it (#2091).
+   */
+  sharesCache?: boolean;
 }
 
 /** P5's rule, while a side-with scene may come; the story's content settings decide how heated the argument gets. */
@@ -1645,6 +1654,7 @@ export function chapterPlanMessages({
   arc: plannedArc = null,
   sideWith = false,
   judgment = false,
+  sharesCache = true,
 }: ChapterPlanInput): OtomeMessage[] {
   const leadUnit = units.find((unit) => unit.id === lead);
   const others = units.filter((unit) => unit.id !== lead);
@@ -1755,7 +1765,7 @@ export function chapterPlanMessages({
   ];
   const [instructions] = forgeChoicePlanMessages([{ role: "system" as const, content: system }], true);
   return storyMessages(storyContext({ world, player, units, number, arc, memory }), instructions!.content, [], rest, {
-    alone: true,
+    marks: sharesCache ? "context" : "none",
   });
 }
 
@@ -1862,9 +1872,9 @@ export interface BeatMessagesInput {
   storySoFar: readonly string[];
   /** Chapter 1's first node only: the prologue's last lines (S/story/prologue.ts), or "" without one. */
   prologue?: string;
-  /** The story memory's text (S/story/canon.ts recallText with `apart`), or "". */
+  /** The story memory's text (S/story/canon.ts recallText with `cached`), or "". */
   memory: string;
-  /** The recalls' text (recallText with `apart`), or "". */
+  /** The recalls' text (recallText with `cached`): the recalls and the canon only some may know, or "". */
   recalls?: string;
   /** A main chapter's arc (#1980), for the story context, or null. */
   arc?: StoryArc | null;
@@ -2461,7 +2471,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     system + VOICES_INSTRUCTION,
     chapterTexts(chapter, units, storySoFar, "(This is the chapter's first node.)"),
     rest,
-    { alone: true },
+    { marks: "context" },
   );
 }
 
@@ -2544,7 +2554,7 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
     system + VOICES_INSTRUCTION,
     chapterTexts(chapter, units, storySoFar, "(This is the chapter's first node.)"),
     rest,
-    { alone: true },
+    { marks: "context" },
   );
 }
 

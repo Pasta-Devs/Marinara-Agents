@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.8.1 — 2026-11-03
+
+- **Love interests keep their own side stories while memory catches up.** When the story memory is still summarizing, a scene now keeps every date and private chapter played since the last main chapter for the love interests who were there. Before, only the newest of them could make it in.
+- **No hour-long cache paid for nothing.** When chapter plans run on a different connection from the scenes, the plan no longer asks for a cache the scenes could never read.
+
 ## 0.8.0 — 2026-11-03
 
 - **A Photo Shoot in Dates.** With a love interest picked in Dates, choose a place your story has painted, what you both wear, and an expression and a pose for each of you: shared poses like kissing, hugging, play-fighting or a piggyback, solo poses, or your own words. **Take picture** paints one photo of you two posing for the camera, sent the place and both outfits as references, with no model call. It follows your image connection, Ask before painting, prompt review and image rating, costs no Starlight and pays nothing. Photos are kept in the Album's new **Photos**, to view, save or delete, and the newest is taped into that love interest's note on Home. Without an image connection it shows as unavailable.

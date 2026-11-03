@@ -72,6 +72,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.8.1",
+          "date": "2026-11-03",
+          "notes": "- **Love interests keep their own side stories while memory catches up.** When the story memory is still summarizing, a scene now keeps every date and private chapter played since the last main chapter for the love interests who were there. Before, only the newest of them could make it in.\n- **No hour-long cache paid for nothing.** When chapter plans run on a different connection from the scenes, the plan no longer asks for a cache the scenes could never read.",
+          "highlight": false
+        },
+        {
           "version": "0.8.0",
           "date": "2026-11-03",
           "notes": "- **A Photo Shoot in Dates.** With a love interest picked in Dates, choose a place your story has painted, what you both wear, and an expression and a pose for each of you: shared poses like kissing, hugging, play-fighting or a piggyback, solo poses, or your own words. **Take picture** paints one photo of you two posing for the camera, sent the place and both outfits as references, with no model call. It follows your image connection, Ask before painting, prompt review and image rating, costs no Starlight and pays nothing. Photos are kept in the Album's new **Photos**, to view, save or delete, and the newest is taped into that love interest's note on Home. Without an image connection it shows as unavailable.",
@@ -183,12 +189,6 @@
           "version": "0.6.18",
           "date": "2026-11-02",
           "notes": "- **\"What happened so far…\" while a chapter is planned.** Planning a new chapter (and a route, repair or extra story chapter) now shows the story's running summary to read while you wait. It scrolls on its own and appears once the first summary is ready.\n- **Who said what? while a scene is written.** Tap **Play Who said what?** under \"Writing the next scene…\" to guess which love interest said a line from the chapters you've read. It's optional, makes no model calls, saves nothing, and steps aside the moment the scene is ready.\n- **Keyboard focus on quotes.** The quoted line in the Wardrobe and in Who said what? now shows where keyboard focus is.",
-          "highlight": false
-        },
-        {
-          "version": "0.6.17",
-          "date": "2026-11-02",
-          "notes": "- **Love interests remember the whole story.** Route, repair, date and Character Story chapters are now summarized too and included in the story's running summary, so long routes keep their early chapters. Their details still come back only in his chats and the scenes he is in.\n- **The last chapter is sent in full** when your model can hold it, with only the choices you made.\n- **Small memories come back when a scene touches them:** Read Me (your notebook as it is now, so deleted stays deleted), Read Him, dates, banner stories, phone talks, Snapshots and Claw rounds.\n- **Too long for your model?** The least relevant memories go first; if it still can't fit, you're asked for a bigger connection, not given a cut-off reply.\n- **Smaller summary models work:** a summary model with a 16k window no longer stops with an error. Memory status and Retry are in Settings → Connections.\n- Stories in progress catch up in the background; nothing you played is rewritten.",
           "highlight": false
         }
       ]

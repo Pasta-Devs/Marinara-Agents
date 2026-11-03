@@ -11,10 +11,11 @@
 // in the background; the panel shows no bold label or markdown emphasis.
 // #2066: the overview is the story's timeline. A chapter's summary (at most 1000 words, said in its prompt) joins it with
 // no model call, and only a timeline past 13k tokens and 1k of leeway is condensed (everything before the newest main
-// chapter's entry, #2091, in as few calls as the memory model's context allows; a fold that adds nothing condenses nothing); a date or Character
-// Story is never in it, and a memory model of unknown context waits for configuration. Recall sends no ranked details:
-// the small memories this prompt may know come back as `recalls`, newest first within 5k tokens and 1k of leeway,
-// never one the caller lists in full; the Home note, Read Him and Read Me take the newest.
+// chapter's entry, #2091, in as few calls as the memory model's context allows; a fold that adds nothing condenses
+// nothing); a date is never in it (a Character Story joins it, titled private), and a memory model of unknown context
+// waits for configuration. Recall sends no ranked details: the small memories this prompt may know come back as
+// `recalls`, newest first within 5k tokens and 1k of leeway, never one the caller lists in full; the Home note, Read Him
+// and Read Me take the newest.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
@@ -44,6 +45,8 @@ import {
   TIMELINE_FOLD_WORDING,
   beatMessages,
   chapterPlanMessages,
+  closerMessages,
+  confrontationMessages,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import {
   HEADROOM_TOKENS,
@@ -999,5 +1002,46 @@ test("the chapter planner (P5) and the beat narrator (P6) carry the knowledge bo
     // In the story context they share (#2066).
     assert.ok(messages[0]!.content.includes(forgeKnowledgeBoundary), `${name} carries the knowledge boundary`);
     assert.equal(messages[0]!.cacheBreakpoint, true);
+  }
+});
+
+test("only a prompt a later call continues is marked past its story context, and P5 only on the scenes' connection (#2091)", () => {
+  const units = [
+    { ...normalizeUnit({}), id: KAI, name: "Kai", bible: normalizeBible({})! },
+    { ...normalizeUnit({}), id: MIR, name: "Mireille", bible: normalizeBible({})! },
+  ];
+  const world = normalizeWorld({ connections: { narration: "conn-story" } });
+  const player = { ...normalizePlayer({}), name: "Ava" };
+  const state = normalizeState({ lis: { [KAI]: {}, [MIR]: {} } });
+  const nodes: ChapterNode[] = [
+    { i: 0, kind: "beat", guide: "They meet at the observatory.", cast: [KAI] },
+    { i: 1, kind: "beat", guide: "The bell.", cast: [KAI] },
+    { i: 2, kind: "confrontation", guide: "Kai and Ava argue.", cast: [KAI] },
+  ];
+  const chapter = { kind: "main" as const, number: 1, title: "The Observatory", lead: KAI, foil: MIR, nodes };
+  const input = { world, player, units, state, chapter, storySoFar: ["SCENE-1", "SCENE-2"], memory: "" };
+  const marks = (messages: Array<{ cacheBreakpoint?: boolean }>) =>
+    messages.map((message) => !!message.cacheBreakpoint);
+  const plan = (sharesCache?: boolean) =>
+    chapterPlanMessages({
+      world,
+      player,
+      units,
+      state,
+      number: 1,
+      lead: KAI,
+      memory: "",
+      ...(sharesCache === undefined ? {} : { sharesCache }),
+    });
+  assert.deepEqual(marks(plan()), [true, false, false]);
+  assert.deepEqual(
+    marks(plan(false)),
+    [false, false, false],
+    "nothing reads a plan's cache on a connection of its own",
+  );
+  // A scene's instructions and settled scenes are continued by the next scene; a Confrontation's and a Closer's are not.
+  assert.deepEqual(marks(beatMessages({ ...input, node: nodes[1]! })), [true, true, true, false]);
+  for (const build of [confrontationMessages, closerMessages]) {
+    assert.deepEqual(marks(build({ ...input, node: nodes[2]!, li: KAI })), [true, false, false, false]);
   }
 });
