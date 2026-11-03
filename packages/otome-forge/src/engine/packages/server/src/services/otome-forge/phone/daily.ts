@@ -214,7 +214,10 @@ async function writeDaily(
     const at = sent.at(-1)!.at;
     await deps.store.updateDoc(runDocTarget("world", worldId(runId)), normalizeWorld, (current) => {
       const days = current.phoneDaily?.days ?? {};
-      // The day the attempt was spent on, so a message that lands past midnight still counts there.
+      // The day the attempt was spent on.
+      // ponytail: a message reserved before local midnight that lands after it counts on that earlier day, so the
+      // same love interest may write first again just after midnight. The job cannot read the request's time zone;
+      // the upgrade path is passing the day's end (forgeResetIn) into the job and counting the day it lands on.
       const today = days[day] ?? { attempts: 1 };
       const wrote = [...new Set([...(today.wrote ?? []), li])];
       return {

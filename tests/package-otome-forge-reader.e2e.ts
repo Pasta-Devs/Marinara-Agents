@@ -1324,83 +1324,86 @@ test("Otome Hearth a click held on a typing line still shows it whole", async ({
   await expect(typed).toHaveText(LONG_LINE);
 });
 
+/**
+ * The maintainer's iPhone: a box scrolled as its text changed shook and fell back short of the end. Here every scroll
+ * of the box is undone once its text changes, which 0.7.1's box fails.
+ */
+async function undoScrollsOnTextChange(root: Locator) {
+  await line(root).evaluate((box) =>
+    new MutationObserver(() => (box.scrollTop = 0)).observe(box, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+    }),
+  );
+}
+
+/** Where the row being typed, the line's first row and its end are drawn, from the box's top edge. */
+const lineView = (root: Locator) =>
+  line(root).evaluate((box) => {
+    const typed = box.querySelector<HTMLElement>(":scope > [aria-hidden='true']")!;
+    const top = box.getBoundingClientRect().top;
+    const at = typed.querySelector(".of-line-rest")?.getClientRects()[0];
+    return {
+      done: typed.dataset.done === "true",
+      lifting: box.dataset.lifting,
+      scrollTop: box.scrollTop,
+      height: box.clientHeight,
+      row: Number.parseFloat(getComputedStyle(box).lineHeight),
+      rowTop: at ? at.top - top : null,
+      first: typed.getBoundingClientRect().top - top,
+      end: typed.getBoundingClientRect().bottom - top,
+    };
+  });
+
 test("Otome Hearth a long line follows its typing without scrolling the box, and ends on its last row", async ({
   page,
 }) => {
-  // On an iPhone the box shook and fell back short of the end: iOS undid each scroll as the text changed under it.
-  // Here every scroll is undone the same way, and the line must still follow its typing and end in view.
   await page.setViewportSize({ width: 390, height: 844 });
   const root = await openLongLine(page);
   await root.getByRole("button", { name: "Begin" }).click();
-  await line(root).evaluate((box) => {
-    const undo = new MutationObserver(() => (box.scrollTop = 0));
-    undo.observe(box, { subtree: true, childList: true, characterData: true });
-    Object.assign(window, { undoScrolls: undo });
-  });
-  // Where the row being typed and the line's end are drawn, from the box's top edge.
-  const view = () =>
-    line(root).evaluate((box) => {
-      const typed = box.querySelector<HTMLElement>(":scope > [aria-hidden='true']")!;
-      const top = box.getBoundingClientRect().top;
-      const at = typed.querySelector(".of-line-rest")?.getClientRects()[0];
-      return {
-        done: typed.dataset.done === "true",
-        lifting: box.dataset.lifting,
-        scrollTop: box.scrollTop,
-        height: box.clientHeight,
-        row: Number.parseFloat(getComputedStyle(box).lineHeight),
-        rowTop: at ? at.top - top : null,
-        lift: top - typed.getBoundingClientRect().top,
-        end: typed.getBoundingClientRect().bottom - top,
-      };
-    });
-  // About 8 s of typing: well past the rows the box shows at once.
+  await undoScrollsOnTextChange(root);
+  // About 8 s of typing, well past the rows the box shows at once; halfway the box widens (a phone turned).
   let lifted = 0;
   for (let step = 0; step < 40; step += 1) {
+    if (step === 20) await page.setViewportSize({ width: 600, height: 844 });
     await page.clock.runFor(200);
-    const now = await view();
+    const now = await lineView(root);
     expect(now.done).toBe(false);
     expect(now.lifting).toBe("true");
     expect(now.scrollTop, "the box never scrolls while it types").toBe(0);
     expect(now.rowTop! + now.row, "the row being typed is in view").toBeLessThanOrEqual(now.height + 1);
-    expect(now.rowTop!).toBeGreaterThanOrEqual(-1);
-    lifted = Math.max(lifted, now.lift);
+    expect(now.rowTop!, "and not above it").toBeGreaterThanOrEqual(-1);
+    lifted = Math.max(lifted, -now.first);
   }
   expect(lifted, "the line ran past the box, so it had to follow").toBeGreaterThan(0);
-  // A slow frame types the last rows at once: the line still ends on its last row.
+  // A slow frame types the last rows at once; a frame later the box scrolls again, from its last row.
   await page.clock.runFor(20_000);
-  const end = await view();
+  await page.clock.runFor(100);
+  const end = await lineView(root);
   expect(end.done).toBe(true);
-  expect(end.end).toBeLessThanOrEqual(end.height + 1);
+  expect(end.lifting).toBe("false");
+  expect(end.scrollTop, "it scrolls from where the lift left it").toBeGreaterThan(0);
+  expect(end.end, "the line ends on its last row").toBeLessThanOrEqual(end.height + 1);
   expect(end.end).toBeGreaterThan(end.height - end.row);
-  // A touch takes over: the box scrolls again from where the line was lifted, so nothing on screen moves.
-  await page.evaluate(() => (window as unknown as { undoScrolls: MutationObserver }).undoScrolls.disconnect());
-  await line(root).evaluate((box) => box.dispatchEvent(new Event("touchstart", { bubbles: true })));
-  await expect(line(root)).toHaveAttribute("data-lifting", "false");
-  const held = await view();
-  expect(held.scrollTop).toBeGreaterThan(0);
-  expect(Math.abs(held.end - end.end)).toBeLessThanOrEqual(1);
 });
 
 test("Otome Hearth Next on a long typing line shows it whole where it was, then the box scrolls", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const root = await openLongLine(page);
   await root.getByRole("button", { name: "Begin" }).click();
+  await undoScrollsOnTextChange(root);
   // Past the rows the box shows at once, short of the line's end.
   await page.clock.runFor(6_000);
-  const row = () =>
-    line(root).evaluate((box) => {
-      const first = box.querySelector(":scope > [aria-hidden='true']")!.getClientRects()[0]!;
-      return first.top - box.getBoundingClientRect().top;
-    });
-  const before = await row();
-  expect(before, "the line is lifted").toBeLessThan(0);
+  const before = await lineView(root);
+  expect(before.first, "the line is lifted").toBeLessThan(0);
   await root.locator(".of-next").click();
-  const typed = line(root).locator(":scope > [aria-hidden='true']");
-  await expect(typed).toHaveAttribute("data-done", "true");
-  await expect(line(root)).toHaveAttribute("data-lifting", "false");
-  expect(Math.abs((await row()) - before), "its first row stays where it was").toBeLessThanOrEqual(1);
-  expect(await line(root).evaluate((box) => box.scrollHeight > box.clientHeight + box.scrollTop)).toBe(true);
+  await page.clock.runFor(100);
+  const whole = await lineView(root);
+  expect(whole.done).toBe(true);
+  expect(whole.lifting).toBe("false");
+  expect(Math.abs(whole.first - before.first), "its first row stays where it was").toBeLessThanOrEqual(1);
+  expect(whole.end, "the rest is below, to scroll to").toBeGreaterThan(whole.height + whole.row);
 });
 
 for (const failure of ["missing sprite", "failed cleanup"] as const) {

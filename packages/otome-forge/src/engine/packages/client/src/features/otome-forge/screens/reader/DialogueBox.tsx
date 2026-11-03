@@ -4,8 +4,8 @@
 // plain. A line types itself out (whole under reduced motion); the Next button, or a tap, shows it whole first. While
 // a story CG's pan hides the box (`paused`), its line waits, and types from the top once the box is back (#2051).
 // Screen readers get the whole line at once, never the typing. A line too long for the box follows its typing, so
-// the newest words stay in view and a line typed out ends on its last row, until the player touches or scrolls the
-// box, or shows the line whole with Next; the box then scrolls from where it was.
+// the newest words stay in view and a line typed out ends on its last row; once the line is whole, the box scrolls
+// from there.
 // ──────────────────────────────────────────────
 import { forwardRef, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
@@ -76,43 +76,46 @@ export const DialogueBox = forwardRef<HTMLButtonElement, DialogueBoxProps>(funct
   const lineRef = useRef<HTMLParagraphElement>(null);
   const typedRef = useRef<HTMLSpanElement>(null);
   const restRef = useRef<HTMLSpanElement>(null);
-  // A new line, or one back from behind a CG's pan, opens at its top and follows its typing until the player touches
-  // or scrolls the box.
+  // While its text changes the box clips instead of scrolling, and the line is lifted (translateY) so the row being
+  // typed sits at the bottom edge (a line typed out, its last row): on an iPhone a box scrolled as its text changed
+  // shook and fell back short of the end. A frame after the line is whole (typed out, or Next), with no text
+  // changing any more, the box scrolls again from where the lift left it, so the player can scroll it.
   const followKey = `${lineKey}:${paused}`;
-  const [heldFor, setHeldFor] = useState<string | null>(null);
-  const following = heldFor !== followKey;
-  const stopFollowing = () => setHeldFor(followKey);
-  // While it follows, the box clips instead of scrolling, and the line is lifted so the row being typed sits at the
-  // bottom edge (typed out, its last row): on an iPhone a box scrolled as its text changed shook and fell back short
-  // of the end. No scroll happens while the text changes; the box scrolls again, from where the lift left it, once
-  // the player takes over or Next shows the line whole.
-  const lifting = following && !whole && !instant;
-  const [lift, setLift] = useState({ key: followKey, px: 0 });
+  const [settled, setSettled] = useState<string | null>(null);
+  const lifting = !instant && settled !== followKey;
+  const [lift, setLift] = useState({ key: followKey, px: 0, width: 0 });
   const liftPx = lifting && lift.key === followKey ? lift.px : 0;
+  // A new line, or one back from behind a CG's pan, opens at its top; a line read again (a replay) has the same key.
   useLayoutEffect(() => {
     if (lineRef.current) lineRef.current.scrollTop = 0;
-    // A line read again (a replay) has the same key: it follows from its top again.
-    setHeldFor(null);
-    setLift({ key: followKey, px: 0 });
+    setSettled(null);
+    setLift({ key: followKey, px: 0, width: 0 });
   }, [followKey]);
   // The untyped rest is laid out (hidden), so the box is already as tall as the whole line. Measured on screen, so
-  // the lift itself never counts. It never drops back while the line types (a row's first character can still sit at
-  // the end of the row above), and never goes past the line's end.
+  // the lift itself never counts. At one width it never drops back while the line types (a row's first character can
+  // still sit at the end of the row above); a new width (a phone turned, fullscreen) measures afresh. It never passes
+  // the line's end, and Next leaves it where it was.
   useLayoutEffect(() => {
     const box = lineRef.current;
     const typed = typedRef.current;
-    if (!box || !typed || !lifting) return;
+    if (!box || !typed || !lifting || whole) return;
     const at = restRef.current?.getClientRects()[0];
     const row = Number.parseFloat(getComputedStyle(box).lineHeight) || 0;
     const bottom = at ? at.top - typed.getBoundingClientRect().top + row : typed.offsetHeight;
     const most = Math.max(0, typed.offsetHeight - box.clientHeight);
+    const width = box.clientWidth;
     setLift((current) => {
-      const before = current.key === followKey ? current.px : 0;
-      const px = Math.min(most, Math.max(before, Math.ceil(bottom - box.clientHeight)));
-      return current.key === followKey && current.px === px ? current : { key: followKey, px };
+      const same = current.key === followKey && current.width === width;
+      const px = Math.min(most, Math.max(same ? current.px : 0, Math.ceil(bottom - box.clientHeight)));
+      return same && current.px === px ? current : { key: followKey, px, width };
     });
-  }, [followKey, lifting, visible]);
-  // Taken over on the same line: the box scrolls to where the lift showed it, so nothing moves.
+  }, [followKey, lifting, visible, whole]);
+  useEffect(() => {
+    if (!lifting || !done) return;
+    const frame = window.requestAnimationFrame(() => setSettled(followKey));
+    return () => window.cancelAnimationFrame(frame);
+  }, [done, followKey, lifting]);
+  // Settled: the box scrolls to where the lift showed the line, so nothing on screen moves.
   const lifted = useRef({ key: followKey, px: 0 });
   useLayoutEffect(() => {
     const box = lineRef.current;
@@ -180,13 +183,7 @@ export const DialogueBox = forwardRef<HTMLButtonElement, DialogueBoxProps>(funct
           ) : null}
         </p>
       ) : null}
-      <p
-        ref={lineRef}
-        className={lineClass}
-        data-lifting={lifting}
-        onTouchStart={stopFollowing}
-        onWheel={stopFollowing}
-      >
+      <p ref={lineRef} className={lineClass} data-lifting={lifting}>
         <span className="of-visually-hidden">{spoken}</span>
         {/* A new span for every step of the reveal, never text changed in place: iOS Safari repaints text changed in
             place only where the box shows it, so rows that typed while scrolled out of view came back blank. A

@@ -262,6 +262,7 @@ test("the timeline grows with no call, has 1k of leeway, and is condensed only p
     assert.equal(system.includes(CHAPTER_SUMMARY_WORDING), detail, "a chapter summary: at most 1000 words, said");
     assert.match(CHAPTER_SUMMARY_WORDING, /at most 1000 words/u);
     assert.equal(system.includes(TIMELINE_FOLD_WORDING), !detail, "condensing: about 5000 words, said");
+    if (!detail) assert.ok(system.includes("to about 5000 words, and no more"), "half the 13–14k it condenses at");
     assert.equal(system.includes(OVERVIEW_WORDING), !detail, "the condensed part reads as a recollection");
     assert.ok(call.options!.maxTokens! >= 10240, "the word limits are the prompt's; the reply room stays 10240");
   }

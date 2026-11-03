@@ -32,7 +32,10 @@ export const NOTE_CURT_WORDS_MAX = 14;
  * scripts written without spaces (Thai, Khmer, …), so the note and its quote share this one limit.
  */
 export const NOTE_TEXT_MAX = 600;
-/** Settings → Connections (#2044): the most daily messages a love interest may send first (one an hour). */
+/**
+ * Settings → Connections (#2044): the most love interests the player may let write first each day. A story has fewer,
+ * so any number above its cast means all of them (S/phone/daily.ts).
+ */
 export const DAILY_MESSAGES_MAX = 24;
 /** The mood chip's reason: this many words or fewer. */
 export const MOOD_REASON_WORDS_MAX = 4;

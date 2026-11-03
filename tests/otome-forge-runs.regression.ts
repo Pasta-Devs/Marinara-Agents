@@ -1,8 +1,8 @@
 // Otome Forge's run routes (M1): the 18+ gate is stored with a timestamp and enforced by the server (raising a gated
 // setting needs it, lowering never does, revoking drops every world), bibles stay behind the spoiler gate and are
 // validated on edit, and deleting a run removes every one of its documents and gallery images and nothing else.
-// Settings → Connections' messages a day from love interests (#2044) is 0 to 24, off by default, kept by every other
-// save, and its quota never reaches the client.
+// Settings → Connections' love interests who message you each day (#2044) is 0 to 24, off by default, kept by every
+// other save, and its quota never reaches the client.
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Bible } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
@@ -415,7 +415,7 @@ test("settings: raising a gated setting needs the gate, lowering never does, and
   assert.equal((await call("POST", "/runs/:run/settings", { params: { run: "../index" }, body: {} })).status, 404);
 });
 
-test("settings: messages a day from love interests is 0 to 24, off by default, kept by other saves, its quota hidden", async () => {
+test("settings: love interests who message you each day is 0 to 24, off by default, kept by other saves, its quota hidden", async () => {
   const { call, world, run, store } = await setup();
   assert.equal((await world())!.dailyMessages, undefined, "off by default");
   assert.equal((await call("GET", "/runs/:run", { params: run })).body.view.world.dailyMessages, undefined);
