@@ -4,6 +4,14 @@
 
 - **A Photo Shoot in Dates.** With a love interest picked in Dates, choose a place your story has painted, what you both wear, and an expression and a pose for each of you: shared poses like kissing, hugging, play-fighting or a piggyback, solo poses, or your own words. **Take picture** paints one photo of you two posing for the camera, sent the place and both outfits as references, with no model call. It follows your image connection, Ask before painting, prompt review and image rating, costs no Starlight and pays nothing. Photos are kept in the Album's new **Photos**, to view, save or delete, and the newest is taped into that love interest's note on Home. Without an image connection it shows as unavailable.
 
+## 0.7.5 — 2026-11-03
+
+- **A slower burn.** Love interests no longer confess in stages 3 and 4. In stage 5 they may, once the story has earned it, and in stage 6 they say it if they haven't yet.
+
+## 0.7.4 — 2026-11-03
+
+- **Stickers send on iPhone again.** Tapping a sticker in Messages sends it as a message. Before, the tap closed the sticker panel and nothing was sent.
+
 ## 0.7.3 — 2026-11-03
 
 - **Love interests remember their Character Stories.** A Memory's Character Story, a Moment, and the scene the first time they wear a new look now join the story's timeline, marked private, as route chapters do. Its love interest always knows what happened there, and the others act only on what they could see. Before, it was one of the small memories that newer ones often pushed out. Stories in progress rebuild their timeline once, from the summaries they already have.

@@ -889,7 +889,27 @@ test("Otome Forge phone: a thread with typing, his sticker, her sticker and Clos
   expect(surface.alpha).toBeGreaterThanOrEqual(0.95);
   expect(surface.blur).toBe("none");
   await page.screenshot({ path: testInfo.outputPath("04b-sticker-picker.png") });
+  // An iPhone never focuses a pressed button: the press gives focus to the nearest focusable ancestor (the Engine's
+  // main), which closed the panel before the tap's click landed, so a tapped sticker never sent. Every press is
+  // answered that way here, unless the picker keeps its focus.
+  await page.evaluate(() => {
+    const main = document.querySelector<HTMLElement>("main")!;
+    // WebKit focuses it on a press; Chromium only once it is focusable.
+    main.tabIndex = -1;
+    const press = (event: MouseEvent) => {
+      if (!event.defaultPrevented) main.focus();
+    };
+    document.addEventListener("mousedown", press);
+    Object.assign(window, { iosPress: press });
+  });
   await yours.getByRole("button", { name: "Send the Laughing sticker" }).click();
+  await page.evaluate(() => {
+    document.removeEventListener(
+      "mousedown",
+      (window as unknown as { iosPress: (event: MouseEvent) => void }).iosPress,
+    );
+    document.querySelector<HTMLElement>("main")!.removeAttribute("tabindex");
+  });
   // The pressed sticker leaves with its panel: focus goes on to the message box, never to the page.
   await expect(box).toBeFocused();
   await expect.poll(() => posts(stub, "/send").length).toBe(3);
@@ -906,6 +926,12 @@ test("Otome Forge phone: a thread with typing, his sticker, her sticker and Clos
   await page.keyboard.press("Escape");
   await expect(root.getByRole("button", { name: "Stickers" })).toBeFocused();
   await expect(yours).toHaveCount(0);
+  // Closing it from its button gives focus back to the button too, never to the page.
+  await root.getByRole("button", { name: "Stickers" }).click();
+  await expect(yours.getByRole("button", { name: "Send the Laughing sticker" })).toBeFocused();
+  await root.getByRole("button", { name: "Stickers" }).click();
+  await expect(yours).toHaveCount(0);
+  await expect(root.getByRole("button", { name: "Stickers" })).toBeFocused();
 
   // Her words fail to send and the server never saved them: they come back to the box, unsent.
   await expect(root.locator(".of-typing")).toHaveCount(0);
