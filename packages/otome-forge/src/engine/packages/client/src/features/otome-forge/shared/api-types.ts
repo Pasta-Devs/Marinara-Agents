@@ -1119,10 +1119,20 @@ export interface SceneArt {
   places: PlaceArt[];
   /** The beat's key image with its paint, or null. */
   cg: NonNullable<BeatView["cg"]> | null;
-  /** Cleaned faces for the look worn now; originals awaiting or failing cleanup are never stage art. */
+  /** Cleaned faces for the look he stands in here; originals awaiting or failing cleanup are never stage art. */
   faces: Record<LiId, Partial<Record<Face, string>>>;
   /** Faces are still painting or being freely cleaned; failed/stopped work never keeps polling. */
   facesComing: LiId[];
+  /**
+   * A look's first-wear scene (`story-<item>`): its love interest stands in that look, not the one he wears now, as
+   * RunLiView's stage fields (its cut-out once ready, its cleaned faces once a set is). Absent in every other scene.
+   */
+  looks?: Record<LiId, Required<Pick<RunLiView, "worn" | "expressions" | "cut">>>;
+  /**
+   * A first-wear scene's look is still painting, or its free cut-out is on the way: the reader polls until he stands in
+   * it. Absent otherwise, also for a look waiting for Paint, failed or stopped.
+   */
+  lookComing?: true;
 }
 
 export interface StoryChapterEntry {
