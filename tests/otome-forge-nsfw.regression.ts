@@ -703,6 +703,17 @@ test("the adult-only negatives stay on every image, at every rating and after an
   }).prompt;
   assert.match(two, /Reference images, in order: Kai; Ines\. Use them only for each person's face, hair and build,/u);
   assert.doesNotMatch(two, /clothing/u);
+  // Only an explicit scene does: an ordinary CG in the same Explicit world keeps their outfits, in words and pictures.
+  const clothed = cgPrompt({
+    brief: "In the lamp room",
+    people: [KAI_LOOK, INES_LOOK],
+    world,
+    style: PLAIN,
+    use: "cg",
+    references: ["Kai", "Ines"],
+  }).prompt;
+  assert.match(clothed, /Use them only for each person's face, hair, build and clothing,/u);
+  assert.ok(clothed.includes(KAI_LOOK.outfitLine), "its outfit lines stay");
 });
 
 test("the explicit tags appear only at the Explicit rating, on a story CG marked explicit under Explicit Heat", () => {
