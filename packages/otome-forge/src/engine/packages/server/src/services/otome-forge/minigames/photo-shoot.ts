@@ -13,13 +13,15 @@
 //   resends its id and paints it again, once.
 // - The record keeps only ids and names: the place's key and name, each look's id, the picks, the prompt as sent and
 //   the photo's own art. Never a place's or a look's image reference, which deleting the photo would delete with it.
-// - Painting follows the story's image settings: 503 `no-connection` without an image connection (nothing is saved),
-//   the image rating (photoPrompt is `clothed`, at most Suggestive), and Ask before painting and prompt review, which
-//   the client applies to the tap as for a keepsake. It goes through paintRecord: one paid image per connection in
-//   the high lane, the prompt built at the paid call, and a result saved only onto the record still waiting for it.
+// - Painting follows the story's image settings: 503 `no-connection` without an image connection (checked first, on
+//   the prompt route too, so nothing is saved or fetched), the image rating (photoPrompt is `clothed`, at most
+//   Suggestive), and Ask before painting and prompt review, which the client applies to the tap as for a keepsake. It
+//   goes through paintRecord: one paid image per connection in the high lane, the prompt built at the paid call, and a
+//   result saved only onto the record still waiting for it.
 // - The references are exactly the three the issue names, people first (a provider that keeps fewer still gets both
 //   likenesses): his chosen look, hers, then the place's picture, each fetched as a data URL; a base look with no
-//   portrait falls back to his card's or her persona's avatar. Only the label `photo <id>` is ever logged.
+//   portrait falls back to his card's or her persona's avatar, labelled as their face (it may wear something else).
+//   Only the label `photo <id>` is ever logged.
 // - The Album lists the ready photos (newest first) apart from `cgs`, which Home's back layer reads, and Home tapes the
 //   newest with its love interest into his note. A photo can be deleted, except while it paints (409 `busy`).
 import { forgeSubjectReference, type ImageIdentitySubject } from "@forge-kit/image-avatar-references.mjs";
@@ -50,14 +52,13 @@ import {
 } from "../art/paint.js";
 import { OtomeForgeError, type RouteDeps } from "../http.js";
 import { isLiId, runDocTarget, worldId } from "../ids.js";
-import { STICKER_SIZE, photoPrompt, type CgPerson, type ImagePrompt } from "../prompts.js";
+import { STICKER_SIZE, photoPrompt, type CgPerson, type ImagePrompt, type PhotoInput } from "../prompts.js";
 import { wearableLook } from "../routes/wardrobe.js";
 import { PaintSchema } from "../schemas/common.js";
 import { readRun } from "../schemas/state.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { withPersonaImageAppearance } from "../setup/cast.js";
 import type { OtomeStore } from "../store.js";
-import { clean } from "./read-him.js";
 
 export type PhotoDeps = Pick<RouteDeps, "runtime" | "store" | "images" | "art">;
 
@@ -73,7 +74,7 @@ export interface Photo extends Omit<PhotoSetup, "place"> {
   id: string;
   /** The place's key, and its name in the world's language (the Album's caption). */
   place: { key: string; name: string };
-  /** As sent at the paid call (the reviewed edit when there was one). */
+  /** As sent at the paid call (the reviewed edit when there was one); unbounded, as the lines it is built from are. */
   prompt?: ImagePrompt;
   /** pending, ready, failed or stopped; a pending one with no live paint here reads as stopped (toPhotoView). */
   art: Paint;
@@ -105,7 +106,9 @@ const PhotoSchema = z.object({
   herLook: LOOK_ID,
   his: PickSchema,
   her: PickSchema,
-  prompt: z.object({ prompt: z.string().max(8000), negativePrompt: z.string().max(8000) }).optional(),
+  // No cap: a long Appearance or identity line makes a long prompt, and a record that no longer read would lose its paid
+  // image (a resend would pay again).
+  prompt: z.object({ prompt: z.string(), negativePrompt: z.string() }).optional(),
   art: PaintSchema,
   createdAt: z.string(),
 });
@@ -157,10 +160,13 @@ const photoNotFound = () => new OtomeForgeError(404, "No such photo.", "not-foun
 const badRequest = (message: string) => new OtomeForgeError(400, message, "bad-request");
 const noConnection = () => new OtomeForgeError(503, "This world has no image connection.", "no-connection");
 
-/** A pick as the record keeps it: the player's own words cleaned (and required) for "custom", preset text dropped. */
+/**
+ * A pick as the record keeps it: the player's own words (required) for "custom", as typed with only the spaces tidied
+ * (the client checks the same), preset text dropped.
+ */
 function pickOf(pick: PhotoPick): PhotoPick {
   const words = (text: string | undefined, what: string) => {
-    const value = clean(text ?? "");
+    const value = (text ?? "").replace(/\s+/gu, " ").trim();
     if (!value) throw badRequest(`Invalid request: write the ${what}, or pick one.`);
     if (value.length > PHOTO_TEXT_MAX) throw badRequest(`Invalid request: the ${what} is too long.`);
     return value;
@@ -177,16 +183,20 @@ function pickOf(pick: PhotoPick): PhotoPick {
 interface PhotoLook {
   outfitLine: string;
   likeness: ImageIdentitySubject;
+  /** The likeness is his card's or her persona's avatar (a base look with no portrait): who they are, not this look. */
+  face?: true;
 }
 
 /**
- * The setup checked against the run, before anything is saved or paid for: the love interest (404), a painted place
- * (400), both picks (400) and each look, read without being worn (wardrobe.ts wearableLook: 409 `locked`, 400, 409
- * `conflict`). Writes nothing.
+ * The setup checked against the run, before anything is saved or paid for: an image connection first (503), then the
+ * love interest (404), a painted place (400), both picks (400) and each look, read without being worn (wardrobe.ts
+ * wearableLook: 409 `locked`, 400, 409 `conflict`). Writes nothing.
  */
 async function resolveSetup(deps: Pick<PhotoDeps, "store">, runId: string, setup: PhotoSetup) {
   const run = await readRun(deps.store, runId);
   if (!run) throw runNotFound();
+  const connectionId = run.world.images.connectionId;
+  if (!connectionId) throw noConnection();
   if (!isLiId(setup.li)) throw liNotFound();
   const unit = run.units.find((candidate) => candidate.id === setup.li && candidate.bible);
   if (!unit?.bible || !run.state.lis[setup.li]) throw liNotFound();
@@ -199,7 +209,9 @@ async function resolveSetup(deps: Pick<PhotoDeps, "store">, runId: string, setup
     setup.hisLook === BASE_LOOK
       ? {
           outfitLine: unit.outfitLine || unit.bible.look.outfitLine,
-          likeness: unit.portrait ? { portrait: unit.portrait } : { ...(unit.cardId ? { cardId: unit.cardId } : {}) },
+          ...(unit.portrait
+            ? { likeness: { portrait: unit.portrait } }
+            : { likeness: unit.cardId ? { cardId: unit.cardId } : {}, face: true as const }),
         }
       : await wearableLook(deps, runId, setup.hisLook, `li:${unit.id}`).then(({ outfit }) => ({
           outfitLine: outfit.outfitLine,
@@ -209,7 +221,9 @@ async function resolveSetup(deps: Pick<PhotoDeps, "store">, runId: string, setup
     setup.herLook === BASE_LOOK
       ? {
           outfitLine: run.player.look.outfitLine,
-          likeness: run.player.portrait ? { portrait: run.player.portrait } : { personaId: run.player.personaId },
+          ...(run.player.portrait
+            ? { likeness: { portrait: run.player.portrait } }
+            : { likeness: { personaId: run.player.personaId }, face: true as const }),
         }
       : await wearableLook(deps, runId, setup.herLook, "player").then(({ outfit }) => ({
           outfitLine: outfit.outfitLine,
@@ -217,6 +231,7 @@ async function resolveSetup(deps: Pick<PhotoDeps, "store">, runId: string, setup
         }));
   return {
     run,
+    connectionId,
     unit,
     place: { key: setup.place, name: place.name, tags: place.tags, url: place.art.url },
     his,
@@ -239,12 +254,12 @@ async function buildPhoto(
   const { run, unit, place, his, her, hisLook, herLook } = await resolveSetup(deps, runId, setup);
   const player = await withPersonaImageAppearance(deps.runtime, run.player);
   const images = imagesOf(deps);
-  const sources = [
-    ["li", hisLook.likeness],
-    ["her", herLook.likeness],
+  const sources: Array<[PhotoInput["references"][number], ImageIdentitySubject]> = [
+    [hisLook.face ? "li-face" : "li", hisLook.likeness],
+    [herLook.face ? "her-face" : "her", herLook.likeness],
     ["place", { portrait: place.url }],
-  ] as const;
-  const resolved: Array<{ who: (typeof sources)[number][0]; image: string }> = [];
+  ];
+  const resolved: Array<{ who: PhotoInput["references"][number]; image: string }> = [];
   for (const [who, likeness] of sources) {
     const image = await forgeSubjectReference(images, likeness).catch(() => null);
     if (image) resolved.push({ who, image });
@@ -279,7 +294,7 @@ async function buildPhoto(
   return { ...prompt, name: `${first} photo`, references: resolved.map((entry) => entry.image) };
 }
 
-/** POST /runs/:run/photos/prompt: the prompt Take picture would send (the review dialog shows it). No write. */
+/** POST /runs/:run/photos/prompt: the prompt Take picture would send (the review dialog shows it). No write; 503 too. */
 export async function photoPromptFor(deps: PhotoDeps, runId: string, setup: PhotoSetup): Promise<ImagePrompt> {
   const { prompt, negativePrompt } = await buildPhoto(deps, runId, setup);
   return { prompt, negativePrompt };
@@ -339,8 +354,8 @@ function paintPhoto(
  * POST /runs/:run/photos {id, ...setup, prompt?, negativePrompt?}: paints the photo `id` once and answers it as left
  * (ready, failed or stopped). A ready photo is answered as it is, whatever the body says; a second request while it
  * paints waits for that paint; a failed, stopped or orphaned one is painted again (Try again). Refusals come before
- * anything is saved: 404 for an unknown love interest, 400 for a place, pick or look that cannot be used, 409 for a
- * look not won or not painted, 503 without an image connection.
+ * anything is saved: 503 without an image connection, 404 for an unknown love interest, 400 for a place, pick or look
+ * that cannot be used, 409 for a look not won or not painted.
  */
 export async function takePhoto(
   deps: PhotoDeps,
@@ -362,9 +377,7 @@ export async function takePhoto(
     async () => {
       const current = await read();
       if (current?.art.state === "ready") return current;
-      const { run, place, his, her } = await resolveSetup(deps, runId, input);
-      const connectionId = run.world.images.connectionId;
-      if (!connectionId) throw noConnection();
+      const { connectionId, place, his, her } = await resolveSetup(deps, runId, input);
       const at = new Date().toISOString();
       const saved = await deps.store.mutateDoc(target, normalizePhoto, (existing): Photo =>
         existing?.art.state === "ready"

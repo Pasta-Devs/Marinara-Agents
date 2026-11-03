@@ -272,6 +272,13 @@ test("Take picture paints one photo with no model call: his look, her look, then
     "/api/avatars/file/ines-persona.png",
     PLACE_URL,
   ]);
+  // An avatar may wear something else: it is labelled as who they are, and the outfit line dresses them.
+  assert.match(
+    t.paid[2]!.request.prompt,
+    /Reference images, in order: Kai's face; Ines's face; the place behind them\./u,
+  );
+  assert.doesNotMatch(t.paid[2]!.request.prompt, /in this outfit/u);
+  assert.match(t.paid[2]!.request.prompt, /Kai: tall, dark hair, grey eyes; black wool coat\./u);
   assert.equal(t.calls.length, 0, "still no model call");
 });
 
@@ -309,8 +316,22 @@ test("a setup the run cannot take is refused before anything is saved or paid fo
   assert.deepEqual(await t.photos(), []);
 
   await setImages(t.store, t.runId, { connectionId: null });
-  const off = await take(t, { id: newPhotoId(), ...setup() });
-  assert.deepEqual([off.status, off.body.code], [503, "no-connection"]);
+  let fetched = 0;
+  const avatarImage = t.images.cardAvatarImage;
+  t.images.cardAvatarImage = async (path) => {
+    fetched += 1;
+    return avatarImage(path);
+  };
+  // Before the other checks: a text-only story has painted no place, and that is not what stops the photo.
+  for (const body of [setup(), setup({ place: BARE }), setup({ herLook: LOOKS.notWon.id })]) {
+    for (const [route, answer] of [
+      ["take", await take(t, { id: newPhotoId(), ...body })],
+      ["review", await promptOf(t, body)],
+    ] as const) {
+      assert.deepEqual([answer.status, answer.body.code], [503, "no-connection"], `${route}: ${JSON.stringify(body)}`);
+    }
+  }
+  assert.equal(fetched, 0, "no reference is fetched without an image connection");
   assert.deepEqual(await t.photos(), [], "nothing is saved without an image connection");
   assert.equal(t.paid.length, 0);
   assert.equal(t.calls.length, 0);
@@ -336,9 +357,6 @@ test("a photo pays once: a double tap, a resend after it is ready, a Retry after
     warned.some((line) => line.includes(`photo ${failedId}`)),
     `the label is logged: ${warned.join("\n")}`,
   );
-  for (const line of warned) {
-    assert.ok(!line.includes("SECRET-WORDS") && !line.includes("Reference images"), "never the prompt or the words");
-  }
   const retried = await take(t, { id: failedId, ...custom });
   assert.equal(retried.body.photo.art.state, "ready");
   assert.equal(t.paid.length, 2, "Try again repaints once");
@@ -358,6 +376,12 @@ test("a photo pays once: a double tap, a resend after it is ready, a Retry after
   assert.equal(stopped.body.photo.art.state, "stopped");
   assert.equal(t.paid.length, 3, "nothing is paid once the art service is torn down");
   assert.equal(t.calls.length, 0);
+  // At every level (the routes run with debug mode on), through the failure, the Retry and the paints after it.
+  assert.ok(t.logs.length > 0);
+  for (const entry of t.logs) {
+    const line = JSON.stringify(entry);
+    assert.ok(!line.includes("SECRET-WORDS") && !line.includes("Reference images"), `never the prompt: ${line}`);
+  }
 });
 
 test("the photo's prompt: both of them posing, each pick in words, the labels, the rating, and nothing softened", async () => {
@@ -365,10 +389,7 @@ test("the photo's prompt: both of them posing, each pick in words, the labels, t
   const solo = (await promptOf(t, setup())).body;
   assert.match(solo.prompt, /A photo of Kai and Ines taking a picture together, both facing the camera and posing/u);
   assert.match(solo.prompt, /Kai makes a peace sign\. Ines waves at the camera\./u);
-  assert.match(
-    solo.prompt,
-    /Kai's expression: a confident smirk\. Ines's expression: smiling brightly at the camera\./u,
-  );
+  assert.match(solo.prompt, /Kai's expression: a confident smirk\. Ines's expression: smiling brightly\./u);
   assert.match(
     solo.prompt,
     /Reference images, in order: Kai in this outfit; Ines in this outfit; the place behind them\./u,
@@ -384,6 +405,32 @@ test("the photo's prompt: both of them posing, each pick in words, the labels, t
   const kiss = (await promptOf(t, setup({ his: pick("fond", "kiss"), her: pick("blush", "kiss") }))).body.prompt;
   assert.match(kiss, /A photo of Kai and Ines posing together for the camera\. Kai and Ines kiss, faces turned/u);
   assert.doesNotMatch(kiss, /facing the camera/u);
+  // The setup starts both of them on Smile: a kiss with it, or a wink, never also looks at the camera.
+  const shot = async (his: PhotoPick, her: PhotoPick) => (await promptOf(t, setup({ his, her }))).body.prompt as string;
+  const smiles = await shot(pick("smile", "kiss"), pick("wink", "kiss"));
+  assert.match(smiles, /Kai's expression: smiling brightly\. Ines's expression: winking\./u);
+  assert.doesNotMatch(smiles, /at the camera|facing the camera/u);
+  const forehead = await shot(pick("smile", "forehead"), pick("smile", "forehead"));
+  assert.match(forehead, /posing together for the camera\. Kai and Ines rest their foreheads together, eyes on each/u);
+  assert.doesNotMatch(forehead, /at the camera|facing the camera/u);
+  // Her cheek kiss on him: she acts, he faces the camera, and the photo opens with them posing together.
+  const cheek = await shot(pick("smile", "cheek-kissed"), pick("smile", "cheek-kiss"));
+  assert.match(
+    cheek,
+    /A photo of Kai and Ines posing together for the camera\. Ines kisses Kai's cheek while Kai faces/u,
+  );
+  assert.doesNotMatch(cheek, /both facing the camera/u);
+  const backHug = await shot(pick("smile", "back-hugged"), pick("smile", "back-hug"));
+  assert.match(
+    backHug,
+    /both facing the camera and posing for it\. Ines hugs Kai from behind, chin on Kai's shoulder\./u,
+  );
+  // A pose names no expression of its own: a pout in a hug or a play-fight stays a pout.
+  for (const pose of ["hug", "play-fight"]) {
+    const pout = await shot(pick("pout", pose), pick("pout", pose));
+    assert.match(pout, /Kai's expression: a playful pout\. Ines's expression: a playful pout\./u, pose);
+    assert.doesNotMatch(pout, /smiling|laughing/u, pose);
+  }
   const carry = (
     await promptOf(t, setup({ his: pick("laugh", "piggyback-ride"), her: pick("laugh", "piggyback-carry") }))
   ).body.prompt;
@@ -392,12 +439,20 @@ test("the photo's prompt: both of them posing, each pick in words, the labels, t
     await promptOf(
       t,
       setup({
-        his: pick("custom", "custom", { expressionText: " “a lopsided grin” ", poseText: "leans on the lens" }),
+        his: pick("custom", "custom", {
+          expressionText: " “a lopsided   grin” ",
+          poseText: '"peace" sign with both hands',
+        }),
+        her: pick("custom", "wave", { expressionText: 'holding a sign that says "hi"' }),
       }),
     )
   ).body.prompt;
-  assert.match(own, /Kai's pose: leans on the lens\. Ines waves at the camera\./u);
-  assert.match(own, /Kai's expression: a lopsided grin\./u);
+  // As typed, only the spaces tidied: quotes at either end stay (a rule for model output, never for the player's).
+  assert.match(own, /Kai's pose: "peace" sign with both hands\. Ines waves at the camera\./u);
+  assert.match(own, /Kai's expression: “a lopsided grin”\. Ines's expression: holding a sign that says "hi"\./u);
+  // Words the client lets through (it only trims) are words the server takes.
+  const quotes = await promptOf(t, setup({ his: pick("custom", "peace", { expressionText: '""' }) }));
+  assert.equal(quotes.status, 200, JSON.stringify(quotes.body));
 
   // Only the references that resolved are labelled.
   t.images.cardAvatarImage = async (path) =>
@@ -409,6 +464,10 @@ test("the photo's prompt: both of them posing, each pick in words, the labels, t
   const tagged = (await promptOf(t, setup())).body.prompt;
   assert.match(tagged, /peace sign, waving, smirk, bright smile/u);
   assert.doesNotMatch(tagged, /Reference images/u);
+  // A shared pose is its own tags once, never either person's solo ones.
+  const taggedKiss = (await promptOf(t, setup({ his: pick("smile", "kiss"), her: pick("blush", "kiss") }))).body.prompt;
+  assert.match(taggedKiss, /kiss, facing each other, bright smile, blush, shy smile/u);
+  assert.doesNotMatch(taggedKiss, /posing,|peace sign|waving|Kai and Ines/u);
   t.images.styleProfile = async () => ({ styleText: "", positiveTags: "", negativeTags: "" });
 
   // Explicit Heat at the Explicit rating: the photo stays clothed, at most Suggestive.
@@ -422,6 +481,18 @@ test("the photo's prompt: both of them posing, each pick in words, the labels, t
   assert.doesNotMatch(explicit.prompt, /explicit adult scene|safe for work/u);
   assert.match(explicit.negativePrompt, /nudity, explicit sexual activity/u);
   assert.match(explicit.negativePrompt, /child, childlike, minor/u);
+  const minor = (await promptOf(t, setup({ his: pick("custom", "peace", { expressionText: "a teen idol grin" }) })))
+    .body.prompt;
+  assert.doesNotMatch(minor, /teen/u);
+  assert.match(
+    minor,
+    /both facing the camera and posing for it\. Kai makes a peace sign\. Ines waves at the camera\. Ines's expression: smiling brightly\. Reference images, in order: Kai in this outfit/u,
+    "every other pick stays",
+  );
+  const minorPose = (await promptOf(t, setup({ her: pick("smile", "custom", { poseText: "holds a kid's kite" }) })))
+    .body.prompt;
+  assert.doesNotMatch(minorPose, /kid/u);
+  assert.match(minorPose, /Kai makes a peace sign\. Kai's expression: a confident smirk\. Ines's expression: smiling/u);
 
   // An edited prompt keeps its words and gets the required tags back.
   await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
@@ -441,11 +512,50 @@ test("the photo's prompt: both of them posing, each pick in words, the labels, t
   assert.match(sent.prompt, /safe for work, fully clothed, adult person$/u);
   assert.match(sent.negativePrompt, /^blurry, child, childlike, minor/u);
 
-  for (const prompt of [solo, kiss, carry, own, noPlace, tagged, explicit.prompt, explicit.negativePrompt]) {
+  for (const prompt of [
+    solo,
+    kiss,
+    smiles,
+    forehead,
+    cheek,
+    backHug,
+    carry,
+    own,
+    noPlace,
+    tagged,
+    taggedKiss,
+    explicit.prompt,
+    explicit.negativePrompt,
+    minor,
+  ]) {
     const text = typeof prompt === "string" ? prompt : `${prompt.prompt} ${prompt.negativePrompt}`;
     assert.doesNotMatch(text, CENSORING);
   }
   assert.equal(t.calls.length, 0);
+});
+
+test("a long identity line makes a long prompt, and the paid photo is still kept, listed and paid for once", async () => {
+  const t = await photoWorld("r-photo7-aaaaaa");
+  const long = `tall, ${"grey-eyed and dark-haired, ".repeat(330)}weathered`;
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    identityLine: long,
+  }));
+  const id = newPhotoId();
+  const taken = await take(t, { id, ...setup() });
+  assert.equal(taken.status, 200, JSON.stringify(taken.body));
+  assert.equal(taken.body.photo.art.state, "ready");
+  assert.ok(t.paid[0]!.request.prompt.length > 8000, "a prompt longer than any cap");
+  const record = (await t.stored(id))!;
+  assert.equal(record.prompt?.prompt, t.paid[0]!.request.prompt, "kept as sent, and the record still reads");
+  assert.deepEqual(t.deleted, [], "its image is kept");
+  assert.equal((await take(t, { id, ...setup() })).body.photo.art.state, "ready");
+  assert.equal(t.paid.length, 1, "a resend pays nothing");
+  const album = (await t.call("GET", "/runs/:run/album")).body;
+  assert.deepEqual(
+    album.photos.map((photo: { key: string }) => photo.key),
+    [`photo:${id}`],
+  );
 });
 
 test("the Album keeps ready photos apart from CGs, Home tapes the newest with him, and delete takes the image", async () => {

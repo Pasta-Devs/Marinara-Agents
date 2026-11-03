@@ -4679,11 +4679,14 @@ const PHOTO_NEGATIVE = "extra people, crowd";
 /** A place's tags name it empty ("no humans", as the narrator writes them); the photo puts the two of them in it. */
 const EMPTY_PLACE_TAG = /^(?:no humans?|no people|no one|nobody|empty|scenery)$/iu;
 
-/** Each expression: [the sentence for natural-language prompts, the tags for tag prompts]. */
+/**
+ * Each expression: [the sentence for natural-language prompts, the tags for tag prompts]. None says where they look:
+ * the opening and the pose do (a kiss turns them to each other).
+ */
 const PHOTO_EXPRESSION_LOOKS: Record<PhotoExpression, [sentence: string, tags: string]> = {
-  smile: ["smiling brightly at the camera", "bright smile"],
+  smile: ["smiling brightly", "bright smile"],
   laugh: ["laughing, eyes crinkled", "laughing, crinkled eyes"],
-  wink: ["winking at the camera", "wink"],
+  wink: ["winking", "wink"],
   blush: ["blushing, a shy smile", "blush, shy smile"],
   pout: ["a playful pout", "pout"],
   smirk: ["a confident smirk", "smirk"],
@@ -4708,16 +4711,14 @@ type PhotoActingPose = Exclude<PhotoSharedPose, "cheek-kissed" | "piggyback-ride
 
 /**
  * Each shared pose by the id of whoever acts in it (`{me}`, with `{other}`); a symmetric pose is one both of them hold.
- * `turned`: they face each other, so the photo does not open with both of them facing the camera.
+ * `turned`: they face each other, so the photo does not open with both of them facing the camera. A pose never names
+ * an expression: each of them has their own pick.
  */
 const PHOTO_SHARED_LOOKS: Record<PhotoActingPose, { look: [sentence: string, tags: string]; turned?: true }> = {
   kiss: { look: ["{me} and {other} kiss, faces turned to each other", "kiss, facing each other"], turned: true },
-  hug: { look: ["{me} and {other} hug, cheek to cheek, smiling at the camera", "hug, cheek to cheek"] },
+  hug: { look: ["{me} and {other} hug, cheek to cheek", "hug, cheek to cheek"] },
   "play-fight": {
-    look: [
-      "{me} and {other} play-fight, tussling and laughing, tugging at each other's sleeves",
-      "play fighting, tussling, laughing",
-    ],
+    look: ["{me} and {other} play-fight, tussling and tugging at each other's sleeves", "play fighting, tussling"],
   },
   "hold-hands": { look: ["{me} and {other} hold hands, fingers laced", "holding hands, interlocked fingers"] },
   forehead: {
@@ -4749,8 +4750,11 @@ export interface PhotoInput {
   herPick: PhotoPick;
   /** The place's English tags (S/art/places.ts). */
   placeTags: string;
-  /** The references that resolved, in the order they are sent. */
-  references: ReadonlyArray<"li" | "her" | "place">;
+  /**
+   * The references that resolved, in the order they are sent. `li-face` and `her-face`: his card's or her persona's
+   * avatar standing in for a look with no picture, so it shows who they are and the outfit line dresses them.
+   */
+  references: ReadonlyArray<"li" | "li-face" | "her" | "her-face" | "place">;
   world: Pick<World, "content" | "images">;
   style: StyleProfile;
 }
@@ -4764,7 +4768,9 @@ const isSoloPose = (pose: string): pose is PhotoSoloPose => Object.hasOwn(PHOTO_
  * What the photo shows, in code with no model call. Sentence mode: the two of them posing for the camera (posing
  * together when they face each other), one sentence for a shared pose or one per person, each person's expression,
  * then which reference is which (only those that resolved). Tag mode: the pose and expression tags with any words of
- * the player's own, and no labels (tag models do not read them). The player's words go in as typed.
+ * the player's own, and no labels (tag models do not read them). The player's words go in as typed; above SFW a
+ * sentence of theirs that names a minor is dropped on its own (adultsOnly reads comma parts, which would otherwise run
+ * across the brief's sentences and take every pick with it).
  */
 function photoBrief(input: PhotoInput): string {
   const him = input.li.name.trim().split(/\s+/)[0] || "Him";
@@ -4788,13 +4794,14 @@ function photoBrief(input: PhotoInput): string {
       ...people.map(({ pick }) => expression(pick)?.[1] ?? own(pick.expressionText)),
     );
   }
-  const labels = input.references.map((reference) =>
-    reference === "li"
-      ? `${him} in this outfit`
-      : reference === "her"
-        ? `${her} in this outfit`
-        : "the place behind them",
-  );
+  const label = {
+    li: `${him} in this outfit`,
+    "li-face": `${him}'s face`,
+    her: `${her} in this outfit`,
+    "her-face": `${her}'s face`,
+    place: "the place behind them",
+  } as const;
+  const labels = input.references.map((reference) => label[reference]);
   return [
     shared?.turned
       ? `A photo of ${him} and ${her} posing together for the camera.`
@@ -4813,6 +4820,7 @@ function photoBrief(input: PhotoInput): string {
     }),
     labels.length ? sentence(`Reference images, in order: ${labels.join("; ")}`) : "",
   ]
+    .map((part) => adultsOnly(input.world, part))
     .filter(Boolean)
     .join(" ");
 }
