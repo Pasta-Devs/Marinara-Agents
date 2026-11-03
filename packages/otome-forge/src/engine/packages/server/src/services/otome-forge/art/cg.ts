@@ -386,9 +386,14 @@ export async function markCgSeen(
   if (art?.state !== "ready" || !art.url || !art.ref) {
     throw new OtomeForgeError(409, "This key image is not painted yet.", "conflict");
   }
-  // An Ease off before the CG's segment keeps readThrough below it: a CG never shown is never unlocked.
-  if (beat.readThrough < cg.at) throw new OtomeForgeError(409, "This key image has not been shown yet.", "conflict");
-  const units = (await readRun(deps.store, runId))?.units ?? [];
+  // An Ease off before the CG's segment keeps readThrough below it, and a beat written ahead (its CG painted with it,
+  // its readThrough still 0) is not shown until it is the one being read: a CG never shown is never unlocked.
+  const run = await readRun(deps.store, runId);
+  const progress = run?.state.chapters[key];
+  if (beat.readThrough < cg.at || (!progress?.completed && i > (progress?.beatsRead ?? 0))) {
+    throw new OtomeForgeError(409, "This key image has not been shown yet.", "conflict");
+  }
+  const units = run?.units ?? [];
   const li =
     cg.cast.map((name) => units.find((unit) => sameName(name, unit.name))?.id).find(Boolean) ??
     chapter.li ??

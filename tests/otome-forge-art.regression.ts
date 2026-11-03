@@ -316,7 +316,8 @@ test("a scene written ahead paints its CG as soon as it is written, so it is rea
     const t = await artWorld({
       runKey,
       images: { expressions: false },
-      replies: Array.from({ length: 4 }, () => json(beatReply({ cg: CG }))),
+      // Its CG opens on the first segment, so a readThrough of 0 alone would count as shown.
+      replies: Array.from({ length: 4 }, () => json(beatReply({ cg: { ...CG, at: 0 } }))),
     });
     await seedChapter(t.store, t.runId);
     const art = createOtomeArt(t.deps);
@@ -332,6 +333,12 @@ test("a scene written ahead paints its CG as soon as it is written, so it is rea
       "the CG painted as its scene was written, before it is served",
     );
     assert.equal(cgs(), 1);
+    // Ready on its first segment, it is still not the scene being read: it cannot reach the album yet.
+    const early = await routesOf(registerArtRoutes, t.deps, runKey)("POST", "/runs/:run/art/cg/seen", {
+      key: KEY,
+      i: 1,
+    });
+    assert.equal(early.status, 409, "a CG written ahead is not seen before its scene is read");
     if (easeOff) {
       const eased = await call("POST", `${beatPath}/ease-off`, { segment: 1 }, { key: KEY, i: "0" });
       assert.equal(eased.status, 200, JSON.stringify(eased.body));
@@ -472,6 +479,12 @@ test("a CG unlocks only once it is ready and shown, exactly once", async () => {
 
   const stored = (await readStoredBeat(t.store, t.runId, 1))!;
   await saveBeat(t.store, t.runId, { ...stored, readThrough: CG.at });
+  // Read through its segment, but not the scene being read yet (written ahead, #2095): still not seen.
+  assert.equal((await t.call("POST", "/runs/:run/art/cg/seen", { key: KEY, i: 1 })).status, 409);
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (current) => ({
+    ...current,
+    chapters: { ...current.chapters, [KEY]: { ...current.chapters[KEY], beatsRead: 1 } },
+  }));
   const seen = await t.call("POST", "/runs/:run/art/cg/seen", { key: KEY, i: 1 });
   assert.equal(seen.status, 200);
   assert.equal(seen.body.unlocked, true);
