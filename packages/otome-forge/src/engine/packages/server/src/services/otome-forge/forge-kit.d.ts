@@ -265,6 +265,11 @@ declare module "@forge-kit/story-memory.mjs" {
     query?: unknown;
     target?: unknown;
     listed?: string[];
+    /**
+     * Otome's: a prompt that carries no timeline (the Home note, Read Him, Read Me) also takes its love interest's own
+     * Character Stories as recalls (S/memory/memory.ts).
+     */
+    ownStories?: boolean;
     excludeChapterIds?: string[];
     signal?: AbortSignal;
   }

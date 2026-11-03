@@ -88,8 +88,9 @@ const SOURCES: ForgeMemorySource[] = [
     content: "Ava met Kai and Mireille at the observatory. The great telescope had been sabotaged.",
     order: 10000,
   },
-  // A side story of the kit's own kind, as Otome's dates and Character Stories are (S/story/canon.ts): summarized, never
-  // in the timeline, recalled only for its love interest; otome-forge-beats.regression.ts checks them with memory ready.
+  // A side story of the kit's own kind, as Otome's dates are (S/story/canon.ts): summarized, never in the timeline,
+  // recalled only for its love interest; otome-forge-beats.regression.ts checks them with memory ready. A Character
+  // Story (a `story-` key) joins the timeline instead (0.7.3, checked below).
   {
     id: "route-li-mireille-cd34-2",
     kind: "character-story",
@@ -168,6 +169,44 @@ async function settle(memory: OtomeMemory) {
   }
   throw new Error("The memory maintenance never finished");
 }
+
+test("a Character Story joins the timeline in story order, private to its love interest; a date never does", async () => {
+  // The maintainer's (2026-11-03): love interests must know what happened in their Character Stories, and as recalls
+  // they were often left out of the 5k.
+  const STORY = {
+    id: "story-item-mem-0001",
+    kind: "character-story" as const,
+    title: 'Kai\'s own story chapter "The Brass Key" (private: only the people in its scenes know what happened in it)',
+    content: "Kai gave Ava the brass key to the bell tower.",
+    order: 10000 + 5000.5,
+    audience: [KAI],
+  };
+  const { fake, memory } = await setup(undefined, { sources: [SOURCES[0]!, SOURCES[1]!, STORY] });
+  assert.equal(await memory.maintain({ runId: RUN, debugMode: false }), true);
+  assert.equal((await settle(memory)).phase, "ready");
+  const saved = fake.rows.get(memoryId(RUN))!.data as { overview: { content: string } };
+  const timeline = parseTimeline(saved.overview.content);
+  assert.deepEqual(
+    timeline.entries.map((entry) => entry.key),
+    [JSON.stringify(["chapter", "main-1"]), JSON.stringify(["character-story", STORY.id])],
+    "after the main chapter it followed; the date-like side story stays out",
+  );
+  assert.match(timeline.entries[1]!.title, /private/u, "titled private to him");
+  assert.ok(timeline.entries[1]!.text.includes("brass key"));
+  // It is the timeline's, so it is no recall any more: his own prompt has it once.
+  const recall = await memory.recall({ runId: RUN, job: "narration", cast: [KAI] });
+  assert.ok(!(recall.recalls ?? []).some((item) => item.id === STORY.id), "not a recall too");
+  const reply = await memory.recall({ runId: RUN, job: "chat", reader: KAI });
+  assert.ok(
+    !(reply.recalls ?? []).some((item) => item.id === STORY.id),
+    "nor in his messages, which carry the timeline",
+  );
+  // The Home note, Read Him and Read Me carry no timeline: they take it as his newest recall.
+  const own = await memory.recall({ runId: RUN, job: "chat", reader: KAI, ownStories: true });
+  assert.equal(own.recalls?.at(-1)?.id, STORY.id, "his newest memory, where no timeline goes");
+  const hers = await memory.recall({ runId: RUN, job: "chat", reader: MIR, ownStories: true });
+  assert.ok(!(hers.recalls ?? []).some((item) => item.id === STORY.id), "and never another love interest's");
+});
 
 test("summaries run on the background lane with the summary wording; a private chat never reaches the overview", async () => {
   const { fake, memory, calls, admissions, logs } = await setup();
@@ -441,7 +480,7 @@ test("an overview saved before the timeline is folded again from the records in 
   assert.ok(!before.text.includes("OLD-OVERVIEW"));
   // The story's own recall queues it, with no Retry.
   await recallText({ store, memory }, RUN, { job: "narration", cast: [MIR] });
-  for (let turn = 0; turn < 2000 && saved().overviewStyle !== 3; turn += 1) {
+  for (let turn = 0; turn < 2000 && saved().overviewStyle !== 4; turn += 1) {
     await new Promise((resolve) => setImmediate(resolve));
   }
   assert.equal((await settle(memory)).phase, "ready");
@@ -450,7 +489,7 @@ test("an overview saved before the timeline is folded again from the records in 
   // overview is never read, and the Character Story stays out of the timeline.
   assert.equal(calls.length, 0, "no call: the saved summaries are the timeline");
   assert.deepEqual(saved().records, old.records, "records and detail summaries are kept as they were");
-  assert.equal(saved().overviewStyle, 3, "the new overview carries its form");
+  assert.equal(saved().overviewStyle, 4, "the new overview carries its form");
   assert.deepEqual(parseTimeline(saved().overview.content), {
     head: "",
     entries: [{ key: JSON.stringify(["chapter", main.id]), title: main.title, text: MAIN }],

@@ -33,12 +33,18 @@
 //   known, so its budget only bounds a timeline that keeps failing to condense; a model of unknown context waits for
 //   configuration.
 // - #2066, the recall pool: recall sends no ranked chapter details. Beside the timeline go the newest small memories
-//   this prompt may know (phone sessions, Snapshots, Read Him sets, Claw rounds, Read Me notebook sets, and each date,
-//   Character Story and Moment by its summary), newest first within RECALL_TOKENS and 1k of leeway, the oldest left
-//   out, and none the prompt already lists in full (`listed`, P17's newest conversations). A date,
-//   Character Story or Moment (the kit's `character-story`) never joins the timeline: it is its love interest's own,
-//   and until it has a summary it goes in as recent canon (S/story/canon.ts). No embeddings are made, so none are paid
-//   for.
+//   this prompt may know (phone sessions, Snapshots, Read Him sets, Claw rounds, Read Me notebook sets, and each date
+//   by its summary), newest first within RECALL_TOKENS and 1k of leeway, the oldest left out, and none the prompt
+//   already lists in full (`listed`, P17's newest conversations). A date (the kit's `character-story`) never joins the
+//   timeline: it is its love interest's own, and until it has a summary it goes in as recent canon (S/story/canon.ts).
+//   No embeddings are made, so none are paid for.
+// - A Character Story, Moment or first-wear beat (also the kit's `character-story`, a `story-<itemId>` chapter) joins
+//   the timeline in story order, as a route chapter does, titled and summarized as private to its love interest (the
+//   maintainer's, 2026-11-03: love interests must know what happened in them; as recalls they were often left out).
+//   The Home note, Read Him and Read Me carry no timeline, so they ask for them as recalls too (`ownStories`).
+//   ponytail: a run whose memory waits for Retry (a failed summary) when it moves to a new overview form sends its
+//   summaries as recent canon, the oldest giving way, until Retry rebuilds it: the kit holds every failure for
+//   Retry. The upgrade path is a form change that queues its rebuild whatever the saved status.
 // - Every summary and condensing call gets at least 10240 tokens of reply room for thinking models (the connection's
 //   own cap when it is lower); a chapter too long for one call is summarized in pieces (fitsSummary).
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
@@ -60,7 +66,7 @@ import {
   withRules,
 } from "../prompts.js";
 import { OUTPUT_FLOOR, generateJson, promptRoom, resolveConnectionId, type OtomeMessage } from "../generation.js";
-import { OTOME_FORGE_PACKAGE_ID, memoryId, runDocTarget, stateId, unitId, worldId } from "../ids.js";
+import { OTOME_FORGE_PACKAGE_ID, isItemStoryKey, memoryId, runDocTarget, stateId, unitId, worldId } from "../ids.js";
 import { normalizeState, readCastUnits } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
@@ -100,8 +106,8 @@ const MEMORY_CONTEXT = 400_000;
 const SummarySchema = z.object({ summary: z.string().min(1) });
 
 /**
- * The overview's form, kept on the memory document: 3 is #2066's timeline (S/memory/timeline.ts; 2 was 0.6.19's prose
- * timeline, rewritten whole with every chapter). A document without it
+ * The overview's form, kept on the memory document: 4 is #2066's timeline with Character Stories in it (0.7.3; 3 left
+ * them out, 2 was 0.6.19's prose timeline, rewritten whole with every chapter). A document without it
  * is read with no overview, so the kit's next maintenance folds a new one from the saved records, one at a time; with
  * no overview every source is owed, so recall reports the memory lagging and queues that (S/story/canon.ts recallText).
  * Records, detail summaries and status are read as saved. Every overview the kit writes after that was folded over the
@@ -109,7 +115,7 @@ const SummarySchema = z.object({ summary: z.string().min(1) });
  * Until then the earlier overview is kept beside it as `legacyOverview` (the kit carries fields it does not know), so
  * What happened so far… can still show it when a fold fails before the first new one lands; the stamp drops it.
  */
-const OVERVIEW_STYLE = 3;
+const OVERVIEW_STYLE = 4;
 
 type SavedForm = { overview?: unknown; overviewStyle?: unknown; legacyOverview?: unknown } | null | undefined;
 
@@ -361,8 +367,8 @@ export function createOtomeMemory({
       const timeline = parseTimeline(previousOverview);
       let added = false;
       for (const record of records ?? []) {
-        // A date, Character Story or Moment is a recall, never the timeline's (see the header).
-        if (record.kind === "character-story") continue;
+        // A date is a recall, never the timeline's; a Character Story joins it (see the header).
+        if (record.kind === "character-story" && !isItemStoryKey(record.id)) continue;
         added = true;
         const key = JSON.stringify([record.kind, record.id]);
         const text = cleanSummary(record.content ?? "");
@@ -400,7 +406,7 @@ export function createOtomeMemory({
   /**
    * #2066's recall pool: the newest small memories this prompt may know, newest first within RECALL_TOKENS, returned in
    * story order. They are the `chat` sources (a phone session, a Snapshot, a Read Him set, a Claw round), each private
-   * to its love interest; `told`, the dates, Character Stories and Moments by their summaries; and the Read Me notebook
+   * to its love interest; `told`, the dates by their summaries; and the Read Me notebook
    * sets of the love interests this recall is for (S/prompts.ts notebookMemories; live, never stored, so a deleted
    * entry never comes back). What the caller lists in full (`listed`) is left out. Each is counted as the prompt shows
    * it (S/story/canon.ts renderMemory); one that alone could never fit is passed over, and the first other that does
@@ -503,11 +509,13 @@ export function createOtomeMemory({
         const phase = result.lagging ? "stale" : "error";
         return { ...result, status: { ...result.status, phase }, overview: "", details: [], text: "" };
       }
-      // Each date, Character Story and Moment this prompt may know that recent canon no longer carries, by its summary.
+      // Each date this prompt may know that recent canon no longer carries, by its summary. A Character Story is the
+      // timeline's, so only a prompt with no timeline (`ownStories`) takes it here too.
       const inRecent = new Set(recent.map((entry) => JSON.stringify([entry.kind, entry.id])));
       const sideStories = sources.filter(
         (source) =>
           source.kind === "character-story" &&
+          (options.ownStories || !isItemStoryKey(source.id)) &&
           !inRecent.has(JSON.stringify([source.kind, source.id])) &&
           mayKnow(knowing, source.audience),
       );

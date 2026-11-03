@@ -145,6 +145,7 @@ export const bannerId = (runId: string, key: string) => `${runId}:banner:${key}`
 export const itemId = (runId: string, item: string) => `${runId}:item:${item}`;
 /** `story-<itemId>`: the chapter key of an item's Character Story, Moment or first-wear beat. */
 export const itemStoryKey = (item: string) => `story-${item}`;
+export const isItemStoryKey = (key: string) => key.startsWith("story-");
 
 /** Every kind a run's documents have. Deleting a run removes each; a milestone that adds a kind adds it here. */
 export const RUN_DOC_KINDS = [
