@@ -91,6 +91,8 @@ export interface DraftImages {
   expressions: boolean;
   /** The player's own image style ("" uses the Engine's style profile). */
   style: string;
+  /** The Engine image style profile the pictures follow; "" is the Engine's default profile. */
+  styleProfileId: string;
 }
 
 /** "" means "the same as the story connection" for every job but narration. */
@@ -139,7 +141,14 @@ export function emptyDraft(): SetupDraft {
     protagonist: { personaId: "", name: "", pronouns: emptyPronouns(), traits: [], goal: "" },
     lis: [],
     content: normalizeContent(undefined),
-    images: { connectionId: null, rating: normalizeImageRating(undefined), ask: false, expressions: true, style: "" },
+    images: {
+      connectionId: null,
+      rating: normalizeImageRating(undefined),
+      ask: false,
+      expressions: true,
+      style: "",
+      styleProfileId: "",
+    },
     connections: { narration: "", structured: "", chat: "", compress: "" },
   };
 }
@@ -226,6 +235,7 @@ export function readDraft(value: unknown): SetupDraft {
       ask: bool(images.ask, draft.images.ask),
       expressions: bool(images.expressions, draft.images.expressions),
       style: str(images.style, IMAGE_STYLE_MAX),
+      styleProfileId: str(images.styleProfileId, 200),
     },
     connections: {
       narration: str(connections.narration, 200),

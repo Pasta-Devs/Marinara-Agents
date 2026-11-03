@@ -9,8 +9,9 @@
 //                                                               else the love interest on Home) in the background; his
 //                                                               new look gets its faces (M2b expressions), in the
 //                                                               background
-// POST /runs/:run/wardrobe/show {li, look}                   → ShowResult {line, face?, grants}; P24, and +20 affection
-//                                                               the first time she shows him that look
+// POST /runs/:run/wardrobe/show {li, look}                   → ShowResult {line, face?, grants}; P24 (on the Messages
+//                                                               connection, job "chat"), and +5 affection the first
+//                                                               time she shows him that look
 // POST /runs/:run/wardrobe/pair {hers, prompt?, negativePrompt?} → {art}; paints the set's pair portrait (1 image)
 // POST /runs/:run/wardrobe/pair/prompt {hers}                → {prompt, negativePrompt}
 // A look is worn once painted: only its image can stand on Home. Wearing is idempotent. A Show is a model call each time;

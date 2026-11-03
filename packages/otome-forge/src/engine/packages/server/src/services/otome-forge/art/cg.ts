@@ -2,9 +2,10 @@
 // Otome Forge: story CGs (plan M2b "Story CGs"): painted onto the beat that holds them, unlocked once seen
 // ──────────────────────────────────────────────
 // A beat on a `cg` node may carry a brief (beat.cg: the segment it opens on, an English brief, the names of at most 3
-// people in the frame). When the beat is first served, its CG is painted in the background (beat.cg.art), unless Ask
-// before painting is on or the player reviews image prompts; then it waits for the tap, as a failed or stopped one
-// does. A beat written ahead pays for no CG until it is served, so one an Ease off or a Rewrite drops never did. The
+// people in the frame). Once the beat is written (the lookahead's included, so it is ready when the reader gets there),
+// its CG is painted in the background (beat.cg.art), unless Ask before painting is on or the player reviews image
+// prompts; then it waits for the tap, as a failed or stopped one does. Serving the beat paints it when it has no record
+// yet. A beat an Ease off or a Rewrite drops lets its CG go: a paint still waiting stops, a painted one is deleted. The
 // prompt is the brief plus each person's identity and outfit lines, the rating and an adult tag for every
 // person, sent as the prompt override, with each person's card, persona or portrait as a reference (at most 4). A brief
 // that set `explicit` is painted explicit only while Heat and the rating are both Explicit at the paid call, and then
@@ -13,8 +14,8 @@
 // image is deleted again. The album gains a CG only through POST .../art/cg/seen, once the CG is ready and the beat has
 // been read to the segment it opens on; a second report changes nothing. A beat eased off before the CG's segment never
 // shows it, so it is not painted (a paint still waiting in the lane stops). The beat writer calls queueScenePaints with
-// a beat's places once it is written, and startBeatCg (OtomeArt.prepareSceneCg) once it is served, awaiting only the
-// CG's record so the reader's first art read sees it pending or waiting.
+// a beat once it is written, and startBeatCg (OtomeArt.prepareSceneCg) once it is served, awaiting only the CG's
+// record so the reader's first art read sees it pending or waiting; the first to write the record paints (startPaint).
 import type {
   AlbumCg,
   Beat,
@@ -42,7 +43,7 @@ import {
   type PaintOwner,
 } from "./paint.js";
 import { paintBeatPlaces, type PaintOptions } from "./places.js";
-import { CG_PEOPLE_MAX, type CgPerson, type ImagePrompt, SCENE_SIZE, cgPrompt } from "../prompts.js";
+import { CG_PEOPLE_MAX, imageNames, type CgPerson, type ImagePrompt, SCENE_SIZE, cgPrompt } from "../prompts.js";
 
 type BeatCg = NonNullable<Beat["cg"]>;
 
@@ -99,16 +100,74 @@ export interface CgSubject {
   person: CgPerson;
   /** Whose likeness the reference keeps; none for someone the story only names. */
   image?: ImageSubject;
+  /** The painted look they wear, if any: their one reference beside others (cgSubjects). */
+  wornUrl?: string;
 }
 
-/** The CG's people, in the brief's order: a love interest, the protagonist, or someone only named (at most 4). */
+/**
+ * The CG's people, in the brief's order: a love interest, the protagonist, or someone only named (at most
+ * CG_PEOPLE_MAX). Alone, a person is sent as who they are and the look they wear (two references). With others, each
+ * person is ONE reference, their worn look when they have one: two full-body pictures of each person in the same
+ * standing pose made the model merge bodies and draw extra limbs (the maintainer's report, 2026-11-03).
+ */
 export function cgSubjects(cast: readonly string[], units: readonly Unit[], player: Player): CgSubject[] {
+  const subjects = castSubjects(cast, units, player);
+  if (subjects.length < 2) return subjects;
+  return subjects.map((subject) =>
+    subject.image && subject.wornUrl
+      ? {
+          ...subject,
+          // Their setup portrait stands behind the look, should its file be gone.
+          image: {
+            kind: "character",
+            portrait: subject.wornUrl,
+            ...(subject.image.portrait ? { avatarPath: subject.image.portrait } : {}),
+          },
+        }
+      : subject,
+  );
+}
+
+/** Whether the kit can find a picture of this subject for sure (a card, a portrait or a look), or only maybe. */
+const likenessOf = (image: ImageSubject): "sure" | "maybe" | "none" =>
+  image.cardId || image.portrait ? "sure" : image.personaId ? "maybe" : "none";
+
+/**
+ * The references a CG of these subjects sends (`units`, for generateBannerArt) and whom each one shows (`labels`, for
+ * cgPrompt), from one list so the two always agree: every person's likeness in turn, then a lone person's worn look,
+ * as the kit sends them. Someone with nothing to send is neither sent nor named, and a protagonist known only by a
+ * persona (whose avatar may be empty) goes last, so a missing picture of her never moves anyone else's label.
+ * ponytail: a file that fails to load (a deleted card image) still shifts the labels after it; the kit logs it. The
+ * upgrade path is the kit returning which references it sent.
+ */
+export function cgReferences(subjects: readonly CgSubject[]): { units: ImageSubject[]; labels: string[] } {
+  // Named as cgPrompt's look lines name them: first names, whole names where two share one.
+  const names = new Map(
+    imageNames(subjects.map((subject) => subject.person.name)).map((name, index) => [subjects[index], name] as const),
+  );
+  const first = (subject: CgSubject) => names.get(subject) || subject.person.name;
+  const shown = subjects.filter((subject) => subject.image && likenessOf(subject.image) !== "none");
+  const ordered = [...shown].sort(
+    (a, b) => Number(likenessOf(a.image!) === "maybe") - Number(likenessOf(b.image!) === "maybe"),
+  );
+  const labels = ordered.map(first);
+  const alone = ordered.length === 1 ? ordered[0]! : undefined;
+  // A lone person's look follows their likeness; when that likeness may be missing, the look is named as them.
+  if (alone?.image?.wornOutfit && likenessOf(alone.image) === "sure") labels.push(`${first(alone)}'s outfit`);
+  return { units: ordered.map((subject) => subject.image!), labels };
+}
+
+/** The CG's people as the brief names them, each with their likeness and the look they wear. */
+function castSubjects(cast: readonly string[], units: readonly Unit[], player: Player): CgSubject[] {
   const subjects: CgSubject[] = [];
   const seen = new Set<string>();
   for (const name of cast) {
     if (subjects.length >= CG_PEOPLE_MAX) break;
-    const unit = units.find((candidate) => sameName(name, candidate.name));
-    const isPlayer = !unit && !!player.name && sameName(name, player.name);
+    // A name a love interest already took that is also the protagonist's is her (a keepsake with a namesake persona).
+    const named = units.find((candidate) => sameName(name, candidate.name));
+    const playerToo = !!player.name && sameName(name, player.name);
+    const unit = named && !(playerToo && seen.has(`li:${named.id}`)) ? named : undefined;
+    const isPlayer = !unit && playerToo;
     const id = unit ? `li:${unit.id}` : isPlayer ? "player" : `name:${name.trim().toLowerCase()}`;
     if (!name.trim() || seen.has(id)) continue;
     seen.add(id);
@@ -129,6 +188,7 @@ export function cgSubjects(cast: readonly string[], units: readonly Unit[], play
           outfits: unit.outfits,
           ...(worn ? { wornOutfit: worn.id } : {}),
         },
+        ...(worn?.url ? { wornUrl: worn.url } : {}),
       });
     } else if (isPlayer) {
       const worn = player.wornOutfit ? player.outfits.find((outfit) => outfit.id === player.wornOutfit) : undefined;
@@ -146,6 +206,7 @@ export function cgSubjects(cast: readonly string[], units: readonly Unit[], play
           outfits: player.outfits,
           ...(worn ? { wornOutfit: worn.id } : {}),
         },
+        ...(worn?.url ? { wornUrl: worn.url } : {}),
       });
     } else {
       subjects.push({ person: { name: name.trim(), identityLine: "", outfitLine: "", presentation: "person" } });
@@ -171,6 +232,7 @@ async function buildCg(deps: ArtDeps, runId: string, beat: Beat, edited: Partial
       style,
       use: "cg",
       explicit: cg.explicit === true,
+      references: cgReferences(subjects).labels,
     },
     edited,
   );
@@ -227,7 +289,7 @@ async function paintCg(
         connectionId,
         // The Engine matches the override as `avatar:<slug of the first person's first name>`.
         name: built.subjects[0]?.person.name.split(/\s+/)[0] || "Scene",
-        units: built.subjects.flatMap((subject) => (subject.image ? [subject.image] : [])),
+        units: cgReferences(built.subjects).units,
         prompt: built.prompt,
         negativePrompt: built.negativePrompt,
         ...SCENE_SIZE,
@@ -243,10 +305,15 @@ async function paintCg(
   });
 }
 
+/** Each CG whose record a start is writing, by run and owner (see startBeatCg). */
+const recording = new Map<string, Promise<void>>();
+
 /**
- * Writes the record of a served beat's CG: pending, or waiting for the tap (Ask before painting, or the player reviews
- * image prompts). Resolves once it is written, with the beat as it stands, while the paid paint goes on in
- * `painting`. A CG that already has a record is left as it is. Never throws.
+ * Writes the record of a beat's CG: pending, or waiting for the tap (Ask before painting, or the player reviews image
+ * prompts). Resolves once it is written, with the beat as it stands, while the paid paint goes on in `painting`. A CG
+ * that already has a record is left as it is. A start while another holds the CG's paint (the scene served just as the
+ * paint its writing started is under way) waits for that one's record and resolves the stored beat with it, so the
+ * reader's first art read sees the CG pending, never missing. Never throws.
  */
 export async function startBeatCg(
   deps: ArtDeps,
@@ -257,8 +324,16 @@ export async function startBeatCg(
   const idle = { beat: written, painting: Promise.resolve() };
   if (!written.cg || written.cg.art) return idle;
   const writtenAt = written.written.at;
-  const release = startPaint(runId, ownerOf(written.key, written.i, writtenAt));
-  if (!release) return idle;
+  const owner = ownerOf(written.key, written.i, writtenAt);
+  const key = `${runId}|${owner}`;
+  const release = startPaint(runId, owner);
+  if (!release) {
+    await recording.get(key);
+    const stored = await readBeat(deps.store, runId, written.key, written.i).catch(() => null);
+    return { ...idle, beat: stored?.written.at === writtenAt ? stored : written };
+  }
+  let recorded = () => {};
+  recording.set(key, new Promise<void>((resolve) => (recorded = resolve)));
   const stopped = (error: unknown) =>
     deps.runtime.logger.warn(
       "[otome-forge] painting cg %s stopped: %s",
@@ -284,6 +359,8 @@ export async function startBeatCg(
     stopped(error);
     return idle;
   } finally {
+    recording.delete(key);
+    recorded();
     if (!painting) release();
   }
 }
@@ -339,9 +416,9 @@ export async function paintCgNow(
 }
 
 /**
- * The beat's places and its CG, painted in the background (or left waiting for the tap). The beat writer calls it with
- * the places once per written beat, a rewrite included (the CG goes through startBeatCg once served); it never throws.
- * Resolves once every paint it started has ended (tests wait on it; the writer does not).
+ * The beat's places and its CG, painted in the background (or left waiting for the tap). The beat writer calls it once
+ * per written beat, a rewrite included; it never throws. Resolves once every paint it started has ended (tests wait on
+ * it; the writer does not).
  */
 export function queueScenePaints(deps: ArtDeps, runId: string, beat: Beat, options: PaintOptions): Promise<void> {
   return Promise.all([
@@ -370,9 +447,14 @@ export async function markCgSeen(
   if (art?.state !== "ready" || !art.url || !art.ref) {
     throw new OtomeForgeError(409, "This key image is not painted yet.", "conflict");
   }
-  // An Ease off before the CG's segment keeps readThrough below it: a CG never shown is never unlocked.
-  if (beat.readThrough < cg.at) throw new OtomeForgeError(409, "This key image has not been shown yet.", "conflict");
-  const units = (await readRun(deps.store, runId))?.units ?? [];
+  // An Ease off before the CG's segment keeps readThrough below it, and a beat written ahead (its CG painted with it,
+  // its readThrough still 0) is not shown until it is the one being read: a CG never shown is never unlocked.
+  const run = await readRun(deps.store, runId);
+  const progress = run?.state.chapters[key];
+  if (beat.readThrough < cg.at || (!progress?.completed && i > (progress?.beatsRead ?? 0))) {
+    throw new OtomeForgeError(409, "This key image has not been shown yet.", "conflict");
+  }
+  const units = run?.units ?? [];
   const li =
     cg.cast.map((name) => units.find((unit) => sameName(name, unit.name))?.id).find(Boolean) ??
     chapter.li ??

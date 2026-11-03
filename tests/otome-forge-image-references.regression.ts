@@ -168,7 +168,7 @@ test("Otome's reference opt-in preserves persona identity, scene outfit ordering
   );
 });
 
-test("a real couple-portrait paint sends the LI neutral, the persona's painted look, and that exact LI outfit; fallbacks retain both looks", async () => {
+test("a real couple-portrait paint sends each of them once, as their pair look, in order (2026-11-03)", async () => {
   for (const [i, scenario] of ["neutral", "missing", "no-card"].entries()) {
     const t = await artWorld({ runKey: `r-pairrefs${i}-aaaaaa` });
     const host = engine(scenario === "missing" ? { sprites: [] } : {});
@@ -205,14 +205,8 @@ test("a real couple-portrait paint sends the LI neutral, the persona's painted l
     }));
     assert.equal((await paintPairNow(t.deps, t.runId, her.id, { debugMode: false })).state, "ready");
     assert.equal(host.generations.length, 1);
-    assert.deepEqual(
-      host.generations[0]!.referenceImages,
-      scenario === "neutral"
-        ? [data("/api/sprites/card-dottore/file/full_neutral.png"), data(herLook), data(hisLook)]
-        : scenario === "missing"
-          ? [data("/api/avatars/file/card.png"), data(herLook), data(hisLook)]
-          : [data(hisLook), data(herLook)],
-    );
+    // His card's full body beside his look was two standing pictures of him: the model merged bodies.
+    assert.deepEqual(host.generations[0]!.referenceImages, [data(hisLook), data(herLook)], scenario);
     assert.ok(
       !host.reads.some((path) => path.startsWith("/api/characters/personas/")),
       "the persona keeps its painted pair-look reference",

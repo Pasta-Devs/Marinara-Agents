@@ -128,11 +128,11 @@ export function normalizeBannerPlan(
       .filter((name) => name && !sameName(name, featured.name));
     plan.featured.premise = clip(top.premise, ITEM_LIMITS.premise);
     plan.featured.cg = {
-      brief: clip(top.cgBrief, ITEM_LIMITS.line),
+      brief: clip(top.cgBrief, ITEM_LIMITS.brief),
       cast: [featured.name, ...new Set(others)].slice(0, 3),
       // Kept only when the plan was offered it (as a story CG's, S/story/beats.ts cgExplicit), and then painted
       // explicit only while the world still allows it (S/wish/banners.ts).
-      ...(clothed ? { explicit: true as const, clothed: clip(clothed, ITEM_LIMITS.line) } : {}),
+      ...(clothed ? { explicit: true as const, clothed: clip(clothed, ITEM_LIMITS.brief) } : {}),
     };
   } else {
     if (!top.look) return "featured.look is missing";
@@ -161,7 +161,7 @@ export function normalizeBannerPlan(
         ...(entry.cgBrief?.trim()
           ? {
               cg: {
-                brief: clip(entry.cgBrief, ITEM_LIMITS.line),
+                brief: clip(entry.cgBrief, ITEM_LIMITS.brief),
                 cast: [
                   li.name,
                   ...(playerName && entry.cgCast?.some((name) => sameName(name, playerName)) ? [playerName] : []),

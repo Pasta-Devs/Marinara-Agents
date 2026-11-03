@@ -782,10 +782,10 @@ async function generateBeat(
     await deps.store.removeDoc(beatId(runId, key, i));
     throw basisChanged();
   }
-  // Only the write that was saved paints its places: a request that lost the race to another write hands nothing on.
-  // Its CG waits until it is served (prepareCg). The beat a rewrite replaced lets its CG go.
+  // Only the write that was saved paints its places and its CG: a request that lost the race to another write hands
+  // nothing on. The beat a rewrite replaced lets its CG go.
   if (saved?.written.at === beat.written.at) {
-    paintPlaces(deps, runId, saved, { debugMode, review });
+    paintScene(deps, runId, saved, { debugMode, review });
     if (replaced) releaseArt(deps, runId, replaced);
   }
   return saved ?? beat;
@@ -809,18 +809,22 @@ function inBackground(deps: BeatDeps, beat: Pick<Beat, "key" | "i">, what: strin
   }
 }
 
-/** A written beat's places (S/art/cg.ts queueScenePaints): painted now, or left waiting for the tap. */
-function paintPlaces(deps: BeatDeps, runId: string, beat: Beat, mode: PaintMode): void {
+/**
+ * A written beat's places and CG (S/art/cg.ts queueScenePaints): painted now, or left waiting for the tap. The scene
+ * the lookahead writes ahead is painted too, so its CG is ready by the time the reader reaches it (the maintainer's,
+ * 2026-11-03). An Ease off or a Rewrite that drops it lets its CG go: a paint still waiting in the lane stops, and one
+ * already painted is deleted again, so only that one was paid for.
+ */
+function paintScene(deps: BeatDeps, runId: string, beat: Beat, mode: PaintMode): void {
   const art = deps.art;
-  const { cg: _cg, ...places } = beat;
-  if (art) inBackground(deps, beat, "scene", () => art.queueScenePaints(runId, places, mode));
+  if (art) inBackground(deps, beat, "scene", () => art.queueScenePaints(runId, beat, mode));
 }
 
 /**
- * The CG of a beat being read, painted (or left waiting for the tap) once it is served, never when it is written: a
- * lookahead that an Ease off or a Rewrite drops unread has paid for no image. Only its record is awaited, so the
- * reader's first art read sees it pending or waiting; the paid paint goes on in the background. Resolves the beat with
- * that record. A CG with a record is left as it is.
+ * The CG of a beat being read, as it is served: a written beat's paint has usually written its record already; one
+ * that has none yet (it is still starting, or this process restarted since) gets it now. Only its record is awaited,
+ * so the reader's first art read sees it pending or waiting; the paid paint goes on in the background. Resolves the
+ * beat with that record. A CG with a record is left as it is.
  */
 async function prepareCg(deps: BeatDeps, runId: string, beat: Beat, mode: PaintMode): Promise<Beat> {
   const art = deps.art;

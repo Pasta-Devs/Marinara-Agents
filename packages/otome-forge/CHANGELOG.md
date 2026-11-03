@@ -1,8 +1,15 @@
 # Otome Hearth release notes
 
+## 0.8.2 — 2026-11-03
+
+- **Key images are ready when you reach them again.** The next scene's key image now starts painting as soon as that scene is written ahead, as it did before 0.6.27, so it is usually waiting when its moment comes. If you use Ease off or Rewrite on the scene you are reading, the scene written ahead is written again and its key image painted again (1 image); the buttons say so.
+- **Showing off a look earns 5 affection**, down from 20, the first time you show it to a love interest.
+- **Fewer extra limbs in pictures of two or more people.** Key images, Memory art, pair portraits and date keepsakes now send one picture of each person, say whose each one is and how many people to draw. A date keepsake now has a picture of you too. Photo Shoot poses say where every hand and leg goes.
+- **Pick the image prompt style.** Settings → Images and setup now let you choose which Engine image style profile your pictures follow. Pick one that writes sentences for GPT Image.
+
 ## 0.8.1 — 2026-11-03
 
-- **Love interests keep their own side stories while memory catches up.** When the story memory is still summarizing, a scene now keeps every date and private chapter played since the last main chapter for the love interests who were there. Before, only the newest of them could make it in.
+- **Love interests keep their own side stories while memory catches up.** When the story memory is still summarizing, a scene now keeps the dates and private chapters played since the last main chapter for the love interests who were there, newest first, within the usual length limit. Before, only the newest of them could make it in.
 - **No hour-long cache paid for nothing.** When chapter plans run on a different connection from the scenes, the plan no longer asks for a cache the scenes could never read.
 
 ## 0.8.0 — 2026-11-03

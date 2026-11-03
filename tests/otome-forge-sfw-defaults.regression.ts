@@ -251,26 +251,26 @@ test("chapter and scene prompts keep emotional payoffs occasional and permit cha
 });
 
 const EXPECTED_ANGST: Record<string, string> = {
-  bannerHis: "99875a4c5f987c66",
-  bannerMemories: "d627bf7d140b7654",
-  bannerMine: "249a5d45cf7934a0",
+  bannerHis: "e8a06d181974c9ca",
+  bannerMemories: "71bad70b6fa3842a",
+  bannerMine: "109b0762d8bcf329",
   beat: "26d7ba0dafc6c0bf",
-  beatWithCg: "ce6c6beb3b5827fa",
+  beatWithCg: "8161431cbc12789d",
   chapterPlan: "3fb0fc6896268a98",
-  closer: "a46ffcf8b64126a9",
-  confrontation: "7ba4288b8dfaf088",
+  closer: "a1a09309945e9e5d",
+  confrontation: "d0a05079393b602d",
   repairPlan: "8b01a20e6b566a07",
   routePlan: "5ee99e80b265372d",
 };
 const EXPECTED_GENTLE: Record<string, string> = {
-  bannerHis: "08b8abf10a38b78a",
-  bannerMemories: "3933a752f49d1bdf",
-  bannerMine: "66aae49d0a525c21",
+  bannerHis: "5b01874fc4fabd17",
+  bannerMemories: "da2465bc6853ef39",
+  bannerMine: "75d0bd9aebbf79ad",
   beat: "7ec97d9b201b895e",
-  beatWithCg: "dc450ab2f6fb1046",
+  beatWithCg: "ce1e12d2113f4eab",
   chapterPlan: "dcbe53dd1f876a18",
-  closer: "9fa2592c1aa6822c",
-  confrontation: "517b71f99a32bca1",
+  closer: "54aafc5f0e85bc63",
+  confrontation: "76c943bb55171273",
   repairPlan: "0b626fe8bd7b1f7c",
   routePlan: "b0ae82afbd80090a",
 };
@@ -379,7 +379,9 @@ test("SFW images keep their safety prompts and negatives, and tagged faces retai
   };
   const scenery =
     "harbour, night, lanterns, no humans, scenery, wide establishing shot, detailed background, atmospheric lighting";
-  const two = "Kai: tall man, grey eyes; keeper's coat. Ines: short dark hair; oilskin.";
+  // Sentence prompts say how many people to draw (the maintainer's anatomy report, 2026-11-03).
+  const two =
+    "Kai: tall man, grey eyes; keeper's coat. Ines: short dark hair; oilskin. Draw exactly two people, each appearing once, with two arms, two legs and five fingers on each visible hand.";
   const cgTail =
     "cinematic composition, detailed background, dramatic lighting, emotional moment, safe for work, fully clothed";
   assert.deepEqual(

@@ -51,8 +51,8 @@ export const AFFECTION_EARNINGS = {
   clawRound: 30,
   /** A phone thread closed with "Close and remember", for an exchange with words from both of them (the maintainer's). */
   closeAndRemember: 5,
-  /** The first Show him for a look (proposal). */
-  showHim: 20,
+  /** The first Show him for a look (the maintainer's, 2026-11-03: 5, was 20). */
+  showHim: 5,
 } as const;
 /** Affection from outside the story, per love interest per local day (proposal: the design's cap read as per LI). */
 export const OUTSIDE_AFFECTION_DAILY_CAP = 300;

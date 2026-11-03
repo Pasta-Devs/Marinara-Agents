@@ -19,6 +19,8 @@ export interface ImageSubject {
   cardId?: string;
   personaId?: string;
   portrait?: string;
+  /** A second likeness the kit tries after `portrait` (cgSubjects: the setup portrait behind a worn look). */
+  avatarPath?: string;
   outfits?: unknown[];
   /** The look worn now: the kit sends its image after the faces for scene and banner art. */
   wornOutfit?: string;
@@ -86,6 +88,14 @@ export interface StyleProfile {
   tagged?: boolean;
 }
 
+/** An Engine image style profile as Settings → Images lists it (GET /image-style-profiles). */
+export interface StyleProfileOption {
+  id: string;
+  name: string;
+  /** The Engine's promptMode: "natural", "tagged", "danbooru" or "hybrid". */
+  promptMode: string;
+}
+
 export interface ImageClient {
   /** Paints one image and uploads it to the Global Gallery. Throws on any failure; it never retries. */
   generatePortrait(request: PortraitRequest): Promise<PaintedImage>;
@@ -105,6 +115,8 @@ export interface ImageClient {
   }): Promise<{ id: string; url: string }>;
   /** The chosen image style profile, else the Engine's default, else the first; empty when there is none. */
   styleProfile(profileId?: string): Promise<StyleProfile>;
+  /** The Engine's image style profiles and its default, for the picker (empty when they cannot be read). */
+  styleProfiles?(): Promise<{ defaultProfileId: string; profiles: StyleProfileOption[] }>;
   deleteGalleryImage(id: string): Promise<boolean>;
   characterCard(cardId: string): Promise<{ avatarPath: string } | null>;
   personaAvatar(personaId: string): Promise<string>;
@@ -246,6 +258,20 @@ export function createImageClient({
     return response.json();
   }
 
+  /** The Engine's image style profiles as its UI settings keep them (either key the Engine has used). */
+  const readStyleProfiles = async () => {
+    const raw = (await request("/api/app-settings/ui")) as { value?: unknown } | null;
+    const value = raw && typeof raw === "object" && "value" in raw ? raw.value : raw;
+    type Profiles = { profiles?: unknown; defaultProfileId?: unknown };
+    const settings = (typeof value === "string" ? parseJson(value) : value) as {
+      imageStyleProfiles?: Profiles;
+      styleProfiles?: Profiles;
+    } | null;
+    const profiles = settings?.imageStyleProfiles ?? settings?.styleProfiles;
+    const list = (Array.isArray(profiles?.profiles) ? profiles.profiles : []) as Array<Record<string, unknown> | null>;
+    return { list, defaultProfileId: str(profiles?.defaultProfileId) };
+  };
+
   const client: ImageClient = {
     async generateImage({ connectionId, name, prompt, negativePrompt, width, height, debugMode, referenceImages }) {
       const result = (await request("/api/characters/avatar-generation", {
@@ -332,20 +358,9 @@ export function createImageClient({
     async styleProfile(profileId) {
       const empty: StyleProfile = { styleText: "", positiveTags: "", negativeTags: "" };
       try {
-        const raw = (await request("/api/app-settings/ui")) as { value?: unknown } | null;
-        const value = raw && typeof raw === "object" && "value" in raw ? raw.value : raw;
-        type Profiles = { profiles?: unknown; defaultProfileId?: unknown };
-        const settings = (typeof value === "string" ? parseJson(value) : value) as {
-          imageStyleProfiles?: Profiles;
-          styleProfiles?: Profiles;
-        } | null;
-        const profiles = settings?.imageStyleProfiles ?? settings?.styleProfiles;
-        const list = (Array.isArray(profiles?.profiles) ? profiles.profiles : []) as Array<Record<
-          string,
-          unknown
-        > | null>;
+        const { list, defaultProfileId } = await readStyleProfiles();
         const find = (id: string) => (id ? list.find((profile) => str(profile?.id) === id) : undefined);
-        const profile = find(str(profileId)) ?? find(str(profiles?.defaultProfileId)) ?? list[0];
+        const profile = find(str(profileId)) ?? find(defaultProfileId) ?? list[0];
         if (!profile) return empty;
         const mode = str(profile.promptMode);
         return {
@@ -357,6 +372,27 @@ export function createImageClient({
       } catch (error) {
         logger?.warn("[otome-forge] could not read the image style profiles: %s", String(error));
         return empty;
+      }
+    },
+
+    async styleProfiles() {
+      try {
+        const { list, defaultProfileId } = await readStyleProfiles();
+        const profiles = list.flatMap((profile): StyleProfileOption[] =>
+          str(profile?.id)
+            ? [
+                {
+                  id: str(profile?.id),
+                  name: str(profile?.name) || str(profile?.id),
+                  promptMode: str(profile?.promptMode),
+                },
+              ]
+            : [],
+        );
+        return { defaultProfileId: defaultProfileId || profiles[0]?.id || "", profiles };
+      } catch (error) {
+        logger?.warn("[otome-forge] could not read the image style profiles: %s", String(error));
+        return { defaultProfileId: "", profiles: [] };
       }
     },
 

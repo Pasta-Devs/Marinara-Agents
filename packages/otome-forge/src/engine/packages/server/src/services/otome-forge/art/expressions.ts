@@ -11,8 +11,8 @@
 //
 // The kit builds one paint per unit; its client is made per run here, so each face's prompt reads that run's world
 // (rating, style) right before the call. createOtomeArt is created once per activation: queueExpressions after each
-// beat is served, queueScenePaints for a beat's places once written and prepareSceneCg for its CG once served
-// (art/cg.ts), dispose on teardown, after which nothing more is paid for. queueStickers (#2044, art/stickers.ts) runs
+// beat is served, queueScenePaints for a beat's places and CG once written and prepareSceneCg for a CG still without
+// a record once served (art/cg.ts), dispose on teardown, after which nothing more is paid for. queueStickers (#2044, art/stickers.ts) runs
 // each run's sticker chain from GET /runs/:run.
 import { forgeLocalAvatarPath } from "@forge-kit/image-avatar-references.mjs";
 import { createForgeStoryExpressions, type ForgeStoryExpressions } from "@forge-kit/story-expressions-server.mjs";

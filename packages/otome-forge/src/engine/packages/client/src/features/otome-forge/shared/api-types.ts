@@ -105,6 +105,7 @@ export interface ImageSettings {
   ask: boolean;
   expressions: boolean;
   expressionsSince?: string;
+  /** The Engine image style profile the pictures follow (Settings → Images); absent or "" is the Engine's default. */
   styleProfileId?: string;
   /** The player's own words for how every picture looks (art style, medium); they lead each image prompt. */
   style?: string;
@@ -1349,7 +1350,7 @@ export interface SetupInput {
   protagonist: { personaId: string; pronouns: Pronouns; traits: string[]; goal: string };
   lis: SetupLi[];
   content: ContentSettings;
-  images: Pick<ImageSettings, "connectionId" | "rating" | "ask" | "expressions" | "style">;
+  images: Pick<ImageSettings, "connectionId" | "rating" | "ask" | "expressions" | "styleProfileId" | "style">;
   connections: Connections;
 }
 

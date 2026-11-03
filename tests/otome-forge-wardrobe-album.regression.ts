@@ -333,7 +333,13 @@ test("an existing owned Snapshot paints its saved vignette once without rewritin
   assert.equal(t.paid.length, 1, "concurrent opens share one paid picture");
   assert.equal(t.paid[0]!.method, "generateBannerArt");
   assert.ok(t.paid[0]!.request.prompt.includes(original.text!), "the legacy vignette remains the scene context");
-  assert.equal(t.paid[0]!.request.units?.length, 2, "only its love interest and protagonist are references");
+  // Only its love interest and protagonist, and only who has a picture to send: this world's love interest has no
+  // card, portrait or look, so only her persona goes (2026-11-03).
+  assert.deepEqual(
+    t.paid[0]!.request.units,
+    [{ kind: "character", personaId: "persona-ines", outfits: [] }],
+    "only its love interest and protagonist are references",
+  );
   const saved = await t.stored(original.id);
   assert.deepEqual({ ...saved, art: null }, original, "only the saved illustration changes the reward");
   assert.deepEqual(
@@ -807,13 +813,18 @@ test("Wear at home: his new look gets its faces, her new look is noticed once (P
   );
 });
 
-test("Show {{name}}: a line each time, and +20 affection once per look and love interest, within the day's cap", async () => {
+test("Show {{name}}: a line each time on the Messages connection, and +5 affection once per look and love interest, within the day's cap", async () => {
   const lines = ["You chose amber on purpose.", "Again? It still suits you.", "The lamp approves.", "Hm."];
   const t = await itemsWorld("r-m4bshow-aaaaaa", {
     images: { connectionId: null },
     heat: "fade",
     replies: lines.map((text, i) => json({ text, ...(i === 0 ? { face: "flustered" } : { face: "smug" }) })),
   });
+  // Messages has a connection of its own: the line is written on it, not on the story's.
+  await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+    ...world,
+    connections: { ...world.connections, chat: "conn-messages" },
+  }));
   const show = (li: string, look = ITEMS.herLook.id) => t.call("POST", "/runs/:run/wardrobe/show", { li, look });
 
   const first = await show(KAI);
@@ -821,12 +832,13 @@ test("Show {{name}}: a line each time, and +20 affection once per look and love 
   assert.deepEqual(first.body, {
     line: "You chose amber on purpose.",
     face: "flustered",
-    grants: [{ source: "show-him", li: KAI, affection: 20 }],
+    grants: [{ source: "show-him", li: KAI, affection: 5 }],
   });
+  assert.equal(t.calls[0]!.connectionId, "conn-messages", "on the Messages connection");
   const second = await show(KAI);
   assert.deepEqual(second.body, { line: "Again? It still suits you.", grants: [] }, "an unknown face is dropped");
   let state = await t.state();
-  assert.equal(state.lis[KAI]!.points, 20, "paid once");
+  assert.equal(state.lis[KAI]!.points, 5, "paid once");
   assert.ok(state.lis[KAI]!.firsts["show:my-wardrobe-0-f"]);
 
   const [x, y] = await Promise.all([show(MIR), show(MIR)]);

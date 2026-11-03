@@ -974,7 +974,7 @@ test("Otome Forge Wardrobe: the toggle moves between their looks and mine, wears
           status: 200,
           json: {
             line: "Blue suits you. Don't make me say it twice.",
-            grants: [{ source: "show-him", li: ILVAR, affection: 20 }],
+            grants: [{ source: "show-him", li: ILVAR, affection: 5 }],
           },
         };
       }
@@ -1018,7 +1018,7 @@ test("Otome Forge Wardrobe: the toggle moves between their looks and mine, wears
   await dialog.getByRole("button", { name: "Show Ilvar Thorne" }).click();
   await expect(page.getByRole("dialog", { name: "Ilvar Thorne sees Starlit Gown" })).toBeVisible();
   await expect(page.getByText("“Blue suits you. Don't make me say it twice.”")).toBeFocused();
-  await expect(page.getByText("+20 affection with Ilvar Thorne")).toBeVisible();
+  await expect(page.getByText("+5 affection with Ilvar Thorne")).toBeVisible();
   expect(posts(calls, "/wardrobe/show").map((call) => call.body)).toEqual([
     expect.objectContaining({ li: ILVAR, look: "my-wardrobe-0-f" }),
   ]);

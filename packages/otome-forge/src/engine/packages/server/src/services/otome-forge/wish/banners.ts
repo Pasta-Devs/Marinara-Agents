@@ -50,7 +50,7 @@ import {
   type WishOpenResult,
   type WishView,
 } from "../../../../../client/src/features/otome-forge/shared/wish.js";
-import { cgSubjects } from "../art/cg.js";
+import { cgReferences, cgSubjects } from "../art/cg.js";
 import { worldStyle, type ImageSubject, type PaintedImage } from "../art/image-client.js";
 import { bannerArtOwner, itemArtOwner } from "../art/outfits.js";
 import {
@@ -569,6 +569,7 @@ async function buildBannerArt(deps: WishDeps, runId: string, banner: Banner, edi
         style,
         use: explicit ? "cg" : "clothed",
         explicit,
+        references: cgReferences(subjects).labels,
       },
       edited,
     );
@@ -579,7 +580,7 @@ async function buildBannerArt(deps: WishDeps, runId: string, banner: Banner, edi
           connectionId,
           // The Engine matches the override as `avatar:<slug of the first person's first name>`.
           name: subjects[0]?.person.name.split(/\s+/)[0] || "Memory",
-          units: subjects.flatMap((subject) => (subject.image ? [subject.image] : [])),
+          units: cgReferences(subjects).units,
           prompt: prompt.prompt,
           negativePrompt: prompt.negativePrompt,
           ...SCENE_SIZE,

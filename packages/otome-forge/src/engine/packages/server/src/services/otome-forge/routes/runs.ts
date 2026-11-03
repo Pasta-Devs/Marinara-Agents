@@ -134,6 +134,7 @@ const SetupBody = z.object({
       rating: z.enum(IMAGE_RATINGS),
       ask: z.boolean(),
       expressions: z.boolean(),
+      styleProfileId: z.string().max(200).optional(),
       style: ImageStyleSchema.optional(),
     }),
     connections: ConnectionsSchema,

@@ -392,7 +392,7 @@ test("the photo's prompt: both of them posing, each pick in words, the labels, t
   assert.match(solo.prompt, /Kai's expression: a confident smirk\. Ines's expression: smiling brightly\./u);
   assert.match(
     solo.prompt,
-    /Reference images, in order: Kai in this outfit; Ines in this outfit; the place behind them\./u,
+    /Reference images, in order: Kai in this outfit; Ines in this outfit; the place behind them\. Use the pictures of them only for their faces, hair, build and clothing, never for the pose\./u,
   );
   assert.match(solo.prompt, /Kai: tall, dark hair, grey eyes; navy greatcoat, brass buttons\./u);
   assert.match(solo.prompt, /Ines: short dark hair, freckles; amber silk dress, lantern earrings\./u);
@@ -401,29 +401,38 @@ test("the photo's prompt: both of them posing, each pick in words, the labels, t
   assert.match(solo.prompt, /safe for work, fully clothed/u);
   assert.match(solo.negativePrompt, /nudity, nsfw, sexual content, lingerie/u);
   assert.match(solo.negativePrompt, /extra people/u);
+  // How many people to draw and with how many limbs (the maintainer's anatomy report, 2026-11-03).
+  assert.match(solo.prompt, /Draw exactly two people, each appearing once, with two arms, two legs and five fingers/u);
 
   const kiss = (await promptOf(t, setup({ his: pick("fond", "kiss"), her: pick("blush", "kiss") }))).body.prompt;
-  assert.match(kiss, /A photo of Kai and Ines posing together for the camera\. Kai and Ines kiss, faces turned/u);
-  assert.doesNotMatch(kiss, /facing the camera/u);
+  assert.match(
+    kiss,
+    /A photo of Kai and Ines together, taken while they face each other\. Kai and Ines kiss, faces turned to each other, Kai's hands on Ines's waist, shown from the waist up\./u,
+  );
+  assert.doesNotMatch(kiss, /facing the camera|posing for the camera/u, "a kiss never also poses for the camera");
   // The setup starts both of them on Smile: a kiss with it, or a wink, never also looks at the camera.
   const shot = async (his: PhotoPick, her: PhotoPick) => (await promptOf(t, setup({ his, her }))).body.prompt as string;
   const smiles = await shot(pick("smile", "kiss"), pick("wink", "kiss"));
   assert.match(smiles, /Kai's expression: smiling brightly\. Ines's expression: winking\./u);
   assert.doesNotMatch(smiles, /at the camera|facing the camera/u);
   const forehead = await shot(pick("smile", "forehead"), pick("smile", "forehead"));
-  assert.match(forehead, /posing together for the camera\. Kai and Ines rest their foreheads together, eyes on each/u);
+  assert.match(
+    forehead,
+    /taken while they face each other\. Kai and Ines rest their foreheads together, eyes on each/u,
+  );
   assert.doesNotMatch(forehead, /at the camera|facing the camera/u);
-  // Her cheek kiss on him: she acts, he faces the camera, and the photo opens with them posing together.
+  // Her cheek kiss on him: she acts, he faces the camera, and the photo opens with them facing each other.
   const cheek = await shot(pick("smile", "cheek-kissed"), pick("smile", "cheek-kiss"));
   assert.match(
     cheek,
-    /A photo of Kai and Ines posing together for the camera\. Ines kisses Kai's cheek while Kai faces/u,
+    /A photo of Kai and Ines together, Ines turned toward Kai while Kai faces the camera\. Ines leans in and kisses Kai's cheek while Kai faces/u,
   );
+  assert.doesNotMatch(cheek, /face each other/u, "only one of them turns");
   assert.doesNotMatch(cheek, /both facing the camera/u);
   const backHug = await shot(pick("smile", "back-hugged"), pick("smile", "back-hug"));
   assert.match(
     backHug,
-    /both facing the camera and posing for it\. Ines hugs Kai from behind, chin on Kai's shoulder\./u,
+    /both facing the camera and posing for it\. Ines stands behind Kai with both arms around Kai's waist, chin on Kai's shoulder, shown from the waist up\./u,
   );
   // A pose names no expression of its own: a pout in a hug or a play-fight stays a pout.
   for (const pose of ["hug", "play-fight"]) {
@@ -434,7 +443,11 @@ test("the photo's prompt: both of them posing, each pick in words, the labels, t
   const carry = (
     await promptOf(t, setup({ his: pick("laugh", "piggyback-ride"), her: pick("laugh", "piggyback-carry") }))
   ).body.prompt;
-  assert.match(carry, /Ines carries Kai piggyback, Kai's arms around Ines's shoulders\./u);
+  // Where every leg and hand goes: left to guess, the model kept the standing legs and added the wrapped ones.
+  assert.match(
+    carry,
+    /Kai rides on Ines's back, Kai's legs wrapped around Ines's waist and arms around Ines's shoulders, while Ines holds Kai's thighs with both hands, shown from the knees up\./u,
+  );
   const own = (
     await promptOf(
       t,
@@ -466,7 +479,7 @@ test("the photo's prompt: both of them posing, each pick in words, the labels, t
   assert.doesNotMatch(tagged, /Reference images/u);
   // A shared pose is its own tags once, never either person's solo ones.
   const taggedKiss = (await promptOf(t, setup({ his: pick("smile", "kiss"), her: pick("blush", "kiss") }))).body.prompt;
-  assert.match(taggedKiss, /kiss, facing each other, bright smile, blush, shy smile/u);
+  assert.match(taggedKiss, /kiss, facing each other, upper body, bright smile, blush, shy smile/u);
   assert.doesNotMatch(taggedKiss, /posing,|peace sign|waving|Kai and Ines/u);
   t.images.styleProfile = async () => ({ styleText: "", positiveTags: "", negativeTags: "" });
 
