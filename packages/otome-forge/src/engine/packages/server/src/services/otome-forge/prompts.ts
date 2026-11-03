@@ -4481,6 +4481,19 @@ export const BRIEF_STAGING =
 
 const COUNT_WORDS = ["no one", "one person", "two people", "three people"] as const;
 
+/**
+ * What an image prompt calls each of these people: their first name, or their whole name when someone else in the
+ * picture shares it, so each look line and reference label names one person only.
+ */
+export function imageNames(names: readonly string[]): string[] {
+  const first = (name: string) => name.trim().split(/\s+/)[0] ?? "";
+  return names.map((name) =>
+    names.filter((other) => first(other).toLowerCase() === first(name).toLowerCase()).length > 1
+      ? name.trim()
+      : first(name),
+  );
+}
+
 const sentence = (value: string) => {
   const text = value.trim().replace(/[,\s]+$/, "");
   return !text || /[.!?…]$/.test(text) ? text : `${text}.`;
@@ -4568,10 +4581,10 @@ export function cgPrompt(input: CgInput, edited: Partial<ImagePrompt> = {}): Ima
   const negative = requiredNegative(world, use, explicitScene);
   // An explicit moment draws each person from who they are: their outfit line would dress it again.
   const bare = effectiveImageRating({ world, use, explicitScene }) === "explicit";
-  const looks = people.map((person) => {
+  const names = imageNames(people.map((person) => person.name));
+  const looks = people.map((person, index) => {
     const look = [person.identityLine, bare ? "" : person.outfitLine].map((line) => line.trim()).filter(Boolean);
-    const first = person.name.trim().split(/\s+/)[0] ?? "";
-    return look.length ? sentence(`${first}: ${look.join("; ")}`) : "";
+    return look.length ? sentence(`${names[index]}: ${look.join("; ")}`) : "";
   });
   // Sentence prompts say how many people there are and which picture is whose: unlabelled full-body references of
   // people standing, beside a brief where they touch, are how bodies come out merged or with extra limbs (2026-11-03).

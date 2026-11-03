@@ -43,7 +43,7 @@ import {
   type PaintOwner,
 } from "./paint.js";
 import { paintBeatPlaces, type PaintOptions } from "./places.js";
-import { CG_PEOPLE_MAX, type CgPerson, type ImagePrompt, SCENE_SIZE, cgPrompt } from "../prompts.js";
+import { CG_PEOPLE_MAX, imageNames, type CgPerson, type ImagePrompt, SCENE_SIZE, cgPrompt } from "../prompts.js";
 
 type BeatCg = NonNullable<Beat["cg"]>;
 
@@ -141,7 +141,11 @@ const likenessOf = (image: ImageSubject): "sure" | "maybe" | "none" =>
  * upgrade path is the kit returning which references it sent.
  */
 export function cgReferences(subjects: readonly CgSubject[]): { units: ImageSubject[]; labels: string[] } {
-  const first = (subject: CgSubject) => subject.person.name.trim().split(/\s+/)[0] || subject.person.name;
+  // Named as cgPrompt's look lines name them: first names, whole names where two share one.
+  const names = new Map(
+    imageNames(subjects.map((subject) => subject.person.name)).map((name, index) => [subjects[index], name] as const),
+  );
+  const first = (subject: CgSubject) => names.get(subject) || subject.person.name;
   const shown = subjects.filter((subject) => subject.image && likenessOf(subject.image) !== "none");
   const ordered = [...shown].sort(
     (a, b) => Number(likenessOf(a.image!) === "maybe") - Number(likenessOf(b.image!) === "maybe"),
@@ -159,8 +163,11 @@ function castSubjects(cast: readonly string[], units: readonly Unit[], player: P
   const seen = new Set<string>();
   for (const name of cast) {
     if (subjects.length >= CG_PEOPLE_MAX) break;
-    const unit = units.find((candidate) => sameName(name, candidate.name));
-    const isPlayer = !unit && !!player.name && sameName(name, player.name);
+    // A name a love interest already took that is also the protagonist's is her (a keepsake with a namesake persona).
+    const named = units.find((candidate) => sameName(name, candidate.name));
+    const playerToo = !!player.name && sameName(name, player.name);
+    const unit = named && !(playerToo && seen.has(`li:${named.id}`)) ? named : undefined;
+    const isPlayer = !unit && playerToo;
     const id = unit ? `li:${unit.id}` : isPlayer ? "player" : `name:${name.trim().toLowerCase()}`;
     if (!name.trim() || seen.has(id)) continue;
     seen.add(id);

@@ -94,3 +94,19 @@ test("without a worn look a CG keeps the base outfit and sends faces only", () =
   assert.equal(sol!.person.outfitLine, "travel cloak");
   assert.equal((sol!.image as { wornOutfit?: string }).wornOutfit, undefined);
 });
+
+test("two people who share a first name are each named in full; a namesake protagonist is still herself (2026-11-03)", () => {
+  const ardent = { ...unit("coat"), name: "Kai Ardent" } as unknown as Unit;
+  const brenner = { ...unit(), id: "kai-b", name: "Kai Brenner", cardId: "card-kb" } as unknown as Unit;
+  const subjects = cgSubjects(["Kai Ardent", "Kai Brenner"], [ardent, brenner], player());
+  assert.deepEqual(cgReferences(subjects).labels, ["Kai Ardent", "Kai Brenner"]);
+  // A keepsake whose protagonist has the love interest's name: both of them, his picture then hers.
+  const namesake = { ...player("gown"), name: "Kai" } as unknown as Player;
+  const pair = cgSubjects(["Kai", "Kai"], [unit("coat")], namesake);
+  assert.equal(pair.length, 2);
+  // Each is their worn look: his coat, then her gown.
+  assert.deepEqual(
+    pair.map((subject) => subject.image?.portrait),
+    [coat.url, gown.url],
+  );
+});
