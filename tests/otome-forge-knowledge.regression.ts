@@ -226,24 +226,29 @@ test("every scene writer asks the protagonist to sit with what matters to them, 
   for (const [kind, messages] of Object.entries(prompts)) assert.match(messages[1]!.content, THOUGHTS, kind);
 });
 
-test("a slow burn through stage 2, a confession when earned from stage 3, by the finale at the latest (#1960)", () => {
+test("a slow burn through stage 4, a confession when earned in stage 5, and in stage 6 if not yet (#1960, 0.7.5)", () => {
   const kai = { name: "Kai" };
   const at = (stage: number) => betweenYou(kai, { ...defaultLiState(), stage });
   const SLOW = /Slow burn: Kai never says what they feel for the protagonist, and neither does the protagonist\./;
   // Desire is not feeling: the burn holds back the words, never what the content contract allows.
   const DESIRE = /Desire is not feeling: they may still act on desire, out of lust or to get what they want/;
   const MAY = /The slow burn may break: when a scene has earned it, Kai may confess what they feel/;
-  for (const stage of [1, 2]) {
+  // A confession from before 0.7.5 stands in stages 3 and 4; stages 1 and 2 never allowed one.
+  const STANDS = /already shows a confession between them, it stands as it happened/;
+  for (const stage of [1, 2, 3, 4]) {
     assert.match(at(stage), SLOW, `stage ${stage}`);
     assert.match(at(stage), DESIRE, `stage ${stage}`);
     assert.doesNotMatch(at(stage), MAY);
+    (stage >= 3 ? assert.match : assert.doesNotMatch)(at(stage), STANDS, `stage ${stage}`);
   }
-  for (const stage of [3, 4, 5]) {
-    assert.match(at(stage), MAY, `stage ${stage}`);
-    assert.doesNotMatch(at(stage), SLOW);
-  }
-  // Ease off can end the finale before the words, so stage 6 never claims they were said.
-  assert.match(at(6), /If the story has not yet shown Kai saying what they feel, they may say it/);
+  assert.match(at(5), MAY);
+  assert.doesNotMatch(at(5), SLOW);
+  // Stage 6: if not said yet, it must be; Ease off can end the finale before the words, so it never claims they were.
+  assert.match(
+    at(6),
+    /If the story has not yet shown Kai saying what they feel, Kai says it in words at the first moment/,
+  );
+  assert.doesNotMatch(at(6), SLOW);
   assert.doesNotMatch(at(6), /has been said/);
   assert.match(
     stageGoal(6, "Kai"),
