@@ -3705,13 +3705,13 @@ const KIND_TEXT: Record<BannerKind, string> = {
 };
 
 const LOOK_SHAPE = `{"name": "<look name>", "outfitLine": "<English outfit tags>"}`;
-const SNAPSHOT_SHAPE = `{"li": "<love interest id>", "title": "<2–5 words>", "text": "<2–3 sentences>", "cgBrief": "<English illustration of this vignette, 1–2 sentences>", "cgCast": ["<this love interest's name; the protagonist only if present>"]}`;
+const SNAPSHOT_SHAPE = `{"li": "<love interest id>", "title": "<2–5 words>", "text": "<2–3 sentences>", "cgBrief": "<English illustration of this vignette, 1–4 sentences>", "cgCast": ["<this love interest's name; the protagonist only if present>"]}`;
 /**
  * The Memories shape. `explicit` adds the key image's mark where the world allows an explicit one; `moments` gives each
  * 4★ its own illustration brief (momentBriefs).
  */
 const memoriesShape = ({ explicit, moments }: { explicit: boolean; moments: boolean }) =>
-  `{"featured": {"title": "<title>", "premise": "<2–3 sentences>", "cgBrief": "<English, 1–2 sentences>", "cgCast": ["<names in the key image, the featured love interest first; the protagonist only if present>"]${explicit ? ', "explicit": false, "clothedBrief": "<English, 1–2 sentences, only when explicit is true>"' : ""}}, "four": [{"li": "<love interest id>", "title": "<title>", "premise": "<1–2 sentences>"${moments ? `, "cgBrief": "<English, 1–2 sentences>", "cgCast": ["<this love interest's name; the protagonist only if present>"]` : ""}} ×3], "snapshots": [${SNAPSHOT_SHAPE} ×6]}`;
+  `{"featured": {"title": "<title>", "premise": "<2–3 sentences>", "cgBrief": "<English, 1–4 sentences>", "cgCast": ["<names in the key image, the featured love interest first; the protagonist only if present>"]${explicit ? ', "explicit": false, "clothedBrief": "<English, 1–4 sentences, only when explicit is true>"' : ""}}, "four": [{"li": "<love interest id>", "title": "<title>", "premise": "<1–2 sentences>"${moments ? `, "cgBrief": "<English, 1–4 sentences>", "cgCast": ["<this love interest's name; the protagonist only if present>"]` : ""}} ×3], "snapshots": [${SNAPSHOT_SHAPE} ×6]}`;
 const SHAPES: Record<BannerKind, string> = {
   memories: memoriesShape({ explicit: false, moments: false }),
   "his-wardrobe": `{"featured": {"title": "<title>", "look": ${LOOK_SHAPE}}, "four": [{"li": "<another love interest's id>", "title": "<title>", "look": ${LOOK_SHAPE}} ×3], "snapshots": [${SNAPSHOT_SHAPE} ×6]}`,
@@ -3836,7 +3836,7 @@ export function bannerPlanMessages(input: BannerPlanInput): OtomeMessage[] {
       `- The key image brief is one to four English sentences on where and how the moment is framed (place, light, what they are doing), never anyone's looks. ${BRIEF_STAGING}`,
       briefRule ? `- ${briefRule}` : "",
       explicitArt
-        ? '- When "explicit" is true, also write clothedBrief: the same moment just before or after it, everyone clothed, in one or two English sentences. It is painted instead if the image settings are lowered first.'
+        ? `- When "explicit" is true, also write clothedBrief: the same moment just before or after it, everyone clothed, in one to four English sentences. ${BRIEF_STAGING} It is painted instead if the image settings are lowered first.`
         : "",
       moments
         ? `- Each 4★'s cgBrief is one to four English sentences for its Moment's illustration: the place, light and what they are doing, never anyone's looks. ${BRIEF_STAGING} Whatever its premise holds, the picture follows this: ${momentRule} cgCast names only that love interest and, when shown, the protagonist.`
@@ -4553,7 +4553,7 @@ export interface CgInput {
   /** The shot's framing tags; CG_FRAMING by default (a keepsake has its own). */
   framing?: string;
   /**
-   * Whom each reference image shows, in the order they are sent (S/art/cg.ts cgReferenceLabels); said in sentence
+   * Whom each reference image shows, in the order they are sent (S/art/cg.ts cgReferences); said in sentence
    * prompts so the model draws each person once from their own picture. None: the brief says it (the Photo Shoot).
    */
   references?: readonly string[];
@@ -4581,7 +4581,7 @@ export function cgPrompt(input: CgInput, edited: Partial<ImagePrompt> = {}): Ima
     : [
         input.references?.length
           ? sentence(
-              `Reference images, in order: ${input.references.join("; ")}. Use them only for each person's face, hair, build and clothing, never for the pose, framing or background`,
+              `Reference images, in order: ${input.references.join("; ")}. Use them only for each person's face, hair${bare ? " and build" : ", build and clothing"}, never for the pose, framing or background`,
             )
           : "",
         people.length
@@ -4781,18 +4781,22 @@ type PhotoActingPose = Exclude<PhotoSharedPose, "cheek-kissed" | "piggyback-ride
 
 /**
  * Each shared pose by the id of whoever acts in it (`{me}`, with `{other}`); a symmetric pose is one both of them hold.
- * `turned`: they face each other, so the photo does not open with both of them facing the camera. A pose never names
+ * `turned`: they face each other ("each-other"), or one turns toward the other who faces the camera ("toward"), so the
+ * photo does not open with both of them facing the camera. A pose never names
  * an expression: each of them has their own pick. Each sentence says where the hands, arms and legs go and how close
  * the shot is (the maintainer's report of three legs and six fingers, 2026-11-03): an image model left to guess how a
  * piggyback holds keeps the standing legs of the reference and adds the wrapped ones.
  */
-const PHOTO_SHARED_LOOKS: Record<PhotoActingPose, { look: [sentence: string, tags: string]; turned?: true }> = {
+const PHOTO_SHARED_LOOKS: Record<
+  PhotoActingPose,
+  { look: [sentence: string, tags: string]; turned?: "each-other" | "toward" }
+> = {
   kiss: {
     look: [
       "{me} and {other} kiss, faces turned to each other, {me}'s hands on {other}'s waist, shown from the waist up",
       "kiss, facing each other, upper body",
     ],
-    turned: true,
+    turned: "each-other",
   },
   hug: {
     look: [
@@ -4817,7 +4821,7 @@ const PHOTO_SHARED_LOOKS: Record<PhotoActingPose, { look: [sentence: string, tag
       "{me} and {other} rest their foreheads together, eyes on each other, {me}'s hands on {other}'s shoulders, shown from the waist up",
       "forehead to forehead, upper body",
     ],
-    turned: true,
+    turned: "each-other",
   },
   "back-to-back": {
     look: [
@@ -4836,7 +4840,7 @@ const PHOTO_SHARED_LOOKS: Record<PhotoActingPose, { look: [sentence: string, tag
       "{me} leans in and kisses {other}'s cheek while {other} faces the camera, shown from the waist up",
       "cheek kiss, upper body",
     ],
-    turned: true,
+    turned: "toward",
   },
   "piggyback-carry": {
     look: [
@@ -4925,9 +4929,11 @@ function photoBrief(input: PhotoInput): string {
   } as const;
   const labels = input.references.map((reference) => label[reference]);
   return [
-    shared?.turned
+    shared?.turned === "each-other"
       ? `A photo of ${him} and ${her} together, taken while they face each other.`
-      : `A photo of ${him} and ${her} taking a picture together, both facing the camera and posing for it.`,
+      : shared?.turned === "toward"
+        ? `A photo of ${him} and ${her} together, ${shared.name} turned toward ${shared.other} while ${shared.other} faces the camera.`
+        : `A photo of ${him} and ${her} taking a picture together, both facing the camera and posing for it.`,
     ...(shared
       ? [sentence(fillNames(shared.look[0], shared.name, shared.other))]
       : people.map(({ name, pick }) => {

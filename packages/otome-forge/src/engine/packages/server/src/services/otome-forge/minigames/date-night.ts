@@ -72,7 +72,7 @@ import {
   STARLIGHT_EARNINGS,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import { sameName } from "../../../../../client/src/features/otome-forge/shared/faces.js";
-import { cgReferenceLabels, cgSubjects } from "../art/cg.js";
+import { cgReferences, cgSubjects } from "../art/cg.js";
 import { galleryRef, worldStyle, type ImageClient } from "../art/image-client.js";
 import { imagesOf, type ArtDeps } from "../art/paint.js";
 import {
@@ -620,8 +620,8 @@ async function keepsakeSubject(deps: DateDeps, runId: string, key: string) {
   // Both of them, one reference each in that order, as a story CG sends them: with only his two pictures, the model
   // drew him twice or gave her his body (the maintainer's report, 2026-11-03).
   const subjects = cgSubjects([unit.name, run.player.name], [unit], run.player);
-  const units = subjects.flatMap((subject) => (subject.image ? [subject.image] : []));
-  return { run, chapter, plan: chapter.date, unit, people, units, references: cgReferenceLabels(subjects) };
+  const { units, labels } = cgReferences(subjects);
+  return { run, chapter, plan: chapter.date, unit, people, units, references: labels };
 }
 
 /** POST /runs/:run/art/keepsake/prompt: the prompt the paint would send (the review dialog shows it). */

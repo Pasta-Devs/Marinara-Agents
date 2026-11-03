@@ -115,24 +115,42 @@ export function cgSubjects(cast: readonly string[], units: readonly Unit[], play
   if (subjects.length < 2) return subjects;
   return subjects.map((subject) =>
     subject.image && subject.wornUrl
-      ? { ...subject, image: { kind: "character", portrait: subject.wornUrl } }
+      ? {
+          ...subject,
+          // Their setup portrait stands behind the look, should its file be gone.
+          image: {
+            kind: "character",
+            portrait: subject.wornUrl,
+            ...(subject.image.portrait ? { avatarPath: subject.image.portrait } : {}),
+          },
+        }
       : subject,
   );
 }
 
+/** Whether the kit can find a picture of this subject for sure (a card, a portrait or a look), or only maybe. */
+const likenessOf = (image: ImageSubject): "sure" | "maybe" | "none" =>
+  image.cardId || image.portrait ? "sure" : image.personaId ? "maybe" : "none";
+
 /**
- * Whom each reference a CG of these subjects sends shows, in the order the kit sends them (every person's likeness,
- * then a lone person's worn look): what cgPrompt names, so the model draws each person once from their own picture.
- * ponytail: a reference that fails to load (a missing card file) shifts the ones after it; the kit logs it. The upgrade
- * path is the kit returning which references it sent.
+ * The references a CG of these subjects sends (`units`, for generateBannerArt) and whom each one shows (`labels`, for
+ * cgPrompt), from one list so the two always agree: every person's likeness in turn, then a lone person's worn look,
+ * as the kit sends them. Someone with nothing to send is neither sent nor named, and a protagonist known only by a
+ * persona (whose avatar may be empty) goes last, so a missing picture of her never moves anyone else's label.
+ * ponytail: a file that fails to load (a deleted card image) still shifts the labels after it; the kit logs it. The
+ * upgrade path is the kit returning which references it sent.
  */
-export function cgReferenceLabels(subjects: readonly CgSubject[]): string[] {
+export function cgReferences(subjects: readonly CgSubject[]): { units: ImageSubject[]; labels: string[] } {
   const first = (subject: CgSubject) => subject.person.name.trim().split(/\s+/)[0] || subject.person.name;
-  const shown = subjects.filter((subject) => subject.image);
-  const labels = shown.map(first);
-  const alone = shown.length === 1 ? shown[0]! : undefined;
-  if (alone?.image?.wornOutfit) labels.push(`${first(alone)}'s outfit`);
-  return labels;
+  const shown = subjects.filter((subject) => subject.image && likenessOf(subject.image) !== "none");
+  const ordered = [...shown].sort(
+    (a, b) => Number(likenessOf(a.image!) === "maybe") - Number(likenessOf(b.image!) === "maybe"),
+  );
+  const labels = ordered.map(first);
+  const alone = ordered.length === 1 ? ordered[0]! : undefined;
+  // A lone person's look follows their likeness; when that likeness may be missing, the look is named as them.
+  if (alone?.image?.wornOutfit && likenessOf(alone.image) === "sure") labels.push(`${first(alone)}'s outfit`);
+  return { units: ordered.map((subject) => subject.image!), labels };
 }
 
 /** The CG's people as the brief names them, each with their likeness and the look they wear. */
@@ -207,7 +225,7 @@ async function buildCg(deps: ArtDeps, runId: string, beat: Beat, edited: Partial
       style,
       use: "cg",
       explicit: cg.explicit === true,
-      references: cgReferenceLabels(subjects),
+      references: cgReferences(subjects).labels,
     },
     edited,
   );
@@ -264,7 +282,7 @@ async function paintCg(
         connectionId,
         // The Engine matches the override as `avatar:<slug of the first person's first name>`.
         name: built.subjects[0]?.person.name.split(/\s+/)[0] || "Scene",
-        units: built.subjects.flatMap((subject) => (subject.image ? [subject.image] : [])),
+        units: cgReferences(built.subjects).units,
         prompt: built.prompt,
         negativePrompt: built.negativePrompt,
         ...SCENE_SIZE,

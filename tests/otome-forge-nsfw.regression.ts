@@ -433,7 +433,7 @@ test("P20: premises span the Heat; Memory art may be explicit only under Explici
   );
   assert.match(
     explicit,
-    /"cgCast": \[[^\]]*\], "explicit": false, "clothedBrief": "<English, 1–2 sentences, only when explicit is true>"\}, "four"/,
+    /"cgCast": \[[^\]]*\], "explicit": false, "clothedBrief": "<English, 1–4 sentences, only when explicit is true>"\}, "four"/,
     "the shape carries the mark and its clothed twin",
   );
   assert.match(
@@ -445,7 +445,7 @@ test("P20: premises span the Heat; Memory art may be explicit only under Explici
     /IMAGE TAGS every outfit line and 4★ brief must fit: [^\n]*\. The featured key image brief follows its rule above\./,
   );
   // Each 4★ Moment gets its own brief, held to clothed art whatever its premise holds.
-  assert.match(explicit, /"premise": "<1–2 sentences>", "cgBrief": "<English, 1–2 sentences>", "cgCast"/);
+  assert.match(explicit, /"premise": "<1–2 sentences>", "cgBrief": "<English, 1–4 sentences>", "cgCast"/);
   assert.match(
     explicit,
     /Each 4★'s cgBrief [^\n]*Whatever its premise holds, the picture follows this: follow the actual scene/,
@@ -690,6 +690,19 @@ test("the adult-only negatives stay on every image, at every rating and after an
   const { prompt } = cgPrompt({ brief, people: [KAI_LOOK], world, style: PLAIN, use: "cg", explicit: true });
   assert.doesNotMatch(prompt, /16-year-old|schoolgirl/);
   assert.match(prompt, /in the lamp room, candlelight/);
+  // An explicit CG draws each person from who they are: its references give their faces and builds, never the
+  // clothing of the clothed looks it is sent (2026-11-03).
+  const two = cgPrompt({
+    brief: "In the lamp room",
+    people: [KAI_LOOK, INES_LOOK],
+    world,
+    style: PLAIN,
+    use: "cg",
+    explicit: true,
+    references: ["Kai", "Ines"],
+  }).prompt;
+  assert.match(two, /Reference images, in order: Kai; Ines\. Use them only for each person's face, hair and build,/u);
+  assert.doesNotMatch(two, /clothing/u);
 });
 
 test("the explicit tags appear only at the Explicit rating, on a story CG marked explicit under Explicit Heat", () => {

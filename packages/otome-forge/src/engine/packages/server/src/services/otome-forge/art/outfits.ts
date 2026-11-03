@@ -41,7 +41,7 @@ import { normalizeBanner, normalizeItem } from "../schemas/wish.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { withPersonaImageAppearance } from "../setup/cast.js";
 import type { OtomeArt } from "./expressions.js";
-import { cgReferenceLabels, cgSubjects } from "./cg.js";
+import { cgReferences, cgSubjects } from "./cg.js";
 import { galleryRef, worldStyle, type ImageSubject, type PaintedImage } from "./image-client.js";
 import {
   imagesOf,
@@ -235,7 +235,7 @@ async function buildItemArt(
         style,
         use: explicit ? "cg" : "clothed",
         explicit,
-        references: cgReferenceLabels(subjects),
+        references: cgReferences(subjects).labels,
       },
       edited,
     );
@@ -247,7 +247,7 @@ async function buildItemArt(
           connectionId,
           // The Engine matches the override as `avatar:<slug of the first person's first name>`.
           name: subjects[0]?.person.name.split(/\s+/)[0] || "Memory",
-          units: subjects.flatMap((subject) => (subject.image ? [subject.image] : [])),
+          units: cgReferences(subjects).units,
           prompt: prompt.prompt,
           negativePrompt: prompt.negativePrompt,
           ...SCENE_SIZE,

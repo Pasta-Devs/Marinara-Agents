@@ -19,14 +19,16 @@ const TITLE_MAX = 200;
 const PREMISE_MAX = 1200;
 const SNAPSHOT_MAX = 600;
 const LINE_MAX = 600;
+/** An illustration brief: one to four sentences that stage the people (S/prompts.ts BRIEF_STAGING), as a CG's. */
+const BRIEF_MAX = 1200;
 
 const LookSchema: ZodType<ItemLook> = z.object({ name: text(TITLE_MAX), outfitLine: text(LINE_MAX) });
 const CgSchema = z.object({
-  brief: text(LINE_MAX),
+  brief: text(BRIEF_MAX),
   cast: z.array(z.string().max(120)).max(3),
   explicit: z.literal(true).optional(),
   /** Beside an explicit brief: the same moment clothed, painted when the world is lowered (#1951). */
-  clothed: text(LINE_MAX).optional(),
+  clothed: text(BRIEF_MAX).optional(),
 });
 const SnapshotCgSchema = CgSchema.extend({ brief: z.string() });
 
@@ -105,4 +107,10 @@ export function normalizeItem(data: unknown): Item {
   );
 }
 
-export const ITEM_LIMITS = { title: TITLE_MAX, premise: PREMISE_MAX, snapshot: SNAPSHOT_MAX, line: LINE_MAX };
+export const ITEM_LIMITS = {
+  title: TITLE_MAX,
+  premise: PREMISE_MAX,
+  snapshot: SNAPSHOT_MAX,
+  line: LINE_MAX,
+  brief: BRIEF_MAX,
+};

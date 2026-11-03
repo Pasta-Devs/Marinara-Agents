@@ -425,8 +425,9 @@ test("the photo's prompt: both of them posing, each pick in words, the labels, t
   const cheek = await shot(pick("smile", "cheek-kissed"), pick("smile", "cheek-kiss"));
   assert.match(
     cheek,
-    /A photo of Kai and Ines together, taken while they face each other\. Ines leans in and kisses Kai's cheek while Kai faces/u,
+    /A photo of Kai and Ines together, Ines turned toward Kai while Kai faces the camera\. Ines leans in and kisses Kai's cheek while Kai faces/u,
   );
+  assert.doesNotMatch(cheek, /face each other/u, "only one of them turns");
   assert.doesNotMatch(cheek, /both facing the camera/u);
   const backHug = await shot(pick("smile", "back-hugged"), pick("smile", "back-hug"));
   assert.match(

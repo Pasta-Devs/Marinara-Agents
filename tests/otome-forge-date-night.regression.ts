@@ -920,13 +920,15 @@ test("the keepsake paints only when asked, once the date is over, and never twic
   assert.equal(failed.body.paint.state, "failed");
   assert.equal(t.art.paid.length, 1);
   assert.ok(t.art.paid[0]!.prompt.includes(appearance), "the actual image request keeps its tail as well as its start");
-  // Both of them, one reference each, named in the prompt: with only his two pictures the model drew him twice.
-  const units = (t.art.paid[0] as unknown as { units: unknown[] }).units;
-  assert.equal(units.length, 2, JSON.stringify(units));
-  assert.match(
-    t.art.paid[0]!.prompt,
-    /Reference images, in order: Kai; [^.;]+\. Use them only for each person's face/u,
+  // Both of them are drawn, from the pictures there are, each named: before, it sent two pictures of him and none of
+  // her. This world's Kai has no card or portrait, so only her persona is sent, and only she is named.
+  const units = (t.art.paid[0] as unknown as { units: Array<{ personaId?: string }> }).units;
+  assert.deepEqual(
+    units.map((unit) => unit.personaId),
+    ["persona-ines"],
+    JSON.stringify(units),
   );
+  assert.match(t.art.paid[0]!.prompt, /Reference images, in order: Ines\. Use them only for each person's face/u);
   assert.match(t.art.paid[0]!.prompt, /Draw exactly two people, each appearing once/u);
   t.art.control.fail = false;
 

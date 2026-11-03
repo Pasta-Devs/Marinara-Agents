@@ -333,7 +333,13 @@ test("an existing owned Snapshot paints its saved vignette once without rewritin
   assert.equal(t.paid.length, 1, "concurrent opens share one paid picture");
   assert.equal(t.paid[0]!.method, "generateBannerArt");
   assert.ok(t.paid[0]!.request.prompt.includes(original.text!), "the legacy vignette remains the scene context");
-  assert.equal(t.paid[0]!.request.units?.length, 2, "only its love interest and protagonist are references");
+  // Only its love interest and protagonist, and only who has a picture to send: this world's love interest has no
+  // card, portrait or look, so only her persona goes (2026-11-03).
+  assert.deepEqual(
+    t.paid[0]!.request.units,
+    [{ kind: "character", personaId: "persona-ines", outfits: [] }],
+    "only its love interest and protagonist are references",
+  );
   const saved = await t.stored(original.id);
   assert.deepEqual({ ...saved, art: null }, original, "only the saved illustration changes the reward");
   assert.deepEqual(

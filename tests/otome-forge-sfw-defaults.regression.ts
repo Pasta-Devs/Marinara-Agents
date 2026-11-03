@@ -251,9 +251,9 @@ test("chapter and scene prompts keep emotional payoffs occasional and permit cha
 });
 
 const EXPECTED_ANGST: Record<string, string> = {
-  bannerHis: "c955398464f66d6b",
-  bannerMemories: "3a5eb0943af2b1f6",
-  bannerMine: "8af1b424a281e6e6",
+  bannerHis: "e8a06d181974c9ca",
+  bannerMemories: "71bad70b6fa3842a",
+  bannerMine: "109b0762d8bcf329",
   beat: "26d7ba0dafc6c0bf",
   beatWithCg: "8161431cbc12789d",
   chapterPlan: "3fb0fc6896268a98",
@@ -263,9 +263,9 @@ const EXPECTED_ANGST: Record<string, string> = {
   routePlan: "5ee99e80b265372d",
 };
 const EXPECTED_GENTLE: Record<string, string> = {
-  bannerHis: "2018eea0fc19f064",
-  bannerMemories: "b96b638fd22e736c",
-  bannerMine: "4aeca03c582bccaf",
+  bannerHis: "5b01874fc4fabd17",
+  bannerMemories: "da2465bc6853ef39",
+  bannerMine: "75d0bd9aebbf79ad",
   beat: "7ec97d9b201b895e",
   beatWithCg: "ce1e12d2113f4eab",
   chapterPlan: "dcbe53dd1f876a18",

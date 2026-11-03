@@ -8,7 +8,7 @@ import type {
   Unit,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import {
-  cgReferenceLabels,
+  cgReferences,
   cgSubjects,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cg.ts";
 
@@ -44,14 +44,47 @@ test("a CG describes and references the look each person wears now", () => {
   assert.equal(kai!.person.outfitLine, "long black greatcoat");
   assert.equal(sol!.person.outfitLine, "silver evening gown");
   // Two people: one picture each, the look they wear, never their face and their look as two standing figures.
-  assert.deepEqual(kai!.image, { kind: "character", portrait: coat.url });
-  assert.deepEqual(sol!.image, { kind: "character", portrait: gown.url });
-  assert.deepEqual(cgReferenceLabels(subjects), ["Kai", "Sol"]);
+  // Their setup portrait stays behind the look, should its file be gone.
+  assert.deepEqual(kai!.image, {
+    kind: "character",
+    portrait: coat.url,
+    avatarPath: "/api/global-gallery/file/kai.png",
+  });
+  assert.deepEqual(sol!.image, {
+    kind: "character",
+    portrait: gown.url,
+    avatarPath: "/api/global-gallery/file/sol.png",
+  });
+  assert.deepEqual(cgReferences(subjects), { units: [kai!.image, sol!.image], labels: ["Kai", "Sol"] });
   // Alone: who they are, then the look they wear.
   const [alone] = cgSubjects(["Kai"], [unit("coat")], player("gown"));
   assert.equal((alone!.image as { wornOutfit?: string }).wornOutfit, "coat");
   assert.equal((alone!.image as { cardId?: string }).cardId, "card-kai");
-  assert.deepEqual(cgReferenceLabels([alone!]), ["Kai", "Kai's outfit"]);
+  assert.deepEqual(cgReferences([alone!]).labels, ["Kai", "Kai's outfit"]);
+});
+
+test("whom each reference shows always matches what is sent: nobody without a picture, a persona's last (2026-11-03)", () => {
+  // A love interest with no card, portrait or look has nothing to send: neither sent nor named.
+  const bare = { ...unit(), cardId: undefined, portrait: undefined } as unknown as Unit;
+  // A protagonist known only by her persona: its avatar may be empty, so she goes last and moves no one else's label.
+  const personaOnly = { ...player(), portrait: undefined } as unknown as Player;
+  const mir = {
+    ...unit(),
+    id: "mir",
+    name: "Mireille Vane",
+    cardId: "card-mir",
+    portrait: undefined,
+  } as unknown as Unit;
+  const subjects = cgSubjects(["Sol", "Kai", "Mireille"], [bare, mir], personaOnly);
+  const { units, labels } = cgReferences(subjects);
+  assert.deepEqual(labels, ["Mireille", "Sol"]);
+  assert.deepEqual(
+    units.map((image) => image.cardId ?? image.personaId),
+    ["card-mir", "persona-sol"],
+  );
+  // Alone with only a persona and a look: the look may be all that is sent, so it is named as her.
+  const [her] = cgSubjects(["Sol"], [], { ...player("gown"), portrait: undefined } as unknown as Player);
+  assert.deepEqual(cgReferences([her!]).labels, ["Sol"]);
 });
 
 test("without a worn look a CG keeps the base outfit and sends faces only", () => {
