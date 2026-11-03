@@ -128,7 +128,7 @@ You can add an image connection later in **Settings → Images**. Saving it pain
 Home shows the love interest you pick, or you when you switch from their name to **Me**, each in the look you wear at home. The scene is tinted by the time of day where you are. Behind them is the newest CG you have unlocked with that love interest, a Memory's included; without one, the newest painted place, else a gradient.
 
 - **Cut-outs:** your generated looks and the love interests' stand on a flat chroma background, removed for Home by the Engine's sprite cleanup. On an Engine with the preservation repair, Otome uses its built-in matte cleanup and rebuilds obsolete cut-outs from their retained originals, with no paid image call. The previous cut-out stays visible while its replacement is made, and stays if that free refresh fails; restarting the Engine lets a failed refresh try again. A first cleanup that fails shows the uncut look instead. Your original persona avatar stays as supplied, and the Wardrobe keeps every original look.
-- **Message of the day:** each love interest leaves one handwritten note, written on your first visit of your local day and kept for the rest of it, with their mood. **Reply** opens their thread with the note quoted. During a rift the note is curt.
+- **Message of the day:** each love interest leaves one handwritten note, written on your first visit of your local day and kept for the rest of it, with their mood. **Reply** opens their thread with the note quoted. During a rift the note is curt. The newest photo you took with that love interest in the **Photo Shoot** is taped into their note, its words wrapping around it.
 - **Taps:** tap their head, hand or heart for a line written ahead in their own voice, so a tap never waits for the model. Too many pokes in a row annoy them, and during a rift every line is cold. The lines are written in the background on your first Home visit, and again when a love interest reaches a new stage. Until then, Home uses a few stock lines.
 - **Rough day?** offers comfort from lines written ahead, with no model call. Comfort lines never give medical advice or guess about your body.
 - **Faces on Home:** their face follows the note's mood, each tap and a rift, once their five faces are painted (and cut out like the look). Before that, their look or initials name the face.
@@ -173,15 +173,16 @@ Wishes cost Starlight you earn by playing: 100 each, or 1,000 for ten. There is 
 - **The Album** keeps:
   - **Memories** offers All, 3★, 4★ and 5★ filters. Unplayed Memories and Moments appear first; partially read and completed stories keep their saved progress. Snapshots are vignettes without a playable chapter.
   - the CGs you have seen and your Memories;
+  - **Photos**: the photos you take in the Photo Shoot, to view, save or delete;
   - the Love Timeline: each stage and first with a love interest, each Snapshot, Moment and Memory you won with them on the day you won it, and each couple set. A Snapshot, Moment or Memory opens from there;
   - the tells you have learned;
   - your favourite lines and the soundtrack.
 
   It saves an image through the Engine's own image saving.
 
-## Dates: Read Them, Read Me, Date Night and the Claw Machine
+## Dates: Read Them, Read Me, Date Night, the Photo Shoot and the Claw Machine
 
-Dates is where you spend time with one love interest at a time. Every activity pays even when it goes badly. Only the rewards are capped each day: 400 Starlight from activities in all, and 300 affection per love interest from outside the story. Play is never capped, and the day ends at your own midnight.
+Dates is where you spend time with one love interest at a time. Every activity but the Photo Shoot pays, even when it goes badly. Only the rewards are capped each day: 400 Starlight from activities in all, and 300 affection per love interest from outside the story. Play is never capped, and the day ends at your own midnight.
 
 ### Read Them
 
@@ -207,6 +208,17 @@ Read Them in reverse: your love interest studies you and makes four guesses abou
 3. **Play three scenes of choices,** judged by what they like and voiced like any scene. You can ask for a keepsake image at the end.
 
 During a rift, Date Night becomes **Make it right**.
+
+### Photo Shoot
+
+Take one photo of you and your love interest posing for the camera together.
+
+1. **Pick a place** your story has painted.
+2. **Pick what you both wear:** your everyday looks, or any painted look either of you owns. Only the photo wears them; what you wear at home stays as it is.
+3. **Pick an expression and a pose for each of you,** from the buttons or in your own words (written into the image prompt as you type them, so English works best). A pose together, such as a kiss, a hug, play-fighting or a piggyback, is one pick for you both: choosing it sets the other's pose to match, and a solo pose for either of you ends it.
+4. **Take picture** paints 1 image, sent their look, your look and the place's picture as references, in that order. It makes no model call, which is why you pick their expression and pose too.
+
+It follows your image connection, **Ask before painting**, prompt review and the image rating, costs no Starlight and pays nothing. A photo that fails is taken again only when you ask. Without an image connection the Photo Shoot shows as unavailable.
 
 ### Claw Machine
 
@@ -294,7 +306,7 @@ Each story has its own content settings:
 
 - Suggestive is a ceiling, not an instruction to make every image suggestive. Neutral portraits and expression edits stay neutral; romantic image briefs follow the actual moment.
 - Facial expression edits use the same adult, nonsexual face-edit policy at every rating, preserving the current look's body, clothing coverage, pose and style. A provider may still refuse the reference image or request; retry remains explicit.
-- Looks, faces, outfits, couple portraits, Moment and Snapshot illustrations always stay clothed (at most Suggestive), and places never show people.
+- Looks, faces, outfits, couple portraits, Photo Shoot photos, Moment and Snapshot illustrations always stay clothed (at most Suggestive), and places never show people.
 - Only a story CG of an explicit scene, or the art of an explicit Memory, under NSFW: Explicit Heat and the Explicit image rating, may show nudity or sex. Other Memory art stays clothed, and an explicit Memory painted after you lower either setting shows the same moment clothed.
 - Every image prompt says everyone is an adult, and its negative prompt keeps the child terms whatever you edit. Above SFW, any part of a prompt that names a minor is dropped.
 - Your image connection decides the rest:
@@ -346,6 +358,7 @@ If a text endpoint rejects the optional JSON-format parameter, Otome Hearth can 
 | Read Them                                                   | 1 call                                                                                                                                                                            | —                                                                                                                       | —                                     | each voiced line, once                                     |
 | Read Me                                                     | 1 call                                                                                                                                                                            | —                                                                                                                       | —                                     | each voiced line, once                                     |
 | Date Night                                                  | 4 calls                                                                                                                                                                           | new places and missing faces as in any scene, and 1 for a keepsake if you ask                                           | —                                     | as any scene                                               |
+| **Photo Shoot**                                             | —                                                                                                                                                                                 | 1, on your tap                                                                                                          | —                                     | —                                                          |
 | **Caring message**                                          | 1 call, or none with **Keep it off the model** or a debug condition on                                                                                                            | —                                                                                                                       | —                                     | **Play**: every time, never cached                         |
 
 These never call a model or paint anything. With voices on, their lines are voiced: Claw Machine lines once each, comfort lines every time.
