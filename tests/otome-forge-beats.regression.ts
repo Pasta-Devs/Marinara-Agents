@@ -60,6 +60,7 @@ import {
   canonicalSegments,
   readChapter,
   recallText,
+  type StoryMemory,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/canon.ts";
 import {
   beatId,
@@ -715,10 +716,10 @@ function markedBeat(number: number, i: number, last: boolean) {
 
 test("a chapter's plan and scenes share their cached prefix byte for byte; only the newest scene and the task change (#2066)", async () => {
   const t = await plannedWorld("r-cache-aaaaaa");
-  await readThrough(t, 0, 4);
+  await readThrough(t, 0, 6);
   await t.settle();
   const plan = t.calls.find((call) => isPlanner(call.messages))!.messages;
-  const scenes = [0, 1, 2, 3, 4].map(
+  const scenes = [0, 1, 2, 3, 4, 6].map(
     (i) => t.calls.find((call) => new RegExp(`Narrate node ${i + 1} of`).test(call.messages.at(-1)!.content))!.messages,
   );
   const plain = (messages: CapabilityLanguageModelMessage[]) =>
@@ -732,10 +733,24 @@ test("a chapter's plan and scenes share their cached prefix byte for byte; only 
     assert.ok(!messages.at(-1)!.cacheBreakpoint, "what changes is never marked");
     assert.match(messages.at(-1)!.content, /Keep to the CONTENT CONTRACT above, silently\.$/u);
   }
+  // The chapter's last scene too (#2091): whether a scene may end on a big choice goes with its task.
   for (const messages of scenes) assert.equal(messages[1]!.content, scenes[0]![1]!.content, "one set of instructions");
+  assert.ok(
+    !scenes[0]![1]!.content.includes("story beat of the chapter") && !/NOT the last/u.test(scenes[0]![1]!.content),
+  );
+  assert.ok(scenes.at(-1)!.at(-1)!.content.includes("- This is the LAST story beat of the chapter."));
+  for (const messages of scenes.slice(0, -1)) {
+    assert.ok(messages.at(-1)!.content.includes("- This is NOT the last story beat."));
+  }
+  // The Confrontation is given the same story context, and its prompt the cache marks and the hour-long cache.
+  const climax = t.calls.find((call) => isConfrontationPrompt(call.messages))!;
+  assert.equal(climax.messages[0]!.content, plan[0]!.content);
+  for (const call of t.calls.filter((entry) => entry.messages[0]!.cacheBreakpoint)) {
+    assert.equal((call.options as { cacheTtl?: string } | undefined)?.cacheTtl, "1h");
+  }
   // Every scene's prompt before its last message is where the next one's begins: the settled scenes, in order, the
   // newest of them marked.
-  for (let i = 2; i < scenes.length; i += 1) {
+  for (let i = 2; i < scenes.length - 1; i += 1) {
     const before = plain(scenes[i - 1]!.slice(0, -1));
     assert.deepEqual(plain(scenes[i]!).slice(0, before.length), before, `node ${i + 1} reuses node ${i}'s prefix`);
     assert.equal(scenes[i]!.length, i + 2, "a message per settled scene");
@@ -2491,4 +2506,79 @@ test("Side with (#2046): the game sets its effects, the pick moves affection onc
   assert.ok(!text.includes("MIR-BACKED"), "the branch not taken never reaches a prompt");
   const [source] = await readMemorySources(t.store, t.runId);
   assert.ok(source!.content.includes("[Canonical player choice by Ines: Back Kai's plan.]"), "it is summarized too");
+});
+
+test("a chapter's calls are given the story context its first call was, for its whole cast; only the recalls follow each (#2091)", async () => {
+  const t = await storyWorld({ runKey: "r-held-aaaaaa" });
+  await completeChapter(
+    t,
+    { key: "main-1", kind: "main", number: 1, lead: KAI, title: "Night 1" },
+    "NIGHT-ONE: the quay goes dark.",
+    "2026-10-28T09:00:00.000Z",
+  );
+  await completeChapter(
+    t,
+    { key: `route-${MIR}-3`, kind: "route", li: MIR, lead: MIR, stage: 3, title: "Mireille's Ledger" },
+    "PRIVATE-LEDGER: she burns a page.",
+    "2026-10-28T10:00:00.000Z",
+  );
+  // A memory that moves on between calls (her chapter's summary landing) and recalls each call's own cast.
+  let landed = 0;
+  const recalled: string[][] = [];
+  const memory = {
+    recall: async (options: { cast?: string[] }) => {
+      recalled.push([...(options.cast ?? [])]);
+      return {
+        status: { phase: "ready" },
+        overview: "",
+        lagging: false,
+        maxContext: null,
+        recent: (options.cast ?? []).includes(MIR)
+          ? [
+              {
+                id: `route-${MIR}-3`,
+                kind: "chapter",
+                title: MIREILLE_LEDGER,
+                content: `LEDGER-${landed}`,
+                summary: true,
+              },
+            ]
+          : [],
+        recalls: (options.cast ?? []).map((li) => ({ id: `note-${li}`, title: `${li}'s note`, content: `NOTE-${li}` })),
+      };
+    },
+    maintain: async () => false,
+  } as unknown as StoryMemory;
+  const deps = { store: t.store, memory };
+  const chapter = { key: "main-2", cast: [KAI, MIR] };
+  const scene = (cast: string[], key = chapter.key) =>
+    recallText(deps, t.runId, { job: "narration", cast, apart: true, continues: "main", chapter: { ...chapter, key } });
+
+  const first = await scene([KAI]);
+  assert.ok(first.text.includes("# Previous chapter in full: Night 1\n\nNIGHT-ONE"), first.text);
+  assert.ok(
+    first.text.includes(`# Recent canon summary: ${MIREILLE_LEDGER}\nLEDGER-0`),
+    "the whole cast's, named as hers",
+  );
+  assert.match(first.recalls!.text, new RegExp(`NOTE-${KAI}`, "u"));
+  assert.doesNotMatch(first.recalls!.text, new RegExp(`NOTE-${MIR}`, "u"), "the recalls are the scene's own");
+  landed = 1;
+  const second = await scene([MIR]);
+  assert.equal(second.text, first.text, "the same story context, though her summary landed and the cast changed");
+  assert.deepEqual(second.optional, first.optional);
+  assert.match(second.recalls!.text, new RegExp(`NOTE-${MIR}`, "u"));
+  assert.doesNotMatch(second.recalls!.text, new RegExp(`NOTE-${KAI}`, "u"));
+  // Without a chapter, a prompt is given the memory as it is now, for its own cast.
+  const now = await recallText(deps, t.runId, { job: "narration", cast: [MIR], apart: true, continues: "main" });
+  assert.ok(now.text.includes("LEDGER-1"));
+  // The next chapter, or a chapter completed meanwhile, works it out again.
+  assert.ok((await scene([KAI], "main-3")).text.includes("LEDGER-1"));
+  landed = 2;
+  await completeChapter(
+    t,
+    { key: "date-1", kind: "date", li: KAI, lead: KAI, title: "Jellyfish Hour" },
+    "KAI-DATE: Kai counts jellyfish.",
+    "2026-10-28T11:00:00.000Z",
+  );
+  assert.ok((await scene([KAI], "main-3")).text.includes("LEDGER-2"));
 });

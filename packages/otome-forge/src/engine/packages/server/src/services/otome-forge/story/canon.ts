@@ -61,7 +61,7 @@ import type {
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { CLIMAX_MOVES, climaxOf } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { beatId, chapterId, playerId, stateId, unitId } from "../ids.js";
-import type { OtomeMemory } from "../memory/memory.js";
+import type { OtomeMemory, OtomeRecallResult } from "../memory/memory.js";
 import { parseTimeline, renderTimeline } from "../memory/timeline.js";
 import { normalizePlayer } from "../schemas/player.js";
 import { normalizeState } from "../schemas/state.js";
@@ -327,6 +327,12 @@ export type RecallTextOptions = Omit<ForgeRecallOptions, "runId"> & {
    * P12, P12c): they follow who is present, the rest of the memory does not. Otherwise they follow the timeline.
    */
   apart?: boolean;
+  /**
+   * The chapter this prompt belongs to, for one whose calls share a cached story context (P5, P6, P12, P12c; see the
+   * header): its memory is worked out once, for `cast`, and every later call of the chapter is given the same, while
+   * the recalls (with `apart`) still follow the call's own cast.
+   */
+  chapter?: { key: string; cast: readonly LiId[] };
 };
 
 /** The story before a prompt: its memory context, and with `apart` the recalls' own (pass both to generateJson). */
@@ -419,24 +425,38 @@ async function canonicalHistory(
   return kept;
 }
 
+type RecallDeps = {
+  store: Pick<OtomeStore, "readDoc">;
+  memory?: StoryMemory;
+  runtime?: Pick<CapabilityRuntimeHost, "logger">;
+};
+
+/** The completed chapters a prompt's story is told from, and the protagonist's name. */
+interface Story {
+  chapters: Completed[];
+  protagonist: string;
+}
+
+/** A context worked out for one chapter's calls (see recallText's `chapter`), and the previous chapter it holds. */
+interface Held {
+  context: StoryContext;
+  previousKey?: string;
+  /** Worked out from the memory, not the canonical history: the recalls may go beside it. */
+  recalled: boolean;
+}
+
 /**
- * The story before a prompt, as the kit's memory context (see the header): the generation core fits it to the
- * connection (pass it as generateJson's `memory`, and its `text` to the prompt builder). Its text is "" when nothing is
- * completed yet; a failure is logged and never holds the story up.
+ * Each run's story context for the chapter being written (recallText's `chapter`): one per run, the newest chapter's.
+ * ponytail: held in memory only, so after a server restart a chapter's next call works its memory out again (one more
+ * cache write, with the newest summaries). The upgrade path is saving it with the chapter.
  */
-export async function recallText(
-  deps: {
-    store: Pick<OtomeStore, "readDoc">;
-    memory?: StoryMemory;
-    runtime?: Pick<CapabilityRuntimeHost, "logger">;
-  },
-  runId: string,
-  options: RecallTextOptions,
-): Promise<StoryContext> {
-  const { debugMode, continues, apart, ...recall } = options;
-  const warn = (what: string, error: unknown) =>
-    deps.runtime?.logger.warn("[otome-forge] %s: %s", what, error instanceof Error ? error.message : String(error));
-  const story = await (async () => {
+const heldContexts = new Map<string, { id: string; held: Promise<Held> }>();
+
+const warnFor = (deps: RecallDeps) => (what: string, error: unknown) =>
+  deps.runtime?.logger.warn("[otome-forge] %s: %s", what, error instanceof Error ? error.message : String(error));
+
+async function readStory(deps: RecallDeps, runId: string): Promise<Story> {
+  return (async () => {
     const [state, player] = await Promise.all([
       deps.store.readDoc(stateId(runId), normalizeState),
       deps.store.readDoc(playerId(runId), normalizePlayer),
@@ -446,9 +466,88 @@ export async function recallText(
       protagonist: player?.name ?? "",
     };
   })().catch((error: unknown) => {
-    warn("The canonical history could not be read", error);
+    warnFor(deps)("The canonical history could not be read", error);
     return { chapters: [] as Completed[], protagonist: "" };
   });
+}
+
+/**
+ * The story before a prompt, as the kit's memory context (see the header): the generation core fits it to the
+ * connection (pass it as generateJson's `memory`, and its `text` to the prompt builder). Its text is "" when nothing is
+ * completed yet; a failure is logged and never holds the story up.
+ *
+ * With `chapter`, every call of that chapter is given the context its first call was (#2091): worked out for the
+ * chapter's whole cast, and the same however the memory moves on meanwhile (a summary landing, the canonical history
+ * giving way to a memory that is ready), so the provider reads it from its cache. A chapter completed or rewound since
+ * works it out again. The recalls (with `apart`) follow each call's own cast, after the cached part.
+ */
+export async function recallText(deps: RecallDeps, runId: string, options: RecallTextOptions): Promise<StoryContext> {
+  const { chapter, ...rest } = options;
+  const story = await readStory(deps, runId);
+  if (!chapter) return (await storyBefore(deps, runId, rest, story)).context;
+  const id = JSON.stringify([
+    chapter.key,
+    rest.continues ?? "",
+    [...chapter.cast].sort(),
+    story.chapters.map(({ chapter: done, order }) => [done.key, order]),
+  ]);
+  let entry = heldContexts.get(runId);
+  if (entry?.id !== id) {
+    const held = storyBefore(deps, runId, { ...rest, cast: [...chapter.cast] }, story).then(
+      ({ context: { recalls: _recalls, ...context }, previousKey, recalled }): Held => ({
+        context,
+        recalled,
+        ...(previousKey ? { previousKey } : {}),
+      }),
+    );
+    const current = { id, held };
+    entry = current;
+    heldContexts.set(runId, current);
+    held.catch(() => heldContexts.get(runId) === current && heldContexts.delete(runId));
+  }
+  const { context, previousKey, recalled } = await entry.held;
+  if (!rest.apart || !recalled || !deps.memory) return context;
+  const recalls = await recallsOf(deps.memory, runId, rest, previousKey).catch(() => null);
+  return recalls ? { ...context, recalls } : context;
+}
+
+/** The recalls alone for a prompt's own cast, beside a held context that has the previous chapter in full. */
+async function recallsOf(
+  memory: StoryMemory,
+  runId: string,
+  { debugMode, continues: _continues, apart: _apart, ...recall }: Omit<RecallTextOptions, "chapter">,
+  previousKey: string | undefined,
+): Promise<ForgeMemoryContext | null> {
+  const result = await memory.recall({
+    ...recall,
+    runId,
+    excludeChapterIds: [...(recall.excludeChapterIds ?? []), ...(previousKey ? [previousKey] : [])],
+  });
+  const phase = result.status?.phase;
+  const lagging = phase === "ready" ? result.lagging : phase === "stale" || phase === "pending";
+  if (lagging) void Promise.resolve(memory.maintain({ runId, debugMode })).catch(() => undefined);
+  if (phase !== "ready") return null;
+  return recallsContext(result);
+}
+
+/** The recall pool as a context of its own (`apart`), newest first as the fitter drops them. */
+const recallsContext = (result: Pick<OtomeRecallResult, "recalls" | "maxContext">) =>
+  forgeMemoryContext(
+    { overview: "", details: recallItems(result), maxContext: result.maxContext },
+    { prefix: "", optional: [], renderMemory },
+  );
+
+const recallItems = (result: Pick<OtomeRecallResult, "recalls">) =>
+  (result.recalls ?? []).map(({ id, title, content }) => ({ id, kind: "recall", title, content })).reverse();
+
+async function storyBefore(
+  deps: RecallDeps,
+  runId: string,
+  options: Omit<RecallTextOptions, "chapter">,
+  story: Story,
+): Promise<{ context: StoryContext; previousKey?: string; recalled: boolean }> {
+  const { debugMode, continues, apart, ...recall } = options;
+  const warn = warnFor(deps);
   const { chapters, protagonist } = story;
   const known = chapters.filter(({ chapter }) => mayKnow(recall, audienceOf(chapter)));
   const last = previousOf(known, continues);
@@ -505,22 +604,12 @@ export async function recallText(
       parseTimeline(result.overview),
       previousKey ? JSON.stringify(["chapter", previousKey]) : undefined,
     );
-    const recalls = (result.recalls ?? [])
-      .map(({ id, title, content }) => ({ id, kind: "recall", title, content }))
-      .reverse();
     const context = contextOf(
-      { overview, details: apart ? [] : recalls, maxContext: result.maxContext },
+      { overview, details: apart ? [] : recallItems(result), maxContext: result.maxContext },
       [...previous, ...others],
       [...summaries.slice(0, -1), ...earliestScenes],
     );
-    if (!apart) return context;
-    return {
-      ...context,
-      recalls: forgeMemoryContext(
-        { overview: "", details: recalls, maxContext: result.maxContext },
-        { prefix: "", optional: [], renderMemory },
-      ),
-    };
+    return apart ? { ...context, recalls: recallsContext(result) } : context;
   };
 
   if (deps.memory) {
@@ -529,7 +618,7 @@ export async function recallText(
       warn("Story memory unavailable; using the canonical history", error);
       return null;
     });
-    if (context) return context;
+    if (context) return { context, previousKey, recalled: true };
   }
   const history = await canonicalHistory(deps.store, runId, known, previousKey, protagonist).catch((error: unknown) => {
     warn("The canonical history could not be read", error);
@@ -543,9 +632,13 @@ export async function recallText(
         .filter((entry) => entry.order < last!.order)
         .sort((a, b) => Number(!a.chapter) - Number(!b.chapter) || byOrder(a, b))
     : [];
-  return contextOf(
-    { overview: "", details: [], maxContext: null },
-    [...previous, ...history],
-    [...before, ...earliestScenes],
-  );
+  return {
+    context: contextOf(
+      { overview: "", details: [], maxContext: null },
+      [...previous, ...history],
+      [...before, ...earliestScenes],
+    ),
+    previousKey,
+    recalled: false,
+  };
 }

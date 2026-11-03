@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.7.6 — 2026-11-03
+
+- **Prompt caching that keeps working through a chapter.** On an Anthropic connection, a chapter's plan, scenes and Confrontation or Closer now ask for the hour-long cache, so a scene read a few minutes after the last one still reads the story context from the cache instead of paying for it again. Each chapter's story memory is also worked out once, for its whole cast, and reused by every one of its calls: a summary finishing in the background, or a different love interest in the scene, no longer changes the cached part. The chapter's last scene shares the other scenes' cached instructions too. Engines older than capability API 1.815 keep the five-minute cache.
+
 ## 0.7.5 — 2026-11-03
 
 - **A slower burn.** Love interests no longer confess in stages 3 and 4. In stage 5 they may, once the story has earned it, and in stage 6 they say it if they haven't yet.

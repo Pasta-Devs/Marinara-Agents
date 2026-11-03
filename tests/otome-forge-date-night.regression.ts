@@ -418,7 +418,10 @@ test("a date is 4 model calls, pays once whatever the outcome, and keeps its ans
   assert.ok(beatPrompt.at(-1)!.content.includes("This chapter is a DATE"));
   // The last scene is never offered a big choice.
   const lastPrompt = t.calls.find((call) => nodeOf(call.messages) === 2 && !isDatePlanner(call.messages))!;
-  assert.equal(system(lastPrompt.messages).includes("This is the LAST story beat"), false);
+  assert.equal(
+    lastPrompt.messages.some((message) => message.content.includes("This is the LAST story beat")),
+    false,
+  );
   assert.equal(system(lastPrompt.messages).includes("This is the chapter's last node"), false, "nor #1949's rule");
 
   // The date is not in the story's chapter list.

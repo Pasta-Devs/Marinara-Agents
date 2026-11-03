@@ -1876,9 +1876,9 @@ export function beatMessages({
   const date = chapter.kind === "date" ? chapter.date : undefined;
   const partner = date ? units.find((unit) => unit.id === date.li) : undefined;
   const cardState = (li: LiId) => (date ? ownView(state, li).liState : liStateOf(state, li));
-  // The narrator's instructions are the same for every node but a chapter's last (its choice rules differ): what a
-  // node changes (who may think aloud, its last-node and key-image rules, a date's or side-with's choice) is told with
-  // the task, so a chapter's scenes share one cached prompt (#2066).
+  // The narrator's instructions are the same for every node: what a node changes (who may think aloud, whether it is
+  // the chapter's last and may end on a big choice, its key-image rules, a date's or side-with's choice) is told with
+  // the task, so a chapter's scenes share one cached prompt (#2066, #2091).
   const instructions = [
     "You are the narrator of an otome visual novel: a character-driven romance mystery. Narrate ONE node of the chapter as a scene the player taps through, a short segment at a time.",
     NO_CHOICES_SENTENCE,
@@ -1896,10 +1896,7 @@ export function beatMessages({
     "- Stay within this node's guide; do not skip ahead to later nodes.",
     `- Write every segment's text and every place name in ${world.language}; tags and any cg brief in English.`,
   ].join("\n");
-  const [chosen] = forgeChoiceMessages([{ role: "system" as const, content: instructions }], {
-    enabled: true,
-    terminal: last && !date,
-  });
+  const choices = choiceRules(instructions, last && !date);
   const framing =
     node.kind === "confrontation"
       ? CONFRONTATION_FRAMING
@@ -1952,6 +1949,7 @@ export function beatMessages({
     dateFraming,
     node.resolves?.length ? `Grievances this node may resolve: ${node.resolves.join(", ")}.` : "",
     `- Thought lines: ${thinkers.length ? `of the love interests, only these are far enough along to have one: ${thinkers.join(", ")}` : "no love interest present may have one: they are still behind their masks"}.`,
+    ...choices.own,
     // A planned chapter's last node; the prologue offers its own choices, and a date never ends on a big one.
     ...(last && !date && chapter.kind !== "prologue"
       ? [
@@ -1971,10 +1969,23 @@ export function beatMessages({
   ];
   return storyMessages(
     storyContext({ world, player, units, number: chapter.kind === "main" ? chapter.number : null, arc, memory }),
-    chosen!.content + CHOICE_EFFECTS_INSTRUCTION + VOICES_INSTRUCTION,
+    choices.shared + CHOICE_EFFECTS_INSTRUCTION + VOICES_INSTRUCTION,
     chapterTexts(chapter, units, storySoFar, opening),
     rest,
   );
+}
+
+/**
+ * P6's choice rules (the kit's forgeChoiceMessages) split in two: what they say for every node (`shared`, in the cached
+ * instructions), and the lines that say whether this one is the chapter's last story beat (`own`, with the task).
+ */
+function choiceRules(instructions: string, terminal: boolean): { shared: string; own: string[] } {
+  const rules = (last: boolean) =>
+    forgeChoiceMessages([{ role: "system" as const, content: instructions }], { enabled: true, terminal: last })[0]!
+      .content;
+  const other = new Set(rules(!terminal).split("\n"));
+  const lines = rules(terminal).split("\n");
+  return { shared: lines.filter((line) => other.has(line)).join("\n"), own: lines.filter((line) => !other.has(line)) };
 }
 
 /**

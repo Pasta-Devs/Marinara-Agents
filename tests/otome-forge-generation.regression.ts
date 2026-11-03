@@ -89,7 +89,7 @@ function request(overrides: Partial<GenerateJsonRequest<Premise>> = {}): Generat
 const failsWith = (status: number, code: string) => (error: unknown) =>
   error instanceof OtomeForgeError && error.statusCode === status && error.code === code;
 
-test("a cache mark is sent as it is, through the fit and the repair turn, and debug mode logs what was cached (#2066)", async () => {
+test("a cache mark is sent as it is, through the fit and the repair turn, for an hour, and debug mode logs what was cached (#2066)", async () => {
   const usage = { promptTokens: 40, cachedPromptTokens: 9000, cacheWritePromptTokens: 120 };
   const { deps, calls, logs } = await setup([
     { content: "not json", finishReason: "stop", usage },
@@ -107,6 +107,8 @@ test("a cache mark is sent as it is, through the fit and the repair turn, and de
       messages,
       "both marks reach the Engine, and the part that changes has none",
     );
+    // #2091: a chapter's calls come minutes apart, so a marked prompt asks for the hour-long cache.
+    assert.equal((call.options as { cacheTtl?: string }).cacheTtl, "1h");
   }
   assert.equal(calls[1]!.messages.length, 5, "the repair turn adds its two messages after them");
   const cached = logs.filter((entry) => entry.level === "debugOverride" && /Prompt cache/u.test(entry.message));
@@ -118,6 +120,7 @@ test("a cache mark is sent as it is, through the fit and the repair turn, and de
   const plain = await setup(['{"premise":"A masked ball."}']);
   await generateJson(plain.deps, request());
   assert.ok(plain.calls[0]!.messages.every((message) => !("cacheBreakpoint" in message)));
+  assert.ok(!("cacheTtl" in plain.calls[0]!.options!), "nor a cache lifetime");
   assert.ok(!plain.logs.some((entry) => /Prompt cache/u.test(entry.message)), "nothing reported, nothing logged");
 });
 
