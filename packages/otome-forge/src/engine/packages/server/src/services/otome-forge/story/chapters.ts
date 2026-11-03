@@ -450,10 +450,8 @@ export async function planNextChapter(
       job: "structured",
       cast: [lead],
       continues: "main",
-      // The recalls follow the Lead, so they go after the story context the chapter's scenes share (#2066); that
-      // context is the chapter's, worked out here and given to each of its scenes (#2091).
-      apart: true,
-      chapter: key,
+      // The recalls follow the Lead, so they go after the story context the chapter's scenes share (#2066, #2091).
+      cached: {},
       query: { plan: units.find((unit) => unit.id === lead)?.bible?.want ?? "", speakers: units.map((u) => u.name) },
       signal,
       debugMode,

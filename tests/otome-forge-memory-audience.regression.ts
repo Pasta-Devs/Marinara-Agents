@@ -10,8 +10,8 @@
 // the story's timeline, a recollection in prose (0.6.19); one saved before that is folded again from the records, once,
 // in the background; the panel shows no bold label or markdown emphasis.
 // #2066: the overview is the story's timeline. A chapter's summary (at most 1000 words, said in its prompt) joins it with
-// no model call, and only a timeline past 13k tokens and 1k of leeway is condensed (all but the newest entry, in as
-// few calls as the memory model's context allows; a fold that adds nothing condenses nothing); a date or Character
+// no model call, and only a timeline past 13k tokens and 1k of leeway is condensed (everything before the newest main
+// chapter's entry, #2091, in as few calls as the memory model's context allows; a fold that adds nothing condenses nothing); a date or Character
 // Story is never in it, and a memory model of unknown context waits for configuration. Recall sends no ranked details:
 // the small memories this prompt may know come back as `recalls`, newest first within 5k tokens and 1k of leeway,
 // never one the caller lists in full; the Home note, Read Him and Read Me take the newest.
@@ -48,6 +48,8 @@ import {
 import {
   HEADROOM_TOKENS,
   TIMELINE_CEILING,
+  foldedPart,
+  keptPart,
   parseTimeline,
   renderTimeline,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/timeline.ts";
@@ -361,6 +363,21 @@ test("condensing keeps the newest main chapter's entry apart, so a prompt that s
     false,
     "its summary never goes in beside it",
   );
+});
+
+test("with nothing before the newest main chapter's entry, condensing folds all but the newest entry (#2091)", () => {
+  const entry = (kind: string, id: string) => ({ key: JSON.stringify([kind, id]), title: id, text: id });
+  const main = entry("chapter", "main-12");
+  const route = entry("chapter", `route-${KAI}-2`);
+  const story = entry("character-story", "story-lamp");
+  const split = (...entries: ReturnType<typeof entry>[]) => [
+    foldedPart({ head: "HEAD", entries }).entries.map((item) => item.text),
+    keptPart({ head: "HEAD", entries }).map((item) => item.text),
+  ];
+  assert.deepEqual(split(route, main, story), [[route.text], [main.text, story.text]], "before the newest main one");
+  assert.deepEqual(split(main, story, route), [[main.text, story.text], [route.text]], "none before it");
+  assert.deepEqual(split(story, route), [[story.text], [route.text]], "no main chapter at all");
+  assert.deepEqual(split(main), [[], [main.text]], "a lone entry is never condensed");
 });
 
 test("a small memory model condenses the timeline in pieces it can hold, each with its whole reply room (#2066)", async () => {

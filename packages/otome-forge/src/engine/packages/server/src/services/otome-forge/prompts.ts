@@ -1380,9 +1380,11 @@ export function sceneCardBlock(unit: Unit, liState: LiState, resolves: readonly 
 // this main chapter's place in its arc (never its reveal or its later chapters, which only P5 sees) and the story
 // memory (the timeline, then the previous chapter in full). Then the prompt's own instructions, a second system
 // message; then, in P6, P12 and P12c, the chapter's settled scenes, one message each; then everything that changes from
-// call to call: the newest scene, who is present, the recalls, the task. Each of the first three parts ends where the
-// provider may cache the prompt (cacheBreakpoint, capability API 1.814), so after a chapter's first call its story
-// context is sent at the cached price. Nothing in the story context may follow the node, its cast or the prompt's kind.
+// call to call: the newest scene, who is present, the recalls with the canon only some may know (S/story/canon.ts
+// `cached`), the task. Each of the first three parts ends where the provider may cache the prompt (cacheBreakpoint,
+// capability API 1.814; P5, P12 and P12c mark the story context alone, as no later call shares the rest), so after a
+// chapter's first call its story context is sent at the cached price. Nothing in the story context may follow the node,
+// its cast or the prompt's kind.
 
 export interface StoryContextInput {
   world: World;
@@ -1444,20 +1446,24 @@ function chapterTexts(
 /**
  * A story prompt in the cached layout (see above). Of the chapter so far (`texts`, chapterTexts), all but the newest are
  * settled, a message each with the cache mark on the last; the newest opens the last message with `rest`, since the
- * lookahead may write the next node before its picks are made, and a pick changes how it reads.
+ * lookahead may write the next node before its picks are made, and a pick changes how it reads. A prompt whose
+ * instructions no later call shares (`alone`: P5, P12, P12c) marks its story context alone: a mark is a cache write,
+ * at twice the price for the hour-long cache, and nothing would read the rest (#2091).
  */
 function storyMessages(
   context: string,
   instructions: string,
   texts: readonly string[],
   rest: readonly string[],
+  { alone = false }: { alone?: boolean } = {},
 ): OtomeMessage[] {
   const settled = texts.slice(0, -1);
+  const marked = (message: OtomeMessage): OtomeMessage => (alone ? message : { ...message, cacheBreakpoint: true });
   return [
     { role: "system", content: context, cacheBreakpoint: true },
-    { role: "system", content: instructions, cacheBreakpoint: true },
+    marked({ role: "system", content: instructions }),
     ...settled.map((content, index): OtomeMessage =>
-      index === settled.length - 1 ? { role: "user", content, cacheBreakpoint: true } : { role: "user", content },
+      index === settled.length - 1 ? marked({ role: "user", content }) : { role: "user", content },
     ),
     {
       role: "user",
@@ -1740,7 +1746,9 @@ export function chapterPlanMessages({
     otomeContractReminder("planner"),
   ];
   const [instructions] = forgeChoicePlanMessages([{ role: "system" as const, content: system }], true);
-  return storyMessages(storyContext({ world, player, units, number, arc, memory }), instructions!.content, [], rest);
+  return storyMessages(storyContext({ world, player, units, number, arc, memory }), instructions!.content, [], rest, {
+    alone: true,
+  });
 }
 
 // ── P6: beat narrator (narration, 0.9, scene contract) ──
@@ -2445,6 +2453,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     system + VOICES_INSTRUCTION,
     chapterTexts(chapter, units, storySoFar, "(This is the chapter's first node.)"),
     rest,
+    { alone: true },
   );
 }
 
@@ -2527,6 +2536,7 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
     system + VOICES_INSTRUCTION,
     chapterTexts(chapter, units, storySoFar, "(This is the chapter's first node.)"),
     rest,
+    { alone: true },
   );
 }
 

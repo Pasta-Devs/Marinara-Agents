@@ -30,10 +30,9 @@
 //   newest main chapter's entry condensed into about 5000 words (half that), and appending goes on: that entry and the
 //   ones after it stay apart, so a prompt that sends that chapter in full never repeats its summary (#2091). The
 //   condensing goes in as few calls as the memory model's own context allows (a small one gets the oldest entries a few
-//   at a time). Its size never
-//   follows the model's context: the kit is given a fixed context (MEMORY_CONTEXT) once the memory model's own is
-//   known, so its budget only bounds a timeline that keeps failing to condense; a model of unknown context waits for
-//   configuration.
+//   at a time). Its size never follows the model's context: the kit is given a fixed context (MEMORY_CONTEXT) once the
+//   memory model's own is known, so its budget only bounds a timeline that keeps failing to condense; a model of
+//   unknown context waits for configuration.
 // - #2066, the recall pool: recall sends no ranked chapter details. Beside the timeline go the newest small memories
 //   this prompt may know (phone sessions, Snapshots, Read Him sets, Claw rounds, Read Me notebook sets, and each date
 //   by its summary), newest first within RECALL_TOKENS and 1k of leeway, the oldest left out, and none the prompt

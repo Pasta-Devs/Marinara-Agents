@@ -9,9 +9,12 @@
 // That entry and every one after it stay apart (#2091): the main story's plans and scenes send that chapter in full and
 // leave its entry out of the timeline (S/story/canon.ts recallText), so its summary never goes in beside it. With
 // nothing before it to condense, everything but the newest entry is.
-// ponytail: only the main story's previous chapter is kept apart. A route chapter's previous one (his last route or
-// repair chapter) that is older than the newest main chapter may be condensed, and then goes in as its summary in the
-// head too. The upgrade path is keeping each storyline's newest entry apart, with a bound on what that holds back.
+// ponytail: only the main story's previous chapter is kept apart, and not always. A route chapter's previous one (his
+// last route or repair chapter) older than the newest main chapter may be condensed; so is the newest main chapter's
+// entry once enough side chapters follow it to cross the ceiling again before the next main one (the fallback); each
+// then goes in beside its chapter in full as part of the head until the next main chapter is condensed after it. A
+// condensing that has only a few short entries before the newest main chapter's frees little, so the next summary may
+// condense again. The upgrade path is keeping each storyline's newest entry apart, with a bound on what that holds back.
 // Stored in the kit's overview content as JSON. Anything else (an overview of an earlier form) reads as a head alone.
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 

@@ -18,10 +18,10 @@
 // 5. Call: chatComplete with the reply's output size alone (the maintainer's rule): no temperature, no JSON mode, no
 //    other sampling or reasoning setting, so what the connection saves (its temperature, its reasoning effort) is what
 //    the Engine sends, and nothing of Otome's stands in for what it leaves unset. A prompt with cache marks also asks
-//    for the hour-long cache (cacheTtl "1h", capability API 1.815; an older Engine ignores it and caches for five
-//    minutes), so a chapter's plan, scenes and climax, minutes apart, read what the first of them wrote. A background
-//    call holds its job's connection admission slot throughout; it names that connection and never takes a second slot
-//    here.
+//    for the hour-long cache (cacheTtl "1h", capability API 1.815; an older Engine ignores it and keeps the
+//    connection's own cache time), so a chapter's plan, scenes and climax, minutes apart, read what the first wrote. A
+//    background call holds its job's connection admission slot throughout; it names that connection and never takes a
+//    second slot here.
 // 6. Parse: parseJsonish, then the schema, then `normalize`. On failure exactly one repair turn (fitted the same way);
 //    if that fails too, two declines are a 422 `declined` and anything else a 502 `bad-format`. A decline is an empty
 //    reply, a content filter, or refusal wording in a reply that is not a JSON object (inside one it is a character's
@@ -285,8 +285,10 @@ export async function generateJson<T extends object>(
 
   const budget = outputBudget(request.maxTokens, model.maxOutputTokens);
   // The memory context rides on the first message, so the repair turn (the same messages and two more) carries it too.
+  // The recalls' context goes first: the fitter leaves out the first context's optional blocks first, so what follows
+  // the cached part (a cached prompt's own canon, S/story/canon.ts) gives way before the cached part does (#2091).
   const messages = request.memory
-    ? forgeComposeMemoryPrompt(() => request.messages, [request.memory, request.memory.recalls].filter(Boolean))
+    ? forgeComposeMemoryPrompt(() => request.messages, [request.memory.recalls, request.memory].filter(Boolean))
     : request.messages;
   const mayCall = () => {
     request.signal?.throwIfAborted();
