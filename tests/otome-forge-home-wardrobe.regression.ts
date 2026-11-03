@@ -631,12 +631,19 @@ test("an owned Snapshot and a Character Story reach only their love interest's p
     assert.ok(pack, "the line pack was written");
     assert.deepEqual(leaked(pack, [...KAI_ONLY, "MIR-SNAPSHOT"]), [], "a pack reads no canon at all");
 
-    // P17: Mireille's reply knows the shared story and her own Snapshot's world; Kai's Character Story and his Snapshot
-    // not at all (#2066: a Character Story is his own small memory, never the timeline's). Kai's knows his story.
+    // P17: Mireille's reply knows the shared story and her own Snapshot's world. Kai's Character Story reaches her only
+    // in the timeline, titled private to him, as his route chapters do (0.7.3: love interests must know what happened
+    // in their Character Stories); its rows and his Snapshot not at all. Kai's knows his story.
     await sendMessage(t.deps, t.runId, MIR, { text: "Still up?" }, { debugMode: false });
     const [mirChat] = t.prompts("chat");
-    assert.deepEqual(leaked(mirChat!), [], "nothing of Kai's in Mireille's reply");
-    assert.ok(!mirChat!.includes("KAI-STORY-SCENE"), "his Character Story never reaches her");
+    const scene = mirChat!.indexOf("KAI-STORY-SCENE");
+    assert.deepEqual(
+      leaked(mirChat!, KAI_ONLY.slice(1)),
+      [],
+      "nothing of Kai's in Mireille's reply but his story's timeline entry",
+    );
+    assert.ok(scene > mirChat!.indexOf("# Canon to date"), "his Character Story reaches her in the timeline");
+    assert.match(mirChat!.slice(Math.max(0, scene - 400), scene), /private/, "titled private to him");
     assert.ok(!mirChat!.includes("KAI-SNAPSHOT"), "his Snapshot never reaches the overview");
     assert.ok(mirChat!.includes("SHARED-QUAY"), "the shared story reaches her");
     await runForeground(t.runId, async () => undefined);
