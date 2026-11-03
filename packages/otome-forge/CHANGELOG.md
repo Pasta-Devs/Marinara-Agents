@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.7.5 — 2026-11-03
+
+- **A slower burn.** Love interests no longer confess in stages 3 and 4. In stage 5 they may, once the story has earned it, and in stage 6 they say it if they haven't yet.
+
 ## 0.7.4 — 2026-11-03
 
 - **Stickers send on iPhone again.** Tapping a sticker in Messages sends it as a message. Before, the tap closed the sticker panel and nothing was sent.
