@@ -233,13 +233,10 @@ test("a slow burn through stage 4, a confession when earned in stage 5, and in s
   // Desire is not feeling: the burn holds back the words, never what the content contract allows.
   const DESIRE = /Desire is not feeling: they may still act on desire, out of lust or to get what they want/;
   const MAY = /The slow burn may break: when a scene has earned it, Kai may confess what they feel/;
-  // A confession from before 0.7.5 stands in stages 3 and 4; stages 1 and 2 never allowed one.
-  const STANDS = /already shows a confession between them, it stands as it happened/;
   for (const stage of [1, 2, 3, 4]) {
     assert.match(at(stage), SLOW, `stage ${stage}`);
     assert.match(at(stage), DESIRE, `stage ${stage}`);
     assert.doesNotMatch(at(stage), MAY);
-    (stage >= 3 ? assert.match : assert.doesNotMatch)(at(stage), STANDS, `stage ${stage}`);
   }
   assert.match(at(5), MAY);
   assert.doesNotMatch(at(5), SLOW);

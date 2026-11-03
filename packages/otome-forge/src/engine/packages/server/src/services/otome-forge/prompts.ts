@@ -1177,17 +1177,12 @@ export const SLOW_BURN_LAST_STAGE = 4;
 /**
  * Where the romance stands, by stage (#1960; moved later by the maintainer on 2026-11-03): a slow burn through stage 4,
  * where neither names what they feel; in stage 5 a confession may come when a scene has earned it, and by the finale
- * at the latest; in stage 6, if it has not come yet, it must. A story played before 0.7.5 may already hold a stage 3
- * or 4 confession: it stands, and nothing new is confessed there. Desire is not feeling: the content contract alone
+ * at the latest; in stage 6, if it has not come yet, it must. Desire is not feeling: the content contract alone
  * decides what bodies may do, at any stage.
  */
 function romanceLine(name: string, stage: number): string {
   if (stage <= SLOW_BURN_LAST_STAGE) {
-    const earlier =
-      stage >= 3
-        ? " If the story so far already shows a confession between them, it stands as it happened, and goes no further."
-        : "";
-    return `Slow burn: ${name} never says what they feel for the protagonist, and neither does the protagonist. It shows in tension, glances, deflections and near misses, with no confession and no becoming a couple yet.${earlier} Desire is not feeling: they may still act on desire, out of lust or to get what they want, as far as the content contract allows, and feelings may grow from it later.`;
+    return `Slow burn: ${name} never says what they feel for the protagonist, and neither does the protagonist. It shows in tension, glances, deflections and near misses, with no confession and no becoming a couple yet. Desire is not feeling: they may still act on desire, out of lust or to get what they want, as far as the content contract allows, and feelings may grow from it later.`;
   }
   if (stage < LAST_STAGE) {
     return `The slow burn may break: when a scene has earned it, ${name} may confess what they feel, if they have not yet; by the finale of their route at the latest, they say it.`;

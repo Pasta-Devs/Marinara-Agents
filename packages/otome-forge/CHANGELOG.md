@@ -2,7 +2,7 @@
 
 ## 0.7.5 — 2026-11-03
 
-- **A slower burn.** Love interests no longer confess in stages 3 and 4. In stage 5 they may, once the story has earned it, and in stage 6 they say it if they haven't yet. A confession your story already holds from stage 3 or 4 stands as it happened.
+- **A slower burn.** Love interests no longer confess in stages 3 and 4. In stage 5 they may, once the story has earned it, and in stage 6 they say it if they haven't yet.
 
 ## 0.7.4 — 2026-11-03
 
