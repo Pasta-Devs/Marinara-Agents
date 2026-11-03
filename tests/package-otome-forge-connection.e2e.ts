@@ -1,8 +1,13 @@
-// Real Engine/provider boundary: the loopback endpoint rejects JSON mode, then returns validated premise JSON.
+// Real Engine/provider boundary: Otome Hearth sends only the reply's size (0.7.1), never a JSON hint of its own, so an
+// endpoint that rejects JSON mode answers its first request. The connection's own settings (here the Engine's default
+// temperature) are the Engine's to send.
 import { expect, test } from "@playwright/test";
 import { createServer } from "node:http";
 
-test("Otome Hearth real custom endpoint recovers from a rejected JSON hint", async ({ request, baseURL }, testInfo) => {
+test("Otome Hearth real custom endpoint gets no JSON hint, only the reply's size", async ({
+  request,
+  baseURL,
+}, testInfo) => {
   const sent: Array<Record<string, unknown>> = [];
   const premise = "In a city of clockwork canals, an apprentice witnesses a murder at the masked ball.";
   const upstream = createServer(async (incoming, response) => {
@@ -63,12 +68,9 @@ test("Otome Hearth real custom endpoint recovers from a rejected JSON hint", asy
     });
     expect(result.ok(), await result.text()).toBe(true);
     expect(await result.json()).toEqual({ premise });
-    expect(sent).toHaveLength(2);
-    expect(sent[0].response_format).toEqual({ type: "json_object" });
-    const withoutHint = { ...sent[0] };
-    delete withoutHint.response_format;
-    expect(sent[1]).toEqual(withoutHint);
-    expect(Number(sent[1].max_tokens ?? sent[1].max_completion_tokens)).toBeGreaterThanOrEqual(8192);
+    expect(sent, "one request, answered: no hint to reject and retry without").toHaveLength(1);
+    expect(sent[0]).not.toHaveProperty("response_format");
+    expect(Number(sent[0].max_tokens ?? sent[0].max_completion_tokens)).toBeGreaterThanOrEqual(8192);
   } finally {
     try {
       if (connectionId) {
