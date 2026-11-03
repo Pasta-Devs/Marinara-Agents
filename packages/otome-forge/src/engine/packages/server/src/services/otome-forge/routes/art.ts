@@ -4,7 +4,8 @@
 // GET  /runs/:run/art/scene?key&i                          → SceneArt: the beat's places and CG with their paints, and
 //                                                            each love interest's ready faces (the reader polls it
 //                                                            while something is painting); in a look's first-wear
-//                                                            scene, its love interest in that look (`looks`)
+//                                                            scene, its love interest in that look (`looks`), and
+//                                                            `lookComing` while that look paints or is cut out
 // POST /runs/:run/art/place {place, prompt?, negativePrompt?} → {place, world}; paints that place now (the tap)
 // POST /runs/:run/art/place/prompt {place}                 → {prompt, negativePrompt}; for the prompt review dialog
 // POST /runs/:run/art/cg {key, i, prompt?, negativePrompt?}  → {art}; paints that beat's CG now (the tap)
@@ -20,21 +21,28 @@
 // rating and adult tags. Automatic paints start from the beat writer (OtomeArt.queueScenePaints), never from here.
 // The looks' own art routes are M1's (routes/setup.ts).
 // A his-look5's first-wear scene (`story-<item>`, S/items/character-story.ts) is about that look, so he stands in it
-// there instead of the look he wears on Home, on every read of it, also after he wears another: its image cut out like
-// every stage picture (free), and its faces only when a set is ready from wearing it. No face set is painted for it
-// here: faces are paid for when he wears a look (S/routes/wardrobe.ts), so the scene does not pay for one he may never
-// wear. Worn now, it is his stage look already and needs nothing. Her looks have no scene and she is never on stage.
+// there instead of the look he wears on Home, on every read of it, also after he wears another: its image (the item's
+// own art, so it shows the moment it is painted) cut out like every stage picture (free), and its faces only when a
+// set is ready from wearing it. The scene can be read while the look still paints (the first open paints it in the
+// background, or after Paint under Ask before painting): his worn look stands in meanwhile, and `lookComing` keeps the
+// reader polling until he stands in the new one, cut out. A look waiting for Paint, failed or stopped is not waited
+// for. No face set is painted for it here: faces are paid for when he wears a look (S/routes/wardrobe.ts), so the
+// scene does not pay for one he may never wear. Worn now, it is his stage look already and needs nothing. Her looks
+// have no scene and she is never on stage.
 import { z } from "zod";
 import type { SceneArt, Unit } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { cutoutsPending, queueCutouts } from "../art/cutout.js";
 import { cgPromptFor, cgView, markCgSeen, paintCgNow } from "../art/cg.js";
+import { itemArtView, outfitOf } from "../art/outfits.js";
 import { paintStickerNow, startPlayerStickers, stickerPromptFor } from "../art/stickers.js";
 import { STICKER_ID } from "../../../../../client/src/features/otome-forge/shared/stickers.js";
 import { paintPlaceNow, placePromptFor, readPlace, withPlaceViews } from "../art/places.js";
 import { OtomeForgeError, debugModeOf, parseBody, runParam, type OtomeRequest, type RegisterRoutes } from "../http.js";
-import { isChapterKey, itemStoryKey } from "../ids.js";
+import { isChapterKey, isItemStoryKey } from "../ids.js";
+import { readItem } from "../items/open.js";
 import { cleanedFaces, facesComing, readRun, readyCutout, stageArtUrls } from "../schemas/state.js";
 import { toWorldView } from "../schemas/world.js";
+import type { OtomeStore } from "../store.js";
 import { readBeat } from "../story/canon.js";
 
 const PROMPT_MAX = 4000;
@@ -69,9 +77,12 @@ function beatRef(key: unknown, i: unknown): { key: string; i: number } {
 const queryOf = (request: OtomeRequest) =>
   request.query && typeof request.query === "object" ? (request.query as Record<string, unknown>) : {};
 
-/** The look chapter `key` is the first-wear scene of, on him, when he does not wear it now (a look's id is its item's). */
-const firstWearLook = (key: string, unit: Unit) =>
-  unit.outfits.find((outfit) => itemStoryKey(outfit.id) === key && outfit.id !== unit.wornOutfit);
+/** The his-look5 whose first-wear scene chapter `key` is (`story-<item>`), else null. */
+async function firstWearItem(store: Pick<OtomeStore, "readDoc">, runId: string, key: string) {
+  if (!isItemStoryKey(key)) return null;
+  const item = await readItem(store, runId, key.slice("story-".length));
+  return item?.kind === "his-look5" && item.li ? item : null;
+}
 
 export const registerArtRoutes: RegisterRoutes = (router, deps) => {
   const { store, handle } = deps;
@@ -82,18 +93,24 @@ export const registerArtRoutes: RegisterRoutes = (router, deps) => {
       const { runId } = runParam(request);
       const query = queryOf(request);
       const { key, i } = beatRef(query.key, query.i);
-      const [run, beat] = await Promise.all([readRun(store, runId), readBeat(store, runId, key, i)]);
+      const [run, beat, item] = await Promise.all([
+        readRun(store, runId),
+        readBeat(store, runId, key, i),
+        firstWearItem(store, runId, key),
+      ]);
       if (!run) throw runNotFound();
       if (!beat) throw new OtomeForgeError(404, "No such beat.", "not-found");
+      // The look this scene is about once painted (a look's outfit id is its item's), on him while he does not wear it.
+      const painted = item && outfitOf(item);
+      const standsIn = (unit: Unit) =>
+        painted && unit.id === item?.li && unit.wornOutfit !== painted.id ? painted : undefined;
       const units = await Promise.all(
-        run.units.map((unit) =>
-          queueCutouts(deps, runId, unit, stageArtUrls(run.world, unit, firstWearLook(key, unit)?.url)),
-        ),
+        run.units.map((unit) => queueCutouts(deps, runId, unit, stageArtUrls(run.world, unit, standsIn(unit)?.url))),
       );
       const faces: SceneArt["faces"] = {};
       const looks: NonNullable<SceneArt["looks"]> = {};
       for (const unit of units) {
-        const look = firstWearLook(key, unit);
+        const look = standsIn(unit);
         const ready = cleanedFaces(run.world, unit, look?.url);
         if (ready) faces[unit.id] = ready;
         if (!look) continue;
@@ -104,6 +121,10 @@ export const registerArtRoutes: RegisterRoutes = (router, deps) => {
           cut: [cutout, ...Object.values(ready ?? {})].filter((url): url is string => !!url),
         };
       }
+      // Its look still paints, or its free cut-out is on the way: the reader polls, with expressions off too.
+      const lookComing =
+        (!!item && !painted && itemArtView(runId, item)?.state === "pending") ||
+        units.some((unit) => !!looks[unit.id] && cutoutsPending(runId, [unit]));
       const scene: SceneArt = {
         places: beat.places.map((place) => readPlace(run.world, runId, place.name) ?? place),
         cg: cgView(runId, beat),
@@ -113,6 +134,7 @@ export const registerArtRoutes: RegisterRoutes = (router, deps) => {
           .filter((unit) => (!looks[unit.id] && facesComing(run.world, unit)) || cutoutsPending(runId, [unit]))
           .map((unit) => unit.id),
         ...(Object.keys(looks).length ? { looks } : {}),
+        ...(lookComing ? { lookComing } : {}),
       };
       return scene;
     }),

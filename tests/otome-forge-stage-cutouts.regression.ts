@@ -7,13 +7,20 @@ import type {
   Cutout,
   Unit,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
+import type { Item } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/wish.ts";
 import {
   cutoutsSettled,
   type CutoutClient,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cutout.ts";
+import {
+  addOutfit,
+  itemArtOwner,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/outfits.ts";
+import { startPaint } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/paint.ts";
 import { placeKey } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/places.ts";
 import {
   beatId,
+  itemId,
   itemStoryKey,
   playerId,
   runDocTarget,
@@ -25,6 +32,7 @@ import { registerRunRoutes } from "../packages/otome-forge/src/engine/packages/s
 import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
 import { normalizeBeat } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/story.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
+import { normalizeItem } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/wish.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { artWorld, beat, KEY, routesOf, saveBeat, seedChapter, until } from "./fixtures/otome-forge-art.ts";
 import { at, KAI } from "./fixtures/otome-forge-story.ts";
@@ -249,7 +257,7 @@ test("scene and run reads retain base, worn and player cleanup without cutting b
   t.noPaidWork();
 });
 
-test("a look's first-wear scene stands him in that look, on a replay too, while other scenes keep his worn look", async (context) => {
+test("a look's first-wear scene stands him in that look, while it paints, on a replay too, while other scenes keep his worn look", async (context) => {
   const cuts = controlledCutouts();
   context.after(async () => {
     cuts.release();
@@ -260,11 +268,22 @@ test("a look's first-wear scene stands him in that look, on a replay too, while 
   const LOOK_URL = "/api/global-gallery/file/kai-look5.png";
   const LOOK_FACE = "/api/global-gallery/file/kai-look5-cold.png";
   const lookKey = itemStoryKey(LOOK);
-  const outfit = { id: LOOK, name: "Midnight suit", outfitLine: "black three-piece suit", url: LOOK_URL, at };
   const setKai = (change: (unit: Unit) => Unit) =>
     t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => change(unit));
-  // The look is painted and owned (on his outfits), still uncut, and he still wears the harbour coat.
-  await setKai((unit) => ({ ...unit, outfits: [...unit.outfits, outfit] }));
+  const setItem = (art: Item["art"]) =>
+    t.store.mutateDoc(runDocTarget("item", itemId(t.runId, LOOK)), normalizeItem, () => ({
+      id: LOOK,
+      kind: "his-look5",
+      banner: "his-wardrobe-0",
+      li: KAI,
+      title: "Midnight suit",
+      look: { name: "Midnight suit", outfitLine: "black three-piece suit" },
+      art,
+      story: { key: lookKey },
+      createdAt: at,
+    }));
+  // Just won and opened: the look paints in the background, while its one-node scene is there to read at once.
+  await setItem({ state: "pending", at });
   await t.store.mutateDoc(runDocTarget("beat", beatId(t.runId, lookKey, 0)), normalizeBeat, () =>
     beat(0, { key: lookKey, readThrough: 1 }),
   );
@@ -274,6 +293,21 @@ test("a look's first-wear scene stands him in that look, on a replay too, while 
     return result.body;
   };
 
+  const release = startPaint(t.runId, itemArtOwner(LOOK))!;
+  const painting = await firstWear();
+  assert.equal(painting.looks, undefined, "no picture of the new look exists yet: his worn look stands in");
+  assert.equal(painting.lookComing, true, "the reader keeps polling while the new look paints");
+  assert.deepEqual(painting.faces[KAI], { cold: clean(FACE) });
+  release();
+  assert.equal((await firstWear()).lookComing, undefined, "a stopped paint is not waited for");
+  await setItem({ state: "waiting-consent", at });
+  assert.equal((await firstWear()).lookComing, undefined, "a look waiting for Paint is not waited for");
+  await setItem({ state: "failed", at, error: "The image provider failed." });
+  assert.equal((await firstWear()).lookComing, undefined, "a failed look is not waited for");
+
+  // Its paint is saved on the item: the next poll stands him in it, before it is even added to his outfits.
+  await setItem({ state: "ready", at, url: LOOK_URL, ref: "global-gallery:look5" });
+  assert.equal((await t.unit())!.outfits.length, 1, "the look is not on his outfits yet");
   const uncut = await firstWear();
   assert.deepEqual(
     uncut.looks?.[KAI],
@@ -282,6 +316,7 @@ test("a look's first-wear scene stands him in that look, on a replay too, while 
   );
   assert.equal(uncut.faces[KAI], undefined, "the coat's faces are not this look's faces");
   assert.ok(uncut.facesComing.includes(KAI), "the reader polls while the new look is cut out");
+  assert.equal(uncut.lookComing, true, "whatever the expression setting, the reader waits for the cut-out");
   cuts.release();
   await cutoutsSettled();
   assert.deepEqual(cuts.calls, [LOOK_URL], "only the new look is cut out, for free");
@@ -292,11 +327,16 @@ test("a look's first-wear scene stands him in that look, on a replay too, while 
     cut: [clean(LOOK_URL)],
   });
   assert.ok(!cut.facesComing.includes(KAI), "no face set is painted for a look he has not worn");
+  assert.equal(cut.lookComing, undefined, "the look is in place: polling stops");
   assert.equal((await t.unit())!.expressions[LOOK_URL], undefined, "reading the scene starts no expression set");
+  const item = normalizeItem(t.fake.rows.get(itemId(t.runId, LOOK))!.data);
+  await addOutfit(t.deps, t.runId, item);
+  assert.deepEqual((await firstWear()).looks[KAI], cut.looks[KAI], "added to his outfits, it is the same look");
 
   // Every other scene keeps the look he wears now.
   const main = await t.scene();
   assert.equal(main.looks, undefined);
+  assert.equal(main.lookComing, undefined);
   assert.deepEqual(main.faces[KAI], { cold: clean(FACE) });
 
   // He wore the new look (its faces were painted then) and went back to his base look: the replay keeps the new look.

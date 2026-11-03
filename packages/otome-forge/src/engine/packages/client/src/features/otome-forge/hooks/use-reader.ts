@@ -569,8 +569,9 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
       (Array.isArray(art.places) && art.places.some((place) => place.art?.state === "pending")) ||
       // Painting and free cleanup both settle; failed or stopped work is never waited for.
       waitingForFaces(art) ||
-      // A first-wear look's free cut-out is waited for with expressions off too: the run's own reads never cut it.
-      Object.keys(art.looks ?? {}).some((li) => art.facesComing?.includes(li));
+      // A first-wear look is waited for with expressions off too, while it paints and then its cut-out: only this read
+      // brings it, as the run's own reads stand him in his worn look.
+      art.lookComing === true;
     const look = async () => {
       tries += 1;
       try {

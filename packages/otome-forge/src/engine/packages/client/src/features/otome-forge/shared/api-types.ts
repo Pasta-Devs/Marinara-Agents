@@ -1128,6 +1128,11 @@ export interface SceneArt {
    * RunLiView's stage fields (its cut-out once ready, its cleaned faces once a set is). Absent in every other scene.
    */
   looks?: Record<LiId, Required<Pick<RunLiView, "worn" | "expressions" | "cut">>>;
+  /**
+   * A first-wear scene's look is still painting, or its free cut-out is on the way: the reader polls until he stands in
+   * it. Absent otherwise, also for a look waiting for Paint, failed or stopped.
+   */
+  lookComing?: true;
 }
 
 export interface StoryChapterEntry {
