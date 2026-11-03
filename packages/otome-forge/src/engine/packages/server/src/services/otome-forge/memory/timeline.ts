@@ -4,10 +4,17 @@
 // The kit keeps one record per chapter (its detail summary, written once) and asks Otome to fold each new record into
 // its overview (S/memory/memory.ts summarize). Otome's overview is this timeline: a condensed head plus the chapter
 // summaries added since, each kept whole and in story order. A new summary is only appended, which costs no model call;
-// once a new summary takes the timeline past TIMELINE_CEILING and its HEADROOM_TOKENS of leeway, everything but the
-// newest entry is condensed into a new head of about 5000 words (half that size), and appending goes on. The newest
-// entry stays apart so a prompt that sends that chapter in full can leave it out of the timeline (S/story/canon.ts
-// recallText).
+// once a new summary takes the timeline past TIMELINE_CEILING and its HEADROOM_TOKENS of leeway, everything before the
+// newest main chapter's entry is condensed into a new head of about 5000 words (half that size), and appending goes on.
+// That entry and every one after it stay apart (#2091): the main story's plans and scenes send that chapter in full and
+// leave its entry out of the timeline (S/story/canon.ts recallText), so its summary never goes in beside it. With
+// nothing before it to condense, everything but the newest entry is.
+// ponytail: only the main story's previous chapter is kept apart, and not always. A route chapter's previous one (his
+// last route or repair chapter) older than the newest main chapter may be condensed; so is the newest main chapter's
+// entry once enough side chapters follow it to cross the ceiling again before the next main one (the fallback); each
+// then goes in beside its chapter in full as part of the head until the next main chapter is condensed after it. A
+// condensing that has only a few short entries before the newest main chapter's frees little, so the next summary may
+// condense again. The upgrade path is keeping each storyline's newest entry apart, with a bound on what that holds back.
 // Stored in the kit's overview content as JSON. Anything else (an overview of an earlier form) reads as a head alone.
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 
@@ -83,15 +90,27 @@ export function renderTimeline({ head, entries }: Timeline, without?: string): s
 export const timelineParagraphs = ({ head, entries }: Timeline) =>
   [head, ...entries.map((entry) => entry.text)].map((text) => text.trim()).filter(Boolean);
 
+/** Whether an entry is a main chapter's (key JSON ["chapter", "main-<n>"]). */
+const isMainEntry = ({ key }: TimelineEntry) => /^\["chapter","main-\d+"\]$/u.test(key);
+
+/** How many of the oldest entries condensing folds (see the header): those before the newest main chapter's. */
+const foldedCount = ({ entries }: Timeline) => {
+  const main = entries.map(isMainEntry).lastIndexOf(true);
+  return main > 0 ? main : Math.max(entries.length - 1, 0);
+};
+
 /**
- * Whether the timeline went past its ceiling and its leeway, with an entry older than the newest to condense. A head
- * alone is what condensing wrote, so it is never condensed again by itself, even when it came back long.
+ * Whether the timeline went past its ceiling and its leeway, with an entry to condense. A head alone is what condensing
+ * wrote, so it is never condensed again by itself, even when it came back long.
  */
 export const crossedCeiling = (timeline: Timeline) =>
-  timeline.entries.length > 1 && estimateTextTokens(renderTimeline(timeline)) > TIMELINE_CEILING + HEADROOM_TOKENS;
+  foldedCount(timeline) > 0 && estimateTextTokens(renderTimeline(timeline)) > TIMELINE_CEILING + HEADROOM_TOKENS;
 
-/** The part a condensing call folds: the head and every entry but the newest. */
+/** The part a condensing call folds: the head and every entry before the newest main chapter's (see the header). */
 export const foldedPart = (timeline: Timeline): Timeline => ({
   head: timeline.head,
-  entries: timeline.entries.slice(0, -1),
+  entries: timeline.entries.slice(0, foldedCount(timeline)),
 });
+
+/** The entries condensing leaves apart: the newest main chapter's and every one after it (see the header). */
+export const keptPart = (timeline: Timeline): TimelineEntry[] => timeline.entries.slice(foldedCount(timeline));

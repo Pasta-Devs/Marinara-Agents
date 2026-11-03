@@ -1388,9 +1388,11 @@ export function sceneCardBlock(unit: Unit, liState: LiState, resolves: readonly 
 // this main chapter's place in its arc (never its reveal or its later chapters, which only P5 sees) and the story
 // memory (the timeline, then the previous chapter in full). Then the prompt's own instructions, a second system
 // message; then, in P6, P12 and P12c, the chapter's settled scenes, one message each; then everything that changes from
-// call to call: the newest scene, who is present, the recalls, the task. Each of the first three parts ends where the
-// provider may cache the prompt (cacheBreakpoint, capability API 1.814), so after a chapter's first call its story
-// context is sent at the cached price. Nothing in the story context may follow the node, its cast or the prompt's kind.
+// call to call: the newest scene, who is present, the recalls with the canon only some may know (S/story/canon.ts
+// `cached`), the task. Each of the first three parts ends where the provider may cache the prompt (cacheBreakpoint,
+// capability API 1.814; P5, P12 and P12c mark the story context alone, as no later call shares the rest), so after a
+// chapter's first call its story context is sent at the cached price. Nothing in the story context may follow the node,
+// its cast or the prompt's kind.
 
 export interface StoryContextInput {
   world: World;
@@ -1452,20 +1454,24 @@ function chapterTexts(
 /**
  * A story prompt in the cached layout (see above). Of the chapter so far (`texts`, chapterTexts), all but the newest are
  * settled, a message each with the cache mark on the last; the newest opens the last message with `rest`, since the
- * lookahead may write the next node before its picks are made, and a pick changes how it reads.
+ * lookahead may write the next node before its picks are made, and a pick changes how it reads. A prompt whose
+ * instructions no later call shares (`alone`: P5, P12, P12c) marks its story context alone: a mark is a cache write,
+ * at twice the price for the hour-long cache, and nothing would read the rest (#2091).
  */
 function storyMessages(
   context: string,
   instructions: string,
   texts: readonly string[],
   rest: readonly string[],
+  { alone = false }: { alone?: boolean } = {},
 ): OtomeMessage[] {
   const settled = texts.slice(0, -1);
+  const marked = (message: OtomeMessage): OtomeMessage => (alone ? message : { ...message, cacheBreakpoint: true });
   return [
     { role: "system", content: context, cacheBreakpoint: true },
-    { role: "system", content: instructions, cacheBreakpoint: true },
+    marked({ role: "system", content: instructions }),
     ...settled.map((content, index): OtomeMessage =>
-      index === settled.length - 1 ? { role: "user", content, cacheBreakpoint: true } : { role: "user", content },
+      index === settled.length - 1 ? marked({ role: "user", content }) : { role: "user", content },
     ),
     {
       role: "user",
@@ -1748,7 +1754,9 @@ export function chapterPlanMessages({
     otomeContractReminder("planner"),
   ];
   const [instructions] = forgeChoicePlanMessages([{ role: "system" as const, content: system }], true);
-  return storyMessages(storyContext({ world, player, units, number, arc, memory }), instructions!.content, [], rest);
+  return storyMessages(storyContext({ world, player, units, number, arc, memory }), instructions!.content, [], rest, {
+    alone: true,
+  });
 }
 
 // ── P6: beat narrator (narration, 0.9, scene contract) ──
@@ -1884,9 +1892,9 @@ export function beatMessages({
   const date = chapter.kind === "date" ? chapter.date : undefined;
   const partner = date ? units.find((unit) => unit.id === date.li) : undefined;
   const cardState = (li: LiId) => (date ? ownView(state, li).liState : liStateOf(state, li));
-  // The narrator's instructions are the same for every node but a chapter's last (its choice rules differ): what a
-  // node changes (who may think aloud, its last-node and key-image rules, a date's or side-with's choice) is told with
-  // the task, so a chapter's scenes share one cached prompt (#2066).
+  // The narrator's instructions are the same for every node: what a node changes (who may think aloud, whether it is
+  // the chapter's last and may end on a big choice, its key-image rules, a date's or side-with's choice) is told with
+  // the task, so a chapter's scenes share one cached prompt (#2066, #2091).
   const instructions = [
     "You are the narrator of an otome visual novel: a character-driven romance mystery. Narrate ONE node of the chapter as a scene the player taps through, a short segment at a time.",
     NO_CHOICES_SENTENCE,
@@ -1904,10 +1912,7 @@ export function beatMessages({
     "- Stay within this node's guide; do not skip ahead to later nodes.",
     `- Write every segment's text and every place name in ${world.language}; tags and any cg brief in English.`,
   ].join("\n");
-  const [chosen] = forgeChoiceMessages([{ role: "system" as const, content: instructions }], {
-    enabled: true,
-    terminal: last && !date,
-  });
+  const choices = choiceRules(instructions, last && !date);
   const framing =
     node.kind === "confrontation"
       ? CONFRONTATION_FRAMING
@@ -1960,6 +1965,7 @@ export function beatMessages({
     dateFraming,
     node.resolves?.length ? `Grievances this node may resolve: ${node.resolves.join(", ")}.` : "",
     `- Thought lines: ${thinkers.length ? `of the love interests, only these are far enough along to have one: ${thinkers.join(", ")}` : "no love interest present may have one: they are still behind their masks"}.`,
+    ...choices.own,
     // A planned chapter's last node; the prologue offers its own choices, and a date never ends on a big one.
     ...(last && !date && chapter.kind !== "prologue"
       ? [
@@ -1979,10 +1985,23 @@ export function beatMessages({
   ];
   return storyMessages(
     storyContext({ world, player, units, number: chapter.kind === "main" ? chapter.number : null, arc, memory }),
-    chosen!.content + CHOICE_EFFECTS_INSTRUCTION + VOICES_INSTRUCTION,
+    choices.shared + CHOICE_EFFECTS_INSTRUCTION + VOICES_INSTRUCTION,
     chapterTexts(chapter, units, storySoFar, opening),
     rest,
   );
+}
+
+/**
+ * P6's choice rules (the kit's forgeChoiceMessages) split in two: what they say for every node (`shared`, in the cached
+ * instructions), and the lines that say whether this one is the chapter's last story beat (`own`, with the task).
+ */
+function choiceRules(instructions: string, terminal: boolean): { shared: string; own: string[] } {
+  const rules = (last: boolean) =>
+    forgeChoiceMessages([{ role: "system" as const, content: instructions }], { enabled: true, terminal: last })[0]!
+      .content;
+  const other = new Set(rules(!terminal).split("\n"));
+  const lines = rules(terminal).split("\n");
+  return { shared: lines.filter((line) => other.has(line)).join("\n"), own: lines.filter((line) => !other.has(line)) };
 }
 
 /**
@@ -2442,6 +2461,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     system + VOICES_INSTRUCTION,
     chapterTexts(chapter, units, storySoFar, "(This is the chapter's first node.)"),
     rest,
+    { alone: true },
   );
 }
 
@@ -2524,6 +2544,7 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
     system + VOICES_INSTRUCTION,
     chapterTexts(chapter, units, storySoFar, "(This is the chapter's first node.)"),
     rest,
+    { alone: true },
   );
 }
 
