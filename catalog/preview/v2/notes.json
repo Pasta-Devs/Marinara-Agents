@@ -72,6 +72,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.7.4",
+          "date": "2026-11-03",
+          "notes": "- **Stickers send on iPhone again.** Tapping a sticker in Messages sends it as a message. Before, the tap closed the sticker panel and nothing was sent.",
+          "highlight": false
+        },
+        {
           "version": "0.7.3",
           "date": "2026-11-03",
           "notes": "- **Love interests remember their Character Stories.** A Memory's Character Story, a Moment, and the scene the first time they wear a new look now join the story's timeline, marked private, as route chapters do. Its love interest always knows what happened there, and the others act only on what they could see. Before, it was one of the small memories that newer ones often pushed out. Stories in progress rebuild their timeline once, from the summaries they already have.",
@@ -183,12 +189,6 @@
           "version": "0.6.14",
           "date": "2026-11-01",
           "notes": "- **Confrontation and Closer choices speak to you.** Their option buttons sometimes talked about you in the third person (\"Say what she pays\") instead of speaking to you (\"Say what you pay\"), unlike every other choice in the story. The writer is now asked to word them as something you do, and to tell an action you pick as \"you\", like the rest of the scene. Confrontations and Closers written before this update keep their old wording.",
-          "highlight": false
-        },
-        {
-          "version": "0.6.13",
-          "date": "2026-11-01",
-          "notes": "- **A love interest's sprite leaves the stage when he does.** When he walked out of a scene, or you left him behind, his sprite used to stay on screen until the end of the beat, as if he were still there. The writer now marks who leaves on that line, and the stage clears from there; he comes back the moment he speaks again, and anyone still in the scene stays. Scenes written before this update keep their old staging.",
           "highlight": false
         }
       ]
