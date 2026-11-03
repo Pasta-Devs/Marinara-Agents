@@ -213,7 +213,13 @@ export function StickerPicker({ stickers, name, disabled, onPick }: StickerPicke
         aria-expanded={open}
         aria-controls={panelId}
         aria-disabled={disabled}
-        onClick={() => !disabled && setOpen((value) => !value)}
+        onClick={() => {
+          if (disabled) return;
+          // Closing from here gives focus back to this button, as Escape does: a press moves no focus (see the
+          // header), so the sticker that had it would otherwise leave with the panel and drop focus to the page.
+          if (open) close(true);
+          else setOpen(true);
+        }}
       >
         <Smile size={18} strokeWidth={1.9} aria-hidden="true" />
       </button>

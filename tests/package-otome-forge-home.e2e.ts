@@ -921,6 +921,12 @@ test("Otome Forge phone: a thread with typing, his sticker, her sticker and Clos
   await page.keyboard.press("Escape");
   await expect(root.getByRole("button", { name: "Stickers" })).toBeFocused();
   await expect(yours).toHaveCount(0);
+  // Closing it from its button gives focus back to the button too, never to the page.
+  await root.getByRole("button", { name: "Stickers" }).click();
+  await expect(yours.getByRole("button", { name: "Send the Laughing sticker" })).toBeFocused();
+  await root.getByRole("button", { name: "Stickers" }).click();
+  await expect(yours).toHaveCount(0);
+  await expect(root.getByRole("button", { name: "Stickers" })).toBeFocused();
 
   // Her words fail to send and the server never saved them: they come back to the box, unsent.
   await expect(root.locator(".of-typing")).toHaveCount(0);
