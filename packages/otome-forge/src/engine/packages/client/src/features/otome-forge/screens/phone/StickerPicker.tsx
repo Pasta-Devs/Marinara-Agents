@@ -4,8 +4,9 @@
 // same). A bubble shows a sticker by its id from the run view's book, a labelled chip when it has no image (or the
 // image fails), and a message saved before #2044 still shows his painted face (faceArt). A new sticker of his shows
 // "You unlocked a new sticker" (useStickerNotice). The panel closes on Escape, on a press outside the picker, and when
-// focus moves to something outside it. A blur with nowhere to go is ignored: Safari and iOS never focus a pressed
-// button, so pressing a sticker blurs the focused one with no target before its click lands.
+// focus moves to something outside it. A press inside the picker moves no focus: Safari and iOS never focus a pressed
+// button, and instead give focus to the nearest focusable ancestor (the Engine's main), which closed the panel
+// before the tap's click landed, so a tapped sticker never sent. A blur with nowhere to go is ignored too.
 // ponytail: the built-in set is the labelled icon chip: its emoji artwork (Codex image generation) is not shipped yet.
 // Upgrade path: ship stickers/<emotion>.webp as package assets (contributions.assets) and give `yours` their URLs.
 // ──────────────────────────────────────────────
@@ -196,7 +197,13 @@ export function StickerPicker({ stickers, name, disabled, onPick }: StickerPicke
     </div>
   );
   return (
-    <div ref={wrap} className="of-stickers" onKeyDown={onKeyDown}>
+    <div
+      ref={wrap}
+      className="of-stickers"
+      onKeyDown={onKeyDown}
+      // Keeps focus where it is on a press, so the sticker's click lands (see the header); keys and clicks still work.
+      onMouseDown={(event) => event.preventDefault()}
+    >
       <button
         ref={trigger}
         type="button"
