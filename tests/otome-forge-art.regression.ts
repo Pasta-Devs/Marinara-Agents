@@ -308,7 +308,9 @@ test("unknown background references use only the existing content repair and sav
   assert.equal(t.paid.length, 0);
 });
 
-test("a scene written ahead pays for its CG only once it is served, so an Ease off that drops it wastes no image", async (context) => {
+test("a scene written ahead paints its CG as soon as it is written, so it is ready when the reader gets there", async (context) => {
+  // The maintainer's, 2026-11-03: the key image should be waiting when its moment comes, as before 0.6.27. An Ease off
+  // that drops the scene written ahead lets its CG go, and the scene written again paints its own.
   for (const easeOff of [false, true]) {
     const runKey = easeOff ? "r-cgahead-bbbbbb" : "r-cgahead-aaaaaa";
     const t = await artWorld({
@@ -325,30 +327,34 @@ test("a scene written ahead pays for its CG only once it is served, so an Ease o
     assert.equal((await call("POST", beatPath, {}, { key: KEY, i: "0" })).status, 200);
     await t.settle();
     assert.ok(await readStoredBeat(t.store, t.runId, 1), "the lookahead wrote the scene with the CG");
-    // Its place is painted as it is written; give any other paint it started the time to end (the fake answers at once).
-    await until(() => t.paid.length > 0, "the place painted");
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    assert.equal(cgs(), 0, "nothing is paid for a CG nobody has been shown");
+    await until(
+      async () => (await readStoredBeat(t.store, t.runId, 1))?.cg?.art?.state === "ready",
+      "the CG painted as its scene was written, before it is served",
+    );
+    assert.equal(cgs(), 1);
     if (easeOff) {
       const eased = await call("POST", `${beatPath}/ease-off`, { segment: 1 }, { key: KEY, i: "0" });
       assert.equal(eased.status, 200, JSON.stringify(eased.body));
+      await until(() => t.deleted.length === 1, "the dropped scene's CG let go");
     }
     const served = await call("POST", beatPath, {}, { key: KEY, i: "1" });
     assert.equal(served.status, 200);
     // The reader reads the scene's art once as it opens and polls again only while something is pending, so the CG's
-    // record is written before the scene answers: without it the reader offers Paint while the paint runs unseen.
+    // record is there before the scene answers: without it the reader offers Paint while the paint runs unseen.
     const scene = await routesOf(registerArtRoutes, t.deps, runKey)("GET", "/runs/:run/art/scene", {
       key: KEY,
       i: "1",
     });
     assert.ok(scene.body.cg?.art, "the reader's first art read already finds the CG's record");
     assert.ok(served.body.beat.cg?.art, "and so does the scene served");
+    if (!easeOff) assert.equal(served.body.beat.cg.art.state, "ready", "ready when the reader gets there");
     await until(
       async () => (await readStoredBeat(t.store, t.runId, 1))?.cg?.art?.state === "ready",
-      "the CG painted once its scene is served",
+      "the scene's CG painted",
     );
-    assert.equal(cgs(), 1, easeOff ? "one CG, for the scene written again" : "one CG, for the scene served");
-    assert.deepEqual(t.deleted, [], "and no paid image was thrown away");
+    // Served, it is not painted again; the scene an Ease off wrote again paints its own, once.
+    assert.equal(cgs(), easeOff ? 2 : 1);
+    assert.equal(t.deleted.length, easeOff ? 1 : 0);
   }
 });
 

@@ -2,9 +2,10 @@
 // Otome Forge: story CGs (plan M2b "Story CGs"): painted onto the beat that holds them, unlocked once seen
 // ──────────────────────────────────────────────
 // A beat on a `cg` node may carry a brief (beat.cg: the segment it opens on, an English brief, the names of at most 3
-// people in the frame). When the beat is first served, its CG is painted in the background (beat.cg.art), unless Ask
-// before painting is on or the player reviews image prompts; then it waits for the tap, as a failed or stopped one
-// does. A beat written ahead pays for no CG until it is served, so one an Ease off or a Rewrite drops never did. The
+// people in the frame). Once the beat is written (the lookahead's included, so it is ready when the reader gets there),
+// its CG is painted in the background (beat.cg.art), unless Ask before painting is on or the player reviews image
+// prompts; then it waits for the tap, as a failed or stopped one does. Serving the beat paints it when it has no record
+// yet. A beat an Ease off or a Rewrite drops lets its CG go: a paint still waiting stops, a painted one is deleted. The
 // prompt is the brief plus each person's identity and outfit lines, the rating and an adult tag for every
 // person, sent as the prompt override, with each person's card, persona or portrait as a reference (at most 4). A brief
 // that set `explicit` is painted explicit only while Heat and the rating are both Explicit at the paid call, and then
@@ -13,8 +14,8 @@
 // image is deleted again. The album gains a CG only through POST .../art/cg/seen, once the CG is ready and the beat has
 // been read to the segment it opens on; a second report changes nothing. A beat eased off before the CG's segment never
 // shows it, so it is not painted (a paint still waiting in the lane stops). The beat writer calls queueScenePaints with
-// a beat's places once it is written, and startBeatCg (OtomeArt.prepareSceneCg) once it is served, awaiting only the
-// CG's record so the reader's first art read sees it pending or waiting.
+// a beat once it is written, and startBeatCg (OtomeArt.prepareSceneCg) once it is served, awaiting only the CG's
+// record so the reader's first art read sees it pending or waiting; the first to write the record paints (startPaint).
 import type {
   AlbumCg,
   Beat,
@@ -243,10 +244,15 @@ async function paintCg(
   });
 }
 
+/** Each CG whose record a start is writing, by run and owner (see startBeatCg). */
+const recording = new Map<string, Promise<void>>();
+
 /**
- * Writes the record of a served beat's CG: pending, or waiting for the tap (Ask before painting, or the player reviews
- * image prompts). Resolves once it is written, with the beat as it stands, while the paid paint goes on in
- * `painting`. A CG that already has a record is left as it is. Never throws.
+ * Writes the record of a beat's CG: pending, or waiting for the tap (Ask before painting, or the player reviews image
+ * prompts). Resolves once it is written, with the beat as it stands, while the paid paint goes on in `painting`. A CG
+ * that already has a record is left as it is. A start while another holds the CG's paint (the scene served just as the
+ * paint its writing started is under way) waits for that one's record and resolves the stored beat with it, so the
+ * reader's first art read sees the CG pending, never missing. Never throws.
  */
 export async function startBeatCg(
   deps: ArtDeps,
@@ -257,8 +263,16 @@ export async function startBeatCg(
   const idle = { beat: written, painting: Promise.resolve() };
   if (!written.cg || written.cg.art) return idle;
   const writtenAt = written.written.at;
-  const release = startPaint(runId, ownerOf(written.key, written.i, writtenAt));
-  if (!release) return idle;
+  const owner = ownerOf(written.key, written.i, writtenAt);
+  const key = `${runId}|${owner}`;
+  const release = startPaint(runId, owner);
+  if (!release) {
+    await recording.get(key);
+    const stored = await readBeat(deps.store, runId, written.key, written.i).catch(() => null);
+    return { ...idle, beat: stored?.written.at === writtenAt ? stored : written };
+  }
+  let recorded = () => {};
+  recording.set(key, new Promise<void>((resolve) => (recorded = resolve)));
   const stopped = (error: unknown) =>
     deps.runtime.logger.warn(
       "[otome-forge] painting cg %s stopped: %s",
@@ -284,6 +298,8 @@ export async function startBeatCg(
     stopped(error);
     return idle;
   } finally {
+    recording.delete(key);
+    recorded();
     if (!painting) release();
   }
 }
@@ -339,9 +355,9 @@ export async function paintCgNow(
 }
 
 /**
- * The beat's places and its CG, painted in the background (or left waiting for the tap). The beat writer calls it with
- * the places once per written beat, a rewrite included (the CG goes through startBeatCg once served); it never throws.
- * Resolves once every paint it started has ended (tests wait on it; the writer does not).
+ * The beat's places and its CG, painted in the background (or left waiting for the tap). The beat writer calls it once
+ * per written beat, a rewrite included; it never throws. Resolves once every paint it started has ended (tests wait on
+ * it; the writer does not).
  */
 export function queueScenePaints(deps: ArtDeps, runId: string, beat: Beat, options: PaintOptions): Promise<void> {
   return Promise.all([

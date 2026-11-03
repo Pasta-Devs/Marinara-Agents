@@ -7,8 +7,8 @@
 // once a new summary takes the timeline past TIMELINE_CEILING and its HEADROOM_TOKENS of leeway, everything before the
 // newest main chapter's entry is condensed into a new head of about 5000 words (half that size), and appending goes on.
 // That entry and every one after it stay apart (#2091): the main story's plans and scenes send that chapter in full and
-// leave its entry out of the timeline (S/story/canon.ts recallText), so its summary never goes in beside it. With
-// nothing before it to condense, everything but the newest entry is.
+// leave its entry out of the timeline (S/story/canon.ts recallText), so its summary does not go in beside it (the
+// ponytail below names when it still can). With nothing before it to condense, everything but the newest entry is.
 // ponytail: only the main story's previous chapter is kept apart, and not always. A route chapter's previous one (his
 // last route or repair chapter) older than the newest main chapter may be condensed; so is the newest main chapter's
 // entry once enough side chapters follow it to cross the ceiling again before the next main one (the fallback); each
