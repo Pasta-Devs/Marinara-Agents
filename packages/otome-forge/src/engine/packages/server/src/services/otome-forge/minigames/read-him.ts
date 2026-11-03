@@ -356,6 +356,8 @@ export async function recalledLine(
       runId,
       job: "structured",
       reader: unit.id,
+      // No timeline here: his own Character Stories come as recalls (S/memory/memory.ts).
+      ownStories: true,
       query: { cues, speakers: [unit.name] },
     });
     if (result.lagging) void Promise.resolve(memory.maintain({ runId, debugMode })).catch(() => undefined);

@@ -41,6 +41,10 @@
 // - A Character Story, Moment or first-wear beat (also the kit's `character-story`, a `story-<itemId>` chapter) joins
 //   the timeline in story order, as a route chapter does, titled and summarized as private to its love interest (the
 //   maintainer's, 2026-11-03: love interests must know what happened in them; as recalls they were often left out).
+//   The Home note, Read Him and Read Me carry no timeline, so they ask for them as recalls too (`ownStories`).
+//   ponytail: a run whose memory waits for Retry (a failed summary) when it moves to a new overview form sends its
+//   summaries as recent canon, the oldest giving way, until Retry rebuilds it: the kit holds every failure for
+//   Retry. The upgrade path is a form change that queues its rebuild whatever the saved status.
 // - Every summary and condensing call gets at least 10240 tokens of reply room for thinking models (the connection's
 //   own cap when it is lower); a chapter too long for one call is summarized in pieces (fitsSummary).
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
@@ -505,13 +509,13 @@ export function createOtomeMemory({
         const phase = result.lagging ? "stale" : "error";
         return { ...result, status: { ...result.status, phase }, overview: "", details: [], text: "" };
       }
-      // Each date this prompt may know that recent canon no longer carries, by its summary (a Character Story is the
-      // timeline's).
+      // Each date this prompt may know that recent canon no longer carries, by its summary. A Character Story is the
+      // timeline's, so only a prompt with no timeline (`ownStories`) takes it here too.
       const inRecent = new Set(recent.map((entry) => JSON.stringify([entry.kind, entry.id])));
       const sideStories = sources.filter(
         (source) =>
           source.kind === "character-story" &&
-          !isItemStoryKey(source.id) &&
+          (options.ownStories || !isItemStoryKey(source.id)) &&
           !inRecent.has(JSON.stringify([source.kind, source.id])) &&
           mayKnow(knowing, source.audience),
       );

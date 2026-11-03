@@ -196,6 +196,16 @@ test("a Character Story joins the timeline in story order, private to its love i
   // It is the timeline's, so it is no recall any more: his own prompt has it once.
   const recall = await memory.recall({ runId: RUN, job: "narration", cast: [KAI] });
   assert.ok(!(recall.recalls ?? []).some((item) => item.id === STORY.id), "not a recall too");
+  const reply = await memory.recall({ runId: RUN, job: "chat", reader: KAI });
+  assert.ok(
+    !(reply.recalls ?? []).some((item) => item.id === STORY.id),
+    "nor in his messages, which carry the timeline",
+  );
+  // The Home note, Read Him and Read Me carry no timeline: they take it as his newest recall.
+  const own = await memory.recall({ runId: RUN, job: "chat", reader: KAI, ownStories: true });
+  assert.equal(own.recalls?.at(-1)?.id, STORY.id, "his newest memory, where no timeline goes");
+  const hers = await memory.recall({ runId: RUN, job: "chat", reader: MIR, ownStories: true });
+  assert.ok(!(hers.recalls ?? []).some((item) => item.id === STORY.id), "and never another love interest's");
 });
 
 test("summaries run on the background lane with the summary wording; a private chat never reaches the overview", async () => {

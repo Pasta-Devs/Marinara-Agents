@@ -636,14 +636,19 @@ test("an owned Snapshot and a Character Story reach only their love interest's p
     // in their Character Stories); its rows and his Snapshot not at all. Kai's knows his story.
     await sendMessage(t.deps, t.runId, MIR, { text: "Still up?" }, { debugMode: false });
     const [mirChat] = t.prompts("chat");
-    const scene = mirChat!.indexOf("KAI-STORY-SCENE");
     assert.deepEqual(
       leaked(mirChat!, KAI_ONLY.slice(1)),
       [],
       "nothing of Kai's in Mireille's reply but his story's timeline entry",
     );
-    assert.ok(scene > mirChat!.indexOf("# Canon to date"), "his Character Story reaches her in the timeline");
-    assert.match(mirChat!.slice(Math.max(0, scene - 400), scene), /private/, "titled private to him");
+    // The timeline is "# Canon to date" up to the next heading; each entry is its title, then its text.
+    const canon = mirChat!.slice(mirChat!.indexOf("# Canon to date")).split(/\n# /u)[0]!;
+    assert.match(
+      canon,
+      /own story chapter "[^"\n]*" \(private[^\n]*\n[^\n]*KAI-STORY-SCENE/u,
+      "his Character Story reaches her in the timeline, under its private title",
+    );
+    assert.equal(mirChat!.split("KAI-STORY-SCENE").length, canon.split("KAI-STORY-SCENE").length, "and nowhere else");
     assert.ok(!mirChat!.includes("KAI-SNAPSHOT"), "his Snapshot never reaches the overview");
     assert.ok(mirChat!.includes("SHARED-QUAY"), "the shared story reaches her");
     await runForeground(t.runId, async () => undefined);
