@@ -317,6 +317,52 @@ test("the timeline grows with no call, has 1k of leeway, and is condensed only p
   );
 });
 
+test("condensing keeps the newest main chapter's entry apart, so a prompt that sends it in full never repeats it (#2091)", async () => {
+  // Night 3 is the newest main chapter; a Character Story after it takes the timeline past its ceiling. Before #2091
+  // everything but the Character Story was condensed, Night 3 with it, and the main story's next prompts sent Night 3
+  // in full beside its summary in the condensed head.
+  const long = (tag: string) => filler(tag, 3900);
+  const story: ForgeMemorySource = {
+    id: "story-lamp",
+    kind: "character-story",
+    title: "Kai's own Character Story",
+    content: "STORY: the lamp.",
+    order: 35000,
+    audience: [KAI],
+  };
+  const { memory, calls, fake } = await setup(undefined, {
+    maxContext: 131_072,
+    maxOutputTokens: null,
+    sources: [...mainChapters(2), { ...mainChapters(3)[2]!, content: "NIGHT-3: short." }, story],
+    replies: Array.from({ length: 12 }, () => (messages: Array<{ content: string }>) => {
+      const input = JSON.parse(messages.at(-1)!.content);
+      if (!input.source) return JSON.stringify({ summary: "CONDENSED" });
+      const id = String(input.source.id);
+      return JSON.stringify({ summary: id === "main-3" ? "SHORT-3" : long(`SUMMARY-${id}`) });
+    }),
+  });
+  assert.equal(await memory.maintain({ runId: RUN }), true);
+  assert.equal((await settle(memory)).phase, "ready");
+  const folds = calls.filter((call) => !JSON.parse(call.messages.at(-1)!.content).source);
+  assert.equal(folds.length, 1, "condensed once");
+  const folded = JSON.parse(folds[0]!.messages.at(-1)!.content).timeline as string;
+  assert.ok(folded.includes("SUMMARY-main-1") && folded.includes("SUMMARY-main-2"));
+  assert.ok(!folded.includes("SHORT-3") && !folded.includes("SUMMARY-story-lamp"), "Night 3 and after stay apart");
+  const saved = fake.rows.get(memoryId(RUN))!.data as { overview: { content: string } };
+  const timeline = parseTimeline(saved.overview.content);
+  assert.equal(timeline.head, "CONDENSED");
+  assert.deepEqual(
+    timeline.entries.map((entry) => entry.key),
+    [JSON.stringify(["chapter", "main-3"]), JSON.stringify(["character-story", "story-lamp"])],
+  );
+  // The main story's prompt leaves Night 3's entry out: only the head and the Character Story remain.
+  assert.equal(
+    renderTimeline(timeline, JSON.stringify(["chapter", "main-3"])).includes("SHORT-3"),
+    false,
+    "its summary never goes in beside it",
+  );
+});
+
 test("a small memory model condenses the timeline in pieces it can hold, each with its whole reply room (#2066)", async () => {
   // A 16k compress model: about 5500 tokens of prompt fit beside a 10240-token reply. Eight summaries of about 2000
   // tokens each take the timeline past 14k; the first seven are condensed a few at a time, oldest first.

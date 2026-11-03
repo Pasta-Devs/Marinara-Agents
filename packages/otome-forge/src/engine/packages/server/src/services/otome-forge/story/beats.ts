@@ -609,19 +609,13 @@ async function generateBeat(
   const present = units.filter((unit) => node.cast.includes(unit.id));
   // The previous chapter in full is the one this chapter's storyline continues: the main story's for a main chapter,
   // his own for his route or repair chapter; a date or a story takes the newest the scene may know. The story context
-  // is the chapter's, the same for each of its scenes (#2091): a main chapter's for the whole cast, as its plan was
-  // given it, any other's for everyone in its nodes. Only the recalls follow who is in this one.
+  // is the chapter's, the same for each of its scenes as for its plan (#2091); what only some may know follows who is
+  // in this one, with the recalls.
   const memory = await recallText(deps, runId, {
     job: "narration",
     cast: node.cast,
     apart: true,
-    chapter: {
-      key,
-      cast:
-        chapter.kind === "main"
-          ? Object.keys(run.state.lis).filter((li) => run.units.some((unit) => unit.id === li && unit.bible))
-          : [...new Set([...(chapter.li ? [chapter.li] : []), ...chapter.nodes.flatMap((item) => item.cast)])],
-    },
+    chapter: key,
     ...(chapter.kind === "main" ? { continues: "main" as const } : {}),
     ...((chapter.kind === "route" || chapter.kind === "repair") && chapter.li ? { continues: chapter.li } : {}),
     query: {

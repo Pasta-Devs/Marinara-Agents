@@ -26,9 +26,11 @@
 //   The knowledge boundary is left out: the summarizer writes no character's words (plan §1.7).
 // - #2066, the timeline: the kit's overview is the story's timeline (S/memory/timeline.ts). Each chapter's summary
 //   (the kit's detail record, written once, at most 1000 words by its prompt) is appended to it as it is folded in,
-//   with no model call; only once the timeline passes 13k tokens and 1k of leeway (14k) is everything but the newest
-//   entry condensed into about 5000 words (half that), and appending goes on. The condensing goes in as few calls as
-//   the memory model's own context allows (a small one gets the oldest entries a few at a time). Its size never
+//   with no model call; only once the timeline passes 13k tokens and 1k of leeway (14k) is everything before the
+//   newest main chapter's entry condensed into about 5000 words (half that), and appending goes on: that entry and the
+//   ones after it stay apart, so a prompt that sends that chapter in full never repeats its summary (#2091). The
+//   condensing goes in as few calls as the memory model's own context allows (a small one gets the oldest entries a few
+//   at a time). Its size never
 //   follows the model's context: the kit is given a fixed context (MEMORY_CONTEXT) once the memory model's own is
 //   known, so its budget only bounds a timeline that keeps failing to condense; a model of unknown context waits for
 //   configuration.
@@ -78,6 +80,7 @@ import {
   cleanSummary,
   crossedCeiling,
   foldedPart,
+  keptPart,
   parseTimeline,
   renderTimeline,
   serializeTimeline,
@@ -359,7 +362,8 @@ export function createOtomeMemory({
       };
       if (request.kind !== "overview") return ask(request.kind, withRules(request, job));
       // The kit folds one record into the overview: here that is appending its summary to the timeline, then, once
-      // the timeline crossed its ceiling, condensing all but that newest entry (#2066).
+      // the timeline crossed its ceiling, condensing everything before the newest main chapter's entry (#2066, #2091;
+      // S/memory/timeline.ts).
       const { previousOverview, records } = JSON.parse(request.messages.at(-1)?.content ?? "{}") as {
         previousOverview?: string;
         records?: Array<{ id: string; kind: string; title?: string; content?: string }>;
@@ -394,7 +398,7 @@ export function createOtomeMemory({
         head = cleanSummary(await ask("timeline", condense({ head, entries: pending.slice(0, take) })));
         pending = pending.slice(take);
       }
-      return serializeTimeline({ head, entries: timeline.entries.slice(-1) });
+      return serializeTimeline({ head, entries: keptPart(timeline) });
     },
     estimateTokens: estimateTextTokens,
     // #2066: recall ranks nothing by meaning any more, so no record is embedded and no query either.

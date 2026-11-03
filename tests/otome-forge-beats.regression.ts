@@ -2508,7 +2508,7 @@ test("Side with (#2046): the game sets its effects, the pick moves affection onc
   assert.ok(source!.content.includes("[Canonical player choice by Ines: Back Kai's plan.]"), "it is summarized too");
 });
 
-test("a chapter's calls are given the story context its first call was, for its whole cast; only the recalls follow each (#2091)", async () => {
+test("a chapter's calls share the story context its first call was given; what only some may know follows each (#2091)", async () => {
   const t = await storyWorld({ runKey: "r-held-aaaaaa" });
   await completeChapter(
     t,
@@ -2522,18 +2522,24 @@ test("a chapter's calls are given the story context its first call was, for its 
     "PRIVATE-LEDGER: she burns a page.",
     "2026-10-28T10:00:00.000Z",
   );
-  // A memory that moves on between calls (her chapter's summary landing) and recalls each call's own cast.
+  await completeChapter(
+    t,
+    { key: "main-2", kind: "main", number: 2, lead: KAI, title: "Night 2" },
+    "NIGHT-TWO: the bell.",
+    "2026-10-28T11:00:00.000Z",
+  );
+  // A memory that moves on between calls (summaries landing): Night 1 and her route chapter are recent canon, hers
+  // only for a cast she is in, and each call recalls its own cast's small memories.
   let landed = 0;
-  const recalled: string[][] = [];
   const memory = {
-    recall: async (options: { cast?: string[] }) => {
-      recalled.push([...(options.cast ?? [])]);
-      return {
-        status: { phase: "ready" },
-        overview: "",
-        lagging: false,
-        maxContext: null,
-        recent: (options.cast ?? []).includes(MIR)
+    recall: async (options: { cast?: string[] }) => ({
+      status: { phase: "ready" },
+      overview: "",
+      lagging: false,
+      maxContext: null,
+      recent: [
+        { id: "main-1", kind: "chapter", title: "Night 1", content: `NIGHT-ONE-SUMMARY-${landed}`, summary: true },
+        ...((options.cast ?? []).includes(MIR)
           ? [
               {
                 id: `route-${MIR}-3`,
@@ -2543,42 +2549,54 @@ test("a chapter's calls are given the story context its first call was, for its 
                 summary: true,
               },
             ]
-          : [],
-        recalls: (options.cast ?? []).map((li) => ({ id: `note-${li}`, title: `${li}'s note`, content: `NOTE-${li}` })),
-      };
-    },
+          : []),
+      ],
+      recalls: (options.cast ?? []).map((li) => ({ id: `note-${li}`, title: `${li}'s note`, content: `NOTE-${li}` })),
+    }),
     maintain: async () => false,
   } as unknown as StoryMemory;
   const deps = { store: t.store, memory };
-  const chapter = { key: "main-2", cast: [KAI, MIR] };
-  const scene = (cast: string[], key = chapter.key) =>
-    recallText(deps, t.runId, { job: "narration", cast, apart: true, continues: "main", chapter: { ...chapter, key } });
+  const scene = (cast: string[], chapter = "main-3") =>
+    recallText(deps, t.runId, { job: "narration", cast, apart: true, continues: "main", chapter });
 
   const first = await scene([KAI]);
-  assert.ok(first.text.includes("# Previous chapter in full: Night 1\n\nNIGHT-ONE"), first.text);
-  assert.ok(
-    first.text.includes(`# Recent canon summary: ${MIREILLE_LEDGER}\nLEDGER-0`),
-    "the whole cast's, named as hers",
-  );
+  assert.ok(first.text.includes("# Previous chapter in full: Night 2\n\nNIGHT-TWO"), first.text);
+  assert.ok(first.text.includes("# Recent canon summary: Night 1\nNIGHT-ONE-SUMMARY-0"));
   assert.match(first.recalls!.text, new RegExp(`NOTE-${KAI}`, "u"));
-  assert.doesNotMatch(first.recalls!.text, new RegExp(`NOTE-${MIR}`, "u"), "the recalls are the scene's own");
+  assert.doesNotMatch(first.recalls!.text, new RegExp(`NOTE-${MIR}|LEDGER`, "u"), "only what Kai's scene may know");
   landed = 1;
   const second = await scene([MIR]);
-  assert.equal(second.text, first.text, "the same story context, though her summary landed and the cast changed");
+  assert.equal(second.text, first.text, "the same story context, though a summary landed and the cast changed");
   assert.deepEqual(second.optional, first.optional);
+  assert.ok(!second.text.includes("LEDGER"), "her own chapter is never in the part every scene shares");
+  assert.ok(
+    second.recalls!.text.includes(`# Recent canon summary: ${MIREILLE_LEDGER}\nLEDGER-1`),
+    second.recalls!.text,
+  );
   assert.match(second.recalls!.text, new RegExp(`NOTE-${MIR}`, "u"));
   assert.doesNotMatch(second.recalls!.text, new RegExp(`NOTE-${KAI}`, "u"));
-  // Without a chapter, a prompt is given the memory as it is now, for its own cast.
+  // Without a chapter, a prompt is given the memory as it is now, for its own cast, as before.
   const now = await recallText(deps, t.runId, { job: "narration", cast: [MIR], apart: true, continues: "main" });
-  assert.ok(now.text.includes("LEDGER-1"));
+  assert.ok(now.text.includes("NIGHT-ONE-SUMMARY-1") && now.text.includes("LEDGER-1"));
   // The next chapter, or a chapter completed meanwhile, works it out again.
-  assert.ok((await scene([KAI], "main-3")).text.includes("LEDGER-1"));
+  assert.ok((await scene([KAI], "main-4")).text.includes("NIGHT-ONE-SUMMARY-1"));
   landed = 2;
   await completeChapter(
     t,
     { key: "date-1", kind: "date", li: KAI, lead: KAI, title: "Jellyfish Hour" },
     "KAI-DATE: Kai counts jellyfish.",
-    "2026-10-28T11:00:00.000Z",
+    "2026-10-28T12:00:00.000Z",
   );
-  assert.ok((await scene([KAI], "main-3")).text.includes("LEDGER-2"));
+  assert.ok((await scene([KAI], "main-4")).text.includes("NIGHT-ONE-SUMMARY-2"));
+
+  // With no memory (the canonical history), his date and her route chapter are each their own scene's, in full, after
+  // the shared part; the shared part holds neither.
+  const history = (cast: string[]) =>
+    recallText({ store: t.store }, t.runId, { job: "narration", cast, continues: "main", chapter: "main-5" });
+  const kai = await history([KAI]);
+  const mir = await history([MIR]);
+  assert.equal(mir.text, kai.text);
+  for (const text of [kai.text]) assert.ok(!text.includes("KAI-DATE") && !text.includes("PRIVATE-LEDGER"), text);
+  assert.ok(kai.recalls!.text.includes("KAI-DATE") && !kai.recalls!.text.includes("PRIVATE-LEDGER"));
+  assert.ok(mir.recalls!.text.includes("PRIVATE-LEDGER") && !mir.recalls!.text.includes("KAI-DATE"));
 });
