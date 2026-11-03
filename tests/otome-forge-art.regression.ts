@@ -621,7 +621,7 @@ test("a CG's loopback request carries the override and at most four references, 
   assert.equal((await readStoredBeat(t.store, t.runId, 1))?.cg?.art?.state, "ready");
   const generation = requests.find((request) => request.path === "/api/characters/avatar-generation");
   const body = JSON.parse(String(generation?.body));
-  assert.equal(body.referenceImages.length, 4, "one reference per person, four at most");
+  assert.equal(body.referenceImages.length, 3, "one reference per person, three people at most");
   assert.equal(body.promptOverrides.length, 1);
   assert.equal(body.promptOverrides[0].id, "avatar:kai", "the override is matched by the first person's first name");
   assert.equal(body.name, "Kai");
@@ -629,9 +629,16 @@ test("a CG's loopback request carries the override and at most four references, 
   assert.deepEqual([body.width, body.height], [768, 1344]);
   const { prompt, negativePrompt } = body.promptOverrides[0];
   assert.match(prompt, /^All of them at the lamp\. Kai: tall man, grey eyes; keeper's coat\./);
-  assert.match(prompt, /Ines: short dark hair; oilskin\./);
-  assert.match(prompt, /adult man, adult woman, adult person/);
-  assert.doesNotMatch(prompt, /Harbour Master/, "four people at most");
+  assert.doesNotMatch(prompt, /Ines|Harbour Master/, "three people at most");
+  // Which picture is whose, and how many people to draw, so nobody is drawn twice or merged (2026-11-03).
+  assert.match(
+    prompt,
+    /Reference images, in order: Kai; Mireille; Sol\. Use them only for each person's face, hair, build and clothing, never for the pose, framing or background\./,
+  );
+  assert.match(
+    prompt,
+    /Draw exactly three people, each appearing once, with two arms, two legs and five fingers on each visible hand\./,
+  );
   assert.doesNotMatch(negativePrompt, /extra people/);
   assert.match(negativePrompt, /child, childlike/);
 });

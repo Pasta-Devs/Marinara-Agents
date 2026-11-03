@@ -100,10 +100,43 @@ export interface CgSubject {
   person: CgPerson;
   /** Whose likeness the reference keeps; none for someone the story only names. */
   image?: ImageSubject;
+  /** The painted look they wear, if any: their one reference beside others (cgSubjects). */
+  wornUrl?: string;
 }
 
-/** The CG's people, in the brief's order: a love interest, the protagonist, or someone only named (at most 4). */
+/**
+ * The CG's people, in the brief's order: a love interest, the protagonist, or someone only named (at most
+ * CG_PEOPLE_MAX). Alone, a person is sent as who they are and the look they wear (two references). With others, each
+ * person is ONE reference, their worn look when they have one: two full-body pictures of each person in the same
+ * standing pose made the model merge bodies and draw extra limbs (the maintainer's report, 2026-11-03).
+ */
 export function cgSubjects(cast: readonly string[], units: readonly Unit[], player: Player): CgSubject[] {
+  const subjects = castSubjects(cast, units, player);
+  if (subjects.length < 2) return subjects;
+  return subjects.map((subject) =>
+    subject.image && subject.wornUrl
+      ? { ...subject, image: { kind: "character", portrait: subject.wornUrl } }
+      : subject,
+  );
+}
+
+/**
+ * Whom each reference a CG of these subjects sends shows, in the order the kit sends them (every person's likeness,
+ * then a lone person's worn look): what cgPrompt names, so the model draws each person once from their own picture.
+ * ponytail: a reference that fails to load (a missing card file) shifts the ones after it; the kit logs it. The upgrade
+ * path is the kit returning which references it sent.
+ */
+export function cgReferenceLabels(subjects: readonly CgSubject[]): string[] {
+  const first = (subject: CgSubject) => subject.person.name.trim().split(/\s+/)[0] || subject.person.name;
+  const shown = subjects.filter((subject) => subject.image);
+  const labels = shown.map(first);
+  const alone = shown.length === 1 ? shown[0]! : undefined;
+  if (alone?.image?.wornOutfit) labels.push(`${first(alone)}'s outfit`);
+  return labels;
+}
+
+/** The CG's people as the brief names them, each with their likeness and the look they wear. */
+function castSubjects(cast: readonly string[], units: readonly Unit[], player: Player): CgSubject[] {
   const subjects: CgSubject[] = [];
   const seen = new Set<string>();
   for (const name of cast) {
@@ -130,6 +163,7 @@ export function cgSubjects(cast: readonly string[], units: readonly Unit[], play
           outfits: unit.outfits,
           ...(worn ? { wornOutfit: worn.id } : {}),
         },
+        ...(worn?.url ? { wornUrl: worn.url } : {}),
       });
     } else if (isPlayer) {
       const worn = player.wornOutfit ? player.outfits.find((outfit) => outfit.id === player.wornOutfit) : undefined;
@@ -147,6 +181,7 @@ export function cgSubjects(cast: readonly string[], units: readonly Unit[], play
           outfits: player.outfits,
           ...(worn ? { wornOutfit: worn.id } : {}),
         },
+        ...(worn?.url ? { wornUrl: worn.url } : {}),
       });
     } else {
       subjects.push({ person: { name: name.trim(), identityLine: "", outfitLine: "", presentation: "person" } });
@@ -172,6 +207,7 @@ async function buildCg(deps: ArtDeps, runId: string, beat: Beat, edited: Partial
       style,
       use: "cg",
       explicit: cg.explicit === true,
+      references: cgReferenceLabels(subjects),
     },
     edited,
   );

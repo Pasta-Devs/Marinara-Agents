@@ -153,13 +153,16 @@ function fakeImages() {
   const paid: PortraitRequest[] = [];
   const deleted: string[] = [];
   const control = { fail: false, hold: null as Promise<void> | null };
+  const paint = async (request: PortraitRequest) => {
+    paid.push(request);
+    if (control.hold) await control.hold;
+    if (control.fail) throw new Error("the image provider is down");
+    return { url: `/api/global-gallery/file/keepsake-${paid.length}.png`, id: `keepsake${paid.length}` };
+  };
   const client: ImageClient = {
-    async generatePortrait(request) {
-      paid.push(request);
-      if (control.hold) await control.hold;
-      if (control.fail) throw new Error("the image provider is down");
-      return { url: `/api/global-gallery/file/keepsake-${paid.length}.png`, id: `keepsake${paid.length}` };
-    },
+    generatePortrait: paint,
+    // The keepsake is a scene of the two of them (2026-11-03), painted as a story CG is.
+    generateBannerArt: (request) => paint(request as unknown as PortraitRequest),
     async styleProfile() {
       return { styleText: "", positiveTags: "", negativeTags: "" };
     },
@@ -917,6 +920,14 @@ test("the keepsake paints only when asked, once the date is over, and never twic
   assert.equal(failed.body.paint.state, "failed");
   assert.equal(t.art.paid.length, 1);
   assert.ok(t.art.paid[0]!.prompt.includes(appearance), "the actual image request keeps its tail as well as its start");
+  // Both of them, one reference each, named in the prompt: with only his two pictures the model drew him twice.
+  const units = (t.art.paid[0] as unknown as { units: unknown[] }).units;
+  assert.equal(units.length, 2, JSON.stringify(units));
+  assert.match(
+    t.art.paid[0]!.prompt,
+    /Reference images, in order: Kai; [^.;]+\. Use them only for each person's face/u,
+  );
+  assert.match(t.art.paid[0]!.prompt, /Draw exactly two people, each appearing once/u);
   t.art.control.fail = false;
 
   // An edited prompt keeps its safety tags; two taps at once paint once.

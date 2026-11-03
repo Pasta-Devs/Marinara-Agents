@@ -72,7 +72,8 @@ import {
   STARLIGHT_EARNINGS,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import { sameName } from "../../../../../client/src/features/otome-forge/shared/faces.js";
-import { galleryRef, worldStyle, type ImageClient, type ImageSubject } from "../art/image-client.js";
+import { cgReferenceLabels, cgSubjects } from "../art/cg.js";
+import { galleryRef, worldStyle, type ImageClient } from "../art/image-client.js";
 import { imagesOf, type ArtDeps } from "../art/paint.js";
 import {
   type ImagePrompt,
@@ -616,16 +617,11 @@ async function keepsakeSubject(deps: DateDeps, runId: string, key: string) {
       presentation: "person",
     },
   ];
-  // ponytail: his card or portrait is the one reference (the M1 client's generatePortrait takes one subject); the
-  // upgrade path is M2b's two-subject CG painter, which sends hers too.
-  const image: ImageSubject = {
-    kind: "character",
-    ...(unit.cardId ? { cardId: unit.cardId } : {}),
-    ...(unit.portrait ? { portrait: unit.portrait } : {}),
-    outfits: unit.outfits,
-    ...(unit.wornOutfit ? { wornOutfit: unit.wornOutfit } : {}),
-  };
-  return { run, chapter, plan: chapter.date, unit, people, image };
+  // Both of them, one reference each in that order, as a story CG sends them: with only his two pictures, the model
+  // drew him twice or gave her his body (the maintainer's report, 2026-11-03).
+  const subjects = cgSubjects([unit.name, run.player.name], [unit], run.player);
+  const units = subjects.flatMap((subject) => (subject.image ? [subject.image] : []));
+  return { run, chapter, plan: chapter.date, unit, people, units, references: cgReferenceLabels(subjects) };
 }
 
 /** POST /runs/:run/art/keepsake/prompt: the prompt the paint would send (the review dialog shows it). */
@@ -635,9 +631,9 @@ export async function keepsakePromptFor(
   key: string,
   edited: Partial<ImagePrompt> = {},
 ): Promise<ImagePrompt> {
-  const { run, plan, people } = await keepsakeSubject(deps, runId, key);
+  const { run, plan, people, references } = await keepsakeSubject(deps, runId, key);
   const style = await worldStyle(imagesOf(deps), run.world.images);
-  return keepsakePrompt({ brief: plan.keepsake.brief, people, world: run.world, style }, edited);
+  return keepsakePrompt({ brief: plan.keepsake.brief, people, world: run.world, style, references }, edited);
 }
 
 /** Saves the keepsake's record on the date's chapter; null when the chapter is gone (the run was deleted). */
@@ -658,7 +654,7 @@ export async function paintKeepsake(
   key: string,
   { prompt, negativePrompt, debugMode }: Partial<ImagePrompt> & { debugMode: boolean },
 ): Promise<Paint> {
-  const { run, plan, unit, people, image } = await keepsakeSubject(deps, runId, key);
+  const { run, plan, unit, people, units, references } = await keepsakeSubject(deps, runId, key);
   if (plan.keepsake.art?.state === "ready") return plan.keepsake.art;
   const connectionId = run.world.images.connectionId;
   if (!connectionId) throw new OtomeForgeError(503, "This world has no image connection.", "no-connection");
@@ -672,17 +668,18 @@ export async function paintKeepsake(
     const images = imagesOf(deps);
     const style = await worldStyle(images, run.world.images);
     const built = keepsakePrompt(
-      { brief: plan.keepsake.brief, people, world: run.world, style },
+      { brief: plan.keepsake.brief, people, world: run.world, style, references },
       { prompt, negativePrompt },
     );
     if (!(await saveKeepsake(deps, runId, key, { state: "pending", at: new Date().toISOString() })))
       throw runNotFound();
     let painted: { url: string; id?: string };
     try {
-      painted = await images.generatePortrait({
+      painted = await images.generateBannerArt({
         connectionId,
-        name: unit.name,
-        unit: image,
+        // The Engine matches the override as `avatar:<slug of the first person's first name>`.
+        name: unit.name.split(/\s+/)[0] || "Keepsake",
+        units,
         prompt: built.prompt,
         negativePrompt: built.negativePrompt,
         ...SCENE_SIZE,

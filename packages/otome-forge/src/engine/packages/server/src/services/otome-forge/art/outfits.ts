@@ -41,7 +41,7 @@ import { normalizeBanner, normalizeItem } from "../schemas/wish.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { withPersonaImageAppearance } from "../setup/cast.js";
 import type { OtomeArt } from "./expressions.js";
-import { cgSubjects } from "./cg.js";
+import { cgReferenceLabels, cgSubjects } from "./cg.js";
 import { galleryRef, worldStyle, type ImageSubject, type PaintedImage } from "./image-client.js";
 import {
   imagesOf,
@@ -235,6 +235,7 @@ async function buildItemArt(
         style,
         use: explicit ? "cg" : "clothed",
         explicit,
+        references: cgReferenceLabels(subjects),
       },
       edited,
     );
@@ -492,15 +493,25 @@ async function buildPair(deps: ArtDeps, runId: string, hers: string, edited: Par
       presentation: "person",
     },
   ];
-  const brief = `A couple portrait of ${first(unit.name, "them")} and ${first(run.player.name, "the protagonist")} together, side by side and in full view, sharing a quiet moment, soft romantic light.`;
-  const prompt = cgPrompt({ brief, people, world: run.world, style, use: "clothed" }, edited);
-  // Keep his selected card's neutral identity and this exact pair look; her painted look stays her reference.
-  const units: ImageSubject[] = [
+  const him = first(unit.name, "them");
+  const her = first(run.player.name, "the protagonist");
+  // Knee-up rather than "in full view": two full bodies in a portrait frame leave each hand a few dozen pixels.
+  const brief = `A couple portrait of ${him} and ${her} together, side by side and shown from the knees up, sharing a quiet moment, soft romantic light.`;
+  const prompt = cgPrompt(
     {
-      kind: "character",
-      ...(unit.cardId ? { cardId: unit.cardId, outfits: [hisOutfit], wornOutfit: hisOutfit.id } : {}),
-      portrait: hisOutfit.url,
+      brief,
+      people,
+      world: run.world,
+      style,
+      use: "clothed",
+      references: [`${him} in this outfit`, `${her} in this outfit`],
     },
+    edited,
+  );
+  // One reference each, the pair's looks (each painted from its wearer's likeness): with his card's full body beside
+  // his look, the model got two standing pictures of him and merged bodies (2026-11-03).
+  const units: ImageSubject[] = [
+    { kind: "character", portrait: hisOutfit.url },
     { kind: "character", portrait: herOutfit.url },
   ];
   return { ...pair, ...prompt, units, name: first(unit.name, "Couple") };

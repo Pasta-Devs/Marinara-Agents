@@ -50,7 +50,7 @@ import {
   type WishOpenResult,
   type WishView,
 } from "../../../../../client/src/features/otome-forge/shared/wish.js";
-import { cgSubjects } from "../art/cg.js";
+import { cgReferenceLabels, cgSubjects } from "../art/cg.js";
 import { worldStyle, type ImageSubject, type PaintedImage } from "../art/image-client.js";
 import { bannerArtOwner, itemArtOwner } from "../art/outfits.js";
 import {
@@ -569,6 +569,7 @@ async function buildBannerArt(deps: WishDeps, runId: string, banner: Banner, edi
         style,
         use: explicit ? "cg" : "clothed",
         explicit,
+        references: cgReferenceLabels(subjects),
       },
       edited,
     );

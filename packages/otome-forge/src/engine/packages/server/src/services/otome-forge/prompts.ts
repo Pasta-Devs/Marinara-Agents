@@ -1985,7 +1985,7 @@ export function beatMessages({
       : []),
     ...(node.cg
       ? [
-          `- cg: this node MAY carry one key image, only when it holds a story-defining moment: add ${cgShape(world).slice(2)} to the JSON object. at: the index of the segment it opens on. brief: one or two plain English sentences on where and how the moment is shot (place, light, framing, what the bodies do), never anyone's looks. cast: the exact names of at most 3 people in the frame. Omit "cg" when the node has no such moment.`,
+          `- cg: this node MAY carry one key image, only when it holds a story-defining moment: add ${cgShape(world).slice(2)} to the JSON object. at: the index of the segment it opens on. brief: one to four plain English sentences on where and how the moment is shot (place, light, framing, what the bodies do), never anyone's looks. ${BRIEF_STAGING} cast: the exact names of at most ${CG_PEOPLE_MAX} people in the frame. Omit "cg" when the node has no such moment.`,
           ...briefRule(world),
         ]
       : []),
@@ -2428,7 +2428,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     ...(backgrounds ? [PLACE_REUSE_RULE] : []),
     ...(node.cg
       ? [
-          '- cg: one key image of the opening, only when it holds a story-defining moment. at: the index of the opening segment it opens on. brief: one or two plain English sentences on where and how the moment is shot, never anyone\'s looks. cast: the exact names of at most 3 people in the frame. Omit "cg" otherwise.',
+          `- cg: one key image of the opening, only when it holds a story-defining moment. at: the index of the opening segment it opens on. brief: one to four plain English sentences on where and how the moment is shot, never anyone's looks. ${BRIEF_STAGING} cast: the exact names of at most ${CG_PEOPLE_MAX} people in the frame. Omit "cg" otherwise.`,
           ...briefRule(world),
         ]
       : []),
@@ -2513,7 +2513,7 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
     ...(backgrounds ? [PLACE_REUSE_RULE] : []),
     ...(node.cg
       ? [
-          '- cg: one key image of the opening, only when it holds a story-defining moment. at: the index of the opening segment it opens on. brief: one or two plain English sentences on where and how the moment is shot, never anyone\'s looks. cast: the exact names of at most 3 people in the frame. Omit "cg" otherwise.',
+          `- cg: one key image of the opening, only when it holds a story-defining moment. at: the index of the opening segment it opens on. brief: one to four plain English sentences on where and how the moment is shot, never anyone's looks. ${BRIEF_STAGING} cast: the exact names of at most ${CG_PEOPLE_MAX} people in the frame. Omit "cg" otherwise.`,
           ...briefRule(world),
         ]
       : []),
@@ -3469,7 +3469,7 @@ export function datePlanMessages({
     `- beats: exactly ${DATE_BEATS} guides in play order, 2 to 4 sentences each, for the narrator: what happens, what ${name} wants in that scene besides the protagonist, the moment where what the protagonist does matters to ${name} (the scene's one choice goes there), and where it leaves things. The evening builds: arriving, the heart of it, how it ends.`,
     `- goesWrong: true when the evening should stumble somewhere real (an old wound brushed, a jealousy, an interruption, a misread), when the story so far gives it a reason; false for an evening that goes as hoped.`,
     `- seed: only when goesWrong: the conflict the stumble plants. type from: ${ANGST_TYPES.join(", ")}${recent.length ? `, never one of ${name}'s last kinds of angst (${recent.join(", ")})` : ""}; text: one line on it. Omit it otherwise.`,
-    `- keepsake.brief: one or two plain English sentences on the picture that would remember this date: where and how it is shot (place, light, framing, what the two of them are doing), never anyone's looks.`,
+    `- keepsake.brief: one to four plain English sentences on the picture that would remember this date: where and how it is shot (place, light, framing, what the two of them are doing), never anyone's looks. ${BRIEF_STAGING}`,
     `- tags: content tags a reader should see before it starts, from: ${CHAPTER_TAGS.join(", ")}. [] when none apply.`,
     "RULES",
     `- The date is the protagonist and ${name}; anyone else stays at the edges of it.`,
@@ -3833,17 +3833,17 @@ export function bannerPlanMessages(input: BannerPlanInput): OtomeMessage[] {
       world.images.rating === "sfw"
         ? ""
         : "- Every look stays a complete clothed look: it may be revealing (lingerie, swimwear), never nude.",
-      "- The key image brief is one or two English sentences on where and how the moment is framed (place, light, what they are doing), never anyone's looks.",
+      `- The key image brief is one to four English sentences on where and how the moment is framed (place, light, what they are doing), never anyone's looks. ${BRIEF_STAGING}`,
       briefRule ? `- ${briefRule}` : "",
       explicitArt
         ? '- When "explicit" is true, also write clothedBrief: the same moment just before or after it, everyone clothed, in one or two English sentences. It is painted instead if the image settings are lowered first.'
         : "",
       moments
-        ? `- Each 4★'s cgBrief is one or two English sentences for its Moment's illustration: the place, light and what they are doing, never anyone's looks. Whatever its premise holds, the picture follows this: ${momentRule} cgCast names only that love interest and, when shown, the protagonist.`
+        ? `- Each 4★'s cgBrief is one to four English sentences for its Moment's illustration: the place, light and what they are doing, never anyone's looks. ${BRIEF_STAGING} Whatever its premise holds, the picture follows this: ${momentRule} cgCast names only that love interest and, when shown, the protagonist.`
         : "",
       `- Exactly ${BANNER_SIZES.four} entries in "four" and ${BANNER_SIZES.three} in "snapshots". Use the love interest ids given below for "li".`,
       `- Snapshots: 2–3 sentences each, a small everyday moment between one love interest and the protagonist, in the third person. Spread them across the cast, at least two with ${featured.name}. Each one stays within what that love interest has seen or been told.`,
-      "- Each Snapshot's cgBrief illustrates its saved vignette: the actual place, light and action, never an invented plot turn or anyone's looks. Write the brief in English; cgCast names only that love interest and, when shown, the protagonist. Its picture stays clothed and within the Snapshot's SFW contract.",
+      `- Each Snapshot's cgBrief illustrates its saved vignette: the actual place, light and action, never an invented plot turn or anyone's looks. ${BRIEF_STAGING} Write the brief in English; cgCast names only that love interest and, when shown, the protagonist. Its picture stays clothed and within the Snapshot's SFW contract.`,
       "- Every love interest keeps their own voice, wants and mask; tenderness before stage 4 costs them something.",
       "- New ideas only: never repeat an earlier banner's title or situation.",
     ]
@@ -4468,8 +4468,18 @@ const PLACE_NEGATIVE =
 export const CG_FRAMING = "cinematic composition, detailed background, dramatic lighting, emotional moment";
 const CG_NEGATIVE =
   "text, captions, logos, watermarks, borders, UI, collage layouts, duplicate faces, cropped-off heads, extra limbs";
-/** At most this many people are drawn in a CG (and sent as references). */
-export const CG_PEOPLE_MAX = 4;
+/** At most this many people are drawn in a CG (and sent as references), as every brief rule says. */
+export const CG_PEOPLE_MAX = 3;
+
+/**
+ * How every image brief stages its people (the maintainer's report, 2026-11-03: three legs, six fingers): one clear
+ * interaction with the fewest people it needs, who is where, where their hands are, and a closer framing when bodies
+ * touch, so the image model never has to guess where each limb goes.
+ */
+export const BRIEF_STAGING =
+  "Stage one clear interaction with the fewest people it needs (two is best): who is where (left or right, in front or behind), where each person's hands and arms are, and a framing (waist-up or knee-up whenever they touch).";
+
+const COUNT_WORDS = ["no one", "one person", "two people", "three people"] as const;
 
 const sentence = (value: string) => {
   const text = value.trim().replace(/[,\s]+$/, "");
@@ -4542,6 +4552,11 @@ export interface CgInput {
   explicit?: boolean;
   /** The shot's framing tags; CG_FRAMING by default (a keepsake has its own). */
   framing?: string;
+  /**
+   * Whom each reference image shows, in the order they are sent (S/art/cg.ts cgReferenceLabels); said in sentence
+   * prompts so the model draws each person once from their own picture. None: the brief says it (the Photo Shoot).
+   */
+  references?: readonly string[];
 }
 
 /** A story CG: the brief, each person's look, then the framing, rating and adult tags for every person. */
@@ -4558,6 +4573,23 @@ export function cgPrompt(input: CgInput, edited: Partial<ImagePrompt> = {}): Ima
     const first = person.name.trim().split(/\s+/)[0] ?? "";
     return look.length ? sentence(`${first}: ${look.join("; ")}`) : "";
   });
+  // Sentence prompts say how many people there are and which picture is whose: unlabelled full-body references of
+  // people standing, beside a brief where they touch, are how bodies come out merged or with extra limbs (2026-11-03).
+  const tagged = style.tagged === true;
+  const staging = tagged
+    ? []
+    : [
+        input.references?.length
+          ? sentence(
+              `Reference images, in order: ${input.references.join("; ")}. Use them only for each person's face, hair, build and clothing, never for the pose, framing or background`,
+            )
+          : "",
+        people.length
+          ? sentence(
+              `Draw exactly ${COUNT_WORDS[people.length] ?? `${people.length} people`}, ${people.length === 1 ? "once" : "each appearing once"}, with two arms, two legs and five fingers on each visible hand`,
+            )
+          : "",
+      ];
   return finish(
     world,
     () => ({
@@ -4565,6 +4597,7 @@ export function cgPrompt(input: CgInput, edited: Partial<ImagePrompt> = {}): Ima
         style.styleText,
         sentence(input.brief),
         ...looks,
+        ...staging,
         mergeTags(input.framing ?? CG_FRAMING, required, style.positiveTags),
       ]
         .filter(Boolean)
@@ -4709,6 +4742,8 @@ export function stickerPrompt(input: StickerInput, edited: Partial<ImagePrompt> 
 
 /** The shot: the two of them posing for the camera, then the place's own English tags. */
 const PHOTO_FRAMING = "two people, couple photo, posing for the camera, detailed background";
+/** A pose where they face each other: a candid shot, never also "posing for the camera" (twisted necks). */
+const PHOTO_TURNED_FRAMING = "two people, couple photo, candid moment, detailed background";
 /** cgPrompt leaves "extra people" out for two or more people; a photo is exactly the two of them. */
 const PHOTO_NEGATIVE = "extra people, crowd";
 /** A place's tags name it empty ("no humans", as the narrator writes them); the photo puts the two of them in it. */
@@ -4747,33 +4782,74 @@ type PhotoActingPose = Exclude<PhotoSharedPose, "cheek-kissed" | "piggyback-ride
 /**
  * Each shared pose by the id of whoever acts in it (`{me}`, with `{other}`); a symmetric pose is one both of them hold.
  * `turned`: they face each other, so the photo does not open with both of them facing the camera. A pose never names
- * an expression: each of them has their own pick.
+ * an expression: each of them has their own pick. Each sentence says where the hands, arms and legs go and how close
+ * the shot is (the maintainer's report of three legs and six fingers, 2026-11-03): an image model left to guess how a
+ * piggyback holds keeps the standing legs of the reference and adds the wrapped ones.
  */
 const PHOTO_SHARED_LOOKS: Record<PhotoActingPose, { look: [sentence: string, tags: string]; turned?: true }> = {
-  kiss: { look: ["{me} and {other} kiss, faces turned to each other", "kiss, facing each other"], turned: true },
-  hug: { look: ["{me} and {other} hug, cheek to cheek", "hug, cheek to cheek"] },
-  "play-fight": {
-    look: ["{me} and {other} play-fight, tussling and tugging at each other's sleeves", "play fighting, tussling"],
+  kiss: {
+    look: [
+      "{me} and {other} kiss, faces turned to each other, {me}'s hands on {other}'s waist, shown from the waist up",
+      "kiss, facing each other, upper body",
+    ],
+    turned: true,
   },
-  "hold-hands": { look: ["{me} and {other} hold hands, fingers laced", "holding hands, interlocked fingers"] },
+  hug: {
+    look: [
+      "{me} and {other} hug, cheek to cheek, each with both arms around the other, shown from the waist up",
+      "hug, cheek to cheek, upper body",
+    ],
+  },
+  "play-fight": {
+    look: [
+      "{me} and {other} play-fight side by side, {me} tugging at {other}'s sleeve while {other} pushes {me} back, shown from the knees up",
+      "play fighting, tussling",
+    ],
+  },
+  "hold-hands": {
+    look: [
+      "{me} and {other} stand side by side holding hands between them, fingers laced, shown from the knees up",
+      "holding hands, interlocked fingers",
+    ],
+  },
   forehead: {
-    look: ["{me} and {other} rest their foreheads together, eyes on each other", "forehead to forehead"],
+    look: [
+      "{me} and {other} rest their foreheads together, eyes on each other, {me}'s hands on {other}'s shoulders, shown from the waist up",
+      "forehead to forehead, upper body",
+    ],
     turned: true,
   },
   "back-to-back": {
     look: [
-      "{me} and {other} stand back to back, looking over their shoulders at the camera",
+      "{me} and {other} stand back to back, arms folded, looking over their shoulders at the camera, shown from the knees up",
       "back to back, looking over shoulder",
     ],
   },
   "hand-heart": {
-    look: ["{me} and {other} each make half of a heart with their hands, joined between them", "heart hands duo"],
+    look: [
+      "{me} and {other} stand side by side, each making half of a heart with one hand, the two halves joined between them, shown from the waist up",
+      "heart hands duo, upper body",
+    ],
   },
-  "cheek-kiss": { look: ["{me} kisses {other}'s cheek while {other} faces the camera", "cheek kiss"], turned: true },
+  "cheek-kiss": {
+    look: [
+      "{me} leans in and kisses {other}'s cheek while {other} faces the camera, shown from the waist up",
+      "cheek kiss, upper body",
+    ],
+    turned: true,
+  },
   "piggyback-carry": {
-    look: ["{me} carries {other} piggyback, {other}'s arms around {me}'s shoulders", "piggyback ride"],
+    look: [
+      "{other} rides on {me}'s back, {other}'s legs wrapped around {me}'s waist and arms around {me}'s shoulders, while {me} holds {other}'s thighs with both hands, shown from the knees up",
+      "piggyback ride",
+    ],
   },
-  "back-hug": { look: ["{me} hugs {other} from behind, chin on {other}'s shoulder", "hug from behind"] },
+  "back-hug": {
+    look: [
+      "{me} stands behind {other} with both arms around {other}'s waist, chin on {other}'s shoulder, shown from the waist up",
+      "hug from behind, upper body",
+    ],
+  },
 };
 
 export interface PhotoInput {
@@ -4799,6 +4875,19 @@ const fillNames = (text: string, me: string, other: string) =>
 const isActingPose = (pose: string): pose is PhotoActingPose => Object.hasOwn(PHOTO_SHARED_LOOKS, pose);
 const isSoloPose = (pose: string): pose is PhotoSoloPose => Object.hasOwn(PHOTO_SOLO_LOOKS, pose);
 
+/** The shared pose of a pick, with whoever acts in it, or null when each of them holds their own. */
+function sharedPose(input: Pick<PhotoInput, "li" | "her" | "his" | "herPick">) {
+  const him = input.li.name.trim().split(/\s+/)[0] || "Him";
+  const her = input.her.name.trim().split(/\s+/)[0] || "Her";
+  const people = [
+    { name: him, other: her, pick: input.his },
+    { name: her, other: him, pick: input.herPick },
+  ];
+  // A shared pose belongs to whoever holds its acting id (him, for a pose both of them hold).
+  const actor = people.find((person) => isActingPose(person.pick.pose));
+  return actor && isActingPose(actor.pick.pose) ? { ...actor, ...PHOTO_SHARED_LOOKS[actor.pick.pose] } : null;
+}
+
 /**
  * What the photo shows, in code with no model call. Sentence mode: the two of them posing for the camera (posing
  * together when they face each other), one sentence for a shared pose or one per person, each person's expression,
@@ -4814,9 +4903,7 @@ function photoBrief(input: PhotoInput): string {
     { name: him, other: her, pick: input.his },
     { name: her, other: him, pick: input.herPick },
   ];
-  // A shared pose belongs to whoever holds its acting id (him, for a pose both of them hold).
-  const actor = people.find((person) => isActingPose(person.pick.pose));
-  const shared = actor && isActingPose(actor.pick.pose) ? { ...actor, ...PHOTO_SHARED_LOOKS[actor.pick.pose] } : null;
+  const shared = sharedPose(input);
   const own = (text: string | undefined) => text?.trim() ?? "";
   const expression = (pick: PhotoPick) =>
     pick.expression === PHOTO_CUSTOM ? null : PHOTO_EXPRESSION_LOOKS[pick.expression];
@@ -4839,7 +4926,7 @@ function photoBrief(input: PhotoInput): string {
   const labels = input.references.map((reference) => label[reference]);
   return [
     shared?.turned
-      ? `A photo of ${him} and ${her} posing together for the camera.`
+      ? `A photo of ${him} and ${her} together, taken while they face each other.`
       : `A photo of ${him} and ${her} taking a picture together, both facing the camera and posing for it.`,
     ...(shared
       ? [sentence(fillNames(shared.look[0], shared.name, shared.other))]
@@ -4853,7 +4940,11 @@ function photoBrief(input: PhotoInput): string {
       const text = expression(pick)?.[0] ?? own(pick.expressionText);
       return text ? sentence(`${name}'s expression: ${text}`) : "";
     }),
-    labels.length ? sentence(`Reference images, in order: ${labels.join("; ")}`) : "",
+    labels.length
+      ? sentence(
+          `Reference images, in order: ${labels.join("; ")}. Use the pictures of them only for their faces, hair, build and clothing, never for the pose`,
+        )
+      : "",
   ]
     .map((part) => adultsOnly(input.world, part))
     .filter(Boolean)
@@ -4878,7 +4969,7 @@ export function photoPrompt(input: PhotoInput, edited: Partial<ImagePrompt> = {}
       world: input.world,
       style: input.style,
       use: "clothed",
-      framing: mergeTags(PHOTO_FRAMING, placeTags),
+      framing: mergeTags(sharedPose(input)?.turned ? PHOTO_TURNED_FRAMING : PHOTO_FRAMING, placeTags),
     },
     edited,
   );
