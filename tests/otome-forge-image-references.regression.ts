@@ -9,13 +9,18 @@ import {
 import { paintPairNow } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/outfits.ts";
 import {
   itemId,
+  playerId,
   runDocTarget,
   stateId,
   unitId,
+  worldId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
+import { takePhoto } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/minigames/photo-shoot.ts";
+import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
 import { normalizeState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeItem } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/wish.ts";
+import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { artWorld, PNG } from "./fixtures/otome-forge-art.ts";
 import { KAI } from "./fixtures/otome-forge-story.ts";
 
@@ -214,4 +219,48 @@ test("a real couple-portrait paint sends the LI neutral, the persona's painted l
     );
     assert.equal(t.calls.length, 0);
   }
+});
+
+test("a real Photo Shoot paint sends his look, her look and the place to the Engine as given (#2087)", async () => {
+  const t = await artWorld({ runKey: "r-photorefs-aaaaaa" });
+  const host = engine();
+  t.deps.images = host.client;
+  const his = "/api/global-gallery/file/kai-everyday.png";
+  const hers = "/api/global-gallery/file/ines-everyday.png";
+  const place = "/api/global-gallery/file/lamp-room.png";
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    cardId: "card-dottore",
+    portrait: his,
+  }));
+  await t.store.updateDoc(runDocTarget("player", playerId(t.runId)), normalizePlayer, (player) => ({
+    ...player,
+    portrait: hers,
+  }));
+  await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+    ...world,
+    places: {
+      "the-lamp-room": { name: "The Lamp Room", tags: "lighthouse", art: { state: "ready", at: "now", url: place } },
+    },
+  }));
+  const photo = await takePhoto(
+    t.deps,
+    t.runId,
+    {
+      id: "ph-mh1abc-abcdef",
+      li: KAI,
+      place: "the-lamp-room",
+      hisLook: "base",
+      herLook: "base",
+      his: { expression: "smile", pose: "hug" },
+      her: { expression: "smile", pose: "hug" },
+    },
+    { debugMode: true },
+  );
+  assert.equal(photo.art.state, "ready");
+  assert.equal(host.generations.length, 1);
+  // generateImage is not the kit's wrapped scene paint: no card sprite or avatar is put in front of the looks.
+  assert.deepEqual(host.generations[0]!.referenceImages, [data(his), data(hers), data(place)]);
+  assert.ok(!host.reads.some((path) => path.startsWith("/api/sprites/")), "his card's sprites are not read");
+  assert.equal(t.calls.length, 0);
 });

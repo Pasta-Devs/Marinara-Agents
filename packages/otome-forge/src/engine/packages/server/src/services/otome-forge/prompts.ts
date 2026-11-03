@@ -88,6 +88,7 @@
 //   keepsakePrompt: a date's keepsake (S/minigames/date-night.ts)
 //   expressionPrompt: a face edit, the kit's instruction (S/art/expressions.ts)
 //   stickerPrompt: a chat sticker (S/art/stickers.ts)
+//   photoPrompt: a Photo Shoot photo (S/minigames/photo-shoot.ts)
 //
 // ELSEWHERE, and why
 // - The forge kit, shared with Gacha Forge (sources/forge-kit; editing it changes Gacha Forge too):
@@ -215,6 +216,13 @@ import {
   READINGS_MIN,
   READ_HIM_ROUNDS,
 } from "../../../../client/src/features/otome-forge/shared/read-him.js";
+import {
+  PHOTO_CUSTOM,
+  type PhotoExpression,
+  type PhotoPick,
+  type PhotoSharedPose,
+  type PhotoSoloPose,
+} from "../../../../client/src/features/otome-forge/shared/photos.js";
 import {
   NOTEBOOK_CATEGORIES,
   type NotebookEntry,
@@ -4206,13 +4214,16 @@ export function showMessages(input: LookLineInput): OtomeMessage[] {
 // M5 adds a date's keepsake: a story CG of the two of them (never explicit) with the keepsake's own framing.
 // #2044 adds chat stickers: a 2D anime chibi bust of one person (the protagonist or a love interest) on the look's
 // chroma matte for the cut-out, with the look's own tags (`clothed`); the sticker's English look sets the expression.
+// #2087 adds a Photo Shoot photo: the two of them posing for the camera, picked by the player with no model call;
+// `clothed`, a square print with the place and both looks as references.
 
 // ── An image's rating and adult tags ──
 
 /**
- * What an image is for. clothed: looks, faces, outfits, the pair portrait, Moment and Snapshot art, and Memory and
- * banner art (painted before any story exists); place: scenery with nobody in it; cg: a story CG, painted from the brief
- * its scene wrote, or a Memory's art whose brief P20 marked explicit (only where explicitCgAllowed).
+ * What an image is for. clothed: looks, faces, outfits, the pair portrait, Moment and Snapshot art, Memory and banner
+ * art (painted before any story exists), and Photo Shoot photos; place: scenery with nobody in it; cg: a story CG,
+ * painted from the brief its scene wrote, or a Memory's art whose brief P20 marked explicit (only where
+ * explicitCgAllowed).
  */
 export type ImageUse = "clothed" | "place" | "cg";
 
@@ -4682,4 +4693,186 @@ export function stickerPrompt(input: StickerInput, edited: Partial<ImagePrompt> 
     negative,
     edited,
   );
+}
+
+// ── #2087: a Photo Shoot photo ──
+
+/** The shot: the two of them posing for the camera, then the place's own English tags. */
+const PHOTO_FRAMING = "two people, couple photo, posing for the camera, detailed background";
+/** cgPrompt leaves "extra people" out for two or more people; a photo is exactly the two of them. */
+const PHOTO_NEGATIVE = "extra people, crowd";
+/** A place's tags name it empty ("no humans", as the narrator writes them); the photo puts the two of them in it. */
+const EMPTY_PLACE_TAG = /^(?:no humans?|no people|no one|nobody|empty|scenery)$/iu;
+
+/**
+ * Each expression: [the sentence for natural-language prompts, the tags for tag prompts]. None says where they look:
+ * the opening and the pose do (a kiss turns them to each other).
+ */
+const PHOTO_EXPRESSION_LOOKS: Record<PhotoExpression, [sentence: string, tags: string]> = {
+  smile: ["smiling brightly", "bright smile"],
+  laugh: ["laughing, eyes crinkled", "laughing, crinkled eyes"],
+  wink: ["winking", "wink"],
+  blush: ["blushing, a shy smile", "blush, shy smile"],
+  pout: ["a playful pout", "pout"],
+  smirk: ["a confident smirk", "smirk"],
+  fond: ["a fond, soft-eyed look", "fond look, soft eyes"],
+  surprised: ["surprised, eyes wide", "surprised, wide eyes"],
+};
+
+/** Each solo pose, `{me}` the one in it. */
+const PHOTO_SOLO_LOOKS: Record<PhotoSoloPose, [sentence: string, tags: string]> = {
+  pose: ["{me} faces the camera and poses", "posing"],
+  peace: ["{me} makes a peace sign", "peace sign"],
+  wave: ["{me} waves at the camera", "waving"],
+  "finger-heart": ["{me} makes a finger heart", "finger heart"],
+  "hand-on-hip": ["{me} stands with a hand on the hip", "hand on hip"],
+  "arms-crossed": ["{me} stands with arms crossed", "crossed arms"],
+  "thumbs-up": ["{me} gives a thumbs up", "thumbs up"],
+  "hands-in-pockets": ["{me} stands with hands in pockets", "hands in pockets"],
+};
+
+/** The shared poses someone acts in; each other one (cheek-kissed, piggyback-ride, back-hugged) is its partner's. */
+type PhotoActingPose = Exclude<PhotoSharedPose, "cheek-kissed" | "piggyback-ride" | "back-hugged">;
+
+/**
+ * Each shared pose by the id of whoever acts in it (`{me}`, with `{other}`); a symmetric pose is one both of them hold.
+ * `turned`: they face each other, so the photo does not open with both of them facing the camera. A pose never names
+ * an expression: each of them has their own pick.
+ */
+const PHOTO_SHARED_LOOKS: Record<PhotoActingPose, { look: [sentence: string, tags: string]; turned?: true }> = {
+  kiss: { look: ["{me} and {other} kiss, faces turned to each other", "kiss, facing each other"], turned: true },
+  hug: { look: ["{me} and {other} hug, cheek to cheek", "hug, cheek to cheek"] },
+  "play-fight": {
+    look: ["{me} and {other} play-fight, tussling and tugging at each other's sleeves", "play fighting, tussling"],
+  },
+  "hold-hands": { look: ["{me} and {other} hold hands, fingers laced", "holding hands, interlocked fingers"] },
+  forehead: {
+    look: ["{me} and {other} rest their foreheads together, eyes on each other", "forehead to forehead"],
+    turned: true,
+  },
+  "back-to-back": {
+    look: [
+      "{me} and {other} stand back to back, looking over their shoulders at the camera",
+      "back to back, looking over shoulder",
+    ],
+  },
+  "hand-heart": {
+    look: ["{me} and {other} each make half of a heart with their hands, joined between them", "heart hands duo"],
+  },
+  "cheek-kiss": { look: ["{me} kisses {other}'s cheek while {other} faces the camera", "cheek kiss"], turned: true },
+  "piggyback-carry": {
+    look: ["{me} carries {other} piggyback, {other}'s arms around {me}'s shoulders", "piggyback ride"],
+  },
+  "back-hug": { look: ["{me} hugs {other} from behind, chin on {other}'s shoulder", "hug from behind"] },
+};
+
+export interface PhotoInput {
+  /** The love interest and the protagonist: who each one is and the look they wear in the photo. */
+  li: CgPerson;
+  her: CgPerson;
+  /** His pick and hers, as the server checked them (posesAgree, custom words cleaned). */
+  his: PhotoPick;
+  herPick: PhotoPick;
+  /** The place's English tags (S/art/places.ts). */
+  placeTags: string;
+  /**
+   * The references that resolved, in the order they are sent. `li-face` and `her-face`: his card's or her persona's
+   * avatar standing in for a look with no picture, so it shows who they are and the outfit line dresses them.
+   */
+  references: ReadonlyArray<"li" | "li-face" | "her" | "her-face" | "place">;
+  world: Pick<World, "content" | "images">;
+  style: StyleProfile;
+}
+
+const fillNames = (text: string, me: string, other: string) =>
+  text.replace(/\{me\}/gu, me).replace(/\{other\}/gu, other);
+const isActingPose = (pose: string): pose is PhotoActingPose => Object.hasOwn(PHOTO_SHARED_LOOKS, pose);
+const isSoloPose = (pose: string): pose is PhotoSoloPose => Object.hasOwn(PHOTO_SOLO_LOOKS, pose);
+
+/**
+ * What the photo shows, in code with no model call. Sentence mode: the two of them posing for the camera (posing
+ * together when they face each other), one sentence for a shared pose or one per person, each person's expression,
+ * then which reference is which (only those that resolved). Tag mode: the pose and expression tags with any words of
+ * the player's own, and no labels (tag models do not read them). The player's words go in as typed; above SFW a
+ * sentence of theirs that names a minor is dropped on its own (adultsOnly reads comma parts, which would otherwise run
+ * across the brief's sentences and take every pick with it).
+ */
+function photoBrief(input: PhotoInput): string {
+  const him = input.li.name.trim().split(/\s+/)[0] || "Him";
+  const her = input.her.name.trim().split(/\s+/)[0] || "Her";
+  const people = [
+    { name: him, other: her, pick: input.his },
+    { name: her, other: him, pick: input.herPick },
+  ];
+  // A shared pose belongs to whoever holds its acting id (him, for a pose both of them hold).
+  const actor = people.find((person) => isActingPose(person.pick.pose));
+  const shared = actor && isActingPose(actor.pick.pose) ? { ...actor, ...PHOTO_SHARED_LOOKS[actor.pick.pose] } : null;
+  const own = (text: string | undefined) => text?.trim() ?? "";
+  const expression = (pick: PhotoPick) =>
+    pick.expression === PHOTO_CUSTOM ? null : PHOTO_EXPRESSION_LOOKS[pick.expression];
+  const pose = (pick: PhotoPick) => (isSoloPose(pick.pose) ? PHOTO_SOLO_LOOKS[pick.pose] : null);
+  if (input.style.tagged === true) {
+    return mergeTags(
+      ...(shared
+        ? [shared.look[1]]
+        : people.map(({ pick }) => (pick.pose === PHOTO_CUSTOM ? own(pick.poseText) : (pose(pick)?.[1] ?? "")))),
+      ...people.map(({ pick }) => expression(pick)?.[1] ?? own(pick.expressionText)),
+    );
+  }
+  const label = {
+    li: `${him} in this outfit`,
+    "li-face": `${him}'s face`,
+    her: `${her} in this outfit`,
+    "her-face": `${her}'s face`,
+    place: "the place behind them",
+  } as const;
+  const labels = input.references.map((reference) => label[reference]);
+  return [
+    shared?.turned
+      ? `A photo of ${him} and ${her} posing together for the camera.`
+      : `A photo of ${him} and ${her} taking a picture together, both facing the camera and posing for it.`,
+    ...(shared
+      ? [sentence(fillNames(shared.look[0], shared.name, shared.other))]
+      : people.map(({ name, pick }) => {
+          if (pick.pose === PHOTO_CUSTOM)
+            return own(pick.poseText) ? sentence(`${name}'s pose: ${own(pick.poseText)}`) : "";
+          const look = pose(pick);
+          return look ? sentence(fillNames(look[0], name, "")) : "";
+        })),
+    ...people.map(({ name, pick }) => {
+      const text = expression(pick)?.[0] ?? own(pick.expressionText);
+      return text ? sentence(`${name}'s expression: ${text}`) : "";
+    }),
+    labels.length ? sentence(`Reference images, in order: ${labels.join("; ")}`) : "",
+  ]
+    .map((part) => adultsOnly(input.world, part))
+    .filter(Boolean)
+    .join(" ");
+}
+
+/**
+ * A Photo Shoot photo (S/minigames/photo-shoot.ts): a two-person CG of the love interest and the protagonist posing
+ * for the camera in a place the story painted, each in the look the player picked. `clothed`, as the pair portrait is
+ * (at most Suggestive whatever the story's rating: the photo is taped to Home, and its outfits are references), with
+ * every rating and adult tag; the negative keeps anyone else out. An edited prompt keeps its wording with every
+ * required tag put back.
+ */
+export function photoPrompt(input: PhotoInput, edited: Partial<ImagePrompt> = {}): ImagePrompt {
+  const placeTags = tagsOf(input.placeTags)
+    .filter((tag) => !EMPTY_PLACE_TAG.test(tag))
+    .join(", ");
+  const built = cgPrompt(
+    {
+      brief: photoBrief(input),
+      people: [input.li, input.her],
+      world: input.world,
+      style: input.style,
+      use: "clothed",
+      framing: mergeTags(PHOTO_FRAMING, placeTags),
+    },
+    edited,
+  );
+  return edited.negativePrompt?.trim()
+    ? built
+    : { ...built, negativePrompt: mergeTags(built.negativePrompt, PHOTO_NEGATIVE) };
 }

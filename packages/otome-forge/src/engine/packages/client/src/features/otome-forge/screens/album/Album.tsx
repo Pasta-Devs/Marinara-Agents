@@ -1,19 +1,21 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the Album. CGs (newest first: story CGs once seen, Memories' CGs once painted, pair portraits), chat
-// stickers (#2044: the protagonist's five and each love interest's unlocked ones, cut out), Memories (each one's
+// stickers (#2044: the protagonist's five and each love interest's unlocked ones, cut out), Photo Shoot photos (#2087:
+// newest first, square, each one viewed, saved or deleted), Memories (each one's
 // Character Story or Moment to read, and Snapshots), the Love Timeline, favourite lines, the soundtrack (the moods,
 // then each begun chapter's theme), and the Tells journal. Only what is unlocked is listed; every image saves to the
 // device through the Engine. Everything reads without images or audio: a Memory without art shows a quiet card in their
 // colour.
 // ──────────────────────────────────────────────
 // Route (S/routes/album.ts): GET /runs/:run/album → AlbumView. An unopened Memory is opened here as anywhere else.
-import { useId, useState, type CSSProperties } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BookHeart,
   BookOpen,
   CalendarHeart,
+  Camera,
   Eye,
   Heart,
   Images,
@@ -27,7 +29,14 @@ import {
 import { useOtomeApi } from "../../api";
 import { Dialog } from "../../components/Dialog";
 import { CostHint } from "../../components/CostHint";
-import { albumQueryKey, imagesOn, paintWaits, useItemActions, type ItemActions } from "../../hooks/use-items";
+import {
+  albumQueryKey,
+  imagesOn,
+  invalidateCollection,
+  paintWaits,
+  useItemActions,
+  type ItemActions,
+} from "../../hooks/use-items";
 import { useMusicCue } from "../../hooks/use-otome-audio";
 import { runPath } from "../../hooks/use-reader";
 import { accentOf } from "../../lib/accent";
@@ -47,12 +56,13 @@ import { Timeline } from "./Timeline";
 
 const POLL_MS = 3_000;
 
-const ALBUM_TABS = ["cgs", "stickers", "memories", "timeline", "favorites", "soundtrack", "tells"] as const;
+const ALBUM_TABS = ["cgs", "stickers", "photos", "memories", "timeline", "favorites", "soundtrack", "tells"] as const;
 type AlbumTab = (typeof ALBUM_TABS)[number];
 
 const TAB_META: Record<AlbumTab, { labelKey: string; Icon: LucideIcon }> = {
   cgs: { labelKey: "ui.otomeForge.album.tabCgs", Icon: Images },
   stickers: { labelKey: "ui.otomeForge.album.tabStickers", Icon: StickerIcon },
+  photos: { labelKey: "ui.otomeForge.album.tabPhotos", Icon: Camera },
   memories: { labelKey: "ui.otomeForge.album.tabMemories", Icon: BookHeart },
   timeline: { labelKey: "ui.otomeForge.album.tabTimeline", Icon: CalendarHeart },
   favorites: { labelKey: "ui.otomeForge.album.tabFavorites", Icon: Quote },
@@ -99,11 +109,23 @@ export function Album({ runKey, view, onOpenStory }: AlbumProps) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const id = useId();
+  const queryClient = useQueryClient();
   const album = useAlbum(runKey);
   const actions = useItemActions(runKey);
   const [tab, setTab] = useState<AlbumTab>("cgs");
   const [viewing, setViewing] = useState<number | null>(null);
   const [viewingSticker, setViewingSticker] = useState<number | null>(null);
+  // A photo is held by its key: the list can change under the viewer (a photo taken elsewhere lands first), and Delete
+  // must take the one shown.
+  const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  // A deleted photo's tile goes with it: once the viewer has closed (and handed focus back), focus moves to the panel.
+  const focusPanel = useRef(false);
+  useEffect(() => {
+    if (viewingPhoto !== null || !focusPanel.current) return;
+    focusPanel.current = false;
+    panelRef.current?.focus({ preventScroll: true });
+  }, [viewingPhoto]);
   const stickers = useStickerImages(view, album.data?.stickers ?? []);
   const [memory, setMemory] = useState<string | null>(null);
   const [playing, setPlaying] = useState<string | null>(null);
@@ -151,12 +173,38 @@ export function Album({ runKey, view, onOpenStory }: AlbumProps) {
   }
 
   const data = album.data;
+  // Stubs and servers older than #2087 send no photos.
+  const photos = data.photos ?? [];
+  const photoIndex = viewingPhoto === null ? -1 : photos.findIndex((image) => image.key === viewingPhoto);
   const shownMemory = data.memories.find((item) => item.id === memory) ?? null;
+  /** Deletes the photo shown, closes the viewer and leaves focus on the Photos panel (its tile is gone). */
+  const deletePhoto = async (image: AlbumImage) => {
+    await otome.post(`${runPath(runKey)}/photos/${encodeURIComponent(image.key.replace(/^photo:/u, ""))}/delete`, {});
+    focusPanel.current = true;
+    setViewingPhoto(null);
+    // Home tapes the newest photo into the note: it reads again too.
+    await invalidateCollection(queryClient, runKey);
+  };
   const panel =
     tab === "cgs" ? (
-      <CgGrid view={view} album={data} onView={setViewing} />
+      <CgGrid
+        view={view}
+        images={data.cgs}
+        emptyKey="ui.otomeForge.album.cgsEmpty"
+        noImagesKey="ui.otomeForge.album.cgsNoImages"
+        onView={setViewing}
+      />
     ) : tab === "stickers" ? (
       <StickerGrid runKey={runKey} view={view} stickers={stickers} actions={actions} onView={setViewingSticker} />
+    ) : tab === "photos" ? (
+      <CgGrid
+        view={view}
+        images={photos}
+        emptyKey="ui.otomeForge.album.photosEmpty"
+        noImagesKey="ui.otomeForge.album.photosNoImages"
+        square
+        onView={(index) => setViewingPhoto(photos[index]?.key ?? null)}
+      />
     ) : tab === "memories" ? (
       <Memories view={view} memories={data.memories} onShow={setMemory} />
     ) : tab === "timeline" ? (
@@ -183,6 +231,7 @@ export function Album({ runKey, view, onOpenStory }: AlbumProps) {
         className="of-album-tabs"
       />
       <div
+        ref={panelRef}
         key={tab}
         id={`${id}-${tab}-panel`}
         className="of-tab-panel"
@@ -202,6 +251,16 @@ export function Album({ runKey, view, onOpenStory }: AlbumProps) {
           index={viewingSticker}
           onIndex={setViewingSticker}
           onClose={() => setViewingSticker(null)}
+        />
+      ) : null}
+      {photoIndex >= 0 ? (
+        <CgViewer
+          view={view}
+          images={photos}
+          index={photoIndex}
+          onIndex={(index) => setViewingPhoto(photos[index]?.key ?? null)}
+          onClose={() => setViewingPhoto(null)}
+          onDelete={deletePhoto}
         />
       ) : null}
       {/* The prompt review takes the place of the Memory's page while it shows (one dialog over the stage at a time). */}
@@ -224,20 +283,33 @@ export function Album({ runKey, view, onOpenStory }: AlbumProps) {
   );
 }
 
-function CgGrid({ view, album, onView }: { view: RunView; album: AlbumView; onView: (index: number) => void }) {
+interface CgGridProps {
+  view: RunView;
+  images: readonly AlbumImage[];
+  /** What the empty grid says, with images on and without. */
+  emptyKey: string;
+  noImagesKey: string;
+  /** Square tiles (Photo Shoot photos). */
+  square?: boolean;
+  onView: (index: number) => void;
+}
+
+/** The CGs, or the Photos: a tile per image, newest first, each opening the viewer. */
+function CgGrid({ view, images, emptyKey, noImagesKey, square = false, onView }: CgGridProps) {
   const { t } = useTranslation();
   const formatAt = useFormatAt();
-  if (!album.cgs.length) {
+  if (!images.length) {
+    const Icon = square ? Camera : Images;
     return (
       <p className="of-empty of-glass">
-        <Images size={20} strokeWidth={1.8} aria-hidden="true" />
-        {imagesOn(view) ? t("ui.otomeForge.album.cgsEmpty") : t("ui.otomeForge.album.cgsNoImages")}
+        <Icon size={20} strokeWidth={1.8} aria-hidden="true" />
+        {imagesOn(view) ? t(emptyKey) : t(noImagesKey)}
       </p>
     );
   }
   return (
-    <ul className="of-album-cgs">
-      {album.cgs.map((image, index) => {
+    <ul className={square ? "of-album-cgs of-album-cgs--photo" : "of-album-cgs"}>
+      {images.map((image, index) => {
         const li = view.lis.find((item) => item.id === image.li) ?? null;
         const title =
           image.title || (li ? t("ui.otomeForge.album.cgWith", { name: li.name }) : t("ui.otomeForge.album.cg"));

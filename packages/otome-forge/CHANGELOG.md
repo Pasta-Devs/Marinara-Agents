@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.8.0 — 2026-11-03
+
+- **A Photo Shoot in Dates.** With a love interest picked in Dates, choose a place your story has painted, what you both wear, and an expression and a pose for each of you: shared poses like kissing, hugging, play-fighting or a piggyback, solo poses, or your own words. **Take picture** paints one photo of you two posing for the camera, sent the place and both outfits as references, with no model call. It follows your image connection, Ask before painting, prompt review and image rating, costs no Starlight and pays nothing. Photos are kept in the Album's new **Photos**, to view, save or delete, and the newest is taped into that love interest's note on Home. Without an image connection it shows as unavailable.
+
 ## 0.7.6 — 2026-11-03
 
 - **Prompt caching that keeps working through a chapter.** On an Anthropic connection, a chapter's plan, scenes and Confrontation or Closer ask for the hour-long cache, so a scene read minutes after the last still reads the story context from the cache. The cached part now holds only what every scene of the chapter may know, so it stays the same when the love interests in a scene change. What only some of them may know (their own chapters, dates and small memories) comes after it, for the people in each scene. The chapter's last scene shares the other scenes' cached instructions too. Older Engines keep the connection's own cache time.

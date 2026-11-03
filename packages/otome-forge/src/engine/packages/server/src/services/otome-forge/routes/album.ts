@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the Album (plan M4 "Album"): only what is unlocked
 // ──────────────────────────────────────────────
-// GET /runs/:run/album → AlbumView {cgs, memories, timeline, favorites, soundtrack, tells}
+// GET /runs/:run/album → AlbumView {cgs, memories, timeline, favorites, soundtrack, tells, stickers, photos}
 // - cgs: story CGs once seen (M2b: POST .../art/cg/seen), each owned Memory's CG once painted, and couple sets' pair
 //   portraits, newest first (the oldest at the bottom). The client saves an image through the Engine's
 //   services.imageDownloads.
@@ -16,6 +16,8 @@
 //   Dossier.
 // - stickers (#2044): the protagonist's five, and each love interest's unlocked ones that are painted, or that wait for
 //   a tap to paint (S/art/stickers.ts albumStickers). Kept out of `cgs`, which Home's back layer reads.
+// - photos (#2087): the Photo Shoot's photos once painted, newest first (S/minigames/photo-shoot.ts albumPhotos), each
+//   captioned with its place. Like stickers, kept out of `cgs`: Home tapes the newest into the note instead.
 // Nothing the player has not won, seen or learned is listed: no banner item not owned, no CG not seen, no tell of a
 // secret still hidden, no theme of a chapter not begun.
 import { chapterMusicCue } from "../../../../../client/src/features/otome-forge/shared/audio.js";
@@ -42,6 +44,7 @@ import { readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeChapter } from "../schemas/story.js";
 import { byStoryOrder } from "../story/chapters.js";
 import { albumStickers } from "../art/stickers.js";
+import { albumPhotos, listPhotos } from "../minigames/photo-shoot.js";
 
 const MEMORY_KINDS: ReadonlySet<Item["kind"]> = new Set(["memory5", "moment4", "snapshot3"]);
 
@@ -157,6 +160,7 @@ export async function albumView(deps: Pick<RouteDeps, "store">, runId: string): 
     ],
     tells,
     stickers: albumStickers(runId, run),
+    photos: albumPhotos(await listPhotos(deps.store, runId)),
   };
 }
 

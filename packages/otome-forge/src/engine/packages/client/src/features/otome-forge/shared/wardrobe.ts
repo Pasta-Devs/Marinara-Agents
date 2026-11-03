@@ -112,15 +112,18 @@ export interface ShowResult {
   grants: WardrobeGrant[];
 }
 
-/** An image the Album keeps: a story CG once seen, a Memory's CG once painted, a couple set's pair portrait. */
+/**
+ * An image the Album keeps: a story CG once seen, a Memory's CG once painted, a couple set's pair portrait, a sticker or
+ * (#2087) a Photo Shoot photo.
+ */
 export interface AlbumImage {
   key: string;
   url: string;
   ref?: string;
   at: string;
   li?: LiId;
-  source: "story" | "memory" | "pair" | "sticker";
-  /** A Memory's title, or the couple set's look names. */
+  source: "story" | "memory" | "pair" | "sticker" | "photo";
+  /** A Memory's title, the couple set's look names, or a photo's place. */
   title?: string;
   /** A sticker's prompt name (mari_laugh), which its saved file is named after. */
   name?: string;
@@ -165,6 +168,8 @@ export interface AlbumView {
   tells: Record<LiId, string[]>;
   /** #2044: the protagonist's five, then each love interest's owed stickers in level order. */
   stickers: AlbumSticker[];
+  /** #2087: the Photo Shoot's photos once painted, newest first. Kept out of `cgs`, which Home's back layer reads. */
+  photos: AlbumImage[];
 }
 
 /** POST /runs/:run/items/:item/open */

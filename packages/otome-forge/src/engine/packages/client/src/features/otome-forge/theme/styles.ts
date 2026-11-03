@@ -1311,6 +1311,8 @@ ${R} .of-album-cg-date { font-size: 0.68rem; opacity: 0.8; }
 /* #2044: stickers, square and whole (they are cut-outs) on a soft surface. */
 ${R} .of-album-stickers { display: flex; flex-direction: column; gap: 12px; }
 ${R} .of-album-stickers-title { margin: 0; font-family: var(--of-font-display); font-weight: 600; font-size: 1.15rem; }
+/* #2087: Photo Shoot photos are square prints. */
+${R} .of-album-cgs--photo .of-album-cg { aspect-ratio: 1; }
 ${R} .of-album-cgs--sticker { grid-template-columns: repeat(auto-fill, minmax(min(132px, 42%), 1fr)); }
 ${R} .of-album-cgs--sticker .of-album-cg {
   aspect-ratio: 1; background: var(--of-tint); box-shadow: inset 0 0 0 1px var(--of-border);
@@ -2413,8 +2415,8 @@ ${R} .of-note-fold:hover { background: rgb(160 77 107 / 0.1); }
 ${R} .of-note-body { display: flex; flex-direction: column; gap: 8px; min-height: 0; margin-top: 6px; }
 ${R} .of-note-body[hidden] { display: none; }
 ${R} .of-note-text {
-  min-height: 0; overflow-y: auto; font-family: var(--of-font-hand); font-weight: 500; font-size: 1.5rem;
-  line-height: 1.14; overflow-wrap: anywhere;
+  min-height: 0; overflow-x: hidden; overflow-y: auto; font-family: var(--of-font-hand); font-weight: 500;
+  font-size: 1.5rem; line-height: 1.14; overflow-wrap: anywhere;
 }
 ${R} .of-note-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 ${R} .of-note-sign {
@@ -2435,6 +2437,25 @@ ${R} .of-note-quill { flex: none; color: #a04d6b; animation: of-write 1.8s ease-
 ${R} .of-note .of-hint { color: #5a4060; }
 ${R} .of-note-failed, ${R} .of-note--alert { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 ${R} .of-note-voice-error { font-size: 0.76rem; font-weight: 700; color: #8e3f5e; }
+/* #2087: the newest Photo Shoot photo, a small print taped into the note. It floats inside the scrolling text (as a
+   flex child it would not float, and beside the scroll box it would narrow the box), so the words wrap around it and
+   it scrolls with them; its top margin keeps the tape inside the box. inline-end mirrors it in RTL. */
+${R} .of-note-text p { margin: 0; }
+${R} .of-note-photo {
+  position: relative; float: inline-end; width: clamp(64px, 30%, 96px); margin: 10px 6px 6px;
+  margin-inline-start: 10px; padding: 4px 4px 10px; background: #fbf7f1; rotate: 3deg;
+  box-shadow: 0 3px 8px rgb(8 4 24 / 0.22);
+}
+${R} .of-note-photo img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; }
+${R} .of-note-photo::before {
+  content: ""; position: absolute; top: -7px; left: 50%; width: 40px; height: 12px; translate: -50% 0; rotate: -5deg;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--of-li-accent) 62%, transparent),
+    color-mix(in srgb, var(--of-li-accent) 44%, transparent));
+  clip-path: polygon(3% 0, 97% 5%, 100% 100%, 0 95%);
+}
+@container of-frame (max-height: 640px) {
+  ${R} .of-note-photo { width: 56px; padding-bottom: 6px; }
+}
 
 /* Rough day? and Who's home? */
 ${R} .of-comfort { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: 0; text-align: center; }

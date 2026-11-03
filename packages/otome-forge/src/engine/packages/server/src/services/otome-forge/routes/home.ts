@@ -4,8 +4,9 @@
 // GET  /runs/:run/home                → HomeView: who Home shows, today's note (null when there is none, or it was
 //                                       written before a rupture opened or was repaired), the look worn (M4's Wear at
 //                                       home) and its cut-out, his ready faces with their cut-outs, whether his lines
-//                                       are ready, a rupture, unread replies, L0's picture (backdropOf), and what a
-//                                       love interest noticed about her look (M4's P19, and whether it is on its way)
+//                                       are ready, a rupture, unread replies, L0's picture (backdropOf), what a
+//                                       love interest noticed about her look (M4's P19, and whether it is on its way),
+//                                       and the newest Photo Shoot photo with him, taped into his note (#2087)
 // POST /runs/:run/home/set {li?, show?} → {home}: the love interest Home is about, and Him or Me
 // POST /runs/:run/home/note {li}       → {note}: today's note, written by the day's first call and read back after
 // GET  /runs/:run/lis/:li/lines        → LinesView: his pre-written lines (cold only during a rupture)
@@ -30,6 +31,7 @@ import { cutoutView, queueCutouts, type CutoutClient } from "../art/cutout.js";
 import { ensureLinePacks, linesView, needsLines } from "../home/lines.js";
 import { noteFits, readNote, serveNote, toNoteView, todayKey } from "../home/note.js";
 import { readItems } from "../items/open.js";
+import { albumPhotos, listPhotos } from "../minigames/photo-shoot.js";
 import {
   OtomeForgeError,
   debugModeOf,
@@ -99,6 +101,10 @@ async function lookOf(
   return { url: worn, source: "look", cutoutState: state, ...(cutout ? { cutout } : {}) };
 }
 
+/** The item of `items` with the latest `at`, or undefined for none. */
+const newest = <T>(items: T[], at: (item: T) => string) =>
+  items.reduce<T | undefined>((best, item) => (!best || at(item) > at(best) ? item : best), undefined);
+
 /**
  * Home's back layer: the newest CG unlocked with this love interest (the Album's CGs, routes/album.ts albumCgs: they
  * name the love interest in them, so one from another love interest's scenes never stands behind him), else the
@@ -109,8 +115,6 @@ export function backdropOf(
   world: Pick<World, "places">,
   li: LiId | null,
 ): HomeView["backdrop"] {
-  const newest = <T>(items: T[], at: (item: T) => string) =>
-    items.reduce<T | undefined>((best, item) => (!best || at(item) > at(best) ? item : best), undefined);
   const cg = newest(
     cgs.filter((item) => !!li && item.li === li && !!item.url),
     (item) => item.at,
@@ -154,12 +158,17 @@ export function registerHomeRoutes(router: OtomeRouter, deps: HomeRouteDeps): vo
         }
       }
       // Each love interest's thread by id, as the phone list reads them: listing would load every world's threads.
-      const [note, look, threads, items] = await Promise.all([
+      const [note, look, threads, items, photos] = await Promise.all([
         li ? readNote(store, runId, todayKey(), li) : null,
         lookOf(deps, runId, show, unit, player),
         Promise.all(order.map((id) => readThread(store, runId, id))),
         readItems(store, runId),
+        listPhotos(store, runId),
       ]);
+      const photo = newest(
+        albumPhotos(photos).filter((entry) => !!li && entry.li === li),
+        (entry) => entry.at,
+      );
 
       // His ready faces on his worn look (M2b paints them in the background, as the reader and the phone read them),
       // each with its cut-out once it is made, and whether one is on its way (the client asks again until it lands).
@@ -186,6 +195,7 @@ export function registerHomeRoutes(router: OtomeRouter, deps: HomeRouteDeps): vo
         rupture: !!liState?.rupture,
         unread: threads.reduce((sum, thread) => sum + (thread ? unreadCount(thread) : 0), 0),
         backdrop: backdropOf(albumCgs(run, items), run.world, li),
+        photo: photo ? { url: photo.url, at: photo.at } : null,
         // Only a line about the look she wears now is kept (schemas/player.ts), so a changed look shows none.
         noticed: run.player.noticed,
         noticing: noticingNow.includes(run.player.wornOutfit ?? ""),

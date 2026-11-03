@@ -1,7 +1,8 @@
 // ──────────────────────────────────────────────
 // Otome Forge: his message of the day, handwritten on a slip of paper. It is written once per local day on the first
 // Home visit (the server keeps it after that); Play reads it in his voice, Reply opens his thread with the note quoted.
-// The note can be folded away so his face shows.
+// The note can be folded away so his face shows. The newest Photo Shoot photo with him (#2087) is taped into it, its
+// words wrapping around the print: the print floats inside the note's scrolling text, so it scrolls with the words.
 // ──────────────────────────────────────────────
 import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
@@ -52,9 +53,11 @@ interface NoteCardProps {
   accent: string;
   status: NoteStatus;
   onReply: (quote: string) => void;
+  /** The newest Photo Shoot photo with him (HomeView.photo), taped in beside the words. */
+  photo?: { url: string } | null;
 }
 
-export function NoteCard({ liId, name, accent, status, onReply }: NoteCardProps) {
+export function NoteCard({ liId, name, accent, status, onReply, photo = null }: NoteCardProps) {
   const { t } = useTranslation();
   const voice = useLineVoice();
   const [folded, setFolded] = useState(false);
@@ -113,7 +116,14 @@ export function NoteCard({ liId, name, accent, status, onReply }: NoteCardProps)
           </div>
         ) : (
           <>
-            <p className="of-note-text">{t("ui.otomeForge.home.noteText", { text: status.note.text })}</p>
+            <div className="of-note-text">
+              {photo ? (
+                <figure className="of-note-photo">
+                  <img src={photo.url} alt={t("ui.otomeForge.home.notePhotoAlt", { name })} decoding="async" />
+                </figure>
+              ) : null}
+              <p>{t("ui.otomeForge.home.noteText", { text: status.note.text })}</p>
+            </div>
             <div className="of-note-foot">
               {line && voice.can(line) ? (
                 <button

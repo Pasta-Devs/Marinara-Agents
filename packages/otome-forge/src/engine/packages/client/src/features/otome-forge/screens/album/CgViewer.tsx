@@ -1,10 +1,12 @@
 // ──────────────────────────────────────────────
 // Otome Forge: one Album image, large. Previous and Next (and the arrow keys) step through the gallery; Save sends the
 // file to the device through the Engine's own image saving (lib/image-download.ts, the iPhone share sheet included).
+// A Photo Shoot photo (#2087) can also be deleted: the dialog asks first in place of its own text, so no second
+// dialog opens over it.
 // ──────────────────────────────────────────────
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronLeft, ChevronRight, Download, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Trash2, X } from "lucide-react";
 import { Dialog } from "../../components/Dialog";
 import { imageFilename, useImageDownload } from "../../lib/image-download";
 import { useOtomeProps } from "../../props";
@@ -16,6 +18,7 @@ const SOURCE_KEYS: Record<AlbumImage["source"], string> = {
   memory: "ui.otomeForge.album.sourceMemory",
   pair: "ui.otomeForge.album.sourcePair",
   sticker: "ui.otomeForge.album.sourceSticker",
+  photo: "ui.otomeForge.album.sourcePhoto",
 };
 
 interface CgViewerProps {
@@ -24,6 +27,8 @@ interface CgViewerProps {
   index: number;
   onIndex: (index: number) => void;
   onClose: () => void;
+  /** Offers Delete for the image shown (a photo); resolves once it is deleted, and throws when it was not. */
+  onDelete?: (image: AlbumImage) => Promise<void>;
 }
 
 /** "When" for a timestamp, in the player's language and time zone. */
@@ -40,12 +45,20 @@ export function useFormatAt() {
   };
 }
 
-export function CgViewer({ view, images, index, onIndex, onClose }: CgViewerProps) {
+export function CgViewer({ view, images, index, onIndex, onClose, onDelete }: CgViewerProps) {
   const { t } = useTranslation();
   const formatAt = useFormatAt();
   const closeRef = useRef<HTMLButtonElement>(null);
+  const keepRef = useRef<HTMLButtonElement>(null);
+  const deleteRef = useRef<HTMLButtonElement>(null);
   const viewerRef = useRef<HTMLDivElement>(null);
+  const questionId = useId();
   const [saved, setSaved] = useState<string | null>(null);
+  // Delete asks first, in this dialog: its text and buttons change, and Keep goes back to the image.
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteFailed, setDeleteFailed] = useState(false);
+  const asked = useRef(false);
   const image = images[index] ?? null;
   const li = image?.li ? view.lis.find((item) => item.id === image.li) : null;
   const title = image?.title || (li ? t("ui.otomeForge.album.cgWith", { name: li.name }) : t("ui.otomeForge.album.cg"));
@@ -54,15 +67,21 @@ export function CgViewer({ view, images, index, onIndex, onClose }: CgViewerProp
   const filename = image?.name ? `${image.name}.${extension}` : imageFilename(image?.url ?? "", `otome-forge-${title}`);
   const download = useImageDownload(image?.url ?? null, filename);
 
-  // Not while a save is in flight: its result would settle under the next image.
+  // Not while a save is in flight (its result would settle under the next image), nor while Delete asks.
   const step = (delta: number) => {
-    if (download.state === "saving") return;
+    if (download.state === "saving" || confirming) return;
     onIndex((index + delta + images.length) % images.length);
   };
   const stepRef = useRef(step);
   stepRef.current = step;
 
   useEffect(() => setSaved(null), [index]);
+  // The button that was pressed is gone once the dialog swaps its actions: focus moves to what stands in for it (and
+  // the question is each answer's description, since the dialog that asks it opened before it was asked).
+  useEffect(() => {
+    if (!asked.current) return;
+    (confirming ? keepRef : deleteRef).current?.focus({ preventScroll: true });
+  }, [confirming]);
   // The arrow keys step through the gallery from anywhere in this dialog (focus starts on its buttons).
   useEffect(() => {
     if (images.length < 2) return;
@@ -80,6 +99,69 @@ export function CgViewer({ view, images, index, onIndex, onClose }: CgViewerProp
   if (!image) return null;
 
   const saving = download.state === "saving" || download.state === "preparing";
+  const ask = (value: boolean) => {
+    asked.current = true;
+    setDeleteFailed(false);
+    setConfirming(value);
+  };
+  const remove = async () => {
+    if (!onDelete || deleting) return;
+    setDeleting(true);
+    setDeleteFailed(false);
+    try {
+      await onDelete(image);
+    } catch {
+      setDeleteFailed(true);
+      setDeleting(false);
+    }
+  };
+  if (confirming) {
+    return (
+      <Dialog
+        wide
+        title={title}
+        onClose={deleting ? undefined : () => ask(false)}
+        initialFocus={keepRef}
+        actions={
+          <>
+            <button
+              ref={keepRef}
+              type="button"
+              className="of-button of-button--quiet of-glass"
+              aria-disabled={deleting}
+              aria-describedby={questionId}
+              onClick={() => {
+                if (!deleting) ask(false);
+              }}
+            >
+              {t("ui.otomeForge.album.deletePhotoKeep")}
+            </button>
+            <button
+              type="button"
+              className="of-button of-button--primary of-button--danger"
+              aria-disabled={deleting}
+              aria-describedby={questionId}
+              onClick={() => void remove()}
+            >
+              <Trash2 size={16} strokeWidth={2} aria-hidden="true" />
+              {t("ui.otomeForge.album.deletePhotoYes")}
+            </button>
+          </>
+        }
+      >
+        <div ref={viewerRef} className="of-viewer" aria-busy={deleting}>
+          <p id={questionId} className="of-body">
+            {t("ui.otomeForge.album.deletePhotoText")}
+          </p>
+          {deleteFailed ? (
+            <p className="of-notice of-notice--error" role="alert">
+              {t("ui.otomeForge.album.deletePhotoFailed")}
+            </p>
+          ) : null}
+        </div>
+      </Dialog>
+    );
+  }
   return (
     <Dialog
       wide
@@ -88,6 +170,17 @@ export function CgViewer({ view, images, index, onIndex, onClose }: CgViewerProp
       initialFocus={closeRef}
       actions={
         <>
+          {onDelete ? (
+            <button
+              ref={deleteRef}
+              type="button"
+              className="of-button of-button--quiet of-glass of-viewer-delete"
+              onClick={() => ask(true)}
+            >
+              <Trash2 size={16} strokeWidth={2} aria-hidden="true" />
+              {t("ui.otomeForge.album.deletePhoto")}
+            </button>
+          ) : null}
           {download.state !== "unavailable" ? (
             <button
               type="button"

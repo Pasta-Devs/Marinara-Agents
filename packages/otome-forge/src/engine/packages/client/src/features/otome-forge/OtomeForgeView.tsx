@@ -26,6 +26,7 @@ import { BibleView } from "./screens/BibleView";
 import { ClawMachine } from "./screens/dates/ClawMachine";
 import { DateNight } from "./screens/dates/DateNight";
 import { DatesHub, type DateActivity } from "./screens/dates/DatesHub";
+import { PhotoShoot } from "./screens/dates/PhotoShoot";
 import { ReadHim } from "./screens/dates/ReadHim";
 import { ReadMe } from "./screens/dates/ReadMe";
 import { ForgeProgress } from "./screens/ForgeProgress";
@@ -54,7 +55,13 @@ import type { OtomeIndex, RunView } from "./shared/api-types";
 
 const DOCKED: ReadonlySet<ScreenId> = new Set<ScreenId>(["home", ...DOCK_SCREENS]);
 /** The Dates activities this build opens (M5), each a screen taking ActivityScreenProps. */
-const ACTIVITIES: ReadonlySet<DateActivity> = new Set<DateActivity>(["read-him", "read-me", "date-night", "claw"]);
+const ACTIVITIES: ReadonlySet<DateActivity> = new Set<DateActivity>([
+  "read-him",
+  "read-me",
+  "date-night",
+  "photo-shoot",
+  "claw",
+]);
 
 interface ScreensProps {
   lookPreference: LookPreference;
@@ -239,6 +246,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     "read-him": "dates",
     "read-me": "dates",
     "date-night": "dates",
+    "photo-shoot": "dates",
     claw: "dates",
     home: activeRun ? undefined : "picker",
   };
@@ -340,6 +348,8 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
         onHome={() => go("home")}
         onImmersive={setImmersive}
       />
+    ) : screen === "photo-shoot" && activeRun && view && datesOf ? (
+      <PhotoShoot runKey={activeRun} view={view} li={datesOf} onExit={() => go("dates")} />
     ) : screen === "claw" && activeRun && view && datesOf ? (
       <ClawMachine runKey={activeRun} view={view} li={datesOf} onExit={() => go("dates")} />
     ) : activeRun && run.isPending ? (
@@ -373,7 +383,11 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
             ? `bible-${bibleLi}`
             : screen === "reader"
               ? `reader-${chapterKey}`
-              : screen === "read-him" || screen === "read-me" || screen === "date-night" || screen === "claw"
+              : screen === "read-him" ||
+                  screen === "read-me" ||
+                  screen === "date-night" ||
+                  screen === "photo-shoot" ||
+                  screen === "claw"
                 ? `${screen}-${datesOf?.id ?? ""}`
                 : screen
         }

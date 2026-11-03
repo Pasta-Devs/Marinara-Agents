@@ -193,5 +193,8 @@ ${R} .of-keepsake-photo img { display: block; width: 100%; aspect-ratio: 9 / 16;
 ${R} .of-keepsake-caption {
   margin-top: 8px; text-align: center; font-family: var(--of-font-hand); font-size: 1.35rem; line-height: 1.1;
 }
+/* #2087: the Photo Shoot's photo is a square print, in the keepsake's frame. */
+${R} .of-photo-result img { aspect-ratio: 1; }
+${R} .of-photo-person .of-hint { margin-top: -2px; }
 @keyframes of-heart-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
 @keyframes of-heart-wobble { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-10deg); } }`;

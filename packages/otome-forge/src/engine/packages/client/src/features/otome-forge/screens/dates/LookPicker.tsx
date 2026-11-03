@@ -2,10 +2,12 @@
 // Otome Forge: Date Night's looks. What each of them wears tonight, side by side: every look they own and can wear (the
 // Wardrobe's own list, GET /runs/:run/wardrobe), their everyday look first, or initials on their colour when a look has
 // no image. Starting the date wears the picks, as Wear at home does (S/routes/dates.ts), so they stay on afterwards.
+// The Photo Shoot (#2087) reuses it with its own note: a photo wears nothing. Looks show matte-cleaned (LookImage).
 // ──────────────────────────────────────────────
 import { useId, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, Shirt } from "lucide-react";
+import { LookImage } from "../../components/LookImage";
 import { accentOf, initialsOf } from "../../lib/accent";
 import { BASE_LOOK } from "../../shared/dates";
 import type { Player, RunLiView } from "../../shared/api-types";
@@ -20,6 +22,11 @@ interface LookPickerProps {
   hisLook: string;
   herLook: string;
   onChange: (looks: { hisLook: string; herLook: string }) => void;
+  /**
+   * In place of "worn for the date, and stay on afterwards" (the Photo Shoot wears nothing). Always shown, with the
+   * unpainted-look hint after it when there is one (that hint stands in for Date Night's own line).
+   */
+  note?: string;
 }
 
 /** The looks a date may use: the everyday one, then every owned look that is painted (only those can be worn). */
@@ -65,11 +72,12 @@ function LookCard({ group, who, name, url, looks, accent, value, onPick }: LookC
               onChange={() => onPick(look.id)}
             />
             <span className="of-look-frame" aria-hidden="true">
-              {image ? (
-                <img src={image} alt="" loading="lazy" />
-              ) : (
-                <span className="of-look-initials">{initialsOf(name)}</span>
-              )}
+              <LookImage
+                src={image}
+                alt=""
+                loading="lazy"
+                fallback={<span className="of-look-initials">{initialsOf(name)}</span>}
+              />
             </span>
             <span className="of-look-name">
               {checked ? <Check size={14} strokeWidth={3} aria-hidden="true" /> : null}
@@ -82,13 +90,17 @@ function LookCard({ group, who, name, url, looks, accent, value, onPick }: LookC
   );
 }
 
-export function LookPicker({ partner, player, hisLooks, herLooks, hisLook, herLook, onChange }: LookPickerProps) {
+export function LookPicker({ partner, player, hisLooks, herLooks, hisLook, herLook, onChange, note }: LookPickerProps) {
   const { t } = useTranslation();
   const id = useId();
   const his = dateLooks(hisLooks);
   const hers = dateLooks(herLooks);
   // Owned looks that are not painted yet (opened in the Wardrobe they paint, and can then be worn).
   const unpainted = [...(hisLooks ?? []), ...(herLooks ?? [])].some((look) => look.id !== BASE_LOOK && !look.wearable);
+  const notes = [
+    note ?? (unpainted ? "" : t("ui.otomeForge.dateNight.lookWearNote")),
+    unpainted ? t("ui.otomeForge.dateNight.lookUnpaintedNote") : "",
+  ].filter(Boolean);
   return (
     <div className="of-looks">
       <div className="of-looks-pair">
@@ -115,9 +127,7 @@ export function LookPicker({ partner, player, hisLooks, herLooks, hisLook, herLo
       </div>
       <p className="of-hint of-looks-note">
         <Shirt size={14} strokeWidth={2} aria-hidden="true" />
-        <span>
-          {t(unpainted ? "ui.otomeForge.dateNight.lookUnpaintedNote" : "ui.otomeForge.dateNight.lookWearNote")}
-        </span>
+        <span>{notes.join(" ")}</span>
       </p>
     </div>
   );

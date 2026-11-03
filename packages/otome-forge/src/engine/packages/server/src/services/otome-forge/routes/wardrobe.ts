@@ -226,13 +226,27 @@ export async function wardrobeView(deps: Pick<RouteDeps, "store">, runId: string
 
 // ── Wear at home ──
 
-/** A look item `owner` may wear: owned, theirs, and painted (made wearable now if its image was not added yet). */
-async function wearableItem(deps: RouteDeps, runId: string, look: string, wearer: "player" | `li:${string}`) {
+/**
+ * A look item `wearer` may wear, read without writing anything: owned (409 `locked`), theirs (400) and painted (409
+ * `conflict`). The Photo Shoot (S/minigames/photo-shoot.ts) dresses its photo in it without wearing it.
+ */
+export async function wearableLook(
+  deps: Pick<RouteDeps, "store">,
+  runId: string,
+  look: string,
+  wearer: "player" | `li:${string}`,
+) {
   if (!isItemId(look)) throw notFound("look");
   const { item } = await readOwnedItem(deps, runId, look);
   if (!isLookKind(item.kind) || lookWearer(item) !== wearer) throw badRequest("That look is not theirs to wear.");
   const outfit = outfitOf(item);
   if (!outfit) throw new OtomeForgeError(409, "That look is not painted yet.", "conflict");
+  return { item, outfit };
+}
+
+/** A look item `owner` may wear: owned, theirs, and painted (made wearable now if its image was not added yet). */
+async function wearableItem(deps: RouteDeps, runId: string, look: string, wearer: "player" | `li:${string}`) {
+  const { item, outfit } = await wearableLook(deps, runId, look, wearer);
   await addOutfit(deps, runId, item);
   return { item, outfit };
 }

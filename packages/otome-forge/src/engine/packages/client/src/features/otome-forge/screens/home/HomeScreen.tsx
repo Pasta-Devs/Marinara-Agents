@@ -348,7 +348,7 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenRemind }: HomeScre
         ? {
             ...current,
             ...patch,
-            // Another love interest: his note, faces, lines and CG arrive with the next answer.
+            // Another love interest: his note, faces, lines, CG and photo arrive with the next answer.
             ...(patch.li && patch.li !== current.li
               ? {
                   note: null,
@@ -356,6 +356,7 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenRemind }: HomeScre
                   lines: { ready: false },
                   rupture: false,
                   backdrop: current.backdrop?.kind === "cg" ? null : current.backdrop,
+                  photo: null,
                 }
               : {}),
           }
@@ -548,6 +549,7 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenRemind }: HomeScre
             accent={accent}
             status={noteStatus}
             onReply={(quote) => onOpenPhone({ li: li.id, quote })}
+            photo={about?.photo ?? null}
           />
         ) : null}
       </div>

@@ -163,6 +163,7 @@ export const RUN_DOC_KINDS = [
   "item",
   "readhim",
   "readme",
+  "photo",
 ] as const;
 export type RunDocKind = (typeof RUN_DOC_KINDS)[number];
 /** The `{id, kind, name}` mutateDoc creates a run document with. */
