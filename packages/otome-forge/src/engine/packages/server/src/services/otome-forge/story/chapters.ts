@@ -34,7 +34,13 @@ import type { ClimaxKind } from "../../../../../client/src/features/otome-forge/
 import { LIS_MAX } from "../../../../../client/src/features/otome-forge/shared/cast.js";
 import { LIMIT_IDS, type LimitId } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import { nextPrestige } from "../../../../../client/src/features/otome-forge/shared/economy.js";
-import { generateJson, readOrGenerate, runForeground, type GenerationDeps } from "../generation.js";
+import {
+  generateJson,
+  readOrGenerate,
+  resolveConnectionId,
+  runForeground,
+  type GenerationDeps,
+} from "../generation.js";
 import { OtomeForgeError } from "../http.js";
 import {
   PROLOGUE_KEY,
@@ -527,6 +533,8 @@ export async function planNextChapter(
         arc,
         sideWith,
         judgment: !!judgment,
+        // The scenes read the story context it caches only on the same connection (#2091).
+        sharesCache: resolveConnectionId(run.world, "structured") === resolveConnectionId(run.world, "narration"),
       }),
       memory,
       schema: ChapterPlanSchema,

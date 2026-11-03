@@ -8,11 +8,13 @@
 //    all of it is sent unchanged. Otherwise the story memory it carries (`memory`, recallText's context) gives way: its
 //    recalls first, oldest first; then, only while the reply would get less than OUTPUT_FLOOR, its older uncovered
 //    summaries, oldest first, and the previous chapter's earliest scenes. The timeline, the previous chapter's last
-//    scene and the newest summary always stay, and nothing outside the memory is ever cut. A message's
-//    `cacheBreakpoint` (#2066) is sent as it is. A prompt that still leaves the reply less than
-//    the floor (or the connection's own smaller cap) is a 413 `capacity` before anything is sent, never a request the
-//    Engine would cut: its fitter would shrink the reply to 128 tokens, then cut the rules. The margin kept is the
-//    Engine's (fitSafety) with some to spare, and model.fitContext checks the result: any trim there is `capacity` too.
+//    scene and the newest summary always stay, and nothing outside the memory is ever cut. A cached prompt's own canon
+//    (S/story/canon.ts `cached`) is a context of its own, beside the recalls, and its summaries give way before the
+//    cached part's, each part keeping its newest (#2091). A message's `cacheBreakpoint` (#2066) is sent as it is. A
+//    prompt that still leaves the reply less than the floor (or the connection's own smaller cap) is a 413 `capacity`
+//    before anything is sent, never a request the Engine would cut: its fitter would shrink the reply to 128 tokens,
+//    then cut the rules. The margin kept is the Engine's (fitSafety) with some to spare, and model.fitContext checks the
+//    result: any trim there is `capacity` too.
 // 4. Log: logOtomePrompt (debugOverride in debug mode, `redact` strings replaced). In debug mode the reply's prompt
 //    cache use is logged too, when the provider reports it.
 // 5. Call: chatComplete with the reply's output size alone (the maintainer's rule): no temperature, no JSON mode, no
@@ -69,7 +71,7 @@ export interface GenerateJsonRequest<T extends object> {
   label: string;
   messages: OtomeMessage[];
   /**
-   * The story memory the messages carry (recallText's context, its `text` inserted as it is, and with `apart` its
+   * The story memory the messages carry (recallText's context, its `text` inserted as it is, and when `cached` its
    * recalls' text too): what the fit may leave out when the prompt does not fit (see the header). Without it nothing in
    * the prompt gives way.
    */
