@@ -1262,7 +1262,7 @@ test("Otome Hearth Album: every tab is in reach with a mouse, and a phone keeps 
   const root = await openOtome(page);
   await openDock(root, "Album");
   const tabs = root.getByRole("tablist", { name: "Album" });
-  const names = ["CGs", "Stickers", "Memories", "Love Timeline", "Favourite lines", "Soundtrack", "Tells"];
+  const names = ["CGs", "Stickers", "Photos", "Memories", "Love Timeline", "Favourite lines", "Soundtrack", "Tells"];
   for (const [colorScheme, look] of [
     ["dark", "midnight"],
     ["light", "pearl"],

@@ -98,6 +98,8 @@ const PORTRAIT_CUT = png(13, 19, [140, 150, 200]);
 const TENDER = png(13, 19, [230, 170, 190]);
 const TENDER_CUT = png(13, 19, [220, 160, 180]);
 const PLACE = png(16, 9, [60, 70, 110]);
+/** #2087: a Photo Shoot photo with Ilvar, a square print. */
+const PHOTO = png(16, 16, [240, 200, 160]);
 const FLUSTERED = png(13, 19, [240, 140, 170]);
 const AVATAR = png(8, 8, [231, 166, 184]);
 /** M4: the looks the Wardrobe's Wear at home put on, his cut out. */
@@ -133,6 +135,7 @@ function createHomeStub({
   worn = false,
   firstNote = NOTE,
   noticedLine = NOTICED_LINE,
+  photo = false,
 } = {}) {
   const calls: Call[] = [];
   const state = {
@@ -342,6 +345,8 @@ function createHomeStub({
           rupture: state.rupture,
           unread: unread(),
           backdrop: images ? { url: PLACE, kind: "place" } : null,
+          // #2087: the newest Photo Shoot photo with him, taped into his note.
+          photo: photo && home.li === ILVAR ? { url: PHOTO, at: now() } : null,
           noticed: noticedNow ? { li: ILVAR, text: noticedLine, look: "my-wardrobe-0-f", at: now() } : null,
           noticing: worn && meReads >= 1 && !noticedNow,
         },
@@ -1256,6 +1261,27 @@ function homeLayout(root: Locator) {
       targets,
       /** How much of the note's own words shows (it scrolls when the stage is short). */
       noteText: element.querySelector(".of-note-text")?.clientHeight ?? 0,
+      /** #2087: the taped photo, inside the scrolling text so the words wrap around it. */
+      photo: (() => {
+        const print = element.querySelector(".of-note-text > .of-note-photo");
+        const text = element.querySelector(".of-note-text");
+        if (!print || !text) return null;
+        const words = text.querySelector("p")!;
+        const range = document.createRange();
+        range.selectNodeContents(words);
+        const first = range.getClientRects()[0];
+        const shown = print.getBoundingClientRect();
+        const box = text.getBoundingClientRect();
+        return {
+          left: shown.left,
+          right: shown.right,
+          top: shown.top,
+          lineLeft: first?.left ?? 0,
+          lineRight: first?.right ?? 0,
+          boxLeft: box.left,
+          boxRight: box.right,
+        };
+      })(),
       // M6's round Remind Me and Caring message share a row at the rail's foot: each counts as a button of its own.
       rail: named(".of-home-rail > :not(.of-home-rail-row), .of-home-rail-row > *", (node) => `rail: ${label(node)}`),
       covers: [
@@ -1291,14 +1317,19 @@ async function showCaringMessage(page: Page, root: Locator) {
   await expect(root.getByRole("button", { name: "Caring message" })).toBeVisible();
 }
 
-for (const images of [true, false]) {
+// #2087: the same sweep again with a Photo Shoot photo taped into the note.
+for (const [images, photo] of [
+  [true, false],
+  [false, false],
+  [true, true],
+] as const) {
   for (const look of ["dark", "light"] as const) {
-    test(`Otome Forge Home at phone sizes (${images ? "painted" : "no images"}, ${look === "dark" ? "Midnight" : "Pearl"}): nothing covers a tap zone or pill`, async ({
+    test(`Otome Forge Home at phone sizes (${images ? "painted" : "no images"}${photo ? ", a photo in the note" : ""}, ${look === "dark" ? "Midnight" : "Pearl"}): nothing covers a tap zone or pill`, async ({
       page,
     }) => {
       test.setTimeout(120_000);
       await page.emulateMedia({ colorScheme: look });
-      const stub = createHomeStub({ images });
+      const stub = createHomeStub({ images, photo });
       await stubRoutes(page, stub, []);
       const root = await openHome(page);
       await expect(root.getByRole("article", { name: "A note from Ilvar Thorne" })).toContainText(NOTE);
@@ -1327,6 +1358,18 @@ for (const images of [true, false]) {
           ).toBe(true);
           // The note keeps at least a line of its words in view.
           expect(layout.noteText, `the note's words at ${at}`).toBeGreaterThanOrEqual(24);
+          if (photo) {
+            // The print is inside the note's text, at its end, and its first line of words stops before it.
+            expect(layout.photo, `the photo in the note at ${at}`).not.toBeNull();
+            expect(layout.photo!.lineRight, `the first line wraps around the photo at ${at}`).toBeLessThanOrEqual(
+              layout.photo!.left + 1,
+            );
+            expect(layout.photo!.right, `the photo stays in the note at ${at}`).toBeLessThanOrEqual(
+              layout.photo!.boxRight + 1,
+            );
+          } else {
+            expect(layout.photo, at).toBeNull();
+          }
           for (const target of layout.targets) {
             const big = target.box.width >= 24 && target.box.height >= 24;
             expect(big, `${target.name} is at least 24 px square at ${at}`).toBe(true);

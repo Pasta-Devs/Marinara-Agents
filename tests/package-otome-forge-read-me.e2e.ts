@@ -389,7 +389,11 @@ test("Otome Hearth Read Me: four guesses answered by button, key and words, paid
     await activities
       .locator(".of-activity")
       .evaluateAll((items) => items.map((item) => (item as HTMLElement).dataset.activity)),
-  ).toEqual(["read-him", "read-me", "date-night", "claw"]);
+  ).toEqual(["read-him", "read-me", "date-night", "photo-shoot", "claw"]);
+  // Without an image connection the Photo Shoot is shown as unavailable: the four Play buttons above stand.
+  await expect(activities.locator('.of-activity[data-activity="photo-shoot"]')).toContainText(
+    "Needs an image connection",
+  );
   await card.scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath("01-dates.png") });
   await root.getByRole("button", { name: "Play: Let Kai Ardent read you" }).click();
