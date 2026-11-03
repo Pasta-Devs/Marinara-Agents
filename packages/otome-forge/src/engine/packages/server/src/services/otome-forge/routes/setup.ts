@@ -8,12 +8,14 @@
 // POST /runs/:run/art/paint {target, prompt?, negativePrompt?}         → {paint}
 // POST /runs/:run/art/expressions/prompt {li}                         → {base, prompts} (five read-only previews)
 // POST /runs/:run/art/expressions {li, base?, prompts?}               → {paint} (one explicit replacement set)
+// GET  /image-style-profiles                                          → {defaultProfileId, profiles: [{id, name, promptMode}]}
+//                                                                        (the Engine's, for Settings → Images)
 // `owner` is "player" or "li:<li id>". The paint route is the explicit tap: it paints once, waits for the result,
 // and answers with the saved record (`ready`, or `failed` with Retry); an edited prompt keeps its safety tags.
 import { z } from "zod";
 import { expressionPromptsFor } from "../art/expressions.js";
 import { FACES } from "../../../../../client/src/features/otome-forge/shared/faces.js";
-import { lookPromptFor, parseLookOwner, type LookOwner } from "../art/paint.js";
+import { imagesOf, lookPromptFor, parseLookOwner, type LookOwner } from "../art/paint.js";
 import { generateJson } from "../generation.js";
 import { OtomeForgeError, debugModeOf, parseBody, runParam, type RegisterRoutes } from "../http.js";
 import { isLiId } from "../ids.js";
@@ -59,6 +61,14 @@ function ownerOf(target: { owner: string }): LookOwner {
 
 export const registerSetupRoutes: RegisterRoutes = (router, deps) => {
   const { handle } = deps;
+
+  router.get(
+    "/image-style-profiles",
+    handle(async () => {
+      const images = imagesOf(deps);
+      return (await images.styleProfiles?.()) ?? { defaultProfileId: "", profiles: [] };
+    }),
+  );
 
   router.post(
     "/runs/:run/art/expressions/prompt",

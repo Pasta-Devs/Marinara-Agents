@@ -1,6 +1,7 @@
 // ──────────────────────────────────────────────
 // Otome Forge Settings → Images: the story's image connection (or none: the game is fully playable without one), its
-// rating (above SFW needs the 18+ confirmation), its image style, "Ask before painting" and expressions.
+// rating (above SFW needs the 18+ confirmation), its image style and image prompt style (the Engine profile), "Ask
+// before painting" and expressions.
 // ──────────────────────────────────────────────
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -14,14 +15,18 @@ import { ImageRatingControl } from "../setup/ContentStep";
 import { Section } from "../setup/parts";
 import { NoStory, SaveBar, storedKey } from "./ContentSettings";
 
-type ImageForm = Pick<ImageSettings, "connectionId" | "rating" | "ask" | "expressions"> & { style: string };
+type ImageForm = Pick<ImageSettings, "connectionId" | "rating" | "ask" | "expressions"> & {
+  style: string;
+  styleProfileId: string;
+};
 
-const toForm = ({ connectionId, rating, ask, expressions, style }: ImageSettings): ImageForm => ({
+const toForm = ({ connectionId, rating, ask, expressions, style, styleProfileId }: ImageSettings): ImageForm => ({
   connectionId,
   rating,
   ask,
   expressions,
   style: style ?? "",
+  styleProfileId: styleProfileId ?? "",
 });
 
 function StoryImages({ run, settings }: { run: RunView; settings: SaveSettings }) {

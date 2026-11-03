@@ -5,11 +5,13 @@
 // to a context window under STORY_CONTEXT_MIN gets a warning (#2066): a story prompt carries the story's timeline and
 // the previous chapter in full, so a smaller one soon runs out of room. It is never refused.
 // ──────────────────────────────────────────────
+import { useId } from "react";
 import { useTranslation } from "react-i18next";
 import { ImageOff, PlugZap } from "lucide-react";
 import { CostHint } from "../../components/CostHint";
 import { CheckAgain, RetryNotice } from "../../components/RetryNotice";
 import { useConnections, type ConnectionOption } from "../../hooks/use-engine-resources";
+import { useImageStyleProfiles } from "../../hooks/use-image-style-profiles";
 import { IMAGE_STYLE_MAX } from "../../shared/content";
 import { FACES_PER_LOOK, type DraftConnections, type DraftImages, type SetupDraft } from "./draft";
 import { ConnectionSelect, Section, Switch, TextField } from "./parts";
@@ -83,12 +85,68 @@ export function ConnectionControls({ value, onChange, connections, onCheckAgain 
   );
 }
 
+type ImageControlValue = Pick<DraftImages, "connectionId" | "ask" | "expressions" | "style" | "styleProfileId">;
+
 interface ImageControlsProps {
-  value: Pick<DraftImages, "connectionId" | "ask" | "expressions" | "style">;
-  onChange: (value: Pick<DraftImages, "connectionId" | "ask" | "expressions" | "style">) => void;
+  value: ImageControlValue;
+  onChange: (value: ImageControlValue) => void;
   connections: readonly ConnectionOption[];
   /** How many love interests have looks, for the expression estimate. */
   lis: number;
+}
+
+/** Each Engine prompt mode in words: whether the profile writes sentences or tags. */
+const PROMPT_MODE_KEYS: Record<string, string> = {
+  natural: "ui.otomeForge.setup.imageProfileNatural",
+  tagged: "ui.otomeForge.setup.imageProfileTagged",
+  danbooru: "ui.otomeForge.setup.imageProfileDanbooru",
+  hybrid: "ui.otomeForge.setup.imageProfileHybrid",
+};
+
+/**
+ * The Engine image style profile the story's pictures follow ("" is the Engine's default): its art style, tags and
+ * prompt mode. A tag profile writes tag prompts, which sentence models such as GPT Image read badly (2026-11-03).
+ */
+function StyleProfileSelect({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const { t } = useTranslation();
+  const profiles = useImageStyleProfiles();
+  const id = useId();
+  const list = profiles.data?.profiles ?? [];
+  const named = (profile: { name: string; promptMode: string }) =>
+    PROMPT_MODE_KEYS[profile.promptMode]
+      ? `${profile.name} · ${t(PROMPT_MODE_KEYS[profile.promptMode]!)}`
+      : profile.name;
+  const fallback = list.find((profile) => profile.id === profiles.data?.defaultProfileId) ?? list[0];
+  const missing = !!value && !profiles.isLoading && !list.some((profile) => profile.id === value);
+  return (
+    <div className="of-field">
+      <label className="of-label" htmlFor={id}>
+        {t("ui.otomeForge.setup.imageProfileLabel")}
+      </label>
+      <select
+        id={id}
+        className="of-input of-select"
+        value={value}
+        aria-describedby={`${id}-hint`}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        <option value="">
+          {fallback
+            ? t("ui.otomeForge.setup.imageProfileDefaultNamed", { name: named(fallback) })
+            : t("ui.otomeForge.setup.imageProfileDefault")}
+        </option>
+        {missing ? <option value={value}>{t("ui.otomeForge.setup.imageProfileMissing")}</option> : null}
+        {list.map((profile) => (
+          <option key={profile.id} value={profile.id}>
+            {named(profile)}
+          </option>
+        ))}
+      </select>
+      <p id={`${id}-hint`} className="of-hint">
+        {t("ui.otomeForge.setup.imageProfileHint")}
+      </p>
+    </div>
+  );
 }
 
 export function ImageControls({ value, onChange, connections, lis }: ImageControlsProps) {
@@ -112,6 +170,10 @@ export function ImageControls({ value, onChange, connections, lis }: ImageContro
             value={value.style}
             max={IMAGE_STYLE_MAX}
             onChange={(style) => onChange({ ...value, style })}
+          />
+          <StyleProfileSelect
+            value={value.styleProfileId}
+            onChange={(styleProfileId) => onChange({ ...value, styleProfileId })}
           />
           <Switch
             label={t("ui.otomeForge.setup.askLabel")}

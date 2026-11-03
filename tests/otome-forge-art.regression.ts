@@ -19,6 +19,7 @@ import {
   worldId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
 import { registerArtRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/art.ts";
+import { registerSetupRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/setup.ts";
 import { registerRunRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/runs.ts";
 import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
 import { normalizeState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
@@ -804,4 +805,60 @@ test("a paint a restart left pending reads as stopped in the run view and the be
   );
   assert.equal(served.body.beat.cg.art.state, "stopped");
   assert.equal((await readStoredBeat(t.store, t.runId, 2))!.cg?.art?.state, "pending", "only the view changes");
+});
+
+test("Settings → Images lists the Engine's image style profiles, and the one picked is the one pictures follow (2026-11-03)", async () => {
+  const profiles = {
+    defaultProfileId: "anime",
+    profiles: [
+      {
+        id: "anime",
+        name: "Anime",
+        baseStyle: "anime",
+        promptMode: "tagged",
+        styleText: "anime art",
+        positiveTags: "anime",
+        negativeTags: "",
+      },
+      {
+        id: "auto",
+        name: "Auto",
+        baseStyle: "auto",
+        promptMode: "natural",
+        styleText: "",
+        positiveTags: "",
+        negativeTags: "",
+      },
+    ],
+  };
+  const fetch = (async (url: string | URL) => {
+    const path = String(url).replace("http://127.0.0.1:7860", "");
+    if (path === "/api/app-settings/ui")
+      return Response.json({ value: JSON.stringify({ imageStyleProfiles: profiles }) });
+    return new Response("{}", { status: 404 });
+  }) as typeof globalThis.fetch;
+  const images = createImageClient({ baseUrl: "http://127.0.0.1:7860", fetch });
+  const t = await sceneWorld("r-profiles-aaaaaa");
+  const listed = await routesOf(
+    registerSetupRoutes,
+    { ...t.deps, images },
+    "r-profiles-aaaaaa",
+  )("GET", "/image-style-profiles");
+  assert.equal(listed.status, 200);
+  assert.deepEqual(listed.body, {
+    defaultProfileId: "anime",
+    profiles: [
+      { id: "anime", name: "Anime", promptMode: "tagged" },
+      { id: "auto", name: "Auto", promptMode: "natural" },
+    ],
+  });
+  // Unpicked, the Engine's default writes tags; picking Auto makes the story's prompts sentences.
+  assert.equal((await images.styleProfile(undefined)).tagged, true);
+  assert.equal((await images.styleProfile("auto")).tagged, false);
+  // A list the Engine cannot give reads as empty, never as an error.
+  const broken = createImageClient({
+    baseUrl: "http://127.0.0.1:7860",
+    fetch: (async () => new Response("{}", { status: 500 })) as typeof globalThis.fetch,
+  });
+  assert.deepEqual(await broken.styleProfiles!(), { defaultProfileId: "", profiles: [] });
 });

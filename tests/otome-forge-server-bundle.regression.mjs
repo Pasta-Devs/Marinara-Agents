@@ -58,6 +58,7 @@ test("the bundle registers its routes under /api/otome-forge, keeps the id prefi
   const host = await activatePackage(fake);
   assert.deepEqual(host.prefixes, ["/api/otome-forge"]);
   assert.deepEqual([...host.routes.keys()].sort(), [
+    "GET /api/otome-forge/image-style-profiles",
     "GET /api/otome-forge/index",
     "GET /api/otome-forge/runs/:run",
     "GET /api/otome-forge/runs/:run/album",
