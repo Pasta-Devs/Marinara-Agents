@@ -254,8 +254,11 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
   // Whom a Confrontation faces: the opponent the server set (not whoever spoke last), else the chapter's own.
   const facingId = reader.confrontation?.li ?? chapter?.li ?? chapter?.lead;
   const facing = view.lis.find((li) => li.id === facingId) ?? null;
-  // Phone stickers may use uncut originals. The stage accepts only faces authorized by the run's cutout metadata.
-  const stageLi = reader.onStage.li;
+  // Phone stickers may use uncut originals. The stage accepts only faces authorized by the run's cutout metadata. A
+  // look's first-wear scene stands him in that look, with its own faces and cut-outs, whatever he wears now.
+  // ponytail: until the scene's art read answers (made only with an image connection), he stands in his worn look; the
+  // upgrade path is the first-wear look on the chapter view.
+  const stageLi = reader.onStage.li && { ...reader.onStage.li, ...reader.sceneArt?.looks?.[reader.onStage.li.id] };
   const onStageLi = stageLi
     ? {
         ...stageLi,

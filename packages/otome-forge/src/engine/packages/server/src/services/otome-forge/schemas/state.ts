@@ -437,11 +437,16 @@ export const STATE_LIMITS = {
 };
 
 /**
- * His painted faces for the look he wears now (the kit's forgeStoryExpressionCast: a ready set only, and only while
- * expressions are on): his worn outfit (M4), else his portrait, the base art/expressions.ts paints them on.
+ * His painted faces for `look` (the kit's forgeStoryExpressionCast: a ready set only, and only while expressions are
+ * on); by default the look he wears now, his worn outfit (M4) else his portrait, the base art/expressions.ts paints
+ * them on. Sets are kept per look, so a look he wore before keeps its faces.
  */
-export function readyFaces(world: Pick<World, "images">, unit: Unit): Partial<Record<Face, string>> | undefined {
-  const { expressions } = forgeStoryExpressionCast(world.images, unit, wornLookUrl(unit), FACES);
+export function readyFaces(
+  world: Pick<World, "images">,
+  unit: Unit,
+  look = wornLookUrl(unit),
+): Partial<Record<Face, string>> | undefined {
+  const { expressions } = forgeStoryExpressionCast(world.images, unit, look, FACES);
   return expressions as Partial<Record<Face, string>> | undefined;
 }
 
@@ -452,8 +457,12 @@ export function readyCutout(unit: Pick<Unit, "cutouts">, url: string | undefined
 }
 
 /** Stage faces use only cleaned derivatives; missing or failed cleanup keeps the neutral look on stage. */
-export function cleanedFaces(world: Pick<World, "images">, unit: Unit): Partial<Record<Face, string>> | undefined {
-  const faces = readyFaces(world, unit);
+export function cleanedFaces(
+  world: Pick<World, "images">,
+  unit: Unit,
+  look?: string,
+): Partial<Record<Face, string>> | undefined {
+  const faces = readyFaces(world, unit, look);
   return faces
     ? (Object.fromEntries(
         Object.entries(faces).flatMap(([face, url]) => {
@@ -464,10 +473,14 @@ export function cleanedFaces(world: Pick<World, "images">, unit: Unit): Partial<
     : undefined;
 }
 
-/** Every image he stands on stage in (base look, worn look, ready faces): what the cut-outs are made of. */
-export function stageArtUrls(world: Pick<World, "images">, unit: Unit): string[] {
-  const worn = unit.wornOutfit ? unit.outfits.find((outfit) => outfit.id === unit.wornOutfit)?.url : undefined;
-  return [unit.portrait, worn, ...Object.values(readyFaces(world, unit) ?? {})].filter((url): url is string => !!url);
+/**
+ * Every image he stands on stage in (base look, the look he stands in, by default the one worn now, and its ready
+ * faces): what the cut-outs are made of.
+ */
+export function stageArtUrls(world: Pick<World, "images">, unit: Unit, look = wornLookUrl(unit)): string[] {
+  return [unit.portrait, look, ...Object.values(readyFaces(world, unit, look) ?? {})].filter(
+    (url): url is string => !!url,
+  );
 }
 
 /**

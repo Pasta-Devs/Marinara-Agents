@@ -2179,6 +2179,70 @@ for (const outcome of ["ready", "uncut"] as const) {
   });
 }
 
+test("Otome Hearth stands him in a first-wear scene's look, not the look he wears on Home", async ({ page }) => {
+  const sprite = (colour: string) =>
+    `data:image/svg+xml,${encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="320"><circle cx="80" cy="40" r="26" fill="${colour}"/><path d="M52 72H108L120 190H100V310H85V190H75V310H60V190H40Z" fill="${colour}"/></svg>`,
+    )}`;
+  const coat = sprite("#9db8f0");
+  const coatCold = sprite("#6f8fd0");
+  const suit = sprite("#3b3b48");
+  const suitCold = sprite("#5a5a6e");
+  const stub = createStoryStub({
+    done: true,
+    storyBeats: [
+      { ...BEATS[0], segments: [seg("Ilvar Thorne", "You came to see it.", { expression: "cold" })], choices: [] },
+      ...BEATS.slice(1),
+    ],
+  });
+  const answer = stub.answer;
+  stub.answer = (call) => {
+    const response = answer(call);
+    if (call.path === `/api/otome-forge/runs/${RUN}`) {
+      const view = (response.json as Json).view;
+      view.world.images.connectionId = "conn-image";
+      // On Home he still wears the coat, with its own faces.
+      Object.assign(view.lis[0], {
+        portrait: coat,
+        worn: { id: "his-wardrobe-0-a1", url: coat },
+        expressions: { cold: coatCold },
+        cut: [coat, coatCold],
+      });
+    }
+    if (call.path.endsWith("/art/scene")) {
+      // S/routes/art.ts: the scene is a look's first-wear scene, so he stands in that look with its faces.
+      return {
+        status: 200,
+        json: {
+          places: [],
+          cg: null,
+          faces: { [ILVAR]: { cold: suitCold } },
+          facesComing: [],
+          looks: {
+            [ILVAR]: {
+              worn: { id: "his-wardrobe-0-f", url: suit },
+              expressions: { cold: suitCold },
+              cut: [suit, suitCold],
+            },
+          },
+        },
+      };
+    }
+    return response;
+  };
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await stubRoutes(page, stub);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+  const scene = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/art/scene"));
+  await root.getByRole("button", { name: "Begin" }).click();
+  await (await scene).finished();
+  const front = root.locator('.of-face-img[data-front="true"]');
+  await expect(front).toHaveAttribute("src", suitCold);
+  await expect(front).toHaveAttribute("data-cut", "true");
+  expect(stub.calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"))).toHaveLength(1);
+});
+
 /** #2046: the first beat as a side-with scene: Ilvar and Cassian disagree, and one small choice backs each. */
 const SIDE_BEAT: Json = {
   ...BEATS[0],

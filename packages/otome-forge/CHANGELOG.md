@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.8.3 — 2026-11-03
+
+- **A new 5★ look's scene shows the new look.** The short scene that comes with a love interest's 5★ look now shows them on stage in that look, not in what they wear on Home, and keeps it when you replay the scene after they change. Its expressions show once that look has them. Reading the scene paints none: a look's expressions are still painted when they first wear it.
+
 ## 0.8.2 — 2026-11-03
 
 - **Key images are ready when you reach them again.** The next scene's key image now starts painting as soon as that scene is written ahead, as it did before 0.6.27, so it is usually waiting when its moment comes. If you use Ease off or Rewrite on the scene you are reading, the scene written ahead is written again and its key image painted again (1 image); the buttons say so.
