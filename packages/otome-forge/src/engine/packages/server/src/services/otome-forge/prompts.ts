@@ -1104,9 +1104,12 @@ const VARIED_DECISION =
 const judgmentLine = ({ question, answers }: ArcJudgment) =>
   `- The big choice MAY be a judgment the protagonist can get wrong, its own kind of decision even when the answers name love interests: "${question}" If it is, give it exactly one option per answer and no others: ${answers.map((answer) => `"${answer}"`).join(", ")}, each as the protagonist's own intent like any big choice. One of them is true; you are not told which and neither is the protagonist, so neither the scene nor the labels or selections hint which is right. Whatever the player picks is canon, and the chapters after play it out. This is optional: a different kind of big choice, or none, is just as good.`;
 
-/** P5's, P10's and P11's line on time passing (#1955): the protagonist rests and sleeps, as people do. */
+/**
+ * P5's, P10's and P11's line on time passing (#1955): the protagonist is human and sees to a day, in passing. The
+ * maintainer's wording, 2026-11-03: "eats" alone made the cast press food on the protagonist scene after scene.
+ */
 const TIME_RULE =
-  "- Time passes as in a life: the protagonist eats, rests and sleeps. When a chapter runs through a night, a long day or an exhausting stretch, give a node, or part of one, to rest: settling down, sleep, waking up. It may be shared or interrupted.";
+  "- Time passes as in a life: the protagonist is human, resting, sleeping, washing and seeing to the small needs of a day or night in passing. When a chapter runs through a night, a long day or an exhausting stretch, give a node, or part of one, to rest: settling down, sleep, waking up. It may be shared or interrupted.";
 
 const TRUST_WORDS = ["cold", "wary", "uneasy", "neutral", "warm", "trusting", "devoted"] as const;
 const TENSION_WORDS = ["calm", "charged", "strained", "breaking"] as const;

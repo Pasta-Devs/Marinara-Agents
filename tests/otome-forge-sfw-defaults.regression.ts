@@ -256,11 +256,11 @@ const EXPECTED_ANGST: Record<string, string> = {
   bannerMine: "109b0762d8bcf329",
   beat: "26d7ba0dafc6c0bf",
   beatWithCg: "8161431cbc12789d",
-  chapterPlan: "3fb0fc6896268a98",
+  chapterPlan: "265af67c2fded21a",
   closer: "a1a09309945e9e5d",
   confrontation: "d0a05079393b602d",
-  repairPlan: "8b01a20e6b566a07",
-  routePlan: "5ee99e80b265372d",
+  repairPlan: "66a0a3d0fc164ff3",
+  routePlan: "d2236d1d9f1d95cc",
 };
 const EXPECTED_GENTLE: Record<string, string> = {
   bannerHis: "5b01874fc4fabd17",
@@ -268,11 +268,11 @@ const EXPECTED_GENTLE: Record<string, string> = {
   bannerMine: "75d0bd9aebbf79ad",
   beat: "7ec97d9b201b895e",
   beatWithCg: "ce1e12d2113f4eab",
-  chapterPlan: "dcbe53dd1f876a18",
+  chapterPlan: "fc83f5795c86773f",
   closer: "54aafc5f0e85bc63",
   confrontation: "76c943bb55171273",
-  repairPlan: "0b626fe8bd7b1f7c",
-  routePlan: "b0ae82afbd80090a",
+  repairPlan: "27abea647217c7fe",
+  routePlan: "c4db47d78223bd2d",
 };
 
 test("the SFW defaults pin scene pacing and earned character change in story and banner prompts", () => {

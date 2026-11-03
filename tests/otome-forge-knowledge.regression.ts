@@ -41,7 +41,8 @@ const UNTIL = "Until then the protagonist does not understand them, and nobody t
 const CANON = "When the story is set in an existing world from a game, book, film or show, keep to its canon:";
 const OTHERS = "- The world has other people: give named minor characters";
 const ALONE = "a node may be theirs alone or with others (cast [])";
-const TIME = "- Time passes as in a life: the protagonist eats, rests and sleeps.";
+const TIME =
+  "- Time passes as in a life: the protagonist is human, resting, sleeping, washing and seeing to the small needs of a day or night in passing.";
 
 function inputs() {
   const world = normalizeWorld({
