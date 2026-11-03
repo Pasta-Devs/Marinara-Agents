@@ -115,7 +115,9 @@ export function Album({ runKey, view, onOpenStory }: AlbumProps) {
   const [tab, setTab] = useState<AlbumTab>("cgs");
   const [viewing, setViewing] = useState<number | null>(null);
   const [viewingSticker, setViewingSticker] = useState<number | null>(null);
-  const [viewingPhoto, setViewingPhoto] = useState<number | null>(null);
+  // A photo is held by its key: the list can change under the viewer (a photo taken elsewhere lands first), and Delete
+  // must take the one shown.
+  const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   // A deleted photo's tile goes with it: once the viewer has closed (and handed focus back), focus moves to the panel.
   const focusPanel = useRef(false);
@@ -173,6 +175,7 @@ export function Album({ runKey, view, onOpenStory }: AlbumProps) {
   const data = album.data;
   // Stubs and servers older than #2087 send no photos.
   const photos = data.photos ?? [];
+  const photoIndex = viewingPhoto === null ? -1 : photos.findIndex((image) => image.key === viewingPhoto);
   const shownMemory = data.memories.find((item) => item.id === memory) ?? null;
   /** Deletes the photo shown, closes the viewer and leaves focus on the Photos panel (its tile is gone). */
   const deletePhoto = async (image: AlbumImage) => {
@@ -200,7 +203,7 @@ export function Album({ runKey, view, onOpenStory }: AlbumProps) {
         emptyKey="ui.otomeForge.album.photosEmpty"
         noImagesKey="ui.otomeForge.album.photosNoImages"
         square
-        onView={setViewingPhoto}
+        onView={(index) => setViewingPhoto(photos[index]?.key ?? null)}
       />
     ) : tab === "memories" ? (
       <Memories view={view} memories={data.memories} onShow={setMemory} />
@@ -250,12 +253,12 @@ export function Album({ runKey, view, onOpenStory }: AlbumProps) {
           onClose={() => setViewingSticker(null)}
         />
       ) : null}
-      {viewingPhoto !== null && photos[viewingPhoto] ? (
+      {photoIndex >= 0 ? (
         <CgViewer
           view={view}
           images={photos}
-          index={viewingPhoto}
-          onIndex={setViewingPhoto}
+          index={photoIndex}
+          onIndex={(index) => setViewingPhoto(photos[index]?.key ?? null)}
           onClose={() => setViewingPhoto(null)}
           onDelete={deletePhoto}
         />

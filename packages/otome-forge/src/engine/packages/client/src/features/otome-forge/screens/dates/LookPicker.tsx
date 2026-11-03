@@ -22,7 +22,10 @@ interface LookPickerProps {
   hisLook: string;
   herLook: string;
   onChange: (looks: { hisLook: string; herLook: string }) => void;
-  /** In place of "worn for the date, and stay on afterwards" (the Photo Shoot wears nothing). */
+  /**
+   * In place of "worn for the date, and stay on afterwards" (the Photo Shoot wears nothing). Always shown, with the
+   * unpainted-look hint after it when there is one (that hint stands in for Date Night's own line).
+   */
   note?: string;
 }
 
@@ -94,6 +97,10 @@ export function LookPicker({ partner, player, hisLooks, herLooks, hisLook, herLo
   const hers = dateLooks(herLooks);
   // Owned looks that are not painted yet (opened in the Wardrobe they paint, and can then be worn).
   const unpainted = [...(hisLooks ?? []), ...(herLooks ?? [])].some((look) => look.id !== BASE_LOOK && !look.wearable);
+  const notes = [
+    note ?? (unpainted ? "" : t("ui.otomeForge.dateNight.lookWearNote")),
+    unpainted ? t("ui.otomeForge.dateNight.lookUnpaintedNote") : "",
+  ].filter(Boolean);
   return (
     <div className="of-looks">
       <div className="of-looks-pair">
@@ -120,11 +127,7 @@ export function LookPicker({ partner, player, hisLooks, herLooks, hisLook, herLo
       </div>
       <p className="of-hint of-looks-note">
         <Shirt size={14} strokeWidth={2} aria-hidden="true" />
-        <span>
-          {unpainted
-            ? t("ui.otomeForge.dateNight.lookUnpaintedNote")
-            : (note ?? t("ui.otomeForge.dateNight.lookWearNote"))}
-        </span>
+        <span>{notes.join(" ")}</span>
       </p>
     </div>
   );

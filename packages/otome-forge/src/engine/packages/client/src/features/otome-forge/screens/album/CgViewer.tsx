@@ -4,7 +4,7 @@
 // A Photo Shoot photo (#2087) can also be deleted: the dialog asks first in place of its own text, so no second
 // dialog opens over it.
 // ──────────────────────────────────────────────
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronLeft, ChevronRight, Download, Trash2, X } from "lucide-react";
 import { Dialog } from "../../components/Dialog";
@@ -52,6 +52,7 @@ export function CgViewer({ view, images, index, onIndex, onClose, onDelete }: Cg
   const keepRef = useRef<HTMLButtonElement>(null);
   const deleteRef = useRef<HTMLButtonElement>(null);
   const viewerRef = useRef<HTMLDivElement>(null);
+  const questionId = useId();
   const [saved, setSaved] = useState<string | null>(null);
   // Delete asks first, in this dialog: its text and buttons change, and Keep goes back to the image.
   const [confirming, setConfirming] = useState(false);
@@ -75,7 +76,8 @@ export function CgViewer({ view, images, index, onIndex, onClose, onDelete }: Cg
   stepRef.current = step;
 
   useEffect(() => setSaved(null), [index]);
-  // The button that was pressed is gone once the dialog swaps its actions: focus moves to what stands in for it.
+  // The button that was pressed is gone once the dialog swaps its actions: focus moves to what stands in for it (and
+  // the question is each answer's description, since the dialog that asks it opened before it was asked).
   useEffect(() => {
     if (!asked.current) return;
     (confirming ? keepRef : deleteRef).current?.focus({ preventScroll: true });
@@ -127,6 +129,7 @@ export function CgViewer({ view, images, index, onIndex, onClose, onDelete }: Cg
               type="button"
               className="of-button of-button--quiet of-glass"
               aria-disabled={deleting}
+              aria-describedby={questionId}
               onClick={() => {
                 if (!deleting) ask(false);
               }}
@@ -137,6 +140,7 @@ export function CgViewer({ view, images, index, onIndex, onClose, onDelete }: Cg
               type="button"
               className="of-button of-button--primary of-button--danger"
               aria-disabled={deleting}
+              aria-describedby={questionId}
               onClick={() => void remove()}
             >
               <Trash2 size={16} strokeWidth={2} aria-hidden="true" />
@@ -146,7 +150,9 @@ export function CgViewer({ view, images, index, onIndex, onClose, onDelete }: Cg
         }
       >
         <div ref={viewerRef} className="of-viewer" aria-busy={deleting}>
-          <p className="of-body">{t("ui.otomeForge.album.deletePhotoText")}</p>
+          <p id={questionId} className="of-body">
+            {t("ui.otomeForge.album.deletePhotoText")}
+          </p>
           {deleteFailed ? (
             <p className="of-notice of-notice--error" role="alert">
               {t("ui.otomeForge.album.deletePhotoFailed")}

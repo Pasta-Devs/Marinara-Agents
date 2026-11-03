@@ -5,7 +5,8 @@
 // with their counter, then Take picture through Ask before painting and the prompt review, as exactly one POST with
 // ids, her words, the edited prompt and a photo id; the polaroid shows. A failed photo and a lost answer each try
 // again with the same id. With no painted place Take picture says why it waits. The Album's Photos view, save and
-// delete a photo; Home tapes the newest photo into his note, its words wrapping around it in both looks, mirrored in
+// delete a photo (asked in the same dialog, the question read with each answer), and a photo that lands while Delete
+// asks never takes the shown one's place; Home tapes the newest photo into his note, its words wrapping around it in both looks, mirrored in
 // RTL, at reduced motion. Each test runs on both projects (desktop-chromium and mobile-chromium).
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-photo-shoot.e2e.ts
 import { expect, test, type Locator, type Page } from "@playwright/test";
@@ -53,6 +54,10 @@ interface StubOptions {
   photos?: Json[];
   /** Home's newest photo with Kai. */
   homePhoto?: boolean;
+  /** The first POST /photos waits for `release()`. */
+  hold?: boolean;
+  /** She owns a look not painted yet. */
+  unpaintedLook?: boolean;
 }
 
 const albumPhoto = (id: string, url = PHOTO_URL) => ({
@@ -73,8 +78,12 @@ function createPhotoStub({
   takes = [],
   photos = [],
   homePhoto = false,
+  hold = false,
+  unpaintedLook = false,
 }: StubOptions = {}) {
   const calls: Call[] = [];
+  let release = () => {};
+  let gate: Promise<void> | null = hold ? new Promise<void>((resolve) => (release = resolve)) : null;
   const now = () => new Date().toISOString();
   const they = { subject: "they", object: "them", possessive: "their" };
   const she = { subject: "she", object: "her", possessive: "her" };
@@ -212,7 +221,21 @@ function createPhotoStub({
         status: 200,
         json: {
           him: { [KAI]: [base(KAI, LOOK)] },
-          me: [base("me", HER_LOOK)],
+          me: [
+            base("me", HER_LOOK),
+            ...(unpaintedLook
+              ? [
+                  {
+                    ...base("me", ""),
+                    id: "my-wardrobe-0-a1",
+                    name: "Rain Coat",
+                    url: undefined,
+                    worn: false,
+                    wearable: false,
+                  },
+                ]
+              : []),
+          ],
           couples: [],
           noticed: null,
           noticing: false,
@@ -229,6 +252,11 @@ function createPhotoStub({
       };
     }
     if (path === `${runPath}/photos`) {
+      if (gate) {
+        const wait = gate;
+        gate = null;
+        await wait;
+      }
       const outcome = outcomes.shift() ?? "ready";
       if (outcome === "abort") return { status: 0, abort: true };
       const body = call.body!;
@@ -279,7 +307,7 @@ function createPhotoStub({
     }
     return { status: 404, json: { error: `No stub for ${call.method} ${call.path}`, code: "not-found" } };
   };
-  return { calls, answer, view, album };
+  return { calls, answer, view, album, release: () => release() };
 }
 
 type Stub = ReturnType<typeof createPhotoStub>;
@@ -367,7 +395,7 @@ async function pressRadio(page: Page, radio: Locator) {
 }
 
 test("Otome Hearth Photo Shoot: unavailable without an image connection; with one, Play opens it", async ({ page }) => {
-  const stub = createPhotoStub({ images: false });
+  const stub = createPhotoStub({ images: false, unpaintedLook: true });
   await stubRoutes(page, stub);
   let root = await openOtome(page);
   await openDates(root);
@@ -385,6 +413,10 @@ test("Otome Hearth Photo Shoot: unavailable without an image connection; with on
   await expect(root).toBeVisible({ timeout: 60_000 });
   await openPhotoShoot(root);
   await expect(root.getByRole("radio", { name: /The Glass Conservatory/u })).toBeChecked();
+  // A look she owns is not painted yet: the hint about it never hides that the photo wears nothing.
+  await expect(root.locator(".of-looks-note")).toHaveText(
+    "Only the photo wears these: what you both wear at home stays as it is. A look you own appears here once it’s painted: open it in the Wardrobe.",
+  );
   expect(posts(stub, "/photos")).toHaveLength(0);
 });
 
@@ -569,6 +601,10 @@ test("Otome Hearth Album: Photos opens a photo large, saves it, and deletes it a
   await viewer.getByRole("button", { name: "Delete photo" }).click();
   await expect(viewer).toContainText("Delete this photo?");
   await expect(viewer.getByRole("button", { name: "Keep it" })).toBeFocused();
+  // Focus lands on Keep it in a dialog that opened before the question: each answer reads the question with it.
+  const question = "Delete this photo? It leaves the Album and the note on Home, and it can’t be brought back.";
+  await expect(viewer.getByRole("button", { name: "Keep it" })).toHaveAccessibleDescription(question);
+  await expect(viewer.getByRole("button", { name: "Delete", exact: true })).toHaveAccessibleDescription(question);
   await expect(page.getByRole("dialog")).toHaveCount(1);
   await viewer.getByRole("button", { name: "Keep it" }).click();
   await expect(viewer.getByRole("button", { name: "Delete photo" })).toBeFocused();
@@ -579,6 +615,39 @@ test("Otome Hearth Album: Photos opens a photo large, saves it, and deletes it a
   expect(posts(stub, `/photos/${id}/delete`)).toHaveLength(1);
   await expect(root.getByRole("tabpanel")).toBeFocused();
   await expect(root.getByRole("tabpanel")).toContainText("No photos yet.");
+});
+
+test("Otome Hearth Album: a photo that lands while Delete asks never takes the place of the one being deleted", async ({
+  page,
+}) => {
+  const shown = "ph-mh1abc-abcdef";
+  const stub = createPhotoStub({ photos: [albumPhoto(shown)], hold: true });
+  await stubRoutes(page, stub);
+  const root = await openOtome(page);
+  // A photo is still being taken when the player leaves for the Album.
+  await openPhotoShoot(root);
+  await root.getByRole("button", { name: "Take picture" }).click();
+  await expect.poll(() => posts(stub, "/photos").length).toBe(1);
+  await root.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
+  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Album", exact: true }).click();
+  await root.getByRole("tablist", { name: "Album" }).getByRole("tab", { name: "Photos", exact: true }).click();
+  await root.getByRole("button", { name: "View: The Glass Conservatory" }).click();
+  const viewer = page.getByRole("dialog", { name: "The Glass Conservatory" });
+  await viewer.getByRole("button", { name: "Delete photo" }).click();
+  await expect(viewer.getByRole("button", { name: "Keep it" })).toBeFocused();
+
+  // It lands first in the list behind the dialog (the Photo Shoot refreshes the Album once it answers).
+  stub.release();
+  await expect(root.locator(".of-album-cg")).toHaveCount(2);
+  await viewer.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  const taken = posts(stub, "/photos")[0]!.body!.id;
+  expect(posts(stub, "/delete").map((call) => call.path)).toEqual([
+    `/api/otome-forge/runs/${RUN}/photos/${shown}/delete`,
+  ]);
+  expect(stub.album.map((entry) => entry.key)).toEqual([`photo:${taken}`]);
+  await expect(root.locator(".of-album-cg")).toHaveCount(1);
 });
 
 test("Otome Hearth Home: the newest photo is taped into his note, its words wrapping around it", async ({

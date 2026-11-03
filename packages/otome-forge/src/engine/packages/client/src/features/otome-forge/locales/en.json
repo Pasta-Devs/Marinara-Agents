@@ -27,7 +27,7 @@
   "ui.otomeForge.album.note": "Everything you’ve kept",
   "ui.otomeForge.album.pause": "Stop {{name}}",
   "ui.otomeForge.album.photosEmpty": "No photos yet. Take one with a love interest in Dates → Photo Shoot.",
-  "ui.otomeForge.album.photosNoImages": "You play this story without images, so the Photo Shoot takes no photos. Photos taken before are still here.",
+  "ui.otomeForge.album.photosNoImages": "You play this story without images, so the Photo Shoot takes no photos.",
   "ui.otomeForge.album.play": "Play {{name}}",
   "ui.otomeForge.album.position": "{{index}} of {{total}}",
   "ui.otomeForge.album.preparing": "Preparing…",
