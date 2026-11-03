@@ -529,6 +529,8 @@ export interface HomeView {
    * newest painted place; null shows the gradient alone.
    */
   backdrop: { url: string; kind: "cg" | "place" } | null;
+  /** #2087: the newest Photo Shoot photo with `li`, taped into his note; null for none. */
+  photo: { url: string; at: string } | null;
   lines: { ready: boolean };
   /** A rupture stands between him and the protagonist: the note is curt and Home shows his cold lines. */
   rupture: boolean;

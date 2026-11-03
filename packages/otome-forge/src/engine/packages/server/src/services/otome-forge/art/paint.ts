@@ -66,10 +66,12 @@ const notFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not
 
 /**
  * Whose paint: a look (`player`, `li:<id>`), a place (`place:<key>`), a story CG (`cg:<key>/<i>@<written at>`), (M4,
- * S/art/outfits.ts) an item's art (`item:<item id>`) or a couple set's pair portrait (`item:<her look's id>/pair`), or
- * (#2044, S/art/stickers.ts) a chat sticker (`sticker:<sticker id>`).
+ * S/art/outfits.ts) an item's art (`item:<item id>`) or a couple set's pair portrait (`item:<her look's id>/pair`),
+ * (#2044, S/art/stickers.ts) a chat sticker (`sticker:<sticker id>`), or (#2087, S/minigames/photo-shoot.ts) a Photo
+ * Shoot photo (`photo:<photo id>`).
  */
-export type PaintOwner = LookOwner | `place:${string}` | `cg:${string}` | `item:${string}` | `sticker:${string}`;
+export type PaintOwner =
+  LookOwner | `place:${string}` | `cg:${string}` | `item:${string}` | `sticker:${string}` | `photo:${string}`;
 
 const live = new Map<string, { settled: Promise<void>; settle: () => void }>();
 const liveKey = (runId: string, owner: PaintOwner) => `${runId}|${owner}`;
