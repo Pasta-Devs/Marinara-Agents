@@ -5,8 +5,9 @@
 // its overview (S/memory/memory.ts summarize). Otome's overview is this timeline: a condensed head plus the chapter
 // summaries added since, each kept whole and in story order. A new summary is only appended, which costs no model call;
 // once a new summary takes the timeline past TIMELINE_CEILING and its HEADROOM_TOKENS of leeway, everything but the
-// newest entry is condensed into a new head of at most 3000 words, and appending goes on. The newest entry stays apart
-// so a prompt that sends that chapter in full can leave it out of the timeline (S/story/canon.ts recallText).
+// newest entry is condensed into a new head of about 5000 words (half that size), and appending goes on. The newest
+// entry stays apart so a prompt that sends that chapter in full can leave it out of the timeline (S/story/canon.ts
+// recallText).
 // Stored in the kit's overview content as JSON. Anything else (an overview of an earlier form) reads as a head alone.
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 

@@ -158,7 +158,11 @@ export function normalizeWorldAudio(data: unknown): WorldAudio {
 const PhoneDailySchema: ZodType<PhoneDaily> = z.object({
   days: z.record(
     z.string().regex(/^\d{4}-\d{2}-\d{2}$/u),
-    z.object({ attempts: z.number().int().min(0), nextAt: z.number().optional() }),
+    z.object({
+      attempts: z.number().int().min(0),
+      nextAt: z.number().optional(),
+      wrote: z.array(z.string().min(1).max(80)).max(DAILY_MESSAGES_MAX).optional(),
+    }),
   ),
   last: z.object({ li: z.string().min(1).max(80), at: z.string().min(1).max(40) }).optional(),
 });

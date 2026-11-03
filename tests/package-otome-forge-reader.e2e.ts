@@ -1324,6 +1324,88 @@ test("Otome Hearth a click held on a typing line still shows it whole", async ({
   await expect(typed).toHaveText(LONG_LINE);
 });
 
+/**
+ * The maintainer's iPhone: a box scrolled as its text changed shook and fell back short of the end. Here every scroll
+ * of the box is undone once its text changes, which 0.7.1's box fails.
+ */
+async function undoScrollsOnTextChange(root: Locator) {
+  await line(root).evaluate((box) =>
+    new MutationObserver(() => (box.scrollTop = 0)).observe(box, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+    }),
+  );
+}
+
+/** Where the row being typed, the line's first row and its end are drawn, from the box's top edge. */
+const lineView = (root: Locator) =>
+  line(root).evaluate((box) => {
+    const typed = box.querySelector<HTMLElement>(":scope > [aria-hidden='true']")!;
+    const top = box.getBoundingClientRect().top;
+    const at = typed.querySelector(".of-line-rest")?.getClientRects()[0];
+    return {
+      done: typed.dataset.done === "true",
+      lifting: box.dataset.lifting,
+      scrollTop: box.scrollTop,
+      height: box.clientHeight,
+      row: Number.parseFloat(getComputedStyle(box).lineHeight),
+      rowTop: at ? at.top - top : null,
+      first: typed.getBoundingClientRect().top - top,
+      end: typed.getBoundingClientRect().bottom - top,
+    };
+  });
+
+test("Otome Hearth a long line follows its typing without scrolling the box, and ends on its last row", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const root = await openLongLine(page);
+  await root.getByRole("button", { name: "Begin" }).click();
+  await undoScrollsOnTextChange(root);
+  // About 8 s of typing, well past the rows the box shows at once; halfway the box widens (a phone turned).
+  let lifted = 0;
+  for (let step = 0; step < 40; step += 1) {
+    if (step === 20) await page.setViewportSize({ width: 600, height: 844 });
+    await page.clock.runFor(200);
+    const now = await lineView(root);
+    expect(now.done).toBe(false);
+    expect(now.lifting).toBe("true");
+    expect(now.scrollTop, "the box never scrolls while it types").toBe(0);
+    expect(now.rowTop! + now.row, "the row being typed is in view").toBeLessThanOrEqual(now.height + 1);
+    expect(now.rowTop!, "and not above it").toBeGreaterThanOrEqual(-1);
+    lifted = Math.max(lifted, -now.first);
+  }
+  expect(lifted, "the line ran past the box, so it had to follow").toBeGreaterThan(0);
+  // A slow frame types the last rows at once; a frame later the box scrolls again, from its last row.
+  await page.clock.runFor(20_000);
+  await page.clock.runFor(100);
+  const end = await lineView(root);
+  expect(end.done).toBe(true);
+  expect(end.lifting).toBe("false");
+  expect(end.scrollTop, "it scrolls from where the lift left it").toBeGreaterThan(0);
+  expect(end.end, "the line ends on its last row").toBeLessThanOrEqual(end.height + 1);
+  expect(end.end).toBeGreaterThan(end.height - end.row);
+});
+
+test("Otome Hearth Next on a long typing line shows it whole where it was, then the box scrolls", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const root = await openLongLine(page);
+  await root.getByRole("button", { name: "Begin" }).click();
+  await undoScrollsOnTextChange(root);
+  // Past the rows the box shows at once, short of the line's end.
+  await page.clock.runFor(6_000);
+  const before = await lineView(root);
+  expect(before.first, "the line is lifted").toBeLessThan(0);
+  await root.locator(".of-next").click();
+  await page.clock.runFor(100);
+  const whole = await lineView(root);
+  expect(whole.done).toBe(true);
+  expect(whole.lifting).toBe("false");
+  expect(Math.abs(whole.first - before.first), "its first row stays where it was").toBeLessThanOrEqual(1);
+  expect(whole.end, "the rest is below, to scroll to").toBeGreaterThan(whole.height + whole.row);
+});
+
 for (const failure of ["missing sprite", "failed cleanup"] as const) {
   test(`Otome Hearth story header restores its description when NPC display fails (${failure})`, async ({
     page,

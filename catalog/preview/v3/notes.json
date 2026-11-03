@@ -72,6 +72,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.7.2",
+          "date": "2026-11-03",
+          "notes": "- **Long lines keep up on iPhone.** A line too long for the dialogue box now follows its typing smoothly and ends on its last row. Before, the box shook as it tried to scroll and fell back short of the end. Once a line is whole, typed out or shown with Next, you can scroll it.\n- **A fuller condensed timeline.** Once the story's timeline passes 14,000 tokens, its older part is condensed to about 5,000 words, half that size, instead of at most 3,000.\n- **Love interests who message you each day.** The Settings number now counts love interests, not messages. Each one who writes first does so once that day, in one or a few messages. Their messages spread over the day even when the number is higher than the love interests you've met.",
+          "highlight": false
+        },
+        {
           "version": "0.7.1",
           "date": "2026-11-03",
           "notes": "- **Closing a conversation** now shows only that they remember it and the line they keep. It earns +5 affection.\n- **Your connection's settings decide.** Otome Hearth now sends only the reply's length, never its own temperature or JSON mode, so your connection's temperature, reasoning effort and other settings are what's used.\n- **Longer chapter summaries**, up to 1,000 words.\n- **More room before condensing.** The story's timeline can reach 14,000 tokens and recent memories 6,000 before anything is condensed or left out, 20,000 together at most.\n- **Fixes.** The daily note, Read Him and Read Me draw on recent memories again. Messages no longer repeat their newest conversations as memories. A small memory model condenses the timeline in steps instead of failing, and a model with an unknown context asks for it again.",
@@ -183,12 +189,6 @@
           "version": "0.6.12",
           "date": "2026-11-01",
           "notes": "- **Every Settings category stays reachable with a mouse.** On a desktop window just under the wide layout, or with wider system fonts, the category bar could cut off its last tab with no scrollbar to reach it. With a mouse the categories now wrap onto a second row instead; phones keep their single swipeable strip.\n- **CGs show whole on a PC.** A CG is painted tall, and on a wide screen (fullscreen on a PC) it was zoomed to fill the width, cropping away its top and bottom and often the faces. On a wide stage the CG now shows in full, framed by a soft blurred copy of itself; phones still fill the screen with it.",
-          "highlight": false
-        },
-        {
-          "version": "0.6.11",
-          "date": "2026-10-31",
-          "notes": "- **His portrait is painted from his card's full-body image and his avatar together**, instead of one standing in for the other. A love interest drawn from a character card now keeps both his build and his face, which the reference could only carry one of before. Scenes still send one likeness per person, so a large cast is not crowded out of the reference budget.",
           "highlight": false
         }
       ]

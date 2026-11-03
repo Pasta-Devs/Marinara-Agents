@@ -3,10 +3,11 @@
 // protagonist's thoughts in pale italics; a love interest's rare thought line set apart in his colour; narration
 // plain. A line types itself out (whole under reduced motion); the Next button, or a tap, shows it whole first. While
 // a story CG's pan hides the box (`paused`), its line waits, and types from the top once the box is back (#2051).
-// Screen readers get the whole line at once, never the typing. A line too long for the box scrolls with its typing,
-// so the newest words stay in view, until the player touches or scrolls the box themselves.
+// Screen readers get the whole line at once, never the typing. A line too long for the box follows its typing, so
+// the newest words stay in view and a line typed out ends on its last row; once the line is whole, the box scrolls
+// from there.
 // ──────────────────────────────────────────────
-import { forwardRef, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { forwardRef, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, CloudMoon } from "lucide-react";
 import { accentOf } from "../../lib/accent";
@@ -57,39 +58,71 @@ export const DialogueBox = forwardRef<HTMLButtonElement, DialogueBoxProps>(funct
     token: finishToken,
     start: Date.now(),
     paused,
+    whole: false,
   }));
   // A new line starts from nothing; Next (a new token) shows the current one whole. A line held behind a CG's pan
   // starts its clock when the box comes back, so none of it is typed out of sight.
   let count = typing.count;
+  let whole = typing.whole;
   if (typing.key !== lineKey || typing.token !== finishToken || typing.paused !== paused) {
-    count = typing.key !== lineKey || (typing.paused && !paused) ? 0 : chars.length;
-    if (paused) count = 0;
-    setTyping({ key: lineKey, count, token: finishToken, start: Date.now(), paused });
+    const fresh = typing.key !== lineKey || (typing.paused && !paused) || paused;
+    count = fresh ? 0 : chars.length;
+    whole = !fresh;
+    setTyping({ key: lineKey, count, token: finishToken, start: Date.now(), paused, whole });
   }
   const visible = instant ? chars.length : paused ? 0 : Math.min(count, chars.length);
   const done = visible >= chars.length;
 
   const lineRef = useRef<HTMLParagraphElement>(null);
+  const typedRef = useRef<HTMLSpanElement>(null);
   const restRef = useRef<HTMLSpanElement>(null);
-  const following = useRef(true);
-  // A new line, or one back from behind a CG's pan, opens at its top and follows its typing again.
-  useEffect(() => {
-    following.current = true;
+  // While its text changes the box clips instead of scrolling, and the line is lifted (translateY) so the row being
+  // typed sits at the bottom edge (a line typed out, its last row): on an iPhone a box scrolled as its text changed
+  // shook and fell back short of the end. A frame after the line is whole (typed out, or Next), with no text
+  // changing any more, the box scrolls again from where the lift left it, so the player can scroll it.
+  const followKey = `${lineKey}:${paused}`;
+  const [settled, setSettled] = useState<string | null>(null);
+  const lifting = !instant && settled !== followKey;
+  const [lift, setLift] = useState({ key: followKey, px: 0, width: 0 });
+  const liftPx = lifting && lift.key === followKey ? lift.px : 0;
+  // A new line, or one back from behind a CG's pan, opens at its top; a line read again (a replay) has the same key.
+  useLayoutEffect(() => {
     if (lineRef.current) lineRef.current.scrollTop = 0;
-  }, [lineKey, paused]);
-  // The untyped rest is laid out (hidden), so the box is already as tall as the whole line: scroll so the row being
-  // typed sits at the bottom edge.
-  useEffect(() => {
+    setSettled(null);
+    setLift({ key: followKey, px: 0, width: 0 });
+  }, [followKey]);
+  // The untyped rest is laid out (hidden), so the box is already as tall as the whole line. Measured on screen, so
+  // the lift itself never counts. At one width it never drops back while the line types (a row's first character can
+  // still sit at the end of the row above); a new width (a phone turned, fullscreen) measures afresh. It never passes
+  // the line's end, and Next leaves it where it was.
+  useLayoutEffect(() => {
     const box = lineRef.current;
-    const rest = restRef.current;
-    if (!box || !rest || !following.current) return;
+    const typed = typedRef.current;
+    if (!box || !typed || !lifting || whole) return;
+    const at = restRef.current?.getClientRects()[0];
     const row = Number.parseFloat(getComputedStyle(box).lineHeight) || 0;
-    const target = rest.offsetTop - box.offsetTop + row - box.clientHeight;
-    if (target > box.scrollTop) box.scrollTop = target;
-  }, [visible]);
-  const stopFollowing = () => {
-    following.current = false;
-  };
+    const bottom = at ? at.top - typed.getBoundingClientRect().top + row : typed.offsetHeight;
+    const most = Math.max(0, typed.offsetHeight - box.clientHeight);
+    const width = box.clientWidth;
+    setLift((current) => {
+      const same = current.key === followKey && current.width === width;
+      const px = Math.min(most, Math.max(same ? current.px : 0, Math.ceil(bottom - box.clientHeight)));
+      return same && current.px === px ? current : { key: followKey, px, width };
+    });
+  }, [followKey, lifting, visible, whole]);
+  useEffect(() => {
+    if (!lifting || !done) return;
+    const frame = window.requestAnimationFrame(() => setSettled(followKey));
+    return () => window.cancelAnimationFrame(frame);
+  }, [done, followKey, lifting]);
+  // Settled: the box scrolls to where the lift showed the line, so nothing on screen moves.
+  const lifted = useRef({ key: followKey, px: 0 });
+  useLayoutEffect(() => {
+    const box = lineRef.current;
+    const before = lifted.current;
+    lifted.current = { key: followKey, px: liftPx };
+    if (box && !lifting && before.key === followKey && before.px > 0) box.scrollTop = before.px;
+  }, [followKey, liftPx, lifting]);
 
   // The pace comes from the clock, not from frames: a slow frame shows more characters at once, never fewer per second.
   useEffect(() => {
@@ -150,7 +183,7 @@ export const DialogueBox = forwardRef<HTMLButtonElement, DialogueBoxProps>(funct
           ) : null}
         </p>
       ) : null}
-      <p ref={lineRef} className={lineClass} onTouchStart={stopFollowing} onWheel={stopFollowing}>
+      <p ref={lineRef} className={lineClass} data-lifting={lifting}>
         <span className="of-visually-hidden">{spoken}</span>
         {/* A new span for every step of the reveal, never text changed in place: iOS Safari repaints text changed in
             place only where the box shows it, so rows that typed while scrolled out of view came back blank. A
@@ -159,9 +192,13 @@ export const DialogueBox = forwardRef<HTMLButtonElement, DialogueBoxProps>(funct
             fires). */}
         <span
           key={`${lineKey}:${visible}`}
+          ref={typedRef}
           aria-hidden="true"
           data-done={done}
-          style={done ? undefined : { pointerEvents: "none" }}
+          style={{
+            pointerEvents: done ? undefined : "none",
+            transform: liftPx ? `translateY(${-liftPx}px)` : undefined,
+          }}
         >
           {done ? text : chars.slice(0, visible).join("")}
           {done ? null : (

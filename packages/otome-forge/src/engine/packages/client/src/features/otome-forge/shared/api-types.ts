@@ -204,17 +204,20 @@ export interface World {
   /** Keyed by S/art/places.ts placeKey(name), which keeps the letters of any script; clients look places up by name. */
   places: Record<string, PlaceArt>;
   /**
-   * Settings → Connections (#2044): how many times a local day a love interest may write to the player first, on
-   * their own (SH/home.ts DAILY_MESSAGES_MAX at most); absent or 0: never.
+   * Settings → Connections (#2044): how many love interests may write to the player first each local day, on their
+   * own, each once (SH/home.ts DAILY_MESSAGES_MAX at most); absent or 0: never.
    */
   dailyMessages?: number;
   /** The daily messages' quota and the newest one sent (S/phone/daily.ts); never sent to the client. */
   phoneDaily?: PhoneDaily;
 }
 
-/** `world.phoneDaily`: per local day ("YYYY-MM-DD"), the attempts spent and when the next may start (epoch ms). */
+/**
+ * `world.phoneDaily`: per local day ("YYYY-MM-DD"), the attempts spent, when the next may start (epoch ms), and the
+ * love interests who wrote first that day.
+ */
 export interface PhoneDaily {
-  days: Record<string, { attempts: number; nextAt?: number }>;
+  days: Record<string, { attempts: number; nextAt?: number; wrote?: LiId[] }>;
   /** The newest daily message: whose thread it landed in, and when. */
   last?: { li: LiId; at: string };
 }
