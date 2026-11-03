@@ -3,6 +3,7 @@
 ## 0.8.2 — 2026-11-03
 
 - **Key images are ready when you reach them again.** The next scene's key image now starts painting as soon as that scene is written ahead, as it did before 0.6.27, so it is usually waiting when its moment comes. If you use Ease off or Rewrite on the scene you are reading, the scene written ahead is written again and its key image painted again (1 image); the buttons say so.
+- **Showing off a look earns 5 affection**, down from 20, the first time you show a love interest that look. Their reaction is still written on your Messages connection.
 
 ## 0.8.1 — 2026-11-03
 

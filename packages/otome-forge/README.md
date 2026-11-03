@@ -165,7 +165,7 @@ Wishes cost Starlight you earn by playing: 100 each, or 1,000 for ten. There is 
 - **The Wardrobe:**
   - Looks, theirs and yours, are displayed with their chroma backdrop removed. The original paintings stay saved.
   - **Wear at home** puts a look, theirs or yours, on Home.
-  - **Show them** shows them one of your looks.
+  - **Show them** shows them one of your looks. The first time you show a love interest a look, it earns 5 affection with them.
   - Your featured look and theirs from the same two weeks make a couple set.
   - A look they wear gets its own faces.
   - When you wear a new look of yours, the love interest on Home notices it, and Home's **Me** shows their line beside your look while you wear it.

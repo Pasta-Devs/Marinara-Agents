@@ -807,13 +807,18 @@ test("Wear at home: his new look gets its faces, her new look is noticed once (P
   );
 });
 
-test("Show {{name}}: a line each time, and +20 affection once per look and love interest, within the day's cap", async () => {
+test("Show {{name}}: a line each time on the Messages connection, and +5 affection once per look and love interest, within the day's cap", async () => {
   const lines = ["You chose amber on purpose.", "Again? It still suits you.", "The lamp approves.", "Hm."];
   const t = await itemsWorld("r-m4bshow-aaaaaa", {
     images: { connectionId: null },
     heat: "fade",
     replies: lines.map((text, i) => json({ text, ...(i === 0 ? { face: "flustered" } : { face: "smug" }) })),
   });
+  // Messages has a connection of its own: the line is written on it, not on the story's.
+  await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+    ...world,
+    connections: { ...world.connections, chat: "conn-messages" },
+  }));
   const show = (li: string, look = ITEMS.herLook.id) => t.call("POST", "/runs/:run/wardrobe/show", { li, look });
 
   const first = await show(KAI);
@@ -821,12 +826,13 @@ test("Show {{name}}: a line each time, and +20 affection once per look and love 
   assert.deepEqual(first.body, {
     line: "You chose amber on purpose.",
     face: "flustered",
-    grants: [{ source: "show-him", li: KAI, affection: 20 }],
+    grants: [{ source: "show-him", li: KAI, affection: 5 }],
   });
+  assert.equal(t.calls[0]!.connectionId, "conn-messages", "on the Messages connection");
   const second = await show(KAI);
   assert.deepEqual(second.body, { line: "Again? It still suits you.", grants: [] }, "an unknown face is dropped");
   let state = await t.state();
-  assert.equal(state.lis[KAI]!.points, 20, "paid once");
+  assert.equal(state.lis[KAI]!.points, 5, "paid once");
   assert.ok(state.lis[KAI]!.firsts["show:my-wardrobe-0-f"]);
 
   const [x, y] = await Promise.all([show(MIR), show(MIR)]);
