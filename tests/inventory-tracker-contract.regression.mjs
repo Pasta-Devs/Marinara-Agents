@@ -35,6 +35,14 @@ for (const packageId of ["world-state", "character-tracker", "custom-tracker", "
   assert.match(incremental, /Without that host marker, use the legacy full-array format/);
   assert.ok(legacy?.includes("Schema:"), `${packageId} retains the older Engine's output contract`);
 }
+// #2077: the Engine reads only the group keys, so a bare root envelope is dropped.
+const nestedExample = prompt.match(/lantern: (\{.*?\})\. Every update and removal sits under its group/);
+assert.ok(nestedExample, "Prompt shows the incremental shape nested under each group");
+const nested = JSON.parse(nestedExample[1]);
+assert.deepEqual(Object.keys(nested), ["currencies", "equipped", "inventory"]);
+for (const group of Object.values(nested)) assert.ok(Array.isArray(group.updates), "each group nests its updates");
+assert.deepEqual(nested.inventory.removed, ["Lantern"]);
+assert.match(prompt, /never put "updates" or "removed" at the top level/);
 assert.match(prompt, /Every existing quantity change MUST include qty, including qty:1/);
 assert.match(prompt, /Only new items may omit qty for 1/);
 const example = JSON.parse(prompt.split("Schema:\n")[1].split("\nRules:")[0]);
