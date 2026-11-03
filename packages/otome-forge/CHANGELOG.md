@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.7.6 — 2026-11-03
+
+- **Prompt caching that keeps working through a chapter.** On an Anthropic connection, a chapter's plan, scenes and Confrontation or Closer ask for the hour-long cache, so a scene read minutes after the last still reads the story context from the cache. The cached part now holds only what every scene of the chapter may know, so it stays the same when the love interests in a scene change. What only some of them may know (their own chapters, dates and small memories) comes after it, for the people in each scene. The chapter's last scene shares the other scenes' cached instructions too. Older Engines keep the connection's own cache time.
+- **The last chapter's summary is no longer repeated.** The story sends the previous main chapter in full and leaves its summary out of the timeline. Condensing a long timeline now keeps that chapter's summary apart, so it stays out.
+
 ## 0.7.5 — 2026-11-03
 
 - **A slower burn.** Love interests no longer confess in stages 3 and 4. In stage 5 they may, once the story has earned it, and in stage 6 they say it if they haven't yet.

@@ -10,8 +10,8 @@
 // the story's timeline, a recollection in prose (0.6.19); one saved before that is folded again from the records, once,
 // in the background; the panel shows no bold label or markdown emphasis.
 // #2066: the overview is the story's timeline. A chapter's summary (at most 1000 words, said in its prompt) joins it with
-// no model call, and only a timeline past 13k tokens and 1k of leeway is condensed (all but the newest entry, in as
-// few calls as the memory model's context allows; a fold that adds nothing condenses nothing); a date or Character
+// no model call, and only a timeline past 13k tokens and 1k of leeway is condensed (everything before the newest main
+// chapter's entry, #2091, in as few calls as the memory model's context allows; a fold that adds nothing condenses nothing); a date or Character
 // Story is never in it, and a memory model of unknown context waits for configuration. Recall sends no ranked details:
 // the small memories this prompt may know come back as `recalls`, newest first within 5k tokens and 1k of leeway,
 // never one the caller lists in full; the Home note, Read Him and Read Me take the newest.
@@ -48,6 +48,8 @@ import {
 import {
   HEADROOM_TOKENS,
   TIMELINE_CEILING,
+  foldedPart,
+  keptPart,
   parseTimeline,
   renderTimeline,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/timeline.ts";
@@ -315,6 +317,67 @@ test("the timeline grows with no call, has 1k of leeway, and is condensed only p
     timeline.entries.map((entry) => [entry.title, entry.text.slice(0, 10)]),
     [["Night 3", "CHAPTER-3 "]],
   );
+});
+
+test("condensing keeps the newest main chapter's entry apart, so a prompt that sends it in full never repeats it (#2091)", async () => {
+  // Night 3 is the newest main chapter; a Character Story after it takes the timeline past its ceiling. Before #2091
+  // everything but the Character Story was condensed, Night 3 with it, and the main story's next prompts sent Night 3
+  // in full beside its summary in the condensed head.
+  const long = (tag: string) => filler(tag, 3900);
+  const story: ForgeMemorySource = {
+    id: "story-lamp",
+    kind: "character-story",
+    title: "Kai's own Character Story",
+    content: "STORY: the lamp.",
+    order: 35000,
+    audience: [KAI],
+  };
+  const { memory, calls, fake } = await setup(undefined, {
+    maxContext: 131_072,
+    maxOutputTokens: null,
+    sources: [...mainChapters(2), { ...mainChapters(3)[2]!, content: "NIGHT-3: short." }, story],
+    replies: Array.from({ length: 12 }, () => (messages: Array<{ content: string }>) => {
+      const input = JSON.parse(messages.at(-1)!.content);
+      if (!input.source) return JSON.stringify({ summary: "CONDENSED" });
+      const id = String(input.source.id);
+      return JSON.stringify({ summary: id === "main-3" ? "SHORT-3" : long(`SUMMARY-${id}`) });
+    }),
+  });
+  assert.equal(await memory.maintain({ runId: RUN }), true);
+  assert.equal((await settle(memory)).phase, "ready");
+  const folds = calls.filter((call) => !JSON.parse(call.messages.at(-1)!.content).source);
+  assert.equal(folds.length, 1, "condensed once");
+  const folded = JSON.parse(folds[0]!.messages.at(-1)!.content).timeline as string;
+  assert.ok(folded.includes("SUMMARY-main-1") && folded.includes("SUMMARY-main-2"));
+  assert.ok(!folded.includes("SHORT-3") && !folded.includes("SUMMARY-story-lamp"), "Night 3 and after stay apart");
+  const saved = fake.rows.get(memoryId(RUN))!.data as { overview: { content: string } };
+  const timeline = parseTimeline(saved.overview.content);
+  assert.equal(timeline.head, "CONDENSED");
+  assert.deepEqual(
+    timeline.entries.map((entry) => entry.key),
+    [JSON.stringify(["chapter", "main-3"]), JSON.stringify(["character-story", "story-lamp"])],
+  );
+  // The main story's prompt leaves Night 3's entry out: only the head and the Character Story remain.
+  assert.equal(
+    renderTimeline(timeline, JSON.stringify(["chapter", "main-3"])).includes("SHORT-3"),
+    false,
+    "its summary never goes in beside it",
+  );
+});
+
+test("with nothing before the newest main chapter's entry, condensing folds all but the newest entry (#2091)", () => {
+  const entry = (kind: string, id: string) => ({ key: JSON.stringify([kind, id]), title: id, text: id });
+  const main = entry("chapter", "main-12");
+  const route = entry("chapter", `route-${KAI}-2`);
+  const story = entry("character-story", "story-lamp");
+  const split = (...entries: ReturnType<typeof entry>[]) => [
+    foldedPart({ head: "HEAD", entries }).entries.map((item) => item.text),
+    keptPart({ head: "HEAD", entries }).map((item) => item.text),
+  ];
+  assert.deepEqual(split(route, main, story), [[route.text], [main.text, story.text]], "before the newest main one");
+  assert.deepEqual(split(main, story, route), [[main.text, story.text], [route.text]], "none before it");
+  assert.deepEqual(split(story, route), [[story.text], [route.text]], "no main chapter at all");
+  assert.deepEqual(split(main), [[], [main.text]], "a lone entry is never condensed");
 });
 
 test("a small memory model condenses the timeline in pieces it can hold, each with its whole reply room (#2066)", async () => {

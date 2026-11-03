@@ -47,6 +47,17 @@
 //   then dates and Character Stories, each oldest first, then the previous chapter's earliest scenes. Stale or pending
 //   memory catches up in the background; a failed one waits for Retry.
 // No decisions list goes beside it any more (#2066): every chapter's summary names each choice the protagonist made.
+// A prompt that caches its story context (`cached`: P5, P6, P12, P12c, #2091) is given only what every call of its
+// chapter may know, so the context is the same whatever the call's cast: the timeline, the previous chapter in full
+// (the same for every node: a main chapter's is the main story's, and a love interest is in every node of his own
+// chapter), and the canon not covered yet that is shared, or the chapter's own love interest's. What only some may know
+// (another love interest's own canon not covered yet, in the canonical history his chapters in full) goes with the
+// recalls, for the call's own cast, which the prompt sends after its cached part. The rules that decide what gives way
+// are worked out within each part, so neither follows the other: in the canonical history the shared chapters are taken
+// first, and each part keeps its own newest summary.
+// ponytail: whether the memory is ready still follows the call (S/memory/memory.ts: two dates or Character Stories it
+// may know without a summary; the job's memory model of unknown context), so on such a call the context switches to
+// the canonical history and back. The upgrade path is deciding it from what every call of the chapter may know.
 import { forgeCanonicalSegments } from "@forge-kit/player-choices-server.mjs";
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 import { forgeMemoryContext, type ForgeMemoryContext } from "@forge-kit/story-memory-fit.mjs";
@@ -323,13 +334,15 @@ export type RecallTextOptions = Omit<ForgeRecallOptions, "runId"> & {
   /** "main" for the main story's plans and scenes, a love interest's id for his route and repair plans and scenes. */
   continues?: "main" | LiId;
   /**
-   * The recalls as a context of their own (`recalls`), for a prompt that sends them after the part it caches (P5, P6,
-   * P12, P12c): they follow who is present, the rest of the memory does not. Otherwise they follow the timeline.
+   * For a prompt that caches its story context (see the header): only what every call of its chapter may know, with
+   * `li` (his route, repair, date or story chapter) the chapter's own love interest's canon too; the rest, and the
+   * recalls, as a context of their own (`recalls`) that the prompt sends after its cached part. Otherwise the recalls
+   * follow the timeline.
    */
-  apart?: boolean;
+  cached?: { li?: LiId };
 };
 
-/** The story before a prompt: its memory context, and with `apart` the recalls' own (pass both to generateJson). */
+/** The story before a prompt: its memory context, and when `cached` the recalls' own (pass both to generateJson). */
 export type StoryContext = ForgeMemoryContext & { recalls?: ForgeMemoryContext };
 
 /** A block of the memory context's prefix, in story order. */
@@ -338,6 +351,8 @@ interface Block {
   text: string;
   /** A storyline chapter's (main, route, repair), not a date's or Character Story's. */
   chapter?: boolean;
+  /** What only some calls of a `cached` prompt's chapter may know: it goes with the recalls (see the header). */
+  own?: boolean;
 }
 
 const byOrder = (a: Block, b: Block) => a.order - b.order;
@@ -396,7 +411,9 @@ function contextOf(
 /**
  * The canonical history, for a memory that cannot answer (GF's legacy history): besides the previous chapter in full,
  * the other chapters the prompt may know, newest first within EARLIER_CANON_TOKENS, each whole; the newest of them
- * however long, as it is the one a prompt most needs.
+ * however long, as it is the one a prompt most needs. With `own` (a `cached` prompt), the chapters only some may know
+ * come after the rest, within what the rest left, their newest however long too: what every call is given never
+ * follows who knows the others.
  */
 async function canonicalHistory(
   store: Pick<OtomeStore, "readDoc">,
@@ -404,17 +421,30 @@ async function canonicalHistory(
   known: readonly Completed[],
   previousKey: string | undefined,
   protagonist: string,
+  own?: (chapter: Chapter) => boolean,
 ): Promise<Block[]> {
   const kept: Block[] = [];
   let used = 0;
-  for (const completed of [...known].reverse()) {
-    if (completed.chapter.key === previousKey) continue;
-    const content = await chapterCanon(store, runId, completed.chapter, protagonist);
-    if (!content?.trim()) continue;
-    const text = block("Canon in full", titleOf(completed), content);
-    used += estimateTextTokens(text);
-    if (used > EARLIER_CANON_TOKENS && kept.length) break;
-    kept.push({ order: completed.order, text, chapter: storyline(completed.chapter) });
+  const newest = [...known].reverse();
+  for (const part of own
+    ? [newest.filter(({ chapter }) => !own(chapter)), newest.filter(({ chapter }) => own(chapter))]
+    : [newest]) {
+    let first = true;
+    for (const completed of part) {
+      if (completed.chapter.key === previousKey) continue;
+      const content = await chapterCanon(store, runId, completed.chapter, protagonist);
+      if (!content?.trim()) continue;
+      const text = block("Canon in full", titleOf(completed), content);
+      used += estimateTextTokens(text);
+      if (used > EARLIER_CANON_TOKENS && !first) break;
+      first = false;
+      kept.push({
+        order: completed.order,
+        text,
+        chapter: storyline(completed.chapter),
+        ...(own?.(completed.chapter) ? { own: true } : {}),
+      });
+    }
   }
   return kept;
 }
@@ -433,7 +463,7 @@ export async function recallText(
   runId: string,
   options: RecallTextOptions,
 ): Promise<StoryContext> {
-  const { debugMode, continues, apart, ...recall } = options;
+  const { debugMode, continues, cached, ...recall } = options;
   const warn = (what: string, error: unknown) =>
     deps.runtime?.logger.warn("[otome-forge] %s: %s", what, error instanceof Error ? error.message : String(error));
   const story = await (async () => {
@@ -451,6 +481,34 @@ export async function recallText(
   });
   const { chapters, protagonist } = story;
   const known = chapters.filter(({ chapter }) => mayKnow(recall, audienceOf(chapter)));
+  // A `cached` prompt's own canon (see the header): a love interest's own chapter, unless it is the chapter's. Anything
+  // in recent canon that is not a known chapter is someone's own too.
+  const own = (chapter: Chapter | undefined) =>
+    !!cached && (!chapter || (!!audienceOf(chapter) && audienceOf(chapter)![0] !== cached.li));
+  const chapterOf = new Map(chapters.map(({ chapter }) => [chapter.key, chapter]));
+  // The memory context of these blocks (contextOf); when `cached`, the own blocks go with the recalls, a context of
+  // their own, and each part keeps its own newest summary (`summaries`, oldest first, may give way but for it).
+  const storyContext = (
+    result: Pick<ForgeRecallResult, "overview" | "details" | "maxContext">,
+    blocks: Block[],
+    optional: Block[],
+    summaries: Block[] = [],
+  ): StoryContext => {
+    if (!cached) return contextOf(result, blocks, [...summaries.slice(0, -1), ...optional]);
+    const mine = (entry: Block) => !!entry.own;
+    const older = (list: Block[]) => list.slice(0, -1);
+    const context = contextOf(
+      { ...result, details: [] },
+      blocks.filter((entry) => !mine(entry)),
+      [...older(summaries.filter((entry) => !mine(entry))), ...optional.filter((entry) => !mine(entry))],
+    );
+    const recalls = contextOf(
+      { overview: "", details: result.details, maxContext: result.maxContext },
+      blocks.filter(mine),
+      [...older(summaries.filter(mine)), ...optional.filter(mine)],
+    );
+    return recalls.text ? { ...context, recalls } : context;
+  };
   const last = previousOf(known, continues);
   const lastScenes =
     (last &&
@@ -492,9 +550,10 @@ export async function recallText(
     for (const entry of result.recent ?? []) {
       order = orders.get(entry.id) ?? order;
       if (entry.id === previousKey || !entry.content?.trim()) continue;
-      const item = {
+      const item: Block = {
         order,
         text: block(entry.summary ? "Recent canon summary" : "Recent canon in full", entry.title, entry.content),
+        ...(own(chapterOf.get(entry.id)) ? { own: true } : {}),
       };
       others.push(item);
       if (entry.summary && entry.kind === "chapter") summaries.push(item);
@@ -508,19 +567,12 @@ export async function recallText(
     const recalls = (result.recalls ?? [])
       .map(({ id, title, content }) => ({ id, kind: "recall", title, content }))
       .reverse();
-    const context = contextOf(
-      { overview, details: apart ? [] : recalls, maxContext: result.maxContext },
+    return storyContext(
+      { overview, details: recalls, maxContext: result.maxContext },
       [...previous, ...others],
-      [...summaries.slice(0, -1), ...earliestScenes],
+      earliestScenes,
+      summaries,
     );
-    if (!apart) return context;
-    return {
-      ...context,
-      recalls: forgeMemoryContext(
-        { overview: "", details: recalls, maxContext: result.maxContext },
-        { prefix: "", optional: [], renderMemory },
-      ),
-    };
   };
 
   if (deps.memory) {
@@ -531,7 +583,14 @@ export async function recallText(
     });
     if (context) return context;
   }
-  const history = await canonicalHistory(deps.store, runId, known, previousKey, protagonist).catch((error: unknown) => {
+  const history = await canonicalHistory(
+    deps.store,
+    runId,
+    known,
+    previousKey,
+    protagonist,
+    cached ? own : undefined,
+  ).catch((error: unknown) => {
     warn("The canonical history could not be read", error);
     return [] as Block[];
   });
@@ -543,7 +602,7 @@ export async function recallText(
         .filter((entry) => entry.order < last!.order)
         .sort((a, b) => Number(!a.chapter) - Number(!b.chapter) || byOrder(a, b))
     : [];
-  return contextOf(
+  return storyContext(
     { overview: "", details: [], maxContext: null },
     [...previous, ...history],
     [...before, ...earliestScenes],
