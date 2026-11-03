@@ -2,7 +2,7 @@
 // Otome Forge: Date Night's places. A radio group of cards, each in its scene's gradient (no image needed), plus
 // "Let {name} choose". The planner adapts the place to the world and names it in the world's language. After them come
 // the places the story has painted (M2b's world.places with ready art), each over its own picture: the date goes there
-// under the name the story gave it.
+// under the name the story gave it. The Photo Shoot (#2087) offers only those (`storyOnly`).
 // ──────────────────────────────────────────────
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
@@ -84,9 +84,20 @@ interface PlacePickerProps {
   storyPlaces: ReadonlyArray<{ key: string; name: string; url: string }>;
   value: PlacePick | null;
   onChange: (pick: PlacePick) => void;
+  /** Only the story's painted places: no built-in places, no "Let {name} choose" and no eyebrow (the Photo Shoot). */
+  storyOnly?: boolean;
+  /** The radio group's name for screen readers; Date Night's by default. */
+  legend?: string;
 }
 
-export function PlacePicker({ partnerName, storyPlaces, value, onChange }: PlacePickerProps) {
+export function PlacePicker({
+  partnerName,
+  storyPlaces,
+  value,
+  onChange,
+  storyOnly = false,
+  legend,
+}: PlacePickerProps) {
   const { t } = useTranslation();
   const name = useId();
   const card = (
@@ -132,11 +143,15 @@ export function PlacePicker({ partnerName, storyPlaces, value, onChange }: Place
   };
   return (
     <fieldset className="of-places">
-      <legend className="of-visually-hidden">{t("ui.otomeForge.dateNight.placeLegend", { name: partnerName })}</legend>
-      {DATE_PLACES.map((place) =>
-        card(place, place, value?.place === place, { place }, t(PLACE_NAME_KEYS[place], { name: partnerName })),
-      )}
-      {storyPlaces.length ? (
+      <legend className="of-visually-hidden">
+        {legend ?? t("ui.otomeForge.dateNight.placeLegend", { name: partnerName })}
+      </legend>
+      {storyOnly
+        ? null
+        : DATE_PLACES.map((place) =>
+            card(place, place, value?.place === place, { place }, t(PLACE_NAME_KEYS[place], { name: partnerName })),
+          )}
+      {storyPlaces.length && !storyOnly ? (
         <p className="of-eyebrow of-places-story" aria-hidden="true">
           {t("ui.otomeForge.dateNight.storyPlaces")}
         </p>
