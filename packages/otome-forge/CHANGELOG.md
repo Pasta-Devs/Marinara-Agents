@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.8.5 — 2026-11-04
+
+- **A love interest who appears in another's Character Story remembers it.** When another love interest speaks in a Character Story, that story is now theirs to remember too, and its summary says who was there and for which parts, so they know what they saw and not what they missed. A name that is only mentioned doesn't count. Character Stories you have already finished get this too. Dates stay private to their love interest.
+- **Character Stories may have cameos.** Another love interest can now appear in a Character Story when the story calls for it.
+
 ## 0.8.4 — 2026-11-04
 
 - **The cast keeps your earlier chapters in mind.** Story prompts now always keep the summaries of earlier chapters, with the last chapter in full, and send a chapter in full only while it has no summary yet. Before, while any summary was still being written or had failed, the summaries were left out and only the most recent chapters went in full.

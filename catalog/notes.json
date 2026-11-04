@@ -670,6 +670,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.8.5",
+          "date": "2026-11-04",
+          "notes": "- **A love interest who appears in another's Character Story remembers it.** When another love interest speaks in a Character Story, that story is now theirs to remember too, and its summary says who was there and for which parts, so they know what they saw and not what they missed. A name that is only mentioned doesn't count. Character Stories you have already finished get this too. Dates stay private to their love interest.\n- **Character Stories may have cameos.** Another love interest can now appear in a Character Story when the story calls for it.",
+          "highlight": false
+        },
+        {
           "version": "0.8.4",
           "date": "2026-11-04",
           "notes": "- **The cast keeps your earlier chapters in mind.** Story prompts now always keep the summaries of earlier chapters, with the last chapter in full, and send a chapter in full only while it has no summary yet. Before, while any summary was still being written or had failed, the summaries were left out and only the most recent chapters went in full.\n- **Memory no longer waits on a model's context size.** Summaries are written with any connection, even one that reports no context size. If its model is too small for a summary, you see its error and can switch to a connection with a larger context.\n- **A failed summary shows on every screen.** When a summary fails, every screen of the open story says so at the top, with what the connection answered, Retry the summary and Change connection. Before, it showed only in Settings.",
@@ -781,12 +787,6 @@
           "version": "0.6.22",
           "date": "2026-11-02",
           "notes": "- **Love interests may be genuinely evil.** A villain or a monster stays one, and taming them is the point; as affection grows they may become a better partner to you, in their own way. Scenes, climaxes and phone replies now see their darkness.\n- **Angst and Dark say it plainly.** Under Angst, cruelty isn't sanitized within your Lines and Veils, and a love interest may be a villain to everyone but you. Under Dark romance, they can be the villain. Gentle is unchanged.\n- **Real villains are back**, and a moral code fits who they are: firm, far looser, or none at all. This applies to love interests written from now on.\n- **Side with one of them.** From chapter 4, at most once every four main chapters, when love interests disagree you choose whom to back: +30 affection for them, −10 for each one you pass over, never below a level they've reached.",
-          "highlight": false
-        },
-        {
-          "version": "0.6.21",
-          "date": "2026-11-02",
-          "notes": "- **A chapter may close on a judgment you can get wrong.** When an arc holds a mystery, a traitor or a disputed account, the end of a chapter can now ask you to judge it: who did it, who betrayed you, whom to believe. The true answer is always among the options, nothing hints which it is, and whatever you pick is what happens; a wrong guess plays out in the chapters after it. Arcs without such a question never get one.",
           "highlight": false
         }
       ]

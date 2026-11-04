@@ -2131,7 +2131,7 @@ function storyFraming(name: string, nodes: number): string[] {
     nodes > 1
       ? `This is ${name}'s CHARACTER STORY: a ${nodes}-scene side story between ${name} and the protagonist, outside the main plot. Each node is one of its scenes; it has its own small arc and ends on its last.`
       : `This is a ONE-SCENE side story of ${name}'s: one complete scene between ${name} and the protagonist, outside the main plot, with its own small beginning and end.`,
-    `It is private: no other love interest appears in it or learns of it. It does not move ${name}'s stage: how close they are follows the scene card. It never resolves the mystery or reveals a secret before its stage, and it never contradicts the story so far.`,
+    `It is ${name}'s: another love interest may appear only when the story truly calls for it, as themselves, and then knows only what happened while they were there. It does not move ${name}'s stage: how close they are follows the scene card. It never resolves the mystery or reveals a secret before its stage, and it never contradicts the story so far.`,
   ];
 }
 
@@ -2598,7 +2598,7 @@ export const TIMELINE_FOLD_WORDS = 5000;
  * the lines and choices that matter. Every choice is named here because the timeline is the only record of them that
  * reaches a prompt. A love interest's own chapter keeps its privacy in its own words.
  */
-export const CHAPTER_SUMMARY_WORDING = `Summarize this one chapter, as it was played, in at most ${CHAPTER_SUMMARY_WORDS} words, in the past tense and in story order: what happened; the most important lines of dialogue, quoted with who said them; and every choice the protagonist made, including any big choice, a judgment they made and whom they sided with over whom. When the source's title says it is someone's own private chapter, begin the summary with "Private: only <their name> and the protagonist know this."`;
+export const CHAPTER_SUMMARY_WORDING = `Summarize this one chapter, as it was played, in at most ${CHAPTER_SUMMARY_WORDS} words, in the past tense and in story order: what happened; the most important lines of dialogue, quoted with who said them; and every choice the protagonist made, including any big choice, a judgment they made and whom they sided with over whom. When the source's title says it is someone's own private chapter, begin the summary with "Private: only <their name> and the protagonist know this." When its title says someone else also appears in it, name them in that opening instead ("Private: only <their name>, <who also appears> and the protagonist know this.") and say in the summary which parts each of them was there for.`;
 
 /**
  * What condensing the timeline asks for (#2066): everything but the newest chapter, retold shorter. The newest stays as
@@ -3954,7 +3954,7 @@ export function storyPlanMessages({ world, player, unit, state, item, memory }: 
     `- guide: what happens in that node, 2 to 4 sentences, for the narrator: who wants what, what changes, where it leaves things. cast: exactly ["${li}"]. place: where it opens (optional).`,
     `- ledger.relationship: one line on what moved between ${name} and the protagonist. ledger.conflict: optional: complicate or escalate an open conflict by its id, or plant a new seed (type from: ${ANGST_TYPES.join(", ")}). ledger.offscreen: [].`,
     "RULES",
-    `- ${STORY_NODES_MIN} to ${STORY_NODES_MAX} nodes of kind beat or moment (no confrontation, no gate). ${name} is in every node, and no other love interest appears: the story is private to ${name} and the protagonist.`,
+    `- ${STORY_NODES_MIN} to ${STORY_NODES_MAX} nodes of kind beat or moment (no confrontation, no gate). ${name} is in every node. It is ${name}'s story: another love interest appears only when the story truly calls for it, and then knows only what happened while they were there.`,
     `- The Memory's premise is a situation, never a plot turn. How close they are follows where ${name} is now, stage ${stage} (${row.name}, ${row.balance}): it may deepen the bond, but it does not move the stage.`,
     "- Continue from the story so far: everything already played is canon and is never undone, contradicted or staged again.",
     "- Never reveal a secret before its stage, and never resolve the mystery. An open grievance stays open.",
