@@ -16,7 +16,7 @@
 // (the maintainer's, 2026-11-04): a memory model that reports none writes every summary, each request whole, and
 // condenses in one call; a summary its provider refuses is status `error` with the provider's own message, which Retry
 // clears; one that reports a context too small for any summary or condensing fails with no call, its message saying
-// so; a run with no connection for it says so in its status, with how many chapters wait for a summary; and a status
+// so in Otome's own words (reason `context-too-small`, a wording for each); a run with no connection for it says so in its status, with how many chapters wait for a summary; and a status
 // the earlier gate saved never waits for setup: it reads as behind and catches up, or as ready. Recall sends no ranked
 // details and no recent canon: the small memories this prompt may know come back as `recalls`, newest first within 5k
 // tokens and 1k of leeway, never one the caller lists in full; the Home note, Read Him and Read Me take the newest.
@@ -1074,7 +1074,9 @@ test("a summary the provider refuses as too long is status error with its own me
     { store, handle: createHandle(runtime.logger), memory },
   );
   const reply: OtomeReply = { status: () => reply, send: () => reply };
-  type Shown = { status: { phase: string; retryable: boolean; message?: string; unsummarized?: number } };
+  type Shown = {
+    status: { phase: string; retryable: boolean; reason?: string; message?: string; unsummarized?: number };
+  };
   const shown = async (method: "GET" | "POST", path: string) =>
     (await routes.get(`${method} ${path}`)!({ params: { run: "r-memory-abcdef" }, body: {} }, reply)) as Shown;
 
@@ -1082,8 +1084,8 @@ test("a summary the provider refuses as too long is status error with its own me
   await settle(memory);
   const failed = (await shown("GET", "/runs/:run/memory/status")).status;
   assert.deepEqual(
-    [failed.phase, failed.retryable, failed.message, failed.unsummarized],
-    ["error", true, TOO_LONG, 2],
+    [failed.phase, failed.retryable, failed.reason, failed.message, failed.unsummarized],
+    ["error", true, "generation-failed", TOO_LONG, 2],
     "the provider's own words, retryable",
   );
   // Nothing retries it by itself; Retry does, and the message goes with the failure.
@@ -1100,11 +1102,13 @@ test("a memory model too small for any summary or condensing fails with no call,
   const small = await setup(undefined, { maxContext: 8192, maxOutputTokens: null });
   assert.equal(await small.memory.maintain({ runId: RUN }), true);
   const failed = await settle(small.memory);
+  // Otome's own words, not the provider's: their own reason, so the client shows them without "The connection said".
   assert.deepEqual(
-    [failed.phase, failed.retryable, failed.message],
+    [failed.phase, failed.retryable, failed.reason, failed.message],
     [
       "error",
       true,
+      "context-too-small",
       "The Memory connection's model (8,192 tokens of context) is too small to write a summary. Choose a connection with a larger context.",
     ],
   );
@@ -1123,8 +1127,16 @@ test("a memory model too small for any summary or condensing fails with no call,
   });
   assert.equal(await condensing.memory.maintain({ runId: RUN }), true);
   const stuck = await settle(condensing.memory);
-  assert.deepEqual([stuck.phase, stuck.retryable], ["error", true]);
-  assert.match(stuck.message ?? "", /\(16,384 tokens of context\) is too small to write a summary/u);
+  // It has just written every summary, so it is too small for the condensing, not for a summary.
+  assert.deepEqual(
+    [stuck.phase, stuck.retryable, stuck.reason, stuck.message],
+    [
+      "error",
+      true,
+      "context-too-small",
+      "The Memory connection's model (16,384 tokens of context) is too small to condense the story's timeline. Choose a connection with a larger context.",
+    ],
+  );
   assert.equal(condensing.calls.length, 3, "the three summaries, and no condensing call");
 });
 

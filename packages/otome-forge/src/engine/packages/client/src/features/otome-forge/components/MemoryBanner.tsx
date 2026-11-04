@@ -1,8 +1,9 @@
 // ──────────────────────────────────────────────
 // Otome Forge: a failed summary is never silent. On every screen of an open story (mounted once by OtomeForgeView), a
-// banner says that a summary failed, with the provider's own words, Retry, and the way to Settings → Connections at
-// the Memory connection (More connections, focused), to give it a model with a larger context; or that no connection
-// can write summaries, with only the way to Connections (the story's own connection is the one missing then).
+// banner says that a summary failed, with the provider's own words (Otome's, without "The connection said", when the
+// memory model is too small), Retry, and the way to Settings → Connections at the Memory connection (More connections,
+// focused), to give it a model with a larger context; or that no connection can write summaries, with only the way to
+// Connections (the story's own connection is the one missing then).
 // Ordinary catch-up shows nothing (lib/memory-notice.ts).
 // ──────────────────────────────────────────────
 // It sits in the stage's flow below the top bar (above the reader's own header, which then leaves the safe area to it),
@@ -99,6 +100,7 @@ function MemoryBannerBox({
   const retrying = notice.kind === "retrying";
   const retry = retryAction(notice, busy);
   const detail = notice.kind === "failed" ? (error ?? notice.message) : null;
+  const own = notice.kind === "failed" && notice.own && !error;
   return (
     <div ref={box} className="of-memory-banner of-glass" data-kind={notice.kind}>
       {/* A new element for each state, so a failure (again) is announced as it appears; a retry's progress is said by
@@ -120,7 +122,10 @@ function MemoryBannerBox({
             )}
           </span>
           {detail ? (
-            <span className="of-memory-banner-said"> {t("ui.otomeForge.memory.failedSaid", { message: detail })}</span>
+            <span className="of-memory-banner-said">
+              {" "}
+              {own ? detail : t("ui.otomeForge.memory.failedSaid", { message: detail })}
+            </span>
           ) : null}
         </p>
       </div>

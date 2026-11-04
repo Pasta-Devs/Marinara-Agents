@@ -2628,6 +2628,28 @@ test("Otome Hearth a failed summary is never silent: every screen of the story s
   expect(pageErrors).toEqual([]);
 });
 
+test("Otome Hearth a memory model too small for any summary says so in Otome's own words, not as the connection's", async ({
+  page,
+}) => {
+  const tooSmall =
+    "The Memory connection's model (8,192 tokens of context) is too small to write a summary. Choose a connection with a larger context.";
+  const stub = createStoryStub({ done: true, memory: { ...failedMemory(tooSmall), reason: "context-too-small" } });
+  await stubRoutes(page, stub);
+  const root = await openStory(page);
+  const banner = root.locator(".of-memory-banner");
+  await expect(banner.getByRole("alert")).toHaveText(
+    `A story summary failed, so the cast may not remember everything yet. ${tooSmall}`,
+  );
+  // Settings → Connections and Debug show it on its own too, not under "The connection said".
+  await banner.getByRole("button", { name: "Change connection" }).click();
+  for (const tab of ["Connections", "Debug"]) {
+    await root.getByRole("tab", { name: tab, exact: true }).click();
+    const section = root.getByRole("tabpanel").getByRole("region", { name: "Story memory" });
+    await expect(section).toContainText(tooSmall);
+    await expect(section).not.toContainText("The connection said");
+  }
+});
+
 test("Otome Hearth memory with no connection to write summaries asks for one, without Retry, and never on the story list", async ({
   page,
 }) => {

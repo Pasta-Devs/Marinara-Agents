@@ -19,7 +19,8 @@
 // Every story prompt reads it as saved (savedStory: the timeline, the sources it covers and each one's summary),
 // whatever state the memory is in (S/story/canon.ts recallText). Its size never follows a model's context: it grows
 // and is condensed at the same sizes whatever the memory model; the context that model reports only splits the
-// condensing into as many calls as it needs (one call when it reports none; S/memory/memory.ts summaryJob).
+// condensing into as many calls as it needs (one call when it reports none; S/memory/memory.ts summaryJob), or fails
+// it, saying so, when not even one entry fits.
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 
 /**

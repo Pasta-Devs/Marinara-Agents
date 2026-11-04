@@ -3,7 +3,8 @@
 // (components/MemoryBanner.tsx) and beside the connection that writes the summaries (Settings' MemorySection).
 // ──────────────────────────────────────────────
 // A failed summary (phase `error`, which the kit always marks retryable) is never silent: it offers Retry, with the
-// provider's own words (a context that is too small, say), and the way to the Memory connection. Memory that waits
+// provider's own words (a context that is too small, say), or Otome's own when the memory model reports a context too
+// small for any summary (reason `context-too-small`), and the way to the Memory connection. Memory that waits
 // because no connection can write summaries asks for one instead, while a finished chapter waits (or while the count
 // is unknown). Ordinary catch-up (pending, stale) and ready memory ask for nothing.
 import type { MemoryStatus } from "../shared/api-types";
@@ -12,8 +13,11 @@ import type { MemoryStatus } from "../shared/api-types";
 export type MemoryView = MemoryStatus & { retrying?: true };
 
 export type MemoryNotice =
-  /** Retry and the way to the connection; `message` is the provider's own, shortened, or null without one. */
-  | { kind: "failed"; message: string | null }
+  /**
+   * Retry and the way to the connection; `message` is the provider's own, shortened, or null without one. `own`: Otome
+   * wrote it (ownMessage), so it shows without "The connection said".
+   */
+  | { kind: "failed"; message: string | null; own?: true }
   /** Upkeep runs again after a failure: its progress, the buttons kept. */
   | { kind: "retrying" }
   /** No connection can write summaries: the way to the connection, no Retry. */
@@ -33,6 +37,9 @@ export function nextMemoryView(before: MemoryView | undefined, status: MemorySta
     : status;
 }
 
+/** Whether a status's `message` is Otome's own (the memory model too small, S/memory/memory.ts), not the provider's. */
+export const ownMessage = (status: Pick<MemoryStatus, "reason">) => status.reason === "context-too-small";
+
 /** The provider's message on one line, cut at a word within `limit` characters, or null when there is none. */
 export function shortMessage(message: string | undefined, limit = NOTICE_MESSAGE_CHARACTERS): string | null {
   const text = (message ?? "").replace(/\s+/gu, " ").trim();
@@ -48,7 +55,8 @@ export function memoryNotice(view: MemoryView | undefined): MemoryNotice {
   if (!view) return null;
   if (view.noConnection && view.unsummarized !== 0) return { kind: "no-connection" };
   if (view.retrying && view.phase === "pending") return { kind: "retrying" };
-  if (view.phase === "error") return { kind: "failed", message: shortMessage(view.message) };
+  if (view.phase === "error")
+    return { kind: "failed", message: shortMessage(view.message), ...(ownMessage(view) ? { own: true } : {}) };
   return null;
 }
 

@@ -1283,12 +1283,16 @@ export interface WhoSaidWhatView {
 export interface MemoryStatus {
   phase: "ready" | "pending" | "stale" | "error";
   retryable: boolean;
-  /** English, for Debug: not-prepared, interrupted, source-changed, generation-failed, … */
+  /**
+   * English, for Debug: not-prepared, interrupted, source-changed, generation-failed, … With `error`,
+   * `context-too-small` says the server wrote `message` itself (the memory model too small), not the provider.
+   */
   reason?: string;
   recordCount?: number;
   /**
    * The failed summary call's own message, as the provider gave it (English, raw), or the server's own when the memory
-   * model's context holds not even the smallest summary request; only with `error`.
+   * model's context holds not even the smallest summary or condensing request (reason `context-too-small`); only with
+   * `error`.
    */
   message?: string;
   /** No connection can write summaries (the world names none for the memory job): memory waits for one. */

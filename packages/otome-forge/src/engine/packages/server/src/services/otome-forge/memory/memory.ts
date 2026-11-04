@@ -19,8 +19,9 @@
 //   sends each request as it is, the summary prompt and the chapter. A model whose context is too small fails at its
 //   provider: that is a failed summary, status `error` with the provider's own `message`, and it waits for Retry. A
 //   model that reports a context too small for even the smallest piece of a summary (or of a condensing) fails the
-//   same way with no call, its `message` saying so (tooSmall), so the player switches the connection. Only a run with
-//   no connection for the job at all waits, which status reports (`noConnection`), with how many chapters have no
+//   same way with no call, its `message` saying so and its reason `context-too-small` (tooSmall), so the client shows
+//   those words as Otome's own, not the connection's, and the player switches the connection. Only a run with no
+//   connection for the job at all waits, which status reports (`noConnection`), with how many chapters have no
 //   summary yet (`unsummarized`). A status the earlier gate saved reads as if no gate had been: `context-unknown` as
 //   stale, so the next recall queues the upkeep, and a ready one without the readers it knew no context for.
 // - Read Me (S/minigames/read-me.ts) is never a source: what the notebook holds beyond knowsAboutYou's newest entries
@@ -123,9 +124,14 @@ const SummarySchema = z.object({ summary: z.string().min(1) });
 /** The longest failed summary's message kept on the status: a proxy's error page can be long. */
 const FAILURE_CHARACTERS = 2000;
 
-/** A failed summary's message when the memory model's context holds not even its smallest request (see the header). */
-const tooSmall = (maxContext: number) =>
-  `The Memory connection's model (${maxContext.toLocaleString("en-US")} tokens of context) is too small to write a summary. Choose a connection with a larger context.`;
+/**
+ * A failed summary's reason and message when the memory model's context holds not even the smallest request of `task`
+ * (see the header): Otome's own words, which the client shows without "The connection said".
+ */
+const tooSmall = (maxContext: number, task: "write a summary" | "condense the story's timeline") => ({
+  reason: "context-too-small",
+  message: `The Memory connection's model (${maxContext.toLocaleString("en-US")} tokens of context) is too small to ${task}. Choose a connection with a larger context.`,
+});
 
 /** How many characters of its source a detail request carries (the kit's `range`); a piece of one is the smallest. */
 const pieceLength = (request: SummaryRequest) => {
@@ -205,9 +211,9 @@ export interface OtomeMemory {
 
 /**
  * The kit's status (phase `error` is a failed summary, which waits for Retry), with what the client shows beside it
- * (see the header): the failed call's own `message` (or tooSmall's, with no call), whether no connection can write
- * summaries, and how many chapters (the story's own and its side stories) have no summary yet, when the run's sources
- * can be read.
+ * (see the header): the failed call's own `message` (or tooSmall's, with no call, and its reason `context-too-small`),
+ * whether no connection can write summaries, and how many chapters (the story's own and its side stories) have no
+ * summary yet, when the run's sources can be read.
  */
 export type OtomeMemoryStatus = ForgeMemoryStatus & {
   message?: string;
@@ -300,8 +306,8 @@ export function createOtomeMemory({
   const maintainKey = (runId: string) => `${memoryId(runId)}#maintain`;
   /** Runs whose maintenance was asked for again while their job waited or ran, with whether one asked in debug mode. */
   const again = new Map<string, boolean>();
-  /** The message of each run's failed summary call this round, for the error status the kit writes next. */
-  const failures = new Map<string, string>();
+  /** Why each run's summary failed this round (the call's own message, or tooSmall), for the kit's next error status. */
+  const failures = new Map<string, { message: string; reason?: string }>();
   let disposed = false;
 
   const runExists = async (runId: string) => !!(await documents.getById(OTOME_FORGE_PACKAGE_ID, worldId(runId)));
@@ -320,11 +326,11 @@ export function createOtomeMemory({
     };
   }
 
-  /** The memory as the kit writes it, with a failed summary's message on its error status (see the header). */
+  /** The memory as the kit writes it, with a failed summary's message (and tooSmall's reason) on its error status. */
   const withFailure = (runId: string, data: unknown) => {
     const status = (data as { status?: { phase?: unknown } } | null)?.status;
-    const message = failures.get(runId);
-    return status?.phase === "error" && message ? { ...(data as object), status: { ...status, message } } : data;
+    const failure = failures.get(runId);
+    return status?.phase === "error" && failure ? { ...(data as object), status: { ...status, ...failure } } : data;
   };
 
   const memory = createForgeStoryMemory({
@@ -392,7 +398,7 @@ export function createOtomeMemory({
       if (!job) return false;
       if (!job.maxContext) return true;
       if (promptRoom(job.maxContext, withRules(request, job)) >= summaryReserve(job.maxOutputTokens)) return true;
-      if (pieceLength(request) <= 1) failures.set(request.runId, tooSmall(job.maxContext));
+      if (pieceLength(request) <= 1) failures.set(request.runId, tooSmall(job.maxContext, "write a summary"));
       return false;
     },
     async summarize(value) {
@@ -416,10 +422,9 @@ export function createOtomeMemory({
           },
         ).catch((error: unknown) => {
           // The provider's own words (a context-length error, a refusal), for the error status (see the header).
-          failures.set(
-            request.runId,
-            (error instanceof Error ? error.message : String(error)).slice(0, FAILURE_CHARACTERS),
-          );
+          failures.set(request.runId, {
+            message: (error instanceof Error ? error.message : String(error)).slice(0, FAILURE_CHARACTERS),
+          });
           throw error;
         });
         return reply.summary.trim();
@@ -460,7 +465,7 @@ export function createOtomeMemory({
         let take = pending.length;
         while (take > 0 && !fits({ head, entries: pending.slice(0, take) })) take -= 1;
         if (!take) {
-          failures.set(request.runId, tooSmall(job.maxContext ?? 0));
+          failures.set(request.runId, tooSmall(job.maxContext ?? 0, "condense the story's timeline"));
           throw new Error("summary-context-too-small");
         }
         head = cleanSummary(await ask("timeline", condense({ head, entries: pending.slice(0, take) })));

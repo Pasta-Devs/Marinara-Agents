@@ -1,7 +1,8 @@
 // ──────────────────────────────────────────────
 // Otome Forge Settings → Debug: whether prompts are being logged, the story's ids and connections, the raw error of
 // every step that failed (English, for logs and bug reports), with a copy button, and the story memory's status with
-// its Retry (a failed summary is never retried by itself) and the provider's whole message. The status and Retry are
+// its Retry (a failed summary is never retried by itself) and the provider's whole message (Otome's own, on a line of
+// its own and not as the connection's, when the memory model is too small). The status and Retry are
 // hooks/use-memory.ts's, shared with the banner every screen of the story shows (components/MemoryBanner.tsx). The
 // memory section is also under Settings → Connections, beside the connection that writes the summaries.
 // ──────────────────────────────────────────────
@@ -10,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import { ClipboardCopy, RotateCcw } from "lucide-react";
 import { useOtomeApi } from "../../api";
 import { useMemoryStatus } from "../../hooks/use-memory";
+import { ownMessage } from "../../lib/memory-notice";
 import { useOtomeProps } from "../../props";
 import type { MemoryStatus, RunView } from "../../shared/api-types";
 import { Section } from "../setup/parts";
@@ -41,6 +43,7 @@ export function MemorySection({ runKey }: { runKey: string }) {
             ? otome.errorMessage(memory.query.error)
             : t("ui.otomeForge.settings.debugMemoryLoading")}
       </p>
+      {status?.message && ownMessage(status) ? <p className="of-body">{status.message}</p> : null}
       {status ? (
         <dl className="of-review-list">
           <dt>{t("ui.otomeForge.settings.debugMemoryRecords")}</dt>
@@ -55,7 +58,7 @@ export function MemorySection({ runKey }: { runKey: string }) {
               </dd>
             </>
           ) : null}
-          {status.message ? (
+          {status.message && !ownMessage(status) ? (
             <>
               <dt>{t("ui.otomeForge.settings.debugMemoryMessage")}</dt>
               <dd>

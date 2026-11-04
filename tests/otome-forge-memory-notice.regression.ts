@@ -1,14 +1,16 @@
 // Otome Hearth: a failed summary is never silent. Which story memory status shows which banner and which action, on
 // every screen of an open story (components/MemoryBanner.tsx) and under Settings → Connections (MemorySection): a
-// failed summary offers Retry with the provider's own words and the way to the Memory connection; a retry shows its
-// progress and keeps its buttons, and a retry that fails again shows the new error; memory that waits for a connection
-// offers only the way to the connection; ordinary catch-up, ready memory and a fresh story show nothing. The status is
-// read fast only while a retry runs or Settings' memory section watches upkeep.
+// failed summary offers Retry with the provider's own words (Otome's, marked its own, when the memory model is too
+// small) and the way to the Memory connection; a retry shows its progress and keeps its buttons, and a retry that fails
+// again shows the new error; memory that waits for a connection offers only the way to the connection; ordinary
+// catch-up, ready memory and a fresh story show nothing. The status is read fast only while a retry runs or Settings'
+// memory section watches upkeep.
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
   NOTICE_MESSAGE_CHARACTERS,
   memoryNotice,
+  ownMessage,
   memoryPollMs,
   nextMemoryView,
   retryAction,
@@ -44,6 +46,25 @@ test("a failed summary shows the provider's words, Retry and the way to the conn
   assert.equal(retryAction(notice!, true), "running");
   // A failure with no message of its own (the memory store unreadable) still shows, without a quote.
   assert.deepEqual(memoryNotice(status("error", { reason: "memory-unavailable" })), { kind: "failed", message: null });
+});
+
+test("a memory model too small for any summary shows Otome's own words, not as the connection's", () => {
+  const TOO_SMALL =
+    "The Memory connection's model (8,192 tokens of context) is too small to write a summary. Choose a connection with a larger context.";
+  const small = status("error", { reason: "context-too-small", message: TOO_SMALL });
+  assert.equal(ownMessage(small), true);
+  const notice = memoryNotice(read(small)[0]);
+  assert.deepEqual(notice, { kind: "failed", message: TOO_SMALL, own: true });
+  assert.equal(retryAction(notice!), "offered");
+  // The provider's words keep "The connection said": no `own`.
+  const provider = status("error", { reason: "generation-failed", message: CONTEXT_ERROR });
+  assert.equal(ownMessage(provider), false);
+  assert.deepEqual(memoryNotice(provider), { kind: "failed", message: CONTEXT_ERROR });
+  // A message with no reason reads as the provider's too.
+  assert.deepEqual(memoryNotice(status("error", { message: CONTEXT_ERROR })), {
+    kind: "failed",
+    message: CONTEXT_ERROR,
+  });
 });
 
 test("ordinary catch-up, ready memory and a fresh story show nothing", () => {
