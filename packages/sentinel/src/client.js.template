@@ -86,23 +86,29 @@
   }
 
   async function load() {
-    if (!S.chatId) return render();
+    const chatId = S.chatId;
+    if (!chatId) return render();
+    let data = null;
+    let error = "";
     try {
-      S.data = await request(`/chats/${encodeURIComponent(S.chatId)}/state`);
-      S.error = "";
-    } catch (error) {
-      S.error = error.message;
+      data = await request(`/chats/${encodeURIComponent(chatId)}/state`);
+    } catch (failure) {
+      error = failure.message;
     }
+    if (chatId !== S.chatId) return;
+    if (data) S.data = data;
+    S.error = error;
     render();
   }
 
   async function run(action) {
+    const chatId = S.chatId;
     S.busy = true;
     S.error = "";
     render();
     try {
       const result = await action();
-      if (result?.entry) S.last = result.entry;
+      if (result?.entry && chatId === S.chatId) S.last = result.entry;
       await load();
     } catch (error) {
       S.error = error.message;
@@ -242,7 +248,10 @@ ${suggestions ? `<div class="sn-muted">${esc(t("ui.sentinel.suggested"))}</div><
       S.panel.addEventListener("pointerdown", onDragStart);
       document.body.appendChild(S.panel);
     }
-    const focusId = document.activeElement?.id;
+    // Rebuilding the panel must not lose focus or half-typed text.
+    const active = S.panel.contains(document.activeElement) ? document.activeElement : null;
+    const focusKey = active ? focusSelector(active) : "";
+    const typed = [...S.panel.querySelectorAll("input[type=text]")].map((input) => [inputKey(input), input.value]);
     S.panel.classList.toggle("sn-big", S.big);
     const styleName = S.data ? t(`ui.sentinel.style.${S.data.state.style}`) : "";
     const tabs = ["look", "log", "setup"]
@@ -252,8 +261,26 @@ ${suggestions ? `<div class="sn-muted">${esc(t("ui.sentinel.suggested"))}</div><
 <button class="sn-icon" data-act="size" aria-label="${esc(t(S.big ? "ui.sentinel.smaller" : "ui.sentinel.bigger"))}">${S.big ? "−" : "+"}</button>
 <button class="sn-icon" data-act="close" aria-label="${esc(t("ui.sentinel.close"))}">✕</button></div>
 <div class="sn-tabs" role="tablist">${tabs}</div><div class="sn-body">${bodyHtml()}</div>`;
-    if (focusId) document.getElementById(focusId)?.focus();
+    for (const [key, value] of typed) {
+      const input = S.panel.querySelector(key);
+      if (input && value) input.value = value;
+    }
+    if (focusKey) S.panel.querySelector(focusKey)?.focus();
   }
+
+  function inputKey(input) {
+    return `form[data-form="${input.form?.dataset.form}"] input[name="${input.name}"]`;
+  }
+
+  function focusSelector(element) {
+    if (element.matches("input[type=text]")) return inputKey(element);
+    const keys = ["act", "subject", "sense", "tab", "style", "change", "index"]
+      .filter((key) => element.dataset[key] !== undefined)
+      .map((key) => `[data-${key}="${CSS_ESCAPE(element.dataset[key])}"]`);
+    return keys.length ? `${element.tagName.toLowerCase()}${keys.join("")}` : "";
+  }
+
+  const CSS_ESCAPE = (value) => (globalThis.CSS?.escape ? CSS.escape(value) : String(value).replace(/["\\]/g, "\\$&"));
 
   function onClick(event) {
     const button = event.target.closest("[data-act]");
@@ -293,6 +320,8 @@ ${suggestions ? `<div class="sn-muted">${esc(t("ui.sentinel.suggested"))}</div><
     event.preventDefault();
     const form = event.target;
     const data = new FormData(form);
+    // Sent forms start empty again; the redraw would otherwise restore the old text.
+    if (form.dataset.form !== "butler") form.reset();
     if (form.dataset.form === "act") {
       const order = String(data.get("order") || "").trim();
       if (order) run(() => post("/act", { order, subjectId: data.get("subjectId") || null }));

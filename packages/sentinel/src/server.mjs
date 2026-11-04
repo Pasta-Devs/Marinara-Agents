@@ -91,11 +91,16 @@ export function currentFacts(log) {
 
 export function privacyFilter(text, privacy, subjectName) {
   if (privacy !== "private" || !PRIVATE_BLOCKLIST.test(text)) return text;
-  return `${subjectName}: someone is there. You keep it to presence and activity.`;
+  return `${subjectName || "Someone"}: someone is there. You keep it to presence and activity.`;
+}
+
+export function privacyFilterFacts(facts, privacy) {
+  if (privacy !== "private") return facts;
+  return facts.filter((fact) => !PRIVATE_BLOCKLIST.test(`${fact.thing} ${fact.value}`));
 }
 
 export function parseResult(raw, parseJsonish, kind) {
-  let data = null;
+  let data;
   try {
     data = parseJsonish ? parseJsonish(raw) : JSON.parse(raw);
   } catch {
@@ -135,11 +140,15 @@ export function buildLookMessages({ style, subject, sense, chat, facts }) {
   ];
 }
 
-export function buildActMessages({ style, butlerName, order, subject, chat, facts }) {
+export function buildActMessages({ style, butlerName, order, subject, subjects, privacy, chat, facts }) {
   const name = butlerName || PLAY_STYLES[style]?.butler || "Butler";
   const user = {
     task: `The user's character tells ${name} (the in-world assistant): "${order}". Decide what happens in a way that fits the setting. If it is impossible, say why in-world. Add an "outcome" field: "done", "partly" or "no". List the facts that changed.`,
     target: subject ? { name: subject.name, kind: subject.kind, privacy: effectivePrivacy(subject) } : null,
+    privacy,
+    protectedPlaces: (subjects || [])
+      .filter((item) => effectivePrivacy(item) !== "open")
+      .map((item) => ({ name: item.name, privacy: effectivePrivacy(item) })),
     replyStyle: `${name} replies briefly, in-world.`,
     knownFacts: facts,
     recentChat: chat,
@@ -153,11 +162,30 @@ export function buildActMessages({ style, butlerName, order, subject, chat, fact
 const LOOK_WORDS =
   /\b(look|looks|looking|peek|peeks|check|checks|checking|open|opens|watch|watches|listen|listens|glance|glances|camera|cam|monitor)\b/i;
 
+// Subjects whose full name appears in the text as whole words.
+export function namedSubjects(text, subjects) {
+  if (!text) return [];
+  return subjects.filter((subject) => {
+    const name = subject.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(^|[^\\p{L}\\p{N}])${name}($|[^\\p{L}\\p{N}])`, "iu").test(text);
+  });
+}
+
 // Subjects named in the user's newest message together with a looking word.
 export function storyLookSubjects(text, subjects) {
   if (!text || !LOOK_WORDS.test(text)) return [];
-  const lower = text.toLowerCase();
-  return subjects.filter((subject) => effectivePrivacy(subject) !== "off-limits" && lower.includes(subject.name.toLowerCase()));
+  return namedSubjects(text, subjects).filter((subject) => effectivePrivacy(subject) !== "off-limits");
+}
+
+const PRIVACY_RANK = { open: 0, private: 1, "off-limits": 2 };
+
+// Strictest privacy among the target and every subject the order names.
+export function orderPrivacy(order, target, subjects) {
+  const involved = [...(target ? [target] : []), ...namedSubjects(order, subjects)];
+  return involved.reduce((worst, subject) => {
+    const privacy = effectivePrivacy(subject);
+    return PRIVACY_RANK[privacy] > PRIVACY_RANK[worst] ? privacy : worst;
+  }, "open");
 }
 
 // Text for the narrator: new results since the last reply, story looks, and known facts.
@@ -165,9 +193,14 @@ export function buildPromptText(state, messages) {
   const list = Array.isArray(messages) ? messages : [];
   const log = liveLog(state.log, messages ? list.map((message) => message.id) : null);
   const index = new Map(list.map((message, i) => [message.id, i]));
+  // A regenerated reply stays in the list, so "since the last reply" means before the newest user turn.
+  let latestUserIndex = -1;
+  list.forEach((message, i) => {
+    if (message.role === "user") latestUserIndex = i;
+  });
   let lastAssistant = -1;
   list.forEach((message, i) => {
-    if (message.role === "assistant") lastAssistant = i;
+    if (message.role === "assistant" && (latestUserIndex < 0 || i < latestUserIndex)) lastAssistant = i;
   });
   const fresh = log.filter((entry) => (index.has(entry.messageId) ? index.get(entry.messageId) : -1) >= lastAssistant);
   const lines = [];
@@ -178,7 +211,7 @@ export function buildPromptText(state, messages) {
         : `- The user's character checked ${entry.subjectName}: ${entry.text}`,
     );
   }
-  const latestUser = list.slice(lastAssistant + 1).filter((message) => message.role === "user").pop();
+  const latestUser = latestUserIndex > lastAssistant ? list[latestUserIndex] : null;
   const looked = state.storyLooks ? storyLookSubjects(latestUser?.content, state.subjects) : [];
   for (const subject of looked) {
     const privacy = effectivePrivacy(subject);
@@ -188,17 +221,34 @@ export function buildPromptText(state, messages) {
   }
   const facts = currentFacts(log).slice(-MAX_FACTS_IN_PROMPT);
   if (!lines.length && !facts.length) return "";
-  const out = ["Sentinel: what the user's character knows about places and people outside the scene. Treat it as true."];
+  const out = [
+    "Sentinel: what the user's character knows about places and people outside the scene. Treat it as true.",
+  ];
   if (lines.length) out.push("New:", ...lines);
   if (facts.length) out.push("Known facts:", ...facts.map((fact) => `- ${fact.thing}: ${fact.value}`));
   return out.join("\n");
 }
 
-function recentChat(messages) {
-  return messages.slice(-RECENT_CHAT_MESSAGES).map((message) => ({
-    role: message.role,
-    text: String(message.content || "").slice(0, MAX_MESSAGE_CHARS),
-  }));
+function hiddenFromAI(message) {
+  let extra = message.extra;
+  if (typeof extra === "string") {
+    try {
+      extra = JSON.parse(extra);
+    } catch {
+      return false;
+    }
+  }
+  return extra?.hiddenFromAI === true;
+}
+
+export function recentChat(messages) {
+  return messages
+    .filter((message) => !hiddenFromAI(message))
+    .slice(-RECENT_CHAT_MESSAGES)
+    .map((message) => ({
+      role: message.role,
+      text: String(message.content || "").slice(0, MAX_MESSAGE_CHARS),
+    }));
 }
 
 function isAgentActive(chatMeta) {
@@ -286,22 +336,34 @@ export async function activate(context) {
   async function runCall(chatId, buildMessages, kind, entryBase, privacy, subjectName) {
     const { state } = await loadDoc(chatId);
     const messages = (await listMessages(chatId)) || [];
-    const log = liveLog(state.log, messages.map((message) => message.id));
+    const log = liveLog(
+      state.log,
+      messages.map((message) => message.id),
+    );
     const call = await callModel(chatId, buildMessages(state, recentChat(messages), currentFacts(log)));
     if (call.error) return { error: call.error, status: 502 };
     const parsed = parseResult(call.raw, runtime.json?.parseJsonish, kind);
     if (!parsed) return { error: "bad-output", status: 502 };
     parsed.text = privacyFilter(parsed.text, privacy, subjectName);
-    const entry = {
-      id: `e${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-      kind,
-      ...entryBase,
-      ...parsed,
-      messageId: messages.length ? messages[messages.length - 1].id : null,
-      at: new Date().toISOString(),
-    };
-    return update(chatId, (fresh) => {
-      fresh.log = [...liveLog(fresh.log, messages.map((message) => message.id)), entry];
+    parsed.facts = privacyFilterFacts(parsed.facts, privacy);
+    return update(chatId, async (fresh) => {
+      // Re-read: a reply may have landed during the model call; anchor after it.
+      const now = (await listMessages(chatId)) || messages;
+      const entry = {
+        id: `e${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+        kind,
+        ...entryBase,
+        ...parsed,
+        messageId: now.length ? now[now.length - 1].id : null,
+        at: new Date().toISOString(),
+      };
+      fresh.log = [
+        ...liveLog(
+          fresh.log,
+          now.map((message) => message.id),
+        ),
+        entry,
+      ];
       return { entry };
     });
   }
@@ -319,7 +381,7 @@ export async function activate(context) {
       routes.put("/chats/:chatId/settings", async (request) => {
         const body = request.body ?? {};
         return update(request.params.chatId, (state) => {
-          if (PLAY_STYLES[body.style]) state.style = body.style;
+          if (typeof body.style === "string" && Object.hasOwn(PLAY_STYLES, body.style)) state.style = body.style;
           if (typeof body.butlerName === "string") state.butlerName = cleanText(body.butlerName, MAX_NAME);
           if (typeof body.acting === "boolean") state.acting = body.acting;
           if (typeof body.storyLooks === "boolean") state.storyLooks = body.storyLooks;
@@ -357,7 +419,8 @@ export async function activate(context) {
         if (privacy === "off-limits") return reply.status(403).send({ error: "This place is off-limits" });
         const result = await runCall(
           chatId,
-          (current, chat, facts) => buildLookMessages({ style: current.style, subject, sense: body.sense, chat, facts }),
+          (current, chat, facts) =>
+            buildLookMessages({ style: current.style, subject, sense: body.sense, chat, facts }),
           "look",
           { subjectId: subject.id, subjectName: subject.name, sense: body.sense },
           privacy,
@@ -375,12 +438,21 @@ export async function activate(context) {
         const { state } = await loadDoc(chatId);
         if (!state.acting) return reply.status(403).send({ error: "Acting is off" });
         const subject = body.subjectId ? state.subjects.find((item) => item.id === body.subjectId) : null;
-        const privacy = subject ? effectivePrivacy(subject) : "open";
+        const privacy = orderPrivacy(order, subject, state.subjects);
         if (privacy === "off-limits") return reply.status(403).send({ error: "This place is off-limits" });
         const result = await runCall(
           chatId,
           (current, chat, facts) =>
-            buildActMessages({ style: current.style, butlerName: current.butlerName, order, subject, chat, facts }),
+            buildActMessages({
+              style: current.style,
+              butlerName: current.butlerName,
+              order,
+              subject,
+              subjects: current.subjects,
+              privacy,
+              chat,
+              facts,
+            }),
           "act",
           { order, subjectId: subject?.id ?? null, subjectName: subject?.name ?? null },
           privacy,
