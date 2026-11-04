@@ -1,6 +1,6 @@
 # Big Cheese: content catalog
 
-Status: draft, branch `big-cheese-agent`. Companion to `big-cheese.md`. That file holds the rules. This file holds the content.
+Status: draft, branch `big-cheese-agent`. Companion to [README.md](README.md). That file holds the concept. This file holds the content.
 
 The generator, the normalizer and the storyteller draw on this catalog. The six built-in kits are written here by hand. Each one is a normal Place Kit that the player can copy and edit.
 

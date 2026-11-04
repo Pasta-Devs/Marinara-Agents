@@ -1,7 +1,7 @@
 # Big Cheese: design deep-dive
 
-Companion to [big-cheese.md](big-cheese.md) (the concept) and
-[big-cheese-content.md](big-cheese-content.md) (kits, decks and catalogs). This file says how
+Companion to [README.md](README.md) (the concept) and
+[content.md](content.md) (kits, decks and catalogs). This file says how
 the systems work: data shapes, the day, the storyteller, cards, meetings, people, viewer mode,
 model tasks and routes.
 

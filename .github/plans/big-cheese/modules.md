@@ -1,7 +1,7 @@
 # Big Cheese: modules and more features
 
-Companion to [big-cheese.md](big-cheese.md), [big-cheese-design.md](big-cheese-design.md) and
-[big-cheese-content.md](big-cheese-content.md).
+Companion to [README.md](README.md), [design.md](design.md) and
+[content.md](content.md).
 
 A warehouse, a kingdom and a pirate ship do not share the same systems. A fixed list like
 "Classes", "Shifts" or "War" only fits some places. So Big Cheese has two layers:
