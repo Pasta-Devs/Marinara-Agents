@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 2,
+  "capabilityApi": {
+    "major": 1,
+    "minor": 14
+  },
+  "builtAgainst": {
+    "engineVersion": "2.4.6",
+    "engineCommit": "f66abf7eddb7db6312f5ba8a080145644191775"
+  },
+  "id": "sentinel",
+  "name": "Sentinel",
+  "version": "0.1.0",
+  "description": "Check on places and people outside the scene in Roleplay: peek into a room, watch a camera, find a phone, or tell the house AI what to do. Answers fit the chat and stay true afterwards.",
+  "engine": {
+    "min": "2.4.6",
+    "maxExclusive": "4.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json",
+    "client": "client.js",
+    "server": "server.mjs"
+  },
+  "contributions": {
+    "slots": [
+      "roleplay-tracker"
+    ]
+  },
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "prompt-context",
+    "routes",
+    "storage",
+    "ui"
+  ],
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "c8c93db3aa89407786da2e5206401c471277500f2232639276139acee6be7f7b",
+      "bytes": 464
+    },
+    {
+      "path": "client.js",
+      "sha256": "85b05325cdac27d9119a1240d16de31b0858a619f611eaaa1eb52dd39893c662",
+      "bytes": 22189
+    },
+    {
+      "path": "server.mjs",
+      "sha256": "aacc9bcd232103eb81e740e32b26fa94b2ac61b0690695e856df8b7b742a781a",
+      "bytes": 17419
+    }
+  ],
+  "restartRequired": true
+}

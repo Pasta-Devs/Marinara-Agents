@@ -1,0 +1,385 @@
+"use strict";
+
+(() => {
+  const TAG_NAME = "marinara-capability-sentinel";
+  const UI = __SENTINEL_UI_ENGLISH__;
+  const SENSES = ["look", "listen", "sensor", "locate"];
+  const UNSAFE = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+  const ICON =
+    '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+
+  const t = (key, vars) => String(UI[key] ?? key).replace(/\{(\w+)\}/g, (_, name) => String(vars?.[name] ?? ""));
+  const esc = (value) =>
+    String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+
+  function adminSecret() {
+    try {
+      return localStorage.getItem("marinara_admin_secret")?.trim() || "";
+    } catch {
+      return "";
+    }
+  }
+
+  async function request(path, options = {}) {
+    const method = options.method || "GET";
+    const headers = {};
+    if (UNSAFE.has(method)) headers["x-marinara-csrf"] = "1";
+    const secret = adminSecret();
+    if (secret) headers["X-Admin-Secret"] = secret;
+    if (options.body !== undefined) headers["Content-Type"] = "application/json";
+    const response = await fetch(`/api/sentinel${path}`, {
+      method,
+      headers,
+      credentials: "same-origin",
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      const code = typeof body?.error === "string" ? body.error : `HTTP ${response.status}`;
+      throw new Error(UI[`ui.sentinel.error.${code}`] || t("ui.sentinel.error", { message: code }));
+    }
+    return body;
+  }
+
+  const CSS = `
+.sn-panel{position:fixed;right:16px;bottom:88px;z-index:60;width:340px;max-height:min(70dvh,560px);display:flex;flex-direction:column;
+  background:var(--card);color:var(--foreground);border:1px solid var(--border);border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.35);
+  font:14px/1.45 inherit;overflow:hidden}
+.sn-panel.sn-big{width:480px;max-height:85dvh}
+.sn-head{display:flex;align-items:center;gap:6px;padding:6px 6px 6px 12px;border-bottom:1px solid var(--border);cursor:move;touch-action:none;user-select:none}
+.sn-head strong{flex:1;font-size:15px}
+.sn-icon{min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:10px;background:transparent;color:var(--muted-foreground);cursor:pointer}
+.sn-icon:hover,.sn-icon:focus-visible{color:var(--foreground);background:var(--secondary)}
+.sn-tabs{display:flex;border-bottom:1px solid var(--border)}
+.sn-tabs button{flex:1;min-height:44px;border:0;background:transparent;color:var(--muted-foreground);font:inherit;cursor:pointer;border-bottom:2px solid transparent}
+.sn-tabs button[aria-selected=true]{color:var(--foreground);font-weight:600;border-bottom-color:var(--primary)}
+.sn-body{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+.sn-card{border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:var(--background)}
+.sn-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sn-name{font-weight:600;flex:1;min-width:0;overflow-wrap:anywhere}
+.sn-badge{font-size:11px;font-weight:700;padding:2px 7px;border-radius:6px;border:1px solid currentColor;color:var(--muted-foreground)}
+.sn-badge.sn-private{color:#d9a21b}
+.sn-btn{min-height:44px;padding:0 12px;border-radius:10px;border:1px solid var(--border);background:var(--secondary);color:var(--foreground);font:inherit;cursor:pointer}
+.sn-btn:disabled{opacity:.5;cursor:default}
+.sn-primary{background:var(--primary);color:var(--primary-foreground);border-color:var(--primary);font-weight:600}
+.sn-senses{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:8px}
+.sn-muted{color:var(--muted-foreground);font-size:12px}
+.sn-error{color:var(--destructive);font-size:13px}
+.sn-facts{margin:6px 0 0;padding-left:18px;font-size:13px}
+.sn-panel input[type=text],.sn-panel select{min-height:44px;min-width:0;padding:0 10px;border-radius:10px;border:1px solid var(--border);background:var(--background);color:var(--foreground);font:inherit}
+.sn-panel input[type=text]{flex:1}
+.sn-check{display:flex;align-items:center;gap:10px;min-height:44px}
+.sn-check input{width:20px;height:20px}
+.sn-launch[aria-pressed=true]{color:var(--primary)}
+@media (max-width:640px){.sn-panel,.sn-panel.sn-big{left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom));width:auto;max-height:80dvh}.sn-head{cursor:default}}
+@media (prefers-reduced-motion:no-preference){.sn-panel{transition:width .2s,max-height .2s}}
+`;
+
+  const S = { chatId: null, data: null, open: false, big: false, tab: "look", busy: false, error: "", last: null, panel: null, launchers: new Set() };
+
+  function ensureStyle() {
+    if (document.getElementById("sn-style")) return;
+    const style = document.createElement("style");
+    style.id = "sn-style";
+    style.textContent = CSS;
+    document.head.appendChild(style);
+  }
+
+  async function load() {
+    if (!S.chatId) return render();
+    try {
+      S.data = await request(`/chats/${encodeURIComponent(S.chatId)}/state`);
+      S.error = "";
+    } catch (error) {
+      S.error = error.message;
+    }
+    render();
+  }
+
+  async function run(action) {
+    S.busy = true;
+    S.error = "";
+    render();
+    try {
+      const result = await action();
+      if (result?.entry) S.last = result.entry;
+      await load();
+    } catch (error) {
+      S.error = error.message;
+    }
+    S.busy = false;
+    render();
+  }
+
+  const chatPath = (path) => `/chats/${encodeURIComponent(S.chatId)}${path}`;
+  const post = (path, body, method = "POST") => request(chatPath(path), { method, body });
+
+  function badge(subject) {
+    const privacy = subject.privacy === "off-limits" ? "off-limits" : subject.minor || subject.privacy === "private" ? "private" : "open";
+    const label = privacy === "off-limits" ? t("ui.sentinel.offLimits") : privacy === "private" ? t("ui.sentinel.private") : t("ui.sentinel.open.badge");
+    return `<span class="sn-badge${privacy === "private" ? " sn-private" : ""}">${esc(label)}</span>`;
+  }
+
+  function entryHtml(entry) {
+    const head =
+      entry.kind === "act"
+        ? `${esc(t("ui.sentinel.logOrder"))}: “${esc(entry.order)}” · ${esc(t(`ui.sentinel.outcome.${entry.outcome}`))}`
+        : `${esc(entry.subjectName)} · ${esc(S.data?.styles?.[S.data.state.style]?.senses?.[entry.sense] || entry.sense)}`;
+    const facts = (entry.facts || []).map((fact) => `<li>${esc(fact.thing)}: ${esc(fact.value)}</li>`).join("");
+    return `<div class="sn-card"><div class="sn-muted">${head}</div><div>${esc(entry.text)}</div>${facts ? `<ul class="sn-facts">${facts}</ul>` : ""}</div>`;
+  }
+
+  function lookTab(state, style) {
+    const parts = [];
+    if (S.last) parts.push(entryHtml(S.last), `<div class="sn-muted">${esc(t("ui.sentinel.narratorNote"))}</div>`);
+    if (!state.subjects.length) {
+      parts.push(
+        `<p class="sn-muted">${esc(t("ui.sentinel.noSubjects"))}</p><button class="sn-btn sn-primary" data-act="tab" data-tab="setup">${esc(t("ui.sentinel.goSetup"))}</button>`,
+      );
+    }
+    for (const subject of state.subjects) {
+      const offLimits = subject.privacy === "off-limits";
+      const senses = offLimits
+        ? ""
+        : `<div class="sn-senses">${SENSES.map(
+            (sense) =>
+              `<button class="sn-btn" data-act="look" data-subject="${esc(subject.id)}" data-sense="${sense}" ${S.busy ? "disabled" : ""}>${esc(style.senses[sense])}</button>`,
+          ).join("")}</div>`;
+      parts.push(`<div class="sn-card"><div class="sn-row"><span class="sn-name">${esc(subject.name)}</span>${badge(subject)}</div>${senses}</div>`);
+    }
+    if (state.acting) {
+      const name = state.butlerName || style.butler;
+      const targets = state.subjects
+        .filter((subject) => subject.privacy !== "off-limits")
+        .map((subject) => `<option value="${esc(subject.id)}">${esc(subject.name)}</option>`)
+        .join("");
+      parts.push(`<form class="sn-card" data-form="act">
+  <label for="sn-order"><strong>${esc(t("ui.sentinel.askButler", { name }))}</strong></label>
+  <div class="sn-row" style="margin-top:6px"><input id="sn-order" type="text" name="order" maxlength="300" autocomplete="off" placeholder="${esc(t("ui.sentinel.orderPlaceholder"))}">
+  <button class="sn-btn sn-primary" ${S.busy ? "disabled" : ""}>${esc(t("ui.sentinel.send"))}</button></div>
+  ${targets ? `<div class="sn-row" style="margin-top:6px"><label for="sn-target" class="sn-muted">${esc(t("ui.sentinel.target"))}</label><select id="sn-target" name="subjectId"><option value="">${esc(t("ui.sentinel.targetNone"))}</option>${targets}</select></div>` : ""}
+</form>`);
+    }
+    return parts.join("");
+  }
+
+  function logTab(state) {
+    if (!state.log.length) return `<p class="sn-muted">${esc(t("ui.sentinel.logEmpty"))}</p>`;
+    return state.log.slice().reverse().map(entryHtml).join("");
+  }
+
+  function setupTab(state, styles) {
+    const styleButtons = Object.keys(styles)
+      .map(
+        (id) =>
+          `<button class="sn-btn${state.style === id ? " sn-primary" : ""}" data-act="style" data-style="${id}" aria-pressed="${state.style === id}">${esc(t(`ui.sentinel.style.${id}`))}</button>`,
+      )
+      .join("");
+    const have = new Set(state.subjects.map((subject) => subject.name.toLowerCase()));
+    const suggestions = styles[state.style].suggestions
+      .filter((item) => !have.has(item.name.toLowerCase()))
+      .map((item, i) => `<button class="sn-btn" data-act="suggest" data-index="${i}">+ ${esc(item.name)}</button>`)
+      .join("");
+    const privacyOptions = (current) =>
+      ["open", "private", "off-limits"]
+        .map((value) => `<option value="${value}" ${current === value ? "selected" : ""}>${esc(value === "open" ? t("ui.sentinel.open.badge") : value === "private" ? t("ui.sentinel.private") : t("ui.sentinel.offLimits"))}</option>`)
+        .join("");
+    const subjects = state.subjects
+      .map(
+        (subject) => `<div class="sn-card"><div class="sn-row"><span class="sn-name">${esc(subject.name)}</span>
+  <select aria-label="${esc(t("ui.sentinel.privacy"))}: ${esc(subject.name)}" data-change="privacy" data-subject="${esc(subject.id)}">${privacyOptions(subject.privacy)}</select>
+  <button class="sn-icon" data-act="remove" data-subject="${esc(subject.id)}" aria-label="${esc(t("ui.sentinel.remove", { name: subject.name }))}">✕</button></div>
+  ${subject.minor ? `<div class="sn-muted">${esc(t("ui.sentinel.under18"))} · ${esc(t("ui.sentinel.private"))}</div>` : ""}</div>`,
+      )
+      .join("");
+    return `<div><div class="sn-muted">${esc(t("ui.sentinel.playStyle"))}</div><div class="sn-row" style="margin-top:6px">${styleButtons}</div></div>
+<form class="sn-row" data-form="butler"><label for="sn-butler" class="sn-muted">${esc(t("ui.sentinel.butlerName"))}</label>
+  <input id="sn-butler" type="text" name="butlerName" maxlength="60" value="${esc(state.butlerName)}" placeholder="${esc(styles[state.style].butler)}"></form>
+<label class="sn-check"><input type="checkbox" data-change="acting" ${state.acting ? "checked" : ""}>${esc(t("ui.sentinel.acting"))}</label>
+<label class="sn-check"><input type="checkbox" data-change="storyLooks" ${state.storyLooks ? "checked" : ""}>${esc(t("ui.sentinel.storyLooks"))}</label>
+<div><strong>${esc(t("ui.sentinel.subjects"))}</strong></div>
+${subjects}
+${suggestions ? `<div class="sn-muted">${esc(t("ui.sentinel.suggested"))}</div><div class="sn-row">${suggestions}</div>` : ""}
+<form class="sn-card" data-form="subject" style="display:flex;flex-direction:column;gap:8px">
+  <input type="text" name="name" maxlength="60" required aria-label="${esc(t("ui.sentinel.name"))}" placeholder="${esc(t("ui.sentinel.name"))}">
+  <div class="sn-row">
+    <select name="kind" aria-label="${esc(t("ui.sentinel.kind"))}">${["place", "person", "device"].map((kind) => `<option value="${kind}">${esc(t(`ui.sentinel.kind.${kind}`))}</option>`).join("")}</select>
+    <select name="privacy" aria-label="${esc(t("ui.sentinel.privacy"))}">${privacyOptions("private")}</select>
+  </div>
+  <label class="sn-check"><input type="checkbox" name="minor">${esc(t("ui.sentinel.under18"))}</label>
+  <button class="sn-btn sn-primary">${esc(t("ui.sentinel.add"))}</button>
+  <div class="sn-muted">${esc(t("ui.sentinel.privacyNote"))}</div>
+</form>`;
+  }
+
+  function bodyHtml() {
+    if (!S.chatId) return `<p class="sn-muted">${esc(t("ui.sentinel.noChat"))}</p>`;
+    if (!S.data) return `<p class="sn-muted">${esc(S.error || t("ui.sentinel.loading"))}</p>`;
+    const { state, styles } = S.data;
+    const style = styles[state.style] || styles.generic;
+    const error = S.error ? `<p class="sn-error" role="alert">${esc(S.error)}</p>` : "";
+    const busy = S.busy ? `<p class="sn-muted" role="status">${esc(t("ui.sentinel.working"))}</p>` : "";
+    if (S.tab === "log") return error + logTab(state);
+    if (S.tab === "setup") return error + setupTab(state, styles);
+    return error + busy + lookTab(state, style);
+  }
+
+  function render() {
+    for (const button of S.launchers) button.setAttribute("aria-pressed", String(S.open));
+    if (!S.open) {
+      S.panel?.remove();
+      S.panel = null;
+      return;
+    }
+    ensureStyle();
+    if (!S.panel) {
+      S.panel = document.createElement("section");
+      S.panel.className = "sn-panel";
+      S.panel.setAttribute("aria-label", t("ui.sentinel.title"));
+      S.panel.addEventListener("click", onClick);
+      S.panel.addEventListener("change", onChange);
+      S.panel.addEventListener("submit", onSubmit);
+      S.panel.addEventListener("pointerdown", onDragStart);
+      document.body.appendChild(S.panel);
+    }
+    const focusId = document.activeElement?.id;
+    S.panel.classList.toggle("sn-big", S.big);
+    const styleName = S.data ? t(`ui.sentinel.style.${S.data.state.style}`) : "";
+    const tabs = ["look", "log", "setup"]
+      .map((tab) => `<button role="tab" aria-selected="${S.tab === tab}" data-act="tab" data-tab="${tab}">${esc(t(`ui.sentinel.tab${tab[0].toUpperCase()}${tab.slice(1)}`))}</button>`)
+      .join("");
+    S.panel.innerHTML = `<div class="sn-head" data-drag><strong>${esc(t("ui.sentinel.title"))} <span class="sn-muted">${esc(styleName)}</span></strong>
+<button class="sn-icon" data-act="size" aria-label="${esc(t(S.big ? "ui.sentinel.smaller" : "ui.sentinel.bigger"))}">${S.big ? "−" : "+"}</button>
+<button class="sn-icon" data-act="close" aria-label="${esc(t("ui.sentinel.close"))}">✕</button></div>
+<div class="sn-tabs" role="tablist">${tabs}</div><div class="sn-body">${bodyHtml()}</div>`;
+    if (focusId) document.getElementById(focusId)?.focus();
+  }
+
+  function onClick(event) {
+    const button = event.target.closest("[data-act]");
+    if (!button || button.disabled) return;
+    const act = button.dataset.act;
+    if (act === "close") return toggle(false);
+    if (act === "size") {
+      S.big = !S.big;
+      return render();
+    }
+    if (act === "tab") {
+      S.tab = button.dataset.tab;
+      return render();
+    }
+    if (act === "look") return run(() => post("/look", { subjectId: button.dataset.subject, sense: button.dataset.sense }));
+    if (act === "style") return run(() => post("/settings", { style: button.dataset.style }, "PUT"));
+    if (act === "remove") return run(() => request(chatPath(`/subjects/${encodeURIComponent(button.dataset.subject)}`), { method: "DELETE" }));
+    if (act === "suggest") {
+      const have = new Set(S.data.state.subjects.map((subject) => subject.name.toLowerCase()));
+      const item = S.data.styles[S.data.state.style].suggestions.filter((entry) => !have.has(entry.name.toLowerCase()))[Number(button.dataset.index)];
+      if (item) run(() => post("/subjects", item));
+    }
+  }
+
+  function onChange(event) {
+    const input = event.target;
+    const what = input.dataset.change;
+    if (what === "acting" || what === "storyLooks") return run(() => post("/settings", { [what]: input.checked }, "PUT"));
+    if (what === "privacy") {
+      const subject = S.data.state.subjects.find((item) => item.id === input.dataset.subject);
+      if (subject) run(() => post("/subjects", { ...subject, privacy: input.value }));
+    }
+    if (input.name === "butlerName") run(() => post("/settings", { butlerName: input.value }, "PUT"));
+  }
+
+  function onSubmit(event) {
+    event.preventDefault();
+    const form = event.target;
+    const data = new FormData(form);
+    if (form.dataset.form === "act") {
+      const order = String(data.get("order") || "").trim();
+      if (order) run(() => post("/act", { order, subjectId: data.get("subjectId") || null }));
+    }
+    if (form.dataset.form === "subject") {
+      run(() => post("/subjects", { name: data.get("name"), kind: data.get("kind"), privacy: data.get("privacy"), minor: data.get("minor") === "on" }));
+    }
+    if (form.dataset.form === "butler") run(() => post("/settings", { butlerName: String(data.get("butlerName") || "") }, "PUT"));
+  }
+
+  function onDragStart(event) {
+    if (!event.target.closest("[data-drag]") || event.target.closest("button") || window.matchMedia("(max-width:640px)").matches) return;
+    const panel = S.panel;
+    const rect = panel.getBoundingClientRect();
+    const dx = event.clientX - rect.left;
+    const dy = event.clientY - rect.top;
+    const move = (e) => {
+      const left = Math.min(Math.max(0, e.clientX - dx), window.innerWidth - rect.width);
+      const top = Math.min(Math.max(0, e.clientY - dy), window.innerHeight - 60);
+      Object.assign(panel.style, { left: `${left}px`, top: `${top}px`, right: "auto", bottom: "auto" });
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+  }
+
+  function toggle(open = !S.open) {
+    S.open = open;
+    render();
+    if (open) load();
+  }
+
+  function setChat(chatId) {
+    if (chatId === S.chatId) return;
+    S.chatId = chatId;
+    S.data = null;
+    S.last = null;
+    if (S.open) load();
+  }
+
+  window.addEventListener("marinara:generation-complete", (event) => {
+    if (S.open && event?.detail?.chatId === S.chatId) load();
+  });
+
+  class SentinelElement extends HTMLElement {
+    constructor() {
+      super();
+      this._props = null;
+      this._onProps = () => this._render();
+    }
+    set capabilityProps(value) {
+      this._props = value;
+      this._render();
+    }
+    get capabilityProps() {
+      return this._props;
+    }
+    connectedCallback() {
+      this.addEventListener("marinara-capability-props", this._onProps);
+      this._render();
+    }
+    disconnectedCallback() {
+      this.removeEventListener("marinara-capability-props", this._onProps);
+      if (this._button) S.launchers.delete(this._button);
+    }
+    _render() {
+      if (!this.isConnected) return;
+      setChat(typeof this._props?.chatId === "string" ? this._props.chatId : null);
+      if (!this._button || !this.contains(this._button)) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.innerHTML = ICON;
+        button.addEventListener("click", () => toggle());
+        this.replaceChildren(button);
+        this._button = button;
+        S.launchers.add(button);
+      }
+      const hostClass = typeof this._props?.toolbarButtonClass === "string" ? this._props.toolbarButtonClass : "";
+      this._button.className = `${hostClass} sn-launch`.trim();
+      this._button.title = t("ui.sentinel.title");
+      this._button.setAttribute("aria-label", t("ui.sentinel.open"));
+      this._button.setAttribute("aria-pressed", String(S.open));
+    }
+  }
+
+  if (!customElements.get(TAG_NAME)) customElements.define(TAG_NAME, SentinelElement);
+})();

@@ -1,0 +1,19 @@
+[
+  {
+    "id": "sentinel",
+    "name": "Sentinel",
+    "description": "Check on places and people outside the scene and give orders to an in-world butler.",
+    "author": "Gunterlie",
+    "phase": "pre_generation",
+    "enabledByDefault": false,
+    "category": "misc",
+    "runtimeDisabled": true,
+    "modeAllowlist": [
+      "roleplay"
+    ],
+    "defaultTools": [],
+    "defaultSettings": {},
+    "defaultPromptTemplate": "",
+    "execution": "feature"
+  }
+]

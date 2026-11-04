@@ -168,6 +168,10 @@
       "section": "apps",
       "tagline": "A little pet that your characters raise."
     },
+    "sentinel": {
+      "section": "adventure",
+      "tagline": "Check rooms and cams outside the scene."
+    },
     "slurp2": {
       "section": "apps",
       "tagline": "A private creator app for your characters."

@@ -76,6 +76,7 @@ jobs:
 
           # Quartermaster dialogs and inventory export; Gacha Forge layout, canonical choices and reproducible bundles.
           node tests/quartermaster-modal-lifecycle.regression.mjs
+          node tests/sentinel.regression.mjs
           node tests/gacha-forge-location-ids.regression.mjs
           node tests/gacha-forge-unit-art.regression.mjs
           node tests/gacha-forge-player-choices.regression.mjs
