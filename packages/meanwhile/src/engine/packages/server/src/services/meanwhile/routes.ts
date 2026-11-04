@@ -6,6 +6,7 @@ import {
   RUN_AHEAD_MS,
   circleNowMs,
   msToWall,
+  shiftDay,
   normalizeSpeed,
   setSpeed,
   setTime,
@@ -13,7 +14,8 @@ import {
   wallToMs,
   type RunMark,
 } from "./clock.js";
-import { dueNow, runCircleNow, runDuePass } from "./scheduler.js";
+import { dueNow, readSchedules, runCircleNow, runDuePass } from "./scheduler.js";
+import { currentBlock } from "./routine.js";
 import {
   applyCircleFields,
   circleFieldError,
@@ -128,6 +130,8 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
       circles: d.circles.filter((c) => c.id !== id),
       marks: d.marks.filter((m) => m.circleId !== id),
       events: d.events.filter((e) => e.circleId !== id),
+      seeds: d.seeds.filter((s) => s.circleId !== id),
+      dealtDays: d.dealtDays.filter((k) => !k.startsWith(`${id}:`)),
     }));
     return { ok: true };
   });
@@ -190,6 +194,45 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
     const doc = await readMeanwhile();
     return view(doc, find(doc, circle.id) ?? circle, Date.now());
   });
+
+  // Routine and summary events of the last `days` Circle days (default 3, at most 14), what each person does now
+  // (from the schedule), and today's dealt seeds.
+  app.get<{ Params: { id: string }; Querystring: { days?: string } }>(
+    "/circles/:id/timeline",
+    async (request, reply) => {
+      const doc = await readMeanwhile();
+      const circle = find(doc, request.params.id);
+      if (!circle) return notFound(reply);
+      const tz = circle.clock.timezone;
+      const nowMs = circleNowMs(circle.clock, Date.now());
+      const today = msToWall(nowMs, tz).slice(0, 10);
+      const days = Math.min(14, Math.max(1, Math.trunc(Number(request.query.days)) || 3));
+      const oldest = shiftDay(today, 1 - days);
+      const wall = (iso: string) => msToWall(Date.parse(iso), tz);
+      const events = doc.events
+        .filter((e) => e.circleId === circle.id && e.status === "accepted" && wall(e.start).slice(0, 10) >= oldest)
+        .sort((a, b) => Date.parse(a.start) - Date.parse(b.start))
+        .map((e) => ({
+          ...e,
+          day: wall(e.start).slice(0, 10),
+          time: wall(e.start).slice(11),
+          until: wall(e.end).slice(11),
+        }));
+      const { schedules } = await readSchedules(circle);
+      const now: Record<string, ReturnType<typeof currentBlock>> = {};
+      for (const id of circle.castIds) {
+        const byActivity = doc.placeTags.find((t) => t.characterId === id)?.byActivity;
+        now[id] = currentBlock(schedules[id], nowMs, tz, byActivity);
+      }
+      return {
+        events,
+        now,
+        today,
+        nowTime: msToWall(nowMs, tz).slice(11),
+        dealt: doc.seeds.filter((s) => s.circleId === circle.id && s.day === today),
+      };
+    },
+  );
 
   app.get<{ Params: { id: string } }>("/circles/:id/status", async (request, reply) => {
     const doc = await readMeanwhile();

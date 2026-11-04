@@ -53,6 +53,10 @@ async function main() {
   const release = configureMeanwhileRuntime(runtime);
   await meanwhileRoutes(app, {});
 
+  // Unknown kinds are rejected.
+  assert.equal((await call("POST", "/circles", { name: "Bad", allowedKinds: ["nope"] })).status, 400);
+  assert.equal((await call("POST", "/circles", { name: "Bad", bigKindsAllowed: ["work"] })).status, 400);
+
   // D2: shared world defaults to on for exactly one linked chat, else off; an explicit value wins.
   assert.equal((await call("POST", "/circles", { name: "One", linkedChatIds: ["a"] })).body.sharedWorld, true);
   assert.equal((await call("POST", "/circles", { name: "Two", linkedChatIds: ["a", "b"] })).body.sharedWorld, false);

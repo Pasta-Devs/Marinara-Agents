@@ -107,3 +107,24 @@ export async function listTextConnections(): Promise<NamedItem[]> {
   const rows = await request<Array<NamedItem & { provider: string }>>("/api/connections");
   return rows.filter((row) => !NON_TEXT_PROVIDERS.has(row.provider));
 }
+
+export interface TimelineEvent {
+  id: string;
+  cast: string[];
+  weight: string;
+  text: string;
+  place?: string;
+  day: string;
+  time: string;
+  until: string;
+}
+
+export interface Timeline {
+  events: TimelineEvent[];
+  now: Record<string, { activity: string; place: string | null; until: string } | null>;
+  today: string;
+  nowTime: string;
+  dealt: { id: string; kind: string; cast: string[]; place: string; time: string }[];
+}
+
+export const getTimeline = (id: string) => api<Timeline>(`/circles/${id}/timeline`);

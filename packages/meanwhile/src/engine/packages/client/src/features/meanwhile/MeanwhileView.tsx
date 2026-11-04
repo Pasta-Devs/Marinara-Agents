@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import {
   createCircle,
   deleteCircle,
+  getTimeline,
   listChats,
   listCharacters,
   listCircles,
@@ -22,6 +23,16 @@ const COPY = {
   title: "Meanwhile",
   new: "New Circle",
   empty: "No Circles yet. Make one to start.",
+  showTimeline: "Timeline",
+  planned: "Planned:",
+  earlier: "earlier today",
+  hideTimeline: "Hide timeline",
+  now: "Now",
+  nothingYet: "nothing yet",
+  dealt: "Dealt for today",
+  person: "Person",
+  everyone: "Everyone",
+  noEvents: "Nothing yet. Press Run now to fill the days.",
   needModel: "Choose a model to start",
   edit: "Edit",
   runNow: "Run now",
@@ -404,7 +415,117 @@ function CircleCard({ circle, onEdit }: { circle: Circle; onEdit: () => void }) 
           {errorText(run.error)}
         </span>
       ) : null}
+      <TimelinePanel circle={circle} />
     </div>
+  );
+}
+
+// Plain words for the kind ids the deck deals.
+const KIND_LABELS: Record<string, string> = {
+  conflict: "a conflict",
+  luck: "a lucky break",
+  hobbies: "a hobby",
+  death: "a death",
+  breakup: "a breakup",
+  pregnancy: "a pregnancy",
+  "job loss": "a job loss",
+  "serious injury": "a serious injury",
+};
+
+function TimelinePanel({ circle }: { circle: Circle }) {
+  const [open, setOpen] = useState(false);
+  const [who, setWho] = useState("");
+  const characters = useQuery({ queryKey: ["meanwhile", "characters"], queryFn: listCharacters });
+  const timeline = useQuery({
+    queryKey: ["meanwhile", "timeline", circle.id],
+    queryFn: () => getTimeline(circle.id),
+    enabled: open,
+    refetchInterval: 15_000,
+  });
+  const name = (id: string) => characters.data?.find((c) => c.id === id)?.name ?? "Someone";
+  const names = (ids: string[]) => ids.map(name).join(" and ");
+  const data = timeline.data;
+  const shown = (data?.events ?? []).filter((e) => !who || e.cast.includes(who));
+  const days = [...new Set(shown.map((e) => e.day))].reverse();
+  return (
+    <>
+      <button type="button" className="mw-btn" aria-expanded={open} onClick={() => setOpen(!open)}>
+        {open ? COPY.hideTimeline : COPY.showTimeline}
+      </button>
+      {open && timeline.isError ? (
+        <span role="alert" className="mw-warn">
+          {errorText(timeline.error)}
+        </span>
+      ) : null}
+      {open && data ? (
+        <>
+          <div className="mw-field">
+            <span className="mw-label">{COPY.now}</span>
+            {circle.castIds.map((id) => {
+              const now = data.now[id];
+              return (
+                <div key={id} className="mw-muted">
+                  {name(id)}:{" "}
+                  {now ? [now.activity, now.place, `until ${now.until}`].filter(Boolean).join(" · ") : COPY.nothingYet}
+                </div>
+              );
+            })}
+          </div>
+          {data.dealt.length > 0 ? (
+            <div className="mw-field">
+              <span className="mw-label">{COPY.dealt}</span>
+              {data.dealt.map((seed) => (
+                <div key={seed.id} className="mw-muted">
+                  {COPY.planned} {names(seed.cast)}, {KIND_LABELS[seed.kind] ?? seed.kind}, {seed.place}, {seed.time}
+                  {seed.time < data.nowTime ? ` (${COPY.earlier})` : ""}
+                </div>
+              ))}
+            </div>
+          ) : null}
+          <select className="mw-input" aria-label={COPY.person} value={who} onChange={(e) => setWho(e.target.value)}>
+            <option value="">{COPY.everyone}</option>
+            {circle.castIds.map((id) => (
+              <option key={id} value={id}>
+                {name(id)}
+              </option>
+            ))}
+          </select>
+          {days.length === 0 ? <div className="mw-muted">{COPY.noEvents}</div> : null}
+          {days.map((day) => {
+            const events = shown.filter((e) => e.day === day);
+            return (
+              <div key={day} className="mw-field">
+                <span className="mw-name">{day}</span>
+                {events
+                  .filter((e) => e.weight === "summary")
+                  .map((e) => (
+                    <div key={e.id} className="mw-muted">
+                      {e.text}
+                    </div>
+                  ))}
+                {circle.castIds
+                  .filter((id) => !who || id === who)
+                  .map((id) => {
+                    const lines = events.filter((e) => e.weight !== "summary" && e.cast.includes(id));
+                    return lines.length ? (
+                      <div key={id} className="mw-field">
+                        <span className="mw-label">{name(id)}</span>
+                        {lines.map((e) => (
+                          <div key={e.id} className="mw-row mw-muted">
+                            <span>{e.time}</span>
+                            <span>{e.text}</span>
+                            {e.place ? <span className="mw-tag">{e.place}</span> : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null;
+                  })}
+              </div>
+            );
+          })}
+        </>
+      ) : null}
+    </>
   );
 }
 
