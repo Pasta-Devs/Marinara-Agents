@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 2,
+  "capabilityApi": {
+    "major": 1,
+    "minor": 386
+  },
+  "builtAgainst": {
+    "engineVersion": "2.5.1",
+    "engineCommit": "a3ceb0162b1629c6b99885759b11794aa6274869"
+  },
+  "id": "big-cheese",
+  "name": "Big Cheese",
+  "version": "0.0.1",
+  "description": "A game where you run any place as the boss: a warehouse, a school, a ward. You wish for the place, answer the cards your staff bring you, and see how the week went on Friday. Install it, restart Marinara Engine when prompted, then open Home → Big Cheese.",
+  "engine": {
+    "min": "2.5.1",
+    "maxExclusive": "4.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json",
+    "server": "server.mjs",
+    "client": "client.js"
+  },
+  "contributions": {
+    "slots": [
+      "home-browser-tab"
+    ],
+    "homeBrowserTab": {
+      "label": "Big Cheese",
+      "ariaLabel": "Open Big Cheese",
+      "iconPaths": [
+        "big-cheese-icon.png"
+      ]
+    }
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "30020d14070540d74c27e30779d21499b75a52c9cbe33d98cd4b34474f007755",
+      "bytes": 705
+    },
+    {
+      "path": "server.mjs",
+      "sha256": "7754603b84b4499590520336280746aec8746c8ea2d62042eabee677d5dc2a2e",
+      "bytes": 32367
+    },
+    {
+      "path": "client.js",
+      "sha256": "dd3ec5b7db8f77ed008c980b7f7fa9fedd94409bc4e920347ab4d4617a2fdb0c",
+      "bytes": 13670
+    },
+    {
+      "path": "big-cheese-icon.png",
+      "sha256": "8a962aaf54218114343c7e8d21acf222fe1bc73b9ae42ebe32a044eae191677b",
+      "bytes": 762
+    }
+  ],
+  "permissions": [
+    "routes",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": true
+}

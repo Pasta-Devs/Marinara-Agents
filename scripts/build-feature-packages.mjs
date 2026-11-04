@@ -237,6 +237,11 @@ const storyWriterServedAssetPaths = ["story-writer-mari.webp", "wood-desk.webp",
 // Otome Forge is written here in Story Writer's layout and keeps its saves through api.runtime.persistence, so it
 // needs no host runtime overlay. Offered to staging testers only until the maintainer promotes it
 // (STAGING_ONLY_PACKAGE_IDS in scripts/catalog-incomplete.mjs).
+const bigCheeseSourceRoot = join(packagesDir, "big-cheese/src/engine");
+const bigCheeseOwnedSourcePaths = [
+  "packages/client/src/features/big-cheese",
+  "packages/server/src/services/big-cheese",
+];
 const otomeForgeSourceRoot = join(packagesDir, "otome-forge/src/engine");
 const otomeForgeOwnedSourcePaths = [
   "packages/client/src/features/otome-forge",
@@ -893,6 +898,36 @@ const features = [
         label: "Otome Hearth",
         ariaLabel: "Open Otome Hearth",
         iconPaths: ["otome-hearth-tab-heart.png"],
+      },
+    },
+  },
+  {
+    id: "big-cheese",
+    version: "0.0.1",
+    minEngineVersion: "2.5.1",
+    capabilityApi: Object.freeze({ major: 1, minor: 386 }),
+    builtAgainst: { engineVersion: "2.5.1", engineCommit: "a3ceb0162b1629c6b99885759b11794aa6274869" },
+    maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
+    name: "Big Cheese",
+    description:
+      "A game where you run any place as the boss: a warehouse, a school, a ward. You wish for the place, answer the cards your staff bring you, and see how the week went on Friday. Install it, restart Marinara Engine when prompted, then open Home → Big Cheese.",
+    category: "misc",
+    kind: ["agent"],
+    modes: ["conversation", "roleplay", "game"],
+    permissions: ["routes", "storage", "ui"],
+    serverImport: "packages/server/src/services/big-cheese/server-entry.ts",
+    serverEntry: true,
+    clientImport: "packages/client/src/features/big-cheese/client-entry.tsx",
+    packageSourceRoot: bigCheeseSourceRoot,
+    ownedSourcePaths: bigCheeseOwnedSourcePaths,
+    assetPaths: ["big-cheese-icon.png"],
+    libraryHidden: true,
+    contributions: {
+      slots: ["home-browser-tab"],
+      homeBrowserTab: {
+        label: "Big Cheese",
+        ariaLabel: "Open Big Cheese",
+        iconPaths: ["big-cheese-icon.png"],
       },
     },
   },
@@ -2256,7 +2291,10 @@ for (const feature of selectedFeatures) {
           ? "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md"
           : feature.id === "noodle"
             ? "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
-            : feature.id === "slurp2" || feature.id === "story-writer" || feature.id === "otome-forge"
+            : feature.id === "slurp2" ||
+                feature.id === "story-writer" ||
+                feature.id === "otome-forge" ||
+                feature.id === "big-cheese"
               ? `https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/${feature.id}/README.md`
               : `https://github.com/Pasta-Devs/Marinara-Agents#${feature.id}`,
     });

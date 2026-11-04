@@ -14,6 +14,7 @@ const catalogPaths = [
   "src/engine/packages/client/src/slp/locales/en.json",
   "src/engine/packages/client/src/features/long-term-memory/locales/en.json",
   "src/engine/packages/client/src/features/otome-forge/locales/en.json",
+  "src/engine/packages/client/src/features/big-cheese/locales/en.json",
 ];
 // i18next resolves a plural key through its suffixed variants, so a bare reference is satisfied by
 // any of them.

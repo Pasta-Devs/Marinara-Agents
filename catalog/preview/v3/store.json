@@ -1,6 +1,13 @@
 {
   "schemaVersion": 1,
   "packages": {
+    "big-cheese": {
+      "section": "apps",
+      "tagline": "Run any place as the boss.",
+      "iconPath": "../../../store/icons/big-cheese.webp",
+      "bannerPath": "../../../store/banners/big-cheese.webp",
+      "bannerSmallPath": "../../../store/banners/big-cheese-1200.webp"
+    },
     "blackjack": {
       "section": "games",
       "tagline": "Play blackjack against the house.",

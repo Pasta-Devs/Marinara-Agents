@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "en",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "Big Cheese",
+    "description": "A game where you run any place as the boss: a warehouse, a school, a ward. You wish for the place, answer the cards your staff bring you, and see how the week went on Friday. Install it, restart Marinara Engine when prompted, then open Home → Big Cheese."
+  },
+  "agents": {
+    "big-cheese": {
+      "name": "Big Cheese",
+      "description": "A game where you run any place as the boss: a warehouse, a school, a ward. You wish for the place, answer the cards your staff bring you, and see how the week went on Friday. Install it, restart Marinara Engine when prompted, then open Home → Big Cheese."
+    }
+  }
+}

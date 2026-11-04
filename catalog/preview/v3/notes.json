@@ -1,6 +1,16 @@
 {
   "schemaVersion": 1,
   "packages": {
+    "big-cheese": {
+      "versions": [
+        {
+          "version": "0.0.1",
+          "date": "2026-11-04",
+          "notes": "- **A title screen for your places.** Start a new place, continue a saved one, or delete one after you confirm.\n- **An empty Office.** Opening a place shows the Office. Nothing happens there yet.",
+          "highlight": false
+        }
+      ]
+    },
     "blackjack": {
       "versions": [
         {

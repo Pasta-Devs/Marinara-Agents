@@ -1,0 +1,127 @@
+// Run state for Big Cheese M1 (design.md section 14, trimmed). Plain JSON only, so a snapshot is a
+// structuredClone and the Cheese Board can rewind by swapping the object back.
+export const METERS = ["money", "output", "people", "standing"] as const;
+export type Meter = (typeof METERS)[number];
+export type Meters = Record<Meter, number>;
+export type Severity = 1 | 2 | 3;
+export type Authority = "manager" | "strong_leader" | "absolute";
+export type Tier = "strong" | "middle" | "weak";
+export type Storyteller = "calm" | "classic" | "chaos";
+
+export interface Clock {
+  week: number; // 1-24, 3 terms of 8
+  day: number; // 0-4 = Mon-Fri
+  hoursLeft: number; // 5 per day
+}
+
+export interface Memory {
+  week: number;
+  about: string; // card id
+  thread: string;
+  stance: string;
+  weight: 1 | 2 | 3;
+}
+
+export interface Person {
+  trust: number; // 0-100
+  stress: number;
+  mood: "great" | "fine" | "low" | "sick" | "away";
+  memories: Memory[];
+}
+
+export interface Answer {
+  tier: Tier;
+  stance: string;
+}
+
+export interface Card {
+  id: string;
+  thread: string;
+  asker: string;
+  need: Meter;
+  severity: Severity;
+  age: number; // days waited
+  answers: Answer[];
+}
+
+export interface Letter {
+  day: number; // -1 = Sunday before week 1, 0-4 = Mon-Fri of week 1
+  person: string;
+  text: string;
+  screen: string;
+}
+
+export interface Beat {
+  id: string;
+  type: "card" | "check" | "letter";
+  planned?: { week: number; day: number };
+  seed?: { need: Meter; severity: Severity };
+  card?: string;
+  result?: string;
+  letter?: Letter;
+  read?: boolean;
+}
+
+export interface Thread {
+  id: string;
+  kind: "follow_up" | "promise" | "guided" | "hearing";
+  title: string;
+  people: string[];
+  need?: Meter;
+  severity?: Severity;
+  stakes: string;
+  clock: { dueWeek: number | "open"; pressure: string };
+  origin: "deck" | "own_answer" | "guided" | "board";
+  beats: Beat[];
+  state: "open" | "won" | "lost" | "dropped";
+  promise?: { to: string; what: string; due: { week: number; day: number }; kept: boolean };
+}
+
+export interface Member {
+  id: string; // a person id
+  fit: number; // stance fit -3..3
+  faction: number; // faction bonus -2..2
+}
+
+export interface Hearing {
+  meter: Meter;
+  thread: string;
+  week: number; // hearing week
+  day: number; // hearing day (1 = second working day)
+  witnesses: string[];
+  evidence: string[]; // evidence cards played, at most 2 count
+}
+
+export interface Report {
+  week: number;
+  income: number;
+  before: Meters;
+  after: Meters;
+}
+
+export interface Run {
+  saveVersion: 1;
+  rng: number;
+  nextId: number;
+  storyteller: Storyteller;
+  authority: Authority;
+  clock: Clock;
+  meters: Meters;
+  low: Meters; // Fridays in a row below 10
+  extras: { id: string; main: Meter; value: number }[]; // an extra meter below 20 hurts its main meter
+  people: Record<string, Person>;
+  deputy: string;
+  deputyAmbition: number;
+  threads: Record<string, Thread>; // open threads
+  closed: { id: string; state: Thread["state"] }[];
+  inbox: Card[];
+  lastWarning: boolean; // whole run
+  hearing: Hearing | null;
+  hearingBody: Member[];
+  lastHearing: { won: boolean; backing: number; of: number } | null;
+  endingName: string;
+  status: "playing" | "complete" | "ended";
+  ending: string | null;
+  report: Report | null;
+  meterHistory: ({ week: number } & Meters)[];
+}
