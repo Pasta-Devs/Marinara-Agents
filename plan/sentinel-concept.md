@@ -5,7 +5,7 @@ Name: Sentinel (package id `sentinel`).
 
 ## One sentence
 
-An Agent package that gives the story world its screens: a companion AI with a personality, cameras on map rooms, in-world records, and device control — all fictional, all built on top of World Maps and World State instead of its own world model.
+An Agent package that gives the story world its screens: a companion AI with a personality, cameras on map rooms, in-world records, and device control — all fictional. It works alone, and uses World Maps and World State when they are installed.
 
 ## Why
 
@@ -13,31 +13,45 @@ Roleplay often has an "AI in the walls" or a "phone that knows things": the hous
 
 Not a Home Assistant link. Nothing touches real devices or the network.
 
-## Building blocks it reuses
+## Standalone first, other agents optional
 
-| Need                | Source              | What it gives                                                                                        |
-| ------------------- | ------------------- | ---------------------------------------------------------------------------------------------------- |
-| Where things are    | `hierarchical-maps` | region > town > building > floor > room, current story location, travel between places, location art |
-| When / conditions   | `world-state`       | date, time, weather, temperature, location, custom world fields                                      |
-| Pictures (optional) | `illustrator`       | image generation for camera stills                                                                   |
-| Counters / flags    | `custom-tracker`    | pattern for model-updated state blocks                                                               |
+Sentinel works with no other agent installed. It keeps its own small world:
 
-Open question to verify before slicing: how one package reads another package's chat data (Engine API, shared game state, or only via prompt context). If there is no read path, Sentinel reads the injected `<current_game_state>` / map context the model already sees, and slice 0 is a small Engine contract.
+- **Places:** a simple list of sites and rooms (for example "Home > Kitchen, Office, Garage"). The user adds them in the panel, or Sentinel adds them when the story names a new room. The preset brings a starter list.
+- **Clock and conditions:** Sentinel tracks story time and weather in its own state block, updated from the story.
+- **Current location:** the room the scene is in, from its own state block.
+
+When other agents are present, Sentinel uses their data instead of its own, so nothing is tracked twice:
+
+| Optional agent      | What Sentinel uses instead of its own                                                  | Without it                           |
+| ------------------- | -------------------------------------------------------------------------------------- | ------------------------------------ |
+| `hierarchical-maps` | region > town > building > floor > room, current location, travel routes, location art | own flat site > room list, no routes |
+| `world-state`       | date, time, weather, temperature, location                                             | own clock and weather fields         |
+| `illustrator`       | image stills for camera feeds                                                          | text feeds only                      |
+
+Rules:
+
+- No feature needs another agent. A missing agent only removes extras (routes, map art, images).
+- Detection is silent. The panel shows "Using World Maps" (or similar) only as a small hint, never as a setup step.
+- If a user installs maps later, Sentinel keeps its own room list and offers a one-tap link of its rooms to map rooms. It does not delete its own data.
+- `custom-tracker` is a pattern reference for the state block, not a dependency.
+
+Open question to verify before slicing: how one package reads another package's chat data (Engine API, shared game state, or only via prompt context). If there is no read path, Sentinel reads the injected `<current_game_state>` / map context the model already sees. Standalone mode does not depend on this answer.
 
 ## Parts
 
 ### 1. Companion AI (the core)
 
 - A system persona that lives in the user's devices: phone, earpiece, car, house, ship. Not a character card replacement; a side voice with its own name and personality preset (butler, corporate, glitchy, cold military, cute, sarcastic) or a custom prompt.
-- Reads time, weather and location; speaks up on its own when a trigger fires (reminder due, weather change, user enters a new map location, an alert).
-- Answers in-world questions: "where is the nearest pharmacy", "route to the docks" (uses map travel), "what's the time in the capital".
+- Reads time, weather and location (own state, or world-state / maps when present); speaks up on its own when a trigger fires (reminder due, weather change, user enters a new room, an alert).
+- Answers in-world questions: "where is the nearest pharmacy", "route to the docks" (exact routes with maps, a plausible in-story answer without), "what's the time in the capital".
 - Has a trust/loyalty value and states (normal, glitching, compromised, offline). Story events can change them: it can be hacked, lie, refuse, or get attached.
 - Frequency control: quiet / normal / chatty, so it never floods the chat.
 
-### 2. Cameras on map rooms
+### 2. Cameras on rooms
 
-- Any map location can carry one or more cameras (name, angle, quality: HD / grainy / night vision / audio yes-no).
-- "Look at Office Cam" produces a feed card: timestamp from world-state, room from maps, and a short CCTV-style description of what happens there now — including NPCs acting offscreen.
+- Any room (Sentinel's own, or a map location) can carry one or more cameras (name, angle, quality: HD / grainy / night vision / audio yes-no).
+- "Look at Office Cam" produces a feed card: timestamp from the story clock, the room, and a short CCTV-style description of what happens there now — including NPCs acting offscreen.
 - Text feed by default (cheap). Image still optional via illustrator.
 - Feed results are written to a log, so the story must stay consistent with what was seen.
 - Cameras can be off, looped, broken or hacked (ties into part 4).
@@ -50,15 +64,15 @@ Open question to verify before slicing: how one package reads another package's 
 
 ### 4. Control and access
 
-- Devices per map location: doors/locks, lights, power, alarm, gates, elevators, speakers.
+- Devices per room: doors/locks, lights, power, alarm, gates, elevators, speakers.
 - Access level per location and per user. Hacking or a stolen keycard raises it.
 - Panel actions become story facts: "Door: locked by you, 21:14". Model-side changes come back through a state block and update the panel.
 - Security reacts: alarms, guards dispatched, lockdown.
 
 ### 5. Scans and overviews
 
-- "Scan the room": people, items, exits in the current map room — gives the model a fixed list to reduce contradictions.
-- Drone/satellite overview of a region map: who is where, as far as the AI can know.
+- "Scan the room": people, items, exits in the current room — gives the model a fixed list to reduce contradictions.
+- Overview of the whole site (drone/satellite with maps: the region map): who is where, as far as the AI can know.
 
 ### 6. Alerts and log
 
@@ -83,7 +97,8 @@ A preset is data (persona, labels, icons, device types, alert types), not code.
 ## UI
 
 - Side panel (like other tracker agents): tabs Companion · Cams · Devices · Records · Log.
-- Cams tab: grid of tiles per current building/floor from maps; tap = feed card in chat.
+- Cams tab: grid of tiles per current site (or building/floor when maps is present); tap = feed card in chat.
+- Places: small list editor for sites and rooms; hidden behind a link when maps provides the rooms.
 - Devices: toggles grouped by room; access-locked ones greyed with a lock icon.
 - Alerts: small toast plus a log line.
 - Follows `marinara-design`: mobile first, theme tokens, no new raw inputs except under Advanced.
@@ -91,14 +106,14 @@ A preset is data (persona, labels, icons, device types, alert types), not code.
 ## Model contract (sketch)
 
 - Context injected per turn: companion persona + state, devices/cams of the current location, last N log lines, active alerts. Kept small; only the current building, not the world.
-- The model may emit a `sentinel_updates` block (incremental, same style as world-state's incremental updates): device changes, new alerts, camera status, companion state. Unknown ids are ignored.
+- The model may emit a `sentinel_updates` block (incremental, same style as world-state's incremental updates): device changes, new alerts, camera status, companion state, and in standalone mode also current room, new rooms, time and weather. Unknown ids are ignored.
 - Camera feed and record generation are separate small calls with a fixed schema, so they do not bloat the main reply.
 
 ## Slices (proposal)
 
-0. Verify the cross-package read path (maps + world-state). Engine contract only if needed.
-1. Companion AI: persona presets, context injection, triggers (location change, time, reminders), frequency setting, panel tab.
-2. Cameras: cams on map locations, text feed card, log, consistency injection.
+1. Companion AI, standalone: own places list, clock and weather, persona presets, context injection, triggers (room change, time, reminders), frequency setting, panel tab.
+2. Cameras: cams on rooms, text feed card, log, consistency injection.
+   Optional-agent links (maps, world-state) come after slice 2, once the cross-package read path is verified. Engine contract only if needed.
 3. Alerts + log tab, random/story hooks.
 4. Devices + access levels + `sentinel_updates` block.
 5. Records and documents.
@@ -114,5 +129,4 @@ Slices 1–2 are a usable first release.
 2. One companion per chat, or one per persona across chats?
 3. Should the companion ever speak as a real chat message, or only in the panel and as short asides?
 4. Cameras: may a feed reveal things the user's character could not know (meta knowledge), or only what the camera can see? (Proposal: only what the camera can see; audio only if the cam has audio.)
-5. Does Sentinel stand alone, or require maps + world-state installed? (Proposal: works without them in a reduced mode with its own simple room list; full mode when they are present.)
-6. Overlap with `modern-life-sim` home tab and Slurp's phone — keep Sentinel out of social media.
+5. Overlap with `modern-life-sim` home tab and Slurp's phone — keep Sentinel out of social media.
