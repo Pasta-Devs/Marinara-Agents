@@ -12,7 +12,7 @@ In:
 - Big events with the review queue (off by default per kind).
 - Long-absence summary, cost budget per real day.
 
-Out (later slices): writes to other agents (LTM, Slurp2), status writes, nudges, phone view, Monday paper,
+Out (later slices): writes to other agents (status first, then LTM, Slurp2), nudges, phone view, Monday paper,
 surprise mode, Home widget.
 
 ## What the code gives us
@@ -55,7 +55,8 @@ interface Circle {
   lastRunCircle: string;            // Circle time covered so far (ISO)
   pace: 'cozy' | 'eventful' | 'dramatic';
   allowedKinds: string[]; bigKindsAllowed: string[];
-  connectionId?: string;            // model; empty = user default
+  connectionId: string;             // chosen in setup (D1)
+  backgroundTimer: boolean;         // D4: also run every 6 real hours
   budgetCallsPerDay: number;        // real day, default 12
   connections: Record<string, { read: boolean; write: boolean }>;
 }
@@ -94,7 +95,8 @@ interface Usage { realDay: string; circleId: string; calls: number; promptTokens
 
 1. **Due?** Timer wakes every 5 min (90 s after start). A Circle is due when Circle time is ahead of
    `lastRunCircle` by at least 6 Circle hours, or a linked chat was opened since the last run
-   (seen through `lastMessageAt`), or the user pressed fast forward. Background runs at most every 6 real hours.
+   (seen through `lastMessageAt`), or the tab was opened, or the user pressed fast forward.
+   With `backgroundTimer` on, it is also due every 6 real hours (D4).
 2. **Lease.** One run per Circle: lease row with 30 min expiry (Slurp2 pattern). Failures back off
    `min(30 min, 5 min x 2^failures)`.
 3. **Window.** `from = max(lastRunCircle, newest linked chat message with a cast member)`, `to = Circle now`.
@@ -149,12 +151,12 @@ For a chat that is linked to a Circle, for the characters in this generation:
 - It also runs for the Engine's first-text messages (conversation mode), so they can talk about real events.
   To check in slice 3: the autonomous path calls the same prompt-context collector.
 
-## Decisions to make
+## Decisions (2026-11-05)
 
-- **D1 Model:** default to the user's default connection, or ask for a cheap connection in setup? (Proposal: default, with a "use a cheaper model" picker.)
-- **D2 Visibility default:** shared world for a Circle made from one chat, per-chat otherwise. (Proposal as written.)
-- **D3 First write-out after release:** LTM (needs a one-line change in the LTM package) or status? (Proposal: LTM.)
-- **D4 Background runs:** catch up only when you return (cheap) or also every 6 real hours (feels alive, costs calls)? (Proposal: on return, plus an opt-in background switch, like Slurp2.)
+- **D1 Model:** setup always asks for a connection. A Circle cannot run until one is chosen; `connectionId` is required.
+- **D2 Visibility:** a Circle made from one chat is one shared world; a Circle that links separate chats keeps each chat's facts in that chat. Changeable per Circle.
+- **D3 First write-out:** character status ("what they do now", conversation chats, x1 speed only). LTM, Slurp2 come after.
+- **D4 Background runs:** catch up when you open a linked chat or the tab; an opt-in switch also runs it every 6 real hours (Slurp2 pattern).
 
 ## Slices
 
@@ -164,7 +166,7 @@ Each slice is one PR into `staging`, version bump by patch, tests listed below.
 2. **Routine and deck:** schedule reading (chat copy over card copy), place tags, seed deck with cooldowns, pair picking, timeline view of routine.
 3. **Beats:** beat call, checks, retry, diary, hooks, budget, long-absence summary. Prompt context with mention-once. "Pick up this thread".
 4. **Fast forward and review:** preview with call count, progress, cancel; big kinds with the "Waiting for you" queue; veto and edit; promises pass with `stale` on edited messages.
-5. **Write-outs (behind switches):** LTM intake + retract (after D3), status at x1, Slurp2 post idea. Each waits 24 h and is undone on veto.
+5. **Write-outs (behind switches):** character status at x1 first (D3), then LTM intake + retract, then Slurp2 post idea. Each waits 24 h and is undone on veto (status: overwritten by the next accepted event).
 6. **Delight:** phone view, Monday paper, Home widget, nudges, surprise mode.
 
 ## Tests (smallest proof per slice)
