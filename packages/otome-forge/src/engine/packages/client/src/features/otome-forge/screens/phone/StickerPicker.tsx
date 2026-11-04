@@ -330,14 +330,14 @@ export function StickerNotice({ view }: { view: Pick<RunView, "runKey" | "sticke
     // Only when his stickers or the run change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, view.runKey]);
-  // Just below the lowest header on screen (the top bar, his thread's, the reader's), so it never covers his name,
-  // Close or the reader's tools; the stylesheet's place until then.
+  // Just below the lowest header on screen (the top bar, a memory banner, his thread's, the reader's), so it never
+  // covers his name, Close, the reader's tools or a failed summary's Retry; the stylesheet's place until then.
   const box = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const element = box.current;
     const stage = element?.offsetParent;
     if (!element || !stage || !shown.length) return;
-    const heads = [...stage.querySelectorAll(".of-topbar, .of-thread-head, .of-reader-head")];
+    const heads = [...stage.querySelectorAll(".of-topbar, .of-memory-banner, .of-thread-head, .of-reader-head")];
     const bottom = Math.max(...heads.map((head) => head.getBoundingClientRect().bottom));
     element.style.top = heads.length ? `${Math.round(bottom - stage.getBoundingClientRect().top + 8)}px` : "";
   }, [shown.length]);

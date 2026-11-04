@@ -6,12 +6,16 @@
 // claims each scene's cue; the screens of a story play the home cue, and the others are silent.
 // M4: Wish, the Wardrobe and the Album open an item's Character Story, Moment or first-wear beat in the reader, and the
 // reader's Back returns to the screen that opened it.
+// A failed summary shows on every screen of the open story (components/MemoryBanner.tsx), never on the story list:
+// the index carries no memory status, and a request for each story is not worth it, so a story's banner shows once
+// it is opened.
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { Heart, RotateCcw } from "lucide-react";
 import { useOtomeApi } from "./api";
 import { Dock } from "./components/Dock";
+import { MemoryBanner } from "./components/MemoryBanner";
 import { Stage } from "./components/Stage";
 import { TopBar } from "./components/TopBar";
 import { INDEX_QUERY_KEY, useOtomeIndex } from "./hooks/use-index";
@@ -45,7 +49,7 @@ import {
   type DockScreen,
   type ScreenId,
 } from "./screens/screens";
-import { Settings, type SettingsTab } from "./screens/settings/Settings";
+import { Settings, type SettingsAsk, type SettingsTab } from "./screens/settings/Settings";
 import { SetupWizard } from "./screens/setup/SetupWizard";
 import { StoryHome } from "./screens/story/StoryHome";
 import { Wardrobe } from "./screens/wardrobe/Wardrobe";
@@ -77,7 +81,8 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
   const run = useRun(activeRun);
   const [chosen, setChosen] = useState<ScreenId | null>(null);
   const [settingsReturn, setSettingsReturn] = useState<ScreenId>("picker");
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>("look");
+  // Each way into Settings, a new object: one made while Settings shows (the memory banner's) switches its tab.
+  const [settingsAsk, setSettingsAsk] = useState<SettingsAsk>({ tab: "look" });
   const [bibleLi, setBibleLi] = useState<string | null>(null);
   const [chapterKey, setChapterKey] = useState<string | null>(null);
   // Where the reader's Back leads: the Story screen, or the Wish, Wardrobe or Album screen that opened an item's story.
@@ -211,9 +216,9 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     go("forge");
   };
 
-  const openSettings = (tab: SettingsTab = "look") => {
-    setSettingsReturn(screen);
-    setSettingsTab(tab);
+  const openSettings = (tab: SettingsTab = "look", memory = false) => {
+    if (screen !== "settings") setSettingsReturn(screen);
+    setSettingsAsk(memory ? { tab, memory } : { tab });
     go("settings");
   };
   const selectDockScreen = (next: DockScreen) => go(next === screen ? "home" : next);
@@ -280,7 +285,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
         run={view}
         lookPreference={lookPreference}
         onLookPreference={onLookPreference}
-        initialTab={settingsTab}
+        ask={settingsAsk}
         // Settings → Stories: the cast needs a story, and neither is offered where Back already leads.
         onOpenCast={activeRun && view && settingsReturn !== "forge" ? () => go("forge") : undefined}
         onOpenStories={settingsReturn === "picker" ? undefined : () => go("picker")}
@@ -377,6 +382,14 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
           onSettings={screen === "settings" ? undefined : () => openSettings()}
         />
       )}
+      {activeRun && view && screen !== "picker" && screen !== "setup" ? (
+        <MemoryBanner
+          key={activeRun}
+          runKey={activeRun}
+          onOpenConnections={(memory) => openSettings("connections", memory)}
+          onLeave={() => screenRef.current?.querySelector<HTMLElement>("h1")?.focus({ preventScroll: true })}
+        />
+      ) : null}
       <div
         key={
           screen === "bible"

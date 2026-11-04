@@ -1,8 +1,12 @@
 // ──────────────────────────────────────────────
 // Otome Forge: story memory status and Retry (shown under Settings → Connections and Settings → Debug)
 // ──────────────────────────────────────────────
-// GET  /runs/:run/memory/status → {status}  the kit's memory status (phase ready | pending | stale | error |
-//                                           context-unknown, with its reason and counts)
+// GET  /runs/:run/memory/status → {status}  the kit's memory status (phase ready | pending | stale | error, with its
+//                                           reason and counts); `error` is a failed summary, with the provider's own
+//                                           `message`, or Otome's own saying the model is too small (reason
+//                                           `context-too-small`); `noConnection` when no connection can write
+//                                           summaries (memory waits for one); `unsummarized`, how many finished
+//                                           chapters have no summary yet (S/memory/memory.ts OtomeMemoryStatus)
 // GET  /runs/:run/memory/overview → {paragraphs}  the saved overview as plain paragraphs, [] before the first one
 //                                           ("What happened so far…" while a chapter is planned, #2040): read as
 //                                           saved, never written or summarized here; no source key leaves the server

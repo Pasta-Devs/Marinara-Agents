@@ -205,7 +205,31 @@ ${R} .of-icon-button {
   flex: none; display: grid; place-items: center; width: 38px; height: 38px; padding: 0; border-radius: 50%;
   cursor: pointer;
 }
-${R} .of-icon-button:hover { background: var(--of-surface-strong); color: var(--of-accent-text); }`;
+${R} .of-icon-button:hover { background: var(--of-surface-strong); color: var(--of-accent-text); }
+/* A failed summary (components/MemoryBanner.tsx): in the stage's flow below the top bar, or first on a full-stage
+   screen (the reader), so it pushes the screen down and covers none of its controls. Its actions go below the text
+   when the row is too narrow for both, sharing one row; the provider's words keep to two lines (Settings → Connections
+   has them whole). A Retry request that failed itself says so on a row of its own, below both. */
+${R} .of-memory-banner {
+  position: relative; z-index: 3; flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+  margin: 0 12px 6px; padding: 8px 10px 8px 12px; border-radius: 16px; border-color: var(--of-danger);
+  font-size: 0.84rem; line-height: 1.35;
+}
+${R} .of-memory-banner:first-child { margin-top: max(12px, env(safe-area-inset-top)); }
+/* First on a full-stage screen, it has taken the safe area: the reader's header below it does not take it again. */
+${R} .of-memory-banner:first-child ~ .of-screen { --of-reader-top: 6px; }
+${R} .of-memory-banner-text { flex: 1 1 15rem; min-width: 0; display: flex; align-items: flex-start; gap: 8px; }
+${R} .of-memory-banner-text svg { flex: none; margin-top: 1px; color: var(--of-danger); }
+${R} .of-memory-banner[data-kind="retrying"] .of-memory-banner-text svg { color: var(--of-accent-text); }
+${R} .of-memory-banner-said {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+  color: var(--of-text-soft); overflow-wrap: anywhere;
+}
+${R} .of-memory-banner-actions { flex: 1 1 15rem; display: flex; gap: 6px; min-width: 0; }
+${R} .of-memory-banner-actions .of-button {
+  flex: 1 1 0; min-width: 0; min-height: 36px; padding: 4px 8px; font-size: 0.8rem; white-space: normal; line-height: 1.2;
+}
+${R} .of-memory-banner-error { flex: 1 0 100%; min-width: 0; color: var(--of-text-soft); overflow-wrap: anywhere; }`;
 
 const DOCK_RULES = `
 ${R} .of-dock {
@@ -1600,7 +1624,8 @@ ${R} .of-reader-secondary[data-expanded="true"] {
   /* Keep the focus padding outside the More button's column. */
   position: absolute; top: calc(100% + 6px); inset-inline-end: -4px;
   display: flex; flex-direction: column; gap: 6px; padding: 4px;
-  max-height: max(44px, calc(100cqh - 120px - max(12px, env(safe-area-inset-top)) - max(10px, env(safe-area-inset-bottom))));
+  /* --of-memory-banner-h: a memory banner above the reader (components/MemoryBanner.tsx) takes that much more. */
+  max-height: max(44px, calc(100cqh - 120px - var(--of-memory-banner-h, 0px) - var(--of-reader-top, max(12px, env(safe-area-inset-top))) - max(10px, env(safe-area-inset-bottom))));
   overflow-y: auto; overscroll-behavior: contain;
   scrollbar-width: none;
 }
@@ -1649,7 +1674,7 @@ ${R}[data-look="pearl"] .of-reader-vignette {
 /* The header: the way out, the chapter's title, and the tools. */
 ${R} .of-reader-head {
   position: relative; z-index: 3; display: flex; flex-direction: column; gap: 6px;
-  padding: max(12px, env(safe-area-inset-top)) 12px 4px;
+  padding: var(--of-reader-top, max(12px, env(safe-area-inset-top))) 12px 4px;
 }
 ${R} .of-reader-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 ${R} .of-reader-row--sub { align-items: flex-start; }

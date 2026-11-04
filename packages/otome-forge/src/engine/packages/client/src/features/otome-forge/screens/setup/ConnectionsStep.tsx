@@ -3,9 +3,10 @@
 // and memory, and an optional image connection (the game is fully playable without one). "Edit" opens the Engine's
 // own connection editor. The same controls serve Settings → Connections and Settings → Images. A text connection set
 // to a context window under STORY_CONTEXT_MIN gets a warning (#2066): a story prompt carries the story's timeline and
-// the previous chapter in full, so a smaller one soon runs out of room. It is never refused.
+// the previous chapter in full, so a smaller one soon runs out of room. It is never refused. The memory banner's way
+// to Settings → Connections (components/MemoryBanner.tsx) opens More connections at the Memory connection, focused.
 // ──────────────────────────────────────────────
-import { useId } from "react";
+import { useEffect, useId, useLayoutEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { ImageOff, PlugZap } from "lucide-react";
 import { CostHint } from "../../components/CostHint";
@@ -25,12 +26,43 @@ interface ConnectionControlsProps {
   connections: readonly ConnectionOption[];
   /** Asks the Engine again, offered while there are none (the player adds one in its Connections panel). */
   onCheckAgain?: () => Promise<unknown>;
+  /** Brings the player to the Memory connection: opens More connections and focuses it, then says so (once). */
+  revealMemory?: boolean;
+  onMemoryRevealed?: () => void;
 }
 
-export function ConnectionControls({ value, onChange, connections, onCheckAgain }: ConnectionControlsProps) {
+export function ConnectionControls({
+  value,
+  onChange,
+  connections,
+  onCheckAgain,
+  revealMemory = false,
+  onMemoryRevealed,
+}: ConnectionControlsProps) {
   const { t } = useTranslation();
   const same = t("ui.otomeForge.setup.sameAsStory");
-  if (connections.length === 0) {
+  const more = useRef<HTMLDetailsElement>(null);
+  const memory = useRef<HTMLSelectElement>(null);
+  // The latest callback, so a parent's new one neither runs the reveal again nor cancels its frame.
+  const revealed = useRef(onMemoryRevealed);
+  useLayoutEffect(() => {
+    revealed.current = onMemoryRevealed;
+  });
+  const listed = connections.length > 0;
+  useEffect(() => {
+    const [details, select] = [more.current, memory.current];
+    // With no connections listed yet there is nothing to show: the reveal waits until they are, and runs then, not on
+    // every render, so a More connections the player closed stays closed.
+    if (!revealMemory || !listed || !details || !select) return;
+    details.open = true;
+    // A frame later: a screen just opened moves focus to its heading after this runs (OtomeForgeView).
+    const frame = requestAnimationFrame(() => {
+      select.focus();
+      revealed.current?.();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [revealMemory, listed]);
+  if (!listed) {
     return (
       <div className="of-empty of-glass">
         <PlugZap size={22} strokeWidth={1.7} aria-hidden="true" />
@@ -49,7 +81,7 @@ export function ConnectionControls({ value, onChange, connections, onCheckAgain 
         minContext={STORY_CONTEXT_MIN}
         onChange={(narration) => onChange({ ...value, narration })}
       />
-      <details className="of-details">
+      <details ref={more} className="of-details">
         <summary className="of-summary">{t("ui.otomeForge.setup.connectionsMore")}</summary>
         <div className="of-details-body">
           <ConnectionSelect
@@ -77,6 +109,7 @@ export function ConnectionControls({ value, onChange, connections, onCheckAgain 
             connections={connections}
             emptyLabel={same}
             minContext={STORY_CONTEXT_MIN}
+            selectRef={memory}
             onChange={(compress) => onChange({ ...value, compress })}
           />
         </div>

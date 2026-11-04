@@ -74,7 +74,7 @@ import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/serve
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { runForeground } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/generation.ts";
 import type { FakeReply, FakeRuntimeOptions } from "./fixtures/otome-forge-fakes.ts";
-import { KAI, MIR, SOL, json, squeezedMemory, storyWorld } from "./fixtures/otome-forge-story.ts";
+import { KAI, MIR, SOL, json, saveStoryMemory, squeezedMemory, storyWorld } from "./fixtures/otome-forge-story.ts";
 
 type Messages = CapabilityLanguageModelMessage[];
 // #2066: a story prompt opens with the shared story context, then its own instructions: both are system messages.
@@ -724,22 +724,22 @@ test("P17 keeps the overview and recalled details whole beside the previous chap
     ...state,
     chapters: { ...state.chapters, [key]: { beatsRead: 6, completed: done, applied: [] } },
   }));
-  // A ready memory: the timeline, an older conversation among the recalls (past the six P17 lists), the chapter.
+  // A ready memory: the timeline as saved, an older conversation among the recalls (past the six P17 lists), the
+  // chapter.
+  await saveStoryMemory(t.store, t.runId, { head: "OVERVIEW-MARK: she came to the harbour city." });
   const memory = {
     async recall() {
-      const overview = "OVERVIEW-MARK: she came to the harbour city.";
       const recalls = [
         { id: "phone-old", title: "Kai's phone conversation", content: "OLD-SESSION-MARK: her sister Mina.", order: 1 },
       ];
       return {
         status: { phase: "ready" as const, retryable: false },
         lagging: false,
-        overview,
+        overview: "",
         details: [],
         recalls,
         maxContext: 32768,
         text: "",
-        recent: [{ id: key, kind: "chapter" as const, title: "Harbour", latest: true }],
       };
     },
     maintain: async () => true,
@@ -758,7 +758,7 @@ test("P17 hands its memory to the fit: a recalled detail too big for the reader'
   // A 1M-token connection, memory recalled for a 60k reader: only the fit it is handed to leaves the detail out.
   const t = await phoneWorld("r-phonesq-aaaaaa", { model: { maxContext: 1_000_000, maxOutputTokens: null } });
   const phone = phoneRoutes(
-    { ...t.deps, memory: squeezedMemory(60_000) as unknown as OtomeMemory },
+    { ...t.deps, memory: (await squeezedMemory(t, 60_000)) as unknown as OtomeMemory },
     "r-phonesq-aaaaaa",
   );
   const sent = await phone("POST", send, { li: KAI, body: { text: "Do you remember the quay?" } });

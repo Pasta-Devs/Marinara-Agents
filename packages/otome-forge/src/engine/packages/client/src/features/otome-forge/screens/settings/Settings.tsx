@@ -1,9 +1,11 @@
 // ──────────────────────────────────────────────
 // Otome Forge: Settings. Tabs for the look, Stories (the way to the story's cast and to Your stories), the current
 // story's content, connections, images and audio, the period tracker, Privacy & data, and Debug. Story settings edit
-// the active run; the look, the tracker and the 18+ confirmation are the player's own.
+// the active run; the look, the tracker and the 18+ confirmation are the player's own. Each way in (`ask`) names its
+// tab; one that comes while Settings shows (the memory banner's) switches to that tab without opening Settings afresh,
+// so a pick not yet saved there stays.
 // ──────────────────────────────────────────────
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import {
   AudioLines,
@@ -33,6 +35,15 @@ const TABS = ["look", "stories", "content", "connections", "images", "audio", "t
 export type SettingsTab = (typeof TABS)[number];
 type Tab = SettingsTab;
 
+/** A way into Settings, a new object each time: its tab, and for a failed summary the Memory connection. */
+export interface SettingsAsk {
+  tab: SettingsTab;
+  /** Connections brings the player to the Memory connection (More connections, focused). */
+  memory?: boolean;
+}
+
+const LOOK: SettingsAsk = { tab: "look" };
+
 const TAB_META: Record<Tab, { labelKey: string; Icon: LucideIcon }> = {
   look: { labelKey: "ui.otomeForge.settings.tabLook", Icon: Palette },
   stories: { labelKey: "ui.otomeForge.settings.tabStories", Icon: BookHeart },
@@ -50,8 +61,8 @@ interface SettingsProps {
   run: RunView | null;
   lookPreference: LookPreference;
   onLookPreference: (preference: LookPreference) => void;
-  /** The tab it opens on (Remind Me opens the tracker); the look otherwise. */
-  initialTab?: SettingsTab;
+  /** The way in (Remind Me opens the tracker, the memory banner Connections); the look otherwise. */
+  ask?: SettingsAsk;
   /** The Stories tab's ways to the story's cast and to Your stories; without either, the tab is left out. */
   onOpenCast?: () => void;
   onOpenStories?: () => void;
@@ -61,28 +72,39 @@ export function Settings({
   run,
   lookPreference,
   onLookPreference,
-  initialTab = "look",
+  ask = LOOK,
   onOpenCast,
   onOpenStories,
 }: SettingsProps) {
   const { t } = useTranslation();
   const tabs: readonly Tab[] = onOpenCast || onOpenStories ? TABS : TABS.filter((name) => name !== "stories");
   const id = useId();
-  const [tab, setTab] = useState<Tab>(initialTab);
+  const [tab, setTab] = useState<Tab>(ask.tab);
+  // The Memory connection still to show (ConnectionControls says once it has); a tab the player picks forgets it.
+  const [memoryAsked, setMemoryAsked] = useState(!!ask.memory);
+  const memoryShown = useCallback(() => setMemoryAsked(false), []);
+  const [answered, setAnswered] = useState(ask);
+  if (ask !== answered) {
+    setAnswered(ask);
+    setTab(ask.tab);
+    setMemoryAsked(!!ask.memory);
+  }
+  const choose = (next: Tab) => {
+    setTab(next);
+    setMemoryAsked(false);
+  };
   const tabRefs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
-  // A tab opened from elsewhere (Remind Me's tracker) may sit past the strip's edge at phone width: bring it in. Only
-  // the strip scrolls, sideways, in either direction of text.
+  // A tab asked for from elsewhere (Remind Me's tracker) may sit past the strip's edge at phone width: bring it in.
+  // Only the strip scrolls, sideways, in either direction of text.
   useEffect(() => {
-    const selected = tabRefs.current[initialTab];
+    const selected = tabRefs.current[ask.tab];
     const strip = selected?.parentElement;
     if (!selected || !strip) return;
     const [inner, outer] = [selected.getBoundingClientRect(), strip.getBoundingClientRect()];
     if (inner.left < outer.left || inner.right > outer.right) {
       strip.scrollBy({ left: inner.left - outer.left - (outer.width - inner.width) / 2 });
     }
-    // Once, as Settings opens.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [ask]);
 
   // Arrow keys move between tabs (and select them), Home and End jump to the ends.
   const onKeyDown = (event: KeyboardEvent) => {
@@ -102,7 +124,7 @@ export function Settings({
               : null;
     if (!next) return;
     event.preventDefault();
-    setTab(next);
+    choose(next);
     tabRefs.current[next]?.focus();
   };
 
@@ -114,7 +136,7 @@ export function Settings({
     ) : tab === "content" ? (
       <ContentSettings run={run} />
     ) : tab === "connections" ? (
-      <ConnectionsSettings run={run} />
+      <ConnectionsSettings run={run} revealMemory={memoryAsked} onMemoryRevealed={memoryShown} />
     ) : tab === "images" ? (
       <ImagesSettings run={run} />
     ) : tab === "audio" ? (
@@ -159,7 +181,7 @@ export function Settings({
               aria-selected={selected}
               aria-controls={`${id}-${name}-panel`}
               tabIndex={selected ? 0 : -1}
-              onClick={() => setTab(name)}
+              onClick={() => choose(name)}
             >
               <Icon size={16} strokeWidth={1.9} aria-hidden="true" />
               <span>{t(labelKey)}</span>

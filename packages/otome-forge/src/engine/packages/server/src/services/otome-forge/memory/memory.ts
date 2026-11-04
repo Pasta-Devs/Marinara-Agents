@@ -11,10 +11,19 @@
 //   session, a Snapshot, a Read Him set, a Claw round) stays out of the overview. Recall always says who is present: a
 //   call that names neither `cast` nor `reader` recalls as a scene with nobody in it, so no private source can reach it
 //   by omission. Care data is never a source.
-// - Recent canon (what the overview does not cover yet) is GF's: the newest chapter stands for the caller's previous
-//   chapter in full, or, when that is another one, comes as its summary until the overview covers it; a date or
-//   Character Story goes in as written only while it is the one newest without a summary, else recall answers
-//   "not ready" and the caller sends the bounded canonical history (S/story/canon.ts).
+// - Recall hands no recent canon to a story prompt: every story prompt reads the saved timeline and summaries itself
+//   (S/memory/timeline.ts savedStory), in every phase, and sends each chapter the timeline does not cover by its
+//   summary, or in full while it has none (S/story/canon.ts recallText). From recall it takes the recall pool, the
+//   phase and whether the memory lags, which queues the upkeep.
+// - No context-size gate (the maintainer's, 2026-11-04): whenever a connection can run the memory job, memory runs and
+//   sends each request as it is, the summary prompt and the chapter. A model whose context is too small fails at its
+//   provider: that is a failed summary, status `error` with the provider's own `message`, and it waits for Retry. A
+//   model that reports a context too small for even the smallest piece of a summary (or of a condensing) fails the
+//   same way with no call, its `message` saying so and its reason `context-too-small` (tooSmall), so the client shows
+//   those words as Otome's own, not the connection's, and the player switches the connection. Only a run with no
+//   connection for the job at all waits, which status reports (`noConnection`), with how many chapters have no
+//   summary yet (`unsummarized`). A status the earlier gate saved reads as if no gate had been: `context-unknown` as
+//   stale, so the next recall queues the upkeep, and a ready one without the readers it knew no context for.
 // - Read Me (S/minigames/read-me.ts) is never a source: what the notebook holds beyond knowsAboutYou's newest entries
 //   joins the recall pool live on each recall (S/prompts.ts notebookMemories), so a deleted entry never comes back.
 // - Summaries run on job `compress` on the background lane. `maintain` queues one job per run on the background
@@ -30,15 +39,17 @@
 //   newest main chapter's entry condensed into about 5000 words (half that), and appending goes on: that entry and the
 //   ones after it stay apart, so a prompt that sends that chapter in full leaves its summary out (#2091; the cases
 //   where it cannot are S/memory/timeline.ts's ponytail). The condensing goes in as few calls as the memory model's
-//   own context allows (a small one gets the oldest entries a few at a time). Its size never follows the model's
-//   context: the kit is given a fixed context (MEMORY_CONTEXT) once the memory model's own is known, so its budget only
-//   bounds a timeline that keeps failing to condense; a model of unknown context waits for configuration.
+//   own context allows when it reports one (a small one gets the oldest entries a few at a time), else in one call:
+//   the timeline it condenses is bounded by its ceiling. Its size never follows the model's context: the kit is given
+//   a fixed context (MEMORY_CONTEXT) for every job a connection can run, so its budget only bounds a timeline that
+//   keeps failing to condense.
 // - #2066, the recall pool: recall sends no ranked chapter details. Beside the timeline go the newest small memories
 //   this prompt may know (phone sessions, Snapshots, Read Him sets, Claw rounds, Read Me notebook sets, and each date
 //   by its summary), newest first within RECALL_TOKENS and 1k of leeway, the oldest left out, and none the prompt
 //   already lists in full (`listed`, P17's newest conversations). A date (the kit's `character-story`) never joins the
-//   timeline: it is its love interest's own, and until it has a summary it goes in as recent canon (S/story/canon.ts).
-//   No embeddings are made, so none are paid for.
+//   timeline's text: it is its love interest's own, and until its summary is folded (the timeline covers it) it goes
+//   in as recent canon, by its summary or in full while it has none (S/story/canon.ts). The pool is the same in every
+//   phase. No embeddings are made, so none are paid for.
 // - A Character Story, Moment or first-wear beat (also the kit's `character-story`, a `story-<itemId>` chapter) joins
 //   the timeline in story order, as a route chapter does, titled and summarized as private to its love interest (the
 //   maintainer's, 2026-11-03: love interests must know what happened in them; as recalls they were often left out).
@@ -47,7 +58,8 @@
 //   summaries as recent canon, the oldest giving way, until Retry rebuilds it: the kit holds every failure for
 //   Retry. The upgrade path is a form change that queues its rebuild whatever the saved status.
 // - Every summary and condensing call gets at least 10240 tokens of reply room for thinking models (the connection's
-//   own cap when it is lower); a chapter too long for one call is summarized in pieces (fitsSummary).
+//   own cap when it is lower); a chapter too long for the context the memory model reports is summarized in pieces
+//   (fitsSummary), and one for a model that reports none goes whole.
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 import {
   createForgeStoryMemory,
@@ -76,12 +88,14 @@ import { mayKnow } from "../story/canon.js";
 import { readMemorySources } from "./sources.js";
 import {
   HEADROOM_TOKENS,
+  OVERVIEW_STYLE,
   cleanSummary,
   crossedCeiling,
   foldedPart,
   keptPart,
   parseTimeline,
   renderTimeline,
+  savedStory,
   serializeTimeline,
   type Timeline,
 } from "./timeline.js";
@@ -107,26 +121,56 @@ const MEMORY_CONTEXT = 400_000;
 
 const SummarySchema = z.object({ summary: z.string().min(1) });
 
+/** The longest failed summary's message kept on the status: a proxy's error page can be long. */
+const FAILURE_CHARACTERS = 2000;
+
 /**
- * The overview's form, kept on the memory document: 4 is #2066's timeline with Character Stories in it (0.7.3; 3 left
- * them out, 2 was 0.6.19's prose timeline, rewritten whole with every chapter). A document without it
- * is read with no overview, so the kit's next maintenance folds a new one from the saved records, one at a time; with
- * no overview every source is owed, so recall reports the memory lagging and queues that (S/story/canon.ts recallText).
- * Records, detail summaries and status are read as saved. Every overview the kit writes after that was folded over the
- * empty one, so its write stamps the form, and the reads after it use the overview again: one rebuild, never a second.
- * Until then the earlier overview is kept beside it as `legacyOverview` (the kit carries fields it does not know), so
- * What happened so far… can still show it when a fold fails before the first new one lands; the stamp drops it.
+ * A failed summary's reason and message when the memory model's context holds not even the smallest request of `task`
+ * (see the header): Otome's own words, which the client shows without "The connection said".
  */
-const OVERVIEW_STYLE = 4;
+const tooSmall = (maxContext: number, task: "write a summary" | "condense the story's timeline") => ({
+  reason: "context-too-small",
+  message: `The Memory connection's model (${maxContext.toLocaleString("en-US")} tokens of context) is too small to ${task}. Choose a connection with a larger context.`,
+});
 
-type SavedForm = { overview?: unknown; overviewStyle?: unknown; legacyOverview?: unknown } | null | undefined;
+/** How many characters of its source a detail request carries (the kit's `range`); a piece of one is the smallest. */
+const pieceLength = (request: SummaryRequest) => {
+  const { source } = JSON.parse(request.messages.at(-1)?.content ?? "{}") as {
+    source?: { range?: { from: number; to: number } };
+  };
+  return source?.range ? source.range.to - source.range.from : Number.POSITIVE_INFINITY;
+};
 
-/** The saved memory as the kit reads it: an overview of an earlier form counts as none, and is kept aside. */
+type SavedForm =
+  | {
+      overview?: unknown;
+      overviewStyle?: unknown;
+      legacyOverview?: unknown;
+      status?: { phase?: unknown; unknownReaders?: unknown };
+    }
+  | null
+  | undefined;
+
+/**
+ * The saved memory as the kit reads it: an overview of an earlier form (S/memory/timeline.ts OVERVIEW_STYLE) counts as
+ * none, and is kept aside. A status the earlier context gate saved (see the header) reads as memory behind; a ready
+ * one loses the readers that gate knew no context for, which the kit would read as waiting for setup with no upkeep
+ * owed to clear it.
+ */
 const currentForm = (data: unknown) => {
   const saved = data as SavedForm;
-  return saved?.overview && saved.overviewStyle !== OVERVIEW_STYLE
-    ? { ...saved, overview: null, legacyOverview: saved.overview }
-    : (data ?? null);
+  const form: SavedForm =
+    saved?.overview && saved.overviewStyle !== OVERVIEW_STYLE
+      ? { ...saved, overview: null, legacyOverview: saved.overview }
+      : saved;
+  const status = form?.status;
+  if (status?.phase === "context-unknown")
+    return { ...form, status: { phase: "stale", retryable: true, reason: "not-prepared" } };
+  if (status && "unknownReaders" in status) {
+    const { unknownReaders: _gate, ...rest } = status;
+    return { ...form, status: rest };
+  }
+  return form ?? null;
 };
 
 /** The memory as the kit writes it: one with an overview carries its form, and the earlier one is let go. */
@@ -158,12 +202,24 @@ export interface OtomeMemory {
    * or no connection to summarize with; true once queued, or folded into the job already waiting or running.
    */
   maintain(options: { runId: string; debugMode?: boolean }): Promise<boolean>;
-  /** The kit's status, `pending` while a maintenance job is queued or running. */
-  status(runId: string): Promise<ForgeMemoryStatus>;
+  /** The kit's status, `pending` while a maintenance job is queued or running (see OtomeMemoryStatus). */
+  status(runId: string): Promise<OtomeMemoryStatus>;
   /** Stops the run's maintenance and drops what it was doing (a deleted run). */
   invalidate(runId: string): void;
   dispose(): void;
 }
+
+/**
+ * The kit's status (phase `error` is a failed summary, which waits for Retry), with what the client shows beside it
+ * (see the header): the failed call's own `message` (or tooSmall's, with no call, and its reason `context-too-small`),
+ * whether no connection can write summaries, and how many chapters (the story's own and its side stories) have no
+ * summary yet, when the run's sources can be read.
+ */
+export type OtomeMemoryStatus = ForgeMemoryStatus & {
+  message?: string;
+  noConnection: boolean;
+  unsummarized?: number;
+};
 
 /** What the kit passes to summarize and fitsSummary. */
 export interface SummaryRequest {
@@ -173,12 +229,6 @@ export interface SummaryRequest {
   tokenBudget?: number;
   debugMode?: boolean;
   signal?: AbortSignal;
-}
-
-/** What recall reads of the kit's saved store (version 1). */
-interface SavedMemory {
-  records?: Array<{ key?: unknown; content?: unknown } | null>;
-  overview?: { content?: unknown; sources?: Array<[string, string] | null> } | null;
 }
 
 /** A run's compress connection, its model's limits, and the rules each summary prompt ends its system message with. */
@@ -205,8 +255,11 @@ export interface RecallItem {
   order: number;
 }
 
-/** The kit's recall, and the small memories that go beside the timeline. */
-export type OtomeRecallResult = ForgeRecallResult & { recalls?: RecallItem[] };
+/**
+ * The kit's recall without its recent canon (a story prompt reads the saved story itself, see the header), and the
+ * small memories that go beside the timeline.
+ */
+export type OtomeRecallResult = Omit<ForgeRecallResult, "recent"> & { recalls?: RecallItem[] };
 
 /** Where a moment sits in story order: after the main chapters completed before it, then by time (S/phone/memory.ts). */
 function storyOrderAt(chapters: Record<string, { completed?: string | null }>, at: string): number {
@@ -253,6 +306,8 @@ export function createOtomeMemory({
   const maintainKey = (runId: string) => `${memoryId(runId)}#maintain`;
   /** Runs whose maintenance was asked for again while their job waited or ran, with whether one asked in debug mode. */
   const again = new Map<string, boolean>();
+  /** Why each run's summary failed this round (the call's own message, or tooSmall), for the kit's next error status. */
+  const failures = new Map<string, { message: string; reason?: string }>();
   let disposed = false;
 
   const runExists = async (runId: string) => !!(await documents.getById(OTOME_FORGE_PACKAGE_ID, worldId(runId)));
@@ -271,6 +326,13 @@ export function createOtomeMemory({
     };
   }
 
+  /** The memory as the kit writes it, with a failed summary's message (and tooSmall's reason) on its error status. */
+  const withFailure = (runId: string, data: unknown) => {
+    const status = (data as { status?: { phase?: unknown } } | null)?.status;
+    const failure = failures.get(runId);
+    return status?.phase === "error" && failure ? { ...(data as object), status: { ...status, ...failure } } : data;
+  };
+
   const memory = createForgeStoryMemory({
     async readMemory(runId) {
       const document = await documents.getById(OTOME_FORGE_PACKAGE_ID, memoryId(runId));
@@ -278,7 +340,7 @@ export function createOtomeMemory({
     },
     async updateMemory(runId, { expectedRevision, data: written }) {
       if (!(await runExists(runId))) return false;
-      const data = stampedForm(written);
+      const data = stampedForm(withFailure(runId, written));
       const { id, kind, name } = runDocTarget("memory", memoryId(runId));
       const at = new Date().toISOString();
       let saved: boolean;
@@ -317,25 +379,27 @@ export function createOtomeMemory({
       return saved;
     },
     readSources: (runId) => readSources(runId),
-    // #2066: every reader is told the same fixed context (MEMORY_CONTEXT), so the timeline's size never follows the
-    // model. A run with no connection for the job, or a model whose context is not known, still has no memory: the
-    // kit waits for configuration, as before.
+    // #2066: every job a connection can run is told the same fixed context (MEMORY_CONTEXT), whatever its model reports
+    // or leaves unknown, so the timeline's size never follows the model and memory never waits for a context size (see
+    // the header). Only a job with no connection at all has none: the kit waits for configuration.
     async resolveContext(runId, { job, connectionId }) {
       const world = connectionId ? null : await store.readDoc(worldId(runId), normalizeWorld);
-      const id = connectionId || resolveConnectionId(world, job ?? "structured");
-      if (!id) return { maxContext: null };
-      const model = await runtime.languageModels.resolveForRequest({ connectionId: id }).catch(() => null);
-      return { maxContext: model?.maxContext ? MEMORY_CONTEXT : null };
+      return { maxContext: connectionId || resolveConnectionId(world, job ?? "structured") ? MEMORY_CONTEXT : null };
     },
     // The kit cuts a chapter into the largest piece whose prompt leaves the summary its reserve, measured as
-    // generateJson fits it (promptRoom), so a piece that fits here is sent whole there with at least that reply room.
-    // Adding a summary to the timeline (an overview fold) sends nothing, so it always fits.
+    // generateJson fits it (promptRoom), so a piece that fits here is sent whole there with at least that reply room. A
+    // model that reports no context size is sent the chapter whole: its provider says when it is too long. Adding a
+    // summary to the timeline (an overview fold) sends nothing, so it always fits. The kit's smallest piece is one
+    // character: a model that holds not even that fails the job with no call, so the status says why (tooSmall).
     async fitsSummary(value) {
       const request = value as SummaryRequest;
       if (request.kind === "overview") return true;
       const job = running.get(request.runId) ?? (await summaryJob(request.runId));
-      if (!job?.maxContext) return false;
-      return promptRoom(job.maxContext, withRules(request, job)) >= summaryReserve(job.maxOutputTokens);
+      if (!job) return false;
+      if (!job.maxContext) return true;
+      if (promptRoom(job.maxContext, withRules(request, job)) >= summaryReserve(job.maxOutputTokens)) return true;
+      if (pieceLength(request) <= 1) failures.set(request.runId, tooSmall(job.maxContext, "write a summary"));
+      return false;
     },
     async summarize(value) {
       const request = value as SummaryRequest;
@@ -356,7 +420,13 @@ export function createOtomeMemory({
             connectionId: job.connectionId,
             signal: request.signal,
           },
-        );
+        ).catch((error: unknown) => {
+          // The provider's own words (a context-length error, a refusal), for the error status (see the header).
+          failures.set(request.runId, {
+            message: (error instanceof Error ? error.message : String(error)).slice(0, FAILURE_CHARACTERS),
+          });
+          throw error;
+        });
         return reply.summary.trim();
       };
       if (request.kind !== "overview") return ask(request.kind, withRules(request, job));
@@ -385,15 +455,19 @@ export function createOtomeMemory({
       if (!added || !crossedCeiling(timeline)) return serializeTimeline(timeline);
       const condense = (part: Timeline) =>
         withRules({ ...request, kind: "timeline", messages: timelineFoldMessages(renderTimeline(part)) }, job);
+      // A model that reports no context size is sent the whole part in one call (see the header).
       const fits = (part: Timeline) =>
         !job.maxContext || promptRoom(job.maxContext, condense(part)) >= summaryReserve(job.maxOutputTokens);
       // As few calls as the memory model's context allows: each folds the head with the most of the oldest entries
-      // that fit beside it. Not even one fitting is a model too small for the story's memory.
+      // that fit beside it. Not even one fitting is a model too small for the story's memory, which the status says.
       let { head, entries: pending } = foldedPart(timeline);
       while (pending.length) {
         let take = pending.length;
         while (take > 0 && !fits({ head, entries: pending.slice(0, take) })) take -= 1;
-        if (!take) throw new Error("summary-context-too-small");
+        if (!take) {
+          failures.set(request.runId, tooSmall(job.maxContext ?? 0, "condense the story's timeline"));
+          throw new Error("summary-context-too-small");
+        }
         head = cleanSummary(await ask("timeline", condense({ head, entries: pending.slice(0, take) })));
         pending = pending.slice(take);
       }
@@ -456,11 +530,11 @@ export function createOtomeMemory({
   return {
     async recall(options) {
       // A failed read rejects: without the sources nothing here can tell what this prompt may not know, so the caller
-      // falls back to its bounded canonical history instead of a recall with the private-canon filters off.
+      // goes on without the recall pool instead of a recall with the private-canon filters off.
       const sources = await readSources(options.runId);
       const knowing = options.reader || options.cast ? options : { cast: [] };
-      // The caller sends a chapter in full; the newest of all (recall marks it `latest`) it sends as recent canon when
-      // this prompt may know it, so it is never ranked as a detail too.
+      // The caller sends the story's chapters itself (S/story/canon.ts), so the newest of all (the kit's `latest`) is
+      // never ranked as a detail.
       const latest = sources.filter((source) => source.kind === "chapter").at(-1);
       // #2066: the kit's ranked details are not sent any more, so every source is listed and none is ranked, which
       // also leaves the kit no query to embed.
@@ -470,64 +544,21 @@ export function createOtomeMemory({
         listed: [...(options.listed ?? []), ...sources.map((source) => source.id)],
         excludeChapterIds: [...(options.excludeChapterIds ?? []), ...(latest ? [latest.id] : [])],
       });
-      if (result.status.phase !== "ready") return result;
-      // Recent canon this prompt may know, in story order: the timeline does not cover it yet.
-      const bySource = new Map(sources.map((source) => [JSON.stringify([source.kind, source.id]), source]));
-      let saved: Promise<SavedMemory | undefined> | undefined;
-      const readSaved = () =>
-        (saved ??= documents
-          .getById(OTOME_FORGE_PACKAGE_ID, memoryId(options.runId))
-          .then((document) => document?.data as SavedMemory | undefined));
-      const recent: NonNullable<ForgeRecallResult["recent"]> = [];
-      for (const entry of result.recent ?? []) {
-        const key = JSON.stringify([entry.kind, entry.id]);
-        const source = bySource.get(key);
-        if (!source || !mayKnow(knowing, source.audience)) continue;
-        // The kit's `latest` stands for the previous chapter in full, as in GF: kept so (no content) when the caller
-        // sends it. When the caller's previous chapter is another one (main after a route chapter, his route after a
-        // main one), this one is recent canon like any other: nothing beyond the overview once that covers it, else
-        // its saved summary, or as written until it has one.
-        // ponytail: reads the kit's v1 store (key JSON [kind, id], the overview's covered keys, a source's first record
-        // standing for it, as keepFirstCanon does); the upgrade path is the kit returning these with `latest`.
-        const canon = entry.latest && !options.excludeChapterIds?.includes(entry.id);
-        const data = canon ? await readSaved() : undefined;
-        const covered =
-          !!result.overview &&
-          data?.overview?.content === result.overview &&
-          !!data.overview.sources?.some((stamp) => stamp?.[0] === key);
-        if (!canon || covered) {
-          recent.push(entry);
-          continue;
-        }
-        const summary = (Array.isArray(data?.records) ? data.records : [])
-          .map((item) => (item?.key === key && typeof item.content === "string" ? item.content.trim() : ""))
-          .find(Boolean);
-        recent.push(summary ? { ...entry, content: summary, summary: true } : { ...entry, content: source.content });
-      }
-      // GF's rule for an earlier chapter with neither a summary nor the overview, kept for dates and Character Stories
-      // past the newest: the canonical history instead, bounded, until the background job catches up (a story saved by
-      // 0.6.16 stored them word for word), so they never all go into a prompt as written. Work is owed, so a kit
-      // result that is not lagging means a failed summary, which waits for Retry as the kit's own fallback does.
-      if (recent.filter((entry) => entry.kind === "character-story" && !entry.summary).length > 1) {
-        const phase = result.lagging ? "stale" : "error";
-        return { ...result, status: { ...result.status, phase }, overview: "", details: [], text: "" };
-      }
-      // Each date this prompt may know that recent canon no longer carries, by its summary. A Character Story is the
-      // timeline's, so only a prompt with no timeline (`ownStories`) takes it here too.
-      const inRecent = new Set(recent.map((entry) => JSON.stringify([entry.kind, entry.id])));
+      // Each date this prompt may know whose summary the timeline covers, by that summary; one not covered yet is
+      // recent canon (S/story/canon.ts). A Character Story is the timeline's, so only a prompt with no timeline
+      // (`ownStories`) takes it here too. The same in every phase: what is saved is what counts (see the header).
       const sideStories = sources.filter(
         (source) =>
           source.kind === "character-story" &&
           (options.ownStories || !isItemStoryKey(source.id)) &&
-          !inRecent.has(JSON.stringify([source.kind, source.id])) &&
           mayKnow(knowing, source.audience),
       );
-      const records = sideStories.length ? ((await readSaved())?.records ?? []) : [];
+      const saved = sideStories.length
+        ? savedStory((await documents.getById(OTOME_FORGE_PACKAGE_ID, memoryId(options.runId)))?.data)
+        : null;
       const told = sideStories.flatMap((source): RecallItem[] => {
         const key = JSON.stringify([source.kind, source.id]);
-        const summary = (Array.isArray(records) ? records : [])
-          .map((item) => (item?.key === key && typeof item.content === "string" ? item.content.trim() : ""))
-          .find(Boolean);
+        const summary = saved?.covered.has(key) ? saved.summaries.get(key) : undefined;
         return summary ? [{ id: source.id, title: source.title, content: summary, order: source.order ?? 0 }] : [];
       });
       // A recall pool that fails only loses its memories; the prompt still goes out with everything else.
@@ -535,7 +566,8 @@ export function createOtomeMemory({
         runtime.logger.warn("[otome-forge] Recall pool: %s", error instanceof Error ? error.message : String(error));
         return [];
       });
-      return { ...result, recent, details: [], text: "", recalls };
+      const { recent: _recent, ...rest } = result;
+      return { ...rest, details: [], text: "", recalls };
     },
 
     async maintain({ runId, debugMode = false }) {
@@ -558,6 +590,7 @@ export function createOtomeMemory({
             while (debug !== undefined && !disposed) {
               const wanted = debug || again.get(runId) === true;
               again.delete(runId);
+              failures.delete(runId);
               await memory.maintain({ runId, debugMode: wanted });
               debug = again.get(runId);
             }
@@ -571,14 +604,29 @@ export function createOtomeMemory({
     },
 
     async status(runId) {
-      const status = await memory.status(runId);
-      // The queue's own key: pending while a job waits, runs or backs off after an admission refusal. A job that failed
-      // before starting for any other reason, or a call in the queue's release gap, shows the kit's real phase.
-      return queue.has(maintainKey(runId)) ? { ...status, phase: "pending", retryable: false } : status;
+      const [status, world, sources, document] = await Promise.all([
+        memory.status(runId),
+        store.readDoc(worldId(runId), normalizeWorld),
+        readSources(runId).catch(() => null),
+        documents.getById(OTOME_FORGE_PACKAGE_ID, memoryId(runId)),
+      ]);
+      const noConnection = !resolveConnectionId(world, "compress");
+      const { summaries } = savedStory(document?.data);
+      const unsummarized = sources?.filter(
+        (source) => source.kind !== "chat" && !summaries.has(JSON.stringify([source.kind, source.id])),
+      ).length;
+      const counts = { noConnection, ...(unsummarized === undefined ? {} : { unsummarized }) };
+      // The queue's own key: pending while a job waits, runs or backs off after an admission refusal, with no earlier
+      // failure's message. A job that failed before starting for any other reason, or a call in the queue's release
+      // gap, shows the kit's real phase.
+      if (!queue.has(maintainKey(runId))) return { ...status, ...counts };
+      const { message: _earlier, ...rest } = status as OtomeMemoryStatus;
+      return { ...rest, phase: "pending", retryable: false, ...counts };
     },
 
     invalidate(runId) {
       again.delete(runId);
+      failures.delete(runId);
       memory.invalidate(runId);
     },
 
@@ -586,6 +634,7 @@ export function createOtomeMemory({
       disposed = true;
       if (!background) queue.dispose();
       again.clear();
+      failures.clear();
     },
   };
 }

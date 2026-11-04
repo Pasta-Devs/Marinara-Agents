@@ -1276,13 +1276,29 @@ export interface WhoSaidWhatView {
   lines: Array<{ li: LiId; text: string }>;
 }
 
-/** GET /runs/:run/memory/status and POST .../memory/retry → {status}: the kit's story memory status (Debug only). */
+/**
+ * GET /runs/:run/memory/status and POST .../memory/retry → {status}: the kit's story memory status. `error` is a failed
+ * summary, which waits for Retry (S/memory/memory.ts).
+ */
 export interface MemoryStatus {
-  phase: "ready" | "pending" | "stale" | "error" | "context-unknown";
+  phase: "ready" | "pending" | "stale" | "error";
   retryable: boolean;
-  /** English, for Debug: not-prepared, interrupted, configure-context, generation-failed, … */
+  /**
+   * English, for Debug: not-prepared, interrupted, source-changed, generation-failed, … With `error`,
+   * `context-too-small` says the server wrote `message` itself (the memory model too small), not the provider.
+   */
   reason?: string;
   recordCount?: number;
+  /**
+   * The failed summary call's own message, as the provider gave it (English, raw), or the server's own when the memory
+   * model's context holds not even the smallest summary or condensing request (reason `context-too-small`); only with
+   * `error`.
+   */
+  message?: string;
+  /** No connection can write summaries (the world names none for the memory job): memory waits for one. */
+  noConnection?: boolean;
+  /** How many finished chapters (dates and Character Stories too) have no summary yet. */
+  unsummarized?: number;
 }
 
 // ── Wire shapes ──

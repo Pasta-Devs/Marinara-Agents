@@ -56,6 +56,7 @@ import type {
 import { useOtomeProps } from "../props";
 import { LIMIT_IDS, type LimitId } from "../shared/content";
 import { placeKey } from "../shared/places";
+import { memoryQueryKey } from "./use-memory";
 import type { SpeakOutcome } from "./use-otome-audio";
 import { patchRun, runQueryKey } from "./use-run";
 
@@ -761,6 +762,9 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
     } else {
       setAuto(false);
       setFinished(true);
+      // A finished chapter queues its summary: the memory banner asks now rather than at its 30 s poll, so the upkeep
+      // (polled every 2 s while it runs) and a failure show at once.
+      void queryClient.invalidateQueries({ queryKey: memoryQueryKey(runKey) });
     }
   }, [cg, current, markCgSeen, node, nodeCount, position, queryClient, refBase, refreshStory, report, runKey]);
 
