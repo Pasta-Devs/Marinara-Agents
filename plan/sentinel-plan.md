@@ -35,7 +35,7 @@ Note: tracker prompts mention `<current_game_state>`, but the Engine injects `<c
 
 - `subjects[]`: id, kind (person/place), name, cardId?, privacy (open/private/off-limits), minor, onscreen (bool), known `{where, doing, at, source}`.
 - `threads[]`: id, subjectId, flavour (trouble/personal/kind), title (hidden), stages[] `{text, traces[]}`, stage index, clock progress, landing `{text, delay}`, found traces[], status (running/caught/stopped/landed).
-- `pressure`: name, value 0–100, effects by band.
+- `pressure`: name, value 0–100, effects by band. Setting `pressureOn` (default on); off = value stays fixed, no backfire, no pressure ring.
 - `suspicions[]`: text, resolved as true/partial/false (hidden), threadId?.
 - `log[]`: found facts with time and source; later reveals.
 - `settings`: play style, mode, tension, truth mode, hunch channel, update cap, connection.

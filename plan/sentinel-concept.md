@@ -15,7 +15,7 @@ In roleplay the world only exists where the scene is. While you are in the kitch
 
 1. **The story is the interface.** You do not need the panel. When you write "I quietly open Lily's door", Sentinel tells the main model what is really behind that door, and the main model writes the scene. Buttons in the panel are shortcuts, not the game.
 2. **Plans, not a diary.** Sentinel does not write a minute-by-minute timeline. Each absent subject has a few **threads**: secret plans with stages (for example "Sneak out to the skate park party": plan → prepare → leave → be out → come back). Threads advance with story time. Every stage leaves **traces** (window open, pillows under the blanket, phone gone) that senses and scenes can find.
-3. **Knowing has a price.** Every play style has one **pressure** value that watching pushes up: trust for a parent, heat for a thief, morale for staff, suspicion for a spy. Watch nothing and threads land without you. Watch everything and people hide better, get angry, or leave.
+3. **Knowing has a price.** Every play style has one **pressure** value that watching pushes up: trust for a parent, heat for a thief, morale for staff, suspicion for a spy. Watch nothing and threads land without you. Watch everything and people hide better, get angry, or leave. The price is a switch: turn it off and you can watch freely, with no pressure and no backfire.
 
 ## How a thread works
 
@@ -114,7 +114,7 @@ Users can copy a play style and edit everything: subjects, senses, pressure name
 
 ## Settings
 
-Play style · mode (watcher / living world) · subjects and privacy · senses · hands · voice · tension (calm / normal / dramatic) · truth mode (cozy / fair / dramatic) · hunches (in story / in HUD / both) · connection for Sentinel's calls.
+Play style · mode (watcher / living world) · subjects and privacy · senses · hands · voice · tension (calm / normal / dramatic) · truth mode (cozy / fair / dramatic) · hunches (in story / in HUD / both) · price of watching (on / off) · connection for Sentinel's calls.
 
 ## Standalone first, other agents optional
 
