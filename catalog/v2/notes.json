@@ -667,6 +667,130 @@
         }
       ]
     },
+    "otome-forge": {
+      "versions": [
+        {
+          "version": "0.8.4",
+          "date": "2026-11-04",
+          "notes": "- **The cast keeps your earlier chapters in mind.** Story prompts now always keep the summaries of earlier chapters, with the last chapter in full, and send a chapter in full only while it has no summary yet. Before, while any summary was still being written or had failed, the summaries were left out and only the most recent chapters went in full.\n- **Memory no longer waits on a model's context size.** Summaries are written with any connection, even one that reports no context size. If its model is too small for a summary, you see its error and can switch to a connection with a larger context.\n- **A failed summary shows on every screen.** When a summary fails, every screen of the open story says so at the top, with what the connection answered, Retry the summary and Change connection. Before, it showed only in Settings.",
+          "highlight": false
+        },
+        {
+          "version": "0.8.3",
+          "date": "2026-11-03",
+          "notes": "- **A new 5★ look's scene shows the new look.** The short scene that comes with a love interest's 5★ look now shows them on stage in that look, not in what they wear on Home, and keeps it when you replay the scene after they change. If you open the scene while the look is still painting, they change into it as soon as it is ready. Its expressions show once that look has them. Reading the scene paints none: a look's expressions are still painted when they first wear it.\n- **Fewer meals forced on you.** The story planners no longer tell the cast that you eat; they remember you're human, resting, sleeping, washing and seeing to a day's small needs in passing.",
+          "highlight": false
+        },
+        {
+          "version": "0.8.2",
+          "date": "2026-11-03",
+          "notes": "- **Key images are ready when you reach them again.** The next scene's key image now starts painting as soon as that scene is written ahead, as it did before 0.6.27, so it is usually waiting when its moment comes. If you use Ease off or Rewrite on the scene you are reading, the scene written ahead is written again and its key image painted again (1 image); the buttons say so.\n- **Showing off a look earns 5 affection**, down from 20, the first time you show it to a love interest.\n- **Fewer extra limbs in pictures of two or more people.** Key images, Memory art, pair portraits and date keepsakes now send one picture of each person, say whose each one is and how many people to draw. A date keepsake now has a picture of you too. Photo Shoot poses say where every hand and leg goes.\n- **Pick the image prompt style.** Settings → Images and setup now let you choose which Engine image style profile your pictures follow. Pick one that writes sentences for GPT Image.",
+          "highlight": false
+        },
+        {
+          "version": "0.8.1",
+          "date": "2026-11-03",
+          "notes": "- **Love interests keep their own side stories while memory catches up.** When the story memory is still summarizing, a scene now keeps the dates and private chapters played since the last main chapter for the love interests who were there, newest first, within the usual length limit. Before, only the newest of them could make it in.\n- **No hour-long cache paid for nothing.** When chapter plans run on a different connection from the scenes, the plan no longer asks for a cache the scenes could never read.",
+          "highlight": false
+        },
+        {
+          "version": "0.8.0",
+          "date": "2026-11-03",
+          "notes": "- **A Photo Shoot in Dates.** With a love interest picked in Dates, choose a place your story has painted, what you both wear, and an expression and a pose for each of you: shared poses like kissing, hugging, play-fighting or a piggyback, solo poses, or your own words. **Take picture** paints one photo of you two posing for the camera, sent the place and both outfits as references, with no model call. It follows your image connection, Ask before painting, prompt review and image rating, costs no Starlight and pays nothing. Photos are kept in the Album's new **Photos**, to view, save or delete, and the newest is taped into that love interest's note on Home. Without an image connection it shows as unavailable.",
+          "highlight": true
+        },
+        {
+          "version": "0.7.6",
+          "date": "2026-11-03",
+          "notes": "- **Prompt caching that keeps working through a chapter.** On an Anthropic connection, a chapter's plan, scenes and Confrontation or Closer ask for the hour-long cache, so a scene read minutes after the last still reads the story context from the cache. The cached part now holds only what every scene of the chapter may know, so it stays the same when the love interests in a scene change. What only some of them may know (their own chapters, dates and small memories) comes after it, for the people in each scene. The chapter's last scene shares the other scenes' cached instructions too. Older Engines keep the connection's own cache time.\n- **The last chapter's summary is no longer repeated.** The story sends the previous main chapter in full and leaves its summary out of the timeline. Condensing a long timeline now keeps that chapter's summary apart, so it stays out.",
+          "highlight": false
+        },
+        {
+          "version": "0.7.5",
+          "date": "2026-11-03",
+          "notes": "- **A slower burn.** Love interests no longer confess in stages 3 and 4. In stage 5 they may, once the story has earned it, and in stage 6 they say it if they haven't yet.",
+          "highlight": false
+        },
+        {
+          "version": "0.7.4",
+          "date": "2026-11-03",
+          "notes": "- **Stickers send on iPhone again.** Tapping a sticker in Messages sends it as a message. Before, the tap closed the sticker panel and nothing was sent.",
+          "highlight": false
+        },
+        {
+          "version": "0.7.3",
+          "date": "2026-11-03",
+          "notes": "- **Love interests remember their Character Stories.** A Memory's Character Story, a Moment, and the scene the first time they wear a new look now join the story's timeline, marked private, as route chapters do. Its love interest always knows what happened there, and the others act only on what they could see. Before, it was one of the small memories that newer ones often pushed out. Stories in progress rebuild their timeline once, from the summaries they already have.",
+          "highlight": false
+        },
+        {
+          "version": "0.7.2",
+          "date": "2026-11-03",
+          "notes": "- **Long lines keep up on iPhone.** A line too long for the dialogue box now follows its typing smoothly and ends on its last row. Before, the box shook as it tried to scroll and fell back short of the end. Once a line is whole, typed out or shown with Next, you can scroll it.\n- **A fuller condensed timeline.** Once the story's timeline passes 14,000 tokens, its older part is condensed to about 5,000 words, half that size, instead of at most 3,000.\n- **Love interests who message you each day.** The Settings number now counts love interests, not messages. Each one who writes first does so once that day, in one or a few messages. Their messages spread over the day even when the number is higher than the love interests you've met.",
+          "highlight": false
+        },
+        {
+          "version": "0.7.1",
+          "date": "2026-11-03",
+          "notes": "- **Closing a conversation** now shows only that they remember it and the line they keep. It earns +5 affection.\n- **Your connection's settings decide.** Otome Hearth now sends only the reply's length, never its own temperature or JSON mode, so your connection's temperature, reasoning effort and other settings are what's used.\n- **Longer chapter summaries**, up to 1,000 words.\n- **More room before condensing.** The story's timeline can reach 14,000 tokens and recent memories 6,000 before anything is condensed or left out, 20,000 together at most.\n- **Fixes.** The daily note, Read Him and Read Me draw on recent memories again. Messages no longer repeat their newest conversations as memories. A small memory model condenses the timeline in steps instead of failing, and a model with an unknown context asks for it again.",
+          "highlight": false
+        },
+        {
+          "version": "0.7.0",
+          "date": "2026-11-02",
+          "notes": "- **A story memory that stays small.** Each chapter is summarized once, in up to 500 words with its key lines and every choice you made, and joins the story's timeline at no extra cost. Only once the timeline passes about 10,000 tokens is its older part condensed. Stories in progress switch over from their saved summaries without new summary calls.\n- **Recent small memories.** Messages, Snapshots, Read Me, Read Him, claw machine rounds, dates and Character Stories come back, newest first, to the love interest they belong to.\n- **Cheaper chapters.** A chapter's plan and scenes share one cached story context, so providers that cache, like Claude, charge less after the first call.\n- **No suggested replies** in Messages: you write your own.\n- **Stickers without white outlines.**\n- **A warning** when a story connection has under 32k tokens of context.",
+          "highlight": true
+        },
+        {
+          "version": "0.6.28",
+          "date": "2026-11-02",
+          "notes": "- **Newest CGs first.** The Album's CGs now open on the newest, with the oldest at the bottom; the full-screen viewer steps through them in the same order.\n- **Chapter themes in the Soundtrack.** A chapter's own theme now appears in the Album's Soundtrack after the six moods, under the chapter's title, once you've reached that chapter, and plays like the others.",
+          "highlight": false
+        },
+        {
+          "version": "0.6.27",
+          "date": "2026-11-02",
+          "notes": "- **Fewer wasted calls.** Picking how the story goes on twice no longer plans the arc twice. A newcomer whose arc failed to plan keeps their character sheet for the next try. A scene written ahead paints its key moment only once you reach it. A connection that refuses JSON mode is asked without it from then on.\n- **Daily messages wait for chapter 1.** Love interests you haven't met yet no longer text you after the prologue.\n- **Stickers stay put.** While their backgrounds are cut out again, your stickers keep showing and never read as newly unlocked.\n- **Fixes.** Every Album tab can be reached with a mouse. A story delete that stops partway can be finished. Close says to wait for the reply while one is on its way. Cost notes count 2 calls where 2 are made.",
+          "highlight": false
+        },
+        {
+          "version": "0.6.26",
+          "date": "2026-11-02",
+          "notes": "- **Every prompt in one place.** All of Otome Hearth's prompts now live in one file, `prompts.ts`, in story order with a table of contents, so they can be read and rewritten in one place. Nothing the models receive changed.",
+          "highlight": false
+        },
+        {
+          "version": "0.6.25",
+          "date": "2026-11-02",
+          "notes": "- **Updated writing rules.** A love interest now wants something of their own in every chapter, not every scene, and the rules about what your protagonist knows and an existing world's canon are shorter.",
+          "highlight": false
+        },
+        {
+          "version": "0.6.24",
+          "date": "2026-11-02",
+          "notes": "- **Long lines show in full on iPhone.** On iPhone, a line longer than the dialogue box could come back cut off mid-word, with only its final period showing, although the Log had all of it. Every row now shows as it types, and a click on a line that is still typing still shows it whole.",
+          "highlight": false
+        },
+        {
+          "version": "0.6.23",
+          "date": "2026-11-02",
+          "notes": "- **Chibi stickers.** With images on, your five phone stickers are chibi busts of your protagonist, and each love interest gets nine of their own, one unlocked per affection level from 2 to 10 (\"You unlocked a new sticker\"). They're painted in the background, one at a time, and Ask before painting holds them for a tap; stories in progress catch up. Without images your five are simple labelled icons.\n- **Love interests send stickers too**, theirs or yours, by name in brackets, like `[dottore_pensive]`. Old face stickers still show.\n- **A Stickers tab in the Album** to view and save each sticker, named like `mari_laugh`.\n- **Messages a day from love interests**: in Settings → Connections, choose how many times a day one you've met may message you first (0 to 24, off by default). They're spread across your day and arrive unread.\n- **A love interest's thread header fits on one row on phones**, with **Close** beside their name.",
+          "highlight": false
+        },
+        {
+          "version": "0.6.22",
+          "date": "2026-11-02",
+          "notes": "- **Love interests may be genuinely evil.** A villain or a monster stays one, and taming them is the point; as affection grows they may become a better partner to you, in their own way. Scenes, climaxes and phone replies now see their darkness.\n- **Angst and Dark say it plainly.** Under Angst, cruelty isn't sanitized within your Lines and Veils, and a love interest may be a villain to everyone but you. Under Dark romance, they can be the villain. Gentle is unchanged.\n- **Real villains are back**, and a moral code fits who they are: firm, far looser, or none at all. This applies to love interests written from now on.\n- **Side with one of them.** From chapter 4, at most once every four main chapters, when love interests disagree you choose whom to back: +30 affection for them, −10 for each one you pass over, never below a level they've reached.",
+          "highlight": false
+        },
+        {
+          "version": "0.6.21",
+          "date": "2026-11-02",
+          "notes": "- **A chapter may close on a judgment you can get wrong.** When an arc holds a mystery, a traitor or a disputed account, the end of a chapter can now ask you to judge it: who did it, who betrayed you, whom to believe. The true answer is always among the options, nothing hints which it is, and whatever you pick is what happens; a wrong guess plays out in the chapters after it. Arcs without such a question never get one.",
+          "highlight": false
+        }
+      ]
+    },
     "quartermaster": {
       "versions": [
         {
@@ -845,6 +969,94 @@
           "version": "0.6.0",
           "date": "2026-09-26",
           "notes": "- First staging release, with Professor Mari and Crimson Orc sharing pasta as its catalogue cover. Tracks character-card relationships and each character's one-way perception of the active persona in Roleplay group chats, drawn as a fixed-circle relationship web in the Tracker Panel.\n- Conservative automatic tracking after each completed reply, a bounded Update from History (1-100 messages), manual editing, optional per-line locks, and Resume Automatic.\n- Two prompt-injection modes: All relationships, or Scene-only relationships. Presence lookback (default 15 messages) decides Scene-only eligibility; the automatic tracker's Context Size (default 5) is separate.\n- Touch and pen: press a relationship line to reveal its label and press elsewhere to dismiss it; desktop keeps hover and keyboard-focus labels.\n- Read-only API for other packages: GET /api/relationship-tracker/v1/chats/:chatId/relationships.",
+          "highlight": false
+        }
+      ]
+    },
+    "saucelings": {
+      "versions": [
+        {
+          "version": "0.23.2",
+          "date": "2026-10-30",
+          "notes": "- On a wide screen, an open Background, Caretaker, Looks or New egg panel no longer stretches the stage card beside it.",
+          "highlight": false
+        },
+        {
+          "version": "0.23.1",
+          "date": "2026-10-27",
+          "notes": "- On a wide screen, Background, Caretaker, Looks and New egg open in their own box under the meters and care buttons, instead of across the bottom of the Nook.",
+          "highlight": false
+        },
+        {
+          "version": "0.23.0",
+          "date": "2026-10-27",
+          "notes": "- One new egg a day. Once one has come, the egg button says what time the next one is ready. Eggs found in chat and saucelings brought back from the Menagerie don't count.\n- On a phone, Background scrolls into view when it opens, like Caretaker, Looks and New egg, and Escape closes it.",
+          "highlight": true
+        },
+        {
+          "version": "0.22.3",
+          "date": "2026-10-27",
+          "notes": "- Background: an error belongs to the last thing you tried and clears once something works. The description box waits while a place is suggested, so it never replaces what you typed.\n- Evolve: Keep works while the new looks are still being written; only a choice already sent has to finish.\n- After a repaint, your sauceling no longer drops to a silhouette while its new pictures load.\n- Settings: a number that fails to save goes back to the saved one, and a picture connection that was deleted shows as missing instead of blank.\n- Album: a sauceling brought back from the Menagerie is no longer shown twice.\n- Moving the egg no longer closes a rename or a hand-over you were in the middle of.\n- Painted sheets with two or three touching rows of drawings are read correctly.\n- An egg find that fails (the writing connection does not answer) no longer uses up the day's find.\n- Talking with the caretaker counts toward an evolution offer on the day the egg hatches or after a hand-over.",
+          "highlight": false
+        },
+        {
+          "version": "0.22.2",
+          "date": "2026-10-27",
+          "notes": "- The Nook's \"⋯\" button also holds Caretaker, Looks and New egg. Each opens its own panel under the Nook; close it with ✕ or Escape.\n- About only describes your sauceling: its look, sauce, traits and who found it.\n- The tour card wraps a long caretaker name instead of pushing its buttons off the screen.",
+          "highlight": false
+        },
+        {
+          "version": "0.22.1",
+          "date": "2026-10-27",
+          "notes": "- On the large Home widget, the caretaker no longer towers over the card: both figures are sized to the card's width.\n- Feed, Play, Rest and Cuddle (or Warm, Talk and Listen for an egg) are behind one \"Care\" button in the bottom-right corner. Tap it and the buttons open to its left; tap it again, or press Escape, to put them away. The button glows when a care would help.",
+          "highlight": false
+        },
+        {
+          "version": "0.22.0",
+          "date": "2026-10-27",
+          "notes": "- The Nook's top bar holds one \"⋯\" button: Rename, Background and Tour are inside it. \"Name it\" stays in view until your sauceling has a name.\n- Ask is one line until you open it, under Check in.\n- When your caretaker has offered an evolution, the reason is written beside the Evolve button instead of behind a \"?\".\n- Settings are grouped under Visits, Writing and Pictures, with shorter notes and a narrower column on a wide screen. On a phone, pickers take the full width instead of being cut off.\n- A caretaker with a long name no longer pushes the buttons in About off the edge of a phone screen.",
+          "highlight": true
+        },
+        {
+          "version": "0.21.5",
+          "date": "2026-10-27",
+          "notes": "- On a narrow screen, the number boxes in Settings no longer shrink until the value is cut off.",
+          "highlight": false
+        },
+        {
+          "version": "0.21.4",
+          "date": "2026-10-26",
+          "notes": "- The Journal says how many entries are new since you last looked.\n- A pet whose Journal is empty now says so, instead of saying there is no sauceling.\n- The meters in the Nook jump to their new level when reduced effects or reduced motion is on, instead of sliding.",
+          "highlight": false
+        },
+        {
+          "version": "0.21.3",
+          "date": "2026-10-26",
+          "notes": "- On the Home widgets, a meter that needs care now shows its amber fill, and the waiting badge on a care button has its colour back.",
+          "highlight": false
+        },
+        {
+          "version": "0.21.2",
+          "date": "2026-10-26",
+          "notes": "- The large Nook widget shows the caretaker's latest line under the stage, with the AI label when a model wrote it. The small widget carries the label too.\n- The widgets open from a real button, so a keyboard or screen reader can reach them. A resting care button on the large widget says when it's ready again instead of doing nothing.\n- Errors, the delete confirmations and the AI label follow your Engine theme's colours, and the Journal uses the same AI label as the rest.",
+          "highlight": false
+        },
+        {
+          "version": "0.21.1",
+          "date": "2026-10-26",
+          "notes": "- The Menagerie explains what comes to it, shows a dot on its tab when a character finds an egg, and picks the finder to look after a found egg.\n- Lock stage has a help tip. Replaying the tour on a hatched sauceling starts with a step about it.\n- The Journal groups lines by day; with no sauceling it offers a button to the Nook.\n- The Album says how to paint the first picture and what a keepsake is. Hiding \"Add instructions\" keeps what you typed.\n- Rename is spelled out, the care window setting reads more plainly, and with no characters the Nook says who looks after the egg.\n- Saved backgrounds say they're shared by all your saucelings, and their delete button is easier to tap.",
+          "highlight": false
+        },
+        {
+          "version": "0.21.0",
+          "date": "2026-10-26",
+          "notes": "- Easier first steps. Mari greets you in an empty nook and gives a short tour after your first egg; the Tour button replays it.\n- Tap a meter's name to see what it does. \"Growing paused\" now shows under Hunger, and an egg says how it hatches.\n- A resting care button, and Bring back in the Menagerie, now say why they can't be used yet.\n- About is split into Caretaker, Looks and New egg. Retiring and handing over to another caretaker ask first.\n- Settings keeps the image options together and shows a Saved tick. Errors read as plain sentences, with the details a tap away.\n- The voice offer comes after the egg arrives, and Esc skips it instead of cancelling the egg. Special saucelings fold away until you want them.",
+          "highlight": true
+        },
+        {
+          "version": "0.20.0",
+          "date": "2026-10-25",
+          "notes": "- First beta of Saucelings, a pet that lives in Home → Saucelings and on the Home widget grid.\n- Pick one of your characters to look after an egg. They care for it on their own schedule and talk in their own voice, drawn from their card, and you cover the gaps they miss.\n- How the two of you care for it shapes its temperament. Retire elders to the Menagerie and bring them back whenever you like.\n- With your image connection: pixel-art paintings for the Album, a figure of your caretaker for the Nook, and backgrounds of your own.\n- Characters you chat with may now and then find an egg of a creature they invent. Not every egg is an ordinary one.\n- Install it, restart Marinara Engine when prompted, then open Home → Saucelings.",
           "highlight": false
         }
       ]

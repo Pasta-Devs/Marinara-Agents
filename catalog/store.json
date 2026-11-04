@@ -204,6 +204,14 @@
         "../store/previews/noodle-3.webp"
       ]
     },
+    "otome-forge": {
+      "section": "apps",
+      "tagline": "An otome game made from your characters.",
+      "featured": 1,
+      "iconPath": "../store/icons/otome-forge.webp",
+      "bannerPath": "../store/banners/otome-forge.webp",
+      "bannerSmallPath": "../store/banners/otome-forge-1200.webp"
+    },
     "persona-stats": {
       "section": "trackers",
       "tagline": "Hunger, energy and hygiene.",
@@ -252,6 +260,13 @@
       "iconPath": "../store/icons/rock-paper-scissors.webp",
       "bannerPath": "../store/banners/rock-paper-scissors.webp",
       "bannerSmallPath": "../store/banners/rock-paper-scissors-1200.webp"
+    },
+    "saucelings": {
+      "section": "apps",
+      "tagline": "A little pet that your characters raise.",
+      "iconPath": "../store/icons/saucelings.webp",
+      "bannerPath": "../store/banners/saucelings.webp",
+      "bannerSmallPath": "../store/banners/saucelings-1200.webp"
     },
     "slurp2": {
       "section": "apps",
