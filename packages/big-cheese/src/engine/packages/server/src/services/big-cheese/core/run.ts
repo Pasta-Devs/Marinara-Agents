@@ -23,6 +23,6 @@ export const newId = (s: Run, prefix: string) => `${prefix}${++s.nextId}`;
 export const spendHour = (s: Run, n = 1) => void (s.clock = spendHours(s.clock, n));
 
 export function addTrust(s: Run, id: string, d: number) {
-  const p = s.people[id];
+  const p = Object.hasOwn(s.people, id) ? s.people[id] : undefined;
   if (p) p.trust = clamp(p.trust + d);
 }

@@ -13,6 +13,30 @@ export const PACKAGE_ID = "big-cheese";
 export const SAVE_VERSION = 1;
 
 const KITS = { hafenkai: { ...HAFENKAI, letters: HAFENKAI_PLACE.guidedLetters } } as const;
+/** The full place kit (words and people) for each built-in place. */
+export const PLACES = { hafenkai: HAFENKAI_PLACE } as const;
+
+// The words of a run, kept next to the rules-core state (route contract).
+export interface SceneText {
+  blueprint: "arrival" | "hearing";
+  title: string;
+  room: string;
+  people: string[];
+  parts: {
+    lines: { who: string; text: string }[];
+    suggestions: { stance: string; text: string }[];
+    summary: string;
+    chosen?: string;
+  }[];
+  total: number;
+  done: boolean;
+  outcome?: string;
+}
+export interface RunText {
+  cards: Record<string, { line: string; answers: { stance: string; text: string }[]; source: "model" | "lite" }>;
+  scenes: Record<string, SceneText>;
+  feelings: Record<string, { person: string; band: string; line: string }[]>;
+}
 
 export class BigCheeseError extends Error {
   constructor(
@@ -32,6 +56,7 @@ export const CreateRunBody = z.object({
     .string()
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
     .max(40),
+  lite: z.boolean().optional(),
 });
 
 // `game` is the rules-core state; the core owns its shape, so the store only checks it is an object.
@@ -40,6 +65,9 @@ const RunData = z.object({
   revision: z.number().int().min(0),
   kitId: z.string(),
   createdAt: z.string(),
+  lite: z.boolean(),
+  text: z.custom<RunText>((v) => typeof v === "object" && v !== null && "scenes" in v),
+  scene: z.string().nullable(),
   game: z.custom<Game>((v) => typeof v === "object" && v !== null && "clock" in v),
 });
 export type Run = z.infer<typeof RunData>;
@@ -91,13 +119,14 @@ export function createRunStore(documents: CapabilityDocumentStore) {
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     },
 
-    async create(kitId: string) {
-      const kit = KITS[kitId as keyof typeof KITS];
+    async create(kitId: string, lite = false, prepare?: (game: Game) => Promise<Pick<Run, "text" | "scene">>) {
+      const kit = Object.hasOwn(KITS, kitId) ? KITS[kitId as keyof typeof KITS] : undefined;
       if (!kit) throw new BigCheeseError(400, "Unknown place.", "bad-request");
       const key = `r-${randomBytes(6).toString("hex")}`;
       const at = new Date().toISOString();
       const game = newRun(kit, randomBytes(4).readUInt32LE(0));
-      const run: Run = { saveVersion: SAVE_VERSION, revision: 0, kitId, createdAt: at, game };
+      const first = (await prepare?.(game)) ?? { text: { cards: {}, scenes: {}, feelings: {} }, scene: null };
+      const run: Run = { saveVersion: SAVE_VERSION, revision: 0, kitId, createdAt: at, lite, game, ...first };
       await documents.create({
         id: runDocId(key),
         packageId: PACKAGE_ID,
@@ -124,7 +153,7 @@ export function createRunStore(documents: CapabilityDocumentStore) {
         if (run.revision !== expectedRevision) {
           throw new BigCheeseError(409, "The run changed. Reload it.", "conflict");
         }
-        const next = { ...change(run), saveVersion: SAVE_VERSION, revision: run.revision + 1 };
+        const next: Run = { ...change(run), saveVersion: SAVE_VERSION, revision: run.revision + 1 };
         const saved = await documents.update({
           id: record.id,
           packageId: PACKAGE_ID,

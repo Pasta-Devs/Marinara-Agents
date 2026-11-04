@@ -22,7 +22,8 @@ function need(s: Run) {
 
 export function addWitness(s: Run, id: string) {
   const h = need(s);
-  if (!s.people[id] || h.witnesses.includes(id) || h.witnesses.length >= 2) throw new Error("Cannot call this witness");
+  if (!Object.hasOwn(s.people, id) || h.witnesses.includes(id) || h.witnesses.length >= 2)
+    throw new Error("Cannot call this witness");
   spendHour(s);
   h.witnesses.push(id);
 }

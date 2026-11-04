@@ -3,6 +3,8 @@
 // ──────────────────────────────────────────────
 // The server bundle may not import Engine modules; everything goes through api.runtime.
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
+import { engineModel } from "./ai/tasks.js";
+import { createGame, view } from "./game.js";
 import { BigCheeseError, CreateRunBody, createRunStore, type RunStore } from "./store.js";
 
 interface Request {
@@ -34,6 +36,8 @@ let activeStore: RunStore | null = null;
 export async function activate({ api }: ActivationContext) {
   const { runtime } = api;
   const store = createRunStore(runtime.persistence.documents);
+  // The default connection. Without one the game plays in Lite mode.
+  const game = createGame(store, () => engineModel(runtime, null).catch(() => undefined));
   const runId = (request: Request) => (request.params as { id?: unknown } | undefined)?.id;
 
   // Known failures go out as { error, code }; anything else is logged and hidden behind a 500.
@@ -42,10 +46,10 @@ export async function activate({ api }: ActivationContext) {
       return await run(request);
     } catch (error) {
       if (error instanceof BigCheeseError) {
-        return reply.status(error.statusCode).send({ error: error.message, code: error.code });
+        return reply.status(error.statusCode).send({ code: error.code, message: error.message });
       }
       runtime.logger.error(error, "Big Cheese request failed");
-      return reply.status(500).send({ error: "Big Cheese could not complete the request." });
+      return reply.status(500).send({ code: "internal", message: "Big Cheese could not complete the request." });
     }
   };
 
@@ -60,13 +64,26 @@ export async function activate({ api }: ActivationContext) {
         handle(async (request) => {
           const body = CreateRunBody.safeParse(request.body ?? {});
           if (!body.success) throw new BigCheeseError(400, "Invalid request: kitId.", "bad-request");
-          return { run: await store.create(body.data.kitId) };
+          return game.create(body.data.kitId, body.data.lite);
         }),
       );
       router.get(
         "/runs/:id",
-        handle(async (request) => ({ run: await store.get(runId(request)) })),
+        handle(async (request) => view(await store.get(runId(request)))),
       );
+      const param = (request: Request, key: string) => String((request.params as Record<string, unknown>)[key]);
+      const action = (path: string, run: (request: Request) => Promise<unknown>) =>
+        router.post(`/runs/:id/${path}`, handle(run));
+      action("scenes/:sceneId/choose", (r) => game.choose(runId(r), param(r, "sceneId"), r.body));
+      action("day/start", (r) => game.dayStart(runId(r), r.body));
+      action("cards/:cardId/answer", (r) => game.answer(runId(r), param(r, "cardId"), r.body));
+      action("day/end", (r) => game.dayEnd(runId(r), r.body));
+      action("letters/:index/read", (r) => game.readLetter(runId(r), Number(param(r, "index")), r.body));
+      action("hearing/witness", (r) => game.witness(runId(r), r.body));
+      action("hearing/evidence", (r) => game.evidence(runId(r), r.body));
+      action("hearing/talk", (r) => game.talk(runId(r), r.body));
+      action("promises/:threadId/keep", (r) => game.keepPromise(runId(r), param(r, "threadId"), r.body));
+      action("hearing/start", (r) => game.hearingStart(runId(r), r.body));
       router.delete(
         "/runs/:id",
         handle(async (request) => {
