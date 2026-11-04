@@ -147,7 +147,7 @@ rules, stance table overrides and the feel dials. The wish makes a kit. The prev
 Optional parts, switched on per run (Modern Life Sim module pattern):
 Office drama (romances, cliques, feuds) · Union and strikes · Deep finance (ledger, salaries,
 quarterly budget) · Building (rooms and upgrades) · Press and social media · Horror (the place
-has a dark secret) · Adult (off by default, asks the player to confirm age).
+has a dark secret) · Adult (off by default, asks the player to confirm age; see "Adult module").
 
 ## Make it alive: depth
 
@@ -324,6 +324,64 @@ Any kit with minors (schools below university) never allows romance or adult con
 students, and the Adult module is locked for that kit. Cruelty under absolute rule stays at the
 level the Tone dial allows; the game shows consequences, not glorified abuse.
 
+## Adult module
+
+Mature and explicit themes are a full part of Big Cheese, in one optional module (Modern Life
+Sim's Adult module pattern).
+
+### Switching it on
+
+- Off by default. Switched on per run at the wish or in the kit, after the player confirms they
+  are an adult. A run with it on shows an "18+" mark on its title card.
+- **Everyone 18+:** the module only runs when every person in the kit is an adult. A kit with
+  minors locks it (see Content rule). The generator and the normalizer set every adult-eligible
+  person's age to 18 or older, and the code refuses romance or explicit content for anyone
+  without an adult age. A university, an office, a court or a ship crew works; a high-school
+  student body does not. An academy kit can say "all students are 18+" as a kit fact.
+
+### Intensity and themes
+
+- **Intensity:** Fade to black · Suggestive · Explicit. It sets how scenes are written. The
+  story results (relationships, scandals, numbers) are the same at every level.
+- **Themes**, each switched on or off by the player:
+  romance and dating · workplace affairs · the boss's own love life · rivalries in love and
+  jealousy · infidelity and cheating · cuckolding / NTR (your partner and someone else, with
+  you as the one who finds out, watches or agrees) · open relationships and polyamory · power
+  and dominance games between consenting adults · kinks the player lists in their own words.
+- **Hard limits:** the player can list things that must never happen. The prompt always carries
+  them, and the validator rejects scene text that names a hard limit.
+- **Consent in the story:** sexual content is always between consenting adults. Coercion,
+  sex as a reward or punishment for staff, and non-consent are not generated, under any
+  authority level. Power can be part of a consensual dynamic, never a tool to force someone.
+
+### How it plays
+
+- **Romance values:** each person gets a Romance value and an Attraction value toward the boss
+  and toward other people (Modern Life Sim's three-number bond shape: friendship, romance, trust).
+- **Your love life:** date someone at the place or outside it. Dating a subordinate creates
+  favouritism rumours, jealousy and a Standing risk. A partner can live at another place (long
+  distance): you hear about their week through messages, visits and the grapevine.
+- **Cheating and cuckolding:** the storyteller can build an affair over several weeks (hints,
+  lies, a discovery, your choice) when the theme is on. With the cuckolding theme, the player
+  can choose to be told, to watch the story unfold, or to agree to it. Traits decide who strays
+  (faithful, jealous, curious), so it fits each person.
+- **Wishes** can ask for adult storylines ("my girlfriend at Hollowmere starts seeing the
+  rowing coach"), inside the switched-on themes.
+- **Staff drama:** affairs between staff create cards, scandals, broken teams and resignations.
+- **Private places:** rooms marked private (your flat, a dorm room, a hotel, the royal
+  chambers) are where explicit scenes happen. Viewer mode shows a closed door there unless the
+  player turns that on.
+
+### Technical rules
+
+- The adult prompt parts are only sent when the module is on for that run.
+- If the model refuses or the provider blocks a scene, the game falls back to fade to black and
+  goes on. The refusal is logged in the `/calls` log.
+- Explicit images are generated only when the player switches them on and has an image
+  connection that allows them. Otherwise the game shows the normal illustrated card.
+- Adult runs: optional "hide 18+ runs" on the title screen, blurred title cards, and adult
+  scenes are never in the yearbook, the chronicle or an exported kit unless the player chooses.
+
 ## Make it feel alive
 
 The most important goal. A place feels alive when it moves without you, reacts to you and
@@ -451,6 +509,8 @@ Four milestones. Each one is playable on its own; each slice is one small PR lat
 11. Built-in kits (incl. Absolute Headmaster, Medieval King) and Kit from text or lorebook.
 12. House rules and decrees (sliders, toggles, own-words rules), enforcers, legitimacy.
 13. Roles (Middle manager, Rising star, Owner), the boss above you, module switchboard.
+13a. Adult module: age gate, 18+ check, intensity, themes, hard limits, romance values,
+     your love life, affairs and cuckolding storylines, private rooms, fallbacks.
 14. Scenarios with weekly seeds, and Sandbox.
 
 **M4 · Lasting**
