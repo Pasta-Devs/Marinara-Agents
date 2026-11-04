@@ -78,6 +78,8 @@ export function dueNow(circle: Circle, mark: RunMark, chatNewer: boolean, now: n
 
 /** One wake: run every due Circle. A tab ping is spent here whether or not it led to a run. */
 export async function runDuePass(now = Date.now()): Promise<string[]> {
+  // Captured first: after deactivate the runtime is gone, and a late catch must still be able to log.
+  const logger = getMeanwhileRuntime().logger;
   const doc = await readMeanwhile();
   if (doc.circles.length === 0) return [];
   const chatTimes = new Map<string, number>();
@@ -105,9 +107,7 @@ export async function runDuePass(now = Date.now()): Promise<string[]> {
       await finish(id, now);
       ran.push(id);
     } catch (error) {
-      getMeanwhileRuntime().logger.warn(
-        `[meanwhile] run failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      logger.warn(`[meanwhile] run failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
   return ran;
@@ -115,6 +115,7 @@ export async function runDuePass(now = Date.now()): Promise<string[]> {
 
 /** Wakes 90 s after start, then every 5 min. The timer is unref'd and the returned stop clears it. */
 export function startMeanwhileScheduler(): () => void {
+  const logger = getMeanwhileRuntime().logger;
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
   const schedule = (ms: number) => {
@@ -126,9 +127,7 @@ export function startMeanwhileScheduler(): () => void {
     try {
       await runDuePass();
     } catch (error) {
-      getMeanwhileRuntime().logger.warn(
-        `[meanwhile] wake failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      logger.warn(`[meanwhile] wake failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       schedule(POLL_MS);
     }

@@ -45,7 +45,7 @@ function when(iso: string, timeZone: string) {
 function statusLine(circle: Circle) {
   const { status, clock } = circle;
   const parts = [people(circle.castIds.length), `caught up to ${when(status.lastRunCircle, clock.timezone)}`];
-  if (clock.speed === 0) parts.push("paused");
+  if (clock.speed === 0) parts.push("Paused");
   else if (clock.speed !== 1) parts.push(`x${clock.speed}`);
   return parts.join(" · ");
 }
@@ -103,10 +103,20 @@ function Picker({
 
 function ClockControls({ circle, onChanged }: { circle: Circle; onChanged: () => void }) {
   const [custom, setCustom] = useState(String(circle.clock.speed));
-  const [wall, setWall] = useState(circle.status.nowWall);
+  const [wall, setWall] = useState("");
+  // Until the field is edited it shows the Circle's current time, so Set time cannot move a running clock back.
+  const [wallEdited, setWallEdited] = useState(false);
   const speed = useMutation({ mutationFn: (value: number) => setCircleSpeed(circle.id, value), onSuccess: onChanged });
-  const time = useMutation({ mutationFn: () => setCircleTime(circle.id, wall), onSuccess: onChanged });
+  const time = useMutation({
+    mutationFn: () => setCircleTime(circle.id, wall),
+    onSuccess: () => {
+      setWallEdited(false);
+      onChanged();
+    },
+  });
   const current = circle.clock.speed;
+  const customSpeed = Number(custom);
+  const customValid = custom.trim() !== "" && Number.isFinite(customSpeed) && customSpeed >= 0 && customSpeed <= 1440;
   return (
     <div className="mw-field">
       <span className="mw-label">Clock</span>
@@ -134,7 +144,7 @@ function ClockControls({ circle, onChanged }: { circle: Circle; onChanged: () =>
           value={custom}
           onChange={(e) => setCustom(e.target.value)}
         />
-        <button type="button" className="mw-btn" onClick={() => speed.mutate(Number(custom))}>
+        <button type="button" className="mw-btn" disabled={!customValid} onClick={() => speed.mutate(customSpeed)}>
           Set speed
         </button>
       </div>
@@ -143,10 +153,18 @@ function ClockControls({ circle, onChanged }: { circle: Circle; onChanged: () =>
           className="mw-input mw-grow"
           type="datetime-local"
           aria-label="Circle date and time"
-          value={wall}
-          onChange={(e) => setWall(e.target.value)}
+          value={wallEdited ? wall : circle.status.nowWall}
+          onChange={(e) => {
+            setWall(e.target.value);
+            setWallEdited(true);
+          }}
         />
-        <button type="button" className="mw-btn" disabled={!wall} onClick={() => time.mutate()}>
+        <button
+          type="button"
+          className="mw-btn"
+          disabled={!wallEdited || !wall || time.isPending}
+          onClick={() => time.mutate()}
+        >
           Set time
         </button>
       </div>
@@ -352,6 +370,11 @@ function CircleCard({ circle, onEdit }: { circle: Circle; onEdit: () => void }) 
         <div className="mw-grow">
           <div className="mw-name">{circle.name}</div>
           <div className="mw-muted">{statusLine(circle)}</div>
+          {circle.status.nextDueAt ? (
+            <div className="mw-muted">
+              Next background run about {new Date(circle.status.nextDueAt).toLocaleTimeString()}
+            </div>
+          ) : null}
         </div>
         <button type="button" className="mw-btn" onClick={onEdit}>
           {COPY.edit}

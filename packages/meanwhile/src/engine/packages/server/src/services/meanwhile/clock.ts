@@ -97,7 +97,8 @@ export function wallToMs(wall: string, tz: string): number | null {
   // Two passes settle zones whose offset changes between the guess and the answer.
   let guess = asUtc - offsetMs(asUtc, tz);
   guess = asUtc - offsetMs(guess, tz);
-  return guess;
+  // 2026-02-31 or 25:99 roll over in Date.UTC, so only an exact round trip is a real time.
+  return msToWall(guess, tz) === wall.slice(0, 16) ? guess : null;
 }
 
 function wallParts(ms: number, tz: string) {

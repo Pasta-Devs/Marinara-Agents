@@ -87,6 +87,30 @@ export function defaultCircle(id: string, now: number): Circle {
   };
 }
 
+/** First problem in the editable fields of a request, or null. Fields that are absent are fine. */
+export function circleFieldError(src: Record<string, unknown>): string | null {
+  const has = (k: string) => k in src;
+  if (has("name") && (typeof src.name !== "string" || !src.name.trim() || src.name.trim().length > 80))
+    return "Name must be 1 to 80 characters";
+  if (has("setting") && (typeof src.setting !== "string" || src.setting.length > 600))
+    return "Setting can have at most 600 characters";
+  if (
+    has("budgetCallsPerDay") &&
+    !(
+      typeof src.budgetCallsPerDay === "number" &&
+      Number.isInteger(src.budgetCallsPerDay) &&
+      src.budgetCallsPerDay >= 1 &&
+      src.budgetCallsPerDay <= 200
+    )
+  ) {
+    return "Budget must be a whole number from 1 to 200";
+  }
+  if (has("timezone") && !validTimezone(src.timezone)) return "Unknown time zone";
+  if (has("connectionId") && (typeof src.connectionId !== "string" || src.connectionId.length > 200))
+    return "Unknown model";
+  return null;
+}
+
 /** Applies the editable fields of `src` over `base`. Unknown or invalid values keep the base. */
 export function applyCircleFields(base: Circle, src: Record<string, unknown>): Circle {
   const text = (v: unknown, max: number, d: string) => (typeof v === "string" ? v.trim().slice(0, max) : d);

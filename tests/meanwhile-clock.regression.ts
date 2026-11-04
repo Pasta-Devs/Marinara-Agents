@@ -42,6 +42,9 @@ assert.equal(wallToMs("2026-11-05T18:00", "Europe/Berlin"), Date.parse("2026-11-
 assert.equal(wallToMs("2026-07-05T18:00", "Europe/Berlin"), Date.parse("2026-07-05T16:00:00Z"));
 assert.equal(msToWall(Date.parse("2026-11-05T17:00:00Z"), "Europe/Berlin"), "2026-11-05T18:00");
 assert.equal(wallToMs("nonsense", "UTC"), null);
+assert.equal(wallToMs("2026-02-31T10:00", "UTC"), null);
+assert.equal(wallToMs("2026-11-05T25:99", "UTC"), null);
+assert.equal(wallToMs("2026-02-28T10:00", "UTC"), Date.parse("2026-02-28T10:00:00Z"));
 
 // Window: short gap is one span, long absence keeps the last 3 days and summarises the rest.
 assert.equal(runWindow(T0, T0), null);

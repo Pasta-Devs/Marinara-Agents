@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
 import {
   SPEED_MAX,
+  BACKGROUND_EVERY_MS,
+  RUN_AHEAD_MS,
   circleNowMs,
   msToWall,
   normalizeSpeed,
@@ -14,6 +16,7 @@ import {
 import { dueNow, runCircleNow, runDuePass } from "./scheduler.js";
 import {
   applyCircleFields,
+  circleFieldError,
   defaultCircle,
   getMeanwhileRuntime,
   markOf,
@@ -29,6 +32,18 @@ const body = (request: { body?: unknown }): Record<string, unknown> =>
     ? (request.body as Record<string, unknown>)
     : {};
 
+/** A 400 message for a bad request, or null. The model must exist when the Engine can resolve it. */
+async function inputError(src: Record<string, unknown>): Promise<string | null> {
+  const error = circleFieldError(src);
+  if (error || typeof src.connectionId !== "string" || src.connectionId === "") return error;
+  try {
+    await getMeanwhileRuntime().languageModels?.resolve(src.connectionId);
+    return null;
+  } catch {
+    return "Unknown model";
+  }
+}
+
 function statusOf(circle: Circle, mark: RunMark, now: number) {
   const circleNow = circleNowMs(circle.clock, now);
   return {
@@ -40,7 +55,16 @@ function statusOf(circle: Circle, mark: RunMark, now: number) {
     lastWindow: mark.lastWindow,
     // ponytail: only the background timer has a known next time; chat and tab reasons are events.
     nextDueAt:
-      circle.backgroundTimer && circle.connectionId ? Math.max(mark.nextAt, mark.lastRunAt + 6 * 3_600_000) : null,
+      circle.backgroundTimer && circle.connectionId && circle.clock.speed > 0
+        ? Math.max(
+            mark.nextAt,
+            mark.lastRunAt + BACKGROUND_EVERY_MS,
+            // the real time at which 6 unseen Circle hours have passed
+            circle.clock.anchorReal +
+              Math.max(0, Date.parse(circle.lastRunCircle) + RUN_AHEAD_MS - Date.parse(circle.clock.anchorCircle)) /
+                circle.clock.speed,
+          )
+        : null,
     leaseUntil: mark.leaseUntil > now ? mark.leaseUntil : null,
     failures: mark.failures,
     retryAt: mark.nextAt > now ? mark.nextAt : null,
@@ -65,8 +89,10 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
     return { circles: doc.circles.map((c) => view(doc, c, now)), speedMax: SPEED_MAX };
   });
 
-  app.post("/circles", async (request) => {
+  app.post("/circles", async (request, reply) => {
     const src = body(request);
+    const error = await inputError(src);
+    if (error) return reply.code(400).send({ error });
     const now = Date.now();
     const base = defaultCircle(randomUUID(), now);
     let circle = applyCircleFields(base, src);
@@ -79,6 +105,9 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
   app.patch<{ Params: { id: string } }>("/circles/:id", async (request, reply) => {
     const { id } = request.params;
     const src = body(request);
+    if (!find(await readMeanwhile(), id)) return notFound(reply);
+    const error = await inputError(src);
+    if (error) return reply.code(400).send({ error });
     const doc = await updateMeanwhile((d) => ({
       ...d,
       circles: d.circles.map((c) => {
@@ -91,8 +120,9 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
     return circle ? view(doc, circle, Date.now()) : notFound(reply);
   });
 
-  app.delete<{ Params: { id: string } }>("/circles/:id", async (request) => {
+  app.delete<{ Params: { id: string } }>("/circles/:id", async (request, reply) => {
     const { id } = request.params;
+    if (!find(await readMeanwhile(), id)) return notFound(reply);
     await updateMeanwhile((d) => ({
       ...d,
       circles: d.circles.filter((c) => c.id !== id),
@@ -145,9 +175,8 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
       for (const c of d.circles) if (c.connectionId) next = withMark(next, { ...markOf(d, c.id), trigger: "tab" });
       return next;
     });
-    void runDuePass().catch((error) =>
-      getMeanwhileRuntime().logger.warn(`[meanwhile] tab pass failed: ${String(error)}`),
-    );
+    const logger = getMeanwhileRuntime().logger;
+    void runDuePass().catch((error) => logger.warn(`[meanwhile] tab pass failed: ${String(error)}`));
     return { ok: true };
   });
 
