@@ -137,11 +137,11 @@ Real-time and fast-forward share the same generator; real time is "fast forward 
 | Autonomous messaging | presence, budget | optional "life update" text via the existing autonomy loop |
 | Long-Term Memory | `long-term-memory:recall` for context | `long-term-memory:intake` — reflections only, tagged `meanwhile` |
 | relationship-tracker | `read-api-v1` feelings between characters | relationship deltas (capped per day) |
-| world-state | in-story date/weather (story-time clock) | — |
+| world-state | in-story date/weather (optional context) | — |
 | Lorebooks | canon facts | (optional) new lorebook entry for major events, via review |
 | Slurp2 | creator state, recent posts | `slurp2:actions` — post ideas from beats ("posted from the beach") |
 | Noodle | recent feed | post ideas from beats |
-| Sentinel | in-story threads | shared ledger events (later) |
+| Sentinel (optional) | found threads, fail-soft | — |
 
 Rule: **writes go out only from accepted events, and each write carries a source tag** so it can be found and retracted.
 
