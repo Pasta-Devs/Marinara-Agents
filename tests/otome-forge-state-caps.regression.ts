@@ -112,9 +112,12 @@ test("the economy's numbers are pinned", () => {
     },
   );
   assert.deepEqual(
-    [0, 299, 300, 599, 600, 2699, 2700, 99_999, -50, Number.NaN].map(economy.levelOf),
+    [0, 199, 200, 449, 450, 3599, 3600, 99_999, -50, Number.NaN].map(economy.levelOf),
     [1, 1, 2, 2, 3, 9, 10, 10, 1, 1],
   );
+  // Each level costs 50 more than the one before, from 200 for level 2 to 600 for level 10 (the maintainer's).
+  assert.deepEqual(economy.LEVEL_COSTS, [200, 250, 300, 350, 400, 450, 500, 550, 600]);
+  assert.equal(economy.MAX_LEVEL_POINTS, 3600);
 });
 
 test("the public run projects current-level affection without exposing private relationship state", () => {
@@ -122,20 +125,20 @@ test("the public run projects current-level affection without exposing private r
   const player = normalizePlayer({});
   const unit = normalizeUnit({ id: KAI, name: "Kai", source: "archetype" });
   assert.ok(unit);
-  for (const [points, level, current] of [
-    [0, 1, 0],
-    [299, 1, 299],
-    [300, 2, 0],
-    [599, 2, 299],
-    [2699, 9, 299],
-    [2700, 10, 300],
-    [99_999, 10, 300],
+  for (const [points, level, current, required] of [
+    [0, 1, 0, 200],
+    [199, 1, 199, 200],
+    [200, 2, 0, 250],
+    [449, 2, 249, 250],
+    [3599, 9, 599, 600],
+    [3600, 10, 600, 600],
+    [99_999, 10, 600, 600],
   ]) {
     const state = normalizeState({ lis: { [KAI]: { points, trust: -2, tension: 3 } } });
     const before = structuredClone(state);
     const view = JSON.parse(JSON.stringify(toRunView("r-affection-abcdef", world, player, [unit], state)));
     assert.equal(view.lis[0].level, level);
-    assert.deepEqual(view.lis[0].affectionProgress, { current, required: 300 });
+    assert.deepEqual(view.lis[0].affectionProgress, { current, required });
     for (const hidden of ["points", "trust", "tension", "grievances", "disclosures", "bible"]) {
       assert.equal(hidden in view.lis[0], false, `${hidden} remains private`);
     }
@@ -291,7 +294,7 @@ test("a grievance never closes in its own beat, and closes only where its node l
 
 test("a rupture opens with its grievance, holds while it festers, and never takes anything unlocked back", () => {
   const before = fresh();
-  before.lis[KAI] = { ...before.lis[KAI]!, points: 1200, stage: 3 };
+  before.lis[KAI] = { ...before.lis[KAI]!, points: economy.levelFloor(5), stage: 3 };
   const broken = pick(
     before,
     [{ li: KAI, trust: -1, grievance: { by: "li", text: "She sold him out.", severity: "rupture" } }],
@@ -299,7 +302,7 @@ test("a rupture opens with its grievance, holds while it festers, and never take
   ).state;
   const id = "g-main-1-1-0";
   assert.deepEqual(broken.lis[KAI]!.rupture, { grievanceId: id, since: AT });
-  assert.deepEqual([broken.lis[KAI]!.points, broken.lis[KAI]!.stage], [1200, 3]);
+  assert.deepEqual([broken.lis[KAI]!.points, broken.lis[KAI]!.stage], [economy.levelFloor(5), 3]);
   // A second rupture-grade grievance does not replace the open rupture.
   let state = pick(broken, [{ li: KAI, grievance: { by: "li", text: "Again.", severity: "rupture" } }], {
     i: 1,
@@ -319,7 +322,7 @@ test("a rupture opens with its grievance, holds while it festers, and never take
     resolves: [second],
   }).state;
   assert.equal(state.lis[KAI]!.rupture, null, "no rupture is left once every rupture is repaired");
-  assert.deepEqual([state.lis[KAI]!.points, state.lis[KAI]!.stage], [1200, 3]);
+  assert.deepEqual([state.lis[KAI]!.points, state.lis[KAI]!.stage], [economy.levelFloor(5), 3]);
 });
 
 const chapter = (changes: Partial<ReadChapter> = {}): ReadChapter => ({
@@ -401,22 +404,22 @@ test("reward grants remain earning-only", () => {
 });
 
 test("hostile choices lose 15 affection without ever losing a reached level, including after earning a new one", () => {
-  for (const points of [0, 5, 299, 300, 305, 599, 600, 605, 2699, 2700, 2705, 99_999]) {
+  for (const points of [0, 5, 199, 200, 205, 449, 450, 455, 3599, 3600, 3605, 99_999]) {
     const before = fresh();
     before.lis[KAI] = { ...before.lis[KAI]!, points };
     const after = pick(before, [{ li: KAI, trust: -1 }], { i: 0 }).state;
     const expected = new Map([
       [0, 0],
       [5, 0],
-      [299, 284],
-      [300, 300],
-      [305, 300],
-      [599, 584],
-      [600, 600],
-      [605, 600],
-      [2699, 2684],
-      [2700, 2700],
-      [2705, 2700],
+      [199, 184],
+      [200, 200],
+      [205, 200],
+      [449, 434],
+      [450, 450],
+      [455, 450],
+      [3599, 3584],
+      [3600, 3600],
+      [3605, 3600],
       [99_999, 99_984],
     ]).get(points);
     assert.equal(after.lis[KAI]!.points, expected, `loss from ${points}`);
@@ -424,13 +427,13 @@ test("hostile choices lose 15 affection without ever losing a reached level, inc
     assert.equal(saved(after).lis[KAI]!.points, expected, "the next request retains the protected level");
   }
   const before = fresh();
-  before.lis[KAI] = { ...before.lis[KAI]!, points: 299 };
+  before.lis[KAI] = { ...before.lis[KAI]!, points: 199 };
   let state = grant(before, { source: "chapter", li: KAI, affection: 30 }, DAY).state;
   assert.equal(economy.levelOf(state.lis[KAI]!.points), 2);
   state = pick(state, [{ li: KAI, trust: -1 }], { i: 0 }).state;
-  assert.equal(state.lis[KAI]!.points, 314);
+  assert.equal(state.lis[KAI]!.points, 214);
   state = pick(saved(state), [{ li: KAI, trust: -1 }], { i: 1 }).state;
-  assert.equal(state.lis[KAI]!.points, 300, "the newly earned level becomes the next loss floor");
+  assert.equal(state.lis[KAI]!.points, 200, "the newly earned level becomes the next loss floor");
 });
 
 test("harm costs affection once per LI and canonical pick; an existing grievance, tension and replay do not", () => {
@@ -562,10 +565,10 @@ test("Side with (#2046): the one backed gains past the daily cap; one passed ove
   for (const [points, expected] of [
     [0, 0],
     [5, 0],
-    [299, 289],
-    [300, 300],
-    [305, 300],
-    [315, 305],
+    [199, 189],
+    [200, 200],
+    [205, 200],
+    [215, 205],
     [economy.MAX_LEVEL_POINTS + 5, economy.MAX_LEVEL_POINTS],
     // At level 10 with one extra story unlocked (three prestige points, 900 past level 10), a loss never takes it back.
     [economy.MAX_LEVEL_POINTS + 904, economy.MAX_LEVEL_POINTS + 900],

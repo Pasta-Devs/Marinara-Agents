@@ -361,13 +361,13 @@ test("a walkout opens a major grievance, or a rupture at low trust; a standoff c
   assert.deepEqual(read.body.grants, [{ source: "beat", starlight: 30 }]);
   assert.equal((await walkout.state()).lis[KAI]!.points, 930, "the argument's read keeps its normal reward only");
 
-  const cold = await fightWorld("r-cold-aaaaaa", { kai: { trust: -2, points: 900, stage: 2 } });
+  const cold = await fightWorld("r-cold-aaaaaa", { kai: { trust: -2, points: 750, stage: 2 } });
   await play(cold, ["press", "press", "press"]);
   kai = (await cold.state()).lis[KAI]!;
   assert.equal(kai.grievances[0]!.severity, "rupture");
   assert.equal(kai.rupture?.grievanceId, kai.grievances[0]!.id);
   assert.equal(kai.stage, 2, "nothing unlocked is taken back");
-  assert.equal(kai.points, 900, "the reached level's floor survives a rupture");
+  assert.equal(kai.points, 750, "the reached level's floor (level 4) survives a rupture");
   const story = await cold.call("GET", "/runs/:run/story");
   assert.equal(story.body.routes[0].next.blockedBy, "rupture");
   assert.equal(story.body.repairs[0].li, KAI);

@@ -72,6 +72,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.8.6",
+          "date": "2026-11-04",
+          "notes": "- **Each affection level takes a little more than the last.** Level 2 now takes 200 affection, and each level after it 50 more, up to 600 for level 10, so the first levels come sooner and the last ones mean more. Past level 10, every 300 affection still earns a prestige point. A love interest's level is worked out from their affection, so a story already under way may show a different level after updating; anything you've already unlocked stays.",
+          "highlight": false
+        },
+        {
           "version": "0.8.5",
           "date": "2026-11-04",
           "notes": "- **A love interest who appears in another's Character Story remembers it.** When another love interest speaks in a Character Story, that story is now theirs to remember too, and its summary says who was there and for which parts, so they know what they saw and not what they missed. A name that is only mentioned doesn't count. Character Stories you have already finished get this too. Dates stay private to their love interest.\n- **Character Stories may have cameos.** Another love interest can now appear in a Character Story when the story calls for it.",
@@ -183,12 +189,6 @@
           "version": "0.6.23",
           "date": "2026-11-02",
           "notes": "- **Chibi stickers.** With images on, your five phone stickers are chibi busts of your protagonist, and each love interest gets nine of their own, one unlocked per affection level from 2 to 10 (\"You unlocked a new sticker\"). They're painted in the background, one at a time, and Ask before painting holds them for a tap; stories in progress catch up. Without images your five are simple labelled icons.\n- **Love interests send stickers too**, theirs or yours, by name in brackets, like `[dottore_pensive]`. Old face stickers still show.\n- **A Stickers tab in the Album** to view and save each sticker, named like `mari_laugh`.\n- **Messages a day from love interests**: in Settings → Connections, choose how many times a day one you've met may message you first (0 to 24, off by default). They're spread across your day and arrive unread.\n- **A love interest's thread header fits on one row on phones**, with **Close** beside their name.",
-          "highlight": false
-        },
-        {
-          "version": "0.6.22",
-          "date": "2026-11-02",
-          "notes": "- **Love interests may be genuinely evil.** A villain or a monster stays one, and taming them is the point; as affection grows they may become a better partner to you, in their own way. Scenes, climaxes and phone replies now see their darkness.\n- **Angst and Dark say it plainly.** Under Angst, cruelty isn't sanitized within your Lines and Veils, and a love interest may be a villain to everyone but you. Under Dark romance, they can be the villain. Gentle is unchanged.\n- **Real villains are back**, and a moral code fits who they are: firm, far looser, or none at all. This applies to love interests written from now on.\n- **Side with one of them.** From chapter 4, at most once every four main chapters, when love interests disagree you choose whom to back: +30 affection for them, −10 for each one you pass over, never below a level they've reached.",
           "highlight": false
         }
       ]

@@ -31,9 +31,24 @@ export const STARLIGHT_EARNINGS = {
 /** Starlight from activities (dates, Read Him, Claw, Show him) per local day. */
 export const ACTIVITY_STARLIGHT_DAILY_CAP = 400;
 
+/** Affection points for each prestige point past level 10 (the maintainer's, 2026-11-04: kept at 300). */
 export const POINTS_PER_LEVEL = 300;
 export const MIN_LEVEL = 1;
 export const MAX_LEVEL = 10;
+/**
+ * The points each level up to 10 costs, from level 1→2 to 9→10: 200, then 50 more per level, up to 600 (the
+ * maintainer's, 2026-11-04). Level n is reached at the sum of the first n − 1 costs.
+ */
+export const LEVEL_COSTS: readonly number[] = Array.from({ length: 9 }, (_, i) => 200 + 50 * i);
+const LEVEL_FLOORS: readonly number[] = LEVEL_COSTS.reduce<number[]>(
+  (floors, cost) => [...floors, floors.at(-1)! + cost],
+  [0],
+);
+
+/** The affection points at which `level` (1–10) is reached. */
+export function levelFloor(level: number): number {
+  return LEVEL_FLOORS[Math.min(MAX_LEVEL, Math.max(MIN_LEVEL, Math.trunc(level))) - MIN_LEVEL]!;
+}
 
 /** Affection points per earning. Story earnings are never capped; the rest share OUTSIDE_AFFECTION_DAILY_CAP. */
 export const AFFECTION_EARNINGS = {
@@ -67,17 +82,17 @@ export const SIDE_WITH_AFFECTION = { backed: 30, passedOver: 10 } as const;
 /** Affection level 1–10 from points. Choice losses stop at the current level's floor. */
 export function levelOf(points: number): number {
   const safe = Number.isFinite(points) ? Math.max(0, points) : 0;
-  return Math.min(MAX_LEVEL, MIN_LEVEL + Math.floor(safe / POINTS_PER_LEVEL));
+  let level = MIN_LEVEL;
+  while (level < MAX_LEVEL && safe >= levelFloor(level + 1)) level += 1;
+  return level;
 }
 
 /** Public progress within the current level; the maximum level is complete, with no level 11 implied. */
 export function affectionProgressOf(points: number): { current: number; required: number } {
   const safe = Number.isFinite(points) ? Math.max(0, points) : 0;
   const level = levelOf(safe);
-  return {
-    current: level === MAX_LEVEL ? POINTS_PER_LEVEL : safe - (level - MIN_LEVEL) * POINTS_PER_LEVEL,
-    required: POINTS_PER_LEVEL,
-  };
+  if (level === MAX_LEVEL) return { current: LEVEL_COSTS.at(-1)!, required: LEVEL_COSTS.at(-1)! };
+  return { current: safe - levelFloor(level), required: LEVEL_COSTS[level - MIN_LEVEL]! };
 }
 
 // ── Prestige (#2025): past level 10, affection keeps counting. Every POINTS_PER_LEVEL is a prestige point, and every
@@ -86,7 +101,7 @@ export function affectionProgressOf(points: number): { current: number; required
 // the stories written (their chapter keys `prestige-<li>-<n>`). ──
 
 /** The affection points at which level 10 is reached. */
-export const MAX_LEVEL_POINTS = (MAX_LEVEL - MIN_LEVEL) * POINTS_PER_LEVEL;
+export const MAX_LEVEL_POINTS = levelFloor(MAX_LEVEL);
 export const PRESTIGE_POINTS_PER_STORY = 3;
 const PRESTIGE_CYCLE = PRESTIGE_POINTS_PER_STORY * POINTS_PER_LEVEL;
 
@@ -128,9 +143,7 @@ export function nextPrestige(points: number, written: number): number | null {
 export function affectionFloorOf(points: number): number {
   const safe = Number.isFinite(points) ? Math.max(0, Math.floor(points)) : 0;
   const level = levelOf(safe);
-  return level < MAX_LEVEL
-    ? (level - MIN_LEVEL) * POINTS_PER_LEVEL
-    : MAX_LEVEL_POINTS + prestigeOf(safe).unlocked * PRESTIGE_CYCLE;
+  return level < MAX_LEVEL ? levelFloor(level) : MAX_LEVEL_POINTS + prestigeOf(safe).unlocked * PRESTIGE_CYCLE;
 }
 
 /**
