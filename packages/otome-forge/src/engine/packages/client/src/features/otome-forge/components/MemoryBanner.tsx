@@ -3,7 +3,8 @@
 // banner says that a summary failed, with the provider's own words (Otome's, without "The connection said", when the
 // memory model is too small), Retry, and the way to Settings → Connections at the Memory connection (More connections,
 // focused), to give it a model with a larger context; or that no connection can write summaries, with only the way to
-// Connections (the story's own connection is the one missing then).
+// Connections (the story's own connection is the one missing then). A Retry request that fails itself (no connection,
+// the server unreachable) says so on a line of its own, never as the connection's words, until the status moves on.
 // Ordinary catch-up shows nothing (lib/memory-notice.ts).
 // ──────────────────────────────────────────────
 // It sits in the stage's flow below the top bar (above the reader's own header, which then leaves the safe area to it),
@@ -99,8 +100,8 @@ function MemoryBannerBox({
   }, []);
   const retrying = notice.kind === "retrying";
   const retry = retryAction(notice, busy);
-  const detail = notice.kind === "failed" ? (error ?? notice.message) : null;
-  const own = notice.kind === "failed" && notice.own && !error;
+  const detail = notice.kind === "failed" ? notice.message : null;
+  const own = notice.kind === "failed" && notice.own;
   return (
     <div ref={box} className="of-memory-banner of-glass" data-kind={notice.kind}>
       {/* A new element for each state, so a failure (again) is announced as it appears; a retry's progress is said by
@@ -152,6 +153,11 @@ function MemoryBannerBox({
           {t("ui.otomeForge.memory.connection")}
         </button>
       </div>
+      {notice.kind === "failed" && error ? (
+        <p className="of-memory-banner-error" role="alert">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

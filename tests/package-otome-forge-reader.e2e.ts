@@ -170,6 +170,21 @@ const failedMemory = (message: string): Json => ({
 const MEMORY_READY: Json = { phase: "ready", retryable: false, recordCount: 2, noConnection: false, unsummarized: 0 };
 const CONTEXT_ERROR =
   "This model's maximum context length is 8192 tokens. However, your messages resulted in 12034 tokens.";
+/** A failed summary's banner text, and a Retry request that fails itself (503 no-connection) in the player's words. */
+const MEMORY_FAILED = "A story summary failed, so the cast may not remember everything yet.";
+const RETRY_REFUSED = "No connection is set for this. Choose one in Settings.";
+
+/** Makes every Retry request (POST .../memory/retry) fail itself while `refuse()` says so; the stub answers it again after. */
+async function refuseRetry(page: Page, refuse: () => boolean = () => true) {
+  await page.route("**/api/otome-forge/runs/*/memory/retry", (route) =>
+    refuse()
+      ? route.fulfill({
+          status: 503,
+          json: { error: "No connection is set to summarize the story with.", code: "no-connection" },
+        })
+      : route.fallback(),
+  );
+}
 
 /**
  * The M2a story routes, answered in memory by the server's rules (S/story/beats.ts). `waits` answers the story so far
@@ -2640,6 +2655,12 @@ test("Otome Hearth a memory model too small for any summary says so in Otome's o
   await expect(banner.getByRole("alert")).toHaveText(
     `A story summary failed, so the cast may not remember everything yet. ${tooSmall}`,
   );
+  // A Retry request that fails itself says so on its own line: Otome's words stay as they were, never "The connection
+  // said".
+  await refuseRetry(page);
+  await banner.getByRole("button", { name: "Retry the summary" }).click();
+  await expect(banner.getByRole("alert")).toHaveText([`${MEMORY_FAILED} ${tooSmall}`, RETRY_REFUSED]);
+  await expect(banner).not.toContainText("The connection said");
   // Settings → Connections and Debug show it on its own too, not under "The connection said".
   await banner.getByRole("button", { name: "Change connection" }).click();
   for (const tab of ["Connections", "Debug"]) {
@@ -2648,6 +2669,86 @@ test("Otome Hearth a memory model too small for any summary says so in Otome's o
     await expect(section).toContainText(tooSmall);
     await expect(section).not.toContainText("The connection said");
   }
+});
+
+test("Otome Hearth a Retry request that fails itself says so on its own line, not as the connection's words, until memory moves on", async ({
+  page,
+}) => {
+  const stub = createStoryStub({ done: true, memory: failedMemory(CONTEXT_ERROR) });
+  await stubRoutes(page, stub);
+  let refuse = true;
+  await refuseRetry(page, () => refuse);
+  const root = await openStory(page);
+  const banner = root.locator(".of-memory-banner");
+  const said = `${MEMORY_FAILED} The connection said: ${CONTEXT_ERROR}`;
+  await expect(banner.getByRole("alert")).toHaveText([said]);
+
+  // The summary's own failure stays as it was, and the request's error is a line of its own, which the status read
+  // that follows (the same failure, as every 30 s poll reads it) keeps.
+  const read = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/memory/status"));
+  await banner.getByRole("button", { name: "Retry the summary" }).click();
+  await read;
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+  await expect(banner.getByRole("alert")).toHaveText([said, RETRY_REFUSED]);
+
+  // Settings' memory section reads the same status with its own Retry: refused too, it says so on its own line, beside
+  // the provider's words.
+  await banner.getByRole("button", { name: "Change connection" }).click();
+  const section = root.getByRole("tabpanel").getByRole("region", { name: "Story memory" });
+  const sectionRetry = section.getByRole("button", { name: "Retry memory upkeep" });
+  await expect(section).toContainText(CONTEXT_ERROR);
+  await expect(section.getByRole("alert")).toHaveCount(0);
+  await sectionRetry.click();
+  await expect(section.getByRole("alert")).toHaveText(RETRY_REFUSED);
+  await expect(section).toContainText(CONTEXT_ERROR);
+
+  // A Retry from Settings goes through: memory moves on, and the banner's earlier request error goes with it.
+  refuse = false;
+  await sectionRetry.click();
+  await expect(banner).toContainText("Trying the summary again…");
+  await expect(section.getByRole("alert")).toHaveCount(0);
+  // It fails anew: the banner shows the new failure's own words, with no earlier request error.
+  const again = "Upstream 413: the request is larger than this model's 8192-token context.";
+  stub.setMemory(failedMemory(again));
+  await expect(banner.getByRole("alert")).toHaveText([`${MEMORY_FAILED} The connection said: ${again}`]);
+  await expect(section).toContainText(again);
+  await expect(section.getByRole("alert")).toHaveCount(0);
+});
+
+test("Otome Hearth Change connection with no connection listed yet opens More connections at Memory once one is", async ({
+  page,
+}) => {
+  const stub = createStoryStub({ done: true, memory: failedMemory(CONTEXT_ERROR) });
+  await stubRoutes(page, stub);
+  // The Engine lists no text connection until the player adds one there and checks again.
+  let listed = false;
+  await page.route("**/api/connections", (route) =>
+    route.request().method() === "GET" && !listed ? route.fulfill({ json: [] }) : route.fallback(),
+  );
+  const root = await openStory(page);
+  const banner = root.locator(".of-memory-banner");
+  await banner.getByRole("button", { name: "Change connection" }).click();
+  await expect(root.getByRole("tab", { name: "Connections", exact: true })).toHaveAttribute("aria-selected", "true");
+  const panel = root.getByRole("tabpanel");
+  await expect(panel).toContainText("No text connections yet.");
+
+  listed = true;
+  await panel.getByRole("button", { name: "Check again" }).click();
+  const more = panel.locator("details.of-details", { hasText: "More connections" });
+  const memoryConnection = panel.getByRole("combobox", { name: "Memory", exact: true });
+  await expect(more).toHaveJSProperty("open", true);
+  await expect(memoryConnection).toBeFocused();
+
+  // Shown once: a More connections the player closes stays closed as the screen renders again, and the banner's way
+  // there (asked again) opens it again, which it could not if the first ask were still pending.
+  await more.locator("summary").click();
+  await expect(more).toHaveJSProperty("open", false);
+  await panel.getByRole("combobox", { name: "Story", exact: true }).selectOption("conn-other");
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+  await expect(more).toHaveJSProperty("open", false);
+  await banner.getByRole("button", { name: "Change connection" }).click();
+  await expect(more).toHaveJSProperty("open", true);
+  await expect(memoryConnection).toBeFocused();
 });
 
 test("Otome Hearth memory with no connection to write summaries asks for one, without Retry, and never on the story list", async ({

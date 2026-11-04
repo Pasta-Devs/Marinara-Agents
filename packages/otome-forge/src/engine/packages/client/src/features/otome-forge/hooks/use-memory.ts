@@ -30,25 +30,29 @@ export function useMemoryStatus(runKey: string, { watching = false }: { watching
     refetchInterval: (current) => memoryPollMs(current.state.data, watching),
   });
   const [busy, setBusy] = useState(false);
-  // Why the Retry request itself failed (no connection, the server unreachable); the next Retry clears it.
-  const [error, setError] = useState<string | null>(null);
+  // Why the Retry request itself failed (no connection, the server unreachable), with the status it failed on.
+  const [failure, setFailure] = useState<{ message: string; on: MemoryView | undefined } | null>(null);
 
   const retry = async () => {
     if (busy) return;
     setBusy(true);
-    setError(null);
+    setFailure(null);
     try {
       // A status read already on its way would land after this answer and put the old failure back.
       await queryClient.cancelQueries({ queryKey });
       const { status } = await otome.post<{ status: MemoryStatus }>(`${path}/retry`);
       queryClient.setQueryData<MemoryView>(queryKey, (before) => nextMemoryView(before, status));
-    } catch (failure) {
-      setError(otome.errorMessage(failure));
+    } catch (error) {
+      setFailure({ message: otome.errorMessage(error), on: queryClient.getQueryData<MemoryView>(queryKey) });
       void queryClient.invalidateQueries({ queryKey });
     } finally {
       setBusy(false);
     }
   };
+  // It lasts while the status reads the same (the cache keeps an unchanged status's object, so a poll keeps it) and
+  // goes once the status moves on: upkeep runs (a Retry from elsewhere), memory is well, or a new failure has its own
+  // words. The next Retry clears it too.
+  const error = failure && failure.on === query.data ? failure.message : null;
 
   return { query, status: query.data, notice: memoryNotice(query.data), retry, busy, error };
 }

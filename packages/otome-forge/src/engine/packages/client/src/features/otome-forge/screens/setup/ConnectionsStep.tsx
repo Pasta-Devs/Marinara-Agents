@@ -6,7 +6,7 @@
 // the previous chapter in full, so a smaller one soon runs out of room. It is never refused. The memory banner's way
 // to Settings → Connections (components/MemoryBanner.tsx) opens More connections at the Memory connection, focused.
 // ──────────────────────────────────────────────
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useLayoutEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { ImageOff, PlugZap } from "lucide-react";
 import { CostHint } from "../../components/CostHint";
@@ -43,19 +43,26 @@ export function ConnectionControls({
   const same = t("ui.otomeForge.setup.sameAsStory");
   const more = useRef<HTMLDetailsElement>(null);
   const memory = useRef<HTMLSelectElement>(null);
+  // The latest callback, so a parent's new one neither runs the reveal again nor cancels its frame.
+  const revealed = useRef(onMemoryRevealed);
+  useLayoutEffect(() => {
+    revealed.current = onMemoryRevealed;
+  });
+  const listed = connections.length > 0;
   useEffect(() => {
     const [details, select] = [more.current, memory.current];
-    // With no connections listed yet there is nothing to show; the reveal waits for them.
-    if (!revealMemory || !details || !select) return;
+    // With no connections listed yet there is nothing to show: the reveal waits until they are, and runs then, not on
+    // every render, so a More connections the player closed stays closed.
+    if (!revealMemory || !listed || !details || !select) return;
     details.open = true;
     // A frame later: a screen just opened moves focus to its heading after this runs (OtomeForgeView).
     const frame = requestAnimationFrame(() => {
       select.focus();
-      onMemoryRevealed?.();
+      revealed.current?.();
     });
     return () => cancelAnimationFrame(frame);
-  }, [revealMemory, onMemoryRevealed]);
-  if (connections.length === 0) {
+  }, [revealMemory, listed]);
+  if (!listed) {
     return (
       <div className="of-empty of-glass">
         <PlugZap size={22} strokeWidth={1.7} aria-hidden="true" />

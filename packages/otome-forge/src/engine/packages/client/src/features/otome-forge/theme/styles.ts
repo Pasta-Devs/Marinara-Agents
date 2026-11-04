@@ -209,7 +209,7 @@ ${R} .of-icon-button:hover { background: var(--of-surface-strong); color: var(--
 /* A failed summary (components/MemoryBanner.tsx): in the stage's flow below the top bar, or first on a full-stage
    screen (the reader), so it pushes the screen down and covers none of its controls. Its actions go below the text
    when the row is too narrow for both, sharing one row; the provider's words keep to two lines (Settings → Connections
-   has them whole). */
+   has them whole). A Retry request that failed itself says so on a row of its own, below both. */
 ${R} .of-memory-banner {
   position: relative; z-index: 3; flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
   margin: 0 12px 6px; padding: 8px 10px 8px 12px; border-radius: 16px; border-color: var(--of-danger);
@@ -228,7 +228,8 @@ ${R} .of-memory-banner-said {
 ${R} .of-memory-banner-actions { flex: 1 1 15rem; display: flex; gap: 6px; min-width: 0; }
 ${R} .of-memory-banner-actions .of-button {
   flex: 1 1 0; min-width: 0; min-height: 36px; padding: 4px 8px; font-size: 0.8rem; white-space: normal; line-height: 1.2;
-}`;
+}
+${R} .of-memory-banner-error { flex: 1 0 100%; min-width: 0; color: var(--of-text-soft); overflow-wrap: anywhere; }`;
 
 const DOCK_RULES = `
 ${R} .of-dock {
