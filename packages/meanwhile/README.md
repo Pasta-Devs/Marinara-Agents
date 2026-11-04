@@ -11,7 +11,7 @@ A Circle is a group of characters who share a setting. Each Circle has its own c
 - Choose a model for each Circle. A Circle cannot run without one.
 - A background timer lets a Circle catch up when you open the tab or a linked chat has new messages. A switch adds a run every 6 hours.
 
-This version makes no model calls and writes no events. Later versions add the events, a timeline and what the characters say about them in chat.
+This version makes no model calls. It fills each day from the characters’ schedules and plans a few meetings per day, and the Timeline shows both. Later versions add the events and what the characters say about them in chat.
 
 ## Install
 

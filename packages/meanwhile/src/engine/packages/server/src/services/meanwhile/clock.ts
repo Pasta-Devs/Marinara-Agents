@@ -160,3 +160,14 @@ export function dueReason(input: {
         : null;
   return reason && input.circleNow - input.lastRunCircle >= RUN_AHEAD_MS ? reason : null;
 }
+
+/** "HH:mm" for minutes since midnight. */
+export function hhmm(minutes: number): string {
+  const two = (n: number) => String(n).padStart(2, "0");
+  return `${two(Math.floor(minutes / 60) % 24)}:${two(minutes % 60)}`;
+}
+
+/** Moves a "YYYY-MM-DD" day by whole days. */
+export function shiftDay(day: string, days: number): string {
+  return new Date(Date.parse(`${day}T00:00:00Z`) + days * DAY).toISOString().slice(0, 10);
+}

@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import type { CapabilityDocumentRecord, CapabilityRuntimeHost } from "@marinara-engine/shared";
+import type { Seed } from "./deck.js";
+import type { PlaceTags } from "./routine.js";
 import { emptyMark, validTimezone, type Clock, type RunMark } from "./clock.js";
 
 const PACKAGE_ID = "meanwhile";
@@ -35,6 +37,7 @@ export interface LifeEvent {
   cast: string[];
   kind: string;
   weight: "routine" | "notable" | "major" | "summary";
+  place?: string;
   text: string;
   source: "schedule" | "generated" | "chat" | "user" | "summary";
   status: "accepted" | "proposed" | "vetoed" | "stale";
@@ -47,6 +50,8 @@ export interface MeanwhileDocument {
   circles: Circle[];
   marks: RunMark[];
   events: LifeEvent[];
+  placeTags: PlaceTags[];
+  seeds: Seed[];
 }
 
 let runtime: CapabilityRuntimeHost | null = null;
@@ -182,7 +187,7 @@ function normalizeMark(value: unknown): RunMark | null {
 }
 
 export function emptyMeanwhileDocument(): MeanwhileDocument {
-  return { schemaVersion: 1, circles: [], marks: [], events: [] };
+  return { schemaVersion: 1, circles: [], marks: [], events: [], placeTags: [], seeds: [] };
 }
 
 export function normalizeMeanwhile(value: unknown): MeanwhileDocument {
@@ -199,6 +204,13 @@ export function normalizeMeanwhile(value: unknown): MeanwhileDocument {
     circles,
     marks: marks.filter((m) => circles.some((c) => c.id === m.circleId)),
     events: list(value.events).filter((e): e is LifeEvent => isRecord(e) && typeof e.id === "string"),
+    placeTags: list(value.placeTags).filter(
+      (t): t is PlaceTags => isRecord(t) && typeof t.characterId === "string" && isRecord(t.byActivity),
+    ),
+    seeds: list(value.seeds).filter(
+      (s): s is Seed =>
+        isRecord(s) && typeof s.id === "string" && typeof s.circleId === "string" && Array.isArray(s.cast),
+    ),
   };
 }
 

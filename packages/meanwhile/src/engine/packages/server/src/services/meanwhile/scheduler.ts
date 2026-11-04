@@ -8,8 +8,12 @@ import {
   runWindow,
   type DueReason,
   type RunMark,
+  DAY,
+  msToWall,
+  shiftDay,
 } from "./clock.js";
 import { getMeanwhileRuntime, markOf, readMeanwhile, updateMeanwhile, withMark, type Circle } from "./store.js";
+import { pickSchedule, planLife } from "./routine.js";
 
 /** Claims the lease for one Circle. Returns false when another run holds it. */
 async function claim(circleId: string, now: number): Promise<boolean> {
@@ -22,15 +26,73 @@ async function claim(circleId: string, now: number): Promise<boolean> {
   return won;
 }
 
-/** Slice 1 run: no model calls. It computes the window and moves `lastRunCircle` to its end. */
+/** Days of routine events that stay in storage. */
+const ROUTINE_KEEP_DAYS = 14;
+
+/**
+ * One run, no model calls: fills routine and deals seeds for the window, then moves `lastRunCircle` to its end.
+ * The mark only moves in the same write that stores the events, so a crash never loses or doubles a day.
+ */
 async function finish(circleId: string, now: number): Promise<void> {
   try {
+    const runtime = getMeanwhileRuntime();
+    const start = (await readMeanwhile()).circles.find((c) => c.id === circleId);
+    if (!start) return;
+    const window = runWindow(Date.parse(start.lastRunCircle), circleNowMs(start.clock, now));
+    const schedules: Record<string, unknown> = {};
+    const chatTruth: Record<string, number> = {};
+    if (window) {
+      const chats = start.linkedChatIds.length
+        ? (await runtime.persistence.listChats()).filter((chat) => start.linkedChatIds.includes(chat.id))
+        : [];
+      const cards = start.castIds.length ? ((await runtime.resources?.listCharacters(start.castIds)) ?? []) : [];
+      for (const id of start.castIds) {
+        const mine = chats.filter((chat) => chat.characterIds.includes(id));
+        schedules[id] = pickSchedule(
+          id,
+          mine.map((chat) => chat.metadata),
+          cards.find((card) => card.id === id)?.data,
+        );
+        chatTruth[id] = Math.max(
+          0,
+          ...mine.map((chat) => {
+            const at = chat.lastMessageAt ? Date.parse(chat.lastMessageAt) : NaN;
+            return Number.isFinite(at) ? circleNowMs(start.clock, at) : 0;
+          }),
+        );
+      }
+    }
     await updateMeanwhile((doc) => {
       const circle = doc.circles.find((c) => c.id === circleId);
       if (!circle) return doc;
-      const window = runWindow(Date.parse(circle.lastRunCircle), circleNowMs(circle.clock, now));
-      const moved = window ? { ...circle, lastRunCircle: window.to } : circle;
-      const next = { ...doc, circles: doc.circles.map((c) => (c.id === circleId ? moved : c)) };
+      let next = doc;
+      if (window) {
+        const plan = planLife({
+          circle,
+          window,
+          schedules,
+          chatTruth,
+          tags: doc.placeTags,
+          seeds: doc.seeds,
+          haveIds: new Set(doc.events.map((e) => e.id)),
+          now,
+        });
+        const to = Date.parse(window.to);
+        const seedCutoff = shiftDay(msToWall(to, circle.clock.timezone).slice(0, 10), -ROUTINE_KEEP_DAYS);
+        next = {
+          ...doc,
+          circles: doc.circles.map((c) => (c.id === circleId ? { ...circle, lastRunCircle: window.to } : c)),
+          // ponytail: routine is cheap to recompute, so only the last 14 Circle days stay. Notable events are kept.
+          events: [...doc.events, ...plan.events].filter(
+            (e) => e.weight !== "routine" || Date.parse(e.start) >= to - ROUTINE_KEEP_DAYS * DAY,
+          ),
+          placeTags: [
+            ...doc.placeTags.filter((t) => !plan.tags.some((n) => n.characterId === t.characterId)),
+            ...plan.tags,
+          ],
+          seeds: [...doc.seeds, ...plan.seeds].filter((s) => s.day >= seedCutoff),
+        };
+      }
       return withMark(next, {
         ...markOf(doc, circleId),
         leaseUntil: 0,

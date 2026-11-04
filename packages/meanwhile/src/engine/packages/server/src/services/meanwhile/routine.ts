@@ -1,0 +1,195 @@
+/** Schedules to routine events, place tags and one run's plan. Pure: no I/O, so tests run without an Engine. */
+import { createHash } from "node:crypto";
+import { hhmm, msToWall, shiftDay, wallToMs, type RunWindow } from "./clock.js";
+import { dealDay, type DayBlock, type Seed } from "./deck.js";
+import type { LifeEvent } from "./store.js";
+
+export interface PlaceTags {
+  characterId: string;
+  scheduleHash: string;
+  byActivity: Record<string, string>;
+}
+
+const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+const at = (v: unknown, key: string): unknown => (isRecord(v) ? v[key] : undefined);
+const json = (v: unknown): unknown => {
+  if (typeof v !== "string") return v;
+  try {
+    return JSON.parse(v);
+  } catch {
+    return null;
+  }
+};
+
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+// Characters without a schedule still live: sleep, day, evening.
+const DEFAULT_DAY = [
+  { start: 0, end: 420, activity: "sleeping", place: "" },
+  { start: 420, end: 1080, activity: "working", place: "" },
+  { start: 1080, end: 1440, activity: "relaxing at home", place: "" },
+];
+
+// ponytail: keyword guess, first match wins. Slice 3 asks the model about the "unknown" ones.
+const PLACE_WORDS: [string, RegExp][] = [
+  ["gym", /gym|work ?out|exercise|train|climb|yoga|lift/],
+  ["school", /school|class|lecture|college|universit|study/],
+  ["work", /work|office|shift|meeting|job|studio|desk|clinic/],
+  ["cafe", /caf[eé]|coffee|brunch|lunch|restaurant/],
+  ["bar", /\bbar\b|pub|drinks|club|party/],
+  ["park", /park|walk|hike|jog|garden|outdoor/],
+  ["shop", /shop|grocer|market|errand|store|mall/],
+  ["out of town", /travel|trip|commute|flight|vacation|journey/],
+  ["online", /game|gaming|stream|online|browse|scroll|social|video/],
+  ["home", /sleep|nap|bed|home|relax|cook|clean|shower|breakfast|dinner|rest|wake/],
+];
+
+export function placeOf(activity: string): string {
+  const text = activity.toLowerCase();
+  return PLACE_WORDS.find(([, re]) => re.test(text))?.[0] ?? "unknown";
+}
+
+/** "06:00-08:00" to minutes. A range that ends before it starts runs past midnight. */
+function parseBlock(time: string): { start: number; end: number } | null {
+  const m = /^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$/.exec(time.trim());
+  if (!m || +m[1]! > 24 || +m[3]! > 24 || +m[2]! > 59 || +m[4]! > 59) return null;
+  const start = +m[1]! * 60 + +m[2]!;
+  const end = +m[3]! * 60 + +m[4]!;
+  return { start, end: end <= start ? end + 1440 : end };
+}
+
+function parseDay(list: unknown): DayBlock[] {
+  return (Array.isArray(list) ? list : []).flatMap((b) => {
+    const time = at(b, "time");
+    const activity = at(b, "activity");
+    const span = typeof time === "string" && typeof activity === "string" ? parseBlock(time) : null;
+    return span ? [{ ...span, activity: (activity as string).slice(0, 80), place: "" }] : [];
+  });
+}
+
+export function blocksFor(schedule: unknown, day: string): DayBlock[] {
+  const [y, m, d] = day.split("-").map(Number);
+  const name = DAY_NAMES[new Date(Date.UTC(y!, m! - 1, d!)).getUTCDay()]!;
+  const blocks = parseDay(at(at(schedule, "days"), name));
+  return blocks.length ? blocks : DEFAULT_DAY;
+}
+
+/** The chat copy of a character's schedule wins over the card copy. */
+export function pickSchedule(characterId: string, chatMetadata: unknown[], card: unknown): unknown {
+  const ok = (s: unknown) => (isRecord(s) && isRecord(s.days) ? s : null);
+  for (const meta of chatMetadata) {
+    const found = ok(at(at(json(meta), "characterSchedules"), characterId));
+    if (found) return found;
+  }
+  const data = json(card);
+  return (
+    ok(at(at(data, "extensions"), "conversationSchedule")) ??
+    ok(at(at(at(data, "data"), "extensions"), "conversationSchedule"))
+  );
+}
+
+/** Reuses the stored tags while the schedule is unchanged, so later model answers are kept. */
+export function tagsFor(characterId: string, schedule: unknown, existing?: PlaceTags): PlaceTags {
+  const hash = createHash("sha256")
+    .update(JSON.stringify(schedule ?? null))
+    .digest("hex")
+    .slice(0, 16);
+  if (existing?.scheduleHash === hash) return existing;
+  const days = Object.values(isRecord(at(schedule, "days")) ? (at(schedule, "days") as object) : {});
+  const activities = new Set([...DEFAULT_DAY, ...days.flatMap(parseDay)].map((b) => b.activity));
+  return {
+    characterId,
+    scheduleHash: hash,
+    byActivity: Object.fromEntries([...activities].map((a) => [a, placeOf(a)])),
+  };
+}
+
+/**
+ * What one run adds for the window: routine events, seeds for each Circle day and the place tags.
+ * `chatTruth` is the Circle time of the newest linked chat message per character. Nothing starts before it.
+ */
+export function planLife(input: {
+  circle: {
+    id: string;
+    castIds: string[];
+    clock: { timezone: string };
+    pace: string;
+    allowedKinds: string[];
+    bigKindsAllowed: string[];
+  };
+  window: RunWindow;
+  schedules: Record<string, unknown>;
+  chatTruth: Record<string, number>;
+  tags: PlaceTags[];
+  seeds: readonly Seed[];
+  haveIds: ReadonlySet<string>;
+  now: number;
+}): { events: LifeEvent[]; seeds: Seed[]; tags: PlaceTags[] } {
+  const { circle, window } = input;
+  const tz = circle.clock.timezone;
+  const fromMs = Date.parse(window.from);
+  const toMs = Date.parse(window.to);
+  const tags = new Map(input.tags.map((t) => [t.characterId, t]));
+  for (const id of circle.castIds) tags.set(id, tagsFor(id, input.schedules[id], tags.get(id)));
+  const events: LifeEvent[] = [];
+  const dealt: Seed[] = [];
+  const known = [...input.seeds];
+
+  if (window.summary) {
+    const id = `s:${circle.id}:${window.summary.from}`;
+    if (!input.haveIds.has(id)) {
+      events.push({
+        id,
+        circleId: circle.id,
+        start: window.summary.from,
+        end: window.summary.to,
+        createdAt: input.now,
+        cast: circle.castIds,
+        kind: "summary",
+        weight: "summary",
+        text: "Time passed.",
+        source: "summary",
+        status: "accepted",
+        visibility: "circle",
+      });
+    }
+  }
+
+  const lastDay = msToWall(toMs, tz).slice(0, 10);
+  for (let day = msToWall(fromMs, tz).slice(0, 10); day <= lastDay; day = shiftDay(day, 1)) {
+    const byChar: Record<string, DayBlock[]> = {};
+    for (const id of circle.castIds) {
+      const byActivity = tags.get(id)!.byActivity;
+      byChar[id] = blocksFor(input.schedules[id], day).map((b) => ({
+        ...b,
+        place: byActivity[b.activity] ?? "unknown",
+      }));
+      const from = Math.max(fromMs, input.chatTruth[id] ?? 0);
+      for (const b of byChar[id]!) {
+        const start = wallToMs(`${day}T${hhmm(b.start)}`, tz);
+        if (start === null || start < from || start >= toMs) continue;
+        const eventId = `r:${circle.id}:${id}:${start}`;
+        if (input.haveIds.has(eventId)) continue;
+        events.push({
+          id: eventId,
+          circleId: circle.id,
+          start: new Date(start).toISOString(),
+          end: new Date(start + (b.end - b.start) * 60_000).toISOString(),
+          createdAt: input.now,
+          cast: [id],
+          place: b.place,
+          kind: "routine",
+          weight: "routine",
+          text: b.activity,
+          source: "schedule",
+          status: "accepted",
+          visibility: "circle",
+        });
+      }
+    }
+    if (known.some((s) => s.circleId === circle.id && s.day === day)) continue;
+    const cards = dealDay({ circle, day, blocks: byChar, recent: known });
+    known.push(...cards);
+    dealt.push(...cards);
+  }
+  return { events, seeds: dealt, tags: [...tags.values()] };
+}

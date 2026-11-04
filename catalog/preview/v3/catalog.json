@@ -326,13 +326,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "1c03dbf2e6d32f6049442d57de93e5773e6d7eb674001761913a770a502adfa2",
-            "bytes": 12420
+            "sha256": "3e5dff6edb6cd78c51b348a18ee672e5a9bff376395fc788b627239a39478682",
+            "bytes": 20520
           },
           {
             "path": "client.js",
-            "sha256": "38c99197953bc4074df6e13778e39639a8e5321ee18470c72705f7b6d2a9798f",
-            "bytes": 16048
+            "sha256": "0fbd2181e7fa79599851a944ae0d66cb9ac62f6d76d59bcf47b5bb3bd8135a89",
+            "bytes": 18368
           },
           {
             "path": "meanwhile-icon.png",
@@ -352,8 +352,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/meanwhile.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/meanwhile-0.1.0.zip",
-        "sha256": "c1c5f5e217c8140e3c706f8acc1de7b94252dfe4e25fc99d5addd6ad4d48eb08",
-        "bytes": 31669
+        "sha256": "f25586b15d52dadffcec58c743bd4c3b5a8310241761005f12e340f547c35362",
+        "bytes": 42089
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#meanwhile"
     },
