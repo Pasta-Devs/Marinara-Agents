@@ -2,7 +2,7 @@
 // Big Cheese: People and one person's file (ui.md §5.10)
 // ──────────────────────────────────────────────
 import { useTranslation } from "react-i18next";
-import { Face, moodKey, stanceKey, trustKey, type Ctx } from "./parts";
+import { Face, initials, moodKey, stanceKey, trustKey, type Ctx } from "./parts";
 
 /** The newest feeling line the Friday report wrote for this person. */
 const feeling = (ctx: Ctx, id: string) => {
@@ -22,6 +22,17 @@ export function People({ ctx }: { ctx: Ctx }) {
       <h1 className="bc-heading" tabIndex={-1} data-focus>
         {t("ui.bigCheese.people.title")}
       </h1>
+      {kit.boss && (
+        <div className="bc-row bc-row-flat">
+          <span className="bc-face bc-face-m" aria-hidden="true">
+            {kit.boss.avatar ? <img src={kit.boss.avatar} alt="" /> : initials(kit.boss.name)}
+          </span>
+          <span className="bc-row-text">
+            <span className="bc-row-title">{kit.boss.name}</span>
+            <span className="bc-chip">{t("ui.bigCheese.cast.persona")}</span>
+          </span>
+        </div>
+      )}
       <ul className="bc-list">
         {kit.people.map((who) => {
           const state = run.game.people[who.id];
@@ -32,6 +43,7 @@ export function People({ ctx }: { ctx: Ctx }) {
                 <span className="bc-row-text">
                   <span className="bc-row-title">{who.name}</span>
                   <span className="bc-muted">{who.role}</span>
+                  {who.library && <span className="bc-chip">{t("ui.bigCheese.cast.badge")}</span>}
                   <span className="bc-clamp">{feeling(ctx, who.id) ?? (state && t(trustKey(state.trust)))}</span>
                 </span>
               </button>
@@ -62,6 +74,7 @@ export function PersonSheet({ ctx, id }: { ctx: Ctx; id: string }) {
             {name}
           </h1>
           <span className="bc-muted">{who?.role}</span>
+          {who?.library && <span className="bc-chip">{t("ui.bigCheese.cast.badge")}</span>}
         </span>
       </div>
       {state && (

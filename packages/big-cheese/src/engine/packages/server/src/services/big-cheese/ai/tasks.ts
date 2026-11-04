@@ -5,6 +5,7 @@ import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import type { PlaceKit } from "../core/kits/types.js";
 import { pick } from "../core/rng.js";
 import { STANCES } from "../core/stances.js";
+import { TRAITS } from "../core/traits.js";
 import type { Meter, Severity, Tier } from "../core/types.js";
 
 export type Band = "cold" | "wary" | "neutral" | "warm" | "loyal";
@@ -134,12 +135,15 @@ const voiceSheet = (kit: PlaceKit, ids: string[]) =>
   ids
     .map((id) => {
       const p = person(kit, id);
-      return `- ${id}: ${p.name}, ${p.role}. Voice: ${p.voice.style}. Sounds like: ${p.voice.phrases.map((x) => `"${x}"`).join(" / ")}`;
+      return `- ${id}: ${p.name}, ${p.role}.${p.core ? ` ${p.core}` : ""} Voice: ${p.voice.style}. Sounds like: ${p.voice.phrases.map((x) => `"${x}"`).join(" / ")}`;
     })
     .join("\n");
 
 const msgs = (kit: PlaceKit, system: string, user: unknown): Msg[] => [
-  { role: "system", content: `You write for "${kit.name}", a game place. ${kit.premise}\n${RULES}\n${system}` },
+  {
+    role: "system",
+    content: `You write for "${kit.name}", a game place. ${kit.premise}${kit.boss ? `\nThe boss is ${kit.boss.name}. ${kit.boss.about}` : ""}\n${RULES}\n${system}`,
+  },
   { role: "user", content: JSON.stringify(user) },
 ];
 
@@ -324,7 +328,61 @@ Voices:\n${voiceSheet(
   },
 };
 
+// cast.read (cast.md section 3): an Engine card becomes a casting sheet. Only the card's own fields go in.
+export interface CastReadInput {
+  kit: PlaceKit;
+  card: { name: string; description: string; personality: string; scenario: string; backstory: string; tags: string[] };
+  roles: string[]; // open roles in the place
+}
+export interface CastReadOutput {
+  core: string;
+  roleFit: string[]; // roles from `roles`, best first
+  traits: string[]; // 0 to 2 ids from the catalog (0 only on the Lite path)
+  tone: string;
+  lines: string[];
+}
+
+const castRead: Task<CastReadInput, CastReadOutput> = {
+  tokens: 700,
+  prompt: (i) =>
+    msgs(
+      i.kit,
+      `Read this character card for a new member of staff. The person keeps their own voice. Never invent an age. Roles open in the place: ${i.roles.join(", ")}. Traits: ${TRAITS.join(", ")}. Shape: {"core":"","roleFit":[""],"traits":[""],"tone":"","lines":[""]}. "core" is at most 60 words on who they are. "roleFit" is up to 2 roles from the list, best first. "traits" is 1 or 2 from the list. "tone" is 1 to 4 words on how they talk. "lines" is 2 or 3 short things they would say, close to how the card writes them.`,
+      i.card,
+    ),
+  parse(raw, i) {
+    const o = obj(raw);
+    const traits = [...new Set(Array.isArray(o.traits) ? o.traits : [])].filter((t) =>
+      (TRAITS as readonly unknown[]).includes(t),
+    );
+    if (!traits.length) throw new Error("no trait from the catalog");
+    return {
+      core: str(o.core, 3, 500, "core"),
+      roleFit: (Array.isArray(o.roleFit) ? o.roleFit : [])
+        .filter((r) => i.roles.includes(r as string))
+        .slice(0, 2) as string[],
+      traits: traits.slice(0, 2) as string[],
+      tone: str(o.tone ?? "", 0, 40, "tone"),
+      lines: list(o.lines, 1, 3).map((l) => str(l, 3, 160, "line")),
+    };
+  },
+  // Lite: the card's own words. Traits are the catalog words the card uses, so there can be none.
+  lite(i) {
+    const c = i.card;
+    const text = `${c.personality} ${c.description}`.toLowerCase();
+    const first = (c.personality || c.description).split(/(?<=[.!?])\s/)[0].slice(0, 160);
+    return {
+      core: `${c.name}. ${(c.description || c.personality).split(/\s+/).slice(0, 50).join(" ")}`.trim(),
+      roleFit: [],
+      traits: TRAITS.filter((t) => new RegExp(`\\b${t}\\b`).test(text)).slice(0, 2),
+      tone: "",
+      lines: first ? [first] : [],
+    };
+  },
+};
+
 export const tasks = {
+  "cast.read": castRead,
   "cards.day": cardsDay,
   "answer.tag": answerTag,
   "scene.part": scenePart,

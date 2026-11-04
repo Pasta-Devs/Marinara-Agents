@@ -12,6 +12,7 @@ export interface KitPerson {
   secret: string;
   routine: { morning: string; afternoon: string }; // room ids
   voice: { style: string; phrases: string[] }; // phrases[0] is the signature line
+  core?: string; // a cast person's short card summary, added to prompts
 }
 
 export interface KitRoom {
@@ -41,6 +42,7 @@ export interface CardTemplate {
 
 export interface PlaceKit {
   kitVersion: 1;
+  boss?: { name: string; about: string }; // the player's persona, set by cast.ts
   id: string;
   name: string;
   family: string;

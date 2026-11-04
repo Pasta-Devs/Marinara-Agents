@@ -50,6 +50,8 @@ ${R} .bc-btn {
 ${R} .bc-btn:disabled { opacity: .6; cursor: default; }
 ${R} .bc-btn-primary { background: var(--bc-gold); color: var(--bc-on-gold); border-color: var(--bc-gold); font-weight: 600; min-height: 56px; }
 ${R} .bc-btn-quiet { border-color: transparent; }
+${R} .bc-btn[aria-pressed="true"], ${R} button.bc-row[aria-pressed="true"] { border-color: var(--bc-gold); }
+${R} .bc-face img { width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }
 ${R} .bc-btn-danger { border-color: var(--bc-danger); color: var(--bc-danger); }
 ${R} .bc-note { padding: .75rem 1rem; border: 1px solid var(--bc-border); border-radius: .75rem; display: flex; flex-direction: column; gap: .5rem; align-items: flex-start; }
 ${R} .bc-skeleton { height: 4rem; border-radius: .75rem; background: var(--bc-card); color: transparent; animation: bc-pulse 1.4s ease-in-out infinite; }
@@ -61,7 +63,9 @@ ${R} .bc-sheet {
   background: var(--bc-card); border: 1px solid var(--bc-border); border-radius: 1rem;
   animation: bc-rise 220ms ease-out;
 }
-${R} .bc-sheet h2 { font-family: var(--bc-display); font-weight: 400; font-size: 1.375rem; margin: 0; }
+${R} .bc-sheet-tall { max-height: 92cqh; overflow-y: auto; }
+    ${R} .bc-form select { min-height: 44px; padding: .625rem .75rem; font: inherit; color: var(--bc-fg); background: var(--bc-card); border: 1px solid var(--bc-border); border-radius: .625rem; }
+    ${R} .bc-sheet h2 { font-family: var(--bc-display); font-weight: 400; font-size: 1.375rem; margin: 0; }
 ${R} .bc-muted { color: var(--muted-foreground, currentColor); }
 ${R} .bc-top { gap: .5rem; }
 ${R} .bc-top-day { margin-inline-start: auto; font-weight: 600; }

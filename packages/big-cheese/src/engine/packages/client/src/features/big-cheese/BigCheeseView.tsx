@@ -3,7 +3,8 @@
 // ──────────────────────────────────────────────
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { createRun, deleteRun, errorKey, listRuns, type RunSummary } from "./api";
+import { createRun, deleteRun, errorKey, listRuns, type RunSummary, type StartBody } from "./api";
+import { Cast } from "./Cast";
 import { RunView } from "./RunView";
 
 type Load = "loading" | "slow" | "error" | "ready";
@@ -16,6 +17,7 @@ export function BigCheeseView() {
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [load, setLoad] = useState<Load>("loading");
   const [open, setOpen] = useState<string | null>(null);
+  const [casting, setCasting] = useState(false);
   const [doomed, setDoomed] = useState<RunSummary | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -38,13 +40,14 @@ export function BigCheeseView() {
 
   useEffect(() => void refresh(), [refresh]);
   // Focus follows the screen: the heading takes it when the screen changes.
-  useEffect(() => heading.current?.focus(), [open]);
+  useEffect(() => heading.current?.focus(), [open, casting]);
 
-  async function start() {
+  async function start(cast?: StartBody) {
     setBusy(true);
     setFailure(null);
     try {
-      const { run } = await createRun("hafenkai");
+      const { run } = await createRun("hafenkai", cast);
+      setCasting(false);
       setOpen(run.id);
     } catch (error) {
       setFailure(errorKey(error));
@@ -81,6 +84,22 @@ export function BigCheeseView() {
         onExit={() => {
           setOpen(null);
           void refresh();
+        }}
+      />
+    );
+  }
+
+  if (casting) {
+    return (
+      <Cast
+        kitId="hafenkai"
+        busy={busy}
+        failure={failure}
+        onStart={(cast) => void start(cast)}
+        onSkip={() => void start()}
+        onBack={() => {
+          setFailure(null);
+          setCasting(false);
         }}
       />
     );
@@ -140,8 +159,8 @@ export function BigCheeseView() {
               );
             })}
           </ul>
-          <button type="button" className="bc-btn bc-btn-primary" disabled={busy} onClick={() => void start()}>
-            {busy ? t("ui.bigCheese.titleScreen.starting") : t("ui.bigCheese.titleScreen.start")}
+          <button type="button" className="bc-btn bc-btn-primary" disabled={busy} onClick={() => setCasting(true)}>
+            {t("ui.bigCheese.titleScreen.start")}
           </button>
         </>
       </main>

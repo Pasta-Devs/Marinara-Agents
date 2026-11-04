@@ -15,7 +15,7 @@ function severityCuts(s: Run): [number, number] {
   return s.storyteller === "chaos" ? [0.33, 0.66] : [0.45, 0.85];
 }
 
-function addCard(s: Run, t: Thread, seed: { need: Meter; severity: Severity }) {
+export function addCard(s: Run, t: Thread, seed: { need: Meter; severity: Severity }) {
   const id = newId(s, "c");
   s.inbox.push({ id, thread: t.id, asker: t.people[0]!, ...seed, age: 0, answers: offer(s, s.authority) });
   return id;

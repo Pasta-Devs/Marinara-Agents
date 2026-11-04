@@ -4,11 +4,14 @@
 // The server bundle may not import Engine modules; everything goes through api.runtime.
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import { engineModel } from "./ai/tasks.js";
+import { createBoard } from "./board.js";
+import { CastRequest, ReadBody, castRead, listCast, resolveCast } from "./cast.js";
 import { createGame, view } from "./game.js";
 import { BigCheeseError, CreateRunBody, createRunStore, type RunStore } from "./store.js";
 
 interface Request {
   params?: unknown;
+  query?: unknown;
   body?: unknown;
 }
 interface Reply {
@@ -37,6 +40,7 @@ export async function activate({ api }: ActivationContext) {
   const { runtime } = api;
   const store = createRunStore(runtime.persistence.documents);
   // The default connection. Without one the game plays in Lite mode.
+  const board = createBoard(store, runtime.persistence.documents);
   const game = createGame(store, () => engineModel(runtime, null).catch(() => undefined));
   const runId = (request: Request) => (request.params as { id?: unknown } | undefined)?.id;
 
@@ -62,9 +66,21 @@ export async function activate({ api }: ActivationContext) {
       router.post(
         "/runs",
         handle(async (request) => {
-          const body = CreateRunBody.safeParse(request.body ?? {});
-          if (!body.success) throw new BigCheeseError(400, "Invalid request: kitId.", "bad-request");
-          return game.create(body.data.kitId, body.data.lite);
+          const body = CreateRunBody.merge(CastRequest).safeParse(request.body ?? {});
+          if (!body.success) throw new BigCheeseError(400, "Invalid request.", "bad-request");
+          return game.create(body.data.kitId, body.data.lite, await resolveCast(runtime, body.data.kitId, body.data));
+        }),
+      );
+      router.get(
+        "/cast",
+        handle(() => listCast(runtime)),
+      );
+      router.post(
+        "/cast/read",
+        handle(async (request) => {
+          const body = ReadBody.safeParse(request.body ?? {});
+          if (!body.success) throw new BigCheeseError(400, "Invalid request.", "bad-request");
+          return castRead(runtime, body.data);
         }),
       );
       router.get(
@@ -75,7 +91,14 @@ export async function activate({ api }: ActivationContext) {
       const action = (path: string, run: (request: Request) => Promise<unknown>) =>
         router.post(`/runs/:id/${path}`, handle(run));
       action("scenes/:sceneId/choose", (r) => game.choose(runId(r), param(r, "sceneId"), r.body));
-      action("day/start", (r) => game.dayStart(runId(r), r.body));
+      action("day/start", (r) => game.dayStart(runId(r), r.body).then(board.morning));
+      action("board/preview", (r) => board.preview(runId(r), r.body));
+      action("board/play", (r) => board.play(runId(r), r.body));
+      action("board/rewind", (r) => board.rewind(runId(r), r.body));
+      router.get(
+        "/runs/:id/board/journal",
+        handle((r) => board.journal(runId(r), r.query)),
+      );
       action("cards/:cardId/answer", (r) => game.answer(runId(r), param(r, "cardId"), r.body));
       action("day/end", (r) => game.dayEnd(runId(r), r.body));
       action("letters/:index/read", (r) => game.readLetter(runId(r), Number(param(r, "index")), r.body));
@@ -87,6 +110,7 @@ export async function activate({ api }: ActivationContext) {
       router.delete(
         "/runs/:id",
         handle(async (request) => {
+          await board.remove(runId(request));
           await store.remove(runId(request));
           return { ok: true };
         }),

@@ -29,6 +29,7 @@ export interface Card {
 
 export interface Person {
   trust: number;
+  stress: number;
   mood: string;
   memories: { week: number; thread: string; stance: string }[];
 }
@@ -104,6 +105,8 @@ export interface KitPerson {
   hue: string | number;
   deputy?: boolean;
   traits: string[];
+  library?: boolean; // cast from the player's Engine library
+  avatar?: string;
 }
 
 export interface KitView {
@@ -111,6 +114,7 @@ export interface KitView {
   name: string;
   premise: string;
   bossTitle: string;
+  boss?: { name: string; avatar: string }; // the player's persona
   meters: Record<Meter, { label: string }>;
   people: KitPerson[];
   rooms: { id: string; name: string; text: string }[];
@@ -130,6 +134,8 @@ const ERROR_KEYS: Record<string, string> = {
   "newer-save": "ui.bigCheese.errors.newerSave",
   "wrong-phase": "ui.bigCheese.errors.wrongPhase",
   "no-hours": "ui.bigCheese.errors.noHours",
+  "stale-preview": "ui.bigCheese.errors.stalePreview",
+  "confirm-later": "ui.bigCheese.errors.confirmLater",
 };
 export const CONFLICT_KEY = ERROR_KEYS.conflict;
 
@@ -146,7 +152,39 @@ export function errorKey(error: unknown): string {
 const runPath = (id: string) => `${PREFIX}/runs/${encodeURIComponent(id)}`;
 
 export const listRuns = () => api.get<{ runs: RunSummary[] }>(`${PREFIX}/runs`).then((r) => r.runs);
-export const createRun = (kitId: string) => api.post<{ run: { id: string } }>(`${PREFIX}/runs`, { kitId });
+export const createRun = (kitId: string, cast: StartBody = {}) =>
+  api.post<{ run: { id: string } }>(`${PREFIX}/runs`, { kitId, ...cast });
+
+// The cast picker (server cast.ts): library lists, one casting sheet per picked card, and the run's cast.
+export interface CastItem {
+  id: string;
+  name: string;
+  line: string;
+  avatar: string;
+}
+export interface CastList {
+  characters: CastItem[];
+  personas: CastItem[];
+  traits: string[];
+}
+export interface CastSheet {
+  role: string;
+  traits: string[];
+  tone: string;
+  lines: string[];
+  core: string;
+}
+export interface CastRead {
+  slots: { id: string; role: string; name: string }[];
+  sheet: CastSheet;
+}
+export interface StartBody {
+  boss?: string;
+  staff?: { characterId: string; replaces: string; sheet: CastSheet }[];
+}
+export const listCast = () => api.get<CastList>(`${PREFIX}/cast`);
+export const readCast = (kitId: string, characterId: string) =>
+  api.post<CastRead>(`${PREFIX}/cast/read`, { kitId, characterId });
 export const deleteRun = (id: string) => api.delete<{ ok: true }>(runPath(id));
 export const getRun = (id: string) => api.get<RunState>(runPath(id));
 /** One game action: `path` is relative to the run, e.g. `day/start` or `cards/c3/answer`. */

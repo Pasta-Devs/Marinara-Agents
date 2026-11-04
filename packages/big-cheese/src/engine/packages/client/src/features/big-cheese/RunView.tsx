@@ -13,6 +13,7 @@ import { Place } from "./Place";
 import { Scene } from "./Scene";
 import { Report, RunEnd } from "./Report";
 import { HearingPrep } from "./Hearing";
+import { Board } from "./Board";
 
 const TABS = [
   { view: "office", key: "ui.bigCheese.dock.office" },
@@ -28,6 +29,7 @@ export function RunView({ id, onExit }: { id: string; onExit: () => void }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [view, setView] = useState("office");
+  const [board, setBoard] = useState(false);
   // A finished scene leaves `run.scene`; we keep its id to show the receipt.
   const [ended, setEnded] = useState<string | null>(null);
   const [reportSeen, setReportSeen] = useState<number | null>(null);
@@ -181,6 +183,9 @@ export function RunView({ id, onExit }: { id: string; onExit: () => void }) {
             {t("ui.bigCheese.run.back")}
           </button>
         )}
+        <button type="button" className="bc-btn bc-btn-quiet" onClick={() => setBoard(true)}>
+          {t("ui.bigCheese.board.open")}
+        </button>
         <span className="bc-top-day">
           {t("ui.bigCheese.run.when", { day: t(dayKey(clock.day)), week: clock.week })}
         </span>
@@ -190,9 +195,10 @@ export function RunView({ id, onExit }: { id: string; onExit: () => void }) {
         />
       </header>
       <main className="bc-main" aria-busy={busy}>
-        {noteBlock}
+        {!board && noteBlock}
         {screen}
       </main>
+      {board && <Board ctx={ctx} note={noteBlock} onClose={() => setBoard(false)} />}
       {tab && (
         <nav className="bc-dock" aria-label={t("ui.bigCheese.dock.label")}>
           {TABS.map((entry) => (

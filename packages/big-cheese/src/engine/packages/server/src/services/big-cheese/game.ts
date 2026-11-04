@@ -3,6 +3,7 @@
 // the store's write, and the write carries `expectedRevision`, so a changed run is a 409 and the client reloads.
 import { z } from "zod";
 import { runTask, type Band, type ModelCall } from "./ai/tasks.js";
+import { withCast, type Cast } from "./cast.js";
 import {
   HOURS,
   WEEKS,
@@ -94,15 +95,17 @@ const SCENES = {
 const band = (trust: number): Band =>
   trust < 25 ? "cold" : trust < 45 ? "wary" : trust < 60 ? "neutral" : trust < 80 ? "warm" : "loyal";
 
-export function kitView(kitId: string) {
-  const k = PLACES[kitId as keyof typeof PLACES];
+export function kitView(kitId: string, cast?: Cast) {
+  const k = withCast(PLACES[kitId as keyof typeof PLACES], cast);
   return {
     id: k.id,
     name: k.name,
     premise: k.premise,
     bossTitle: k.bossTitle,
     meters: Object.fromEntries(METERS.map((m) => [m, { label: k.meters[m].label }])),
+    boss: cast?.boss && { name: cast.boss.name, avatar: cast.boss.avatar },
     people: k.people.map((p) => ({
+      ...(cast?.people[p.id] && { library: true, avatar: cast.people[p.id].avatar }),
       id: p.id,
       name: p.name,
       role: p.role,
@@ -115,10 +118,10 @@ export function kitView(kitId: string) {
     letters: k.guidedLetters,
   };
 }
-export const view = (run: Run) => ({ run, kit: kitView(run.kitId) });
+export const view = (run: Run) => ({ run, kit: kitView(run.kitId, run.cast) });
 
 export function createGame(store: RunStore, getModel: () => Promise<ModelCall | undefined>) {
-  const placeOf = (run: Run) => PLACES[run.kitId as keyof typeof PLACES];
+  const placeOf = (run: Run) => withCast(PLACES[run.kitId as keyof typeof PLACES], run.cast);
   const modelFor = (run: { lite: boolean }) => (run.lite ? Promise.resolve(undefined) : getModel());
 
   // One part of a scene. The code picks the offered stances; `h.rng` moves on after the call.
@@ -185,15 +188,26 @@ export function createGame(store: RunStore, getModel: () => Promise<ModelCall | 
   const withGame = (game: Game, h: Rng): Game => ({ ...game, rng: h.rng });
 
   return {
-    async create(kitId: string, lite = false) {
+    async create(kitId: string, lite = false, cast?: Cast) {
       const model = await modelFor({ lite });
       return view(
-        await store.create(kitId, lite, async (game) => {
-          const h = { rng: game.rng };
-          const arrival = await openScene(PLACES[kitId as keyof typeof PLACES], h, game, "arrival", model);
-          game.rng = h.rng;
-          return { text: { cards: {}, scenes: { arrival }, feelings: {} }, scene: "arrival" };
-        }),
+        await store.create(
+          kitId,
+          lite,
+          async (game) => {
+            const h = { rng: game.rng };
+            const arrival = await openScene(
+              withCast(PLACES[kitId as keyof typeof PLACES], cast),
+              h,
+              game,
+              "arrival",
+              model,
+            );
+            game.rng = h.rng;
+            return { text: { cards: {}, scenes: { arrival }, feelings: {} }, scene: "arrival" };
+          },
+          cast,
+        ),
       );
     },
 

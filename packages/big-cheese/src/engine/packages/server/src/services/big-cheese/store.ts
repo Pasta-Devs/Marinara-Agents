@@ -5,6 +5,7 @@
 // revision the caller read, so two writers cannot overwrite each other.
 import { randomBytes } from "node:crypto";
 import type { CapabilityDocumentStore } from "@marinara-engine/shared";
+import type { Cast } from "./cast.js";
 import { z } from "zod";
 import { HAFENKAI, newRun, type Run as Game } from "./core/index.js";
 import { HAFENKAI_PLACE } from "./core/kits/hafenkai.js";
@@ -68,6 +69,7 @@ const RunData = z.object({
   lite: z.boolean(),
   text: z.custom<RunText>((v) => typeof v === "object" && v !== null && "scenes" in v),
   scene: z.string().nullable(),
+  cast: z.custom<Cast>((v) => typeof v === "object" && v !== null && "people" in v).optional(),
   game: z.custom<Game>((v) => typeof v === "object" && v !== null && "clock" in v),
 });
 export type Run = z.infer<typeof RunData>;
@@ -119,14 +121,28 @@ export function createRunStore(documents: CapabilityDocumentStore) {
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     },
 
-    async create(kitId: string, lite = false, prepare?: (game: Game) => Promise<Pick<Run, "text" | "scene">>) {
+    async create(
+      kitId: string,
+      lite = false,
+      prepare?: (game: Game) => Promise<Pick<Run, "text" | "scene">>,
+      cast?: Cast,
+    ) {
       const kit = Object.hasOwn(KITS, kitId) ? KITS[kitId as keyof typeof KITS] : undefined;
       if (!kit) throw new BigCheeseError(400, "Unknown place.", "bad-request");
       const key = `r-${randomBytes(6).toString("hex")}`;
       const at = new Date().toISOString();
       const game = newRun(kit, randomBytes(4).readUInt32LE(0));
       const first = (await prepare?.(game)) ?? { text: { cards: {}, scenes: {}, feelings: {} }, scene: null };
-      const run: Run = { saveVersion: SAVE_VERSION, revision: 0, kitId, createdAt: at, lite, game, ...first };
+      const run: Run = {
+        saveVersion: SAVE_VERSION,
+        revision: 0,
+        kitId,
+        createdAt: at,
+        lite,
+        game,
+        ...(cast && { cast }),
+        ...first,
+      };
       await documents.create({
         id: runDocId(key),
         packageId: PACKAGE_ID,

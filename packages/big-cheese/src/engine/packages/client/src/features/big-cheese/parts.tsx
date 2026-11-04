@@ -64,7 +64,7 @@ const hueColor = (hue: string | number | undefined) =>
 /** The person's colour mixed into the card surface, so it follows the theme. */
 export const tint = (hue: string | number | undefined) => ({ "--bc-hue": hueColor(hue) }) as CSSProperties;
 
-const initials = (name: string) =>
+export const initials = (name: string) =>
   name
     .split(/\s+/)
     .filter((part) => /^\p{L}/u.test(part))
@@ -73,12 +73,12 @@ const initials = (name: string) =>
     .join("")
     .toUpperCase();
 
-/** Face: no portraits in M1, so a ring in the person's colour with their initials. */
+/** Face: a ring in the person's colour with their initials, or the card avatar of a cast person. */
 export function Face({ kit, id, size = "m" }: { kit: KitView; id: string; size?: "s" | "m" | "l" }) {
   const who = person(kit, id);
   return (
     <span className={`bc-face bc-face-${size}`} style={tint(who?.hue)} aria-hidden="true">
-      {initials(who?.name ?? id)}
+      {who?.avatar ? <img src={who.avatar} alt="" /> : initials(who?.name ?? id)}
     </span>
   );
 }
