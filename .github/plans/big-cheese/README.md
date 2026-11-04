@@ -331,13 +331,15 @@ Four milestones. Each one is playable on its own; each slice is one small PR lat
    opening threads wait for M2.
 3. The week: office, hours, cards with strong / middle / weak answers, Say something else, Friday
    settle and report with feeling lines, board hearing. A minimal thread core carries the guided
-   thread and the promise threads from own answers (modules.md §5).
+   thread and the promise threads from own answers (modules.md §5). The big-scene screen and
+   `scene.part` ship for two scenes only: the arrival and the board hearing.
 4. Persona as the boss and up to 3 cards as staff: picker, casting sheet, `cast.read`, age check
    (cast.md §11).
 5. Cheese Board Set for meters, feelings, cards and time, the journal with snapshots, rewind and
    revert (cheese-board.md §10).
 
-**M2 · Alive:** the full storyteller (5-8 open threads, all 11 thread kinds), the Drama and Romance layers, the Project block,
+**M2 · Alive:** the full storyteller (5-8 open threads, all 11 thread kinds), the storyteller's
+weekly big-scene budget and the other big-scene blueprints, the Drama and Romance layers, the Project block,
 systems chips on Preview (modules.md §5). Meetings, rooms and routines, relations, grapevine,
 viewer mode and skip ahead. Cheese Board Spin, Coming up and reason seeds. Cast swap, mid-run hire,
 visitors and story roles.

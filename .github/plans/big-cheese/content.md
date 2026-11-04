@@ -236,10 +236,10 @@ Each card names its need. The three answers are one strong, one middle and one w
 | 1    | Sunday    | Letter 1: "Tomasz is loyal and his brakes are not." Opens the truck card. First card, first answer. | Inbox and answer cards. Tomasz.   |
 | 2    | Monday    | Letter 2: "Gunnar talks first, then works. Never skip his talks." Points at the works council talk. | Calendar and meetings. Gunnar.    |
 | 3    | Wednesday | Letter 3: "Henrike wants my job. She is right to. Watch her."                                       | Staff file. Henrike.              |
-| 4    | Thursday  | Letter 4: "Hear what the Kantine says about you. Then hear it again."                               | Grapevine.                        |
+| 4    | Thursday  | Letter 4: "Read how the crew feels about you. Then read it again."                                  | People file and feeling lines.    |
 | 5    | Friday    | Letter 5: "Ask Olga who eats at night." Points at the pantry thief mystery.                         | Friday report and Office threads. |
 
-The wish generator unlocks after beat 5.
+The wish generator opens after beat 5.
 
 **Crises** (stances all allowed for a Manager kit)
 
@@ -343,10 +343,10 @@ Each card names its need. The three answers are one strong, one middle and one w
 | 1    | Sunday    | Letter 1: "Yusuf knows every door. Ask him first." First card, first answer.                             | Inbox and answer cards. Yusuf.    |
 | 2    | Monday    | Letter 2: "The union eats you alive if you skip their talks." Points at Wednesday's union talks.         | Calendar and meetings. Mina.      |
 | 3    | Wednesday | Letter 3: "Your deputy smiles a lot. Count the smiles."                                                  | Staff file. Dr. Imogen Hale.      |
-| 4    | Thursday  | Letter 4: "Read what they say about you. Then read it again."                                            | Grapevine.                        |
+| 4    | Thursday  | Letter 4: "Read how they feel about you. Then read it again."                                            | People file and feeling lines.    |
 | 5    | Friday    | Letter 5: "Don't trust the clock." Closes the guided thread and opens the mystery "The clock tower key". | Friday report and Office threads. |
 
-The wish generator unlocks after beat 5.
+The wish generator opens after beat 5.
 
 **Crises** (stances all allowed for a Strong leader kit)
 
@@ -968,30 +968,30 @@ A tradition begins as an event that repeats 3 times. The generator may also give
 
 ## 8. Perks (20)
 
-The player picks one perk after each term. Each perk gives a flat effect and unlocks or improves a stance.
+The player picks one perk after each term. Each perk gives a flat effect and adds or improves a stance.
 
-| Perk               | Effect                                           | Stance                           |
-| ------------------ | ------------------------------------------------ | -------------------------------- |
-| Negotiator         | Meetings start with +1 support                   | improves `ask_others`            |
-| Penny-pincher      | `cheap_fix` costs 25% less Output                | improves `cheap_fix`             |
-| Good listener      | "Talk it through" always unlocks a better answer | improves `ask_others`            |
-| Iron hand          | `decree` has half the Love loss                  | improves `decree`                |
-| Silver tongue      | `refuse` costs half the Trust                    | improves `refuse`                |
-| Builder            | `invest` in rooms is 15% cheaper                 | improves `invest`                |
-| Trusted deputy     | `delegate` always works at severity 1            | improves `delegate`              |
-| Fair judge         | `punish` gives no Legitimacy loss                | improves `punish`                |
-| Open heart         | `pardon` Love gain +4                            | improves `pardon`                |
-| Generous host      | `reward` costs 20% less                          | improves `reward`                |
-| Eye for talent     | `appoint` first test is always passed once       | improves `appoint`               |
-| Long breath        | `delay` follow-up chance -15%                    | improves `delay`                 |
-| Early bird         | +1 hour on Monday                                | unlocks extra answers            |
-| Thick skin         | Boss Stress rises 30% slower                     | none                             |
-| Press friend       | Press cards hit 25% softer                       | improves `refuse` on press cards |
-| Lucky streak       | One crisis per term starts at severity 2         | none                             |
-| Master of ceremony | Rituals give +2 People                           | unlocks ritual answers           |
-| Spy network        | One free secret reveal per term                  | unlocks evidence play            |
-| Peacemaker         | Feuds fade 2x faster                             | improves `ask_others`            |
-| Steady hand        | Meters wear 15% slower in the Friday report      | none                             |
+| Perk               | Effect                                        | Stance                           |
+| ------------------ | --------------------------------------------- | -------------------------------- |
+| Negotiator         | Meetings start with +1 support                | improves `ask_others`            |
+| Penny-pincher      | `cheap_fix` costs 25% less Output             | improves `cheap_fix`             |
+| Good listener      | "Talk it through" always adds a better answer | improves `ask_others`            |
+| Iron hand          | `decree` has half the Love loss               | improves `decree`                |
+| Silver tongue      | `refuse` costs half the Trust                 | improves `refuse`                |
+| Builder            | `invest` in rooms is 15% cheaper              | improves `invest`                |
+| Trusted deputy     | `delegate` always works at severity 1         | improves `delegate`              |
+| Fair judge         | `punish` gives no Legitimacy loss             | improves `punish`                |
+| Open heart         | `pardon` Love gain +4                         | improves `pardon`                |
+| Generous host      | `reward` costs 20% less                       | improves `reward`                |
+| Eye for talent     | `appoint` first test is always passed once    | improves `appoint`               |
+| Long breath        | `delay` follow-up chance -15%                 | improves `delay`                 |
+| Early bird         | +1 hour on Monday                             | adds extra answers               |
+| Thick skin         | Boss Stress rises 30% slower                  | none                             |
+| Press friend       | Press cards hit 25% softer                    | improves `refuse` on press cards |
+| Lucky streak       | One crisis per term starts at severity 2      | none                             |
+| Master of ceremony | Rituals give +2 People                        | adds ritual answers              |
+| Spy network        | One free secret reveal per term               | adds evidence plays              |
+| Peacemaker         | Feuds fade 2x faster                          | improves `ask_others`            |
+| Steady hand        | Meters wear 15% slower in the Friday report   | none                             |
 
 ---
 

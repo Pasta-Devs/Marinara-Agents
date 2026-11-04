@@ -176,7 +176,7 @@ These ideas are now kinds of threads (design.md §3). They need no own system.
 - **Boss sheet:** name, look, title, 2 traits and a short backstory. People react to the traits (a "Former soldier" Provost gets respect from the head porter and jokes from the students).
 - **Epithet:** the place gives the boss a name from their decisions: "The Iron Provost", "Good King Aldric", "Bucket Brandt". It changes when the style changes, and the grapevine uses it.
 - **Energy:** a bad night's sleep costs one hour the next day. A weekend off gives one back. Late meetings, parties and crises cost sleep.
-- **Skills** grow with use: Negotiation, Charm, Fear, Finance, Craft. Each level unlocks a better answer type on cards (Charm 3: "Talk them round" appears on angry cards).
+- **Skills** grow with use: Negotiation, Charm, Fear, Finance, Craft. Each level adds a better answer type on cards (Charm 3: "Talk them round" appears on angry cards).
 - **Wardrobe:** outfits for days and events. People comment on them.
 - **Diary:** one short line per day, written from the day's events. Readable as a book at the end and part of the yearbook.
 
@@ -295,10 +295,10 @@ Optional room sounds by place family (forklift beeps, a school bell, a harbour, 
 
 ## 5. Where it fits in the slices
 
-| Slice     | Content                                                                                                                                                                                                                                      |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **M1**    | A minimal thread core: the guided thread "Letters from the last boss" and promise threads from own answers. A card's follow-up comes back as a beat on that card's own thread.                                                               |
-| **M2**    | The full storyteller: 5-8 open threads and all 11 thread kinds (design.md §3.2). The Drama and Romance layers. The Project block. Systems chips on Preview. No hook framework: blocks are plain code.                                        |
-| **M3**    | Big event and Season blocks. More layers: Press and gossip, Rivals, Family and home. The Adult module. The Systems tab in the Kit editor. Advisors. Office hours.                                                                            |
-| **M4**    | Crime, Politics, Mystery, Horror, Legacy, The strange. Depth options. Delegation, favours and leverage. Eyes and ears. Out of the office. Reviews and awards. Mini-games.                                                                    |
-| **Later** | The later blocks (Queue, Rota, Market, Stock, Ranking, Map, Faction) and the hook extraction. Data-only packs. Career mode. Many places. Return visit. Mutators other than Ironman (M3, with the Cheese Board). Daily challenge. Photo mode. |
+| Slice     | Content                                                                                                                                                                                                                                                                                |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **M1**    | A minimal thread core: the guided thread "Letters from the last boss" and promise threads from own answers. A card's follow-up comes back as a beat on that card's own thread. The big-scene screen and `scene.part` ship for two scenes only: the arrival and the board hearing.      |
+| **M2**    | The full storyteller: 5-8 open threads and all 11 thread kinds (design.md §3.2). The weekly big-scene budget and the other big-scene blueprints (design.md §3.8). The Drama and Romance layers. The Project block. Systems chips on Preview. No hook framework: blocks are plain code. |
+| **M3**    | Big event and Season blocks. More layers: Press and gossip, Rivals, Family and home. The Adult module. The Systems tab in the Kit editor. Advisors. Office hours.                                                                                                                      |
+| **M4**    | Crime, Politics, Mystery, Horror, Legacy, The strange. Depth options. Delegation, favours and leverage. Eyes and ears. Out of the office. Reviews and awards. Mini-games.                                                                                                              |
+| **Later** | The later blocks (Queue, Rota, Market, Stock, Ranking, Map, Faction) and the hook extraction. Data-only packs. Career mode. Many places. Return visit. Mutators other than Ironman (M3, with the Cheese Board). Daily challenge. Photo mode.                                           |

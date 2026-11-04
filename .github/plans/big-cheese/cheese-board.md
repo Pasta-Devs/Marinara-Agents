@@ -5,17 +5,15 @@ Companion to [README.md](README.md), [design.md](design.md), [content.md](conten
 
 ## 1. What it is
 
-The Cheese Board is the boss's own board of directors, and the player is its only member. You
-are the boss of the boss. The Board can change any part of the game state on purpose: a meter, a
-feeling, a secret, a room, a rule, the calendar, the story itself.
+The Cheese Board is the boss's own board of directors, and the player is its only member. The
+Board can change any part of the game state on purpose: a meter, a feeling, a secret, a room, a
+rule, the calendar, the story itself.
 
-The promise has three parts:
+The Board does three things:
 
-- **Anything the code owns, you can set.** If the game stores a number or a flag, the Board can
-  change it, exactly, now.
-- **Anything you can say, you can spin.** Plain words become a planned story with beats over
-  the next days and weeks.
-- **Everything can go back.** Every play is in the journal, and every play can be rewound.
+- It sets any number or flag the game stores, exactly and at once.
+- It turns plain words into a planned story with beats over the next days and weeks.
+- It keeps every play in the journal, and any play can be rewound.
 
 It is pillar 6 of the plan ("Say it and the place answers"). The code still owns every number:
 the Board changes numbers through code, never through model text.
@@ -136,14 +134,14 @@ values are clamped to their range (meters, trust, stress, condition: 0-100).
 
 **Rooms and things**
 
-| Action             | Layer      | Inputs                            | Effect                                                         |
-| ------------------ | ---------- | --------------------------------- | -------------------------------------------------------------- |
-| Condition          | Set + Spin | room, value                       | Boathouse 45 → 90.                                             |
-| Unlock hidden room | Set        | room                              | Clock tower opens with no key.                                 |
-| Add room           | Set + Spin | name, kind, feeds, condition      | A rooftop garden. Spin can write it; the code sets its effect. |
-| Drawer items       | Set        | add or remove key, gift, document | Put the clock tower key in the drawer.                         |
-| Evidence           | Set + Spin | about whom, which secret          | Evidence card of Odalys's tutoring fees.                       |
-| Equipment          | Set        | item, condition                   | The marine lab pump works again.                               |
+| Action           | Layer      | Inputs                            | Effect                                                         |
+| ---------------- | ---------- | --------------------------------- | -------------------------------------------------------------- |
+| Condition        | Set + Spin | room, value                       | Boathouse 45 → 90.                                             |
+| Open hidden room | Set        | room                              | Clock tower opens with no key.                                 |
+| Add room         | Set + Spin | name, kind, feeds, condition      | A rooftop garden. Spin can write it; the code sets its effect. |
+| Drawer items     | Set        | add or remove key, gift, document | Put the clock tower key in the drawer.                         |
+| Evidence         | Set + Spin | about whom, which secret          | Evidence card of Odalys's tutoring fees.                       |
+| Equipment        | Set        | item, condition                   | The marine lab pump works again.                               |
 
 **Rules**
 
@@ -161,7 +159,7 @@ values are clamped to their range (meters, trust, stress, condition: 0-100).
 | ---------------- | ----- | ----------------- | ------------------------------------------------------------------------------------------------------------- |
 | Layer on or off  | Set   | layer, dial 0-100 | Romance on at 40, now. The Board skips the "start of week" wait (modules.md §2); the intro event still plays. |
 | System on or off | Set   | system block      | Turn on Season. Removing keeps its state, as in modules.md.                                                   |
-| Adult module     | Set   | on or off         |                                                    |
+| Adult module     | Set   | on or off         |                                                                                                               |
 
 **Cast** (details of reading cards, ages and memory are in cast.md)
 
@@ -191,7 +189,7 @@ it, so "falls for Cormac" from Imogen's file means Imogen.
 | "Imogen falls for Cormac"                     | 4 beats over 2 weeks: a late talk at the Boathouse, Yusuf notices, a crush (Imogen → Cormac, medium), a thread "Imogen and Cormac" with stakes for the deputy's focus. Needs Romance on. |
 | "A storm floods the boathouse next week"      | 3 beats: Monday weather "storm", Tuesday Boathouse condition big drop, a thread "Boathouse flood" (need Campus mood, severity 2). Cormac asks for money on Wednesday.                    |
 | "Make the union strike unless I fix pay"      | A thread "Union strike" with a 2-week clock and a win condition (answer the pay card with `invest`), Mina's ambition progress up, one grapevine beat.                                    |
-| "Bring my persona's sister as the new bursar" | Insert person: a new bursar written from the persona's lore, Teodor Vance moves to "on leave" or stays (the preview asks). One arrival scene on Monday.                 |
+| "Bring my persona's sister as the new bursar" | Insert person: a new bursar written from the persona's lore, Teodor Vance moves to "on leave" or stays (the preview asks). One arrival scene on Monday.                                  |
 
 ### The planner task `board.plan`
 
@@ -201,6 +199,11 @@ One model call. Input:
 - a short run summary: clock, meters, people (id, name, role, traits, age class), rooms, open
   threads, layers on, Adult on or off, themes;
 - the verb list with each verb's inputs and the size words.
+
+The verb list includes `scene.big` with a one-line premise. The code builds that big scene from
+the `free` blueprint (design.md §3.8). It counts as a scene the player asked for, so it is outside
+the storyteller's weekly big-scene budget. It still costs 2 hours and shows in Coming up with its
+parts and hours.
 
 The model never writes a number. It picks a **size** (`small`, `medium`, `big`) and the code turns
 it into a number with the severity scale k = 3 / 6 / 10 (content.md §1). The player can change
@@ -262,22 +265,22 @@ model could not plan, with a reason the UI shows.
 The code checks every plan before the preview. Model text that breaks a rule is dropped with the
 beat it belongs to; the preview names what was dropped and why.
 
-| Check         | Rule                                                                                             |
-| ------------- | ------------------------------------------------------------------------------------------------ |
-| Verbs         | Only verbs in the Board verb list. Unknown verb = beat dropped.                                  |
-| Targets       | Every id exists, or is a new person or room made in the same plan.                               |
-| Size          | Only `small`, `medium`, `big`. The code sets the number.                                         |
-| Limits        | Max 8 beats per play. Beats from now up to 8 weeks ahead (one term). Text 600 characters.        |
-| Adult module  | Adult beats only when the module is on and that theme is on.                                     |
+| Check        | Rule                                                                                      |
+| ------------ | ----------------------------------------------------------------------------------------- |
+| Verbs        | Only verbs in the Board verb list. Unknown verb = beat dropped.                           |
+| Targets      | Every id exists, or is a new person or room made in the same plan.                        |
+| Size         | Only `small`, `medium`, `big`. The code sets the number.                                  |
+| Limits       | Max 8 beats per play. Beats from now up to 8 weeks ahead (one term). Text 600 characters. |
+| Adult module | Adult beats only when the module is on and that theme is on.                              |
 
 One fix-up retry with the error list. If the retry also fails, the play is not made: "The planner
 could not make this plan: <reason>. Nothing changed." The Board then lists Set actions that match
 the words, by keyword search with no model call.
 
-### Preview, remove, "Do it"
+### Preview, remove, "Play it"
 
 The preview is a list of beat cards in time order. Each card can be removed with its "x". The
-player can tap a number to change it, or tap the time to move the beat. "Do it" makes the play.
+player can tap a number to change it, or tap the time to move the beat. "Play it" makes the play.
 "Cancel" leaves no trace and no cost.
 
 ## 5. Truth, journal and Coming up
@@ -319,7 +322,7 @@ One timeline of everything scheduled, grouped by day:
 - follow-ups and scheduled meetings.
 
 Each row has **Move** (pick a new slot), **Change** (edit people, size or text, with the same
-validation), **Cancel** and **Now** (force it). Every change is a small play in the journal, so it
+validation), **Cancel** and **Run now** (force it). Every change is a small play in the journal, so it
 can be rewound too. Rows from the storyteller (not from the player) show a small "storyteller"
 tag; they can be changed the same way.
 
@@ -339,7 +342,7 @@ People react to a Board play in character, but they never refuse it, deny it or 
   again after a demotion is cool to you.
 
 **Silent edit** (a switch on every Set play): no reason line, no memory, no grapevine. The new
-values are simply true. Use it for fixes and tests.
+values are true at once. Use it for fixes and tests.
 
 ## 7. Honest runs, Sandbox, Ironman
 
@@ -415,7 +418,7 @@ not a play, so it adds no mark.
 | `/runs/:id/board/journal`   | GET         | paged journal entries.                                                                                              |
 | `/runs/:id/board/coming-up` | GET / PATCH | the timeline; PATCH moves, changes, cancels or forces one row.                                                      |
 
-A preview is kept for 30 minutes. "Do it" on an old preview, or after the run moved on, makes a
+A preview is kept for 30 minutes. "Play it" on an old preview, or after the run moved on, makes a
 fresh preview instead and shows what changed.
 
 ### Model task `board.plan`
@@ -423,7 +426,7 @@ fresh preview instead and shows what changed.
 | Field     | Value                                                                                                 |
 | --------- | ----------------------------------------------------------------------------------------------------- |
 | When      | Spin "Plan it"                                                                                        |
-| Input     | text, target, run summary, verb list                                                   |
+| Input     | text, target, run summary, verb list                                                                  |
 | Output    | the JSON in §4                                                                                        |
 | Budget    | the shared model helper: room for reasoning models, retry on `length` and on empty answers            |
 | Validator | §4 table; one fix-up retry                                                                            |
@@ -462,11 +465,11 @@ spacing from theme tokens only.
 - **Spin tab:** one text box with the target as a chip, 3 suggestions from the open threads
   ("Make the strike happen sooner"), and "Plan it".
 - **Preview sheet:** beat cards (what, when, numbers, rewind note), "x" on each card, a Silent
-  edit switch for Set plays, "Do it" and "Cancel". A loading state for Spin says "Planning...",
+  edit switch for Set plays, "Play it" and "Cancel". A loading state for Spin says "Planning...",
   and a failure says why and offers the Set list.
 - **Journal:** rows with time, layer icon, summary; tap opens the entry with "Rewind" and
   "Revert values".
-- **Coming up:** a day-grouped list; each row has Move, Change, Cancel, Now.
+- **Coming up:** a day-grouped list; each row has Move, Change, Cancel, Run now.
 
 On a wide screen the Board is a right-hand panel instead of a bottom sheet.
 
@@ -476,7 +479,7 @@ On a wide screen the Board is a right-hand panel instead of a bottom sheet.
 | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | M1 Playable | Board shell from More and long-press, search, Set for meters, feelings, cards, time (skip, hours, rewind a day), journal with snapshots, rewind and revert     | Helps every playtest and bug report: set up a state in one minute, then rewind. |
 | M2 Alive    | Spin with `board.plan`, preview with beats, Coming up, threads (open, change, close, force), relations, secrets, ambition, rooms, reason seeds and Silent edit | Threads and the storyteller arrive in M2; Spin needs them.                      |
-| M3 Yours    | Cast insert (with cast.md), layer and system switches, Adult module switch, rules, decrees, dials, mutators, Honest run, Sandbox, Ironman           | Follows the kit editor, modules and Sandbox slices.                             |
+| M3 Yours    | Cast insert (with cast.md), layer and system switches, Adult module switch, rules, decrees, dials, mutators, Honest run, Sandbox, Ironman                      | Follows the kit editor, modules and Sandbox slices.                             |
 | M4 Lasting  | Drawer, evidence, equipment, hidden rooms, culture and traditions, authority values for all kits, Edit the kit from the Board, Redo                            | Follows the M4 systems they touch.                                              |
 
 Each part needs one runnable check: validator cases (unknown verb, too

@@ -6,16 +6,16 @@ Your own Engine characters and personas inside the game. This file covers where 
 
 Big Cheese runs inside Marinara, and Marinara players already have characters they love. A management game is only a game. A game where _your_ Rhea coaches the rowing crew, remembers that you cut her budget, and gossips about you in The Bilge is the reason to play it here and not anywhere else.
 
-**Promise:** "Bring your people. They stay themselves, they remember you, and nothing leaves the game unless you say so."
+**Promise:** "Your characters keep their own voice and remember what you do. Nothing goes back to the Engine unless you send it."
 
 **Pillars**
 
-| #   | Pillar                           | What it means                                                                                              |
-| --- | -------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| 1   | Your character stays themselves  | Voice, looks and history come from the card. The kit gives them a job, not a new personality.              |
-| 2   | The game never rewrites the card | Big Cheese only reads cards. It writes nothing back on its own.                                            |
-| 3   | You decide what goes back        | Memories, places and notes go to the Engine only from an export sheet, one tap per item, with a preview.   |
-| 4   | Same rules as everyone           | A cast person uses the same numbers, traits and stances as a generated one. |
+| #   | Pillar                           | What it means                                                                                            |
+| --- | -------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| 1   | Your character stays themselves  | Voice, looks and history come from the card. The kit gives them a job, not a new personality.            |
+| 2   | The game never rewrites the card | Big Cheese only reads cards. It writes nothing back on its own.                                          |
+| 3   | You decide what goes back        | Memories, places and notes go to the Engine only from an export sheet, one tap per item, with a preview. |
+| 4   | Same rules as everyone           | A cast person uses the same numbers, traits and stances as a generated one.                              |
 
 ## 2. Where cast can come in
 
@@ -109,7 +109,7 @@ The player sees the result before confirming. Everything is editable.
 | Ambition, secret | Pick, type, or leave empty.                                                  |
 | Voice sample     | Edit the line.                                                               |
 | Routine          | Pick rooms per slot.                                                         |
-| Age              | Shown with its source.                          |
+| Age              | Shown with its source.                                                       |
 | Starting numbers | trust, stress as normal starts. Change only with the "Show numbers" setting. |
 
 **How the role is picked.** At the wish and on mid-run hire, the AI suggests the best role in this place first (top of `roleFit`). The player can choose any other. On a Preview swap the role is fixed by the slot. On the Cheese Board the player can drop a card anywhere without a sheet ("Quick cast" uses the AI's first suggestion and skips the sheet).
@@ -206,19 +206,18 @@ Multi-select up to 3 at the wish, one at a time elsewhere. A "Personas" tab list
 Role:   [Head of rowing v]  suggested
 Traits: (hot-headed) (loyal)        [edit]
 Wants:  Win the national cup        [edit]
-Secret: Banned one season...  [keep][x]
+Secret: Banned one season... [Keep][Remove]
 Voice:  "Again. And this time..."   [edit]
-Age:    34 (from card)
-        [ Back ]     [ Confirm ]
+Age:    34 (from the card)
+        [ Back ]     [ Cast Rhea ]
 ```
-
 
 **Badges.** Cast people show a small "From your library" badge on the staff list, the Staff file and scene headers. The boss card shows "Your persona".
 
-**Export sheet** (from the run menu, "Take it home")
+**Export sheet** (from the run menu, "Save to your library")
 
 ```
-Take it home: Hollowmere, year 2
+Save to your library: Hollowmere, year 2
 [ ] Memories lorebook   (12 people)   [preview]
 [ ] Place lorebook      (9 rooms)     [preview]
 [ ] Note on persona "Wren"            [preview]

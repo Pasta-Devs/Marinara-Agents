@@ -64,8 +64,8 @@ That evening the third letter opens the Staff file: "Your deputy smiles a lot. C
 
 **Thursday.** Barnaby Quill says the Gazette will print a grade-inflation story (need Reputation,
 severity 2). The Provost lets admissions handle it (`delegate`): Reputation +3 −1. Imogen's
-ambition +15. The fourth letter opens the Grapevine screen: "Read what they say about you. Then
-read it again."
+ambition +15. The fourth letter opens the People file and its feeling lines: "Read how they feel
+about you. Then read it again."
 
 **Friday.** Settle (content.md §1.5). Before settle: Endowment 50, Grades 56, Campus mood 57,
 Reputation 55. Income +3 (2 + (56 − 50) / 5, rounded), drift 10% toward 50, wear −2. Report:
@@ -235,7 +235,7 @@ The last boss left 5 letters in the drawer. Each one points at a person and a sc
 | Sunday    | "X knows every door. Ask them first."               | the head porter / forklift lead | Inbox                         |
 | Monday    | "The union eats you alive if you skip their talks." | the union rep                   | Calendar and Meetings         |
 | Wednesday | "Your deputy smiles a lot. Count the smiles."       | the deputy                      | Staff file                    |
-| Thursday  | "Read what they say about you. Then read it again." | —                               | Grapevine                     |
+| Thursday  | "Read how they feel about you. Then read it again." | —                               | People file and feeling lines |
 | Friday    | a hint at the kit's first mystery                   | —                               | Friday report, Office threads |
 
 The letters are kit data with placeholders, so a generated kit can have them too. The built-in
