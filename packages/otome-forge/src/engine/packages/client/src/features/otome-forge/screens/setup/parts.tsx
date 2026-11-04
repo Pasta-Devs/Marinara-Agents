@@ -4,7 +4,7 @@
 // ──────────────────────────────────────────────
 // Every control is a native input with its own label, so keyboard and screen readers work as they do anywhere:
 // radio groups move with the arrow keys, switches toggle with Space.
-import { useId, type ReactNode } from "react";
+import { useId, type ReactNode, type Ref } from "react";
 import { useTranslation } from "react-i18next";
 import { Lock, PencilLine, TriangleAlert, type LucideIcon } from "lucide-react";
 import { useOtomeProps } from "../../props";
@@ -312,6 +312,8 @@ interface ConnectionSelectProps {
   emptyLabel?: string;
   /** The context window, in tokens, below which the chosen connection gets a warning (it is never refused). */
   minContext?: number;
+  /** The <select> itself, for a screen that brings the player to it. */
+  selectRef?: Ref<HTMLSelectElement>;
 }
 
 export function ConnectionSelect({
@@ -322,6 +324,7 @@ export function ConnectionSelect({
   onChange,
   emptyLabel,
   minContext,
+  selectRef,
 }: ConnectionSelectProps) {
   const { t } = useTranslation();
   const { openConnection } = useOtomeProps();
@@ -339,6 +342,7 @@ export function ConnectionSelect({
       </label>
       <div className="of-select-row">
         <select
+          ref={selectRef}
           id={id}
           className="of-input of-select"
           value={value}

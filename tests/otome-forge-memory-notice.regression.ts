@@ -2,12 +2,14 @@
 // every screen of an open story (components/MemoryBanner.tsx) and under Settings → Connections (MemorySection): a
 // failed summary offers Retry with the provider's own words and the way to the Memory connection; a retry shows its
 // progress and keeps its buttons, and a retry that fails again shows the new error; memory that waits for a connection
-// offers only the way to the connection; ordinary catch-up, ready memory and a fresh story show nothing.
+// offers only the way to the connection; ordinary catch-up, ready memory and a fresh story show nothing. The status is
+// read fast only while a retry runs or Settings' memory section watches upkeep.
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
   NOTICE_MESSAGE_CHARACTERS,
   memoryNotice,
+  memoryPollMs,
   nextMemoryView,
   retryAction,
   shortMessage,
@@ -119,4 +121,19 @@ test("a long provider message is shortened to one line for the banner", () => {
   assert.equal(shortMessage(undefined), null);
   // One unbroken word longer than the limit is cut inside it.
   assert.equal(shortMessage("x".repeat(500), 10), `${"x".repeat(9)}…`);
+});
+
+test("the status is read every 2 s only while a retry runs or Settings watches; catch-up every 10 s, else 30 s", () => {
+  const [failed, retrying] = read(status("error", { message: CONTEXT_ERROR }), status("pending"));
+  assert.equal(retrying.retrying, true);
+  assert.equal(memoryPollMs(retrying), 2_000);
+  // The catch-up after every chapter shows nothing until it fails: no 2 s reads on every screen of the story.
+  const catchUp = read(status("ready"), status("pending")).at(-1);
+  assert.equal(memoryPollMs(catchUp), 10_000);
+  // Settings' memory section shows that upkeep as it runs.
+  assert.equal(memoryPollMs(catchUp, true), 2_000);
+  for (const resting of [failed, status("ready"), status("stale", { noConnection: true }), undefined]) {
+    assert.equal(memoryPollMs(resting), 30_000, JSON.stringify(resting));
+    assert.equal(memoryPollMs(resting, true), 30_000, JSON.stringify(resting));
+  }
 });

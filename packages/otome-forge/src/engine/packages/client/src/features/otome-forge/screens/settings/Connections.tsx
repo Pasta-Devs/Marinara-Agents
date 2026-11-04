@@ -1,7 +1,8 @@
 // ──────────────────────────────────────────────
 // Otome Forge Settings → Connections: the story's text connection for each job ("Same as story" by default), how many
 // love interests may write first each day, each once (#2044, S/phone/daily.ts; 0, the default, is off), and the story
-// memory's status with its Retry (Debug's MemorySection), next to the connection that writes the summaries
+// memory's status with its Retry (Debug's MemorySection), next to the connection that writes the summaries. Opened by
+// the memory banner for a failed summary, it shows that connection (Memory, under More connections), focused.
 // ──────────────────────────────────────────────
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -39,7 +40,18 @@ function dailyOf(text: string): number | null {
   return Number.isInteger(value) && value >= 0 && value <= DAILY_MESSAGES_MAX ? value : null;
 }
 
-function StoryConnections({ run, settings }: { run: RunView; settings: SaveSettings }) {
+/** Settings' way to the Memory connection (ConnectionControls revealMemory), shown once. */
+interface RevealMemory {
+  revealMemory?: boolean;
+  onMemoryRevealed?: () => void;
+}
+
+function StoryConnections({
+  run,
+  settings,
+  revealMemory,
+  onMemoryRevealed,
+}: { run: RunView; settings: SaveSettings } & RevealMemory) {
   const { t } = useTranslation();
   const connections = useConnections();
   const [form, setForm] = useState(() => toForm(run.world.connections));
@@ -73,6 +85,8 @@ function StoryConnections({ run, settings }: { run: RunView; settings: SaveSetti
         connections={connections.text}
         onChange={setForm}
         onCheckAgain={connections.refetch}
+        revealMemory={revealMemory}
+        onMemoryRevealed={onMemoryRevealed}
       />
       <TextField
         label={t("ui.otomeForge.settings.dailyMessages")}
@@ -106,7 +120,7 @@ function StoryConnections({ run, settings }: { run: RunView; settings: SaveSetti
   );
 }
 
-export function ConnectionsSettings({ run }: { run: RunView | null }) {
+export function ConnectionsSettings({ run, ...reveal }: { run: RunView | null } & RevealMemory) {
   const { t } = useTranslation();
   const settings = useSaveSettings(run?.runKey ?? null);
   return (
@@ -114,7 +128,12 @@ export function ConnectionsSettings({ run }: { run: RunView | null }) {
       <p className="of-hint">{t("ui.otomeForge.settings.connectionsIntro")}</p>
       {run ? (
         <>
-          <StoryConnections key={storedKey(run.runKey, run.world.connections)} run={run} settings={settings} />
+          <StoryConnections
+            key={storedKey(run.runKey, run.world.connections)}
+            run={run}
+            settings={settings}
+            {...reveal}
+          />
           <MemorySection runKey={run.runKey} />
         </>
       ) : (

@@ -60,3 +60,13 @@ export function retryAction(notice: NonNullable<MemoryNotice>, busy = false): "o
   if (notice.kind === "no-connection") return null;
   return busy || notice.kind === "retrying" ? "running" : "offered";
 }
+
+/**
+ * How often the status is read again, in ms: every 2 s while a retry runs, or while upkeep runs and the memory's own
+ * section is open (`watching`, Settings); every 10 s for other upkeep (the catch-up after a chapter, which shows
+ * nothing until it fails); and every 30 s otherwise, so a summary that fails in the background still shows.
+ */
+export function memoryPollMs(view: MemoryView | undefined, watching = false): number {
+  if (view?.retrying || (watching && view?.phase === "pending")) return 2_000;
+  return view?.phase === "pending" ? 10_000 : 30_000;
+}

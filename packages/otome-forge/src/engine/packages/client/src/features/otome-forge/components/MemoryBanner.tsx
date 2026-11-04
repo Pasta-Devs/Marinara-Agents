@@ -1,13 +1,15 @@
 // ──────────────────────────────────────────────
 // Otome Forge: a failed summary is never silent. On every screen of an open story (mounted once by OtomeForgeView), a
-// banner says that a summary failed, with the provider's own words, Retry, and the way to Settings → Connections, to
-// give Memory a model with a larger context; or that no connection can write summaries, with only the way there.
+// banner says that a summary failed, with the provider's own words, Retry, and the way to Settings → Connections at
+// the Memory connection (More connections, focused), to give it a model with a larger context; or that no connection
+// can write summaries, with only the way to Connections (the story's own connection is the one missing then).
 // Ordinary catch-up shows nothing (lib/memory-notice.ts).
 // ──────────────────────────────────────────────
-// It sits in the stage's flow below the top bar (above the reader's own header), so it pushes the screen down and
-// covers none of its controls; its height goes to --of-memory-banner-h for the reader's phone menu (styles.ts). Retry
-// stays mounted (aria-disabled) while it runs, so focus never falls to the page; once memory is well again the banner
-// goes, gives the focus it held to the screen's heading, and a status line says so.
+// It sits in the stage's flow below the top bar (above the reader's own header, which then leaves the safe area to it),
+// so it pushes the screen down and covers none of its controls; its height goes to --of-memory-banner-h for the
+// reader's phone menu (styles.ts). Retry stays mounted (aria-disabled) while it runs, so focus never falls to the
+// page; once memory is well again the banner goes, gives the focus it held to the screen's heading, and a status line
+// says so.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CircleAlert, PlugZap, RotateCcw } from "lucide-react";
@@ -16,8 +18,8 @@ import { retryAction, type MemoryNotice } from "../lib/memory-notice";
 
 interface MemoryBannerProps {
   runKey: string;
-  /** Opens Settings → Connections. */
-  onOpenConnections: () => void;
+  /** Opens Settings → Connections; `memory`: at the Memory connection (a failed summary). */
+  onOpenConnections: (memory: boolean) => void;
   /** Where focus goes when the banner leaves while it held it (the screen's heading). */
   onLeave: () => void;
 }
@@ -66,7 +68,7 @@ function MemoryBannerBox({
   error: string | null;
   busy: boolean;
   onRetry: () => void;
-  onOpenConnections: () => void;
+  onOpenConnections: (memory: boolean) => void;
   onLeave: () => void;
 }) {
   const { t } = useTranslation();
@@ -139,7 +141,7 @@ function MemoryBannerBox({
         <button
           type="button"
           className="of-button of-button--quiet of-glass of-button--small"
-          onClick={onOpenConnections}
+          onClick={() => onOpenConnections(notice.kind !== "no-connection")}
         >
           <PlugZap size={15} strokeWidth={2} aria-hidden="true" />
           {t("ui.otomeForge.memory.connection")}

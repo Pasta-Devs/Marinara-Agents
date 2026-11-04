@@ -25,7 +25,7 @@ const MEMORY_PHASE_KEYS: Record<MemoryStatus["phase"], string> = {
 export function MemorySection({ runKey }: { runKey: string }) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
-  const memory = useMemoryStatus(runKey);
+  const memory = useMemoryStatus(runKey, { watching: true });
   const { status, busy, error } = memory;
   const noConnection = memory.notice?.kind === "no-connection";
 

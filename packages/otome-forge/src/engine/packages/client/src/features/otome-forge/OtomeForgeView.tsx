@@ -49,7 +49,7 @@ import {
   type DockScreen,
   type ScreenId,
 } from "./screens/screens";
-import { Settings, type SettingsTab } from "./screens/settings/Settings";
+import { Settings, type SettingsAsk, type SettingsTab } from "./screens/settings/Settings";
 import { SetupWizard } from "./screens/setup/SetupWizard";
 import { StoryHome } from "./screens/story/StoryHome";
 import { Wardrobe } from "./screens/wardrobe/Wardrobe";
@@ -81,9 +81,8 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
   const run = useRun(activeRun);
   const [chosen, setChosen] = useState<ScreenId | null>(null);
   const [settingsReturn, setSettingsReturn] = useState<ScreenId>("picker");
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>("look");
-  // Each way into Settings opens it afresh on its tab, from Settings too (the memory banner's Connections).
-  const [settingsOpened, setSettingsOpened] = useState(0);
+  // Each way into Settings, a new object: one made while Settings shows (the memory banner's) switches its tab.
+  const [settingsAsk, setSettingsAsk] = useState<SettingsAsk>({ tab: "look" });
   const [bibleLi, setBibleLi] = useState<string | null>(null);
   const [chapterKey, setChapterKey] = useState<string | null>(null);
   // Where the reader's Back leads: the Story screen, or the Wish, Wardrobe or Album screen that opened an item's story.
@@ -217,10 +216,9 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     go("forge");
   };
 
-  const openSettings = (tab: SettingsTab = "look") => {
+  const openSettings = (tab: SettingsTab = "look", memory = false) => {
     if (screen !== "settings") setSettingsReturn(screen);
-    setSettingsTab(tab);
-    setSettingsOpened((count) => count + 1);
+    setSettingsAsk(memory ? { tab, memory } : { tab });
     go("settings");
   };
   const selectDockScreen = (next: DockScreen) => go(next === screen ? "home" : next);
@@ -287,7 +285,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
         run={view}
         lookPreference={lookPreference}
         onLookPreference={onLookPreference}
-        initialTab={settingsTab}
+        ask={settingsAsk}
         // Settings → Stories: the cast needs a story, and neither is offered where Back already leads.
         onOpenCast={activeRun && view && settingsReturn !== "forge" ? () => go("forge") : undefined}
         onOpenStories={settingsReturn === "picker" ? undefined : () => go("picker")}
@@ -388,7 +386,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
         <MemoryBanner
           key={activeRun}
           runKey={activeRun}
-          onOpenConnections={() => openSettings("connections")}
+          onOpenConnections={(memory) => openSettings("connections", memory)}
           onLeave={() => screenRef.current?.querySelector<HTMLElement>("h1")?.focus({ preventScroll: true })}
         />
       ) : null}
@@ -396,17 +394,15 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
         key={
           screen === "bible"
             ? `bible-${bibleLi}`
-            : screen === "settings"
-              ? `settings-${settingsOpened}`
-              : screen === "reader"
-                ? `reader-${chapterKey}`
-                : screen === "read-him" ||
-                    screen === "read-me" ||
-                    screen === "date-night" ||
-                    screen === "photo-shoot" ||
-                    screen === "claw"
-                  ? `${screen}-${datesOf?.id ?? ""}`
-                  : screen
+            : screen === "reader"
+              ? `reader-${chapterKey}`
+              : screen === "read-him" ||
+                  screen === "read-me" ||
+                  screen === "date-night" ||
+                  screen === "photo-shoot" ||
+                  screen === "claw"
+                ? `${screen}-${datesOf?.id ?? ""}`
+                : screen
         }
         ref={screenRef}
         className="of-screen"

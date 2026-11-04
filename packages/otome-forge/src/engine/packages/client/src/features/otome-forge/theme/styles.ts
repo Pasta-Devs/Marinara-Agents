@@ -216,6 +216,8 @@ ${R} .of-memory-banner {
   font-size: 0.84rem; line-height: 1.35;
 }
 ${R} .of-memory-banner:first-child { margin-top: max(12px, env(safe-area-inset-top)); }
+/* First on a full-stage screen, it has taken the safe area: the reader's header below it does not take it again. */
+${R} .of-memory-banner:first-child ~ .of-screen { --of-reader-top: 6px; }
 ${R} .of-memory-banner-text { flex: 1 1 15rem; min-width: 0; display: flex; align-items: flex-start; gap: 8px; }
 ${R} .of-memory-banner-text svg { flex: none; margin-top: 1px; color: var(--of-danger); }
 ${R} .of-memory-banner[data-kind="retrying"] .of-memory-banner-text svg { color: var(--of-accent-text); }
@@ -1622,7 +1624,7 @@ ${R} .of-reader-secondary[data-expanded="true"] {
   position: absolute; top: calc(100% + 6px); inset-inline-end: -4px;
   display: flex; flex-direction: column; gap: 6px; padding: 4px;
   /* --of-memory-banner-h: a memory banner above the reader (components/MemoryBanner.tsx) takes that much more. */
-  max-height: max(44px, calc(100cqh - 120px - var(--of-memory-banner-h, 0px) - max(12px, env(safe-area-inset-top)) - max(10px, env(safe-area-inset-bottom))));
+  max-height: max(44px, calc(100cqh - 120px - var(--of-memory-banner-h, 0px) - var(--of-reader-top, max(12px, env(safe-area-inset-top))) - max(10px, env(safe-area-inset-bottom))));
   overflow-y: auto; overscroll-behavior: contain;
   scrollbar-width: none;
 }
@@ -1671,7 +1673,7 @@ ${R}[data-look="pearl"] .of-reader-vignette {
 /* The header: the way out, the chapter's title, and the tools. */
 ${R} .of-reader-head {
   position: relative; z-index: 3; display: flex; flex-direction: column; gap: 6px;
-  padding: max(12px, env(safe-area-inset-top)) 12px 4px;
+  padding: var(--of-reader-top, max(12px, env(safe-area-inset-top))) 12px 4px;
 }
 ${R} .of-reader-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 ${R} .of-reader-row--sub { align-items: flex-start; }

@@ -175,7 +175,8 @@ const CONTEXT_ERROR =
  * The M2a story routes, answered in memory by the server's rules (S/story/beats.ts). `waits` answers the story so far
  * and Who said what?; without it they are 404s, as on a run with nothing to show, and the waits look as before.
  * `memory` is the story memory's status (GET .../memory/status), which Retry turns pending until `setMemory` settles
- * it; without it the status is a 404 and no banner shows.
+ * it, and which a saved connection (POST .../settings) takes out of waiting for one; without it the status is a 404
+ * and no banner shows.
  */
 function createStoryStub({
   done = false,
@@ -375,6 +376,11 @@ function createStoryStub({
       memoryStatus = { ...memoryStatus, phase: "pending", retryable: false };
       delete memoryStatus.message;
       return { status: 200, json: { status: memoryStatus } };
+    }
+    if (memoryStatus && path === `${base}/settings` && call.method === "POST") {
+      view.world.connections = call.body!.connections;
+      memoryStatus = { ...memoryStatus, noConnection: false };
+      return { status: 200, json: { world: structuredClone(view.world) } };
     }
     if (waits && path === `${base}/memory/overview`) return { status: 200, json: { paragraphs: SO_FAR } };
     if (waits && path === `${base}/who-said-what`) {
@@ -2561,6 +2567,8 @@ test("Otome Hearth a failed summary is never silent: every screen of the story s
     expect(box.y, "below the banner").toBeGreaterThanOrEqual(bannerBox.y + bannerBox.height);
     expect(box.y + box.height, "inside the stage").toBeLessThanOrEqual(stageBox.y + stageBox.height + 1);
   }
+  // First on the full stage, the banner has taken the safe area: the reader's header does not take it again.
+  await expect(root.locator(".of-reader-head")).toHaveCSS("padding-top", "6px");
   await page.screenshot({ path: testInfo.outputPath(`memory-banner-reader-${mobile ? "phone" : "desktop"}.png`) });
   await setReaderControlsExpanded(root, false);
 
@@ -2583,18 +2591,28 @@ test("Otome Hearth a failed summary is never silent: every screen of the story s
   await expect(retry).not.toHaveAttribute("aria-disabled");
   await expect(retry).toBeFocused();
 
-  // The Memory connection: Settings → Connections, with the provider's whole message beside it; from Settings too.
+  // The Memory connection: Settings → Connections with More connections open and Memory focused, and the provider's
+  // whole message beside it; from Settings too.
   await connection.click();
-  await expect(root.getByRole("heading", { name: "Settings", level: 1 })).toBeFocused();
   const connectionsTab = root.getByRole("tab", { name: "Connections", exact: true });
   await expect(connectionsTab).toHaveAttribute("aria-selected", "true");
+  const memoryConnection = root.getByRole("combobox", { name: "Memory", exact: true });
+  await expect(memoryConnection).toBeFocused();
+  await expect(root.locator("details.of-details", { hasText: "More connections" })).toHaveJSProperty("open", true);
   const section = root.getByRole("tabpanel").getByRole("region", { name: "Story memory" });
   await expect(section).toContainText("The connection said");
   await expect(section).toContainText(again);
   await expect(banner.getByRole("alert")).toContainText(again);
+  // Pressed again on Connections, it keeps a pick not saved yet.
+  const storyConnection = root.getByRole("combobox", { name: "Story", exact: true });
+  await storyConnection.selectOption("conn-other");
+  await connection.click();
+  await expect(memoryConnection).toBeFocused();
+  await expect(storyConnection).toHaveValue("conn-other");
   await root.getByRole("tab", { name: "Debug", exact: true }).click();
   await connection.click();
   await expect(connectionsTab).toHaveAttribute("aria-selected", "true");
+  await expect(memoryConnection).toBeFocused();
   // Back to the reader, which opens on the chapter's content tags again.
   await root.getByRole("button", { name: "Back", exact: true }).click();
   await expect(root.getByRole("button", { name: "Begin" })).toBeVisible();
@@ -2633,10 +2651,17 @@ test("Otome Hearth memory with no connection to write summaries asks for one, wi
   await expect(banner.getByRole("button")).toHaveText(["Change connection"]);
   await banner.getByRole("button", { name: "Change connection" }).click();
   await expect(root.getByRole("tab", { name: "Connections", exact: true })).toHaveAttribute("aria-selected", "true");
-  await expect(root.getByRole("tabpanel").getByRole("region", { name: "Story memory" })).toContainText(
-    "No connection is set to write the story’s summaries",
-  );
+  // The story's own connection is the one missing: Settings opens as it does, not at Memory.
+  await expect(root.getByRole("heading", { name: "Settings", level: 1 })).toBeFocused();
+  const section = root.getByRole("tabpanel").getByRole("region", { name: "Story memory" });
+  await expect(section).toContainText("No connection is set to write the story’s summaries");
   await expect(root.getByRole("tabpanel").getByRole("button", { name: "Retry memory upkeep" })).toHaveCount(0);
+  // A connection saved here ends the wait at once, not at the next 30 s read.
+  await root.getByRole("combobox", { name: "Story", exact: true }).selectOption("conn-other");
+  await root.getByRole("button", { name: "Save changes" }).click();
+  await expect.poll(() => posts(stub, "/settings").length).toBe(1);
+  await expect(banner).toHaveCount(0, { timeout: 5_000 });
+  await expect(section).not.toContainText("No connection is set to write the story’s summaries", { timeout: 5_000 });
   // The story list belongs to no one story: it shows no banner.
   await root.getByRole("tab", { name: "Stories", exact: true }).click();
   await root.getByRole("button", { name: "Open your stories" }).click();

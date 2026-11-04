@@ -2,21 +2,20 @@
 // Otome Forge: the story memory's status (GET /runs/:run/memory/status) and its Retry (POST .../memory/retry), shared
 // by the banner on every screen of a story (components/MemoryBanner.tsx) and Settings' MemorySection
 // ──────────────────────────────────────────────
-// Polled every 2 s while upkeep runs, and every 30 s otherwise, so a summary that fails in the background (after a
-// date, a message thread, a scene's recall) shows within half a minute; the reader asks again as a chapter ends.
-// The cache keeps lib/memory-notice.ts's `retrying` mark, so both places show a retry's progress, whichever started it.
+// Polled as lib/memory-notice.ts memoryPollMs says: fast only while a retry runs (or upkeep runs with Settings' memory
+// section open, `watching`), so a summary that fails in the background (after a date, a message thread, a scene's
+// recall) shows within half a minute; the reader asks again as a chapter ends, and a saved setting (a new connection)
+// asks again at once (hooks/use-run.ts useSaveSettings). The cache keeps memory-notice's `retrying` mark, so both
+// places show a retry's progress, whichever started it.
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useOtomeApi } from "../api";
-import { memoryNotice, nextMemoryView, type MemoryView } from "../lib/memory-notice";
+import { memoryNotice, memoryPollMs, nextMemoryView, type MemoryView } from "../lib/memory-notice";
 import type { MemoryStatus } from "../shared/api-types";
-
-const PENDING_POLL_MS = 2_000;
-const IDLE_POLL_MS = 30_000;
 
 export const memoryQueryKey = (runKey: string) => ["otome-forge", "memory", runKey] as const;
 
-export function useMemoryStatus(runKey: string) {
+export function useMemoryStatus(runKey: string, { watching = false }: { watching?: boolean } = {}) {
   const otome = useOtomeApi();
   const queryClient = useQueryClient();
   const path = `/runs/${encodeURIComponent(runKey)}/memory`;
@@ -28,7 +27,7 @@ export function useMemoryStatus(runKey: string) {
         queryClient.getQueryData<MemoryView>(queryKey),
         (await otome.get<{ status: MemoryStatus }>(`${path}/status`)).status,
       ),
-    refetchInterval: (current) => (current.state.data?.phase === "pending" ? PENDING_POLL_MS : IDLE_POLL_MS),
+    refetchInterval: (current) => memoryPollMs(current.state.data, watching),
   });
   const [busy, setBusy] = useState(false);
   // Why the Retry request itself failed (no connection, the server unreachable); the next Retry clears it.
