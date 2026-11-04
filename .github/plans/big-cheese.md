@@ -1,7 +1,7 @@
 # Big Cheese
 
 Status: concept, branch `big-cheese-agent` (local plan, not pushed). No PR yet.
-Mockups: https://claude.ai/artifact/9gniMXoxfpKZXHx6xdzc9j (private Claude artifact, 15 phone screens).
+Mockups: https://claude.ai/artifact/9gniMXoxfpKZXHx6xdzc9j (private Claude artifact, 18 phone screens).
 
 Big Cheese is a stand-alone game in its own Home tab, a sibling of Modern Life Sim. The player
 wishes for any place, such as a warehouse, a university campus, a hospital ward or a space station,
@@ -274,6 +274,119 @@ schedules (open day, team building, festival). Each scheduled event is a mini-sc
 - **Achievements:** fun one-liners ("Fired in week 1", "Everyone came to your farewell").
 - **Undo:** one undo per day by default (swipe-like). An Ironman setting turns undo off.
 
+## Authority: what kind of boss you are
+
+The same game must carry a careful manager, an Absolute Authority Headmaster and a Medieval King.
+The kit sets an **authority level**, and it changes the rules, not only the words.
+
+| | Manager | Strong leader | Absolute ruler |
+|---|---|---|---|
+| Example | warehouse site manager | university Dean | Headmaster with total power, Medieval King |
+| Who can remove you | the board or the owner | the board, after a vote | nobody — only a **revolt**, a **coup**, ruin or an outside power |
+| House rules | proposals, often need a vote | rules, people may push back | **decrees**: instant and sealed, but each one costs Love or Legitimacy |
+| People values | Trust | Trust | **Fear** and **Love** (both 0-100, per person and for the place) |
+| Extra verbs | delegate, ask others | promote, let go | **decree, punish, pardon, reward, banish/expel, appoint** |
+| Loss | fired | voted out | overthrown, assassinated, school closed, abdication |
+
+- **Fear and Love** replace Trust under absolute rule. High fear keeps order but makes people
+  hide things; low love plus high fear makes secret plots (a secret society, a noble conspiracy).
+  The code turns the two values into plot chances; the model writes the plots.
+- **Enforcers:** absolute rulers act through people (prefects, a Head Girl, knights, a spymaster).
+  Enforcers have their own ambitions and can misuse your power.
+- **Legitimacy** (absolute kits only): a hidden fifth value. Cruel or unfair decrees lower it;
+  ceremonies and justice raise it. At zero, the revolt starts.
+
+### Example: Absolute Authority Headmaster
+
+- Meters: School funds (Money), Exam results (Output), Discipline (People), Ministry favour (Standing).
+- Decrees: uniform rules, curfew, phone ban, house points, dorm inspections.
+- Rituals: morning assembly (your weekly speech), house cup, sports day, entrance exams.
+- Desk cards: rule breakers to judge (detention, pardon, letter home, expel), staff requests,
+  parents' letters.
+- Threats: a secret student society, a teacher faction, a ministry inspector, a rival academy.
+- Night: dorm patrols use rooms and routines; who is out after curfew, and why?
+
+### Example: Medieval King
+
+- Meters: Treasury (Money), Harvest (Output), Commons (People), Nobles (Standing).
+- **Petition day:** a queue of petitioners in the throne room, one card each. This is the
+  Reigns-style heart of the kit.
+- Royal council: chancellor, marshal, bishop, spymaster. Each wants a different kingdom.
+- Rituals: feasts, tournaments, coronation anniversary, the harvest festival.
+- Outside world: rival kingdoms, the Church, the merchants' guild, bandits.
+- Things: the crown, the royal seal, treaties, letters, hostages.
+- **Succession:** an heir, marriage alliances and a regent. Legacy mode means your child takes
+  the throne and inherits your enemies.
+
+### Content rule
+
+Any kit with minors (schools below university) never allows romance or adult content with
+students, and the Adult module is locked for that kit. Cruelty under absolute rule stays at the
+level the Tone dial allows; the game shows consequences, not glorified abuse.
+
+## Make it feel alive
+
+The most important goal. A place feels alive when it moves without you, reacts to you and
+remembers you. Rules for every slice:
+
+1. **Something always moves.** Every screen has a sign of life: people change rooms each time
+   slot, an ambient line ("Anja is humming at the racks"), a light on at night.
+2. **Everything gets a reaction.** Every decision gets at least one visible reaction within a
+   day: a face, a grapevine line, a mood change, a note on your desk.
+3. **Callbacks.** People quote your earlier decisions. The code picks 1-2 memories for every
+   scene and card, so memory is used in text, not only stored.
+4. **Small life, not only crises.** About 70% of moments are small (birthdays, a cold, a new
+   couple, a cat in the warehouse, the coffee machine breaks); 30% carry stakes.
+5. **Surprise budget.** The storyteller must make at least one surprise per week that the player
+   did not cause.
+6. **People have days.** Mood of the day, sick days, holidays, seasonal outfits, bad weeks.
+7. **The place changes visibly.** Wear, repairs, upgrades, the festival banner that stays up,
+   a plaque for the winner, a tradition's decoration.
+8. **Each person has a voice.** A short voice sheet (speech style, pet phrases) is made once and
+   used in every line, so people sound the same every time.
+9. **Alive test** (playtest checklist): after week 2, can the player name 3 people and what they
+   want? Did something happen that they did not cause? Did someone remember a decision?
+
+## Ways to play
+
+- **Viewer mode:** watch the place live like a diorama. Time plays by itself (pause, 1×, 2×,
+  4×). Your deputy or an AI boss makes the decisions, or nobody does. Follow one person or one
+  room. A ticker shows what happens. **Paused for drama** stops on big moments and offers
+  *Keep watching* or *Step in*. You can take over at any time and give it back. You can still
+  use wishes.
+- **Away digest:** when you come back, the code plays the missed slots in a fast batch and shows
+  "This morning at Hollowmere". The place never moves while the Engine is closed.
+- **Scenarios:** fixed challenges with a goal and a time limit ("Save St. Agnes hospital in 12
+  weeks", "The crew wants a vote"), plus a weekly seed so friends can compare.
+- **Sandbox:** you cannot be fired, and you can edit meters while you play.
+- **Moving places:** a tour bus, a ship, a travelling circus. The world outside changes every week.
+- **More built-in kits:** villain lair, haunted hotel for ghosts, dragon's hoard, Mars colony,
+  kindergarten, football club, film set, witch school, cat café, monastery, rock band on tour,
+  Absolute Headmaster, Medieval King.
+
+## Deeper mechanics
+
+- **Culture and traditions:** repeated decisions become culture tags (Family, Cutthroat,
+  Chaotic, Strict). Repeated events become traditions; stopping one causes outrage. Culture
+  changes card topics and how newcomers behave.
+- **Factions:** groups inside the place (old guard vs reformers, nobles vs merchants). Each wants
+  different things; their support decides big votes.
+- **Phone calls and messengers:** an urgent call or a royal messenger. Answer now or miss it.
+- **Negotiation:** offers and counter-offers with hidden limits (union, suppliers, donors, treaties).
+- **Crisis sequences:** 3 fast decisions in a row ("fire in the lab", "the castle gate falls").
+- **Cover-ups:** hide a scandal; it can come back weeks later and worse.
+- **Mentoring:** train a person; their skill grows; in legacy mode your protégé can be the next boss.
+- **Elections:** student council, union rep, guild master. Backing a candidate has a cost.
+- **The boss above you:** an owner, a board chair or an emperor with a mood and targets.
+  Absolute rulers have none.
+
+## Memories you keep
+
+- **Yearbook / company newsletter / royal chronicle page:** at the end of each term, one page with
+  pictures, quotes and awards. Save it as an image or a PDF.
+- **Chronicle:** a history of the place that writes itself, and portraits of past bosses.
+- **Meter graphs:** history lines with markers at big decisions.
+
 ## Screens
 
 Title (saved places) · Wish · Preview · Kit editor · Office (meters, hours, next meeting,
@@ -292,7 +405,13 @@ placeholders).
   bundles; its source is not reviewable. Do not repeat that.)
 - One run = one document in `api.persistence.documents` with `saveVersion`, a migration function
   and a "newer save" guard. Writes go through a per-run queue with `expectedRevision`.
-- Time advances only on player actions (`advance` route returns `events[]`), like Modern Life Sim.
+- Time advances through one `advance` route that returns `events[]`, like Modern Life Sim. It is
+  called by player actions, and in viewer mode by a client timer while the tab is open and
+  visible. The away digest calls it in one batch on return. No server-side clock.
+- Viewer mode and the "alive" layer use one batch model call per time slot that writes ambient
+  lines for many people at once; the code moves people and picks who gets a line.
+- **Lite mode:** fewer and smaller model calls for slow or costly models, and template cards and
+  lines when a call fails, so the game never stops.
 - One model helper: JSON extract + repair, a validator with one fix-up retry, retry with more
   room on `finishReason == "length"`, retry once on an empty answer, per-task token budget that
   leaves room for reasoning models, and a `/calls` debug log. Honor the Engine debug mode.
@@ -309,37 +428,52 @@ placeholders).
 Four milestones. Each one is playable on its own; each slice is one small PR later.
 
 **M1 · Playable** (does the loop feel fun?)
-0. Skeleton: package, Home tab, title screen, empty run document, build script, catalog lane.
-1. Wish → Place Kit: wish screen, generator (draft → normalize → save), preview, reroll.
-2. The week: office, hours, request cards with stance table, Friday report, firing.
-3. People: staff list and file, trust, stress, memory, "Talk it through" scenes.
+0. Skeleton: package, Home tab, title screen, empty run document, build script, catalog lane,
+   model helper with Lite mode.
+1. Wish → Place Kit: wish screen, generator (draft → normalize → save), preview, reroll,
+   authority level.
+2. The week: office, hours, request cards with stance table, Friday report, losing.
+3. People: staff list and file, trust (or Fear and Love), stress, memory, voice sheets,
+   callbacks, "Talk it through" scenes.
 
 **M2 · Alive**
-4. Storyteller (Calm/Classic/Chaos), follow-up cards, crises.
-5. Meetings: agenda, attendees, support in the room, votes.
+4. Storyteller (Calm/Classic/Chaos), small-moments deck, surprise budget, follow-ups, crises,
+   crisis sequences.
+5. Meetings: agenda, attendees, support in the room, votes, negotiation.
 6. Rooms and routines: floor map, room condition, people moving each time slot, room visits,
-   overhearing.
-7. Relationships between people, ambitions, secrets, grapevine.
-8. Hire, promote, let go, delegate to the deputy.
+   overhearing, ambient lines.
+7. Relationships between people, ambitions, secrets, grapevine, cover-ups.
+8. **Viewer mode**, away digest and "Previously at…" recap.
+9. Hire, promote, let go, delegate, mentoring.
 
 **M3 · Yours**
-9. Kit editor, extra meters, feel dials, save, export and import kits.
-10. Built-in kits (16) and Kit from text or lorebook.
-11. House rules (sliders, toggles, own-words rules).
-12. Roles (Middle manager, Rising star, Owner) and the module switchboard.
+10. Kit editor, extra meters, feel dials, kit themes, save, export and import kits.
+11. Built-in kits (incl. Absolute Headmaster, Medieval King) and Kit from text or lorebook.
+12. House rules and decrees (sliders, toggles, own-words rules), enforcers, legitimacy.
+13. Roles (Middle manager, Rising star, Owner), the boss above you, module switchboard.
+14. Scenarios with weekly seeds, and Sandbox.
 
 **M4 · Lasting**
-13. The world outside: town map, rival, suppliers, authorities, money, visitors, trips.
-14. Things: equipment, stock, the drawer (keys, gifts, documents, minutes, evidence).
-15. Term goals, perks, wishes during the game, endings with epilogues, achievements.
-16. Building module (upgrades, growth tiers), hidden rooms, Calendar events, weather.
-17. Press module, Office drama module, Deep finance module, Union module.
-18. Legacy runs, Make a character card, images (portraits, backgrounds), GUIDE app.
+15. The world outside: town map, rival, suppliers, authorities, money, visitors, trips,
+    moving places.
+16. Things: equipment, stock, the drawer (keys, gifts, documents, minutes, evidence).
+17. Term goals, perks, wishes during the game, endings with epilogues, achievements.
+18. Culture and traditions, factions, elections.
+19. Building module, hidden rooms, Calendar events and rituals, weather, phone calls and messengers.
+20. Yearbook, chronicle, meter graphs.
+21. Press, Office drama, Deep finance and Union modules.
+22. Legacy runs and succession, Make a character card, images, GUIDE app.
 
 ## Not planned
 
-Multiplayer, multiple places in one run, real-time clock, a link to Modern Life Sim (your job
-there = your Big Cheese place; revisit after M4).
+Multiplayer, multiple places in one run, a clock that runs while the Engine is closed.
+
+## Later: Marinara crossovers (parked)
+
+Parked on purpose until the game itself feels alive: a Slurp2 feed for the grapevine and press,
+"Call someone" as a real Marinara roleplay chat, your persona as the boss, the place as a
+lorebook, Illustrator and Music DJ helpers, and a link to Modern Life Sim (your job there = your
+Big Cheese place).
 
 ## Open questions
 
@@ -347,6 +481,8 @@ there = your Big Cheese place; revisit after M4).
 - One shared stance table for all kits, or one table per place family plus kit overrides?
 - Kit sharing: file export only, or also a kit catalog in Marinara-Agents?
 - Do the boss's own Energy and Stress bars ship in M1 or wait for M4?
+- Viewer mode: who decides when you only watch — the deputy, a neutral AI boss, or nobody?
+- Absolute rule: is Legitimacy shown to the player, or only felt through events?
 
 ## Do not copy
 
