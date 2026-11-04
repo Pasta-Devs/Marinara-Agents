@@ -1,7 +1,7 @@
 # Big Cheese
 
 Status: concept, branch `big-cheese-agent` (local plan, not pushed). No PR yet.
-Mockups: https://claude.ai/artifact/9gniMXoxfpKZXHx6xdzc9j (private Claude artifact, 7 phone screens).
+Mockups: https://claude.ai/artifact/9gniMXoxfpKZXHx6xdzc9j (private Claude artifact, 11 phone screens).
 
 Big Cheese is a stand-alone game in its own Home tab, a sibling of Modern Life Sim. The player
 wishes for any place, such as a warehouse, a university campus, a hospital ward or a space station,
@@ -17,6 +17,8 @@ and runs it as the boss. Staff and stakeholders are characters who remember what
    never sets a meter, a trust value or an outcome.
 4. **Short loop, long story.** One week is about 10 minutes of play. A run lasts a few in-game
    months, until you win the year or the board fires you.
+5. **Everything the AI makes, the player can change.** Every generated part is data in a Place
+   Kit: you can edit it, save it, share it and start a new run from it.
 
 ## What we learned
 
@@ -102,11 +104,117 @@ leave"). A meter at 100 is safe; Reigns-style "too much" endings are not in v1.
 - **Support in the room** is computed by code from each attendee's trust and stance preference.
   Board items end in a vote; others end in an agreement the code turns into deltas.
 
+## Make it yours: customization
+
+### Place Kits
+
+A Place Kit is the whole place as one JSON document: premise, meter names and start values, extra
+meters, departments and rooms, people and stakeholder groups, meeting types, crisis deck, house
+rules, stance table overrides and the feel dials. The wish makes a kit. The preview opens it.
+
+- **Kit editor** (tabs Meters, People, Rooms, Events, Rules). Rename anything, change start
+  values, delete or add people, write your own crisis cards.
+- **Extra meters:** up to 2 more meters per place (for example "Rum supply" on a pirate ship).
+  Each extra meter maps to one of the four types, so the rules still work.
+- **Save as kit / Share kit:** export and import a kit file. A shared kit holds no run history.
+  Kits are validated on import (schema, limits, text length) like any untrusted input.
+- **Built-in kits:** Warehouse, University, Hospital ward, Restaurant, Hotel, Startup,
+  Newsroom, Esports team, Zoo, Theme park, Space station, Pirate ship, Royal court, Magic academy,
+  Haunted inn, Mercenary guild. Each is a normal kit the player can copy and edit.
+- **Kit from text:** paste a lore text or a lorebook and the AI drafts a kit from it.
+
+### Feel dials (per run)
+
+| Dial | Range | What it changes |
+|---|---|---|
+| Tone | Cozy ↔ Drama | card topics, how harsh people speak, crisis themes |
+| Realism | Silly ↔ Real | how absurd events may get |
+| Difficulty | Easy ↔ Brutal | delta size, firing threshold, hours per day |
+| Storyteller | Calm / Classic / Chaos / Custom | event pacing (Custom = own sliders) |
+| Era | Any text, for example "1920s", "far future" | names, technology, language |
+| Pace | Short day (3 hours) / Full day (5 hours) | length of a week |
+
+### Your role
+
+- **Big Cheese** (default): you run the whole place.
+- **Middle manager:** you run one department and have a boss above you who sends you demands.
+- **Rising star:** you start as a shift lead or a junior teacher and get promoted to the top.
+  Each promotion opens more of the place and more meters.
+- **Owner:** you set the budget and the rules and hire a manager (played by the AI) to run it.
+
+### Modules
+
+Optional parts, switched on per run (Modern Life Sim module pattern):
+Office drama (romances, cliques, feuds) · Union and strikes · Deep finance (ledger, salaries,
+quarterly budget) · Building (rooms and upgrades) · Press and social media · Horror (the place
+has a dark secret) · Adult (off by default, asks the player to confirm age).
+
+## Make it alive: depth
+
+### People, deeper
+
+- **Ambitions:** each person wants something (your job, a raise, a quiet life, to leave).
+- **Relationships between people:** ally, feud, crush, mentor, secret romance. They change on
+  their own each week and create cards ("Tomas and Vera refuse to work together").
+- **Secrets:** each key person has one. You learn it at trust 60, from the grapevine or in a crisis.
+- **Hire, promote, let go:** hiring shows 3 candidate cards and an interview scene. Letting
+  someone go changes the trust of their friends.
+- **Make a character card:** turn any staff member into a Marinara character card (with their
+  memories as a lorebook entry) to chat with them outside the game.
+
+### House rules (policies)
+
+Standing rules that change the meters every week without a card: sliders (night-shift bonus,
+tuition level, speed target), toggles (phones on the floor, Friday pizza) and rules the player
+writes in their own words (the model maps them to a meter type and a stance; the code sets
+the numbers). Changing a rule costs 1 hour and the people who care react.
+
+### Grapevine and press
+
+- **Grapevine:** a feed of what people say when you are not in the room: complaints, plans,
+  rumours. Some rumours are false; checking one costs an hour.
+- **Press:** a local paper or a social feed writes about your place. It moves the Standing meter.
+
+### Wishes during the game
+
+The wish idea stays in the game. You get 3 wishes per term. A wish asks the storyteller for
+something ("a rich old graduate wants to donate, with strings attached"). It arrives in its own
+way within 1-2 weeks. Wishes cannot set numbers; they only make new cards, people or events.
+
+### Rooms and growth (Building module)
+
+A simple floor map of rooms with who is in each room now. Spend money to upgrade a room or add
+one (new lab, break room, loading dock). Each room gives a small weekly effect and new card
+topics. The place grows in tiers (small → known → famous) that unlock bigger events.
+
+### Calendar
+
+Terms or quarters, holidays, fiscal year end, recurring meetings, and events the player
+schedules (open day, team building, festival). Each scheduled event is a mini-scene with a result.
+
+## Make it last: long-term play
+
+- **Term goals:** 3 goals per term, chosen from 5 offers (for example "Reputation above 70",
+  "No strike"). Meeting them earns wishes and perks.
+- **Boss perks:** small skills you pick after each term (Negotiator: meetings start with +1
+  support; Penny-pincher: cheap fixes cost less). Perks unlock new answer stances.
+- **Your own bars (optional):** Energy and Stress for the boss. A hard week costs Energy; a
+  burnout skips a day. Can read Persona Stats if the player uses it.
+- **Delegate:** let the deputy answer severity-1 cards. They answer in their own style,
+  and their trust and ambition change what they pick.
+- **Endings:** win the year, fired, quit, or sold the place. Each ending is a title card with a
+  short epilogue of what happened to everyone.
+- **Legacy:** start a new run in the same place years later. Old staff may still be there and
+  remember the last boss.
+- **Achievements:** fun one-liners ("Fired in week 1", "Everyone came to your farewell").
+- **Undo:** one undo per day by default (swipe-like). An Ironman setting turns undo off.
+
 ## Screens
 
-Title (saved places) · Wish · Preview · Office (meters, hours, next meeting, inbox) · Card ·
-Meeting scene · Friday report · later: Floor map, Staff files, Calendar, Settings.
-Bottom bar: Office, Floor, Staff, Calendar. Phone first, 44 px targets, theme tokens only in the
+Title (saved places) · Wish · Preview · Kit editor · Office (meters, hours, next meeting,
+inbox) · Card · Meeting scene · Friday report · Staff list and Staff file · House rules ·
+Grapevine and wishes · Floor map · Calendar · Goals and perks · Settings.
+Bottom bar: Office, Floor, Staff, Calendar. "More" holds Rules, Grapevine, Goals and the Kit. Phone first, 44 px targets, theme tokens only in the
 real build (the mockup colours are placeholders).
 
 ## Technical shape
@@ -131,28 +239,43 @@ real build (the mockup colours are placeholders).
 
 ## Slices
 
-0. **Skeleton:** package, Home tab, title screen, empty run document, build script, catalog lane.
-1. **Wish → place:** wish screen, place generator (draft → normalize → save), preview, reroll.
-2. **The week:** office dashboard, hours, request cards with stance table, Friday report, firing.
-3. **People:** staff files, trust and memory, "Talk it through" scenes.
-4. **Storyteller:** Calm/Classic/Chaos, follow-up cards, crises.
-5. **Meetings:** agenda, attendees, support in the room, votes.
-6. **Goals and endings:** term goals, win the year, end cards on the title screen.
-7. **Extras:** floor map, images, GUIDE app, character cards as staff.
+Four milestones. Each one is playable on its own; each slice is one small PR later.
 
-Slices 0-2 are the smallest version that shows whether the loop is fun.
+**M1 · Playable** (does the loop feel fun?)
+0. Skeleton: package, Home tab, title screen, empty run document, build script, catalog lane.
+1. Wish → Place Kit: wish screen, generator (draft → normalize → save), preview, reroll.
+2. The week: office, hours, request cards with stance table, Friday report, firing.
+3. People: staff list and file, trust, stress, memory, "Talk it through" scenes.
 
-## Not in v1
+**M2 · Alive**
+4. Storyteller (Calm/Classic/Chaos), follow-up cards, crises.
+5. Meetings: agenda, attendees, support in the room, votes.
+6. Relationships between people, ambitions, secrets, grapevine.
+7. Hire, promote, let go, delegate to the deputy.
 
-Building or room layout, hiring markets, salaries per person, multiple places at once, a link to
-Modern Life Sim (your job there = your Big Cheese place), adult content.
+**M3 · Yours**
+8. Kit editor, extra meters, feel dials, save, export and import kits.
+9. Built-in kits (16) and Kit from text or lorebook.
+10. House rules (sliders, toggles, own-words rules).
+11. Roles (Middle manager, Rising star, Owner) and the module switchboard.
+
+**M4 · Lasting**
+12. Term goals, perks, wishes during the game, endings with epilogues, achievements.
+13. Building module (floor map, rooms, growth tiers) and Calendar events.
+14. Press module, Office drama module, Deep finance module, Union module.
+15. Legacy runs, Make a character card, images (portraits, backgrounds), GUIDE app.
+
+## Not planned
+
+Multiplayer, multiple places in one run, real-time clock, a link to Modern Life Sim (your job
+there = your Big Cheese place; revisit after M4).
 
 ## Open questions
 
-- Week length: 5 days with 5 hours each, or a shorter 3-slot day?
-- Does the player have a body (Energy, Stress like Persona Stats), or only the place meters?
-- Can the player rename meters and people in the preview?
-- One shared stance table for all places, or one per place family?
+- Week length default: Full day (5 hours) or Short day (3 hours)?
+- One shared stance table for all kits, or one table per place family plus kit overrides?
+- Kit sharing: file export only, or also a kit catalog in Marinara-Agents?
+- Do the boss's own Energy and Stress bars ship in M1 or wait for M4?
 
 ## Do not copy
 
