@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.8.6 — 2026-11-04
+
+- **Each affection level takes a little more than the last.** Level 2 now takes 200 affection, and each level after it 50 more, up to 600 for level 10, so the first levels come sooner and the last ones mean more. Past level 10, every 300 affection still earns a prestige point. A love interest's level is worked out from their affection, so a story already under way may show a different level after updating; anything you've already unlocked stays.
+
 ## 0.8.5 — 2026-11-04
 
 - **A love interest who appears in another's Character Story remembers it.** When another love interest speaks in a Character Story, that story is now theirs to remember too, and its summary says who was there and for which parts, so they know what they saw and not what they missed. A name that is only mentioned doesn't count. Character Stories you have already finished get this too. Dates stay private to their love interest.

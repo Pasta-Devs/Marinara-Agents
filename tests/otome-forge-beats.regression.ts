@@ -2757,7 +2757,7 @@ test("Side with (#2046): the game sets its effects, the pick moves affection onc
   const t = await storyWorld({
     runKey: "r-side-aaaaaa",
     // Mireille stands at the floor of level 2: passing her over costs nothing she reached.
-    lis: { [MIR]: { points: 300 } },
+    lis: { [MIR]: { points: 200 } },
     replies: Array.from({ length: 60 }, () => (messages: CapabilityLanguageModelMessage[]) => {
       if (isPlanner(messages)) return json(planReply());
       if (isConfrontationPrompt(messages)) return json(confrontationReply());
@@ -2819,7 +2819,7 @@ test("Side with (#2046): the game sets its effects, the pick moves affection onc
   const after = await t.state();
   assert.equal(after.lis[KAI]!.points, before.lis[KAI]!.points + 30);
   assert.equal(after.lis[KAI]!.trust, 1);
-  assert.equal(after.lis[MIR]!.points, 300);
+  assert.equal(after.lis[MIR]!.points, 200);
   assert.equal(after.lis[MIR]!.tension, 1);
   assert.equal(after.lis[SOL]!.points, before.lis[SOL]!.points, "Sol was not in the scene");
   const replay = await choose("option-2");
