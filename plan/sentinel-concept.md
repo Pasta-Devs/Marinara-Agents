@@ -96,7 +96,11 @@ A preset is data (persona, labels, icons, device types, alert types), not code.
 
 ## UI
 
-- Side panel (like other tracker agents): tabs Companion · Cams · Devices · Records · Log.
+- Floating over the chat, three sizes (pattern: Beholder's floating panel):
+  - **Bubble:** small round button at a screen edge, alert count badge. Default when nothing happens.
+  - **HUD:** compact card over the chat: status line (time, weather), the newest alert with "Look", 3 cam tiles, "Ask" field. Opens by itself on an alert (setting), then shrinks back.
+  - **Full:** phone = bottom sheet over the chat (swipe down = smaller); desktop = movable, resizable window. Tabs Companion · Cams · Places · Log (later Devices · Records).
+  - Size and position are remembered per chat.
 - Cams tab: grid of tiles per current site (or building/floor when maps is present); tap = feed card in chat.
 - Places: small list editor for sites and rooms; hidden behind a link when maps provides the rooms.
 - Devices: toggles grouped by room; access-locked ones greyed with a lock icon.
