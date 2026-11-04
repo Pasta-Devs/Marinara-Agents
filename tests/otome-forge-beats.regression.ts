@@ -61,6 +61,7 @@ import {
   EASE_OFF_MARKER,
   canonicalSegments,
   readChapter,
+  readStorySources,
   recallText,
   type StoryMemory,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/canon.ts";
@@ -3051,5 +3052,73 @@ test("in his own route chapter, a love interest's own canon is cached with the r
   for (const call of scenes) {
     assert.equal(call.messages[0]!.content, scenes[0]!.messages[0]!.content, "one story context, whoever is present");
     assert.ok(call.messages[0]!.content.includes("KAI-DATE"), "his own date is cached in his own chapter");
+  }
+});
+
+test("a love interest who speaks in another's Character Story knows it; one only mentioned there does not (0.8.5)", async () => {
+  // The maintainer's (2026-11-04): a cameo in a Character Story is added to who may know it, and its summary says who
+  // was there; the text says which parts he saw.
+  const t = await storyWorld({ runKey: "r-cameo-aaaaaa", replies: [] });
+  const key = "story-item-cameo-0001";
+  const done = "2026-11-04T12:00:00.000Z";
+  const chapter: Chapter = {
+    key,
+    kind: "story",
+    li: KAI,
+    lead: KAI,
+    title: "The Bell Rope",
+    tags: [],
+    summary: "",
+    nodes: [{ i: 0, kind: "beat", guide: "The bell tower.", cast: [KAI] }],
+    ledger: { relationship: [], conflict: [], offscreen: [] },
+    plannedAt: done,
+    connectionId: "conn-text",
+  };
+  const beat: Beat = {
+    key,
+    i: 0,
+    kind: "beat",
+    places: [],
+    segments: [
+      { speaker: "Kai", text: "CAMEO-KAI: hold the rope." },
+      { speaker: "Mireille", text: "CAMEO-MIR: I heard the bell from the quay." },
+      { speaker: "", text: "Sol was asleep across town and heard nothing." },
+    ],
+    choices: [],
+    choiceCanon: {},
+    effects: {},
+    applied: {},
+    musicMood: "tense",
+    readThrough: 2,
+    written: { at: done, connectionId: "conn-text", model: "fake" },
+    rewrites: 0,
+  };
+  await t.store.mutateDoc(runDocTarget("chapter", chapterId(t.runId, key)), normalizeChapter, () => chapter);
+  await t.store.mutateDoc(runDocTarget("beat", beatId(t.runId, key, 0)), normalizeBeat, () => beat);
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+    ...state,
+    chapters: { ...state.chapters, [key]: { beatsRead: 1, completed: done, applied: [] } },
+  }));
+
+  const source = (await readStorySources(t.store, t.runId, await t.state(), "Ines")).find((item) => item.id === key);
+  assert.ok(source);
+  assert.deepEqual(
+    source.audience,
+    [KAI, MIR],
+    "Kai's own, and Mireille who speaks in it; Sol, only mentioned, is not",
+  );
+  assert.equal(
+    source.title,
+    'Kai\'s own story chapter "The Bell Rope" (private: only the people in its scenes know what happened in it; Mireille also appears in it)',
+  );
+  for (const [who, sees] of [
+    [{ reader: KAI }, true],
+    [{ reader: MIR }, true],
+    [{ reader: SOL }, false],
+    [{ cast: [MIR] }, true],
+    [{ cast: [SOL] }, false],
+  ] as const) {
+    const { text } = await recallText({ store: t.store }, t.runId, { job: "narration", ...who });
+    assert.equal(text.includes("CAMEO-MIR"), sees, `the story, for ${JSON.stringify(who)}`);
   }
 });
