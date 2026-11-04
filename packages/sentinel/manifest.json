@@ -5,8 +5,8 @@
     "minor": 14
   },
   "builtAgainst": {
-    "engineVersion": "2.4.6",
-    "engineCommit": "f66abf7eddb7db6312f5ba8a080145644191775"
+    "engineVersion": "2.5.1",
+    "engineCommit": "805287ced335b52fe18b7f7f9d4f5405e6f1faaf"
   },
   "id": "sentinel",
   "name": "Sentinel",
@@ -45,8 +45,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "36cbb13c52ae34cf5945ee3588ef0653a5cc1742f8de6280333cedea01341361",
-      "bytes": 23594
+      "sha256": "f856c563a49ee271978e901a72eede156b3ce15c982b7b58592b6b46703b84f9",
+      "bytes": 23597
     },
     {
       "path": "server.mjs",

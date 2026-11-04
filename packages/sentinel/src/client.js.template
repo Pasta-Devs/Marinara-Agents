@@ -43,7 +43,7 @@
 
   const CSS = `
 .sn-panel{position:fixed;right:16px;bottom:88px;z-index:60;width:340px;max-height:min(70dvh,560px);display:flex;flex-direction:column;
-  background:var(--card);color:var(--foreground);border:1px solid var(--border);border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.35);
+  background:var(--background);color:var(--foreground);border:1px solid var(--border);border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.35);
   font:14px/1.45 inherit;overflow:hidden}
 .sn-panel.sn-big{width:480px;max-height:85dvh}
 .sn-head{display:flex;align-items:center;gap:6px;padding:6px 6px 6px 12px;border-bottom:1px solid var(--border);cursor:move;touch-action:none;user-select:none}
@@ -280,7 +280,7 @@ ${suggestions ? `<div class="sn-muted">${esc(t("ui.sentinel.suggested"))}</div><
     return keys.length ? `${element.tagName.toLowerCase()}${keys.join("")}` : "";
   }
 
-  const CSS_ESCAPE = (value) => (globalThis.CSS?.escape ? CSS.escape(value) : String(value).replace(/["\\]/g, "\\$&"));
+  const CSS_ESCAPE = (value) => (globalThis.CSS?.escape ? globalThis.CSS.escape(value) : String(value).replace(/["\\]/g, "\\$&"));
 
   function onClick(event) {
     const button = event.target.closest("[data-act]");

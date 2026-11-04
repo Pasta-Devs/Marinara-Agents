@@ -26,3 +26,4 @@ When "Notice checks written in the story" is on and you write something like "I 
 
 - Results are stored per chat. A branch starts without the parent chat's results.
 - If you delete or rewind the message a result belongs to, that result is dropped.
+- Results show in the Sentinel panel only. The Engine has no slot for a chip under a chat message yet.

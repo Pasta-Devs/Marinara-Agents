@@ -845,8 +845,8 @@
           "minor": 14
         },
         "builtAgainst": {
-          "engineVersion": "2.4.6",
-          "engineCommit": "f66abf7eddb7db6312f5ba8a080145644191775"
+          "engineVersion": "2.5.1",
+          "engineCommit": "805287ced335b52fe18b7f7f9d4f5405e6f1faaf"
         },
         "id": "sentinel",
         "name": "Sentinel",
@@ -885,8 +885,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "36cbb13c52ae34cf5945ee3588ef0653a5cc1742f8de6280333cedea01341361",
-            "bytes": 23594
+            "sha256": "f856c563a49ee271978e901a72eede156b3ce15c982b7b58592b6b46703b84f9",
+            "bytes": 23597
           },
           {
             "path": "server.mjs",
@@ -900,8 +900,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/sentinel.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/sentinel-0.1.0.zip",
-        "sha256": "6410c5e7c0149ffa5df859f6fd7e748a151cd39c86f3fc6fca2d436aed1ea586",
-        "bytes": 45635
+        "sha256": "d7a226a9c0c7c7c6e9344c89c784679d057d9f038325d9b71fffffa9961343ee",
+        "bytes": 45639
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/sentinel/README.md"
     }
