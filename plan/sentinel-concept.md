@@ -9,7 +9,7 @@ In roleplay you often want to check on a place or a person that is not in the sc
 
 ## The idea in one line
 
-**Sentinel lets you look at places and people outside the scene, gives an answer that fits the chat, and keeps that answer true afterwards.**
+**Sentinel lets you look at and act on places and people outside the scene, gives an answer that fits the chat, and keeps that answer true afterwards.**
 
 Sentinel does not simulate time or plan what absent people do. The chat is the only timeline. Sentinel answers one question: "what is true where I look, right now?" Background life is a separate concept (Meanwhile, branch `background-simulation`).
 
@@ -22,6 +22,17 @@ Sentinel does not simulate time or plan what absent people do. The chat is the o
 5. Before the next reply, the narrator gets the observation as context, so the scene matches what you saw. Later replies get the found facts too, so the narrator does not contradict them.
 
 The next look at the same subject must fit the earlier facts and what happened in the chat since then. Nothing else moves the facts.
+
+## Acting: tell the butler
+
+A free-text field: "turn up the heat in the office", "lock the front door", "play music in Lily's room", "tell Jonas to close the shop early". It works like a look, with the same single call:
+
+1. You write the order in the panel (or, later, in the story: "Butler, lock the door").
+2. Sentinel's call decides what happens, in a way that fits the chat and the setting: done, partly done, or not possible ("there is no lock on the back door").
+3. The result is a short reply plus changed facts ("office heating: 24 °C", "front door: locked").
+4. The facts go into the log, and the narrator gets them as context, so the scene reacts (the office gets warm, Lily hears the music).
+
+The butler has a name and a short reply style per play style (house AI, butler, shop system, familiar). It answers in-world and does not comment on its own.
 
 ## Subjects
 
@@ -56,12 +67,13 @@ Users can copy a play style and rename skins and subjects.
 - Every subject: **open**, **private**, or **off-limits**.
 - Private (default for bedrooms and bathrooms): presence and activity only. No body, clothes or intimate detail in any observation.
 - Characters under 18 are always private, whatever the setting.
-- Off-limits: no looks there.
+- Off-limits: no looks and no acts there.
+- Acts follow the same rules as looks. An act on a private subject cannot produce intimate detail either.
 - These rules sit in Sentinel's prompt and in the output filter.
 
 ## Settings
 
-Play style · subjects and privacy · senses · in-story looks (on / off) · connection for Sentinel's calls.
+Play style · butler name · subjects and privacy · senses · acting (on / off) · in-story looks (on / off) · connection for Sentinel's calls.
 
 ## Standalone first, other agents optional
 
@@ -70,17 +82,17 @@ Works alone. Can link `hierarchical-maps` rooms as subjects and ask `illustrator
 ## UI
 
 - **In the chat:** a small "Sentinel" chip under replies that used an observation (tap: what was seen).
-- **Floating panel:** bubble → panel with Look (subjects + sense buttons) and Log (found facts). Beholder's floating panel is the pattern.
+- **Floating panel:** bubble → panel with Look (subjects + sense buttons), an "Ask the butler" text field, and Log (found and changed facts). Beholder's floating panel is the pattern.
 
 ## Open questions
 
 1. Storage of found facts with swipe and branch safety.
 2. Detecting in-story looks ("I open her door") — keyword rules per skin first.
-3. Cost: one call per look; a cap per hour.
+3. Cost: one call per look or act; a cap per hour.
 
 ## Changes from v3
 
 - No clock, no threads, no ticks, no Living world mode. The chat is the only timeline.
 - No pressure, backfire, hunches, truth modes or suspicions.
-- No hands and no voice.
+- Hands are now one free-text "Ask the butler" field. No separate voice persona; the butler answers in-world only.
 - One model call per look; the log keeps answers consistent.
