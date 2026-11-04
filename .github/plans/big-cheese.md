@@ -3,7 +3,8 @@
 Status: concept, branch `big-cheese-agent` (local plan, not pushed). No PR yet.
 Mockups: https://claude.ai/artifact/9gniMXoxfpKZXHx6xdzc9j (private Claude artifact, 18 phone screens).
 Deep-dive: [big-cheese-design.md](big-cheese-design.md) (systems, data, model tasks, routes) and
-[big-cheese-content.md](big-cheese-content.md) (built-in kits, decks and catalogs).
+[big-cheese-content.md](big-cheese-content.md) (built-in kits, decks and catalogs) and
+[big-cheese-modules.md](big-cheese-modules.md) (module system, 30 modules, more features).
 
 Big Cheese is a stand-alone game in its own Home tab, a sibling of Modern Life Sim. The player
 wishes for any place, such as a warehouse, a university campus, a hospital ward or a space station,
