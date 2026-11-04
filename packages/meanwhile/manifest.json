@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 2,
+  "capabilityApi": {
+    "major": 1,
+    "minor": 341
+  },
+  "builtAgainst": {
+    "engineVersion": "2.5.0",
+    "engineCommit": "2039583caf0288d31a5696ae3546f5b4913e7e6f"
+  },
+  "id": "meanwhile",
+  "name": "Meanwhile",
+  "version": "0.1.0",
+  "description": "Circles of characters whose lives go on while you are away, on a clock you can speed up or set. This first slice has the Circle setup, the clock and the timer. It makes no model calls yet. Install it, restart Marinara Engine when prompted, then open Home → Meanwhile.",
+  "engine": {
+    "min": "2.5.0",
+    "maxExclusive": "4.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json",
+    "server": "server.mjs",
+    "client": "client.js"
+  },
+  "contributions": {
+    "slots": [
+      "home-browser-tab"
+    ],
+    "homeBrowserTab": {
+      "label": "Meanwhile",
+      "ariaLabel": "Open Meanwhile",
+      "iconPaths": [
+        "meanwhile-icon.png"
+      ]
+    }
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "0f1bd4fac6290c2be70577fb4d16b921b83825745622c6b5d34b04468b58ac73",
+      "bytes": 621
+    },
+    {
+      "path": "server.mjs",
+      "sha256": "1c03dbf2e6d32f6049442d57de93e5773e6d7eb674001761913a770a502adfa2",
+      "bytes": 12420
+    },
+    {
+      "path": "client.js",
+      "sha256": "38c99197953bc4074df6e13778e39639a8e5321ee18470c72705f7b6d2a9798f",
+      "bytes": 16048
+    },
+    {
+      "path": "meanwhile-icon.png",
+      "sha256": "9f8ed347dde9df0581d5af4d0133ee96068109fb7c82854209b1a1ff38c37a81",
+      "bytes": 358
+    }
+  ],
+  "permissions": [
+    "routes",
+    "storage",
+    "ui",
+    "chat-read"
+  ],
+  "restartRequired": true
+}

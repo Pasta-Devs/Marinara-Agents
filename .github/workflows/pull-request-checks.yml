@@ -177,6 +177,9 @@ jobs:
           # Saucelings simulation and routes.
           npm run test:saucelings
 
+          # Meanwhile clock, window, lease and backoff.
+          npm run test:meanwhile
+
           # Otome Forge ids, store and the committed server bundle.
           npm run test:otome-forge
 
