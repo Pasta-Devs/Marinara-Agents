@@ -4,9 +4,10 @@
 // call; a refusal is a 422 that writes nothing; the lookahead and the player's own request write a beat once; moment
 // and confrontation nodes are written as beats; a LI's thought before stage 2 gets the repair turn, under his first
 // name too, and one thought per scene counts every branch a player can read; Cancel stops a write; a chapter's grants
-// land once; every prompt keeps the earlier chapters and their big choices when memory cannot answer, and never gets
-// another love interest's private canon, with memory ready too, while the one it gets says whose it is and that it is
-// private; a rewrite never replaces a beat played meanwhile; a
+// land once; every prompt keeps the earlier chapters and their big choices whatever state memory is in (the timeline
+// and each chapter's summary as saved, a chapter in full only while it has none: memory pending, a failed summary, or
+// never written, the oldest giving way only at the reply floor), and never gets another love interest's private canon,
+// while the one it gets says whose it is and that it is private; a rewrite never replaces a beat played meanwhile; a
 // pick whose effects were lost lands when its beat is read; Ease off removes the lookahead on a retry, when the
 // lookahead is saved just after the cut, and when the cut lands between the lookahead's reads of the beat it follows;
 // a pick past the cut changes nothing, also when the cut lands while the pick is saved; an Ease off before a saved
@@ -62,7 +63,6 @@ import {
   recallText,
   type StoryMemory,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/canon.ts";
-import { serializeTimeline } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/timeline.ts";
 import {
   beatId,
   chapterId,
@@ -82,6 +82,7 @@ import {
   json,
   closerPlanReply,
   planReply,
+  saveStoryMemory,
   squeezedMemory,
   storyWorld,
 } from "./fixtures/otome-forge-story.ts";
@@ -802,8 +803,8 @@ test("a chapter's plan and scenes share their cached prefix byte for byte; only 
   }
 });
 
-test("every story prompt keeps the earlier chapters and their big choices when memory cannot answer", async () => {
-  // A compress model that refuses every summary: memory never gets past `error`.
+test("a chapter whose summary failed goes in full in every story prompt, with its big choices", async () => {
+  // A compress model that refuses every summary: memory never gets past `error`, and no chapter has a summary.
   const replies = Array.from({ length: 200 }, () => (messages: CapabilityLanguageModelMessage[]) => {
     if (system(messages).includes(SUMMARY_WORDING)) return "I can't help with summarizing this.";
     if (isConfrontationPrompt(messages)) return json(confrontationReply());
@@ -855,6 +856,8 @@ test("every story prompt keeps the earlier chapters and their big choices when m
       ["P6", whole(narrator.messages)],
     ] as const) {
       assert.ok(prompt.includes("CANON-1-0") && prompt.includes("CANON-2-0"), `${name} keeps both earlier chapters`);
+      assert.match(prompt, /# Canon in full: Night 1\n/u, `${name} has Night 1 in full, for want of its summary`);
+      assert.ok(!prompt.includes("# Canon to date"), `${name}: no timeline was ever written`);
       assert.match(
         prompt,
         /# Previous chapter in full: Night 2\n\nCANON-2-0/,
@@ -1603,9 +1606,14 @@ test("a story saved by 0.6.16 catches up in the background: its own chapters are
   const memory = createOtomeMemory({ runtime: t.runtime, store: t.store });
   t.deps.memory = memory;
   try {
-    // Before the catch-up: recall answers at once, on the bounded canonical history, and queues the upkeep.
+    // Before the catch-up: a prompt goes out at once on what is saved, and queues the upkeep. The old overview is no
+    // timeline, so Night 1 goes by its saved summary; her route chapter, whose 0.6.16 record is a `chat`, has no summary
+    // of its own yet, so it goes in full.
     const before = await recallText(t.deps, t.runId, { job: "narration", cast: [MIR], continues: "main" });
     assert.match(before.text, /# Previous chapter in full: Night 2\n\nSECOND-NIGHT/u);
+    assert.ok(before.text.includes("# Recent canon summary: Night 1\nSUMMARY: SHARED-QUAY"), before.text);
+    assert.ok(!before.text.includes("Canon in full: Night 1"), "a chapter with a summary never goes in full");
+    assert.ok(!before.text.includes("# Canon to date") && !before.text.includes("OLD-OVERVIEW"));
     assert.ok(before.text.includes(`# Canon in full: ${MIREILLE_LEDGER}\nPRIVATE-LEDGER`));
     assert.equal((await memory.status(t.runId)).phase, "pending", "the catch-up is queued in the background");
     // A real prompt meanwhile: P5 is sent whole within the connection's context, the previous chapter in it.
@@ -1660,7 +1668,7 @@ const KAI_ROUTE =
   "Kai's own route chapter \"Kai's Lamp\" (private: only the people in its scenes know what happened in it)";
 
 test("the previous chapter in full is the last of the storyline the prompt continues, and what may give way", async () => {
-  // No memory: the canonical history, GF's legacy one. Kai's date after Night 1, his route chapter after Night 2.
+  // Memory never written: every chapter in full. Kai's date after Night 1, his route chapter after Night 2.
   const t = await storyWorld({ runKey: "r-storyline-aaaaaa", replies: [] });
   await completeChapter(
     t,
@@ -1699,22 +1707,22 @@ test("the previous chapter in full is the last of the storyline the prompt conti
     const { text } = await recall({ job: "structured", ...options });
     assert.ok(text.includes(`# Previous chapter in full: ${previous}`), `${JSON.stringify(options)}: ${text}`);
   }
-  // GF's legacy rule: the previous chapter and all after it stay; what came before it may give way at the reply floor,
-  // the storyline chapters first, then the dates, each oldest first.
+  // At the reply floor the chapters in full give way oldest first, in story order whatever their kind, those after the
+  // previous chapter too: the newest goes last.
   const main = await recall({ job: "structured", cast: [KAI], continues: "main" });
   assert.deepEqual(main.optional, [
     full("Night 1", "NIGHT-ONE: the quay goes dark."),
     full(KAI_DATE, "KAI-DATE: Kai counts jellyfish."),
+    full(KAI_ROUTE, "KAI-ROUTE: Kai lights the lamp for her."),
   ]);
-  assert.ok(main.text.includes(full(KAI_ROUTE, "KAI-ROUTE: Kai lights the lamp for her.")), "after it, it stays");
   const route = await recall({ job: "structured", cast: [KAI], continues: KAI });
   assert.deepEqual(route.optional, [
     full("Night 1", "NIGHT-ONE: the quay goes dark."),
-    full("Night 2", "NIGHT-TWO: the bell rings."),
     full(KAI_DATE, "KAI-DATE: Kai counts jellyfish."),
+    full("Night 2", "NIGHT-TWO: the bell rings."),
   ]);
 
-  // The newest of the others goes in however long, past the bound the older ones keep to.
+  // Every chapter goes in whole, however long: only the fit to the connection may leave one out.
   const long = Array.from({ length: 140 }, (_, n) =>
     Array.from({ length: 100 }, (_, w) => `lamp${(n + w) % 89}`).join(" "),
   );
@@ -1725,9 +1733,9 @@ test("the previous chapter in full is the last of the storyline the prompt conti
     "2026-10-28T13:00:00.000Z",
   );
   const after = await recall({ job: "structured", cast: [KAI], continues: "main" });
-  assert.ok(estimateTextTokens(after.text) > 14_000, "a chapter past the bound");
+  assert.ok(estimateTextTokens(after.text) > 14_000, "a long chapter");
   assert.ok(after.text.includes("LONG-WATCH-START") && after.text.includes("LONG-WATCH-END"), "kept whole");
-  assert.ok(!after.optional.some((block) => block.includes("LONG-WATCH")), "after the previous chapter, so it stays");
+  assert.ok(after.optional.at(-1)!.includes("LONG-WATCH-START"), "the newest, so the last to give way");
 });
 
 test("with memory ready, recent canon is GF's: only older chapter summaries may give way, nothing twice", async () => {
@@ -1863,7 +1871,7 @@ test("with memory ready, recent canon is GF's: only older chapter summaries may 
   }
 });
 
-test("dates a 0.6.16 story kept word for word wait on the bounded history, never all as written", async () => {
+test("dates with no summary yet go in full beside the summaries there are, the oldest first to give way", async () => {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => (release = resolve));
   const t = await storyWorld({
@@ -1937,11 +1945,27 @@ test("dates a 0.6.16 story kept word for word wait on the bounded history, never
   });
   const memory = createOtomeMemory({ runtime: t.runtime, store: t.store });
   try {
-    const before = (
-      await recallText({ store: t.store, memory }, t.runId, { job: "narration", cast: [KAI], continues: "main" })
-    ).text;
-    assert.ok(!before.includes("# Recent canon in full") && !before.includes("# Canon to date"), before);
-    assert.ok(before.includes('# Canon in full: Kai\'s own date chapter "Tide Pools"'), "the bounded history instead");
+    // As saved: the old overview is no timeline, and Night 1 goes by its summary. His dates, whose 0.6.16 records are
+    // `chat`s, have no summary of their own yet: each goes in full, and at the reply floor the older gives way first.
+    const context = await recallText({ store: t.store, memory }, t.runId, {
+      job: "narration",
+      cast: [KAI],
+      continues: "main",
+    });
+    const before = context.text;
+    assert.ok(!before.includes("# Canon to date"), before);
+    assert.ok(before.includes("# Recent canon summary: Night 1\nSUMMARY: NIGHT-ONE"), before);
+    const date = (title: string) =>
+      `# Canon in full: Kai's own date chapter "${title}" (private: only the people in its scenes know what happened in it)`;
+    assert.ok(
+      before.includes(`${date("Jellyfish Hour")}\nKAI-DATE-ONE`) &&
+        before.includes(`${date("Tide Pools")}\nKAI-DATE-TWO`),
+    );
+    assert.deepEqual(
+      context.optional.map((block) => block.split("\n")[0]),
+      [date("Jellyfish Hour"), date("Tide Pools")],
+      "Night 1, the one chapter summary, stays",
+    );
     assert.equal((await memory.status(t.runId)).phase, "pending", "the catch-up is queued");
     release();
     assert.equal(await memorySettled(memory, t.runId), "ready");
@@ -1957,6 +1981,209 @@ test("dates a 0.6.16 story kept word for word wait on the bounded history, never
     release();
     memory.dispose();
   }
+});
+
+test("memory pending after chapters complete: the previous chapter in full, the rest by the timeline or in full", async () => {
+  // Night 1 and Night 2 are summarized and in the timeline. Then Kai's route chapter and Night 3 complete while the
+  // background job waits at the Engine's admission. Before, a chapter other than the newest waiting for its summary
+  // sent every prompt the canonical history instead: Night 1 and Night 2 word for word, and no timeline.
+  let held = false;
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const t = await storyWorld({
+    runKey: "r-pending-aaaaaa",
+    replies: Array.from({ length: 40 }, () => markerSummary),
+    model: {
+      admissionRun: async (operation) => {
+        if (held) await gate;
+        return operation();
+      },
+    },
+  });
+  await completeChapter(
+    t,
+    { key: "main-1", kind: "main", number: 1, lead: KAI, title: "Night 1" },
+    "NIGHT-ONE: dark.",
+    "2026-10-28T09:00:00.000Z",
+  );
+  await completeChapter(
+    t,
+    { key: "main-2", kind: "main", number: 2, lead: KAI, title: "Night 2" },
+    "NIGHT-TWO: bell.",
+    "2026-10-28T10:00:00.000Z",
+  );
+  const memory = createOtomeMemory({ runtime: t.runtime, store: t.store });
+  try {
+    assert.equal(await memory.maintain({ runId: t.runId }), true);
+    assert.equal(await memorySettled(memory, t.runId), "ready");
+    held = true;
+    await completeChapter(
+      t,
+      { key: `route-${KAI}-3`, kind: "route", li: KAI, lead: KAI, stage: 3, title: "Kai's Lamp" },
+      "KAI-ROUTE: Kai lights the lamp for her.",
+      "2026-10-28T11:00:00.000Z",
+    );
+    await completeChapter(
+      t,
+      { key: "main-3", kind: "main", number: 3, lead: KAI, title: "Night 3" },
+      "NIGHT-THREE: noon.",
+      "2026-10-28T12:00:00.000Z",
+    );
+    const recall = () =>
+      recallText({ store: t.store, memory }, t.runId, { job: "structured", cast: [KAI], continues: "main" });
+    const pending = (await recall()).text;
+    assert.equal((await memory.status(t.runId)).phase, "pending", "the prompt queued the summaries");
+    assert.match(pending, /# Previous chapter in full: Night 3\n\nNIGHT-THREE: noon\./u);
+    assert.match(overviewOf(pending), /SUMMARY: NIGHT-ONE[^]*SUMMARY: NIGHT-TWO/u, "the timeline as saved");
+    assert.ok(!pending.includes("Canon in full: Night"), "a chapter with a summary never goes in full");
+    assert.ok(pending.includes(`# Canon in full: ${KAI_ROUTE}\nKAI-ROUTE`), "his, being summarized, in full meanwhile");
+
+    release();
+    assert.equal(await memorySettled(memory, t.runId), "ready");
+    const caught = (await recall()).text;
+    assert.match(overviewOf(caught), /SUMMARY: NIGHT-ONE[^]*SUMMARY: NIGHT-TWO[^]*SUMMARY: KAI-ROUTE/u, caught);
+    assert.match(caught, /# Previous chapter in full: Night 3\n\nNIGHT-THREE: noon\./u);
+    assert.ok(!caught.includes("Canon in full") && !caught.includes("# Recent canon"), "all the rest by the timeline");
+  } finally {
+    release();
+    memory.dispose();
+  }
+});
+
+test("a failed summary for one older chapter: that chapter in full, every other by the timeline, until Retry", async () => {
+  // Kai's route chapter is refused; Night 3 completes after it. Before, the refusal sent every prompt the canonical
+  // history (no timeline) until the player tapped Retry.
+  let refuse = false;
+  const route = `route-${KAI}-3`;
+  const t = await storyWorld({
+    runKey: "r-failed-aaaaaa",
+    replies: Array.from({ length: 40 }, () => (messages: CapabilityLanguageModelMessage[]) => {
+      // Refused again in the repair turn, whose last message asks for the format.
+      const last = messages.at(-1)!.content;
+      const refused = refuse && (!last.startsWith("{") || JSON.parse(last).source?.id === route);
+      return refused ? "I can't help with summarizing this." : markerSummary(messages);
+    }),
+  });
+  await completeChapter(
+    t,
+    { key: "main-1", kind: "main", number: 1, lead: KAI, title: "Night 1" },
+    "NIGHT-ONE: dark.",
+    "2026-10-28T09:00:00.000Z",
+  );
+  await completeChapter(
+    t,
+    { key: "main-2", kind: "main", number: 2, lead: KAI, title: "Night 2" },
+    "NIGHT-TWO: bell.",
+    "2026-10-28T10:00:00.000Z",
+  );
+  const memory = createOtomeMemory({ runtime: t.runtime, store: t.store });
+  try {
+    assert.equal(await memory.maintain({ runId: t.runId }), true);
+    assert.equal(await memorySettled(memory, t.runId), "ready");
+    refuse = true;
+    await completeChapter(
+      t,
+      { key: route, kind: "route", li: KAI, lead: KAI, stage: 3, title: "Kai's Lamp" },
+      "KAI-ROUTE: Kai lights the lamp for her.",
+      "2026-10-28T11:00:00.000Z",
+    );
+    assert.equal(await memory.maintain({ runId: t.runId }), true);
+    assert.equal(await memorySettled(memory, t.runId), "error", "his summary was refused");
+    await completeChapter(
+      t,
+      { key: "main-3", kind: "main", number: 3, lead: KAI, title: "Night 3" },
+      "NIGHT-THREE: noon.",
+      "2026-10-28T12:00:00.000Z",
+    );
+    const recall = () =>
+      recallText({ store: t.store, memory }, t.runId, { job: "structured", cast: [KAI], continues: "main" });
+    const failed = (await recall()).text;
+    const status = await memory.status(t.runId);
+    assert.deepEqual(
+      [status.phase, status.retryable, status.message],
+      ["error", true, "The model declined memory-detail."],
+    );
+    assert.match(failed, /# Previous chapter in full: Night 3\n\nNIGHT-THREE: noon\./u);
+    assert.match(overviewOf(failed), /SUMMARY: NIGHT-ONE[^]*SUMMARY: NIGHT-TWO/u, "the rest by the timeline");
+    assert.ok(failed.includes(`# Canon in full: ${KAI_ROUTE}\nKAI-ROUTE`), "the refused one in full");
+    assert.ok(!failed.includes("Canon in full: Night"), failed);
+
+    // Nothing retries it by itself; Retry writes it, and the next prompt has it by the timeline.
+    refuse = false;
+    assert.equal(await memory.maintain({ runId: t.runId }), true);
+    assert.equal(await memorySettled(memory, t.runId), "ready");
+    const retried = (await recall()).text;
+    assert.match(overviewOf(retried), /SUMMARY: KAI-ROUTE/u, retried);
+    assert.ok(!retried.includes("Canon in full"), retried);
+  } finally {
+    memory.dispose();
+  }
+});
+
+test("memory never written: every chapter in full, fitted to the connection, the oldest giving way only at the floor", async () => {
+  // A 16k connection, no memory written: three chapters of about 3800 tokens each and a short previous one leave a
+  // reply far less than its 8192 floor, so the oldest in full give way, in story order, until the floor is back.
+  const t = await storyWorld({
+    runKey: "r-unwritten-aaaaaa",
+    replies: ['{"premise":"x"}'],
+    model: { maxContext: 16_384, maxOutputTokens: null },
+  });
+  const words = (tag: string) => [
+    `${tag}-START`,
+    ...Array.from({ length: 25 }, (_, n) =>
+      Array.from({ length: 100 }, (__, w) => `${tag.toLowerCase()}${(n + w) % 89}`).join(" "),
+    ),
+  ];
+  await completeChapter(
+    t,
+    { key: "main-1", kind: "main", number: 1, lead: KAI, title: "Night 1" },
+    words("NIGHTONE"),
+    "2026-10-28T09:00:00.000Z",
+  );
+  await completeChapter(
+    t,
+    { key: "date-1", kind: "date", li: KAI, lead: KAI, title: "Jellyfish Hour" },
+    words("KAIDATE"),
+    "2026-10-28T10:00:00.000Z",
+  );
+  await completeChapter(
+    t,
+    { key: "main-2", kind: "main", number: 2, lead: KAI, title: "Night 2" },
+    words("NIGHTTWO"),
+    "2026-10-28T11:00:00.000Z",
+  );
+  await completeChapter(
+    t,
+    { key: "main-3", kind: "main", number: 3, lead: KAI, title: "Night 3" },
+    "NIGHT-THREE: noon.",
+    "2026-10-28T12:00:00.000Z",
+  );
+  const memory = await recallText({ store: t.store }, t.runId, { job: "narration", cast: [KAI], continues: "main" });
+  for (const tag of ["NIGHTONE", "KAIDATE", "NIGHTTWO"]) assert.ok(memory.text.includes(`${tag}-START`), tag);
+  assert.deepEqual(
+    memory.optional.map((block) => block.split("\n")[0]),
+    ["# Canon in full: Night 1", `# Canon in full: ${KAI_DATE}`, "# Canon in full: Night 2"],
+  );
+  const sent = [
+    { role: "system" as const, content: "Reply with {premise}." },
+    { role: "user" as const, content: `STORY MEMORY\n${memory.text}` },
+  ];
+  await generateJson(t.deps, {
+    runId: t.runId,
+    job: "narration",
+    label: "unwritten",
+    messages: sent,
+    memory,
+    schema: z.object({ premise: z.string() }),
+    maxTokens: 600,
+    debugMode: false,
+    lane: "foreground",
+  });
+  const prompt = t.calls[0]!.messages.map((message) => message.content).join("\n");
+  assert.ok(!prompt.includes("NIGHTONE-START") && !prompt.includes("KAIDATE-START"), "the two oldest gave way");
+  assert.ok(prompt.includes("NIGHTTWO-START"), "the newest stays while the floor holds");
+  assert.ok(prompt.includes("# Previous chapter in full: Night 3\n\nNIGHT-THREE: noon."), "the previous chapter");
+  assert.ok(t.calls[0]!.options!.maxTokens! >= 8192, `the reply keeps its floor: ${t.calls[0]!.options!.maxTokens}`);
 });
 
 test("what he learned in Read Me still comes back while the chapter just played has no summary yet", async () => {
@@ -2015,7 +2242,7 @@ test("the chapter plan, its scenes and its Confrontation hand their memory to th
     replies: router(),
     model: { maxContext: 1_000_000, maxOutputTokens: null },
   });
-  t.deps.memory = squeezedMemory(60_000);
+  t.deps.memory = await squeezedMemory(t, 60_000);
   assert.equal((await t.call("POST", "/runs/:run/chapters/next", { lead: KAI })).status, 200);
   await readThrough(t, 0, 4);
   const served = await t.call("POST", beatPath, {}, node(5));
@@ -2562,6 +2789,12 @@ test("a cached story context is what every call of its chapter may know, whateve
   );
   await completeChapter(
     t,
+    { key: `route-${MIR}-2`, kind: "route", li: MIR, lead: MIR, stage: 2, title: "Her First" },
+    "PRIVATE-FIRST: she shows her the archive stairs.",
+    "2026-10-28T09:30:00.000Z",
+  );
+  await completeChapter(
+    t,
     { key: `route-${MIR}-3`, kind: "route", li: MIR, lead: MIR, stage: 3, title: "Mireille's Ledger" },
     "PRIVATE-LEDGER: she burns a page.",
     "2026-10-28T10:00:00.000Z",
@@ -2572,36 +2805,27 @@ test("a cached story context is what every call of its chapter may know, whateve
     "NIGHT-TWO: the bell.",
     "2026-10-28T11:00:00.000Z",
   );
-  // Night 1 and her route chapter are recent canon, hers only for a cast she is in, until her chapter's summary joins
-  // the timeline; each call recalls its own cast's small memories.
-  let covered = false;
-  const ledgerKey = JSON.stringify(["chapter", `route-${MIR}-3`]);
+  // Night 1 and her route chapters are summarized but not in the timeline yet: they go beside it by their summaries,
+  // hers only for a cast she is in, until her chapter's summary joins the timeline. Each call recalls its own cast's
+  // small memories.
+  const keyOf = (id: string) => JSON.stringify(["chapter", id]);
+  const summaries = {
+    [keyOf("main-1")]: "NIGHT-ONE-SUMMARY",
+    [keyOf(`route-${MIR}-2`)]: "FIRST-RECENT",
+    [keyOf(`route-${MIR}-3`)]: "LEDGER-RECENT",
+  };
+  const save = (covered: boolean) =>
+    saveStoryMemory(t.store, t.runId, {
+      summaries,
+      entries: covered ? [{ key: keyOf(`route-${MIR}-3`), title: MIREILLE_LEDGER, text: "TIMELINE-LEDGER" }] : [],
+    });
+  await save(false);
   const memory = {
     recall: async (options: { cast?: string[] }) => ({
       status: { phase: "ready" },
-      overview: covered
-        ? serializeTimeline({
-            head: "",
-            entries: [{ key: ledgerKey, title: MIREILLE_LEDGER, text: "TIMELINE-LEDGER" }],
-          })
-        : "",
+      overview: "",
       lagging: false,
       maxContext: null,
-      recent: [
-        { id: "main-1", kind: "chapter", title: "Night 1", content: "NIGHT-ONE-SUMMARY", summary: true },
-        ...((options.cast ?? []).includes(MIR) && !covered
-          ? [
-              { id: `route-${MIR}-2`, kind: "chapter", title: "Her first", content: "FIRST-RECENT", summary: true },
-              {
-                id: `route-${MIR}-3`,
-                kind: "chapter",
-                title: MIREILLE_LEDGER,
-                content: "LEDGER-RECENT",
-                summary: true,
-              },
-            ]
-          : []),
-      ],
       recalls: (options.cast ?? []).map((li) => ({ id: `note-${li}`, title: `${li}'s note`, content: `NOTE-${li}` })),
     }),
     maintain: async () => false,
@@ -2625,20 +2849,22 @@ test("a cached story context is what every call of its chapter may know, whateve
   // Each part keeps its own newest summary: of hers, only the older may give way.
   assert.deepEqual(
     mir.recalls!.optional.map((text) => text.split("\n")[0]),
-    ["# Recent canon summary: Her first"],
+    [
+      `# Recent canon summary: Mireille's own route chapter "Her First" (private: only the people in its scenes know what happened in it)`,
+    ],
   );
   // In her own chapter she is in every scene: her canon is cached with the rest.
   assert.ok((await call([MIR], { li: MIR })).text.includes("LEDGER-RECENT"));
   // Once her chapter's summary is in the timeline, every call has it there, as before.
-  covered = true;
+  await save(true);
   assert.ok((await call([KAI])).text.includes(`${MIREILLE_LEDGER}\nTIMELINE-LEDGER`));
-  covered = false;
+  await save(false);
   // Without `cached`, as before: her chapter in the context for her own cast, the recalls after the timeline.
   const plain = await recallText(deps, t.runId, { job: "narration", cast: [MIR], continues: "main" });
   assert.ok(plain.text.includes("LEDGER-RECENT") && plain.text.includes(`NOTE-${MIR}`) && !plain.recalls);
 
-  // The canonical history: the shared chapters first, so his long date never pushes Night 1 out of the part every
-  // scene shares; each love interest's own chapters go with his own scenes only.
+  // A chapter with no summary yet goes in full in the part of those who may know it: his long date only with his own
+  // scenes, never in the part every scene shares, where the shared chapters keep their summaries.
   await completeChapter(
     t,
     { key: "date-1", kind: "date", li: KAI, lead: KAI, title: "Jellyfish Hour" },
@@ -2650,20 +2876,23 @@ test("a cached story context is what every call of its chapter may know, whateve
     ],
     "2026-10-28T12:00:00.000Z",
   );
-  const history = (cast: string[]) =>
+  const unrecalled = (cast: string[]) =>
     recallText({ store: t.store }, t.runId, { job: "narration", cast, continues: "main", cached: {} });
-  const kaiHistory = await history([KAI]);
-  const mirHistory = await history([MIR]);
-  assert.equal(mirHistory.text, kaiHistory.text);
-  assert.ok(kaiHistory.text.includes("# Canon in full: Night 1\nNIGHT-ONE"), "Night 1, though his date is newer");
-  assert.ok(!kaiHistory.text.includes("KAI-DATE") && !kaiHistory.text.includes("PRIVATE-LEDGER"));
-  assert.ok(
-    kaiHistory.recalls!.text.includes("KAI-DATE-START") && !kaiHistory.recalls!.text.includes("PRIVATE-LEDGER"),
+  const kaiStory = await unrecalled([KAI]);
+  const mirStory = await unrecalled([MIR]);
+  assert.equal(mirStory.text, kaiStory.text);
+  assert.ok(kaiStory.text.includes("# Recent canon summary: Night 1\nNIGHT-ONE-SUMMARY"), "Night 1 by its summary");
+  assert.ok(!kaiStory.text.includes("KAI-DATE") && !kaiStory.text.includes("LEDGER"));
+  assert.ok(kaiStory.recalls!.text.includes(`# Canon in full: ${KAI_DATE}\nKAI-DATE-START`), kaiStory.recalls!.text);
+  assert.ok(!kaiStory.recalls!.text.includes("LEDGER"));
+  assert.deepEqual(
+    kaiStory.recalls!.optional.map((text) => text.split("\n")[0]),
+    [`# Canon in full: ${KAI_DATE}`],
   );
-  assert.ok(mirHistory.recalls!.text.includes("PRIVATE-LEDGER") && !mirHistory.recalls!.text.includes("KAI-DATE"));
+  assert.ok(mirStory.recalls!.text.includes("LEDGER-RECENT") && !mirStory.recalls!.text.includes("KAI-DATE"));
 });
 
-test("a cached prompt's own canon has a bound of its own in the canonical history (#2091)", async () => {
+test("with memory never written, a cached prompt's chapters go whole, its own after the cached part, each part's oldest first to give way (#2091)", async () => {
   const t = await storyWorld({ runKey: "r-ownbound-aaaaaa" });
   const words = (tag: string, lines: number) => [
     `${tag}-START`,
@@ -2671,7 +2900,7 @@ test("a cached prompt's own canon has a bound of its own in the canonical histor
       Array.from({ length: 100 }, (__, w) => `${tag.toLowerCase()}${(n + w) % 89}`).join(" "),
     ),
   ];
-  // Two main chapters before the previous one fill most of the bound; two dates of his come after the previous one.
+  // Two long main chapters before the previous one; two long dates of his after it.
   for (const [n, at] of [
     [1, "2026-10-28T09:00:00.000Z"],
     [2, "2026-10-28T10:00:00.000Z"],
@@ -2708,10 +2937,18 @@ test("a cached prompt's own canon has a bound of its own in the canonical histor
   });
   assert.ok(
     context.text.includes("NIGHT1-START") && context.text.includes("NIGHT2-START"),
-    "the shared part's own bound",
+    "the shared chapters, whole",
   );
-  // Both his dates, played after the previous chapter, stay, however much of the bound the shared part took.
-  assert.ok(context.recalls!.text.includes("DATE1-START") && context.recalls!.text.includes("DATE2-START"));
+  assert.ok(
+    context.recalls!.text.includes("DATE1-START") && context.recalls!.text.includes("DATE2-START"),
+    "his, whole",
+  );
+  // Only at the reply floor, and each part's oldest first: his dates go with the recalls, which give way first.
+  const heads = (blocks: readonly string[]) => blocks.map((text) => text.split("\n")[0]);
+  const date = (n: number) =>
+    `# Canon in full: Kai's own date chapter "Date ${n}" (private: only the people in its scenes know what happened in it)`;
+  assert.deepEqual(heads(context.recalls!.optional), [date(1), date(2)]);
+  assert.deepEqual(heads(context.optional), ["# Canon in full: Night 1", "# Canon in full: Night 2"]);
 });
 
 test("in his own route chapter, a love interest's own canon is cached with the rest (#2091)", async () => {

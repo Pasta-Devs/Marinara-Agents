@@ -12,10 +12,13 @@
 // #2066: the overview is the story's timeline. A chapter's summary (at most 1000 words, said in its prompt) joins it with
 // no model call, and only a timeline past 13k tokens and 1k of leeway is condensed (everything before the newest main
 // chapter's entry, #2091, in as few calls as the memory model's context allows; a fold that adds nothing condenses
-// nothing); a date is never in it (a Character Story joins it, titled private), and a memory model of unknown context
-// waits for configuration. Recall sends no ranked details: the small memories this prompt may know come back as
-// `recalls`, newest first within 5k tokens and 1k of leeway, never one the caller lists in full; the Home note, Read Him
-// and Read Me take the newest.
+// nothing); a date is never in it (a Character Story joins it, titled private). Memory never waits for a context size
+// (the maintainer's, 2026-11-04): a memory model that reports none writes every summary, each request whole, and
+// condenses in one call; a summary its provider refuses is status `error` with the provider's own message, which Retry
+// clears; a run with no connection for it says so in its status, with how many chapters wait for a summary; and a
+// status the earlier gate saved reads as behind and catches up. Recall sends no ranked details and no recent canon: the
+// small memories this prompt may know come back as `recalls`, newest first within 5k tokens and 1k of leeway, never
+// one the caller lists in full; the Home note, Read Him and Read Me take the newest.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
@@ -55,6 +58,7 @@ import {
   keptPart,
   parseTimeline,
   renderTimeline,
+  savedStory,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/timeline.ts";
 import { recalledLine } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/minigames/read-him.ts";
 import {
@@ -464,12 +468,72 @@ test("a condensed head that came back long is never condensed again by itself, a
   assert.equal(calls.length, 5);
 });
 
-test("a memory model of unknown context waits for configuration, as before #2066, and summarizes nothing", async () => {
-  const { memory, calls } = await setup(undefined, { maxContext: null });
+test("a memory model that reports no context size writes every summary whole and condenses in one call", async () => {
+  // The maintainer's (2026-11-04): memory sends its requests as they are, the summary prompt and the chapter. Before,
+  // the kit waited for configuration and never wrote a summary. Night 1 is far longer than any context the fake has;
+  // eight summaries of about 2000 tokens take the timeline past 14k, as on the small model above.
+  const summary = (n: number) => filler(`CHAPTER-${n}`, 1150);
+  const chapters = mainChapters(8);
+  chapters[0] = { ...chapters[0]!, content: filler("NIGHT-1", 60_000) };
+  let condensed = 0;
+  const { memory, calls, fake } = await setup(undefined, {
+    maxContext: null,
+    maxOutputTokens: null,
+    sources: chapters,
+    replies: Array.from({ length: 20 }, () => (messages: Array<{ content: string }>) => {
+      const input = JSON.parse(messages.at(-1)!.content);
+      if (input.source) return JSON.stringify({ summary: summary(Number(input.source.id.slice(5))) });
+      condensed += 1;
+      return JSON.stringify({ summary: `CONDENSED-${condensed}` });
+    }),
+  });
   assert.equal(await memory.maintain({ runId: RUN }), true);
-  const status = await settle(memory);
-  assert.equal(status.phase, "context-unknown");
-  assert.equal(calls.length, 0);
+  assert.equal((await settle(memory)).phase, "ready");
+  const inputs = calls.map((call) => JSON.parse(call.messages.at(-1)!.content));
+  assert.deepEqual(
+    inputs.map((input) => (input.source ? input.source.id : "timeline")),
+    [...chapters.map((chapter) => chapter.id), "timeline"],
+    "each chapter in one call, then one condensing",
+  );
+  const night1 = inputs[0]!.source;
+  assert.ok(estimateTextTokens(night1.content) > 60_000, "Night 1 went whole");
+  assert.deepEqual(night1.range, { from: 0, to: night1.range.total, total: night1.range.total });
+  const folded = (inputs.at(-1)!.timeline as string).match(/CHAPTER-\d/gu);
+  assert.deepEqual(
+    folded,
+    [1, 2, 3, 4, 5, 6, 7].map((n) => `CHAPTER-${n}`),
+    "all but Night 8 in the one call",
+  );
+  const timeline = parseTimeline(
+    (fake.rows.get(memoryId(RUN))!.data as { overview: { content: string } }).overview.content,
+  );
+  assert.deepEqual([timeline.head, timeline.entries.map((entry) => entry.title)], ["CONDENSED-1", ["Night 8"]]);
+});
+
+test("a status the earlier context gate saved reads as behind, and the next story prompt catches the memory up", async () => {
+  const { fake, store, memory, calls } = await setup();
+  await fake.documents.create({
+    ...runDocTarget("memory", memoryId(RUN)),
+    packageId: "otome-forge",
+    description: "",
+    data: {
+      version: 1,
+      records: [],
+      work: [],
+      overview: null,
+      status: { phase: "context-unknown", retryable: false, reason: "configure-context", operationId: "op-gate" },
+    },
+    createdAt: "2026-11-03T08:00:00.000Z",
+    updatedAt: "2026-11-03T08:00:00.000Z",
+  });
+  assert.deepEqual((({ phase, retryable }) => ({ phase, retryable }))(await memory.status(RUN)), {
+    phase: "stale",
+    retryable: true,
+  });
+  await recallText({ store, memory }, RUN, { job: "narration", cast: [KAI] });
+  for (let turn = 0; turn < 2000 && calls.length < 2; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal((await settle(memory)).phase, "ready", "queued by the prompt, with no Retry");
+  assert.equal(calls.length, 2, "both chapters summarized");
 });
 
 test("a newcomer kept out of the cast after a failed arc plan is named in no summary's content contract", async () => {
@@ -536,14 +600,14 @@ test("an overview saved before the timeline is folded again from the records in 
   assert.equal(before.status.phase, "ready");
   assert.equal(before.overview, "");
   assert.equal(before.lagging, true, "the rebuild is owed, so recall queues it");
-  assert.deepEqual(
-    before.recent?.map((entry) => [entry.id, entry.content]),
-    [
-      [main.id, MAIN],
-      [route.id, ROUTE],
-    ],
-  );
   assert.ok(!before.text.includes("OLD-OVERVIEW"));
+  // What a story prompt reads meanwhile (S/story/canon.ts): no timeline, and every saved summary.
+  const read = savedStory(saved());
+  assert.equal(read.timeline, "");
+  assert.deepEqual(
+    [main, route].map((source) => read.summaries.get(JSON.stringify([source.kind, source.id]))),
+    [MAIN, ROUTE],
+  );
   // The story's own recall queues it, with no Retry.
   await recallText({ store, memory }, RUN, { job: "narration", cast: [MIR] });
   for (let turn = 0; turn < 2000 && saved().overviewStyle !== 4; turn += 1) {
@@ -660,8 +724,8 @@ test("a private chat is recalled only for its own love interest, or a scene he i
     const recalled = (result.recalls ?? []).map((item) => item.content).join("\n");
     assert.equal(recalled.includes(PRIVATE), sees, JSON.stringify(who));
     assert.ok(!result.overview.includes(PRIVATE), "never in the overview");
-    // The latest chapter is the caller's to send in full: marked, and never ranked as a detail.
-    assert.ok(result.recent?.some((entry) => entry.id === "main-1" && entry.latest));
+    // The story's chapters are the caller's to send (S/story/canon.ts): no recent canon, and never a ranked detail.
+    assert.equal("recent" in result, false);
     assert.ok(result.details.every((detail) => detail.id !== "main-1"));
   }
 });
@@ -963,6 +1027,59 @@ test("the memory routes report the memory, queue a Retry and give the overview a
   };
   await bareRoutes.get("POST /runs/:run/memory/retry")!({ params: { run: "r-memory-abcdef" }, body: {} }, reply);
   assert.deepEqual([code, (body as { code: string }).code], [503, "no-connection"]);
+  // The status says why it waits, and how many chapters wait for a summary (a chat is its own record).
+  const waiting = (await bareRoutes.get("GET /runs/:run/memory/status")!(
+    { params: { run: "r-memory-abcdef" } },
+    reply,
+  )) as {
+    status: { noConnection: boolean; unsummarized: number };
+  };
+  assert.deepEqual([waiting.status.noConnection, waiting.status.unsummarized], [true, 2]);
+  const ready = (await call("GET", "/runs/:run/memory/status", "r-memory-abcdef")).payload as {
+    status: { noConnection: boolean; unsummarized: number };
+  };
+  assert.deepEqual([ready.status.noConnection, ready.status.unsummarized], [false, 0]);
+});
+
+test("a summary the provider refuses as too long is status error with its own message, and Retry writes it", async () => {
+  // A memory model that reports no context size, behind a provider whose window is too small for the chapter.
+  const TOO_LONG =
+    "400 This model's maximum context length is 8192 tokens. However, your messages resulted in 9100 tokens.";
+  let refuse = true;
+  const { store, memory, runtime } = await setup(undefined, {
+    maxContext: null,
+    replies: Array.from({ length: 12 }, () => (messages: Array<{ content: string }>) => {
+      if (refuse) throw new Error(TOO_LONG);
+      return summarizer(messages);
+    }),
+  });
+  const routes = new Map<string, RouteHandler>();
+  registerMemoryRoutes(
+    {
+      get: (path, handler) => routes.set(`GET ${path}`, handler),
+      post: (path, handler) => routes.set(`POST ${path}`, handler),
+    },
+    { store, handle: createHandle(runtime.logger), memory },
+  );
+  const reply: OtomeReply = { status: () => reply, send: () => reply };
+  type Shown = { status: { phase: string; retryable: boolean; message?: string; unsummarized?: number } };
+  const shown = async (method: "GET" | "POST", path: string) =>
+    (await routes.get(`${method} ${path}`)!({ params: { run: "r-memory-abcdef" }, body: {} }, reply)) as Shown;
+
+  assert.equal(await memory.maintain({ runId: RUN }), true);
+  await settle(memory);
+  const failed = (await shown("GET", "/runs/:run/memory/status")).status;
+  assert.deepEqual(
+    [failed.phase, failed.retryable, failed.message, failed.unsummarized],
+    ["error", true, TOO_LONG, 2],
+    "the provider's own words, retryable",
+  );
+  // Nothing retries it by itself; Retry does, and the message goes with the failure.
+  refuse = false;
+  const retried = (await shown("POST", "/runs/:run/memory/retry")).status;
+  assert.deepEqual([retried.phase, retried.message], ["pending", undefined]);
+  const done = await settle(memory);
+  assert.deepEqual([done.phase, done.message, done.unsummarized], ["ready", undefined, 0]);
 });
 
 test("the chapter planner (P5) and the beat narrator (P6) carry the knowledge boundary", () => {

@@ -19,6 +19,7 @@ import {
 } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/http.ts";
 import {
   INDEX_TARGET,
+  memoryId,
   playerId,
   runDocTarget,
   runIdOf,
@@ -26,6 +27,10 @@ import {
   unitId,
   worldId,
 } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
+import {
+  serializeTimeline,
+  type TimelineEntry,
+} from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/timeline.ts";
 import { registerArcRoutes } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/arcs.ts";
 import { registerStoryRoutes } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/story.ts";
 import { normalizeIndex } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/index.ts";
@@ -39,7 +44,10 @@ import {
   normalizeUnit,
 } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
-import { createOtomeStore } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/store.ts";
+import {
+  createOtomeStore,
+  type OtomeStore,
+} from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/store.ts";
 import {
   createFakeDocuments,
   createFakeRuntime,
@@ -419,12 +427,46 @@ export function closerReply(
 }
 
 /**
- * A ready memory recalled for a reader whose window is `maxContext`, with one recall of about 40000 tokens: only the fit
- * the memory is handed to can leave that recall out, so a prompt sent on a far larger connection shows whether its
- * caller handed it over (#2066: also when the recalls go after the cached part, as their own context).
+ * Saves a run's story memory as the kit keeps it (`${R}:memory`, read by S/memory/timeline.ts savedStory): a timeline of
+ * `head` and `entries`, covering each entry and each of `covered`, and a summary record for each of `summaries`, every
+ * one by the kit's source key JSON [kind, id]. What a story prompt reads is what is saved, whatever the phase.
  */
-export function squeezedMemory(maxContext: number) {
-  const overview = "SQUEEZED-OVERVIEW: the lights of the quay fail one by one.";
+export async function saveStoryMemory(
+  store: Pick<OtomeStore, "mutateDoc">,
+  runId: string,
+  {
+    head = "",
+    entries = [],
+    covered = [],
+    summaries = {},
+  }: { head?: string; entries?: TimelineEntry[]; covered?: string[]; summaries?: Record<string, string> },
+) {
+  const stamp = (key: string) => [key, `fp-${key}`];
+  await store.mutateDoc(
+    runDocTarget("memory", memoryId(runId)),
+    (data) => data,
+    () => ({
+      version: 1,
+      records: Object.entries(summaries).map(([key, content]) => ({ key, fingerprint: `fp-${key}`, content })),
+      work: [],
+      overview: {
+        content: serializeTimeline({ head, entries }),
+        sources: [...entries.map((entry) => entry.key), ...covered].map(stamp),
+      },
+      overviewStyle: 4,
+      status: { phase: "ready", retryable: false },
+    }),
+  );
+}
+
+/**
+ * A ready memory recalled for a reader whose window is `maxContext`, with one recall of about 40000 tokens, and the
+ * run's timeline saved: only the fit the memory is handed to can leave that recall out, so a prompt sent on a far
+ * larger connection shows whether its caller handed it over (#2066: also when the recalls go after the cached part, as
+ * their own context).
+ */
+export async function squeezedMemory(t: { store: Pick<OtomeStore, "mutateDoc">; runId: string }, maxContext: number) {
+  await saveStoryMemory(t.store, t.runId, { head: "SQUEEZED-OVERVIEW: the lights of the quay fail one by one." });
   const recalls = [
     {
       id: "phone-old",
@@ -439,12 +481,11 @@ export function squeezedMemory(maxContext: number) {
       return {
         status: { phase: "ready" as const, retryable: false },
         lagging: false,
-        overview,
+        overview: "",
         details: [],
         recalls,
         maxContext,
         text: "",
-        recent: [],
       };
     },
     maintain: async () => true,

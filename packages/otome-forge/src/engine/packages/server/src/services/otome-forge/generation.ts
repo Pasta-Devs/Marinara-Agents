@@ -7,8 +7,9 @@
 //    needs, and every call asks for GF's floor and reasoning headroom on top (outputBudget). A prompt that fits with
 //    all of it is sent unchanged. Otherwise the story memory it carries (`memory`, recallText's context) gives way: its
 //    recalls first, oldest first; then, only while the reply would get less than OUTPUT_FLOOR, its older uncovered
-//    summaries, oldest first, and the previous chapter's earliest scenes. The timeline, the previous chapter's last
-//    scene and the newest summary always stay, and nothing outside the memory is ever cut. A cached prompt's own canon
+//    summaries, then the chapters it carries in full for want of a summary, each oldest first, and then the previous
+//    chapter's earliest scenes. The timeline, the previous chapter's last scene and the newest summary always stay,
+//    and nothing outside the memory is ever cut. A cached prompt's own canon
 //    (S/story/canon.ts `cached`) is a context of its own, beside the recalls, and its summaries give way before the
 //    cached part's, each part keeping its newest (#2091). A message's `cacheBreakpoint` (#2066) is sent as it is. A
 //    prompt that still leaves the reply less than the floor (or the connection's own smaller cap) is a 413 `capacity`

@@ -352,16 +352,18 @@ test("another love interest's route or repair chapter never reaches a note, a li
     assert.ok(!mirBeyond.includes("KAI-OWN-ROUTE") && !mirBeyond.includes("tower"), "Kai's own route only in it");
     assert.ok(!mirChat.includes("tower210"), "and never his route's scenes");
 
-    // With memory not ready, the canonical history keeps the same rule, each chapter whole.
-    const unready = { ...t.deps, memory: undefined };
-    const history = async (reader: string) =>
-      (await recallText(unready, t.runId, { job: "chat", reader, query: { cues: [] } })).text;
-    const kaiHistory = await history(KAI);
-    assert.ok(kaiHistory.includes("KAI-OWN-ROUTE") && kaiHistory.includes("SHARED-QUAY"), "his route, unready");
-    assert.ok(kaiHistory.includes("KAI-ROUTE-OPENING"), "whole");
-    assert.deepEqual(leaked(kaiHistory), []);
-    const mirHistory = await history(MIR);
-    assert.ok(mirHistory.includes("PRIVATE-REPAIR") && !mirHistory.includes("tower"), "hers, never his");
+    // With no recall at all, the story context is the same saved story and keeps the same rule: hers only in the
+    // timeline, his route whole.
+    const unrecalled = { ...t.deps, memory: undefined };
+    const story = async (reader: string) =>
+      (await recallText(unrecalled, t.runId, { job: "chat", reader, query: { cues: [] } })).text;
+    const kaiStory = await story(KAI);
+    assert.ok(kaiStory.includes("KAI-OWN-ROUTE") && kaiStory.includes("SHARED-QUAY"), "his route, unrecalled");
+    assert.ok(kaiStory.includes("KAI-ROUTE-OPENING"), "whole");
+    assert.deepEqual(leaked(beyondOverview(kaiStory)), []);
+    const mirStory = await story(MIR);
+    assert.ok(mirStory.includes("PRIVATE-REPAIR") && !beyondOverview(mirStory).includes("tower"), "hers, never his");
+    assert.ok(!mirStory.includes("tower210"), "and never his route's scenes");
 
     // Kai's closed conversation is a `chat` source for him alone, and never reaches Mireille's next reply.
     await closeAndRemember(t.deps, t.runId, KAI, { debugMode: false });

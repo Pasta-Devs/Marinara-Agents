@@ -16,6 +16,9 @@
 // condensing that has only a few short entries before the newest main chapter's frees little, so the next summary may
 // condense again. The upgrade path is keeping each storyline's newest entry apart, with a bound on what that holds back.
 // Stored in the kit's overview content as JSON. Anything else (an overview of an earlier form) reads as a head alone.
+// Every story prompt reads it as saved (savedStory: the timeline, the sources it covers and each one's summary),
+// whatever state the memory is in (S/story/canon.ts recallText). Its size never follows a model's context: no memory
+// model is asked how large its context is before the timeline grows or is condensed (S/memory/memory.ts).
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 
 /**
@@ -114,3 +117,52 @@ export const foldedPart = (timeline: Timeline): Timeline => ({
 
 /** The entries condensing leaves apart: the newest main chapter's and every one after it (see the header). */
 export const keptPart = (timeline: Timeline): TimelineEntry[] => timeline.entries.slice(foldedCount(timeline));
+
+/**
+ * The overview's form, kept on the memory document: 4 is #2066's timeline with Character Stories in it (0.7.3; 3 left
+ * them out, 2 was 0.6.19's prose timeline, rewritten whole with every chapter). A document without it
+ * is read with no overview, so the kit's next maintenance folds a new one from the saved records, one at a time; with
+ * no overview every source is owed, so recall reports the memory lagging and queues that (S/story/canon.ts recallText).
+ * Records, detail summaries and status are read as saved. Every overview the kit writes after that was folded over the
+ * empty one, so its write stamps the form, and the reads after it use the overview again: one rebuild, never a second.
+ * Until then the earlier overview is kept beside it as `legacyOverview` (the kit carries fields it does not know), so
+ * What happened so far… can still show it when a fold fails before the first new one lands; the stamp drops it.
+ */
+export const OVERVIEW_STYLE = 4;
+
+/** What the story memory has saved for a run, as every story prompt reads it (see the header). */
+export interface SavedStory {
+  /** The timeline (the kit's overview content); "" before the first one, or while one of an earlier form waits. */
+  timeline: string;
+  /** The kit's source keys (JSON [kind, id]) the timeline covers: a date's too, though a date is never in its text. */
+  covered: ReadonlySet<string>;
+  /** Each source's saved summary by its key: its first record, as the kit's keepFirstCanon keeps it. */
+  summaries: ReadonlyMap<string, string>;
+}
+
+/**
+ * The saved memory document's data (the kit's v1 store, `${R}:memory`) as a SavedStory. An overview of an earlier form
+ * is no timeline (OVERVIEW_STYLE), so what it covered counts as not covered until the rebuild folds it again.
+ * ponytail: reads the kit's v1 store and, unlike the kit's own recall, trusts the saved overview without checking that
+ * every source it covers is still canon: Otome never takes a completed chapter back. The upgrade path is the kit
+ * returning its overview and records in every phase.
+ */
+export function savedStory(data: unknown): SavedStory {
+  const saved = data as {
+    overview?: { content?: unknown; sources?: unknown } | null;
+    overviewStyle?: unknown;
+    records?: unknown;
+  } | null;
+  const content = saved?.overviewStyle === OVERVIEW_STYLE ? saved.overview?.content : undefined;
+  const stamps = typeof content === "string" && Array.isArray(saved?.overview?.sources) ? saved.overview.sources : [];
+  const covered = new Set<string>();
+  for (const stamp of stamps) if (Array.isArray(stamp) && typeof stamp[0] === "string") covered.add(stamp[0]);
+  const summaries = new Map<string, string>();
+  for (const record of Array.isArray(saved?.records) ? (saved.records as unknown[]) : []) {
+    const { key, content: summary } = (record ?? {}) as { key?: unknown; content?: unknown };
+    if (typeof key === "string" && !summaries.has(key) && typeof summary === "string" && summary.trim()) {
+      summaries.set(key, summary.trim());
+    }
+  }
+  return { timeline: typeof content === "string" ? content : "", covered, summaries };
+}
