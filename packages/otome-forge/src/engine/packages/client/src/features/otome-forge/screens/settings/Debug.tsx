@@ -19,7 +19,6 @@ const MEMORY_PHASE_KEYS: Record<MemoryStatus["phase"], string> = {
   pending: "ui.otomeForge.settings.debugMemoryPending",
   stale: "ui.otomeForge.settings.debugMemoryStale",
   error: "ui.otomeForge.settings.debugMemoryError",
-  "context-unknown": "ui.otomeForge.settings.debugMemoryContextUnknown",
 };
 
 export function MemorySection({ runKey }: { runKey: string }) {

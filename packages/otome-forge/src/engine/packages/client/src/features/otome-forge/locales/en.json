@@ -936,7 +936,6 @@
   "ui.otomeForge.settings.debugHow": "Turn on Debug mode in the Engine’s settings, or start the server with DEBUG_AGENTS, to log prompts.",
   "ui.otomeForge.settings.debugLogging": "Prompt logging",
   "ui.otomeForge.settings.debugMemory": "Story memory",
-  "ui.otomeForge.settings.debugMemoryContextUnknown": "Waiting for setup: the connection that summarizes or writes the story has no known context size.",
   "ui.otomeForge.settings.debugMemoryError": "A summary failed. Retry when you’re ready.",
   "ui.otomeForge.settings.debugMemoryLoading": "Checking the story memory…",
   "ui.otomeForge.settings.debugMemoryMessage": "The connection said",

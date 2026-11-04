@@ -17,10 +17,12 @@
 //   phase and whether the memory lags, which queues the upkeep.
 // - No context-size gate (the maintainer's, 2026-11-04): whenever a connection can run the memory job, memory runs and
 //   sends each request as it is, the summary prompt and the chapter. A model whose context is too small fails at its
-//   provider: that is a failed summary, status `error` with the provider's own `message`, and it waits for Retry. Only
-//   a run with no connection for the job at all waits, which status reports (`noConnection`), with how many chapters
-//   have no summary yet (`unsummarized`). A status the earlier gate saved (`context-unknown`) reads as stale, so the
-//   next recall queues the upkeep.
+//   provider: that is a failed summary, status `error` with the provider's own `message`, and it waits for Retry. A
+//   model that reports a context too small for even the smallest piece of a summary (or of a condensing) fails the
+//   same way with no call, its `message` saying so (tooSmall), so the player switches the connection. Only a run with
+//   no connection for the job at all waits, which status reports (`noConnection`), with how many chapters have no
+//   summary yet (`unsummarized`). A status the earlier gate saved reads as if no gate had been: `context-unknown` as
+//   stale, so the next recall queues the upkeep, and a ready one without the readers it knew no context for.
 // - Read Me (S/minigames/read-me.ts) is never a source: what the notebook holds beyond knowsAboutYou's newest entries
 //   joins the recall pool live on each recall (S/prompts.ts notebookMemories), so a deleted entry never comes back.
 // - Summaries run on job `compress` on the background lane. `maintain` queues one job per run on the background
@@ -121,14 +123,33 @@ const SummarySchema = z.object({ summary: z.string().min(1) });
 /** The longest failed summary's message kept on the status: a proxy's error page can be long. */
 const FAILURE_CHARACTERS = 2000;
 
+/** A failed summary's message when the memory model's context holds not even its smallest request (see the header). */
+const tooSmall = (maxContext: number) =>
+  `The Memory connection's model (${maxContext.toLocaleString("en-US")} tokens of context) is too small to write a summary. Choose a connection with a larger context.`;
+
+/** How many characters of its source a detail request carries (the kit's `range`); a piece of one is the smallest. */
+const pieceLength = (request: SummaryRequest) => {
+  const { source } = JSON.parse(request.messages.at(-1)?.content ?? "{}") as {
+    source?: { range?: { from: number; to: number } };
+  };
+  return source?.range ? source.range.to - source.range.from : Number.POSITIVE_INFINITY;
+};
+
 type SavedForm =
-  | { overview?: unknown; overviewStyle?: unknown; legacyOverview?: unknown; status?: { phase?: unknown } }
+  | {
+      overview?: unknown;
+      overviewStyle?: unknown;
+      legacyOverview?: unknown;
+      status?: { phase?: unknown; unknownReaders?: unknown };
+    }
   | null
   | undefined;
 
 /**
  * The saved memory as the kit reads it: an overview of an earlier form (S/memory/timeline.ts OVERVIEW_STYLE) counts as
- * none, and is kept aside; a status the earlier context gate saved (see the header) reads as memory behind.
+ * none, and is kept aside. A status the earlier context gate saved (see the header) reads as memory behind; a ready
+ * one loses the readers that gate knew no context for, which the kit would read as waiting for setup with no upkeep
+ * owed to clear it.
  */
 const currentForm = (data: unknown) => {
   const saved = data as SavedForm;
@@ -136,9 +157,14 @@ const currentForm = (data: unknown) => {
     saved?.overview && saved.overviewStyle !== OVERVIEW_STYLE
       ? { ...saved, overview: null, legacyOverview: saved.overview }
       : saved;
-  return form?.status?.phase === "context-unknown"
-    ? { ...form, status: { phase: "stale", retryable: true, reason: "not-prepared" } }
-    : (form ?? null);
+  const status = form?.status;
+  if (status?.phase === "context-unknown")
+    return { ...form, status: { phase: "stale", retryable: true, reason: "not-prepared" } };
+  if (status && "unknownReaders" in status) {
+    const { unknownReaders: _gate, ...rest } = status;
+    return { ...form, status: rest };
+  }
+  return form ?? null;
 };
 
 /** The memory as the kit writes it: one with an overview carries its form, and the earlier one is let go. */
@@ -179,8 +205,9 @@ export interface OtomeMemory {
 
 /**
  * The kit's status (phase `error` is a failed summary, which waits for Retry), with what the client shows beside it
- * (see the header): the failed call's own `message`, whether no connection can write summaries, and how many chapters
- * (the story's own and its side stories) have no summary yet, when the run's sources can be read.
+ * (see the header): the failed call's own `message` (or tooSmall's, with no call), whether no connection can write
+ * summaries, and how many chapters (the story's own and its side stories) have no summary yet, when the run's sources
+ * can be read.
  */
 export type OtomeMemoryStatus = ForgeMemoryStatus & {
   message?: string;
@@ -356,15 +383,17 @@ export function createOtomeMemory({
     // The kit cuts a chapter into the largest piece whose prompt leaves the summary its reserve, measured as
     // generateJson fits it (promptRoom), so a piece that fits here is sent whole there with at least that reply room. A
     // model that reports no context size is sent the chapter whole: its provider says when it is too long. Adding a
-    // summary to the timeline (an overview fold) sends nothing, so it always fits.
+    // summary to the timeline (an overview fold) sends nothing, so it always fits. The kit's smallest piece is one
+    // character: a model that holds not even that fails the job with no call, so the status says why (tooSmall).
     async fitsSummary(value) {
       const request = value as SummaryRequest;
       if (request.kind === "overview") return true;
       const job = running.get(request.runId) ?? (await summaryJob(request.runId));
       if (!job) return false;
-      return (
-        !job.maxContext || promptRoom(job.maxContext, withRules(request, job)) >= summaryReserve(job.maxOutputTokens)
-      );
+      if (!job.maxContext) return true;
+      if (promptRoom(job.maxContext, withRules(request, job)) >= summaryReserve(job.maxOutputTokens)) return true;
+      if (pieceLength(request) <= 1) failures.set(request.runId, tooSmall(job.maxContext));
+      return false;
     },
     async summarize(value) {
       const request = value as SummaryRequest;
@@ -425,12 +454,15 @@ export function createOtomeMemory({
       const fits = (part: Timeline) =>
         !job.maxContext || promptRoom(job.maxContext, condense(part)) >= summaryReserve(job.maxOutputTokens);
       // As few calls as the memory model's context allows: each folds the head with the most of the oldest entries
-      // that fit beside it. Not even one fitting is a model too small for the story's memory.
+      // that fit beside it. Not even one fitting is a model too small for the story's memory, which the status says.
       let { head, entries: pending } = foldedPart(timeline);
       while (pending.length) {
         let take = pending.length;
         while (take > 0 && !fits({ head, entries: pending.slice(0, take) })) take -= 1;
-        if (!take) throw new Error("summary-context-too-small");
+        if (!take) {
+          failures.set(request.runId, tooSmall(job.maxContext ?? 0));
+          throw new Error("summary-context-too-small");
+        }
         head = cleanSummary(await ask("timeline", condense({ head, entries: pending.slice(0, take) })));
         pending = pending.slice(take);
       }

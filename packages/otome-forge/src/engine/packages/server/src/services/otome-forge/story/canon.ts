@@ -48,7 +48,10 @@
 // the older storyline chapter summaries, oldest first, then the chapters in full, oldest first, then the previous
 // chapter's earliest scenes. As in GF, the timeline, the previous chapter's last scene, the newest chapter summary and
 // every date's and Character Story's summary always stay. Memory that lags (stale or pending) is queued to catch up in
-// the background; a failed summary waits for Retry, and the chapter goes in full meanwhile.
+// the background; a failed summary waits until Retry, or the upkeep the next finished chapter queues, succeeds (after
+// a connection change, say). The kit summarizes in story order and stops at the first failure, and folds nothing into
+// the timeline until every chapter has its summary, so meanwhile that chapter and every chapter completed after it go
+// in full (one summarized before it in that round goes by its summary).
 // No decisions list goes beside it any more (#2066): every chapter's summary names each choice the protagonist made,
 // and a chapter in full is what was played.
 // A prompt that caches its story context (`cached`: P5, P6, P12, P12c, #2091) is given only what every call of its

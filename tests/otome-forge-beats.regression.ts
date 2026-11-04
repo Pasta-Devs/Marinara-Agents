@@ -5,8 +5,9 @@
 // and confrontation nodes are written as beats; a LI's thought before stage 2 gets the repair turn, under his first
 // name too, and one thought per scene counts every branch a player can read; Cancel stops a write; a chapter's grants
 // land once; every prompt keeps the earlier chapters and their big choices whatever state memory is in (the timeline
-// and each chapter's summary as saved, a chapter in full only while it has none: memory pending, a failed summary, or
-// never written, the oldest giving way only at the reply floor), and never gets another love interest's private canon,
+// and each chapter's summary as saved, a chapter in full only while it has none: memory pending, a failed summary (it
+// and every chapter completed after it, until Retry), or never written, the oldest giving way only at the reply
+// floor), and never gets another love interest's private canon,
 // while the one it gets says whose it is and that it is private; a rewrite never replaces a beat played meanwhile; a
 // pick whose effects were lost lands when its beat is read; Ease off removes the lookahead on a retry, when the
 // lookahead is saved just after the cut, and when the cut lands between the lookahead's reads of the beat it follows;
@@ -2050,7 +2051,7 @@ test("memory pending after chapters complete: the previous chapter in full, the 
   }
 });
 
-test("a failed summary for one older chapter: that chapter in full, every other by the timeline, until Retry", async () => {
+test("a failed summary for an older chapter: it goes in full, the chapters before it by the timeline, until Retry", async () => {
   // Kai's route chapter is refused; Night 3 completes after it. Before, the refusal sent every prompt the canonical
   // history (no timeline) until the player tapped Retry.
   let refuse = false;
@@ -2114,6 +2115,72 @@ test("a failed summary for one older chapter: that chapter in full, every other 
     assert.equal(await memorySettled(memory, t.runId), "ready");
     const retried = (await recall()).text;
     assert.match(overviewOf(retried), /SUMMARY: KAI-ROUTE/u, retried);
+    assert.ok(!retried.includes("Canon in full"), retried);
+  } finally {
+    memory.dispose();
+  }
+});
+
+test("a chapter completed after a failed summary goes in full too while it keeps failing, until Retry", async () => {
+  // The kit summarizes in story order and stops at the first failure, and folds nothing into the timeline until every
+  // chapter has its summary: Night 2, completed after Kai's refused route chapter, has no summary while it is refused.
+  let refuse = false;
+  const route = `route-${KAI}-3`;
+  const t = await storyWorld({
+    runKey: "r-refused-aaaaaa",
+    replies: Array.from({ length: 40 }, () => (messages: CapabilityLanguageModelMessage[]) => {
+      const last = messages.at(-1)!.content;
+      const refused = refuse && (!last.startsWith("{") || JSON.parse(last).source?.id === route);
+      return refused ? "I can't help with summarizing this." : markerSummary(messages);
+    }),
+  });
+  await completeChapter(
+    t,
+    { key: "main-1", kind: "main", number: 1, lead: KAI, title: "Night 1" },
+    "NIGHT-ONE: dark.",
+    "2026-10-28T09:00:00.000Z",
+  );
+  const memory = createOtomeMemory({ runtime: t.runtime, store: t.store });
+  try {
+    assert.equal(await memory.maintain({ runId: t.runId }), true);
+    assert.equal(await memorySettled(memory, t.runId), "ready");
+    refuse = true;
+    await completeChapter(
+      t,
+      { key: route, kind: "route", li: KAI, lead: KAI, stage: 3, title: "Kai's Lamp" },
+      "KAI-ROUTE: Kai lights the lamp for her.",
+      "2026-10-28T10:00:00.000Z",
+    );
+    assert.equal(await memory.maintain({ runId: t.runId }), true);
+    assert.equal(await memorySettled(memory, t.runId), "error", "his summary was refused");
+    for (const [number, text, at] of [
+      [2, "NIGHT-TWO: bell.", "2026-10-28T11:00:00.000Z"],
+      [3, "NIGHT-THREE: noon.", "2026-10-28T12:00:00.000Z"],
+    ] as const) {
+      await completeChapter(
+        t,
+        { key: `main-${number}`, kind: "main", number, lead: KAI, title: `Night ${number}` },
+        text,
+        at,
+      );
+    }
+    // The upkeep a finished chapter queues meets the same refusal.
+    assert.equal(await memory.maintain({ runId: t.runId }), true);
+    assert.equal(await memorySettled(memory, t.runId), "error", "still refused");
+    const recall = () =>
+      recallText({ store: t.store, memory }, t.runId, { job: "structured", cast: [KAI], continues: "main" });
+    const failed = (await recall()).text;
+    assert.match(failed, /# Previous chapter in full: Night 3\n\nNIGHT-THREE: noon\./u);
+    assert.match(failed, /# Canon in full: Night 2\nNIGHT-TWO: bell\./u, "completed after the failure, in full");
+    assert.ok(failed.includes(`# Canon in full: ${KAI_ROUTE}\nKAI-ROUTE`), "the refused one in full");
+    assert.match(overviewOf(failed), /SUMMARY: NIGHT-ONE/u, "the one before it by the timeline");
+    assert.ok(!overviewOf(failed).includes("NIGHT-TWO") && !failed.includes("Recent canon"), failed);
+
+    refuse = false;
+    assert.equal(await memory.maintain({ runId: t.runId }), true);
+    assert.equal(await memorySettled(memory, t.runId), "ready");
+    const retried = (await recall()).text;
+    assert.match(overviewOf(retried), /SUMMARY: NIGHT-ONE[^]*SUMMARY: KAI-ROUTE[^]*SUMMARY: NIGHT-TWO/u, retried);
     assert.ok(!retried.includes("Canon in full"), retried);
   } finally {
     memory.dispose();

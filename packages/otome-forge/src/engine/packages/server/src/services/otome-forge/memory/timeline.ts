@@ -17,8 +17,9 @@
 // condense again. The upgrade path is keeping each storyline's newest entry apart, with a bound on what that holds back.
 // Stored in the kit's overview content as JSON. Anything else (an overview of an earlier form) reads as a head alone.
 // Every story prompt reads it as saved (savedStory: the timeline, the sources it covers and each one's summary),
-// whatever state the memory is in (S/story/canon.ts recallText). Its size never follows a model's context: no memory
-// model is asked how large its context is before the timeline grows or is condensed (S/memory/memory.ts).
+// whatever state the memory is in (S/story/canon.ts recallText). Its size never follows a model's context: it grows
+// and is condensed at the same sizes whatever the memory model; the context that model reports only splits the
+// condensing into as many calls as it needs (one call when it reports none; S/memory/memory.ts summaryJob).
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 
 /**

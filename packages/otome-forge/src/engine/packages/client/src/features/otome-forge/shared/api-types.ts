@@ -1281,12 +1281,15 @@ export interface WhoSaidWhatView {
  * summary, which waits for Retry (S/memory/memory.ts).
  */
 export interface MemoryStatus {
-  phase: "ready" | "pending" | "stale" | "error" | "context-unknown";
+  phase: "ready" | "pending" | "stale" | "error";
   retryable: boolean;
-  /** English, for Debug: not-prepared, interrupted, configure-context, generation-failed, … */
+  /** English, for Debug: not-prepared, interrupted, source-changed, generation-failed, … */
   reason?: string;
   recordCount?: number;
-  /** The failed summary call's own message, as the provider gave it (English, raw); only with `error`. */
+  /**
+   * The failed summary call's own message, as the provider gave it (English, raw), or the server's own when the memory
+   * model's context holds not even the smallest summary request; only with `error`.
+   */
   message?: string;
   /** No connection can write summaries (the world names none for the memory job): memory waits for one. */
   noConnection?: boolean;

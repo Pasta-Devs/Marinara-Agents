@@ -15,10 +15,11 @@
 // nothing); a date is never in it (a Character Story joins it, titled private). Memory never waits for a context size
 // (the maintainer's, 2026-11-04): a memory model that reports none writes every summary, each request whole, and
 // condenses in one call; a summary its provider refuses is status `error` with the provider's own message, which Retry
-// clears; a run with no connection for it says so in its status, with how many chapters wait for a summary; and a
-// status the earlier gate saved reads as behind and catches up. Recall sends no ranked details and no recent canon: the
-// small memories this prompt may know come back as `recalls`, newest first within 5k tokens and 1k of leeway, never
-// one the caller lists in full; the Home note, Read Him and Read Me take the newest.
+// clears; one that reports a context too small for any summary or condensing fails with no call, its message saying
+// so; a run with no connection for it says so in its status, with how many chapters wait for a summary; and a status
+// the earlier gate saved never waits for setup: it reads as behind and catches up, or as ready. Recall sends no ranked
+// details and no recent canon: the small memories this prompt may know come back as `recalls`, newest first within 5k
+// tokens and 1k of leeway, never one the caller lists in full; the Home note, Read Him and Read Me take the newest.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
@@ -510,7 +511,18 @@ test("a memory model that reports no context size writes every summary whole and
   assert.deepEqual([timeline.head, timeline.entries.map((entry) => entry.title)], ["CONDENSED-1", ["Night 8"]]);
 });
 
-test("a status the earlier context gate saved reads as behind, and the next story prompt catches the memory up", async () => {
+test("a status the earlier context gate saved never waits for setup: it reads as behind, or ready with nothing owed", async () => {
+  // A ready memory the gate saved with a reader it knew no context for (the chat job on an on-device model, say): the
+  // kit read it as waiting for setup, and with nothing owed no upkeep ever wrote it again.
+  const done = await setup();
+  assert.equal(await done.memory.maintain({ runId: RUN }), true);
+  assert.equal((await settle(done.memory)).phase, "ready");
+  const row = done.fake.rows.get(memoryId(RUN))!;
+  const data = row.data as { status: object };
+  done.fake.rows.set(row.id, { ...row, data: { ...data, status: { ...data.status, unknownReaders: ["chat"] } } });
+  const ready = await done.memory.status(RUN);
+  assert.deepEqual([ready.phase, ready.reason, "unknownReaders" in ready], ["ready", undefined, false]);
+
   const { fake, store, memory, calls } = await setup();
   await fake.documents.create({
     ...runDocTarget("memory", memoryId(RUN)),
@@ -1080,6 +1092,40 @@ test("a summary the provider refuses as too long is status error with its own me
   assert.deepEqual([retried.phase, retried.message], ["pending", undefined]);
   const done = await settle(memory);
   assert.deepEqual([done.phase, done.message, done.unsummarized], ["ready", undefined, 0]);
+});
+
+test("a memory model too small for any summary or condensing fails with no call, its status saying why", async () => {
+  // The maintainer's rule: the player sees an error and switches the connection. An 8k model leaves no piece of a
+  // chapter room beside the summary's reply, so the kit stops with no call; before, the status gave no reason.
+  const small = await setup(undefined, { maxContext: 8192, maxOutputTokens: null });
+  assert.equal(await small.memory.maintain({ runId: RUN }), true);
+  const failed = await settle(small.memory);
+  assert.deepEqual(
+    [failed.phase, failed.retryable, failed.message],
+    [
+      "error",
+      true,
+      "The Memory connection's model (8,192 tokens of context) is too small to write a summary. Choose a connection with a larger context.",
+    ],
+  );
+  assert.equal(small.calls.length, 0, "no provider call");
+  // A 16k model writes each summary, but its timeline's oldest entry alone leaves the condensing no reply room.
+  const long = (n: number) => filler(`CHAPTER-${n}`, 3900);
+  const condensing = await setup(undefined, {
+    maxContext: 16_384,
+    maxOutputTokens: null,
+    sources: mainChapters(3),
+    replies: Array.from(
+      { length: 12 },
+      () => (messages: Array<{ content: string }>) =>
+        JSON.stringify({ summary: long(Number(JSON.parse(messages.at(-1)!.content).source.id.slice(5))) }),
+    ),
+  });
+  assert.equal(await condensing.memory.maintain({ runId: RUN }), true);
+  const stuck = await settle(condensing.memory);
+  assert.deepEqual([stuck.phase, stuck.retryable], ["error", true]);
+  assert.match(stuck.message ?? "", /\(16,384 tokens of context\) is too small to write a summary/u);
+  assert.equal(condensing.calls.length, 3, "the three summaries, and no condensing call");
 });
 
 test("the chapter planner (P5) and the beat narrator (P6) carry the knowledge boundary", () => {
