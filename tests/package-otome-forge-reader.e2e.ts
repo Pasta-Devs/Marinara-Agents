@@ -157,10 +157,25 @@ const WSW_LINES = [
   { li: ILVAR, text: "Stay, then. The data can wait until morning." },
   { li: CASSIAN, text: "I kept your letters in the clock tower drawer." },
 ];
+/** Story memory statuses (GET /runs/:run/memory/status): a summary that failed at its provider, and memory at rest. */
+const failedMemory = (message: string): Json => ({
+  phase: "error",
+  retryable: true,
+  reason: "generation-failed",
+  recordCount: 1,
+  message,
+  noConnection: false,
+  unsummarized: 1,
+});
+const MEMORY_READY: Json = { phase: "ready", retryable: false, recordCount: 2, noConnection: false, unsummarized: 0 };
+const CONTEXT_ERROR =
+  "This model's maximum context length is 8192 tokens. However, your messages resulted in 12034 tokens.";
 
 /**
  * The M2a story routes, answered in memory by the server's rules (S/story/beats.ts). `waits` answers the story so far
  * and Who said what?; without it they are 404s, as on a run with nothing to show, and the waits look as before.
+ * `memory` is the story memory's status (GET .../memory/status), which Retry turns pending until `setMemory` settles
+ * it; without it the status is a 404 and no banner shows.
  */
 function createStoryStub({
   done = false,
@@ -168,6 +183,7 @@ function createStoryStub({
   pendingCutouts = false,
   storyBeats = BEATS,
   waits = false,
+  memory = null as Json | null,
 } = {}) {
   const calls: Call[] = [];
   const now = () => new Date().toISOString();
@@ -257,6 +273,7 @@ function createStoryStub({
   // The first report of beat 0's end fails, as when the Engine restarts.
   let endFails = !done;
   let favorites: Json[] = [];
+  let memoryStatus = memory;
   if (done) {
     for (const stored of storyBeats) {
       const copy = structuredClone(stored);
@@ -353,6 +370,12 @@ function createStoryStub({
       return { status: 200, json: { favorites } };
     }
     if (path === `${base}/cancel`) return { status: 200, json: { ok: true } };
+    if (memoryStatus && path === `${base}/memory/status`) return { status: 200, json: { status: memoryStatus } };
+    if (memoryStatus && path === `${base}/memory/retry`) {
+      memoryStatus = { ...memoryStatus, phase: "pending", retryable: false };
+      delete memoryStatus.message;
+      return { status: 200, json: { status: memoryStatus } };
+    }
     if (waits && path === `${base}/memory/overview`) return { status: 200, json: { paragraphs: SO_FAR } };
     if (waits && path === `${base}/who-said-what`) {
       return { status: 200, json: { choices: [ILVAR, CASSIAN], lines: WSW_LINES } };
@@ -415,6 +438,9 @@ function createStoryStub({
       delete view.cutoutsPending;
       view.lis[0].portrait = correctedCutout;
       view.lis[0].cut = [correctedCutout];
+    },
+    setMemory(next: Json) {
+      memoryStatus = next;
     },
   };
 }
@@ -519,7 +545,7 @@ test("Otome Forge reader: a stubbed chapter with faces, thoughts, a remembered c
   page,
 }, testInfo) => {
   test.setTimeout(180_000);
-  const stub = createStoryStub();
+  const stub = createStoryStub({ memory: MEMORY_READY });
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await stubRoutes(page, stub);
@@ -661,8 +687,12 @@ test("Otome Forge reader: a stubbed chapter with faces, thoughts, a remembered c
   await expect.poll(() => posts(stub, "/beats/2/read").length).toBeGreaterThan(0);
   await expect(easeOff).toHaveCount(0);
   await expect(root.getByRole("button", { name: "Ease off", includeHidden: true })).toHaveCount(0);
+  // A finished chapter queues its summary: the memory banner asks for the status at once, not at its 30 s poll.
+  const memoryReads = () => stub.calls.filter((call) => call.method === "GET" && call.path.endsWith("/memory/status"));
+  const readsBefore = memoryReads().length;
   await next(root);
   await expect(root.getByRole("heading", { name: "Chapter complete" })).toBeFocused();
+  await expect.poll(() => memoryReads().length, { timeout: 2_000 }).toBeGreaterThan(readsBefore);
   await expect(root.getByText("+160 Starlight")).toBeVisible();
   await expect(root.getByText("Ilvar Thorne · +150 affection")).toBeVisible();
   await expect(root.getByText("Level 3!")).toBeVisible();
@@ -2483,4 +2513,134 @@ test("Otome Hearth Side with on a replay: the first pick's label keeps its room 
     );
     await page.screenshot({ path: testInfo.outputPath(`side-with-replay-${width}.png`) });
   }
+});
+
+test("Otome Hearth a failed summary is never silent: every screen of the story shows it, with Retry and the Memory connection", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(180_000);
+  const mobile = testInfo.project.name.includes("mobile");
+  const stub = createStoryStub({ done: true, memory: failedMemory(CONTEXT_ERROR) });
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await stubRoutes(page, stub);
+  const root = await openStory(page);
+  const banner = root.locator(".of-memory-banner");
+  const retry = banner.getByRole("button", { name: "Retry the summary" });
+  const connection = banner.getByRole("button", { name: "Change connection" });
+  const failed = "A story summary failed, so the cast may not remember everything yet.";
+  await expect(banner.getByRole("alert")).toHaveText(`${failed} The connection said: ${CONTEXT_ERROR}`);
+  await expect(retry).toBeVisible();
+  await expect(connection).toBeVisible();
+
+  // The same banner on Home and on each of the dock's screens.
+  const dock = root.getByRole("navigation", { name: "Game menu" });
+  for (const name of ["Dates", "Wish", "Wardrobe", "Album"]) {
+    await dock.getByRole("button", { name, exact: true }).click();
+    await expect(dock.getByRole("button", { name, exact: true })).toHaveAttribute("aria-current", "page");
+    await expect(banner.getByRole("alert")).toContainText(CONTEXT_ERROR);
+  }
+  await root.getByRole("button", { name: "Home with Ilvar Thorne" }).click();
+  await expect(dock).toBeVisible();
+  await expect(dock.getByRole("button", { name: "Album", exact: true })).not.toHaveAttribute("aria-current", "page");
+  await expect(banner.getByRole("alert")).toContainText(CONTEXT_ERROR);
+
+  // In the reader, full-stage: above its header, in the stage's flow, so it covers none of the reader's controls.
+  await dock.getByRole("button", { name: "Story", exact: true }).click();
+  await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  await expect(line(root)).toContainText("Rain needles the glass dome.");
+  await expect(banner.getByRole("alert")).toContainText(CONTEXT_ERROR);
+  await setReaderControlsExpanded(root);
+  const bannerBox = (await banner.boundingBox())!;
+  const stageBox = (await root.locator(".of-stage").boundingBox())!;
+  const controls = root.locator(".of-reader-head button:visible, .of-dialogue, .of-next");
+  expect(await controls.count()).toBeGreaterThan(2);
+  for (const control of await controls.all()) {
+    const box = (await control.boundingBox())!;
+    expect(box.y, "below the banner").toBeGreaterThanOrEqual(bannerBox.y + bannerBox.height);
+    expect(box.y + box.height, "inside the stage").toBeLessThanOrEqual(stageBox.y + stageBox.height + 1);
+  }
+  await page.screenshot({ path: testInfo.outputPath(`memory-banner-reader-${mobile ? "phone" : "desktop"}.png`) });
+  await setReaderControlsExpanded(root, false);
+
+  // Retry: its progress, with both buttons kept and focus on Retry; a second press sends nothing.
+  await retry.click();
+  await expect.poll(() => posts(stub, "/memory/retry").length).toBe(1);
+  await expect(banner).toContainText("Trying the summary again…");
+  await expect(retry).toHaveAttribute("aria-disabled", "true");
+  await expect(retry).toBeFocused();
+  await expect(connection).toBeVisible();
+  await expect(root.getByRole("status").filter({ hasText: "Trying the summary again…" })).toHaveCount(1);
+  // Playwright waits for an aria-disabled button to be enabled; the press itself must do nothing.
+  await retry.click({ force: true });
+  expect(posts(stub, "/memory/retry")).toHaveLength(1);
+
+  // It fails again: the new error, and the buttons again.
+  const again = "Upstream 413: the request is larger than this model's 8192-token context.";
+  stub.setMemory(failedMemory(again));
+  await expect(banner.getByRole("alert")).toHaveText(`${failed} The connection said: ${again}`);
+  await expect(retry).not.toHaveAttribute("aria-disabled");
+  await expect(retry).toBeFocused();
+
+  // The Memory connection: Settings → Connections, with the provider's whole message beside it; from Settings too.
+  await connection.click();
+  await expect(root.getByRole("heading", { name: "Settings", level: 1 })).toBeFocused();
+  const connectionsTab = root.getByRole("tab", { name: "Connections", exact: true });
+  await expect(connectionsTab).toHaveAttribute("aria-selected", "true");
+  const section = root.getByRole("tabpanel").getByRole("region", { name: "Story memory" });
+  await expect(section).toContainText("The connection said");
+  await expect(section).toContainText(again);
+  await expect(banner.getByRole("alert")).toContainText(again);
+  await root.getByRole("tab", { name: "Debug", exact: true }).click();
+  await connection.click();
+  await expect(connectionsTab).toHaveAttribute("aria-selected", "true");
+  // Back to the reader, which opens on the chapter's content tags again.
+  await root.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(root.getByRole("button", { name: "Begin" })).toBeVisible();
+
+  // Retry writes the summary: the banner goes, gives its focus to the screen's heading, and says so.
+  await retry.click();
+  await expect(banner).toContainText("Trying the summary again…");
+  stub.setMemory(MEMORY_READY);
+  await expect(banner).toHaveCount(0);
+  await expect(root.locator(".of-reader-title")).toBeFocused();
+  await expect(root.getByRole("status").filter({ hasText: "Story memory is working again." })).toHaveCount(1);
+  expect(posts(stub, "/memory/retry")).toHaveLength(2);
+  expect(pageErrors).toEqual([]);
+});
+
+test("Otome Hearth memory with no connection to write summaries asks for one, without Retry, and never on the story list", async ({
+  page,
+}) => {
+  const stub = createStoryStub({
+    done: true,
+    memory: {
+      phase: "stale",
+      retryable: true,
+      reason: "not-prepared",
+      recordCount: 0,
+      noConnection: true,
+      unsummarized: 1,
+    },
+  });
+  await stubRoutes(page, stub);
+  const root = await openStory(page);
+  const banner = root.locator(".of-memory-banner");
+  await expect(banner.getByRole("alert")).toHaveText(
+    "No connection is set to write the story’s summaries, so finished chapters wait to be remembered.",
+  );
+  await expect(banner.getByRole("button")).toHaveText(["Change connection"]);
+  await banner.getByRole("button", { name: "Change connection" }).click();
+  await expect(root.getByRole("tab", { name: "Connections", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(root.getByRole("tabpanel").getByRole("region", { name: "Story memory" })).toContainText(
+    "No connection is set to write the story’s summaries",
+  );
+  await expect(root.getByRole("tabpanel").getByRole("button", { name: "Retry memory upkeep" })).toHaveCount(0);
+  // The story list belongs to no one story: it shows no banner.
+  await root.getByRole("tab", { name: "Stories", exact: true }).click();
+  await root.getByRole("button", { name: "Open your stories" }).click();
+  await expect(root.getByRole("heading", { name: "Your stories", level: 1 })).toBeVisible();
+  await expect(banner).toHaveCount(0);
+  expect(posts(stub, "/memory/retry")).toHaveLength(0);
 });

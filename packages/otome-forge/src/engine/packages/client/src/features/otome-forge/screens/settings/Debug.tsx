@@ -1,15 +1,15 @@
 // ──────────────────────────────────────────────
 // Otome Forge Settings → Debug: whether prompts are being logged, the story's ids and connections, the raw error of
 // every step that failed (English, for logs and bug reports), with a copy button, and the story memory's status with
-// its Retry (a failed summary is never retried by itself). Polls every 2 s while memory upkeep runs. The memory section
-// is also under Settings → Connections, beside the connection that writes the summaries, so a player sees a failed
-// summary and its Retry without opening Debug.
+// its Retry (a failed summary is never retried by itself) and the provider's whole message. The status and Retry are
+// hooks/use-memory.ts's, shared with the banner every screen of the story shows (components/MemoryBanner.tsx). The
+// memory section is also under Settings → Connections, beside the connection that writes the summaries.
 // ──────────────────────────────────────────────
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ClipboardCopy, RotateCcw } from "lucide-react";
 import { useOtomeApi } from "../../api";
+import { useMemoryStatus } from "../../hooks/use-memory";
 import { useOtomeProps } from "../../props";
 import type { MemoryStatus, RunView } from "../../shared/api-types";
 import { Section } from "../setup/parts";
@@ -25,37 +25,21 @@ const MEMORY_PHASE_KEYS: Record<MemoryStatus["phase"], string> = {
 export function MemorySection({ runKey }: { runKey: string }) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
-  const queryClient = useQueryClient();
-  const path = `/runs/${encodeURIComponent(runKey)}/memory`;
-  const queryKey = ["otome-forge", "memory", runKey] as const;
-  const memory = useQuery({
-    queryKey,
-    queryFn: async () => (await otome.get<{ status: MemoryStatus }>(`${path}/status`)).status,
-    refetchInterval: (query) => (query.state.data?.phase === "pending" ? 2_000 : false),
-  });
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const status = memory.data;
-
-  const retry = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      queryClient.setQueryData(queryKey, (await otome.post<{ status: MemoryStatus }>(`${path}/retry`)).status);
-    } catch (failure) {
-      setError(otome.errorMessage(failure));
-    } finally {
-      setBusy(false);
-    }
-  };
+  const memory = useMemoryStatus(runKey);
+  const { status, busy, error } = memory;
+  const noConnection = memory.notice?.kind === "no-connection";
 
   return (
     <Section title={t("ui.otomeForge.settings.debugMemory")}>
       <p className="of-body" role="status">
         {status
-          ? t(MEMORY_PHASE_KEYS[status.phase] ?? "ui.otomeForge.settings.debugMemoryStale")
-          : memory.isError
-            ? otome.errorMessage(memory.error)
+          ? t(
+              noConnection
+                ? "ui.otomeForge.memory.noConnection"
+                : (MEMORY_PHASE_KEYS[status.phase] ?? "ui.otomeForge.settings.debugMemoryStale"),
+            )
+          : memory.query.isError
+            ? otome.errorMessage(memory.query.error)
             : t("ui.otomeForge.settings.debugMemoryLoading")}
       </p>
       {status ? (
@@ -72,17 +56,23 @@ export function MemorySection({ runKey }: { runKey: string }) {
               </dd>
             </>
           ) : null}
+          {status.message ? (
+            <>
+              <dt>{t("ui.otomeForge.settings.debugMemoryMessage")}</dt>
+              <dd>
+                <code>{status.message}</code>
+              </dd>
+            </>
+          ) : null}
         </dl>
       ) : null}
-      {status && status.phase !== "pending" && status.phase !== "ready" ? (
+      {status && status.phase !== "pending" && status.phase !== "ready" && !noConnection ? (
         <div className="of-actions of-actions--start">
           <button
             type="button"
             className="of-button of-button--quiet of-glass of-button--small"
             aria-disabled={busy}
-            onClick={() => {
-              if (!busy) void retry();
-            }}
+            onClick={() => void memory.retry()}
           >
             <RotateCcw size={15} strokeWidth={2} aria-hidden="true" />
             {t("ui.otomeForge.settings.debugMemoryRetry")}

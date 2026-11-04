@@ -136,6 +136,8 @@ function createHomeStub({
   firstNote = NOTE,
   noticedLine = NOTICED_LINE,
   photo = false,
+  // The story memory's status (GET .../memory/status); without it the route is a 404 and no memory banner shows.
+  memory = null as Json | null,
 } = {}) {
   const calls: Call[] = [];
   const state = {
@@ -285,6 +287,7 @@ function createHomeStub({
     const path = call.path.replace(/^\/api\/otome-forge/u, "");
     const base = `/runs/${RUN}`;
     if (path === "/index" || path === "/index/opened") return { status: 200, json: { index } };
+    if (memory && path === `${base}/memory/status`) return { status: 200, json: { status: memory } };
     if (path === base) {
       if (stickerState.unlock && stickerState.starts > 0) {
         stickerState.unlock = false;
@@ -794,7 +797,18 @@ test("Otome Forge phone: a thread with typing, his sticker, her sticker and Clos
   // #2044's sticker steps (the unlock notice's 4 s, the picker by touch and keyboard) make this the longest phone walk.
   test.setTimeout(180_000);
   await page.emulateMedia({ colorScheme: "dark" });
-  const stub = createHomeStub();
+  // A summary that failed: its banner stays above every screen of the walk, and the sticker notice lands below it.
+  const stub = createHomeStub({
+    memory: {
+      phase: "error",
+      retryable: true,
+      reason: "generation-failed",
+      recordCount: 1,
+      message: "This model's maximum context length is 8192 tokens.",
+      noConnection: false,
+      unsummarized: 1,
+    },
+  });
   stub.stickerState.unlock = true;
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -814,6 +828,15 @@ test("Otome Forge phone: a thread with typing, his sticker, her sticker and Clos
   const notice = root.locator(".of-toasts--app");
   await expect(notice).toHaveAttribute("role", "status");
   await expect(notice).toContainText("You unlocked a new sticker · Ilvar Thorne");
+  const banner = root.locator(".of-memory-banner");
+  await expect(banner.getByRole("alert")).toContainText("A story summary failed");
+  const [noticeBox, bannerBox] = await Promise.all([
+    root.locator(".of-toasts--app .of-toast").first().boundingBox(),
+    banner.boundingBox(),
+  ]);
+  expect(noticeBox!.y, "the notice leaves the banner's Retry in view").toBeGreaterThanOrEqual(
+    bannerBox!.y + bannerBox!.height,
+  );
   await page.screenshot({ path: testInfo.outputPath("03-sticker-unlocked.png") });
   await expect(root.locator(".of-toasts--app .of-toast")).toHaveCount(0, { timeout: 8_000 });
   await row.click();
@@ -937,7 +960,8 @@ test("Otome Forge phone: a thread with typing, his sticker, her sticker and Clos
   await expect(root.locator(".of-typing")).toHaveCount(0);
   stub.state.sendFailures = 1;
   await box.press("Enter");
-  await expect(root.getByRole("alert")).toContainText(catalog["ui.otomeForge.errors.unknown"]!);
+  // The thread's own alert, beside the memory banner's.
+  await expect(root.locator(".of-screen").getByRole("alert")).toContainText(catalog["ui.otomeForge.errors.unknown"]!);
   await expect(box).toHaveValue("Half a thought");
   expect(posts(stub, "/send")).toHaveLength(4);
 
