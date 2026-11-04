@@ -135,35 +135,93 @@ a short intro event) and removed at any time (its state stays saved; its cards s
 ## 4. More features for the core game
 
 ### The boss as a character
-- A boss sheet: name, look, title, 2 traits, a short backstory. People react to the traits.
-- Boss energy: a bad night's sleep costs one hour the next day; a weekend off gives one back.
-- Boss skills grow with use: Negotiation, Charm, Fear, Finance, Craft. Each level unlocks a
-  better answer type on cards.
-- A wardrobe with outfits for days and events. People comment on them.
-- A boss diary: one short line per day, written by the model from the day's events. Readable
-  as a book at the end.
+- **Boss sheet:** name, look, title, 2 traits, a short backstory. People react to the traits (a
+  "Former soldier" Dean gets respect from the caretaker and jokes from the students).
+- **Energy:** a bad night's sleep costs one hour the next day; a weekend off gives one back. Late
+  meetings, parties and crises cost sleep.
+- **Skills** grow with use: Negotiation, Charm, Fear, Finance, Craft. Each level unlocks a better
+  answer type on cards (Charm 3: "Talk them round" appears on angry cards).
+- **Epithet:** the place gives the boss a name from their decisions: "The Iron Dean",
+  "Good King Aldric", "Bucket Brandt". It changes when the style changes, and the grapevine
+  uses it.
+- **Wardrobe:** outfits for days and events. People comment on them. A king's crown, a
+  captain's coat, a dean's gown for prize day.
+- **Diary:** one short line per day, written from the day's events. Readable as a book at the
+  end and part of the yearbook.
+
+### Advisors
+- Pick an **inner circle** of up to 3 people. On every card each advisor gives one line of advice
+  in their own voice and leans to one answer ("Vera: Let the board pay. Tomas: Fix it properly.").
+- Advisors gain influence when you follow them and sulk when you never do.
+- A bad advisor can be a plant from a rival or a faction. Fire them, or feed them false plans.
+- In absolute places the inner circle is the court: chancellor, marshal, spymaster.
+
+### Delegation
+- Give an area (a system, a room, a group of people) to a person. They decide its cards by their
+  own traits while you do other things, and report on Friday.
+- A good deputy saves hours. A bad one makes choices you must clean up, or builds their own power.
+- Take an area back at any time; the person remembers it.
+
+### Promises, favours and leverage
+- **Promises:** what you say in scenes ("I'll get you a new boat") is saved as a promise with a
+  due date. Kept promises raise trust; broken ones are remembered for a long time.
+- **Favours:** a list of who owes you and whom you owe. Spend a favour to swing a vote, skip a
+  queue or get a person to do something.
+- **Leverage:** secrets you know about people. Use one to force a choice; it costs trust if they
+  find out you used it.
+
+### Personal arcs
+- Each named person has a personal story arc of 3-5 beats over a term: Tomas wants to retire to
+  the coast, Anja wants to row for the country, Lord Brennan wants your throne.
+- Beats happen as small moments, cards and scenes. The boss can help, block or ignore each one.
+- An arc ends with a result that goes into the chronicle: a farewell party, a medal, a coup.
 
 ### The office as a place
-- Decorate the office. Items (a plant, a trophy, a portrait, a throne) change how visitors feel.
+- **Decorate** the office. Items (a plant, a trophy, a portrait, a throne) change how visitors feel.
 - The desk holds the inbox, the drawer, the phone and the calendar as real objects.
-- An office door state: open (more small talk, more cards) or closed (fewer interruptions,
-  people feel shut out).
+- **Office door:** open (more small talk, more cards) or closed (fewer interruptions, people feel
+  shut out).
+- **Office hours:** a queue of visitors at set times. Short talks, 15 minutes each, no card needed.
+- **Letters from the last boss** in the drawer: a small quest line about why they left.
 
 ### Phone and messages
-- A phone with message threads from staff, family and outsiders. Short, in each person's voice.
-- Some messages need an answer by a time. Late answers count as `delay`.
+- Message threads from staff, family and outsiders. Short, in each person's voice.
+- Some messages need an answer by a time. A late answer counts as `delay`.
 - Group chats the boss is not in, found as evidence.
 - In a kingdom it is a messenger with letters; on a ship it is the signal flags and the log.
 
+### Eyes and ears
+- **Informants:** pay or befriend a person to report on a room or a group each week.
+- **Cameras, spies or a spymaster** by place type. They show overheard lines from rooms you did
+  not visit.
+- **Plant a rumour:** write one line and pick who starts it. It spreads by relations and can
+  come back to you.
+
+### Out of the office
+- **After work:** invitations to drinks, dinners, a card game, a feast. Go to build trust; your
+  hours that evening are gone.
+- **Walk and talk:** take one person along on a floor walk. You talk while you visit rooms.
+- **Trips:** a team trip, a royal progress, shore leave, a field trip. A trip is a short run in
+  a new place with your people.
+- **Visitors:** VIPs, parents, a celebrity, a foreign envoy, the boss above you. A visit is a
+  day with special cards and a scene.
+
+### Reviews and rewards
+- **Term reviews:** a short sit-down with each key person. Pick praise, a raise, a warning or a
+  new role. People compare what they got.
+- **Awards:** at term end, give "Employee of the term", a knighthood, a house prize. The winner
+  is happy; the people who lost are not.
+
 ### Mini-games
 Short interactive parts that replace a card when it fits:
-- **Budget sliders** (Deep finance, quarterly).
-- **Shift planner** (Shifts and logistics).
+- **Budget sliders** (Detailed money, quarterly).
+- **Rota planner** (Rota block): drag people into time blocks.
 - **Seating plan** for a dinner or a gala: who sits next to whom changes relations.
-- **Interview** with 3 questions you pick (Hiring).
-- **Negotiation** with offers and a hidden limit (Union, Trade, War peace talks).
+- **Interview** with 3 questions you pick, for a new hire, a squire or a new crew member.
+- **Negotiation** with offers and a hidden limit (Faction, Market, Map peace talks).
 - **Speech** at an assembly: pick 3 lines in order; the crowd reacts per line.
-- **Inspection walk**: hide or show rooms before the inspector arrives.
+- **Inspection walk:** hide or show rooms before the inspector arrives.
+- **Judgement** (Queue in absolute places): hear two sides, ask one question, give a verdict.
 
 ### Relationship map
 A web of people with lines for friends, rivals, couples and secrets you know. Tap a line to see
@@ -176,11 +234,15 @@ its story. Unknown lines show as faint dashes once someone hints at them.
 
 ### Many places
 - Open a second branch or conquer a second castle. Appoint a manager there.
-- Places run in viewer-style auto mode and send weekly reports. Visit to take over.
+- Other places run in auto mode (like viewer mode) and send weekly reports. Visit to take over.
 - People can move between your places.
 
+### Return visit
+After a run ends, come back years later as a guest. The place has moved on: new people, old
+people older, your traditions kept or dropped, a portrait of you on the wall (or not).
+
 ### Mutators
-Toggles that change the rules of one run for fun:
+Toggles that change one run for fun:
 - **Ironman:** one save, no reroll.
 - **Everyone hates you:** start trust 20.
 - **Short days:** 3 hours per day.
@@ -188,6 +250,7 @@ Toggles that change the rules of one run for fun:
 - **Inherited mess:** start with 5 open follow-ups.
 - **Speed run:** a term is 4 weeks.
 - **Silent boss:** you can only pick answers, never type.
+- **Second chance:** undo the last decision once per week.
 
 ### Daily and weekly challenge
 A seeded place and week that everyone gets. A score at the end (meters, goals, achievements).
@@ -210,7 +273,9 @@ echo). A short sting on big moments. Off by default.
 - **M2:** the hook system, the Queue and Rota blocks, Systems chips on Preview, and the Drama
   and Romance layers.
 - **M3:** Project, Stock, Faction and Big event blocks; Press and gossip, Rivals, Family and home
-  layers; the Systems tab in the Kit editor.
+  layers; the Systems tab in the Kit editor; advisors, promises, personal arcs, office hours.
 - **M4:** Season, Market, Ranking and Map blocks; Crime, Politics, Mystery, Horror, Legacy, The
-  strange and Adult (13a stays as planned); depth options.
-- **Later:** data-only packs, Career mode, Many places, mutators, daily challenge, photo mode.
+  strange and Adult (13a stays as planned); depth options; delegation, favours and leverage,
+  eyes and ears, out of the office, reviews and awards, mini-games.
+- **Later:** data-only packs, Career mode, Many places, return visit, mutators, daily challenge,
+  photo mode.
