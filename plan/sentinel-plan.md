@@ -1,81 +1,63 @@
-# Sentinel — implementation plan (v3)
+# Sentinel — implementation plan (v4)
 
-Status: plan for review, 2026-11-04. Concept: `plan/sentinel-concept.md` (v3). No issue or PR (on request).
+Status: plan for review, 2026-11-04. Concept: `plan/sentinel-concept.md` (v4). No issue or PR (on request).
 
 ## Scope of the first release
 
-- Threads with stages, traces, flavour and landing; ticked by code against story time.
-- Handoff (absent subject enters the scene) and "while you were away".
-- Hunches (in story / in HUD).
-- In-story sense use for Look and Sensor, plus panel buttons for Look, Listen, Sensor, Locate.
-- Pressure per play style.
-- Play styles: **Parent**, **Business owner**, **Living world** (light mode). All data.
-- Truth modes cozy / fair / dramatic; user suspicions.
-- Privacy levels and the under-18 rule from day one.
-- Floating UI (bubble · HUD · full) and the inline "Sentinel" chip.
-- Standalone; uses `world-state` time if present. Roleplay mode only.
+- Subjects with privacy levels and the under-18 rule.
+- Senses Look, Listen, Sensor, Locate as panel buttons.
+- In-story looks for Look and Sensor (keyword rules).
+- One observe call per look; facts in a log; observation and found facts as context for the narrator.
+- Play styles **Parent**, **Business owner**, **Generic** as data.
+- Floating panel (bubble · panel with Look and Log) and the inline "Sentinel" chip.
+- Standalone. Roleplay mode only.
 
-Later: hands, voice, Messages/Report senses, more play styles, play style editor, character-side tools, maps/illustrator links.
+Later: Messages sense, play style editor, maps and illustrator links.
 
 ## What the code gives us (checked 2026-11-04)
 
-| Need              | Found                                                                                                                                        | Use                                                                                                                                                                                   |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Package shape     | `manifest.json`, `agents.json`, `locales/`, `src/` → generated `client.js` / `server.mjs` via `node scripts/build-feature-packages.mjs <id>` | copy `packages/quartermaster/` (panel + server)                                                                                                                                       |
-| Agent phases      | `pre_generation`, `post_processing`, `parallel`, `context_injection`, …                                                                      | `post_processing`: advance clocks, detect enter/leave, detect in-story sense use for the next turn; `context_injection`: handoff, hunch, truth for a sense used in the user's message |
-| Per-message state | `game_state_snapshots` (per message and swipe)                                                                                               | candidate for thread state (D1)                                                                                                                                                       |
-| Story time        | `world-state` fields read by the Engine (`illustrator-background-generation.ts:120`)                                                         | own clock first; world-state time when readable                                                                                                                                       |
-| Floating UI       | Beholder floating panel `packages/beholder/src/80-dock.js`                                                                                   | copy it                                                                                                                                                                               |
-| Server calls      | `routes`, `api.registerService`                                                                                                              | sense, author and landing calls                                                                                                                                                       |
-| Tools             | Engine built-ins only                                                                                                                        | no character tools in the first release                                                                                                                                               |
+| Need              | Found                                                                                                                                        | Use                                                                                                    |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Package shape     | `manifest.json`, `agents.json`, `locales/`, `src/` → generated `client.js` / `server.mjs` via `node scripts/build-feature-packages.mjs <id>` | copy `packages/quartermaster/` (panel + server)                                                        |
+| Agent phases      | `pre_generation`, `post_processing`, `parallel`, `context_injection`, …                                                                      | `context_injection`: observation for a look in the user's message, plus found facts for the subject(s) |
+| Per-message state | `game_state_snapshots` (per message and swipe)                                                                                               | candidate for the log (D1)                                                                             |
+| Floating UI       | Beholder floating panel `packages/beholder/src/80-dock.js`                                                                                   | copy it                                                                                                |
+| Server calls      | `routes`, `api.registerService`                                                                                                              | observe call                                                                                           |
 
 Note: tracker prompts mention `<current_game_state>`, but the Engine injects `<context>` or `# Context`. Do not rely on a tag name.
 
 ## Data model (sketch)
 
-- `subjects[]`: id, kind (person/place), name, cardId?, privacy (open/private/off-limits), minor, onscreen (bool), known `{where, doing, at, source}`.
-- `threads[]`: id, subjectId, flavour (trouble/personal/kind), title (hidden), stages[] `{text, traces[]}`, stage index, clock progress, landing `{text, delay}`, found traces[], status (running/caught/stopped/landed).
-- `pressure`: name, value 0–100, effects by band. Setting `pressureOn` (default on); off = value stays fixed, no backfire, no pressure ring.
-- `suspicions[]`: text, resolved as true/partial/false (hidden), threadId?.
-- `log[]`: found facts with time and source; later reveals.
-- `settings`: play style, mode, tension, truth mode, hunch channel, update cap, connection.
+- `subjects[]`: id, kind (person/place/device), name, cardId?, privacy (open/private/off-limits), minor.
+- `log[]`: subjectId, sense, observation text, facts[], messageId.
+- `settings`: play style, in-story looks on/off, connection.
 
-Hidden data (thread titles, stages not found, landing, suspicion truth) never goes into the main prompt. Only found traces, hunches and the handoff state do.
+## Model call
 
-## Model calls (and when)
+| Call    | When                     | Input                                                                    | Output (fixed schema)          |
+| ------- | ------------------------ | ------------------------------------------------------------------------ | ------------------------------ |
+| Observe | a look (story or button) | subject, sense skin, recent chat, earlier facts for the subject, privacy | observation (1–3 lines), facts |
 
-| Call                | When                                                | Output (fixed schema)                                                      |
-| ------------------- | --------------------------------------------------- | -------------------------------------------------------------------------- |
-| Author thread       | new subject, thread landed or stopped, rare refresh | stages with traces, flavour, landing; from the card and play style library |
-| Render sense        | sense used (story or button)                        | what is noticed, from traces at the current stage, privacy-filtered        |
-| Handoff             | subject enters the scene                            | one or two lines of true state for the main model                          |
-| Landing / away card | thread lands; user returns                          | short consequence or "what changed"                                        |
-
-Ticks, pressure, hunch choice and suspicion resolution are code (seeded random). Cost cap per hour applies to all calls.
+Privacy filter runs on the output in code too. Cap per hour.
 
 ## Decisions to make
 
-- **D1 Storage.** Package storage keyed by chat + message id for hidden state (swipe-safe by re-reading the snapshot at the active message), plus a small `known` summary in game state custom fields. Spike confirms.
-- **D2 In-story sense detection.** Keyword rules per sense skin first ("open her door", "check the cam"), a small classifier call only if rules miss too much.
-- **D3 Thread library format.** Small JSON: stages with traces, flavour, tension weight, landing, follow-up threads. Ship 15–20 threads per play style.
-- **D4 Story time.** Own clock advanced by detected time phrases and time skips; world-state time when available.
+- **D1 Storage.** Package storage keyed by chat + message id (swipe-safe by reading the entries on the active branch). Spike confirms.
+- **D2 In-story look detection.** Keyword rules per sense skin ("open her door", "check the cam"); a small classifier call only if rules miss too much.
 
 ## Slices
 
 0. **Spike:** D1 on a throwaway Engine; one `context_injection` line reaches the main model; one fixed-schema call from a package route.
-1. **Skeleton:** manifest (`ui`, `routes`, `storage`, `prompt-context`, `chat-read`), agents.json, locales, floating bubble/HUD/full with empty tabs.
-2. **Threads core:** library format, Parent + Business + Living world libraries, clock ticks, landing, log. Unit-tested without any model.
-3. **Handoff + away card:** enter/leave detection, handoff injection, "while you were away".
-4. **Senses:** button senses, in-story Look/Sensor detection, trace rendering with privacy filter, Sentinel chip.
-5. **Pressure + backfire + hunches:** pressure bands, noticed senses, hunch channel setting.
-6. **Truth modes + suspicions.**
-7. **Proof + release:** regressions, screenshots at 390 / 768 / 1440, version 0.1.0, catalog entry.
+1. **Skeleton:** manifest (`ui`, `routes`, `storage`, `prompt-context`, `chat-read`), agents.json, locales, floating bubble + panel with empty Look and Log.
+2. **Looks:** subjects, button senses, observe call, log, context injection, Sentinel chip, privacy filter.
+3. **In-story looks:** keyword detection for Look and Sensor.
+4. **Play styles:** Parent, Business owner, Generic data.
+5. **Proof + release:** regressions, screenshots at 390 / 768 / 1440, version 0.1.0, catalog entry.
 
 ## Tests (smallest proof per slice)
 
-- Threads: a seeded tick sequence moves stages as expected; onscreen subjects do not tick; landing fires once.
-- Privacy: private or minor subjects never get body/clothing/intimate content in any output; off-limits gets no thread and no call.
-- Hidden truth never appears in injected context (only found traces, hunches, handoff).
-- Suspicion resolution respects truth mode weights (seeded).
-- Sense detection rules: positive and negative phrases per skin.
+- Privacy: private or minor subjects never get body/clothing/intimate content; off-limits gets no call.
+- Log: a swipe or branch switch shows only the facts of the active branch.
+- Context: the injected text holds the observation and found facts, nothing else.
+- Look detection rules: positive and negative phrases per skin.
 - UI proof per `marinara-design`: populated, empty, loading, error, long names.
