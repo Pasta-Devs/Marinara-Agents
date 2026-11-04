@@ -1,42 +1,39 @@
 # Big Cheese: modules and more features
 
-Companion to [README.md](README.md), [design.md](design.md) and
-[content.md](content.md).
+Companion to [README.md](README.md), [design.md](design.md), [content.md](content.md), [cast.md](cast.md) and [cheese-board.md](cheese-board.md).
 
-A warehouse, a kingdom and a pirate ship do not share the same systems. A fixed list like
-"Classes", "Shifts" or "War" only fits some places. So Big Cheese has two layers:
+A warehouse, a kingdom and a pirate ship do not share the same systems. So Big Cheese has two layers:
 
-1. **Place systems** are made with each place. The AI builds them from a small set of generic
-   building blocks and names them for the place: the warehouse gets "Night shift", Hollowmere
-   gets "The Regatta", Valmora gets "Tithe day".
-2. **Story layers** fit any place. They change what happens between people, not how the place
-   works: Romance, Drama, Crime, Horror, Mystery and so on.
+1. **Place systems.** Three building blocks, filled with place words.
+2. **Story layers.** They change what happens between people, not how the place works.
+
+Both layers feed the same thing: **threads** (see design.md). A block or layer never talks to the player directly. It makes threads, and the threads make cards, scenes and small moments.
 
 ## 1. Place systems
 
-### Building blocks
+### The 3 blocks in the core
 
-The code knows about 10 blocks. Each block has its own logic, state and one generic screen.
-The AI only picks blocks, names them and fills them with place words.
+The code knows 3 blocks. Each block has its own logic and state. The AI picks blocks and names them for the place.
 
-| Block | What it does | Generic screen | Example instances |
-|---|---|---|---|
-| **Queue** | Things arrive and must be handled in time. Late items hurt a meter. | a list with timers | shipments, patients, guests, petitioners, orders, prisoners to judge |
-| **Rota** | Put people into time blocks. Gaps and overwork have effects. | a week grid | shifts, classes, night watches, ward rota, guard duty |
-| **Project** | A goal that takes weeks, with progress, risks and a reveal. | a progress card | new wing, research, a cathedral, a ship refit, a new product |
-| **Season** | A team from your people plays fixtures against rivals. | fixtures and a live match | regatta, forklift cup, tourney, ship races, football |
-| **Market** | Prices move each week; buy, sell, sign contracts. | a price list and graph | freight rates, grain, plunder sale, tuition fees, drug supplies |
-| **Stock** | Things you hold run low, spoil or go missing. | a stock list | inventory, rum, medicine, the armoury, lab samples |
-| **Ranking** | A score race against rivals, updated each week. | a league table | university rankings, hotel stars, kingdom prestige, infamy |
-| **Map** | Regions or routes; move people or forces between them. | a simple region map | sales areas, provinces, sea routes, wards |
-| **Faction** | A group with its own mood, demands and votes. | a group card | union, guild, nobles, parents' council, the crew vote |
-| **Big event** | One planned event with prep, a budget and a live night. | a planner | gala, coronation, prom, launch party, a feast |
+| Block         | What it does                                                | Example instances                                            |
+| ------------- | ----------------------------------------------------------- | ------------------------------------------------------------ |
+| **Project**   | A goal that takes weeks, with progress, risks and a reveal. | new wing, research, a cathedral, a ship refit, a new product |
+| **Big event** | One planned event with prep, a budget and a live night.     | gala, coronation, prom, launch party, a feast                |
+| **Season**    | A team from your people plays fixtures against rivals.      | regatta, forklift cup, tourney, ship races, football         |
+
+### How each block makes threads
+
+| Block     | Thread it makes                                    | Beats                                                                                                    |
+| --------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Project   | One long thread per project.                       | Kick-off, supply card, a risk, a setback, a reveal. Progress is the thread's clock.                      |
+| Season    | One thread per fixture.                            | Pick the squad, a training moment, a rival move, match night, result. The season table is the chronicle. |
+| Big event | One thread with prep beats and a live night scene. | Budget, guest list, a crisis in prep, then one live scene on the night. Result goes to the chronicle.    |
+
+Each thread has a need meter, a stakes line and a clock like every other thread. Winning or losing the thread moves the meters in content.md §1.
 
 ### How a place gets its systems
 
-- `place.draft` picks 2-4 blocks that fit the wish and returns for each one: block, name, a one-line
-  premise, the meter type it feeds, roles that run it, rooms it uses, and 6-10 deck items in
-  place words.
+- `place.draft` picks 1-3 blocks that fit the wish. For each one it returns: block, name, a one-line premise, the meter type it feeds, roles that run it, rooms it uses, and 6-10 deck items with place words.
 - The normalizer checks the block exists, the meter type is valid and every role has a person.
 - On the Preview screen each system is a chip. Tap it to rename, reroll or remove it.
 - The Kit editor has a **Systems** tab: add a block, name it, write its deck items.
@@ -49,233 +46,259 @@ The AI only picks blocks, names them and fills them with place words.
   "id": "regatta",
   "block": "season",
   "name": "The Regatta",
-  "premise": "Hollowmere rows against Kingsbridge every spring.",
+  "premise": "Hollowmere rows against Carrow College every spring.",
   "feeds": "standing",
-  "roles": { "coach": "lindqvist", "captain": "anja" },
+  "roles": { "coach": "cormac" },
   "rooms": ["boathouse"],
-  "deck": ["The cox is ill on race week.", "Kingsbridge buys a new boat."],
+  "deck": ["The cox is ill on race week.", "Carrow buys a new boat."],
   "settings": { "fixtures": 6, "squad": 8 }
 }
 ```
 
 ### Examples per built-in kit
 
-| Kit | Systems |
-|---|---|
-| Hafenkai warehouse | Inbound trucks (Queue) · Night shift (Rota) · Freight rates (Market) · Forklift cup (Season) |
-| Hollowmere University | Timetable (Rota) · The Regatta (Season) · League tables (Ranking) · New science wing (Project) |
-| St. Corvin's Academy | House rota (Rota) · House cup (Ranking) · Prefects' council (Faction) · Founders' ball (Big event) |
-| Kingdom of Valmora | Petition day (Queue) · Granaries (Stock) · The provinces (Map) · Nobles' council (Faction) |
-| Pirate ship | Prizes to sell (Market) · Rum and powder (Stock) · Sea routes (Map) · Crew vote (Faction) |
-| Hospital ward | Admissions (Queue) · Ward rota (Rota) · Medicine cabinet (Stock) · Inspection stars (Ranking) |
+Core things such as petition day, the Friday meeting or house rota are not blocks. They are threads, meetings and cards.
+
+| Kit                   | Systems                                                                                        |
+| --------------------- | ---------------------------------------------------------------------------------------------- |
+| Hafenkai Logistics    | Dock extension (Project) and Founders' day (Big event). Night shift trouble is a thread.       |
+| Hollowmere University | The Regatta (Season) and the new science wing (Project). Timetable clashes are threads.        |
+| St. Corvin's Academy  | House cup (Season) and Founders' ball (Big event). Prefects' council is a group and a meeting. |
+| Kingdom of Valmora    | Coronation (Big event) and the great cathedral (Project). Petition day is a thread.            |
+| Salt Magpie           | Refit (Project) and the Crew race (Season). A crew vote is a meeting.                          |
+| Ward 7                | New wing (Project) and the Charity gala (Big event). Admissions are threads.                   |
 
 ### Depth options
 
-Two core parts can go deeper on any place:
+Two core parts can go deeper in any place:
 
-- **Detailed money:** a ledger with salaries, loans, a quarterly budget and audits instead of one
-  Money meter.
-- **Detailed building:** a grid floor plan, build orders, room upgrades and decor instead of room
-  condition only.
+- **Detailed money:** a ledger with salaries, loans, a quarterly budget and audits instead of one Money meter.
+- **Detailed building:** a grid floor plan, build orders, room upgrades and decor instead of a room condition only.
 
-## 2. Story layers
+### Later blocks
 
-Story layers are place-free. Each one adds people events, decks, roles and prompt parts.
-Each has a dial (0-100) for how often and how strongly it acts.
+These wait. Most are number sims where the model adds little. Faction groups and meetings already exist in the core.
 
-| Layer | What it adds |
-|---|---|
-| **Drama** | cliques, feuds, "him or me" cards, mediation meetings, the yearly party |
-| **Romance** | crushes, dates, couples, break-ups, weddings, triangles, the boss's own love story |
-| **Adult** | see the Adult module in the main plan |
-| **Crime** | bribes, fraud, blackmail, cover-ups, an evidence board, a fixer, a detective |
-| **Rivals** | a rival boss with a face and plans, moles, sabotage, a yearly showdown |
-| **Press and gossip** | a feed or an in-house paper, viral moments, interviews, scandals |
-| **Politics** | elections inside the place, campaigns, backing candidates, outside laws |
-| **Mystery** | one case per term: clues in rooms, suspects, an accusation scene |
-| **Horror** | a dark secret, things at night, missing people, a sealed room, a final night |
-| **Family and home** | the boss's home life, evening hours split, family events that clash with work |
-| **Legacy** | heirs or protégés, succession, play the next boss with the same place |
-| **The strange** | magic, curses, artefacts, odd tech, an AI crew member; tone follows the place |
+| Block   | Why it waits                                                              |
+| ------- | ------------------------------------------------------------------------- |
+| Queue   | Items and timers. A number sim. Petitions and patients work as threads.   |
+| Rota    | Time blocks and gaps. A number sim. The planner mini-game needs it.       |
+| Market  | Prices and graphs. A number sim, no story from the model.                 |
+| Stock   | Counts of things that spoil. A number sim.                                |
+| Ranking | A score race. A number sim. Fixtures in a Season already show a table.    |
+| Map     | Regions and routes. Needs map art and rules. Wait for Many places.        |
+| Faction | Groups, moods and votes already exist as groups and meetings in the core. |
 
-The place sets the words. Crime at St. Corvin's is a cheating ring and a stolen key. Crime in
-Valmora is a poisoner at court. Crime on the ship is a thief in the crew.
+### Hooks
 
-### Bundles
+There is no hook framework in M2. The 3 blocks and the layers are plain code that call each other directly. When a third block needs the same extension point, extract the hook. This list is the target shape for later.
 
-One tap sets several story layers: **Soap opera** (Drama, Romance, Press and gossip), **Dark**
-(Crime, Horror, Mystery), **Cosy** (Family and home, Romance at low dial), **Power** (Politics,
-Rivals, Legacy).
-
-## 3. How both layers plug in
-
-Systems and story layers use the same hooks. The core never knows a system or layer by name.
-
-| Hook | When | What it can do |
-|---|---|---|
-| `onCreate` | place generation | add people, rooms, groups, seed state |
-| `onSlot` | each time slot | move people, add small moments, change own state |
-| `onDraw` | storyteller draw | add weighted deck items, raise or lower tension |
-| `onCardSeed` | before cards are written | add topics, askers, extra stances |
-| `onApply` | after a stance is applied | extra deltas, memories, follow-ups |
-| `onMeeting` | meeting setup and close | extra attendees, agenda items, vote effects |
-| `onWish` | wish classify | new wish types |
-| `onWeekEnd` | Friday | report lines, decay, achievements |
-| `onTermEnd` | term end | yearbook parts, endings |
-| `onViewerTick` | viewer mode | drama triggers, AI boss choices |
+| Hook        | When it runs                                                 |
+| ----------- | ------------------------------------------------------------ |
+| `onCreate`  | Place generation: add people, rooms, groups, thread seeds.   |
+| `onSlot`    | Each time slot: move people, add small moments.              |
+| `onDraw`    | Storyteller draw: add weighted items, change tension.        |
+| `onApply`   | After a stance is applied: add deltas, memories, follow-ups. |
+| `onMeeting` | Meeting setup and close: attendees, agenda, vote effects.    |
+| `onWeekEnd` | Friday: report lines, decay, achievements.                   |
+| `onTermEnd` | Term end: yearbook parts, endings.                           |
 
 Hooks are pure: they take state and return new state and events.
 
-**Data-only packs.** Players can share JSON packs with deck items, roles, house rules, perks,
-achievements, endings and prompt parts for a story layer or a system ("Vampire hospital pack").
+## 2. Story layers
 
-**Switching during a run.** A layer or system can be added at the start of a week (it opens with
-a short intro event) and removed at any time (its state stays saved; its cards stop).
+Story layers are place-free. Each layer mainly adds three things:
 
-## 4. More features for the core game
+- **Thread seeds:** starting threads and new kinds of threads.
+- **Roles:** who plays what (a rival, a cheater, a suitor).
+- **Prompt parts:** words for the storyteller, the asker and the scene writer.
+
+It can also add deck items, memories and achievements. Each layer has a dial (0-100) for how often and how strongly it acts.
+
+| Layer                | What it adds                                                                                                    |
+| -------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Drama**            | cliques, feuds, "him or me" threads, mediation meetings, the yearly party, triangles, the boss's own love story |
+| **Romance**          | crushes, dates, couples, break-ups, weddings                                                                    |
+| **Adult**            | see the Adult module in the main plan                                                                           |
+| **Crime**            | bribes, fraud, blackmail, cover-up threads, an evidence board, a fixer, a detective                             |
+| **Rivals**           | a rival boss with a face and plans, mole threads, sabotage, a yearly showdown                                   |
+| **Press and gossip** | a feed or an in-house paper, viral moments, interviews, scandals                                                |
+| **Politics**         | elections inside the place, campaigns, backing candidates, outside laws                                         |
+| **Mystery**          | one case thread per term: clues in rooms, suspects, an accusation scene                                         |
+| **Horror**           | a dark secret, things at night, missing people, a sealed room, a final night                                    |
+| **Family and home**  | the boss's home life, evening hours split, family events that clash with work                                   |
+| **Legacy**           | heirs or proteges, succession, play the next boss with the same place                                           |
+| **The strange**      | magic, curses, artefacts, odd tech, an AI crew member. Tone follows the place                                   |
+
+The place sets the words. Crime at St. Corvin's is a cheating ring and a stolen key. Crime in Valmora is a poisoner at court. Crime on the ship is a thief in the crew.
+
+### Bundles
+
+One tap sets several story layers: **Soap opera** (Drama, Romance, Press and gossip), **Dark** (Crime, Horror, Mystery), **Cosy** (Family and home, Romance at low dial), **Power** (Politics, Rivals, Legacy).
+
+### Data-only packs
+
+Players can share JSON packs with deck items, roles, house rules, perks, achievements, endings and prompt parts for a story layer or a system ("Vampire hospital pack").
+
+### Switching during a run
+
+A layer or system can be added at the start of a week (it opens with a short intro event) and removed at any time (its state stays saved, its threads pause). The player does this in the Kit editor or through the Cheese Board.
+
+## 3. Player freedom
+
+The module and feature set gives the player these freedoms:
+
+| Freedom                                                                       | Where it lives                     |
+| ----------------------------------------------------------------------------- | ---------------------------------- |
+| Own answer on every card (typed, mapped to a stance by the model)             | design.md §4.4, README Pillar 6    |
+| "Do something": a free action anywhere, mapped to a verb or a new thread seed | design.md §10                      |
+| Edit systems and layers in the middle of a run                                | Section 1 and 2 above              |
+| Change any rule, edit the kit, change state on purpose                        | [cheese-board.md](cheese-board.md) |
+| "Show numbers" setting                                                        | design.md §8.1                     |
+
+The code owns every number. Freedom never means the model sets numbers.
+
+## 4. More features
+
+### Threads cover these
+
+These ideas are now kinds of threads (design.md §3). They need no own system.
+
+| Feature          | As a thread                                                                                                 |
+| ---------------- | ----------------------------------------------------------------------------------------------------------- |
+| Personal arcs    | A named person's own thread, 3-5 beats over a term (retire to the coast, win the cup, take the throne).     |
+| Promises         | A promise made in a scene becomes a thread with a due date. Kept: trust up. Broken: remembered a long time. |
+| Crisis sequences | A thread with a short clock and linked beats.                                                               |
+| Mysteries        | A thread of clues and suspects that ends in an accusation scene.                                            |
 
 ### The boss as a character
-- **Boss sheet:** name, look, title, 2 traits, a short backstory. People react to the traits (a
-  "Former soldier" Dean gets respect from the caretaker and jokes from the students).
-- **Energy:** a bad night's sleep costs one hour the next day; a weekend off gives one back. Late
-  meetings, parties and crises cost sleep.
-- **Skills** grow with use: Negotiation, Charm, Fear, Finance, Craft. Each level unlocks a better
-  answer type on cards (Charm 3: "Talk them round" appears on angry cards).
-- **Epithet:** the place gives the boss a name from their decisions: "The Iron Dean",
-  "Good King Aldric", "Bucket Brandt". It changes when the style changes, and the grapevine
-  uses it.
-- **Wardrobe:** outfits for days and events. People comment on them. A king's crown, a
-  captain's coat, a dean's gown for prize day.
-- **Diary:** one short line per day, written from the day's events. Readable as a book at the
-  end and part of the yearbook.
+
+- **Boss sheet:** name, look, title, 2 traits and a short backstory. People react to the traits (a "Former soldier" Provost gets respect from the head porter and jokes from the students).
+- **Epithet:** the place gives the boss a name from their decisions: "The Iron Provost", "Good King Aldric", "Bucket Brandt". It changes when the style changes, and the grapevine uses it.
+- **Energy:** a bad night's sleep costs one hour the next day. A weekend off gives one back. Late meetings, parties and crises cost sleep.
+- **Skills** grow with use: Negotiation, Charm, Fear, Finance, Craft. Each level unlocks a better answer type on cards (Charm 3: "Talk them round" appears on angry cards).
+- **Wardrobe:** outfits for days and events. People comment on them.
+- **Diary:** one short line per day, written from the day's events. Readable as a book at the end and part of the yearbook.
 
 ### Advisors
-- Pick an **inner circle** of up to 3 people. On every card each advisor gives one line of advice
-  in their own voice and leans to one answer ("Vera: Let the board pay. Tomas: Fix it properly.").
+
+- Pick an **inner circle** of up to 3 people. On every card each advisor gives one line of advice in their own voice. Advice leans to one of the 3 offered answers (design.md §4.2) or to the player's own typed answer ("Imogen: Let the trustees pay. Yusuf: Fix it properly.").
 - Advisors gain influence when you follow them and sulk when you never do.
 - A bad advisor can be a plant from a rival or a faction. Fire them, or feed them false plans.
 - In absolute places the inner circle is the court: chancellor, marshal, spymaster.
 
 ### Delegation
-- Give an area (a system, a room, a group of people) to a person. They decide its cards by their
-  own traits while you do other things, and report on Friday.
-- A good deputy saves hours. A bad one makes choices you must clean up, or builds their own power.
-- Take an area back at any time; the person remembers it.
 
-### Promises, favours and leverage
-- **Promises:** what you say in scenes ("I'll get you a new boat") is saved as a promise with a
-  due date. Kept promises raise trust; broken ones are remembered for a long time.
-- **Favours:** a list of who owes you and whom you owe. Spend a favour to swing a vote, skip a
-  queue or get a person to do something.
-- **Leverage:** secrets you know about people. Use one to force a choice; it costs trust if they
-  find out you used it.
+- Give an area (a system, a room, a group of people) to a person. They decide its cards by their own traits while you do other things, and report on Friday.
+- Delegation uses the deputy ambition rule (content.md §1): each delegate gives the delegate +15 ambition. At 100 the deputy challenges you.
+- A good deputy saves hours. A bad one makes choices you must clean up.
+- Take an area back at any time. The person remembers it.
 
-### Personal arcs
-- Each named person has a personal story arc of 3-5 beats over a term: Tomas wants to retire to
-  the coast, Anja wants to row for the country, Lord Brennan wants your throne.
-- Beats happen as small moments, cards and scenes. The boss can help, block or ignore each one.
-- An arc ends with a result that goes into the chronicle: a farewell party, a medal, a coup.
+### Favours and leverage
+
+- **Favours:** a list of who owes you and whom you owe. Spend a favour to swing a vote, skip a queue or get a person to do something.
+- **Leverage:** secrets you know about people. Use one to force a choice. It costs trust if they find out you used it.
 
 ### The office as a place
+
 - **Decorate** the office. Items (a plant, a trophy, a portrait, a throne) change how visitors feel.
 - The desk holds the inbox, the drawer, the phone and the calendar as real objects.
-- **Office door:** open (more small talk, more cards) or closed (fewer interruptions, people feel
-  shut out).
+- **Office door:** open (more small talk, more cards) or closed (fewer interruptions, people feel shut out).
 - **Office hours:** a queue of visitors at set times. Short talks, 15 minutes each, no card needed.
 - **Letters from the last boss** in the drawer: a small quest line about why they left.
 
 ### Phone and messages
+
 - Message threads from staff, family and outsiders. Short, in each person's voice.
 - Some messages need an answer by a time. A late answer counts as `delay`.
-- Group chats the boss is not in, found as evidence.
-- In a kingdom it is a messenger with letters; on a ship it is the signal flags and the log.
+- Group chats the boss is not in are found as evidence.
+- In a kingdom it is a messenger with letters. On a ship it is the signal flags and the log.
 
 ### Eyes and ears
+
 - **Informants:** pay or befriend a person to report on a room or a group each week.
-- **Cameras, spies or a spymaster** by place type. They show overheard lines from rooms you did
-  not visit.
-- **Plant a rumour:** write one line and pick who starts it. It spreads by relations and can
-  come back to you.
+- **Cameras, spies or a spymaster** by place type. They show overheard lines from rooms you did not visit.
+- **Plant a rumour:** write one line and pick who starts it. It spreads by relations and can come back to you.
 
 ### Out of the office
-- **After work:** invitations to drinks, dinners, a card game, a feast. Go to build trust; your
-  hours that evening are gone.
+
+- **After work:** invitations to drinks, dinners, a card game, a feast. Go to build trust. You lose hours that evening.
 - **Walk and talk:** take one person along on a floor walk. You talk while you visit rooms.
-- **Trips:** a team trip, a royal progress, shore leave, a field trip. A trip is a short run in
-  a new place with your people.
-- **Visitors:** VIPs, parents, a celebrity, a foreign envoy, the boss above you. A visit is a
-  day with special cards and a scene.
+- **Trips:** a team trip, a royal progress, shore leave, a field trip. A trip is a short run in a new place with your people.
+- **Visitors:** VIPs, parents, a celebrity, a foreign envoy, the boss above you. A visit is a 1-day event with special cards and a scene.
 
 ### Reviews and rewards
-- **Term reviews:** a short sit-down with each key person. Pick praise, a raise, a warning or a
-  new role. People compare what they got.
-- **Awards:** at term end, give "Employee of the term", a knighthood, a house prize. The winner
-  is happy; the people who lost are not.
+
+- **Term reviews:** a short sit-down with each key person. Pick praise, a raise, a warning or a new role. People compare what they got.
+- **Awards:** at term end, give "Employee of the term", a knighthood, a house prize. The winner is happy. The people who lost are not.
 
 ### Mini-games
+
 Short interactive parts that replace a card when it fits:
+
 - **Budget sliders** (Detailed money, quarterly).
-- **Rota planner** (Rota block): drag people into time blocks.
 - **Seating plan** for a dinner or a gala: who sits next to whom changes relations.
 - **Interview** with 3 questions you pick, for a new hire, a squire or a new crew member.
-- **Negotiation** with offers and a hidden limit (Faction, Market, Map peace talks).
-- **Speech** at an assembly: pick 3 lines in order; the crowd reacts per line.
+- **Speech** at an assembly: pick 3 lines in order. The crowd reacts per line.
 - **Inspection walk:** hide or show rooms before the inspector arrives.
-- **Judgement** (Queue in absolute places): hear two sides, ask one question, give a verdict.
+
+The Rota planner, Negotiation and Judgement mini-games return with their later blocks.
 
 ### Relationship map
-A web of people with lines for friends, rivals, couples and secrets you know. Tap a line to see
-its story. Unknown lines show as faint dashes once someone hints at them.
+
+A web of people with lines for friends, rivals, couples and secrets you know. Tap a line to see its story. Unknown lines show as faint dashes until someone hints at them.
 
 ### Career mode
+
 - Start small (shift lead, a village reeve, a deputy head) and get promoted to bigger places.
 - Each promotion is a new place on a map with your reputation and some people from before.
 - Top of the ladder: regional director, CEO, emperor, chancellor.
 
 ### Many places
+
 - Open a second branch or conquer a second castle. Appoint a manager there.
 - Other places run in auto mode (like viewer mode) and send weekly reports. Visit to take over.
 - People can move between your places.
 
 ### Return visit
-After a run ends, come back years later as a guest. The place has moved on: new people, old
-people older, your traditions kept or dropped, a portrait of you on the wall (or not).
+
+After a run ends, come back years later as a guest. The place has moved on: new people, old people older, your traditions kept or dropped, a portrait of you on the wall (or not).
 
 ### Mutators
+
 Toggles that change one run for fun:
-- **Ironman:** one save, no reroll.
-- **Everyone hates you:** start trust 20.
-- **Short days:** 3 hours per day.
-- **Double drama:** small moments become stakes more often.
-- **Inherited mess:** start with 5 open follow-ups.
-- **Speed run:** a term is 4 weeks.
-- **Silent boss:** you can only pick answers, never type.
-- **Second chance:** undo the last decision once per week.
+
+| Mutator            | Effect                                                        |
+| ------------------ | ------------------------------------------------------------- |
+| Ironman            | One save. No undo, no reroll, Cheese Board off.               |
+| Everyone hates you | Start trust at 20.                                            |
+| Double drama       | Small moments become stakes more often.                       |
+| Inherited mess     | Start with 5 open threads.                                    |
+| Speed run          | A term is 4 weeks.                                            |
+| Silent boss        | You can only pick offered answers. No own answers, no typing. |
 
 ### Daily and weekly challenge
-A seeded place and week that everyone gets. A score at the end (meters, goals, achievements).
-Results stay local; sharing is a copied text or image.
+
+A seeded place and week that everyone gets. A score at the end (meters, goals, achievements). Results stay local. Sharing is a copied text or image.
 
 ### Photo mode and postcards
-Freeze a scene (a room, a meeting, the floor map) with a caption. Postcards go into the
-chronicle and the yearbook. Save as an image.
+
+Freeze a scene (a room, a meeting, the floor map) with a caption. Postcards go into the chronicle and the yearbook. Save as an image.
 
 ### Montage and time skip
-Skip a quiet week: the code plays it with the AI boss (your style from past choices) and shows a
-short montage of 5 moments.
+
+Skip a quiet week: the code plays it with the AI boss (your style from past choices) and shows a short montage of 5 moments.
 
 ### Sound and ambience
-Optional room sounds by place family (forklift beeps, a school bell, a harbour, a throne room
-echo). A short sting on big moments. Off by default.
+
+Optional room sounds by place family (forklift beeps, a school bell, a harbour, a throne room echo). A short sting on big moments. Off by default.
 
 ## 5. Where it fits in the slices
 
-- **M2:** the hook system, the Queue and Rota blocks, Systems chips on Preview, and the Drama
-  and Romance layers.
-- **M3:** Project, Stock, Faction and Big event blocks; Press and gossip, Rivals, Family and home
-  layers; the Systems tab in the Kit editor; advisors, promises, personal arcs, office hours.
-- **M4:** Season, Market, Ranking and Map blocks; Crime, Politics, Mystery, Horror, Legacy, The
-  strange and Adult (13a stays as planned); depth options; delegation, favours and leverage,
-  eyes and ears, out of the office, reviews and awards, mini-games.
-- **Later:** data-only packs, Career mode, Many places, return visit, mutators, daily challenge,
-  photo mode.
+| Slice     | Content                                                                                                                                                                                                                                      |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **M1**    | A minimal thread core: the guided thread "Letters from the last boss" and promise threads from own answers. A card's follow-up comes back as a beat on that card's own thread.                                                               |
+| **M2**    | The full storyteller: 5-8 open threads and all 11 thread kinds (design.md §3.2). The Drama and Romance layers. The Project block. Systems chips on Preview. No hook framework: blocks are plain code.                                        |
+| **M3**    | Big event and Season blocks. More layers: Press and gossip, Rivals, Family and home. The Adult module. The Systems tab in the Kit editor. Advisors. Office hours.                                                                            |
+| **M4**    | Crime, Politics, Mystery, Horror, Legacy, The strange. Depth options. Delegation, favours and leverage. Eyes and ears. Out of the office. Reviews and awards. Mini-games.                                                                    |
+| **Later** | The later blocks (Queue, Rota, Market, Stock, Ranking, Map, Faction) and the hook extraction. Data-only packs. Career mode. Many places. Return visit. Mutators other than Ironman (M3, with the Cheese Board). Daily challenge. Photo mode. |
