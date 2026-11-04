@@ -205,11 +205,36 @@ interface Completed {
   chapter: Chapter;
   order: number;
   owner?: string;
+  /** Who may know it (see audienceOf); undefined for a main chapter. */
+  audience?: string[];
+  /** The other love interests who appear in a Character Story, by name (cameosOf). */
+  guests?: string[];
 }
 
 /** Who may know a chapter: anyone for a main chapter, only its own love interest for any other kind. */
 const audienceOf = (chapter: Chapter): string[] | undefined =>
   chapter.kind === "main" ? undefined : [chapter.li ?? chapter.lead];
+
+/**
+ * A Character Story (kind "story") is also known to every other love interest who speaks in it (a cameo): its summary
+ * says who was there, so a prompt for him knows what he saw. Matched by his name on a line of the played text.
+ * ponytail: only a love interest who speaks counts, not one who is only described; upgrade by having the writer name
+ * the cast of each scene.
+ */
+async function cameosOf(
+  store: Pick<OtomeStore, "readDoc">,
+  runId: string,
+  chapter: Chapter,
+  others: ReadonlyMap<string, string>,
+): Promise<string[]> {
+  if (chapter.kind !== "story" || !others.size) return [];
+  const speakers = new Set<string>();
+  for (let i = 0; i < chapter.nodes.length; i += 1) {
+    const beat = await readBeat(store, runId, chapter.key, i);
+    for (const segment of beat?.segments ?? []) if (segment.speaker) speakers.add(segment.speaker.trim());
+  }
+  return [...others].filter(([, name]) => speakers.has(name)).map(([li]) => li);
+}
 
 /** The kit's kind of a chapter (see the header): a storyline's chapter, or a side story (GF's bond chapter). */
 const kindOf = (chapter: Chapter): ForgeMemorySource["kind"] =>
@@ -238,20 +263,30 @@ export async function completedChapters(
     names.set(li, name);
     return name;
   };
+  const cast = new Map<string, string>();
+  for (const li of Object.keys(state.lis ?? {})) {
+    const name = (await nameOf(li))?.trim();
+    if (name) cast.set(li, name);
+  }
   const chapters: Completed[] = [];
   for (const { key, completed } of done) {
     const chapter = await readChapter(store, runId, key);
     // The prologue is no memory source: no love interest was there, and chapter 1's first scene is given it directly.
     // An extra story (#2025) is none either: it is imagined together for fun, and never canon.
     if (!chapter || chapter.kind === "prologue" || chapter.prestige) continue;
-    const audience = audienceOf(chapter);
+    const own = audienceOf(chapter);
+    const others = new Map([...cast].filter(([li]) => !own?.includes(li)));
+    const cameos = own ? await cameosOf(store, runId, chapter, others) : [];
+    const audience = own ? [...own, ...cameos] : undefined;
+    const guests = cameos.map((li) => cast.get(li)!);
     chapters.push({
       chapter,
       order:
         chapter.kind === "main" && chapter.number
           ? chapter.number * 10000
           : mainDone(completed) * 10000 + 5000 + (Date.parse(completed) || 0) / 1e13,
-      ...(audience ? { owner: (await nameOf(audience[0]!)) || "a love interest" } : {}),
+      ...(audience ? { owner: (await nameOf(audience[0]!)) || "a love interest", audience } : {}),
+      ...(guests.length ? { guests } : {}),
     });
   }
   return chapters.sort((a, b) => a.order - b.order || a.chapter.key.localeCompare(b.chapter.key));
@@ -262,11 +297,11 @@ export async function completedChapters(
  * every path (in full, its summary, the timeline), so a scene with others in it keeps the knowledge boundary: nobody
  * else knows what happened there.
  */
-function titleOf({ chapter, owner }: Completed): string {
+function titleOf({ chapter, owner, guests }: Completed & { guests?: string[] }): string {
   const title = chapter.title || chapter.key;
-  return owner === undefined
-    ? title
-    : `${owner}'s own ${chapter.kind} chapter "${title}" (private: only the people in its scenes know what happened in it)`;
+  if (owner === undefined) return title;
+  const also = guests?.length ? `; ${guests.join(" and ")} also appear${guests.length === 1 ? "s" : ""} in it` : "";
+  return `${owner}'s own ${chapter.kind} chapter "${title}" (private: only the people in its scenes know what happened in it${also})`;
 }
 
 /**
@@ -281,14 +316,14 @@ async function sourcesOf(
 ): Promise<ForgeMemorySource[]> {
   const sources: ForgeMemorySource[] = [];
   for (const completed of chapters) {
-    const { chapter, order } = completed;
+    const { chapter, order, audience } = completed;
     const content = await chapterCanon(store, runId, chapter, protagonist);
     if (!content?.trim()) continue;
-    const audience = audienceOf(chapter);
+    const guests = completed.guests;
     sources.push({
       id: chapter.key,
       kind: kindOf(chapter),
-      title: titleOf(completed),
+      title: titleOf({ ...completed, guests }),
       content,
       order,
       ...(audience ? { audience } : {}),
@@ -381,7 +416,7 @@ function previousOf(known: readonly Completed[], continues: RecallTextOptions["c
   const main = () => chapters.filter(({ chapter }) => chapter.kind === "main").at(-1);
   if (continues === "main") return main();
   if (continues) {
-    const his = chapters.filter(({ chapter }) => chapter.kind !== "main" && audienceOf(chapter)?.[0] === continues);
+    const his = chapters.filter(({ chapter, audience }) => chapter.kind !== "main" && audience?.[0] === continues);
     return his.at(-1) ?? main();
   }
   return chapters.at(-1);
@@ -442,9 +477,10 @@ export async function recallText(
     }),
   ]);
   const { chapters, protagonist } = story;
-  const known = chapters.filter(({ chapter }) => mayKnow(recall, audienceOf(chapter)));
+  const known = chapters.filter(({ audience }) => mayKnow(recall, audience));
   // A `cached` prompt's own canon (see the header): a love interest's own chapter, unless it is the chapter's.
-  const own = (chapter: Chapter) => !!cached && !!audienceOf(chapter) && audienceOf(chapter)![0] !== cached.li;
+  const audiences = new Map(chapters.map(({ chapter, audience }) => [chapter, audience]));
+  const own = (chapter: Chapter) => !!cached && !!audiences.get(chapter) && audiences.get(chapter)![0] !== cached.li;
   // The memory context of these blocks (contextOf); when `cached`, the own blocks go with the recalls, a context of
   // their own, and each part keeps its own newest summary (`summaries`, oldest first, may give way but for it).
   const storyContext = (

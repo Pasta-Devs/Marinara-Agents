@@ -598,7 +598,7 @@ test("a Character Story plays privately, and an already-read four-star Moment ga
   const user = t.calls[0]!.messages.at(-1)!.content;
   assert.ok(user!.includes("Mireille's Character Story"), "P23 names whose side story it is");
   assert.ok(user!.includes("ONE-SCENE side story of Mireille's"));
-  assert.ok(user!.includes("no other love interest appears"));
+  assert.ok(user!.includes("another love interest may appear only when the story truly calls for it"));
   assert.ok(system!.includes(forgeKnowledgeBoundary));
 
   const read = await t.call("POST", "/runs/:run/chapters/:key/beats/:i/read", { segment: 2 }, { key, i: "0" });
@@ -614,7 +614,8 @@ test("a Character Story plays privately, and an already-read four-star Moment ga
   const story = sources.find((source) => source.id === key);
   assert.ok(story, "the finished Moment is canon");
   assert.equal(story.kind, "character-story", "a side story of his, as GF's Character Story");
-  assert.deepEqual(story.audience, [MIR], "only Mireille may recall it");
+  // The fixture's scene has Kai speak in it, so he appears in her Moment and may recall it too (0.8.5 cameos).
+  assert.deepEqual(story.audience, [MIR, KAI], "Mireille, and Kai who speaks in it");
   const snapshot = sources.find((source) => source.content.includes("SNAP-KAI"));
   assert.ok(snapshot, "the owned Snapshot is canon");
   assert.deepEqual(snapshot.audience, [KAI], "a Snapshot is recalled only by its love interest");
