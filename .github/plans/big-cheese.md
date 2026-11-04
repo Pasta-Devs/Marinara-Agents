@@ -1,7 +1,7 @@
 # Big Cheese
 
 Status: concept, branch `big-cheese-agent` (local plan, not pushed). No PR yet.
-Mockups: https://claude.ai/artifact/9gniMXoxfpKZXHx6xdzc9j (private Claude artifact, 11 phone screens).
+Mockups: https://claude.ai/artifact/9gniMXoxfpKZXHx6xdzc9j (private Claude artifact, 15 phone screens).
 
 Big Cheese is a stand-alone game in its own Home tab, a sibling of Modern Life Sim. The player
 wishes for any place, such as a warehouse, a university campus, a hospital ward or a space station,
@@ -181,11 +181,76 @@ The wish idea stays in the game. You get 3 wishes per term. A wish asks the stor
 something ("a rich old graduate wants to donate, with strings attached"). It arrives in its own
 way within 1-2 weeks. Wishes cannot set numbers; they only make new cards, people or events.
 
+## Places, the world and things
+
+### Rooms inside the place
+
+The place is a small map, not a list. Reuse the hierarchical-maps idea (AI draft → normalize →
+snapshot), but keep it simple: zones → rooms, 6-20 rooms per kit.
+
+- **Room fields:** name, kind (work, social, private, outside, hidden), capacity, opening hours,
+  **condition** 0-100, the meter type it feeds, upgrades, a mood tag and an optional background.
+- **Condition wears down** with use and weather. A worn room makes cards ("The roof is leaking
+  again") and incidents. Repair costs money and hours.
+- **Hidden rooms:** the roof, the old archive, the cold store at night. They need a key or a
+  secret to open and often hold the best scenes.
+- **The player shapes rooms:** rename, add or remove them in the kit editor, or wish for one in
+  the game ("a rooftop garden"). The model writes the room; the code sets its cost and effect.
+
+### People move around
+
+- Every person has a **routine**: their shift or timetable plus habits ("smokes behind the fence
+  at 15:00", "eats lunch alone in the library"). The code moves people every time slot.
+- The **floor map** shows who is where right now. People who avoid each other never share a room;
+  a crush makes two people meet "by accident".
+- **Visiting a room** costs ½ hour. You see who is there, may **overhear** something (a plan, a
+  complaint, a rumour), can **step in** for a scene, **keep listening**, **inspect** the room, or
+  leave. Overheard lines feed the grapevine and unlock cards and secrets.
+- Being seen matters: staff work harder in rooms you visit often, and talk more freely in rooms
+  you never visit.
+
+### Time and weather
+
+Time slots (morning, afternoon, evening, night) decide who is where. Night-shift places have a
+real night crew. Seasons and weather change outside rooms, visitors and card topics
+(enrolment season, Christmas rush, a storm closes the harbour).
+
+### The world outside
+
+A second map with 4-8 outside places that the kit makes for the place type:
+
+| Outside place | Role | What it does |
+|---|---|---|
+| Rival | competitor | has its own simple strength value; poaches staff, undercuts deals, can be outplayed |
+| Supplier / partner | relation 0-100 | delivery days, price changes, favours |
+| Authority | inspector, ministry, port authority | inspections, permits, fines |
+| Money | bank, investors, donors | loans, interest, strings attached |
+| Press | local paper, social feed | stories that move the Standing meter |
+| After-work spot | pub, café, staff homes | off-duty scenes; people say what they never say at work |
+
+A trip costs 2 hours. Outside places also come to you as **visitors** (the inspector, a parent,
+an investor) and show up as cards or as people on the floor map.
+
+### Things
+
+- **Equipment** belongs to rooms (forklift, lab gear, beds, ovens, a ship's cannon). Each item
+  has a condition and feeds one meter type. Broken equipment makes cards; you repair, replace or
+  sell it.
+- **Stock** (only for places that move goods: warehouse, restaurant, shop) is one number per kind
+  with a delivery schedule. Running out makes a crisis. No per-item inventory in v1.
+- **Your drawer** holds the boss's own things:
+  - **Keys** open hidden rooms.
+  - **Gifts** go to people (gift tastes like Modern Life Sim) and raise trust.
+  - **Documents:** contracts with due dates, letters, and **meeting minutes** written by the
+    model and stored as text.
+  - **Evidence:** secrets and overheard lines become evidence cards. Playing one in a meeting
+    gives big support changes, and people remember who used it.
+
 ### Rooms and growth (Building module)
 
-A simple floor map of rooms with who is in each room now. Spend money to upgrade a room or add
-one (new lab, break room, loading dock). Each room gives a small weekly effect and new card
-topics. The place grows in tiers (small → known → famous) that unlock bigger events.
+Spend money to upgrade a room or add one (new lab, break room, loading dock). Each room gives a
+small weekly effect and new card topics. The place grows in tiers (small → known → famous) that
+unlock bigger events and more outside places.
 
 ### Calendar
 
@@ -213,9 +278,11 @@ schedules (open day, team building, festival). Each scheduled event is a mini-sc
 
 Title (saved places) · Wish · Preview · Kit editor · Office (meters, hours, next meeting,
 inbox) · Card · Meeting scene · Friday report · Staff list and Staff file · House rules ·
-Grapevine and wishes · Floor map · Calendar · Goals and perks · Settings.
-Bottom bar: Office, Floor, Staff, Calendar. "More" holds Rules, Grapevine, Goals and the Kit. Phone first, 44 px targets, theme tokens only in the
-real build (the mockup colours are placeholders).
+Grapevine and wishes · Floor map (Site / Town) · Room visit · Drawer and equipment · Calendar ·
+Goals and perks · Settings.
+Bottom bar: Office, Floor, Staff, Calendar. "More" holds Rules, Grapevine, Drawer, Goals and the
+Kit. Phone first, 44 px targets, theme tokens only in the real build (the mockup colours are
+placeholders).
 
 ## Technical shape
 
@@ -250,20 +317,24 @@ Four milestones. Each one is playable on its own; each slice is one small PR lat
 **M2 · Alive**
 4. Storyteller (Calm/Classic/Chaos), follow-up cards, crises.
 5. Meetings: agenda, attendees, support in the room, votes.
-6. Relationships between people, ambitions, secrets, grapevine.
-7. Hire, promote, let go, delegate to the deputy.
+6. Rooms and routines: floor map, room condition, people moving each time slot, room visits,
+   overhearing.
+7. Relationships between people, ambitions, secrets, grapevine.
+8. Hire, promote, let go, delegate to the deputy.
 
 **M3 · Yours**
-8. Kit editor, extra meters, feel dials, save, export and import kits.
-9. Built-in kits (16) and Kit from text or lorebook.
-10. House rules (sliders, toggles, own-words rules).
-11. Roles (Middle manager, Rising star, Owner) and the module switchboard.
+9. Kit editor, extra meters, feel dials, save, export and import kits.
+10. Built-in kits (16) and Kit from text or lorebook.
+11. House rules (sliders, toggles, own-words rules).
+12. Roles (Middle manager, Rising star, Owner) and the module switchboard.
 
 **M4 · Lasting**
-12. Term goals, perks, wishes during the game, endings with epilogues, achievements.
-13. Building module (floor map, rooms, growth tiers) and Calendar events.
-14. Press module, Office drama module, Deep finance module, Union module.
-15. Legacy runs, Make a character card, images (portraits, backgrounds), GUIDE app.
+13. The world outside: town map, rival, suppliers, authorities, money, visitors, trips.
+14. Things: equipment, stock, the drawer (keys, gifts, documents, minutes, evidence).
+15. Term goals, perks, wishes during the game, endings with epilogues, achievements.
+16. Building module (upgrades, growth tiers), hidden rooms, Calendar events, weather.
+17. Press module, Office drama module, Deep finance module, Union module.
+18. Legacy runs, Make a character card, images (portraits, backgrounds), GUIDE app.
 
 ## Not planned
 
