@@ -168,6 +168,10 @@
       "section": "apps",
       "tagline": "A little pet that your characters raise."
     },
+    "meanwhile": {
+      "section": "alive",
+      "tagline": "Characters whose lives go on between chats."
+    },
     "slurp2": {
       "section": "apps",
       "tagline": "A private creator app for your characters."

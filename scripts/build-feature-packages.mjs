@@ -116,6 +116,8 @@ const saucelingsOwnedSourcePaths = [
   "packages/server/src/services/saucelings",
   "packages/client/src/features/saucelings",
 ];
+const meanwhileSourceRoot = join(packagesDir, "meanwhile/src/engine");
+const meanwhileOwnedSourcePaths = ["packages/server/src/services/meanwhile", "packages/client/src/features/meanwhile"];
 // The sprite pipeline writes sprites/atlas.json with every species sheet, effect and scene it made; the package
 // ships exactly those, so a new species or view needs no edit here.
 const saucelingsAtlas = JSON.parse(readFileSync(join(packagesDir, "saucelings/sprites/atlas.json"), "utf8"));
@@ -337,6 +339,7 @@ async function prepareFeatureBuildRoot(feature) {
     feature.id !== "long-term-memory" &&
     feature.id !== "memory-nag" &&
     feature.id !== "saucelings" &&
+    feature.id !== "meanwhile" &&
     feature.id !== "hierarchical-maps";
   const buildRoot = await mkdtemp(join(tmpdir(), `marinara-${feature.id}-source-`));
   try {
@@ -707,6 +710,37 @@ const features = [
     },
   },
   {
+    id: "meanwhile",
+    version: "0.1.0",
+    minEngineVersion: "2.5.0",
+    maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
+    name: "Meanwhile",
+    description:
+      "Circles of characters whose lives go on while you are away, on a clock you can speed up or set. This first slice has the Circle setup, the clock and the timer. It makes no model calls yet.",
+    category: "misc",
+    kind: ["agent"],
+    modes: ["conversation", "roleplay"],
+    permissions: ["routes", "storage", "ui", "chat-read"],
+    serverImport: "packages/server/src/services/meanwhile/server-entry.ts",
+    serverEntry: true,
+    clientImport: "packages/client/src/features/meanwhile/client-entry.tsx",
+    packageSourceRoot: meanwhileSourceRoot,
+    ownedSourcePaths: meanwhileOwnedSourcePaths,
+    engineBoundaryPath: join(packagesDir, "meanwhile/engine-boundary.json"),
+    boundaryDisplayName: "Meanwhile",
+    capabilityApi: PACKAGE_CAPABILITY_API,
+    libraryHidden: true,
+    assetPaths: ["meanwhile-icon.png"],
+    contributions: {
+      slots: ["home-browser-tab"],
+      homeBrowserTab: {
+        label: "Meanwhile",
+        ariaLabel: "Open Meanwhile",
+        iconPaths: ["meanwhile-icon.png"],
+      },
+    },
+  },
+  {
     id: "hierarchical-maps",
     version: "1.8.0",
     minEngineVersion: "2.5.1",
@@ -941,6 +975,14 @@ const saucelingsBoundary = selectedFeatures.some((feature) => feature.id === "sa
       sourceRoot: saucelingsSourceRoot,
       boundaryPath: join(packagesDir, "saucelings/engine-boundary.json"),
       displayName: "Saucelings",
+      capabilityApi: PACKAGE_CAPABILITY_API,
+    })
+  : null;
+const meanwhileBoundary = selectedFeatures.some((feature) => feature.id === "meanwhile")
+  ? await assertPackagePrivateImportBoundary({
+      sourceRoot: meanwhileSourceRoot,
+      boundaryPath: join(packagesDir, "meanwhile/engine-boundary.json"),
+      displayName: "Meanwhile",
       capabilityApi: PACKAGE_CAPABILITY_API,
     })
   : null;
@@ -2118,7 +2160,9 @@ for (const feature of selectedFeatures) {
           ? memoryNagBoundary
           : feature.id === "saucelings"
             ? saucelingsBoundary
-            : null;
+            : feature.id === "meanwhile"
+              ? meanwhileBoundary
+              : null;
   const manifest = {
     schemaVersion: boundary || feature.capabilityApi ? 2 : 1,
     ...(boundary

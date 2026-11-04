@@ -1,0 +1,161 @@
+/** Pure clock, window, lease and backoff math. No I/O, so tests can run it without an Engine. */
+
+export const HOUR = 3_600_000;
+export const DAY = 24 * HOUR;
+export const SPEEDS = [0, 1, 24] as const;
+export const SPEED_MAX = 1440; // custom speeds: 0 to 1440 (one real minute = one Circle day)
+export const LONG_ABSENCE_DAYS = 3;
+export const RUN_AHEAD_MS = 6 * HOUR; // a run needs this much unseen Circle time
+export const BACKGROUND_EVERY_MS = 6 * HOUR; // real time, for the background-timer switch
+export const POLL_MS = 5 * 60_000;
+export const FIRST_POLL_MS = 90_000;
+export const LEASE_MS = 30 * 60_000;
+export const BACKOFF_BASE_MS = 5 * 60_000;
+export const BACKOFF_MAX_MS = 30 * 60_000;
+
+export interface Clock {
+  anchorCircle: string; // ISO instant
+  anchorReal: number; // epoch ms
+  speed: number;
+  timezone: string; // IANA name, for display and day edges
+}
+
+export interface RunWindow {
+  from: string;
+  to: string;
+  /** Part of a long absence before the last 3 days. Becomes one summary event later. */
+  summary: { from: string; to: string } | null;
+}
+
+export type DueReason = "manual" | "tab" | "chat" | "background";
+
+export interface RunMark {
+  circleId: string;
+  leaseUntil: number;
+  failures: number;
+  nextAt: number;
+  trigger: "tab" | null;
+  lastRunAt: number; // real ms of the last finished run, 0 = never
+  lastWindow: RunWindow | null;
+  lastError: string | null;
+}
+
+export function emptyMark(circleId: string): RunMark {
+  return {
+    circleId,
+    leaseUntil: 0,
+    failures: 0,
+    nextAt: 0,
+    trigger: null,
+    lastRunAt: 0,
+    lastWindow: null,
+    lastError: null,
+  };
+}
+
+/** A finite speed in 0..SPEED_MAX, else null. */
+export function normalizeSpeed(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= SPEED_MAX ? value : null;
+}
+
+export function circleNowMs(clock: Clock, realNow: number): number {
+  return Date.parse(clock.anchorCircle) + (realNow - clock.anchorReal) * clock.speed;
+}
+
+/** Changing the speed re-anchors, so the Circle time does not jump. */
+export function setSpeed(clock: Clock, speed: number, realNow: number): Clock {
+  return { ...clock, anchorCircle: new Date(circleNowMs(clock, realNow)).toISOString(), anchorReal: realNow, speed };
+}
+
+export function setTime(clock: Clock, circleMs: number, realNow: number): Clock {
+  return { ...clock, anchorCircle: new Date(circleMs).toISOString(), anchorReal: realNow };
+}
+
+export function validTimezone(tz: unknown): tz is string {
+  if (typeof tz !== "string" || !tz) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Wall clock parts of an instant in a zone, as a "YYYY-MM-DDTHH:mm" string. */
+export function msToWall(ms: number, tz: string): string {
+  const p = wallParts(ms, tz);
+  const two = (n: number) => String(n).padStart(2, "0");
+  return `${String(p.y).padStart(4, "0")}-${two(p.mo)}-${two(p.d)}T${two(p.h)}:${two(p.mi)}`;
+}
+
+/** A "YYYY-MM-DDTHH:mm" wall time in a zone to an instant. Null when it does not parse. */
+export function wallToMs(wall: string, tz: string): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(wall);
+  if (!m) return null;
+  const asUtc = Date.UTC(+m[1]!, +m[2]! - 1, +m[3]!, +m[4]!, +m[5]!);
+  if (!Number.isFinite(asUtc)) return null;
+  // Two passes settle zones whose offset changes between the guess and the answer.
+  let guess = asUtc - offsetMs(asUtc, tz);
+  guess = asUtc - offsetMs(guess, tz);
+  return guess;
+}
+
+function wallParts(ms: number, tz: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+  }).formatToParts(new Date(ms));
+  const n = (t: string) => Number(parts.find((x) => x.type === t)?.value);
+  return { y: n("year"), mo: n("month"), d: n("day"), h: n("hour"), mi: n("minute"), s: n("second") };
+}
+
+function offsetMs(ms: number, tz: string): number {
+  const p = wallParts(ms, tz);
+  return Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi, p.s) - Math.floor(ms / 1000) * 1000;
+}
+
+/** What a run covers. Null when no Circle time has passed since the last run. */
+export function runWindow(lastRunMs: number, nowMs: number): RunWindow | null {
+  if (!(nowMs > lastRunMs)) return null;
+  const cut = nowMs - LONG_ABSENCE_DAYS * DAY;
+  const iso = (ms: number) => new Date(ms).toISOString();
+  if (lastRunMs >= cut) return { from: iso(lastRunMs), to: iso(nowMs), summary: null };
+  return { from: iso(cut), to: iso(nowMs), summary: { from: iso(lastRunMs), to: iso(cut) } };
+}
+
+/** Same shape as Slurp2's poll backoff: 5 min, 10, 20, then 30 min. */
+export function backoffMs(failures: number): number {
+  return Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** Math.max(0, failures));
+}
+
+/** A claimed mark, or null when another run holds a live lease. */
+export function claimLease(mark: RunMark, now: number): RunMark | null {
+  return mark.leaseUntil > now ? null : { ...mark, leaseUntil: now + LEASE_MS };
+}
+
+export function dueReason(input: {
+  hasConnection: boolean;
+  mark: RunMark;
+  now: number;
+  circleNow: number;
+  lastRunCircle: number;
+  chatNewer: boolean;
+  backgroundTimer: boolean;
+}): DueReason | null {
+  const { mark, now } = input;
+  if (!input.hasConnection || mark.leaseUntil > now || mark.nextAt > now) return null;
+  const reason: DueReason | null = mark.trigger
+    ? "tab"
+    : input.chatNewer
+      ? "chat"
+      : input.backgroundTimer && now - mark.lastRunAt >= BACKGROUND_EVERY_MS
+        ? "background"
+        : null;
+  return reason && input.circleNow - input.lastRunCircle >= RUN_AHEAD_MS ? reason : null;
+}

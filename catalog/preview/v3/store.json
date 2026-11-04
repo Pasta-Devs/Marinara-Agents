@@ -8,6 +8,13 @@
       "bannerPath": "../../../store/banners/blackjack.webp",
       "bannerSmallPath": "../../../store/banners/blackjack-1200.webp"
     },
+    "meanwhile": {
+      "section": "alive",
+      "tagline": "Characters whose lives go on between chats.",
+      "iconPath": "../../../store/icons/meanwhile.webp",
+      "bannerPath": "../../../store/banners/meanwhile.webp",
+      "bannerSmallPath": "../../../store/banners/meanwhile-1200.webp"
+    },
     "modern-life-sim": {
       "section": "apps",
       "tagline": "A town, a job and rent with your cast.",

@@ -49,6 +49,7 @@ export const STAGING_ONLY_PACKAGE_IDS = new Set([
   "otome-forge",
   "ruleset-5e-2014",
   "saucelings",
+  "meanwhile",
 ]);
 
 // A package is in exactly one state. Both sets hiding the same id would make

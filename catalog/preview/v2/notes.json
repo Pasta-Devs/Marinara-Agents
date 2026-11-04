@@ -11,6 +11,16 @@
         }
       ]
     },
+    "meanwhile": {
+      "versions": [
+        {
+          "version": "0.1.0",
+          "date": "2026-11-05",
+          "notes": "- First slice. Home -> Meanwhile lists your Circles. A Circle has a cast, a setting, linked chats, a pace and a model.\n- Each Circle has its own clock. Run it at x1 or x24, pause it, enter a custom speed, or set the date and time.\n- A Circle needs a model before it can run. Until you choose one, the card says \"Choose a model to start\".\n- A timer wakes every 5 minutes. A Circle catches up when you open the tab, when a linked chat has new messages, or every 6 hours if you turn on the background switch.\n- Runs do not call a model yet and write no events. They only move the Circle forward on its clock.",
+          "highlight": false
+        }
+      ]
+    },
     "modern-life-sim": {
       "versions": [
         {
