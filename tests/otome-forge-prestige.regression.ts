@@ -36,8 +36,8 @@ import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/serv
 import { applyChoiceEffects } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/state/relationship.ts";
 import { CAST, KAI, MIR, beatReply, bible, json, storyWorld } from "./fixtures/otome-forge-story.ts";
 
-/** Level 10 is reached at 2700 affection. */
-const L10 = 2700;
+/** Level 10 is reached at 3600 affection (200 for level 2, then 50 more per level). */
+const L10 = 3600;
 const PLANNER = "You are the Extra Story planner";
 
 /** A valid P25 reply: a what-if for Kai, three nodes (Mireille named in one is left out). */
@@ -117,7 +117,7 @@ test("a choice loss never takes an unlocked extra story back", () => {
   assert.equal(hurt(L10 + 1800), L10 + 1800, "the second one too");
   assert.equal(hurt(L10 + 950), L10 + 935, "within a cycle, points may fall as they do within a level");
   assert.equal(hurt(L10 + 5), L10, "level 10 itself still holds");
-  assert.equal(hurt(305), 300, "below level 10 nothing changes");
+  assert.equal(hurt(205), 200, "below level 10 nothing changes");
   assert.equal(hurt(320), 305);
 });
 

@@ -288,7 +288,7 @@ test("the Memory Selector opens at level 10, once per love interest, for one of 
   };
   await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
     ...state,
-    lis: { ...state.lis, [KAI]: { ...state.lis[KAI]!, points: 2700 } },
+    lis: { ...state.lis, [KAI]: { ...state.lis[KAI]!, points: 3600 } },
   }));
   // His Memory on the live banner is pulled with pity: it is not offered, and claiming it is refused.
   assert.deepEqual(await choices(KAI), [true, false, []]);

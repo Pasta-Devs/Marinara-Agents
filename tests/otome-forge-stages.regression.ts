@@ -52,6 +52,7 @@ import {
   planReply,
   storyWorld,
 } from "./fixtures/otome-forge-story.ts";
+import { levelFloor } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/economy.ts";
 
 type World = Awaited<ReturnType<typeof storyWorld>>;
 type Messages = CapabilityLanguageModelMessage[];
@@ -141,7 +142,7 @@ function router({
   });
 }
 
-const POINTS_FOR_LEVEL = (level: number) => (level - 1) * 300;
+const POINTS_FOR_LEVEL = levelFloor;
 
 async function arcWorld(runKey: string, kai: Partial<LiState>, replies = router()) {
   return storyWorld({ runKey, replies, lis: { [KAI]: kai } });
