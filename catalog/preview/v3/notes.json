@@ -404,6 +404,16 @@
           "highlight": false
         }
       ]
+    },
+    "sentinel": {
+      "versions": [
+        {
+          "version": "0.1.0",
+          "date": "2026-11-05",
+          "notes": "- First release: look at places and people outside the scene, give orders to the butler, and keep a log of what you found.\n- The narrator gets new results and known facts before each reply, so scenes agree with what you saw.\n- Parent, Business owner and Generic play styles. Private places show presence and activity only; under 18 is always private.",
+          "highlight": false
+        }
+      ]
     }
   }
 }

@@ -11,7 +11,7 @@
   "id": "sentinel",
   "name": "Sentinel",
   "version": "0.1.0",
-  "description": "Check on places and people outside the scene in Roleplay: peek into a room, watch a camera, find a phone, or tell the house AI what to do. Answers fit the chat and stay true afterwards.",
+  "description": "Check on places and people outside the scene in Roleplay: peek into a room, watch a camera, find a phone, or tell the house AI what to do. Answers fit the chat and stay true afterwards. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
   "engine": {
     "min": "2.4.6",
     "maxExclusive": "4.0.0"
@@ -40,18 +40,18 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "c8c93db3aa89407786da2e5206401c471277500f2232639276139acee6be7f7b",
-      "bytes": 464
+      "sha256": "7cad559bcec4f7ee8116e12759be971206f9c2d2fb49360363ecec385ec1407a",
+      "bytes": 569
     },
     {
       "path": "client.js",
-      "sha256": "85b05325cdac27d9119a1240d16de31b0858a619f611eaaa1eb52dd39893c662",
-      "bytes": 22189
+      "sha256": "36cbb13c52ae34cf5945ee3588ef0653a5cc1742f8de6280333cedea01341361",
+      "bytes": 23594
     },
     {
       "path": "server.mjs",
-      "sha256": "aacc9bcd232103eb81e740e32b26fa94b2ac61b0690695e856df8b7b742a781a",
-      "bytes": 17419
+      "sha256": "0d7705bebfc5ac518ab860c1e087ca9bb289f326929da6f07bda09da96f92b3b",
+      "bytes": 19633
     }
   ],
   "restartRequired": true

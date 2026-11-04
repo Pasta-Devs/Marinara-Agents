@@ -36,6 +36,13 @@
       "iconPath": "../../store/icons/saucelings.webp",
       "bannerPath": "../../store/banners/saucelings.webp",
       "bannerSmallPath": "../../store/banners/saucelings-1200.webp"
+    },
+    "sentinel": {
+      "section": "adventure",
+      "tagline": "Check rooms and cams outside the scene.",
+      "iconPath": "../../store/icons/sentinel.webp",
+      "bannerPath": "../../store/banners/sentinel.webp",
+      "bannerSmallPath": "../../store/banners/sentinel-1200.webp"
     }
   }
 }

@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "en",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "Sentinel",
+    "description": "Check on places and people outside the scene in Roleplay: peek into a room, watch a camera, find a phone, or tell the house AI what to do. Answers fit the chat and stay true afterwards. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode."
+  },
+  "agents": {
+    "sentinel": {
+      "name": "Sentinel",
+      "description": "Check on places and people outside the scene in Roleplay: peek into a room, watch a camera, find a phone, or tell the house AI what to do. Answers fit the chat and stay true afterwards."
+    }
+  }
+}

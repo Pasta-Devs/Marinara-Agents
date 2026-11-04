@@ -836,6 +836,74 @@
         "bytes": 824313
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#saucelings"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 2,
+        "capabilityApi": {
+          "major": 1,
+          "minor": 14
+        },
+        "builtAgainst": {
+          "engineVersion": "2.4.6",
+          "engineCommit": "f66abf7eddb7db6312f5ba8a080145644191775"
+        },
+        "id": "sentinel",
+        "name": "Sentinel",
+        "version": "0.1.0",
+        "description": "Check on places and people outside the scene in Roleplay: peek into a room, watch a camera, find a phone, or tell the house AI what to do. Answers fit the chat and stay true afterwards. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+        "engine": {
+          "min": "2.4.6",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "client": "client.js",
+          "server": "server.mjs"
+        },
+        "contributions": {
+          "slots": [
+            "roleplay-tracker"
+          ]
+        },
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "prompt-context",
+          "routes",
+          "storage",
+          "ui"
+        ],
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "7cad559bcec4f7ee8116e12759be971206f9c2d2fb49360363ecec385ec1407a",
+            "bytes": 569
+          },
+          {
+            "path": "client.js",
+            "sha256": "36cbb13c52ae34cf5945ee3588ef0653a5cc1742f8de6280333cedea01341361",
+            "bytes": 23594
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "0d7705bebfc5ac518ab860c1e087ca9bb289f326929da6f07bda09da96f92b3b",
+            "bytes": 19633
+          }
+        ],
+        "restartRequired": true
+      },
+      "category": "tracker",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/sentinel.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/sentinel-0.1.0.zip",
+        "sha256": "6410c5e7c0149ffa5df859f6fd7e748a151cd39c86f3fc6fca2d436aed1ea586",
+        "bytes": 45635
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/sentinel/README.md"
     }
   ]
 }

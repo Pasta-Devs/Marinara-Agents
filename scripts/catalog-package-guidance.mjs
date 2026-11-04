@@ -72,6 +72,10 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
     modes: ["roleplay"],
     activation: "Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
   },
+  sentinel: {
+    modes: ["roleplay"],
+    activation: "Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+  },
   "world-state": {
     modes: ["roleplay"],
     activation: "Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",

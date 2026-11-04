@@ -2,11 +2,11 @@
   {
     "id": "sentinel",
     "name": "Sentinel",
-    "description": "Check on places and people outside the scene and give orders to an in-world butler.",
+    "description": "Check on places and people outside the scene in Roleplay: peek into a room, watch a camera, find a phone, or tell the house AI what to do. Answers fit the chat and stay true afterwards.",
     "author": "Gunterlie",
     "phase": "pre_generation",
     "enabledByDefault": false,
-    "category": "misc",
+    "category": "tracker",
     "runtimeDisabled": true,
     "modeAllowlist": [
       "roleplay"
