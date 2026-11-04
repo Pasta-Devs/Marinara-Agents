@@ -1,7 +1,10 @@
-# Background Simulation — characters live while you are away (concept v1)
+# Background Simulation — characters live while you are away (concept v2)
 
 Status: concept for discussion, 2026-11-04. No code, no issue, no PR.
-Working name: **Offscreen** (package id `offscreen`; `background` is taken by the scene-background package).
+Decided 2026-11-04: name Meanwhile; clock = real time + fast forward + settable time and speed;
+only big events wait for review; Sentinel is a sibling, neither depends on the other.
+
+Name: **Meanwhile** (package id `meanwhile`; `background` is taken by the scene-background package).
 
 ## The idea in one line
 
@@ -46,7 +49,7 @@ Agents repo:
 - **relationship-tracker** publishes `persona-state-v1` / `read-api-v1` contracts (nobody reads them yet).
 - **world-state** package tracks in-story date/time/weather.
 - **Sentinel** (`origin/rp-sentinel-agent`): secret threads for absent characters **inside one story, in story time**.
-  Offscreen is the **real-time, cross-chat** sibling. They should share the "thread" idea and one ledger format (see "Sentinel and Offscreen").
+  Meanwhile is the **real-time, cross-chat** sibling. Neither depends on the other (see "Sentinel and Meanwhile").
 
 ## Prior art — what we take from it
 
@@ -71,10 +74,18 @@ on "a character" alone. It runs on a **Life**: a named setup with
 - **cast** — the characters who live in it (each on/off, each with a detail level),
 - **setting** — the world it plays in (from a chat, a lorebook, or free text),
 - **linked chats** — the chats that are "this universe" (they feed it and receive from it),
-- **clock** — real time (default) or story time,
+- **clock** — see "The clock" below,
 - **sources** — which other agents it reads from and writes to.
 
 A user can have one Life ("my modern-day friend group") or several ("fantasy party", "office AU").
+
+### 1b. The clock
+Each Life has its own clock with three controls:
+- **Real time** (default) — Life time runs with the wall clock (and the Life's timezone); the gap since the last run is caught up, clamped.
+- **Fast forward** — jump N hours or days now (see Fast forward).
+- **Set time and speed** — set the Life's current date/time by hand, and a speed factor
+  (×1 real time, ×24 = one Life day per real hour, ×0 = paused). Life time = last set point + real elapsed × speed.
+Speed changes only how much Life time a catch-up covers; the generator and the clamp stay the same.
 
 ### 2. The life ledger (the truth)
 An append-only list of **events** per Life. Every event has: time span, who, where, what (short),
@@ -102,7 +113,8 @@ We do not simulate minute by minute. On catch-up or fast forward, for each day:
 ### 5. Influences
 - **Storyteller profile**: Cozy (slice of life), Eventful, Dramatic, Custom.
 - **Drama budget** per week; **allowed event kinds** (work, friends, romance, conflict, health, luck, spicy, …).
-- **Hard limits** (never without your OK): death, breakup, pregnancy, moving away, job loss, injury — they come as `proposed` and wait.
+- **Review rule (decided)**: small and notable events are accepted automatically; **big events** wait.
+- **Hard limits** = the big events (never without your OK): death, breakup, pregnancy, moving away, job loss, injury — they come as `proposed` and wait in the review queue. Vetoing an accepted event later retracts its writes.
 - **Nudges**: "This week Lily gets a job offer", "Jonas and Mia should meet". Nudges become planned beats.
 - **Canon locks**: facts the sim must not break (from you, from the card, from lorebooks).
 
@@ -123,7 +135,7 @@ Real-time and fast-forward share the same generator; real time is "fast forward 
 | Chats (linked) | last messages, timestamps (spans that are "chat truth") | `createChatInfluence` / chat note: "since you last talked" |
 | Character status | — | `updateCharacterStatus` (what they do right now) |
 | Autonomous messaging | presence, budget | optional "life update" text via the existing autonomy loop |
-| Long-Term Memory | `long-term-memory:recall` for context | `long-term-memory:intake` — reflections only, tagged `offscreen` |
+| Long-Term Memory | `long-term-memory:recall` for context | `long-term-memory:intake` — reflections only, tagged `meanwhile` |
 | relationship-tracker | `read-api-v1` feelings between characters | relationship deltas (capped per day) |
 | world-state | in-story date/weather (story-time clock) | — |
 | Lorebooks | canon facts | (optional) new lorebook entry for major events, via review |
@@ -151,16 +163,16 @@ Rule: **writes go out only from accepted events, and each write carries a source
 - Real-time catch-up is clamped (default max 3 days, like Slurp2) and runs at most a few times a day.
 - Model choice per Life (cheap model for beats, main model optional for reflections).
 
-## Sentinel and Offscreen
+## Sentinel and Meanwhile
 
-| | Sentinel | Offscreen |
+| | Sentinel | Meanwhile |
 |---|---|---|
 | Time | story time, inside one roleplay | real time (default) across chats |
 | Unit | secret threads you discover by play | a life ledger you see and steer |
 | Visibility | hidden until found | open dashboard (optional "surprise" mode) |
 
-Proposal: share one **event format** and the "threads with stages" idea, keep two packages.
-Offscreen in story-time mode reads `world-state` time, like Sentinel.
+Decided: two sibling packages, **neither depends on the other** — no shared format or service is required.
+Each can later read the other through the service registry as an optional, fail-soft source.
 
 ## Risks
 
@@ -168,7 +180,7 @@ Offscreen in story-time mode reads `world-state` time, like Sentinel.
 - **Memory spam** — every small event in LTM. → reflections only, capped, tagged.
 - **Same card, many universes** → the Life scope; a character can be in several Lives with separate ledgers.
 - **Token cost on local models** → code routine, batched beats, clamp, preview before fast forward.
-- **Double automation** — the Engine's autonomy loop and Offscreen both send messages. → Offscreen only feeds the existing loop; it never sends its own messages.
+- **Double automation** — the Engine's autonomy loop and Meanwhile both send messages. → Meanwhile only feeds the existing loop; it never sends its own messages.
 - **Cross-package contracts** — Slurp2/Noodle/LTM services change. → read through the service registry only, fail soft.
 
 ## Phases (proposal)
@@ -180,9 +192,5 @@ Offscreen in story-time mode reads `world-state` time, like Sentinel.
 
 ## Open questions
 
-1. Clock: real time, story time, or both per Life?
-2. Review: auto-accept small events and only hold "hard limit" events, or review everything?
-3. First home: package first (proposal) or Engine feature first?
-4. Sentinel: separate sibling (proposal), or one package with two modes?
-5. Name: Offscreen, Elsewhere, Meanwhile, Life …?
-6. Should characters who are **not** in your chats at all (only cards) be allowed in a Life?
+1. First home: package first (proposal) or Engine feature first?
+2. Should characters who are **not** in your chats at all (only cards) be allowed in a Life?
