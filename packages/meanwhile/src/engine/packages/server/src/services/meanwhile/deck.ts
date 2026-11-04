@@ -119,7 +119,7 @@ export function dealDay(input: {
     if (!kind) continue;
     const options = SOLO.has(kind)
       ? ids.flatMap((id) =>
-          blocks[id]!.filter((b) => !/sleep/.test(b.activity)).map((b) => ({
+          blocks[id]!.filter((b) => !/sleep/i.test(b.activity)).map((b) => ({
             cast: [id],
             place: b.place,
             time: hhmm(b.start),
@@ -132,18 +132,19 @@ export function dealDay(input: {
 
   // One extra random pair per Circle week, on a weekday picked from the week number.
   const dayIndex = Math.floor(Date.parse(`${day}T00:00:00Z`) / DAY);
-  const wildcardKind = kinds.find((k) => !SOLO.has(k));
+  const pairKinds = kinds.filter((k) => !SOLO.has(k));
   if (
     ids.length >= 2 &&
-    wildcardKind &&
+    pairKinds.length &&
     hashSeed(`${circle.id}:w${Math.floor((dayIndex + 3) / 7)}`) % 7 === (dayIndex + 3) % 7
   ) {
     const r = mulberry32(hashSeed(`${circle.id}:${day}:w`));
+    const kind = pairKinds[Math.floor(r() * pairKinds.length)]!;
     const a = Math.floor(r() * ids.length);
     let b = Math.floor(r() * (ids.length - 1));
     if (b >= a) b += 1;
     const o = { cast: [ids[a]!, ids[b]!], place: MEET_PLACES[Math.floor(r() * MEET_PLACES.length)]!, time: "18:00" };
-    if (!seen.has(keyOf(wildcardKind, o))) add(wildcardKind, o, `${circle.id}:${day}:w`);
+    if (!seen.has(keyOf(kind, o))) add(kind, o, `${circle.id}:${day}:w`);
   }
   return out;
 }

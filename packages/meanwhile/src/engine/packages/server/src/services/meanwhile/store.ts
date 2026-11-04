@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { CapabilityDocumentRecord, CapabilityRuntimeHost } from "@marinara-engine/shared";
-import type { Seed } from "./deck.js";
+import { BIG_KINDS, KINDS, type Seed } from "./deck.js";
 import type { PlaceTags } from "./routine.js";
 import { emptyMark, validTimezone, type Clock, type RunMark } from "./clock.js";
 
@@ -52,6 +52,8 @@ export interface MeanwhileDocument {
   events: LifeEvent[];
   placeTags: PlaceTags[];
   seeds: Seed[];
+  /** "circleId:day" for each day already dealt, so a day with no seeds is not dealt again. */
+  dealtDays: string[];
 }
 
 let runtime: CapabilityRuntimeHost | null = null;
@@ -95,6 +97,15 @@ export function defaultCircle(id: string, now: number): Circle {
 /** First problem in the editable fields of a request, or null. Fields that are absent are fine. */
 export function circleFieldError(src: Record<string, unknown>): string | null {
   const has = (k: string) => k in src;
+  for (const [key, known] of [
+    ["allowedKinds", [...KINDS, "spicy"]],
+    ["bigKindsAllowed", BIG_KINDS],
+  ] as const) {
+    const list = src[key];
+    if (has(key) && (!Array.isArray(list) || list.some((k) => typeof k !== "string" || !known.includes(k)))) {
+      return `Unknown kind in ${key}`;
+    }
+  }
   if (has("name") && (typeof src.name !== "string" || !src.name.trim() || src.name.trim().length > 80))
     return "Name must be 1 to 80 characters";
   if (has("setting") && (typeof src.setting !== "string" || src.setting.length > 600))
@@ -187,7 +198,7 @@ function normalizeMark(value: unknown): RunMark | null {
 }
 
 export function emptyMeanwhileDocument(): MeanwhileDocument {
-  return { schemaVersion: 1, circles: [], marks: [], events: [], placeTags: [], seeds: [] };
+  return { schemaVersion: 1, circles: [], marks: [], events: [], placeTags: [], seeds: [], dealtDays: [] };
 }
 
 export function normalizeMeanwhile(value: unknown): MeanwhileDocument {
@@ -207,6 +218,7 @@ export function normalizeMeanwhile(value: unknown): MeanwhileDocument {
     placeTags: list(value.placeTags).filter(
       (t): t is PlaceTags => isRecord(t) && typeof t.characterId === "string" && isRecord(t.byActivity),
     ),
+    dealtDays: list(value.dealtDays).filter((d): d is string => typeof d === "string"),
     seeds: list(value.seeds).filter(
       (s): s is Seed =>
         isRecord(s) && typeof s.id === "string" && typeof s.circleId === "string" && Array.isArray(s.cast),

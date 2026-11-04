@@ -24,6 +24,8 @@ const COPY = {
   new: "New Circle",
   empty: "No Circles yet. Make one to start.",
   showTimeline: "Timeline",
+  planned: "Planned:",
+  earlier: "earlier today",
   hideTimeline: "Hide timeline",
   now: "Now",
   nothingYet: "nothing yet",
@@ -418,6 +420,18 @@ function CircleCard({ circle, onEdit }: { circle: Circle; onEdit: () => void }) 
   );
 }
 
+// Plain words for the kind ids the deck deals.
+const KIND_LABELS: Record<string, string> = {
+  conflict: "a conflict",
+  luck: "a lucky break",
+  hobbies: "a hobby",
+  death: "a death",
+  breakup: "a breakup",
+  pregnancy: "a pregnancy",
+  "job loss": "a job loss",
+  "serious injury": "a serious injury",
+};
+
 function TimelinePanel({ circle }: { circle: Circle }) {
   const [open, setOpen] = useState(false);
   const [who, setWho] = useState("");
@@ -462,7 +476,8 @@ function TimelinePanel({ circle }: { circle: Circle }) {
               <span className="mw-label">{COPY.dealt}</span>
               {data.dealt.map((seed) => (
                 <div key={seed.id} className="mw-muted">
-                  Planned: {names(seed.cast)}, {seed.kind}, {seed.place}, {seed.time}
+                  {COPY.planned} {names(seed.cast)}, {KIND_LABELS[seed.kind] ?? seed.kind}, {seed.place}, {seed.time}
+                  {seed.time < data.nowTime ? ` (${COPY.earlier})` : ""}
                 </div>
               ))}
             </div>

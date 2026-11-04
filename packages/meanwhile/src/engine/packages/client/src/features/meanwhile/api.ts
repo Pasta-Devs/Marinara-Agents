@@ -123,6 +123,7 @@ export interface Timeline {
   events: TimelineEvent[];
   now: Record<string, { activity: string; place: string | null; until: string } | null>;
   today: string;
+  nowTime: string;
   dealt: { id: string; kind: string; cast: string[]; place: string; time: string }[];
 }
 

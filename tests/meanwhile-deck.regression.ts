@@ -6,6 +6,7 @@ import {
   type DayBlock,
 } from "../packages/meanwhile/src/engine/packages/server/src/services/meanwhile/deck.ts";
 import {
+  currentBlock,
   pickSchedule,
   placeOf,
   planLife,
@@ -100,6 +101,7 @@ const base = {
   seeds: [],
   haveIds: new Set<string>(),
   now: T0,
+  dealtDays: new Set<string>(),
 };
 const plan = planLife(base);
 const x = plan.events.filter((e) => e.cast[0] === "x");
@@ -108,18 +110,59 @@ assert.deepEqual(
   [["coffee", "cafe"]],
 ); // the Monday block replaces the default day
 assert.deepEqual(
-  plan.events.filter((e) => e.cast[0] === "y").map((e) => e.text),
-  [],
+  plan.events.filter((e) => e.cast[0] === "y").map((e) => [e.text, e.start]),
+  [["working", new Date(T0 + 8 * 3600_000).toISOString()]], // the 07:00 block in progress at 08:00 is stored, cut at 08:00
 ); // default day, but all its blocks start before chat truth 08:00 or after the window
 assert.ok(plan.events.every((e) => Date.parse(e.start) < T0 + 12 * 3600_000));
 assert.equal(planLife({ ...base, haveIds: new Set(plan.events.map((e) => e.id)) }).events.length, 0);
 
+// A day with no seeds is marked dealt and not dealt again; a block running past midnight is found.
+const solo = { ...base, circle: { ...base.circle, castIds: ["x"] }, chatTruth: {} };
+const noPairs = planLife({ ...solo, circle: { ...solo.circle, allowedKinds: ["friends"] } });
+assert.equal(noPairs.seeds.length, 0);
+assert.ok(noPairs.dealtDays.includes("k:2026-01-05"));
+assert.equal(planLife({ ...solo, dealtDays: new Set(noPairs.dealtDays) }).dealtDays.length, 0);
+const night = {
+  days: {
+    Sunday: [{ time: "22:00-06:00", activity: "sleeping" }],
+    Monday: [{ time: "09:00-10:00", activity: "coffee" }],
+  },
+};
+const nightPlan = planLife({ ...solo, schedules: { x: night } });
+assert.deepEqual(
+  nightPlan.events.map((e) => [e.text, e.start]),
+  [
+    ["sleeping", win.from],
+    ["coffee", new Date(T0 + 9 * 3600_000).toISOString()],
+  ],
+);
+
+// "Now" comes from the schedule.
+assert.deepEqual(currentBlock(night, T0 + 9.5 * 3600_000, "UTC"), {
+  activity: "coffee",
+  place: "cafe",
+  until: "10:00",
+});
+assert.deepEqual(currentBlock(night, T0 + 3 * 3600_000, "UTC"), {
+  activity: "sleeping",
+  place: "home",
+  until: "06:00",
+});
+assert.equal(currentBlock(night, T0 + 11 * 3600_000, "UTC"), null);
+
 async function main() {
   // Store flow: a failed save leaves the mark alone, a good run advances it, routine keeps 14 days, long absence adds a summary.
   let failSave = true;
+  let onRead: (() => Promise<void>) | null = null;
   const docs = new Map<string, any>();
   configureMeanwhileRuntime({
     logger: { warn: () => undefined },
+    resources: {
+      listCharacters: async () => {
+        await onRead?.();
+        return [];
+      },
+    },
     persistence: {
       listChats: async () => [],
       documents: {
@@ -143,8 +186,37 @@ async function main() {
   const start = defaultCircle("p", T1 - 10 * DAY);
   await updateMeanwhile((d) => ({
     ...d,
-    circles: [{ ...start, castIds: ["x"], connectionId: "m" }],
+    circles: [
+      { ...start, castIds: ["x"], connectionId: "m" },
+      { ...defaultCircle("q", T1 - 10 * DAY), clock: start.clock },
+    ],
+    seeds: [
+      {
+        id: "qs",
+        circleId: "q",
+        day: "2025-01-01",
+        kind: "work",
+        cast: [],
+        place: "cafe",
+        time: "10:00",
+        status: "dealt" as const,
+      },
+    ],
     events: [
+      {
+        id: "qold",
+        circleId: "q",
+        start: new Date(T1 - 20 * DAY).toISOString(),
+        end: "",
+        createdAt: 0,
+        cast: [],
+        kind: "routine",
+        weight: "routine",
+        text: "",
+        source: "schedule",
+        status: "accepted",
+        visibility: "circle",
+      },
       {
         id: "old",
         circleId: "p",
@@ -178,7 +250,7 @@ async function main() {
   await assert.rejects(runCircleNow("p", T1), /disk/);
   let doc = await readMeanwhile();
   assert.equal(doc.circles[0]!.lastRunCircle, start.lastRunCircle);
-  assert.equal(doc.events.length, 2);
+  assert.equal(doc.events.length, 3);
   failSave = false;
   assert.ok(await runCircleNow("p", T1 + 1000)); // the failed run set a backoff mark, but the lease is free
   doc = await readMeanwhile();
@@ -191,6 +263,24 @@ async function main() {
   assert.ok(!doc.events.some((e) => e.id === "old"));
   assert.ok(doc.events.some((e) => e.id === "keep"));
   assert.ok(doc.seeds.length > 0 && doc.placeTags.length === 1);
+  // Another Circle keeps its old routine events and seeds.
+  assert.ok(doc.events.some((e) => e.id === "qold"));
+  assert.ok(doc.seeds.some((s) => s.id === "qs"));
+  assert.ok(doc.dealtDays.some((k) => k.startsWith("p:")));
+
+  // A clock change during the run drops the result and frees the lease.
+  const before = doc.circles[0]!.lastRunCircle;
+  onRead = async () => {
+    await updateMeanwhile((d) => ({
+      ...d,
+      circles: d.circles.map((c) => (c.id === "p" ? { ...c, clock: { ...c.clock, speed: 24 } } : c)),
+    }));
+  };
+  assert.ok(await runCircleNow("p", T1 + 2 * DAY));
+  doc = await readMeanwhile();
+  assert.equal(doc.circles[0]!.lastRunCircle, before);
+  assert.equal(doc.circles[0]!.clock.speed, 24);
+  assert.equal(doc.marks.find((m) => m.circleId === "p")!.leaseUntil, 0);
 }
 
 main().then(() => console.log("Meanwhile deck and routine tests passed."));

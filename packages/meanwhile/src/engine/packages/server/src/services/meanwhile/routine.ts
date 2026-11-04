@@ -51,7 +51,7 @@ export function placeOf(activity: string): string {
 /** "06:00-08:00" to minutes. A range that ends before it starts runs past midnight. */
 function parseBlock(time: string): { start: number; end: number } | null {
   const m = /^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$/.exec(time.trim());
-  if (!m || +m[1]! > 24 || +m[3]! > 24 || +m[2]! > 59 || +m[4]! > 59) return null;
+  if (!m || +m[1]! > 23 || +m[3]! > 23 || +m[2]! > 59 || +m[4]! > 59) return null;
   const start = +m[1]! * 60 + +m[2]!;
   const end = +m[3]! * 60 + +m[4]!;
   return { start, end: end <= start ? end + 1440 : end };
@@ -122,8 +122,9 @@ export function planLife(input: {
   tags: PlaceTags[];
   seeds: readonly Seed[];
   haveIds: ReadonlySet<string>;
+  dealtDays: ReadonlySet<string>; // "circleId:day" for every day already dealt, even with zero seeds
   now: number;
-}): { events: LifeEvent[]; seeds: Seed[]; tags: PlaceTags[] } {
+}): { events: LifeEvent[]; seeds: Seed[]; tags: PlaceTags[]; dealtDays: string[] } {
   const { circle, window } = input;
   const tz = circle.clock.timezone;
   const fromMs = Date.parse(window.from);
@@ -154,8 +155,11 @@ export function planLife(input: {
     }
   }
 
+  const firstDay = msToWall(fromMs, tz).slice(0, 10);
   const lastDay = msToWall(toMs, tz).slice(0, 10);
-  for (let day = msToWall(fromMs, tz).slice(0, 10); day <= lastDay; day = shiftDay(day, 1)) {
+  const dealtDays: string[] = [];
+  // Starts a day early so a block that runs past midnight and is still going at `from` is found.
+  for (let day = shiftDay(firstDay, -1); day <= lastDay; day = shiftDay(day, 1)) {
     const byChar: Record<string, DayBlock[]> = {};
     for (const id of circle.castIds) {
       const byActivity = tags.get(id)!.byActivity;
@@ -166,14 +170,17 @@ export function planLife(input: {
       const from = Math.max(fromMs, input.chatTruth[id] ?? 0);
       for (const b of byChar[id]!) {
         const start = wallToMs(`${day}T${hhmm(b.start)}`, tz);
-        if (start === null || start < from || start >= toMs) continue;
+        if (start === null || start >= toMs) continue;
+        const end = start + (b.end - b.start) * 60_000;
+        if (end <= from) continue;
+        // The id uses the block's own start, so a block already stored by an earlier run is not stored again.
         const eventId = `r:${circle.id}:${id}:${start}`;
         if (input.haveIds.has(eventId)) continue;
         events.push({
           id: eventId,
           circleId: circle.id,
-          start: new Date(start).toISOString(),
-          end: new Date(start + (b.end - b.start) * 60_000).toISOString(),
+          start: new Date(Math.max(start, from)).toISOString(), // a block in progress is cut at `from`
+          end: new Date(end).toISOString(),
           createdAt: input.now,
           cast: [id],
           place: b.place,
@@ -186,10 +193,35 @@ export function planLife(input: {
         });
       }
     }
-    if (known.some((s) => s.circleId === circle.id && s.day === day)) continue;
+    const marker = `${circle.id}:${day}`;
+    if (day < firstDay || input.dealtDays.has(marker) || known.some((s) => s.circleId === circle.id && s.day === day))
+      continue;
     const cards = dealDay({ circle, day, blocks: byChar, recent: known });
     known.push(...cards);
     dealt.push(...cards);
+    dealtDays.push(marker);
   }
-  return { events, seeds: dealt, tags: [...tags.values()] };
+  return { events, seeds: dealt, tags: [...tags.values()], dealtDays };
+}
+
+/** The block a character is in at a Circle time, read from the schedule. Null when none matches. */
+export function currentBlock(
+  schedule: unknown,
+  nowMs: number,
+  tz: string,
+  byActivity: Record<string, string> = {},
+): { activity: string; place: string; until: string } | null {
+  const wall = msToWall(nowMs, tz);
+  const day = wall.slice(0, 10);
+  const minute = +wall.slice(11, 13) * 60 + +wall.slice(14, 16);
+  // Yesterday's blocks can run past midnight, so they are checked with a 1440 minute shift.
+  for (const [d, shift] of [
+    [day, 0],
+    [shiftDay(day, -1), 1440],
+  ] as const) {
+    const b = blocksFor(schedule, d).find((x) => x.start - shift <= minute && minute < x.end - shift);
+    if (b)
+      return { activity: b.activity, place: byActivity[b.activity] ?? placeOf(b.activity), until: hhmm(b.end - shift) };
+  }
+  return null;
 }
