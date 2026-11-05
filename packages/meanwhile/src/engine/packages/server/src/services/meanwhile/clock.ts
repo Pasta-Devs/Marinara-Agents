@@ -122,19 +122,22 @@ function offsetMs(ms: number, tz: string): number {
 }
 
 /** What a run covers. Null when no Circle time has passed since the last run. */
-export function runWindow(lastRunMs: number, nowMs: number): RunWindow | null {
+export function runWindow(lastRunMs: number, nowMs: number, keepMs = LONG_ABSENCE_DAYS * DAY): RunWindow | null {
   if (!(nowMs > lastRunMs)) return null;
-  const cut = nowMs - LONG_ABSENCE_DAYS * DAY;
+  const cut = nowMs - keepMs;
   const iso = (ms: number) => new Date(ms).toISOString();
   if (lastRunMs >= cut) return { from: iso(lastRunMs), to: iso(nowMs), summary: null };
   return { from: iso(cut), to: iso(nowMs), summary: { from: iso(lastRunMs), to: iso(cut) } };
 }
 
-/** Fast forward: every day of the span gets beats, so it never turns into a long-absence summary. */
+/**
+ * Fast forward: every day of the span gets beats, so a long span never turns into a summary. A Circle that
+ * was already behind keeps the long-absence summary for the days before the span (a gap under one day is
+ * not worth a call).
+ */
 export function fastForwardWindow(lastRunMs: number, nowMs: number, spanMs: number): RunWindow | null {
-  const from = Math.max(lastRunMs, nowMs - spanMs);
-  if (!(nowMs > from)) return null;
-  return { from: new Date(from).toISOString(), to: new Date(nowMs).toISOString(), summary: null };
+  const window = runWindow(lastRunMs, nowMs, Math.max(spanMs, LONG_ABSENCE_DAYS * DAY));
+  return window?.summary && Date.parse(window.summary.to) - lastRunMs < DAY ? { ...window, summary: null } : window;
 }
 
 /** Same shape as Slurp2's poll backoff: 5 min, 10, 20, then 30 min. */

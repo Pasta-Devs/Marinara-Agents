@@ -120,7 +120,7 @@ function motifs(w: World, toMs: number): string[] {
 }
 
 /** One filled beat for the first seed, with that seed's own cast numbers, so the model copies the shape. */
-function exampleBeat(w: World, seed: Seed): string {
+function exampleBeat(w: World, seed: Seed, withKept = false): string {
   const nums = seed.cast.map((id) => castNumber(w.circle, id));
   const names = seed.cast.map((id) => w.cast[id]?.name ?? "Someone");
   return JSON.stringify({
@@ -130,6 +130,7 @@ function exampleBeat(w: World, seed: Seed): string {
     text: `${names.join(" and ")} spend half an hour at the ${seed.place}.`,
     diary: { [nums[0]!]: `That half hour at the ${seed.place} was the best part of my day.` },
     hook: { [nums[0]!]: `Wants to show you what they found at the ${seed.place}` },
+    ...(withKept ? { kept: [1] } : {}),
   });
 }
 
@@ -164,6 +165,8 @@ export function bannedWords(personas: string[], castNames: string[], secondPerso
 }
 
 export interface BeatCheck {
+  /** How many promises the beat call listed. */
+  promiseCount: number;
   circle: Circle;
   day: string;
   labels: ReadonlyMap<string, Seed>;
@@ -185,7 +188,7 @@ const minutes = (v: unknown) => {
 };
 
 /** One model beat against its seed. Returns the event, or the reason it was rejected. */
-export function checkBeat(raw: unknown, c: BeatCheck): { label: string; event: LifeEvent } | string {
+export function checkBeat(raw: unknown, c: BeatCheck): { label: string; event: LifeEvent; kept: number[] } | string {
   if (!isRecord(raw)) return "A beat must be an object";
   const label = String(raw.seed);
   const seed = c.labels.get(label);
@@ -227,7 +230,12 @@ export function checkBeat(raw: unknown, c: BeatCheck): { label: string; event: L
   if (typeof diary === "string") return diary;
   if (typeof hook === "string") return hook;
   const major = BIG_KINDS.includes(seed.kind);
+  // The promises this beat says it carries out.
+  const kept = Array.isArray(raw.kept)
+    ? [...new Set(raw.kept.filter((n): n is number => Number.isInteger(n) && n >= 1 && n <= c.promiseCount))]
+    : [];
   return {
+    kept,
     label,
     event: {
       id: `b:${seed.id}`,
@@ -259,7 +267,7 @@ async function beatDay(w: World, gate: Gate, day: string, seeds: Seed[], toMs: n
   // Open promises that are due by this day, in the model's cast numbers.
   const due = w.promises.filter((p) => p.circleId === circle.id && p.status === "open" && p.due <= day);
   const base = beatMessages({
-    promises: due.map((p) => `${castNumber(circle, p.characterId)}: ${line(p.text)}`),
+    promises: due.map((p, n) => `P${n + 1} (${castNumber(circle, p.characterId)}): ${line(p.text)}`),
     setting: circle.setting,
     day,
     weekday: new Date(`${day}T00:00:00Z`).toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" }),
@@ -277,10 +285,11 @@ async function beatDay(w: World, gate: Gate, day: string, seeds: Seed[], toMs: n
     pace: circle.pace,
     kinds: [...kinds],
     spicy: circle.allowedKinds.includes("spicy"),
-    example: exampleBeat(w, [...labels][0]![1]),
+    example: exampleBeat(w, [...labels][0]![1], due.length > 0),
   });
   const castNames = circle.castIds.map((id) => w.cast[id]?.name ?? "");
   const check: BeatCheck = {
+    promiseCount: due.length,
     circle,
     day,
     labels,
@@ -293,6 +302,7 @@ async function beatDay(w: World, gate: Gate, day: string, seeds: Seed[], toMs: n
     toMs,
   };
   const accepted = new Map<string, LifeEvent>();
+  const keptBy = new Map<string, number[]>();
   let messages = base;
   for (let attempt = 0; attempt < 2; attempt++) {
     const data = await gate.complete(messages, 1200);
@@ -307,6 +317,7 @@ async function beatDay(w: World, gate: Gate, day: string, seeds: Seed[], toMs: n
       if (typeof result === "string") errors.push(result);
       else {
         accepted.set(result.label, result.event);
+        keptBy.set(result.event.id, result.kept);
         check.used.add(result.label);
       }
     }
@@ -324,10 +335,11 @@ async function beatDay(w: World, gate: Gate, day: string, seeds: Seed[], toMs: n
     }
     if (e.hook && !Object.keys(e.hook).length) delete e.hook;
   }
-  // A promise that has a beat for its character is kept; the event carries the anchor so an edit can mark it stale.
+  // Only a beat that names a promise (kept) takes its anchor and visibility, and marks it kept.
   for (const e of events) {
-    for (const p of due) {
-      if (!e.cast.includes(p.characterId)) continue;
+    for (const n of keptBy.get(e.id) ?? []) {
+      const p = due[n - 1];
+      if (!p || !e.cast.includes(p.characterId)) continue;
       e.anchors = [...(e.anchors ?? []), p.anchor];
       if (e.visibility === "circle") e.visibility = p.visibility;
       p.status = "kept";

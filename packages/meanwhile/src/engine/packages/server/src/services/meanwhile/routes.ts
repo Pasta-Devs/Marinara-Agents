@@ -380,8 +380,9 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
     circle: Circle,
     src: Record<string, unknown>,
   ) => Promise<LifeEvent | { code: number; error: string }>;
+  // `from` is checked again inside the write, so an expiry or a second click between read and write gives a 409.
   const changeEvent =
-    (change: Change) =>
+    (from: LifeEvent["status"][], change: Change) =>
     async (
       request: { params: { id: string; eventId: string }; body?: unknown },
       reply: Parameters<typeof notFound>[0],
@@ -392,17 +393,24 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
       if (!circle || !event) return notFound(reply);
       const next = await change(event, circle, body(request));
       if ("error" in next) return reply.code(next.code).send({ error: next.error });
-      await updateMeanwhile((d) => ({
-        ...d,
-        events: d.events.map((e) => (e.id === next.id ? { ...e, text: next.text, status: next.status } : e)),
-      }));
-      return { ok: true };
+      let moved = false;
+      await updateMeanwhile((d) => {
+        const now = d.events.find((e) => e.id === next.id);
+        moved = !now || !from.includes(now.status);
+        return moved
+          ? d
+          : {
+              ...d,
+              events: d.events.map((e) => (e.id === next.id ? { ...e, text: next.text, status: next.status } : e)),
+            };
+      });
+      return moved ? reply.code(409).send({ error: "This event changed. Reload and try again." }) : { ok: true };
     };
   type EventParams = { Params: { id: string; eventId: string } };
 
   app.post<EventParams>(
     "/circles/:id/events/:eventId/accept",
-    changeEvent(async (e) =>
+    changeEvent(["proposed"], async (e) =>
       e.status === "proposed"
         ? { ...e, status: "accepted" }
         : { code: 409, error: "Only an event that waits can be accepted" },
@@ -410,7 +418,7 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
   );
   app.post<EventParams>(
     "/circles/:id/events/:eventId/veto",
-    changeEvent(async (e) =>
+    changeEvent(["proposed", "accepted"], async (e) =>
       e.status === "proposed" || e.status === "accepted"
         ? { ...e, status: "vetoed" }
         : { code: 409, error: "This event is already gone" },
@@ -418,7 +426,7 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
   );
   app.patch<EventParams>(
     "/circles/:id/events/:eventId",
-    changeEvent(async (e, circle, src) => {
+    changeEvent(["accepted", "proposed"], async (e, circle, src) => {
       const text = typeof src.text === "string" ? src.text.trim().replace(/\s+/g, " ") : "";
       if (e.weight !== "notable" && e.weight !== "major")
         return { code: 409, error: "Only notable and major events can be edited" };

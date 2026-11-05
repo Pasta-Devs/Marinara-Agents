@@ -161,6 +161,8 @@ export interface Estimate {
   calls: number;
   left: number;
   overBudget: boolean;
+  /** Days the Circle was already behind, covered by one summary. */
+  missed: number;
 }
 
 export const previewFastForward = (id: string, span: Span) =>

@@ -6,6 +6,7 @@ import {
   ffStatus,
   previewFastForward,
   runCircleNow,
+  runDuePass,
   startFastForward,
 } from "../packages/meanwhile/src/engine/packages/server/src/services/meanwhile/scheduler.ts";
 import {
@@ -46,6 +47,12 @@ let beatPrompts: string[] = [];
 let promiseCalls = 0;
 let promiseAnswer: unknown = { promises: [] };
 let onBeatCall: (() => void) | null = null;
+// Beats name a promise (kept) only in this mode: the first beat that has cast number 0 in it.
+let keepMode = false;
+let hold: Promise<void> | null = null;
+let active = 0;
+let maxActive = 0;
+let race: { left: number; fn: () => void } | null = null;
 const warnings: string[] = [];
 
 configureMeanwhileRuntime({
@@ -63,6 +70,7 @@ configureMeanwhileRuntime({
           promiseCalls += 1;
           return reply(promiseAnswer);
         }
+        if (msgs[0]!.content.startsWith("You summarise")) return reply({ text: "Time passed quietly.", diary: {} });
         const lines = msgs
           .at(-1)!
           .content.split("\n")
@@ -70,6 +78,11 @@ configureMeanwhileRuntime({
         if (!lines.length) return reply({});
         beatPrompts.push(msgs.map((m) => m.content).join("\n"));
         onBeatCall?.();
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        if (hold) await hold;
+        active -= 1;
+        let keptGiven = false;
         const beats = lines.map((l) => {
           const s = JSON.parse(l) as { seed: string; time: string; cast: number[] };
           const m = Number(s.time.slice(0, 2)) * 60 + Number(s.time.slice(3)) + 30;
@@ -80,6 +93,9 @@ configureMeanwhileRuntime({
             end: `${pad(Math.floor(m / 60) % 24)}:${pad(m % 60)}`,
             text: "They met up.",
             hook: { [s.cast[0]!]: "met up" },
+            ...(keepMode && !keptGiven && s.cast.includes(0) && msgs.at(-1)!.content.includes("P1 (")
+              ? ((keptGiven = true), { kept: [1] })
+              : {}),
           };
         });
         return reply({ beats });
@@ -100,7 +116,13 @@ configureMeanwhileRuntime({
     getChat: async () => null,
     listMessages: async () => messages,
     documents: {
-      getById: async (_p: string, id: string) => docs.get(id) ?? null,
+      getById: async (_p: string, id: string) => {
+        if (race && --race.left === 0) {
+          race.fn();
+          race = null;
+        }
+        return docs.get(id) ?? null;
+      },
       create: async (input: any) => (docs.set(input.id, { ...input, revision: 1 }), docs.get(input.id)),
       update: async (input: any) => {
         const doc = docs.get(input.id);
@@ -129,6 +151,10 @@ async function reset(c: Circle, events: LifeEvent[] = []) {
   promiseCalls = 0;
   beatPrompts = [];
   onBeatCall = null;
+  keepMode = false;
+  hold = null;
+  race = null;
+  maxActive = 0;
   await updateMeanwhile((d) => ({ ...d, circles: [c], events }));
 }
 const settled = async (id: string) => {
@@ -215,6 +241,47 @@ async function fastForwardCases() {
   doc = await readMeanwhile();
   assert.ok(calls > 1 && doc.usage[0]!.calls === calls);
   assert.equal(doc.beatDays.length, estimate.days);
+
+  // A timer pass while a fast forward holds the lease skips the Circle: one run at a time.
+  await reset(circle());
+  let release!: () => void;
+  hold = new Promise<void>((resolve) => (release = resolve));
+  assert.ok(await startFastForward("q", 2 * DAY, false, REAL0));
+  while (!beatPrompts.length) await new Promise((r) => setTimeout(r, 5));
+  const during = calls;
+  assert.deepEqual(await runDuePass(REAL0), []);
+  assert.equal(calls, during);
+  hold = null;
+  release();
+  await settled("q");
+  assert.equal(maxActive, 1);
+
+  // x24: the clock re-anchors at the real time of the jump and keeps its speed.
+  await reset(
+    circle({
+      clock: { anchorCircle: iso(T0 + HOUR), anchorReal: REAL0, speed: 24, timezone: "UTC" },
+      lastRunCircle: iso(T0 + DAY + HOUR),
+    }),
+  );
+  const later = REAL0 + HOUR; // one real hour = one Circle day at x24
+  assert.ok(await startFastForward("q", 2 * DAY, false, later));
+  await settled("q");
+  const fast = (await readMeanwhile()).circles[0]!;
+  assert.equal(fast.clock.speed, 24);
+  assert.equal(fast.clock.anchorReal, later);
+  assert.equal(fast.clock.anchorCircle, iso(T0 + HOUR + 3 * DAY));
+  assert.equal(fast.lastRunCircle, fast.clock.anchorCircle);
+
+  // A Circle that was already behind keeps a summary for the days before the span, and the preview says so.
+  await reset(circle({ lastRunCircle: iso(T0 - 10 * DAY) }));
+  const behind = (await previewFastForward("q", 2 * DAY, REAL0))!;
+  assert.equal(behind.missed, 9);
+  assert.ok(await startFastForward("q", 2 * DAY, false, REAL0));
+  await settled("q");
+  doc = await readMeanwhile();
+  assert.ok(doc.events.some((e) => e.weight === "summary" && e.text === "Time passed quietly."));
+  assert.equal(calls, behind.calls);
+  assert.equal(doc.circles[0]!.lastRunCircle, doc.circles[0]!.clock.anchorCircle);
 }
 
 async function reviewCases() {
@@ -276,9 +343,27 @@ async function reviewCases() {
     seeded.every((e) => !e.cast.includes("y")),
     "y has an event that waits",
   );
+  // Expiry or a second click between read and write: the status is checked again inside the write.
+  const veto = (id: string) => () => {
+    const stored = [...docs.values()][0];
+    stored.data = {
+      ...stored.data,
+      events: stored.data.events.map((e: LifeEvent) => (e.id === id ? { ...e, status: "vetoed" } : e)),
+    };
+  };
+  await reset(circle(), [event({ id: "big", kind: "death", weight: "major", status: "proposed", hook: undefined })]);
+  race = { left: 2, fn: veto("big") };
+  const lost = await call("POST", "/circles/:id/events/:eventId/accept", { id: "q", eventId: "big" });
+  assert.equal(lost.status, 409);
+  assert.equal(await statusOf("big"), "vetoed", "the accept did not bring it back");
+  await reset(circle(), [event({ id: "ok" })]);
+  race = { left: 2, fn: veto("ok") };
+  assert.equal((await edit("ok", "Lily found a ring.")).status, 409);
+  assert.equal((await readMeanwhile()).events[0]!.text, "Lily found a coin.");
 }
 
 async function promiseCases() {
+  let doc: Awaited<ReturnType<typeof readMeanwhile>>;
   chatCount = 1;
   const clock = { anchorCircle: iso(T0 + 2 * DAY + 12 * HOUR), anchorReal: REAL0, speed: 1, timezone: "UTC" };
   const msg = (content: string) => ({
@@ -297,9 +382,10 @@ async function promiseCases() {
 
   for (const shared of [false, true]) {
     await reset(circle({ clock, linkedChatIds: ["c1"], sharedWorld: shared }));
+    keepMode = true;
     messages = [msg("I'm seeing Mia tomorrow")];
     assert.ok(await runCircleNow("q", REAL0));
-    let doc = await readMeanwhile();
+    doc = await readMeanwhile();
     assert.equal(promiseCalls, 1);
     assert.equal(doc.promises.length, 1, "the bad entry is dropped");
     const p = doc.promises[0]!;
@@ -307,11 +393,18 @@ async function promiseCases() {
     assert.deepEqual(p.anchor, { chatId: "c1", messageId: "m1" });
     assert.equal(doc.promisePass.c1, Date.parse(messages[0]!.createdAt));
     // The beat call for the due day gets the line, and the beat that follows keeps the promise.
-    assert.ok(beatPrompts.some((t) => t.includes("They said they would:\n0: Lily sees Mia.")));
+    assert.ok(beatPrompts.some((t) => t.includes("They said they would:\nP1 (0): Lily sees Mia.")));
     assert.equal(p.status, "kept");
     const built = doc.events.filter((e) => e.anchors?.some((a) => a.messageId === "m1"));
     assert.ok(built.length > 0);
     assert.ok(built.every((e) => e.visibility === p.visibility));
+    // Only the beat that names the promise takes its visibility. Other events, also of Mia, stay Circle-wide.
+    const others = doc.events.filter((e) => e.source === "generated" && !e.anchors?.length);
+    assert.ok(others.length > 0 && others.every((e) => e.visibility === "circle"));
+    assert.ok(
+      others.some((e) => e.cast.includes("y")),
+      "an event of Mia without the promise stays Circle-wide",
+    );
     // The promise pass counted as a call and costs nothing when no chat has a newer message.
     const before = promiseCalls;
     await updateMeanwhile((d) => ({
@@ -342,6 +435,31 @@ async function promiseCases() {
       doc.events.filter((e) => e.anchors?.some((a) => a.messageId === "m1")).every((e) => e.status === "stale"),
     );
   }
+
+  // A beat that does not name the promise leaves it open, and the next day's prompt lists it again.
+  promiseAnswer = { promises: [{ who: 0, m: 1, text: "Lily sees Mia.", due: "2026-01-06" }] };
+  await reset(circle({ clock: { ...clock, anchorCircle: iso(T0 + DAY + 12 * HOUR) }, linkedChatIds: ["c1"] }));
+  messages = [msg("I'm seeing Mia tomorrow")];
+  await runCircleNow("q", REAL0);
+  await updateMeanwhile((d) => ({
+    ...d,
+    circles: d.circles.map((c) => ({
+      ...c,
+      clock: { ...c.clock, anchorCircle: iso(T0 + 3 * DAY + 12 * HOUR) },
+      lastRunCircle: iso(T0 + DAY + 12 * HOUR),
+    })),
+  }));
+  await runCircleNow("q", REAL0);
+  doc = await readMeanwhile();
+  assert.equal(doc.promises[0]!.status, "open");
+  assert.ok(beatPrompts.filter((t) => t.includes("P1 (0): Lily sees Mia.")).length >= 2);
+  assert.ok(doc.events.every((e) => !e.anchors?.length));
+  promiseAnswer = {
+    promises: [
+      { who: 0, m: 1, text: "Lily sees Mia.", due: "2026-01-06" },
+      { who: 7, m: 1, text: "bad" },
+    ],
+  };
 
   // A deleted message is stale as well.
   await reset(circle({ clock, linkedChatIds: ["c1"] }));

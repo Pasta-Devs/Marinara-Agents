@@ -30,6 +30,11 @@ async function readChat(chatId: string): Promise<Message[] | null> {
   }
 }
 
+/** Every linked chat once per run, shared by the stale check and the promise pass. Null = unreadable. */
+export async function readChats(circle: Circle): Promise<Map<string, Message[] | null>> {
+  return new Map(await Promise.all(circle.linkedChatIds.map(async (id) => [id, await readChat(id)] as const)));
+}
+
 /**
  * One small model call when a linked chat has messages newer than the last pass. Returns the new promises and
  * the new pass marks, or null when there was nothing to read or no budget left (the pass stays where it was).
@@ -41,13 +46,14 @@ export async function askPromises(
   pass: Record<string, number>,
   gate: Gate,
   nowMs: number,
+  chats: Map<string, Message[] | null>,
 ): Promise<{ promises: PromiseRecord[]; pass: Record<string, number> } | null> {
   const tz = circle.clock.timezone;
   const fresh: { chatId: string; m: Message }[] = [];
   const marks = { ...pass };
   for (const chatId of circle.linkedChatIds) {
     const seen = pass[chatId] ?? 0;
-    for (const m of (await readChat(chatId)) ?? []) {
+    for (const m of chats.get(chatId) ?? []) {
       const at = Date.parse(m.createdAt);
       if (!(at > seen) || !textOf(m).trim()) continue;
       fresh.push({ chatId, m });
@@ -57,6 +63,7 @@ export async function askPromises(
   if (!fresh.length || gate.left() < 1) return null;
   fresh.sort((a, b) => Date.parse(a.m.createdAt) - Date.parse(b.m.createdAt));
   // Newest first until the cap, then back in time order.
+  // ponytail: messages dropped by the cap are never read (the pass mark moves past them); chunk the read if that loses plans.
   const picked: typeof fresh = [];
   let size = 0;
   for (const f of [...fresh].reverse()) {
@@ -67,6 +74,7 @@ export async function askPromises(
   const speaker = (m: Message) => (m.role === "user" ? "User" : (cast[m.characterId ?? ""]?.name ?? "Narrator"));
   const lines = picked.map((f, n) => `m${n + 1} ${speaker(f.m)}: ${textOf(f.m).replace(/\s+/g, " ").slice(0, 1200)}`);
   const today = msToWall(nowMs, tz).slice(0, 10);
+  const latest = shiftDay(today, 30);
   const data = await gate.complete(
     promiseMessages({
       setting: circle.setting,
@@ -91,7 +99,9 @@ export async function askPromises(
       circleId: circle.id,
       characterId,
       text,
-      due: typeof raw.due === "string" && DAY_RE.test(raw.due) ? raw.due : today,
+      // Today to 30 days ahead; anything else counts as today.
+      due:
+        typeof raw.due === "string" && DAY_RE.test(raw.due) && raw.due >= today && raw.due <= latest ? raw.due : today,
       visibility: circle.sharedWorld ? "circle" : `chat:${source.chatId}`,
       anchor: { chatId: source.chatId, messageId: source.m.id },
       hash: hashText(textOf(source.m)),
@@ -110,6 +120,7 @@ export async function staleAnchors(
   circle: Circle,
   promises: readonly PromiseRecord[],
   nowMs: number,
+  chats: Map<string, Message[] | null>,
 ): Promise<Set<string>> {
   const tz = circle.clock.timezone;
   const since = shiftDay(msToWall(nowMs, tz).slice(0, 10), -CHECK_DAYS);
@@ -118,7 +129,7 @@ export async function staleAnchors(
   );
   const stale = new Set<string>();
   for (const chatId of new Set(mine.map((p) => p.anchor.chatId))) {
-    const messages = await readChat(chatId);
+    const messages = chats.get(chatId);
     if (!messages) continue;
     const byId = new Map(messages.map((m) => [m.id, textOf(m)]));
     for (const p of mine) {

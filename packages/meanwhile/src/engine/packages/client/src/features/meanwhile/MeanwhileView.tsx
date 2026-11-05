@@ -72,8 +72,8 @@ const COPY = {
   ffRun: "Run",
   ffGo: "Go on anyway",
   ffStop: "Stop after this day",
-  ffEstimate: (days: number, calls: number, left: number) =>
-    `${days} ${days === 1 ? "day" : "days"} with events. ${calls} model ${calls === 1 ? "call" : "calls"}. ${Math.max(0, left)} left today.`,
+  ffEstimate: (days: number, calls: number, left: number, missed: number) =>
+    `${missed ? `Also covers ${missed} days you missed (summary). ` : ""}${days} ${days === 1 ? "day" : "days"} with events. ${calls} model ${calls === 1 ? "call" : "calls"}. ${Math.max(0, left)} left today.`,
   ffOver: (calls: number, left: number) => `This uses ${calls} of ${Math.max(0, left)} calls left today. Go on?`,
   ffProgress: (done: number, total: number) => `Running: ${done} of ${total} days done.`,
   promises: "Promises",
@@ -566,7 +566,7 @@ function FastForwardPanel({ circle }: { circle: Circle }) {
               <div className={data.overBudget ? "mw-warn" : "mw-muted"}>
                 {data.overBudget
                   ? COPY.ffOver(data.calls, data.left)
-                  : COPY.ffEstimate(data.days, data.calls, data.left)}
+                  : COPY.ffEstimate(data.days, data.calls, data.left, data.missed)}
               </div>
               <button
                 type="button"

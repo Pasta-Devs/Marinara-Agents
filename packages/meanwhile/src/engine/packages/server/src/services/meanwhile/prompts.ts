@@ -46,6 +46,11 @@ export function beatMessages(i: BeatInput): Msg[] {
         "Write one beat per seed and use each seed once. Keep start within an hour of the seed time and end after start on the same day.",
         "text is one plain third-person sentence of at most 140 characters. diary is one first-person line. Write each line in that character's own voice. hook is a concrete thing the character wants to share or ask, under 12 words. diary and hook are optional. Their keys are cast numbers from the seed.",
         "Vary openings: no two beats start with the same name or verb.",
+        ...(i.promises.length
+          ? [
+              'A beat that carries out a promise lists its number in kept, for example "kept":[1]. Leave kept out otherwise.',
+            ]
+          : []),
         "The user is not in these events. Never name or address the user.",
         `Pace: ${i.pace}. Allowed kinds: ${i.kinds.join(", ")}.`,
         i.spicy ? "Spicy events are allowed. Write them fade-to-black." : "No sexual content.",

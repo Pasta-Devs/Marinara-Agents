@@ -39,7 +39,7 @@ import {
   type World,
 } from "./beats.js";
 import { markDelivered } from "./context.js";
-import { applyStale, askPromises, dropOld, hasNewMessages, staleAnchors } from "./promises.js";
+import { applyStale, askPromises, dropOld, hasNewMessages, readChats, staleAnchors } from "./promises.js";
 import type { Seed } from "./deck.js";
 
 /** Claims the lease for one Circle. Returns false when another run holds it. */
@@ -214,9 +214,10 @@ async function finish(circleId: string, now: number, opts: FinishOpts = {}): Pro
           });
         }
         if (start.linkedChatIds.length) {
-          staleSet = await staleAnchors(start, promises, to);
+          const chats = await readChats(start);
+          staleSet = await staleAnchors(start, promises, to, chats);
           promises = applyStale(promises, [], staleSet).promises;
-          const asked = await askPromises(start, inputs.cast, first.promisePass, gate, to);
+          const asked = await askPromises(start, inputs.cast, first.promisePass, gate, to, chats);
           if (asked) {
             const have = new Set(promises.map((p) => p.id));
             promises = [...promises, ...asked.promises.filter((p) => !have.has(p.id))];
@@ -381,7 +382,11 @@ export async function previewFastForward(circleId: string, spanMs: number, now =
   const to = circleNowMs(circle.clock, now) + spanMs;
   const window = fastForwardWindow(Date.parse(circle.lastRunCircle), to, spanMs);
   const left = circle.budgetCallsPerDay - usageRow(doc.usage, circleId, now).calls;
-  if (!window) return { days: 0, calls: 0, left };
+  if (!window) return { days: 0, calls: 0, left, missed: 0 };
+  // Days before the span that the Circle was already behind: one summary call.
+  const missed = window.summary
+    ? Math.round((Date.parse(window.summary.to) - Date.parse(window.summary.from)) / DAY)
+    : 0;
   const lapsed = (e: LifeEvent) => e.status === "proposed" && Date.parse(e.end) < to - PROPOSAL_DAYS * DAY;
   const plan = planLife({
     ...lifeInput(doc, circle, window, await readSchedules(circle), now, lapsed),
@@ -393,7 +398,7 @@ export async function previewFastForward(circleId: string, spanMs: number, now =
   const beats = days.filter((d) => seeds.some((s) => s.circleId === circleId && s.day === d)).length;
   const places = plan.tags.some((t) => !t.asked && Object.values(t.byActivity).includes("unknown")) ? 1 : 0;
   const promises = (await hasNewMessages(circle, doc.promisePass)) ? 1 : 0;
-  return { days: days.length, calls: beats + places + promises, left };
+  return { days: days.length, calls: beats + places + promises + (missed ? 1 : 0), left, missed };
 }
 
 /**
@@ -417,7 +422,9 @@ export async function startFastForward(
       ),
     }));
   } catch (error) {
-    ff.running = false; // ponytail: the lease stays until it expires (30 min), release it here if that hurts
+    ff.running = false;
+    // Best effort: free the lease, or the Circle waits 30 minutes.
+    await updateMeanwhile((doc) => withMark(doc, { ...markOf(doc, circleId), leaseUntil: 0 })).catch(() => undefined);
     throw error;
   }
   const logger = getMeanwhileRuntime().logger;
