@@ -2,7 +2,34 @@
 import { DAY } from "./clock.js";
 import { BRING_UP, CONTEXT_FRAME } from "./prompts.js";
 import { SUMMARY_PLACEHOLDER, cardInfo } from "./routine.js";
-import { getMeanwhileRuntime, readMeanwhile, updateMeanwhile, type MeanwhileDocument } from "./store.js";
+import {
+  getMeanwhileRuntime,
+  readMeanwhile,
+  updateMeanwhile,
+  type Circle,
+  type LifeEvent,
+  type MeanwhileDocument,
+} from "./store.js";
+
+/**
+ * Surprise mode (slice 6e): the one place that says what the dashboard hides. An accepted notable, major or
+ * summary event, or any event with a hook, stays hidden until a chat prompt took it (`delivered`) or the user
+ * picked it up. Routine events, big events in review and the "Time passed." placeholder stay visible.
+ * Every route that shows events filters with this; prompt context ignores it.
+ */
+export function hiddenBySurprise(circle: Circle, e: LifeEvent): boolean {
+  return (
+    circle.surprise &&
+    e.status === "accepted" &&
+    e.text !== SUMMARY_PLACEHOLDER &&
+    e.weight !== "routine" &&
+    !Object.keys(e.delivered ?? {}).length &&
+    !Object.keys(e.pickedUp ?? {}).length
+  );
+}
+
+export const countHidden = (doc: MeanwhileDocument, circle: Circle): number =>
+  doc.events.filter((e) => e.circleId === circle.id && hiddenBySurprise(circle, e)).length;
 
 const MAX_ITEMS = 3;
 const LINE_MAX = 160;
