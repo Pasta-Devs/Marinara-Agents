@@ -29,12 +29,19 @@ jobs:
 
           if [ "$BASE_REF" = "main" ] &&
              [ "$AUTHOR_LOGIN" = "SpicyMarinara" ] &&
-             [ "$HEAD_REPO" = "$REPOSITORY" ] &&
-             [ "$HEAD_REF" = "staging" ]; then
-            exit 0
+             [ "$HEAD_REPO" = "$REPOSITORY" ]; then
+            if [ "$HEAD_REF" = "staging" ]; then
+              exit 0
+            fi
+
+            case "$HEAD_REF" in
+              hotfix/*)
+                exit 0
+                ;;
+            esac
           fi
 
-          echo "::error::Contributions must target staging. Main accepts only SpicyMarinara's promotion from this repository's staging branch."
+          echo "::error::Contributions must target staging. Main accepts only SpicyMarinara's same-repository staging promotion or hotfix/* PR."
           exit 1
 
   owner-approval:
