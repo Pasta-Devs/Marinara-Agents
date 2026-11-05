@@ -12,6 +12,8 @@ import { BigCheeseError, PLACES } from "./store.js";
 
 export interface CastPerson {
   engineId: string;
+  /** Only when the card states it (cast.md §3); later layers that need an adult check read it. */
+  age?: number;
   name: string;
   core: string;
   traits: string[];
@@ -84,6 +86,30 @@ const placeKit = (kitId: string): PlaceKit => {
   return PLACES[kitId as keyof typeof PLACES];
 };
 
+/** The lowest age the card states, from plain phrases like "34 years old", "age: 34" or "aged 34". */
+export function statedAge(d: Record<string, unknown>): number | undefined {
+  const ext = isRecord(d.extensions) ? d.extensions : {};
+  const text = [d.description, d.personality, d.scenario, d.backstory, ext.backstory, d.first_mes]
+    .map((v) => (typeof v === "string" ? v.slice(0, 5000) : ""))
+    .join(" ");
+  const ages = [
+    ...text.matchAll(/\b(\d{1,3})[- ]?(?:years?[- ]old|y\/?o)\b/gi),
+    ...text.matchAll(/\b(?:age[d:]?|aged)\s*:?\s*(\d{1,3})\b/gi),
+  ].map((m) => Number(m[1]));
+  return ages.length ? Math.min(...ages) : undefined;
+}
+
+/** Big Cheese casts adults only: a card that states an age under 18 is refused. */
+const UNDER_AGE = /\b(minor|underage|under-age|loli|shota)\b/i;
+function checkAge(d: Record<string, unknown>) {
+  const age = statedAge(d);
+  const tags = Array.isArray(d.tags) ? d.tags.filter((x): x is string => typeof x === "string") : [];
+  if ((age !== undefined && age < 18) || tags.some((x) => UNDER_AGE.test(x))) {
+    throw new BigCheeseError(400, "This card is under 18. Big Cheese casts adults only.", "under-age");
+  }
+  return age;
+}
+
 /** One card or persona, read only when the player picks it. Professor Mari is never cast. */
 async function readOne(runtime: CapabilityRuntimeHost, kind: "character" | "persona", id: string) {
   if (id === MARI_ID) throw bad("Professor Mari cannot join the cast.");
@@ -119,6 +145,7 @@ export async function listCast(runtime: CapabilityRuntimeHost) {
 export async function castRead(runtime: CapabilityRuntimeHost, body: z.infer<typeof ReadBody>) {
   const kit = placeKit(body.kitId);
   const d = await readOne(runtime, "character", body.characterId);
+  checkAge(d);
   const slots = kit.people.filter((p) => !p.deputy).map((p) => ({ id: p.id, role: p.role, name: p.name }));
   const model = body.lite ? undefined : await engineModel(runtime, null).catch(() => undefined);
   // ponytail: each card field is cut to 1500 characters, not summarized. Summarize first when long cards cost too much.
@@ -160,6 +187,7 @@ export async function resolveCast(runtime: CapabilityRuntimeHost, kitId: string,
   const cast: Cast = { people: {} };
   if (req.boss) {
     const d = await readOne(runtime, "persona", req.boss);
+    checkAge(d);
     const name = str(d.name, 80);
     if (!name) throw bad("This persona has no name.");
     // ponytail: the boss text is the first 400 characters of the description, not a summary. Summarize when it reads badly.
@@ -172,10 +200,20 @@ export async function resolveCast(runtime: CapabilityRuntimeHost, kitId: string,
     if (cast.people[slot.id] || used.has(characterId)) throw bad("Each role and each card can be used once.");
     used.add(characterId);
     const d = await readOne(runtime, "character", characterId);
+    const age = checkAge(d);
     const name = str(d.name, 80);
     if (!name) throw bad("This card has no name.");
     const { traits, tone, lines, core } = sheet;
-    cast.people[slot.id] = { engineId: characterId, name, core, traits, tone, lines, avatar: avatarOf(d.avatarPath) };
+    cast.people[slot.id] = {
+      engineId: characterId,
+      name,
+      core,
+      traits,
+      tone,
+      lines,
+      avatar: avatarOf(d.avatarPath),
+      age,
+    };
   }
   return cast;
 }

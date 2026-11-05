@@ -183,6 +183,7 @@
   "ui.bigCheese.errors.notFound": "That place is gone.",
   "ui.bigCheese.errors.conflict": "This run changed in another tab. Reload to see the latest.",
   "ui.bigCheese.errors.newerSave": "A newer Big Cheese saved this place.",
+  "ui.bigCheese.errors.underAge": "This card says the character is under 18. Big Cheese only casts adults.",
   "ui.bigCheese.errors.wrongPhase": "You can't do that now. Finish what is open first.",
   "ui.bigCheese.errors.noHours": "No hours left today. End the day to go on.",
   "ui.bigCheese.errors.adminAccess": "This device has no admin access.",

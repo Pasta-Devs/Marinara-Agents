@@ -133,6 +133,7 @@ const ERROR_KEYS: Record<string, string> = {
   "not-found": "ui.bigCheese.errors.notFound",
   conflict: "ui.bigCheese.errors.conflict",
   "newer-save": "ui.bigCheese.errors.newerSave",
+  "under-age": "ui.bigCheese.errors.underAge",
   "wrong-phase": "ui.bigCheese.errors.wrongPhase",
   "no-hours": "ui.bigCheese.errors.noHours",
   "stale-preview": "ui.bigCheese.errors.stalePreview",

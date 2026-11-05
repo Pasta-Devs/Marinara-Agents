@@ -251,3 +251,19 @@ test("cast names are replaced once, with word boundaries, and special characters
   assert.equal(played.people.find((p) => p.id === y!.id)!.name, "A$'B");
   assert.ok(!JSON.stringify(played).includes(y!.name));
 });
+
+test("cards that state an age under 18 are refused; a stated adult age is kept", async () => {
+  const h = await harness([
+    card("kid", "Pip", { description: "Pip is a 16-year-old deckhand." }),
+    card("tag", "Lia", { tags: ["Loli"] }),
+    card("adult", "Rhea Sand", { description: "Rhea Sand, 34 years old, former rower." }),
+  ]);
+  for (const id of ["kid", "tag"]) {
+    const r = await start(h, { staff: [{ characterId: id, sheet: sheet() }] });
+    assert.equal(r.code, 400, id);
+    assert.match(r.body.message, /under 18/);
+  }
+  const ok = await start(h, { staff: [{ characterId: "adult", sheet: sheet() }] });
+  assert.equal(ok.code, 200);
+  assert.equal(ok.body.run.cast.people.tomasz.age, 34);
+});
