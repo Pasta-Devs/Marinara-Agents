@@ -398,4 +398,27 @@ assert.match(recapA, /a dance/u);
 assert.match(recapA, /120 coins from 2 tippers/u);
 assert.notEqual(recapA, recapB);
 
+// Own goals replace the made ones, in amount order, and nobody tips for their rewards.
+const own = slpLiveStart({
+  level: "none",
+  fans: 10,
+  goals: [
+    { target: 900, text: "Sings in a duck voice" },
+    { target: 50, text: "Spins" },
+  ],
+});
+assert.deepEqual(
+  own.goals.map((goal) => goal.target),
+  [50, 900],
+);
+assert.equal(own.menu.find((item) => item.id === own.goals[1]!.reward)?.label, "Sings in a duck voice");
+assert.equal(
+  slpLiveStart({ level: "none", fans: 10, priceScale: 2 }).goals[0]!.target,
+  2 * slpLiveStart({ level: "none", fans: 10 }).goals[0]!.target,
+);
+assert.equal(
+  normalizeSlpLiveSettings({ goals: { c1: [{ target: 5, text: " Dance " }] } }).goals.c1?.[0]?.text,
+  "Dance",
+);
+
 console.log("slurp2 live sim: ok");

@@ -12,7 +12,9 @@ const MENU_WORDS: Record<string, string> = {
   flash: "a flash",
   toy: "toy play",
 };
-const menuWords = (id: string | undefined) => (id ? (MENU_WORDS[id] ?? id) : "");
+/** A player-written goal reward reads as the player wrote it. */
+const menuWords = (state: SlpLiveState, id: string | undefined) =>
+  id ? (state.menu.find((item) => item.id === id)?.label ?? MENU_WORDS[id] ?? id) : "";
 
 export type SlpLivePromptInput = {
   /** `world`: the Creator's world line, empty for a modern Creator. */
@@ -66,9 +68,10 @@ function logLines(state: SlpLiveState, at: number, host: string, count: number) 
       if (event.kind === "cam") return `${time} [cam] ${event.text ?? ""}`;
       if (event.kind === "join") return `${time} ${event.name} joined`;
       if (event.kind === "tip") return `${time} ${event.name} tipped ${event.amount}`;
-      if (event.kind === "order") return `${time} ${event.name} tipped ${event.amount} for ${menuWords(event.itemId)}`;
-      if (event.kind === "goal") return `${time} GOAL HIT, the room unlocked ${menuWords(event.itemId)}`;
-      if (event.kind === "done") return `${time} ${host} finished ${menuWords(event.itemId)}`;
+      if (event.kind === "order")
+        return `${time} ${event.name} tipped ${event.amount} for ${menuWords(state, event.itemId)}`;
+      if (event.kind === "goal") return `${time} GOAL HIT, the room unlocked ${menuWords(state, event.itemId)}`;
+      if (event.kind === "done") return `${time} ${host} finished ${menuWords(state, event.itemId)}`;
       if (event.kind === "private") return `${time} ${event.name} paid for a private show`;
       return `${time} ${host} took a layer off`;
     });
@@ -133,9 +136,9 @@ export function slpLivePrompt(input: SlpLivePromptInput) {
       heat: `${Math.round(state.heat)} of 100`,
       layersOff: state.strip,
       raised: state.raised,
-      NOW: open[0] ? `${menuWords(open[0].itemId)} for ${open[0].name || "the room"}` : null,
-      NEXT: open[1] ? `${menuWords(open[1].itemId)} for ${open[1].name || "the room"}` : null,
-      goal: goal ? `${menuWords(goal.reward)} at ${goal.target} (${state.raised} raised)` : "every goal is hit",
+      NOW: open[0] ? `${menuWords(state, open[0].itemId)} for ${open[0].name || "the room"}` : null,
+      NEXT: open[1] ? `${menuWords(state, open[1].itemId)} for ${open[1].name || "the room"}` : null,
+      goal: goal ? `${menuWords(state, goal.reward)} at ${goal.target} (${state.raised} raised)` : "every goal is hit",
     },
     ROOM: alone
       ? ["(waiting outside: the show is private)"]

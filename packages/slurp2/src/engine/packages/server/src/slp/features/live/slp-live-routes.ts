@@ -115,7 +115,7 @@ export async function slpLiveRoutes(app: FastifyInstance, { noodle, resolveViewe
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     if (parsed.data.itemId) {
       const item = (await storage.get(showId))?.state.menu.find((entry) => entry.id === parsed.data.itemId);
-      if (!item || parsed.data.amount < item.price)
+      if (!item || item.goal || parsed.data.amount < item.price)
         return reply.code(400).send({ error: "That is not on the menu at this price" });
     }
     const result = await tipSlurpLiveShow(app.db, { ...parsed.data, showId, viewer });

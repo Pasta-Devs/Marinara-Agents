@@ -1064,6 +1064,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.4.18",
+          "date": "2026-11-05",
+          "notes": "- Added: Backstage > Live shows has a Tip goals group. \"Goal size\" makes the room's goals and menu prices smaller or bigger. \"Own goals\" sets up to three goals for one Creator: an amount and what happens. They replace the made goals in that Creator's next shows, and the Creator acts out the text when the room hits the goal. Viewers cannot tip for an own goal's reward directly.",
+          "highlight": false
+        },
+        {
           "version": "0.4.17",
           "date": "2026-11-02",
           "notes": "- Fixed: refreshing a Creator's conversation schedule read only the card description and personality. An Engine card split (Engine #8543) moves scenario and backstory into their own fields, so the schedule lost them. It now reads description, scenario and backstory (top-level or `extensions.backstory`). The canon reading, picture look and flavour brief already read the split fields.",
@@ -1175,12 +1181,6 @@
           "version": "0.3.53",
           "date": "2026-10-21",
           "notes": "- Image failures marked nonretryable by the Engine no longer start automatic replacement requests. Slurp also stops later background retries for posts and Creator artwork, and keeps post prompts for a deliberate retry.",
-          "highlight": false
-        },
-        {
-          "version": "0.3.52",
-          "date": "2026-10-20",
-          "notes": "- Fixed: an automatic post no longer reads a Creator's card or refreshes shared ideas with the AI while one of your chats on the same connection is replying, and an automatic post no longer makes your other automatic work (Noodle's too) wait 30 seconds. A new Creator's first automatic post no longer refuses itself.\n- Fixed: Write, Improve, Draft voice, Generate schedule, the page style and \"Let <Creator> design it\", a plan you ask for, an appearance you generate and picture descriptions for replies now take their turn on your connection like your chats, so automatic work waits for them.",
           "highlight": false
         }
       ]

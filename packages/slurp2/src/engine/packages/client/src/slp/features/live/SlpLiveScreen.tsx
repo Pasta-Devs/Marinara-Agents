@@ -517,7 +517,7 @@ export function SlpLiveScreen({
             <SlpSheet open={sheet === "menu"} onClose={() => setSheet(null)} title={t("ui.slurp.live.menuTitle")}>
               <ul className="space-y-2 p-0.5">
                 {show.menu
-                  .filter((item) => !item.strip || show.strip < show.stripMax)
+                  .filter((item) => !item.goal && (!item.strip || show.strip < show.stripMax))
                   .map((item) => (
                     <li key={item.id}>
                       <button
