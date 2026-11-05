@@ -450,6 +450,10 @@ for (const entry of catalog.packages) {
   if (!manifest?.id || ids.has(manifest.id)) throw new Error(`Duplicate or missing package id: ${manifest?.id}`);
   assertPortableFilenameComponent(manifest.id, "Package id");
   packageArtifactName(manifest.id, manifest.version);
+  // The Engine skips an installed record whose engineCommit is not a full 40-hex commit.
+  if (manifest.builtAgainst && !/^[a-f0-9]{40}$/u.test(manifest.builtAgainst.engineCommit ?? "")) {
+    throw new Error(`${manifest.id} builtAgainst.engineCommit must be a full 40-character commit`);
+  }
   if (!Array.isArray(manifest.files)) throw new Error(`Missing file declarations for ${manifest.id}`);
   const declaredPaths = new Set();
   for (const [index, declared] of manifest.files.entries()) {
