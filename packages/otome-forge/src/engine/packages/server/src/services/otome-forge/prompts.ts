@@ -39,11 +39,11 @@
 //     betweenYou with romanceLine (also P16, P17, P19, P20, P21, P24, P26, Read Me, Read Him, the extra story plan),
 //     the Read Me notebook knowsAboutYou (also P16, P17, P21, P26, Read Me, Read Him, the extra story plan),
 //     protagonistBlock (also P19, P21, P24, P26, Read Me, the extra story plan), appearanceLine (also P19, P21, P24,
-//     P26, the extra story plan), bibleBlock (also P21, P26, the extra story plan), sceneCardBlock (also P19, P24),
-//     ledgerBlock (also P21), and what each love interest may know: knownRows (also P19, P21, P24, P26 and
-//     S/story/chapters.ts) and ownView (also P19, P24, P26, and the view S/home/note.ts gives P16, S/phone/chat.ts
-//     P17, S/minigames/read-me.ts Read Me and read-him.ts Read Him). The rules after them are the story prompts' own
-//     (briefRule is P20's too)
+//     P26, Read Me through protagonistBlock, the extra story plan), bibleBlock (also P21, P26, the extra story plan),
+//     sceneCardBlock (also P19, P24), ledgerBlock (also P21), and what each love interest may know: knownRows (also
+//     P19, P21, P24, P26 and S/story/chapters.ts) and ownView (also P19, P24, P26, and the view S/home/note.ts gives
+//     P16, S/phone/chat.ts P17, S/minigames/read-me.ts Read Me and read-him.ts Read Him). The rules after them are the
+//     story prompts' own (briefRule is P20's too)
 //   arcPlanMessages: the arc planner, #1980 (S/story/arc.ts)
 //   chapterPlanMessages: P5 chapter plan (S/story/chapters.ts)
 //   beatMessages: P6 scene (beat) narrator, also for dates, Character Stories (P22, P23), extra stories and the
@@ -1290,8 +1290,9 @@ function knownShown(unit: Pick<Unit, "name">, known: readonly NotebookEntry[]): 
 
 /**
  * Who the protagonist is (name, pronouns, traits, goal, the persona) and what they wear now, for every story prompt.
- * The outfit is a love interest's appearanceLine with the outfit alone (a worn Wardrobe look, else their everyday
- * clothes): the persona's Appearance is in aboutLine already, and an image-only appearance is not a story fact.
+ * The outfit is a love interest's appearanceLine with the outfit alone: a worn Wardrobe look. Their base look is the
+ * persona's Appearance, in aboutLine already (no current code writes player.look.outfitLine), and an image-only
+ * appearance is not a story fact.
  * `wearing: false` leaves it out where a prompt names the look itself (P19, P24).
  */
 export function protagonistBlock(player: Player, { wearing = true } = {}): string {

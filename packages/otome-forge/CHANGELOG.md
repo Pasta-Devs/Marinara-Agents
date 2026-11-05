@@ -2,7 +2,7 @@
 
 ## 0.8.7 — 2026-11-05
 
-- **The story knows what you're wearing.** Like it does for love interests, the story now knows the look you wear: the one you put on with Wear at home or picked for a date, or your everyday outfit. Scenes and plans can describe it when your looks come up.
+- **The story knows what you're wearing.** Like it does for love interests, the story now knows the look you wear: the one you put on with Wear at home or picked for a date. Scenes and plans can describe it when your looks come up.
 
 ## 0.8.6 — 2026-11-04
 
