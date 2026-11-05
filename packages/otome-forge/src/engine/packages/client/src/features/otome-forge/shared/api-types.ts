@@ -1124,8 +1124,9 @@ export interface SceneArt {
   /** Faces are still painting or being freely cleaned; failed/stopped work never keeps polling. */
   facesComing: LiId[];
   /**
-   * A look's first-wear scene (`story-<item>`): its love interest stands in that look, not the one he wears now, as
-   * RunLiView's stage fields (its cut-out once ready, its cleaned faces once a set is). Absent in every other scene.
+   * A his-look5's first-wear scene (`story-<item>`): its love interest stands in that look, not the one he wears now, as
+   * RunLiView's stage fields (its cut-out once ready, its cleaned faces once a set is). Absent in every other scene, a
+   * her-look5's first-wear scene too (he stands in what he wears now).
    */
   looks?: Record<LiId, Required<Pick<RunLiView, "worn" | "expressions" | "cut">>>;
   /**

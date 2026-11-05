@@ -65,7 +65,7 @@ export interface LookView {
   unopened: boolean;
   /** His ready faces on this look, while expressions are on. */
   faces?: Partial<Record<Face, string>>;
-  /** his-look5: the first-wear beat (a one-node Character Story), once its first open wrote it. */
+  /** A 5★ look (his-look5, her-look5): the first-wear beat (a one-node Character Story), once its first open wrote it. */
   story?: { key: string } | null;
   /** Her looks: the love interests already shown it, whose first Show paid its affection. */
   shownTo?: LiId[];

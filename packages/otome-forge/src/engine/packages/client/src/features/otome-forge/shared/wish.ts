@@ -167,7 +167,8 @@ export function parseBannerKey(value: unknown): { kind: BannerKind; rotation: nu
 /**
  * memory5: a CG, a 3–5 beat Character Story and a voiced line · moment4: a one-beat Moment · snapshot3: a 2–3 sentence
  * vignette with an illustration (his Love Timeline and his private memory) · his-look5: his look, a first-wear beat and repainted faces ·
- * his-look4: another love interest's look · her-look5: her look, a couple set with his · her-look4: a look of hers.
+ * his-look4: another love interest's look · her-look5: her look, a first-wear beat with him and a couple set with his ·
+ * her-look4: a look of hers.
  */
 export const ITEM_KINDS = [
   "memory5",
@@ -250,7 +251,7 @@ export interface Item {
    */
   cg?: { brief: string; cast: string[]; explicit?: true; clothed?: string };
   art: Paint | null;
-  /** The Character Story (memory5), Moment (moment4) or first-wear beat (his-look5), once written. */
+  /** The Character Story (memory5), Moment (moment4) or first-wear beat (his-look5, her-look5), once written. */
   story: { key: string } | null;
   voicedLine?: string;
   createdAt: string;
