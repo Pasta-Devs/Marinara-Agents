@@ -7,7 +7,10 @@ import {
   deleteCircle,
   editEvent,
   fastForward,
+  createNudge,
+  deleteNudge,
   getHome,
+  getNudges,
   getPromises,
   getTimeline,
   listChats,
@@ -86,6 +89,18 @@ const COPY = {
   showPromises: "Show promises",
   hidePromises: "Hide promises",
   noPromises: "No promises yet.",
+  nudge: "Nudge",
+  hideNudge: "Hide nudge",
+  nudgeWho: "Who",
+  nudgeAlso: "And (optional)",
+  nudgeText: "What happens",
+  nudgePlaceholder: "Gets a job offer",
+  nudgeKind: "Kind",
+  nudgeDays: "Within days",
+  nudgeAdd: "Add nudge",
+  nudgeRemove: "Remove",
+  noNudges: "No nudges yet.",
+  nudgeState: { open: "waiting", used: "happened", expired: "ran out" } as Record<string, string>,
   promiseState: { open: "waiting", kept: "kept", dropped: "dropped", stale: "out of date" } as Record<string, string>,
   loadFailed: "Could not load Circles.",
 };
@@ -665,6 +680,148 @@ function PromisesPanel({ circle }: { circle: Circle }) {
   );
 }
 
+const PLAIN_KINDS = ["work", "friends", "family", "romance", "conflict", "health", "luck", "hobbies"];
+
+/** "This week Lily gets a job offer": the deck turns the nudge into one planned event inside its window. */
+function NudgesPanel({ circle }: { circle: Circle }) {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [who, setWho] = useState("");
+  const [also, setAlso] = useState("");
+  const [text, setText] = useState("");
+  const [kind, setKind] = useState("");
+  const [days, setDays] = useState(7);
+  const characters = useQuery({ queryKey: ["meanwhile", "characters"], queryFn: listCharacters });
+  const list = useQuery({
+    queryKey: ["meanwhile", "nudges", circle.id],
+    queryFn: () => getNudges(circle.id),
+    enabled: open,
+    refetchInterval: 15_000,
+  });
+  const kinds = [...(circle.allowedKinds.length ? circle.allowedKinds : PLAIN_KINDS), ...circle.bigKindsAllowed];
+  const name = (id: string) => characters.data?.find((c) => c.id === id)?.name ?? "Someone";
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ["meanwhile", "nudges", circle.id] });
+  const add = useMutation({
+    mutationFn: () =>
+      createNudge(circle.id, {
+        cast: [who || circle.castIds[0], also].filter((id): id is string => !!id),
+        text,
+        kind: kind || kinds[0]!,
+        withinDays: days,
+      }),
+    onSuccess: () => {
+      setText("");
+      void refresh();
+    },
+  });
+  const remove = useMutation({
+    mutationFn: (id: string) => deleteNudge(circle.id, id),
+    onSuccess: () => void refresh(),
+  });
+  const items = list.data?.nudges ?? [];
+  const cast = (
+    <>
+      {circle.castIds.map((id) => (
+        <option key={id} value={id}>
+          {name(id)}
+        </option>
+      ))}
+    </>
+  );
+  return (
+    <div className="mw-field">
+      <button type="button" className="mw-btn" aria-expanded={open} onClick={() => setOpen(!open)}>
+        {open ? COPY.hideNudge : COPY.nudge}
+      </button>
+      {open ? (
+        <>
+          <label className="mw-field">
+            <span className="mw-label">{COPY.nudgeWho}</span>
+            <select className="mw-input" value={who || circle.castIds[0]} onChange={(e) => setWho(e.target.value)}>
+              {cast}
+            </select>
+          </label>
+          <label className="mw-field">
+            <span className="mw-label">{COPY.nudgeAlso}</span>
+            <select className="mw-input" value={also} onChange={(e) => setAlso(e.target.value)}>
+              <option value="" />
+              {cast}
+            </select>
+          </label>
+          <label className="mw-field">
+            <span className="mw-label">{COPY.nudgeText}</span>
+            <input
+              className="mw-input"
+              maxLength={140}
+              placeholder={COPY.nudgePlaceholder}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+            />
+          </label>
+          <label className="mw-field">
+            <span className="mw-label">{COPY.nudgeKind}</span>
+            <select className="mw-input" value={kind || kinds[0]} onChange={(e) => setKind(e.target.value)}>
+              {kinds.map((k) => (
+                <option key={k} value={k}>
+                  {KIND_LABELS[k] ?? k}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="mw-field">
+            <span className="mw-label">{COPY.nudgeDays}</span>
+            <select className="mw-input" value={days} onChange={(e) => setDays(Number(e.target.value))}>
+              {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="mw-row">
+            <button
+              type="button"
+              className="mw-btn mw-btn-primary"
+              disabled={add.isPending || !text.trim() || circle.castIds.length === 0}
+              onClick={() => add.mutate()}
+            >
+              {COPY.nudgeAdd}
+            </button>
+          </div>
+          {add.isError ? (
+            <span role="alert" className="mw-warn">
+              {errorText(add.error)}
+            </span>
+          ) : null}
+          {list.data && items.length === 0 ? <div className="mw-muted">{COPY.noNudges}</div> : null}
+          {items.map((n) => (
+            <div key={n.id} className="mw-row mw-muted">
+              <span>{n.cast.map(name).join(" + ")}:</span>
+              <span>{n.text}</span>
+              <span className="mw-tag">{COPY.nudgeState[n.status]}</span>
+              {n.event ? (
+                <span>
+                  {n.event.day} {n.event.text}
+                </span>
+              ) : null}
+              {n.status === "open" ? (
+                <button
+                  type="button"
+                  className="mw-btn"
+                  disabled={remove.isPending}
+                  onClick={() => remove.mutate(n.id)}
+                >
+                  {COPY.nudgeRemove}
+                </button>
+              ) : null}
+            </div>
+          ))}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 /** Opens a chat in the Engine. The host passes it to the element; older hosts pass nothing. */
 type OpenChat = () => ((chatId: string) => void) | undefined;
 
@@ -845,6 +1002,7 @@ function CircleCard({ circle, onEdit, openChat }: { circle: Circle; onEdit: () =
       <HomePanel circle={circle} openChat={openChat} />
       <FastForwardPanel circle={circle} />
       <PromisesPanel circle={circle} />
+      <NudgesPanel circle={circle} />
       <TimelinePanel circle={circle} />
     </div>
   );

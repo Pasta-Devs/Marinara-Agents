@@ -1,5 +1,6 @@
 /** The seed deck. Pure: same input, same cards. Slice 3 turns each seed into a beat with the model. */
 import { DAY, hhmm, shiftDay } from "./clock.js";
+import type { Nudge } from "./store.js";
 
 /** A block of one character's day, in minutes since midnight. `end` may pass 1440. */
 export interface DayBlock {
@@ -20,6 +21,9 @@ export interface Seed {
   place: string;
   time: string;
   status: "dealt";
+  /** Set when the user asked for this event: the words of the nudge. */
+  nudge?: string;
+  nudgeId?: string;
 }
 
 export const KINDS = ["work", "friends", "family", "romance", "conflict", "health", "luck", "hobbies"];
@@ -147,6 +151,44 @@ export function dealDay(input: {
     if (b >= a) b += 1;
     const o = { cast: [ids[a]!, ids[b]!], place: MEET_PLACES[Math.floor(r() * MEET_PLACES.length)]!, time: "18:00" };
     if (!seen.has(keyOf(kind, o))) add(kind, o, `${circle.id}:${day}:w`);
+  }
+  return out;
+}
+
+/**
+ * Puts each open nudge into the cards of its day. The day is picked from the nudge id, spread over the window,
+ * and a nudge that is still open on the last day of its window is placed then. A nudge fills a free slot, or
+ * replaces a normal card when the day is full. It keeps the normal seed shape plus the nudge text.
+ */
+export function placeNudges(
+  cards: Seed[],
+  input: { circleId: string; day: string; pace: string; nudges: readonly (Nudge & { startDay: string })[] },
+): Seed[] {
+  const out = [...cards];
+  const max = (PACE[input.pace] ?? PACE.cozy!).max;
+  for (const n of input.nudges) {
+    const last = shiftDay(n.startDay, n.withinDays - 1);
+    const target = shiftDay(n.startDay, Math.floor(mulberry32(hashSeed(n.id))() * n.withinDays));
+    if (input.day < target || input.day > last) continue;
+    const r = mulberry32(hashSeed(`${input.circleId}:${input.day}:${n.id}`));
+    const card: Seed = {
+      id: `${input.circleId}:${input.day}:n:${n.id}`,
+      circleId: input.circleId,
+      day: input.day,
+      kind: n.kind,
+      cast: n.cast,
+      place: n.kind === "work" ? "work" : MEET_PLACES[Math.floor(r() * MEET_PLACES.length)]!,
+      time: `${String(9 + Math.floor(r() * 12)).padStart(2, "0")}:00`,
+      status: "dealt",
+      nudge: n.text,
+      nudgeId: n.id,
+    };
+    let normal = -1;
+    out.forEach((c, i) => {
+      if (!c.nudge && !BIG_KINDS.includes(c.kind as never)) normal = i;
+    });
+    if (out.length >= max && normal >= 0) out[normal] = card;
+    else out.push(card);
   }
   return out;
 }

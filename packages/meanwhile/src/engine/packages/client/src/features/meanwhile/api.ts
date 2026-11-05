@@ -27,6 +27,8 @@ export interface Circle {
   sharedWorld: boolean;
   clock: { speed: number; timezone: string };
   pace: "cozy" | "eventful" | "dramatic";
+  allowedKinds: string[];
+  bigKindsAllowed: string[];
   backgroundTimer: boolean;
   writeStatus: boolean;
   /** Characters whose status another Circle writes. */
@@ -205,3 +207,20 @@ export interface PromiseItem {
   visibility: string;
 }
 export const getPromises = (id: string) => api<{ promises: PromiseItem[] }>(`/circles/${id}/promises`);
+
+export interface NudgeItem {
+  id: string;
+  cast: string[];
+  text: string;
+  kind: string;
+  withinDays: number;
+  status: "open" | "used" | "expired";
+  /** The event a used nudge turned into. */
+  event?: { text: string; day: string };
+}
+
+export const getNudges = (id: string) => api<{ nudges: NudgeItem[] }>(`/circles/${id}/nudges`);
+export const createNudge = (id: string, nudge: { cast: string[]; text: string; kind: string; withinDays: number }) =>
+  api<NudgeItem>(`/circles/${id}/nudges`, "POST", nudge);
+export const deleteNudge = (id: string, nudgeId: string) =>
+  api<{ ok: true }>(`/circles/${id}/nudges/${nudgeId}`, "DELETE");

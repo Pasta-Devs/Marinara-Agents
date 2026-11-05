@@ -26,6 +26,7 @@ import {
   runDuePass,
   startFastForward,
 } from "./scheduler.js";
+import { KINDS } from "./deck.js";
 import { currentBlock } from "./routine.js";
 import { statusOwner } from "./status.js";
 import { bannedWords, usageRow } from "./beats.js";
@@ -40,7 +41,9 @@ import {
   withMark,
   type Circle,
   type LifeEvent,
+  NUDGE_MAX_OPEN,
   type MeanwhileDocument,
+  type Nudge,
 } from "./store.js";
 
 const body = (request: { body?: unknown }): Record<string, unknown> =>
@@ -204,6 +207,7 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
       seeds: d.seeds.filter((s) => s.circleId !== id),
       dealtDays: d.dealtDays.filter((k) => !k.startsWith(`${id}:`)),
       promises: d.promises.filter((p) => p.circleId !== id),
+      nudges: d.nudges.filter((n) => n.circleId !== id),
     }));
     return { ok: true };
   });
@@ -506,6 +510,77 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
       return { ...e, text };
     }),
   );
+
+  // Nudges: the user steers a Circle ("this week Lily gets a job offer"). The deck turns each into one seed.
+  app.get<{ Params: { id: string } }>("/circles/:id/nudges", async (request, reply) => {
+    const doc = await readMeanwhile();
+    const circle = find(doc, request.params.id);
+    if (!circle) return notFound(reply);
+    const events = new Map(doc.events.map((e) => [e.id, e]));
+    const nudges = doc.nudges
+      .filter((n) => n.circleId === circle.id)
+      .slice(-30)
+      .reverse();
+    return {
+      nudges: nudges.map((n) => {
+        const e = n.eventId ? events.get(n.eventId) : undefined;
+        return e
+          ? { ...n, event: { text: e.text, day: msToWall(Date.parse(e.start), circle.clock.timezone).slice(0, 10) } }
+          : n;
+      }),
+    };
+  });
+
+  app.post<{ Params: { id: string } }>("/circles/:id/nudges", async (request, reply) => {
+    const circle = find(await readMeanwhile(), request.params.id);
+    if (!circle) return notFound(reply);
+    const src = body(request);
+    const cast: unknown[] = Array.isArray(src.cast) ? [...new Set(src.cast)] : [];
+    const text = typeof src.text === "string" ? src.text.trim().replace(/\s+/g, " ") : "";
+    const days = src.withinDays === undefined ? 7 : src.withinDays;
+    const kinds: string[] = [...(circle.allowedKinds.length ? circle.allowedKinds : KINDS), ...circle.bigKindsAllowed];
+    const error =
+      cast.length < 1 || cast.length > 2 || cast.some((id) => typeof id !== "string" || !circle.castIds.includes(id))
+        ? "Pick 1 or 2 people from the cast"
+        : !text || text.length > 140
+          ? "Text must have 1 to 140 characters"
+          : typeof src.kind !== "string" || !kinds.includes(src.kind)
+            ? "This kind is not allowed in this Circle"
+            : typeof days !== "number" || !Number.isInteger(days) || days < 1 || days > 7
+              ? "Days must be a whole number from 1 to 7"
+              : null;
+    if (error) return reply.code(400).send({ error });
+    const nudge: Nudge = {
+      id: randomUUID(),
+      circleId: circle.id,
+      cast: cast as string[],
+      text,
+      kind: src.kind as string,
+      withinDays: days as number,
+      createdCircle: new Date(circleNowMs(circle.clock, Date.now())).toISOString(),
+      status: "open",
+    };
+    let added = false;
+    await updateMeanwhile((d) => {
+      added = d.nudges.filter((n) => n.circleId === circle.id && n.status === "open").length < NUDGE_MAX_OPEN;
+      return added ? { ...d, nudges: [...d.nudges, nudge] } : d;
+    });
+    return added ? nudge : reply.code(409).send({ error: `A Circle can hold ${NUDGE_MAX_OPEN} open nudges` });
+  });
+
+  app.delete<{ Params: { id: string; nudgeId: string } }>("/circles/:id/nudges/:nudgeId", async (request, reply) => {
+    const nudge = (await readMeanwhile()).nudges.find(
+      (n) => n.id === request.params.nudgeId && n.circleId === request.params.id,
+    );
+    if (!nudge) return notFound(reply);
+    if (nudge.status !== "open") return reply.code(409).send({ error: "Only an open nudge can be removed" });
+    await updateMeanwhile((d) => ({
+      ...d,
+      nudges: d.nudges.filter((n) => n.id !== nudge.id || n.status !== "open"),
+      seeds: d.seeds.filter((s) => s.nudgeId !== nudge.id),
+    }));
+    return { ok: true };
+  });
 
   // Plans that the characters said in chat, newest first.
   app.get<{ Params: { id: string } }>("/circles/:id/promises", async (request, reply) => {

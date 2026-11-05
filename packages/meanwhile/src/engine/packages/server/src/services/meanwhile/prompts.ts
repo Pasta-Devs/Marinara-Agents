@@ -26,7 +26,7 @@ export interface BeatInput {
   /** One line per cast member, numbered by position. */
   cast: string[];
   promises: string[];
-  seeds: { seed: string; kind: string; cast: number[]; place: string; time: string }[];
+  seeds: { seed: string; kind: string; cast: number[]; place: string; time: string; nudge?: string }[];
   recent: string[];
   avoid: string[];
   pace: string;
@@ -46,6 +46,7 @@ export function beatMessages(i: BeatInput): Msg[] {
         "Write one beat per seed and use each seed once. Keep start within an hour of the seed time and end after start on the same day.",
         "text is one plain third-person sentence of at most 140 characters. diary is one first-person line. Write each line in that character's own voice. hook is a concrete thing the character wants to share or ask, under 12 words. diary and hook are optional. Their keys are cast numbers from the seed.",
         "Vary openings: no two beats start with the same name or verb.",
+        "A seed with a nudge is a plot point the user asked for. Write that seed so the nudge happens.",
         ...(i.promises.length
           ? [
               'A beat that carries out a promise lists its number in kept, for example "kept":[1]. Leave kept out otherwise.',

@@ -83,6 +83,22 @@ export interface PromiseRecord {
   status: "open" | "kept" | "dropped" | "stale";
 }
 
+/** A steer from the user: "this week Lily gets a job offer". The deck turns it into one seed inside its window. */
+export interface Nudge {
+  id: string;
+  circleId: string;
+  cast: string[];
+  text: string;
+  kind: string;
+  withinDays: number;
+  /** Circle time the nudge was made; day 1 of the window is this Circle day. */
+  createdCircle: string;
+  status: "open" | "used" | "expired";
+  eventId?: string;
+}
+
+export const NUDGE_MAX_OPEN = 10;
+
 export interface StatusSent {
   key: string;
   chatId: string;
@@ -106,6 +122,7 @@ export interface MeanwhileDocument {
   promisePass: Record<string, number>;
   /** characterId -> the last status written (`key` = chat|status|activity). `at` is 0 when the Engine kept a status set by hand. */
   statusSent: Record<string, StatusSent>;
+  nudges: Nudge[];
 }
 
 let runtime: CapabilityRuntimeHost | null = null;
@@ -253,6 +270,39 @@ function normalizeMark(value: unknown): RunMark | null {
   };
 }
 
+function normalizeNudge(value: unknown): Nudge | null {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.circleId !== "string") return null;
+  const cast = Array.isArray(value.cast) ? value.cast.filter((x): x is string => typeof x === "string") : [];
+  const days = value.withinDays;
+  if (
+    cast.length < 1 ||
+    cast.length > 2 ||
+    typeof value.text !== "string" ||
+    !value.text ||
+    value.text.length > 140 ||
+    typeof value.kind !== "string" ||
+    typeof days !== "number" ||
+    !Number.isInteger(days) ||
+    days < 1 ||
+    days > 7 ||
+    typeof value.createdCircle !== "string" ||
+    !Number.isFinite(Date.parse(value.createdCircle))
+  )
+    return null;
+  const status = value.status === "used" || value.status === "expired" ? value.status : "open";
+  return {
+    id: value.id,
+    circleId: value.circleId,
+    cast,
+    text: value.text,
+    kind: value.kind,
+    withinDays: days,
+    createdCircle: value.createdCircle,
+    status,
+    ...(typeof value.eventId === "string" ? { eventId: value.eventId } : {}),
+  };
+}
+
 export function emptyMeanwhileDocument(): MeanwhileDocument {
   return {
     schemaVersion: 1,
@@ -267,6 +317,7 @@ export function emptyMeanwhileDocument(): MeanwhileDocument {
     promises: [],
     promisePass: {},
     statusSent: {},
+    nudges: [],
   };
 }
 
@@ -292,6 +343,9 @@ export function normalizeMeanwhile(value: unknown): MeanwhileDocument {
     promises: list(value.promises).filter(
       (p): p is PromiseRecord => isRecord(p) && typeof p.id === "string" && typeof p.circleId === "string",
     ),
+    nudges: list(value.nudges)
+      .map(normalizeNudge)
+      .filter((n): n is Nudge => n !== null),
     statusSent: isRecord(value.statusSent) ? (value.statusSent as Record<string, StatusSent>) : {},
     promisePass: isRecord(value.promisePass) ? (value.promisePass as Record<string, number>) : {},
     usage: list(value.usage).filter(

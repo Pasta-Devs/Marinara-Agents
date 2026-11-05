@@ -150,6 +150,7 @@ function lifeInput(
     schedules: inputs.schedules,
     chatTruth: inputs.chatTruth,
     seeds: doc.seeds,
+    nudges: doc.nudges.filter((n) => n.circleId === circle.id && n.status === "open"),
     haveIds: new Set(doc.events.map((e) => e.id)),
     dealtDays: new Set(doc.dealtDays),
     now,
@@ -320,6 +321,16 @@ async function finish(circleId: string, now: number, opts: FinishOpts = {}): Pro
             ...doc.promises.filter((p) => !mine(p.circleId)),
             ...swept.promises.filter((p) => p.status === "open" || p.due >= seedCutoff),
           ],
+          // A nudge is used when its seed became an event, and expires after the last day of its window.
+          nudges: doc.nudges.map((n) => {
+            if (n.circleId !== circleId || n.status !== "open") return n;
+            const used = run.events.find((e) =>
+              [...doc.seeds, ...stored.seeds].some((s) => s.id === e.seedId && s.nudgeId === n.id),
+            );
+            if (used) return { ...n, status: "used" as const, eventId: used.id };
+            const lastDay = shiftDay(msToWall(Date.parse(n.createdCircle), tz).slice(0, 10), n.withinDays - 1);
+            return msToWall(advanceTo, tz).slice(0, 10) > lastDay ? { ...n, status: "expired" as const } : n;
+          }),
           promisePass: { ...doc.promisePass, ...pass },
           placeTags: [
             ...doc.placeTags.filter((t) => !stored.tags.some((n) => n.characterId === t.characterId)),

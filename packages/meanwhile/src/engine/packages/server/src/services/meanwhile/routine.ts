@@ -1,8 +1,8 @@
 /** Schedules to routine events, place tags and one run's plan. Pure: no I/O, so tests run without an Engine. */
 import { createHash } from "node:crypto";
 import { hhmm, msToWall, shiftDay, wallToMs, type RunWindow } from "./clock.js";
-import { dealDay, type DayBlock, type Seed } from "./deck.js";
-import type { LifeEvent } from "./store.js";
+import { dealDay, placeNudges, type DayBlock, type Seed } from "./deck.js";
+import type { LifeEvent, Nudge } from "./store.js";
 
 export interface PlaceTags {
   characterId: string;
@@ -150,6 +150,8 @@ export function planLife(input: {
   dealtDays: ReadonlySet<string>; // "circleId:day" for every day already dealt, even with zero seeds
   /** Characters with a major event waiting for the user: routine only, no new seeds. */
   holdIds?: ReadonlySet<string>;
+  /** Open nudges of this Circle. */
+  nudges?: readonly Nudge[];
   now: number;
 }): { events: LifeEvent[]; seeds: Seed[]; tags: PlaceTags[]; dealtDays: string[] } {
   const { circle, window } = input;
@@ -224,7 +226,15 @@ export function planLife(input: {
     if (day < firstDay || input.dealtDays.has(marker) || known.some((s) => s.circleId === circle.id && s.day === day))
       continue;
     const open = Object.fromEntries(Object.entries(byChar).filter(([id]) => !input.holdIds?.has(id)));
-    const cards = dealDay({ circle, day, blocks: open, recent: known });
+    const nudges = (input.nudges ?? [])
+      .filter((n) => n.cast.every((id) => !input.holdIds?.has(id)))
+      .map((n) => ({ ...n, startDay: msToWall(Date.parse(n.createdCircle), tz).slice(0, 10) }));
+    const cards = placeNudges(dealDay({ circle, day, blocks: open, recent: known }), {
+      circleId: circle.id,
+      day,
+      pace: circle.pace,
+      nudges,
+    });
     known.push(...cards);
     dealt.push(...cards);
     dealtDays.push(marker);
