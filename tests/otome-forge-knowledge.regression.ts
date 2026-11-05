@@ -18,6 +18,7 @@ import {
   closerMessages,
   confrontationMessages,
   noteMessages,
+  noticedMessages,
   premiseMessages,
   repairPlanMessages,
   routePlanMessages,
@@ -290,4 +291,46 @@ test("the story describes a love interest from their current Image appearance an
     appearanceLine(plain),
     `How Kai looks now (English image tags; describe them from this, in the story's language, whenever their looks come up): OLD-MASK: a plain white mask; wearing ${plain.bible!.look.outfitLine}.`,
   );
+});
+
+test("the story knows what the protagonist wears now, as it does a love interest, without their appearance twice", () => {
+  const input = inputs();
+  // The persona's Appearance rides in its story fields; the image identity line is that same text.
+  const appearance = "PERSONA-LOOK: short black hair, freckles";
+  input.player = {
+    ...input.player,
+    about: `A lantern-keeper's apprentice.\nAppearance: ${appearance}`,
+    look: { identityLine: appearance, outfitLine: "EVERYDAY: grey apprentice smock" },
+    outfits: [{ id: "my-wardrobe-0-a1", name: "Festival Night", outfitLine: "WORN: red qipao", url: "/x.png", at }],
+    wornOutfit: "my-wardrobe-0-a1",
+  };
+  const node = { i: 0, kind: "beat" as const, guide: "Kai turns to face you.", cast: [KAI] };
+  const chapter = { kind: "main" as const, number: 2, title: "Rain", lead: KAI, foil: MIR, nodes: [node] };
+  const prompts = () => ({
+    scene: text(beatMessages({ ...input, chapter, node, storySoFar: [], memory: "" })),
+    plan: text(chapterPlanMessages({ ...input, number: 2, lead: KAI, memory: "" })),
+  });
+  const count = (prompt: string, part: string) => prompt.split(part).length - 1;
+  for (const [kind, prompt] of Object.entries(prompts())) {
+    assert.match(
+      prompt,
+      /\nHow Ines looks now \(English image tags; describe them from this[^)]*\): wearing WORN: red qipao\.\n/,
+      kind,
+    );
+    assert.doesNotMatch(prompt, /EVERYDAY/, `${kind}: the worn look replaces the everyday outfit`);
+    assert.equal(count(prompt, appearance), 1, `${kind}: the persona's appearance is sent once`);
+  }
+  // In their base look, the everyday outfit.
+  input.player = { ...input.player, wornOutfit: undefined };
+  for (const [kind, prompt] of Object.entries(prompts())) {
+    assert.match(prompt, /\nHow Ines looks now \([^)]*\): wearing EVERYDAY: grey apprentice smock\.\n/, kind);
+    assert.equal(count(prompt, appearance), 1, `${kind}: the persona's appearance is sent once`);
+  }
+  // P19 is about the look itself: it is named once, as THE LOOK.
+  input.player = { ...input.player, wornOutfit: "my-wardrobe-0-a1" };
+  const kai = input.units.find((unit) => unit.id === KAI)!;
+  const look = { name: "Festival Night", outfitLine: "WORN: red qipao" };
+  const noticed = text(noticedMessages({ ...input, unit: kai, look }));
+  assert.equal(count(noticed, "WORN: red qipao"), 1, "P19 names the look once");
+  assert.doesNotMatch(noticed, /How Ines looks now/);
 });

@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.8.7 — 2026-11-05
+
+- **The story knows what you're wearing.** Like it does for love interests, the story now knows the look you wear: the one you put on with Wear at home or picked for a date, or your everyday outfit. Scenes and plans can describe it when your looks come up.
+
 ## 0.8.6 — 2026-11-04
 
 - **Each affection level takes a little more than the last.** Level 2 now takes 200 affection, and each level after it 50 more, up to 600 for level 10, so the first levels come sooner and the last ones mean more. Past level 10, every 300 affection still earns a prestige point. A love interest's level is worked out from their affection, so a story already under way may show a different level after updating; anything you've already unlocked stays.

@@ -1288,13 +1288,27 @@ function knownShown(unit: Pick<Unit, "name">, known: readonly NotebookEntry[]): 
   return count;
 }
 
-/** Who the protagonist is (name, pronouns, traits, goal), for every story prompt. */
-export function protagonistBlock(player: Player): string {
+/**
+ * Who the protagonist is (name, pronouns, traits, goal, the persona) and what they wear now, for every story prompt.
+ * The outfit is a love interest's appearanceLine with the outfit alone (a worn Wardrobe look, else their everyday
+ * clothes): the persona's Appearance is in aboutLine already, and an image-only appearance is not a story fact.
+ * `wearing: false` leaves it out where a prompt names the look itself (P19, P24).
+ */
+export function protagonistBlock(player: Player, { wearing = true } = {}): string {
   return [
     `${player.name || "The protagonist"} (${pronounText(player.pronouns)}). Never assume a gender the pronouns do not state.`,
     player.traits.length ? `Traits: ${player.traits.join("; ")}` : "",
     player.goal.trim() ? `Their own goal: ${player.goal.trim()}` : "",
     aboutLine(player),
+    wearing
+      ? appearanceLine({
+          ...player,
+          name: player.name || "the protagonist",
+          identityLine: "",
+          outfitLine: player.look.outfitLine,
+          bible: null,
+        })
+      : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -3493,7 +3507,8 @@ export function datePlanMessages({
     "",
     otomeContentContract({ world, lis: [{ name }], kind: "planner" }),
   ].join("\n");
-  const wear = (who: string, line: string) => (line.trim() ? `- ${who}: ${line.trim()}` : "");
+  // What each of them wears (a date's picked looks are worn before it is planned) is in protagonistBlock and in the
+  // bible's appearanceLine.
   const user = [
     "WORLD",
     world.setting.trim() || world.premise.trim(),
@@ -3512,10 +3527,6 @@ export function datePlanMessages({
       : place === STORY_PLACE
         ? `"${storyPlace?.name ?? ""}", a place in this world${storyPlace?.tags.trim() ? ` (${storyPlace.tags.trim()})` : ""}. The date goes there: keep that name for it.`
         : `${PLACE_SPIRIT[place]}. Adapt it to this world's setting and era, keeping its spirit.`,
-    "",
-    "WHAT THEY WEAR (image tags; describe them in words if at all)",
-    wear(name, wornOutfitLine(unit) || unit.outfitLine || unit.bible?.look.outfitLine || ""),
-    wear(player.name || "The protagonist", wornOutfitLine(player) || player.look.outfitLine),
     makeItRight ? `\nMAKE IT RIGHT\nThe rupture (${makeItRight.id})${mendText ? `: ${mendText}` : ""}` : "",
     "",
     memory.trim() ? `STORY MEMORY\n${memory.trim()}` : "",
@@ -4147,7 +4158,8 @@ function lookUser({ player, unit, state, look }: LookLineInput, task: string, ki
     sceneCardBlock(unit, ownView(state, unit.id).liState),
     "",
     "PROTAGONIST",
-    protagonistBlock(player),
+    // THE LOOK below is the one this line is about (P19: the one worn now), so the block names no other.
+    protagonistBlock(player, { wearing: false }),
     "",
     lookBlock(look),
     "",
