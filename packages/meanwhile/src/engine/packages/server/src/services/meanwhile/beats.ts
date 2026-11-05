@@ -537,7 +537,7 @@ export async function askPaper(
   gate: Gate,
   week: { start: string; end: string },
   events: readonly LifeEvent[],
-): Promise<PaperBody | null> {
+): Promise<PaperBody | null | "deferred"> {
   const circle = w.circle;
   const tz = circle.clock.timezone;
   const castNames = Object.values(w.cast).map((c) => c.name);
@@ -554,7 +554,7 @@ export async function askPaper(
     const data = await gate.complete(messages, 800);
     const result = checkPaper(data, banned);
     if (!Array.isArray(result)) return result;
-    if (gate.left() < 1) return null;
+    if (gate.left() < 1) return "deferred"; // no budget for the retry: try again on the next run
     messages = [...base, paperRetryMessage(result)];
   }
   return null;

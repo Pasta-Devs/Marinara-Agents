@@ -91,6 +91,7 @@ async function weeklyPaper(
   if (gate.left() < 1) return null;
   try {
     const body = await askPaper(world, gate, week, events);
+    if (body === "deferred") return null;
     if (!body) return { key, paper: null };
     return {
       key,
@@ -109,7 +110,7 @@ async function weeklyPaper(
 }
 
 /** Adds the paper, and keeps the last 8 per Circle. */
-function storePaper(doc: MeanwhileDocument, circleId: string, w: Weekly | null): MeanwhileDocument {
+function storePaper(doc: MeanwhileDocument, circleId: string, w: Weekly | null, cutoff: string): MeanwhileDocument {
   if (!w) return doc;
   const mine = doc.papers.filter((p) => p.circleId === circleId && p.id !== w.key);
   if (w.paper) mine.push(w.paper);
@@ -117,7 +118,10 @@ function storePaper(doc: MeanwhileDocument, circleId: string, w: Weekly | null):
   return {
     ...doc,
     papers: [...doc.papers.filter((p) => p.circleId !== circleId), ...mine.slice(-8)],
-    paperWeeks: [...doc.paperWeeks, w.key],
+    // Old weeks of this Circle go; the week just marked stays, so it is never asked twice.
+    paperWeeks: [...doc.paperWeeks, w.key].filter(
+      (k) => !k.startsWith(`${circleId}:`) || k.slice(-10) >= (cutoff < w.key.slice(-10) ? cutoff : w.key.slice(-10)),
+    ),
   };
 }
 
@@ -448,7 +452,10 @@ async function finish(circleId: string, now: number, opts: FinishOpts = {}): Pro
           ],
         };
       }
-      return withMark(withUsage(storePaper(next, circleId, weekly)), done);
+      return withMark(
+        withUsage(storePaper(next, circleId, weekly, shiftDay(msToWall(to, tz).slice(0, 10), -ROUTINE_KEEP_DAYS))),
+        done,
+      );
     });
   } catch (error) {
     await updateMeanwhile((doc) => {
@@ -511,7 +518,7 @@ export async function previewFastForward(circleId: string, spanMs: number, now =
   const beats = days.filter((d) => seeds.some((s) => s.circleId === circleId && s.day === d)).length;
   const places = plan.tags.some((t) => !t.asked && Object.values(t.byActivity).includes("unknown")) ? 1 : 0;
   const promises = (await hasNewMessages(circle, doc.promisePass)) ? 1 : 0;
-  // At most one Monday paper call: the newest finished week, if it has none yet.
+  // Over-counts when fewer than 2 events will qualify, and for the retry: an estimate, not a promise.
   const paper = doc.paperWeeks.includes(`${circleId}:${lastWeek(to, circle.clock.timezone).start}`) ? 0 : 1;
   return { days: days.length, calls: beats + places + promises + (missed ? 1 : 0) + paper, left, missed };
 }

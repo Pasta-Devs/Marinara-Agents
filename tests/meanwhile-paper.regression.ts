@@ -209,6 +209,27 @@ async function main() {
   assert.equal((await previewFastForward("p", DAY, REAL))!.calls, withDone + 1);
   await updateMeanwhile((d) => ({ ...d, paperWeeks: saved }));
 
+  // One call left and the reply is bad: no budget for the retry, so the week is NOT marked done and the next day makes it.
+  await addCircle("u", [ev("u1", "u", "2026-01-06"), ev("u2", "u", "2026-01-07")], 11);
+  const left1 = paperCalls.length;
+  replies = [null];
+  await runCircleNow("u", REAL);
+  doc = await readMeanwhile();
+  assert.equal(paperCalls.length, left1 + 1);
+  assert.ok(!doc.paperWeeks.includes("u:2026-01-05") && !doc.papers.some((p) => p.circleId === "u"));
+  replies = [good];
+  await runCircleNow("u", REAL + DAY);
+  doc = await readMeanwhile();
+  assert.ok(doc.paperWeeks.includes("u:2026-01-05") && doc.papers.some((p) => p.circleId === "u"));
+
+  // Old week keys of the Circle are pruned; other Circles keep theirs.
+  await addCircle("v", []);
+  await updateMeanwhile((d) => ({ ...d, paperWeeks: [...d.paperWeeks, "v:2025-10-06", "zz:2025-10-06"] }));
+  await runCircleNow("v", REAL);
+  doc = await readMeanwhile();
+  assert.ok(doc.paperWeeks.includes("v:2026-01-05") && !doc.paperWeeks.includes("v:2025-10-06"));
+  assert.ok(doc.paperWeeks.includes("zz:2025-10-06"));
+
   // Bad JSON: one retry, then no paper, and the week is marked done so it is not retried forever.
   replies = [null, null];
   const bad = paperCalls.length;

@@ -284,7 +284,7 @@ async function fastForwardCases() {
   await settled("q");
   doc = await readMeanwhile();
   assert.ok(doc.events.some((e) => e.weight === "summary" && e.text === "Time passed quietly."));
-  assert.ok(Math.abs(calls - behind.calls) <= 1); // a Monday paper call is counted at most once, and its retry is not
+  assert.equal(calls, behind.calls + 1); // the estimate counts one paper call; the fake model gives a bad paper, so the retry adds one
   assert.equal(doc.circles[0]!.lastRunCircle, doc.circles[0]!.clock.anchorCircle);
 }
 

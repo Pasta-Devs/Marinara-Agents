@@ -381,7 +381,6 @@ export function normalizeMeanwhile(value: unknown): MeanwhileDocument {
     nudges: list(value.nudges)
       .map(normalizeNudge)
       .filter((n): n is Nudge => n !== null),
-    // shortcut: paperWeeks grows by one short string per Circle week, prune if it ever matters
     papers: list(value.papers).filter(
       (p): p is Paper =>
         isRecord(p) &&
