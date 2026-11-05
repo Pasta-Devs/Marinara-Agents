@@ -15,8 +15,9 @@
 // A job the player asked for (`foreground`, the memory's Retry) is their own request, not background work: it runs in
 // its lane under foreground admission, which never refuses, so it never waits for an idle connection. Background
 // admission refuses while the player's own calls run on the connection, for 30 s after each, and for hours after
-// three failed background jobs, so a Retry that waited for it would wait as long as the player reads. Asked for again
-// while it waits or backs off, a job becomes foreground and goes back in its lane at once.
+// three failed background jobs, so a Retry that waited for it would wait as long as the player reads. It goes ahead
+// of every background job waiting in its lane (one running finishes first). Asked for again while it waits or backs
+// off, a job becomes foreground and moves ahead in its lane, or goes back in it, at once.
 //
 // ponytail: nothing about the queue is stored, so a restart drops it. The ceiling is that line packs wait for the
 // next visit; the upgrade path is a job document.
@@ -43,6 +44,8 @@ interface Entry {
   foreground: boolean;
   /** Set while it backs off after an admission refusal. */
   backoff?: ReturnType<typeof setTimeout>;
+  /** Admitted: it runs or has run, and is never run again. */
+  started?: boolean;
 }
 
 export function createBackgroundQueue(runtime: Pick<CapabilityRuntimeHost, "integrations" | "logger">) {
@@ -54,7 +57,9 @@ export function createBackgroundQueue(runtime: Pick<CapabilityRuntimeHost, "inte
   function enqueue(entry: Entry) {
     const lane = lanes.get(entry.job.connectionId);
     if (lane) {
-      lane.push(entry);
+      // A foreground job goes ahead of every background one waiting (see the header).
+      const at = entry.foreground ? lane.findIndex((waiting) => !waiting.foreground) : -1;
+      lane.splice(at < 0 ? lane.length : at, 0, entry);
       return;
     }
     const fresh = [entry];
@@ -70,9 +75,8 @@ export function createBackgroundQueue(runtime: Pick<CapabilityRuntimeHost, "inte
   async function attempt(entry: Entry) {
     const { job } = entry;
     const admission = runtime.integrations?.admission;
-    let started = false;
     const work = () => {
-      started = true;
+      entry.started = true;
       return job.run();
     };
     try {
@@ -80,7 +84,7 @@ export function createBackgroundQueue(runtime: Pick<CapabilityRuntimeHost, "inte
         ? admission.run(job.connectionId, { kind: entry.foreground ? "foreground" : "background" }, work)
         : work());
     } catch (error) {
-      if (!started && !disposed && admission?.isFailure(error)) {
+      if (!entry.started && !disposed && admission?.isFailure(error)) {
         // Made foreground while this attempt was refused: again at once.
         const delay = entry.foreground
           ? 0
@@ -104,7 +108,7 @@ export function createBackgroundQueue(runtime: Pick<CapabilityRuntimeHost, "inte
   return {
     /**
      * Queues the job unless its key is already queued; false when it was. A `foreground` job whose key waits or backs
-     * off makes that one foreground (see the header); one running goes on as it is.
+     * off makes that one foreground and moves it ahead (see the header); one running goes on as it is.
      */
     ensure(job: BackgroundJob): boolean {
       if (disposed) return false;
@@ -115,11 +119,16 @@ export function createBackgroundQueue(runtime: Pick<CapabilityRuntimeHost, "inte
         enqueue(entry);
         return true;
       }
-      if (job.foreground) {
+      if (job.foreground && !queued.foreground) {
         queued.foreground = true;
+        const lane = lanes.get(queued.job.connectionId);
+        const at = lane?.indexOf(queued) ?? -1;
         if (queued.backoff) {
           clearTimeout(queued.backoff);
           queued.backoff = undefined;
+          enqueue(queued);
+        } else if (lane && at >= 0) {
+          lane.splice(at, 1);
           enqueue(queued);
         }
       }
@@ -127,6 +136,11 @@ export function createBackgroundQueue(runtime: Pick<CapabilityRuntimeHost, "inte
     },
     /** True while a job with this key waits, backs off or runs. */
     has: (key: string) => entries.has(key),
+    /** True while a background job with this key waits or backs off: not admitted yet, and nobody asked for it. */
+    waiting(key: string) {
+      const entry = entries.get(key);
+      return !!entry && !entry.started && !entry.foreground;
+    },
     /** Drops every waiting job and backoff timer (on deactivate). A running job finishes on its own. */
     dispose() {
       disposed = true;

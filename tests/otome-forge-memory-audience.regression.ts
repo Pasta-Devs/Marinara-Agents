@@ -16,8 +16,8 @@
 // (the maintainer's, 2026-11-04): a memory model that reports none writes every summary, each request whole, and
 // condenses in one call; a summary its provider refuses is status `error` with the provider's own message, which Retry
 // clears, and Retry runs at once even while the player reads (foreground admission), its banner gone until it fails
-// again; one that reports a context too small for any summary or condensing fails with no call, its message saying
-// so in Otome's own words (reason `context-too-small`, a wording for each); a run with no connection for it says so in its status, with how many chapters wait for a summary; and a status
+// again, while upkeep queued by itself meanwhile keeps the failure and its Retry until it is admitted; one that
+// reports a context too small for any summary or condensing fails with no call, its message saying so in Otome's own words (reason `context-too-small`, a wording for each); a run with no connection for it says so in its status, with how many chapters wait for a summary; and a status
 // the earlier gate saved never waits for setup: it reads as behind and catches up, or as ready. Recall sends no ranked
 // details and no recent canon: the small memories this prompt may know come back as `recalls`, newest first within 5k
 // tokens and 1k of leeway, never one the caller lists in full; the Home note, Read Him and Read Me take the newest.
@@ -1116,7 +1116,7 @@ test("Retry runs at once while the player reads: its banner goes until it fails 
   const BUSY = new Error("Connection conn-memory is not available for background generation.");
   let failure: string | null = TOO_LONG;
   let reading = false;
-  const { store, memory, runtime, admissions } = await setup(undefined, {
+  const { store, memory, runtime, admissions, calls } = await setup(undefined, {
     maxContext: null,
     admissionFailures: new Set([BUSY]),
     admissionRun: async (operation, mode) => {
@@ -1173,11 +1173,23 @@ test("Retry runs at once while the player reads: its banner goes until it fails 
     assert.deepEqual(again.at(-1), { kind: "failed", message: AGAIN });
     assert.ok(again.length > 1 && again.slice(0, -1).every((notice) => notice === null), JSON.stringify(again));
 
-    // A chapter ends as she reads: its upkeep is refused and backs off. A Retry pressed then runs it at once, and
-    // this one writes the summary: nothing shows, before or after.
+    // A chapter ends as she reads: its upkeep is refused and backs off. Nobody pressed Retry and no summary was tried,
+    // so the failed banner stays, with its Retry (before, the status read `pending`: the banner went, the summary never
+    // ran, and nothing offered a Retry).
     failure = null;
+    const tried = calls.length;
     assert.equal(await memory.maintain({ runId: RUN }), true);
-    assert.equal((await memory.status(RUN)).phase, "pending");
+    for (let poll = 0; poll < 50; poll += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+      view = nextMemoryView(view, await answer("GET", "/runs/:run/memory/status"));
+      assert.deepEqual(
+        [view.phase, view.retrying, memoryNotice(view)],
+        ["error", undefined, { kind: "failed", message: AGAIN }],
+        `poll ${poll}`,
+      );
+    }
+    assert.equal(calls.length, tried, "the waiting upkeep made no summary call");
+    // The Retry pressed then runs that job at once, and this one writes the summary: nothing shows, before or after.
     const done = await retry();
     assert.deepEqual([view.phase, view.message, view.unsummarized], ["ready", undefined, 0]);
     assert.ok(

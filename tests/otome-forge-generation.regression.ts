@@ -647,3 +647,53 @@ test("an admitted background job never calls the model twice, and one connection
   assert.deepEqual(order, ["first", "elsewhere", "second"]);
   queue.dispose();
 });
+
+test("a foreground job (the memory's Retry) goes ahead of the background jobs waiting on its connection", async () => {
+  // Memory shares the queue with line packs, stickers, plush and the phone's daily: a Retry that joined the tail waited
+  // for every one of them that admission let through, its banner already gone.
+  const host = createFakeRuntime();
+  const modes: string[] = [];
+  const admission = {
+    async run<T>(_connectionId: string, mode: { kind: string }, operation: () => Promise<T>): Promise<T> {
+      modes.push(mode.kind);
+      return operation();
+    },
+    isFailure: () => false,
+  };
+  const runtime = { logger: host.runtime.logger, integrations: { admission } } as unknown as Pick<
+    CapabilityRuntimeHost,
+    "integrations" | "logger"
+  >;
+  const queue = createBackgroundQueue(runtime);
+  const order: string[] = [];
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const job = (key: string, foreground = false) => ({
+    key,
+    connectionId: "conn-bg",
+    foreground,
+    run: async () => void order.push(key),
+  });
+  queue.ensure({ key: "running", connectionId: "conn-bg", run: async () => (order.push("running"), held) });
+  for (const key of ["lines", "sticker", "memory"]) queue.ensure(job(key));
+  await settle();
+  assert.deepEqual(order, ["running"]);
+  assert.deepEqual(
+    ["running", "lines", "memory"].map((key) => queue.waiting(key)),
+    [false, true, true],
+    "a job admitted is not waiting; ones in the lane are",
+  );
+
+  // A Retry: a new foreground job goes ahead of the waiting ones; one already waiting, asked for, moves ahead too.
+  assert.equal(queue.ensure(job("retry", true)), true);
+  assert.equal(queue.ensure(job("memory", true)), false, "already queued");
+  assert.deepEqual(
+    ["retry", "memory"].map((key) => queue.waiting(key)),
+    [false, false],
+  );
+  release();
+  await settle();
+  assert.deepEqual(order, ["running", "retry", "memory", "lines", "sticker"], "the running job finishes first");
+  assert.deepEqual(modes, ["background", "foreground", "foreground", "background", "background"]);
+  queue.dispose();
+});

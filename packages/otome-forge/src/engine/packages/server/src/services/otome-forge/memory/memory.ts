@@ -36,7 +36,9 @@
 // - The player's Retry (maintain's `retry`) is their own request, so its job runs under foreground admission
 //   (S/background-queue.ts): it runs at once even while they read, and status gives its outcome, done or failed again.
 //   Under background admission it waited for a connection idle for 30 s, which while the player reads may be never,
-//   and status stayed `pending` all that time.
+//   and status stayed `pending` all that time. Upkeep queued by itself after a failed summary (a chapter's end, a
+//   recall) still waits for that admission, so while it only waits status keeps the failure, with its Retry, which
+//   then runs that job at once.
 // - #2066, the timeline: the kit's overview is the story's timeline (S/memory/timeline.ts). Each chapter's summary
 //   (the kit's detail record, written once, at most 1000 words by its prompt) is appended to it as it is folded in,
 //   with no model call; only once the timeline passes 13k tokens and 1k of leeway (14k) is everything before the
@@ -207,7 +209,10 @@ export interface OtomeMemory {
    * the player's Retry, which never waits for an idle connection (see the header).
    */
   maintain(options: { runId: string; debugMode?: boolean; retry?: boolean }): Promise<boolean>;
-  /** The kit's status, `pending` while a maintenance job is queued or running (see OtomeMemoryStatus). */
+  /**
+   * The kit's status, `pending` while a maintenance job is queued or running (see OtomeMemoryStatus), except a failure
+   * whose upkeep only waits for background admission, which stays the failure (see the header).
+   */
   status(runId: string): Promise<OtomeMemoryStatus>;
   /** Stops the run's maintenance and drops what it was doing (a deleted run). */
   invalidate(runId: string): void;
@@ -624,8 +629,10 @@ export function createOtomeMemory({
       const counts = { noConnection, ...(unsummarized === undefined ? {} : { unsummarized }) };
       // The queue's own key: pending while a job waits, runs or backs off after an admission refusal, with no earlier
       // failure's message. A job that failed before starting for any other reason, or a call in the queue's release
-      // gap, shows the kit's real phase.
-      if (!queue.has(maintainKey(runId))) return { ...status, ...counts };
+      // gap, shows the kit's real phase; so does a failure whose upkeep is background work not admitted yet, so its
+      // Retry stays offered (the banner would go with no summary written, and Settings hides Retry while pending).
+      const key = maintainKey(runId);
+      if (!queue.has(key) || (status.phase === "error" && queue.waiting(key))) return { ...status, ...counts };
       const { message: _earlier, ...rest } = status as OtomeMemoryStatus;
       return { ...rest, phase: "pending", retryable: false, ...counts };
     },
