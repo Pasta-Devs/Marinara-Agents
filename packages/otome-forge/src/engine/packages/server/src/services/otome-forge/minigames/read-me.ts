@@ -373,7 +373,7 @@ export async function startReadMe(
     const recalled = await recalledLine(deps.memory, runId, unit, lately, debugMode);
     const { value, connectionId, model } = await generateJson(deps, {
       runId,
-      job: "structured",
+      job: "narration",
       label: `read-me/${li}`,
       messages: readMeMessages({ world: run.world, player: run.player, unit, liState, recalled, lately }),
       schema: ReadMeReplySchema,

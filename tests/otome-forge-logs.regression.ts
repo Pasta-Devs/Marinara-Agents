@@ -19,7 +19,7 @@ import { registerCareRoutes } from "../packages/otome-forge/src/engine/packages/
 import { registerPhoneRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/phone.ts";
 import { registerStoryRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/story.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
-import { KAI, beatReply, json, planReply, storyWorld } from "./fixtures/otome-forge-story.ts";
+import { KAI, beatReply, confrontationReply, json, planReply, storyWorld } from "./fixtures/otome-forge-story.ts";
 import type { FakeLogEntry, FakeReply } from "./fixtures/otome-forge-fakes.ts";
 
 const PROMPT = "PROMPT-SENTINEL-the-drowned-bell";
@@ -86,12 +86,17 @@ test("with debug off, no line above debug carries a prompt, a request body, a ca
     // P5: one malformed reply (the repair turn's prompt is logged too), then the plan.
     "Here is your chapter plan, as requested.",
     json(planReply()),
-    // P6: the provider fails, then refuses twice (a 422), then writes the scene; the lookahead writes the next one.
+    // P6: the provider fails, then refuses twice (a 422), then writes the scene; the chapter is then written ahead
+    // up to its Confrontation: nodes 1 to 4 as scenes, node 5 by P12.
     new Error("provider unavailable (503)"),
     "I can't continue this scene.",
     "I cannot write that.",
     json(beatReply()),
     json(beatReply()),
+    json(beatReply()),
+    json(beatReply()),
+    json(beatReply()),
+    json(confrontationReply()),
     // P17 for the message, then P27 for the Caring message; a second care request fails at the provider.
     (messages) => {
       assert.ok(isPhonePrompt(messages), "the phone reply");

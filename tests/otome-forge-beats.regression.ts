@@ -277,8 +277,13 @@ test("the lookahead and the player's own request write a beat once", async () =>
   assert.equal(labels(t, "beat/main-1/1"), 1, "beat 1 was written once");
   assert.equal(labels(t, "beat/main-1/0"), 1);
   assert.equal(labels(t, "beat/main-1/2"), 1, "serving beat 1 queued beat 2");
-  assert.equal(labels(t, "beat/main-1/3"), 0, "never further than one ahead");
-  assert.equal((await t.call("POST", beatPath, {}, node(4))).status, 409, "a beat two ahead cannot be written yet");
+  // The maintainer's, 2026-11-05: the chapter is written ahead, each node once, so every scene's art is painted before
+  // the reader gets there. It stops at the Confrontation: what follows waits for how it ends.
+  assert.equal(labels(t, "beat/main-1/3"), 1);
+  assert.equal(labels(t, "beat/main-1/4"), 1);
+  assert.equal(labels(t, "confrontation/main-1/5"), 1, "written ahead up to the Confrontation");
+  assert.equal(labels(t, "beat/main-1/6"), 0, "and nothing after it until it ends");
+  assert.equal((await t.call("POST", beatPath, {}, node(6))).status, 409, "a beat past the Confrontation waits for it");
   const again = await t.call("POST", beatPath, {}, node(1));
   assert.deepEqual(again.body.beat, second.body.beat);
 });
@@ -2425,9 +2430,15 @@ test("Ease off removes the lookahead on a retry, and a lookahead saved just afte
   await u.call("POST", beatPath, {}, node(0));
   await u.settle();
   assert.equal((await eased!)?.status, 200);
-  assert.equal(await u.store.readDoc(beatId(u.runId, "main-1", 1), normalizeBeat), null, "the stale lookahead is gone");
-  await u.call("POST", beatPath, {}, node(1));
-  assert.ok(u.calls.at(-1)!.messages.at(-1)!.content.includes(EASE_OFF_MARKER), "beat 1 follows the cut scene");
+  // The stale lookahead is not kept: beat 1 is written again from the cut (the chapter is written ahead from an Ease
+  // off too, so its art is ready), once, and it is what the reader then gets.
+  assert.equal(labels(u, "beat/main-1/1"), 2, "the stale write, then one written from the cut");
+  const followsCut = u.calls.filter((entry) => entry.messages.at(-1)!.content.includes(EASE_OFF_MARKER));
+  assert.equal(followsCut.length, 1, "beat 1 follows the cut scene");
+  const afterCut = await u.store.readDoc(beatId(u.runId, "main-1", 1), normalizeBeat);
+  const served = await u.call("POST", beatPath, {}, node(1));
+  assert.equal(served.body.beat.written.at, afterCut!.written.at, "the reader gets the scene written from the cut");
+  assert.equal(labels(u, "beat/main-1/1"), 2, "and nothing is written again");
 });
 
 test("a pick past an Ease off cut changes nothing, even while the cut beat is not counted as read", async () => {
@@ -2552,11 +2563,13 @@ test("an Ease off between the lookahead's two reads of the beat it follows stops
   await t.call("POST", beatPath, {}, node(0));
   await t.settle();
   assert.equal((await eased!)?.status, 200);
-  assert.equal(
-    await t.store.readDoc(beatId(t.runId, "main-1", 1), normalizeBeat),
-    null,
-    "the stale lookahead is not kept",
-  );
+  // The stale lookahead is not kept: whatever beat 1 holds now was written from the cut (the chapter is written ahead
+  // from an Ease off too), never from the scene before it.
+  const kept = await t.store.readDoc(beatId(t.runId, "main-1", 1), normalizeBeat);
+  const fromCut = t.calls.filter((entry) => entry.messages.at(-1)!.content.includes(EASE_OFF_MARKER)).length;
+  // A write of it that read the scene before the cut is never kept; one that started from the cut may write it twice
+  // when the cut lands inside it, a single extra call in that narrow race, and both follow the cut.
+  assert.ok(!kept || fromCut >= 1, "the stale lookahead is not kept");
   assert.ok(
     t.logs.some(
       (entry) =>
@@ -2565,10 +2578,12 @@ test("an Ease off between the lookahead's two reads of the beat it follows stops
         String(entry.args[2]).includes("The scene before this one changed"),
     ),
   );
-  assert.equal((await t.call("POST", beatPath, {}, node(1))).status, 200);
-  const next = t.calls.at(-1)!.messages.at(-1)!.content;
-  assert.ok(next.includes(EASE_OFF_MARKER), "beat 1 follows the cut scene");
-  assert.ok(!next.includes("Someone had to."));
+  const served = await t.call("POST", beatPath, {}, node(1));
+  assert.equal(served.status, 200);
+  // Written ahead from the cut, beat 1 is served as stored; the prompt that wrote it followed the cut scene.
+  const wrote = t.calls.filter((entry) => entry.messages.at(-1)!.content.includes(EASE_OFF_MARKER)).at(-1);
+  assert.ok(wrote, "beat 1 follows the cut scene");
+  assert.ok(!wrote.messages.at(-1)!.content.includes("Someone had to."));
 });
 
 test("keeping a line twice keeps it once; letting it go removes it", async () => {
@@ -2602,12 +2617,11 @@ test("the art hears of every beat: faces when served, places and its CG once whe
   const served = await t.call("POST", beatPath, { reviewImagePrompts: true }, node(0));
   assert.equal(served.status, 200, "an art call that throws never breaks the story");
   await t.settle();
+  // Every scene written ahead up to the Confrontation (node 5) is painted once as it is written, with the review mode.
+  const ahead = [0, 1, 2, 3, 4, 5].map((i) => ["scene", "main-1", i, true]);
   assert.deepEqual(
     seen.filter(([kind]) => kind === "scene"),
-    [
-      ["scene", "main-1", 0, true],
-      ["scene", "main-1", 1, true],
-    ],
+    ahead,
     "each written beat once, the lookahead's included, with the request's review mode",
   );
   assert.equal(seen.filter(([kind]) => kind === "faces").length, 1, "faces for the beat served");
@@ -2616,7 +2630,7 @@ test("the art hears of every beat: faces when served, places and its CG once whe
   // Served again from the store: faces again (a set may resume), no second scene paint.
   await t.call("POST", beatPath, {}, node(0));
   assert.equal(seen.filter(([kind]) => kind === "faces").length, 2);
-  assert.equal(seen.filter(([kind]) => kind === "scene").length, 2);
+  assert.equal(seen.filter(([kind]) => kind === "scene").length, ahead.length);
   // A rewrite paints its own scene and lets the replaced beat's CG go, and the lookahead it drops.
   for (const i of [0, 1]) {
     const art = { state: "ready" as const, at, url: `/cg${i}.png`, ref: `global-gallery:g${i}` };
@@ -2627,6 +2641,7 @@ test("the art hears of every beat: faces when served, places and its CG once whe
   const rewritten = await t.call("POST", beatPath, { rewrite: true }, node(0));
   assert.equal(rewritten.status, 200);
   await t.settle();
+  // The replaced beat and every dropped scene written ahead let their art go; only the two with a CG had any.
   assert.equal(seen.filter(([kind]) => kind === "release").length, 2, "the replaced beat and the dropped lookahead");
 });
 

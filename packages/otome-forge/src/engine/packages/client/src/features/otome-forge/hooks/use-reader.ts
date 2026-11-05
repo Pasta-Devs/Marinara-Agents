@@ -171,9 +171,12 @@ export interface LogEntry {
 }
 
 const TOAST_MS = 3_200;
-/** How often, and how long, a key image being painted is looked for again (3 minutes). */
+/**
+ * How often, and how long, a key image being painted is looked for again: 12 minutes, past the server's 10-minute
+ * deadline for one image (S/art/paint.ts PAINT_DEADLINE_MS), so a paint that fails there shows its Retry here.
+ */
 const PAINT_POLL_MS = 5_000;
-const PAINT_POLL_TRIES = 36;
+const PAINT_POLL_TRIES = 144;
 /** Auto's pause after a voiced line ends. */
 const AFTER_VOICE_MS = 900;
 

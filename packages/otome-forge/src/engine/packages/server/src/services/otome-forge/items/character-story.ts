@@ -231,7 +231,7 @@ export async function ensureItemStory(
     // Read again in the queue: the state the story is written against is the one of this moment.
     const now = (await readRun(deps.store, runId)) ?? run;
     const memory = await recallText(deps, runId, {
-      job: "structured",
+      job: "narration",
       cast: [li],
       query: { plan: item.premise ?? item.title, speakers: [unit.name] },
       signal,
@@ -240,7 +240,7 @@ export async function ensureItemStory(
     const context: StoryPlanContext = { units: now.units, state: now.state, world: now.world, li, key };
     const { value, connectionId } = await generateJson(deps, {
       runId,
-      job: "structured",
+      job: "narration",
       label: `story-plan/${key}`,
       messages: storyPlanMessages({
         world: now.world,

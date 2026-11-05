@@ -388,7 +388,7 @@ async function createBanner(
   // Recall as a scene with nobody in it: the overview of the whole timeline (a love interest's own chapter only as the
   // overview tells it, titled private) and the main story's previous chapter, never his own details.
   const memory = await recallText(deps, runId, {
-    job: "structured",
+    job: "narration",
     cast: [],
     continues: "main",
     query: { plan: featured.bible?.want ?? "", speakers: cast.map((unit) => unit.name) },
@@ -420,7 +420,7 @@ async function createBanner(
   };
   const { value, connectionId, model } = await generateJson(deps, {
     runId,
-    job: "structured",
+    job: "narration",
     label: `banner-plan/${key}`,
     messages: bannerPlanMessages({
       kind,

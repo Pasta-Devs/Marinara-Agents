@@ -354,7 +354,7 @@ export async function recalledLine(
   try {
     const result = await memory.recall({
       runId,
-      job: "structured",
+      job: "narration",
       reader: unit.id,
       // No timeline here: his own Character Stories come as recalls (S/memory/memory.ts).
       ownStories: true,
@@ -407,7 +407,7 @@ export async function startReadHim(
     const tells = unit.bible.mask.tells;
     const { value, connectionId, model } = await generateJson(deps, {
       runId,
-      job: "structured",
+      job: "narration",
       label: `read-him/${li}`,
       messages: readHimMessages({
         world: run.world,

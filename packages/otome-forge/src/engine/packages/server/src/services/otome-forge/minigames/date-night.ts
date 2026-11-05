@@ -401,7 +401,7 @@ export async function startDate(
     const liState = run.state.lis[input.li] ?? defaultLiState();
     const makeItRight = standingRupture(liState);
     const key = nextDateKey(await dateChapters(deps.store, runId));
-    const job: ForgeMemoryJob = "structured";
+    const job: ForgeMemoryJob = "narration";
     const memory = await recallText(deps, runId, {
       job,
       cast: [input.li],
