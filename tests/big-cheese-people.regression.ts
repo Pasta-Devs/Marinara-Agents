@@ -138,3 +138,16 @@ test("tasks: ambient and grapevine fall back to Lite and reject a wrong person",
   const nobody = async () => JSON.stringify({ lines: [{ source: "ghost", line: "Something odd." }] });
   assert.equal((await runTask("grapevine.batch", { kit, rng: 3, facts }, { model: nobody })).source, "lite");
 });
+
+test("visitor: goes home on their last day and gets a room before that", () => {
+  const s = fresh();
+  const p = HAFENKAI_PLACE.people.find((x) => !x.deputy)!;
+  s.people.v1 = { ...s.people[p.id], name: "Visitor", routine: p.routine, until: core.dayIndex(s.clock) + 1 };
+  core.movePeople(s);
+  assert.notEqual(s.people.v1.room, "home", "a visitor works a kit routine");
+  core.dayTurn(s);
+  assert.equal(s.people.v1.status, "active", "still here before the last day");
+  s.clock = { ...s.clock, day: s.clock.day + 1 };
+  core.dayTurn(s);
+  assert.equal(s.people.v1.status, "quit");
+});

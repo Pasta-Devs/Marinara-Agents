@@ -1,4 +1,5 @@
 import { addTrust, applyDelta, pure, spendHour } from "./run.js";
+import { support } from "./meetings.js";
 import { closeThread, openThread } from "./threads.js";
 import type { Meter, Run } from "./types.js";
 
@@ -54,7 +55,7 @@ export function holdHearing(s: Run) {
     return a + (tr >= 60 ? 1 : tr < 40 ? -1 : 0);
   }, 0);
   const backing = s.hearingBody.filter((m) => {
-    const item = (s.people[m.id]?.trust ?? 50) / 5 - 10 + m.fit + m.faction;
+    const item = support(s, m.id, m.fit, m.faction);
     return item * 3 + witness + 3 * h.evidence.length > 0;
   }).length;
   const won = backing > s.hearingBody.length / 2;

@@ -3,6 +3,7 @@
 // ──────────────────────────────────────────────
 import { useTranslation } from "react-i18next";
 import type { Meter } from "./api";
+import { WeekStrip } from "./WeekStrip";
 import { dayKey, Face, nameOf, threadTitle, type Ctx } from "./parts";
 
 const METERS: Meter[] = ["money", "output", "people", "standing"];
@@ -30,6 +31,7 @@ export function Office({ ctx, canStart }: { ctx: Ctx; canStart: boolean }) {
       <h1 className="bc-heading" tabIndex={-1} data-focus>
         {kit.name}
       </h1>
+      <WeekStrip ctx={ctx} />
       <ul className="bc-meters" aria-label={t("ui.bigCheese.office.meters")}>
         {METERS.map((meter) => {
           const value = meters[meter];

@@ -5,6 +5,7 @@ import {
   MAX_SNAPSHOTS,
   createBoard,
 } from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/board.js";
+import type { ModelCall } from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/ai/tasks.js";
 import { createGame } from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/game.js";
 import { createRunStore } from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/store.js";
 
@@ -37,7 +38,8 @@ async function harness(finishArrival = true) {
   const documents = fakeDocuments();
   const store = createRunStore(documents);
   const game = createGame(store, async () => undefined);
-  const board = createBoard(store, documents);
+  let model: ModelCall | undefined; // the Spin planner's model; none = Lite
+  const board = createBoard(store, documents, async () => model);
   const { run } = await game.create("hafenkai", true);
   const id: string = (run as any).id;
   const rev = async () => (await store.get(id)).revision;
@@ -54,7 +56,8 @@ async function harness(finishArrival = true) {
     board.rewind(id, { expectedRevision: await rev(), playId, mode, confirmLater });
   const journal = async () => (await board.journal(id, {})).entries as any[];
   const startDay = async () => board.morning(await game.dayStart(id, { expectedRevision: await rev() }));
-  return { documents, store, game, board, id, rev, cur, play, rewind, journal, startDay };
+  const say = (text: string) => void (model = async () => text);
+  return { documents, store, game, board, id, rev, cur, play, rewind, journal, startDay, say };
 }
 
 const code = (c: string) => (e: any) => e.code === c;
@@ -260,4 +263,157 @@ test("deleting a run deletes its Board document", async () => {
   await h.store.remove(h.id);
   await h.board.remove(h.id);
   assert.ok(![...h.documents.docs.values()].some((d) => d.kind === "board-snapshots"));
+});
+
+// ── M2: Spin, Coming up and the new Set actions ──
+const plan = (beats: unknown[]) =>
+  JSON.stringify({
+    summary: "Henrike warms to the boss.",
+    question: null,
+    cant: [],
+    thread: { title: "Henrike warms up", people: ["henrike"], need: "people", stakes: "Her work depends on it" },
+    beats,
+  });
+const beat = (o: Record<string, unknown> = {}) => ({
+  id: "b1",
+  when: { week: 1, day: 1, slot: "morning" },
+  verb: "person.feelings",
+  who: ["henrike"],
+  touches: { trust: { size: "medium", dir: "up" } },
+  scene: "",
+  ...o,
+});
+
+test("board.plan refuses unknown verbs and plans over 8 beats; a good plan gets code-made numbers", async () => {
+  const h = await harness();
+  const spin = async () => (await h.board.preview(h.id, { text: "Henrike warms to me" })) as any;
+  assert.equal((await spin()).offline, true); // no model: nothing planned, nothing changed
+  for (const beats of [[beat({ verb: "fire.everyone" })], Array.from({ length: 9 }, (_, i) => beat({ id: `b${i}` }))]) {
+    h.say(plan(beats));
+    const p = await spin();
+    assert.deepEqual(p.actions, []);
+    assert.equal(p.offline, true);
+  }
+  h.say(
+    plan([
+      beat(),
+      beat({ id: "b2", who: ["nobody"] }),
+      beat({ id: "b3", when: { week: 20, day: 1, slot: "morning" } }),
+    ]),
+  );
+  const p = await spin();
+  assert.deepEqual(
+    p.actions.map((a: any) => a.verb),
+    ["thread.open", "person.feelings"],
+  );
+  assert.equal(p.actions[1].input.trustBy, 12); // medium = 6, doubled for trust
+  assert.deepEqual(p.actions[1].when, { week: 1, day: 1, slot: "morning" });
+  assert.deepEqual(
+    p.dropped.map((d: any) => d.code),
+    ["unknown-person", "bad-when"],
+  );
+});
+
+test("a Spin play runs its beat on its day, and rewinding it equals the snapshot", async () => {
+  const h = await harness();
+  const before = await h.cur();
+  h.say(plan([beat()]));
+  const pv = (await h.board.preview(h.id, { text: "Henrike warms to me" })) as any;
+  await h.board.play(h.id, { expectedRevision: await h.rev(), previewId: pv.id });
+  const [spin] = await h.journal();
+  assert.deepEqual([spin.layer, spin.state, spin.text], ["spin", "scheduled", "Henrike warms to me"]);
+  const g1 = await h.cur();
+  assert.equal(g1.people.henrike.trust, before.people.henrike.trust);
+  assert.ok(Object.values<any>(g1.threads).some((t) => t.origin === "board" && t.kind === "wish"));
+  await h.play([{ verb: "time.skip", input: { days: 1 } }]);
+  await h.startDay();
+  const g2 = await h.cur();
+  assert.equal(g2.people.henrike.trust - before.people.henrike.trust, Math.min(12, 100 - before.people.henrike.trust));
+  assert.equal((await h.journal()).find((e) => e.id === spin.id).state, "done");
+  await h.rewind(spin.id, "rewind", true);
+  assert.deepEqual(await h.cur(), before);
+  assert.equal((await h.journal()).find((e) => e.id === spin.id).state, "rewound");
+});
+
+test("Coming up lists scheduled beats and moves, cancels and forces them", async () => {
+  const h = await harness();
+  h.say(plan([beat(), beat({ id: "b2", when: { week: 1, day: 3, slot: "evening" } })]));
+  const pv = (await h.board.preview(h.id, { text: "Henrike warms to me" })) as any;
+  await h.board.play(h.id, { expectedRevision: await h.rev(), previewId: pv.id });
+  const rows = async () => (await h.board.comingUp(h.id)).rows as any[];
+  const patch = async (id: string, op: string, when?: object) =>
+    h.board.patch(h.id, { expectedRevision: await h.rev(), id, op, when });
+  const [first, second] = (await rows()).filter((r) => r.type === "action");
+  assert.deepEqual([first.when.day, second.when.day], [1, 3]);
+  await patch(first.id, "move", { week: 2, day: 0 });
+  assert.deepEqual(
+    (await rows()).filter((r) => r.type === "action").map((r) => r.when.week),
+    [1, 2],
+  );
+  await assert.rejects(() => patch(second.id, "move", { week: 1, day: 0 }), code("bad-request")); // not later than today
+  await patch(second.id, "cancel");
+  assert.equal((await rows()).filter((r) => r.type === "action").length, 1);
+  // A thread beat moves as a play of its own, which rewinds like any other.
+  const b = (await rows()).find((r) => r.type === "beat");
+  assert.ok(b);
+  const before = await h.cur();
+  await patch(b.id, "move", { week: 3, day: 2 });
+  const moved = (await rows()).find((r) => r.id === b.id);
+  assert.deepEqual([moved.when.week, moved.when.day], [3, 2]);
+  const [last] = await h.journal();
+  assert.equal(last.actions[0].verb, "coming.move");
+  await h.rewind(last.id, "rewind");
+  assert.deepEqual(await h.cur(), before);
+  await patch(first.id, "run"); // run now: the beat lands at once
+  assert.equal(
+    (await h.cur()).people.henrike.trust - before.people.henrike.trust,
+    Math.min(12, 100 - before.people.henrike.trust),
+  );
+});
+
+test("Set actions for relations, secrets, ambition, rooms and threads", async () => {
+  const h = await harness();
+  const g0 = await h.cur();
+  const [a, b] = Object.keys(g0.people);
+  const room = Object.keys(g0.rooms)[0]!;
+  await h.play([
+    { verb: "relation.shift", input: { a, b, kind: "crush", value: 40 } },
+    { verb: "ambition.set", target: { kind: "person", id: a }, input: { value: 70 } },
+    { verb: "room.condition", target: { kind: "room", id: room }, input: { delta: -20 } },
+    { verb: "secret.add", input: { about: a, text: "Cheats at cards", knownBy: ["boss", b] } },
+    { verb: "thread.open", input: { kind: "crisis", title: "Pump fails", people: [a], need: "output" } },
+  ]);
+  const g = await h.cur();
+  const rel = g.relations.find((r: any) => [r.a, r.b].sort().join() === [a, b].sort().join());
+  assert.deepEqual([rel.kind, rel.level], ["crush", 40]);
+  assert.equal(g.rooms[room].condition, Math.max(0, g0.rooms[room].condition - 20));
+  const secret = Object.values<any>(g.threads).find((t) => t.title === "Cheats at cards");
+  assert.deepEqual([secret.kind, secret.secret], ["cover_up", false]);
+  assert.equal(g.people[a].ambition === 70 || a === g.deputy, true);
+  const pump = Object.values<any>(g.threads).find((t) => t.title === "Pump fails");
+  await h.play([{ verb: "thread.close", target: { kind: "thread", id: pump.id }, input: { state: "lost" } }]);
+  const lost = await h.cur();
+  assert.equal(lost.threads[pump.id], undefined);
+  assert.equal(lost.meters.output, Math.max(0, g.meters.output - 6));
+  await assert.rejects(
+    () => h.play([{ verb: "thread.change", target: { kind: "thread", id: "nope" }, input: { severity: 2 } }]),
+    code("bad-request"),
+  );
+  await assert.rejects(
+    () => h.play([{ verb: "relation.shift", input: { a, b: a, kind: "crush", value: 1 } }]),
+    code("bad-request"),
+  );
+});
+
+test("a play leaves a reason seed and a memory for the person it changed, unless it is silent", async () => {
+  const h = await harness();
+  const trust = (v: number) => [
+    { verb: "person.feelings", target: { kind: "person", id: "henrike" }, input: { trust: v } },
+  ];
+  await h.play(trust(95));
+  const g = await h.cur();
+  assert.equal(g.reasons.length, 1);
+  assert.equal(g.people.henrike.memories.at(-1).thread, "board");
+  await h.play(trust(5), { silent: true });
+  assert.equal((await h.cur()).reasons.length, 1);
 });

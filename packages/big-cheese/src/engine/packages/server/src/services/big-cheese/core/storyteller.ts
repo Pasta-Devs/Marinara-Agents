@@ -1,7 +1,9 @@
 // The storyteller (design.md section 5): tension, card budget, decks and the target number of open threads.
 // It runs once each morning from cards.seedDay and only plans; the model writes words.
 import { dayIndex } from "./clock.js";
+import { bigToday, bookClimaxes, lapse } from "./bigscenes.js";
 import { pick, roll } from "./rng.js";
+import { layerSeeds, projects } from "./layers.js";
 import { K } from "./stances.js";
 import { closeThread, openStory, openThread } from "./threads.js";
 import { applyDelta, newId } from "./run.js";
@@ -74,7 +76,11 @@ function draw(s: Run, deck: Item[]) {
   return pick(s, fresh.length ? fresh : deck);
 }
 
-const someone = (s: Run) => pick(s, Object.keys(s.people));
+const someone = (s: Run) =>
+  pick(
+    s,
+    Object.keys(s.people).filter((id) => s.people[id].status === "active"),
+  );
 const tomorrow = (s: Run) => ({ week: s.clock.week + (s.clock.day === 4 ? 1 : 0), day: (s.clock.day + 1) % 5 });
 
 // A thread past its due week ends by kind. Cards, promises, letters and hearings close themselves; a revolt closes on Friday (checkRevolt).
@@ -162,12 +168,18 @@ function fill(s: Run) {
 export function morning(s: Run): number {
   s.story.wave = target(s);
   s.story.tension = tension(s);
+  projects(s);
   clocks(s);
-  if (s.clock.day === 0) weekly(s);
+  if (s.clock.day === 0) {
+    weekly(s);
+    layerSeeds(s, PRESETS[s.storyteller].open);
+  }
   surprise(s);
   fill(s);
+  lapse(s);
+  bookClimaxes(s);
   const [lo, hi] = PRESETS[s.storyteller].cards;
-  return lo + Math.floor(roll(s) * (hi - lo + 1));
+  return Math.max(0, lo + Math.floor(roll(s) * (hi - lo + 1)) - bigToday(s)); // a big scene takes one card off its day
 }
 
 /** Friday: Legitimacy 0 opens a revolt, 25 or more wins it, and a revolt that runs out of time ends the reign (design.md 9). */

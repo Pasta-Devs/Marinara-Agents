@@ -29,6 +29,9 @@ export interface Person {
   memories: Memory[];
   room: string; // a room id, or "home"
   ambition: number; // 0-100, progress toward their own goal
+  name?: string; // set when a cast card replaces or adds this person
+  routine?: Record<Slot, string>; // hired people and visitors are not in the kit
+  until?: number; // visitors: the day index on which they go home
   status: "active" | "on_leave" | "sick" | "quit" | "fired" | "banished" | "imprisoned" | "dead";
 }
 
@@ -64,9 +67,35 @@ export interface Letter {
   screen: string;
 }
 
+export interface MeetingItem {
+  id: string;
+  title: string;
+  thread?: string;
+  deputy?: boolean; // the deputy challenge
+  need: Meter;
+  severity: Severity;
+  offer: Answer[]; // the three stances the code picked
+  base: Record<string, number>; // each attendee's score before the boss speaks
+  lines: { who: string; text: string }[];
+  suggestions: { stance: string; text: string }[];
+  chosen?: string;
+  scores?: Record<string, number>;
+  passed?: boolean;
+}
+
+export interface Meeting {
+  kind: string;
+  mode: "vote" | "agreement";
+  title: string;
+  people: string[];
+  items: MeetingItem[];
+  done: boolean;
+}
+
 export interface Beat {
   id: string;
-  type: "card" | "check" | "letter";
+  type: "card" | "check" | "letter" | "meeting_item" | "big_scene" | "scene";
+  blueprint?: string; // big_scene: the blueprint id (core/bigscenes.ts)
   planned?: { week: number; day: number };
   seed?: { need: Meter; severity: Severity };
   card?: string;
@@ -100,6 +129,7 @@ export interface Thread {
   beats: Beat[];
   state: "open" | "won" | "lost" | "dropped";
   promise?: { to: string; what: string; due: { week: number; day: number }; kept: boolean };
+  layer?: "drama" | "romance"; // set when a story layer opened it (layers.ts)
 }
 
 export interface Member {
@@ -144,6 +174,7 @@ export interface Run {
   hearing: Hearing | null;
   hearingBody: Member[];
   lastHearing: { won: boolean; backing: number; of: number } | null;
+  meeting?: Meeting | null; // the open (or last finished) meeting, design.md section 7
   endingName: string;
   status: "playing" | "complete" | "ended";
   ending: string | null;
@@ -154,4 +185,6 @@ export interface Run {
   grapevine: string[]; // ids of lines in a child document
   story: { tension: number; lastSurprise: { week: number; day: number } | null; wave: number };
   bigScenes: { week: number; used: number }; // the weekly big-scene budget
+  reasons?: { person: string; text: string }[]; // Board reason seeds for the next ambient batch (cheese-board.md §6)
+  layers?: { drama: number; romance: number }; // story layer dials 0-100; missing = 50 (layers.ts)
 }

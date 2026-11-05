@@ -14,6 +14,7 @@ export interface Kit {
   letters?: Letter[]; // "Letters from the last boss", kit data
   hearing: { members: Member[]; ending: string };
   extras?: { id: string; main: Meter; value: number }[];
+  layers?: { drama: number; romance: number };
 }
 
 // Hafenkai Logistics start values (content.md 2.1).
@@ -86,6 +87,7 @@ export function newRun(kit: Kit, seed: number): Run {
     grapevine: [],
     story: { tension: 0, lastSurprise: null, wave: 0 },
     bigScenes: { week: 1, used: 0 },
+    ...(kit.layers && { layers: { ...kit.layers } }),
     extras: structuredClone(kit.extras ?? []),
     people: Object.fromEntries(
       kit.people.map((p) => [

@@ -31,7 +31,7 @@ export const PLACES = { hafenkai: HAFENKAI_PLACE } as const;
 
 // The words of a run, kept next to the rules-core state (route contract).
 export interface SceneText {
-  blueprint: "arrival" | "hearing";
+  blueprint: string;
   title: string;
   room: string;
   people: string[];
@@ -155,6 +155,9 @@ export function createRunStore(documents: CapabilityDocumentStore) {
       const key = `r-${randomBytes(6).toString("hex")}`;
       const at = new Date().toISOString();
       const game = newRun(kit, randomBytes(4).readUInt32LE(0));
+      // Core text (thread titles) names a swapped slot by its cast name.
+      for (const [pid, c] of Object.entries(cast?.people ?? {}))
+        if (Object.hasOwn(game.people, pid)) game.people[pid].name = c.name;
       const first = (await prepare?.(game)) ?? { text: { cards: {}, scenes: {}, feelings: {} }, scene: null };
       const run: Run = {
         saveVersion: SAVE_VERSION,

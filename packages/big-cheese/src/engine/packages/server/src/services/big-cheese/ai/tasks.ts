@@ -6,6 +6,7 @@ import type { PlaceKit } from "../core/kits/types.js";
 import { pick } from "../core/rng.js";
 import { STANCES } from "../core/stances.js";
 import { TRAITS } from "../core/traits.js";
+import { METERS, SLOTS } from "../core/types.js";
 import type { Meter, Severity, Tier } from "../core/types.js";
 
 export type Band = "cold" | "wary" | "neutral" | "warm" | "loyal";
@@ -46,7 +47,7 @@ export interface AnswerTagOutput {
 export interface ScenePartInput {
   kit: PlaceKit;
   rng: number;
-  blueprint: "arrival" | "hearing";
+  blueprint: string;
   goal: string;
   room: string;
   people: string[]; // on stage
@@ -526,6 +527,150 @@ const threadBeat: Task<ThreadBeatInput, ThreadBeatOutput> = {
   }),
 };
 
+// meeting.turn (design.md 7.1): what the attendees say on one item, then a line for each stance.
+export interface MeetingTurnInput {
+  kit: PlaceKit;
+  rng: number;
+  title: string; // the meeting
+  item: string; // the item that is up
+  first: boolean; // the chair opens the meeting
+  people: { person: string; side: "for" | "open" | "against" }[];
+  offer: string[];
+}
+export interface MeetingTurnOutput {
+  lines: { who: string; text: string }[];
+  suggestions: { stance: string; text: string }[];
+}
+
+const meetingTurn: Task<MeetingTurnInput, MeetingTurnOutput> = {
+  tokens: 900,
+  prompt: (i) =>
+    msgs(
+      i.kit,
+      `Write 2 to 4 lines the attendees of a "${i.title}" meeting say about this item: "${i.item}".${i.first ? " The chair opens the meeting first." : ""} "who" is a person id from the list. Each person speaks for, against or undecided, as given. Then write one suggestion line the boss could say for each stance, in the given order. Echo each "stance". Stances: ${stanceHelp(i.offer)}
+Shape: {"lines":[{"who":"","text":""}],"suggestions":[{"stance":"","text":""}]}
+Attendees:\n${i.people.map((p) => `- ${p.person}: ${p.side}`).join("\n")}
+Voices:\n${voiceSheet(
+        i.kit,
+        i.people.map((p) => p.person),
+      )}`,
+      { people: i.people, offer: i.offer },
+    ),
+  parse(raw, i) {
+    const o = obj(raw);
+    const lines = list(o.lines, 2, 4).map((l) => {
+      const x = obj(l);
+      if (!i.people.some((p) => p.person === x.who)) throw new Error("line: who is not at the meeting");
+      return { who: x.who as string, text: words(x.text, 3, 200, "line") };
+    });
+    return { lines, suggestions: suggestions(o.suggestions, i.offer) };
+  },
+  lite(i) {
+    const h = { rng: i.rng };
+    const lines = i.people.slice(0, i.first ? 3 : 2).map((p) => ({
+      who: p.person,
+      text: pick(h, person(i.kit, p.person).voice.phrases),
+    }));
+    return {
+      lines: i.first
+        ? [{ who: "narrator", text: `The ${i.title.replace(/_/g, " ")} begins. First up: ${i.item}.` }, ...lines]
+        : lines,
+      suggestions: i.offer.map((stance) => ({ stance, text: SUGGEST[stance] ?? SUGGEST.delay! })),
+    };
+  },
+};
+
+// board.plan (cheese-board.md §4): one Spin line becomes up to 8 beats. The model picks verbs, people and
+// size words only; the Board turns sizes into numbers and checks every id against the run.
+export const BOARD_PLAN_VERBS = [
+  "person.feelings",
+  "relation.shift",
+  "ambition.set",
+  "secret.add",
+  "room.condition",
+  "card.add",
+  "meter.set",
+] as const;
+export const MAX_PLAN_BEATS = 8;
+
+export interface BoardPlanInput {
+  kit: PlaceKit;
+  rng: number;
+  text: string;
+  target: string | null;
+  world: Obj; // the run in short: clock, meters, people, rooms, open threads
+}
+
+export interface PlanBeat {
+  id: string;
+  when: { week: number; day: number; slot: string } | null; // null = now
+  verb: string;
+  who: string[];
+  touches: Obj;
+  scene: string;
+}
+
+export interface BoardPlanOutput {
+  summary: string;
+  question: string | null;
+  cant: string[];
+  thread: { title: string; people: string[]; need: Meter; stakes: string } | null;
+  beats: PlanBeat[];
+}
+
+const boardPlan: Task<BoardPlanInput, BoardPlanOutput> = {
+  tokens: 1200,
+  prompt: (i) =>
+    msgs(
+      i.kit,
+      `Plan the player's wish as at most ${MAX_PLAN_BEATS} beats, each on its own day. Verbs: ${BOARD_PLAN_VERBS.join(", ")}.
+Never write a number. Size is "small", "medium" or "big"; "dir" is "up" or "down".
+touches by verb: person.feelings {trust|stress: {size, dir}, mood: "great|fine|low|sick|away"}; relation.shift {relation: {kind: friend|rival|crush|couple|mentor|enemy|family|secret_affair, size, dir}} with who of 2 people; ambition.set {ambition: {size, dir}}; secret.add {} with who = the person it is about, then who knows it ("boss" is the player), and "scene" = the secret in one line; room.condition {room: id, size, dir}; card.add {need: money|output|people|standing, size}; meter.set {meter, size, dir}.
+"when" is {week, day 0-4, slot: morning|midday|afternoon|evening|night} or null for now. Set "question" when the words are unclear, and put parts you cannot plan in "cant".
+Shape: {"summary":"","question":null,"cant":[],"thread":{"title":"","people":[],"need":"people","stakes":""},"beats":[{"id":"b1","when":null,"verb":"","who":[],"touches":{},"scene":""}]}`,
+      { text: i.text, target: i.target, world: i.world },
+    ),
+  parse(raw) {
+    const o = obj(raw);
+    const beats = list(o.beats ?? [], 0, MAX_PLAN_BEATS).map((b, n) => {
+      const x = obj(b);
+      if (!(BOARD_PLAN_VERBS as readonly unknown[]).includes(x.verb)) throw new Error("unknown verb");
+      let when: PlanBeat["when"] = null;
+      if (x.when != null) {
+        const w = obj(x.when);
+        const week = Number(w.week);
+        const day = Number(w.day);
+        if (!Number.isInteger(week) || week < 1 || week > 24 || !Number.isInteger(day) || day < 0 || day > 4)
+          throw new Error("bad when");
+        when = { week, day, slot: (SLOTS as readonly unknown[]).includes(w.slot) ? (w.slot as string) : "morning" };
+      }
+      return {
+        id: str(x.id ?? `b${n + 1}`, 1, 20, "id"),
+        when,
+        verb: x.verb as string,
+        who: list(x.who ?? [], 0, 4).map((p) => str(p, 1, 40, "who")),
+        touches: obj(x.touches ?? {}),
+        scene: x.scene == null ? "" : str(x.scene, 0, 200, "scene"),
+      };
+    });
+    const t = o.thread == null ? null : obj(o.thread);
+    return {
+      summary: str(o.summary, 3, 160, "summary"),
+      question: o.question == null ? null : str(o.question, 1, 200, "question"),
+      cant: list(o.cant ?? [], 0, 5).map((c) => str(c, 1, 160, "cant")),
+      thread: t && {
+        title: str(t.title, 1, 80, "title"),
+        people: list(t.people ?? [], 0, 4).map((p) => str(p, 1, 40, "people")),
+        need: (METERS as readonly unknown[]).includes(t.need) ? (t.need as Meter) : "standing",
+        stakes: t.stakes == null ? "" : str(t.stakes, 0, 200, "stakes"),
+      },
+      beats,
+    };
+  },
+  // No model, no plan: the Set layer still works (cheese-board.md §8 fallback).
+  lite: () => ({ summary: "", question: null, cant: [], thread: null, beats: [] }),
+};
+
 export const tasks = {
   "cast.read": castRead,
   "cards.day": cardsDay,
@@ -535,6 +680,8 @@ export const tasks = {
   "thread.beat": threadBeat,
   "ambient.batch": ambientBatch,
   "grapevine.batch": grapevineBatch,
+  "meeting.turn": meetingTurn,
+  "board.plan": boardPlan,
 };
 type Tasks = typeof tasks;
 

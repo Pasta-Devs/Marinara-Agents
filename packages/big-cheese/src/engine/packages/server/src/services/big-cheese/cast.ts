@@ -331,6 +331,12 @@ export const MidBody = z.object({
 
 const MAX_EXTRA = 6;
 
+/** Cast changes only while the run is playing and no scene is open, like every other action. */
+function open(r: Run) {
+  if (r.game.status !== "playing") throw new BigCheeseError(409, "This run is over.", "wrong-phase");
+  if (r.scene) throw new BigCheeseError(409, "Finish the scene first.", "wrong-phase");
+}
+
 /** Reads the picked card, then writes through the run queue. A changed run is a 409, as for every action. */
 export async function midCast(
   runtime: CapabilityRuntimeHost,
@@ -359,18 +365,21 @@ export async function midCast(
   };
   const deputy = kit.people.find((p) => p.deputy);
   return store.update(id, expectedRevision, (r) => {
+    open(r);
     const cast: Cast = { ...r.cast, people: { ...r.cast?.people } };
     if (Object.values(cast.people).some((p) => p.engineId === engineId)) throw bad("Each card can be used once.");
     if (mode === "swap") {
       const slot = kit.people.find((p) => (replaces ? p.id === replaces : p.role === sheet.role));
       if (!slot || slot.deputy) throw bad("This role cannot be filled from your library.");
       cast.people[slot.id] = person;
-      return { ...r, cast };
+      const people = { ...r.game.people, [slot.id]: { ...r.game.people[slot.id], name } };
+      return { ...r, cast, game: { ...r.game, people } };
     }
     if (deputy && sheet.role.toLowerCase() === deputy.role.toLowerCase()) {
       throw bad("This role cannot be filled from your library.");
     }
-    if (Object.keys(cast.people).filter((k) => !kit.people.some((p) => p.id === k)).length >= MAX_EXTRA) {
+    const extras = Object.keys(cast.people).filter((k) => !kit.people.some((p) => p.id === k));
+    if (extras.filter((k) => r.game.people[k]?.status === "active").length >= MAX_EXTRA) {
       throw bad("The place has no room for more people.");
     }
     let n = 1;
@@ -389,6 +398,14 @@ export async function midCast(
       room: "home",
       ambition: 0,
       status: "active",
+      name,
+      // Extras work the routine of a kit person in the same role, or of the first non-deputy.
+      routine: (
+        kit.people.find((p) => p.role.toLowerCase() === sheet.role.toLowerCase()) ??
+        kit.people.find((p) => !p.deputy) ??
+        kit.people[0]
+      ).routine,
+      ...(mode === "visitor" && { until: dayIndex(r.game.clock) + days }),
     };
     return { ...r, cast, game: { ...r.game, people: { ...r.game.people, [key]: fresh } } };
   });
@@ -405,18 +422,22 @@ export async function refreshCast(
   const b = z.object({ expectedRevision: z.number().int().min(0) }).safeParse(body ?? {});
   if (!b.success) throw bad("Invalid request.");
   const missing = () => new BigCheeseError(404, "No such cast person.", "not-found");
-  const old = (await store.get(id)).cast?.people[pid];
-  if (!old) throw missing();
+  const before = (await store.get(id)).cast;
+  if (!before || !Object.hasOwn(before.people, pid)) throw missing();
+  const old = before.people[pid];
   const d = await readOne(runtime, "character", old.engineId);
   const age = checkAge(d);
   const name = str(d.name, 80);
   if (!name) throw bad("This card has no name.");
   return store.update(id, b.data.expectedRevision, (r) => {
+    open(r);
     const cur = r.cast?.people[pid];
     if (!r.cast || !cur) throw missing();
+    const person = r.game.people[pid];
     return {
       ...r,
       cast: { ...r.cast, people: { ...r.cast.people, [pid]: { ...cur, age, name, avatar: avatarOf(d.avatarPath) } } },
+      ...(person && { game: { ...r.game, people: { ...r.game.people, [pid]: { ...person, name } } } }),
     };
   });
 }

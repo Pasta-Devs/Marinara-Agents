@@ -7,6 +7,7 @@ import { engineModel } from "./ai/tasks.js";
 import { createBoard } from "./board.js";
 import { CastRequest, ReadBody, castRead, listCast, midCast, refreshCast, resolveCast, systemsOf } from "./cast.js";
 import { createGame, kitView, view } from "./game.js";
+import { createMeetings } from "./meetings.js";
 import { createPlace } from "./place.js";
 import { BigCheeseError, CreateRunBody, createRunStore, type RunStore } from "./store.js";
 
@@ -22,6 +23,7 @@ interface Reply {
 interface Router {
   get(path: string, handler: (request: Request, reply: Reply) => Promise<unknown>): void;
   post(path: string, handler: (request: Request, reply: Reply) => Promise<unknown>): void;
+  patch?(path: string, handler: (request: Request, reply: Reply) => Promise<unknown>): void;
   delete(path: string, handler: (request: Request, reply: Reply) => Promise<unknown>): void;
 }
 
@@ -41,9 +43,12 @@ export async function activate({ api }: ActivationContext) {
   const { runtime } = api;
   const store = createRunStore(runtime.persistence.documents);
   // The default connection. Without one the game plays in Lite mode.
-  const board = createBoard(store, runtime.persistence.documents);
+  const board = createBoard(store, runtime.persistence.documents, () =>
+    engineModel(runtime, null).catch(() => undefined),
+  );
   const game = createGame(store, () => engineModel(runtime, null).catch(() => undefined));
   const place = createPlace(store, () => engineModel(runtime, null).catch(() => undefined));
+  const meetings = createMeetings(store, () => engineModel(runtime, null).catch(() => undefined));
   const runId = (request: Request) => (request.params as { id?: unknown } | undefined)?.id;
 
   // Known failures go out as { error, code }; anything else is logged and hidden behind a 500.
@@ -101,6 +106,16 @@ export async function activate({ api }: ActivationContext) {
         "/runs/:id/board/journal",
         handle((r) => board.journal(runId(r), r.query)),
       );
+      router.get(
+        "/runs/:id/board/coming-up",
+        handle((r) => board.comingUp(runId(r))),
+      );
+      router.patch?.(
+        "/runs/:id/board/coming-up",
+        handle((r) => board.patch(runId(r), r.body)),
+      );
+      // The client posts through its one action helper; PATCH is the same call.
+      action("board/coming-up", (r) => board.patch(runId(r), r.body));
       action("cards/:cardId/answer", (r) => game.answer(runId(r), param(r, "cardId"), r.body));
       action("day/end", (r) => game.dayEnd(runId(r), r.body));
       action("letters/:index/read", (r) => game.readLetter(runId(r), Number(param(r, "index")), r.body));
@@ -109,6 +124,9 @@ export async function activate({ api }: ActivationContext) {
       action("hearing/talk", (r) => game.talk(runId(r), r.body));
       action("promises/:threadId/keep", (r) => game.keepPromise(runId(r), param(r, "threadId"), r.body));
       action("hearing/start", (r) => game.hearingStart(runId(r), r.body));
+      // T3: big scenes
+      action("big-scene/start", (r) => game.bigStart(runId(r), r.body));
+      action("big-scene/decline", (r) => game.bigDecline(runId(r), r.body));
       // T6: the Preview screen reads the place with a cast applied, without making a run.
       router.post(
         "/preview",
@@ -136,16 +154,10 @@ export async function activate({ api }: ActivationContext) {
       );
       action("rooms/refresh", (r) => place.refresh(runId(r), r.body));
       action("rooms/:room/visit", (r) => place.visit(runId(r), param(r, "room"), r.body));
-      router.get(
-        "/runs/:id/rooms",
-        handle((r) => place.rooms(runId(r))),
-      );
-      router.get(
-        "/runs/:id/grapevine",
-        handle((r) => place.grapevine(runId(r), r.query)),
-      );
-      action("rooms/refresh", (r) => place.refresh(runId(r), r.body));
-      action("rooms/:room/visit", (r) => place.visit(runId(r), param(r, "room"), r.body));
+      // T4: meetings (design.md section 7).
+      action("meetings/start", (r) => meetings.start(runId(r), r.body));
+      action("meetings/choose", (r) => meetings.choose(runId(r), r.body));
+
       router.delete(
         "/runs/:id",
         handle(async (request) => {

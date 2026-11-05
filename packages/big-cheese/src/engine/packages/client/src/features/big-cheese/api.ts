@@ -44,8 +44,34 @@ export interface Thread {
   stakes: string;
   clock: { dueWeek: number | "open"; pressure: string };
   secret?: boolean;
-  beats: { read?: boolean }[];
+  beats: {
+    read?: boolean;
+    type?: string;
+    planned?: { week: number; day: number };
+    blueprint?: string;
+    result?: string;
+  }[];
   promise?: { to: string; what: string; due: { week: number; day: number }; kept: boolean };
+}
+
+export interface MeetingItem {
+  id: string;
+  title: string;
+  deputy?: boolean;
+  base: Record<string, number>; // each attendee's score before the boss speaks
+  lines: { who: string; text: string }[];
+  suggestions: { stance: string; text: string }[];
+  chosen?: string;
+  scores?: Record<string, number>;
+  passed?: boolean;
+}
+
+export interface Meeting {
+  kind: string;
+  mode: "vote" | "agreement";
+  people: string[];
+  items: MeetingItem[];
+  done: boolean;
 }
 
 export interface Hearing {
@@ -68,6 +94,7 @@ export interface Game {
   grapevine: string[]; // ids of rumour lines in `text.place.grapevine`
   hearing: Hearing | null;
   hearingBody: { id: string }[];
+  meeting?: Meeting | null;
   status: "playing" | "complete" | "ended";
   ending: string | null;
   report: { week: number; income: number; before: Meters; after: Meters } | null;

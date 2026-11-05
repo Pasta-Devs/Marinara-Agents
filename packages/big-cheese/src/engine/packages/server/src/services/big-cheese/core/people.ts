@@ -1,6 +1,6 @@
 // Big Cheese: who is where, who knows whom and who leaves (design.md section 6 and 8.2).
 // Plain functions that edit the run they get, like the rest of the core.
-import { slot } from "./clock.js";
+import { dayIndex, slot } from "./clock.js";
 import { HAFENKAI_PLACE } from "./kits/hafenkai.js";
 import type { PlaceKit } from "./kits/types.js";
 import { clamp } from "./run.js";
@@ -29,7 +29,7 @@ const dice = (s: Run, key: string, at: Slot) => {
 /** Where a person is at a slot: sick or gone is home, then stress, then 10% wander, else the routine. */
 function roomFor(s: Run, kit: PlaceKit, id: string, at: Slot): string {
   const p = s.people[id];
-  const routine = kit.people.find((x) => x.id === id)?.routine[at] ?? "home";
+  const routine = (kit.people.find((x) => x.id === id)?.routine ?? p.routine)?.[at] ?? "home";
   if (p.status !== "active" || p.mood === "sick" || p.mood === "away" || routine === "home") return "home";
   if (p.stress > STRESSED) return kit.rooms.find((r) => r.kind === "social")?.id ?? routine;
   const open = kit.rooms.filter((r) => r.kind === "work" || r.kind === "social" || r.kind === "outside");
@@ -108,7 +108,7 @@ export function dayFacts(s: Run, kit: PlaceKit, known: readonly string[]) {
 function leaveCheck(s: Run, kit: PlaceKit) {
   for (const [id, p] of Object.entries(s.people)) {
     if (p.status !== "active") continue;
-    const title = `${kit.people.find((x) => x.id === id)?.name ?? id} may leave`;
+    const title = `${p.name ?? kit.people.find((x) => x.id === id)?.name ?? id} may leave`;
     const warning = Object.values(s.threads).find((t) => t.kind === "crisis" && t.title === title);
     if (p.trust >= LEAVE_BELOW) {
       if (warning) closeThread(s, warning.id, "won");
@@ -142,6 +142,11 @@ function weekTurn(s: Run) {
 
 /** The end-of-day call: a new week first runs its checks, then the new day's people go to their rooms. */
 export function dayTurn(s: Run) {
+  for (const [id, p] of Object.entries(s.people)) {
+    if (p.until === undefined || p.status !== "active" || dayIndex(s.clock) < p.until) continue;
+    for (const t of Object.values(s.threads)) if (t.people.includes(id)) closeThread(s, t.id, "dropped");
+    p.status = "quit"; // a visitor goes home
+  }
   if (s.clock.day === 0) weekTurn(s);
   movePeople(s);
 }

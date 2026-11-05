@@ -14,7 +14,6 @@ import {
   endDay,
   holdHearing,
   isFriday,
-  offer,
   pure,
   readLetter,
   keepPromise,
@@ -26,13 +25,15 @@ import {
   type Run as Game,
 } from "./core/index.js";
 import type { PlaceKit } from "./core/kits/types.js";
+import { BLUEPRINTS, choices, dueBig, finishBig, settleBig } from "./core/bigscenes.js";
 import { addTrust } from "./core/run.js";
-import { METERS } from "./core/types.js";
+import { METERS, type Thread } from "./core/types.js";
 import { BigCheeseError, PLACES, type Run, type RunStore, type SceneText } from "./store.js";
 
 type Patch = Partial<Pick<Run, "game" | "text" | "scene">>;
 type Rng = { rng: number };
 
+const BIG_HOURS = 2;
 const bad = (message: string) => new BigCheeseError(400, message, "bad-request");
 const wrongPhase = (message: string) => new BigCheeseError(409, message, "wrong-phase");
 
@@ -67,30 +68,6 @@ const AnswerBody = Base.extend({
 }).refine((b) => (b.stance === undefined) !== (b.text === undefined), "Send one of stance or text.");
 const PersonBody = Base.extend({ person: z.string().min(1).max(40) });
 const EvidenceBody = Base.extend({ threadId: z.string().min(1).max(40) });
-
-// Scene plans (code data): one goal line per part. Every part ends in a stance choice.
-const SCENES = {
-  arrival: {
-    title: (k: PlaceKit) => `Arrival at ${k.name}`,
-    room: (k: PlaceKit) => `${k.bossTitle}'s office`,
-    people: (k: PlaceKit, g: Game) => [...new Set([g.deputy, k.guidedLetters[0].person])],
-    goals: [
-      "You walk in and meet your deputy.",
-      "Your deputy shows you the desk, the key and the letters.",
-      "A first problem walks in before you sit down.",
-    ],
-  },
-  hearing: {
-    title: () => "Board hearing",
-    room: (k: PlaceKit) => k.hearing.body,
-    people: (_k: PlaceKit, g: Game) => g.hearingBody.map((m) => m.id),
-    goals: [
-      "The board reads the charge against you.",
-      "You answer the charge in front of the board.",
-      "Each member has a last word before the vote.",
-    ],
-  },
-};
 
 /** A part's summary plus what the player chose there, so the receipt names the choice. */
 const withChoice = (summary: string, stance: string) => `${summary} ${CHOSE[stance] ?? CHOSE.other}`;
@@ -129,33 +106,37 @@ export function createGame(store: RunStore, getModel: () => Promise<ModelCall | 
 
   // One part of a scene. The code picks the offered stances; `h.rng` moves on after the call.
   async function nextPart(kit: PlaceKit, h: Rng, game: Game, s: SceneText, model?: ModelCall) {
-    const stances = offer(h, game.authority).map((a) => a.stance);
+    const bp = BLUEPRINTS[s.blueprint]!;
+    const final = s.parts.length === s.total - 1;
+    const stances = choices(bp, h, game.authority, final);
     const { output } = await runTask(
       "scene.part",
       {
         kit,
         rng: h.rng,
         blueprint: s.blueprint,
-        goal: SCENES[s.blueprint].goals[s.parts.length],
+        goal: BLUEPRINTS[s.blueprint].goals[s.parts.length],
         room: s.room,
         people: s.people,
-        offer: stances,
+        offer: final && bp.end === "pick" ? [] : stances,
         earlier: s.parts.map((p) => p.summary),
         chose: s.parts.map((p) => p.chosen ?? "other"),
       },
       { model },
     );
     roll(h);
+    // A pick part offers the blueprint options, not model text.
+    if (final && bp.end === "pick") output.suggestions = bp.picks!.map((p) => ({ stance: p.id, text: p.text }));
     return output;
   }
 
-  async function openScene(kit: PlaceKit, h: Rng, game: Game, blueprint: SceneText["blueprint"], model?: ModelCall) {
-    const plan = SCENES[blueprint];
+  async function openScene(kit: PlaceKit, h: Rng, game: Game, blueprint: string, model?: ModelCall, thread?: Thread) {
+    const plan = BLUEPRINTS[blueprint];
     const s: SceneText = {
       blueprint,
       title: plan.title(kit),
       room: plan.room(kit),
-      people: plan.people(kit, game),
+      people: plan.people(kit, game, thread),
       parts: [],
       total: plan.goals.length,
       done: false,
@@ -225,9 +206,11 @@ export function createGame(store: RunStore, getModel: () => Promise<ModelCall | 
         const last = s.parts[s.parts.length - 1];
         const h = { rng: run.game.rng };
         const model = await modelFor(run);
-        let stance = b.stance ?? last.suggestions[1]?.stance ?? last.suggestions[0].stance;
+        let stance = b.stance ?? (last.suggestions[1] ?? last.suggestions[0])?.stance;
         if (b.stance && !last.suggestions.some((x) => x.stance === b.stance)) throw bad("That answer is not offered.");
         if (b.text) {
+          if (BLUEPRINTS[s.blueprint]!.end !== "stance" && s.parts.length === s.total)
+            throw bad("Pick one of the options.");
           const allowed = last.suggestions.map((x) => x.stance);
           stance = (await runTask("answer.tag", { kit, text: b.text, allowed }, { model })).output.stance;
         }
@@ -237,11 +220,12 @@ export function createGame(store: RunStore, getModel: () => Promise<ModelCall | 
         if (b.skip) {
           // Skip: the middle answer for every part left, with no model calls.
           while (s.parts.length < s.total) {
-            const mid = offer(h, run.game.authority)[1].stance;
+            const c = choices(BLUEPRINTS[s.blueprint]!, h, run.game.authority, s.parts.length === s.total - 1);
+            const mid = c[1] ?? c[0];
             s.parts.push({
               lines: [],
               suggestions: [],
-              summary: withChoice(SCENES[s.blueprint].goals[s.parts.length], mid),
+              summary: withChoice(BLUEPRINTS[s.blueprint].goals[s.parts.length], mid),
               chosen: mid,
             });
             picks.push(mid);
@@ -249,7 +233,9 @@ export function createGame(store: RunStore, getModel: () => Promise<ModelCall | 
         } else if (s.parts.length < s.total) {
           s.parts.push(await nextPart(kit, h, run.game, s, model));
         }
-        const done = s.parts.length >= s.total && !!s.parts[s.parts.length - 1].chosen;
+        const done =
+          s.parts.length >= s.total &&
+          (!!s.parts[s.parts.length - 1].chosen || BLUEPRINTS[s.blueprint]!.end === "check");
         let game = withGame(run.game, h);
         if (s.blueprint === "arrival") {
           // Small trust nudges for the people on stage.
@@ -261,7 +247,10 @@ export function createGame(store: RunStore, getModel: () => Promise<ModelCall | 
           s.done = true;
           if (s.blueprint === "arrival")
             s.outcome = `Your first hour at ${kit.name} is over. The letters are in the drawer.`;
-          else {
+          else if (sceneId.startsWith("big-")) {
+            game = structuredClone(game);
+            s.outcome = finishBig(game, sceneId.slice(4));
+          } else {
             game = holdHearing(game);
             const r = game.lastHearing!;
             s.outcome = r.won
@@ -384,6 +373,31 @@ export function createGame(store: RunStore, getModel: () => Promise<ModelCall | 
           text: { ...run.text, scenes: { ...run.text.scenes, [sceneId]: scene } },
           scene: sceneId,
         };
+      }),
+    // T3: a booked big scene takes 2 hours when it starts. Declining costs nothing and counts against the week.
+    bigStart: (id: unknown, body: unknown) =>
+      act(id, body, Base, "idle", async (run) => {
+        const due = dueBig(run.game);
+        if (!due) throw wrongPhase("No big scene is booked for today.");
+        if (run.game.clock.hoursLeft === HOURS && !run.game.inbox.some((c) => c.age === 0))
+          throw wrongPhase("The day has not started.");
+        const clock = spendHours(run.game.clock, BIG_HOURS);
+        const h = { rng: run.game.rng };
+        const sceneId = `big-${due.beat.id}`; // a stale finished scene from a rewind is replaced
+        const scene = await openScene(placeOf(run), h, run.game, due.beat.blueprint!, await modelFor(run), due.thread);
+        return {
+          game: { ...withGame(run.game, h), clock },
+          text: { ...run.text, scenes: { ...run.text.scenes, [sceneId]: scene } },
+          scene: sceneId,
+        };
+      }),
+    bigDecline: (id: unknown, body: unknown) =>
+      act(id, body, Base, "idle", async (run) => {
+        const game = structuredClone(run.game);
+        const due = dueBig(game);
+        if (!due) throw wrongPhase("No big scene is booked for today.");
+        settleBig(game, due.beat, "declined");
+        return { game };
       }),
   };
 }

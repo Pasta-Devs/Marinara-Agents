@@ -42,6 +42,8 @@ function PartView({ ctx, id, part, onLeave, onClose }: Props & { part: ScenePart
   const current = part?.lines[line];
   const atChoice = !part || line >= part.lines.length;
   const speaker = current && person(kit, current.who);
+  // A pick part offers blueprint options (ids that are no stance): no stance label, no own words.
+  const pick = !!part?.suggestions.some((entry) => stanceKey(entry.stance) === stanceKey(""));
   const choose = (body: object) => void act(`scenes/${encodeURIComponent(id)}/choose`, body);
 
   function onOwn(event: FormEvent) {
@@ -109,19 +111,21 @@ function PartView({ ctx, id, part, onLeave, onClose }: Props & { part: ScenePart
                     disabled={busy}
                     onClick={() => choose({ stance: entry.stance })}
                   >
-                    <span className="bc-pill">{t(stanceKey(entry.stance))}</span>
+                    {!pick && <span className="bc-pill">{t(stanceKey(entry.stance))}</span>}
                     <span className="bc-said">{entry.text}</span>
                   </button>
                 </li>
               ))}
             </ul>
-            <form className="bc-form" onSubmit={onOwn}>
-              <label htmlFor="bc-scene-own">{t("ui.bigCheese.card.own")}</label>
-              <textarea id="bc-scene-own" rows={2} value={own} onChange={(event) => setOwn(event.target.value)} />
-              <button type="submit" className="bc-btn" disabled={busy || !own.trim()}>
-                {t("ui.bigCheese.card.sayIt")}
-              </button>
-            </form>
+            {!pick && (
+              <form className="bc-form" onSubmit={onOwn}>
+                <label htmlFor="bc-scene-own">{t("ui.bigCheese.card.own")}</label>
+                <textarea id="bc-scene-own" rows={2} value={own} onChange={(event) => setOwn(event.target.value)} />
+                <button type="submit" className="bc-btn" disabled={busy || !own.trim()}>
+                  {t("ui.bigCheese.card.sayIt")}
+                </button>
+              </form>
+            )}
           </div>
         ) : (
           // shortcut: a part with no suggestions (a `check`) has no choose body in the contract, so it moves on with skip

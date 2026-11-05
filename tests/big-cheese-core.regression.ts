@@ -102,7 +102,7 @@ test("answer: applies effect, trust, hour, and the follow-up beat", () => {
   assert.ok(planned > 5 && planned < 35);
 });
 
-test("delegate feeds deputy ambition; 100 is a challenge", () => {
+test("delegate feeds deputy ambition; 100 waits for the board meeting", () => {
   let s = fresh(1);
   s.deputyAmbition = 90;
   s.meters = { money: 50, output: 50, people: 50, standing: 50 };
@@ -118,8 +118,8 @@ test("delegate feeds deputy ambition; 100 is a challenge", () => {
     },
   ];
   s = answerCard(s, "c1", "delegate");
-  assert.equal(s.deputyAmbition, 0);
-  assert.equal(s.meters.people, 45);
+  assert.equal(s.deputyAmbition, 100);
+  assert.equal(s.meters.people, 50);
   assert.equal(s.people.henrike!.trust, 53);
 });
 

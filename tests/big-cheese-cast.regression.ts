@@ -96,6 +96,12 @@ const sheet = (over: object = {}) => ({
 });
 const start = (h: Awaited<ReturnType<typeof harness>>, body: object) =>
   h.call("POST", "/runs", { kitId: "hafenkai", lite: true, ...body });
+// Cast changes wait for the arrival scene, so mid-run tests skip it first.
+const play = async (h: Awaited<ReturnType<typeof harness>>, body: object) => {
+  const made = await start(h, body);
+  const { id, revision } = made.body.run;
+  return h.call("POST", `/runs/${id}/scenes/arrival/choose`, { expectedRevision: revision, skip: true });
+};
 
 test("the picker lists names and short lines, never Professor Mari, never a full card", async () => {
   const many = Array.from({ length: 250 }, (_, i) => card(`m${i}`, `Person ${String(i).padStart(3, "0")}`));
@@ -275,7 +281,7 @@ test("mid-run: a swap keeps the role and the run state, a hire runs the age chec
     card("kid", "Pip", { description: "Pip is a 16-year-old deckhand." }),
     card(MARI, "Professor Mari"),
   ]);
-  const made = await start(h, {});
+  const made = await play(h, {});
   const id = made.body.run.id;
   const mid = (body: object) =>
     h.call("POST", `/runs/${id}/cast`, { expectedRevision: made.body.run.revision, ...body });
@@ -286,7 +292,7 @@ test("mid-run: a swap keeps the role and the run state, a hire runs the age chec
   const who = swap.body.kit.people.find((p: { id: string }) => p.id === "tomasz");
   assert.equal(who.name, "Rhea Sand");
   assert.equal(who.role, tomasz.role);
-  assert.deepEqual(swap.body.run.game.people.tomasz, before);
+  assert.deepEqual(swap.body.run.game.people.tomasz, { ...before, name: "Rhea Sand" });
 
   const rev = swap.body.run.revision;
   const hire = (body: object) =>
@@ -338,13 +344,15 @@ test("a visitor leaves after n days", () => {
 test("a refresh follows the card and keeps the run state", async () => {
   const cards = [card("c1", "Rhea Sand")];
   const h = await harness(cards);
-  const made = await start(h, { staff: [{ characterId: "c1", sheet: sheet() }] });
+  const made = await play(h, { staff: [{ characterId: "c1", sheet: sheet() }] });
   const id = made.body.run.id;
   cards[0].data.name = "Rhea Stone";
   const r = await h.call("POST", `/runs/${id}/cast/tomasz/refresh`, { expectedRevision: made.body.run.revision });
   assert.equal(r.code, 200, JSON.stringify(r.body));
   assert.equal(r.body.kit.people.find((p: { id: string }) => p.id === "tomasz").name, "Rhea Stone");
-  assert.deepEqual(r.body.run.game, made.body.run.game);
+  const game = made.body.run.game;
+  const tomasz = { ...game.people.tomasz, name: "Rhea Stone" };
+  assert.deepEqual(r.body.run.game, { ...game, people: { ...game.people, tomasz } });
   assert.equal(
     (await h.call("POST", `/runs/${id}/cast/nobody/refresh`, { expectedRevision: r.body.run.revision })).code,
     404,

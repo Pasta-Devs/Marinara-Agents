@@ -69,10 +69,7 @@ export function answerCard(s: Run, id: string, stance: string, promises: Paramet
   if (mem && mem.length > 5) mem.shift();
   if (stance === "delegate") {
     addTrust(s, s.deputy, 3);
-    if ((s.deputyAmbition += 15) >= 100) {
-      s.deputyAmbition = 0; // the deputy challenges you at the board
-      s.meters = applyDelta(s.meters, { standing: -10, people: -5 });
-    }
+    s.deputyAmbition = Math.min(100, s.deputyAmbition + 15); // at 100 the challenge is an item at the next board meeting
   }
   promises.forEach((p) => openPromise(s, p));
   const t = s.threads[c.thread];

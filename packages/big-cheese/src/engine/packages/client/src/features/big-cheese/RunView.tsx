@@ -12,7 +12,7 @@ import { People, PersonSheet } from "./People";
 import { Place } from "./Place";
 import { Scene } from "./Scene";
 import { Report, RunEnd } from "./Report";
-import { HearingPrep } from "./Hearing";
+import { HearingPrep, MeetingScreen } from "./Meeting";
 import { Board } from "./Board";
 
 const TABS = [
@@ -20,6 +20,7 @@ const TABS = [
   { view: "inbox", key: "ui.bigCheese.dock.inbox" },
   { view: "people", key: "ui.bigCheese.dock.people" },
   { view: "place", key: "ui.bigCheese.dock.place" },
+  { view: "meeting", key: "ui.bigCheese.dock.meeting" },
 ];
 
 export function RunView({ id, onExit }: { id: string; onExit: () => void }) {
@@ -169,6 +170,7 @@ export function RunView({ id, onExit }: { id: string; onExit: () => void }) {
     screen = <Inbox ctx={ctx} canStart={canStart} remembered={base === "inbox" ? arg : undefined} />;
   else if (base === "people") screen = <People ctx={ctx} />;
   else if (base === "place") screen = <Place ctx={ctx} />;
+  else if (base === "meeting") screen = <MeetingScreen ctx={ctx} />;
   else screen = <Office ctx={ctx} canStart={canStart} />;
 
   const { clock } = game;
