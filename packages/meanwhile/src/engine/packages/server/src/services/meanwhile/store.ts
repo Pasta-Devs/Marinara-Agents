@@ -101,6 +101,18 @@ export interface Nudge {
 
 export const NUDGE_MAX_OPEN = 10;
 
+/** The Monday paper of one Circle week. `eventIds` are the events it was made from. */
+export interface Paper {
+  id: string;
+  circleId: string;
+  /** Circle day the week starts on (a Monday). */
+  weekStart: string;
+  title: string;
+  items: { headline: string; text: string }[];
+  createdAt: number;
+  eventIds: string[];
+}
+
 export interface StatusSent {
   key: string;
   chatId: string;
@@ -125,6 +137,9 @@ export interface MeanwhileDocument {
   /** characterId -> the last status written (`key` = chat|status|activity). `at` is 0 when the Engine kept a status set by hand. */
   statusSent: Record<string, StatusSent>;
   nudges: Nudge[];
+  papers: Paper[];
+  /** "circleId:weekStart" for each week that has a paper or was skipped. */
+  paperWeeks: string[];
 }
 
 let runtime: CapabilityRuntimeHost | null = null;
@@ -320,6 +335,8 @@ export function emptyMeanwhileDocument(): MeanwhileDocument {
     promisePass: {},
     statusSent: {},
     nudges: [],
+    papers: [],
+    paperWeeks: [],
   };
 }
 
@@ -364,6 +381,17 @@ export function normalizeMeanwhile(value: unknown): MeanwhileDocument {
     nudges: list(value.nudges)
       .map(normalizeNudge)
       .filter((n): n is Nudge => n !== null),
+    papers: list(value.papers).filter(
+      (p): p is Paper =>
+        isRecord(p) &&
+        typeof p.id === "string" &&
+        typeof p.circleId === "string" &&
+        typeof p.weekStart === "string" &&
+        typeof p.title === "string" &&
+        Array.isArray(p.items) &&
+        Array.isArray(p.eventIds),
+    ),
+    paperWeeks: list(value.paperWeeks).filter((k): k is string => typeof k === "string"),
     statusSent: isRecord(value.statusSent) ? (value.statusSent as Record<string, StatusSent>) : {},
     promisePass: isRecord(value.promisePass) ? (value.promisePass as Record<string, number>) : {},
     usage: list(value.usage).filter(

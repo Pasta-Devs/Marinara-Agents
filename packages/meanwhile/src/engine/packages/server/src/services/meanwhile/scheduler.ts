@@ -6,6 +6,7 @@ import {
   claimLease,
   dueReason,
   fastForwardWindow,
+  lastWeek,
   runWindow,
   setTime,
   type DueReason,
@@ -25,23 +26,104 @@ import {
   type Circle,
   type LifeEvent,
   type MeanwhileDocument,
+  type Paper,
   type PromiseRecord,
 } from "./store.js";
 import { SUMMARY_PLACEHOLDER, at, cardInfo, json, pickSchedule, planLife } from "./routine.js";
 import {
   TIME_TOLERANCE_MIN,
+  askPaper,
   askPlaces,
   askSummary,
   makeGate,
   runBeats,
   usageRow,
   type BeatRun,
+  type Gate,
   type World,
 } from "./beats.js";
 import { markDelivered } from "./context.js";
 import { writeStatuses } from "./status.js";
 import { applyStale, askPromises, dropOld, hasNewMessages, readChats, staleAnchors } from "./promises.js";
 import type { Seed } from "./deck.js";
+
+/** A Circle week needs this many qualifying events to get a paper. */
+const PAPER_MIN_EVENTS = 2;
+const PAPER_MAX_EVENTS = 30;
+
+interface Weekly {
+  key: string;
+  paper: Paper | null;
+}
+
+/**
+ * The Monday paper: only the newest finished week, one model call, no backlog.
+ * Null = nothing to store (done already, or the budget or a provider error makes it wait for the next run).
+ * A week with too few events, or a reply that stays invalid after the retry, is marked done without a paper.
+ */
+async function weeklyPaper(
+  world: World,
+  gate: Gate,
+  all: readonly LifeEvent[],
+  doneWeeks: readonly string[],
+  coveredMs: number,
+  now: number,
+): Promise<Weekly | null> {
+  const circle = world.circle;
+  const tz = circle.clock.timezone;
+  const week = lastWeek(coveredMs, tz);
+  const key = `${circle.id}:${week.start}`;
+  if (doneWeeks.includes(key)) return null;
+  const seen = new Set<string>();
+  // Only what is shown outside any chat: accepted, Circle-visible, not spicy.
+  const events = all
+    .filter((e) => {
+      const day = msToWall(Date.parse(e.start), tz).slice(0, 10);
+      if (seen.has(e.id) || e.circleId !== circle.id || e.status !== "accepted") return false;
+      seen.add(e.id);
+      return (
+        e.visibility === "circle" && e.kind !== "spicy" && e.weight !== "routine" && day >= week.start && day < week.end
+      );
+    })
+    .sort((a, b) => Date.parse(a.start) - Date.parse(b.start))
+    .slice(0, PAPER_MAX_EVENTS);
+  if (events.length < PAPER_MIN_EVENTS) return { key, paper: null };
+  if (gate.left() < 1) return null;
+  try {
+    const body = await askPaper(world, gate, week, events);
+    if (body === "deferred") return null;
+    if (!body) return { key, paper: null };
+    return {
+      key,
+      paper: {
+        id: key,
+        circleId: circle.id,
+        weekStart: week.start,
+        ...body,
+        createdAt: now,
+        eventIds: events.map((e) => e.id),
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Adds the paper, and keeps the last 8 per Circle. */
+function storePaper(doc: MeanwhileDocument, circleId: string, w: Weekly | null, cutoff: string): MeanwhileDocument {
+  if (!w) return doc;
+  const mine = doc.papers.filter((p) => p.circleId === circleId && p.id !== w.key);
+  if (w.paper) mine.push(w.paper);
+  mine.sort((a, b) => a.weekStart.localeCompare(b.weekStart));
+  return {
+    ...doc,
+    papers: [...doc.papers.filter((p) => p.circleId !== circleId), ...mine.slice(-8)],
+    // Old weeks of this Circle go; the week just marked stays, so it is never asked twice.
+    paperWeeks: [...doc.paperWeeks, w.key].filter(
+      (k) => !k.startsWith(`${circleId}:`) || k.slice(-10) >= (cutoff < w.key.slice(-10) ? cutoff : w.key.slice(-10)),
+    ),
+  };
+}
 
 /** Claims the lease for one Circle. Returns false when another run holds it. */
 async function claim(circleId: string, now: number): Promise<boolean> {
@@ -200,13 +282,15 @@ async function finish(circleId: string, now: number, opts: FinishOpts = {}): Pro
     const run: BeatRun = { events: [], done: [], stoppedAt: null };
     let error: string | null = null;
     let held = false;
+    let gate: Gate | null = null;
+    let world: World | null = null;
     if (window) {
       const inputs = await readSchedules(start);
       const base = lifeInput(first, start, window, inputs, now, lapsed);
       plan = planLife({ ...base, tags: first.placeTags });
       let days: string[] = [];
       try {
-        const gate = await makeGate(start, usage, { over: opts.over, stop: () => opts.ff?.cancel === true });
+        gate = await makeGate(start, usage, { over: opts.over, stop: () => opts.ff?.cancel === true });
         usage = gate.usage;
         const asked = await askPlaces(gate, plan.tags);
         if (asked.changed) {
@@ -227,7 +311,7 @@ async function finish(circleId: string, now: number, opts: FinishOpts = {}): Pro
             pass = asked.pass;
           }
         }
-        const world: World = { circle: start, ...inputs, tags: plan.tags, events: first.events, promises, now };
+        world = { circle: start, ...inputs, tags: plan.tags, events: first.events, promises, now };
         const summaries = plan.events.filter((e) => e.weight === "summary");
         if (summaries.length && gate.left() < 1) {
           // No budget for the summary: drop the placeholder, do not move past the cut, try again on the next real day.
@@ -254,6 +338,18 @@ async function finish(circleId: string, now: number, opts: FinishOpts = {}): Pro
     // Not done: stay at the first undone day. Failed before any day: stay where we were.
     const advanceTo =
       (error && !run.stoppedAt) || held ? lastRun : stopMs === null ? to : Math.min(to, Math.max(lastRun, stopMs));
+    // The Monday paper comes after the day beats, so it counts against what is left of the budget.
+    const weekly =
+      gate && world && plan && !error && !held
+        ? await weeklyPaper(
+            world,
+            gate,
+            [...first.events, ...plan.events, ...run.events],
+            first.paperWeeks,
+            advanceTo,
+            now,
+          )
+        : null;
 
     await updateMeanwhile((doc) => {
       const circle = doc.circles.find((c) => c.id === circleId);
@@ -356,7 +452,10 @@ async function finish(circleId: string, now: number, opts: FinishOpts = {}): Pro
           ],
         };
       }
-      return withMark(withUsage(next), done);
+      return withMark(
+        withUsage(storePaper(next, circleId, weekly, shiftDay(msToWall(to, tz).slice(0, 10), -ROUTINE_KEEP_DAYS))),
+        done,
+      );
     });
   } catch (error) {
     await updateMeanwhile((doc) => {
@@ -419,7 +518,9 @@ export async function previewFastForward(circleId: string, spanMs: number, now =
   const beats = days.filter((d) => seeds.some((s) => s.circleId === circleId && s.day === d)).length;
   const places = plan.tags.some((t) => !t.asked && Object.values(t.byActivity).includes("unknown")) ? 1 : 0;
   const promises = (await hasNewMessages(circle, doc.promisePass)) ? 1 : 0;
-  return { days: days.length, calls: beats + places + promises + (missed ? 1 : 0), left, missed };
+  // Over-counts when fewer than 2 events will qualify, and for the retry: an estimate, not a promise.
+  const paper = doc.paperWeeks.includes(`${circleId}:${lastWeek(to, circle.clock.timezone).start}`) ? 0 : 1;
+  return { days: days.length, calls: beats + places + promises + (missed ? 1 : 0) + paper, left, missed };
 }
 
 /**

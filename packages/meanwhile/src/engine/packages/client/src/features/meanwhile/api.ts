@@ -231,4 +231,13 @@ export interface PhoneThread {
   texts: { from: string; text: string; time: string }[];
 }
 
+export interface Paper {
+  id: string;
+  weekStart: string;
+  title: string;
+  items: { headline: string; text: string }[];
+}
+
+export const getPapers = (id: string) => api<{ papers: Paper[] }>(`/circles/${id}/papers`);
+
 export const getPhone = (id: string) => api<{ threads: PhoneThread[] }>(`/circles/${id}/phone`);

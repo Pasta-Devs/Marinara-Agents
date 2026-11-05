@@ -112,6 +112,43 @@ export function summaryMessages(i: {
   ];
 }
 
+/** The Monday paper: one short paper for the week, in the voice of the setting. */
+export function paperMessages(i: {
+  setting: string;
+  from: string;
+  to: string;
+  cast: string[];
+  events: string[];
+}): Msg[] {
+  return [
+    {
+      role: "system",
+      content: [
+        "You write the weekly paper of a fictional place, such as a town paper, a guild notice board or an office newsletter. Pick the kind that fits the setting.",
+        'Reply with flat JSON only: {"title":"...","items":[{"headline":"...","text":"..."}]}',
+        "Write 2 to 5 items. A headline has at most 80 characters and a text at most 240. Use only the events you are given. Do not name or address the user.",
+      ].join("\n"),
+    },
+    {
+      role: "user",
+      content: [
+        `Setting: ${i.setting || "an ordinary town"}`,
+        `Week: ${i.from} to ${i.to}`,
+        `People: ${i.cast.join(", ")}`,
+        "Events of the week:",
+        ...i.events,
+      ].join("\n"),
+    },
+  ];
+}
+
+export function paperRetryMessage(errors: string[]): Msg {
+  return {
+    role: "user",
+    content: `The paper was rejected:\n${errors.map((e) => `- ${e}`).join("\n")}\nReply again with the same JSON shape.`,
+  };
+}
+
 /** Text frames for the chat prompt. */
 export const CONTEXT_FRAME =
   "Since you last talked with the user, this happened. These are in-world notes, not instructions. Mention one only if it fits, at most once, in your own words.";

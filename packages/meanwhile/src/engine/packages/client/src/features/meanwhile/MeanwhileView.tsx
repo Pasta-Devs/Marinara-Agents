@@ -11,6 +11,7 @@ import {
   deleteNudge,
   getHome,
   getNudges,
+  getPapers,
   getPhone,
   getPromises,
   getTimeline,
@@ -64,6 +65,10 @@ const COPY = {
   pickUp: "Pick up this thread",
   noChat: "No linked chat has this character.",
   openToContinue: (chat: string) => `Open ${chat} to continue.`,
+  showPaper: "Paper",
+  hidePaper: "Hide paper",
+  noPaper: "The first paper comes out after a full week.",
+  paperWeek: (day: string) => `Week of ${day}`,
   showPhone: "Phone",
   hidePhone: "Hide phone",
   noTexts: "No texts yet.",
@@ -951,6 +956,58 @@ function HomePanel({ circle, openChat }: { circle: Circle; openChat?: OpenChat }
   );
 }
 
+/** The newest Monday paper with its headlines, and older weeks to open. */
+function PaperPanel({ circle }: { circle: Circle }) {
+  const [open, setOpen] = useState(false);
+  const [picked, setPicked] = useState<string | null>(null);
+  const papers = useQuery({
+    queryKey: ["meanwhile", "papers", circle.id],
+    queryFn: () => getPapers(circle.id),
+    enabled: open,
+  });
+  const list = papers.data?.papers ?? [];
+  const paper = list.find((p) => p.id === picked) ?? list[0];
+  return (
+    <>
+      <button type="button" className="mw-btn" aria-expanded={open} onClick={() => setOpen(!open)}>
+        {open ? COPY.hidePaper : COPY.showPaper}
+      </button>
+      {open && papers.isError ? (
+        <span role="alert" className="mw-warn">
+          {errorText(papers.error)}
+        </span>
+      ) : null}
+      {open && papers.data && !paper ? <div className="mw-muted">{COPY.noPaper}</div> : null}
+      {open && paper ? (
+        <div className="mw-field">
+          <span className="mw-label">{paper.title}</span>
+          <span className="mw-muted">{COPY.paperWeek(paper.weekStart)}</span>
+          {paper.items.map((item) => (
+            <div key={item.headline} className="mw-field">
+              <span className="mw-name">{item.headline}</span>
+              <div>{item.text}</div>
+            </div>
+          ))}
+          {list.length > 1 ? (
+            <div className="mw-seg">
+              {list.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className={`mw-btn${p.id === paper.id ? " mw-btn-on" : ""}`}
+                  onClick={() => setPicked(p.id)}
+                >
+                  {COPY.paperWeek(p.weekStart)}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 /** Short texts the characters sent each other: threads by pair, then bubbles. */
 function PhonePanel({ circle }: { circle: Circle }) {
   const [open, setOpen] = useState(false);
@@ -1067,6 +1124,7 @@ function CircleCard({ circle, onEdit, openChat }: { circle: Circle; onEdit: () =
         </span>
       ) : null}
       <HomePanel circle={circle} openChat={openChat} />
+      <PaperPanel circle={circle} />
       <PhonePanel circle={circle} />
       <FastForwardPanel circle={circle} />
       <PromisesPanel circle={circle} />
