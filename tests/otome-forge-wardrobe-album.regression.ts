@@ -26,10 +26,7 @@ import {
   unitId,
   worldId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
-import {
-  normalizeStoryPlan,
-  singleStoryChapter,
-} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/items/character-story.ts";
+import { normalizeStoryPlan } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/items/character-story.ts";
 import { withCoupleTimeline } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/items/open.ts";
 import type { StoryPlanReply } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/items/replies.ts";
 import { readMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/sources.ts";
@@ -728,13 +725,17 @@ test("her 5★ look gets a first-wear scene with the love interest of its couple
   assert.deepEqual([chapter.kind, chapter.li, chapter.lead, chapter.nodes.length], ["story", KAI, KAI, 1]);
   assert.deepEqual(chapter.nodes[0]!.cast, [KAI], "Kai, whose look it is a couple set with, is in it");
   const guide = chapter.nodes[0]!.guide;
+  // Her look takes the place of whatever she wears now; Kai keeps his own (the reader pins no look on him).
   assert.ok(
     guide.startsWith(
-      'The protagonist wears a new look for the first time: "Lantern Dress" (amber silk dress, lantern earrings).',
+      'The protagonist wears a new look for the first time, in place of what they wear now: "Lantern Dress" (amber silk dress, lantern earrings).',
     ),
     guide,
   );
-  assert.ok(guide.includes(`It is a couple set with Kai's look "Harbour Night"`), guide);
+  assert.ok(
+    guide.includes(`It is a couple set with Kai's look "Harbour Night"; Kai wears what "How Kai looks now" says.`),
+    guide,
+  );
   assert.ok(guide.includes("Kai sees the protagonist in it") && guide.includes("came to have it"), guide);
   assert.deepEqual(
     [(await herLook()).story, (await herLook()).unopened],
@@ -756,9 +757,21 @@ test("her 5★ look gets a first-wear scene with the love interest of its couple
   assert.deepEqual(await t.store.readDoc(chapterId(t.runId, key), normalizeChapter), saved, "a reopen writes nothing");
   assert.deepEqual([t.calls.length, t.paid.length], [1, 0], "and pays for nothing");
 
-  // No couple set to name (its his-look is not stored): the scene is still Kai's, without the couple set.
-  const unpaired = singleStoryChapter({ ...ITEMS.herLook, coupleWith: undefined }, { id: KAI, name: "Kai" }, at)!;
-  assert.ok(!unpaired.nodes[0]!.guide.includes("couple set") && unpaired.nodes[0]!.guide.includes("Kai sees"));
+  // Its couple set names only Kai's own his-look5: a pair that is gone, of another kind, or another love interest's is
+  // left out, and the scene is still Kai's.
+  const pairs: Array<Item | null> = [null, { ...ITEMS.hisLook, kind: "his-look4" }, { ...ITEMS.hisLook, li: SOL }];
+  for (const [n, pair] of pairs.entries()) {
+    const lone = await itemsWorld(`r-herpair${n}-aaaaaa`);
+    const id = itemId(lone.runId, ITEMS.hisLook.id);
+    await (pair ? lone.store.mutateDoc(runDocTarget("item", id), normalizeItem, () => pair) : lone.store.removeDoc(id));
+    const reply = await lone.open(ITEMS.herLook.id);
+    assert.deepEqual([reply.status, reply.body.story], [200, { key }], JSON.stringify(reply.body));
+    const scene = (await lone.store.readDoc(chapterId(lone.runId, key), normalizeChapter))!;
+    assert.deepEqual([scene.li, scene.nodes[0]!.cast], [KAI, [KAI]], `pair ${n}`);
+    const text = scene.nodes[0]!.guide;
+    assert.ok(!text.includes("couple set") && !text.includes("Harbour Night"), `pair ${n}: ${text}`);
+    assert.ok(text.includes("in place of what they wear now") && text.includes("Kai sees the protagonist"), text);
+  }
 
   // Opened before her 5★ look had a scene: painted, with no story. The next open writes it, and paints nothing.
   const old = await itemsWorld("r-herold-aaaaaa");

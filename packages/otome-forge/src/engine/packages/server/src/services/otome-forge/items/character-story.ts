@@ -137,14 +137,18 @@ export function singleStoryChapter(
 ): Chapter | null {
   const { name } = unit;
   const premise = item.premise?.trim() || item.title;
-  const couple = coupleLook ? ` It is a couple set with ${name}'s look "${coupleLook}": the two looks match.` : "";
+  // In this scene her look replaces whatever she wears now. He keeps his: the reader pins no look for a her-look5
+  // (S/routes/art.ts), and his half of the set may not be won.
+  const couple = coupleLook
+    ? ` It is a couple set with ${name}'s look "${coupleLook}"; ${name} wears what "How ${name} looks now" says.`
+    : "";
   const guide =
     item.kind === "moment4"
       ? `A MOMENT between ${name} and the protagonist: ${premise} One complete scene, with its own small turn.`
       : item.kind === "his-look5" && item.look
         ? `${name} wears a new look for the first time: "${item.look.name}" (${item.look.outfitLine}). The protagonist sees ${name} in it: one short scene of how ${name} carries it, why ${name} wore it now, and what it changes between them for a moment.`
         : item.kind === "her-look5" && item.look
-          ? `The protagonist wears a new look for the first time: "${item.look.name}" (${item.look.outfitLine}).${couple} ${name} sees the protagonist in it: one short scene of how the protagonist came to have it, how the protagonist carries it, and what it changes between them for a moment.`
+          ? `The protagonist wears a new look for the first time, in place of what they wear now: "${item.look.name}" (${item.look.outfitLine}).${couple} ${name} sees the protagonist in it: one short scene of how the protagonist came to have it, how the protagonist carries it, and what it changes between them for a moment.`
           : "";
   if (!guide) return null;
   return {
