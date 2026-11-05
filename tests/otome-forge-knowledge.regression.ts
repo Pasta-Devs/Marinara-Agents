@@ -4,9 +4,10 @@
 // - The world plan (P2) names an existing world as it is; the Surprise me premise stays original.
 // - The chapter planner (P5) gives minor characters parts and lets a node go without any love interest; P5, P10 and P11
 //   let time pass, with rest or sleep. A route or repair chapter keeps its love interest in every node.
-// - 0.8.8: the world the player chose holds. Only the arc and chapter planners read the premise (the maintainer's),
-//   the world plan keeps its era and technology, and messages are sent by whatever the world uses.
+// - 0.8.8: the world the player chose holds. Only the arc and chapter planners read the premise (the maintainer's), for
+//   its genre, era and technology alone; the world plan keeps them; every other prompt sends what staging sent.
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -16,7 +17,6 @@ import type {
   Unit,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import {
-  NO_ABSENCE_RULE,
   PLACE_FRAMING,
   appearanceLine,
   arcPlanMessages,
@@ -306,15 +306,32 @@ test("the story describes a love interest from their current Image appearance an
   );
 });
 
-test("only the arc and chapter planners read the premise; the world plan keeps its era; messages know the world (0.8.8)", () => {
-  // Players saw a world drift to a period look: the premise reached no planner, the world plan never kept its era, and
-  // messages had no world. The maintainer's limits (2026-11-05): the premise goes only to the arc and chapter planners,
-  // and the outfit and place tags name no era.
+// What every prompt but the planners and the world plan sent on staging (e01922d19), for build() below with the premise:
+// sha256 of the messages as JSON. A change to one of them is a change to a prompt the 0.8.8 limits keep as it was; a
+// release that changes one on purpose (0.8.7 moves the date plan's WHAT THEY WEAR into protagonistBlock) retakes it.
+const STAGING_OTHERS: Record<string, string> = {
+  scene: "a9f81dc2b4e41db4",
+  callScene: "082f4a96e3320b99",
+  confrontation: "646929977ecd71b2",
+  closer: "07ddfbafd6578c00",
+  bible: "0e8da543f0ac13bf",
+  chat: "737cde4c51f826e8",
+  daily: "c25471977dd29aa5",
+  note: "77c2dd85e08f8023",
+  datePlan: "74a5995534e14a50",
+};
+
+test("only the arc and chapter planners read the premise, for its world alone; the world plan keeps it (0.8.8)", () => {
+  // Players saw a world drift to a period look: the premise reached no planner and the world plan never kept its era.
+  // The maintainer's limits (2026-11-05): the premise goes only to the arc and chapter planners, and the outfit and
+  // place tags name no era; every other prompt sends what it sent.
   const base = inputs();
   const PREMISE =
     "PREMISE-MARK: a glass tower in a modern city, where a night-shift analyst finds a file that should not exist.";
   const SETTING = "SETTING-MARK: a modern city of glass towers, late trains and phones that never sleep.";
-  const LINE = `The player's premise (its genre, era and technology are canon): ${PREMISE}`;
+  // Read for the world alone, never for its events (its opening is P2's openingSituation); an au extra story leaves it.
+  const LINE = `The player's premise, read only for its genre, era and technology, which the story keeps: ${PREMISE}`;
+  const EXTRA = `The player's premise, read only for its genre, era and technology, which an extra story keeps unless its kind is au (an au imagines another world on purpose): ${PREMISE}`;
   const build = (premise: string) => {
     const world = { ...base.world, premise, setting: SETTING };
     const input = { ...base, world };
@@ -394,14 +411,23 @@ test("only the arc and chapter planners read the premise; the world plan keeps i
   // The planners read the premise once, right after the setting, and only that line is new.
   for (const [kind, messages] of Object.entries(withPremise.planners)) {
     const prompt = text(messages);
-    assert.equal(prompt.split(LINE).length - 1, 1, `${kind} reads the premise once`);
+    const line = kind === "extraStoryPlan" ? EXTRA : LINE;
+    assert.equal(prompt.split(line).length - 1, 1, `${kind} reads the premise once`);
+    assert.equal(prompt.split(PREMISE).length - 1, 1, `${kind}: in that line alone`);
     assert.ok(prompt.includes(SETTING), `${kind} keeps the setting`);
     const bare = text(without.planners[kind as keyof typeof withPremise.planners]);
     // P5 opens its own part with the line and a blank; the others put it on the line after the setting.
-    const added = kind === "chapterPlan" ? `${LINE}\n\n` : `${LINE}\n`;
+    const added = kind === "chapterPlan" ? `${line}\n\n` : `${line}\n`;
     assert.equal(prompt.replace(added, ""), bare, `${kind}: only the line is new`);
     if (kind !== "chapterPlan")
-      assert.ok(prompt.includes(`WORLD\n${SETTING}\n${LINE}\n`), `${kind}: after the setting`);
+      assert.ok(prompt.includes(`WORLD\n${SETTING}\n${line}\n`), `${kind}: after the setting`);
+  }
+  // The extra story still offers its au, and P21 and the extra story plan a call as P5, P10 and P11 do.
+  assert.ok(text(withPremise.planners.extraStoryPlan).includes("- au: a mini alternate universe they imagine"));
+  for (const kind of ["characterStoryPlan", "extraStoryPlan"] as const) {
+    const prompt = text(withPremise.planners[kind]);
+    assert.ok(prompt.includes("call (a call from afar, only voices)"), kind);
+    assert.ok(!prompt.includes("a phone call"), kind);
   }
   // P5's story context is the scenes' cached prefix: the premise stays out of it, in the plan's own part.
   const [context, , ...own] = withPremise.planners.chapterPlan;
@@ -414,26 +440,20 @@ test("only the arc and chapter planners read the premise; the world plan keeps i
     "the same bytes on every call",
   );
 
-  // Every other prompt sends exactly what it sends with no premise at all.
+  // Every other prompt never reads the premise, and sends exactly what it sent on staging.
   for (const [kind, messages] of Object.entries(withPremise.others)) {
     assert.ok(!text(messages).includes("PREMISE-MARK"), `${kind} never reads the premise`);
     assert.deepEqual(messages, without.others[kind as keyof typeof withPremise.others], `${kind} is unchanged`);
   }
+  const digest = (messages: unknown) =>
+    createHash("sha256").update(JSON.stringify(messages)).digest("hex").slice(0, 16);
+  assert.deepEqual(
+    Object.fromEntries(Object.entries(withPremise.others).map(([kind, messages]) => [kind, digest(messages)])),
+    STAGING_OTHERS,
+    "every other prompt is staging's",
+  );
 
-  // Messages and daily messages know the world (its setting, never the premise) and use what it has.
-  for (const kind of ["chat", "daily"] as const) {
-    const [system, user] = withPremise.others[kind];
-    assert.ok(user!.content.startsWith(`WORLD\n${SETTING}\n\nWHO YOU ARE\n`), `${kind}: the setting first`);
-    assert.ok(
-      system!.content.includes(
-        "by whatever this world uses to send messages (a phone in a modern world; never a device this world does not have).",
-      ),
-      kind,
-    );
-    assert.ok(!system!.content.includes("never a phone or a screen unless the world has them"), kind);
-  }
-
-  // The world plan keeps the premise's era and technology.
+  // The world plan keeps the premise's era and technology, and an existing world its canon.
   const plan = text(withPremise.worldPlan);
   assert.ok(
     plan.includes(
@@ -442,25 +462,9 @@ test("only the arc and chapter planners read the premise; the world plan keeps i
   );
   assert.ok(
     plan.includes(
-      "- Keep the premise's genre, era and technology: never move the story to another period, and never add a technology or aesthetic the premise does not have; with no premise, choose them to fit the cast.",
+      "- Keep the premise's genre, era and technology: never move the story to another period, and never add a technology or aesthetic its world does not have (in an existing world, its canon decides).",
     ),
   );
-
-  // A call and a fixed date place use what the world has; Home's absence rule bans only the player's own devices.
-  assert.ok(
-    text(withPremise.others.callScene).includes(
-      "carried by a phone where the world has them, otherwise by a means this world already has; never invent a machine for it.",
-    ),
-  );
-  assert.ok(
-    text(withPremise.others.datePlan).includes(
-      "Adapt it to this world's setting and era, keeping its spirit; use this world's nearest native equivalent where it has no such place, never a machine or technology the setting lacks.",
-    ),
-  );
-  assert.ok(
-    NO_ABSENCE_RULE.includes("(never the player's own devices, apps or screens; what exists in this world is fine)"),
-  );
-  assert.ok(text(withPremise.others.note).includes(NO_ABSENCE_RULE));
 
   // The outfit and place tag specs name no era: the bible's look, the scene's and the climaxes' place tags and the
   // place image framing stay as they were on staging.

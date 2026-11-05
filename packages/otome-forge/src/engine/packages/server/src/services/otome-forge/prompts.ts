@@ -825,7 +825,7 @@ export function worldPlanMessages({
     "- Every love interest is an adult, written as an adult, in an adult role. No school or student roles.",
     "- Never contradict a love interest's CANONICAL CHARACTER CARD: the card wins over the premise and over this plan.",
     "- In an existing world, the mystery, the pieces and the web fit its canon: they may add what canon leaves unsaid, never contradict it. The adult rule above still holds over canon.",
-    "- Keep the premise's genre, era and technology: never move the story to another period, and never add a technology or aesthetic the premise does not have; with no premise, choose them to fit the cast.",
+    "- Keep the premise's genre, era and technology: never move the story to another period, and never add a technology or aesthetic its world does not have (in an existing world, its canon decides).",
     "- The love interests' goals compete with the protagonist's own goal.",
     "- Never assume the protagonist's gender: use their pronouns.",
     "- Omit an optional field rather than writing null.",
@@ -1500,12 +1500,14 @@ const questionOf = (world: Pick<World, "mystery">) => world.mystery.question.tri
 /**
  * The player's premise, the line after the WORLD block's setting in the arc, chapter (P5: in its own part, since the
  * story context is shared with the scenes), route, repair, Character Story and extra story planners, and in no other
- * prompt: the premise sets the genre, era and technology the setting must keep. No line with no premise, or when the
- * WORLD block already shows the premise in place of a setting. The same text on every call of a run.
+ * prompt. It is read for the genre, era and technology the setting must keep, never for its events: its opening
+ * situation is P2's openingSituation, which P5 shows for chapter 1 only. `keep` says what holds them (the extra story
+ * plan's own, since an au leaves them on purpose). No line with no premise, or when the WORLD block already shows the
+ * premise in place of a setting. The same text on every call of a run.
  */
-const plannerPremise = (world: Pick<World, "premise" | "setting">): string[] =>
+const plannerPremise = (world: Pick<World, "premise" | "setting">, keep = "which the story keeps"): string[] =>
   world.premise.trim() && world.setting.trim()
-    ? [`The player's premise (its genre, era and technology are canon): ${world.premise.trim()}`]
+    ? [`The player's premise, read only for its genre, era and technology, ${keep}: ${world.premise.trim()}`]
     : [];
 
 /**
@@ -1807,7 +1809,7 @@ export const INTIMATE_BEAT_SEGMENTS_MAX = 60;
 const MOMENT_FRAMING: Record<NonNullable<ChapterNode["moment"]>, string> = {
   "read-him":
     "This node is a READ HIM moment: the protagonist studies one love interest's face and body to work out what they really feel. Linger on their tells; let their face contradict their words; leave the truth readable but unsaid.",
-  call: "This node is a CALL FROM AFAR: only voices, carried by a phone where the world has them, otherwise by a means this world already has; never invent a machine for it. Narrate what the protagonist hears and imagines; nobody else is in the room with the caller.",
+  call: "This node is a CALL FROM AFAR: only voices, carried by a phone where the world has them and otherwise by whatever carries voices there. Narrate what the protagonist hears and imagines; nobody else is in the room with the caller.",
   date: "This node is a DATE: time together. It goes as hoped unless the chapter's guide or the story so far gives a reason for it to turn on something real between them.",
 };
 
@@ -2768,7 +2770,7 @@ const RUPTURE_LINE =
   "A rupture stands between you. Answer curt and cold, at a distance, within your red lines. Do not pretend it is fine, and do not mend it here.";
 
 export interface ChatReplyInput {
-  world: Pick<World, "language" | "content" | "images" | "writingStyle" | "bannedPhrases" | "setting">;
+  world: Pick<World, "language" | "content" | "images" | "writingStyle" | "bannedPhrases">;
   player: Pick<Player, "name" | "pronouns" | "traits" | "about">;
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   liState: LiState;
@@ -2813,7 +2815,7 @@ export function chatReplyMessages({
         .join(" ")
     : "";
   const system = [
-    `You are ${name} (${pronounText(unit.pronouns)}), a love interest in an otome visual novel: a character-driven romance. You are writing to ${them} in your private message thread, by whatever this world uses to send messages (a phone in a modern world; never a device this world does not have). This is a MESSAGE, not a scene: write as ${name}, in the first person, in your own voice.`,
+    `You are ${name} (${pronounText(unit.pronouns)}), a love interest in an otome visual novel: a character-driven romance. You are writing to ${them} in your private message thread, by whatever carries messages in this world (never a phone or a screen unless the world has them). This is a MESSAGE, not a scene: write as ${name}, in the first person, in your own voice.`,
     "Reply with ONLY a JSON object of this shape:",
     `{"messages": [{"text": "..."}]}`,
     `- messages: 1 to ${REPLY_MESSAGES_MAX} messages sent one after another, usually 1 or 2, each short: a line or a few, the way people text.`,
@@ -2840,8 +2842,6 @@ export function chatReplyMessages({
     .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
     .join("\n");
   const user = [
-    // The setting only (never the premise, which only the planners get): the message medium is the world's.
-    ...(world.setting.trim() ? ["WORLD", world.setting.trim(), ""] : []),
     "WHO YOU ARE",
     otomeSceneCard(unit, liState),
     betweenYou(unit, liState),
@@ -2952,7 +2952,7 @@ export function chatMemoryMessages({ world, names, conversation }: ChatMemoryInp
 
 /** The rule both prompts carry: Home never speaks about the player's absence or life outside the story. */
 export const NO_ABSENCE_RULE =
-  "Never mention the protagonist being away, how long it has been since you last spoke, or their real life outside the story (never the player's own devices, apps or screens; what exists in this world is fine).";
+  "Never mention the protagonist being away, how long it has been since you last spoke, or their real life outside the story (no devices, apps, players or screens).";
 
 function protagonistLine(player: Pick<Player, "name" | "pronouns" | "about">): string {
   return [
@@ -3532,7 +3532,7 @@ export function datePlanMessages({
       ? `${name} chooses where to take the protagonist: somewhere that says something true about ${name} (from their likes, their past or their world).`
       : place === STORY_PLACE
         ? `"${storyPlace?.name ?? ""}", a place in this world${storyPlace?.tags.trim() ? ` (${storyPlace.tags.trim()})` : ""}. The date goes there: keep that name for it.`
-        : `${PLACE_SPIRIT[place]}. Adapt it to this world's setting and era, keeping its spirit; use this world's nearest native equivalent where it has no such place, never a machine or technology the setting lacks.`,
+        : `${PLACE_SPIRIT[place]}. Adapt it to this world's setting and era, keeping its spirit.`,
     "",
     "WHAT THEY WEAR (image tags; describe them in words if at all)",
     wear(name, wornOutfitLine(unit) || unit.outfitLine || unit.bible?.look.outfitLine || ""),
@@ -3971,7 +3971,7 @@ export function storyPlanMessages({ world, player, unit, state, item, memory }: 
     "- title: the Memory's title, exactly as given. summary: one or two lines on what the story is about, without giving away its turns (the player reads it).",
     `- tags: content tags a reader should see before it starts, from: ${CHAPTER_TAGS.join(", ")}. Only what the story really holds; [] when none apply.`,
     `- voicedLine: the one line ${name} says aloud in this story that holds its heart, in ${name}'s own voice, at most ${NOTICED_WORDS_MAX} words; it is voiced on the Memory's card. Not a question that demands an answer.`,
-    "- nodes: kind beat is an ordinary scene; kind moment is a scene with a special framing, set by moment: read-him (the protagonist reads their face to see what they really feel), call (a phone call), date (time together that turns on something real).",
+    "- nodes: kind beat is an ordinary scene; kind moment is a scene with a special framing, set by moment: read-him (the protagonist reads their face to see what they really feel), call (a call from afar, only voices), date (time together that turns on something real).",
     `- guide: what happens in that node, 2 to 4 sentences, for the narrator: who wants what, what changes, where it leaves things. cast: exactly ["${li}"]. place: where it opens (optional).`,
     `- ledger.relationship: one line on what moved between ${name} and the protagonist. ledger.conflict: optional: complicate or escalate an open conflict by its id, or plant a new seed (type from: ${ANGST_TYPES.join(", ")}). ledger.offscreen: [].`,
     "RULES",
@@ -4080,7 +4080,7 @@ export function prestigePlanMessages({
     "FIELDS",
     `- kind: one of ${kinds.join(", ")}. premise: one sentence on what they imagine (the player does not see it). title: a short title for it. summary: one or two lines on it, without giving away its turns (the player reads it).`,
     `- tags: content tags a reader should see before it starts, from: ${CHAPTER_TAGS.join(", ")}. Only what the story really holds; [] when none apply.`,
-    "- nodes: kind beat is an ordinary scene; kind moment is a scene with a special framing, set by moment: read-him (the protagonist reads their face to see what they really feel), call (a phone call), date (time together that turns on something real).",
+    "- nodes: kind beat is an ordinary scene; kind moment is a scene with a special framing, set by moment: read-him (the protagonist reads their face to see what they really feel), call (a call from afar, only voices), date (time together that turns on something real).",
     `- guide: what happens in that node, 2 to 4 sentences, for the narrator: who wants what, what changes, where it leaves things. cast: exactly ["${li}"]. place: where it opens (optional).`,
     "RULES",
     `- ${STORY_NODES_MIN} to ${STORY_NODES_MAX} nodes of kind beat or moment (no confrontation). ${name} is in every node, and no other love interest appears.`,
@@ -4098,7 +4098,10 @@ export function prestigePlanMessages({
   const user = [
     "WORLD",
     world.setting.trim() || world.premise.trim(),
-    ...plannerPremise(world),
+    ...plannerPremise(
+      world,
+      "which an extra story keeps unless its kind is au (an au imagines another world on purpose)",
+    ),
     "",
     "PROTAGONIST",
     protagonistBlock(player),
