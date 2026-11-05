@@ -4,7 +4,9 @@ import {
   recordSlurpContinuityEvent,
   recordSlurpContinuityLink,
 } from "../../data/continuity/slp-continuity-storage.js";
+import type { SlurpAccount } from "../../modules/records/slp-storage-model.js";
 import { slurpContinuityInstruction } from "../../modules/continuity/slp-continuity-prompt.js";
+import { recallSlurpMemories } from "../../data/creators/slp-ltm-recall.js";
 import { slurpContinuityIdentityOf } from "../../modules/continuity/slp-continuity-rules.js";
 import type { SlpCreatorManagedPost } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlurpPostAxes } from "../../modules/feed/slp-content-axes.js";
@@ -65,7 +67,7 @@ import { linkSlurpPurposePost } from "../../data/feed/slp-purpose-storage.js";
 export async function planSlurpPost(
   db: DB,
   ctx: {
-    account: Pick<SlpAccount, "id">;
+    account: Pick<SlpAccount, "id" | "displayName" | "settings">;
     request: Pick<SlpCreatorGenerationRequest, "contentIntent" | "contentDelivery" | "access"> & {
       generateImage?: boolean;
     };
@@ -356,6 +358,24 @@ export async function planSlurpPost(
     axes?.intent === "request" && !promise && !previewOnly
       ? await topSlurpDemandTrend(db, account.id, at).catch(() => null)
       : null;
+  // What Long-Term Memory remembers about them that fits this beat (none without a beat: their name).
+  // The settings and source lookups are part of it: no failure here fails the post.
+  const memories = await (async () => {
+    try {
+      const noodle = createSlurpStorage(db);
+      return (
+        await recallSlurpMemories({
+          settings: await noodle.getSettings(),
+          source: await noodle.resolveAccountSource(account as SlurpAccount),
+          disclosureMode: account.settings.privacy.identityDisclosure ?? "open",
+          queryText: [beat?.line, beat?.place, beat?.anchor].filter(Boolean).join(" ") || account.displayName,
+        })
+      ).lines;
+    } catch (error) {
+      logger.warn(error, "[slurp] Could not read memories for a post; it is written without them");
+      return [] as string[];
+    }
+  })();
   // What this Creator may use about themselves in this post: their own public and private notes,
   // and what they have been doing. A fan's thread never reaches a post; `slurpContinuityReadable`
   // decides that, not this call site.
@@ -365,10 +385,10 @@ export async function planSlurpPost(
     request.access === "locked" ? "locked_post" : "public_post",
     { at, limit: 20 },
   )
-    .then((ledger) => slurpContinuityInstruction(ledger))
+    .then((ledger) => slurpContinuityInstruction({ ...ledger, memories }))
     .catch((error: unknown) => {
       logger.warn(error, "[slurp] Could not read continuity for a post; it is written without it");
-      return "";
+      return slurpContinuityInstruction({ facts: [], memories });
     });
   const postPurpose = slurpPostPurpose({
     intent: axes?.intent,

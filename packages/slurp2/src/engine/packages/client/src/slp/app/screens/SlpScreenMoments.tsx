@@ -16,6 +16,9 @@ import { useSlurpMediaSrc } from "../../base/media/slp-media-src";
 import { ProfileInitial, slpImgFade } from "../../base/chrome/SlpChrome";
 import { SlurpSparkleVeil } from "../../base/chrome/SlpSparkleVeil";
 import { SlpSkeleton } from "../../modules/chrome/SlpStateKit";
+import { SlpLiveMomentTiles } from "../../features/live/SlpLiveMomentTiles";
+import { useCreatorAccounts } from "../../features/creators/slp-creators-contract";
+import { useSlpLiveNow } from "../../features/live/slp-live-hooks";
 import { SlpPostSurfaceMenu } from "../../modules/post/SlpPostMenu";
 import { api } from "../../../lib/api-client";
 import { downloadSlpShareCard, toSlpShareCardInput } from "../../modules/post/slp-share-card";
@@ -89,7 +92,14 @@ export function SlurpMomentsShelf({
     const current = tileByCreator.get(moment.creator.profile.id);
     if (!current || (watched(current) && !watched(moment))) tileByCreator.set(moment.creator.profile.id, moment);
   }
-  const creatorMoments = [...tileByCreator.values()];
+  // A live Creator's tile is the show; their Stories wait until it ends.
+  const liveNow = useSlpLiveNow().data ?? [];
+  // Only a show whose host account resolves gets a tile, so only those hide the host's Stories.
+  const accounts = useCreatorAccounts(liveNow.length > 0).data ?? [];
+  const live = liveNow.filter((show) => accounts.some((account) => account.id === show.hostId));
+  const creatorMoments = [...tileByCreator.values()].filter(
+    (moment) => !live.some((show) => show.hostId === moment.creator.profile.id),
+  );
   const isUnwatched = (moment: (typeof moments)[number]) => !watched(moment);
   creatorMoments.sort((left, right) => {
     const leftNew = isUnwatched(left);
@@ -127,7 +137,10 @@ export function SlurpMomentsShelf({
               </span>
             </button>
           )}
-          {creatorMoments.length === 0 && isLoading && !isError ? (
+          <SlpLiveMomentTiles shows={live} />
+          {creatorMoments.length === 0 && live.length > 0 ? null : creatorMoments.length === 0 &&
+            isLoading &&
+            !isError ? (
             <SlpSkeleton shape="stories" count={4} />
           ) : creatorMoments.length === 0 ? (
             <div

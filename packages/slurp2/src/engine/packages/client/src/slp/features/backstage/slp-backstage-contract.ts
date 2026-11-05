@@ -18,6 +18,7 @@ import type { SlurpSettings } from "../settings/slp-settings-contract";
 import {
   SLP_BACKSTAGE_DEFAULT_TARGET,
   SLP_BACKSTAGE_TARGETS_BY_SECTION,
+  slpBackstageSectionFor,
   type SlpBackstageTarget,
 } from "../../base/navigation/slp-backstage-target";
 
@@ -37,7 +38,8 @@ export type SlpBackstageShellProps = {
  */
 export function useSlpBackstageHostState(props: SlpBackstageShellProps) {
   const { t, i18n } = useTranslation();
-  const section = props.navigation.section ?? "overview";
+  // A caller may name a page under its old section; the page decides where it shows.
+  const section = slpBackstageSectionFor(props.navigation.section ?? "overview", props.navigation.target);
   const target =
     props.navigation.target && SLP_BACKSTAGE_TARGETS_BY_SECTION[section].includes(props.navigation.target)
       ? props.navigation.target

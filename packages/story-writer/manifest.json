@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 2,
+  "capabilityApi": {
+    "major": 1,
+    "minor": 386
+  },
+  "builtAgainst": {
+    "engineVersion": "2.5.1",
+    "engineCommit": "54e6848c818ae4150f108ab9614986bb7610891d"
+  },
+  "id": "story-writer",
+  "name": "Story Writer",
+  "version": "0.1.1",
+  "description": "A co-writing book. Pick a connection, your characters, personas and lorebooks, describe the story, and the model writes it chapter by chapter while you guide it with an author's note and edit anything on the page. Install it, restart Marinara Engine when prompted, then open Home → Story Writer.",
+  "engine": {
+    "min": "2.5.1",
+    "maxExclusive": "4.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json",
+    "server": "server.mjs",
+    "client": "client.js"
+  },
+  "contributions": {
+    "slots": [
+      "home-browser-tab"
+    ],
+    "homeBrowserTab": {
+      "label": "Story Writer",
+      "ariaLabel": "Open Story Writer",
+      "iconPaths": [
+        "story-writer-icon.png"
+      ]
+    },
+    "assets": {
+      "paths": [
+        "story-writer-mari.webp",
+        "wood-desk.webp",
+        "paper-light.webp",
+        "paper-dark.webp"
+      ]
+    }
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "498b13d0c7f04f59546aab5d16d4c6806335bcb4b7eef9e9bcf46008b0e7a3a3",
+      "bytes": 666
+    },
+    {
+      "path": "server.mjs",
+      "sha256": "ca6300129f178a7f32aa5eadd587a5a7c885ffc4a202c617e70ee235731d3974",
+      "bytes": 13665
+    },
+    {
+      "path": "client.js",
+      "sha256": "4a745b679a777d1d71dd8a17f441a9b621784a8b5c0b6579619b6a1ba9a71438",
+      "bytes": 210075
+    },
+    {
+      "path": "story-writer-icon.png",
+      "sha256": "fdf24e26aaea6611faf1038b92fe95762abb240c2861c13496930a015d1cce9c",
+      "bytes": 61634
+    },
+    {
+      "path": "story-writer-mari.webp",
+      "sha256": "97dd7fe0c5609602e1abcdb628d38e59ad30077945346900035d6cb89c302da7",
+      "bytes": 174988
+    },
+    {
+      "path": "wood-desk.webp",
+      "sha256": "6a5b8a51f584c5062999eea3dfe90fb74facb1cc4a3b55ecdb119f5b5a89d913",
+      "bytes": 91530
+    },
+    {
+      "path": "paper-light.webp",
+      "sha256": "61b26fa8903d0213eeea702b02d34a2853356b7f60932ab0e789ef50a6064350",
+      "bytes": 43156
+    },
+    {
+      "path": "paper-dark.webp",
+      "sha256": "3889e55f4c6513a1cf0424344eb17d10d8fd4142a0288398c06bf610d984cecb",
+      "bytes": 14878
+    }
+  ],
+  "permissions": [
+    "routes",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": true
+}

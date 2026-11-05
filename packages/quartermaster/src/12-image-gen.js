@@ -298,7 +298,7 @@ Object.assign(QM.dock, {
       this._renderImageGenContent();
       const outcome = isOutfit
         ? await QM.state.uploadOutfitPortrait(subjectId, result.imageDataUrl)
-        : await QM.state.uploadItemImage(subjectId, result.imageDataUrl);
+        : await QM.state.uploadItemImage(subjectId, result.imageDataUrl, "generated");
       if (token !== this._imageGenSessionToken || chatId !== QM.state.chatId) return;
       if (!outcome) return;
       if (!outcome.ok) throw new Error(outcome.error);

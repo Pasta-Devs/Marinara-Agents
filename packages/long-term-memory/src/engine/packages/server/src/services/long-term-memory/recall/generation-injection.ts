@@ -4,7 +4,10 @@ import type {
   LtmRecallAttempt,
   LtmRecallAttemptOutcome,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { resolveLongTermMemoryRecallSettings } from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
+import {
+  resolveLongTermMemoryRecallSettings,
+  resolveLtmChatMemories,
+} from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
 import {
   inheritedBranchLtmNoteIds,
   ltmModeForChatMode,
@@ -26,6 +29,8 @@ import { recordLongTermMemoryAttempt, recordLongTermMemoryInjection, recordLongT
 import { recordLtmDebugEvent } from "../maintenance/debug-log.js";
 import { getPackagePersistence, logger, withKeyedLock } from "../package-runtime.js";
 import { summaries } from "../sources/interop.js";
+import { armLtmAutoImport } from "../sources/auto-import-job.js";
+import { getLtmExtractionConfig } from "../extraction/extraction-config.js";
 import { LongTermMemoryStorage } from "../persistence/storage.js";
 
 export type LongTermMemoryRecallReceipt = {
@@ -222,6 +227,13 @@ export async function prepareGenerationLongTermMemory(input: {
     await recordAttempt(input.signal?.aborted ? "cancelled" : "failed", { debugEnabled });
     throw error;
   }
+  // Hands-off import runs after the reply's recall and never delays or fails it.
+  void getLtmExtractionConfig(input.root)
+    .then((config) => {
+      if (resolveLtmChatMemories(parseLtmChatMetadata(chat.metadata), config).autoImport)
+        armLtmAutoImport(input.root, input.chatId, mode);
+    })
+    .catch((error) => logger.warn(error, "[ltm] Could not schedule background import for chat %s", input.chatId));
   const artifact = serializeLongTermMemoryPrompt(retrieval.chunks, {
     preamble: recall.recallPreamble,
     maxTokens: budgetTokens,

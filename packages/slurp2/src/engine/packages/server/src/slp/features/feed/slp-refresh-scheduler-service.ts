@@ -12,6 +12,7 @@ import {
   nextSlpRefreshTime,
   type PersistedSlpRefreshSchedule,
 } from "../../modules/feed/slp-refresh-schedule.js";
+import { slpExtensionOn, slpInlineAdsOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
 const SLP_SCHEDULER_INITIAL_DELAY_MS = 20_000;
 const SLP_SCHEDULER_MAX_POLL_MS = 60_000;
@@ -137,13 +138,13 @@ export function startSlpRefreshScheduler(
       if (settings.paused) return;
       // A lorebook-backed ad pool follows its book. This is a no-op unless the book's content
       // fingerprint actually changed, so a steady setting costs one cheap read per poll.
-      if (settings.inlineAdsLorebookId) {
+      if (settings.inlineAdsLorebookId && slpExtensionOn(settings, "ads")) {
         await syncGarnishAdsWithLorebook(app.db, createGarnishAds(app.db).pool).catch((error) =>
           logger.warn(error, "[slurp-scheduler] Lorebook ad sync failed"),
         );
       }
       // Older ads get their wide banner once (V), one picture per poll at most, paced over the day.
-      if (settings.inlineAdsEnabled && settings.inlineAdsImagesEnabled) {
+      if (slpInlineAdsOn(settings) && settings.inlineAdsImagesEnabled) {
         await redrawOldGarnishAdBanner(app.db, createGarnishAds(app.db).pool, now).catch((error) =>
           logger.warn(error, "[slurp-scheduler] Ad banner redraw failed"),
         );

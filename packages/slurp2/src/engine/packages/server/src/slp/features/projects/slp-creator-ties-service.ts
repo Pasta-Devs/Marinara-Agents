@@ -13,7 +13,7 @@ import { createSlurpStorage } from "../../data/slp-storage.js";
 import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
 import { readSlurpCardPeople, readSlurpCreatorFitText } from "../../data/creators/slp-flavour-source.js";
 import { SLURP_PARTNER_RELATION } from "../../modules/creators/slp-spice.js";
-import { slurpAdvanceBonds, slurpBondsFor } from "../../modules/projects/slp-creator-bonds.js";
+import { slurpAdvanceBonds, slurpBondActive, slurpBondsFor } from "../../modules/projects/slp-creator-bonds.js";
 import { mutateSlurpCreatorTies, readSlurpCreatorTiesDocument } from "../../data/projects/slp-creator-ties-storage.js";
 import { slurpCreatorReach } from "../../../../../shared/src/slp/slp-reach.js";
 import { slurpPlatformScaleMultiplier, slurpWorldActivityMultiplier } from "../../../../../shared/src/slp/slp-scale.js";
@@ -73,6 +73,7 @@ import type { SlurpBeat } from "../../modules/feed/slp-post-beat.js";
 import type { SlurpContentIntent } from "../../../../../shared/src/slp/slp-content-axes.js";
 import { bookSlurpHeldSlot, readSlurpSlotTimes } from "../feed/slp-held-slots-contract.js";
 import { slurpPausedNow } from "../../data/settings/slp-pause-storage.js";
+import { slpBrandDealsPace, slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
 type Storage = ReturnType<typeof createSlurpStorage>;
 type Account = Awaited<ReturnType<Storage["listNoodlerAccounts"]>>[number];
@@ -90,6 +91,9 @@ export async function loadSlurpTieCreators(db: DB, at = new Date()): Promise<Slu
     accounts.map((account) => account.id),
   );
   const scale = slurpPlatformScaleMultiplier(settings.platformScale);
+  const family = (await readSlurpCreatorTiesDocument(db)).bonds.filter(
+    (bond) => bond.kind === "family" && slurpBondActive(bond),
+  );
   return Promise.all(
     accounts.map(async (account: Account) => {
       const text = await readSlurpCreatorFitText(db, { account, source: await storage.resolveAccountSource(account) });
@@ -108,6 +112,9 @@ export async function loadSlurpTieCreators(db: DB, at = new Date()): Promise<Slu
           .filter((person) => SLURP_PARTNER_RELATION.test(person.relation))
           .map((person) => person.name),
         cardPeople,
+        kin: family.flatMap((bond) =>
+          bond.aId === account.id ? [bond.bId] : bond.bId === account.id ? [bond.aId] : [],
+        ),
         poly: style ? style === "poly" : SLP_POLY_CARD_WORDS.test(text),
         // An unreadable setting is no permission: fail closed (no romance) until it reads again.
         romance: steering ? steering.romance : { off: true, only: [] },
@@ -134,7 +141,7 @@ export async function advanceSlurpCreatorTies(db: DB, at = new Date()): Promise<
   const storage = createSlurpStorage(db);
   const settings = await storage.getSettings();
   const creators = await loadSlurpTieCreators(db, at);
-  const pace = SLURP_DEAL_PACE[settings.brandDealsPace as SlurpDealPace] ?? 1;
+  const pace = SLURP_DEAL_PACE[slpBrandDealsPace(settings) as SlurpDealPace] ?? 1;
   // Loaded even when paced off: open offers still get answered against their product.
   const ads = await loadSlurpDealAds(db, settings);
   const spice = ads.some((ad) => ad.rating && ad.rating !== "tame") ? await loadSlurpDealSpice(db) : undefined;
@@ -142,10 +149,17 @@ export async function advanceSlurpCreatorTies(db: DB, at = new Date()): Promise<
   const paired = settings.creatorCollabs.map((collab) => collab.creatorIds);
   const storylines = await slurpCouplesWorldInput(db, creators);
   const before = await readSlurpCreatorTiesDocument(db);
+  // Storylines off: collabs, rivalries and couples stand still; bonds (Basic) and brand deals move on.
+  const storylinesOn = slpExtensionOn(settings, "storylines");
   const after = await mutateSlurpCreatorTies(db, (document) => {
-    const ties = slurpAdvanceCreatorTies(document.ties, { creators, at, activity, paired, newId });
+    const ties = storylinesOn
+      ? slurpAdvanceCreatorTies(document.ties, { creators, at, activity, paired, newId })
+      : // Stamped, so bonds and deals keep their 6-hour look and turning Storylines on adds no catch-up.
+        { ...document.ties, advancedAt: at.toISOString() };
     const around = fromTies(ties, at);
-    const couples = slurpAdvanceCouples(document.couples, { creators, at, activity, newId, storylines, ...around });
+    const couples = storylinesOn
+      ? slurpAdvanceCouples(document.couples, { creators, at, activity, newId, storylines, ...around })
+      : document.couples;
     const next = {
       ties,
       couples,
@@ -344,7 +358,12 @@ export async function planSlurpTieBeat(
   },
 ): Promise<SlurpBeat | null> {
   try {
-    const { ties, deals, couples } = await readSlurpCreatorTiesDocument(db);
+    const stored = await readSlurpCreatorTiesDocument(db);
+    const { deals } = stored;
+    // Storylines off: only a brand deal takes a post; collabs, rivalries and couples wait.
+    const storylinesOn = slpExtensionOn(await createSlurpStorage(db).getSettings(), "storylines");
+    const ties = storylinesOn ? stored.ties : { ...stored.ties, collabs: [], rivalries: [] };
+    const couples = storylinesOn ? stored.couples : [];
     const ids = new Set([
       ...ties.collabs.flatMap((collab) => [collab.hostId, collab.partnerId]),
       ...ties.rivalries.flatMap((rivalry) => [rivalry.fromId, rivalry.toId]),

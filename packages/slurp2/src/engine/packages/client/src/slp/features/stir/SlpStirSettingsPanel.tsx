@@ -3,7 +3,8 @@ import { AdvancedGroup, Field, NumberSetting, SettingsGroup, Toggle } from "../.
 import { BackstagePageHeader } from "../../modules/settings/SlpSettingsKit";
 import { ChoiceSetting } from "../../modules/settings/SlpSettingsInputs";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
-import { SlpDramaSettings } from "./SlpDramaSettings";
+import { SlpExtensionSwitch } from "../../modules/settings/SlpExtensionSwitch";
+import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 import {
   SLP_DESK_RATES,
   SLP_DESK_TICKET_PACES,
@@ -11,15 +12,12 @@ import {
 } from "../../../../../shared/src/slp/slp-support-desk.js";
 
 /**
- * Settings › Stir: how the Slurp Support desk plays (docs/SUPPORT-DESK.md). One stored object,
+ * Settings › Support desk: how the Slurp Support desk plays (docs/SUPPORT-DESK.md). One stored object,
  * `supportDesk`; every control saves the whole object with its one field changed.
  */
 export function SlpStirSettingsPanel(page: SlpBackstagePageProps) {
-  const { settings, update, updateSettings } = page;
+  const { settings, updateNow } = page;
   const { t } = useTranslation();
-  const desk = settings.supportDesk;
-  const set = <K extends keyof SlpSupportDeskSettings>(key: K, value: SlpSupportDeskSettings[K]) =>
-    void update("supportDesk", { ...desk, [key]: value });
   const tx = (key: string, defaultValue: string) => t(`ui.slurp.stir.settings.${key}`, { defaultValue });
   return (
     <div className="space-y-5">
@@ -29,6 +27,38 @@ export function SlpStirSettingsPanel(page: SlpBackstagePageProps) {
           "Slurp Support is Slurp's own staff. You write as Support to Creators you do not run: steer them, reward them, and play them. These settings decide how that game plays.",
         )}
       />
+      {/* Two extensions share this page: Stir (the tab's levers) and the Support desk (the staff game). */}
+      <SlpExtensionSwitch
+        settingKey="extStir"
+        label={t("ui.slurp.settings.ext.stir.label", { defaultValue: "Stir" })}
+        detail={t("ui.slurp.settings.ext.stir.detail", {
+          defaultValue: "The Stir tab: the planner, the lever deck and In play.",
+        })}
+        on={slpExtensionOn(settings, "stir")}
+        onChange={(value) => void updateNow("extStir", value)}
+      />
+      <SlpExtensionSwitch
+        settingKey="extSupportDesk"
+        label={t("ui.slurp.settings.ext.supportDesk.label", { defaultValue: "Support desk" })}
+        detail={t("ui.slurp.settings.ext.supportDesk.detail", {
+          defaultValue: "The staff game: tickets, trust, suspicion, offers, perks, notices and Creators who leave.",
+        })}
+        on={slpExtensionOn(settings, "supportDesk")}
+        onChange={(value) => void updateNow("extSupportDesk", value)}
+      />
+      {slpExtensionOn(settings, "supportDesk") && <SlpDeskSettings {...page} />}
+    </div>
+  );
+}
+
+function SlpDeskSettings({ settings, update, updateSettings }: SlpBackstagePageProps) {
+  const { t } = useTranslation();
+  const desk = settings.supportDesk;
+  const set = <K extends keyof SlpSupportDeskSettings>(key: K, value: SlpSupportDeskSettings[K]) =>
+    void update("supportDesk", { ...desk, [key]: value });
+  const tx = (key: string, defaultValue: string) => t(`ui.slurp.stir.settings.${key}`, { defaultValue });
+  return (
+    <>
       <div className="grid items-start gap-5 lg:grid-cols-2">
         <SettingsGroup title={tx("groupCreators", "What Creators do")}>
           <ChoiceSetting
@@ -101,19 +131,6 @@ export function SlpStirSettingsPanel(page: SlpBackstagePageProps) {
           />
         </SettingsGroup>
       </div>
-      <SettingsGroup title={tx("groupLove", "Love")}>
-        <Toggle
-          settingKey="polyamory"
-          label={tx("polyamory", "Polyamory")}
-          detail={tx(
-            "polyamoryDetail",
-            "A couple can grow to three or four, and a polyamorous Creator can be in more than one couple. Each Creator's style is in their steering: from their card, monogamous or polyamorous.",
-          )}
-          value={settings.polyamory}
-          onChange={(value) => update("polyamory", value)}
-        />
-      </SettingsGroup>
-      <SlpDramaSettings {...page} settingKey="drama" />
       <SettingsGroup title={tx("groupNotices", "Slurp's notices")}>
         <Toggle
           label={tx("noticeMilestones", "Milestones")}
@@ -171,6 +188,6 @@ export function SlpStirSettingsPanel(page: SlpBackstagePageProps) {
           />
         </Field>
       </AdvancedGroup>
-    </div>
+    </>
   );
 }

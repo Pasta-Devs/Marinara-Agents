@@ -123,6 +123,7 @@ export function createFeedPostStorage1(context: SlurpStorageContext) {
           (metadata.imageGenerationFailed !== true && metadata.imageGenerationDeferred !== true)
         )
           continue;
+        if (metadata.imageGenerationRetryable === false) continue;
         if (slpCreatorPostImageRetryAttempts(metadata) >= SLP_CREATOR_POST_IMAGE_RETRY_LIMIT) continue;
         eligible.push(mapManagedPost(row));
         if (eligible.length >= Math.max(1, Math.floor(limit))) break;

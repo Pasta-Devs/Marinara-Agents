@@ -20,6 +20,8 @@ const DEBUG_TOKEN_PATTERN = new RegExp(
 );
 const UUID_ONLY_PATTERN = /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i;
 
+const relativeTimeFormats = new Map<string, Intl.RelativeTimeFormat>();
+
 /** How long ago a timestamp was, as "4 min. ago"; empty when it isn't a date. */
 export function formatAge(timestamp: string, locale: string, now: number) {
   const then = Date.parse(timestamp);
@@ -34,7 +36,13 @@ export function formatAge(timestamp: string, locale: string, now: number) {
         : seconds < 86400
           ? ([Math.floor(seconds / 3600), "hour"] as const)
           : ([Math.floor(seconds / 86400), "day"] as const);
-  return new Intl.RelativeTimeFormat(locale, { numeric: "always", style: "short" }).format(-value, unit);
+  // One formatter per locale: the Debug list formats an age for every row it renders.
+  let format = relativeTimeFormats.get(locale);
+  if (!format) {
+    format = new Intl.RelativeTimeFormat(locale, { numeric: "always", style: "short" });
+    relativeTimeFormats.set(locale, format);
+  }
+  return format.format(-value, unit);
 }
 
 /** Under a second in ms, under a minute in seconds (one decimal below 10 s), then minutes and seconds. */

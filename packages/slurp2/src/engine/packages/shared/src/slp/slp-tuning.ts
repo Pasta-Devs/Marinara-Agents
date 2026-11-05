@@ -11,6 +11,7 @@
  * may write.
  */
 import { z } from "zod";
+import { slpFilledDefault } from "./slp-schema-defaults.js";
 import { SLURP_AUDIENCE_TONE_INSTRUCTIONS } from "./slp-tone.js";
 
 /** Most world events one tick may produce, whatever the settings say. */
@@ -37,38 +38,40 @@ const int = (min: number, max: number, fallback: number) =>
     .default(fallback);
 const text = (max: number, fallback: string) => z.string().max(max).default(fallback);
 const curve = (floor: number, cap: number, coef: number, capMax: number) =>
-  z.object({ floor: int(0, 1_000_000, floor), cap: num(0, capMax, cap), curve: num(0, capMax, coef) }).default({});
+  slpFilledDefault(
+    z.object({ floor: int(0, 1_000_000, floor), cap: num(0, capMax, cap), curve: num(0, capMax, coef) }),
+  );
 
 export const SLURP_TUNING_PRESETS = ["quiet", "realistic", "lively", "generous", "custom"] as const;
 
 export const slurpSimulationTuningSchema = z.object({
   preset: z.enum(SLURP_TUNING_PRESETS).default("realistic"),
-  clock: z
-    .object({
+  clock: slpFilledDefault(
+    z.object({
       tickMinutes: int(1, 240, 5),
       backgroundTimer: z.boolean().default(false),
       catchUpHours: int(1, 24 * 14, 72),
       maxEventsPerTick: int(1, SLURP_TUNING_EVENTS_PER_TICK_CEILING, 14),
-    })
-    .default({}),
-  rhythm: z
-    .object({
+    }),
+  ),
+  rhythm: slpFilledDefault(
+    z.object({
       enabled: z.boolean().default(true),
       nightLow: num(0, 1, 0.7),
       eveningHigh: num(1, 4, 1.25),
       weekendBoost: num(1, 4, 1.1),
-    })
-    .default({}),
-  reach: z
-    .object({
+    }),
+  ),
+  reach: slpFilledDefault(
+    z.object({
       floor: int(0, 1_000_000, 240),
       ceiling: int(1, 10_000_000, 34_000),
       growthDays: num(1, 3650, 45),
       realFollowerWeight: num(0, 1000, 25),
-    })
-    .default({}),
-  pulse: z
-    .object({
+    }),
+  ),
+  pulse: slpFilledDefault(
+    z.object({
       minutesPerReaction: num(0.1, 1440, 3),
       referenceReach: int(1, 10_000_000, 3_000),
       maxPerTick: int(0, SLURP_TUNING_PULSE_PER_TICK_CEILING, 6),
@@ -80,10 +83,10 @@ export const slurpSimulationTuningSchema = z.object({
       viralChance: num(0, 1, 0.02),
       viralMultiplier: num(1, 20, 4),
       viralHours: int(1, 24 * 14, 12),
-    })
-    .default({}),
-  world: z
-    .object({
+    }),
+  ),
+  world: slpFilledDefault(
+    z.object({
       maxActionsPerTick: int(0, SLURP_TUNING_ACTIONS_PER_TICK_CEILING, 4),
       maxOpenRequests: int(0, 50, 3),
       commission: curve(40, 0.5, 0.09, 10),
@@ -92,18 +95,18 @@ export const slurpSimulationTuningSchema = z.object({
       questionNeedsRecentPost: z.boolean().default(true),
       /** Chance per day that an eligible fan buys one affordable locked post. */
       unlockChancePerDay: num(0, 1, 0.04),
-    })
-    .default({}),
-  funnel: z
-    .object({
+    }),
+  ),
+  funnel: slpFilledDefault(
+    z.object({
       rollCadence: z.enum(["daily", "hourly"]).default("daily"),
       churnDays: num(0.01, 30, 0.5),
       ambientCanPay: z.boolean().default(false),
       conversionGrowth: num(0, 10, 0),
-    })
-    .default({}),
-  economy: z
-    .object({
+    }),
+  ),
+  economy: slpFilledDefault(
+    z.object({
       audienceCommissionPrice: int(0, 99_999, 40),
       /** Share of a fan's weekly budget one tip is worth. A Whale tips like a Whale for free. */
       audienceTipShare: num(0, 1, 0.25),
@@ -112,22 +115,22 @@ export const slurpSimulationTuningSchema = z.object({
        * count, the Creator's earnings in dollars, and the dollars per coin at payout all use it.
        */
       crowdWeight: int(1, 20, 5),
-    })
-    .default({}),
-  prompts: z
-    .object({
-      tones: z
-        .object({
+    }),
+  ),
+  prompts: slpFilledDefault(
+    z.object({
+      tones: slpFilledDefault(
+        z.object({
           warm: text(2000, SLURP_AUDIENCE_TONE_INSTRUCTIONS.warm),
           mixed: text(2000, SLURP_AUDIENCE_TONE_INSTRUCTIONS.mixed),
           unfiltered: text(2000, SLURP_AUDIENCE_TONE_INSTRUCTIONS.unfiltered),
-        })
-        .default({}),
+        }),
+      ),
       fanActivityExtra: text(4000, ""),
       replyMaxChars: int(20, 2000, 180),
       scheduleExtra: text(4000, ""),
-    })
-    .default({}),
+    }),
+  ),
 });
 
 export type SlurpSimulationTuning = z.infer<typeof slurpSimulationTuningSchema>;

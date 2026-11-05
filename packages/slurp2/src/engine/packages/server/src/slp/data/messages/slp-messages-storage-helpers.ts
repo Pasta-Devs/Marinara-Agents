@@ -7,6 +7,7 @@ import {
 import { readStoredNotes, type SlurpThreadNote } from "../../modules/messages/slp-thread-notes.js";
 import { slurpRapportPartner, type SlurpRapport } from "../../modules/messages/slp-rapport.js";
 import type { SlurpMessageKind, SlurpThreadState } from "../../modules/messages/slp-messaging.js";
+import { readSlurpSexting } from "../../modules/messages/slp-sexting.js";
 import type { SlurpCommission, SlurpMessage, SlurpThread } from "./slp-messages-storage-types.js";
 
 export const now = () => new Date().toISOString();
@@ -91,6 +92,8 @@ export function readStoredRapport(raw: Record<string, unknown>): SlurpRapport {
     score: typeof raw.score === "number" ? raw.score : 0,
     tier: (typeof raw.tier === "string" ? raw.tier : "stranger") as SlurpRapport["tier"],
     contributions: Array.isArray(raw.contributions) ? (raw.contributions as SlurpRapport["contributions"]) : [],
+    ...(typeof raw.peak === "string" ? { peak: raw.peak as SlurpRapport["tier"] } : {}),
+    ...(typeof raw.said === "string" ? { said: raw.said as SlurpRapport["tier"] } : {}),
   };
 }
 
@@ -135,6 +138,7 @@ export const mapThread = (row: Record<string, unknown>): SlurpThread => ({
   notes: readStoredNotes(row.notes),
   sceneChatId: (row.sceneChatId as string | null) ?? null,
   sceneStartedAt: (row.sceneStartedAt as string | null) ?? null,
+  sexting: readSlurpSexting(row.sexting),
   createdAt: String(row.createdAt),
   updatedAt: String(row.updatedAt),
 });

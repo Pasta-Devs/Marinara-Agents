@@ -205,10 +205,10 @@ const readers: [string, RegExp][] = [
     "features/messages/slp-message-operation.ts",
     /"messages\.reply-delay",\s*await slurp\.platformInfluenceStory\(creator\.id\)/u,
   ],
-  ["features/audience/slp-fan-activity-operation.ts", /"audience\.activity", story\)/u],
+  ["features/audience/slp-fan-activity-operation.ts", /"audience\.activity",\s*story,?\s*\)/u],
   [
     "data/economy/slp-economy-storage-2.ts",
-    /slurpPlatformEventModifierSource\(\s*settings\.platformEvents,\s*await this\.platformInfluenceStory\(creatorAccountId\),?\s*\)/u,
+    /slurpPlatformEventModifierSource\(\s*slpLiveEvents\(settings\),\s*await this\.platformInfluenceStory\(creatorAccountId\),?\s*\)/u,
   ],
 ];
 for (const [file, pattern] of readers) assert.match(readSlurp2Source("server", file), pattern, file);
@@ -218,7 +218,8 @@ const sceneModel = readSlurp2Source("client", "features/onboarding/slp-scene-mod
 const finishOnClose = sceneModel.slice(sceneModel.indexOf("const finishOnClose = useCallback"));
 assert.match(
   finishOnClose,
-  /const id = accountRef\.current;\s*if \(!id\) return false;/u,
+  // R6: an update of an existing page saves on "Save" only.
+  /const id = accountRef\.current;[\s\S]*?if \(!id \|\| setup\.existing\) return false;/u,
   "only a page the shoot saved",
 );
 assert.match(finishOnClose, /await completeSignUp\(/u, "limits line, first post and kept chat, like Finish");

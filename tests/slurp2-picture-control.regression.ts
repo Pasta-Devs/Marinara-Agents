@@ -21,7 +21,7 @@ const openBranch = artwork.indexOf('if (disclosureMode === "open")');
 const gate = artwork.indexOf('if (!settings.autoCreatorArtworkEnabled) return "idle" as const;');
 assert.ok(openBranch > 0 && gate > openBranch, "only generation waits for the switch");
 assert.ok(
-  gate < artwork.indexOf("await generateCreatorPostImage(", openBranch),
+  gate < artwork.indexOf("await generateSlpArtworkImage(", openBranch),
   "the switch is checked before any picture is drawn",
 );
 assert.match(settings, /autoCreatorArtworkEnabled: z\.boolean\(\)/u);

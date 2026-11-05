@@ -48,7 +48,7 @@ export function SlpAutopurgePanel(page: SlpBackstagePageProps) {
   );
   return (
     <>
-      {section === "maintenance" && (
+      {section === "basic" && (
         <div className="mb-5">
           <SlurpMaintenanceHealth
             summary={maintenanceSummary.data}

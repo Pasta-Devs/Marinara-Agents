@@ -1,7 +1,8 @@
-import { useId, useState, type KeyboardEvent } from "react";
+import { useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Check, Search } from "lucide-react";
 import { labelKeys } from "./display-labels";
 import { useLtmTranslation } from "./localization";
+import { placeListLimit } from "./scope-targets";
 import { inputClass } from "./shared-controls";
 import { nextTabIndex } from "./tab-keys";
 
@@ -42,20 +43,27 @@ export function AvailabilityTabRail({
   disabled?: boolean;
   onToggle: (kind: AvailabilityPlaceKind, id: string) => void;
 }) {
-  const { t: localizeUi } = useLtmTranslation();
+  const { locale, t: localizeUi } = useLtmTranslation();
   type SectionKind = "all" | AvailabilityPlaceKind;
-  type Row = AvailabilityTarget & { kind: AvailabilityPlaceKind };
-  const rows = (kind: AvailabilityPlaceKind, targets: readonly AvailabilityTarget[]): Row[] =>
-    targets.map((target) => ({ ...target, kind }));
-  const chatRows = rows("chat", chats);
-  const characterRows = rows("character", characters);
-  const personaRows = rows("persona", personas);
-  const sections: Array<[SectionKind, Row[]]> = [
-    ["all", [...chatRows, ...characterRows, ...personaRows]],
-    ["chat", [{ id: "all", label: localizeUi("ui.longTermMemory.memoryvault.allChats"), kind: "chat" }, ...chatRows]],
-    ["character", characterRows],
-    ["persona", personaRows],
-  ];
+  type Row = AvailabilityTarget & { kind: AvailabilityPlaceKind; haystack: string };
+  const allChatsLabel = localizeUi("ui.longTermMemory.memoryvault.allChats");
+  const sections = useMemo((): Array<[SectionKind, Row[]]> => {
+    const rows = (kind: AvailabilityPlaceKind, targets: readonly AvailabilityTarget[]): Row[] =>
+      targets.map((target) => ({
+        ...target,
+        kind,
+        haystack: `${target.label} ${target.comment ?? ""} ${target.searchText ?? ""}`.toLocaleLowerCase(),
+      }));
+    const chatRows = rows("chat", chats);
+    const characterRows = rows("character", characters);
+    const personaRows = rows("persona", personas);
+    return [
+      ["all", [...chatRows, ...characterRows, ...personaRows]],
+      ["chat", [...rows("chat", [{ id: "all", label: allChatsLabel }]), ...chatRows]],
+      ["character", characterRows],
+      ["persona", personaRows],
+    ];
+  }, [allChatsLabel, characters, chats, personas]);
   const copy = {
     all: {
       searchPlaceholder: localizeUi("ui.longTermMemory.sourcesworkspace.searchScopes"),
@@ -85,11 +93,26 @@ export function AvailabilityTabRail({
   const [activeKind, activeTargets] = sections.find(([kind]) => kind === activeSection)!;
   const activeCopy = copy[activeKind];
   const query = queries[activeKind] ?? "";
-  const filtered = activeTargets.filter((target) =>
-    `${target.label} ${target.comment ?? ""} ${target.searchText ?? ""}`
-      .toLocaleLowerCase()
-      .includes(query.trim().toLocaleLowerCase()),
-  );
+  const needle = query.trim().toLocaleLowerCase();
+  const filtered = activeTargets.filter((target) => target.haystack.includes(needle));
+  // The list renders placeListLimit places at a time; a new tab or search starts again at the limit.
+  const shownKey = `${activeKind}\n${needle}`;
+  const [shown, setShown] = useState({ key: shownKey, count: placeListLimit });
+  if (shown.key !== shownKey && shown.count !== placeListLimit) setShown({ key: shownKey, count: placeListLimit });
+  const shownCount = shown.key === shownKey ? shown.count : placeListLimit;
+  const shownTargets = filtered.slice(0, shownCount);
+  const listRef = useRef<HTMLDivElement>(null);
+  // Show more moves focus to the first place it adds, so keyboard users continue where the list grew.
+  const showMore = () => {
+    const next = filtered[shownCount];
+    setShown({ key: shownKey, count: shownCount + placeListLimit });
+    if (!next) return;
+    requestAnimationFrame(() =>
+      listRef.current
+        ?.querySelector<HTMLElement>(`[data-ltm-availability-target="${CSS.escape(`${next.kind}:${next.id}`)}"]`)
+        ?.focus(),
+    );
+  };
   const panelId = `${railId}-panel`;
   const handleTabKey = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     const nextIndex = nextTabIndex(event.key, index, sections.length);
@@ -131,6 +154,11 @@ export function AvailabilityTabRail({
         }
         [data-ltm-availability-tab][data-active="true"] {
           background: var(--secondary);
+        }
+        /* The Engine's unlayered .mari-editor-tab and --compact heights beat min-h-11, so the touch floor is set here. */
+        [data-ltm-availability-tabs] :is([data-ltm-availability-tab], [data-ltm-availability-target], [data-ltm-availability-show-more]) {
+          height: auto;
+          min-height: 2.75rem;
         }
         @container (min-width: 22rem) {
           [data-ltm-availability-tablist] {
@@ -199,18 +227,19 @@ export function AvailabilityTabRail({
             className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--marinara-editor-muted)]"
           />
           <input
-            className={`${inputClass} pl-9`}
+            className={`${inputClass} pl-9${disabled ? " opacity-50" : ""}`}
             value={query}
             placeholder={activeCopy.searchPlaceholder}
             aria-label={activeCopy.searchPlaceholder}
             data-ltm-availability-search={activeKind}
-            disabled={disabled}
+            readOnly={disabled}
+            aria-disabled={disabled || undefined}
             onChange={(event) => setQueries((current) => ({ ...current, [activeKind]: event.target.value }))}
           />
         </label>
-        <div data-ltm-availability-list className="max-h-52 overflow-y-auto">
+        <div ref={listRef} data-ltm-availability-list className="max-h-52 overflow-y-auto">
           {filtered.length ? (
-            filtered.map((target) => {
+            shownTargets.map((target) => {
               const key = `${target.kind}:${target.id}`;
               const selected = selectedIds.has(key);
               const comment =
@@ -224,9 +253,11 @@ export function AvailabilityTabRail({
                   data-ltm-availability-target={key}
                   data-selected={selected ? "true" : "false"}
                   aria-pressed={selected}
-                  disabled={disabled}
-                  className={`mari-editor-action mari-editor-action--compact flex min-h-11 w-full items-center gap-2 rounded-none border-t-0 px-3 py-2 text-left text-sm last:border-b-0 ${selected ? "bg-[var(--primary)]/10" : ""}`}
-                  onClick={() => onToggle(target.kind, target.id)}
+                  aria-disabled={disabled || undefined}
+                  className={`mari-editor-action mari-editor-action--compact flex min-h-11 w-full items-center gap-2 rounded-none border-t-0 px-3 py-2 text-left text-sm last:border-b-0 ${selected ? "bg-[var(--primary)]/10" : ""}${disabled ? " opacity-50" : ""}`}
+                  onClick={() => {
+                    if (!disabled) onToggle(target.kind, target.id);
+                  }}
                 >
                   <Check
                     aria-hidden="true"
@@ -247,6 +278,21 @@ export function AvailabilityTabRail({
           ) : (
             <p className="px-3 py-2 text-xs text-[var(--marinara-editor-muted)]">{activeCopy.emptyLabel}</p>
           )}
+          {filtered.length > shownTargets.length ? (
+            <button
+              type="button"
+              data-ltm-availability-show-more
+              aria-disabled={disabled || undefined}
+              className={`mari-editor-action mari-editor-action--compact flex min-h-11 w-full items-center rounded-none border-t-0 px-3 py-2 text-left text-xs font-semibold text-[var(--marinara-editor-muted)] last:border-b-0${disabled ? " opacity-50" : ""}`}
+              onClick={() => {
+                if (!disabled) showMore();
+              }}
+            >
+              {localizeUi("ui.longTermMemory.memoryvault.showMoreMemories", {
+                value1: Math.min(placeListLimit, filtered.length - shownTargets.length).toLocaleString(locale),
+              })}
+            </button>
+          ) : null}
         </div>
       </div>
     </div>

@@ -122,11 +122,18 @@ async function runLongTermMemoryRetentionUnsafe({
     return { ran: false, skippedPendingRecovery: true, quarantineArtifacts: 0 };
   }
 
-  const { settings: config } = await readLtmSettingsFile(
+  const { settings: config, newer } = await readLtmSettingsFile(
     longTermMemoryRetentionConfigPath(root),
     ltmRetentionConfigSchema,
     DEFAULT_LTM_RETENTION_CONFIG,
   );
+  // A retention value from a newer version loads its default here. Deleting by a limit the
+  // user never chose could remove what they keep, so cleanup waits until that value is gone.
+  if (newer.length) {
+    lastRetentionRun.set(key, now.getTime());
+    logger.warn("[ltm] Retention cleanup paused: the retention settings hold values this version cannot use");
+    return { ran: false, skippedNewerSettings: true, skippedPendingRecovery: false, quarantineArtifacts: 0 };
+  }
 
   const DAY_MS = 86400000;
   const quarantineCutoff = now.getTime() - config.quarantineRetentionDays * DAY_MS;

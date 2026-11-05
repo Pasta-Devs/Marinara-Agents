@@ -18,6 +18,7 @@ export const SLP_PEOPLE_EDGE_KINDS = [
   "crush",
   "ex",
   "rival",
+  "family",
   "roommate",
   "friend",
   "coworker",

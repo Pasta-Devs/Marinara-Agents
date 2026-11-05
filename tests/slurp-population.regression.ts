@@ -253,7 +253,7 @@ assert.match(provider, /resolve\(weights: SlpCreatorFanArchetypeWeights, creator
 // path has had rapport since it shipped; the comment path never did — and comments are where most
 // people are actually seen.
 const replyService = read("services/slurp/slurp-reply-generation.service.ts");
-assert.match(replyService, /relationship: input\.relationship \?\? "no history with this creator yet"/u);
+assert.match(replyService, /relationship: protect\(input\.relationship \?\? "no history with this creator yet"\)/u);
 assert.match(replyService, /Let the relationship set the warmth\./u);
 assert.match(replyService, /async function describeCommenterRelationship/u);
 // A reply is one or two sentences; a paragraph of history would dominate the comment it answers.

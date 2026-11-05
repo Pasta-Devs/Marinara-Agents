@@ -75,7 +75,12 @@ assert.match(splash, /closeDisabled=\{!onLeave\}/u);
 
 assert.match(world, /MAINTENANCE_KEY = "slurp2\.world\.maintenance"/u);
 assert.match(world, /const maintenanceSince = maintenanceMark \?\? since/u);
-assert.equal((world.match(/for \(const account of maintenanceDue \? accounts : \[\]\)/gu) ?? []).length, 3);
+assert.equal((world.match(/for \(const account of maintenanceDue \? accounts : \[\]\)/gu) ?? []).length, 2);
+// The third maintenance loop (Creator arcs) also waits for Storylines.
+assert.match(
+  world,
+  /for \(const account of maintenanceDue && slpExtensionOn\(settings, "storylines"\) \? accounts : \[\]\)/u,
+);
 // The mark must also be written when it is absent. Writing it only when maintenance is due leaves
 // the fallback resolving to the previous tick forever, so a box that ticks more often than
 // CHURN_MIN_ELAPSED_DAYS never arms the clock and maintenance never runs at all.

@@ -18,6 +18,8 @@ import {
   clampText,
   slurpProjectRecord,
 } from "./slp-project.js";
+import { slpStorylineEdges, slpStorylineNext } from "../../../../../shared/src/slp/slp-storyline.js";
+import { slurpProjectSync, slurpProjectView, slurpStageInsert, slurpStoryLine } from "./slp-project-storyline.js";
 
 const PACE_MULTIPLIER: Record<SlurpArcPace, number> = { slow: 1.5, normal: 1, fast: 0.5 };
 
@@ -126,60 +128,53 @@ export function slurpProjectDirect(
     const option = Number(value);
     return Number.isInteger(option) && value.trim() !== "" ? slurpProjectChoose(project, at, votes, option) : null;
   }
+  const run = slurpProjectSync(project);
+  const storyline = run.storyline;
+  const line = storyline ? slurpStoryLine(storyline, run.taken ?? {}) : [];
   const updatedAt = at.toISOString();
-  const moveTo = (chapter: number) =>
-    chapter < 0 || chapter >= project.chapters.length
+  const moveTo = (chapter: number): SlurpProject | null =>
+    chapter < 0 || chapter >= line.length
       ? null
-      : { ...project, chapter, chapterStartedAt: updatedAt, pollPostId: null, pollClosesAt: null };
-  let next: SlurpProject | null;
+      : { ...run, stage: line[chapter]!, chapterStartedAt: updatedAt, pollPostId: null, pollClosesAt: null };
+  let next: SlurpProject | null = null;
   switch (action) {
     case "pause":
-      next = project.status === "active" ? { ...project, status: "paused" } : null;
+      next = run.status === "active" ? { ...run, status: "paused" } : null;
       break;
     case "resume":
-      next = project.status === "paused" ? { ...project, status: "active" } : null;
+      next = run.status === "paused" ? { ...run, status: "active" } : null;
       break;
     case "skip": {
       // "Move on" also lets go of a held chapter.
-      const moved = moveTo(project.chapter + 1);
+      const moved = moveTo(run.chapter + 1);
       next = moved ? { ...moved, held: false } : null;
       break;
     }
     case "hold":
-      next = project.chapters.length && !project.held ? { ...project, held: true } : null;
+      next = run.chapters.length && !run.held ? { ...run, held: true } : null;
       break;
     case "release":
-      next = project.held ? { ...project, held: false } : null;
+      next = run.held ? { ...run, held: false } : null;
       break;
     case "insert": {
-      // A new chapter right after this one, so the player can say what happens next. Chapter-aligned
-      // lists get an empty slot at the same place, so nothing shifts onto the wrong chapter.
+      // A new stage right after this one, so the player can say what happens next.
       const label = clampText(value, SLURP_PROJECT_CHAPTER_MAX_LENGTH);
-      const index = project.chapter + 1;
-      const insert = <T>(list: readonly T[], empty: T) =>
-        list.length >= index ? [...list.slice(0, index), empty, ...list.slice(index)] : [...list];
-      next =
-        label && project.chapters.length && project.chapters.length < SLURP_PROJECT_MAX_CHAPTERS
-          ? {
-              ...project,
-              chapters: insert(project.chapters, label),
-              phaseDays: insert(project.phaseDays, null),
-              choices: insert(project.choices, null),
-              reach: insert(project.reach, null),
-            }
-          : null;
+      next = label && line.length < SLURP_PROJECT_MAX_CHAPTERS ? slurpStageInsert(run, label) : null;
       break;
     }
     case "back":
-      next = moveTo(project.chapter - 1);
+      next = moveTo(run.chapter - 1);
       break;
     case "label": {
       const label = clampText(value, SLURP_PROJECT_CHAPTER_MAX_LENGTH);
       next =
-        label && project.chapters.length
+        label && storyline
           ? {
-              ...project,
-              chapters: project.chapters.map((entry, index) => (index === project.chapter ? label : entry)),
+              ...run,
+              storyline: {
+                ...storyline,
+                stages: storyline.stages.map((stage) => (stage.key === run.stage ? { ...stage, label } : stage)),
+              },
             }
           : null;
       break;
@@ -190,14 +185,14 @@ export function slurpProjectDirect(
         typed && typed.toLowerCase() !== "random"
           ? typed
           : SLURP_ARC_RANDOM_TWISTS[Math.floor(random() * SLURP_ARC_RANDOM_TWISTS.length)]!;
-      next = { ...project, twist };
+      next = { ...run, twist };
       break;
     }
     case "end":
-      next = { ...project, status: "complete" };
+      next = { ...run, status: "complete" };
       break;
   }
-  return next ? slurpProjectRecord(project, { ...next, updatedAt }, at) : null;
+  return next ? slurpProjectRecord(project, slurpProjectView({ ...next, updatedAt }), at) : null;
 }
 
 /** The projects that may claim a post. Paused and complete projects keep everything and claim nothing. */
@@ -299,12 +294,34 @@ export function slurpProjectInstruction(input: {
 const daysInChapter = (project: SlurpProject, at: Date) =>
   (at.getTime() - Date.parse(project.chapterStartedAt || project.startedAt)) / 86_400_000 || 0;
 
-function nextChapter(project: SlurpProject, at: Date): SlurpProject {
+/** Move to `to`, a stage or an ending, and remember the way taken. */
+function enterStage(project: SlurpProject, to: string, at: Date): SlurpProject {
   const updatedAt = at.toISOString();
-  const next = project.chapter + 1;
-  return next >= project.chapters.length
-    ? { ...project, chapter: project.chapters.length - 1, status: "complete", updatedAt }
-    : { ...project, chapter: next, chapterStartedAt: updatedAt, updatedAt };
+  const taken = project.stage ? { ...project.taken, [project.stage]: to } : { ...project.taken };
+  return slurpProjectView(
+    project.storyline?.stages.some((stage) => stage.key === to)
+      ? { ...project, taken, stage: to, chapterStartedAt: updatedAt, updatedAt }
+      : { ...project, taken, status: "complete", ending: to, updatedAt },
+  );
+}
+
+/**
+ * The next stage: the way taken on an earlier visit, else the first way out whose `when` holds on `tags`. A
+ * choice leaves only by `slurpProjectChoose` or its `next`; a standing stage stays.
+ */
+function nextChapter(project: SlurpProject, at: Date, tags: ReadonlySet<string>): SlurpProject {
+  const storyline = project.storyline;
+  const index = storyline ? storyline.stages.findIndex((stage) => stage.key === project.stage) : -1;
+  if (!storyline || index < 0) return project;
+  const stage = storyline.stages[index]!;
+  const edges = stage.choice
+    ? stage.next === undefined
+      ? null
+      : slpStorylineEdges(stage.next)
+    : slpStorylineNext(storyline, index);
+  const to =
+    project.taken?.[stage.key] ?? edges?.find((edge) => !edge.when || tags.has(edge.when.tag) === edge.when.set)?.to;
+  return to ? enterStage(project, to, at) : project;
 }
 
 /**
@@ -325,8 +342,10 @@ export function slurpProjectAdvance(
   pace: SlurpArcPace = SLURP_DEFAULT_ARC_PACE,
   /** The published post, when it carries this chapter's poll. Opens the poll for `hours`. */
   poll?: { postId: string; hours: number },
+  /** The Creator's story tags, for `when` ways out of a stage. */
+  tags: ReadonlySet<string> = new Set(),
 ): SlurpProject {
-  const posted = { ...project, posts: project.posts + 1, updatedAt: at.toISOString() };
+  const posted = { ...slurpProjectSync(project), posts: project.posts + 1, updatedAt: at.toISOString() };
   if (project.chapters.length === 0 || project.held) return posted;
   // A chapter with an open choice waits for its poll to be settled, however many posts go by.
   if (project.choices[project.chapter])
@@ -339,7 +358,7 @@ export function slurpProjectAdvance(
         };
   const days = project.phaseDays[project.chapter];
   if (days && daysInChapter(project, at) < days.min * PACE_MULTIPLIER[pace]) return posted;
-  return nextChapter(posted, at);
+  return nextChapter(posted, at, tags);
 }
 
 /**
@@ -353,8 +372,11 @@ export function slurpProjectTick(
   project: SlurpProject,
   at: Date,
   pace: SlurpArcPace = SLURP_DEFAULT_ARC_PACE,
+  /** The Creator's story tags, for `when` ways out of a stage. */
+  tags: ReadonlySet<string> = new Set(),
 ): SlurpProject {
   if (project.status !== "active") return project;
+  project = slurpProjectSync(project);
   if (project.chapters.length === 0) {
     const elapsed = (at.getTime() - Date.parse(project.startedAt)) / 86_400_000;
     return project.durationDays && elapsed >= project.durationDays * PACE_MULTIPLIER[pace]
@@ -365,7 +387,7 @@ export function slurpProjectTick(
   if (project.choices[project.chapter] || project.held) return project;
   const days = project.phaseDays[project.chapter];
   if (!days || daysInChapter(project, at) < days.max * PACE_MULTIPLIER[pace]) return project;
-  return nextChapter(project, at);
+  return nextChapter(project, at, tags);
 }
 
 /**
@@ -397,10 +419,10 @@ export function slurpArcFanVotes(project: SlurpProject, options: number): number
 }
 
 /**
- * Settle the open choice on the current chapter: insert the chosen option's chapters after it,
- * record the result on this visit, and move on. `option` is the Director's pick; without one the
- * most votes win, and a tie (or nobody voting) is a pick among the leaders seeded on the arc and
- * chapter. Null when there is no open choice or the option does not exist.
+ * Settle the open choice on the current stage: take the chosen option's way, record the result on this visit,
+ * and move on. `option` is the Director's pick; without one the most votes win, and a tie (or nobody voting)
+ * is a pick among the leaders seeded on the arc and the chapter. Null when there is no open choice or the
+ * option does not exist.
  */
 export function slurpProjectChoose(
   project: SlurpProject,
@@ -408,51 +430,28 @@ export function slurpProjectChoose(
   votes: readonly number[],
   option: number | null = null,
 ): SlurpProject | null {
+  project = slurpProjectSync(project);
   const choice = project.choices[project.chapter];
-  if (!choice || (project.status !== "active" && project.status !== "paused")) return null;
+  const stage = project.storyline?.stages.find((item) => item.key === project.stage);
+  if (!choice || !stage?.choice || (project.status !== "active" && project.status !== "paused")) return null;
   if (option !== null && !(Number.isInteger(option) && option >= 0 && option < choice.options.length)) return null;
   const counts = choice.options.map((_, index) => Math.max(0, Math.floor(votes[index] ?? 0)));
   const top = Math.max(...counts);
   const leaders = counts.flatMap((count, index) => (count === top ? [index] : []));
   const picked = option ?? leaders[hash(`${project.id}:${project.chapter}:choice`) % leaders.length]!;
-  const winner = choice.options[picked]!;
-  const branch = winner.chapters.slice(0, Math.max(0, SLURP_PROJECT_MAX_CHAPTERS - project.chapters.length));
-  const after = project.chapter + 1;
-  const spread = <T>(list: readonly (T | null)[], items: (T | null)[]) => {
-    const full: (T | null)[] = project.chapters.map((_, index) => list[index] ?? null);
-    full.splice(after, 0, ...items);
-    return full;
-  };
   const poll: SlurpArcPollResult = {
     question: choice.question,
-    winner: winner.label,
+    winner: choice.options[picked]!.label,
     votes: choice.options.map((entry, index) => ({ label: entry.label, count: counts[index]! })),
     decidedBy: option !== null ? "director" : top > 0 ? "fans" : "chance",
   };
   const settled: SlurpProject = {
     ...project,
-    chapters: [
-      ...project.chapters.slice(0, after),
-      ...branch.map((chapter) => chapter.label),
-      ...project.chapters.slice(after),
-    ],
-    phaseDays: spread(
-      project.phaseDays,
-      branch.map((chapter) => ({ min: chapter.minDays, max: Math.max(chapter.minDays, chapter.maxDays) })),
-    ),
-    choices: spread(
-      project.choices.map((entry, index) => (index === project.chapter ? null : entry)),
-      branch.map(() => null),
-    ),
-    reach: spread(
-      project.reach,
-      branch.map(() => null),
-    ),
     pollPostId: null,
     pollClosesAt: null,
     history: project.history.map((entry, index, list) => (index === list.length - 1 ? { ...entry, poll } : entry)),
   };
-  return slurpProjectRecord(settled, nextChapter(settled, at), at);
+  return slurpProjectRecord(settled, enterStage(settled, stage.choice.options[picked]!.next, at), at);
 }
 
 /** A storyline's vote on this post has closed, so later votes do not land (R1-035). */

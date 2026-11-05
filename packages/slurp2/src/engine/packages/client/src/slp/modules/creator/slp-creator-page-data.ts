@@ -68,7 +68,7 @@ export function pickSlpCollageTiles(input: {
 }
 
 export type SlpPagePersonRelation =
-  "partner" | "dating" | "bestie" | "roommate" | "collab" | "friend" | "coworker" | "rival";
+  "partner" | "dating" | "family" | "bestie" | "roommate" | "collab" | "friend" | "coworker" | "rival";
 export type SlpPagePerson = { id: string; name: string; avatarUrl: string | null; relation: SlpPagePersonRelation };
 
 /** The parts of the ties view the People block reads (structural, so this module needs no feature import). */
@@ -84,7 +84,7 @@ export type SlpPageTies = {
 const PEOPLE_MAX = 6;
 
 /**
- * Partner first, then best friends and roommates, collab partners, friends, coworkers, then a live
+ * Partner first, then family, best friends and roommates, collab partners, friends, coworkers, then a live
  * rivalry. Each person once, at their closest tie.
  */
 export function slpPagePeople(creatorId: string, ties: SlpPageTies | null | undefined): SlpPagePerson[] {
@@ -114,6 +114,7 @@ export function slpPagePeople(creatorId: string, ties: SlpPageTies | null | unde
       if (other) add(other, relation);
     }
   };
+  bonded(["family"], 0, "family");
   bonded(["friend"], 3, "bestie");
   bonded(["roommate"], 0, "roommate");
   for (const collab of ties.collabs) {

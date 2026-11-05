@@ -9,7 +9,7 @@ import type { SlurpSettings } from "./slp-settings-contract";
  */
 export type SlurpResettableSection =
   | "general"
-  | "connections"
+  | "engine"
   | "images"
   | "prompts"
   | "audience"
@@ -18,7 +18,9 @@ export type SlurpResettableSection =
   | "wallet"
   | "ads"
   | "autopurge"
-  | "stir";
+  | "stir"
+  | "drama"
+  | "live";
 
 export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonly (keyof SlurpSettings)[]> = {
   general: [
@@ -39,8 +41,16 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
     "teaserRate",
     "pictureReuse",
   ],
-  // Carryover is about Engine chats, so it resets with the Connections page it lives on.
-  connections: ["carryoverModes", "carryoverHours", "carryoverMaxItems"],
+  // Everything that crosses into Engine chats resets with the Engine link page it lives on.
+  engine: [
+    "carryoverModes",
+    "carryoverHours",
+    "carryoverMaxItems",
+    "enableLorebookContext",
+    "flavourFromAgents",
+    "memoryRecall",
+    "shareWithMemory",
+  ],
   images: [
     "imageWidth",
     "imageHeight",
@@ -51,6 +61,7 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
     "imageStyleProfileId",
     "enableImageInterpretation",
     "imageGenerationUseAvatarReferences",
+    "imageKeepOriginalFiles",
     "imageGenerationIncludeDescriptions",
     "imageAppearanceMode",
     "appearanceProfileMode",
@@ -61,14 +72,7 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
     "previewWholePictures",
     "blurPictures",
   ],
-  prompts: [
-    "generationGuidance",
-    "enableLorebookContext",
-    "flavourFromAgents",
-    "imageGenerationPrompt",
-    "imagePromptInterpretation",
-    "promptBlocks",
-  ],
+  prompts: ["generationGuidance", "imageGenerationPrompt", "imagePromptInterpretation", "promptBlocks"],
   audience: [
     "audienceTone",
     "worldActivity",
@@ -124,6 +128,7 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
     "messagesQuoteAnswerMinutes",
     "messagesFanOpeners",
     "messagesCommissionOpeners",
+    "messagesCommissionAsks",
   ],
   wallet: [
     "walletEnabled",
@@ -133,6 +138,7 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
     "pricingMaxWeeklyChangePercent",
     "walletStipendFloor",
     "walletDayStartHour",
+    "walletPayoutDailyLimit",
     "walletAdReward",
     "walletAdDailyCap",
     "walletEngagementReward",
@@ -151,7 +157,9 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
     "inlineAdsWorldContext",
     "inlineAdsImagesEnabled",
   ],
-  stir: ["supportDesk", "polyamory", "drama"],
+  stir: ["supportDesk"],
+  drama: ["polyamory", "drama"],
+  live: ["live"],
   autopurge: [
     "autopurgeEnabled",
     "autopurgeRetentionValue",
@@ -168,6 +176,16 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
  * no control in Settings.
  */
 export const SLURP_SETTINGS_NOT_RESET: readonly (keyof SlurpSettings)[] = [
+  // Which extensions are on is the shape of the player's Slurp, not a tuning of one section.
+  "extAds",
+  "extStorylines",
+  "extWorld",
+  "extStir",
+  "extSupportDesk",
+  "extEngineLink",
+  "extLive",
+  // Living world's own sub-switch, the same kind of choice.
+  "trendsEnabled",
   // "Pause all" is a switch, not a tuning: resetting a section must never pause or resume Slurp.
   "paused",
   // Who is browsing, not a tuning (#103).

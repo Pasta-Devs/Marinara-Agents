@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   SlpCreatorRefreshNowOutcome,
-  SlpCreatorStageProfile,
   SlpIdentityDisclosure,
 } from "../../../../../shared/src/slp/slp-social.types.js";
 import { resolveCreatorOnboardingCompletion } from "../../../../../shared/src/slp/slp-creator-onboarding.js";
@@ -27,14 +26,14 @@ import {
   type SlurpActivityPreset,
 } from "../../modules/creator/slp-activity-presets";
 import {
-  DEMO_PROFILE,
   DEFAULT_POSTS_PER_DAY,
   type CompletionKind,
-  type Intro,
   type SetupLane,
   type Step,
   type WizardProps,
 } from "./SlpOnboardingPanel";
+import type { SlpBasicLead } from "./SlpBasicSetup";
+import type { SlpBasicStamp } from "./slp-basic-setup";
 
 /**
  * The onboarding wizard's whole working state: who is selected, how the world is tuned, what the
@@ -56,9 +55,9 @@ export function useSlurpOnboardingWizardModel(props: WizardProps) {
   const settingsQuery = useSlurpSettings();
   const accounts = useMemo(() => eligible.data?.pages.flatMap((page) => page.items) ?? [], [eligible.data?.pages]);
   const [step, setStep] = useState<Step>(1);
-  const [intro, setIntro] = useState<Intro>(selectionOnly ? null : 0);
+  // The Basic screen comes first on a first run and on "Run setup again"; adding creators skips it.
+  const [basic, setBasic] = useState(!selectionOnly);
   const [setupLane, setSetupLane] = useState<SetupLane>(null);
-  const [postExplored, setPostExplored] = useState(false);
   const [activityChoice, setActivityChoice] = useState<SlurpActivityPreset | null>(SLURP_DEFAULT_ACTIVITY_PRESET);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selectionInitialized, setSelectionInitialized] = useState(false);
@@ -93,20 +92,6 @@ export function useSlurpOnboardingWizardModel(props: WizardProps) {
   const completionHeadingRef = useRef<HTMLHeadingElement>(null);
   // A retry polls the same run again; status data older than its enqueue must not end the wait.
   const firstPostsQueuedAtRef = useRef(0);
-  const demoProfile: SlpCreatorStageProfile = {
-    ...DEMO_PROFILE,
-    displayName:
-      disclosure === "open"
-        ? t("ui.noodle.noodlerwizard.identityPreview.openName")
-        : t("ui.noodle.noodlerwizard.identityPreview.hintedName"),
-    handle:
-      disclosure === "open"
-        ? t("ui.noodle.noodlerwizard.identityPreview.openHandle")
-        : t("ui.noodle.noodlerwizard.identityPreview.hintedHandle"),
-    avatarUrl: "/sprites/mari/chibi-professor-mari.png",
-    disclosureMode: disclosure,
-  };
-
   useEffect(() => {
     if (completion) completionHeadingRef.current?.focus();
   }, [completion]);
@@ -114,10 +99,9 @@ export function useSlurpOnboardingWizardModel(props: WizardProps) {
   useEffect(() => {
     if (!open) return;
     setStep(1);
-    setIntro(selectionOnly ? null : 0);
+    setBasic(!selectionOnly);
     // Adding creators later starts at the lane choice too, so the role-play sign-up is reachable.
     setSetupLane(null);
-    setPostExplored(false);
     setActivityChoice(SLURP_DEFAULT_ACTIVITY_PRESET);
     setSelected(new Set());
     setSelectionInitialized(false);
@@ -282,6 +266,36 @@ export function useSlurpOnboardingWizardModel(props: WizardProps) {
       return false;
     }
   };
+  // Read once per open: "Run setup again" on a finished Slurp is not a first run.
+  const firstRun = settingsQuery.data?.onboarding !== "completed";
+  /**
+   * The Basic screen wrote its answers; the Creator step takes them over, so the settings this wizard
+   * saves at the end are the ones just chosen. A watcher's exit (and a rerun's save) ends here.
+   */
+  const applyBasic = (lead: SlpBasicLead, stamp: SlpBasicStamp) => {
+    const patch = stamp.settings;
+    if (patch.autoPostingScheduleEnabled !== undefined) setAutoPostingEnabled(patch.autoPostingScheduleEnabled);
+    if (patch.postsPerDay !== undefined) setPostsPerDay(patch.postsPerDay);
+    if (patch.autoPostingImagesEnabled !== undefined) setImagesEnabled(patch.autoPostingImagesEnabled);
+    if (patch.generationConnectionId) setGenerationConnectionId(patch.generationConnectionId);
+    if (stamp.imageConnectionId) setImageConnectionId(stamp.imageConnectionId);
+    setDisclosure(stamp.disclosure);
+    if (lead === "saved") return onClose();
+    if (lead === "feed") {
+      // The watcher exit: `completed` last, after the Basic answers are saved.
+      void updateSlurpSettings
+        .mutateAsync({ onboarding: "completed" })
+        .then(() => {
+          onSkipped?.();
+          onClose();
+        })
+        .catch(() => toast.error(t("ui.slurp.onboarding.saveError")));
+      return;
+    }
+    setBasic(false);
+    setSetupLane(lead === "list" ? "easy" : "scene");
+    setStep(1);
+  };
   const skip = async () => {
     if (await saveSettings("zero")) {
       onSkipped?.();
@@ -295,7 +309,7 @@ export function useSlurpOnboardingWizardModel(props: WizardProps) {
     setCompletion(null);
     setStep(4);
   };
-  const returnToPreviousStep = () => setStep(setupLane === "easy" ? 1 : ((step - 1) as Step));
+  const returnToPreviousStep = () => setStep(1);
   /**
    * Create the selected Creators, or with `retryIds` only the ones whose sign-up failed on the way.
    * A retry keeps what the first pass created and replaces only the retried Creators' reasons.
@@ -461,12 +475,12 @@ export function useSlurpOnboardingWizardModel(props: WizardProps) {
     accounts,
     step,
     setStep,
-    intro,
-    setIntro,
+    basic,
+    setBasic,
+    firstRun,
+    applyBasic,
     setupLane,
     setSetupLane,
-    postExplored,
-    setPostExplored,
     activityChoice,
     setActivityChoice,
     selected,
@@ -521,7 +535,6 @@ export function useSlurpOnboardingWizardModel(props: WizardProps) {
     providerConfirmationOpen,
     setProviderConfirmationOpen,
     completionHeadingRef,
-    demoProfile,
     firstPostStatus,
     fetchNextPage,
     hasNextPage,

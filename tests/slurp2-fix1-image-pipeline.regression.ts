@@ -136,7 +136,10 @@ assert.match(
 // --- R1-057: a new picture drops the old crop and description; a failed one is restored cleanly -----
 assert.match(routes, /imageCrop: undefined, imageDescription: undefined, imageDescriptionSource: undefined/u);
 const restore = postStorage.slice(postStorage.indexOf("async restorePostImageIfUnclaimed"));
-assert.match(restore, /"imageGenerationFailed",\s*"imageGenerationError",\s*"imageRetryAttempts"/u);
+assert.match(
+  restore,
+  /"imageGenerationFailed",\s*"imageGenerationRetryable",\s*"imageGenerationError",\s*"imageRetryAttempts"/u,
+);
 assert.match(restore, /imagePrompt !== undefined && \{ imagePrompt \}/u);
 
 // --- R1-058: ready only when a connection resolves ---------------------------------------------------

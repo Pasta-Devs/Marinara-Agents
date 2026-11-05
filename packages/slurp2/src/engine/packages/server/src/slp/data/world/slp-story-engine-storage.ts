@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
-import type { SlpEventOccurrence, SlpInfluenceTarget } from "../../../../../shared/src/slp/slp-story-engine.js";
+import { createWardrobeStorage } from "../creators/slp-wardrobe-storage.js";
+import { slurpDramaStageFactor } from "./slp-drama-storage.js";
+import { slurpStoryLookChange } from "../../modules/storylines/slp-story-state.js";
+import type {
+  SlpEventOccurrence,
+  SlpInfluenceTarget,
+  SlpStoryFact,
+} from "../../../../../shared/src/slp/slp-story-engine.js";
 import {
   slurpInfluenceMultiplier,
   type SlurpInfluenceStory,
@@ -11,6 +18,7 @@ import {
   SLP_STORY_OCCURRENCES_KEY,
   SLP_STORY_OPPORTUNITIES_KEY,
   applySlpStoryOutcomes,
+  putSlpStoryFact,
   readSlpArcOpportunities,
   readSlpOccurrences,
   readSlpStoryFacts,
@@ -20,8 +28,12 @@ import {
 
 import { normalizeSlpSupportDesk, slpDeskReachFactor } from "../../../../../shared/src/slp/slp-support-desk.js";
 import { slurpSupportDeskKey } from "../creators/slp-support-desk-storage.js";
+import { slpExtensionOn, slpLiveEvents } from "../../../../../shared/src/slp/slp-extensions.js";
+import { slurpPackGate } from "../../modules/world/events/slp-content-packs.js";
 
-export function createStoryEngineStorage({ settingsStore }: SlurpStorageContext) {
+export function createStoryEngineStorage(context: SlurpStorageContext) {
+  const { settingsStore } = context;
+  const wardrobe = createWardrobeStorage(context);
   const write = async (key: string, value: unknown) => settingsStore.set(key, JSON.stringify(value));
   const readDesk = async (creatorAccountId: string) => {
     try {
@@ -50,16 +62,24 @@ export function createStoryEngineStorage({ settingsStore }: SlurpStorageContext)
     /** The running events' multiplier on one target, for one Creator or (no id) for everybody. */
     async platformInfluenceMultiplier(target: SlpInfluenceTarget, creatorAccountId?: string, at = new Date()) {
       const settings = await this.getSettings();
+      // A running storyline's stage influences on its lead count with the events (PR 6).
+      const stages =
+        creatorAccountId && slpExtensionOn(settings, "storylines")
+          ? await slurpDramaStageFactor(settingsStore, creatorAccountId, target)
+          : 1;
       const events = slurpInfluenceMultiplier(
-        settings.platformEvents,
+        slpLiveEvents(settings),
         at,
         target,
         await this.platformInfluenceStory(creatorAccountId),
       );
       // The Support desk's throttle, Discover feature and Partner badge reach the same place.
-      return target === "feed.reach" && creatorAccountId
-        ? events * slpDeskReachFactor(await readDesk(creatorAccountId), at)
-        : events;
+      return (
+        stages *
+        (target === "feed.reach" && creatorAccountId && slpExtensionOn(settings, "supportDesk")
+          ? events * slpDeskReachFactor(await readDesk(creatorAccountId), at)
+          : events)
+      );
     },
     /**
      * Settings as the post reserve reads them: "feed.posting-rate" events scale posts per day for
@@ -78,14 +98,46 @@ export function createStoryEngineStorage({ settingsStore }: SlurpStorageContext)
     async listArcOpportunities() {
       return readSlpArcOpportunities(await settingsStore.get(SLP_STORY_OPPORTUNITIES_KEY));
     },
+    /** Apply outcomes outside an event: an arc chapter that just started (docs/STORYLINES.md, PR 1). */
+    async applyStoryOutcomes(
+      input: Omit<Parameters<typeof applySlpStoryOutcomes>[0], "facts" | "opportunities"> & {
+        /** The storyline's name, shown as the source of a look it gives. */
+        label?: string;
+      },
+    ) {
+      const result = applySlpStoryOutcomes({
+        ...input,
+        facts: await this.listStoryFacts(),
+        opportunities: await this.listArcOpportunities(),
+      });
+      await Promise.all([
+        write(SLP_STORY_FACTS_KEY, result.facts),
+        write(SLP_STORY_OPPORTUNITIES_KEY, result.opportunities),
+      ]);
+      for (const outcome of input.outcomes) {
+        for (const creatorId of input.participants) {
+          const change = slurpStoryLookChange(outcome, await wardrobe.listWardrobeLooks(creatorId), input.label);
+          if (change && "remove" in change) await wardrobe.deleteWardrobeLook(creatorId, change.remove);
+          // A full closet keeps what it has: the storyline goes on without the look.
+          else if (change)
+            await wardrobe
+              .createWardrobeLooks(creatorId, [change.add], { kind: "storyline", label: input.label })
+              .catch(() => undefined);
+        }
+      }
+    },
     async reconcileStoryEvents(at = new Date()) {
       const [settings, accounts, existing] = await Promise.all([
         this.getSettings(),
         this.listNoodlerAccounts(),
         this.listStoryOccurrences(),
       ]);
+      // Living world off: occurrences wait as they are (no start, no end) until it is on again.
+      // ponytail: their dates do not move, so a window that passes while off ends on the next pass;
+      // shift endsAt by the time spent off if players want a true pause.
+      if (!slpExtensionOn(settings, "world")) return existing;
       const result = reconcileSlpScheduledOccurrences({
-        events: settings.platformEvents,
+        events: slurpPackGate(settings.platformEvents, settings.contentPacks),
         occurrences: existing,
         accounts,
         at,
@@ -203,6 +255,11 @@ export function createStoryEngineStorage({ settingsStore }: SlurpStorageContext)
         ),
       ]);
       return true;
+    },
+    /** A player condition (Life panel): it takes its track, replacing what was there. */
+    async putStoryCondition(fact: SlpStoryFact) {
+      await write(SLP_STORY_FACTS_KEY, putSlpStoryFact(await this.listStoryFacts(), fact));
+      return fact;
     },
     async removeStoryFact(id: string) {
       const before = await this.listStoryFacts();

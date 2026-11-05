@@ -33,7 +33,7 @@ import {
   LtmIdentityRepairError,
   previewLtmIdentityRepairs,
 } from "../identity/identity-repair.js";
-import { loadTrustedLtmSubjectCatalog } from "../identity/subject-identity.js";
+import { loadTrustedLtmSubjectCatalog } from "../identity/subject-catalog.js";
 import {
   deleteAllLongTermMemoryData,
   exportLongTermMemoryData,
@@ -275,10 +275,8 @@ export function registerMaintenanceRoutes(app: FastifyInstance, runtime: LtmRout
           }),
         );
       } catch (error) {
-        return reply.status(error instanceof LtmIdentityRepairError ? error.statusCode : 500).send({
-          error: error instanceof Error ? error.message : "Failed to repair long-term memory identities",
-          code: error instanceof LtmIdentityRepairError ? error.code : "identity_repair_failed",
-        });
+        const result = routeError(error, "Failed to repair long-term memory identities");
+        return reply.status(result.statusCode).send(result.body);
       }
     },
   );

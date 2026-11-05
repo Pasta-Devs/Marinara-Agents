@@ -29,12 +29,12 @@ import { slurpImageExtension } from "./slp-image-format.js";
  * bytes on disk and in the full-screen view, with no visible change in a generated picture. Other
  * formats, and hosts without `sharp`, keep the provider's bytes.
  */
-export async function slpCompactGeneratedImage(image: {
-  base64: string;
-  ext: string;
-}): Promise<{ base64: string; ext: string }> {
+export async function slpCompactGeneratedImage(
+  image: { base64: string; ext: string },
+  keepOriginal = false,
+): Promise<{ base64: string; ext: string }> {
   const ext = slurpImageExtension(image.base64, image.ext);
-  if (ext !== "png" && ext !== "bmp") return { base64: image.base64, ext };
+  if (keepOriginal || (ext !== "png" && ext !== "bmp")) return { base64: image.base64, ext };
   const sharp = await getSharp();
   if (!sharp) return { base64: image.base64, ext };
   try {

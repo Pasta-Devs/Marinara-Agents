@@ -50,6 +50,15 @@ export async function openSlurpCampaign(
     template?: typeof SLURP_CAMPAIGN_TEMPLATE;
   },
 ): Promise<string> {
+  // The plan runs again on every poll until the slot fills; one slot opens one campaign.
+  if (input.opportunityId) {
+    const [existing] = await db
+      .select({ campaignId: slurpContentCampaignStages.campaignId })
+      .from(slurpContentCampaignStages)
+      .where(eq(slurpContentCampaignStages.opportunityId, input.opportunityId))
+      .limit(1);
+    if (existing) return String(existing.campaignId);
+  }
   const campaignId = newId();
   // Stages count from when the set goes up, not from when it was planned: a scheduled set planned
   // tonight for tomorrow must not have its teaser due before it exists.

@@ -22,6 +22,7 @@ import {
   sourceHashForEvidenceUnitExtraction,
   summarizeCompiledEvidenceUnitExtraction,
   sourceMetadataForEvidenceUnitDraft,
+  type LtmPreviousPieceContext,
 } from "./evidence-unit-extraction.js";
 import { getLtmExtractionConfig } from "./extraction-config.js";
 import { recordLtmDebugEvent, withLtmDebugOperation } from "../maintenance/debug-log.js";
@@ -34,12 +35,9 @@ import { reconcileEvidenceUnitCandidates } from "./candidate-reconciliation.js";
 import { canUpdateLtmScopedTarget, resolveScopedEvidenceUnitTargets, scopedVariantNoteId } from "./scoped-targets.js";
 import { LongTermMemoryStorage } from "../persistence/storage.js";
 import { normalizeStructuredSummaryEvidenceUnits } from "./structured-summary-normalizer.js";
-import {
-  prepareLtmSubjectIdentityContext,
-  trustedLtmIdentityNotesForSource,
-  trustedLtmCharacterAliasIdentifiers,
-  type TrustedLtmSubjectCatalog,
-} from "../identity/subject-identity.js";
+import { prepareLtmSubjectIdentityContext } from "../identity/subject-identity.js";
+import { trustedLtmIdentityNotesForSource, trustedLtmCharacterAliasIdentifiers } from "../identity/subject-catalog.js";
+import type { TrustedLtmSubjectCatalog } from "../identity/subject-matching.js";
 import { subjectsEqual } from "../identity/subject-equality.js";
 import { noteIdForLtmDraftMutation, projectLtmDraftOntoNotes } from "../drafts/draft-projector.js";
 import { stableJsonHash } from "../recall/chunking.js";
@@ -58,6 +56,7 @@ export type ExtractLongTermMemoryFromSourceNoteOptions = {
   operationId?: string;
   chatId?: string;
   trustedSubjectCatalog?: TrustedLtmSubjectCatalog;
+  previousPiece?: LtmPreviousPieceContext;
 };
 
 /**
@@ -477,11 +476,12 @@ async function extractLongTermMemoryFromSourceNoteInner(
         usesPromptTemplate: Boolean(extractionConfig.activePromptTemplateId),
         hasPromptOverride: extractionConfig.systemPrompt !== DEFAULT_LTM_EXTRACTION_PROMPTS_BY_MODE[resolvedMode],
         aiKeywordExtraction: extractionConfig.aiKeywordExtraction,
+        finishCutOffAnswers: extractionConfig.finishCutOffAnswers,
       },
     },
   });
   const recallIndex = await loadOrRebuildLongTermMemoryIndexes(options.root, undefined, undefined, options.signal);
-  const existingNotes = await getExistingTypedNotes({
+  const retrievedNotes = await getExistingTypedNotes({
     storage,
     root: options.root,
     sourceText: extractionText,
@@ -494,6 +494,17 @@ async function extractLongTermMemoryFromSourceNoteInner(
     index: recallIndex,
     signal: options.signal,
   });
+  // The listed events and threads must resolve as existing targets even where retrieval did not surface them.
+  const existingNotes = options.previousPiece
+    ? [
+        ...new Map(
+          [...retrievedNotes, ...options.previousPiece.events, ...options.previousPiece.threads].map((note) => [
+            note.id,
+            note,
+          ]),
+        ).values(),
+      ]
+    : retrievedNotes;
   await recordLtmDebugEvent({
     operationId: options.operationId,
     root: options.root,
@@ -538,8 +549,10 @@ async function extractLongTermMemoryFromSourceNoteInner(
     allowedBuckets,
     mode: resolvedMode,
     aiKeywordExtraction: extractionConfig.aiKeywordExtraction,
+    finishCutOffAnswers: extractionConfig.finishCutOffAnswers,
     resolveSubjectNames: true,
     trustedSubjectCatalog: options.trustedSubjectCatalog,
+    previousPiece: options.previousPiece,
   };
 
   const extractionPayload = await runLongTermMemoryEvidenceUnitExtraction(baseExtractionOptions);
@@ -615,6 +628,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
       mode: resolvedMode,
       sourceHash,
       allowedBuckets,
+      finishCutOffAnswers: extractionConfig.finishCutOffAnswers,
       eventSubjectIdentityKeys: options.trustedSubjectCatalog
         ? trustedLtmCharacterAliasIdentifiers(options.trustedSubjectCatalog)
         : undefined,

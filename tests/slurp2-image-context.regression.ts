@@ -111,16 +111,17 @@ async function main() {
   assert.match(maskForViewerDef[0], /imagePrompt: undefined,\s*imageDescription: undefined/u);
   // Every viewer-facing message response routes through the shared helper, called either directly
   // (a single reply/outcome) or passed to `.map` (a page of messages). Counted in the current
-  // routes: 5 direct calls in slp-messages-send-routes.ts, 1 in slp-messages-media-routes.ts, 1 in
+  // routes: 6 direct calls in slp-messages-send-routes.ts, 1 in slp-messages-media-routes.ts, 1 in
   // slp-messages-context.ts's own listMessages, and 2 `.map(maskForViewer)` list pages in
-  // slp-messages-thread-routes.ts — 9 total. A route that returns a message without one of these
+  // slp-messages-thread-routes.ts — 10 total. A route that returns a message without one of these
   // is the exact bug this regression exists to catch, so this count is a proof, not a floor:
   // bump it, with a reason, when a new masked path is added.
   const maskForViewerCalls = messageRoutes.match(/\bmaskForViewer\(/gu) ?? [];
   const maskForViewerMapRefs = messageRoutes.match(/\.map\(maskForViewer\)/gu) ?? [];
   assert.equal(
     maskForViewerCalls.length + maskForViewerMapRefs.length,
-    9,
+    // 10: the sexting session route (docs/SPICY.md, item 2) masks her reply like the tip route.
+    10,
     "every viewer-facing list/get path that carries a message must route through the shared redaction",
   );
 

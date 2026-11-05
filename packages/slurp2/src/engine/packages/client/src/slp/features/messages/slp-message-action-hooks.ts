@@ -64,6 +64,42 @@ export function useForceSlurpReply() {
     onSettled: () => invalidateSlurpMessages(queryClient),
   });
 }
+/** R9: change your own words in a DM. */
+export function useEditSlurpMessage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { personaId: string; threadId: string; messageId: string; content: string }) =>
+      api.post(
+        `/slurp2/messages/threads/${encodeURIComponent(input.threadId)}/messages/${encodeURIComponent(input.messageId)}/edit`,
+        { personaId: input.personaId, content: input.content },
+      ),
+    onSettled: () => invalidateSlurpMessages(queryClient),
+  });
+}
+/** R9: take a message out of a DM thread (never a tip, paid picture or commission step). */
+export function useDeleteSlurpMessage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { personaId: string; threadId: string; messageId: string }) =>
+      api.post(
+        `/slurp2/messages/threads/${encodeURIComponent(input.threadId)}/messages/${encodeURIComponent(input.messageId)}/delete`,
+        { personaId: input.personaId },
+      ),
+    onSettled: () => invalidateSlurpMessages(queryClient),
+  });
+}
+/** R9: the Creator writes their last answer again (answered like Get reply now). */
+export function useRegenerateSlurpReply() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { personaId: string; threadId: string }) =>
+      api.post<Omit<SlurpSendResponse, "message" | "tipError">>(
+        `/slurp2/messages/threads/${encodeURIComponent(input.threadId)}/regenerate`,
+        { personaId: input.personaId },
+      ),
+    onSettled: () => invalidateSlurpMessages(queryClient),
+  });
+}
 export function useRequestSlurpReply() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -107,6 +143,16 @@ export function useTipInSlurpThread() {
     onSettled: () => invalidateSlurpMessages(queryClient),
   });
 }
+/** Buy a sexting session in this thread (docs/SPICY.md, item 2); paid like a tip, she answers at once. */
+export function useStartSlurpSexting() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { personaId: string; threadId: string; requestId: string }) =>
+      api.post<SlurpSendResponse & { wallet: SlurpWallet }>("/slurp2/messages/sexting", input),
+    onSettled: () => invalidateSlurpMessages(queryClient),
+  });
+}
+
 export function useUnlockSlurpMessage() {
   const queryClient = useQueryClient();
   return useMutation({

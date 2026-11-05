@@ -74,7 +74,7 @@ export async function slpCommissionsRoutes(app: FastifyInstance, messaging: SlpM
     if (!countered) return reply.code(409).send({ error: "This quote is not open to an offer." });
     const creator = await slurp.getNoodlerAccountById(commission.creatorAccountId);
     if (!creator || creator.sourceKind === "persona") return { commission: countered };
-    const pricing = await messages.getCreatorMessaging(commission.creatorAccountId);
+    const pricing = await messages.commissionPricingFor(commission);
     return { commission: (await messages.answerCommissionCounter(commission.id, pricing.commissionMin)) ?? countered };
   });
 

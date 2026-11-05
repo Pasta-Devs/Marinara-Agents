@@ -7,11 +7,15 @@
 import type { DB } from "../../../db/connection.js";
 import { logger } from "../../../lib/logger.js";
 import { newId } from "../../../utils/id-generator.js";
+import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 import { randomUUID } from "node:crypto";
 import { createSlurpMessagesStorage, createSlurpStorage } from "../../data/slp-storage.js";
 import { createSlurpEventsStorage } from "../../data/notifications/slp-notification-storage.js";
 import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
-import { readSlurpSpice } from "../../data/creators/slp-spice-storage.js";
+import { readSlurpSpice, resolveSlurpCreatorSpice } from "../../data/creators/slp-spice-storage.js";
+import { readSlurpCreatorFitText } from "../../data/creators/slp-flavour-source.js";
+import { readSlurpCreatorSteering } from "../../data/creators/slp-steering-storage.js";
+import { slpStorylineGated } from "../../modules/world/events/slp-drama-cast.js";
 import { getSlurpPostGuidance } from "../../data/settings/slp-post-guidance-storage.js";
 import { selectSlurpExplicitLevel } from "../../modules/feed/slp-post-guidance.js";
 import { SLP_EXPLICIT_LEVELS, slpClampExplicitLevel } from "../../../../../shared/src/slp/slp-spice.js";
@@ -22,19 +26,27 @@ import {
   readSlurpDramaLibrary,
   readSlurpDramaState,
 } from "../../data/world/slp-drama-storage.js";
-import { slpDramaCatalog, slpEnabledDrama } from "../../modules/world/events/slp-drama-library.js";
+import {
+  slpDramaCatalog,
+  slpDramaEnabledIds,
+  slpDramaStorylines,
+  slpEnabledDrama,
+} from "../../modules/world/events/slp-drama-library.js";
+import { slurpStoryState, slurpTieTags } from "../../modules/storylines/slp-story-state.js";
 import { slpDramaText } from "../../modules/world/events/slp-drama-words.js";
 import {
   slpAdvanceDrama,
   slpAnswerDramaChoice,
   slpDueDramaJobs,
   slpMarkDramaJob,
+  type SlpDramaCreator,
   type SlpDramaJob,
   type SlpDramaTieEffect,
   type SlpDramaWorld,
 } from "../../modules/world/events/slp-drama-runtime.js";
 import type { SlurpBeat } from "../../modules/feed/slp-post-beat.js";
-import { loadSlurpTieCreators } from "../projects/slp-projects-contract.js";
+import { listSlurpBrandCatalog, loadSlurpTieCreators, slurpBrandDealLever } from "../projects/slp-projects-contract.js";
+import { slurpFitPattern } from "../../modules/feed/slp-occasion-beats.js";
 import { mutateSlurpCreatorTies, readSlurpCreatorTiesDocument } from "../../data/projects/slp-creator-ties-storage.js";
 import { slurpApplyDramaTie } from "../../modules/projects/slp-drama-ties.js";
 import type { SlurpTieCreator } from "../../modules/projects/slp-creator-ties.js";
@@ -50,15 +62,21 @@ const pairKey = (kind: string, a: string, b: string) => `${kind}:${[a, b].sort()
 export async function loadDramaWorld(
   db: DB,
   at: Date,
+  /** Read card texts and hard noes, for `fit` gates. */
+  gated = false,
 ): Promise<SlpDramaWorld & { viewerOf: Map<string, string>; tieCreators: SlurpTieCreator[] }> {
   const storage = createSlurpStorage(db);
-  const [tieCreators, accounts, spice, guidance, document] = await Promise.all([
+  const [tieCreators, accounts, spice, guidance, document, facts, settings] = await Promise.all([
     loadSlurpTieCreators(db, at),
     storage.listNoodlerAccounts(),
     readSlurpSpice(db),
     getSlurpPostGuidance(db),
     readSlurpCreatorTiesDocument(db),
+    storage.listStoryFacts(),
+    storage.getSettings(),
   ]);
+  // A collab pair counts as a tie (`collab`): a storyline may need it, or cast "her collab partner".
+  const collabs = settings.creatorCollabs ?? [];
   const byId = new Map(accounts.map((account) => [account.id, account]));
   // A player's page acts for the persona behind it: DMs, coins and notifications go to that persona.
   const viewerOf = new Map(
@@ -68,7 +86,7 @@ export async function loadDramaWorld(
         : [],
     ),
   );
-  const creators = tieCreators.map((creator) => ({
+  let creators: SlpDramaCreator[] = tieCreators.map((creator) => ({
     id: creator.id,
     name: creator.name,
     automatic: creator.automatic,
@@ -80,7 +98,39 @@ export async function loadDramaWorld(
     joinedAt: byId.get(creator.id)?.createdAt ?? at.toISOString(),
     followers: creator.followers,
     romance: creator.romance,
+    storyTags: slurpStoryState({
+      facts,
+      creatorId: creator.id,
+      tieTags: [
+        ...slurpTieTags(document, creator.id),
+        ...(collabs.some((collab) => collab.creatorIds.includes(creator.id)) ? ["collab"] : []),
+      ],
+      at,
+    }).tags,
   }));
+  if (gated)
+    creators = await Promise.all(
+      creators.map(async (creator) => {
+        const account = byId.get(creator.id);
+        if (!account) return creator;
+        const [fitText, spice, steering] = await Promise.all([
+          storage
+            .resolveAccountSource(account)
+            .then((source) => readSlurpCreatorFitText(db, { account, source }))
+            .catch(() => undefined),
+          resolveSlurpCreatorSpice(db, account).catch(() => undefined),
+          readSlurpCreatorSteering(db, account.id).catch(() => undefined),
+        ]);
+        if (fitText === undefined) return creator;
+        return {
+          ...creator,
+          fitText,
+          hardNoes: spice?.hardNoes ?? [],
+          avoid: steering?.avoid ?? [],
+          turnOns: spice?.turnOns ?? [],
+        };
+      }),
+    );
   const automatic = new Set(creators.filter((creator) => creator.automatic).map((creator) => creator.id));
   const relations = new Map<string, { playerId: string; relation: SlpRelationToPlayer }[]>();
   const relate = (creatorId: string, playerId: string, relation: SlpRelationToPlayer) =>
@@ -112,6 +162,7 @@ export async function loadDramaWorld(
     ] as const)
       if (automatic.has(creatorId) && viewerOf.has(playerId)) relate(creatorId, playerId, relation);
   }
+  for (const collab of collabs) ties.add(pairKey("collab", collab.creatorIds[0], collab.creatorIds[1]));
   for (const rivalry of document.ties.rivalries)
     if (rivalry.stage !== "over") ties.add(pairKey("rival", rivalry.fromId, rivalry.toId));
   return { creators, relations, ties, viewerOf, tieCreators };
@@ -242,36 +293,54 @@ function hashOf(value: string): number {
  * and on every tick what is due goes out. Nothing switched on and nothing running: nothing happens.
  */
 export async function advanceSlurpDrama(db: DB, at = new Date()): Promise<void> {
-  const settings = await createSlurpStorage(db).getSettings();
-  // "Pause all": no drama moves while Slurp is paused.
-  if (settings.paused) return;
-  const catalog = slpEnabledDrama(slpDramaCatalog(await readSlurpDramaLibrary(db)), settings.drama.enabled);
+  const storage = createSlurpStorage(db);
+  const settings = await storage.getSettings();
+  // "Pause all": no drama moves while Slurp is paused. Storylines off holds it the same way.
+  if (settings.paused || !slpExtensionOn(settings, "storylines")) return;
+  const imported = await readSlurpDramaLibrary(db);
+  const library = slpDramaCatalog(imported);
+  const catalog = slpEnabledDrama(library, slpDramaEnabledIds(imported, settings.drama.enabled, settings.contentPacks));
   const stored = await readSlurpDramaState(db);
   const idle =
     !catalog.dramas.length &&
     !catalog.situations.length &&
+    !catalog.storylines.length &&
     !stored.state.runs.some((run) => !run.endedAt) &&
     !stored.state.situations.some((run) => !run.endedAt);
   if (idle && !stored.state.jobs.some((job) => job.status === "queued")) return;
   // The full world (every Creator's spice, card people, followers) only when the runtime moves.
   if (!stored.advancedAt || at.getTime() - Date.parse(stored.advancedAt) >= ADVANCE_EVERY_MS) {
-    const world = await loadDramaWorld(db, at);
+    const storylines = slpDramaStorylines(catalog);
+    const gated = [...storylines.dramas, ...storylines.situations].some(slpStorylineGated);
+    const world = await loadDramaWorld(db, at, gated);
+    const { tastes } = await readSlurpSpice(db);
     const effects = await mutateSlurpDramaState(db, ({ state }) => {
       const result = slpAdvanceDrama(state, {
         at,
         level: settings.drama.level,
-        situations: catalog.situations,
-        dramas: catalog.dramas,
+        ...storylines,
+        known: slpDramaStorylines(library).dramas,
         dials: settings.drama.dials,
         world,
         activity: slurpWorldActivityMultiplier(settings.worldActivity),
+        tastes,
         newId,
       });
-      return { stored: { state: result.state, advancedAt: at.toISOString() }, result: result.ties };
+      return { stored: { state: result.state, advancedAt: at.toISOString() }, result };
     });
     const polyamory = settings.polyamory === true;
-    await applyDramaTies(db, effects ?? [], { at, creators: world.tieCreators, polyamory }).catch((error: unknown) =>
-      logger.warn(error, "[slurp-drama] Could not apply a drama's tie outcome"),
+    for (const effect of effects?.story ?? [])
+      await storage
+        .applyStoryOutcomes({ ...effect, participants: [effect.creatorId], sourceKind: "drama", at })
+        .catch((error: unknown) => logger.warn(error, "[slurp-drama] Could not write a drama's story state"));
+    for (const effect of effects?.story ?? [])
+      for (const outcome of effect.outcomes)
+        if (outcome.kind === "brand-offer")
+          await offerStoryBrand(db, effect.creatorId, outcome.words).catch((error: unknown) =>
+            logger.warn(error, "[slurp-drama] Could not offer a drama's brand deal"),
+          );
+    await applyDramaTies(db, effects?.ties ?? [], { at, creators: world.tieCreators, polyamory }).catch(
+      (error: unknown) => logger.warn(error, "[slurp-drama] Could not apply a drama's tie outcome"),
     );
   }
   // Everything due except post lines (the post planner takes those): questions and DMs first, so
@@ -337,6 +406,7 @@ export async function planSlurpDramaBeat(
   input: { creatorId: string; at: Date; previewOnly?: boolean },
 ): Promise<SlurpBeat | null> {
   try {
+    if (!slpExtensionOn(await createSlurpStorage(db).getSettings(), "storylines")) return null;
     const { state } = await readSlurpDramaState(db);
     const job = slpDueDramaJobs(state, input.at, "post").find((entry) => entry.actorId === input.creatorId);
     if (!job?.heat) return null;
@@ -393,4 +463,22 @@ export async function answerSlurpDramaChoice(
     return { stored: current, result: taken ? ("taken" as const) : ("late" as const) };
   });
   return result ?? "late";
+}
+
+/**
+ * A `brand-offer` outcome: the first live product that fits the Creator and whose brand name, category,
+ * product or pitch matches the words gets offered, by the same lever as Stir. No such brand, nothing.
+ */
+async function offerStoryBrand(db: DB, creatorId: string, words: readonly string[]): Promise<void> {
+  const pattern = slurpFitPattern(words);
+  const catalog = await listSlurpBrandCatalog(db, creatorId);
+  if (!pattern || !catalog.adsOn) return;
+  const product = catalog.brands
+    .flatMap((brand) => brand.products.map((entry) => ({ brand, entry })))
+    .find(
+      ({ brand, entry }) =>
+        entry.fit === "fits" &&
+        pattern.test(`${brand.name} ${brand.category ?? ""} ${entry.name} ${entry.pitch ?? ""}`),
+    );
+  if (product) await slurpBrandDealLever(db, { accountId: creatorId, productId: product.entry.id }, true);
 }

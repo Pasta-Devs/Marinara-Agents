@@ -15,6 +15,8 @@ import {
 import { projectLongTermMemoryDraftReview } from "../drafts/draft-review.js";
 import { applyLongTermMemoryDraft, preflightLongTermMemoryDraft } from "../drafts/reconciliation.js";
 import { resolveLtmSubjectIdentityReview } from "../identity/subject-choice-review.js";
+import { hideImportedMessagesAfterReview } from "../sources/interop.js";
+import { logger } from "../package-runtime.js";
 import {
   deleteRejectedSuggestion,
   deleteRejectedSuggestionsForSource,
@@ -63,6 +65,17 @@ const acceptDraftBody = z
 
 export function registerDraftRoutes(app: FastifyInstance, runtime: LtmRouteRuntime) {
   const { root, draftStore } = runtime;
+  // "Hide imported messages" waits for review; a failure only leaves the messages visible until the next import.
+  const afterReview = (sourceNoteId: string | undefined) =>
+    hideImportedMessagesAfterReview(root, sourceNoteId).catch((error) =>
+      logger.warn(error, "[ltm] Could not hide imported chat messages from the AI"),
+    );
+  // The lookup is only for the hide step, so a draft that cannot be read must not fail the review action.
+  const sourceNoteIdOf = (id: string) =>
+    draftStore
+      .getDraft(id)
+      .then((draft) => draft?.source.sourceNoteId)
+      .catch(() => undefined);
   app.get<{ Querystring: unknown }>("/drafts", async (request) =>
     draftStore.listDrafts(draftQuery.parse(request.query)),
   );
@@ -147,7 +160,7 @@ export function registerDraftRoutes(app: FastifyInstance, runtime: LtmRouteRunti
       const id = z.string().uuid().parse(request.params.id);
       const body = acceptDraftBody.parse(request.body ?? {});
       try {
-        return await applyLongTermMemoryDraft(id, {
+        const result = await applyLongTermMemoryDraft(id, {
           root,
           actor: "maintenance_api",
           mutationIds: body.mutationIds,
@@ -156,6 +169,8 @@ export function registerDraftRoutes(app: FastifyInstance, runtime: LtmRouteRunti
           autoApplyLowRiskOnly: body.lowRiskOnly,
           operationId: randomUUID(),
         });
+        await afterReview(await sourceNoteIdOf(id));
+        return result;
       } catch (error) {
         const result = routeError(error, "Failed to apply long-term memory draft");
         return reply.status(result.statusCode).send(result.body);
@@ -168,6 +183,8 @@ export function registerDraftRoutes(app: FastifyInstance, runtime: LtmRouteRunti
       .object({ mutationIds: z.array(z.string().uuid()).min(1) })
       .strict()
       .parse(request.body ?? {});
+    // Skipping the last suggestion deletes the draft, so its source is read first.
+    const sourceNoteId = await sourceNoteIdOf(id);
     const result = await draftStore.deleteDraftMutations(id, body.mutationIds);
     if (!result.deleted)
       return reply.status(result.reason === "not_pending" ? 409 : 404).send({
@@ -176,6 +193,7 @@ export function registerDraftRoutes(app: FastifyInstance, runtime: LtmRouteRunti
             ? "Long-term memory draft is not pending"
             : "Long-term memory draft mutation not found",
       });
+    await afterReview(sourceNoteId);
     return {
       deleted: true,
       draftId: id,
@@ -185,8 +203,10 @@ export function registerDraftRoutes(app: FastifyInstance, runtime: LtmRouteRunti
   });
   app.delete<{ Params: { id: string } }>("/drafts/:id", async (request, reply) => {
     const id = z.string().uuid().parse(request.params.id);
+    const sourceNoteId = await sourceNoteIdOf(id);
     if (!(await draftStore.deleteDraft(id)))
       return reply.status(404).send({ error: "Long-term memory draft not found" });
+    await afterReview(sourceNoteId);
     return { deleted: true, id };
   });
 }

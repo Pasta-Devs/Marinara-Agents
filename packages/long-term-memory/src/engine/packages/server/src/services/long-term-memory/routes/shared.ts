@@ -3,7 +3,7 @@ import { logger } from "../package-runtime.js";
 import { rebuildLongTermMemoryIndexes } from "../recall/rebuild.js";
 import type { LongTermMemoryDraftStore } from "../drafts/draft-store.js";
 import type { LongTermMemoryStorage } from "../persistence/storage.js";
-import { LtmServiceError, ltmErrorResponse } from "../service-error.js";
+import { isLtmServiceError, ltmErrorResponse } from "../service-error.js";
 
 export const NOTE_BODY_LIMIT_BYTES = 512 * 1024;
 export const DRAFT_BODY_LIMIT_BYTES = 512 * 1024;
@@ -22,25 +22,14 @@ export function routeError(error: unknown, fallback: string) {
       statusCode: 400,
       body: { error: error.message, code: "ltm_invalid_request" },
     };
-  if (
-    error instanceof LtmServiceError ||
-    (error && typeof error === "object" && "statusCode" in error && "code" in error)
-  )
-    return ltmErrorResponse(error, fallback);
-  if (error instanceof AggregateError) {
-    logger.error(error, "[ltm] Unexpected aggregate failure in route");
-    return {
-      statusCode: 500,
-      body: { error: fallback, code: "ltm_unexpected_failure" },
-    };
-  }
-  const message = error instanceof Error ? error.message : fallback;
+  if (isLtmServiceError(error)) return ltmErrorResponse(error);
+  // An unexpected failure's message can carry file paths or library internals, so it stays in the server log.
+  // A cancelled request has no reader and is not a failure.
+  if (!(error instanceof Error && error.name === "AbortError"))
+    logger.error(error, "[ltm] Unexpected failure in route");
   return {
     statusCode: 500,
-    body: {
-      error: message,
-      code: "ltm_unexpected_failure",
-    },
+    body: { error: fallback, code: "ltm_unexpected_failure" },
   };
 }
 
@@ -77,7 +66,7 @@ export async function rebuildAfterMutation(root: string, ordinaryEditorMutation 
     );
     return {
       status: "deferred" as const,
-      error: error instanceof Error ? error.message : "Index rebuild failed",
+      error: isLtmServiceError(error) ? error.message : "Index rebuild failed",
     };
   }
 }

@@ -19,7 +19,11 @@
  *   usual tease → drop; the rest go on ordinary slots. No extra AI call: the post call writes it.
  */
 import type { SlurpContentIntent } from "../../../../../shared/src/slp/slp-content-axes.js";
-import { SLP_EXPLICIT_LEVELS, type SlpExplicitLevelName } from "../../../../../shared/src/slp/slp-spice.js";
+import {
+  SLP_EXPLICIT_LEVELS,
+  type SlpExplicitLevelName,
+  type SlpTaste,
+} from "../../../../../shared/src/slp/slp-spice.js";
 import {
   SLURP_BIRTHDAY_BEATS,
   SLURP_FIRST_THOUSAND_SUBS_BEAT,
@@ -32,10 +36,22 @@ import {
   slurpPackEventFor,
   type SlurpContentPackToggles,
 } from "../world/events/slp-content-packs.js";
-import { slurpBeatIntents, type SlurpBeat, type SlurpBeatHistory } from "./slp-post-beat.js";
+import type { SlpOccasion } from "../../../../../shared/src/slp/slp-storyline.js";
+import { SLURP_BEAT_TYPES, slurpBeatIntents, type SlurpBeat, type SlurpBeatHistory } from "./slp-post-beat.js";
 import { slurpLifeFits, slurpNeverSentences } from "./slp-life-moments.js";
 import { SLURP_SHARED_IDEA_DAILY_CAP } from "./slp-shared-preseed.js";
 import { slurpWeightedPick } from "./slp-weighted.js";
+import { slurpTasteWeight } from "../creators/slp-spice.js";
+
+/** An imported occasion's beats and fit, by its content id; a beat type the planner does not know is dropped. */
+function slurpImportedMoments(contentId: string, imported: readonly SlpOccasion[]) {
+  const occasion = imported.find((entry) => (entry.contentId ?? entry.id) === contentId);
+  if (!occasion) return null;
+  const beats = occasion.beats.filter((beat): beat is typeof beat & { type: SlurpPackBeat["type"] } =>
+    (SLURP_BEAT_TYPES as readonly string[]).includes(beat.type),
+  );
+  return { fit: occasion.fit ?? {}, beats: beats as SlurpPackBeat[] };
+}
 
 /** One occasion running for this Creator now, with when each of its moments is due. */
 export type SlurpOccasion = {
@@ -65,6 +81,25 @@ const wordsOf = (value: string) => value.toLocaleLowerCase().match(/\p{L}{3,}/gu
 const sameWord = (a: string, b: string) =>
   a === b || (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a)));
 
+// ponytail: unbounded cache, one entry per distinct word list (built-ins plus imported packs); add an LRU if packs get edited a lot.
+const fitPatterns = new Map<string, RegExp>();
+/** A fit's word list as one pattern: a word matches whole, `word*` matches a word's start; pack words stay plain text. */
+export function slurpFitPattern(words: readonly string[] | undefined): RegExp | undefined {
+  if (!words?.length) return undefined;
+  const key = words.join("\n");
+  let pattern = fitPatterns.get(key);
+  if (!pattern) {
+    const parts = words.map((word) => {
+      const stem = word.endsWith("*") ? word.slice(0, -1) : word;
+      const escaped = stem.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return word.endsWith("*") ? `${escaped}[\\p{L}\\p{N}]*` : `${escaped}(?![\\p{L}\\p{N}])`;
+    });
+    pattern = new RegExp(`(?<![\\p{L}\\p{N}])(?:${parts.join("|")})`, "iu");
+    fitPatterns.set(key, pattern);
+  }
+  return pattern;
+}
+
 /** Whether an occasion, a pack storyline or one moment fits this Creator. */
 export function slurpPackFits(
   fit: SlurpPackFit,
@@ -77,8 +112,29 @@ export function slurpPackFits(
     )
   )
     return false;
-  if (fit.topic && (creator.avoid ?? []).some((topic) => fit.topic!.test(topic))) return false;
-  return slurpLifeFits(fit, { text: creator.text, never: slurpNeverSentences(creator.text) });
+  const needs = slurpFitPattern(fit.needs);
+  const topic = slurpFitPattern(fit.topic);
+  if (topic && (creator.avoid ?? []).some((entry) => topic.test(entry))) return false;
+  return slurpLifeFits({ needs, topic }, { text: creator.text, never: slurpNeverSentences(creator.text) });
+}
+
+/**
+ * Whether a pack topic the player switched off (`contentPacks["<pack>:<topic>"] === false`) rules out
+ * this entry of that pack: the same as the topic on the "never" list, but for this pack only.
+ * ponytail: checks the entry's own fit (an occasion, a storyline); stage and beat fits inside a pack
+ * storyline still run, add the topic to `creator.avoid` per pack in the drama runtime if that matters.
+ */
+export function slurpPackTopicOff(
+  packId: string,
+  fit: Pick<SlurpPackFit, "topic" | "needs"> | undefined,
+  toggles: Readonly<Record<string, boolean>>,
+): boolean {
+  const pattern = slurpFitPattern([...(fit?.topic ?? []), ...(fit?.needs ?? [])]);
+  if (!pattern) return false;
+  const prefix = `${packId}:`;
+  return Object.entries(toggles).some(
+    ([key, on]) => on === false && key.startsWith(prefix) && pattern.test(key.slice(prefix.length)),
+  );
 }
 
 /**
@@ -129,6 +185,8 @@ export function slurpOccasionBeat(input: {
   used: readonly string[];
   history: Pick<SlurpBeatHistory, "sharedToday">;
   intents: readonly SlurpContentIntent[];
+  /** The player's tastes: a moment whose fit shares their words comes up more often. */
+  tastes?: readonly SlpTaste[];
 }): SlurpBeat | null {
   const used = new Set(input.used);
   const now = input.at.getTime();
@@ -153,7 +211,7 @@ export function slurpOccasionBeat(input: {
     "occasionPick",
     input.creatorAccountId,
     input.sequence,
-    candidates.map((entry) => ({ value: entry, weight: 1 })),
+    candidates.map((entry) => ({ value: entry, weight: slurpTasteWeight(entry.occasion.fit, input.tastes) })),
   );
   const { line, cast } = lineFor(picked.beat, input.creator);
   return {
@@ -225,7 +283,7 @@ export function slurpBirthdayOccasion(
       key: `birthday:${new Date(day).toISOString().slice(0, 10)}`,
       name: "Birthday",
       // A card that hates birthdays, or a player who wants them left out, skips the week.
-      fit: { topic: /\b(birthdays?|Geburtstag\w*)\b/iu },
+      fit: { topic: ["birthday", "birthdays", "geburtstag*"] },
       beats,
       dueAt: [startsAt, day, day + DAY_MS].slice(0, beats.length),
       endsAt,
@@ -260,16 +318,20 @@ export function slurpPackOccasions(input: {
   /** `dateAt`: the event's own day (an annual event started late still has Halloween night on Oct 31). */
   windows: readonly { contentId: string; name: string; startsAt: number; endsAt: number; dateAt?: number }[];
   toggles: SlurpContentPackToggles;
+  /** Occasions of imported packs that are on (docs/STORYLINES.md, PR 5b). */
+  imported?: readonly SlpOccasion[];
   creatorAccountId: string;
   creatorText: string;
   subscribers: number;
   at: Date;
 }): SlurpOccasion[] {
   const packs = slurpContentPacksOn(input.toggles);
-  if (!packs.length) return [];
+  if (!packs.length && !input.imported?.length) return [];
   const dated = input.windows.flatMap((window) => {
     const moments =
-      slurpPackEventFor(window.contentId, input.toggles) ?? slurpPackDateBeatsFor(window.contentId, input.toggles);
+      slurpPackEventFor(window.contentId, input.toggles) ??
+      slurpPackDateBeatsFor(window.contentId, input.toggles) ??
+      slurpImportedMoments(window.contentId, input.imported ?? []);
     if (!moments?.beats.length) return [];
     const spread = slurpSpreadDueAt(window.startsAt, window.endsAt, moments.beats.length);
     return [

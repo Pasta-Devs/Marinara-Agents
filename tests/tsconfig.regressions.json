@@ -1,7 +1,8 @@
 {
   "compilerOptions": {
     "paths": {
-      "@marinara-engine/shared": ["../sources/package-shared.ts"]
+      "@marinara-engine/shared": ["../sources/package-shared.ts"],
+      "@forge-kit/*": ["../sources/forge-kit/*"]
     }
   }
 }

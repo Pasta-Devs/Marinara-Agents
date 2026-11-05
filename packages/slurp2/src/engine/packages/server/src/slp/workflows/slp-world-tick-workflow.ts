@@ -10,6 +10,8 @@ import {
   textSlurpPartners,
 } from "../features/messages/slp-messages-contract.js";
 import { refreshSlurpCreatorPages } from "../features/creators/slp-creators-contract.js";
+import { advanceSlurpLive } from "../features/live/slp-live-contract.js";
+import { advanceSlurpTrends } from "../features/discovery/slp-discovery-contract.js";
 import { slurpPausedNow } from "../data/settings/slp-pause-storage.js";
 
 let modelDrains: Promise<void> | null = null;
@@ -28,6 +30,11 @@ export async function slpCatchUpWorldOnOpen(app: FastifyInstance) {
   await advanceSlurpSupportDesk(app.db).catch((error: unknown) => logger.warn(error, "[slurp-desk] Catch-up failed"));
   // Drama (docs/DRAMA.md): situations and dramas the player switched on, and their due beats.
   await advanceSlurpDrama(app.db).catch((error: unknown) => logger.warn(error, "[slurp-drama] Catch-up failed"));
+  await advanceSlurpLive(app.db).catch((error: unknown) => logger.warn(error, "[slurp-live] Catch-up failed"));
+  // A post that took off may become a trend (docs/TRENDS.md), as on the scheduler's clock.
+  await advanceSlurpTrends(app.db, new Date()).catch((error: unknown) =>
+    logger.warn(error, "[slurp-trends] Catch-up failed"),
+  );
   // A Creator who is with the player texts like a partner.
   await textSlurpPartners(app.db).catch((error: unknown) => logger.warn(error, "[slurp-partner] Catch-up failed"));
   // The model drains below are not awaited: the notification list used to wait seconds of model

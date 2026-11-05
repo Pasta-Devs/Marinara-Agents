@@ -8,6 +8,7 @@ import {
   SLP_CREATOR_POST_IMAGE_RETRY_LIMIT,
   slpCreatorPostImageRetryAttempts,
   slpImageAuthFailure,
+  slpImageRetryable,
 } from "../../base/media/slp-image-retry.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { slurpDeepDetailsImageRunRecorder } from "../../data/feed/slp-post-deep-details-storage.js";
@@ -155,6 +156,7 @@ export function createCreatorSlpImagesService(db: DB) {
             // in listNoodlerPostsAwaitingImageRetry, so nulling the prompt only destroyed data.
             metadata: {
               imageGenerationFailed: true,
+              imageGenerationRetryable: slpImageRetryable(error),
               imageRetryAttempts: attempts,
               imageGenerationError: getErrorMessage(error).slice(0, 500),
             },

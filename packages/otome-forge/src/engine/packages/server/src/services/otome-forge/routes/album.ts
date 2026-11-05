@@ -1,0 +1,172 @@
+// ──────────────────────────────────────────────
+// Otome Forge: the Album (plan M4 "Album"): only what is unlocked
+// ──────────────────────────────────────────────
+// GET /runs/:run/album → AlbumView {cgs, memories, timeline, favorites, soundtrack, tells, stickers, photos}
+// - cgs: story CGs once seen (M2b: POST .../art/cg/seen), each owned Memory's CG once painted, and couple sets' pair
+//   portraits, newest first (the oldest at the bottom). The client saves an image through the Engine's
+//   services.imageDownloads.
+// - memories: the owned Memories, Moments and Snapshots in the order won, with how far each story has been read.
+// - timeline and favorites: the state's Love Timeline (stages, firsts, Snapshots, couple sets) with each owned Moment
+//   and Memory on the day it was won (#1947; not stored, so pulls made before it show too), and starred lines.
+// - soundtrack: each cue with its generated track, or null for the stock one; then the theme saved for each chapter the
+//   player has begun (S/audio/music.ts recordChapterTrack), in the Story screen's order. A chapter without one (an old
+//   run, or chapter themes off) is not listed.
+// - tells: per love interest, the tells she has learned to read: the mask tells Read Him taught (M5), and those of each
+//   secret of his she has learned (its truth is out, so what gave it away reads plainly now). The seed of the R2
+//   Dossier.
+// - stickers (#2044): the protagonist's five, and each love interest's unlocked ones that are painted, or that wait for
+//   a tap to paint (S/art/stickers.ts albumStickers). Kept out of `cgs`, which Home's back layer reads.
+// - photos (#2087): the Photo Shoot's photos once painted, newest first (S/minigames/photo-shoot.ts albumPhotos), each
+//   captioned with its place. Like stickers, kept out of `cgs`: Home tapes the newest into the note instead.
+// Nothing the player has not won, seen or learned is listed: no banner item not owned, no CG not seen, no tell of a
+// secret still hidden, no theme of a chapter not begun.
+import { chapterMusicCue } from "../../../../../client/src/features/otome-forge/shared/audio.js";
+import type {
+  Chapter,
+  LiState,
+  RunState,
+  TimelineEntry,
+  Unit,
+} from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import { MUSIC_MOODS } from "../../../../../client/src/features/otome-forge/shared/faces.js";
+import type {
+  AlbumImage,
+  AlbumMemory,
+  AlbumView,
+  SoundtrackEntry,
+} from "../../../../../client/src/features/otome-forge/shared/wardrobe.js";
+import type { Item } from "../../../../../client/src/features/otome-forge/shared/wish.js";
+import { pairKey } from "../art/outfits.js";
+import { playableTracks } from "../audio/music.js";
+import { OtomeForgeError, runParam, type RegisterRoutes, type RouteDeps } from "../http.js";
+import { couplesOf, itemView, ownedItems, readItems } from "../items/open.js";
+import { readRun, type RunDocuments } from "../schemas/state.js";
+import { normalizeChapter } from "../schemas/story.js";
+import { byStoryOrder } from "../story/chapters.js";
+import { albumStickers } from "../art/stickers.js";
+import { albumPhotos, listPhotos } from "../minigames/photo-shoot.js";
+
+const MEMORY_KINDS: ReadonlySet<Item["kind"]> = new Set(["memory5", "moment4", "snapshot3"]);
+
+/**
+ * The tells she has learned to read of his: the mask tells Read Him taught (M5's `tellsLearned`, indexes into his mask
+ * tells in the order learned), then each learned secret's tells.
+ */
+export function learnedTells(unit: Pick<Unit, "bible">, liState: LiState): string[] {
+  const bible = unit.bible;
+  if (!bible) return [];
+  const mask = liState.tellsLearned.map((index) => bible.mask.tells[index]).filter((tell): tell is string => !!tell);
+  const secrets = bible.secrets
+    .filter((secret) => liState.revealed.includes(secret.id))
+    .flatMap((secret) => secret.tells);
+  return [...new Set([...mask, ...secrets])];
+}
+
+/** How far an item's story has been read, or null when it has none. */
+function readState(state: RunState, item: Item): AlbumMemory["read"] {
+  if (!item.story) return null;
+  const progress = state.chapters[item.story.key];
+  return progress?.completed ? "done" : progress?.beatsRead ? "in-progress" : "unread";
+}
+
+/**
+ * The Album's CGs, newest first: story CGs once seen, couple sets' pair portraits, and each owned Memory's CG once
+ * painted, dated when it was won or, when it was painted later, painted (a featured Memory shares its banner's art,
+ * painted before anyone wins it). Home's back layer (S/routes/home.ts backdropOf) picks its love interest's newest.
+ */
+export function albumCgs(run: Pick<RunDocuments, "state">, items: readonly Item[]): AlbumImage[] {
+  const owned = ownedItems(run, items);
+  const pairs = new Map(couplesOf(items).map((row) => [pairKey(row.hers.id), row]));
+  return [
+    ...run.state.album.cgs.map((cg): AlbumImage => {
+      const pair = pairs.get(cg.key);
+      const title = pair ? [pair.his.look?.name, pair.hers.look?.name].filter(Boolean).join(" · ") : "";
+      return { ...cg, source: cg.key.startsWith("pair:") ? "pair" : "story", ...(title ? { title } : {}) };
+    }),
+    ...owned.flatMap((item): AlbumImage[] => {
+      if ((item.kind !== "memory5" && item.kind !== "moment4") || item.art?.state !== "ready" || !item.art.url)
+        return [];
+      const won = run.state.owned.at[item.id] ?? "";
+      return [
+        {
+          key: `item:${item.id}`,
+          url: item.art.url,
+          ...(item.art.ref ? { ref: item.art.ref } : {}),
+          at: won > item.art.at ? won : item.art.at,
+          ...(item.li ? { li: item.li } : {}),
+          source: "memory",
+          title: item.title,
+        },
+      ];
+    }),
+  ].sort((a, b) => b.at.localeCompare(a.at));
+}
+
+/**
+ * The Love Timeline as the Album shows it: the state's entries, and each owned Moment and Memory on the day it was won
+ * (`owned.at`), oldest first. They are read from what is owned rather than stored, so every pull shows, and the
+ * calendar's anniversaries (S/routes/care.ts, from the state's firsts) are unchanged.
+ */
+function albumTimeline(run: RunDocuments, owned: readonly Item[]): TimelineEntry[] {
+  const listed = new Set(run.state.timeline.flatMap((entry) => (entry.ref ? [entry.ref] : [])));
+  const won = owned.flatMap((item): TimelineEntry[] => {
+    if ((item.kind !== "memory5" && item.kind !== "moment4") || !item.li || listed.has(item.id)) return [];
+    const at = run.state.owned.at[item.id];
+    if (!at) return [];
+    return [{ at, li: item.li, kind: item.kind === "memory5" ? "memory" : "moment", text: item.title, ref: item.id }];
+  });
+  return [...run.state.timeline, ...won].sort((a, b) => a.at.localeCompare(b.at));
+}
+
+/** The Soundtrack's chapter themes: each begun chapter's saved theme (cue `chapter-<key>`), in story order. */
+async function chapterThemes(
+  deps: Pick<RouteDeps, "store">,
+  runId: string,
+  state: RunState,
+): Promise<SoundtrackEntry[]> {
+  return (await deps.store.listRun("chapter", runId))
+    .map((record) => normalizeChapter(record.data))
+    .filter((chapter): chapter is Chapter => !!chapter?.music?.track && !!state.chapters[chapter.key])
+    .sort(byStoryOrder)
+    .map((chapter) => ({
+      cue: chapterMusicCue(chapter.key),
+      track: chapter.music!.track!,
+      chapter: { key: chapter.key, title: chapter.title },
+    }));
+}
+
+export async function albumView(deps: Pick<RouteDeps, "store">, runId: string): Promise<AlbumView> {
+  const run = await readRun(deps.store, runId);
+  if (!run) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+  const items = await readItems(deps.store, runId);
+  const owned = ownedItems(run, items);
+  const cgs = albumCgs(run, items);
+  const tracks = playableTracks(run.world.audio);
+  const tells: AlbumView["tells"] = {};
+  for (const unit of run.units) {
+    const liState = run.state.lis[unit.id];
+    if (liState) tells[unit.id] = learnedTells(unit, liState);
+  }
+  return {
+    cgs,
+    memories: owned
+      .filter((item) => MEMORY_KINDS.has(item.kind))
+      .map((item) => ({ ...itemView(runId, item, true), read: readState(run.state, item) })),
+    timeline: albumTimeline(run, owned),
+    favorites: run.state.favorites,
+    soundtrack: [
+      ...MUSIC_MOODS.map((cue) => ({ cue, track: tracks.find((track) => track.cue === cue) ?? null })),
+      ...(await chapterThemes(deps, runId, run.state)),
+    ],
+    tells,
+    stickers: albumStickers(runId, run),
+    photos: albumPhotos(await listPhotos(deps.store, runId)),
+  };
+}
+
+export const registerAlbumRoutes: RegisterRoutes = (router, deps) => {
+  router.get(
+    "/runs/:run/album",
+    deps.handle(async (request) => albumView(deps, runParam(request).runId)),
+  );
+};

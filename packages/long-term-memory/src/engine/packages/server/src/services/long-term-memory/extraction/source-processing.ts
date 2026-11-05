@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { basename } from "node:path";
 import type {
   LtmExtractionAccounting,
   LtmExtractionDiagnostic,
@@ -12,25 +13,28 @@ import type {
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { isLtmSourceLikeNote } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { logger, type PackageLanguageModel } from "../package-runtime.js";
-import { rebuildLongTermMemoryIndexes } from "../recall/rebuild.js";
-import { applyLongTermMemoryDraft } from "../drafts/reconciliation.js";
+import { scheduleLongTermMemoryIndexRebuild } from "../recall/rebuild.js";
+import { applyLongTermMemoryDraft, LtmDraftApplyError } from "../drafts/reconciliation.js";
 import {
   extractLongTermMemoryFromSourceNote,
   finalizeLongTermMemoryExtractionDraft,
   type LtmSourceExtractionRecompile,
 } from "./source-extraction.js";
 import { LongTermMemoryStorage } from "../persistence/storage.js";
-import { loadTrustedLtmSubjectCatalog } from "../identity/subject-identity.js";
+import { loadTrustedLtmSubjectCatalog } from "../identity/subject-catalog.js";
 import {
   compileEvidenceUnitExtraction,
   sourceHashForEvidenceUnitExtraction,
   diagnosticsRequireExtractionReview,
+  type LtmPreviousPieceContext,
 } from "./evidence-unit-extraction.js";
 import { extractionFingerprintForLtmSourceNote } from "./source-hash.js";
 import { canUpdateLtmScopedTarget } from "./scoped-targets.js";
 import { LtmServiceError } from "../service-error.js";
 import { addRejectedSuggestions } from "../drafts/rejected-suggestions.js";
 import { withLtmVaultLock } from "../persistence/vault-lock.js";
+import { watchLtmVaultWrites } from "../persistence/vault-snapshot.js";
+import { LTM_VAULT_DIR } from "../persistence/paths.js";
 
 export type ImportedSourceItem = {
   sourceId: string;
@@ -39,6 +43,8 @@ export type ImportedSourceItem = {
   created: boolean;
   extractionMode: LtmMode;
   deterministicSourceText?: string;
+  /** The chat piece before this one: its source note id and the end of its text. */
+  previousPiece?: { sourceNoteId: string; tail: string };
 };
 type PreparedSource = {
   operationId: string;
@@ -70,6 +76,7 @@ type PrepareOptions = {
   directGameMode?: boolean;
   directSourceText?: string;
   existingNotes?: LtmNote[];
+  previousPiece?: LtmPreviousPieceContext;
 };
 
 const RETRYABLE_FAILURE_CODES = new Set([
@@ -144,14 +151,6 @@ function canMarkCurrent(prepared: PreparedSource) {
   }
   return false;
 }
-async function rebuildAfterSourceExtraction(root?: string) {
-  try {
-    await rebuildLongTermMemoryIndexes({ root });
-  } catch (error) {
-    logger.warn(error, "[ltm] Deferred index rebuild after source extraction");
-  }
-}
-
 function deterministicUuid(seed: string) {
   const hex = createHash("sha256").update(seed).digest("hex");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-${((Number.parseInt(hex[16]!, 16) & 3) | 8).toString(16)}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
@@ -202,11 +201,12 @@ export async function prepareLongTermMemorySource(options: PrepareOptions): Prom
   throwIfAborted(options.signal);
   const scope = options.scope ?? options.sourceNote.destinationScope ?? options.sourceNote.scope;
   const extractionMode = options.extractionMode ?? options.mode ?? options.sourceNote.modes[0] ?? "roleplay";
-  if (options.directGameMode && extractionMode === "game") {
+  // Game Mode summaries are ingested without a model call; the caller decides when.
+  if (options.directGameMode) {
     const requestedScope = options.scope ?? options.sourceNote.destinationScope ?? options.sourceNote.scope;
     const requestedModes = options.modes ?? options.sourceNote.modes;
     const sourceFingerprintBeforeBinding = extractionFingerprintForLtmSourceNote(options.sourceNote, {
-      extractionMode: "game",
+      extractionMode,
     });
     const sourceNote = {
       ...options.sourceNote,
@@ -230,7 +230,7 @@ export async function prepareLongTermMemorySource(options: PrepareOptions): Prom
       existingNotes,
       scope: requestedScope,
       modes: requestedModes,
-      mode: "game",
+      mode: extractionMode,
       sourceHash,
       skipStructuredBackfill: true,
     });
@@ -239,7 +239,7 @@ export async function prepareLongTermMemorySource(options: PrepareOptions): Prom
       chatId: options.chatId,
       sourceNote,
       sourceFingerprintBeforeBinding,
-      extractionMode: "game",
+      extractionMode,
       response: compiled.compiledResponse,
       diagnostics: compiled.diagnostics,
       outcome: compiled.outcome,
@@ -263,6 +263,7 @@ export async function prepareLongTermMemorySource(options: PrepareOptions): Prom
     root: options.root,
     chatId: options.chatId,
     trustedSubjectCatalog: await loadTrustedLtmSubjectCatalog(scope, options.root),
+    previousPiece: options.previousPiece,
   });
   throwIfAborted(options.signal);
   return {
@@ -275,27 +276,65 @@ export async function prepareLongTermMemorySource(options: PrepareOptions): Prom
   };
 }
 
+/**
+ * Merge by id so a note that reached the vault and is still projected in the batch overlay is one
+ * candidate, not two identical ones that read as an ambiguous match. The overlay carries this
+ * batch's newer projected state, so it normally wins — except when the durable note reached a
+ * terminal status after the projection, which the stale active copy must not revive.
+ */
+async function batchCandidateNotes(
+  storage: LongTermMemoryStorage,
+  overlay?: ReadonlyMap<string, LtmNote>,
+  committedNotes?: BatchCommittedNotes,
+) {
+  const candidates = new Map<string, LtmNote>();
+  for (const note of await (committedNotes?.list() ?? storage.listNotes())) candidates.set(note.id, note);
+  for (const note of overlay?.values() ?? []) {
+    const durable = candidates.get(note.id);
+    candidates.set(
+      note.id,
+      durable && (durable.status === "archived" || durable.status === "resolved") ? durable : note,
+    );
+  }
+  return [...candidates.values()];
+}
+
+/**
+ * The events and still-open threads the previous chat piece extracted, found by their link back to its source note.
+ * Only notes this piece may link to or update are listed, so a listed id never fails scope resolution.
+ * ponytail: the list is not capped; each piece's own output keeps it small. Cap per kind if a chat ever grows it.
+ */
+async function previousPieceContext(
+  previous: NonNullable<ImportedSourceItem["previousPiece"]>,
+  scope: LtmScope,
+  storage: LongTermMemoryStorage,
+  overlay: ReadonlyMap<string, LtmNote>,
+  committedNotes: BatchCommittedNotes,
+): Promise<LtmPreviousPieceContext> {
+  const fromPrevious = (await batchCandidateNotes(storage, overlay, committedNotes)).filter(
+    (note) =>
+      note.status === "active" &&
+      canUpdateLtmScopedTarget(note.scope, scope) &&
+      note.links.some((link) => link.relation === "extracted_from" && link.target === previous.sourceNoteId),
+  );
+  return {
+    tail: previous.tail,
+    events: fromPrevious.filter((note) => note.type === "timeline_event"),
+    threads: fromPrevious.filter((note) => note.type === "thread"),
+  };
+}
+
 async function recompilePreparedWithFreshCandidates(
   prepared: PreparedSource,
   storage: LongTermMemoryStorage,
   overlay?: ReadonlyMap<string, LtmNote>,
+  committedNotes?: BatchCommittedNotes,
 ) {
   if (!prepared.recompile) return null;
   try {
-    // Merge by id so a note that reached the vault and is still projected in the batch overlay is one
-    // candidate, not two identical ones that read as an ambiguous match. The overlay carries this
-    // batch's newer projected state, so it normally wins — except when the durable note reached a
-    // terminal status after the projection, which the stale active copy must not revive.
-    const candidates = new Map<string, LtmNote>();
-    for (const note of await storage.listNotes()) candidates.set(note.id, note);
-    for (const note of overlay?.values() ?? []) {
-      const durable = candidates.get(note.id);
-      candidates.set(
-        note.id,
-        durable && (durable.status === "archived" || durable.status === "resolved") ? durable : note,
-      );
-    }
-    return await prepared.recompile({ candidateNotes: [...candidates.values()] });
+    return await prepared.recompile({
+      candidateNotes: await batchCandidateNotes(storage, overlay, committedNotes),
+    });
   } catch (error) {
     // Freshness is best-effort: a failed scan must not fail a commit that the preparation
     // snapshot could already finalize.
@@ -304,9 +343,64 @@ async function recompilePreparedWithFreshCandidates(
   }
 }
 
+type BatchCommittedNotes = ReturnType<typeof batchCommittedNotes>;
+
+/**
+ * The committed vault notes for one batch, listed once instead of once per item. Notes that any vault write touches
+ * afterwards (source refreshes, draft apply, anything else) are re-read before the next listing, so the list stays
+ * equal to a fresh listNotes(), in the same order. A write that names no files, or a failed re-read, lists again.
+ */
+function batchCommittedNotes(storage: LongTermMemoryStorage) {
+  let notes: Map<string, LtmNote> | undefined;
+  const written = new Set<string>();
+  const stop = watchLtmVaultWrites(storage.root, (paths) => {
+    if (!notes) return;
+    if (!paths) notes = undefined;
+    else for (const path of paths) if (path.startsWith(`${LTM_VAULT_DIR}/`)) written.add(basename(path, ".json"));
+  });
+  const refresh = async () => {
+    if (notes && written.size) {
+      const noteIds = [...written];
+      written.clear();
+      const fresh = await storage.getNotesByIds(noteIds).catch(() => undefined);
+      // A failed re-read, or a write that named no files while it ran, falls back to a full listing below.
+      if (!fresh || !notes) notes = undefined;
+      else {
+        let added = false;
+        for (const noteId of noteIds) {
+          const note = fresh.get(noteId);
+          if (!note) notes.delete(noteId);
+          else {
+            added ||= !notes.has(noteId);
+            notes.set(noteId, note);
+          }
+        }
+        // listNotes() orders by id; keep that order so the candidate order a fresh listing gives is unchanged.
+        if (added) notes = new Map([...notes].sort(([left], [right]) => left.localeCompare(right)));
+      }
+    }
+    if (!notes) {
+      written.clear();
+      notes = new Map((await storage.listNotes()).map((note) => [note.id, note]));
+    }
+    return notes.values();
+  };
+  return {
+    stop,
+    // Chain workers list outside the commit lock; refreshing under the (reentrant) vault lock keeps two callers from
+    // seeing each other's cleared writes as already applied.
+    list: () => withLtmVaultLock(storage.root, refresh),
+  };
+}
+
 async function commitPreparedLongTermMemorySource(
   prepared: PreparedSource,
-  options: { root?: string; overlay?: Map<string, LtmNote>; applyLowRisk?: boolean },
+  options: {
+    root?: string;
+    overlay?: Map<string, LtmNote>;
+    applyLowRisk?: boolean;
+    committedNotes?: BatchCommittedNotes;
+  },
 ) {
   const storage = new LongTermMemoryStorage(options.root);
   // ponytail: serialize finalization per vault; use narrower locks only if local commit throughput becomes a bottleneck.
@@ -314,7 +408,12 @@ async function commitPreparedLongTermMemorySource(
     // Reconcile against the committed vault plus any sibling projections this batch already
     // prepared, then finalize. A concurrent import or sibling source may have created the
     // compatible target after the preparation snapshot that reconciliation originally saw.
-    const fresh = await recompilePreparedWithFreshCandidates(prepared, storage, options.overlay);
+    const fresh = await recompilePreparedWithFreshCandidates(
+      prepared,
+      storage,
+      options.overlay,
+      options.committedNotes,
+    );
     const response = fresh?.response ?? prepared.response;
     const diagnostics = fresh?.diagnostics ?? prepared.diagnostics;
     const outcome = fresh?.outcome ?? prepared.outcome;
@@ -371,10 +470,31 @@ async function commitPreparedLongTermMemorySource(
             autoApplyLowRiskOnly: true,
             rebuildIndexes: false,
             operationId: prepared.operationId,
+          }).catch((error: unknown) => {
+            // Apply drops a rewrite from an auto-apply, so this is for other refusals: it may name a note only
+            // the previous piece's still-unapplied draft creates. The draft is already written, so it waits for
+            // review instead of failing the piece.
+            if (
+              error instanceof LtmDraftApplyError &&
+              (error.code === "destructive_disposition_requires_explicit_review" ||
+                error.code === "ltm_draft_target_missing")
+            )
+              return null;
+            throw error;
           })
         : null;
     const finalDraft = applyResult?.draft ?? draft;
-    return { draft: finalDraft, note, applyResult, response, diagnostics, outcome, accounting, reviewRequired };
+    return {
+      draft: finalDraft,
+      note,
+      fingerprintPersisted,
+      applyResult,
+      response,
+      diagnostics,
+      outcome,
+      accounting,
+      reviewRequired,
+    };
   });
 }
 
@@ -384,7 +504,7 @@ export async function processLongTermMemorySource(options: PrepareOptions & { ap
     root: options.root,
     applyLowRisk: options.applyLowRisk,
   });
-  if (committed.applyResult?.appliedMutationIds.length) await rebuildAfterSourceExtraction(options.root);
+  if (committed.applyResult?.appliedMutationIds.length) scheduleLongTermMemoryIndexRebuild(options.root);
   return {
     operationId: prepared.operationId,
     draft: committed.draft,
@@ -405,7 +525,14 @@ function failed(
   isCancelled: boolean,
   prepared?: PreparedSource,
 ): LtmImportedSourceResult {
-  const message = error instanceof Error ? error.message : `Failed to ${stage} imported source`,
+  // An unexpected failure's message can carry file paths or library internals, so it stays in the server log.
+  const unexpected = !isCancelled && !(error instanceof LtmServiceError);
+  if (unexpected) logger.error(error, "[ltm] Failed to %s imported source %s", stage, item.sourceId);
+  const message = unexpected
+      ? `Failed to ${stage} imported source. Details are in the server log.`
+      : error instanceof Error
+        ? error.message
+        : `Failed to ${stage} imported source`,
     base = {
       sourceId: item.sourceId,
       title: item.title,
@@ -468,107 +595,133 @@ export async function processLongTermMemorySourceBatch(options: {
   concurrency: number;
   root: string;
   chatId?: string;
-  directGameMode?: boolean;
 }) {
-  const preparedResults: Array<
+  type Outcome =
     | { state: "prepared"; item: ImportedSourceItem; prepared: PreparedSource }
     | { state: "failed"; result: LtmImportedSourceResult }
-    | undefined
-  > = new Array(options.items.length);
-  let deterministicSnapshot: Promise<LtmNote[]> | undefined;
-  let next = 0;
-  await Promise.all(
-    Array.from({ length: Math.min(Math.max(options.concurrency, 1), options.items.length) }, async () => {
-      while (next < options.items.length) {
-        const index = next++,
-          item = options.items[index]!,
-          directGameMode = Boolean(options.directGameMode && item.deterministicSourceText);
-        try {
-          preparedResults[index] = {
-            state: "prepared",
-            item,
-            prepared: await prepareLongTermMemorySource({
-              sourceNote: item.note,
-              languageModel: options.languageModel,
-              mode: options.mode,
-              modes: options.modes,
-              extractionMode: item.extractionMode,
-              instruction: options.instruction,
-              operationId: options.operationId,
-              signal: options.signal,
-              root: options.root,
-              chatId: options.chatId,
-              directGameMode,
-              directSourceText: item.deterministicSourceText,
-              existingNotes: directGameMode
-                ? await (deterministicSnapshot ??= new LongTermMemoryStorage(options.root).listNotes())
-                : undefined,
-            }),
-          };
-        } catch (error) {
-          preparedResults[index] = {
-            state: "failed",
-            result: failed(
-              item,
-              directGameMode ? "deterministic" : "llm",
-              "extract",
-              error,
-              cancelled(error, options.signal),
-            ),
-          };
-        }
-      }
-    }),
-  );
-  const overlay = new Map<string, LtmNote>(),
-    results: LtmImportedSourceResult[] = [];
+    | { state: "committed"; result: LtmImportedSourceResult };
+  const outcomes: Array<Outcome | undefined> = new Array(options.items.length);
+  const overlay = new Map<string, LtmNote>();
   // Only applied mutations change indexed memories; a draft left for review or a source refresh does not.
   let hasAppliedMutations = false;
-  // Hold one vault lock across the ordered commit loop: the shared overlay carries this batch's
-  // projections, so an independent write landing between items could otherwise make it stale
-  // against the vault at the next item's commit-time reconciliation. The lock is reentrant, so each
-  // commit reuses it; the post-batch index rebuild stays outside and runs after release.
-  await withLtmVaultLock(new LongTermMemoryStorage(options.root).root, async () => {
-    for (const entry of preparedResults) {
-      if (!entry) continue;
-      if (entry.state === "failed") {
-        results.push(entry.result);
-        continue;
-      }
-      const { item, prepared } = entry;
-      try {
-        throwIfAborted(options.signal);
-        const committed = await commitPreparedLongTermMemorySource(prepared, {
-          root: options.root,
-          overlay,
-          applyLowRisk: options.applyLowRisk,
-        });
-        hasAppliedMutations ||= (committed.applyResult?.appliedMutationIds.length ?? 0) > 0;
-        // extractionStatus and retryable both follow outcome.incomplete, which the union type cannot see.
-        results.push({
-          sourceId: item.sourceId,
-          title: item.title,
-          note: committed.note,
-          created: item.created,
-          sourceWriteStatus: item.created ? "created" : "refreshed",
-          extractionMode: item.extractionMode,
-          extractionStatus: committed.outcome.incomplete === true ? "incomplete" : "succeeded",
-          extractionMethod: prepared.extractionMethod,
-          retryable: committed.outcome.incomplete === true,
-          draft: committed.draft,
-          diagnostics: committed.diagnostics,
-          outcome: committed.outcome,
-          accounting: committed.accounting,
-          appliedMutationIds: committed.applyResult?.appliedMutationIds ?? [],
-          skippedMutationIds: committed.applyResult?.skippedMutationIds ?? [],
-        } as LtmImportedSourceResult);
-      } catch (error) {
-        results.push(
-          failed(item, prepared.extractionMethod, "finalize", error, cancelled(error, options.signal), prepared),
-        );
-      }
+  const storage = new LongTermMemoryStorage(options.root);
+  const committedNotes = batchCommittedNotes(storage);
+  let deterministicSnapshot: Promise<LtmNote[]> | undefined;
+  const commitItem = async (item: ImportedSourceItem, prepared: PreparedSource): Promise<LtmImportedSourceResult> => {
+    try {
+      throwIfAborted(options.signal);
+      const committed = await commitPreparedLongTermMemorySource(prepared, {
+        root: options.root,
+        overlay,
+        applyLowRisk: options.applyLowRisk,
+        committedNotes,
+      });
+      hasAppliedMutations ||= (committed.applyResult?.appliedMutationIds.length ?? 0) > 0;
+      // extractionStatus and retryable both follow outcome.incomplete, which the union type cannot see.
+      return {
+        sourceId: item.sourceId,
+        title: item.title,
+        note: committed.note,
+        created: item.created,
+        sourceWriteStatus: item.created ? "created" : "refreshed",
+        extractionMode: item.extractionMode,
+        extractionStatus: committed.outcome.incomplete === true ? "incomplete" : "succeeded",
+        extractionMethod: prepared.extractionMethod,
+        retryable: committed.outcome.incomplete === true,
+        draft: committed.draft,
+        diagnostics: committed.diagnostics,
+        outcome: committed.outcome,
+        accounting: committed.accounting,
+        appliedMutationIds: committed.applyResult?.appliedMutationIds ?? [],
+        skippedMutationIds: committed.applyResult?.skippedMutationIds ?? [],
+        markedCurrent: committed.fingerprintPersisted,
+      } as LtmImportedSourceResult;
+    } catch (error) {
+      return failed(item, prepared.extractionMethod, "finalize", error, cancelled(error, options.signal), prepared);
     }
+  };
+  // A chat piece extracts after the piece before it, so that piece's committed events and threads are known: the
+  // pieces of one chat form a chain that prepares and commits in order, while separate chains run in parallel.
+  const indexBySourceNote = new Map(options.items.map((item, index) => [item.note.id, index]));
+  const followers = new Map<number, number>();
+  options.items.forEach((item, index) => {
+    const before = item.previousPiece ? indexBySourceNote.get(item.previousPiece.sourceNoteId) : undefined;
+    if (before !== undefined && before !== index && !followers.has(before)) followers.set(before, index);
   });
-  if (hasAppliedMutations) await rebuildAfterSourceExtraction(options.root);
-  return results;
+  const followerIndexes = new Set(followers.values());
+  const heads = options.items.flatMap((_, index) => (followerIndexes.has(index) ? [] : [index]));
+  let next = 0;
+  try {
+    await Promise.all(
+      Array.from({ length: Math.min(Math.max(options.concurrency, 1), heads.length) }, async () => {
+        while (next < heads.length) {
+          for (let index: number | undefined = heads[next++]; index !== undefined; index = followers.get(index)) {
+            const item = options.items[index]!,
+              directGameMode = Boolean(item.deterministicSourceText);
+            try {
+              const prepared = await prepareLongTermMemorySource({
+                sourceNote: item.note,
+                languageModel: options.languageModel,
+                mode: options.mode,
+                modes: options.modes,
+                extractionMode: item.extractionMode,
+                instruction: options.instruction,
+                operationId: options.operationId,
+                signal: options.signal,
+                root: options.root,
+                chatId: options.chatId,
+                directGameMode,
+                directSourceText: item.deterministicSourceText,
+                existingNotes: directGameMode
+                  ? await (deterministicSnapshot ??= new LongTermMemoryStorage(options.root).listNotes())
+                  : undefined,
+                previousPiece: item.previousPiece
+                  ? await previousPieceContext(
+                      item.previousPiece,
+                      item.note.destinationScope ?? item.note.scope,
+                      storage,
+                      overlay,
+                      committedNotes,
+                    )
+                  : undefined,
+              });
+              outcomes[index] = { state: "prepared", item, prepared };
+            } catch (error) {
+              outcomes[index] = {
+                state: "failed",
+                result: failed(
+                  item,
+                  directGameMode ? "deterministic" : "llm",
+                  "extract",
+                  error,
+                  cancelled(error, options.signal),
+                ),
+              };
+            }
+            const prepared = outcomes[index];
+            if (followers.has(index) && prepared?.state === "prepared")
+              outcomes[index] = { state: "committed", result: await commitItem(prepared.item, prepared.prepared) };
+          }
+        }
+      }),
+    );
+    const results: LtmImportedSourceResult[] = [];
+    // Hold one vault lock across the ordered commit loop: the shared overlay carries this batch's
+    // projections, so an independent write landing between items could otherwise make it stale
+    // against the vault at the next item's commit-time reconciliation. The lock is reentrant, so each
+    // commit reuses it; the post-batch index rebuild stays outside and runs after release.
+    // ponytail: a chat piece with a follower committed above under its own lock, so an overlay copy can go stale while
+    // the follower's model call runs. Apply's freshness check still guards the vault; to close the gap, drop overlay
+    // entries for ids committedNotes reports written.
+    await withLtmVaultLock(storage.root, async () => {
+      for (const entry of outcomes) {
+        if (!entry) continue;
+        results.push(entry.state === "prepared" ? await commitItem(entry.item, entry.prepared) : entry.result);
+      }
+    });
+    if (hasAppliedMutations) scheduleLongTermMemoryIndexRebuild(options.root);
+    return results;
+  } finally {
+    committedNotes.stop();
+  }
 }

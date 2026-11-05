@@ -21,6 +21,8 @@ export type SlurpMessagePromptInput = {
   history: SlurpMessage[];
   rapport: SlurpRapport;
   subscribed: boolean;
+  /** A paid sexting session runs: she talks at her full level, like to a subscriber. */
+  sexting?: boolean;
   dmPolicy: SlurpDmPolicy;
   isRequest: boolean;
   /** Stored conversation mood and when it was last written, so silence can heal it first. */

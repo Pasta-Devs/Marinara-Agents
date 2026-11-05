@@ -52,6 +52,7 @@ import {
 } from "../../../db/schema/slurp.js";
 import { newId, now } from "../../../utils/id-generator.js";
 import { createAppSettingsStorage } from "../../../services/storage/app-settings.storage.js";
+import { slurpDramaStageFactor } from "../world/slp-drama-storage.js";
 import { pruneSlpRefreshRuns } from "../../base/host/slp-refresh-run-retention.js";
 import { enqueueSlurpFinancial } from "../../base/host/slp-financial-queue.js";
 import {
@@ -78,6 +79,7 @@ import type {
 import { normalizeSlurpSettings } from "../../modules/settings/slp-settings.js";
 import type { SlurpSettings } from "../../modules/settings/slp-settings.js";
 import { mapAccount, snapshotForAccount, mapPost, mapInteraction } from "./slp-storage-mappers.js";
+import { slpArcsLive, slpExtensionOn, slpLiveEvents } from "../../../../../shared/src/slp/slp-extensions.js";
 
 export function createSlurpStorageContext(db: DB) {
   const settingsStore = createAppSettingsStorage(db);
@@ -299,8 +301,13 @@ export function createSlurpStorageContext(db: DB) {
     const occurrences = readSlpOccurrences(await settingsStore.get(SLP_STORY_OCCURRENCES_KEY));
     amount = Math.floor(
       amount *
-        slurpArcEffectMultiplier(await loadProjects(creatorAccountId), "earnings", settings.arcStatEffects) *
-        slurpInfluenceMultiplier(settings.platformEvents, new Date(), "economy.creator-earnings", {
+        (slpArcsLive(settings)
+          ? slurpArcEffectMultiplier(await loadProjects(creatorAccountId), "earnings", settings.arcStatEffects)
+          : 1) *
+        (slpExtensionOn(settings, "storylines")
+          ? await slurpDramaStageFactor(settingsStore, creatorAccountId, "economy.creator-earnings")
+          : 1) *
+        slurpInfluenceMultiplier(slpLiveEvents(settings), new Date(), "economy.creator-earnings", {
           occurrences,
           creator: { id: creatorAccountId },
         }),

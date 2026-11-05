@@ -17,6 +17,7 @@
     complicated: "#c084fc",
   });
   const SECTION_TITLE = "Relationship Tracker";
+  const UI_TEXT = {"ui.relationshipTracker.open":"Relationship Tracker","ui.relationshipTracker.close":"Close Relationship Tracker"};
   const SECTION_COLLAPSED_STORAGE_KEY = "marinara.relationship-tracker.trackerPanelCollapsed";
   // 24px stroke icons drawn like the Lucide icons on the Engine's built-in tracker sections.
   const svgIcon = (paths, size) => `<svg viewBox="0 0 24 24" width="24" height="24" style="width:${size};height:${size}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${paths}</svg>`;
@@ -250,6 +251,7 @@
       this._historyRequestToken = 0;
       this._statusGeneration = 0;
       this._statusTimer = null;
+      this._mobileDialog = null;
       this.onCapabilityProps = () => this.syncProps();
     }
 
@@ -268,6 +270,7 @@
     }
 
     disconnectedCallback() {
+      this.closeMobileTracker(false);
       this.removeEventListener("marinara-capability-props", this.onCapabilityProps);
       this._requestToken += 1;
       this._historyRequestToken += 1;
@@ -285,6 +288,7 @@
     syncProps() {
       const chatId = this.currentChatId();
       if (this._panel.chatId !== chatId) {
+        this.closeMobileTracker(false);
         this._panel = { chatId, status: chatId ? "loading" : "idle", value: null, portraits: {}, error: "" };
         this._historyRequestToken += 1;
         this._history = this.emptyHistoryState(chatId);
@@ -427,7 +431,7 @@
     // The desktop Trackers window wraps each tracker in a drawer that already shows its title and
     // collapse arrow, as it does for built-in trackers; only the Tracker Panel needs this header.
     hostProvidesHeader() {
-      return Boolean(this.closest?.(".mari-drawer__body"));
+      return Boolean(this.closest?.(".mari-drawer__body, [data-relationship-sheet-body]"));
     }
 
     async loadPortrait(characterId) {
@@ -1408,6 +1412,25 @@
 
     renderToolbar() {
       const hostClass = typeof this._props?.toolbarButtonClass === "string" ? this._props.toolbarButtonClass.trim() : "";
+      if (this._props?.mobileCompact) {
+        // Keep the launcher and open native dialog mounted across asynchronous panel/status renders.
+        if (!this.querySelector("[data-mobile-tracker]")) {
+          this.shadowRoot.innerHTML = `<style>
+            :host { display: contents; }
+            dialog { box-sizing: border-box; width: min(40rem, calc(100vw - 1rem)); max-height: calc(100dvh - 1rem); margin: auto auto 0.5rem; padding: 0; border: 1px solid var(--border, #52525b); border-radius: 1rem; background: var(--card, #27272a); color: var(--foreground, #f5f5f5); font: inherit; }
+            dialog::backdrop { background: rgb(15 12 24 / 65%); }
+            .mobile-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.75rem 1rem; border-bottom: 1px solid var(--border, #52525b); }
+            h2 { margin: 0; font-size: 1rem; }
+            .mobile-close { min-width: 44px; min-height: 44px; border: 0; border-radius: 0.5rem; background: var(--muted, #3f3f46); color: inherit; font: inherit; }
+            .mobile-body { max-height: calc(100dvh - 6rem); overflow: auto; overscroll-behavior: contain; }
+          </style><slot></slot>`;
+          this.innerHTML = `<button type="button" class="${escapeHtml(hostClass)}" data-mobile-tracker aria-label="${escapeHtml(UI_TEXT["ui.relationshipTracker.open"])}" aria-haspopup="dialog" aria-expanded="false" style="min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center">${svgIcon(WEB_ICON_PATHS, "0.875rem")}</button>`;
+          this.querySelector("[data-mobile-tracker]").addEventListener("click", () => this.openMobileTracker());
+        }
+        if (this._mobileDialog) this._mobileDialog.querySelector(TAG_NAME).capabilityProps = this._props;
+        return;
+      }
+      this.closeMobileTracker(false);
       if (hostClass) {
         // Wear the host's chat-widget button class like other packages' controls. Host classes style only light
         // DOM, so the tile is slotted. It has no action of its own: presses pass through, so in the Trackers
@@ -1426,8 +1449,59 @@
       `;
     }
 
+    openMobileTracker() {
+      if (this._mobileDialog || !this.isConnected || !this._props?.mobileCompact) return;
+      const dialog = document.createElement("dialog");
+      if (typeof dialog.showModal !== "function") return;
+      dialog.setAttribute("aria-labelledby", "mobile-tracker-title");
+      dialog.innerHTML = `<div class="mobile-header"><h2 id="mobile-tracker-title">${SECTION_TITLE}</h2><button type="button" class="mobile-close" aria-label="${escapeHtml(UI_TEXT["ui.relationshipTracker.close"])}" autofocus>×</button></div><div class="mobile-body" data-relationship-sheet-body></div>`;
+      dialog.querySelector(".mobile-close").addEventListener("click", () => this.closeMobileTracker());
+      dialog.addEventListener("close", () => {
+        if (this._mobileDialog === dialog) this.closeMobileTracker();
+      });
+      dialog.addEventListener("click", (event) => {
+        if (event.target !== dialog) return;
+        const rect = dialog.getBoundingClientRect();
+        if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) this.closeMobileTracker();
+      });
+      this.shadowRoot.append(dialog);
+      try {
+        dialog.showModal();
+      } catch {
+        dialog.remove();
+        return;
+      }
+      if (!dialog.isConnected || !dialog.open) {
+        dialog.remove();
+        return;
+      }
+      // Do not connect a polling tracker or commit launcher state until presentation succeeds.
+      this._mobileDialog = dialog;
+      const tracker = document.createElement(TAG_NAME);
+      tracker.setAttribute("view", "tracker");
+      tracker.capabilityProps = this._props;
+      dialog.querySelector(".mobile-body").append(tracker);
+      this.querySelector("[data-mobile-tracker]").setAttribute("aria-expanded", "true");
+    }
+
+    closeMobileTracker(restoreFocus = true) {
+      const dialog = this._mobileDialog;
+      if (!dialog) return;
+      this._mobileDialog = null;
+      try {
+        if (typeof dialog.close === "function") dialog.close();
+      } catch {
+        // A platform failure must not leave the child view or its polling connected.
+      }
+      dialog.remove(); // Disconnect the existing tracker view and its status polling too.
+      const launcher = this.querySelector("[data-mobile-tracker]");
+      launcher?.setAttribute("aria-expanded", "false");
+      if (restoreFocus && this.isConnected) launcher?.focus();
+    }
+
     render() {
       const view = this.getAttribute("view");
+      if (view !== "toolbar") this.closeMobileTracker(false);
       if (view === "toolbar") {
         this.renderToolbar();
         return;

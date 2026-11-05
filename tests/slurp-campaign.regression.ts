@@ -104,4 +104,12 @@ assert.match(storage, /const at = \(input\.dueAt \?\? input\.at\)\.getTime\(\);/
 assert.match(storage, /await closeSlurpCampaign\(db, String\(campaign\.id\), "cancelled", at\);/u);
 assert.match(storage, /if \(!slurpCampaignStageCanMove\(stage\.status, to\)\) return false;/u);
 
+// One slot opens one campaign: the plan runs again on every poll until the slot fills (prod: 34 campaigns for one slot).
+assert.match(storage, /eq\(slurpContentCampaignStages\.opportunityId, input\.opportunityId\)/u);
+// The reserve stops at the same count the reconcile caps at, so it no longer adds a slot that is discarded a minute later.
+assert.match(
+  slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/feed/reserve/slp-reserve-operation.ts"),
+  /\.length >= settings\.postsPerDay\)\s*return "covered";/u,
+);
+
 console.log("slurp campaign regression checks passed");

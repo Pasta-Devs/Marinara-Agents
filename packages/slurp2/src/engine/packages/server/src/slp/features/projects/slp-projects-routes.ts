@@ -30,11 +30,14 @@ import { protectCreatorGeneratedIdentity, type PublicIdentity } from "../../base
 import { resolveNoodlerPublicIdentity } from "../feed/slp-feed-contract.js";
 import { isSlurpViewerActorAccount } from "../../modules/settings/slp-settings.js";
 import { generateSlurpArc, SlurpArcGenerationFailure } from "./slp-arc-generation-service.js";
+import { SLP_STORYLINES_OFF, slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
 export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   const { creatorBelongsToViewer, noodle, resolveViewerPersona } = deps;
+  // Storylines off: nothing new starts or moves on; ending, editing and deleting still work.
+  const storylinesOff = async () => !slpExtensionOn(await noodle.getSettings(), "storylines");
   app.post("/arc-library/:id/reset", async (req, reply) => {
     const settings = await noodle.resetArcType((req.params as { id: string }).id);
     return settings ?? reply.code(404).send({ error: "Not a built-in arc type." });
@@ -103,6 +106,7 @@ export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps
 
   /** Open a project. Refused past the active limit rather than opening one that would never post. */
   app.post("/slurp/accounts/:id/projects", async (req, reply) => {
+    if (await storylinesOff()) return reply.code(409).send({ error: SLP_STORYLINES_OFF });
     const parsed = z
       .object({
         personaId: z.string().trim().min(1),
@@ -208,6 +212,7 @@ export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps
    * 403 while `arcDirectorMode` is off, so the arcs run by themselves unless directing is on.
    */
   app.post("/slurp/accounts/:id/projects/:projectId/director", async (req, reply) => {
+    if (await storylinesOff()) return reply.code(409).send({ error: SLP_STORYLINES_OFF });
     const parsed = z
       .object({
         personaId: z.string().trim().min(1),
@@ -389,6 +394,7 @@ export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps
 
   /** Ask the model for an arc for this Creator. It is stored as a suggestion for the player to review. */
   app.post("/slurp/accounts/:id/projects/generate", async (req, reply) => {
+    if (await storylinesOff()) return reply.code(409).send({ error: SLP_STORYLINES_OFF });
     const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
@@ -411,6 +417,7 @@ export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps
 
   /** Generate an unsaved Arc Library draft from a player brief. */
   app.post("/slurp/accounts/:id/arc-library/generate", async (req, reply) => {
+    if (await storylinesOff()) return reply.code(409).send({ error: SLP_STORYLINES_OFF });
     const parsed = z
       .object({ personaId: z.string().trim().min(1), brief: z.string().trim().min(1).max(2_000) })
       .safeParse(req.body ?? {});

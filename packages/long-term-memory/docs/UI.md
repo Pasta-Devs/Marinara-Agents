@@ -8,23 +8,24 @@ visual and accessibility rules, and `ARCHITECTURE.md` for server and data flow.
 
 `LongTermMemoryDetail.tsx` owns the capability shell, destination changes,
 activation, vault-health feedback, recovery handoffs, and dirty navigation
-guards; `Onboarding.tsx` owns the setup guide. The shell's destinations are lazy-loaded:
+guards; `Onboarding.tsx` owns the setup guide. The shell's four destinations and
+the separate Chat Settings entry:
 
 | Surface | Owner | User task |
 | --- | --- | --- |
 | Memory Vault | `vault/MemoryVault.tsx` | Browse, search, filter, edit, link, archive, restore, and manage memory availability. |
 | Review Queue | `review/ReviewQueue.tsx` | Inspect evidence, edit or preflight proposed mutations, then accept or skip them. |
 | Sources | `sources/SourcesWorkspace.tsx` | Select source and destination scopes; import, refresh, re-extract, cancel, and inspect source results. |
-| Memory Settings | `settings/MemorySettings.tsx` | Configure extraction and retention, repair indexes or identities, and inspect activity. |
-| Chat Settings | `ChatSettings.tsx` | Set per-chat recall style, token budget, and maximum memories; inspect the last injection. |
+| Memory Settings | `settings/MemorySettings.tsx` | Configure recall and extraction, run maintenance (index and identity repair, backup, reset, delete all data), and inspect activity. |
+| Chat Settings | `ChatSettings.tsx` | Set per-chat recall style, token budget, maximum memories and how memories from the chat get in; see what background import did today and what waits for review; inspect the last injection. |
 
 Each screen lives in its own folder (`vault/`, `review/`, `sources/`, `settings/`)
 with the components cut out of it; modules shared across screens stay at the
 feature root.
 
 `LongTermMemoryNavigation.tsx` owns the four destination buttons and their
-memory, review, and source-task status badges. `settings/ActivityView.tsx` is opened
-from Memory Settings rather than being a fifth destination.
+memory, review, and source-task status badges. `settings/ActivityView.tsx` is the
+Debug tab of Memory Settings rather than a fifth destination.
 
 ## Navigation Contract
 
@@ -37,14 +38,32 @@ dirty surface -> save / discard / stay decision -> destination changes or remain
 ```
 
 Opening a memory, review item, source target, activity view, or the Agents
-panel uses the same guard. A successful navigation clears the relevant stale
-selection and closes transient menus. Save and discard decisions restore focus
+panel uses the same guard. The in-page dialog names the destination ("Save your
+changes before opening X, or discard them."); the `confirm()` fallback uses the
+same nouns and the "Discard and continue" verb. A successful navigation clears
+the relevant stale selection and closes transient menus. Save and discard decisions restore focus
 to the control that initiated navigation.
 
 On first successful status load, onboarding opens for an empty vault. Its step
-is stored in local storage; closing it suspends at the current step, while
-completion records `complete`. Opening related chat settings or prompt editors
-suspends onboarding rather than completing it.
+is stored in local storage. The full guide shows on the Memory Vault only; on
+every other destination it is a one-line bar (`Setup guide · step N of 7`) with
+Resume, which returns to the Vault at the saved step, and Dismiss. Not now and
+Dismiss keep the saved step, so the guide returns at that step on the next
+visit; Don't show again and the last step's Done record `complete`. The Help
+button replays the guide from step 1 and goes to the Vault first. A step button
+that opens another screen, a related chat setting or a prompt editor suspends
+onboarding at the current step into the bar rather than completing it; steps
+that open Sources use the source type chosen in step 4. Step 3 (Activate) asks
+"How should memories get in?" with the three Memories from chats choices as
+pressed buttons and an "After a reply" sample. A new setup (empty vault, choice
+still I add them myself) starts on Save them for me; an existing one shows its
+stored choice. Pressing a choice saves it, and moving on from step 3 saves the
+choice it shows.
+Step 4 (Import) and step 7 (You're Set Up) follow that choice: when the choice
+collects new messages (Collect them, I'll review or Save them for me) the import
+step says new messages are already being collected, and step 7 says what waits
+for you or is saved on its own; I add them myself keeps the plain import and
+setup wording.
 
 ## Responsive Contract
 
@@ -62,13 +81,71 @@ Pane state belongs to each destination. Pane tabs use `ArrowLeft`, `ArrowRight`,
 Disabled panes are excluded from the tab sequence. The destination rail becomes
 the mobile bottom navigation; reduced-motion behavior is defined in `DESIGN.md`.
 
+Layout inside a destination also follows container width, so a narrow panel on
+a wide window gets the phone layout. Below `48rem` of workspace, Vault and Sources
+row actions collapse into a menu, the Review batch bar and the Sources lorebook
+bar stick to the top while rows scroll, and the flat source bar sticks to the
+bottom; from `48rem` they sit in the flow. Review rows never use a menu: their
+commit control shows the text "Check", then "Apply" once the check passes,
+from `40rem`, and below it keeps the icon with a Ready or Blocked chip under
+it. Review also widens its fields and padding from `40rem`. Review draws one progress line, in the
+navigator below `48rem` and in the workbench from it, and puts the run summary at the top of the
+workbench while rows are listed (above the pane tabs once the queue is empty), as a warning while a
+change is ready to apply. The Sources scope row stacks until
+its destination container reaches `40rem`. Vault note title and status share a
+row from a `28rem` workbench, and the Vault list scrolls on its own from `48rem`.
+Memory Settings puts its four section tabs, its recall field pairs, its three
+active-template pickers and its activity detail pairs in one row from a `40rem`
+settings container. The header's add action keeps its `2.75rem` target and drops
+its label, and the Vault health pill hides, below `48rem` of the detail surface;
+the health pill's detail text appears from `40rem`. Below `48rem` the header
+tightens its gaps and padding and the activation switch keeps a `3rem` minimum
+width; below `22.5rem` it also hides the icon tile. The setup guide pads more
+from `40rem` and puts its illustration beside the text from `48rem` of its own
+container, which also picks the setup guide's sprite (the phone sprite below
+`48rem`, the wide one from it, both at whole-pixel scale). The detail header's
+icon shrinks and the content padding drops to `1rem` below `48rem` of the detail
+container, not of the window. The destination tabs, the availability tabs and
+their rows keep `2.75rem` against the Engine's `2.25rem` tab height. Chat
+Settings keeps the host drawer's own control sizes as named exceptions: the
+recall-style select (`min-h-8`) and the number fields (`compactInputClass`,
+`min-h-9`) match the drawer's neighbouring fields, and the compact Retry
+(`min-h-7`) matches its action floor. The Vault and Debug lists cap at the window height minus `12rem`
+(`dvh`, with a `vh` fallback and a `10rem` floor), so a zoomed or short window
+scrolls the list instead of the page.
+
 ## Workflow Contracts
 
 ### Memory Vault
 
 The navigator resolves scope targets before loading notes. Search, status,
 source-only, and sort filters apply to the visible note list; clearing filters
-does not change the selected scope. The workbench distinguishes read-only
+does not change the selected scope. Each type group renders at most 100 rows;
+Show more adds the next 100 and moves focus to the first row it added. Group
+counts, the shown total, search, and Select visible still cover every memory,
+and a new search, filter, sort, or place starts again at 100 rows. The
+navigator leads with the place, search, Show and Sort controls; a second place
+and the available-modes filter sit under a Refine disclosure that is closed by
+default, opens by itself while either is set, and names what is active when
+closed. With memories checked, the bulk rail is Edit selected…, then Archive and
+Delete set apart; Edit selected… opens one sheet for status, modes and
+availability that previews the outcome per memory and applies as one request.
+Under "What Apply will do" a polite summary counts ready, unchanged and blocked
+memories; Apply changes the ready ones and skips the rest, which stay selected.
+Apply appears in the header and under the list, stays focusable when off
+(`aria-disabled`, guarded handler) and names the reason beside it.
+Save in the memory header works the same way: it keeps its label and primary
+tone, stays focusable while off or running, and a polite status beside it says
+Saving or Saved until the next edit. A save whose recall index rebuild is
+deferred is a warning ("Saved. Recall will catch up…"), not a danger error,
+because the memory is saved.
+The open memory's row carries the primary wash, a left-edge bar and
+`aria-current="true"` on its button, so it is marked beyond colour.
+The memory's side panel is called Memory info wherever it opens: the toggle in the
+memory header (`aria-pressed`, no `aria-label`, so its accessible name is its visible
+label) and the narrow-layout pane tab. Its first section is named for what it holds,
+Keywords and links.
+The workbench distinguishes read-only
 source notes from editable memories and keeps validation, evidence, freshness,
 confidence, subjects, links, keywords, and availability visible as applicable.
 Archive supports undo. Destructive actions and navigation away from edits use
@@ -87,17 +164,109 @@ rejected-suggestion cleanup preserve access to relevant diagnostics.
 Import and refresh require a source scope and a destination scope. Source and
 destination target pickers support search, pinned current targets, grouped
 target kinds, keyboard selection, and explicit capacity/validation feedback.
+Place pickers and the destination rail render 100 places per list or memory
+group, with a Show more row for the rest. The source search waits for a pause
+in typing and keeps the current rows, marked busy, until its results arrive.
 Long-running source tasks expose running, completed, cancelled, partial-failure,
 and failed states through the Sources navigation and workspace feedback. A
 running task can be cancelled and its latest result can be revisited.
+The Chat Messages tab imports a chat's own messages in pieces of up to 24,000
+characters, or 12,000 when the Extraction setting Chat import detail is
+Detailed. Each chat keeps the piece size of its first import, and a branch
+never imported uses its chat's size. When the selected chat also has summaries,
+it says that importing both can repeat memories in review. A chat with branches
+adds a Branch menu (this branch, each other branch, All branches); it filters
+the list to a branch's history, and the destination stays the whole chat.
+The Extraction setting Hide remembered messages from the AI (off by default)
+hides each extracted piece's messages from the chat's prompt, except the last
+messages the chat's summary keeps (10 when unset). It records only the messages
+it hid; turning it off or permanently deleting a piece's source note shows
+those again, archiving keeps them hidden, and a message shown or hidden by hand
+stays as set. A branch copies the hidden state, and those copies are not
+recorded, so turning it off leaves them hidden. A piece not hidden yet whose
+source note has a proposal waiting in the Review Queue keeps its messages until
+that draft is accepted, skipped or deleted; then Hide runs again for that piece
+(messages already hidden stay hidden through a later re-extract; a branch
+sharing the piece hides on its own next import). On an Engine without the host
+call the toggle is disabled with a note.
+When the unsearched first page finds imported notes whose character, lorebook
+entry, chat summary or message piece no longer exists, a "Source gone (N)" group
+above the source tabs lists them. Each row opens the memory or removes it with
+its source (the usual delete confirmation); leaving a row alone keeps the
+memory and lists it again on the next preview. Searching hides the group.
+
+The Extraction tab starts with Memories from chats, one select on its own row
+with three choices: I add them myself (nothing is imported in the background),
+Collect them, I'll review (background import, every proposal waits in the
+Review Queue) and Save them for me (background import, low-risk proposals are
+accepted). The choice is stored as the two extraction settings
+`autoImportChatSources` and `autoAcceptSafeChanges`; import off with accept on
+shows as I add them myself, and the next save writes accept off. Its hint says
+chats use this unless they choose otherwise, and an "After a reply" sample (a small label over the same status line, with example numbers) shows
+what the choice does. Accepting low-risk proposals covers new notes and
+additions with no conflicts; rewrites, status changes, shared memories and
+anything with warnings wait in the Review Queue, and a draft that mixes them
+applies its safe part and keeps the rest pending. A Sources import follows the
+global choice, or the chat's own choice when the import comes from one chat that
+has one. Background import brings in each chat's new or changed summaries and
+finished message pieces a couple of seconds after the chat's latest generation
+starts and never the piece still being written, and each run is an "Imported
+automatically" row in Activity. A selection whose import failed is not retried
+until a source or the extraction connection changes.
+When background import is on and has no extraction connection, Extraction shows a warning
+(`StatusSurface` warning tone) with a Choose button that focuses the connection field; the same
+warning appears in Chat Settings, where Choose opens Extraction with that field focused. The warning
+shows only while the newest background import of either source (chats or messages) ended for lack
+of a language model: Automatic borrows the chat's own connection, so it stays hidden until a run
+actually fails, and a later run of that source that works clears it. Extraction looks at every chat's
+runs; Chat Settings looks at the open chat's runs. Both read the newest 1000 import Activity rows.
 
 ### Settings and Chat Settings
 
 Global settings and per-chat settings are distinct. Chat Settings shows whether
 values inherit global defaults, disables edits when the host owns settings, and
-shows last-injection loading, error, retry, and result states. Memory Settings
-groups extraction, retention, maintenance, identity repair, and activity; repair
-actions report their result without hiding vault-health warnings.
+shows last-injection loading, error, retry, and result states. Memories from this chat
+picks one of the three Memories from chats choices for the open chat; it shows the global
+choice with the Global default chip until the chat has its own, then a "Use global default"
+button clears it. The Engine passes only the recall keys to Chat Settings, so the panel reads
+the chat's choice from `GET /chat-memories/:chatId` and writes it through the host's chat
+settings change. Memories from this chat is the first field, followed by one status line
+(`ChatMemoriesStatusLine` in `chat-memories.tsx`, shared with the "After a reply" sample). Save them
+for me shows a check with "N saved today" in `--ltm-success` (also at 0), then a "·" and a clock with
+"N waits for you" when something waits; Collect them, I'll review shows only the waiting part, since
+nothing saves on its own, and with nothing waiting says "Watching this chat · nothing new yet"; I add them myself
+says "Nothing is added on its own" with an Import button that opens Sources. The first count adds up
+the memories the chat's `auto_import` Activity rows applied since local midnight, the second is the
+chat's pending drafts. Review (shown only when something waits) opens the Review Queue (it has no
+per-chat filter); Chat Settings is a separate host view, so Review and Import leave a short-lived open
+request (`auto-import-status.ts`) that the detail view reads when it opens. There is no "reading your
+latest messages" state: the Activity rows load once and carry no live signal for a run in progress.
+It keeps one short explanation above the recall controls; the Recall style info popover lists every style
+and marks the current one. While the global defaults have not arrived, an
+inherited value shows "Loading default…" (or "Default unavailable" after a
+failed load) instead of an invented number, and the controls stay usable. Memory Settings
+has Recall, Extraction, Maintenance, and Debug tabs; Recall is grouped under Budget, Ranking, Text filters, and
+Sharing headings (Sharing lists the Agents that read or added memories in a table under both switches: last read, reads this week, memories returned this week and memories added this week, counted from the Debug activity log), names the four weights in plain words (Meaning match, Exact words match, Linked memories
+match, Stored keywords match; the help keeps "graph weight" and "keyword weight"), and shows "Custom (edited
+weights)" with a Reset to preset button beside the style once an edited weight has flipped it to Custom (the
+button returns to the last named style, Balanced if none); Maintenance holds Backup (export, choose backup), Repair (integrity, selected repairs;
+identity repair follows as its own section), and Delete or reset (Reset settings in warning tone, Delete all data
+in destructive tone; Delete all first offers "Export a backup first", then the host
+confirmation), and Debug is the activity view. Repair actions
+report their result without hiding vault-health warnings. Unsaved edits show a dot on the tab that holds them
+(spoken as "unsaved changes") and keep Save and Discard in a header row that sticks to the top of the scrolling
+form. A finished identity repair names the backup it saved first (the first eight characters of its id, in the
+`long-term-memory-identity-repairs` backups folder); there is no restore button, so restoring is manual.
+Success messages (`StatusSurface` with the success tone) use the `--ltm-success` token (the accent mixed toward
+the editor text, measured at no less than 10.0:1 in the light and 9.1:1 in the dark default theme) and a check
+icon, never the bare accent color.
+A result that appears after an action (Debug export and clear, each Maintenance group, the source workbench preview
+summary and run result) is read out from a region that is always mounted: `LiveResult` keeps a hidden `role="status"` copy in the
+page and shows the visible `StatusSurface` without its own live role, so one action speaks once (a failure is read politely, not as an alert). A live region that
+mounts together with its text is often not announced. Loading placeholders and spinners carry `motion-reduce:animate-none`. Counts use the One/Other catalog keys with
+`selectLtmPluralForm`, name lists go through `Intl.ListFormat`, and stored codes map to catalog labels instead of
+`replaceAll("_", " ")`. Add section refuses an empty key (a name with no letters A-Z or numbers) or a duplicate on
+the name field itself: the reason is linked with `aria-describedby` and focus returns to the field.
 
 Debug operation details lead with recorded problems and guidance, then extraction,
 recall, or apply outcomes before diagnostic facts and the timeline. Dropped
@@ -118,7 +287,26 @@ Keep these states distinct in UI changes:
 - blocked mutation versus failed mutation
 - unsaved changes versus saved navigation
 - index building, degraded, stale, corrupt, and failed health
+- status load failed (Retry beside the error, no health pill; the setup guide waits for a read that succeeds, because the vault count is unknown)
+- lexical-recall-only warning (its own Reindex recall button, reachable by keyboard)
 - source task running, cancelled, completed, and completed with failures
+
+A control that starts work stays focusable while the work runs: spread
+`lockedActionProps(locked, reasonId?)` from `shared-controls.tsx` (`aria-disabled`, plus
+`aria-describedby` for a reason line; `Button` and `IconButton` dim on `aria-disabled`
+themselves) and make its handler return early, because Enter and Space still fire
+`onClick` and a submit button still submits (see the activation switch, Reindex, Chat
+Settings, Maintenance and the Debug toolbar). The same holds in the Vault and Review:
+availability Save and Cancel, the rename dialog, and the Review source, re-extract,
+clear-rejected, Retry and delete controls stay focusable while they run. While identity
+edits are unsaved, the source select, rejected count, re-extract and clear-rejected share
+one linked reason ("Save or discard identity edits first."), and a stale or blocked change
+names why Apply is unavailable on its row, even when the row is collapsed. In Sources a running task of
+any kind holds one lock: Import, Refresh, Re-import, Re-extract (rows, inspector and Retry), the source
+picker and the Manage operations stay focusable, point at the always-mounted lock line ("Locked while an
+import runs" or "...a re-extract runs"), and send nothing on Enter. Native `disabled` is for permanent
+unavailability, such as a host that owns the setting, or input validity such as an empty
+name or nothing selected, because it drops keyboard focus.
 
 Every failure state needs its existing retry or recovery path where one exists.
 Status and alert semantics, focus behavior, touch targets, labels, and reduced

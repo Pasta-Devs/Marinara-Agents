@@ -1,6 +1,7 @@
 import type { DB } from "../../../db/connection.js";
 import { logger } from "../../../lib/logger.js";
 import { newId } from "../../../utils/id-generator.js";
+import { slpImageRetryable } from "../../base/media/slp-image-retry.js";
 import { slpIsAdmissionFailure } from "../../base/host/slp-admission.js";
 import { slurpDeepDetailsImageRunRecorder } from "../../data/feed/slp-post-deep-details-storage.js";
 import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
@@ -144,6 +145,7 @@ export async function finishSlurpPostImage<T>(input: {
           imagePrompt: prompt,
           metadata: {
             imageGenerationFailed: true,
+            imageGenerationRetryable: slpImageRetryable(err),
             imageRetryAttempts: 1,
             imageGenerationError: getErrorMessage(err).slice(0, 500),
           },
@@ -184,6 +186,7 @@ export async function finishSlurpPostImage<T>(input: {
         imagePrompt: prompt,
         metadata: {
           imageGenerationFailed: true,
+          imageGenerationRetryable: slpImageRetryable(err),
           imageRetryAttempts: 1,
           imageGenerationError: getErrorMessage(err).slice(0, 500),
         },

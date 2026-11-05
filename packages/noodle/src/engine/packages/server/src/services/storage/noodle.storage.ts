@@ -56,6 +56,9 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
   showImagesToWriter: true,
   enableLorebookContext: false,
   includeCharacterSchedules: false,
+  useLtmMemories: false,
+  ltmMemoriesConfirmed: false,
+  ltmMemoryRecall: "whole",
   enableEnhancedTimelineWriting: false,
   allowProfessorMari: true,
   allowRandomUsers: false,
@@ -392,6 +395,11 @@ export function createNoodleStorage(db: DB) {
       if ("imageHeight" in patch) patch.imageHeight = imageDimension(patch.imageHeight, 1536);
       if ("autoTranslatePosts" in patch) patch.autoTranslatePosts = bool(patch.autoTranslatePosts);
       if ("showImagesToWriter" in patch) patch.showImagesToWriter = bool(patch.showImagesToWriter);
+      if ("useLtmMemories" in patch) patch.useLtmMemories = bool(patch.useLtmMemories);
+      if ("ltmMemoriesConfirmed" in patch) patch.ltmMemoriesConfirmed = bool(patch.ltmMemoriesConfirmed);
+      if ("ltmMemoryRecall" in patch && patch.ltmMemoryRecall !== "whole" && patch.ltmMemoryRecall !== "relevant") {
+        delete patch.ltmMemoryRecall;
+      }
       const next = { ...(await this.getSettings()), ...patch };
       await saveSettingsRaw(next);
       const schedule = await this.getRefreshSchedule();

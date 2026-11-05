@@ -219,7 +219,8 @@ export async function rewriteSlpImagePrompt(input: {
     const maxTokens = clampGenerationMaxOutputTokens({
       provider: textConnection.provider as APIProvider,
       model: textConnection.model,
-      maxTokens: Math.max(resolveStoredMaxTokens(textConnection.defaultParameters, 4_096), 4_096),
+      // 8192: a reasoning model can think through 4096 and leave no prompt; the clamp still caps it at the model's max.
+      maxTokens: Math.max(resolveStoredMaxTokens(textConnection.defaultParameters, 8_192), 8_192),
       maxTokensOverride: textConnection.maxTokensOverride,
     });
     const result = await runtime.provider.chatComplete(messages, {

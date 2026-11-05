@@ -16,6 +16,8 @@ import { SlpChip, SlpPrimaryButton } from "../../modules/chrome/SlpButton";
 import { SlpSheetGroup } from "../../modules/chrome/SlpSheet";
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import { SLP_DESK_NOW, SLP_DESK_OFFERABLE, type SlpActionName } from "../../../../../shared/src/slp/slp-actions.js";
+import { slpActionAllowed } from "../../../../../shared/src/slp/slp-extensions.js";
+import { useSlurpSettings } from "../settings/slp-settings-contract";
 import { SlpStirPlaySheet, slpStirWhat, useSlurpStir } from "../stir/slp-stir-contract";
 import { useAddSlurpDeskNote } from "./slp-message-action-hooks";
 import type { SlurpThreadViewModel } from "./slp-thread-actions";
@@ -28,6 +30,7 @@ export function SlpDeskToolPanel({ model, onPicked }: { model: SlurpThreadViewMo
   const { t } = useTranslation();
   const { toolTab, setDeskPick, personaId, targetCreatorAccountId } = model;
   const note = useAddSlurpDeskNote();
+  const settings = useSlurpSettings().data;
   const [text, setText] = useState("");
   if (toolTab === "note")
     return (
@@ -68,7 +71,10 @@ export function SlpDeskToolPanel({ model, onPicked }: { model: SlurpThreadViewMo
       </form>
     );
   const mode = toolTab === "offer" ? "offer" : "now";
-  const actions: readonly SlpActionName[] = mode === "offer" ? SLP_DESK_OFFERABLE : SLP_DESK_NOW;
+  // Offers of a switched-off extension (a brand deal without Brands & ads) are not on the desk.
+  const actions = (mode === "offer" ? SLP_DESK_OFFERABLE : SLP_DESK_NOW).filter(
+    (action: SlpActionName) => !settings || slpActionAllowed(settings, action),
+  );
   return (
     <SlpSheetGroup>
       {actions.map((action) => (

@@ -27,6 +27,7 @@ import { slurpUsableSharedIdeas, type SlurpSharedIdea } from "../../modules/feed
 import { slurpLifeBeat, type SlurpLifeMomentRate } from "../../modules/feed/slp-life-moments.js";
 import { readSlurpLifeSignals } from "../../data/feed/slp-life-signals.js";
 import { planSlurpOccasionBeat } from "./slp-occasion-service.js";
+import { selectSlurpPostJob } from "../../modules/feed/slp-post-jobs.js";
 import { selectSlurpReference, slurpReferenceCandidates } from "../../modules/feed/slp-post-reference.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { resolveCreatorCharacterCanon } from "../../data/creators/slp-source-resolve.js";
@@ -36,6 +37,8 @@ import type { SlurpAccount } from "../../modules/records/slp-storage-model.js";
 import { planSlurpBondBeat, planSlurpTieBeat } from "../projects/slp-projects-contract.js";
 import { planSlurpDramaBeat } from "../world/slp-world-contract.js";
 import { planSlurpTrendBeat } from "../discovery/slp-discovery-contract.js";
+import type { loadSlurpStoryState } from "../storylines/slp-storylines-contract.js";
+import { slurpConditionBeat } from "../../modules/storylines/slp-story-state.js";
 import { readSlurpCanonAnchorState, slurpCanonAnchorsFor } from "../../data/creators/slp-canon-anchor-storage.js";
 import {
   normalizeSlurpCanonAnchors,
@@ -58,6 +61,7 @@ import {
 } from "../../modules/creators/slp-creator-schedule-context.js";
 import type { SlpAccount, SlpCreatorManagedPost } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlpCreatorNudge, SlpCreatorSteering } from "../../../../../shared/src/slp/slp-creator-steering.js";
+import { findSlpTextMentions } from "../../../../../shared/src/slp/slp-mentions.js";
 
 type SlurpBeatConnection = Parameters<typeof createSlurpPostProvider>[0]["connection"] & { model: string };
 
@@ -84,6 +88,8 @@ export type SlurpBeatContext = {
   steering?: SlpCreatorSteering | null;
   /** The player's next idea for this Creator. It is this post's beat, ahead of the arc. */
   nudge?: SlpCreatorNudge | null;
+  /** Standing conditions (docs/STORYLINES.md, "State"): their deck takes a share of ordinary slots. */
+  story?: Awaited<ReturnType<typeof loadSlurpStoryState>> | null;
   /** Day-to-day life moments: the account (for what really happened) and its tags (for what fits). */
   life?: {
     account: Pick<SlpAccount, "id" | "createdAt">;
@@ -220,6 +226,17 @@ export async function planSlurpBeat(
     });
     if (trend) return trend;
     const history = await readSlurpBeatHistory(db, input.accountId, input.at);
+    // An ordinary post gets a job; a drama, trend, occasion, tie or the player's idea has its own content.
+    const withJob = (beat: SlurpBeat): SlurpBeat => {
+      const placeFree = !beat.place && !input.context.day?.current;
+      const job = selectSlurpPostJob(input.accountId, input.sequence, read?.niches, history, {
+        heatMax: read?.heat.max,
+        placeFree,
+        avoid: input.context.steering?.avoid,
+      });
+      if (!job) return beat;
+      return { ...beat, job: job.id, ...(job.place && placeFree ? { place: job.place } : {}) };
+    };
     // A pack occasion running now (SlurpCon, a holiday, their birthday week): only one that fits them.
     const occasion = await planSlurpOccasionBeat(db, {
       accountId: input.accountId,
@@ -231,6 +248,19 @@ export async function planSlurpBeat(
       at: input.at,
     });
     if (occasion) return occasion;
+    // A small moment of what is true right now (a bump, a new flat), at the condition's share.
+    const condition = input.context.story
+      ? slurpConditionBeat({
+          creatorAccountId: input.accountId,
+          sequence: input.sequence,
+          state: input.context.story.state,
+          history,
+          intents: input.intents,
+          partner: input.context.story.partner,
+          avoid: input.context.steering?.avoid,
+        })
+      : null;
+    if (condition) return withJob(condition);
     const steered = slurpSteeredBeat(input.accountId, input.sequence, input.context.steering, read, input.intents);
     if (steered) return steered;
     // Drama bonds: now and then a friend, roommate or coworker is in the post.
@@ -257,7 +287,7 @@ export async function planSlurpBeat(
         input.context.day?.current ?? null,
         input.context.life.rate,
       );
-      if (life) return life;
+      if (life) return withJob(life);
     }
     const shared = input.shared
       ? slurpUsableSharedIdeas({ ...input.shared, usedToday: history.sharedToday ?? {} })
@@ -278,7 +308,7 @@ export async function planSlurpBeat(
       await readReferenceCandidates(db, input.accountId, input.at),
       history.recentReferences ?? [],
     );
-    return reference ? { ...beat, reference } : beat;
+    return withJob(reference ? { ...beat, reference } : beat);
   } catch (error) {
     logger.warn(error, "[slurp] Beat planning failed; this post uses the classic planner");
     return null;
@@ -445,7 +475,30 @@ async function readReferenceCandidates(db: DB, accountId: string, at: Date) {
       listSlurpContinuityFor(db, accountId, "public_post", { at }),
       listSlurpOpportunities(db, accountId, 40),
     ]);
+    const titles = new Map(posts.map((post) => [post.id, post.title]));
+    const comments = await createSlurpStorage(db)
+      .listNoodlerInteractions(posts.map((post) => post.id))
+      .catch(() => []);
+    // A fan's own top-level question; the newest ten are plenty to draw one from.
+    const questions = comments
+      .filter(
+        (entry) =>
+          entry.type === "reply" &&
+          !entry.parentInteractionId &&
+          entry.actorAccountId !== accountId &&
+          entry.actorSnapshot?.handle &&
+          entry.content?.trim().endsWith("?"),
+      )
+      .reverse()
+      .map((entry) => ({
+        id: entry.id,
+        handle: entry.actorSnapshot!.handle,
+        question: entry.content!.trim().slice(0, 200),
+        postTitle: titles.get(entry.postId) ?? null,
+        createdAt: entry.createdAt,
+      }));
     return slurpReferenceCandidates({
+      questions,
       posts,
       chatMoments: continuity.facts.filter((fact) => fact.source === "chat"),
       keptPromises: plans
@@ -490,4 +543,19 @@ export async function resolveSlurpBeatCastContext(db: DB, castIds: readonly stri
     }),
   );
   return people.filter(Boolean).join("\n\n");
+}
+
+/** Creators a post tags by @handle (the player's idea or the written post). They join its cast, so the writer
+ * knows them and the picture draws them instead of a second copy of her. */
+/** `personas: false` for a caption: "thanks @you" there does not put the player in the picture. */
+export async function resolveSlurpMentionedCast(db: DB, selfId: string, text: string, personas = true) {
+  const handles = new Set(findSlpTextMentions(text).map((mention) => mention.handle));
+  if (!handles.size) return { ids: [] as string[], names: [] as string[] };
+  const accounts = (await createSlurpStorage(db).listNoodlerAccounts()).filter(
+    (account) =>
+      account.id !== selfId &&
+      handles.has(account.handle.toLowerCase()) &&
+      (personas || account.sourceKind !== "persona"),
+  );
+  return { ids: accounts.map((account) => account.id), names: accounts.map((account) => account.displayName) };
 }

@@ -14,6 +14,9 @@ import { readSlurpDeskOffer, slurpDeskAcceptedInput } from "../../../modules/mes
 import { isSlurpViewerActorAccount } from "../../../modules/settings/slp-settings.js";
 import { slpDeskAdjust } from "../../../../../../shared/src/slp/slp-support-desk.js";
 import { SLURP_SUPPORT_ACCOUNT_ID } from "../../../../../../shared/src/slp/slp-support.js";
+import { slpExtensionOn } from "../../../../../../shared/src/slp/slp-extensions.js";
+
+export const SLP_DESK_OFF = "The Support desk is switched off in Backstage.";
 
 const personaBody = z.object({ personaId: z.string().trim().min(1), creatorAccountId: z.string().trim().min(1) });
 
@@ -21,9 +24,11 @@ export async function slpDeskRoutes(app: FastifyInstance, messaging: SlpMessages
   const { messages, ownsCreator, requireViewer, slurp } = messaging;
   // ponytail: one process; two tabs answering the same Offer at once get one run. A row claim if multi-process.
   const answering = new Set<string>();
+  const deskOff = async () => !slpExtensionOn(await slurp.getSettings(), "supportDesk");
 
   /** Every Creator the player can write to as Support, with their case file and Support thread. */
   app.get("/slurp/desk", async (req, reply) => {
+    if (await deskOff()) return reply.code(409).send({ error: SLP_DESK_OFF });
     const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await requireViewer(parsed.data.personaId);
@@ -66,6 +71,7 @@ export async function slpDeskRoutes(app: FastifyInstance, messaging: SlpMessages
 
   /** An internal note: the player's own line in the thread. Never in a prompt, never seen by the Creator. */
   app.post("/slurp/desk/note", async (req, reply) => {
+    if (await deskOff()) return reply.code(409).send({ error: SLP_DESK_OFF });
     const parsed = personaBody
       .extend({ text: z.string().trim().min(1).max(1000) })
       .strict()
@@ -86,6 +92,7 @@ export async function slpDeskRoutes(app: FastifyInstance, messaging: SlpMessages
 
   /** Support marks the open ticket resolved; the Creator answers and rates it. */
   app.post("/slurp/desk/ticket/resolve", async (req, reply) => {
+    if (await deskOff()) return reply.code(409).send({ error: SLP_DESK_OFF });
     const parsed = personaBody.strict().safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await requireViewer(parsed.data.personaId);
@@ -124,6 +131,7 @@ export async function slpDeskRoutes(app: FastifyInstance, messaging: SlpMessages
 
   /** The player, as a Creator they run, answers an Offer AI Support sent them. */
   app.post("/slurp/desk/offer/answer", async (req, reply) => {
+    if (await deskOff()) return reply.code(409).send({ error: SLP_DESK_OFF });
     const parsed = z
       .object({
         personaId: z.string().trim().min(1),

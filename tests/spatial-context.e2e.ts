@@ -805,6 +805,8 @@ async function openGameSetupMapDraftReview(
         JSON.stringify({
           state: {
             hasCompletedOnboarding: true,
+            chatHelpSeenModes: ["conversation", "roleplay", "game"],
+            chatWindowIntroDismissed: true,
             rightPanelOpen: false,
             sidebarOpen: false,
           },
@@ -919,6 +921,8 @@ test("World Maps activates inside its Tracker Agents entry", async ({ page }, te
         JSON.stringify({
           state: {
             hasCompletedOnboarding: true,
+            chatHelpSeenModes: ["conversation", "roleplay", "game"],
+            chatWindowIntroDismissed: true,
             rightPanelOpen: false,
             sidebarOpen: false,
           },
@@ -1040,6 +1044,8 @@ test("global World Maps home activates and opens the current chat map", async ({
         JSON.stringify({
           state: {
             hasCompletedOnboarding: true,
+            chatHelpSeenModes: ["conversation", "roleplay", "game"],
+            chatWindowIntroDismissed: true,
             rightPanelOpen: false,
             sidebarOpen: false,
           },
@@ -1346,6 +1352,8 @@ test("global World Maps home activates and opens the current chat map", async ({
           JSON.stringify({
             state: {
               hasCompletedOnboarding: true,
+              chatHelpSeenModes: ["conversation", "roleplay", "game"],
+              chatWindowIntroDismissed: true,
               rightPanelOpen: false,
               sidebarOpen: false,
             },
@@ -1592,7 +1600,13 @@ test("World Maps editor changes the AI connection without losing the draft", asy
       localStorage.setItem(
         "marinara-engine-ui",
         JSON.stringify({
-          state: { hasCompletedOnboarding: true, rightPanelOpen: false, sidebarOpen: false },
+          state: {
+            hasCompletedOnboarding: true,
+            chatHelpSeenModes: ["conversation", "roleplay", "game"],
+            chatWindowIntroDismissed: true,
+            rightPanelOpen: false,
+            sidebarOpen: false,
+          },
           version: 75,
         }),
       );
@@ -1702,7 +1716,13 @@ test("Map templates are created outside chats and copied into Roleplay", async (
       localStorage.setItem(
         "marinara-engine-ui",
         JSON.stringify({
-          state: { hasCompletedOnboarding: true, rightPanelOpen: false, sidebarOpen: false },
+          state: {
+            hasCompletedOnboarding: true,
+            chatHelpSeenModes: ["conversation", "roleplay", "game"],
+            chatWindowIntroDismissed: true,
+            rightPanelOpen: false,
+            sidebarOpen: false,
+          },
           version: 75,
         }),
       );
@@ -1927,7 +1947,13 @@ test("detached chat maps create distinguishable shared-world copies and expose p
       localStorage.setItem(
         "marinara-engine-ui",
         JSON.stringify({
-          state: { hasCompletedOnboarding: true, rightPanelOpen: false, sidebarOpen: false },
+          state: {
+            hasCompletedOnboarding: true,
+            chatHelpSeenModes: ["conversation", "roleplay", "game"],
+            chatWindowIntroDismissed: true,
+            rightPanelOpen: false,
+            sidebarOpen: false,
+          },
           version: 75,
         }),
       );
@@ -2001,7 +2027,13 @@ test("global World Maps home protects templates after a settings load failure", 
       localStorage.setItem(
         "marinara-engine-ui",
         JSON.stringify({
-          state: { hasCompletedOnboarding: true, rightPanelOpen: false, sidebarOpen: false },
+          state: {
+            hasCompletedOnboarding: true,
+            chatHelpSeenModes: ["conversation", "roleplay", "game"],
+            chatWindowIntroDismissed: true,
+            rightPanelOpen: false,
+            sidebarOpen: false,
+          },
           version: 75,
         }),
       );
@@ -2095,7 +2127,13 @@ test("global World Maps home edits the current map location types", async ({ pag
       localStorage.setItem(
         "marinara-engine-ui",
         JSON.stringify({
-          state: { hasCompletedOnboarding: true, rightPanelOpen: false, sidebarOpen: false },
+          state: {
+            hasCompletedOnboarding: true,
+            chatHelpSeenModes: ["conversation", "roleplay", "game"],
+            chatWindowIntroDismissed: true,
+            rightPanelOpen: false,
+            sidebarOpen: false,
+          },
           version: 75,
         }),
       );
@@ -2511,6 +2549,8 @@ test("Map editor fills missing location artwork with one image per location", as
         JSON.stringify({
           state: {
             hasCompletedOnboarding: true,
+            chatHelpSeenModes: ["conversation", "roleplay", "game"],
+            chatWindowIntroDismissed: true,
             rightPanelOpen: false,
             sidebarOpen: false,
             spatialMapDetailChatId: chatId,
@@ -2799,6 +2839,8 @@ test("Large map artwork reviews keep their actions visible while requests scroll
         JSON.stringify({
           state: {
             hasCompletedOnboarding: true,
+            chatHelpSeenModes: ["conversation", "roleplay", "game"],
+            chatWindowIntroDismissed: true,
             rightPanelOpen: false,
             sidebarOpen: false,
             spatialMapDetailChatId: chatId,
@@ -2863,7 +2905,13 @@ test("missing location lore explains the problem without exposing opaque entry I
       localStorage.setItem(
         "marinara-engine-ui",
         JSON.stringify({
-          state: { hasCompletedOnboarding: true, rightPanelOpen: false, sidebarOpen: false },
+          state: {
+            hasCompletedOnboarding: true,
+            chatHelpSeenModes: ["conversation", "roleplay", "game"],
+            chatWindowIntroDismissed: true,
+            rightPanelOpen: false,
+            sidebarOpen: false,
+          },
           version: 75,
         }),
       );
@@ -2970,6 +3018,8 @@ test("portable map import refreshes host lorebooks and linked navigation without
         JSON.stringify({
           state: {
             hasCompletedOnboarding: true,
+            chatHelpSeenModes: ["conversation", "roleplay", "game"],
+            chatWindowIntroDismissed: true,
             rightPanelOpen: true,
             rightPanel: "lorebooks",
             sidebarOpen: false,
@@ -3180,7 +3230,13 @@ for (const libraryTarget of ["template", "shared-world"] as const) {
         localStorage.setItem(
           "marinara-engine-ui",
           JSON.stringify({
-            state: { hasCompletedOnboarding: true, rightPanelOpen: false, sidebarOpen: false },
+            state: {
+              hasCompletedOnboarding: true,
+              chatHelpSeenModes: ["conversation", "roleplay", "game"],
+              chatWindowIntroDismissed: true,
+              rightPanelOpen: false,
+              sidebarOpen: false,
+            },
             version: 75,
           }),
         );
@@ -3408,6 +3464,8 @@ test("opening linked lore protects unsaved map edits", async ({ page }, testInfo
         JSON.stringify({
           state: {
             hasCompletedOnboarding: true,
+            chatHelpSeenModes: ["conversation", "roleplay", "game"],
+            chatWindowIntroDismissed: true,
             rightPanelOpen: false,
             sidebarOpen: false,
             spatialMapDetailChatId: chatId,
@@ -3475,6 +3533,108 @@ test("opening linked lore protects unsaved map edits", async ({ page }, testInfo
   }
 });
 
+// #1995: in a deep map the Story Location bar used to show the path from its root and cut off the place the story is in.
+// Every display ends with the current place, keeps parent-to-child order, and marks left-out ancestors with "…"; the
+// full path stays in the bar's title and label and is spelled out when the bar is opened.
+test("Story Location bar keeps the current place visible in a deep map, with each display", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "the bar's text is shown from the sm breakpoint up");
+  test.setTimeout(120_000);
+  const names = ["Continent", "Realm", "Province", "City", "District", "Building", "Floor", "Room"];
+  const full = names.join(" › ");
+  const chatResponse = await page.request.post("/api/chats", {
+    data: { name: `Story Location Trail ${testInfo.project.name}`, mode: "roleplay", characterIds: [] },
+  });
+  expect(chatResponse.ok(), await chatResponse.text()).toBeTruthy();
+  const chat = (await chatResponse.json()) as { id: string };
+  try {
+    await activateHierarchicalMaps(page, chat.id);
+    const saveResponse = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+      data: {
+        expectedRevision: 0,
+        expectedCurrentLocationId: null,
+        definition: {
+          ...deepMapDefinition,
+          startingLocationId: "deep-07",
+          locations: deepMapDefinition.locations.slice(0, names.length).map((location, index) => ({
+            ...location,
+            name: names[index]!,
+            links: [],
+          })),
+        },
+      },
+    });
+    expect(saveResponse.ok(), await saveResponse.text()).toBeTruthy();
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem("marinara-engine-ui-updated-at", String(Date.now() + 60_000));
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: {
+            hasCompletedOnboarding: true,
+            chatHelpSeenModes: ["conversation", "roleplay", "game"],
+            chatWindowIntroDismissed: true,
+            rightPanelOpen: false,
+            sidebarOpen: false,
+          },
+          version: 75,
+        }),
+      );
+    }, chat.id);
+    await page.goto("/");
+    await dismissOnboardingTutorial(page);
+    const region = page.getByRole("region", { name: "Story location" });
+    const bar = region.getByRole("button", { name: `Story location: ${full}`, exact: true });
+    const trail = region.locator("[data-story-location-trail]");
+    await expect(bar).toBeVisible();
+    await expect(bar, "hovering still shows the full path").toHaveAttribute("title", full);
+
+    // Adaptive (the default) at any width: it ends with the current place and is never cut off mid-text. The trail
+    // follows the bar's width on the next frame (a ResizeObserver), so it is read once it fits.
+    const expectAdaptive = async (width: number) => {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(trail).toHaveAttribute("data-story-location-trail", "adaptive");
+      await expect
+        .poll(() => trail.evaluate((element) => element.scrollWidth <= element.clientWidth + 1), {
+          message: `${width}px fits the trail without cutting it`,
+        })
+        .toBe(true);
+      const text = (await trail.textContent())!;
+      expect(text, `${width}px ends with the current place`).toMatch(/(?:^| › )Room$/u);
+      const shown = text.replace(/^… › /u, "").split(" › ");
+      expect(names.slice(names.length - shown.length), `${width}px keeps parent-to-child order`).toEqual(shown);
+      expect(text.startsWith("… › "), `${width}px marks left-out ancestors`).toBe(shown.length < names.length);
+      await page.screenshot({ path: testInfo.outputPath(`story-location-adaptive-${width}.png`) });
+      return shown.length;
+    };
+    const wide = await expectAdaptive(1440);
+    const narrow = await expectAdaptive(700);
+    expect(narrow, "a narrower bar keeps fewer levels").toBeLessThan(wide);
+
+    // Opening the bar spells out the whole path and offers the displays.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await bar.click();
+    await expect(region.locator("[data-story-location-full-path]")).toHaveText(full);
+    const display = region.getByRole("combobox", { name: "Show in bar" });
+    for (const [value, text] of [
+      ["current", "… › Room"],
+      ["nearby", "… › Building › Floor › Room"],
+      ["full", full],
+    ] as const) {
+      await display.selectOption(value);
+      await expect(trail).toHaveText(text);
+    }
+    await page.reload();
+    await dismissOnboardingTutorial(page);
+    await expect(trail, "the chosen display is kept on this device").toHaveText(full);
+    await expect(trail).toHaveAttribute("data-story-location-trail", "full");
+  } finally {
+    await expectDeletedInOrder(page, [`/api/chats/${chat.id}`]);
+  }
+});
+
 test("Deep maps and long labels remain keyboard and touch operable across themes", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   const chatResponse = await page.request.post("/api/chats", {
@@ -3510,6 +3670,8 @@ test("Deep maps and long labels remain keyboard and touch operable across themes
         JSON.stringify({
           state: {
             hasCompletedOnboarding: true,
+            chatHelpSeenModes: ["conversation", "roleplay", "game"],
+            chatWindowIntroDismissed: true,
             rightPanelOpen: false,
             sidebarOpen: false,
             spatialMapDetailChatId: chatId,
@@ -3655,6 +3817,8 @@ test("Map loading retry and stale-write recovery preserve the working copy", asy
         JSON.stringify({
           state: {
             hasCompletedOnboarding: true,
+            chatHelpSeenModes: ["conversation", "roleplay", "game"],
+            chatWindowIntroDismissed: true,
             rightPanelOpen: false,
             sidebarOpen: false,
             spatialMapDetailChatId: chatId,
@@ -3776,6 +3940,8 @@ test("AI map builder previews a validated local draft before save", async ({ pag
           JSON.stringify({
             state: {
               hasCompletedOnboarding: true,
+              chatHelpSeenModes: ["conversation", "roleplay", "game"],
+              chatWindowIntroDismissed: true,
               rightPanelOpen: false,
               sidebarOpen: false,
               spatialMapDetailChatId: chatId,
@@ -4165,6 +4331,8 @@ test("reciprocal and incoming Direct Links stay visible from either endpoint", a
         JSON.stringify({
           state: {
             hasCompletedOnboarding: true,
+            chatHelpSeenModes: ["conversation", "roleplay", "game"],
+            chatWindowIntroDismissed: true,
             rightPanelOpen: false,
             sidebarOpen: false,
             spatialMapDetailChatId: chatId,
@@ -4373,7 +4541,15 @@ test("Roleplay minimap keeps selected locations opaque over map artwork", async 
       localStorage.setItem("marinara-active-chat-id", chatId);
       localStorage.setItem(
         "marinara-engine-ui",
-        JSON.stringify({ state: { hasCompletedOnboarding: true, sidebarOpen: false }, version: 72 }),
+        JSON.stringify({
+          state: {
+            hasCompletedOnboarding: true,
+            chatHelpSeenModes: ["conversation", "roleplay", "game"],
+            chatWindowIntroDismissed: true,
+            sidebarOpen: false,
+          },
+          version: 72,
+        }),
       );
     }, chat.id);
     await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
@@ -4466,7 +4642,13 @@ test("installed World Maps package keeps the editor canvas square", async ({ pag
       localStorage.setItem(
         "marinara-engine-ui",
         JSON.stringify({
-          state: { hasCompletedOnboarding: true, sidebarOpen: false, rightPanelOpen: false },
+          state: {
+            hasCompletedOnboarding: true,
+            chatHelpSeenModes: ["conversation", "roleplay", "game"],
+            chatWindowIntroDismissed: true,
+            sidebarOpen: false,
+            rightPanelOpen: false,
+          },
           version: 72,
         }),
       );
@@ -4663,6 +4845,8 @@ test("AI map expansion preserves a campaign map and its current location", async
           JSON.stringify({
             state: {
               hasCompletedOnboarding: true,
+              chatHelpSeenModes: ["conversation", "roleplay", "game"],
+              chatWindowIntroDismissed: true,
               rightPanelOpen: false,
               sidebarOpen: false,
               spatialMapDetailChatId: chatId,
@@ -5544,7 +5728,15 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
       localStorage.setItem("marinara-active-chat-id", chatId);
       localStorage.setItem(
         "marinara-engine-ui",
-        JSON.stringify({ state: { hasCompletedOnboarding: true, sidebarOpen: false }, version: 72 }),
+        JSON.stringify({
+          state: {
+            hasCompletedOnboarding: true,
+            chatHelpSeenModes: ["conversation", "roleplay", "game"],
+            chatWindowIntroDismissed: true,
+            sidebarOpen: false,
+          },
+          version: 72,
+        }),
       );
     }, chat.id);
     await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
@@ -5955,6 +6147,8 @@ test("Game screen gives the hierarchical World map precedence over the session L
         JSON.stringify({
           state: {
             hasCompletedOnboarding: true,
+            chatHelpSeenModes: ["conversation", "roleplay", "game"],
+            chatWindowIntroDismissed: true,
             gameTutorialDisabled: true,
             sidebarOpen: false,
             rightPanelOpen: false,
@@ -6999,6 +7193,8 @@ test("Game Location Details binds and clears a tactical cell", async ({ page }, 
         JSON.stringify({
           state: {
             hasCompletedOnboarding: true,
+            chatHelpSeenModes: ["conversation", "roleplay", "game"],
+            chatWindowIntroDismissed: true,
             sidebarOpen: false,
             rightPanelOpen: false,
             spatialMapDetailChatId: chatId,

@@ -94,6 +94,11 @@ const W = 5;
   assert.equal(slurpPayoutAllowance(paidOut, at, W), 0, "the day's allowance is used up");
   const tomorrow = new Date("2026-09-06T12:00:00.000Z");
   assert.ok(slurpPayoutAllowance(paidOut, tomorrow, W) > 0, "a new day restores it");
+  // R5: with the daily limit off, Collect moves every whole coin, also after a payout today.
+  assert.equal(slurpPayoutAllowance(paidOut, at, W, 0, false), paidOut.coins - (paidOut.coins % W));
+  assert.equal(slurpPayoutAllowance(rich, at, W, 60, false), 5_000, "other Creators' payouts do not count");
+  assert.ok(payout(paidOut, 4_000, at, W, 0, false), "no daily allowance to refuse against");
+  assert.equal(payout(paidOut, 4_000, at, W), null, "the default keeps the limit");
   // Refused rather than clamped: a caller asking for more has misread the state, and silently
   // paying less would leave the player believing they moved more.
   assert.equal(payout(rich, allowance + W, at, W), null);

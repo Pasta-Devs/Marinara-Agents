@@ -1,3 +1,4 @@
+import type { SlurpStoryNow } from "../../modules/storylines/slp-story-state.js";
 import {
   slpGeneratedCreatorPostSchema,
   SLP_LOCKED_TEASER_MAX_LENGTH,
@@ -17,6 +18,7 @@ import {
   parseSlurpBeatClaims,
   slurpBeatCorrection,
   slurpPostBriefSection,
+  slurpRightNowLine,
   type SlurpClaimCheck,
 } from "../../modules/feed/slp-post-brief.js";
 import type { SlurpBeat, SlurpDayMoment } from "../../modules/feed/slp-post-beat.js";
@@ -54,11 +56,14 @@ export type FormattedCreatorGenerationRequest = SlpCreatorGenerationRequest & {
 };
 
 /** Hard ceiling per format, below the page-wide maximum. */
-const SLURP_FORMAT_CEILING: Partial<Record<SlpCreatorContentFormat, number>> = { caption: 400, announcement: 900 };
+export const SLURP_FORMAT_CEILING: Partial<Record<SlpCreatorContentFormat, number>> = {
+  caption: 280,
+  announcement: 900,
+};
 
 const NOODLER_FORMAT_PROMPTS: Record<SlpCreatorContentFormat, string> = {
   caption:
-    "Format: caption. Aim for 40-220 characters in one short creator-feed caption. Go longer only when the moment really calls for it.",
+    "Format: caption. Aim for 40-160 characters: one or two short lines under the picture, like a real creator caption. The picture does the talking.",
   announcement: "Format: announcement. Aim for 80-600 body characters with the important news first.",
   long_form:
     "Format: long_form. Target 500-2000 body characters with readable paragraphs. Only this format can use long text.",
@@ -93,6 +98,8 @@ export type SlurpPostPromptInput = {
   /** Extra pictures in a multi-image post, each planned as its own scene in `shots`. */
   sceneShots?: number;
   wardrobePrompt?: string | null;
+  /** The picture shows the body (nudity or explicit level). */
+  bareOutfit?: boolean;
   imageGenerationPrompt: string;
   generationGuidance: string;
   /** The player's ceiling. Formats only set a target; nothing shorter than this is cut. */
@@ -131,7 +138,12 @@ export type SlurpPostPromptInput = {
   beatCompany?: string | null;
   /** Where the Creator's day stands at publication. See `resolveSlurpBeatDay`. */
   beatDay?: SlurpDayMoment | null;
+  /** Standing conditions (story state): in the brief, or a short section without a beat. */
+  storyNow?: SlurpStoryNow;
 };
+
+const BARE_OUTFIT_RULE =
+  ". This picture shows the body, so outfit is nothing, or only what the scene needs (lingerie, swimwear, a towel, an open shirt). Never everyday clothes such as a sweater, top, trousers or pajamas, and do not copy the usual wardrobe";
 
 /**
  * The post prompt's blocks, before they are ordered and joined.
@@ -270,7 +282,9 @@ export function buildSlurpPostBlocks(input: SlurpPostPromptInput): SlurpPromptBl
       kind: "required" as const,
       text: `${
         input.allowScenePlan
-          ? "Return one JSON object with title, content, and scene. scene has wardrobeId (from the supplied wardrobe, or null), setting, action, expression, visualDirection, outfit, and subject. The scene is the attractive, believable photograph for this caption and goes to an image model as written: write every scene field in English as concrete visible facts. setting and action make the angle concrete without changing the person, company, camera source, or access level. outfit is exactly what they wear in this photo (or what little); clothes are in good condition and suit them, never worn-out, faded or shabby, unless the card or the caption calls for that. visualDirection is one memorable composition, light, or prop detail, not tags or policy. subject is who is in the photo as an image model knows them: for a character from an existing anime, game, show or book, their name and series the way image sites tag it ('fubuki (one punch man)'); null for an original character. Do not return imagePrompt or a poll." +
+          ? "Return one JSON object with title, content, and scene. scene has wardrobeId (from the supplied wardrobe, or null), setting, action, expression, visualDirection, outfit, and subject. The scene is the attractive, believable photograph for this caption and goes to an image model as written: write every scene field in English as concrete visible facts. setting and action make the angle concrete without changing the person, company, camera source, or access level. outfit is exactly what they wear in this photo (or what little)" +
+            (input.bareOutfit ? BARE_OUTFIT_RULE : "") +
+            "; clothes are in good condition and suit them, never worn-out, faded or shabby, unless the card or the caption calls for that. visualDirection is one memorable composition, light, or prop detail, not tags or policy. subject is who is in the photo as an image model knows them: for a character from an existing anime, game, show or book, their name and series the way image sites tag it ('fubuki (one punch man)'); null for an original character. Do not return imagePrompt or a poll." +
             (input.sceneShots ? `\n${slurpSceneShotsInstruction(input.sceneShots)}` : "")
           : input.allowImagePrompt
             ? // The old contract asked for "subject, pose, setting, lighting, framing", which is a
@@ -367,9 +381,12 @@ export function buildNoodlerPostMessages(input: SlurpPostPromptInput): ChatMessa
             protect,
             input.beatCompany,
             input.beatDay,
+            input.storyNow?.lines,
           ),
         ]
-      : []),
+      : input.storyNow?.lines.length
+        ? ["", "# Right now", slurpRightNowLine(input.storyNow.lines, protect, input.storyNow.moment)]
+        : []),
     ...(input.castContext?.trim() ? ["", "# Who else is in this post", protect(input.castContext)] : []),
     ...(input.project
       ? [

@@ -64,6 +64,7 @@ import {
   slurpImageNegativeWithCompany,
 } from "../../modules/feed/slp-image-brief.js";
 import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
+import { withSlurpConditionLook } from "../storylines/slp-storylines-contract.js";
 
 /**
  * Apply Slurp's chosen style profile. The profile rides on the defaults, where the compiler reads
@@ -123,6 +124,7 @@ type CreatorPostImageInput = {
     | "imageGenerationPrompt"
     | "imagePromptInterpretation"
     | "imageGenerationUseAvatarReferences"
+    | "imageKeepOriginalFiles"
     | "imageGenerationIncludeDescriptions"
     | "imageAppearanceMode"
     | "appearanceProfileMode"
@@ -158,6 +160,8 @@ type CreatorPostImageInput = {
   admissionMode?: ConnectionAdmissionMode;
   /** The player asked for this picture: its prompt rewrite never spends the world's AI budget (0.3.6). */
   playerAsked?: boolean;
+  /** An avatar or banner outlives a condition, so it never shows one (STORYLINES.md). */
+  skipCondition?: boolean;
   width?: number;
   height?: number;
   /** A Story picture: drawn at the Story size unless the caller names its own size. */
@@ -419,6 +423,8 @@ async function generateCreatorPostImageRun(
     : "";
   run.appearance = { source: appearanceSource, text: redactIdentity(characterDescription) };
   run.referenceImages = referenceImages?.length ?? 0;
+  if (!input.skipCondition && !input.suppressCharacterContext)
+    characterImageInstructions = await withSlurpConditionLook(input.db, input.account.id, characterImageInstructions);
 
   const postPrompt = await loadPrompt(input.promptOverrides, NOODLE_IMAGE_POST, {
     authorName: input.suppressCreatorDetails ? "" : input.account.displayName,
@@ -599,10 +605,10 @@ async function generateCreatorPostImageRun(
     : viewpoint && !withoutDevice.includes(viewpoint.phrase)
       ? `${withoutDevice}\n${viewpoint.phrase}`
       : withoutDevice;
-  // The Creator's medium: an anime, furry or dragon Creator is drawn, so the brief's photo words go
-  // and their style leads. A photo-style Creator, and a prompt a human approved, stay as they are.
+  // A drawn Creator or a painted style profile drops the photo words; in the story it is still a photo.
   const styleSource = `${characterDescription}\n${characterImageInstructions}`;
-  const artStyle = skipInterpretation ? null : slurpArtStyle(styleSource);
+  const medium = `${characterImageInstructions}\n${styleGuidance}`;
+  const artStyle = skipInterpretation ? null : slurpArtStyle(styleSource, medium);
   // The viewpoint in the image model's words: tags for a tag model, e621 tags for a drawn furry.
   const promptFamily = slurpPromptFamily({
     promptMode: compiledPrompt.profile.promptMode,
@@ -639,7 +645,7 @@ async function generateCreatorPostImageRun(
   const people = skipInterpretation ? "" : redactIdentity(blocks());
   const finalPromptSubject = styleLead + ownBlock + people + finalPromptBody;
   const finalPrompt = [
-    artStyle ? slurpStyledImagePrompt(finalPromptSubject, styleSource) : finalPromptSubject,
+    artStyle ? slurpStyledImagePrompt(finalPromptSubject, styleSource, medium) : finalPromptSubject,
     input.compositionGuard,
   ]
     .filter(Boolean)
@@ -669,9 +675,10 @@ async function generateCreatorPostImageRun(
   // Chosen here rather than by each caller, so a scheduled or redrawn Story is a Story too (R1-052).
   const outputWidth = input.width ?? (input.story ? input.settings.storyImageWidth : input.settings.imageWidth);
   const outputHeight = input.height ?? (input.story ? input.settings.storyImageHeight : input.settings.imageHeight);
-  if (referenceImages?.length) {
+  const companionRefs = input.settings.imageGenerationUseAvatarReferences && allowAvatarReferences;
+  if (referenceImages?.length || (companionRefs && inPicture.length)) {
     referenceImages = await slurpCompanionReferenceImages(input.characters, inPicture, finalPrompt, referenceImages);
-    run.referenceImages = referenceImages.length;
+    run.referenceImages = referenceImages?.length ?? 0;
   }
   run.finalPrompt = finalPrompt;
   run.negativePrompt = finalNegativePrompt ?? null;
@@ -771,7 +778,7 @@ async function generateCreatorPostImageRun(
       logger.warn(error, "[slurp] Could not charge image energy for %s", input.account.id);
     }
   }
-  const stored = await slpCompactGeneratedImage(image);
+  const stored = await slpCompactGeneratedImage(image, input.settings.imageKeepOriginalFiles);
   const file =
     stageSlurpImageWithHost(`${NOODLER_MEDIA_PREFIX}${input.account.id}`, stored.base64, stored.ext) ??
     stageImageToDisk(`${NOODLER_MEDIA_PREFIX}${input.account.id}`, stored.base64, stored.ext);

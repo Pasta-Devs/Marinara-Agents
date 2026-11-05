@@ -97,6 +97,8 @@ export function useSlurpThread(threadId: string | null, personaId: string | null
         relationship?: SlurpThreadRelationship;
         /** Whether this thread can start a roleplay scene on this Engine (docs/SCENES.md). */
         scenes?: boolean;
+        /** The sexting session price; null where sessions are not sold. */
+        sextingPrice?: number | null;
       }>(`/slurp2/messages/threads/${encodeURIComponent(threadId!)}?personaId=${encodeURIComponent(personaId!)}`),
     enabled: Boolean(threadId && personaId),
     // Opening a chat marks it read and must show what arrived meanwhile, whatever the cache age.
@@ -228,6 +230,8 @@ export function useSlurpCompose(
         relationship?: SlurpThreadRelationship;
         /** Whether this thread can start a roleplay scene on this Engine (docs/SCENES.md). */
         scenes?: boolean;
+        /** The sexting session price; null where sessions are not sold. */
+        sextingPrice?: number | null;
       }>(
         `/slurp2/messages/compose?personaId=${encodeURIComponent(personaId!)}&creatorAccountId=${encodeURIComponent(creatorAccountId!)}${support ? "&support=1" : ""}${peek ? "&peek=1" : ""}`,
       ),

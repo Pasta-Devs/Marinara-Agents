@@ -58,7 +58,10 @@ async function main() {
   assert.match(shell, /"--slurp-hero"/u);
   assert.match(shell, /"--slurp-nav-active"/u);
   assert.match(english, /"ui\.slurp\.settings\.tabs\.overview": "Overview"/u);
-  assert.match(home, /inlineAdsEnabled=\{slurpSettingsQuery\.data\?\.inlineAdsEnabled !== false\}/u);
+  assert.match(
+    home,
+    /inlineAdsEnabled=\{Boolean\(slurpSettingsQuery\.data && slpInlineAdsOn\(slurpSettingsQuery\.data\)\)\}/u,
+  );
   // Following now carries ads too (the query already tags "following"); only the search results
   // stay ad-free. Dropped the tab !== "all" gate on purpose.
   assert.match(home, /if \(!inlineAdsEnabled \|\| searchTerm \|\| !ad\) return null;/u);

@@ -1,4 +1,18 @@
-import { Camera, Check, CheckCheck, Cloud, Copy, Dumbbell, Moon, Plane, ScanSearch, WifiOff } from "lucide-react";
+import {
+  Camera,
+  Check,
+  CheckCheck,
+  Cloud,
+  Copy,
+  Dumbbell,
+  Moon,
+  Pencil,
+  Plane,
+  ScanSearch,
+  RefreshCw,
+  Trash2,
+  WifiOff,
+} from "lucide-react";
 import { memo, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { SlpHeartGlyph } from "../../base/chrome/SlpGlyphs";
 import { useTranslation as useUiTranslation } from "react-i18next";
@@ -20,6 +34,8 @@ import { slpErrorText } from "../../base/ui/slp-error-text";
 import { useReactToSlurpMessage, useUnlockSlurpMessage } from "../../features/messages/slp-message-action-hooks";
 import { SlpSharedPostCard } from "./SlpSharedPostCard";
 import { SlpMessageDeepDetails } from "./SlpMessageDeepDetails";
+import { SlpMessageEditSheet } from "./SlpMessageEditSheet";
+import { slurpMessageEditable, slurpMessageRemovable } from "../../../../../shared/src/slp/slp-message-edit.js";
 
 // One message in a thread, the away animation and the platform action card.
 
@@ -263,6 +279,7 @@ export const MessageBubble = memo(function MessageBubble({
   fresh = false,
   hasDeepDetails = false,
   onOpenProfile,
+  onWriteAgain,
 }: {
   message: SlurpMessage;
   locale: string;
@@ -275,6 +292,8 @@ export const MessageBubble = memo(function MessageBubble({
   hasDeepDetails?: boolean;
   /** A shared post opens its author's page. */
   onOpenProfile?: (accountId: string) => void;
+  /** The Creator's last answer (R9): write it again. */
+  onWriteAgain?: () => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
   const unlock = useUnlockSlurpMessage();
@@ -290,6 +309,9 @@ export const MessageBubble = memo(function MessageBubble({
   const badgeRef = useRef<HTMLSpanElement | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [deepDetailsOpen, setDeepDetailsOpen] = useState(false);
+  const [changing, setChanging] = useState<"edit" | "delete" | null>(null);
+  const canEdit = Boolean(personaId) && slurpMessageEditable(message, ownsCreator ? "creator" : "viewer");
+  const canDelete = Boolean(personaId) && slurpMessageRemovable(message);
   // The veil dissolves over the picture once, right after this reader bought it.
   const [dissolving, setDissolving] = useState(false);
   useEffect(() => {
@@ -642,6 +664,39 @@ export const MessageBubble = memo(function MessageBubble({
             {localizeUi("ui.slurp.deepDetails.title", { defaultValue: "Deep details" })}
           </SlpSheetItem>
         )}
+        {onWriteAgain && (
+          <SlpSheetItem
+            onSelect={() => {
+              setMenuOpen(false);
+              onWriteAgain();
+            }}
+          >
+            <RefreshCw aria-hidden="true" />
+            {localizeUi("ui.slurp.messages.writeAgain")}
+          </SlpSheetItem>
+        )}
+        {canEdit && (
+          <SlpSheetItem
+            onSelect={() => {
+              setMenuOpen(false);
+              setChanging("edit");
+            }}
+          >
+            <Pencil aria-hidden="true" />
+            {localizeUi("ui.slurp.messages.edit")}
+          </SlpSheetItem>
+        )}
+        {canDelete && (
+          <SlpSheetItem
+            onSelect={() => {
+              setMenuOpen(false);
+              setChanging("delete");
+            }}
+          >
+            <Trash2 aria-hidden="true" />
+            {localizeUi("ui.slurp.messages.delete")}
+          </SlpSheetItem>
+        )}
       </SlpSheet>
       {/* Mounted on demand: a long thread must not carry one window per bubble. */}
       {deepDetailsOpen && personaId && (
@@ -653,6 +708,14 @@ export const MessageBubble = memo(function MessageBubble({
             // Back to the bubble the menu came from, so keyboard users keep their place.
             bubbleRef.current?.focus();
           }}
+        />
+      )}
+      {personaId && changing && (
+        <SlpMessageEditSheet
+          message={message}
+          personaId={personaId}
+          mode={changing}
+          onClose={() => setChanging(null)}
         />
       )}
     </div>

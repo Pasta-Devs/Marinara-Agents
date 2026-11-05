@@ -183,7 +183,7 @@ export function SlpImagesPanel(page: SlpBackstagePageProps) {
         {/* The picture model has one home, Connections; this row only says which one is used. */}
         <button
           type="button"
-          onClick={() => page.onNavigate({ ...page.navigation, section: "models", target: "connections" })}
+          onClick={() => page.onNavigate({ ...page.navigation, section: "basic", target: "connections" })}
           className="inline-flex min-h-11 items-center gap-1 rounded-lg px-3 text-sm font-semibold ring-1 ring-inset ring-[var(--slurp-outline)] hover:bg-[var(--slurp-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
         >
           {t("ui.slurp.settings.images.changeModel")}
@@ -421,6 +421,13 @@ export function SlpImagesPanel(page: SlpBackstagePageProps) {
             onChange={(value: SlurpSettings["imageAppearanceMode"]) => void update("imageAppearanceMode", value)}
           />
         )}
+        <Toggle
+          settingKey="imageKeepOriginalFiles"
+          label={t("ui.slurp.settings.images.keepOriginal")}
+          detail={t("ui.slurp.settings.images.keepOriginalDetail")}
+          value={settings.imageKeepOriginalFiles}
+          onChange={(value) => update("imageKeepOriginalFiles", value)}
+        />
       </AdvancedGroup>
     </div>
   );

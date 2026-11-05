@@ -31,9 +31,7 @@ export function useSlpCreatorsBackstageState({
   setRefreshRemaining: (remaining: number) => void;
 }) {
   const { t } = useTranslation();
-  const accountsQuery = useCreatorAccounts(
-    section === "overview" || section === "creators" || section === "automation",
-  );
+  const accountsQuery = useCreatorAccounts(section === "overview" || section === "creators" || section === "basic");
   const refreshCreators = useRefreshTargetedCreatorsNow(setRefreshRemaining);
   const refreshConversationSchedule = useRefreshCreatorConversationSchedule();
   const deleteCreator = useDeleteCreatorStageProfile();

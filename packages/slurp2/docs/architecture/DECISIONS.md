@@ -341,10 +341,18 @@ modules, rejected alternative, and migration consequence.
   later version join a saved library; deleting a built-in keeps hiding it.
 - **Other Agents' data** (`data/creators/slp-agent-memory-source.ts`), behind the `flavourFromAgents` setting (on by
   default): read-only reads of the Engine `game_state_snapshots` table (Character Tracker, World State, Persona
-  Stats; the package holds `chat-read`) through the Engine schema already in `sources/engine`, and Long-Term
-  Memory's in-process `long-term-memory:storage` service through the Engine service registry. None of these
-  Agents offers a documented read contract; any failure yields no lines. Rejected: a new Engine snapshot file
+  Stats; the package holds `chat-read`) through the Engine schema already in `sources/engine`. The trackers
+  offer no documented read contract; any failure yields no lines. Rejected: a new Engine snapshot file
   (`game-state.storage.ts`), which would change the captured Engine sources.
+- **Long-Term Memory recall** (`data/creators/slp-ltm-recall.ts`, Pasta-Devs/Marinara-Agents#1841): posts and DM
+  replies read what Long-Term Memory remembers through its documented `long-term-memory:recall` service (version
+  1), not its storage, so its subject, mode, persona and sharing rules apply and Slurp keeps none of its own.
+  Same gates as the brief (open identity, `flavourFromAgents`). The result is a "From your memory" section of the
+  continuity block, not brief lines. `memoryRecall` (`whole` by default, or `relevant`) is passed as `whole`; an
+  older Long-Term Memory answers ranked either way. A DM adds the player's persona only when that persona's own
+  page is open and no fan voice is speaking, so a hinted page is never tied to its persona's memories. A missing
+  service, a refusal or a failure yields no lines; the last outcome shows in Backstage. Rejected: reading
+  `long-term-memory:storage` and ranking in Slurp (duplicates Long-Term Memory's retrieval).
 
 ## Action layer and Professor Mari (2026-09-28)
 
@@ -745,3 +753,24 @@ modules, rejected alternative, and migration consequence.
 - **Migration consequence:** reading version v3: every card is read once more. An entry the player
   edited before 0.3.26 has no base reading, so it is kept as it is on that first reading and merges
   normally afterwards.
+
+## Story state is its own feature (2026-10-21)
+
+- **Decision:** `features/storylines/` owns what is true about a Creator right now (`docs/STORYLINES.md`,
+  "State"): the per-post loader, the condition look for pictures and the Life panel routes. Feed, messages
+  and media reach it through `slp-storylines-contract.ts`. The pure reader lives in `modules/storylines/`.
+  The loader returns an empty state when the Storylines extension is off, so every reader is gated in one place.
+- **Rejected alternatives:** keeping it in `features/world` (the living world is a different extension and
+  can be off while Storylines is on); a gate at every call site.
+
+## Arcs run on their storyline (2026-10-21)
+
+- **Decision:** a project keeps its run record, its screens, Director mode and crossovers, and gains its own
+  copy of a storyline (`storyline`, `stage`, `taken`, `ending`). `modules/projects/slp-project-storyline.ts`
+  makes the chapter fields (`chapters`, `chapter`, `phaseDays`, `choices`, `reach`) a view of the line the run
+  walks; `slp-arc-progress.ts` moves the run along stage edges. Every reader of the chapter fields stays as it
+  is. Chapter fields edited by hand (the editor, a record stored before this) rebuild the storyline, each stage
+  keeping its content by label.
+- **Rejected alternatives:** a new run store with a new board (the editor, Director mode and crossovers would be
+  gone until the editor PR); letting running arcs finish on the old chapter code (two runtimes at once).
+- **Consequence:** `modules/projects` stays; STORYLINES.md's "projects goes in PR 3" no longer holds.

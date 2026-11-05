@@ -13,6 +13,8 @@ export type SlpDramaCatalogEntry = {
   dials: { key: string; options: string[]; default: string }[];
   /** A drama that runs only while this situation stands. */
   requires: string | null;
+  /** A built-in pack's storyline: the pack switch turns it on. */
+  pack?: { name: string; on: boolean } | null;
 };
 type SlpDramaCast = Record<string, { id: string; name: string | null }>;
 export type SlpDramaRunView = {

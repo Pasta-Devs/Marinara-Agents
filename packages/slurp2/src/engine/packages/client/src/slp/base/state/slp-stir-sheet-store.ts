@@ -18,6 +18,9 @@ export const useSlpStirSheet = create<{
 }));
 export const openSlpStir = (target: SlpStirTarget) => useSlpStirSheet.getState().open(target);
 
+/** The Stir tab (W) as a sheet over the page it was opened from; any other move closes it (slp-home-state). */
+export const useSlpStirDeck = create<{ open: boolean }>(() => ({ open: false }));
+
 /**
  * A plan that came back after the player left the box (task B: planning never holds them there).
  * Pulse's "Open" and the toast show it in one sheet the app keeps mounted.

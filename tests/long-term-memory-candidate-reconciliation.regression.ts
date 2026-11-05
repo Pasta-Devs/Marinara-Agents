@@ -759,6 +759,186 @@ async function main() {
       assertCounts(result, { groups: 1, incomplete: 1 });
     }
 
+    // The complete commit-time set (`candidateNotes`) keeps the bounded path's rules: the same
+    // filters, identity keys, content threshold and candidate order.
+    {
+      const words = Array.from({ length: 33 }, (_, index) => `token${index}`);
+      const text = (count: number) => words.slice(0, count).join(" ");
+      const worldUnit = (subjectId: string, extra: { title?: string; text?: string; subjectNames?: string[] } = {}) =>
+        unit({
+          bucket: "world_fact",
+          subjectId,
+          sectionKey: "facts",
+          text: extra.text ?? "An unrelated sentence about the observatory floorboards.",
+          ...(extra.title ? { title: extra.title } : {}),
+          ...(extra.subjectNames ? { subjectNames: extra.subjectNames } : {}),
+        });
+      const lantern = (id: string, overrides: Record<string, unknown> = {}) => ({
+        ...note({ id, type: "world", title: "Lantern Bridge", text: "The lantern bridge spans the river." }),
+        ...overrides,
+      });
+      const cases: Array<{
+        name: string;
+        units: unknown[];
+        candidateNotes: unknown[];
+        scope?: Record<string, unknown>;
+        remap?: [string, string];
+        matchKind?: "identity" | "content";
+        ambiguous?: string[];
+      }> = [
+        {
+          name: "identity by title",
+          units: [worldUnit("river_crossing", { title: "Lantern Bridge" })],
+          candidateNotes: [lantern("world_lantern_bridge_old")],
+          remap: ["world_river_crossing", "world_lantern_bridge_old"],
+          matchKind: "identity",
+        },
+        {
+          name: "identity by subjectId",
+          units: [worldUnit("lantern_bridge")],
+          candidateNotes: [lantern("world_lantern_bridge_old")],
+          remap: ["world_lantern_bridge", "world_lantern_bridge_old"],
+          matchKind: "identity",
+        },
+        {
+          name: "identity by subjectNames",
+          units: [worldUnit("river_crossing", { subjectNames: ["Lantern Bridge"] })],
+          candidateNotes: [lantern("world_lantern_bridge_old")],
+          remap: ["world_river_crossing", "world_lantern_bridge_old"],
+          matchKind: "identity",
+        },
+        {
+          name: "same content with other case and punctuation",
+          units: [worldUnit("river_span", { text: "the LANTERN bridge, spans the river!" })],
+          candidateNotes: [lantern("world_lantern_bridge_old", { title: "Old Crossing" })],
+          remap: ["world_river_span", "world_lantern_bridge_old"],
+          matchKind: "content",
+        },
+        {
+          name: "content overlap at the 0.85 threshold",
+          units: [worldUnit("token_set", { text: text(17) })],
+          candidateNotes: [note({ id: "world_token_note", type: "world", title: "Token Note", text: text(20) })],
+          remap: ["world_token_set", "world_token_note"],
+          matchKind: "content",
+        },
+        {
+          name: "content overlap just below the threshold",
+          units: [worldUnit("token_set", { text: text(28) })],
+          candidateNotes: [note({ id: "world_token_note", type: "world", title: "Token Note", text: text(33) })],
+        },
+        {
+          name: "a note with an empty title or no sections",
+          units: [worldUnit("punctuation_only", { title: "!!!", text: "The lantern bridge spans the river." })],
+          candidateNotes: [
+            lantern("world_empty_title", { title: "!!!", sections: {} }),
+            lantern("world_no_sections", { title: "Quiet Ford", sections: {} }),
+          ],
+        },
+        {
+          name: "archived, resolved, source, scene, global, other-scope, other-mode and other-type notes",
+          units: [worldUnit("river_crossing", { title: "Lantern Bridge" })],
+          candidateNotes: [
+            lantern("world_archived", { status: "archived" }),
+            lantern("world_resolved", { status: "resolved" }),
+            lantern("source_lantern", { type: "source" }),
+            lantern("scene_lantern", { type: "scene" }),
+            lantern("world_global", { scope: {} }),
+            lantern("world_other_chat", { scope: scopeB }),
+            lantern("world_shared_wider", { scope: { ...scopeA, characterIds: ["character-x"] } }),
+            lantern("world_game_mode", { modes: ["game"] }),
+            lantern("thread_lantern", { type: "thread" }),
+            lantern("world_lantern_bridge_old"),
+          ],
+          remap: ["world_river_crossing", "world_lantern_bridge_old"],
+          matchKind: "identity",
+        },
+        {
+          name: "a note in a narrower scope than the source",
+          units: [worldUnit("river_crossing", { title: "Lantern Bridge" })],
+          scope: { ...scopeA, characterIds: ["character-x"] },
+          candidateNotes: [lantern("world_lantern_bridge_old")],
+          remap: ["world_river_crossing", "world_lantern_bridge_old"],
+          matchKind: "identity",
+        },
+        {
+          name: "the derived id",
+          units: [worldUnit("lantern_bridge", { title: "Lantern Bridge" })],
+          candidateNotes: [lantern("world_lantern_bridge")],
+        },
+        {
+          // The diagnostic keeps the first eight plausible notes in candidate order, then sorts them.
+          name: "nine plausible notes",
+          units: [worldUnit("river_crossing", { title: "Lantern Bridge" })],
+          candidateNotes: ["8", "7", "6", "5", "4", "3", "2", "1", "0"].map((suffix) =>
+            lantern(`world_lantern_${suffix}`),
+          ),
+          ambiguous: ["1", "2", "3", "4", "5", "6", "7", "8"].map((suffix) => `world_lantern_${suffix}`),
+        },
+      ];
+      for (const testCase of cases) {
+        const result = await reconcile(testCase.units, {
+          candidateNotes: testCase.candidateNotes,
+          ...(testCase.scope ? { scope: testCase.scope } : {}),
+        });
+        assert.deepEqual(
+          [...result.remaps],
+          testCase.remap ? [testCase.remap] : [],
+          `candidateNotes, ${testCase.name}: remap`,
+        );
+        assert.deepEqual(
+          result.matches.map((match: { matchKind: string }) => match.matchKind),
+          testCase.matchKind ? [testCase.matchKind] : [],
+          `candidateNotes, ${testCase.name}: match kind`,
+        );
+        const ambiguity = result.diagnostics.find(
+          (candidate: { code: string }) => candidate.code === "candidate_reconciliation_ambiguous",
+        );
+        assert.deepEqual(
+          ambiguity?.details?.candidateTargetNoteIds,
+          testCase.ambiguous,
+          `candidateNotes, ${testCase.name}: ambiguity`,
+        );
+        assert.equal(
+          result.diagnostics.some(
+            (candidate: { code: string }) => candidate.code === "candidate_reconciliation_incomplete",
+          ),
+          false,
+          `candidateNotes, ${testCase.name}: a complete set is never incomplete`,
+        );
+      }
+    }
+
+    // A commit-time reconciliation filters and reads each candidate note once per call, not once
+    // per candidate group, so its cost stays one pass over the vault however many groups a source has.
+    {
+      let scopeReads = 0;
+      let sectionReads = 0;
+      const counted = (id: string) => {
+        const plain = note({ id, type: "world", title: `Counted ${id}`, text: `The ${id} ledger is sealed.` });
+        const { scope, sections, ...rest } = plain;
+        return Object.defineProperties(rest, {
+          scope: { enumerable: true, get: () => (scopeReads++, scope) },
+          sections: { enumerable: true, get: () => (sectionReads++, sections) },
+        });
+      };
+      const candidateNotes = ["world_count_a", "world_count_b", "world_count_c", "world_count_d"].map(counted);
+      const result = await reconcile(
+        ["first_group", "second_group", "third_group"].map((subjectId) =>
+          unit({ bucket: "world_fact", subjectId, sectionKey: "facts", text: `The ${subjectId} harbor is flooded.` }),
+        ),
+        { candidateNotes },
+      );
+      assertCounts(result, { groups: 3, created: 3 });
+      assert.ok(
+        scopeReads <= candidateNotes.length,
+        `each candidate's scope must be checked once per call, not per group (${scopeReads} reads)`,
+      );
+      assert.ok(
+        sectionReads <= candidateNotes.length,
+        `each candidate's sections must be read once per call, not per group (${sectionReads} reads)`,
+      );
+    }
+
     process.stdout.write(
       "Long-Term Memory candidate reconciliation regression: bounded reuse, create, ambiguity, scope, link closure, mutation kinds ok\n",
     );
@@ -768,7 +948,357 @@ async function main() {
   }
 }
 
-void runRegressionToCompletion("long-term-memory-candidate-reconciliation", main).catch((error) => {
+// Issue #1085 proof: reconciliation recall must not depend on the prompt-sized
+// `existingTypedNotes` window. This builds a vault larger than the default
+// existing-note budget (12 chunks), proves the prompt window misses the matching
+// notes, and proves per-candidate bounded retrieval still reconciles every one.
+async function recallBeyondPromptWindow() {
+  const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
+  const { reconcileEvidenceUnitCandidates } = await import(`${source}/extraction/candidate-reconciliation.ts`);
+  const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
+  const { rebuildLongTermMemoryIndexes, loadOrRebuildLongTermMemoryIndexes } = await import(
+    `${source}/recall/rebuild.ts`
+  );
+  const { retrieveLongTermMemory } = await import(`${source}/recall/retrieval.ts`);
+  const { sourceHashForLtmSourceNote } = await import(`${source}/extraction/source-hash.ts`);
+  const { configurePackageRuntime } = await import(`${source}/package-runtime.ts`);
+  const { prepareLongTermMemorySource } = await import(`${source}/extraction/source-processing.ts`);
+  const { readLtmDebugLog } = await import(`${source}/maintenance/debug-log.ts`);
+
+  const timestamp = "2026-07-21T00:00:00.000Z";
+  const scope = { chatId: "chat-a", chatIds: ["chat-a"] };
+  const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-reconcile-recall-"));
+  const releaseHost = configurePackageRuntime({
+    isDebugAgentsEnabled: () => false,
+    logger: { debug() {}, info() {}, warn() {}, error() {} },
+    dataDir,
+    resources: {
+      listCharacters: async () => [],
+      listPersonas: async () => [],
+      listLorebooks: async () => [],
+    },
+    persistence: {
+      getChat: async () => null,
+      listChats: async () => [],
+      updateChatMetadata: async () => {},
+    },
+  });
+  const root = join(dataDir, "long-term-memory");
+
+  const noteInput = (input: {
+    id: string;
+    type: string;
+    title: string;
+    text: string;
+    scope?: Record<string, unknown>;
+    tags?: string[];
+    sectionKey?: string;
+    provenance?: { kind: string; sourceId: string; entryId: string };
+  }) => ({
+    id: input.id,
+    title: input.title,
+    type: input.type,
+    status: "active",
+    modes: ["roleplay"],
+    scope: input.scope ?? scope,
+    tags: input.tags ?? [],
+    keywords: [],
+    links: [],
+    sections: { [input.sectionKey ?? "facts"]: { text: input.text, updatedAt: timestamp } },
+    ...(input.provenance ? { provenance: input.provenance } : {}),
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    version: 1,
+  });
+
+  try {
+    const storage = new LongTermMemoryStorage(root);
+    const sourceText = "The observatory archive ledger records the cobalt vault survey.";
+    await storage.createNote(
+      noteInput({
+        id: "source_session_recall",
+        type: "source",
+        title: "Session recall",
+        text: sourceText,
+        tags: ["source_summary"],
+        sectionKey: "source",
+        provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "entry-1" },
+      }) as never,
+    );
+    const sourceNote = (await storage.getNote("source_session_recall"))!;
+
+    // 16 distractors share the source vocabulary, so the prompt-sized window is filled by them.
+    // The 12 targets carry a unique marker that only their own candidate query reaches.
+    for (let index = 0; index < 16; index += 1) {
+      await storage.createNote(
+        noteInput({
+          id: `world_ledger_entry_${index + 1}`,
+          type: "world",
+          title: `Ledger Entry ${index + 1}`,
+          text: `Observatory archive ledger entry ${index + 1} records a routine vault survey.`,
+        }) as never,
+      );
+    }
+    const targets = [
+      "granite",
+      "marble",
+      "basalt",
+      "quartzite",
+      "feldspar",
+      "amethyst",
+      "topaz",
+      "garnet",
+      "jade",
+      "onyx",
+      "opal",
+      "jasper",
+    ].map((marker, index) => ({
+      noteId: `world_marker_${index + 1}`,
+      marker,
+    }));
+    const markerText = (marker: string) =>
+      `The ${marker} sigil and ${marker} ward and ${marker} altar mark the ${marker} vault.`;
+    for (const target of targets) {
+      await storage.createNote(
+        noteInput({
+          id: target.noteId,
+          type: "world",
+          title: `Marker ${target.marker}`,
+          text: markerText(target.marker),
+        }) as never,
+      );
+    }
+    // A same-subject note in another scope must never be selected.
+    await storage.createNote(
+      noteInput({
+        id: "world_marker_1_other_chat",
+        type: "world",
+        title: "Marker granite",
+        text: markerText("granite"),
+        scope: { chatId: "chat-b", chatIds: ["chat-b"] },
+      }) as never,
+    );
+    // Two same-title notes make a candidate genuinely ambiguous at extraction time.
+    await storage.createNote(
+      noteInput({
+        id: "world_ambiguous_sigil_a",
+        type: "world",
+        title: "Ambiguous Sigil",
+        text: "The ambiguous sigil first reading points north.",
+      }) as never,
+    );
+    await storage.createNote(
+      noteInput({
+        id: "world_ambiguous_sigil_b",
+        type: "world",
+        title: "Ambiguous Sigil",
+        text: "The ambiguous sigil second reading points south.",
+      }) as never,
+    );
+
+    await rebuildLongTermMemoryIndexes({ root });
+    const index = await loadOrRebuildLongTermMemoryIndexes(root);
+
+    // The prompt-sized window misses every target.
+    const promptWindow = await retrieveLongTermMemory({
+      root,
+      queryText: sourceText,
+      scope,
+      mode: "roleplay",
+      maxChunks: 12,
+      maxTokens: 4_096,
+    });
+    const promptNoteIds = new Set(promptWindow.chunks.map((chunk) => chunk.chunk.noteId));
+    assert.equal(
+      targets.some((target) => promptNoteIds.has(target.noteId)),
+      false,
+      "the fixture must exceed the prompt-sized existing-note window",
+    );
+
+    const unit = (target: (typeof targets)[number]) => ({
+      id: randomUUID(),
+      bucket: "world_fact",
+      subjectId: `sealed_vault_${target.marker}`,
+      sectionKey: "facts",
+      text: markerText(target.marker),
+      claimKind: "static",
+      importance: "major",
+      keywords: [],
+      evidence: [`source_note:${sourceNote.id}`],
+      confidence: 0.95,
+      salience: 0.8,
+      status: "active",
+      links: [],
+      sourceHash: sourceHashForLtmSourceNote(sourceNote as never),
+    });
+
+    const resolved = await Promise.all(
+      targets.map(async (target) => {
+        const result = await reconcileEvidenceUnitCandidates({
+          units: [unit(target)] as never,
+          root,
+          scope,
+          mode: "roleplay",
+          storage,
+          index,
+          // The cap must cover the whole ranked note set: a smaller window is correctly treated
+          // as an incomplete candidate set and left for review instead of being remapped.
+          maxCandidatesPerUnit: 32,
+        });
+        return { target, result };
+      }),
+    );
+
+    const recalled = resolved.filter(
+      ({ target, result }) => result.remaps.get(`world_sealed_vault_${target.marker}`) === target.noteId,
+    );
+    assert.equal(recalled.length, targets.length, "every recorded candidate must meet the recall floor");
+    assert.equal(
+      resolved.some(({ result }) => [...result.remaps.values()].includes("world_marker_1_other_chat")),
+      false,
+      "scope-incompatible notes must never be reconciled",
+    );
+    assert.equal(
+      resolved.every(({ result }) => result.diagnostics.length === 0),
+      true,
+      "an unambiguous candidate set must not warn",
+    );
+
+    // An ambiguous reconciliation must gate auto-apply on review.
+    const ambiguousContent = JSON.stringify({
+      summary: "One ambiguous claim.",
+      units: [
+        {
+          bucket: "world_fact",
+          subjectId: "ambiguous_sigil",
+          sectionKey: "facts",
+          title: "Ambiguous Sigil",
+          text: "The ambiguous sigil points north and south.",
+          claimKind: "static",
+          importance: "major",
+          evidence: [`source_note:${sourceNote.id}`],
+          confidence: 0.95,
+          salience: 0.8,
+          status: "active",
+          links: [],
+          sourceHash: sourceHashForLtmSourceNote(sourceNote as never),
+        },
+      ],
+    });
+    let capturedMessages: unknown[] = [];
+    const languageModel = {
+      name: "FixtureModel",
+      model: "fixture-model",
+      maxContext: null,
+      maxOutputTokens: null,
+      fitContext(messages: unknown[], fitOptions: { maxTokens: number }) {
+        return {
+          messages,
+          maxTokens: fitOptions.maxTokens,
+          estimatedTokensBefore: 20,
+          estimatedTokensAfter: 20,
+          trimmed: false,
+        };
+      },
+      async chatComplete(messages: unknown[]) {
+        capturedMessages = messages;
+        return { content: ambiguousContent, finishReason: "stop" };
+      },
+    };
+    const prepared = await prepareLongTermMemorySource({
+      sourceNote: sourceNote as never,
+      languageModel: languageModel as never,
+      scope,
+      modes: ["roleplay"],
+      mode: "roleplay",
+      extractionMode: "roleplay",
+      operationId: randomUUID(),
+      root,
+    });
+    assert.equal(prepared.reviewRequired, true, "an ambiguous reconciliation must require review");
+    assert.ok(
+      prepared.diagnostics.some((diagnostic) => diagnostic.code === "candidate_reconciliation_ambiguous"),
+      "the ambiguity diagnostic must reach the draft",
+    );
+
+    // Issue #1449 proof: a create-only preparation still records the outcome counts. The vault holds
+    // no timeline notes, so this candidate has nothing to match in a complete window.
+    const createOnlyOperationId = randomUUID();
+    const createOnlyContent = JSON.stringify({
+      summary: "One new claim.",
+      units: [
+        {
+          bucket: "timeline_event",
+          subjectId: "brand_new_beacon",
+          sectionKey: "event",
+          title: "Brand New Beacon",
+          text: "The brand new beacon burns green at dusk.",
+          claimKind: "static",
+          importance: "major",
+          evidence: [`source_note:${sourceNote.id}`],
+          confidence: 0.95,
+          salience: 0.8,
+          status: "active",
+          links: [],
+          sourceHash: sourceHashForLtmSourceNote(sourceNote as never),
+        },
+      ],
+    });
+    await prepareLongTermMemorySource({
+      sourceNote: sourceNote as never,
+      languageModel: {
+        ...languageModel,
+        chatComplete: async () => ({ content: createOnlyContent, finishReason: "stop" }),
+      } as never,
+      scope,
+      modes: ["roleplay"],
+      mode: "roleplay",
+      extractionMode: "roleplay",
+      operationId: createOnlyOperationId,
+      root,
+    });
+    const reconciliationEvents = (await readLtmDebugLog({ operationId: createOnlyOperationId }, root)).filter(
+      (event) => event.action === "candidate_reconciliation",
+    );
+    assert.equal(reconciliationEvents.length, 1, "a create-only run must still record one reconciliation event");
+    assert.equal(reconciliationEvents[0]!.status, "ok");
+    assert.deepEqual(reconciliationEvents[0]!.counts, {
+      groups: 1,
+      matched: 0,
+      created: 1,
+      ambiguous: 0,
+      incomplete: 0,
+    });
+
+    // Issue #1086 proof: the prompt must not serialize the broad existing-note
+    // collection. This vault is larger than the prompt window, so the removed
+    // `existingTypedNotes` block and its note text would otherwise be present.
+    const promptBody = JSON.stringify(capturedMessages);
+    assert.equal(
+      promptBody.includes("existingTypedNotes"),
+      false,
+      "the extraction prompt must not serialize existingTypedNotes",
+    );
+    assert.equal(
+      promptBody.includes("records a routine vault survey"),
+      false,
+      "existing note text must not be serialized into the extraction prompt",
+    );
+    assert.ok(promptBody.includes(sourceText), "the extraction prompt must still carry the source text");
+
+    process.stdout.write(
+      `Long-Term Memory reconciliation recall regression: ${recalled.length}/${targets.length} beyond the prompt window, bounded, scope-safe, review-gated ok\n`,
+    );
+  } finally {
+    releaseHost();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+}
+
+void runRegressionToCompletion("long-term-memory-candidate-reconciliation", async () => {
+  await main();
+  await recallBeyondPromptWindow();
+}).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

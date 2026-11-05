@@ -99,6 +99,10 @@ export async function reconcileEvidenceUnitCandidates(options: {
     groups.set(noteId, bucket);
   }
 
+  // The complete set is filtered once per call, not per group: scope, mode and status do not depend on the group.
+  const compatibleByType =
+    options.candidateNotes && compatibleCandidatesByType(options.candidateNotes, options.scope, options.mode);
+  const keysFor = noteMatchKeyCache();
   const remaps = new Map<string, string>();
   const diagnostics: LtmExtractionDiagnostic[] = [];
   const matches: CandidateReconciliationMatch[] = [];
@@ -120,11 +124,10 @@ export async function reconcileEvidenceUnitCandidates(options: {
     // per-candidate lane cost shows up in extraction latency.
     let candidates: LtmNote[];
     let complete: boolean;
-    if (options.candidateNotes) {
+    if (compatibleByType) {
       // The caller's set is complete, so a singleton match is always safe to reuse.
-      candidates = options.candidateNotes
+      candidates = (compatibleByType.get(noteType) ?? [])
         .filter((note) => note.id !== derivedNoteId)
-        .filter((note) => isCompatibleCandidateNote(note, noteType, options.scope, options.mode))
         // Skip ids this unit cannot target, so a match never compiles against a different new note.
         .filter((note) => isRemappableEvidenceUnitTarget(groupUnits[0]!, note.id));
       complete = true;
@@ -165,10 +168,9 @@ export async function reconcileEvidenceUnitCandidates(options: {
         .filter((note) => isRemappableEvidenceUnitTarget(groupUnits[0]!, note.id));
     }
 
-    const identityMatches = candidates.filter((note) => identityMatchesGroup(groupUnits, note));
-    const plausible = identityMatches.length
-      ? identityMatches
-      : candidates.filter((note) => contentMatchesGroup(groupUnits, note));
+    const identityKeys = new Set(groupUnits.flatMap(identityKeysForUnit));
+    const identityMatches = candidates.filter((note) => identityKeys.has(keysFor(note).title));
+    const plausible = identityMatches.length ? identityMatches : contentMatches(groupUnits, candidates, keysFor);
 
     const matchKind = identityMatches.length ? "identity" : "content";
 
@@ -246,11 +248,25 @@ export async function reconcileEvidenceUnitCandidates(options: {
 }
 
 function isCompatibleCandidateNote(note: LtmNote, noteType: LtmNote["type"], scope: LtmScope, mode?: LtmMode) {
+  return note.type === noteType && isReconcilableNote(note, scope, mode);
+}
+
+function compatibleCandidatesByType(notes: readonly LtmNote[], scope: LtmScope, mode?: LtmMode) {
+  const byType = new Map<LtmNote["type"], LtmNote[]>();
+  for (const note of notes) {
+    if (!isReconcilableNote(note, scope, mode)) continue;
+    const bucket = byType.get(note.type);
+    if (bucket) bucket.push(note);
+    else byType.set(note.type, [note]);
+  }
+  return byType;
+}
+
+function isReconcilableNote(note: LtmNote, scope: LtmScope, mode?: LtmMode) {
   if (isLtmSourceLikeNote(note) || note.type === "scene") return false;
   // Keep retrieval's candidate view: archived notes and resolved threads are not recall targets, so a
   // complete commit-time set must not revive one the preparation snapshot would skip.
   if (note.status === "archived" || note.status === "resolved") return false;
-  if (note.type !== noteType) return false;
   if (!canUpdateLtmScopedTarget(note.scope, scope)) return false;
   if (mode && !note.modes.includes(mode)) return false;
   return true;
@@ -270,12 +286,6 @@ function reconciliationQueryText(units: LtmEvidenceUnit[]) {
     .slice(0, 4_000);
 }
 
-function identityMatchesGroup(units: LtmEvidenceUnit[], note: LtmNote) {
-  const noteKey = normalizeIdentity(note.title ?? "");
-  if (!noteKey) return false;
-  return units.some((unit) => identityKeysForUnit(unit).includes(noteKey));
-}
-
 function identityKeysForUnit(unit: LtmEvidenceUnit) {
   return uniqueStrings(
     [unit.title, unit.subjectId.replace(/_/g, " "), ...(unit.subjectNames ?? []), ...(unit.subjectKeys ?? [])]
@@ -284,22 +294,37 @@ function identityKeysForUnit(unit: LtmEvidenceUnit) {
   );
 }
 
-function contentMatchesGroup(units: LtmEvidenceUnit[], note: LtmNote) {
-  const sectionTexts = Object.values(note.sections)
-    .map((section) => section.text.trim())
-    .filter(Boolean);
-  if (sectionTexts.length === 0) return false;
-  return units.some((unit) => {
-    const unitText = normalizeIdentity(unit.text);
-    if (!unitText) return false;
-    const unitTokens = tokenize(unit.text);
-    if (unitTokens.size === 0) return false;
-    return sectionTexts.some((sectionText) => {
-      if (normalizeIdentity(sectionText) === unitText) return true;
-      const sectionTokens = tokenize(sectionText);
-      if (sectionTokens.size === 0) return false;
-      return jaccardSimilarity(unitTokens, sectionTokens) >= CONTENT_MATCH_THRESHOLD;
-    });
+type NoteMatchKeys = { title: string; sections?: { text: string; tokens: Set<string> }[] };
+
+/** Normalized title and section tokens per note, computed at most once per reconciliation call. */
+function noteMatchKeyCache() {
+  const cache = new Map<LtmNote, NoteMatchKeys>();
+  return (note: LtmNote) => {
+    let keys = cache.get(note);
+    if (!keys) cache.set(note, (keys = { title: normalizeIdentity(note.title ?? "") }));
+    return keys;
+  };
+}
+
+function contentMatches(units: LtmEvidenceUnit[], candidates: LtmNote[], keysFor: (note: LtmNote) => NoteMatchKeys) {
+  const unitKeys = units
+    .map((unit) => ({ text: normalizeIdentity(unit.text), tokens: tokenize(unit.text) }))
+    .filter((unit) => unit.text && unit.tokens.size > 0);
+  if (unitKeys.length === 0) return [];
+  return candidates.filter((note) => {
+    const keys = keysFor(note);
+    keys.sections ??= Object.values(note.sections)
+      .map((section) => section.text.trim())
+      .filter(Boolean)
+      .map((text) => ({ text: normalizeIdentity(text), tokens: tokenize(text) }));
+    const sections = keys.sections;
+    return unitKeys.some((unit) =>
+      sections.some(
+        (section) =>
+          section.text === unit.text ||
+          (section.tokens.size > 0 && jaccardSimilarity(unit.tokens, section.tokens) >= CONTENT_MATCH_THRESHOLD),
+      ),
+    );
   });
 }
 

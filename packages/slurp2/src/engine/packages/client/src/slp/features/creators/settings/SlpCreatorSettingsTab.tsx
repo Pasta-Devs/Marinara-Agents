@@ -4,6 +4,8 @@ import { SettingAnchor } from "../../../modules/settings/SlpSettingsKit";
 import { StatusStrip } from "../../../modules/settings/SlpSettingsInputs";
 import type { SlpCreatorSettingsSectionProps } from "./slp-creator-settings-contract";
 import type { SlpCreatorSettingsSection } from "./slp-creator-settings-sections";
+import { useSlurpSettings } from "../../settings/slp-settings-contract";
+import { slpExtensionOn } from "../../../../../../shared/src/slp/slp-extensions.js";
 
 /**
  * One tab of the Creator settings modal: its blocks in order, each under its own heading when the
@@ -15,7 +17,13 @@ export function SlpCreatorSettingsTab({
   ...props
 }: SlpCreatorSettingsSectionProps & { section: SlpCreatorSettingsSection }) {
   const { t } = useTranslation();
-  const visible = section.blocks.filter((block) => !block.available || block.available(props.creator));
+  const settings = useSlurpSettings(props.active).data;
+  // A switched-off extension's blocks go; while settings load, they show.
+  const visible = section.blocks.filter(
+    (block) =>
+      (!block.available || block.available(props.creator)) &&
+      (!block.extension || !settings || slpExtensionOn(settings, block.extension)),
+  );
   const headed = visible.length > 1;
   // Two blocks fit on one screen; a jump row there only looks like a second set of tabs.
   const jumpRow = visible.length > 2;

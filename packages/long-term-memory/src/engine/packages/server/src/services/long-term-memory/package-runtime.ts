@@ -1,3 +1,5 @@
+import { LtmServiceError } from "./service-error.js";
+
 export type RuntimeLogArgument = string | number | boolean | null | undefined | object;
 
 export type PackageLanguageModelError = Error & {
@@ -98,7 +100,21 @@ export type CapabilityRuntimeHost = {
         updatedAt: string;
       }>
     >;
-    updateChatMetadata(input: { chatId: string; metadata: Record<string, unknown>; updatedAt: string }): Promise<void>;
+    listMessages(chatId: string): Promise<
+      Array<{
+        id: string;
+        chatId: string;
+        role: string;
+        characterId: string | null;
+        content: string;
+        activeSwipeIndex: number;
+        extra: unknown;
+        createdAt: string;
+        agentContent?: string;
+      }>
+    >;
+    /** Engines that have it skip messages the user hid or showed by hand and return the ids actually changed. */
+    setMessagesHiddenFromAI?(chatId: string, messageIds: string[], hidden: boolean): Promise<string[]>;
   };
 };
 
@@ -161,6 +177,32 @@ export function getPackageLanguageModels() {
   return languageModels;
 }
 
+// The Engine words a missing, deleted or unusable model connection for users. Anything else the resolver throws,
+// such as a database or key-file error, can name file paths, so it goes on to routeError, which logs it.
+// ponytail: matches the Engine's current wording, so a reworded setup message gets the route's fallback until the
+// Engine marks these errors with a code.
+const LANGUAGE_MODEL_SETUP_ERRORS = [
+  "Choose a language model connection ",
+  "No language model connection ",
+  "The selected connection ",
+  "The selected language model connection ",
+  "Language model connection not found: ",
+  "Chat language model connection not found: ",
+  "Decision connections cannot ",
+];
+
+export async function resolvePackageLanguageModel(
+  request: Parameters<NonNullable<CapabilityRuntimeHost["languageModels"]>["resolveForRequest"]>[0],
+) {
+  try {
+    return await getPackageLanguageModels().resolveForRequest(request);
+  } catch (error) {
+    if (error instanceof Error && LANGUAGE_MODEL_SETUP_ERRORS.some((start) => error.message.startsWith(start)))
+      throw new LtmServiceError(error.message, 400, "ltm_model_configuration");
+    throw error;
+  }
+}
+
 export function getPackageResources() {
   const resources = currentHost().resources;
   if (!resources) throw new Error("Long-Term Memory runtime host did not provide resources");
@@ -174,15 +216,14 @@ export function isPackageDebugAgentsEnabled() {
 export const logger = {
   debug: (message: string, ...args: RuntimeLogArgument[]) => host?.logger.debug(message, ...args),
   info: (message: string, ...args: RuntimeLogArgument[]) => host?.logger.info(message, ...args),
-  warn: (first: unknown, second?: RuntimeLogArgument, ...args: RuntimeLogArgument[]) =>
-    host &&
-    (typeof first === "string"
-      ? host.logger.warn(first, second, ...args)
-      : host.logger.warn(
-          typeof second === "string" ? second : "Long-Term Memory warning",
-          first as RuntimeLogArgument,
-          ...args,
-        )),
+  warn: (first: unknown, second?: RuntimeLogArgument, ...args: RuntimeLogArgument[]) => {
+    if (!host) return;
+    if (typeof first === "string") return host.logger.warn(first, second, ...args);
+    // The host's warn takes the message first, and pino (the Engine's logger) drops an argument the message
+    // has no placeholder for, so an error passed first goes into the message.
+    const cause = first instanceof Error ? (first.stack ?? first.message) : String(first);
+    host.logger.warn(`${typeof second === "string" ? second : "Long-Term Memory warning"}: ${cause}`, ...args);
+  },
   error: (error: unknown, message: string, ...args: RuntimeLogArgument[]) =>
     host?.logger.error(error, message, ...args),
   debugOverride: (overrideEnabled: boolean, message: string, ...args: RuntimeLogArgument[]) => {

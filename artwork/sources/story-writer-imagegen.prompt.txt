@@ -1,0 +1,129 @@
+Built-in image generation prompt (2026-10-25), generated with Codex image_gen
+
+PROMPT (exact image_gen prompt):
+Use case: illustration-story.
+Asset type: Story Writer catalog cover for Marinara Engine, square 1:1 composition, designed to remain legible at 44px.
+
+Reference images: Mari_profile.png and pose-greet.webp are Professor Mari's canonical identity and clothing. chibi-professor-mari.webp supplies only proportions and bold line language; DO NOT copy its animal ears or tail. storyboard.png is the exact catalog-cover visual family: large circular medallion, thick very dark navy outlines, bold flat colors, gentle cel shading, polished friendly cartoon, pure clean white canvas outside the medallion. Create a new writing scene, not a storyboard or filmstrip.
+
+Scene and composition: Professor Mari is large and centered, waist-up at a cozy writing desk, happily writing with a long feather quill into one large open antique book in the lower foreground. Her face is fully visible and unobstructed; her head and bright expressive eyes are the main focal point. The book has rich leather-brown covers and warm parchment-cream pages that glow softly. One small bright-yellow sticky note is attached to the book's top outer corner. Suggest handwriting only with a few nonalphabetic abstract curved squiggles, absolutely no readable letters. A single small warm candle at the side lights the scene. A few ink sparkles and two curling loose paper pages frame the composition within the circle. Keep the composition simple and the silhouettes bold for tiny catalog display.
+
+Professor Mari identity: adult woman with voluminous wavy golden-blonde hair, very large bright light-blue eyes, dramatic black eyelashes, and BLACK RECTANGULAR GLASSES. Navy-blue hoodie. Charcoal-gray trousers and black boots are canonical but are below the waist-up crop. Human ears only. Friendly encouraging smile. Two anatomically coherent hands: one grips the quill in a natural writing pose, the other rests beside the open book.
+
+Style and palette: match storyboard.png's crisp illustrated circular medallion family, thick dark contours, bold flat color blocks with gentle cel shading. Deep ink-navy circular backdrop, parchment cream, rich leather brown, Marinara orange, warm gold, golden candlelight. Large clean face, open book, and long quill are easily read shapes. Circle stays fully inside the square with a slim clean WHITE margin at the corners and outside the circle. No transparency for this cover.
+
+Avoid: title, letters, readable words, lettering on book spine, logo, watermark, photorealism, 3D rendering, extra people, animal ears, cat ears, tail, malformed hands, extra fingers, face occlusion, clutter, storyboard panels, filmstrip. Deliver one polished square illustration at full available resolution.
+
+TOOL: built-in image_gen.imagegen
+transparent_background: false
+referenced_image_paths: refs/Mari_profile.png, refs/pose-greet.webp, refs/chibi-professor-mari.webp, refs/storyboard.png
+
+Generated at 1254x1254 and downsampled to the catalog's canonical 512x512 PNG. The full-resolution source is preserved beside this prompt as story-writer-imagegen.png.
+
+--- Home tab icon (packages/story-writer/story-writer-icon.png) ---
+Asset: story-writer-tab-icon.png
+Generator: built-in image_gen.imagegen
+Original resolution: 1254x1254 pixels
+Final resolution: 256x256 pixels
+Tool arguments: transparent_background=true; no referenced_image_paths or num_last_images_to_include (new image generated from visible style reference).
+Original file: story-writer-tab-icon-full.png
+Final conversion: sips -z 256 256 out/story-writer-tab-icon-full.png --out out/story-writer-tab-icon.png
+Alpha verification: sips reports hasAlpha: yes for original and final.
+
+EXACT GENERATION PROMPT:
+Use case: logo-brand
+Asset type: Story Writer home browser tab icon, ultimately 256x256 PNG shown at about 18px.
+Primary request: Generate a single chunky flat rounded open-book icon, on a genuinely transparent background. Follow the simple visual language of the shown documentation.png style reference: clean broad color areas, plump rounded forms, very little detail, icon design.
+Subject: A warmly colored open book with parchment-cream pages, a leather-brown and warm orange cover, a clearly visible large deep-navy feather quill resting diagonally across the right page, and one tiny bright orange-yellow sticky-note tab on the top edge. The feather quill is the key identifying feature and must remain a clear simple silhouette at 18 pixels.
+Composition: One centered icon filling most of the square canvas with a small transparent margin, book viewed from above with slight front perspective. Book spine centered; pages form two simple broad curved wings. Quill points diagonally down-left, with its bold feather body extending toward the upper-right. Three or fewer broad feather lobes, thick solid shaft. The sticky tab is a small rounded rectangle along the top-left page edge. Transparent empty space around the whole object.
+Style and palette: Flat rounded graphic, warm parchment pages, rich leather-brown/orange cover, navy quill accents. Use at most a few solid color regions and very gentle minimal shading. Clean rounded outer edges. No heavy black outlines; any dark accent or stroke must be several pixels thick at final 256px size. Match the friendly simple visual family of documentation.png while clearly distinct through the quill and warm colors.
+Constraints: Real alpha transparency, no white backdrop or checkerboard painted into the image. No text, letters, words, writing marks, logos, watermark, sparkles, ground shadow, scenery, frames, people, texture, thin lines, ornamental detail, photorealism, or 3D rendering. The icon must stay legible as a book and quill at 18x18 pixels.
+
+
+--- Empty-page illustration (packages/story-writer/story-writer-mari.webp) ---
+Asset: story-writer-mari.webp
+Tool: built-in image_gen.imagegen
+Generation intent: reference-preserving character repose/edit
+transparent_background: true
+referenced_image_paths:
+- refs/Mari_profile.png
+- refs/pose-greet.webp
+- refs/chibi-professor-mari.webp
+Original generated resolution: 1024x1536 PNG with alpha
+Original retained: out/story-writer-mari-full.png
+Final resolution: 426x640 WebP, lossless with alpha
+Processing: sips --resampleHeight 640; cwebp -lossless -exact
+Exact generation prompt:
+
+Use case: identity-preserve.
+Create one polished full-body transparent character cutout for the Marinara Engine Story Writer package by reposing Professor Mari from the reference images. The references are identity and drawing-language guides, not a background to reproduce. Reference 1 Mari_profile.png establishes canonical face and hair; reference 2 pose-greet.webp establishes the full-body chibi-adult proportions, clothing and boots; reference 3 chibi-professor-mari.webp establishes bold simple outline language only. Remove and do not include the animal ears or tail seen in reference 3.
+
+Subject: Professor Mari is an ADULT WOMAN with a large expressive chibi head and a compact adult body matching the proportions of pose-greet.webp, with voluminous shoulder-length wavy golden-blonde hair, very large bright LIGHT BLUE eyes, dramatic thick black lashes, BLACK RECTANGULAR GLASSES, fair skin, a navy-blue hoodie, charcoal-gray trousers and black boots. Her canonical glasses and light-blue eyes must both be clearly visible. Friendly encouraging smile. Front-facing with a slight natural turn, standing comfortably.
+Pose and props: She holds a large CLOSED antique leather-brown book snug against one hip in the crook of one arm, and raises a long elegant feather quill in her other hand as if she is about to start writing. Make the closed book clearly recognizable with its cover and cream page block visible. Quill has a warm cream feather and a deep ink-navy shaft. Natural simplified hands, readable grip, no extra fingers. Keep the face unobstructed.
+Style: clean charming 2D character illustration, thick dark outlines, bold flat colors with gentle cel shading; smooth deliberate linework, comparable to the references without pixelation, no painterly texture. Warm golden hair contrasts with deep navy hoodie. Full figure including both boots, quill tip and all hair fully visible with a little clear margin. Portrait composition, one single character centered, suitable to resize to approximately 640 pixels tall.
+Background: genuine fully TRANSPARENT alpha cutout, including clear gaps around the arms and between the legs. No backdrop, no floor, no ground shadow, no shadow box, no checkerboard graphic. No animal ears, no animal tail, no cats, no title, no letters, no readable writing, no logos, no watermark, no extra people, no photorealism, no 3D.
+
+
+--- Textures (wood-desk.webp, paper-light.webp, paper-dark.webp) ---
+Story Writer background textures
+Generator: built-in image_gen tool (three generation calls, one dark-paper color refinement).
+Final format: lossy WebP, cwebp method 6; wood Q75, paper Q78.
+Resize: cwebp -resize WIDTH HEIGHT; no additional effects or color grading.
+Original resolutions below are the actual generated PNG dimensions.
+File sizes are decimal bytes / KB (1 KB = 1000 bytes).
+
+========================================================================
+wood-desk.webp
+Initial original resolution: 1586x992
+Final resolution: 1920x1200
+WebP quality: 75
+Final file size: 91530 bytes (91.530 KB)
+
+Exact initial prompt:
+Use case: photorealistic-natural
+Asset type: full-bleed background texture for Story Writer, an antique-book reading and writing interface
+Primary request: A top-down, photo-like texture of a dark walnut / ebony wooden desk surface filling the entire image. Warm dark brown wood with deep, softly graduated shadows. Visible but soft natural wood grain running horizontally from left to right. A gentle darker vignette toward all outer edges; the central region has restrained contrast so an open book overlaid by the application will stand out.
+Composition/framing: Flat overhead surface, landscape, 8:5 aspect ratio, intended final size 1920x1200. Only the wooden surface, extending beyond every image edge; no desk outline.
+Lighting/mood: Diffuse warm low light, matte surface, no glare, no hard cast shadows, no central spotlight.
+Constraints: No objects, no book, no props, no text, no letters, no logos, no watermark. No large cracks, conspicuous knots, strong plank seams, scratches, or decorative borders.
+
+========================================================================
+paper-light.webp
+Initial original resolution: 1060x1484
+Final resolution: 1000x1400
+WebP quality: 78
+Final file size: 43156 bytes (43.156 KB)
+
+Exact initial prompt:
+Use case: photorealistic-natural
+Asset type: full-bleed blank book-page texture for the light reading mode of Story Writer
+Primary request: A single aged book page surface, warm cream / ivory parchment, with extremely subtle natural paper fibers and faint uneven tone. The broad middle area must remain very clean, nearly uniform, and low contrast so text placed over it stays easy to read. Slightly darker, softly toasted outer edges fading gradually into the cream center.
+Composition/framing: Portrait, 5:7 aspect ratio, intended final size 1000x1400. Flat perpendicular view, evenly lit, full-bleed paper texture extending all the way to every image edge. This is the surface texture of one page, with no surrounding background and no visible physical page outline.
+Lighting/mood: Soft even illumination; muted warm antique paper, delicate natural material detail.
+Constraints: No text, no letters, no symbols, no lines, no ruling, no folds, no creases, no torn edges, no tears, no holes, no shadows or book gutter. Absolutely no stains, blotches, foxing spots, speckles, or dark marks in the middle. No ornamental frame, no logos, no watermark. No photographic perspective or curled page.
+
+========================================================================
+paper-dark.webp
+Initial original resolution: 1060x1484
+Final resolution: 1000x1400
+WebP quality: 78
+Final file size: 14878 bytes (14.878 KB)
+
+Exact initial prompt:
+Use case: photorealistic-natural
+Asset type: full-bleed blank book-page texture for the dark night reading mode of Story Writer
+Primary request: A single aged paper page surface in deep sepia-charcoal, the night-mode counterpart of warm antique ivory book paper. Keep the main surface approximately between #2a2420 and #3a3029, a dark warm charcoal-brown rather than gray or orange. Extremely subtle natural paper fibers, very faint tone variation, slightly darker outer edges with a gradual restrained fade. The broad center must remain clean, uniform, and low contrast for light-colored text overlaid by the application.
+Composition/framing: Portrait, 5:7 aspect ratio, intended final size 1000x1400. Flat perpendicular view, evenly lit, full-bleed paper texture reaching every edge. No surrounding background and no visible physical page outline.
+Lighting/mood: Matte dark paper with soft even illumination and understated antique material detail.
+Constraints: No text, no letters, no symbols, no lines, no ruling, no stains, no blotches, no speckles, no bright flecks, no cloudy patches, no folds, no creases, no torn edges, no tears, no holes, no shadows or book gutter. No ornamental frame, no logos, no watermark. No photographic perspective or curled page.
+
+Selected source: the color-refined image.
+Refinement original resolution: 1060x1484
+Refinement reference: initial generated paper-dark PNG at 1060x1484.
+
+Exact refinement prompt:
+Use case: lighting-weather
+Asset type: full-bleed blank aged-paper texture for Story Writer night reading mode
+Input image: the supplied dark paper texture is the edit target.
+Change only its color and subtle tone: darken and neutralize the warm brown surface into deep sepia-charcoal. The broad central paper surface must be close to sRGB #322a25 (RGB 50,42,37), within roughly #2a2420 to #3a3029. Keep the central area almost uniform and low contrast for light-colored reading text. Smooth away broad cloudy mottling while retaining extremely subtle fine natural paper fibers. Keep gently darker outer edges, approximately #24201c, with a restrained gradual fade. The result should clearly read as dark charcoal-brown paper rather than medium brown.
+Preserve the portrait 5:7 framing, flat perpendicular perspective, full-bleed paper surface and soft even illumination. No page outline or surrounding background. No text, no letters, no symbols, no lines, no stains, no blotches, no speckles, no bright flecks, no folds, no torn edges, no logos, no watermark. Intended final size 1000x1400.

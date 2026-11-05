@@ -1,8 +1,7 @@
-import { characterCardName, normalizeRelationshipState } from "./state.mjs";
+import { characterCardName, namePattern, normalizeRelationshipState } from "./state.mjs";
 
 const compareIds = (left, right) => (left < right ? -1 : left > right ? 1 : 0);
 const compactText = (value) => String(value ?? "").replace(/\s+/gu, " ").trim();
-const escapeRegularExpression = (value) => value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 
 function assignedCharacterIdentity(character) {
   const characterId = typeof character?.id === "string"
@@ -17,8 +16,10 @@ function assignedCharacterIdentity(character) {
 function buildUniqueNameMatchers(characters, allowedCharacterIds) {
   if (!Array.isArray(characters)) throw new Error("Relationship presence requires an assigned-character array.");
   const candidatesByName = new Map();
+  const names = [];
   for (const character of characters) {
     const candidate = assignedCharacterIdentity(character);
+    if (candidate.name) names.push(candidate.name);
     if (!candidate.characterId || !allowedCharacterIds.has(candidate.characterId) || !candidate.name) continue;
     const normalizedName = candidate.name.toLowerCase();
     candidatesByName.set(normalizedName, candidatesByName.has(normalizedName) ? null : candidate);
@@ -27,10 +28,7 @@ function buildUniqueNameMatchers(characters, allowedCharacterIds) {
     .filter(Boolean)
     .map((candidate) => ({
       characterId: candidate.characterId,
-      matcher: new RegExp(
-        `(^|[^\\p{L}\\p{N}_])${escapeRegularExpression(candidate.name)}(?=$|[^\\p{L}\\p{N}_])`,
-        "iu",
-      ),
+      matcher: namePattern(candidate.name, "iu", names),
     }));
 }
 

@@ -31,7 +31,7 @@ import {
 import { getLtmExtractionConfig } from "../extraction/extraction-config.js";
 import { branchInheritedNoteIds } from "../recall/generation-injection.js";
 import { applyLtmNoteTransfer, previewLtmNoteTransfer } from "../maintenance/note-transfer.js";
-import { getPackageLanguageModels, getPackagePersistence, getPackageResources, logger } from "../package-runtime.js";
+import { getPackagePersistence, getPackageResources, logger, resolvePackageLanguageModel } from "../package-runtime.js";
 import { retrieveLongTermMemory } from "../recall/retrieval.js";
 import { applyLtmScopeLinksToDerivedNotes } from "../identity/scope-links.js";
 import { getLtmGlobalSettings } from "../settings.js";
@@ -44,7 +44,10 @@ import {
   getLtmChatDisplayName,
 } from "../identity/chat-scope.js";
 import { estimateLongTermMemoryPromptOverhead } from "../recall/prompt.js";
-import { resolveLongTermMemoryRecallSettings } from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
+import {
+  resolveLongTermMemoryRecallSettings,
+  resolveLtmChatMemories,
+} from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
 import { isLtmSourceNote } from "../extraction/source-extraction.js";
 import { processLongTermMemorySource } from "../extraction/source-processing.js";
 import { PROFESSOR_MARI_CHARACTER_ID } from "../sources/interop.js";
@@ -54,7 +57,7 @@ import {
   getLtmScopePersonaIds,
   isGlobalLtmScope,
 } from "../../../../../shared/src/features/agents/long-term-memory/scope.js";
-import { loadTrustedLtmSubjectCatalog } from "../identity/subject-identity.js";
+import { loadTrustedLtmSubjectCatalog } from "../identity/subject-catalog.js";
 import { LtmServiceError } from "../service-error.js";
 import type { FastifyInstance } from "fastify";
 import {
@@ -561,7 +564,12 @@ export function registerNotesRoutes(app: FastifyInstance, runtime: LtmRouteRunti
         return reply.status(400).send({ error: "Long-term memory note is not a source note" });
       const explicitChatId = body.chatId;
       const chatId =
-        body.chatId ?? (sourceNote.provenance?.kind === "chat_summary" ? sourceNote.provenance.sourceId : undefined);
+        body.chatId ??
+        (sourceNote.provenance?.kind === "chat_summary" ||
+        sourceNote.provenance?.kind === "chat_transcript" ||
+        sourceNote.provenance?.kind === "advanced_memory"
+          ? sourceNote.provenance.sourceId
+          : undefined);
       const chat = chatId ? await getPackagePersistence().getChat(chatId) : null;
       if (explicitChatId && !chat) return reply.status(404).send({ error: "Chat not found" });
       const operationId = randomUUID();
@@ -573,21 +581,12 @@ export function registerNotesRoutes(app: FastifyInstance, runtime: LtmRouteRunti
       request.raw.once("aborted", abort);
       request.raw.once("close", close);
       try {
-        let languageModel;
-        try {
-          const extractionConfig = await getLtmExtractionConfig(root, body.mode);
-          languageModel = await getPackageLanguageModels().resolveForRequest({
-            connectionId: body.connectionId ?? extractionConfig.connectionId,
-            chatConnectionId: chat?.connectionId ?? null,
-            model: body.model,
-          });
-        } catch (error) {
-          throw new LtmServiceError(
-            error instanceof Error ? error.message : "Language model configuration is invalid",
-            400,
-            "ltm_model_configuration",
-          );
-        }
+        const extractionConfig = await getLtmExtractionConfig(root, body.mode);
+        const languageModel = await resolvePackageLanguageModel({
+          connectionId: body.connectionId ?? extractionConfig.connectionId,
+          chatConnectionId: chat?.connectionId ?? null,
+          model: body.model,
+        });
         // Re-extract applies the current availability selection, like a fresh import. An explicit mode
         // must still be enabled; otherwise the previous extraction mode is kept, as import keeps the chat's.
         if (body.modes && body.mode && !body.modes.includes(body.mode))
@@ -620,7 +619,11 @@ export function registerNotesRoutes(app: FastifyInstance, runtime: LtmRouteRunti
             extractionMode,
             instruction: body.instruction,
             operationId,
-            applyLowRisk: body.applyLowRisk,
+            applyLowRisk:
+              body.applyLowRisk ??
+              (chat
+                ? resolveLtmChatMemories(parseLtmChatMetadata(chat.metadata), extractionConfig).autoAccept
+                : extractionConfig.autoAcceptSafeChanges),
             signal: controller.signal,
             root,
             chatId: chat?.id,

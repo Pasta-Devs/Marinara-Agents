@@ -390,6 +390,19 @@ export function slurpTasteChance(strength: SlpTasteStrength, fit: number): numbe
   return fit < 0 ? 0 : STRENGTH_SHARE[strength] * (0.6 + 0.8 * fit);
 }
 
+/** Pick weight of a storyline or pack moment: 1, plus more for each player taste that shares a word with its fit topics or needs (hint ×2, often ×3, obsessed ×4). */
+export function slurpTasteWeight(
+  fit: { topic?: readonly string[]; needs?: readonly string[] } | undefined,
+  tastes: readonly Pick<SlpTaste, "text" | "strength">[] = [],
+): number {
+  const words = [...(fit?.topic ?? []), ...(fit?.needs ?? [])].join(" ").replace(/\*/g, "");
+  if (!words) return 1;
+  return tastes.reduce(
+    (weight, taste) => (shareWord(taste.text, words) ? weight + 5 * STRENGTH_SHARE[taste.strength] : weight),
+    1,
+  );
+}
+
 /**
  * The taste one spicy post or offer touches, or null. `recent` is this Creator's earlier spicy
  * items, newest first: the one before never repeats, the two before that seldom.

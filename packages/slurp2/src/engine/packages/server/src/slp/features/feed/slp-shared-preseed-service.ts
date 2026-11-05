@@ -26,6 +26,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 type SharedCache = {
   world?: { date: string; ideas: SlurpSharedIdea[] };
   niche: Record<string, { at: string; ideas: SlurpSharedIdea[] }>;
+  /** Recent world event names and trend labels, oldest first. */
+  themes?: string[];
 };
 
 // ponytail: one JSON blob in app settings and in-memory in-flight/failure maps, like the anchor
@@ -38,7 +40,7 @@ async function readShared(db: DB): Promise<SharedCache> {
   try {
     const raw = await createAppSettingsStorage(db).get(SHARED_KEY);
     const parsed = (typeof raw === "string" ? JSON.parse(raw) : raw) as Partial<SharedCache> | null;
-    return { world: parsed?.world, niche: parsed?.niche ?? {} };
+    return { world: parsed?.world, niche: parsed?.niche ?? {}, themes: parsed?.themes };
   } catch {
     return { niche: {} };
   }
@@ -124,17 +126,21 @@ export async function slurpSharedIdeasFor(
       refresh("world", input.at, async () => {
         const answer = await completeSlurpBeatJson(
           input.context,
-          slurpWorldTickPrompt({ date, withEvent: input.worldEvents }),
+          slurpWorldTickPrompt({ date, withEvent: input.worldEvents, avoid: cache.themes ?? [] }),
           "world tick",
           0.9,
         );
-        await writeShared(db, (next) => {
-          next.world = { date, ideas: normalizeSlurpSharedIdeas(answer, "world", `world:${date}`) };
-        });
         const event = input.worldEvents ? normalizeSlurpSharedWorldEvent(answer) : null;
-        if (event) await startSlurpWideEvent(db, event, input.at);
         // A platform trend (docs/TRENDS.md): it starts only while fewer than three trends are live.
         const trend = normalizeSlurpSharedWorldTrend(answer);
+        await writeShared(db, (next) => {
+          next.world = { date, ideas: normalizeSlurpSharedIdeas(answer, "world", `world:${date}`) };
+          // The tick saw only the date, so late October gave five "Cozy" trends in a row.
+          next.themes = [...(next.themes ?? []), event?.name, trend?.label]
+            .filter((theme): theme is string => !!theme)
+            .slice(-12);
+        });
+        if (event) await startSlurpWideEvent(db, event, input.at);
         if (trend) await startSlurpTrend(db, { label: trend.label, line: trend.line, source: "world" }, input.at);
       });
     }

@@ -46,13 +46,16 @@ import { readSlpDeskOffer, SlpDeskOfferCard } from "./SlpDeskRows";
 import { readSlpDramaChoice, SlpDramaChoiceCard } from "./SlpDramaChoiceCard";
 import { slurpAwayKind } from "./slp-away-kind";
 import { formatClockTime } from "../../base/ui/slp-date-time";
+import { useRegenerateSlurpReply } from "./slp-message-action-hooks";
+import { slurpLastAnswer } from "../../../../../shared/src/slp/slp-message-edit.js";
+import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
 /**
  * A conversation is a full-screen task on phones (design language §8): it leaves the page for a
  * layer over the whole app, so the Slurp nav and the Engine bars are out of the way and the composer
  * owns the bottom edge. Wide screens keep it in place (split view).
  */
-function SlpThreadTaskLayer({ children }: { children: ReactNode }) {
+export function SlpThreadTaskLayer({ children }: { children: ReactNode }) {
   const phone = !useSlpMediaQuery("(min-width: 768px)");
   const portal = useContext(ModalPortalContext);
   const accent = useSlpAccent();
@@ -123,6 +126,9 @@ export function SlurpThreadView(props: SlurpThreadViewProps) {
   // Until the conversation has loaded there is nothing to read and no policy to send under, so the
   // composer stays away instead of offering a live input on a blank screen.
   const notLoaded = !threadQuery.data;
+  // Support desk off: an Offer still waiting cannot be answered, so its card stays away.
+  const deskOn = !model.settingsQuery.data || slpExtensionOn(model.settingsQuery.data, "supportDesk");
+  const storylinesOn = !model.settingsQuery.data || slpExtensionOn(model.settingsQuery.data, "storylines");
   const keptDeepDetails = threadQuery.data?.deepDetailIds;
   const deepDetailIds = useMemo(() => new Set(keptDeepDetails), [keptDeepDetails]);
   // Roleplay scenes (docs/SCENES.md): offered when this Engine runs them and the thread is free.
@@ -131,6 +137,42 @@ export function SlurpThreadView(props: SlurpThreadViewProps) {
   const openProfileRef = useRef(model.onOpenProfile);
   openProfileRef.current = model.onOpenProfile;
   const openProfile = useCallback((accountId: string) => openProfileRef.current(accountId), []);
+  // "Get reply now" and "Write it again" (R9) both wait for an answer the server writes at once.
+  const regenerate = useRegenerateSlurpReply();
+  const answerNow = async (
+    run: (input: {
+      personaId: string;
+      threadId: string;
+    }) => Promise<{ replyStatus: string; reply?: { id: string } | null }>,
+  ) => {
+    if (!thread || !personaId) return;
+    const forcedPersonaId = personaId;
+    const forcedThreadId = thread.id;
+    const stillHere = () =>
+      activeConversationRef.current.personaId === forcedPersonaId &&
+      activeConversationRef.current.threadId === forcedThreadId;
+    setError(null);
+    setTyping(true);
+    noteSlpAiUseOnce(localizeUi);
+    try {
+      const result = await run({ personaId: forcedPersonaId, threadId: forcedThreadId });
+      if (!stillHere()) return;
+      setReplyStatus(result.replyStatus);
+      // "Now" means now: the pacing delay is the thing these buttons exist to skip.
+      holdTyping(0, result.reply?.id);
+    } catch (cause) {
+      if (!stillHere()) return;
+      setTyping(false);
+      setError(getApiErrorMessage(cause, "The reply could not be written."));
+    }
+  };
+  const lastAnswer = useMemo(
+    () => new Set(ownsCreator ? [] : (slurpLastAnswer(messages) ?? [])),
+    [messages, ownsCreator],
+  );
+  const rewriteRef = useRef(answerNow);
+  rewriteRef.current = answerNow;
+  const writeAgain = useCallback(() => void rewriteRef.current(regenerate.mutateAsync), [regenerate.mutateAsync]);
   // One formatter per language: two toLocaleDateString calls per row re-ran on every keystroke.
   const dayFormat = useMemo(() => new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium" }), [i18n.language]);
   const sceneChatId = thread?.sceneChatId ?? null;
@@ -286,13 +328,14 @@ export function SlurpThreadView(props: SlurpThreadViewProps) {
                               deepDetailIds.has(slpMessageDeepDetailsId(entry.message.id))
                             }
                             onOpenProfile={openProfile}
+                            onWriteAgain={lastAnswer.has(entry.message.id) ? writeAgain : undefined}
                           />
                           {/* The Support desk: an Offer sits under the line that made it (docs/SUPPORT-DESK.md). */}
-                          {readSlpDeskOffer(entry.message) && (
+                          {deskOn && readSlpDeskOffer(entry.message) && (
                             <SlpDeskOfferCard message={entry.message} ownsCreator={ownsCreator} personaId={personaId} />
                           )}
                           {/* Drama: a Creator's question with its answers (docs/DRAMA.md). */}
-                          {readSlpDramaChoice(entry.message) && (
+                          {storylinesOn && readSlpDramaChoice(entry.message) && (
                             <SlpDramaChoiceCard message={entry.message} personaId={personaId} />
                           )}
                           {/* W: a talk with Slurp Support proposes Stir cards under the Creator's reply. */}
@@ -398,35 +441,7 @@ export function SlurpThreadView(props: SlurpThreadViewProps) {
                     <SlpButton
                       variant="tertiary"
                       disabled={forceReply.isPending}
-                      onClick={async () => {
-                        const forcedPersonaId = personaId;
-                        const forcedThreadId = thread.id;
-                        setError(null);
-                        setTyping(true);
-                        noteSlpAiUseOnce(localizeUi);
-                        try {
-                          const result = await forceReply.mutateAsync({
-                            personaId: forcedPersonaId,
-                            threadId: forcedThreadId,
-                          });
-                          if (
-                            activeConversationRef.current.personaId !== forcedPersonaId ||
-                            activeConversationRef.current.threadId !== forcedThreadId
-                          )
-                            return;
-                          setReplyStatus(result.replyStatus);
-                          // "Now" means now: the pacing delay is the thing this button exists to skip.
-                          holdTyping(0, result.reply?.id);
-                        } catch (cause) {
-                          if (
-                            activeConversationRef.current.personaId !== forcedPersonaId ||
-                            activeConversationRef.current.threadId !== forcedThreadId
-                          )
-                            return;
-                          setTyping(false);
-                          setError(getApiErrorMessage(cause, "The reply could not be written."));
-                        }
-                      }}
+                      onClick={() => void answerNow(forceReply.mutateAsync)}
                       className="mt-1 text-xs"
                     >
                       {localizeUi("ui.slurp.messages.forceReply", { defaultValue: "Get reply now" })}

@@ -1,3 +1,4 @@
+import type { SlpLiveSettings } from "../../../../../shared/src/slp/slp-live.js";
 import type { SlurpFanType } from "../../../../../shared/src/slp/slp-fan-types.js";
 import type { SlurpModelBudget } from "../../../../../shared/src/slp/slp-model-budget.js";
 import type { SlpSupportDeskSettings } from "../../../../../shared/src/slp/slp-support-desk.js";
@@ -13,6 +14,14 @@ import type {
 import type { SlurpArcType } from "../projects/slp-projects-contract.js";
 
 export type SlurpSettings = {
+  /** Extension switches (shared slp-extensions.ts); read them through `slpExtensionOn`. */
+  extAds: boolean;
+  extStorylines: boolean;
+  extWorld: boolean;
+  extStir: boolean;
+  extSupportDesk: boolean;
+  extEngineLink: boolean;
+  extLive: boolean;
   inlineAdsEnabled: boolean;
   inlineAdsFrequency: "light" | "standard" | "frequent";
   brandDealsPace: "off" | "rare" | "normal" | "often";
@@ -33,6 +42,8 @@ export type SlurpSettings = {
   pricingMaxWeeklyChangePercent: number;
   walletStipendFloor: number;
   walletDayStartHour: number;
+  /** Collect moves at most a daily allowance; false moves all earnings. */
+  walletPayoutDailyLimit: boolean;
   walletAdReward: number;
   walletAdDailyCap: number;
   walletEngagementReward: number;
@@ -86,6 +97,7 @@ export type SlurpSettings = {
   imagePromptInterpretation: string;
   enableImageInterpretation: boolean;
   imageGenerationUseAvatarReferences: boolean;
+  imageKeepOriginalFiles: boolean;
   imageGenerationIncludeDescriptions: boolean;
   /** How the look reaches the picture prompt: the prompt writer words it, Slurp inserts it, or both. */
   imageAppearanceMode: "writer" | "insert" | "both";
@@ -117,6 +129,8 @@ export type SlurpSettings = {
   professorMariCreatorSource: boolean;
   enableLorebookContext: boolean;
   flavourFromAgents: boolean;
+  memoryRecall: "whole" | "relevant";
+  shareWithMemory: boolean;
   postPlanner: "classic" | "beats";
   lifeMomentRate: "rarely" | "sometimes" | "often";
   /** One weight per Story job (0-10, 0 = never); `SLURP_STORY_JOB_DEFAULTS` is balanced. */
@@ -141,6 +155,7 @@ export type SlurpSettings = {
   /** Editable audience personas and their numeric behavior. */
   fanTypes: SlurpFanType[];
   platformEvents: SlurpPlatformEvent[];
+  trendsEnabled: boolean;
   creatorCollabs: { creatorIds: [string, string]; content: string }[];
   /** Creators answer while you are away. Off leaves the background reply loop asleep. */
   messagesAwayRepliesEnabled: boolean;
@@ -172,6 +187,8 @@ export type SlurpSettings = {
   messagesFanOpeners: string[];
   /** The player's own first words for commission requests; empty = the built-in ones. */
   messagesCommissionOpeners: string[];
+  /** The player's own "what the fan wants" for commission requests; empty = the built-in ones. */
+  messagesCommissionAsks: string[];
   /** Creator replies to comments in any 24 hours (1–200). */
   creatorRepliesPerDay: number;
   autopurgeEnabled: boolean;
@@ -193,6 +210,8 @@ export type SlurpSettings = {
   paused: boolean;
   /** Backstage › Drama: level, the situations and dramas switched on, situation dials. */
   drama: SlpDramaSettings;
+  /** Backstage > Live shows: how often Creators go live, the room's pace, pictures and private shows. */
+  live: SlpLiveSettings;
   onboarding: "not_started" | "in_progress" | "completed";
   /** The persona browsing Slurp, shared by every device. Null: not picked yet. */
   viewerPersonaId: string | null;

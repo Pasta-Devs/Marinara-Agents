@@ -133,13 +133,13 @@ export function LongTermMemoryNavigation({
         className={`mari-editor-tab relative flex items-center gap-2 rounded-lg text-xs font-semibold transition-colors ${
           mobile
             ? "min-h-14 min-w-0 flex-1 flex-col justify-center gap-1 px-2 text-[0.625rem]"
-            : "min-h-10 shrink-0 justify-start whitespace-nowrap px-3 text-left"
+            : "min-h-11 shrink-0 justify-start whitespace-nowrap px-3 text-left"
         }`}
       >
         <Icon
           aria-hidden="true"
           size={mobile ? "1.125rem" : "0.875rem"}
-          className={item.id === "sources" && activeSourceTask ? "animate-spin" : undefined}
+          className={item.id === "sources" && activeSourceTask ? "animate-spin motion-reduce:animate-none" : undefined}
         />
         <span className="min-w-0 truncate" aria-hidden={item.id === "sources" ? true : undefined}>
           {label}

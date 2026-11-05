@@ -33,6 +33,7 @@ export const HOST_MODULE_SPECIFIERS = [
   "i18next",
   "react-i18next",
   "framer-motion",
+  "motion/react",
   "tailwind-merge",
   "clsx",
 ];
@@ -49,8 +50,16 @@ const IDENTIFIER = /^[A-Za-z_$][\w$]*$/u;
 const HOST_MODULE_NAMESPACE = "marinara-host-module";
 const HOST_NAMESPACE = "marinara-host";
 
+export const HOST_MODULE_CAPABILITY_APIS = { "motion/react": "1.377" };
+
+function supportsApi(declared, minimum) {
+  const actual = typeof declared === "string" ? declared.split(".").map(Number) : [declared?.major, declared?.minor];
+  const required = minimum.split(".").map(Number);
+  return actual[0] === required[0] && actual[1] >= required[1];
+}
+
 function missingMessage(member) {
-  return `Marinara Engine does not provide ${member}; this package needs capability API ${HOST_CAPABILITY_API} or newer.`;
+  return `Marinara Engine does not provide ${member}; this package needs capability API ${HOST_MODULE_CAPABILITY_APIS[member] ?? HOST_CAPABILITY_API} or newer.`;
 }
 
 /** The specifiers the Engine's contract lists. Throws when the Engine predates the namespace. */
@@ -66,20 +75,69 @@ export function readHostContractSpecifiers(engineRoot) {
   return [...list.matchAll(/["']([^"']+)["']/gu)].map((match) => match[1]);
 }
 
+/** Read the Engine's explicit public-slot to dependency mapping; old contracts map identically. */
+export function readHostModuleImports(engineRoot, specifiers) {
+  const source = readFileSync(join(engineRoot, HOST_CONTRACT_PATH), "utf8");
+  const declaration = /MARINARA_HOST_MODULE_IMPORTS\s*=\s*\{([^}]*)\}/u.exec(source)?.[1];
+  if (declaration === undefined) {
+    if (/\bMARINARA_HOST_MODULE_IMPORTS\b/u.test(source))
+      throw new Error("Cannot parse MARINARA_HOST_MODULE_IMPORTS; the Engine must declare a literal slot mapping");
+    return Object.fromEntries(specifiers.map((specifier) => [specifier, specifier]));
+  }
+  const imports = Object.fromEntries(
+    [...declaration.matchAll(/(?:"([^"]+)"|'([^']+)'|([A-Za-z_$][\w$]*))\s*:\s*["']([^"']+)["']/gu)].map((match) => [
+      match[1] ?? match[2] ?? match[3],
+      match[4],
+    ]),
+  );
+  for (const specifier of specifiers) {
+    if (!/^(?:@[\w.-]+\/)?[\w-][\w.-]*(?:\/[\w-][\w.-]*)*$/u.test(imports[specifier] ?? "")) {
+      throw new Error(`The Engine host slot ${specifier} has no valid dependency in MARINARA_HOST_MODULE_IMPORTS`);
+    }
+  }
+  return Object.fromEntries(specifiers.map((specifier) => [specifier, imports[specifier]]));
+}
+
+/** TypeScript paths for renamed slots; unchanged slots retain normal package/@types resolution. */
+export function readHostModuleTypePaths(engineRoot) {
+  const imports = readHostModuleImports(engineRoot, readHostContractSpecifiers(engineRoot));
+  const aliases = Object.entries(imports).filter(([specifier, dependency]) => specifier !== dependency);
+  if (!aliases.length) return {};
+  // The strict lane already uses this compiler. Its resolver handles hoisting, package exports and declarations.
+  const ts = createRequire(import.meta.url)("typescript");
+  const containingFile = join(resolve(engineRoot), "packages/client/__marinara-host-types__.ts");
+  return Object.fromEntries(
+    aliases.map(([specifier, dependency]) => {
+      const resolved = ts.resolveModuleName(
+        dependency,
+        containingFile,
+        { module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.Bundler },
+        ts.sys,
+      ).resolvedModule;
+      if (!resolved) throw new Error(`Cannot resolve the Engine host dependency ${dependency} for ${specifier}`);
+      return [specifier, [resolved.resolvedFileName]];
+    }),
+  );
+}
+
 const exportCache = new Map();
 
 /**
- * The names `import * as m from "<specifier>"` gives for each host library, evaluated by Node in the Engine's client
- * package with NODE_ENV=production (ESM resolution, so the same entry the Engine's bundler uses).
+ * Each public host slot's exports, read from its mapped dependency in the Engine's client package.
+ * NODE_ENV=production and ESM resolution match the host's namespace imports, including the legacy Motion alias.
  */
-export function readHostModuleExports(engineRoot, specifiers = HOST_MODULE_SPECIFIERS) {
+export function readHostModuleExports(engineRoot, specifiers) {
+  const listed = new Set(readHostContractSpecifiers(engineRoot));
+  specifiers ??= HOST_MODULE_SPECIFIERS.filter((specifier) => listed.has(specifier));
+  for (const specifier of specifiers) if (!listed.has(specifier)) throw new Error(missingMessage(specifier));
+  const imports = readHostModuleImports(engineRoot, specifiers);
   const clientRoot = join(resolve(engineRoot), "packages/client");
-  const key = `${clientRoot}\0${specifiers.join("\0")}`;
+  const key = `${clientRoot}\0${JSON.stringify(imports)}`;
   if (exportCache.has(key)) return exportCache.get(key);
   const script = `const out = {};
-for (const specifier of JSON.parse(process.argv[1])) out[specifier] = Object.keys(await import(specifier));
+for (const [specifier, dependency] of Object.entries(JSON.parse(process.argv[1]))) out[specifier] = Object.keys(await import(dependency));
 process.stdout.write(JSON.stringify(out));`;
-  const result = spawnSync(process.execPath, ["--input-type=module", "-e", script, JSON.stringify(specifiers)], {
+  const result = spawnSync(process.execPath, ["--input-type=module", "-e", script, JSON.stringify(imports)], {
     cwd: clientRoot,
     encoding: "utf8",
     env: { ...process.env, NODE_ENV: "production" },
@@ -108,6 +166,13 @@ export function hostModuleShimSource(specifier, names) {
     `const m = host && host.version === 1 && host.modules ? host.modules[${JSON.stringify(specifier)}] : undefined;`,
     `if (!m) throw new Error(${JSON.stringify(missingMessage(specifier))});`,
   ];
+  const required = HOST_MODULE_CAPABILITY_APIS[specifier];
+  if (required) {
+    const [major, minor] = required.split(".").map(Number);
+    lines.push(
+      `if (host.capabilityApi?.major !== ${major} || !(host.capabilityApi.minor >= ${minor})) throw new Error(${JSON.stringify(missingMessage(specifier))});`,
+    );
+  }
   // Local bindings, then one export clause: export names may be reserved words (zod exports `enum`).
   exported.forEach((name, index) => lines.push(`const e${index} = m[${JSON.stringify(name)}];`));
   if (exported.length) lines.push(`export { ${exported.map((name, index) => `e${index} as ${name}`).join(", ")} };`);
@@ -124,10 +189,12 @@ export const queryClient = host.queryClient;
  * Resolves the host libraries to shims over `__MARINARA_HOST__.modules` and `marinara:host` to the namespace.
  * `exportMap` replaces the Engine's export lists (tests only).
  */
-export function hostModulesPlugin({ engineRoot, exportMap } = {}) {
+export function hostModulesPlugin({ engineRoot, exportMap, capabilityApi = HOST_CAPABILITY_API } = {}) {
   if (!engineRoot) throw new Error("hostModulesPlugin needs the Engine root");
   const listed = new Set(readHostContractSpecifiers(engineRoot));
-  const unlisted = HOST_MODULE_SPECIFIERS.filter((specifier) => !listed.has(specifier));
+  const unlisted = HOST_MODULE_SPECIFIERS.filter(
+    (specifier) => !HOST_MODULE_CAPABILITY_APIS[specifier] && !listed.has(specifier),
+  );
   if (unlisted.length) {
     throw new Error(
       `The Engine at ${engineRoot} does not provide ${unlisted.join(", ")} in MARINARA_HOST_MODULE_SPECIFIERS (${HOST_CONTRACT_PATH})`,
@@ -140,7 +207,14 @@ export function hostModulesPlugin({ engineRoot, exportMap } = {}) {
   return {
     name: "marinara-host-modules",
     setup(build) {
-      build.onResolve({ filter }, (args) => ({ path: args.path, namespace: HOST_MODULE_NAMESPACE }));
+      build.onResolve({ filter }, (args) => {
+        const minimum = HOST_MODULE_CAPABILITY_APIS[args.path];
+        if (minimum && !supportsApi(capabilityApi, minimum)) {
+          return { errors: [{ text: `${args.path} requires declared capability API ${minimum} or newer` }] };
+        }
+        if (!listed.has(args.path)) return { errors: [{ text: missingMessage(args.path) }] };
+        return { path: args.path, namespace: HOST_MODULE_NAMESPACE };
+      });
       build.onResolve({ filter: /^marinara:host$/ }, () => ({ path: "marinara:host", namespace: HOST_NAMESPACE }));
       build.onLoad({ filter: /.*/, namespace: HOST_MODULE_NAMESPACE }, (args) => {
         const names = exportsBySpecifier[args.path];

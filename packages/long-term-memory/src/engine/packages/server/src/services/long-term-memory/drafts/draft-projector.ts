@@ -22,7 +22,7 @@ import {
 import { uniqueLinks } from "../../../../../shared/src/features/agents/long-term-memory/utils.js";
 import { stableStringify } from "../recall/chunking.js";
 import { uniqueStrings } from "../ltm-utils.js";
-import { canUpdateLtmScopedTarget } from "../extraction/scoped-targets.js";
+import { canUpdateLtmScopedTarget, isSharedLtmScopedTarget } from "../extraction/scoped-targets.js";
 import { subjectsEqual } from "../identity/subject-equality.js";
 import { LtmServiceError } from "../service-error.js";
 import {
@@ -165,6 +165,20 @@ export function isAdditiveLtmSection(note: Pick<LtmNote, "type" | "tags">, key: 
   return key === "anchors";
 }
 
+// The compiler replaces a non-additive section on purpose (a thread's sections, a relationship's state, a
+// character's items and progression), so a section update on any non-anchor note applies with the rest; only an
+// anchor note's sections and status, title or subject changes still apply one at a time.
+export function isDestructiveLtmRewrite(
+  note: Pick<LtmNote, "tags"> | null,
+  mutation: LtmDraftMutation,
+  disposition: LtmMutationDisposition,
+) {
+  if (disposition !== "rewrite") return false;
+  if (mutation.kind === "update_section" || mutation.kind === "append_section")
+    return Boolean(note?.tags.includes("anchor"));
+  return true;
+}
+
 function projectMutation(
   current: LtmNote | null,
   mutation: LtmDraftMutation,
@@ -246,7 +260,8 @@ function projectMutation(
       `Long-term memory mutation target not found: ${mutation.noteId}`,
       "missing_target",
     );
-  if (!canUpdateLtmScopedTarget(current.scope, context.scope))
+  // A shared note is projected for review; `preflight` in reconciliation.ts admits only changes the reviewer named.
+  if (!canUpdateLtmScopedTarget(current.scope, context.scope) && !isSharedLtmScopedTarget(current.scope, context.scope))
     throw new LtmDraftProjectionError(
       `Long-term memory draft cannot mutate ${current.id} because it belongs to another scope.`,
       "scope_mismatch",

@@ -6,10 +6,17 @@ import type { DB } from "../../../db/connection.js";
 import { createAppSettingsStorage } from "../../../services/storage/app-settings.storage.js";
 import {
   readSlpDramaLibrary,
+  slpDramaCatalog,
+  slpDramaStorylines,
   SLP_DRAMA_LIBRARY_KEY,
   type SlpDramaLibrary,
 } from "../../modules/world/events/slp-drama-library.js";
-import { readSlpDramaState, type SlpDramaState } from "../../modules/world/events/slp-drama-runtime.js";
+import {
+  readSlpDramaState,
+  slpDramaStageMultiplier,
+  type SlpDramaState,
+} from "../../modules/world/events/slp-drama-runtime.js";
+import type { SlpInfluenceTarget } from "../../../../../shared/src/slp/slp-story-engine.js";
 
 const parse = (raw: string | null | undefined): unknown => {
   try {
@@ -56,4 +63,19 @@ export function mutateSlurpDramaState<T>(
   });
   queue = run.catch(() => undefined);
   return run;
+}
+
+/** A running storyline's stage influences on its lead (PR 6). Nothing running for her: one read, 1. */
+export async function slurpDramaStageFactor(
+  store: Pick<ReturnType<typeof createAppSettingsStorage>, "get">,
+  creatorAccountId: string,
+  target: SlpInfluenceTarget,
+): Promise<number> {
+  const stored = parse(await store.get(SLP_DRAMA_STATE_KEY)) as Record<string, unknown> | null;
+  const state = readSlpDramaState(stored?.state);
+  if (!state.runs.some((run) => !run.endedAt && Object.values(run.cast).includes(creatorAccountId))) return 1;
+  const { situations, dramas } = slpDramaStorylines(
+    slpDramaCatalog(readSlpDramaLibrary(parse(await store.get(SLP_DRAMA_LIBRARY_KEY)))),
+  );
+  return slpDramaStageMultiplier(state, [...situations, ...dramas], creatorAccountId, target);
 }

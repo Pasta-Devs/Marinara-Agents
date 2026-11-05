@@ -116,10 +116,18 @@ export const slurpPayoutCoins = (dollars: number, crowdWeight: number): number =
  *
  * Grows on a square-root curve, so early success is felt immediately and later success keeps
  * mattering without ever running away. `othersToday` is what the persona's other Creators already
- * withdrew today, in coins.
+ * withdrew today, in coins. `dailyLimit` false (Settings › Fans & money, R5) lets every whole coin
+ * of the balance through.
  */
-export function slurpPayoutAllowance(earnings: SlurpEarnings, at: Date, crowdWeight: number, othersToday = 0): number {
+export function slurpPayoutAllowance(
+  earnings: SlurpEarnings,
+  at: Date,
+  crowdWeight: number,
+  othersToday = 0,
+  dailyLimit = true,
+): number {
   const weight = Math.max(1, crowdWeight);
+  if (!dailyLimit) return slurpPayoutCoins(earnings.coins, weight) * weight;
   const lifetime = Number.isFinite(earnings.lifetime) ? Math.max(0, earnings.lifetime) : 0;
   const scale = Math.min(1, Math.sqrt(lifetime / PAYOUT_REFERENCE));
   const dailyCoins = Math.round(PAYOUT_FLOOR_COINS + (PAYOUT_CEILING_COINS - PAYOUT_FLOOR_COINS) * scale);
@@ -310,12 +318,13 @@ export function payout(
   at: Date,
   crowdWeight: number,
   othersToday = 0,
+  dailyLimit = true,
 ): SlurpEarnings | null {
   const weight = Math.max(1, crowdWeight);
   if (!Number.isInteger(amount) || amount <= 0 || amount % weight !== 0 || earnings.coins < amount) return null;
   // Refused rather than clamped. A caller that asked for more than the day allows has misread the
   // state, and silently paying out less would leave the player believing they moved more.
-  if (amount > slurpPayoutAllowance(earnings, at, weight, othersToday)) return null;
+  if (amount > slurpPayoutAllowance(earnings, at, weight, othersToday, dailyLimit)) return null;
   return record(
     {
       ...earnings,

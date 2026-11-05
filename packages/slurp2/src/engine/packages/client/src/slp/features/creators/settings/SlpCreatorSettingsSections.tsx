@@ -595,7 +595,7 @@ export function SlpCreatorMessagesSection({ creator, onClose }: SlpCreatorSettin
           type="button"
           onClick={() => {
             onClose();
-            setNavigation({ mode: "creator-settings", section: "world", target: "messaging" });
+            setNavigation({ mode: "creator-settings", section: "basic", target: "messaging" });
           }}
           className={quietButton}
         >

@@ -25,17 +25,21 @@ const settings = readFileSync(ltmSourcePaths.settings, "utf8");
 const settingsScreen = readScreen(ltmSourcePaths.settings);
 const vault = readFileSync(ltmSourcePaths.vault, "utf8");
 const vaultScreen = readScreen(ltmSourcePaths.vault);
+const vaultRow = readFileSync(ltmSourcePaths.vaultRow, "utf8");
 const bulkAvailability = readFileSync(ltmSourcePaths.bulkAvailability, "utf8");
 const availabilityTabRail = readFileSync(ltmSourcePaths.availabilityTabRail, "utf8");
 const sourceScopeCombobox = readFileSync(ltmSourcePaths.sourceScopeCombobox, "utf8");
 const targetPicker = readFileSync(ltmSourcePaths.targetPicker, "utf8");
 const reviewQueue = readFileSync(ltmSourcePaths.reviewQueue, "utf8");
+const displayLabels = readFileSync(join(dirname(ltmSourcePaths.reviewQueue), "../display-labels.ts"), "utf8");
 const reviewQueueScreen = readScreen(ltmSourcePaths.reviewQueue);
 const api = readFileSync(ltmSourcePaths.api, "utf8");
 const workspaceLayout = readFileSync(ltmSourcePaths.workspaceLayout, "utf8");
 const sharedControls = readFileSync(ltmSourcePaths.sharedControls, "utf8");
 const types = readFileSync(ltmSourcePaths.types, "utf8");
 const locale = JSON.parse(readFileSync(ltmSourcePaths.locale));
+const routes = readFileSync(ltmSourcePaths.routes, "utf8");
+const maintenance = readFileSync(ltmSourcePaths.maintenance, "utf8");
 
 assert.match(workspace, /const effectiveAction = retryContract\?\.action \?\? action/u);
 assert.match(workspace, /extract: contract\.action !== "refresh"/u);
@@ -55,7 +59,10 @@ assert.match(navigation, /latestSourceTask\.status === "cancelled"[\s\S]*\? 0/u)
 assert.match(navigation, /sourceTaskCancelled/u);
 assert.match(navigation, /selectLtmPluralForm\(locale, failureCount\)/u);
 assert.match(navigation, /sourceTaskFailedCountOne[\s\S]*sourceTaskFailedCountOther/u);
-assert.match(navigation, /className=\{item\.id === "sources" && activeSourceTask \? "animate-spin"/u);
+assert.match(
+  navigation,
+  /className=\{item\.id === "sources" && activeSourceTask \? "animate-spin motion-reduce:animate-none"/u,
+);
 assert.match(navigation, /const label = localizeUi\(mobile \? item\.shortLabelKey : item\.labelKey\)/u);
 assert.doesNotMatch(navigation, /const label =\s*item\.id === "sources" && sourceTaskLabel\s*\?\s*sourceTaskLabel/u);
 // Accessible name stays Sources; live status is outside the button.
@@ -83,9 +90,10 @@ assert.equal(
   "live and restored results derive one retry set",
 );
 assert.match(workspace, /restoredImportResult\.writeFailures\?\.map\(\(failure\) =>/u);
+// #1588: the destination panel follows the page, with no window-height cap; its place list caps itself.
 assert.match(
   workspaceScreen,
-  /<div\s+id="ltm-destination-scope-control"[^>]*className="mari-editor-panel flex min-h-0 flex-col gap-3 p-3"[^>]*style=\{\{ maxHeight: "calc\(100vh - 12rem\)" \}\}[^>]*>/u,
+  /<div\s+id="ltm-destination-scope-control"\s+role="group"\s+aria-labelledby=\{labelId\}\s+className="mari-editor-panel flex min-h-0 flex-col gap-3 p-3"\s*>/u,
 );
 // #1420: the destination place list is the shared availability rail.
 assert.match(workspaceScreen, /<AvailabilityTabRail[\s\S]*disabled=\{disabled\}[\s\S]*onToggle=\{toggleRail\}/u);
@@ -118,6 +126,20 @@ assert.equal(locale["ui.longTermMemory.activityview.notKept"], "Not kept");
 assert.equal(locale["ui.longTermMemory.activityview.notAdded"], "Not added");
 assert.equal(locale["ui.longTermMemory.activityview.settingMinimumRelevance"], "Minimum relevance");
 assert.match(settings, /reasoningEffort: resolved\.reasoningEffort \?\? "low"/u);
+// Slurp's switches are offered only after the global PUT succeeded and only when a switch went from off to on.
+const globalSave = settings.slice(settings.indexOf("const saveSettings"), settings.indexOf("const discard"));
+assert.match(globalSave, /const sharingWasOff = savedGlobal\?\.longTermMemoryShareWithPackages === false/u);
+assert.match(globalSave, /sharingTurnedOn = sharingWasOff && saved\.longTermMemoryShareWithPackages/u);
+assert.match(globalSave, /const acceptWasOff = savedGlobal\?\.longTermMemoryAcceptFromPackages === false/u);
+assert.match(globalSave, /acceptTurnedOn = acceptWasOff && saved\.longTermMemoryAcceptFromPackages/u);
+assert.ok(
+  globalSave.indexOf('"PUT"') < globalSave.indexOf("...(sharingTurnedOn") &&
+    globalSave.indexOf("...(sharingTurnedOn") < globalSave.indexOf('setting: "flavourFromAgents"') &&
+    globalSave.indexOf("...(acceptTurnedOn") < globalSave.indexOf('setting: "shareWithMemory"') &&
+    globalSave.indexOf('setting: "shareWithMemory"') < globalSave.indexOf("offerSlurpMemories("),
+  "each Slurp offer must follow the global PUT and run only when its switch turned on",
+);
+assert.equal(globalSave.match(/offerSlurpMemories\(/gu)?.length, 1);
 assert.match(settings, /memorySettingsSavedIndexRebuilt/u);
 assert.match(settings, /memorySettingsSavedIndexRebuildFailed/u);
 assert.match(settingsScreen, /memorySettingsResetIndexRebuildFailed/u);
@@ -174,7 +196,7 @@ assert.match(vault, /availabilityStaged/u);
 assert.match(vaultScreen, /lastPlaceRequired/u);
 assert.match(vaultScreen, /lastModeRequired/u);
 assert.match(vaultScreen, /function BulkAvailabilityWorkbench/u);
-assert.match(vault, /data-ltm-bulk-availability/u);
+assert.match(vault, /data-ltm-bulk-edit/u);
 assert.match(vaultScreen, /data-ltm-bulk-availability-action/u);
 assert.match(vault, /onActionChange=/u);
 assert.match(vaultScreen, /data-ltm-availability-picker/u);
@@ -327,21 +349,21 @@ assert.match(availabilityTabRail, /@container \(min-width: 22rem\)[\s\S]*repeat\
 assert.doesNotMatch(availabilityTabRail, /grid-template-columns: minmax\(0, 1fr\)/u);
 assert.match(availabilityTabRail, /border-radius: 0/u);
 assert.match(availabilityTabRail, /data-ltm-availability-panel=\{activeKind\}[\s\S]*className="space-y-3 p-3"/u);
-assert.match(availabilityTabRail, /<div data-ltm-availability-list className="max-h-52 overflow-y-auto">/u);
+assert.match(
+  availabilityTabRail,
+  /<div ref=\{listRef\} data-ltm-availability-list className="max-h-52 overflow-y-auto">/u,
+);
 assert.doesNotMatch(availabilityTabRail, /border-t border-\[var\(--marinara-editor-divider\)\]/u);
 assert.match(availabilityTabRail, /nextTabIndex\(event\.key/u);
 assert.doesNotMatch(availabilityTabRail, /aria-expanded/u);
 assert.doesNotMatch(availabilityTabRail, /group-open:rotate-90/u);
 assert.doesNotMatch([vault, workspaceScreen].join("\n"), /currentIds=/u);
-assert.match(vault, /filterModes/u);
-assert.doesNotMatch(vault, /scopeModes/u);
 assert.match(vault, /useQuery\(scopeTargetsQueryOptions\(props\.chatId\)\)/u);
 assert.doesNotMatch(workspace, /id: `branch:\$\{chat\.id\}`/u);
 assert.match(workspace, /destinationScopeLimitReached/u);
 assert.match(workspace, /hasDestinationScopeCapacity\(target\.destinationScope\)/u);
 assert.match(availabilityTabRail, /data-ltm-availability-target/u);
 assert.match(sourceScopeCombobox, /data-ltm-scope-picker-popup/u);
-assert.match(sourceScopeCombobox, /data-ltm-scope-tablist/u);
 assert.match(sourceScopeCombobox, /data-ltm-scope-tab=\{kind\}/u);
 assert.match(sourceScopeCombobox, /data-ltm-scope-tabpanel=\{activeKind\}/u);
 assert.match(workspace, /role="tabpanel"/u);
@@ -359,12 +381,29 @@ assert.match(vault, /characterScopeTargets/u);
 assert.match(vault, /conversationScopeTargets/u);
 assert.doesNotMatch(vault, /branchScopeTargets|deriveScopeBranches\b/u);
 assert.match(vault, /bulkAvailabilityScope/u);
-assert.match(vaultScreen, /bulkAvailabilitySelected/u);
+assert.match(vaultScreen, /bulkAvailabilitySelectedOne/u);
+assert.match(vaultScreen, /bulkAvailabilitySelectedOther/u);
+assert.equal(locale["ui.longTermMemory.memoryvault.bulkAvailabilitySelectedOne"], "{{count}} memory selected");
+assert.equal(locale["ui.longTermMemory.memoryvault.bulkAvailabilitySelectedOther"], "{{count}} memories selected");
+// #1636: the Edit selected sheet says what Apply will do, and why it is off, beside both Apply buttons.
+assert.equal(
+  locale["ui.longTermMemory.memoryvault.bulkOutcomeSummary"],
+  "{{ready}} ready · {{unchanged}} unchanged · {{blocked}} blocked",
+);
+assert.match(bulkAvailability, /role="status"[^>]*data-ltm-bulk-outcome-summary/u);
+assert.match(bulkAvailability, /aria-disabled=\{canApply \? undefined : true\}/u);
+assert.doesNotMatch(bulkAvailability, /\sdisabled=\{/u);
+assert.match(bulkAvailability, /renderApply\("top"\)[\s\S]*renderApply\("bottom"\)/u);
+assert.match(bulkAvailability, /if \(canApply\) onApply\(\)/u);
+assert.match(bulkAvailability, /removedTargets\.length > 0 && remainingPlaces\.length === 0 && changes/u);
+assert.match(bulkAvailability, /pressedMark/u);
+assert.match(vault, /pending=\{Boolean\(busy\)\}/u);
+assert.match(vault, /if \(busy \|\| batchPendingRef\.current\) return;\s*setAvailabilityOpen\(null\);/u);
 assert.match(vaultScreen, /chat:all/u);
 assert.doesNotMatch(vaultScreen, /branch:all|"branch"/u);
 assert.doesNotMatch(vault, /chooseOneAvailabilityPlace/u);
-assert.match(vault, /line-clamp-2 break-words text-xs leading-5/u);
-assert.doesNotMatch(vault, /line-clamp-2 block/u);
+assert.match(vaultRow, /line-clamp-2 break-words text-xs leading-5/u);
+assert.doesNotMatch(vaultScreen, /line-clamp-2 block/u);
 assert.doesNotMatch(vault, /typeFilter/u);
 assert.doesNotMatch(vault, /filterByType/u);
 assert.doesNotMatch(vault, /characterWithName/u);
@@ -385,7 +424,13 @@ assert.match(vault, /place-items-center bg-black\/50/u);
 assert.match(vault, /mari-editor-panel w-full max-w-md space-y-3 p-3 shadow-xl/u);
 assert.doesNotMatch(vault, /max-w-72/u);
 assert.match(vault, /details\[open\] > summary/u);
-assert.match(vault, /localizeUi\("ui\.longTermMemory\.memoryvault\.memoryOptions"\)/u);
+assert.match(vault, /localizeUi\("ui\.longTermMemory\.memoryvault\.keywordsAndLinks"\)/u);
+assert.doesNotMatch(vault, /memoryvault\.(memoryOptions|memoryInfo|showMemoryInfo|hideMemoryInfo)/u);
+assert.match(
+  vault,
+  /<Button\s+onClick=\{\(\) => \{\s+const next = !detailsOpen;[\s\S]*?aria-pressed=\{detailsOpen\}[\s\S]*?data-ltm-details-toggle[\s\S]*?memoryvault\.memoryDetails"\)\}\s+<\/Button>/u,
+);
+assert.match(vault, /label: localizeUi\("ui\.longTermMemory\.memoryvault\.memoryDetails"\)/u);
 assert.doesNotMatch(vault, /<Braces aria-hidden="true" size="1rem" className="shrink-0" \/>/u);
 assert.doesNotMatch(vault, /<Check aria-hidden="true" size="1rem" className="shrink-0" \/>\n\s*\{saveState/u);
 assert.match(vault, /beginRename/u);
@@ -411,7 +456,15 @@ assert.equal(locale["ui.longTermMemory.memoryvault.searchChats"], "Search chats"
 assert.equal(locale["ui.longTermMemory.memoryvault.searchBranches"], undefined);
 assert.equal(locale["ui.longTermMemory.memoryvault.showMemories"], "Show");
 assert.equal(locale["ui.longTermMemory.memoryvault.sortBy"], "Sort by");
-assert.equal(locale["ui.longTermMemory.memoryvault.changeAvailability"], "Change availability");
+assert.equal(locale["ui.longTermMemory.memoryvault.editSelected"], "Edit selected…");
+assert.equal(locale["ui.longTermMemory.memoryvault.refine"], "Refine");
+assert.equal(locale["ui.longTermMemory.memoryvault.changeAvailability"], undefined);
+assert.match(
+  vault,
+  /<details\s+data-ltm-refine[\s\S]*?data-ltm-memory-scope-secondary[\s\S]*?data-ltm-mode-filter[\s\S]*?<\/details>/u,
+);
+assert.match(vault, /useEffect\(\(\) => \{\s*if \(refineActive\) setRefineOpen\(true\);/u);
+assert.equal(locale["ui.longTermMemory.memoryvault.bulkChangeGroup"], undefined);
 
 assert.match(detail, /TriangleAlert/u);
 assert.doesNotMatch(detail, /CircleAlert/u);
@@ -428,12 +481,72 @@ assert.match(
   settings,
   /@container ltm-memory-settings \(min-width: 40rem\) \{[^}]*\}\s*\[data-ltm-prompt-template-grid\] \{\s*grid-template-columns: 12rem minmax\(0, 1fr\);/u,
 );
+// #1673: the panel's width decides these, so a narrow panel on a wide window keeps the compact layout.
+assert.doesNotMatch(settings, /sm:grid-cols-4/u);
+assert.match(settings, /\[data-ltm-settings-tab-rail\] \{\s*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);/u);
+assert.equal((settings.match(/<div\s+data-ltm-recall-grid\s+className="grid gap-2"\s*>/gu) ?? []).length, 2);
+assert.match(settings, /\[data-ltm-recall-grid\] \{\s*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/u);
+assert.doesNotMatch(detail, /sm:min-h-9|sm:min-w-0|hidden sm:inline|md:flex/u);
+assert.match(detail, /\[data-ltm-add-label\] \{\s*display: inline;/u);
+assert.match(detail, /\[data-ltm-surface="vault-health-pill"\] \{\s*display: flex;/u);
+assert.match(detail, /\[data-ltm-health-detail\] \{\s*display: inline;/u);
+assert.doesNotMatch(activity, /sm:grid-cols-2/u);
+assert.match(activity, /<dl data-ltm-debug-settings-grid className=/u);
+assert.match(activity, /<div data-ltm-debug-facts-grid className=/u);
+assert.match(
+  activity,
+  /@container ltm-memory-settings \(min-width: 40rem\) \{\s*\[data-ltm-debug-settings-grid\],\s*\[data-ltm-debug-facts-grid\] \{\s*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/u,
+);
+const onboarding = readFileSync(join(dirname(ltmSourcePaths.detail), "Onboarding.tsx"), "utf8");
+assert.match(onboarding, /@container ltm-onboarding \(min-width: 48rem\)/u);
+assert.doesNotMatch(onboarding, /@media \(min-width: 768px\)/u);
+// The scrollers fit a short or zoomed viewport: no 20rem floor, and dvh so mobile chrome cannot inflate the cap.
+// A vh line above it covers browsers without dvh; a 10rem floor stops a very short window collapsing the list.
+const dvhCap = /max-height: calc\(100vh - 12rem\);\s*max-height: max\(10rem, calc\(100dvh - 12rem\)\);/u;
+assert.match(vault, dvhCap);
+assert.doesNotMatch(vault, /max\(20rem, calc\(100vh/u);
+assert.match(activity, new RegExp(`\\[data-ltm-debug-list\\] \\{\\s*${dvhCap.source}`, "u"));
+assert.doesNotMatch(activity, /maxHeight: "calc\(/u);
+// The last two window breakpoints in the settings and setup guide follow their containers too.
+assert.doesNotMatch(onboarding, /sm:p-6/u);
+assert.match(
+  onboarding,
+  /@container ltm-onboarding \(min-width: 40rem\) \{\s*\[data-ltm-onboarding-body\] \{\s*padding: 1\.5rem;/u,
+);
+const promptTemplates = readFileSync(
+  join(dirname(ltmSourcePaths.detail), "settings", "ExtractionPromptTemplates.tsx"),
+  "utf8",
+);
+assert.doesNotMatch(promptTemplates, /sm:grid-cols-3/u);
+assert.match(promptTemplates, /<div\s+data-ltm-active-template-grid\s+className="grid gap-2"\s*>/u);
+assert.match(settings, /\[data-ltm-active-template-grid\] \{\s*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/u);
+// #1673: the last raw text-style buttons meet the 2.75rem floor instead of a ~20px target.
+assert.match(
+  maintenance,
+  /<button\s+type="button"\s+className="inline-flex min-h-11 items-center underline"\s+onClick=\{\(\) => void integrity\.refetch\(\)\}/u,
+);
+assert.match(
+  settings,
+  /className="inline-flex min-h-11 items-center underline"\s+onClick=\{\(\) => void connections\.refetch\(\)\}/u,
+);
+assert.match(
+  settings,
+  /className="inline-flex min-h-11 items-center underline"\s+onClick=\{\(\) => \{\s*void global\.refetch\(\);/u,
+);
+assert.match(
+  settingsScreen,
+  /className="inline-flex min-h-11 items-center text-\[0\.6875rem\] underline"\s+onClick=\{\(\) => setActive\(mode, null\)\}/u,
+);
+assert.doesNotMatch(settingsScreen, /className="(?:text-\[0\.6875rem\] )?underline"/u);
 assert.match(detail, /health !== "healthy" && !needsHealthAttention/u);
 assert.match(detail, /howToRepairVaultHealth[\s\S]*compact/u);
 assert.match(detail, /tone=\{healthNeedsDangerTone \? "danger" : "warning"\}/u);
 assert.match(vault, /data-ltm-detail-conflict/u);
-assert.equal(locale["ui.longTermMemory.memoryvault.memoryInfo"], "Memory info");
-assert.equal(locale["ui.longTermMemory.memoryvault.memoryOptions"], "Memory options");
+assert.equal(locale["ui.longTermMemory.memoryvault.memoryDetails"], "Memory info");
+assert.equal(locale["ui.longTermMemory.memoryvault.keywordsAndLinks"], "Keywords and links");
+for (const key of ["memoryInfo", "memoryOptions", "showMemoryInfo", "hideMemoryInfo"]) {
+  assert.equal(`ui.longTermMemory.memoryvault.${key}` in locale, false, `${key} is replaced by one pane name`);
+}
 assert.equal(locale["ui.longTermMemory.memoryvault.renameDetails"], "Rename details");
 assert.equal(locale["ui.longTermMemory.memoryvault.previewRename"], "Preview rename");
 assert.equal(locale["ui.longTermMemory.memoryvault.openDebugLog"], "Open debug log");
@@ -476,10 +589,11 @@ assert.equal(locale["ui.longTermMemory.memoryvault.deletePermanentlyOne"], "Dele
 assert.equal(locale["ui.longTermMemory.memoryvault.deletePermanentlyOther"], "Delete {{count}} memories permanently");
 assert.equal(locale["ui.longTermMemory.memoryvault.deleteConfirmationExcerpt"], "Excerpt");
 assert.equal(locale["ui.longTermMemory.memoryvault.deleteConfirmationMemoryId"], "Memory ID");
-assert.match(vault, /data-ltm-note-actions-desktop[\s\S]*md:flex/u);
-assert.doesNotMatch(vault, /data-ltm-note-actions-desktop[\s\S]*opacity-0/u);
-assert.doesNotMatch(vault, /data-ltm-note-actions-desktop[\s\S]*pointer-events-none/u);
-assert.match(vault, /data-ltm-note-actions-open/u);
+// #1588: wide-panel row actions show by the workspace container query (LtmWorkspace), not a viewport class.
+assert.match(vaultRow, /data-ltm-note-actions-desktop\s+data-ltm-row-actions="inline"/u);
+assert.doesNotMatch(vaultRow, /data-ltm-note-actions-desktop[\s\S]*opacity-0/u);
+assert.doesNotMatch(vaultRow, /data-ltm-note-actions-desktop[\s\S]*pointer-events-none/u);
+assert.match(vaultRow, /data-ltm-note-actions-open/u);
 assert.equal(locale["ui.longTermMemory.memoryvault.undo"], "Undo");
 assert.equal(locale["ui.longTermMemory.memoryvault.archiveSuccessOne"], "{{count}} memory archived.");
 assert.equal(locale["ui.longTermMemory.memoryvault.archiveSuccessOther"], "{{count}} memories archived.");
@@ -535,8 +649,7 @@ assert.match(vault, /<span data-ltm-accent-border className="rounded-full border
 assert.match(vaultScreen, /inline-flex min-h-11 max-w-full[\s\S]*h-11 w-11/u);
 assert.match(vault, /clearMemorySearch[\s\S]*h-11 w-11/u);
 assert.match(vault, /data-ltm-mode-filter[\s\S]*min-h-11/u);
-assert.match(vault, /bulkModes[\s\S]*min-h-11/u);
-assert.match(vault, /data-ltm-memory-scope-secondary/u);
+assert.match(vaultScreen, /memoryvault\.chatModes[\s\S]*min-h-11/u);
 assert.match(vault, /data-ltm-note-inspector/u);
 assert.match(vault, /mari-editor-panel min-w-0 space-y-4 p-3/u);
 assert.match(vault, /copyDiagnostics/u);
@@ -565,10 +678,54 @@ assert.match(detail, /onSaveRequest=\{\(save\) =>/u);
 assert.match(detail, /navigationPrompt/u);
 assert.match(detail, /navigationResolveRef\.current\?\.\(false\)/u);
 assert.match(detail, /navigationSaveInFlightRef/u);
-assert.match(detail, /disabled=\{navigationSaveInFlight\}/u);
+assert.match(detail, /navigationBusyProps = lockedActionProps\(navigationSaveInFlight\)/u);
+// Detail locks go through the shared helper; no hand-built aria-disabled literal is left.
+assert.match(detail, /<Button \{\.\.\.lockedActionProps\(repairPending\)\}/u);
+assert.doesNotMatch(detail, /"aria-disabled": true/u);
+assert.match(detail, /\{\.\.\.navigationBusyProps\}/u);
 assert.match(detail, /finishNavigationPrompt\("save"\)/u);
 assert.match(detail, /aria-modal="true"/u);
 assert.match(detail, /event\.key !== "Tab"/u);
+
+// Pending controls keep keyboard focus: aria-disabled plus a ref guard, with native `disabled`
+// kept only for permanent unavailability.
+const chatSettings = readFileSync(join(dirname(ltmSourcePaths.detail), "ChatSettings.tsx"), "utf8");
+assert.match(detail, /activationBusyRef\.current\) return;/u);
+assert.match(detail, /repairBusyRef\.current\) return;/u);
+assert.match(
+  detail,
+  /disabled=\{!props\.onEnabledForChatChange\}\s+aria-disabled=\{activationPending \|\| undefined\}/u,
+);
+assert.doesNotMatch(detail, /(?<!aria-)disabled=\{activationPending/u);
+assert.doesNotMatch(detail, /(?<!aria-)disabled=\{repairPending/u);
+assert.match(detail, /\[data-ltm-control="activation"\]\[aria-disabled="true"\]/u);
+assert.match(chatSettings, /pendingRef\.current\) return;/u);
+assert.match(chatSettings, /disabled=\{readOnly\}\s+aria-disabled=\{pending \|\| undefined\}/u);
+assert.equal(chatSettings.match(/busy=\{pending\}/gu)?.length, 2);
+assert.doesNotMatch(chatSettings, /(?<!aria-)disabled=\{pending/u);
+assert.match(sharedControls, /aria-disabled=\{busy \|\| undefined\}\s+readOnly=\{busy\}/u);
+
+// #1617: the Detail dialog names its destination, the shared MemoryVault wording is untouched, and Chat Settings
+// no longer invents values or names a label that does not exist.
+assert.match(locale["ui.longTermMemory.longtermmemorydetail.unsavedNavigationDescription"], /\{\{action\}\}/u);
+assert.match(detail, /longtermmemorydetail\.unsavedNavigationDescription", \{\s*action: navigationPrompt/u);
+assert.doesNotMatch(detail, /memoryvault\.unsavedNavigationDescription/u);
+assert.match(locale["ui.longTermMemory.longtermmemorydetail.unsavedChangesLostBeforeOpening"], /\{\{destination\}\}/u);
+assert.match(detail, /unsavedChangesLostBeforeOpening[\s\S]*memoryvault\.discardAndContinue/u);
+assert.equal("ui.longTermMemory.chatsettings.lastInjectionSummaryGuidance" in locale, false);
+assert.equal("ui.longTermMemory.chatsettings.openLongTermMemorySettings" in locale, false);
+assert.deepEqual(
+  Object.entries(locale).filter(
+    ([key, value]) => key.includes(".chatsettings.") && /Last Injection Summary/u.test(value),
+  ),
+  [],
+);
+assert.match(chatSettings, /recallStyles\.map\(\(style\)/u);
+assert.match(chatSettings, /chatsettings\.openLongTermMemory"/u);
+assert.match(chatSettings, /defaults \? \(defaults\.longTermMemoryBudgetTokens \?\? 4096\) : null/u);
+assert.match(chatSettings, /placeholder=\{effectiveBudget === null \? unknownValueLabel : undefined\}/u);
+assert.match(chatSettings, /placeholder=\{effectiveMaxChunks === null \? unknownValueLabel : undefined\}/u);
+assert.match(sharedControls, /value: number \| null/u);
 
 const localeRoot = ltmClientRoot;
 const sourceFiles = [];
@@ -587,6 +744,34 @@ for (const file of sourceFiles) {
   }
 }
 assert.deepEqual([...usedKeys].filter((key) => !(key in locale)).sort(), []);
+// #1673: every underlined text button anywhere in the package meets the 2.75rem floor, whatever its markup.
+// The floor is `min-h-11` or an inline `minHeight: 44` on the same element. LastInjectionSummary keeps a
+// 1.75rem target in its compact strip only, the host drawer's own action floor (#1714).
+const underlinedBelowFloor = sourceFiles.flatMap((file) => {
+  const text = readFileSync(file, "utf8");
+  return [...text.matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\})/gu)]
+    .map((match) => ({ classes: match[1] ?? match[2], after: text.slice(match.index, match.index + 240) }))
+    .filter(({ classes }) => /(?:^|\s)underline(?:\s|$)/u.test(classes))
+    .filter(({ classes, after }) => !/(?:^|\s)min-h-11(?:\s|$)/u.test(classes) && !/minHeight: 44/u.test(after))
+    .filter(
+      ({ classes }) =>
+        !(basename(file) === "LastInjectionSummary.tsx" && /compact \? "min-h-7" : "min-h-11"/u.test(classes)),
+    )
+    .map(({ classes }) => `${basename(file)}: ${classes}`);
+});
+assert.deepEqual(underlinedBelowFloor, []);
+// #1714: the container, not the window, picks the setup-guide sprite and the detail header sizes.
+const onboardingSource = readFileSync(join(ltmClientRoot, "Onboarding.tsx"), "utf8");
+assert.doesNotMatch(onboardingSource, /<picture|<source/u);
+assert.match(
+  onboardingSource,
+  /@container ltm-onboarding \(min-width: 48rem\) \{[\s\S]*?\[data-ltm-onboarding-sprite-wide\] \{\s*display: block/u,
+);
+assert.doesNotMatch(detail, /max-md:/u);
+assert.match(
+  detail,
+  /@container ltm-detail \(max-width: 47\.99rem\) \{\s*\[data-ltm-surface="detail"\] \[data-ltm-detail-icon\]/u,
+);
 const vaultLocaleValues = Object.entries(locale)
   .filter(([key]) => key.startsWith("ui.longTermMemory.memoryvault."))
   .map(([, value]) => value)
@@ -594,7 +779,7 @@ const vaultLocaleValues = Object.entries(locale)
 assert.doesNotMatch(vaultLocaleValues, /\b(?:Metadata|Scope|Derived memories|Connections)\b/u);
 assert.match(workspaceScreen, /function SourceOperationWorkbench/u);
 assert.match(workspaceScreen, /!previewed \|\| busy \|\| result/u);
-assert.match(workspaceScreen, /disabled=\{\s*disabled \|\|\s*Boolean\(result\)/u);
+assert.match(workspaceScreen, /disabled=\{\s*Boolean\(result\) \|\|/u);
 assert.match(workspace, /confirmAction=\{props\.confirmAction\}/u);
 assert.match(workspace, /key=\{`\$\{sourceOperation\.id\}:\$\{sourceOperation\.operation/u);
 assert.match(workspaceScreen, /data-ltm-linked-memory-selection/u);
@@ -604,12 +789,18 @@ assert.match(workspaceScreen, /excludedNoteIds: excludedMemories/u);
 assert.match(workspaceScreen, /data-ltm-source-operation-preview/u);
 assert.match(workspaceScreen, /data-ltm-source-operation-excluded/u);
 assert.match(workspaceScreen, /data-ltm-source-operation-result/u);
+// The result's hidden status copy is always mounted (LiveResult), and only the visible list waits for a result.
+assert.match(
+  workspaceScreen,
+  /<div\s+data-ltm-source-operation-result=\{result \? operation : undefined\}[^>]*>\s*<LiveResult/u,
+);
+assert.doesNotMatch(workspaceScreen, /\{result \? \(\s*<div data-ltm-source-operation-result/u);
 assert.match(workspace, /data-ltm-source-mode/u);
 assert.match(workspaceScreen, /const sourceCheckboxClass = "h-4 w-4 shrink-0 accent-/u);
 assert.match(workspaceScreen, /linked\.isError[\s\S]*linkedMemoriesCouldNotLoad/u);
 assert.match(workspaceScreen, /!linked\.data \|\| linked\.isError \|\| !previewed/u);
 assert.match(workspace, /tone === "danger"[\s\S]*var\(--destructive\)/u);
-assert.match(workspace, /className="hidden items-start gap-1 md:flex"/u);
+assert.match(workspace, /className="items-start gap-1" data-ltm-row-actions="inline"/u);
 assert.doesNotMatch(workspace, /group-hover:pointer-events-auto|transition-opacity/u);
 assert.match(workspace, /className="space-y-2 border-t border-\[var\(--border\)\] py-3"/u);
 assert.match(workspace, /\[changeSource, onRequestedSourceHandled, requestedSource\]/u);
@@ -620,19 +811,40 @@ assert.match(workspace, /data-ltm-import-result-modes=/u);
 assert.match(workspace, /data-ltm-retry-modes/u);
 assert.match(workspace, /\.\.\.\(contract\.modes\?\.length \? \{ modes: contract\.modes \} : \{\}\)/u);
 assert.equal(locale["ui.longTermMemory.sourcesworkspace.retryUsesModes"], "Retries with {{modes}}");
-assert.match(workspace, /const reextractDisabled = extractingId !== null \|\| !availabilityReady;/u);
-assert.equal(workspace.match(/disabled=\{reextractDisabled\}/gu)?.length, 3);
-assert.equal(
-  workspace.match(/disabled=\{sourceTask\.active\?\.status === "running" \|\| !availabilityReady\}/gu)?.length,
-  2,
+// Re-extract locks on any running source task, stays focusable and points at the lock reason.
+assert.match(workspace, /const reextractLocked = importRunning \|\| !availabilityReady;/u);
+assert.match(workspace, /const reextractActionProps = lockedActionProps\(reextractLocked, reextractReasonId\);/u);
+// While availability settings load, Re-extract points at the existing loading message instead of staying silent.
+assert.match(
+  workspace,
+  /const reextractReasonId = importRunning \? importLockId : !availabilityReady \? availabilityWaitId : undefined;/u,
 );
+assert.match(workspace, /id=\{availabilityWaitId\}/u);
+assert.equal(workspace.match(/\{\.\.\.reextractActionProps\}/gu)?.length, 3);
+assert.doesNotMatch(workspace, /(?<!aria-)disabled=\{reextractDisabled\}/u);
+assert.equal(workspace.match(/disabled=\{reextractLocked\}/gu)?.length, 2);
+assert.equal(workspace.match(/lockReasonId=\{reextractReasonId\}/gu)?.length, 2);
 assert.match(
   workspace,
   /const availabilityReady = settingsQuery\.isSuccess && effectiveAvailabilityModes\.length > 0/u,
 );
 assert.match(workspace, /availabilitySavingRef\.current/u);
 assert.match(workspace, /availabilityDisabled=\{availabilitySaving \|\| !availabilityReady\}/u);
-assert.match(workspace, /disabled=\{importDisabled\}/u);
+assert.match(
+  workspace,
+  /const importActionProps = lockedActionProps\(importDisabled, importRunning \? importLockId : undefined\)/u,
+);
+assert.match(workspace, /id=\{importLockId\}/u);
+// The lock note is empty unless a run is active, so only a run may reference it: not loading or saving, and
+// Re-import locks on any running task (`importRunning`), not on an availability save.
+assert.match(workspace, /"aria-describedby": importRunning \? `\$\{importLockId\} \$\{reasonId\}` : reasonId/u);
+assert.match(workspace, /\$\{importRunning \? ` \$\{importLockId\}` : ""\}/u);
+assert.doesNotMatch(workspace, /importDisabled \? `[^`]*importLockId/u);
+assert.equal((workspace.match(/disabled=\{importDisabled\}/gu) ?? []).length, 0);
+assert.doesNotMatch(workspace, /disabled=\{importing\}/u);
+assert.match(workspace, /disabled=\{selectedBookImportIds\.length === 0\}/u);
+assert.match(workspace, /disabled=\{selectedBookRefreshIds\.length === 0\}/u);
+assert.match(workspace, /\.\.\.importActionProps/u);
 assert.match(workspace, /settingsQuery\.refetch\(\)/u);
 assert.equal(
   locale["ui.longTermMemory.sourcesworkspace.availabilitySettingsCouldNotLoad"],
@@ -689,7 +901,7 @@ assert.match(reviewQueue, /reviewProgress/u);
 assert.match(reviewQueueScreen, /MAX_APPEND_TEXT_LENGTH = 20_000/u);
 assert.match(reviewQueueScreen, /MAX_SECTION_TEXT_LENGTH = 24_000/u);
 assert.match(reviewQueueScreen, /charactersRemaining(?:One|Other)/u);
-assert.match(reviewQueue, /textExceedsLimit/u);
+assert.match(reviewQueueScreen, /textExceedsLimit/u);
 assert.match(reviewQueue, /preflight/u);
 assert.match(reviewQueue, /data-ltm-review-preflight/u);
 assert.match(reviewQueue, /data-ltm-review-conflicts/u);
@@ -700,6 +912,17 @@ assert.doesNotMatch(reviewQueue, /label\.replace\("\{\{value\}\}"/u);
 assert.match(reviewQueue, /preflightBlocked/u);
 assert.match(reviewQueue, /preflightSummary/u);
 assert.match(reviewQueue, /applyPreflighted/u);
+assert.match(
+  reviewQueue,
+  /const acceptDisabled = !eligibleIds\.has\(row\.mutation\.id\) \|\| !valid \|\| preflightBlocked/u,
+);
+assert.match(reviewQueue, /aria-disabled=\{acceptDisabled \|\| runBusy \|\| undefined\}/u);
+assert.match(reviewQueue, /if \(!runBusy && !acceptDisabled\) void runBatch\("accept", \[row\]\)/u);
+assert.match(reviewQueue, /const batchAcceptDisabled =/u);
+assert.match(reviewQueue, /aria-disabled=\{batchAcceptDisabled \|\| runBusy \|\| undefined\}/u);
+assert.match(reviewQueue, /if \(!runBusy && !batchAcceptDisabled\) void runBatch\("accept"\)/u);
+assert.doesNotMatch(reviewQueue, /disabled=\{!eligibleIds\.has\(row\.mutation\.id\)/u);
+assert.doesNotMatch(reviewQueue, /disabled=\{!eligibleSelectedRows\.length \|\| invalidSelectedEdits/u);
 assert.match(reviewQueue, /data-ltm-review-action/u);
 assert.match(reviewQueue, /reviewChangeForTitle/u);
 assert.match(reviewQueue, /applyChangeForTitle/u);
@@ -711,8 +934,35 @@ assert.match(reviewQueue, /discardDependentWarning/u);
 assert.match(reviewQueue, /reviewQueueEmpty/u);
 assert.match(reviewQueue, /className=\{workspaceUnavailable \|\| reviewDataUnavailable \? "hidden" : ""\}/u);
 assert.equal(locale["ui.longTermMemory.reviewqueue.retryFailed"], "Retry failed review actions");
-assert.equal(locale["ui.longTermMemory.reviewqueue.reviewChangeForTitle"], "Review change for {{title}}");
+assert.equal(locale["ui.longTermMemory.reviewqueue.reviewChangeForTitle"], "Check change for {{title}}");
 assert.equal(locale["ui.longTermMemory.reviewqueue.applyChangeForTitle"], "Apply change for {{title}}");
+// #1654: one Check/Apply verb pair, "changes" not "mutations", and a plain sentence for the engine's codes.
+assert.match(reviewQueue, /data-ltm-review-action-text/u);
+assert.match(reviewQueue, /data-ltm-review-state-chip/u);
+assert.match(reviewQueue, /reviewCodeText\(blocker\.code/u);
+assert.equal(locale["ui.longTermMemory.reviewqueue.missingSourceTitle"], "Deleted source");
+assert.equal(locale["ui.longTermMemory.reviewqueue.preflightReady"], "Checked, ready to apply");
+assert.equal(locale["ui.longTermMemory.reviewqueue.mutationActions"], "Change actions");
+assert.equal(locale["ui.longTermMemory.reviewqueue.rowCheck"], "Check");
+assert.equal(locale["ui.longTermMemory.reviewqueue.rowApply"], "Apply");
+assert.equal(locale["ui.longTermMemory.reviewqueue.codeSourceMissing"], "The source note was deleted.");
+// The two stale codes name their remedy, and a catch-all code keeps the engine's own reason.
+assert.match(locale["ui.longTermMemory.reviewqueue.codeSourceStale"], /Extract the source again/u);
+assert.match(locale["ui.longTermMemory.reviewqueue.codeSourceContextUnbound"], /Extract the source again/u);
+assert.match(displayLabels, /catchAllReviewCodes[\s\S]*preflight_blocked[\s\S]*projection_failed/u);
+// Rows follow the run's own mutation ids, a missing source is only claimed once the notes context is ready, and
+// a failed request stays a danger beside ready rows.
+assert.match(reviewQueue, /runMutationIds\.has\(row\.mutation\.id\)/u);
+assert.match(reviewQueue, /reviewContextReady\s*\?[^;]*missingSourceTitle/u);
+assert.match(reviewQueue, /result\.failed \|\| result\.indexRebuildFailures\.length[\s\S]{0,80}danger/u);
+assert.match(reviewQueue, /humanizeText\(diagnostic\.message\)/u);
+for (const key of Object.keys(locale).filter((name) => name.startsWith("ui.longTermMemory.reviewqueue."))) {
+  assert.doesNotMatch(
+    locale[key].replace(/\{\{\w+\}\}/gu, ""),
+    /\bmutations?\b|\bpreflight\b/iu,
+    `${key} still uses engine wording`,
+  );
+}
 assert.equal(locale["ui.longTermMemory.reviewqueue.discard"], "Discard");
 assert.equal(locale["ui.longTermMemory.reviewqueue.sourcesPane"], "Sources");
 assert.equal(locale["ui.longTermMemory.reviewqueue.reviewPane"], "Review");
@@ -786,6 +1036,445 @@ assert.equal(locale["ui.longTermMemory.activityview.valueExcluded"], "Excluded")
 assert.equal(locale["ui.longTermMemory.activityview.settingCharacterTargeting"], "Character targeting");
 assert.equal(locale["ui.longTermMemory.activityview.valueWholeChat"], "Whole chat");
 
+// Scope loading stays separate from local-character discovery (formerly long-term-memory-loading).
+assert.match(api, /export const ltmScopeTargetsKey = \(chatId: string \| null \| undefined\)/u);
+assert.match(
+  api,
+  /export const scopeTargetsQueryOptions = \(chatId: string \| null \| undefined\) => \(\{\s+queryKey: ltmScopeTargetsKey\(chatId\),\s+staleTime: 30_000,/u,
+);
+assert.match(workspace, /useQuery\(scopeTargetsQueryOptions\(props\.chatId\)\)/u);
+const previewBlock = workspace.slice(workspace.indexOf("const previewEnabled ="), workspace.indexOf("const rows ="));
+assert.match(
+  previewBlock,
+  /const previewEnabled = sourceContextMatchesProps && sourceTargetResolved && source !== "lorebooks"/u,
+);
+assert.match(
+  previewBlock,
+  /const lorebookPreviewEnabled = sourceContextMatchesProps && sourceTargetResolved && source === "lorebooks"/u,
+);
+assert.match(previewBlock, /const preview = useInfiniteQuery\(\{[\s\S]*?enabled: previewEnabled,/u);
+assert.match(previewBlock, /const lorebookPreview = useInfiniteQuery\(\{[\s\S]*?enabled: lorebookPreviewEnabled,/u);
+const sourceDetailsBlock = workspace.slice(
+  workspace.indexOf("const sourceDetails = useQuery({"),
+  workspace.indexOf("const previewData ="),
+);
+assert.match(sourceDetailsBlock, /scopeTargets\.isSuccess/u);
+assert.match(sourceDetailsBlock, /sourceContextMatchesProps/u);
+assert.match(sourceDetailsBlock, /focusedFlatSourceId !== null/u);
+assert.match(workspace, /const sourceContextMatchesProps = sourceContextKey === \(props\.chatId \?\? "all"\)/u);
+assert.match(workspace, /const sourceTargetResolved = Boolean\(sourceTarget && scopeTargets\.isSuccess\)/u);
+assert.match(
+  workspace,
+  /const previewData = sourceContextMatchesProps && sourceTargetResolved \? mergedPreview : undefined/u,
+);
+assert.match(
+  workspace,
+  /const lorebookPreviewData = sourceContextMatchesProps && sourceTargetResolved \? mergedLorebookPreview : undefined/u,
+);
+assert.match(
+  workspace,
+  /const sourceDetailsData = sourceContextMatchesProps && sourceTargetResolved \? sourceDetails\.data : undefined/u,
+);
+assert.match(workspace, /setSourceTargetId\(props\.chatId \? `chat:\$\{props\.chatId\}` : "all"\)/u);
+assert.match(workspace, /scopeTargetOptions\.find\(\(target\) => target\.id === sourceTargetId\)/u);
+assert.match(workspace, /setSourceTargetId\(next\)/u);
+assert.match(workspace, /if \(scopeTargets\.isError\) \{/u);
+assert.match(workspace, /scopeTargets\.refetch\(\)/u);
+const scopeTargetsRoute = routes.slice(
+  routes.indexOf('app.get<{ Querystring: unknown }>("/scope-targets"'),
+  routes.indexOf('app.get<{ Querystring: unknown }>("/local-characters"'),
+);
+assert.doesNotMatch(scopeTargetsRoute, /loadTrustedLtmSubjectCatalog/u);
+assert.match(vault, /localCharacters\.isLoading && !localCharacters\.data/u);
+assert.match(vault, /localCharacters\.isError && !localCharacters\.data/u);
+assert.match(vault, /localCharacters\.refetch\(\)/u);
+assert.equal((maintenance.match(/queryKeys\.localCharactersRoot/g) ?? []).length, 2);
+// One lock helper serves every run-time lock; `Button` and `IconButton` dim on `aria-disabled` themselves, so a
+// caller no longer passes `opacity-50`. Running work (`busy`, `pending`) never feeds a native `disabled`,
+// which would drop keyboard focus; only input validity does.
+assert.match(sharedControls, /export function lockedActionProps\(locked: boolean, reasonId\?: string\)/u);
+assert.equal((sharedControls.match(/props\["aria-disabled"\] \? "opacity-50"/gu) ?? []).length, 2);
+assert.match(maintenance, /const lock = lockedActionProps\(busy\)/u);
+// A native `disabled={…}` expression is read to its matching brace: a pattern that stops at the first `}` lets a
+// nested object, arrow body or template literal hide the running-work flag from the scan.
+const nativeDisabledMentioning = (source, pattern) => {
+  const found = [];
+  for (const match of source.matchAll(/(?<!aria-)\bdisabled=\{/gu)) {
+    const start = match.index + match[0].length;
+    let depth = 1;
+    let end = start;
+    for (; end < source.length && depth > 0; end += 1) {
+      if (source[end] === "{") depth += 1;
+      else if (source[end] === "}") depth -= 1;
+    }
+    const expression = source.slice(start, end - 1);
+    if (pattern.test(expression)) found.push(expression);
+  }
+  return found;
+};
+const runningWork = /\b(?:busy|pending)\b/u;
+assert.deepEqual(nativeDisabledMentioning("<Button disabled={!ready || busy} />", runningWork), ["!ready || busy"]);
+assert.deepEqual(nativeDisabledMentioning("<Button disabled={busy} />", runningWork), ["busy"]);
+assert.deepEqual(
+  nativeDisabledMentioning("<Button disabled={Boolean(find({ id })) || busy} />", runningWork),
+  ["Boolean(find({ id })) || busy"],
+  "an expression with a nested object is read whole",
+);
+assert.doesNotMatch(
+  "<Button disabled={Boolean(find({ id })) || busy} />",
+  /disabled=\{[^}]*\b(?:busy|pending)\b/u,
+  "the first-brace pattern misses that expression",
+);
+assert.deepEqual(nativeDisabledMentioning("<Button aria-disabled={busy} />", runningWork), []);
+assert.deepEqual(nativeDisabledMentioning(maintenance, runningWork), []);
+assert.doesNotMatch(vault, /className: "opacity-50"/u);
+assert.doesNotMatch(readFileSync(ltmSourcePaths.settings, "utf8"), /className: "opacity-50"/u);
+// Vault and Review locks: unsaved identity edits and running saves never feed a native `disabled`; the source
+// list names one reason node, and a stale or blocked row says why on the row itself.
+const availabilityWorkbench = readFileSync(
+  join(dirname(ltmSourcePaths.vault), "MemoryAvailabilityWorkbench.tsx"),
+  "utf8",
+);
+const subjectIdentityReview = readFileSync(
+  join(dirname(ltmSourcePaths.reviewQueue), "SubjectIdentityReview.tsx"),
+  "utf8",
+);
+assert.deepEqual(nativeDisabledMentioning(reviewQueue, /identityDirtyIds/u), []);
+assert.deepEqual(
+  nativeDisabledMentioning(
+    reviewQueue,
+    /\b(?:dismissingId|clearingSourceId|extractingSourceId|isFetching|running !== null)\b/u,
+  ),
+  [],
+);
+assert.equal(
+  (reviewQueue.match(/lockedActionProps\(identityLocked, identityLockReasonId\)/gu) ?? []).length,
+  2,
+  "the source select and the rejected-count button share the identity lock reason",
+);
+assert.match(reviewQueue, /id=\{identityLockReasonId\}/u);
+assert.ok((reviewQueue.match(/if \(identityLocked\) return;/gu) ?? []).length >= 2);
+assert.match(reviewQueue, /const acceptReason = !valid[\s\S]*?acceptRowNotEligible/u);
+assert.doesNotMatch(availabilityWorkbench, /(?<!aria-)disabled=\{busy\}/u);
+assert.match(availabilityWorkbench, /\{\.\.\.lockedActionProps\(busy\)\}/u);
+assert.doesNotMatch(subjectIdentityReview, /(?<!aria-)disabled=\{busy/u);
+assert.match(subjectIdentityReview, /aria-disabled=\{busy \|\| undefined\}/u);
+assert.doesNotMatch(vault, /(?<!aria-)disabled=\{Boolean\(busy\)/u);
+assert.ok(locale["ui.longTermMemory.reviewqueue.identityLockReason"]);
+assert.ok(locale["ui.longTermMemory.reviewqueue.acceptRowNotEligible"]);
+// #1636: Save keeps its label and tone, stays focusable while off and reports Saving and Saved in a polite region
+// beside it; a save that waits on a recall rebuild is a warning, not an error.
+assert.match(vault, /aria-disabled=\{!dirty \|\| busy === "save" \? true : undefined\}/u);
+assert.doesNotMatch(vault, /primary\s+disabled=/u);
+assert.match(vault, /role="status"\s+data-ltm-save-status/u);
+// A save asked for during a save (the unsaved-changes dialog, the host shortcut) awaits that run's result, never a
+// synthetic `false` that `confirm()` reads as "did not save" and the host reads as "save failed".
+assert.match(vault, /if \(savePromiseRef\.current\) return savePromiseRef\.current;/u);
+assert.doesNotMatch(vault, /savePendingRef/u);
+// One save speaks once: the inline status announces Saving, and its Saved text is hidden from assistive technology
+// because the banner's "Memory saved" notice announces it.
+assert.match(vault, /saveState === "saved" \? <span aria-hidden="true">\{saveStatus\}<\/span> : saveStatus/u);
+// A save clears the standing notice first: a second save writes the identical "Memory saved" text, which a polite
+// region does not announce twice, so without this the later save would start aloud and finish silently.
+// An archive Undo keeps its own caption in ArchiveUndoState, so the save clears the notice unconditionally.
+assert.match(vault, /setSaveState\("saving"\);\s+setError\(""\);\s+(?:\/\/[^\n]*\n\s*)*setNotice\(""\);/u);
+assert.doesNotMatch(vault, /if \(!archiveUndo\) setNotice/u);
+assert.match(vault, /caption: string;/u);
+assert.match(vault, /<span data-ltm-archive-undo-caption/u);
+// A memory that is already global is blocked under its own reason, not under a last place it never had.
+assert.match(vaultScreen, /alreadyEverywhere: removesLastPlace && !removesLastMode && places\.length === 0/u);
+assert.match(locale["ui.longTermMemory.memoryvault.applyReasonNothingToChange"], /would be skipped/u);
+assert.doesNotMatch(locale["ui.longTermMemory.memoryvault.applyReasonNothingToChange"], /last place/u);
+assert.ok(locale["ui.longTermMemory.memoryvault.alreadyAvailableEverywhere"]);
+assert.match(vault, /const setWarning = useCallback/u);
+assert.match(vault, /tone=\{noticeState\.warning \? "warning" : "success"\}/u);
+assert.doesNotMatch(vault, /setError\(\s*localizeUi\("ui\.longTermMemory\.memoryvault\.savedButRecallIsStale"/u);
+assert.equal(
+  locale["ui.longTermMemory.memoryvault.savedButRecallIsStale"],
+  "Saved. Recall will catch up once the index rebuild succeeds: {{error}}",
+);
+// An empty rebuild error picks the no-error key at both call sites, so the warning never ends in a bare colon.
+assert.equal(
+  locale["ui.longTermMemory.memoryvault.savedButRecallIsStaleNoError"],
+  "Saved. Recall will catch up once the index rebuild succeeds.",
+);
+assert.doesNotMatch(locale["ui.longTermMemory.memoryvault.savedButRecallIsStaleNoError"], /\{\{|:\s*$/u);
+assert.doesNotMatch(vault, /error: (?:response|result)\.rebuild\.error \?\? ""/u);
+assert.equal(
+  vault.match(
+    /\.rebuild\.error\s*\?\s*localizeUi\("ui\.longTermMemory\.memoryvault\.savedButRecallIsStale", \{ error: /gu,
+  )?.length,
+  2,
+);
+assert.equal(vault.match(/"ui\.longTermMemory\.memoryvault\.savedButRecallIsStaleNoError"/gu)?.length, 2);
+// #1636: the open row uses the documented primary wash plus a start-edge bar and aria-current, not an accent tint.
+assert.match(vaultRow, /selected \? "bg-\[var\(--primary\)\]\/10" : ""/u);
+assert.doesNotMatch(vaultRow, /bg-\[var\(--accent\)\]\/50/u);
+assert.match(vaultRow, /\{selected \? \(\s*<span\s+aria-hidden="true"\s+data-ltm-note-open-bar/u);
+assert.match(vaultRow, /aria-current=\{selected \? "true" : undefined\}/u);
+// #1659: the source write and the list reload no longer share a name. The write says what it overwrites, and its
+// description joins the destination reason instead of replacing it.
+assert.equal(locale["ui.longTermMemory.sourcesworkspace.reimportFromSource"], "Re-import from source");
+assert.equal(locale["ui.longTermMemory.sourcesworkspace.reloadList"], "Reload list");
+assert.match(
+  locale["ui.longTermMemory.sourcesworkspace.reimportFromSourceDescription"],
+  /Overwrites the imported text/u,
+);
+assert.match(workspace, /data-ltm-source-action="refresh"[\s\S]{0,200}sourcesworkspace\.reimportFromSource"/u);
+assert.equal((workspace.match(/data-ltm-source-action="refresh-preview"/gu) ?? []).length, 2);
+assert.match(workspace, /<p id=\{reimportDescriptionId\}/u);
+assert.equal((workspace.match(/sourcesworkspace\.reloadList"/gu) ?? []).length, 2);
+assert.match(workspace, /`\$\{reimportDescriptionId\} \$\{importReasonId\}`/u);
+// #1659: lorebook counts are whole sentences with their own plural forms, and the pane tab is a plain word.
+assert.equal(locale["ui.longTermMemory.sourcesworkspace.entries"], undefined);
+assert.equal(locale["ui.longTermMemory.sourcesworkspace.entriesTab"], "Entries");
+assert.equal(locale["ui.longTermMemory.sourcesworkspace.lorebookEntryCountOne"], "{{count}} entry");
+assert.equal(locale["ui.longTermMemory.sourcesworkspace.lorebookEntryCountOther"], "{{count}} entries");
+assert.doesNotMatch(workspace, /sourcesworkspace\.entries"/u);
+assert.equal((workspace.match(/entryCountLabel\(/gu) ?? []).length, 2);
+assert.match(workspace, /label: localizeUi\("ui\.longTermMemory\.sourcesworkspace\.entriesTab"\)/u);
+// #1659: the blocking reason ends with a route to the destination, and the panel's own hint stays screen-reader only.
+assert.equal(locale["ui.longTermMemory.sourcesworkspace.chooseDestinationAction"], "Choose destination");
+assert.match(workspaceScreen, /<span role="status" className="sr-only" data-ltm-destination-hint>/u);
+// #1659: controls locked by a running import stay focusable (aria-disabled plus an early return) and a status line says why.
+assert.equal(locale["ui.longTermMemory.sourcesworkspace.lockedWhileImportRuns"], "Locked while an import runs");
+assert.equal(locale["ui.longTermMemory.sourcesworkspace.lockedWhileReextractRuns"], "Locked while a re-extract runs");
+// A running source task never feeds a native `disabled` on Sources controls; each carries the lock reason.
+// Only the scope combobox still takes the prop on a button; it renders aria-disabled itself.
+assert.equal(workspace.match(/(?<!aria-)disabled=\{activeSourceTask !== null\}/gu)?.length, 1);
+assert.match(workspace, /\{\.\.\.lockedActionProps\(importRunning, importLockId\)\}[\s\S]{0,60}retry-re-extract/u);
+assert.match(workspace, /lockReasonId=\{importLockId\}/u);
+// Each locked Re-extract and Retry handler guards itself: Enter still fires onClick on an aria-disabled button.
+assert.equal(workspace.match(/if \(reextractLocked\) return;/gu)?.length, 2);
+assert.match(workspace, /if \(!reextractLocked\) void reextract\(item\.note\.id\)/u);
+assert.match(workspace, /if \(!importRunning\)\s+void reextract\(\s*retryableReextract/u);
+assert.match(workspace, /describedBy=\{importLockId\}/u);
+assert.match(sourceScopeCombobox, /aria-describedby=\{disabled \? describedBy : undefined\}/u);
+const sourceOperationWorkbench = readFileSync(
+  join(dirname(ltmSourcePaths.sourcesWorkspace), "SourceOperationWorkbench.tsx"),
+  "utf8",
+);
+assert.doesNotMatch(sourceOperationWorkbench, /(?<!aria-)disabled=\{\s*(?:disabled|busy)\b/u);
+assert.equal(
+  sourceOperationWorkbench.match(
+    /\{\.\.\.lockedActionProps\(disabled \|\| busy !== null, disabled \? lockReasonId : undefined\)\}/gu,
+  )?.length,
+  2,
+);
+const importedSourceInspector = readFileSync(
+  join(dirname(ltmSourcePaths.sourcesWorkspace), "ImportedSourceInspector.tsx"),
+  "utf8",
+);
+assert.doesNotMatch(importedSourceInspector, /className=\{disabled \? "opacity-50" : ""\}/u);
+assert.equal(importedSourceInspector.match(/lockedActionProps\(disabled, lockReasonId\)/gu)?.length, 2);
+assert.doesNotMatch(availabilityTabRail, /\bdisabled=\{disabled\}/u);
+assert.doesNotMatch(sourceScopeCombobox, /\bdisabled=\{disabled\}/u);
+assert.match(availabilityTabRail, /aria-disabled=\{disabled \|\| undefined\}/u);
+assert.match(sourceScopeCombobox, /aria-disabled=\{disabled \|\| undefined\}/u);
+assert.match(sourceScopeCombobox, /const choose = \(id: string\) => \{\s+if \(disabled\) return;/u);
+assert.match(workspaceScreen, /disabled=\{isLastSelected\}/u);
+assert.match(workspaceScreen, /aria-disabled=\{availabilityDisabled \|\| disabled \|\| undefined\}/u);
+assert.match(workspaceScreen, /aria-describedby=\{disabled \? `\$\{labelId\}-lock` : undefined\}/u);
+assert.match(workspaceScreen, /if \(availabilityDisabled \|\| disabled\) return;/u);
+assert.doesNotMatch(workspaceScreen, /disabled=\{availabilityDisabled \|\| isLastSelected\}/u);
+
+// Results are read out from regions that stay mounted, so a result that mounts with its text is not missed.
+assert.match(sharedControls, /export function LiveResult[\s\S]*<p role="status" className="sr-only">\s*\{text\}/u);
+assert.match(
+  sharedControls,
+  /<StatusSurface tone=\{tone\} \{\.\.\.props\} role=\{undefined\} aria-live=\{undefined\}>/u,
+);
+assert.match(activity, /<LiveResult text=\{actionState\.text\} tone=\{actionState\.tone\} \/>/u);
+assert.doesNotMatch(activity, /\{actionState\.text \? <StatusSurface/u);
+assert.match(maintenance, /<LiveResult\s+text=\{messageState\.area === area \? messageState\.text : ""\}/u);
+assert.doesNotMatch(maintenance, /messageState\.text && messageState\.area === area \?/u);
+assert.match(
+  sourceOperationWorkbench,
+  /<p role="status" data-ltm-source-operation-preview-summary className=\{previewed \? "text-xs" : "sr-only"\}>/u,
+);
+assert.doesNotMatch(sourceOperationWorkbench, /<div data-ltm-source-operation-preview[^>]*>\s*<p role="status">/u);
+// Counts use the package's One/Other pattern and the list join follows the locale; no hand-built plurals.
+assert.doesNotMatch(maintenance, /\? "" : "s"/u);
+assert.doesNotMatch(maintenance, /\.join\(" and "\)/u);
+assert.doesNotMatch(maintenance, /replaceAll\("_", " "\)/u);
+assert.match(maintenance, /new Intl\.ListFormat\(locale/u);
+assert.match(maintenance, /labelKeys\.identityMatchBasis/u);
+for (const key of [
+  "applyIdentityRepairsActionOne",
+  "applyIdentityRepairsActionOther",
+  "selectedIdentityRepairsOne",
+  "selectedIdentityRepairsOther",
+  "includedDuplicateNotesOne",
+  "includedDuplicateNotesOther",
+  "basisBoundSubjects",
+  "basisExactName",
+  "basisUniqueAlias",
+  "basisQualifiedAlias",
+  "basisSpellingVariation",
+  "basisUnorderedPair",
+]) {
+  assert.ok(locale[`ui.longTermMemory.memorysettings.${key}`], `${key} is in the catalog`);
+}
+assert.equal(locale["ui.longTermMemory.memorysettings.applyIdentityRepairsAction"], undefined);
+assert.doesNotMatch(locale["ui.longTermMemory.memorysettings.applyIdentityRepairsDescription"], /Suffix/u);
+// Add section says why a name was refused, on the field, and keeps focus there.
+assert.match(
+  vault,
+  /const refuse = \(messageKey: string\) => \{[\s\S]*requestAnimationFrame\(\(\) => sectionInputRef\.current\?\.focus\(\)\)/u,
+);
+assert.match(vault, /refuse\("ui\.longTermMemory\.memoryvault\.detailNameNoLetters"\)/u);
+assert.match(vault, /refuse\("ui\.longTermMemory\.memoryvault\.detailNameAlreadyExists"\)/u);
+assert.match(
+  vault,
+  /aria-describedby=\{\s*sectionError \? "ltm-new-section-error ltm-new-section-key" : "ltm-new-section-key"/u,
+);
+assert.match(vault, /<span id="ltm-new-section-error"/u);
+
+assert.doesNotMatch(detail, /#000\b/u);
+assert.match(
+  detail,
+  /\[data-ltm-activation-knob\] \{[^}]*box-shadow: 0 1px 2px var\(--marinara-editor-border-strong\);/u,
+);
+assert.match(detail, /Measured on the status panel[^\n]*at least 10\.0:1 light, 9\.1:1 dark/u);
+
+// Every spinner and pulsing placeholder in the feature stops under reduced motion; the workspace rule only shortens
+// the loop, so one outside it (navigation, detail header, loading rows) would still move without its own class.
+const spinnerFiles = readdirSync(ltmClientRoot, { recursive: true }).filter((name) => /\.tsx$/u.test(String(name)));
+assert.ok(spinnerFiles.length > 10, "spinner scan found the feature sources");
+for (const name of spinnerFiles) {
+  const lines = readFileSync(join(ltmClientRoot, String(name)), "utf8").split("\n");
+  lines.forEach((line, index) => {
+    if (/animate-(?:spin|pulse)/u.test(line)) {
+      assert.match(
+        line,
+        /motion-reduce:animate-none/u,
+        `${name}:${index + 1} spinner or placeholder needs motion-reduce:animate-none`,
+      );
+    }
+  });
+}
+
+// Debug search filters up to 1,000 events, so typing must not block on the filter.
+assert.match(activity, /const deferredSearch = useDeferredValue\(search\);/u);
+assert.match(activity, /const query = deferredSearch\.trim\(\)/u);
+
+// The Korean catalog mirrors English: same keys, same {{placeholders}}, no blank text, and it is registered.
+const koLocale = JSON.parse(readFileSync(ltmSourcePaths.localeKo));
+const catalogKeys = (catalog) => Object.keys(catalog).filter((key) => key !== "_meta");
+const placeholders = (text) => [...text.matchAll(/\{\{[A-Za-z0-9_]+\}\}/gu)].map((match) => match[0]).sort();
+assert.equal(koLocale._meta?.locale, "ko");
+assert.deepEqual(catalogKeys(koLocale), catalogKeys(locale), "ko.json keys must equal en.json keys, in order");
+for (const key of catalogKeys(locale)) {
+  assert.equal(typeof koLocale[key], "string", `${key} needs Korean text`);
+  assert.ok(koLocale[key].trim(), `${key} Korean text is blank`);
+  assert.deepEqual(placeholders(koLocale[key]), placeholders(locale[key]), `${key} placeholders differ from en`);
+}
+// The add-detail placeholder must be a name the A-Z/digit key rule accepts, and discard is never labeled delete.
+for (const name of koLocale["ui.longTermMemory.memoryvault.detailNameExample"].replace(/^[^:]*:/u, "").split(",")) {
+  assert.ok(/[a-z0-9]/iu.test(name), `detailNameExample name "${name.trim()}" has no A-Z or digit for the stored key`);
+}
+assert.ok(
+  !koLocale["ui.longTermMemory.memoryvault.discardAndContinue"].includes("삭제"),
+  "discardAndContinue must not read as delete",
+);
+const localization = readFileSync(ltmSourcePaths.localization, "utf8");
+assert.match(localization, /import koreanCatalog from "\.\/locales\/ko\.json"/u);
+assert.match(localization, /ko: stringEntries\(koreanCatalog\)/u);
+
+// NumberField rounds before it shows or reports a value (a typed 3.4 at size 3 must not leave "3.4" in the field).
+assert.match(sharedControls, /integer\?: boolean;/u);
+const clampSource = sharedControls.match(/const clamped = (.+);/u)?.[1] ?? "";
+assert.match(
+  clampSource,
+  /integer \? Math\.round\(next\) : next/u,
+  "NumberField rounds before it stores and shows the value",
+);
+const commitBody = sharedControls.slice(
+  sharedControls.indexOf("const clamped ="),
+  sharedControls.indexOf("useEffect(() => {\n    setText(valueText)"),
+);
+assert.ok(
+  commitBody.indexOf("setText(String(clamped))") > 0 && commitBody.includes("onChange(clamped)"),
+  "NumberField shows and reports the same clamped value",
+);
+const clampOf = (next, size, integer) => {
+  const clamped = new Function("min", "max", "next", "integer", `return ${clampSource};`)(1, 100, next, integer);
+  return { shown: String(clamped), changed: String(clamped) !== String(size), clamped };
+};
+const stay = clampOf(3.4, 3, true);
+assert.equal(stay.shown, "3", "typing 3.4 at size 3 shows 3");
+assert.equal(stay.changed, false, "no state change is needed for the field to read 3");
+const halfUp = clampOf(2.5, 10, true);
+assert.equal(halfUp.shown, "3", "typing 2.5 from 10 shows 3");
+assert.ok(Number.isInteger(halfUp.clamped), "the request limit is a whole number");
+assert.equal(clampOf(2.5, 10, false).shown, "2.5", "other NumberFields keep decimals");
+
+// Issue #1974: the settings schema's `.int()` fields must round a typed decimal like the batch size does;
+// the score threshold, the four recall weights and the temperature stay decimal.
+const numberFieldOf = (source, value) =>
+  source.match(
+    new RegExp(`<NumberField(?:(?!<NumberField)[\\s\\S])*?value=\\{${value.replace(".", "\\.")}\\}[\\s\\S]*?/>`, "u"),
+  )?.[0] ?? "";
+for (const [source, values] of [
+  [
+    settings,
+    [
+      "globalForm.longTermMemoryBudgetTokens",
+      "globalForm.longTermMemoryMaxChunks",
+      "globalForm.longTermMemoryRecallContextMessages",
+      "extractionFormState.maxOutputTokens",
+      "extractionFormState.maxSourceTokens",
+      "extractionFormState.existingNoteMaxChunks",
+      "extractionFormState.existingNoteMaxTokens",
+    ],
+  ],
+  [chatSettings, ["effectiveBudget", "effectiveMaxChunks"]],
+]) {
+  for (const value of values) {
+    assert.match(numberFieldOf(source, value), /^\s*integer$/mu, `${value} rounds a typed decimal`);
+  }
+}
+for (const value of [
+  "globalForm.longTermMemoryScoreThreshold",
+  "globalForm.longTermMemorySemanticWeight",
+  "globalForm.longTermMemoryLexicalWeight",
+  "globalForm.longTermMemoryGraphWeight",
+  "globalForm.longTermMemoryKeywordWeight",
+  "extractionFormState.temperature",
+]) {
+  const field = numberFieldOf(settings, value);
+  assert.ok(field.includes(`value={${value}}`), `${value} field found`);
+  assert.doesNotMatch(field, /^\s*integer$/mu, `${value} keeps decimals`);
+}
+
+// A memory another package or Advanced Memory added says so in the Vault list and editor header.
+assert.match(vaultRow, /originLabel\?: string/u, "VaultRow takes a plain origin label");
+assert.match(vaultRow, /originLabel \? \(/u, "VaultRow renders the origin chip");
+assert.match(vault, /function originLabelKey\(/u, "the vault derives the origin from the note");
+assert.match(
+  vault,
+  /function originLabelKey\([\s\S]*?link\.relation === "extracted_from"[\s\S]*?source\?\.type === "source"/u,
+  "a memory takes its origin from its extracted_from source note",
+);
+assert.match(vault, /package_record: "ui\.longTermMemory\.memoryvault\.originSlurp"/u, "Slurp provenance has a label");
+assert.match(
+  vault,
+  /advanced_memory: "ui\.longTermMemory\.memoryvault\.originAdvancedMemory"/u,
+  "Advanced Memory provenance has a label",
+);
+assert.match(
+  vault,
+  /originLabel=\{originKey \? localizeUi\(originKey\) : undefined\}/u,
+  "rows get the localized label as a string",
+);
+assert.equal(
+  (vault.match(/data-ltm-origin-chip/gu) ?? []).length,
+  2,
+  "the source and regular editor headers show the chip",
+);
+assert.equal(locale["ui.longTermMemory.memoryvault.originSlurp"], "Slurp");
+assert.equal(locale["ui.longTermMemory.memoryvault.originAdvancedMemory"], "Advanced Memory");
+
 process.stdout.write(
-  "Long-Term Memory feedback clarity UI regression: labels, outcomes, usage, warnings, and defaults ok\n",
+  "Long-Term Memory feedback clarity UI regression: labels, outcomes, usage, warnings, defaults, and scope loading ok\n",
 );

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useSlurpUIStore } from "../../base/state/slp-package-store";
 import { cn } from "../../../lib/utils";
 import { SlpStoryRingAvatar } from "../../modules/story/SlpStoryRing";
@@ -13,12 +14,14 @@ import {
   Search,
   Trash2,
   Clapperboard,
+  ClipboardCopy,
+  ScrollText,
   UserRound,
   X,
 } from "lucide-react";
 import { Avatar, SLP_BAR_GLASS_CLASS } from "../../base/chrome/SlpChrome";
 import { SlpHeartGlyph } from "../../base/chrome/SlpGlyphs";
-import { SlurpRapportBadge, SlurpTierLadder } from "./SlpMessageInsights";
+import { SlurpRapportBadge, SlurpTierDoors, SlurpTierLadder } from "./SlpMessageInsights";
 import { showConfirmDialog } from "../../../lib/app-dialogs";
 import { SlpButton, SlpPrimaryButton } from "../../modules/chrome/SlpButton";
 import { SlpSheet, SlpSheetGroup, SlpSheetItem } from "../../modules/chrome/SlpSheet";
@@ -26,6 +29,9 @@ import { CommissionRow } from "./commissions/SlpCommissions";
 import type { SlurpThreadViewModel } from "./slp-thread-actions";
 import { SlpDeskTrustChip } from "../../modules/desk/SlpDeskCaseFile";
 import { SlpDeskTicketBar } from "./SlpDeskTicketBar";
+import { SlpSextingBar } from "./SlpSextingBar";
+import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
+import { copySlpThread, SlpThreadSummarySheet } from "./SlpThreadExportSheet";
 
 const ICON_BUTTON =
   "relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[var(--slurp-muted)] transition-[background-color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:!text-current";
@@ -76,6 +82,8 @@ export function SlpThreadHeader({ model }: { model: SlurpThreadViewModel }) {
     tierOpen,
     tierTriggerRef,
   } = model;
+  // Support desk off: Support's thread shows no trust, ticket or case file (the desk game is off).
+  const deskOn = !model.settingsQuery.data || slpExtensionOn(model.settingsQuery.data, "supportDesk");
   // A chat opened from a profile is addressed by its Creator; once it loads it has a thread like any
   // other, so Search, Memories, Commissions and Clear show there too (R1-008).
   const threadId = thread?.id ?? threadIdProp;
@@ -125,6 +133,7 @@ export function SlpThreadHeader({ model }: { model: SlurpThreadViewModel }) {
   // The player may speak as Slurp Support (Slurp's staff) in any chat with a Creator they do not run.
   // Support's own thread is a staff console: it has no way back to the persona's voice.
   const canSwitchVoice = Boolean(personaId && targetCreatorAccountId && !ownsCreator && !asSupport);
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const menuAction = (run: () => void) => () => {
     setHeaderMenuOpen(false);
     run();
@@ -189,7 +198,7 @@ export function SlpThreadHeader({ model }: { model: SlurpThreadViewModel }) {
             )}
           </span>
         </button>
-        {relationship?.desk && (
+        {relationship?.desk && deskOn && (
           // Slurp Support's thread: where the Creator stands with Slurp, and the open ticket.
           <span className="flex shrink-0 items-center gap-1 pe-1">
             <SlpDeskTrustChip desk={relationship.desk} />
@@ -283,6 +292,7 @@ export function SlpThreadHeader({ model }: { model: SlurpThreadViewModel }) {
               )}
             </p>
             <SlurpTierLadder tier={thread.rapport.tier} className="mt-4" />
+            {!ownsCreator && <SlurpTierDoors tier={thread.rapport.peak ?? thread.rapport.tier} />}
           </div>
         )}
       </SlpSheet>
@@ -313,6 +323,18 @@ export function SlpThreadHeader({ model }: { model: SlurpThreadViewModel }) {
             <SlpSheetItem onSelect={menuAction(() => setDrawerMode("memories"))}>
               <BookHeart aria-hidden="true" />
               {localizeUi("ui.slurp.messages.memories", { defaultValue: "Memories" })}
+            </SlpSheetItem>
+          )}
+          {threadId && personaId && (
+            <SlpSheetItem onSelect={menuAction(() => void copySlpThread(personaId, threadId, localizeUi))}>
+              <ClipboardCopy aria-hidden="true" />
+              {localizeUi("ui.slurp.messages.exportCopy")}
+            </SlpSheetItem>
+          )}
+          {threadId && personaId && (
+            <SlpSheetItem onSelect={menuAction(() => setSummaryOpen(true))}>
+              <ScrollText aria-hidden="true" />
+              {localizeUi("ui.slurp.messages.summaryTitle")}
             </SlpSheetItem>
           )}
           {canStartScene && thread && (
@@ -356,6 +378,15 @@ export function SlpThreadHeader({ model }: { model: SlurpThreadViewModel }) {
           </SlpSheetGroup>
         )}
       </SlpSheet>
+
+      {threadId && personaId && (
+        <SlpThreadSummarySheet
+          personaId={personaId}
+          threadId={threadId}
+          open={summaryOpen}
+          onClose={() => setSummaryOpen(false)}
+        />
+      )}
 
       {messageSearchOpen && (
         <div
@@ -454,8 +485,9 @@ export function SlpThreadHeader({ model }: { model: SlurpThreadViewModel }) {
         </div>
       )}
 
-      {relationship?.desk && asSupport && <SlpDeskTicketBar model={model} desk={relationship.desk} />}
+      {relationship?.desk && asSupport && deskOn && <SlpDeskTicketBar model={model} desk={relationship.desk} />}
 
+      {!ownsCreator && !asSupport && <SlpSextingBar model={model} />}
       {thread?.state === "request" && (
         <div className="mx-auto mt-3 w-full max-w-[45rem] shrink-0 px-3">
           <div className="rounded-2xl bg-[var(--slurp-tint)] px-4 py-3 shadow-[var(--slurp-highlight)]">

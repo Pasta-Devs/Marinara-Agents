@@ -195,6 +195,7 @@ export function createFeedPostStorage2(context: SlurpStorageContext) {
         const metadata = parseRecord(row.metadata);
         for (const key of [
           "imageGenerationFailed",
+          "imageGenerationRetryable",
           "imageGenerationError",
           "imageRetryAttempts",
           "imageRetryPrompt",
@@ -241,6 +242,7 @@ export function createFeedPostStorage2(context: SlurpStorageContext) {
         delete mergedMetadata.imageGenerationDeferred;
         if (input.imageUrl) {
           delete mergedMetadata.imageGenerationFailed;
+          delete mergedMetadata.imageGenerationRetryable;
           delete mergedMetadata.imageGenerationError;
           delete mergedMetadata.imageRetryPrompt;
           delete mergedMetadata.imageRetryNegativePrompt;
@@ -369,6 +371,7 @@ export function createFeedPostStorage2(context: SlurpStorageContext) {
             "imageModel",
             "imageStyleProfileId",
             "imageGenerationFailed",
+            "imageGenerationRetryable",
             "imageGenerationError",
             "imagePendingReview",
             "imageGenerationDeferred",

@@ -32,6 +32,7 @@ import {
 import { newId, now } from "../../../utils/id-generator.js";
 import { isSlurpViewerActorAccount } from "../../modules/settings/slp-settings.js";
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
+import { slurpPackGate } from "../../modules/world/events/slp-content-packs.js";
 
 export function createProjectsStorage2(context: SlurpStorageContext) {
   const {
@@ -89,6 +90,7 @@ export function createProjectsStorage2(context: SlurpStorageContext) {
       const projects = await this.listProjects(creatorAccountId);
       const { pace } = await this.resolveArcConfig(creatorAccountId);
       const ticked: SlurpProject[] = [];
+      let tags: ReadonlySet<string> | undefined;
       for (const project of projects) {
         // A crossover ticks once, in the list that stores it.
         if (isSlurpCrossover(project) && project.creatorIds[0] !== creatorAccountId) {
@@ -99,7 +101,7 @@ export function createProjectsStorage2(context: SlurpStorageContext) {
           ticked.push(slurpProjectChoose(project, at, await this.projectPollVotes(project)) ?? project);
           continue;
         }
-        const next = slurpProjectTick(project, at, pace);
+        const next = slurpProjectTick(project, at, pace, (tags ??= await this.storyTags(creatorAccountId, at)));
         ticked.push(next === project ? project : slurpProjectRecord(project, next, at));
       }
       const moved = ticked.filter((project, index) => project !== projects[index]);
@@ -141,7 +143,7 @@ export function createProjectsStorage2(context: SlurpStorageContext) {
           creatorAccountId,
           at,
           projects,
-          library: settings.arcLibrary,
+          library: slurpPackGate(settings.arcLibrary, settings.contentPacks),
           creatorTags: creator?.settings.profile.tags ?? [],
           lastAutoAt: await settingsStore.get(slurpArcAutoKey(creatorAccountId)),
           cooldownWeeks: config.cooldownWeeks,

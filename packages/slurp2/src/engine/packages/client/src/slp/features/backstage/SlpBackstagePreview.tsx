@@ -1,4 +1,5 @@
 import { SlpCoinText } from "../../modules/coin/SlpCoin";
+import { slpInlineAdsOn, slpLiveEvents } from "../../../../../shared/src/slp/slp-extensions.js";
 import { ChevronDown, SlidersHorizontal } from "lucide-react";
 import { SlpSparkleGlyph } from "../../base/chrome/SlpGlyphs";
 import { useDeferredValue, useMemo, type ReactNode } from "react";
@@ -59,7 +60,7 @@ export function outcomeSummary(
       return t(key, {
         defaultValue: "{{count}} events · {{active}} running now",
         count: settings.platformEvents.length,
-        active: slurpActivePlatformEvents(settings.platformEvents, new Date()).length,
+        active: slurpActivePlatformEvents(slpLiveEvents(settings), new Date()).length,
       });
     case "arcs":
       return t(key, {
@@ -82,7 +83,7 @@ export function outcomeSummary(
     case "ads":
       return t(key, {
         defaultValue: "Ads {{state}} · {{frequency}}",
-        state: onOff(t, settings.inlineAdsEnabled),
+        state: onOff(t, slpInlineAdsOn(settings)),
         frequency: settings.inlineAdsFrequency,
       });
     case "wallet":
@@ -234,7 +235,7 @@ function sampleAdPromotion(t: Translate, settings: SlurpSettings): SlurpPromotio
 function AdCadence({ current, proposed }: { current: SlurpSettings; proposed: SlurpSettings }) {
   const { t } = useTranslation();
   const every = (settings: SlurpSettings) =>
-    settings.inlineAdsEnabled ? slurpAdEveryPosts(settings.inlineAdsFrequency) : 0;
+    slpInlineAdsOn(settings) ? slurpAdEveryPosts(settings.inlineAdsFrequency) : 0;
   const label = (settings: SlurpSettings) =>
     every(settings)
       ? t("ui.slurp.settings.backstage.preview.ads.every", {
@@ -267,7 +268,7 @@ function AdCadence({ current, proposed }: { current: SlurpSettings; proposed: Sl
         />
       </dl>
       {/* The real feed card, with sample copy: an ad setting is easier to judge as an ad. */}
-      {proposed.inlineAdsEnabled && (
+      {slpInlineAdsOn(proposed) && (
         <div className="mt-3">
           <p className="mb-1 text-xs font-semibold text-[var(--slurp-muted)]">
             {t("ui.slurp.settings.backstage.preview.ads.sample", { defaultValue: "Sample ad" })}

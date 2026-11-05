@@ -26,7 +26,7 @@ export function useSlpBackstageController(
 ): Omit<SlpBackstagePageProps, "settings" | "audiencePreset"> & { settings: SlurpSettings | undefined } {
   const host = useSlpBackstageHostState(props);
   const { section, target } = host;
-  const draft = useSlpSettingsDraft({ section });
+  const draft = useSlpSettingsDraft({ section, target });
   const { settings, save, restore } = draft;
 
   const creators = useSlpCreatorsBackstageState({

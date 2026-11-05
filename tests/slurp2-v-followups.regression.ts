@@ -253,11 +253,11 @@ const names = new Map([
     /const NOODLER_AD_IMAGE_URL_PREFIX = "\/api\/slurp2\/noodler\/ads\/";/u,
   );
   assert.match(images, /if \(outcome !== "unavailable"\)\s*await store\.set\(/u);
-  assert.match(images, /if \(!settings\.inlineAdsEnabled \|\| !settings\.inlineAdsImagesEnabled\) return "off";/u);
+  assert.match(images, /if \(!slpInlineAdsOn\(settings\) \|\| !settings\.inlineAdsImagesEnabled\) return "off";/u);
   const scheduler = server("features/feed/slp-refresh-scheduler-service.ts");
   assert.match(
     scheduler,
-    /if \(settings\.inlineAdsEnabled && settings\.inlineAdsImagesEnabled\) \{\s*await redrawOldGarnishAdBanner\(app\.db, createGarnishAds\(app\.db\)\.pool, now\)/u,
+    /if \(slpInlineAdsOn\(settings\) && settings\.inlineAdsImagesEnabled\) \{\s*await redrawOldGarnishAdBanner\(app\.db, createGarnishAds\(app\.db\)\.pool, now\)/u,
   );
 }
 

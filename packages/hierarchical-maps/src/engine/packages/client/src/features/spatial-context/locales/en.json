@@ -13,5 +13,11 @@
   "ui.worldMaps.connection.saving": "Saving…",
   "ui.worldMaps.connection.useChat": "Use chat connection",
   "ui.worldMaps.connection.useDefault": "Use default connection",
+  "ui.worldMaps.runtime.fullPath": "Full path",
+  "ui.worldMaps.runtime.locationDisplay": "Show in bar",
+  "ui.worldMaps.runtime.locationDisplay.adaptive": "As much as fits",
+  "ui.worldMaps.runtime.locationDisplay.current": "Current place only",
+  "ui.worldMaps.runtime.locationDisplay.full": "Full path",
+  "ui.worldMaps.runtime.locationDisplay.nearby": "Current and two above",
   "ui.worldMaps.runtime.nextStop": "Next stop"
 }

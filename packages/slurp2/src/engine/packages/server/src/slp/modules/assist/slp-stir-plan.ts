@@ -8,6 +8,7 @@ import {
   SLP_ACTIONS,
   type SlpStirWorld,
 } from "../../../../../shared/src/slp/slp-actions.js";
+import { slpActionAllowed, type SlpExtensionSettings } from "../../../../../shared/src/slp/slp-extensions.js";
 import { SLP_STIR_STEPS_MAX, type SlpStirStep } from "../../../../../shared/src/slp/slp-stir.js";
 
 export type SlpStirPlanContext = {
@@ -15,6 +16,8 @@ export type SlpStirPlanContext = {
   /** `own`: a page this persona runs. `card`: one public line about them (personality, tags). */
   creators: { id: string; name: string; handle: string; automatic: boolean; own?: boolean; card?: string }[];
   world: SlpStirWorld;
+  /** The extension switches: actions of a switched-off extension are not offered. */
+  extensions?: SlpExtensionSettings;
   /** Switched-on brands and their live products, for offer-brand-deal (R). */
   brands?: { id: string; name: string; products: { id: string; name: string }[] }[];
   /** The ✦ sheet's Creator: "she", "her" and a plan with no name mean them. */
@@ -36,14 +39,17 @@ const line = (value: string) => value.replace(/\s+/gu, " ").trim();
 export function buildSlpStirPlanMessages(context: SlpStirPlanContext) {
   const names = new Map(context.creators.map((creator) => [creator.id, creator.name]));
   const who = (id: string) => names.get(id) ?? id;
-  const catalog = PLAN_ACTIONS.map((name) => {
-    const inputs = Object.entries(SLP_ACTIONS[name].inputs)
-      // A play is never a dry run (`slpStirPlayInput`), so the planner is not told about one.
-      .filter(([key]) => key !== "preview")
-      .map(([key, text]) => `${key}: ${text}`)
-      .join("; ");
-    return `- ${name}: ${SLP_ACTIONS[name].summary}${inputs ? ` Inputs: ${inputs}` : ""}`;
-  }).join("\n");
+  const actions = PLAN_ACTIONS.filter((name) => !context.extensions || slpActionAllowed(context.extensions, name));
+  const catalog = actions
+    .map((name) => {
+      const inputs = Object.entries(SLP_ACTIONS[name].inputs)
+        // A play is never a dry run (`slpStirPlayInput`), so the planner is not told about one.
+        .filter(([key]) => key !== "preview")
+        .map(([key, text]) => `${key}: ${text}`)
+        .join("; ");
+      return `- ${name}: ${SLP_ACTIONS[name].summary}${inputs ? ` Inputs: ${inputs}` : ""}`;
+    })
+    .join("\n");
   const system = [
     "You plan what happens next on Slurp, a creator social app where the player steers a world of Creators.",
     "Turn the player's words into a short plan: the fewest actions from the list below that do what they asked, in order.",
@@ -53,7 +59,11 @@ export function buildSlpStirPlanMessages(context: SlpStirPlanContext) {
     "- A couple that moved on or forgot the relationship stays that way unless the player explicitly asks to reunite them.",
     `- At most ${SLP_STIR_STEPS_MAX} steps.`,
     "- If it is unclear who is meant (two Creators could fit, or no one is named and nobody is in focus), ask one short question instead and give no steps.",
-    "- A brand deal (offer-brand-deal) names a brand or product from the Brands list; with none named, leave both out and the best fit is picked.",
+    ...(actions.includes("offer-brand-deal")
+      ? [
+          "- A brand deal (offer-brand-deal) names a brand or product from the Brands list; with none named, leave both out and the best fit is picked.",
+        ]
+      : []),
     '- Something no action can do: say so in one short in-world line in "cant", and where it fits add the nearest action (often an idea for one Creator).',
     "- Ideas and chapters stay in the player's words and language, short.",
     '- A time ("this week", "tonight") does not change the action; plays start now and the Creators pace them.',
@@ -98,7 +108,7 @@ export function buildSlpStirPlanMessages(context: SlpStirPlanContext) {
     world.storylines.length
       ? `# Running storylines\n${world.storylines.map((story) => `- ${story.projectId} (${who(story.accountId)}, accountId ${story.accountId}): "${line(story.title)}", now: ${line(story.chapter)}${story.held ? " (held)" : ""}`).join("\n")}`
       : "",
-    context.brands?.length
+    context.brands?.length && actions.includes("offer-brand-deal")
       ? `# Brands\n${context.brands.map((brand) => `- ${brand.id}: ${line(brand.name)} (products: ${brand.products.map((product) => `${product.id} ${line(product.name)}`).join(", ")})`).join("\n")}`
       : "",
   ].filter(Boolean);

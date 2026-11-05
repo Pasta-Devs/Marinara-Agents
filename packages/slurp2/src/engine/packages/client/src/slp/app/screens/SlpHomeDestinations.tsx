@@ -1,11 +1,13 @@
-import type { ComponentProps } from "react";
+import { useState, type ComponentProps } from "react";
 import { SlpEmptyState, SlpErrorState, SlpSkeleton } from "../../modules/chrome/SlpStateKit";
 import { SlpShell } from "../../modules/chrome/SlpShell";
 import { openSlpPulse } from "../../base/state/slp-task-store";
+import { useSlpStirDeck } from "../../base/state/slp-stir-sheet-store";
 import { SlurpWalletView } from "./SlpScreenWallet";
 import { DisclosureBadge } from "./SlpHomeHelpers";
 import { SlurpInboxView } from "./SlpScreenMessages";
 import { SlpStirScreen } from "../../features/stir/slp-stir-contract";
+import { SlpLiveScreen } from "../../features/live/SlpLiveScreen";
 import { ChevronLeft, ChevronRight, Plus, TriangleAlert, UserRound } from "lucide-react";
 import { ProfileInitial, SLP_PAGE_SCROLL_CLASS } from "../../base/chrome/SlpChrome";
 import { cn } from "../../../lib/utils";
@@ -50,6 +52,18 @@ export function renderSlurpHomeDestinations({
     );
   }
 
+  if (navigation.mode === "creator" && navigation.view === "live") {
+    return (
+      <SlpShell {...shellProps}>
+        <SlpLiveScreen
+          showId={navigation.showId}
+          personaId={viewerPersonaId}
+          onBack={navigation.returnTo ? () => onNavigate(navigation.returnTo!) : exitToCreatorHub}
+        />
+      </SlpShell>
+    );
+  }
+
   if (navigation.mode === "creator" && navigation.view === "wallet") {
     return (
       <SlpShell {...shellProps}>
@@ -80,31 +94,12 @@ export function renderSlurpHomeDestinations({
     );
   }
 
-  // W: the Stir tab. An old Studio link lands here too (its own-page half is the profile's Dashboard).
+  // W: the Stir tab. An old Studio link lands here too (its own-page half is the profile's Dashboard). Links
+  // open it as a sheet (SlpStirDeck); this page is only for a restored navigation.
   if (navigation.mode === "creator" && (navigation.view === "stir" || navigation.view === "studio")) {
     return (
       <SlpShell {...shellProps}>
-        <SlpStirTab
-          personaId={viewerPersonaId}
-          onOpenSettings={() =>
-            onNavigate({ mode: "creator-settings", section: "stir", target: "stir", settingKey: "drama" })
-          }
-          onOpenTarget={shellProps.onOpenPulseTarget}
-          onOpenSupport={(creatorAccountId) =>
-            onNavigate({
-              mode: "creator",
-              view: "messages",
-              creatorAccountId,
-              asSupport: true,
-              returnTo: { mode: "creator", view: "stir" },
-            })
-          }
-          onOpenDashboard={
-            myCreatorProfile
-              ? () => onNavigate({ mode: "creator", view: "profile", accountId: myCreatorProfile.id, dashboard: true })
-              : undefined
-          }
-        />
+        <SlpStirTab {...slpStirLinks(model, shellProps.onOpenPulseTarget)} />
       </SlpShell>
     );
   }
@@ -285,8 +280,10 @@ function SlpStirTab({
   onOpenTarget,
   onOpenSupport,
   onOpenSettings,
+  sheet,
 }: {
   personaId: string | null;
+  sheet?: ComponentProps<typeof SlpStirScreen>["sheet"];
   onOpenSettings?: () => void;
   onOpenDashboard?: () => void;
   onOpenTarget?: ComponentProps<typeof SlpStirScreen>["onOpenTarget"];
@@ -300,6 +297,49 @@ function SlpStirTab({
       onOpenPulse={openSlpPulse}
       onOpenDashboard={onOpenDashboard}
       onOpenTarget={onOpenTarget}
+      sheet={sheet}
+    />
+  );
+}
+
+/** Stir's ways out to the rest of Slurp, the same from the page and the sheet. */
+function slpStirLinks(
+  { myCreatorProfile, onNavigate, viewerPersonaId }: SlurpHomeHostView["model"],
+  onOpenTarget: SlurpHomeHostView["shellProps"]["onOpenPulseTarget"],
+) {
+  return {
+    personaId: viewerPersonaId,
+    onOpenSettings: () =>
+      onNavigate({ mode: "creator-settings", section: "content", target: "drama", settingKey: "drama" }),
+    onOpenTarget,
+    onOpenSupport: (creatorAccountId: string) =>
+      onNavigate({
+        mode: "creator",
+        view: "messages",
+        creatorAccountId,
+        asSupport: true,
+        returnTo: { mode: "creator", view: "stir" },
+      }),
+    onOpenDashboard: myCreatorProfile
+      ? () => onNavigate({ mode: "creator", view: "profile", accountId: myCreatorProfile.id, dashboard: true })
+      : undefined,
+  };
+}
+
+/** W: the Stir tab as a sheet over the page it was opened from. Mounted on first open, then kept. */
+export function SlpStirDeck({
+  model,
+  onOpenTarget,
+}: Pick<SlurpHomeHostView, "model"> & { onOpenTarget: SlurpHomeHostView["shellProps"]["onOpenPulseTarget"] }) {
+  const open = useSlpStirDeck((state) => state.open);
+  // shortcut: once opened, Stir and its query stay mounted until reload; unmount after the exit motion if that costs.
+  const [opened, setOpened] = useState(false);
+  if (open && !opened) setOpened(true);
+  if (!opened) return null;
+  return (
+    <SlpStirTab
+      {...slpStirLinks(model, onOpenTarget)}
+      sheet={{ open, onClose: () => useSlpStirDeck.setState({ open: false }) }}
     />
   );
 }

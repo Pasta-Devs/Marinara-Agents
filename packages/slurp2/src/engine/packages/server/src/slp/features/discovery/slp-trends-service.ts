@@ -11,6 +11,7 @@ import { mutateSlurpTrends, readSlurpTrendList } from "../../data/discovery/slp-
 import { readSlurpTrendPosts } from "../../data/discovery/slp-trends-signals.js";
 import { slurpCreatorReach } from "../../../../../shared/src/slp/slp-reach.js";
 import { slurpPlatformScaleMultiplier } from "../../../../../shared/src/slp/slp-scale.js";
+import { slpTrendsOn } from "../../../../../shared/src/slp/slp-extensions.js";
 import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
 import { readSlurpCreatorTiesDocument } from "../../data/projects/slp-creator-ties-storage.js";
 import { slurpBeatIntents, type SlurpBeat } from "../../modules/feed/slp-post-beat.js";
@@ -39,6 +40,9 @@ import type { SlurpTieCreator } from "../../modules/projects/slp-creator-ties.js
 const SCAN_EVERY_MS = 30 * 60_000;
 let lastScanAt = 0;
 
+/** Living world and its "Viral trends" switch (docs/CONFIGURATOR.md): off, no trend starts, runs or shows. */
+const trendsOn = async (db: DB) => slpTrendsOn(await createSlurpStorage(db).getSettings());
+
 const isPlayerPersona = (account: { kind: string; sourceKind?: string | null }) =>
   account.kind === "persona" && account.sourceKind === "persona";
 
@@ -55,7 +59,7 @@ export type SlurpTrendStart = {
 /** Start a trend unless three are live or the label already runs. Returns it, or null. */
 export async function startSlurpTrend(db: DB, input: SlurpTrendStart, at: Date): Promise<SlurpTrend | null> {
   const label = slurpTrendLabel(input.label);
-  if (!label) return null;
+  if (!label || !(await trendsOn(db))) return null;
   return mutateSlurpTrends(db, at, (trends) => {
     if (!slurpTrendMayStart(trends, label, at)) return null;
     const trend: SlurpTrend = {
@@ -79,7 +83,7 @@ export async function startSlurpTrend(db: DB, input: SlurpTrendStart, at: Date):
  * post and a player-run page's post are read the same way; only the starter's label differs.
  */
 export async function advanceSlurpTrends(db: DB, at = new Date()): Promise<void> {
-  if (at.getTime() - lastScanAt < SCAN_EVERY_MS) return;
+  if (at.getTime() - lastScanAt < SCAN_EVERY_MS || !(await trendsOn(db))) return;
   lastScanAt = at.getTime();
   try {
     const before = await readSlurpTrendList(db);
@@ -184,7 +188,7 @@ export async function planSlurpTrendBeat(
 ): Promise<SlurpBeat | null> {
   try {
     const trends = await readSlurpTrendList(db);
-    if (!slurpLiveTrends(trends, input.at).length) return null;
+    if (!slurpLiveTrends(trends, input.at).length || !(await trendsOn(db))) return null;
     const storage = createSlurpStorage(db);
     const accounts = await storage.listNoodlerAccounts();
     const creator: SlurpTieCreator = {
@@ -278,6 +282,7 @@ export type SlurpTrendView = {
 
 /** The live trends for Discover. */
 export async function listSlurpTrendViews(db: DB, at = new Date()): Promise<SlurpTrendView[]> {
+  if (!(await trendsOn(db))) return [];
   const live = slurpLiveTrends(await readSlurpTrendList(db), at);
   const storage = createSlurpStorage(db);
   return Promise.all(

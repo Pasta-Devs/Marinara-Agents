@@ -29,7 +29,7 @@ import { getSlurpPostGuidance, updateSlurpPostGuidance } from "../settings/slp-p
 import { selectSlurpExplicitLevel } from "../../modules/feed/slp-post-guidance.js";
 import { readSlurpCreatorSteering, slurpSteeringKey } from "./slp-steering-storage.js";
 import { createSlurpStorage } from "../slp-storage.js";
-import { SLURP_GUIDANCE_PRESETS, SLURP_HOUSE_STYLE_GUIDANCE } from "../../modules/settings/slp-settings.js";
+import { SLURP_GUIDANCE_PRESETS, SLURP_HOUSE_STYLE_GUIDANCE } from "../../modules/settings/slp-settings-guidance.js";
 
 // One blob behind concurrent writes (a like and a tip landing together) loses the earlier one.
 // ponytail: in-process queue like the post guidance blob; needs a row lock if Engine ever runs

@@ -583,7 +583,8 @@ export function createMessagesStorageActions(context: SlurpMessagesContext) {
                   rapport: JSON.stringify({
                     ...thread.rapport,
                     ...(patch.score === undefined ? {} : { score: patch.score }),
-                    ...(patch.tier === undefined ? {} : { tier: patch.tier }),
+                    // An edited tier also moves the kept peak, so lowering it closes doors.
+                    ...(patch.tier === undefined ? {} : { tier: patch.tier, peak: patch.tier }),
                   }),
                 }),
             ...(patch.threadState

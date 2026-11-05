@@ -1,6 +1,7 @@
 // The Projects navigation destination, split out of components/slurp/SlurpProjectsPanel.tsx in
 // Slice 10. Named Board to avoid colliding with the Backstage SlpProjectsPanel from Slice 9.
 
+import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 import { useSlurpSettings } from "../settings/slp-settings-contract";
 import { ArcConfigSection } from "./SlpArcConfigSection";
 import { ProjectEditor, canSave } from "./SlpProjectEditor";
@@ -57,6 +58,7 @@ export function SlurpProjectsPanel({
   const resolveProfile = useResolveSlurpArcProfile();
   const settings = useSlurpSettings().data;
   const director = settings?.arcDirectorMode === true;
+  const stirOn = Boolean(settings && slpExtensionOn(settings, "stir"));
   /** Inline Director input: which arc, and whether it renames the chapter or adds a twist. */
   const [directing, setDirecting] = useState<{ id: string; action: "label" | "twist"; value: string } | null>(null);
   const library = (settings?.arcLibrary ?? []).filter((type) => !type.hidden);
@@ -317,13 +319,15 @@ export function SlurpProjectsPanel({
                       : localizeUi("ui.slurp.projects.chapterNow", {
                           chapter: project.chapters[project.chapter] ?? "",
                         })}
-                    <button
-                      type="button"
-                      onClick={() => openSlpStir({ creatorId: creatorAccountId })}
-                      className="min-h-11 font-semibold text-[var(--slurp-ink)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
-                    >
-                      {localizeUi("ui.slurp.stir.moveInStir")}
-                    </button>
+                    {stirOn && (
+                      <button
+                        type="button"
+                        onClick={() => openSlpStir({ creatorId: creatorAccountId })}
+                        className="min-h-11 font-semibold text-[var(--slurp-ink)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+                      >
+                        {localizeUi("ui.slurp.stir.moveInStir")}
+                      </button>
+                    )}
                   </span>
                 )}
                 {director &&

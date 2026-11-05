@@ -19,7 +19,8 @@ import { LtmServiceError } from "../service-error.js";
 import { getLtmSourceNoteText, isLtmSourceNote } from "../extraction/source-extraction.js";
 import { extractionFingerprintForLtmSourceNote, extractionFingerprintsEqual } from "../extraction/source-hash.js";
 import { LongTermMemoryStorage } from "../persistence/storage.js";
-import { loadTrustedLtmSubjectCatalog, prepareLtmSubjectIdentityContext } from "./subject-identity.js";
+import { loadTrustedLtmSubjectCatalog } from "./subject-catalog.js";
+import { prepareLtmSubjectIdentityContext } from "./subject-identity.js";
 import { withLtmVaultLock } from "../persistence/vault-lock.js";
 
 export async function resolveLtmSubjectIdentityReview(

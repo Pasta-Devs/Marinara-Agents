@@ -61,7 +61,7 @@ assert.doesNotMatch(
 const generation = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-generation-service.ts",
 );
-assert.match(generation, /const camera = shoot\?\.cameraSource \?\? cameraSource/u);
+assert.match(generation, /const camera = slurpScreenFreeCamera\(shoot\?\.cameraSource, screens\) \?\? cameraSource/u);
 // Continuity bookkeeping must never cost a post.
 assert.match(generation, /Could not open a shoot session/u);
 assert.match(generation, /Could not record a shoot reuse/u);

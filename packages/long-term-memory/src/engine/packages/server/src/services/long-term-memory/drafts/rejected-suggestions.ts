@@ -10,6 +10,7 @@ import {
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { readJsonFile, writeJsonAtomic } from "../persistence/atomic-json.js";
 import { getLongTermMemoryRoot, ltmRejectedSuggestionsPath } from "../persistence/paths.js";
+import { LtmServiceError } from "../service-error.js";
 import { nowIso, normalizeSubjectName } from "../ltm-utils.js";
 import { logger } from "../package-runtime.js";
 import { withLtmVaultLock } from "../persistence/vault-lock.js";
@@ -180,7 +181,12 @@ export async function resolveRejectedSuggestionIdentity(
   return withLtmVaultLock(root, async () => {
     const existing = await readSuggestionsUnlocked(root);
     const current = existing.find((item) => item.id === id);
-    if (!current || current.identityResolution) throw new Error("Rejected suggestion is no longer pending.");
+    if (!current || current.identityResolution)
+      throw new LtmServiceError(
+        "Rejected suggestion is no longer pending.",
+        409,
+        "ltm_rejected_suggestion_not_pending",
+      );
     const next = existing.map((item) =>
       item.id === id ? ltmRejectedSuggestionSchema.parse({ ...item, identityResolution: resolution }) : item,
     );
@@ -302,7 +308,11 @@ export async function writeRejectedSuggestions(suggestions: LtmRejectedSuggestio
         (existingId && existingId.fingerprint !== parsed.fingerprint) ||
         (existingFingerprint && existingFingerprint.id !== parsed.id)
       )
-        throw new Error("Backup contains conflicting rejected-suggestion IDs or fingerprints.");
+        throw new LtmServiceError(
+          "Backup contains conflicting rejected-suggestion IDs or fingerprints.",
+          400,
+          "ltm_backup_invalid",
+        );
       if (existingId || existingFingerprint) continue;
       byId.set(parsed.id, parsed);
       byFingerprint.set(parsed.fingerprint, parsed);

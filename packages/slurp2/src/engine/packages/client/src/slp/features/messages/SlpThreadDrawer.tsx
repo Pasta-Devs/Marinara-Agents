@@ -2,6 +2,7 @@ import { ArrowLeft, X } from "lucide-react";
 import { SlpStoryRingAvatar } from "../../modules/story/SlpStoryRing";
 import { SlurpPromptDebugPanel, SlurpRelationshipPanel } from "./SlpMessageInsights";
 import { SlpDeskCaseFile } from "../../modules/desk/SlpDeskCaseFile";
+import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 import { SlurpMemoriesPanel } from "./SlpMemoriesPanel";
 import { SlpYouTwo } from "../stir/slp-stir-contract";
 import { SlurpThreadRequestsPanel } from "./SlpThreadRequestsPanel";
@@ -39,6 +40,8 @@ export function SlpThreadDrawer({ model }: { model: SlurpThreadViewModel }) {
     thread,
   } = model;
   const threadId = thread?.id ?? threadIdProp;
+  const settings = model.settingsQuery.data;
+  const deskOn = !settings || slpExtensionOn(settings, "supportDesk");
   const docked = useSlpMediaQuery("(min-width: 1280px)");
   const title =
     drawerMode === "prompt"
@@ -112,7 +115,7 @@ export function SlpThreadDrawer({ model }: { model: SlurpThreadViewModel }) {
             )}
           </section>
         )}
-        {relationship?.desk && (
+        {relationship?.desk && deskOn && (
           // Slurp Support's thread: where the Creator stands with Slurp, not a fan relationship.
           <div className="p-4">
             <SlpDeskCaseFile desk={relationship.desk} name={headerAccount?.displayName ?? ""} />

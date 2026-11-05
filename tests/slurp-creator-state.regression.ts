@@ -247,7 +247,11 @@ assert.match(generation, /creatorState\?: SlurpCreatorState/u);
 assert.match(generation, /Arousal is not permission/u);
 assert.match(generation, /A sales intent is not personal intimacy/u);
 assert.match(generation, /stateSignals: generated\.stateSignals/u);
-assert.match(generation, /happeningNow: slurpModifierLines\(input\.creatorState\)/u);
+// Standing conditions (STORYLINES.md, "State") come first, then the short-lived feelings.
+assert.match(
+  generation,
+  /happeningNow: \[\.\.\.\(input\.rightNow \?\? \[\]\)\.map\(protect\), \.\.\.slurpModifierLines\(input\.creatorState\)\]/u,
+);
 assert.match(generation, /exposure: slurpIntensityBand\(input\.creatorState\.exposure\)/u);
 const storage = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
 assert.match(storage, /for \(const accountId of accountIds\)[\s\S]{0,160}?SLURP_CREATOR_STATE_KEY/u);

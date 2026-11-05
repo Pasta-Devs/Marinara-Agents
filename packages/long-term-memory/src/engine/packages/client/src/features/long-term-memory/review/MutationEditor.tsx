@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, type ReactNode } from "react";
 import {
   type LtmDraftMutation,
   type LtmImportance,
@@ -97,6 +97,48 @@ export function MutationEditor({
       </>
     );
   };
+  // The counter and the error sit outside the label, so the field's name stays its label; both
+  // describe the field, and an invalid field names its own error.
+  const renderTextField = (
+    key: string,
+    label: ReactNode,
+    value: string,
+    limit: number,
+    setValue: (text: string) => void,
+  ) => {
+    const fieldId = `${counterId}-${key}`;
+    const error =
+      value.length > limit
+        ? localizeUi("ui.longTermMemory.reviewqueue.textExceedsLimit", { limit })
+        : value.trim()
+          ? null
+          : localizeUi("ui.longTermMemory.reviewqueue.sectionTextCannotBeEmpty");
+    return (
+      <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+        <label className="block space-y-1">
+          <span>{label}</span>
+          <textarea
+            className={`${inputClass} min-h-24 py-2`}
+            maxLength={limit}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? `${fieldId}-error ${fieldId}` : fieldId}
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            onBlur={(event) => {
+              setValue(event.target.value.trim());
+              onBlur?.();
+            }}
+          />
+        </label>
+        {renderCounter(fieldId, value, limit)}
+        {error ? (
+          <p id={`${fieldId}-error`} role="alert" className="font-normal text-[var(--destructive)]">
+            {error}
+          </p>
+        ) : null}
+      </div>
+    );
+  };
   if (mutation.kind === "create_note") {
     return (
       <div data-ltm-mutation-editor className="space-y-3 pt-3">
@@ -131,47 +173,15 @@ export function MutationEditor({
         ) : null}
         {Object.entries(mutation.note.sections).map(([sectionKey, section]) => (
           <div key={sectionKey} data-ltm-review-field-grid className="grid gap-2">
-            <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-              <span>{humanizeLabel(sectionKey)}</span>
-              <textarea
-                className={`${inputClass} min-h-24 py-2`}
-                maxLength={MAX_SECTION_TEXT_LENGTH}
-                aria-describedby={`${counterId}-${sectionKey}`}
-                value={section.text}
-                onChange={(event) =>
-                  onChange({
-                    ...mutation,
-                    note: {
-                      ...mutation.note,
-                      sections: {
-                        ...mutation.note.sections,
-                        [sectionKey]: {
-                          ...section,
-                          text: event.target.value,
-                        },
-                      },
-                    },
-                  })
-                }
-                onBlur={(event) => {
-                  onChange({
-                    ...mutation,
-                    note: {
-                      ...mutation.note,
-                      sections: {
-                        ...mutation.note.sections,
-                        [sectionKey]: {
-                          ...section,
-                          text: event.target.value.trim(),
-                        },
-                      },
-                    },
-                  });
-                  onBlur?.();
-                }}
-              />
-              {renderCounter(`${counterId}-${sectionKey}`, section.text, MAX_SECTION_TEXT_LENGTH)}
-            </label>
+            {renderTextField(sectionKey, humanizeLabel(sectionKey), section.text, MAX_SECTION_TEXT_LENGTH, (text) =>
+              onChange({
+                ...mutation,
+                note: {
+                  ...mutation.note,
+                  sections: { ...mutation.note.sections, [sectionKey]: { ...section, text } },
+                },
+              }),
+            )}
             <ImportanceField
               value={section.importance}
               onChange={(importance) =>
@@ -197,31 +207,15 @@ export function MutationEditor({
   if (mutation.kind === "append_section") {
     return (
       <div data-ltm-mutation-editor data-ltm-review-field-grid className="grid gap-2 pt-3">
-        <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-          <span>
+        {renderTextField(
+          "text",
+          <>
             {humanizeLabel(mutation.sectionKey)} {localizeUi("ui.longTermMemory.mutationeditor.text")}
-          </span>
-          <textarea
-            className={`${inputClass} min-h-24 py-2`}
-            maxLength={MAX_APPEND_TEXT_LENGTH}
-            aria-describedby={`${counterId}-text`}
-            value={mutation.text}
-            onChange={(event) =>
-              onChange({
-                ...mutation,
-                text: event.target.value,
-              })
-            }
-            onBlur={(event) => {
-              onChange({
-                ...mutation,
-                text: event.target.value.trim(),
-              });
-              onBlur?.();
-            }}
-          />
-          {renderCounter(`${counterId}-text`, mutation.text, MAX_APPEND_TEXT_LENGTH)}
-        </label>
+          </>,
+          mutation.text,
+          MAX_APPEND_TEXT_LENGTH,
+          (text) => onChange({ ...mutation, text }),
+        )}
         <ImportanceField
           value={mutation.importance}
           onChange={(importance) => onChange({ ...mutation, importance })}
@@ -234,37 +228,15 @@ export function MutationEditor({
   if (mutation.kind === "update_section") {
     return (
       <div data-ltm-mutation-editor data-ltm-review-field-grid className="grid gap-2 pt-3">
-        <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-          <span>
+        {renderTextField(
+          "text",
+          <>
             {humanizeLabel(mutation.sectionKey)} {localizeUi("ui.longTermMemory.mutationeditor.text")}
-          </span>
-          <textarea
-            className={`${inputClass} min-h-24 py-2`}
-            maxLength={MAX_SECTION_TEXT_LENGTH}
-            aria-describedby={`${counterId}-text`}
-            value={mutation.section.text}
-            onChange={(event) =>
-              onChange({
-                ...mutation,
-                section: {
-                  ...mutation.section,
-                  text: event.target.value,
-                },
-              })
-            }
-            onBlur={(event) => {
-              onChange({
-                ...mutation,
-                section: {
-                  ...mutation.section,
-                  text: event.target.value.trim(),
-                },
-              });
-              onBlur?.();
-            }}
-          />
-          {renderCounter(`${counterId}-text`, mutation.section.text, MAX_SECTION_TEXT_LENGTH)}
-        </label>
+          </>,
+          mutation.section.text,
+          MAX_SECTION_TEXT_LENGTH,
+          (text) => onChange({ ...mutation, section: { ...mutation.section, text } }),
+        )}
         <ImportanceField
           value={mutation.section.importance}
           onChange={(importance) =>

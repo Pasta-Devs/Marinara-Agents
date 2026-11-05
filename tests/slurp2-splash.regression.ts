@@ -15,7 +15,15 @@ assert.match(
   /viewBox="0 0 28 44"[\s\S]*?M22 4 13 0M18 22H4m18 18-9 4/u,
   "the hero must keep all three emphasis lines",
 );
-assert.match(splash, /Hey, I’m G\.[\s\S]*?The dude responsible for all the bugs\./u);
+assert.match(
+  splash,
+  /Hey, I’m G\.[\s\S]*?The dude responsible for <CrudeStrike>all<\/CrudeStrike> most of the bugs\./u,
+);
+assert.match(
+  splash,
+  /function CrudeStrike[\s\S]*?<del[\s\S]*?aria-hidden="true"/u,
+  "the struck word stays deleted text for screen readers",
+);
 assert.match(splash, /occasionally\s*feral, and absolutely full of bugs\./u);
 assert.match(splash, /Slurp calls your text and image models on its own, and one tap can call them more than once\./u);
 assert.doesNotMatch(splash, /const BROKEN|Everything that is not really working/u);

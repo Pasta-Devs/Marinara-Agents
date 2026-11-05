@@ -499,13 +499,15 @@ assert.match(generation, /spice: spiced\.spice/u, "the brief gets the same spice
 const dm = server("features/messages/slp-message-generation-service.ts");
 assert.match(
   dm,
-  /chat: \{\n\s*subscribed: input\.subscribed,\n\s*player: input\.viewer\.kind === "persona" && !fanVoice/u,
+  // A subscriber, or a regular and up on the rapport ladder, gets her full DM level.
+  /chat: \{\n\s*subscribed: input\.subscribed \|\| input\.sexting === true \|\| slurpRapportOpens\(input\.rapport, "spicierTalk"\),\n\s*player: input\.viewer\.kind === "persona" && !fanVoice/u,
 );
 const operation = server("features/messages/slp-message-operation.ts");
 // Slice I (user): a free chat picture is a tease for everybody (a subscriber's casual one too); a paid one goes all the way.
 assert.match(
   operation,
-  /level: \(offer\.price > 0 \|\| partner\) && !demanded \? creatorLevel : slurpDmSpiceLevel\(creatorLevel, false\)/u,
+  // Rapport ladder: a favourite's gift and anything for a whale go all the way too.
+  /level:\s*\(offer\.price > 0 \|\| partner \|\| gift \|\| doors\.includes\("fullSpice"\)\) && !demanded\s*\? creatorLevel\s*: slurpDmSpiceLevel\(creatorLevel, false\)/u,
 );
 assert.match(
   server("data/creators/slp-flavour-source.ts"),

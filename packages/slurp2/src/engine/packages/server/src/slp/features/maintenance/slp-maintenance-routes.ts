@@ -37,8 +37,10 @@ import {
 import { getSlurpPostGuidance, updateSlurpPostGuidance } from "../../data/settings/slp-post-guidance-storage.js";
 import { isAmbientSlpAccount, dismissAmbientSlpAccount } from "../../data/audience/slp-ambient-profiles.js";
 import { getCreatorFanActivityStatus } from "../audience/slp-audience-contract.js";
+import { slpLatestPostSince } from "../onboarding/slp-onboarding-contract.js";
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
+import { slpExtensionOn, slpLiveEvents } from "../../../../../shared/src/slp/slp-extensions.js";
 
 export async function slpMaintenanceRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   const { noodle } = deps;
@@ -109,6 +111,17 @@ export async function slpMaintenanceRoutes(app: FastifyInstance, deps: SlpRouteD
     ]);
     const cutoff = Date.now() - 24 * 60 * 60 * 1000;
     const recent = (value: string) => Date.parse(value) >= cutoff;
+    const firstPostJobsShown = await Promise.all(
+      firstPostJobs
+        .filter((row) => row.status === "running" || row.status === "queued" || recent(row.updatedAt))
+        .map(async (row) => ({
+          row,
+          postId:
+            row.status === "running" || row.status === "queued"
+              ? await slpLatestPostSince(app.db, row.creatorAccountId, row.createdAt).catch(() => null)
+              : null,
+        })),
+    );
     const terminal = new Set([
       "completed",
       "complete",
@@ -189,27 +202,26 @@ export async function slpMaintenanceRoutes(app: FastifyInstance, deps: SlpRouteD
           }),
         ),
       // A first post that made it or failed stays for a day, so Pulse can open it or say why.
-      ...firstPostJobs
-        .filter((row) => row.status === "running" || recent(row.updatedAt))
-        .map((row) =>
-          task({
-            id: `first-post:${row.id}`,
-            kind: "first-post",
-            status: row.status,
-            createdAt: row.createdAt,
-            updatedAt: row.updatedAt,
-            accountId: row.creatorAccountId,
-            detail: row.error,
-            postId: row.postId,
-            retry:
-              row.status === "failed"
-                ? {
-                    path: "/slurp/first-posts/enqueue",
-                    body: { executionId: `pulse-retry:${row.id}`, accountIds: [row.creatorAccountId] },
-                  }
-                : null,
-          }),
-        ),
+      ...firstPostJobsShown.map(({ row, postId: madeId }) =>
+        task({
+          id: `first-post:${row.id}`,
+          kind: "first-post",
+          // A job left queued or running whose Creator already posted is done: that post is it.
+          status: madeId ? "generated" : row.status,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+          accountId: row.creatorAccountId,
+          detail: madeId ? null : row.error,
+          postId: madeId ?? row.postId,
+          retry:
+            row.status === "failed"
+              ? {
+                  path: "/slurp/first-posts/enqueue",
+                  body: { executionId: `pulse-retry:${row.id}`, accountIds: [row.creatorAccountId] },
+                }
+              : null,
+        }),
+      ),
       ...improvementJobs
         .filter((row) => !terminal.has(row.status) || recent(row.updatedAt))
         .map((row) =>
@@ -307,14 +319,14 @@ export async function slpMaintenanceRoutes(app: FastifyInstance, deps: SlpRouteD
       fansAt: audience.nextRunAt,
       events: [
         ...occurrences
-          .filter((occurrence) => occurrence.status === "scheduled")
+          .filter((occurrence) => occurrence.status === "scheduled" && slpExtensionOn(settings, "world"))
           .map((occurrence) => ({
             id: occurrence.id,
             name: occurrence.blueprint.name,
             startsAt: occurrence.startsAt,
             accountIds: [...occurrence.participantIds],
           })),
-        ...slurpUpcomingAnnualEvents(settings.platformEvents, at).filter(
+        ...slurpUpcomingAnnualEvents(slpLiveEvents(settings), at).filter(
           (event) => !occurrences.some((occurrence) => occurrence.blueprintId === event.id),
         ),
       ],

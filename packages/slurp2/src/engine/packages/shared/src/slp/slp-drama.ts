@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { slpFilledDefault } from "./slp-schema-defaults.js";
 
 /**
  * Drama pack entries (`docs/DRAMA.md`): **situations** (a standing state with a deck of small beats,
@@ -11,6 +12,29 @@ import { z } from "zod";
  * - every drama has `maxDays` and an `exit`; text is short
  */
 
+const fitWord = z
+  .string()
+  .trim()
+  .max(60)
+  .regex(/[\p{L}\p{N}]/u, "a fit word needs a letter or digit");
+/**
+ * A gate (docs/STORYLINES.md, PR 5), checked by `slurpPackFits`: what does not fit is skipped, never
+ * softened. Plain word lists so a pack stays JSON: a word matches whole, `word*` matches a word's start.
+ */
+export const slpFitSchema = z
+  .object({
+    /** The Creator's spice level must reach it. */
+    level: z.enum(["suggestive", "nudity", "explicit"]).optional(),
+    /** A hard no sharing a word with one of these rules it out. */
+    hardNo: z.array(fitWord).max(24).optional(),
+    /** The card, tags or anchors must say one of these. */
+    needs: z.array(fitWord).max(64).optional(),
+    /** A card "never" sentence or a leave-out topic naming one of these rules it out. */
+    topic: z.array(fitWord).max(64).optional(),
+  })
+  .strict();
+export type SlpFit = z.infer<typeof slpFitSchema>;
+
 const key = z
   .string()
   .trim()
@@ -22,29 +46,30 @@ export const SLP_DRAMA_CHANNELS = ["post", "dm", "comment", "notification", "mon
 export type SlpDramaChannel = (typeof SLP_DRAMA_CHANNELS)[number];
 export const SLP_RELATIONS_TO_PLAYER = ["partner", "ex", "roommate", "friend", "crush"] as const;
 export type SlpRelationToPlayer = (typeof SLP_RELATIONS_TO_PLAYER)[number];
-export const SLP_DRAMA_TIE_KINDS = ["friend", "roommate", "coworker", "ex", "rival", "couple"] as const;
+export const SLP_DRAMA_TIE_KINDS = ["friend", "roommate", "coworker", "ex", "rival", "couple", "collab"] as const;
 
 /** Who may fill a role. The player role is the player's own persona page, never cast by the world. */
 export const slpDramaRoleSchema = z
   .object({
     key,
     player: z.boolean().optional(),
-    needs: z
-      .object({
-        /** The Creator is this to the player's persona (her relation to you). */
-        relationToPlayer: z.array(z.enum(SLP_RELATIONS_TO_PLAYER)).min(1).max(5).optional(),
-        gender: z.enum(["male", "female", "other"]).optional(),
-        minSpice: spice.optional(),
-        /** Shares a tag or interest with that role. */
-        sharesNicheWith: key.optional(),
-        /** Already tied to that role in one of these ways. */
-        tiedTo: z
-          .object({ role: key, kinds: z.array(z.enum(SLP_DRAMA_TIE_KINDS)).min(1).max(6) })
-          .strict()
-          .optional(),
-      })
-      .strict()
-      .default({}),
+    needs: slpFilledDefault(
+      z
+        .object({
+          /** The Creator is this to the player's persona (her relation to you). */
+          relationToPlayer: z.array(z.enum(SLP_RELATIONS_TO_PLAYER)).min(1).max(5).optional(),
+          gender: z.enum(["male", "female", "other"]).optional(),
+          minSpice: spice.optional(),
+          /** Shares a tag or interest with that role. */
+          sharesNicheWith: key.optional(),
+          /** Already tied to that role in one of these ways. */
+          tiedTo: z
+            .object({ role: key, kinds: z.array(z.enum(SLP_DRAMA_TIE_KINDS)).min(1).max(6) })
+            .strict()
+            .optional(),
+        })
+        .strict(),
+    ),
     /** Newcomers (joined in the last two weeks) or the biggest pages first. */
     prefer: z.enum(["newcomer", "popular"]).optional(),
   })
@@ -85,6 +110,8 @@ export const slpDramaBeatSchema = z
     chance: z.number().int().min(1).max(100).optional(),
     /** Situation decks: only while the situation's dials have these values. */
     when: z.record(key, key).optional(),
+    /** Checked on the beat's actor: a moment that does not fit is dropped (a crowd beat has no Creator to fit). */
+    fit: slpFitSchema.optional(),
   })
   .strict()
   .superRefine((beat, context) => {
@@ -92,6 +119,7 @@ export const slpDramaBeatSchema = z
     if (beat.channel === "post" && !beat.heat) issue("a post beat needs a heat block (its one line and angle)");
     if (beat.channel !== "post" && beat.heat) issue("only a post beat carries heat");
     if (beat.role === "crowd" && beat.channel !== "comment") issue("the crowd only comments");
+    if (beat.role === "crowd" && beat.fit) issue("a crowd beat has no Creator to fit");
     if (beat.channel === "comment" && (!beat.on || !beat.lines)) issue("a comment beat needs `on` and `lines`");
     if ((beat.channel === "dm" || beat.channel === "money") && !beat.to) issue(`a ${beat.channel} beat needs \`to\``);
     if ((beat.channel === "dm" || beat.channel === "notification") && !beat.seed)
@@ -160,9 +188,13 @@ const common = {
 
 /**
  * Every role a beat, choice, outcome or role condition names must exist. "crowd" is only who acts in
- * a beat and "fans" only who a post is for: `beatRoles` leaves those two out where they belong.
+ * a beat and "fans" only who a post is for: `slpDramaBeatRoles` leaves those two out where they belong.
  */
-function checkRoles(entry: { roles: SlpDramaRole[] }, named: (string | undefined)[], context: z.RefinementCtx): void {
+export function checkSlpDramaRoles(
+  entry: { roles: SlpDramaRole[] },
+  named: (string | undefined)[],
+  context: z.RefinementCtx,
+): void {
   const keys = entry.roles.map((role) => role.key);
   const known = new Set(keys);
   if (known.size !== keys.length) context.addIssue({ code: "custom", message: "role keys must be unique" });
@@ -170,7 +202,7 @@ function checkRoles(entry: { roles: SlpDramaRole[] }, named: (string | undefined
   for (const name of [...named, ...conditions])
     if (name && !known.has(name)) context.addIssue({ code: "custom", message: `unknown role "${name}"` });
 }
-const beatRoles = (beat: SlpDramaBeat) => [
+export const slpDramaBeatRoles = (beat: SlpDramaBeat) => [
   beat.role === "crowd" ? undefined : beat.role,
   beat.to,
   beat.on,
@@ -179,25 +211,29 @@ const beatRoles = (beat: SlpDramaBeat) => [
   beat.heat?.for === "fans" ? undefined : beat.heat?.for,
 ];
 
+export const slpDramaDialsSchema = z
+  .array(
+    z
+      .object({ key, options: z.array(key).min(2).max(5), default: key })
+      .strict()
+      .refine((dial) => dial.options.includes(dial.default), "a dial's default is one of its options"),
+  )
+  .max(6)
+  .default([]);
+
 export const slpSituationSchema = z
   .object({
     ...common,
-    dials: z
-      .array(
-        z
-          .object({ key, options: z.array(key).min(2).max(5), default: key })
-          .strict()
-          .refine((dial) => dial.options.includes(dial.default), "a dial's default is one of its options"),
-      )
-      .max(6)
-      .default([]),
+    dials: slpDramaDialsSchema,
     /** Small beats drawn now and then while the situation stands. `when` limits a beat to dial values. */
     deck: z.array(slpDramaBeatSchema).min(1).max(24),
     /** At most this many deck beats reach the player a day. */
     perDay: z.number().int().min(1).max(6).default(2),
   })
   .strict()
-  .superRefine((situation, context) => checkRoles(situation, situation.deck.flatMap(beatRoles), context));
+  .superRefine((situation, context) =>
+    checkSlpDramaRoles(situation, situation.deck.flatMap(slpDramaBeatRoles), context),
+  );
 export type SlpSituation = z.infer<typeof slpSituationSchema>;
 
 export const slpDramaSchema = z
@@ -231,15 +267,15 @@ export const slpDramaSchema = z
     }
     const minimum = drama.stages.reduce((sum, stage) => sum + stage.days[0], 0);
     if (minimum > drama.maxDays) issue("maxDays is shorter than the stages need");
-    checkRoles(
+    checkSlpDramaRoles(
       drama,
       [
         ...drama.stages.flatMap((stage) => [
-          ...stage.beats.flatMap(beatRoles),
+          ...stage.beats.flatMap(slpDramaBeatRoles),
           stage.choice?.role,
           ...stage.outcomes.flatMap((outcome) => outcome.between),
         ]),
-        ...beatRoles(drama.exit),
+        ...slpDramaBeatRoles(drama.exit),
       ],
       context,
     );
@@ -271,9 +307,3 @@ export type SlpDramaSettings = z.infer<typeof slpDramaSettingsSchema>;
 export const SLP_DEFAULT_DRAMA_SETTINGS: SlpDramaSettings = slpDramaSettingsSchema.parse({});
 
 export const normalizeSlpDramaSettings = (raw: unknown): SlpDramaSettings => slpDramaSettingsSchema.parse(raw ?? {});
-
-/** The role pairs a drama ends as a couple: casting keeps the player's romance settings for them (0.3.17). */
-export const slpDramaCouplePairs = (drama: { stages: readonly { outcomes: readonly SlpDramaOutcome[] }[] }) =>
-  drama.stages.flatMap((stage) =>
-    stage.outcomes.flatMap((outcome) => (outcome.kind === "tie" && outcome.tie === "couple" ? [outcome.between] : [])),
-  );

@@ -21,6 +21,7 @@ import type { SlpCreatorPostPageCursor } from "../host/slp-storage-constants.js"
 import { normalizeSlpAccountSettings } from "../../modules/records/slp-storage-model.js";
 import { mapAccount, mapSubscription } from "../host/slp-storage-mappers.js";
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
+import { slpLiveEvents } from "../../../../../shared/src/slp/slp-extensions.js";
 
 export function createEconomyStorage1(context: SlurpStorageContext) {
   const {
@@ -209,7 +210,7 @@ export function createEconomyStorage1(context: SlurpStorageContext) {
           ? slurpSubscriptionCharge(
               basePrice,
               createSlpActiveModifierProvider([
-                slurpPlatformEventModifierSource(settings.platformEvents, influenceStory),
+                slurpPlatformEventModifierSource(slpLiveEvents(settings), influenceStory),
               ]),
               at,
             )

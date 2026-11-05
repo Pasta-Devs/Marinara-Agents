@@ -88,6 +88,7 @@ export type SlurpArcType = SlpArcBlueprint;
 /** The per-Creator storyline overrides, also shown as a tab in Creator settings. */
 export { ArcConfigSection } from "./SlpArcConfigSection";
 export { SlurpProjectsPanel } from "./SlpProjectsBoard";
+export { SlpStorylinesSwitch } from "./SlpStorylinesPanel";
 export { useSlurpProjects } from "./slp-projects-hooks";
 // W: Business and Relationships (U) moved from Studio into the Stir tab; the ✦ sheet moves chapters.
 export { SlpCollabsPanel, SlpRelationshipsPanel } from "./SlpCollabsPanel";

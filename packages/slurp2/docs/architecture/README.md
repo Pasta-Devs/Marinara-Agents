@@ -92,7 +92,7 @@ media helpers stay in `base/media/`.
 ## Features
 
 Client and server share one feature vocabulary: `creators`, `feed`, `messages`, `discovery`,
-`audience`, `projects`, `economy`, `notifications`, `world`, `ads`, `onboarding`, `maintenance`,
+`audience`, `projects`, `economy`, `notifications`, `world`, `storylines`, `ads`, `onboarding`, `maintenance`,
 `assist`, plus client-only `backstage` and server-only `viewer`, `media`, and `settings`. Submodules that are deliberate expansion seams get a folder:
 `creators/improvement`, `feed/reserve`, `messages/commissions`, `messages/desk` (the Slurp Support desk,
 `docs/SUPPORT-DESK.md`), `messages/scenes` (roleplay scenes from a DM thread, `docs/SCENES.md`), `world/events`.

@@ -27,15 +27,14 @@ import {
   type SlurpPackEvent,
 } from "./slp-content-pack-library.js";
 
-/** Pack id → on/off, as the player set it. A pack missing here uses its default. */
+/** Pack id → on/off, as the player set it, for built-in and imported packs. A pack missing here uses its default. */
 export type SlurpContentPackToggles = Record<string, boolean>;
 
 export function readSlurpContentPackToggles(raw: unknown): SlurpContentPackToggles {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
   return Object.fromEntries(
     Object.entries(raw as Record<string, unknown>).filter(
-      (entry): entry is [string, boolean] =>
-        typeof entry[1] === "boolean" && SLURP_CONTENT_PACK_LIBRARY.some((pack) => pack.id === entry[0]),
+      (entry): entry is [string, boolean] => typeof entry[1] === "boolean" && entry[0].length <= 170, // a pack id (128) or `<pack>:<topic>` (128 + 1 + 40)
     ),
   );
 }
@@ -43,6 +42,13 @@ export function readSlurpContentPackToggles(raw: unknown): SlurpContentPackToggl
 export function slurpContentPackOn(pack: Pick<SlurpContentPack, "id" | "defaultOn">, toggles: SlurpContentPackToggles) {
   return toggles[pack.id] ?? pack.defaultOn;
 }
+
+/**
+ * An imported pack switched off is a gate: its entries stay saved with their own switches, but none starts.
+ * (A built-in pack switched off is already out of the libraries.)
+ */
+export const slurpPackGate = <E extends Entry>(list: readonly E[], toggles: SlurpContentPackToggles): E[] =>
+  list.filter((entry) => !entry.provenance?.packId || toggles[entry.provenance.packId] !== false);
 
 /** The packs switched on. */
 export function slurpContentPacksOn(toggles: SlurpContentPackToggles): SlurpContentPack[] {
@@ -164,7 +170,7 @@ export function slurpContentPackSummaries() {
       ...pack.events.map((event) => ({ name: event.name, month: event.month, day: event.day })),
       ...Object.values(pack.dateBeats ?? {}).map((entry) => ({ name: entry.name, month: null, day: null })),
     ],
-    arcs: pack.arcs.map((arc) => arc.name),
+    arcs: [...pack.arcs.map((arc) => arc.name), ...(pack.storylines ?? []).map((storyline) => storyline.name)],
     extras: [...(pack.birthday ? ["birthday"] : []), ...(pack.firstThousandSubs ? ["first-1k-subs"] : [])],
   }));
 }

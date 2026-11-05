@@ -51,7 +51,8 @@ async function qmRequest(path, options) {
   const response = await fetch(`/api/quartermaster${path}`, { ...options, headers, credentials: "same-origin" });
   const body = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error(qmResponseError(response, body));
+    // status and body let a caller read an answer it expects, like resolvePending's 409.
+    throw Object.assign(new Error(qmResponseError(response, body)), { status: response.status, body });
   }
   return body;
 }
@@ -130,10 +131,12 @@ QM.generateWardrobe = (chatId, ownerId, direction, includePersonaContext) =>
   });
 
 // The separate confirm step that actually persists a previously-generated proposal.
-QM.confirmWardrobe = (chatId, ownerId, proposal) =>
+// hiddenChoices: { [itemId]: { action: "overwrite" | "keep" | "skip", show } }
+// for the hidden items the proposal uses; any it leaves out are skipped.
+QM.confirmWardrobe = (chatId, ownerId, proposal, hiddenChoices) =>
   qmRequest(`/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/wardrobe/confirm`, {
     method: "POST",
-    body: JSON.stringify({ proposal }),
+    body: JSON.stringify({ proposal, hiddenChoices }),
   });
 
 QM.updateSettings = (chatId, ownerId, settings) =>
@@ -157,6 +160,29 @@ QM.restoreInventory = (chatId, ownerId) =>
     body: "{}",
   });
 
+// Settles one pending agent change to a hidden item: { ok, status, body }.
+// A 409 resolves instead of throwing, since a stale change answers with the
+// item's before/current/after for the user to compare (and a deleted item with
+// gone); every other failure still throws.
+QM.resolvePending = (chatId, ownerId, pendingId, decision) =>
+  qmRequest(
+    `/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/pending/${encodeURIComponent(pendingId)}/resolve`,
+    { method: "POST", body: JSON.stringify(decision) },
+  ).then(
+    (body) => ({ ok: true, status: 200, body }),
+    (error) => {
+      if (error.status !== 409) throw error;
+      return { ok: false, status: 409, body: error.body };
+    },
+  );
+
+// Pending changes the user has already been shown, so the popup only opens for new ones.
+QM.markPendingSeen = (chatId, ownerId, ids) =>
+  qmRequest(`/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/pending/seen`, {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  });
+
 // Per-item undo from the Recent Changes view — see server.mjs's
 // /revert-item route for the staleness guard (refuses rather than
 // overwrites if the item changed again since the recorded turn).
@@ -166,12 +192,13 @@ QM.revertTrackerItem = (chatId, ownerId, itemId) =>
     body: JSON.stringify({ itemId }),
   });
 
-QM.uploadItemImage = (chatId, ownerId, itemId, imageDataUrl) =>
+// source: "uploaded" or "generated", shown as the image's label in the dock.
+QM.uploadItemImage = (chatId, ownerId, itemId, imageDataUrl, source = "uploaded") =>
   qmRequest(
     `/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/items/${encodeURIComponent(itemId)}/image`,
     {
       method: "POST",
-      body: JSON.stringify({ imageDataUrl }),
+      body: JSON.stringify({ imageDataUrl, source }),
     },
   );
 
@@ -228,6 +255,14 @@ QM.deleteItemImage = (chatId, ownerId, itemId) =>
     },
   );
 
+// Which file an item's image comes from: { file, source, savedFile,
+// savedMissing, deletable } (server.mjs's image/info route).
+QM.itemImageInfo = (chatId, ownerId, itemId) =>
+  qmRequest(
+    `/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/items/${encodeURIComponent(itemId)}/image/info`,
+    { method: "GET" },
+  );
+
 // Not a fetch — the <img src> URL. A 404 (no matching image, uploaded or
 // pack) is handled by the caller's onerror, not here.
 QM.itemImageUrl = (chatId, ownerId, itemId) =>
@@ -236,13 +271,12 @@ QM.itemImageUrl = (chatId, ownerId, itemId) =>
 // Items confirmed to have no image (uploaded or pack), so repeated repaints
 // of the same item — the dock/panel rebuild their DOM on every reflow, not
 // just once — don't keep re-requesting (and re-404ing/re-logging) a URL
-// already known to fail. Session-lifetime only, not persisted: a page
-// reload re-checks everything once, which is fine. Cleared for a specific
-// item by uploadItemImage/deleteItemImage below, and entirely by Refresh
-// Images or an Admin Secret change (qmSyncImageSecret); a rename that happens to
-// newly match a pack image is the one case this can go stale on, until the
-// next reload — rare enough not to warrant duplicating the server's
-// name-matching logic here just to key this more precisely.
+// already known to fail. Only a real 404 lands here (QM.setImageSrc tells it
+// apart from a failed load). Session-lifetime only, not persisted: a page
+// reload re-checks everything once, which is fine. Cleared for an item whenever
+// its image may have changed (05-state.js's qmForgetItemImageAfter: upload,
+// delete, unlink, rename), and entirely by Refresh Images or an Admin Secret
+// change (qmSyncImageSecret).
 QM._missingItemImageIds = new Set();
 
 // Not a fetch — the <img src> URL for a slot's bundled generic artwork
@@ -270,11 +304,13 @@ QM.deleteOutfitPortrait = (chatId, ownerId, outfitId) =>
 QM.outfitPortraitUrl = (chatId, ownerId, outfitId) =>
   `/api/quartermaster/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/outfits/${encodeURIComponent(outfitId)}/portrait`;
 
-// An <img src> can't send X-Admin-Secret, so with a secret saved on this device
-// our own (gated) image URLs load through fetch into a session cache of object
-// URLs, shared by every element showing that image: the dock rebuilds its lists
-// on every repaint, so loading per element would refetch everything each time.
-// Without a saved secret nothing changes: a plain src, as before.
+// Our own image URLs load through fetch into a session cache of object URLs,
+// shared by every element showing that image: the dock rebuilds its lists on
+// every repaint, so loading per element would refetch everything each time.
+// fetch also sends a saved X-Admin-Secret (an <img src> can't), and tells a
+// real "no image" (404) apart from a dropped connection or server error. A
+// plain <img src> can't: any failure looked like "no image" and hid the item's
+// picture for the rest of the session (#1697).
 //
 // Entry status: "loading", "ok", "missing" (a confirmed 404, like
 // _missingItemImageIds) or "failed" (refused secret, server or network error).
@@ -285,7 +321,7 @@ QM.outfitPortraitUrl = (chatId, ownerId, outfitId) =>
 const qmImageCache = new Map();
 // img -> the cache entry it last asked for, so only its latest request applies.
 const qmImageTargets = new WeakMap();
-let qmImageCacheSecret = null;
+let qmImageCacheSecret; // undefined until the first image request
 
 // ponytail: a retired object URL is revoked after a delay instead of tracking
 // every element using it. An image already on screen keeps its decoded
@@ -310,7 +346,7 @@ QM.clearImageCache = () => {
 // A new or removed secret can fix (or cause) refused requests, so everything,
 // including items remembered as having no image, gets a fresh try.
 function qmSyncImageSecret(secret) {
-  if (qmImageCacheSecret === null) qmImageCacheSecret = secret;
+  if (qmImageCacheSecret === undefined) qmImageCacheSecret = secret;
   if (secret === qmImageCacheSecret) return;
   qmImageCacheSecret = secret;
   QM.clearImageCache();
@@ -346,9 +382,8 @@ function qmLoadImage(url) {
 // A failed load fires the img's "error" event, which every caller already uses
 // for its fallback; event.qmRetryable marks a failure that isn't a real "no image".
 QM.setImageSrc = (img, url) => {
-  const secret = qmAdminSecret();
-  qmSyncImageSecret(secret);
-  if (!secret || !url.startsWith("/api/quartermaster/")) {
+  qmSyncImageSecret(qmAdminSecret());
+  if (!url.startsWith("/api/quartermaster/")) {
     qmImageTargets.delete(img);
     img.src = url;
     return;

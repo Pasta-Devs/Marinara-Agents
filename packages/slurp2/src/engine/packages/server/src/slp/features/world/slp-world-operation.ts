@@ -10,6 +10,7 @@
  * Auto-posting is the one exception to that rule and it lives in its own scheduler.
  */
 import { slurpCoupleBuzz } from "../../modules/projects/slp-couple-group.js";
+import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 import { settleSlurpStuckMessages } from "../messages/slp-messages-contract.js";
 import { advanceSlurpCreatorTies, readSlurpClosedCouplePageIds } from "../projects/slp-projects-contract.js";
 import {
@@ -150,8 +151,8 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       const WORLD_AUDIENCE_POOL = tuning.pulse.poolSize;
       if (activity === 0) {
         // "Off" silences the world around the Creators, not their own lives: storylines still move
-        // on and start (R1-109). Prices and churn read audience demand, which is frozen with it.
-        for (const account of await noodle.listNoodlerAccounts()) {
+        // on and start (R1-109) unless Storylines is off. Prices and churn read frozen demand.
+        for (const account of slpExtensionOn(settings, "storylines") ? await noodle.listNoodlerAccounts() : []) {
           await yieldToEngine();
           await noodle.tickProjects(account.id, until).catch(() => []);
           await noodle
@@ -330,12 +331,11 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       }
 
       // Creator arcs. A chapter with a day range moves on once its time runs out, posted or not, so a
-      // move does not stall forever on a Creator who stopped posting.
-      for (const account of maintenanceDue ? accounts : []) {
+      // move does not stall on a Creator who stopped posting. Storylines off: arcs stand still.
+      for (const account of maintenanceDue && slpExtensionOn(settings, "storylines") ? accounts : []) {
         await yieldToEngine();
         await noodle.tickProjects(account.id, until).catch(() => []);
-        // After the tick, so an arc that just finished leaves room for the next one.
-        // Generated arcs are the one model call here; a failed call starts nothing this tick.
+        // After the tick, so a finished arc leaves room. Generated arcs are the one model call here.
         await noodle
           .rollAutoArc(account.id, until, (id, partnerIds) =>
             generateSlurpArc(db, id, partnerIds, "", { kind: "background" }),
@@ -501,7 +501,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       for (const commission of await messages.listAutomatedBriefCommissions()) {
         await yieldToEngine();
         automatedCreatorIds.add(commission.creatorAccountId);
-        const pricing = await messages.getCreatorMessaging(commission.creatorAccountId);
+        const pricing = await messages.commissionPricingFor(commission);
         await messages
           .quoteCommission(commission.id, slurpCommissionQuote(commission.brief, pricing))
           .catch(() => null);
@@ -509,7 +509,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       // A persona Creator can let its own pricing answer the audience instead of quoting each brief.
       for (const commission of await messages.listAudienceBriefCommissions()) {
         await yieldToEngine();
-        const pricing = await messages.getCreatorMessaging(commission.creatorAccountId);
+        const pricing = await messages.commissionPricingFor(commission);
         if (!pricing.autoQuote) continue;
         await messages
           .quoteCommission(commission.id, slurpCommissionQuote(commission.brief, pricing))
@@ -546,7 +546,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
         if (answer.kind === "counter") {
           const countered = await messages.counterCommission(commission.id, answer.price).catch(() => null);
           if (countered && automatedCreatorIds.has(commission.creatorAccountId)) {
-            const pricing = await messages.getCreatorMessaging(commission.creatorAccountId);
+            const pricing = await messages.commissionPricingFor(commission);
             await messages.answerCommissionCounter(commission.id, pricing.commissionMin).catch(() => null);
           }
           continue;
@@ -649,9 +649,8 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
           logger.warn(error, "[slurp-world] Could not apply a %s pulse", action.kind);
         }
       }
-      // The audience reacting is the only channel the world had into a Creator that she could
-      // actually feel, and it went straight into the counters without touching her. This is not a
-      // rolling average on purpose: the thing being modelled is noticing your notifications.
+      // Audience reactions are the one signal a Creator feels; not a rolling average on purpose:
+      // the thing being modelled is noticing your notifications.
       const slurpForPulse = createSlurpStorage(db);
       for (const [creatorAccountId, weight] of landedBy) {
         if (weight < SLURP_POST_LANDED_REACTIONS) continue;

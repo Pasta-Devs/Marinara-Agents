@@ -1,18 +1,31 @@
-/** In order of use; Connections sits right under Overview so a model is one click away. */
+/**
+ * In order of use. Basic is the whole app; the extension sections after it each own one add-on
+ * (docs/CONFIGURATOR.md). The sidebar puts a heading before the first extension.
+ */
 export const SLP_BACKSTAGE_SECTIONS = [
   "overview",
-  "models",
+  "basic",
   "creators",
-  "automation",
+  "spice",
+  "prompts",
+  "ads",
   "content",
   "world",
   "stir",
-  "fans",
-  "spice",
-  "prompts",
-  "maintenance",
+  "live",
+  "engine",
 ] as const;
 export type SlpBackstageSection = (typeof SLP_BACKSTAGE_SECTIONS)[number];
+
+/** The sections that hold one extension each, in sidebar order. */
+export const SLP_BACKSTAGE_EXTENSION_SECTIONS: readonly SlpBackstageSection[] = [
+  "ads",
+  "content",
+  "world",
+  "stir",
+  "live",
+  "engine",
+];
 
 /**
  * Overview is the only hub. The Posting, Stories and World landing pages and the separate Backup
@@ -20,6 +33,7 @@ export type SlpBackstageSection = (typeof SLP_BACKSTAGE_SECTIONS)[number];
  */
 export const SLP_BACKSTAGE_TARGETS = [
   "overview",
+  "basic",
   "creators",
   "improve",
   "tags",
@@ -28,6 +42,7 @@ export const SLP_BACKSTAGE_TARGETS = [
   "calendar",
   "arcs",
   "packs",
+  "drama",
   "messaging",
   "audience",
   "ads",
@@ -35,57 +50,64 @@ export const SLP_BACKSTAGE_TARGETS = [
   "general",
   "images",
   "connections",
+  "engine",
   "spice",
   "prompts",
   "autopurge",
   "stir",
+  "live",
 ] as const;
 export type SlpBackstageTarget = (typeof SLP_BACKSTAGE_TARGETS)[number];
 
+/**
+ * Basic's first page is the short one; the pages after it are its "More for …" depth and open
+ * from that page, not from a row of tabs.
+ */
 export const SLP_BACKSTAGE_TARGETS_BY_SECTION: Record<SlpBackstageSection, readonly SlpBackstageTarget[]> = {
   overview: ["overview"],
-  models: ["connections", "images"],
-  creators: ["creators", "improve"],
-  automation: ["general"],
-  content: ["storylines", "arcs", "packs"],
-  world: ["events", "calendar"],
-  stir: ["stir"],
-  fans: ["audience", "messaging", "wallet", "ads", "tags"],
+  basic: ["basic", "connections", "general", "audience", "images", "messaging", "wallet", "autopurge"],
+  creators: ["creators", "improve", "tags"],
   spice: ["spice"],
   prompts: ["prompts"],
-  maintenance: ["autopurge"],
+  ads: ["ads"],
+  content: ["storylines", "arcs", "packs", "drama"],
+  world: ["events", "calendar"],
+  stir: ["stir"],
+  live: ["live"],
+  engine: ["engine"],
 };
 
 export const SLP_BACKSTAGE_DEFAULT_TARGET: Record<SlpBackstageSection, SlpBackstageTarget> = {
   overview: "overview",
-  models: "connections",
+  basic: "basic",
   creators: "creators",
-  world: "events",
-  stir: "stir",
-  fans: "audience",
-  content: "storylines",
-  automation: "general",
   spice: "spice",
   prompts: "prompts",
-  maintenance: "autopurge",
+  ads: "ads",
+  content: "storylines",
+  world: "events",
+  stir: "stir",
+  live: "live",
+  engine: "engine",
 };
 
 export const SLP_BACKSTAGE_SECTION_LABELS: Record<SlpBackstageSection, string> = {
   overview: "Overview",
-  models: "Connections",
+  basic: "Basic",
   creators: "Creators",
-  world: "World",
-  stir: "Stir",
-  fans: "Fans & money",
-  content: "Storylines",
-  automation: "Posting",
   spice: "Spice",
   prompts: "Writing",
-  maintenance: "Maintenance",
+  ads: "Brands & ads",
+  content: "Storylines",
+  world: "Living world",
+  stir: "Support desk",
+  live: "Live shows",
+  engine: "Engine link",
 };
 
 export const SLP_BACKSTAGE_TARGET_LABELS: Record<SlpBackstageTarget, string> = {
   overview: "Overview",
+  basic: "Basic",
   creators: "All creators",
   improve: "Improve with AI",
   tags: "Tags",
@@ -94,17 +116,20 @@ export const SLP_BACKSTAGE_TARGET_LABELS: Record<SlpBackstageTarget, string> = {
   calendar: "Calendar",
   arcs: "Types",
   packs: "Packs",
+  drama: "Drama & love",
   messaging: "Messages",
-  audience: "Audience",
+  audience: "Crowd",
   ads: "Ads",
   wallet: "Coins",
-  general: "Publishing",
-  images: "Images",
-  connections: "Text & chats",
+  general: "How busy",
+  images: "Pictures",
+  connections: "Connections",
+  engine: "Engine link",
   spice: "Spice",
   prompts: "Prompts",
   autopurge: "Storage and backup",
   stir: "Support desk",
+  live: "Live shows",
 };
 
 export function destinationForTarget(target: SlpBackstageTarget): SlpBackstageSection {
@@ -116,19 +141,24 @@ export function destinationForTarget(target: SlpBackstageTarget): SlpBackstageSe
   );
 }
 
+/** Old section names, from saved navigation, and the page each one opens now. */
 export const SLP_LEGACY_SETTINGS_DESTINATION = {
   overview: { section: "overview", target: "overview" },
   creators: { section: "creators", target: "creators" },
-  tags: { section: "fans", target: "tags" },
+  tags: { section: "creators", target: "tags" },
   arcs: { section: "content", target: "storylines" },
-  messaging: { section: "fans", target: "messaging" },
-  audience: { section: "fans", target: "audience" },
-  ads: { section: "fans", target: "ads" },
-  wallet: { section: "fans", target: "wallet" },
-  general: { section: "automation", target: "general" },
-  images: { section: "models", target: "images" },
-  autopurge: { section: "maintenance", target: "autopurge" },
-  advanced: { section: "maintenance", target: "autopurge" },
+  messaging: { section: "basic", target: "messaging" },
+  audience: { section: "basic", target: "audience" },
+  ads: { section: "ads", target: "ads" },
+  wallet: { section: "basic", target: "wallet" },
+  general: { section: "basic", target: "general" },
+  images: { section: "basic", target: "images" },
+  autopurge: { section: "basic", target: "autopurge" },
+  advanced: { section: "basic", target: "autopurge" },
+  models: { section: "basic", target: "connections" },
+  automation: { section: "basic", target: "general" },
+  fans: { section: "basic", target: "audience" },
+  maintenance: { section: "basic", target: "autopurge" },
 } as const satisfies Record<string, { section: SlpBackstageSection; target: SlpBackstageTarget }>;
 
 export function isSlpBackstageSection(value: unknown): value is SlpBackstageSection {

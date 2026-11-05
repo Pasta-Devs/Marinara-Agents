@@ -1,3 +1,4 @@
+import { slurpRapportDoorTier } from "../../modules/messages/slp-rapport.js";
 import type { FastifyRequest, FastifyInstance } from "fastify";
 import {
   isAllowedImageBuffer,
@@ -186,7 +187,7 @@ export async function slpMessagesMediaRoutes(app: FastifyInstance, messaging: Sl
     const messaging = await messages.getCreatorMessaging(thread.creatorAccountId);
     const offer = resolveSlurpMediaOffer({
       intent: parsed.data.intent,
-      rapportTier: thread.rapport.tier,
+      rapportTier: slurpRapportDoorTier(thread.rapport),
       subscribed,
       configuredPrice: messaging.ppvPrice,
     });

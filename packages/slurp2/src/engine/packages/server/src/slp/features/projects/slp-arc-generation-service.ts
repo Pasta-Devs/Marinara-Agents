@@ -144,7 +144,9 @@ export function buildSlurpArcGenerationMessages(input: {
 
 /** Parse the answer, or throw so the caller can retry once. */
 export function parseSlurpGeneratedArc(content: string): Record<string, unknown> {
-  const parsed = parseGameJsonish(requireModelAnswer(content, "an arc"));
+  const answer = parseGameJsonish(requireModelAnswer(content, "an arc"));
+  // Local models often wrap the one arc in a list: `[{...}]`.
+  const parsed = Array.isArray(answer) && answer.length === 1 ? answer[0] : answer;
   if (
     !parsed ||
     typeof parsed !== "object" ||
@@ -207,7 +209,10 @@ export async function generateSlurpArc(
           .map((item) => `- Themes: ${item.storyTags.join(", ")}`),
         ...(await slurp.listStoryFacts().catch(() => []))
           .filter(
-            (fact) => fact.creatorId === creator.id && (!fact.expiresAt || Date.parse(fact.expiresAt) > Date.now()),
+            (fact) =>
+              fact.creatorId === creator.id &&
+              !fact.track &&
+              (!fact.expiresAt || Date.parse(fact.expiresAt) > Date.now()),
           )
           .map((fact) => `- Fact: ${fact.label}`),
       ].slice(0, 10),

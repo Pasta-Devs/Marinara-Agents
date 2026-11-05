@@ -33,13 +33,18 @@
  * checked with `--strict` against that Engine's node_modules, and every diagnostic fails the run. Without the Engine's
  * dependency types a strict run reports about a thousand false errors and hides real ones, so it only runs with an
  * Engine. The Long-Term Memory browser workflow sets one; Pull Request Checks has no Engine checkout and skips it.
+ *
+ * The packages are checked concurrently (#1579); each package's output is printed together, in argument order, once
+ * every run has finished.
  */
-import { cp, mkdtemp, rm, symlink } from "node:fs/promises";
+import { cp, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { inspect, promisify } from "node:util";
+import { readHostModuleTypePaths } from "./esbuild-host-plugins.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const engineSources = join(repoRoot, "sources/engine");
@@ -88,11 +93,17 @@ const ENGINE_HOST_MODULES = new Set([
   "packages/client/src/lib/agent-failures",
   "packages/server/src/db/connection",
   "packages/server/src/services/prompt-overrides/types",
+  // Type-only for turn-game engines (Blackjack's tool manifest and the vendored engine contract).
+  "packages/shared/src/features/function-calls/tool-definitions",
 ]);
 // Packages whose own sources are clean under strict tsc. Each run checks the package files under its roots; the
 // client run uses the Engine client's lib.
 const STRICT_RUNS = {
   "long-term-memory": [
+    { name: "server and shared", roots: ["packages/server/", "packages/shared/"], lib: [] },
+    { name: "client", roots: ["packages/client/"], lib: ["ES2023", "DOM", "DOM.Iterable"] },
+  ],
+  "otome-forge": [
     { name: "server and shared", roots: ["packages/server/", "packages/shared/"], lib: [] },
     { name: "client", roots: ["packages/client/"], lib: ["ES2023", "DOM", "DOM.Iterable"] },
   ],
@@ -115,18 +126,16 @@ const COMPILER_ARGS = [
 ];
 
 // Returns the compiler's output, or "" when it reports nothing. A compiler that ran and found errors exits with a
-// status and prints them. No status (ENOENT for a missing node_modules/.bin/tsc, a signal) or no output means no
-// typecheck happened, which must never read as a clean result.
-function runTsc(args, cwd) {
+// numeric code and prints them. No numeric code (ENOENT for a missing node_modules/.bin/tsc, a signal) or no output
+// means no typecheck happened, which must never read as a clean result.
+async function runTsc(args, cwd) {
   try {
-    execFileSync(tsc, args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
+    await promisify(execFile)(tsc, args, { cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
     return "";
   } catch (error) {
     const output = `${error.stdout ?? ""}${error.stderr ?? ""}`;
-    if (typeof error.status !== "number" || !output.trim()) {
-      throw new Error(`Could not run tsc (${error.code ?? error.signal ?? `exit ${error.status}`}): ${tsc}`, {
-        cause: error,
-      });
+    if (typeof error.code !== "number" || !output.trim()) {
+      throw new Error(`Could not run tsc (${error.code ?? error.signal ?? "no exit code"}): ${tsc}`, { cause: error });
     }
     return output;
   }
@@ -142,8 +151,11 @@ const isReportedMissingModule = (line) => {
 const packages = process.argv.slice(2);
 if (packages.length === 0) packages.push("slurp2");
 
-let failed = false;
-for (const id of packages) {
+// Checks one package, appending to `report` as [console method, text]; true in `failed` when the gate fails.
+async function checkPackage(id, report) {
+  const log = (text) => report.push(["log", text]);
+  const error = (text) => report.push(["error", text]);
+  let failed = false;
   const packageSources = id === "games" ? null : join(repoRoot, `packages/${id}/src/engine`);
   if (packageSources && !existsSync(packageSources)) throw new Error(`No package-owned source for ${id}`);
 
@@ -164,7 +176,7 @@ for (const id of packages) {
     // Ambient declarations the overlays carry (`marinara:host`) join every run.
     const declarations = OVERLAY_ROOTS.flatMap((root) => sourceFiles(root).filter((file) => file.endsWith(".d.ts")));
 
-    const output = runTsc([...COMPILER_ARGS, ...new Set([...declarations, ...files])], overlay);
+    const output = await runTsc([...COMPILER_ARGS, ...new Set([...declarations, ...files])], overlay);
 
     const lines = [...new Set(output.split("\n"))];
     const found = [
@@ -179,15 +191,14 @@ for (const id of packages) {
     ];
     if (found.length > 0) {
       failed = true;
-      console.error(`${id}: ${found.length} syntax error(s), undefined name(s) or unresolved module(s)`);
-      for (const line of found) console.error(`  ${line}`);
+      error(`${id}: ${found.length} syntax error(s), undefined name(s) or unresolved module(s)`);
+      for (const line of found) error(`  ${line}`);
     } else {
-      console.log(`${id}: no syntax errors, undefined names or unresolved modules`);
+      log(`${id}: no syntax errors, undefined names or unresolved modules`);
     }
 
     const strictRuns = STRICT_RUNS[id] ?? [];
-    if (strictRuns.length && !engineRoot)
-      console.log(`${id}: strict check skipped; set MARINARA_ENGINE_ROOT to run it`);
+    if (strictRuns.length && !engineRoot) log(`${id}: strict check skipped; set MARINARA_ENGINE_ROOT to run it`);
     if (strictRuns.length && engineRoot) {
       // Resolve bare imports (zod, fastify, react, @types/node) the way the Engine does.
       for (const dir of ["", "packages/client", "packages/server", "packages/shared"]) {
@@ -201,20 +212,55 @@ for (const id of packages) {
           ...declarations.filter((file) => run.roots.some((root) => file.startsWith(root))),
           ...ownFiles,
         ];
-        const lib = run.lib.length ? ["--lib", run.lib.join(",")] : [];
-        const strictOutput = runTsc([...COMPILER_ARGS, "--strict", "--types", "node", ...lib, ...runFiles], overlay);
+        // Compiler paths must follow the same versioned slots as esbuild's runtime shims.
+        const config = join(overlay, "host-strict.tsconfig.json");
+        await writeFile(
+          config,
+          JSON.stringify({
+            compilerOptions: {
+              noEmit: true,
+              skipLibCheck: true,
+              jsx: "react-jsx",
+              target: "es2022",
+              module: "esnext",
+              moduleResolution: "bundler",
+              strict: true,
+              types: ["node"],
+              ...(run.lib.length ? { lib: run.lib } : {}),
+              paths: readHostModuleTypePaths(engineRoot),
+            },
+            files: runFiles,
+          }),
+        );
+        const strictOutput = await runTsc(["--project", config], overlay);
         const errors = strictOutput.split("\n").filter((line) => /\berror TS\d+: /.test(line)).length;
         if (strictOutput) {
           failed = true;
-          console.error(`${id}: ${errors} strict error(s) in ${run.name} files`);
-          console.error(strictOutput.trimEnd());
+          error(`${id}: ${errors} strict error(s) in ${run.name} files`);
+          error(strictOutput.trimEnd());
         } else {
-          console.log(`${id}: no strict errors in ${ownFiles.length} ${run.name} files`);
+          log(`${id}: no strict errors in ${ownFiles.length} ${run.name} files`);
         }
       }
     }
   } finally {
     await rm(overlay, { recursive: true, force: true });
   }
+  return failed;
 }
-process.exit(failed ? 1 : 0);
+
+// Each package settles on its own: a setup or compiler failure is reported by name after whatever that package had
+// already gathered, and never discards the other packages' reports.
+const results = await Promise.all(
+  packages.map(async (id) => {
+    const report = [];
+    try {
+      return { report, failed: await checkPackage(id, report) };
+    } catch (cause) {
+      report.push(["error", `${id}: ${cause instanceof Error ? cause.message : inspect(cause)}`]);
+      return { report, failed: true };
+    }
+  }),
+);
+for (const { report } of results) for (const [method, text] of report) console[method](text);
+process.exitCode = results.some((result) => result.failed) ? 1 : 0;

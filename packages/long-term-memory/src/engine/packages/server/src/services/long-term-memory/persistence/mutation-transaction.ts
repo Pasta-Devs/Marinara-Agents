@@ -88,8 +88,13 @@ async function publish(root: string, tx: LtmMutationTransaction, deduplicate = f
   await remove(root, tx);
 }
 export async function commitLtmMutation(root: string, input: { files: LtmMutationFileChange[]; events?: LtmEvent[] }) {
-  invalidateLtmVaultSnapshot(root);
   const prepared = create(root, input.files, input.events ?? []);
+  // Invalidate after create(): it validated the root-relative paths write watchers receive, and it is
+  // synchronous, so no read can run in between.
+  invalidateLtmVaultSnapshot(
+    root,
+    prepared.files.map((file) => file.path),
+  );
   await writeJsonAtomic(journalPath(root, prepared.id), prepared);
   let committed = false;
   try {

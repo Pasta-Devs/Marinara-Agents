@@ -26,6 +26,7 @@ import type {
 import { countNoodlePostsSince, mergeNoodlePollVoteInteractions } from "@marinara-engine/shared";
 import type { ImagePromptOverride, ImagePromptReviewItem } from "../components/ui/ImagePromptReviewModal";
 import type { PackageNoodleSettingsUpdateInput } from "../components/noodle/noodle-settings-defaults";
+import { currentMemoryStatus, type NoodleMemoryStatus } from "../components/noodle/noodle-ltm-sharing";
 
 export type NoodleRefreshResult = {
   bootstrap: NoodleBootstrap;
@@ -46,6 +47,7 @@ export const noodleKeys = {
   all: ["noodle"] as const,
   bootstrap: () => [...noodleKeys.all, "bootstrap"] as const,
   feed: () => [...noodleKeys.all, "feed"] as const,
+  memoryStatus: () => [...noodleKeys.all, "memory-status"] as const,
 };
 
 export type NoodlePostPage = {
@@ -144,6 +146,22 @@ export function useNoodleUnseenCount(personaAccount: NoodleAccount | null, enabl
   );
 }
 
+/** Why Long-Term Memory gave nothing on the latest refresh; null until one has run since the server started. */
+export function useNoodleMemoryStatus(enabled: boolean) {
+  return useQuery({
+    queryKey: noodleKeys.memoryStatus(),
+    queryFn: () =>
+      currentMemoryStatus({
+        read: () => api.get<{ status: NoodleMemoryStatus }>("/noodle/memory-status"),
+        readLtm: () => api.get<{ longTermMemoryShareWithPackages?: boolean }>("/long-term-memory/settings"),
+      }),
+    enabled,
+    staleTime: 10_000,
+    // Long-Term Memory's own settings can turn sharing on without telling Noodle, so ask again on every open.
+    refetchOnMount: "always",
+  });
+}
+
 export function useUpdateNoodleSettings() {
   const qc = useQueryClient();
   return useMutation({
@@ -170,7 +188,10 @@ export function useUpdateNoodleSettings() {
         current ? { ...current, settings } : current,
       );
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: noodleKeys.memoryStatus() });
+      return qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() });
+    },
   });
 }
 
@@ -453,7 +474,10 @@ export function useRefreshNoodle() {
       qc.setQueryData<NoodleBootstrap | undefined>(noodleKeys.bootstrap(), (current) =>
         preservePollVotes(current, result.bootstrap),
       ),
-    onSettled: () => qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: noodleKeys.memoryStatus() });
+      return qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() });
+    },
   });
 }
 

@@ -25,8 +25,12 @@ const QM_WARDROBE_ERROR_MESSAGES = {
 Object.assign(QM.dock, {
   _wardrobeDirection: "",
   _wardrobeIncludePersonaContext: true,
-  _wardrobeViewState: "form", // "form" | "loading" | "preview" | "error"
+  _wardrobeViewState: "form", // "form" | "loading" | "preview" | "hidden" | "error"
   _wardrobeProposal: null,
+  // Hidden items the proposal would use (server.mjs's wardrobeHiddenMatches)
+  // and what the user picked for each: { [itemId]: { action, show } }.
+  _wardrobeHiddenMatches: [],
+  _wardrobeHiddenChoices: {},
   _wardrobeError: null,
   _wardrobeSummary: null,
   _wardrobeContentContainer: null,
@@ -41,6 +45,8 @@ Object.assign(QM.dock, {
     this._closeWardrobeBuilder();
     this._wardrobeViewState = "form";
     this._wardrobeProposal = null;
+    this._wardrobeHiddenMatches = [];
+    this._wardrobeHiddenChoices = {};
     this._wardrobeError = null;
     this._wardrobeSummary = null;
 
@@ -116,9 +122,11 @@ Object.assign(QM.dock, {
         ? this._renderWardrobeBuilderLoading()
         : this._wardrobeViewState === "preview"
           ? this._renderWardrobeBuilderPreview()
-          : this._wardrobeViewState === "error"
-            ? this._renderWardrobeBuilderError()
-            : this._renderWardrobeBuilderForm();
+          : this._wardrobeViewState === "hidden"
+            ? this._renderWardrobeHiddenChoices()
+            : this._wardrobeViewState === "error"
+              ? this._renderWardrobeBuilderError()
+              : this._renderWardrobeBuilderForm();
     this._wardrobeContentContainer.replaceChildren(node);
   },
 
@@ -183,6 +191,14 @@ Object.assign(QM.dock, {
       const result = await QM.state.generateWardrobe(this._wardrobeDirection, this._wardrobeIncludePersonaContext);
       if (token !== this._wardrobeSessionToken) return; // modal closed/reopened while this was in flight
       this._wardrobeProposal = result.proposal;
+      this._wardrobeHiddenMatches = result.hiddenMatches ?? [];
+      // Skip by default; Show starts from the chat's access setting.
+      this._wardrobeHiddenChoices = Object.fromEntries(
+        this._wardrobeHiddenMatches.map((match) => [
+          match.itemId,
+          { action: "skip", show: qmAccessModeShows(QM.state.hiddenItemAccess) },
+        ]),
+      );
       this._wardrobeSummary = null;
       this._wardrobeViewState = "preview";
     } catch (error) {
@@ -234,7 +250,9 @@ Object.assign(QM.dock, {
       summary.skipped.map((entry) =>
         entry.reason === "duplicate-name"
           ? `"${entry.name}" — an outfit with that name already exists`
-          : `"${entry.itemName}" in "${entry.outfitName}" — that slot was already used`,
+          : entry.reason === "hidden"
+            ? `"${entry.itemName}" in "${entry.outfitName}" — a hidden item you skipped`
+            : `"${entry.itemName}" in "${entry.outfitName}" — that slot was already used`,
       ),
     );
 
@@ -293,7 +311,15 @@ Object.assign(QM.dock, {
     Object.assign(buttonRow.style, { display: "flex", gap: "6px" });
     const confirmButton = QM.button("Confirm and Add to Inventory", { bg: QM_COLOR_SUCCESS, fg: QM_COLOR_SUCCESS_FG });
     confirmButton.style.flex = "1";
-    confirmButton.addEventListener("click", () => this._submitWardrobeConfirm(confirmButton));
+    if (this._wardrobeHiddenMatches.length > 0) {
+      confirmButton.textContent = "Next: Hidden Items";
+      confirmButton.addEventListener("click", () => {
+        this._wardrobeViewState = "hidden";
+        this._renderWardrobeBuilderContent();
+      });
+    } else {
+      confirmButton.addEventListener("click", () => this._submitWardrobeConfirm(confirmButton));
+    }
     const retryButton = QM.button("Retry", { border: true });
     retryButton.addEventListener("click", () => this._submitWardrobeGeneration());
     const cancelButton = QM.button("Cancel", { border: true });
@@ -304,14 +330,146 @@ Object.assign(QM.dock, {
     return fragment;
   },
 
+  // The step before committing whenever the proposal uses hidden items:
+  // each one's details beside the new ones, then Overwrite / Keep / Skip
+  // (skipping drops it from its outfits) and whether to show it again.
+  _renderWardrobeHiddenChoices() {
+    const fragment = document.createDocumentFragment();
+    const intro = document.createElement("div");
+    intro.textContent = "This wardrobe uses hidden items. Choose what happens to each one.";
+    Object.assign(intro.style, { fontSize: "12px" });
+
+    const list = document.createElement("div");
+    Object.assign(list.style, {
+      display: "flex",
+      flexDirection: "column",
+      gap: "6px",
+      fontSize: "12px",
+      maxHeight: "300px",
+      overflowY: "auto",
+    });
+    for (const match of this._wardrobeHiddenMatches) list.appendChild(this._buildWardrobeHiddenMatchRow(match));
+
+    const buttonRow = document.createElement("div");
+    Object.assign(buttonRow.style, { display: "flex", gap: "6px" });
+    const confirmButton = QM.button("Confirm and Add to Inventory", { bg: QM_COLOR_SUCCESS, fg: QM_COLOR_SUCCESS_FG });
+    confirmButton.style.flex = "1";
+    confirmButton.addEventListener("click", () => this._submitWardrobeConfirm(confirmButton));
+    const backButton = QM.button("Back", { border: true });
+    backButton.addEventListener("click", () => {
+      this._wardrobeViewState = "preview";
+      this._renderWardrobeBuilderContent();
+    });
+    buttonRow.append(confirmButton, backButton);
+
+    fragment.append(intro, list, buttonRow);
+    return fragment;
+  },
+
+  _buildWardrobeHiddenMatchRow(match) {
+    const choice = this._wardrobeHiddenChoices[match.itemId];
+    const row = document.createElement("div");
+    Object.assign(row.style, {
+      border: "1px solid var(--border, rgba(128,128,128,0.3))",
+      borderRadius: "var(--radius, 4px)",
+      padding: "6px",
+      display: "flex",
+      flexDirection: "column",
+      gap: "6px",
+    });
+    const name = document.createElement("strong");
+    name.textContent = match.name;
+    row.appendChild(name);
+
+    const sides = document.createElement("div");
+    Object.assign(sides.style, { display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "8px" });
+    const side = (title, description) => {
+      const column = document.createElement("div");
+      const heading = document.createElement("div");
+      heading.textContent = title;
+      Object.assign(heading.style, { fontSize: "11px", fontWeight: "600" });
+      const body = document.createElement("div");
+      body.textContent = description || "(no description)";
+      Object.assign(body.style, {
+        fontSize: "11px",
+        opacity: "0.85",
+        maxHeight: "84px",
+        overflowY: "auto",
+        wordBreak: "break-word",
+        fontStyle: description ? "normal" : "italic",
+      });
+      column.append(heading, body);
+      return column;
+    };
+    sides.append(
+      side(match.descriptionLocked ? "Hidden item (locked)" : "Hidden item", match.description),
+      match.proposed
+        ? side("New", match.proposed.description)
+        : side("New", "Only named in an outfit — no new details."),
+    );
+    row.appendChild(sides);
+
+    const showLabel = document.createElement("label");
+    const showBox = document.createElement("input");
+    const options = [
+      { value: "overwrite", label: "Overwrite with new details", disabled: !match.proposed },
+      { value: "keep", label: "Keep hidden item's details" },
+      { value: "skip", label: "Skip (leave it out of these outfits)" },
+    ];
+    const optionsColumn = document.createElement("div");
+    Object.assign(optionsColumn.style, { display: "flex", flexDirection: "column", gap: "2px", fontSize: "11px" });
+    for (const option of options) {
+      const label = document.createElement("label");
+      Object.assign(label.style, {
+        display: "flex",
+        alignItems: "center",
+        gap: "4px",
+        cursor: option.disabled ? "default" : "pointer",
+        opacity: option.disabled ? "0.5" : "1",
+      });
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.name = `qm-wardrobe-hidden-${match.itemId}`;
+      radio.value = option.value;
+      radio.checked = choice.action === option.value;
+      radio.disabled = Boolean(option.disabled);
+      radio.addEventListener("change", () => {
+        if (!radio.checked) return;
+        choice.action = option.value;
+        showBox.disabled = option.value === "skip";
+        showLabel.style.opacity = showBox.disabled ? "0.5" : "1";
+      });
+      const text = document.createElement("span");
+      text.textContent = option.label;
+      label.append(radio, text);
+      optionsColumn.appendChild(label);
+    }
+    row.appendChild(optionsColumn);
+
+    Object.assign(showLabel.style, { display: "flex", alignItems: "center", gap: "4px", fontSize: "11px" });
+    showBox.type = "checkbox";
+    showBox.checked = choice.show;
+    showBox.disabled = choice.action === "skip";
+    showLabel.style.opacity = showBox.disabled ? "0.5" : "1";
+    showBox.addEventListener("change", () => {
+      choice.show = showBox.checked;
+    });
+    const showText = document.createElement("span");
+    showText.textContent = "Show (unhide) this item";
+    showLabel.append(showBox, showText);
+    row.appendChild(showLabel);
+    return row;
+  },
+
   async _submitWardrobeConfirm(confirmButton) {
     const token = this._wardrobeSessionToken;
     const chatId = QM.state.chatId;
     confirmButton.disabled = true;
     try {
-      const result = await QM.state.confirmWardrobe(this._wardrobeProposal);
+      const result = await QM.state.confirmWardrobe(this._wardrobeProposal, this._wardrobeHiddenChoices);
       if (token !== this._wardrobeSessionToken || chatId !== QM.state.chatId) return;
       this._wardrobeSummary = result.summary;
+      this._wardrobeViewState = "preview";
       this._renderWardrobeBuilderContent();
     } catch (error) {
       if (token !== this._wardrobeSessionToken || chatId !== QM.state.chatId) return;

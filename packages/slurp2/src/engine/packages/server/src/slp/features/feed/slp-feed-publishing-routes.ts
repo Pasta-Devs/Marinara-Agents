@@ -1,4 +1,4 @@
-import { slpCreatorGenerationRequestSchema } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
+import { slpCreatorGenerationRequestObjectSchema } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
 import { slpIsAdmissionFailure } from "../../base/host/slp-admission.js";
 import { loadImageGenerationUserSettings } from "../../../services/image/image-generation-settings.js";
 import { slpCreatorTargetedRefreshSchema } from "../../../../../shared/src/slp/slp-social.schema.js";
@@ -38,13 +38,11 @@ const slurpTargetedRefreshSchema = slpCreatorTargetedRefreshSchema.extend({
 });
 // The packaged shared bundle wraps this schema in a refinement, so `.extend` is not always
 // available. Extend the underlying object and re-run the full base schema in a refinement.
-// Same trick as the post-create schema below: the packaged shared bundle may wrap the generation
-// schema, so extend the underlying object rather than the export.
-const slurpCreatorGenerationRequestSchema = (
-  slpCreatorGenerationRequestSchema instanceof z.ZodEffects
-    ? slpCreatorGenerationRequestSchema.innerType()
-    : slpCreatorGenerationRequestSchema
-).extend({ postType: slurpPostTypeSchema.default("post"), generateImage: z.boolean().optional() });
+// The generation schema is refined, so extend its plain object (zod 4 has no ZodEffects).
+const slurpCreatorGenerationRequestSchema = slpCreatorGenerationRequestObjectSchema.extend({
+  postType: slurpPostTypeSchema.default("post"),
+  generateImage: z.boolean().optional(),
+});
 
 const slpImagePromptConfirmationSchema = z.object({
   prompts: z

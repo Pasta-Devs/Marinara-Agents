@@ -26,8 +26,8 @@ assert.match(automation, /settingKey="storyLifetimeHours"/u);
 assert.match(automation, /settingKey="storyImageWidth"[\s\S]*settingKey="storyImageHeight"/u);
 assert.match(home, /storyLifetimeHours \* 60 \* 60 \* 1000/u);
 assert.doesNotMatch(home, /SLURP_MOMENT_WINDOW_MS/u);
-assert.match(backstage, /storyRate: automation\("general", "story posts", "story rate"\)/u);
-assert.match(backstage, /arcLibrary: content\("arcs", "plan templates", "stories"\)/u);
+assert.match(backstage, /storyRate: slurp\("general", "story posts", "story rate"\)/u);
+assert.match(backstage, /arcLibrary: slurp\("arcs", "plan templates", "stories"\)/u);
 assert.equal(english["ui.slurp.settings.storyRate"], "Stories");
 for (const key of [
   "ui.slurp.settings.storyImagesEnabled",

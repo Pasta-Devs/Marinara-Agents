@@ -1,5 +1,124 @@
 # Slurp release notes
 
+## 0.4.18 — 2026-11-05
+
+- Added: Backstage > Live shows has a Tip goals group. "Goal size" makes the room's goals and menu prices smaller or bigger. "Own goals" sets up to three goals for one Creator: an amount and what happens. They replace the made goals in that Creator's next shows, and the Creator acts out the text when the room hits the goal. Viewers cannot tip for an own goal's reward directly.
+
+## 0.4.17 — 2026-11-02
+
+- Fixed: refreshing a Creator's conversation schedule read only the card description and personality. An Engine card split (Engine #8543) moves scenario and backstory into their own fields, so the schedule lost them. It now reads description, scenario and backstory (top-level or `extensions.backstory`). The canon reading, picture look and flavour brief already read the split fields.
+
+## 0.4.16 — 2026-11-02
+
+- Fixed: Pulse kept a made first post as "Creating first post… running" for a day. The server reports a made first post as `generated`, and Pulse now counts that as done.
+- Fixed: a second Creator in a picture lost their reference picture when the posting Creator had none of their own (no linked card, or no picture). Their picture now goes along when avatar references are on and the provider takes them.
+- Fixed: Professor Mari's page asked for attention whenever the Engine updated her built-in card, and the player could not act on it. Her page now follows her card without a "card changed" or appearance review flag.
+
+## 0.4.15 — 2026-11-01
+
+- Slurp can tell Long-Term Memory what is true about your Creators, so chats know it too. A new "Tell Long-Term Memory about your Creators" switch in Backstage (Engine link) is off by default. From then on, facts you write or promote, couples and friendships between Creators, and how storylines end become memories. Nothing from fans or DM threads is sent. Turning it on asks whether to turn on Long-Term Memory's "Other Agents can add memories" when that is off.
+- Slurp's own facts no longer come back to Creators as memories, so they are not told twice.
+
+## 0.4.14 — 2026-10-31
+
+- Fixed: nude and explicit pictures showed everyday clothes. A post at the nudity or explicit level (after access and intent) now picks only intimate wardrobe looks (lingerie, swimwear, a towel, nude and similar by name, summary, description or tag), never falls back to an everyday look, and the writer may return no look.
+- At those levels the writer is told the outfit is nothing or only what the scene needs, the Creator's usual wardrobe note is not a fallback, and an outfit of "nothing" adds no `Wearing` line to the picture prompt. Clothed and suggestive posts are unchanged.
+
+## 0.4.13 — 2026-10-31
+
+- Wardrobe looks can be exported and imported as JSON. Export the whole wardrobe or a single look, and import a file back into the same review list as the AI import. No model call is needed, and {{random}} in a description stays as written.
+- Rewritten commission requests keep up to 1000 characters instead of being cut off at 400.
+- A scene's setting, action and visual direction may be up to 1500 characters, so a long visual direction no longer fails "Post now" on a collab.
+
+## 0.4.12 — 2026-10-30
+
+- Wardrobe import finds looks again. It accepts untidy model replies (other list names, extra fields, long summaries, tags as one line) and has room for long replies and thinking models.
+- The "Legacy wardrobe note" source says "(empty)" when the Creator has no old note, so it is clear why you cannot pick it.
+- Long-Term Memory no longer turns people from your chats into collabs. Creators keep those people out of posts and DMs unless the brief names them, and new installs recall only the relevant memories.
+
+## 0.4.11 — 2026-10-29
+
+- Backstage (Engine link) no longer says Long-Term Memory isn't sharing after its "Other Agents can read memories" switch is turned on. The line clears at once after Slurp's offer, and the next time the panel loads after Long-Term Memory's offer or Memory Settings.
+
+## 0.4.10 — 2026-10-29
+
+- Turning on "What your other Agents know" now asks whether to turn on Long-Term Memory's "Other Agents can read memories" when that switch is off. "Turn it on" changes only that switch; "Not now" leaves it alone.
+
+## 0.4.9 — 2026-10-29
+
+- Creators' posts and DM replies now use what Long-Term Memory remembers about them, through its recall service. A new "Long-term memory" choice in Backstage (Engine link) sets whether they get whole memories (the default) or only the parts that fit the post or message. It shows while "What your other Agents know" is on.
+- Backstage says when Long-Term Memory is missing, or is not sharing ("Other Agents can read memories" is off in its Memory Settings).
+- A DM brings in the persona's memories only when that persona's Slurp page uses Linked identity. A hinted or concealed page never does.
+- The Creator brief no longer reads Long-Term Memory's storage; the Character Tracker, World State and Persona Stats lines are unchanged.
+
+## 0.4.8 — 2026-10-28
+
+- World lens: the canon-anchor reading also returns `world` (era, device, money, festivals). Cache version v4 → v5, so each card is read once more in the background. A modern card has no lens and nothing changes.
+- The Creator brief (posts, DMs, comment replies, scenes, Stir suggestions, rewritten fan lines) and both live show prompts get one "Your world" line for a non-modern lens. Drama and Support desk prompts do not use the brief and are unchanged.
+- Pictures: a non-modern Creator never gets the mirror, desk or screenshot camera source, so no phone or screen appears. The image model gets no world words.
+- Holidays: when events run, a non-modern Creator is told to play them as their world's nearest festival.
+- Culture-shock fans: about 1 in 4 regular fan comments under a non-modern Creator's post comes from a free bank per era.
+- Backstage: the canon-anchor editor shows and edits the world (era, device, money, festivals); a player's fix survives a new reading.
+
+## 0.4.7 — 2026-10-28
+
+- Fan comments see the post: a short title (40 characters or fewer) gets quoted in some questions and reactions, the question bank has 16 more lines, and a fan line is skipped when the same text is already under the post.
+- Fan questions as callbacks: a top-level fan question under the Creator's recent posts (1–30 days old) is a new callback kind, `question`, so a later post may answer it.
+- Five business arcs join the built-in arc library: sale week, burnout and comeback, new gear, leak scare and page anniversary. Saved libraries get them through the existing normalize step.
+
+## 0.4.6 — 2026-10-28
+
+- Niches: the card reading now names each Creator's page niche (main + up to two side niches, from a fixed list). The reading refreshes once for every Creator.
+- Post jobs: each ordinary post gets a kind (try-on haul, gym set, finished commission, stream setup, fan request, teaser, …). The niche weighs the jobs, the main niche keeps at most half of the last 8 posts, and a Creator never repeats one of their last 3 jobs. Spice is not changed.
+- Card notes edits keep the niche.
+- Jobs fit the post: a job with its own place (gym, kitchen, stage) only goes on a post with no place yet, intimate jobs need a card heat of at least flirty, and avoided topics drop the job.
+- The card reading refreshes once for every Creator; on a card you never edited, the heat range may shift a little with the new reading.
+
+## 0.4.5 — 2026-10-28
+
+- Outfits change: a Creator who never had a wardrobe gets one filled from the card once (a closet you emptied stays empty), so pictures stop showing the same clothes.
+- Pictures follow your image style: a painted style no longer gets "personal photograph" words. In the story it is still a photo.
+- Automatic captions are short lines under the picture (about 40–160 characters, cut at a sentence end above 280).
+- Halloween costume contest in October (Settings › Stir › Drama): three Creators post costumes, you pick the winner, the winner posts a reward set.
+- Live recaps are built from the show (what you got, goals, coins, top tipper), so two shows never post the same text.
+- The daily world tick sees the recent themes, so the feed no longer gets "Cozy" trends day after day.
+- Fewer wasted slots: the planner stops adding post slots past posts per day, and one slot opens one campaign.
+
+## 0.4.4 — 2026-10-26
+
+- Live shows, rebuilt: code runs every show minute by minute (fans, tips, menu orders, goals); while you watch, the model writes the host and the chat, and the host answers you by name.
+- Live pictures about once per minute, and private shows at the Backstage price and length.
+- Go live yourself as your persona's Creator, or as any Creator from Stir; the room reacts and suggests your next move.
+- "X is live" notices, a thank-you post after each show, and a Backstage > Live shows page.
+- The cam is told in words on the stage, so a show works without pictures; pictures follow those words. A live Creator's Moments tile opens the show. Live is portrait on every screen, with a slim top bar.
+
+## 0.4.3 — 2026-10-26
+
+- Slurp starts again on Engine builds with zod 4. The feed post and Creator generation routes no longer stop at load with "Right-hand side of 'instanceof' is not an object" (zod 4 has no `ZodEffects`); they extend the plain object schemas instead.
+
+## 0.4.2 — 2026-10-26 [highlight]
+
+- Slurp starts again on Engine builds with zod 4. Settings sections with nested defaults are filled in again, so the server no longer stops at load with "Cannot read properties of undefined (reading 'curve')".
+- On zod 4 Engines, saving part of the Slurp settings, a Garnish ad or a creator account no longer resets the fields you did not send to their defaults. Creator access and auto-posting defaults are filled in again too.
+
+## 0.4.1 — 2026-10-24 [highlight]
+
+- Fixed Story viewer clicks passing through to the feed or Engine behind it. Close, Creator profile, menu, navigation and picture controls respond again.
+
+## 0.4.0 — 2026-10-23
+
+One release for everything built since 0.3.53 (unreleased 0.3.54 to 0.3.65 folded in):
+
+- Storylines: arcs, dramas and situations run on one storyline engine; Story Packs import v2 files, one JSON `fit`, one Packs list with a gate and Remove, topic switches `<pack>:<topic>`.
+- Packs (off by default): Family pack and five kink packs (Lingerie, Cosplay, Feet, Dom/sub, Exhibition).
+- Intimacy ladder: rapport tiers open doors in DMs (`slurpRapportDoors`), the highest tier is kept.
+- Paid sexting sessions (`SlpSextingBar`); Stir as a slide-up sheet (`SlpStirDeck`); Stories in Slurp's own layer.
+- Fixes: DM prompts know the player's latest public posts, @tagged Creators join the picture cast, tag-list looks go over whole, picture prompt rewrite floor 8192, wardrobe tag commas, neutral wording; Images > Advanced "Keep original picture files".
+
+## 0.3.53 — 2026-10-21
+
+- Image failures marked nonretryable by the Engine no longer start automatic replacement requests. Slurp also stops later background retries for posts and Creator artwork, and keeps post prompts for a deliberate retry.
+
 ## 0.3.52 — 2026-10-20
 
 - Fixed: an automatic post no longer reads a Creator's card or refreshes shared ideas with the AI while one of your chats on the same connection is replying, and an automatic post no longer makes your other automatic work (Noodle's too) wait 30 seconds. A new Creator's first automatic post no longer refuses itself.
@@ -9,6 +128,12 @@
 
 - Changed: Slurp now uses Marinara Engine's own settings, dialogs, notifications, Local Model and connection queue instead of carrying copies of them. It no longer resets your Engine settings or starts a second Local Model, its background work waits while a chat on the same connection is replying, and its notifications appear where you put yours. The download is smaller. It needs a Marinara Engine release after 2.5.0. On 2.5.0 and older, the version you already have keeps working. (#1478, #1487)
 - Changed: the sticker and emoji pickers no longer show the chat emoji-selection settings. Those belong to a chat, and Slurp has none.
+
+## 0.3.50 — 2026-10-19
+
+- Added: tapping an ad (the button, the picture or a wall tile) opens an ad sheet with the picture, brand, product, copy and price feel, and still records the tap. The old "Opening … promotion" toast is gone.
+- Added: Settings › Fans & money › Collect has a "Daily limit on Collect" switch (`walletPayoutDailyLimit`, on by default). Off, Collect moves every whole coin of your Creator earnings at once.
+- Added: Messaging › "What fans ask for" is an editable list for the wish in a commission request (`messagesCommissionAsks`); empty keeps the built-in asks.
 
 ## 0.3.49 — 2026-10-19
 

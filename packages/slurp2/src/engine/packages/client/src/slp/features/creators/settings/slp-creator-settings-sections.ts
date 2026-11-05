@@ -34,6 +34,7 @@ import { SlpCreatorOverviewSection } from "./SlpCreatorOverviewSection";
 import { SlpCreatorStorylinesSection } from "./SlpCreatorStorylinesSection";
 import type { SlpCreatorSettingsCreator, SlpCreatorSettingsSectionProps } from "./slp-creator-settings-contract";
 import type { SlpCreatorSettingsBlock, SlpCreatorSettingsTab } from "./slp-creator-settings-store";
+import type { SlpExtensionId } from "../../../../../../shared/src/slp/slp-extensions.js";
 
 /** One block of settings; a tab shows one or more blocks in order. */
 export type SlpCreatorSettingsBlockEntry = {
@@ -45,6 +46,8 @@ export type SlpCreatorSettingsBlockEntry = {
   Component: ComponentType<SlpCreatorSettingsSectionProps>;
   /** Hides a tab that has nothing to show for this Creator, rather than showing it empty. */
   available?: (creator: SlpCreatorSettingsCreator) => boolean;
+  /** The extension this block belongs to: hidden while it is off. */
+  extension?: SlpExtensionId;
 };
 
 /**
@@ -114,6 +117,7 @@ export const SLP_CREATOR_SETTINGS_BLOCKS: readonly SlpCreatorSettingsBlockEntry[
     labelKey: "ui.slurp.settings.creators.tabs.collaborations",
     defaultLabel: "Collaborations",
     Component: SlpCreatorCollaborationsSection,
+    extension: "storylines",
   },
   {
     id: "messages",
@@ -128,6 +132,7 @@ export const SLP_CREATOR_SETTINGS_BLOCKS: readonly SlpCreatorSettingsBlockEntry[
     labelKey: "ui.slurp.settings.creators.tabs.storylines",
     defaultLabel: "Storylines",
     Component: SlpCreatorStorylinesSection,
+    extension: "storylines",
   },
   {
     id: "continuity",

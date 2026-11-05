@@ -11,6 +11,8 @@ import {
   RangeSetting,
 } from "../../modules/settings/SlpSettingsControls";
 import { BackstagePageHeader } from "../../modules/settings/SlpSettingsKit";
+import { SlpExtensionSwitch } from "../../modules/settings/SlpExtensionSwitch";
+import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 import { ChoiceSetting, StatusStrip } from "../../modules/settings/SlpSettingsInputs";
 import type { SlurpSettings } from "../settings/slp-settings-contract";
 import {
@@ -21,6 +23,22 @@ import {
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
 
 const PRESET_ICONS = { calm: Moon, lively: SlpSparkleGlyph, handsOff: Zap } as const;
+
+/** Storylines' switch, on top of each of its pages (Storylines, Plan templates, Drama & love). */
+export function SlpStorylinesSwitch({ settings, updateNow }: SlpBackstagePageProps) {
+  const { t } = useTranslation();
+  return (
+    <SlpExtensionSwitch
+      settingKey="extStorylines"
+      label={t("ui.slurp.settings.ext.storylines.label", { defaultValue: "Storylines" })}
+      detail={t("ui.slurp.settings.ext.storylines.detail", {
+        defaultValue: "Arcs and plans, collabs, rivalries, couples, drama and polyamory between Creators.",
+      })}
+      on={slpExtensionOn(settings, "storylines")}
+      onChange={(value) => void updateNow("extStorylines", value)}
+    />
+  );
+}
 
 /**
  * Everything that makes stories happen, in one place: whether events and storylines start by
@@ -34,9 +52,65 @@ export function SlpStorylinesPanel(page: SlpBackstagePageProps) {
   const activity = slurpStoryActivityPresetFor(settings);
   const onOff = (value: boolean) => t(value ? "ui.slurp.settings.overview.on" : "ui.slurp.settings.overview.off");
   const cap = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
+  const sharedIdeas = (
+    <SettingsGroup title={t("ui.slurp.settings.prompts.sharedPreseed")}>
+      <Toggle
+        settingKey="sharedPreseed"
+        label={t("ui.slurp.settings.prompts.sharedPreseed")}
+        detail={t("ui.slurp.settings.prompts.sharedPreseedDetail")}
+        value={settings.sharedPreseed}
+        onChange={(value) => update("sharedPreseed", value)}
+        disabledReason={beats ? null : t("ui.slurp.settings.hints.needsLifeIdeas")}
+      />
+      {slpExtensionOn(settings, "world") && (
+        <Toggle
+          settingKey="sharedWorldEvents"
+          label={t("ui.slurp.settings.prompts.sharedWorldEvents")}
+          detail={t("ui.slurp.settings.prompts.sharedWorldEventsDetail")}
+          value={settings.sharedWorldEvents}
+          onChange={(value) => update("sharedWorldEvents", value)}
+          disabledReason={
+            !beats
+              ? t("ui.slurp.settings.hints.needsLifeIdeas")
+              : !settings.sharedPreseed
+                ? t("ui.slurp.settings.hints.needsSharedIdeas")
+                : null
+          }
+        />
+      )}
+    </SettingsGroup>
+  );
+  const eventAutomation = slpExtensionOn(settings, "world") && (
+    <ChoiceSetting
+      settingKey="storyAutomation"
+      label={t("ui.slurp.settings.events.automationLabel")}
+      detail={t("ui.slurp.settings.events.automationDetail")}
+      options={[
+        { value: "manual", label: t("ui.slurp.settings.events.automationManual") },
+        { value: "suggest", label: t("ui.slurp.settings.events.automationSuggest") },
+        { value: "auto", label: t("ui.slurp.settings.events.automationAuto") },
+      ]}
+      value={settings.storyAutomation}
+      disabled={updateSettings.isPending}
+      onChange={(value: SlurpSettings["storyAutomation"]) => void update("storyAutomation", value)}
+    />
+  );
+  // Off, the page keeps what is not Storylines': shared ideas (Basic) and event automation (Living world).
+  if (!slpExtensionOn(settings, "storylines"))
+    return (
+      <div className="space-y-5">
+        <BackstagePageHeader detail={t("ui.slurp.settings.planAutomation.detail")} />
+        <SlpStorylinesSwitch {...page} />
+        {eventAutomation && (
+          <SettingsGroup title={t("ui.slurp.settings.startByThemselves.title")}>{eventAutomation}</SettingsGroup>
+        )}
+        {sharedIdeas}
+      </div>
+    );
   return (
     <div className="space-y-5">
       <BackstagePageHeader detail={t("ui.slurp.settings.planAutomation.detail")} />
+      <SlpStorylinesSwitch {...page} />
       <StatusStrip
         label={t("ui.slurp.settings.strip.label")}
         items={[
@@ -83,19 +157,7 @@ export function SlpStorylinesPanel(page: SlpBackstagePageProps) {
       />
       <div className="grid items-start gap-5 lg:grid-cols-2">
         <SettingsGroup title={t("ui.slurp.settings.startByThemselves.title")}>
-          <ChoiceSetting
-            settingKey="storyAutomation"
-            label={t("ui.slurp.settings.events.automationLabel")}
-            detail={t("ui.slurp.settings.events.automationDetail")}
-            options={[
-              { value: "manual", label: t("ui.slurp.settings.events.automationManual") },
-              { value: "suggest", label: t("ui.slurp.settings.events.automationSuggest") },
-              { value: "auto", label: t("ui.slurp.settings.events.automationAuto") },
-            ]}
-            value={settings.storyAutomation}
-            disabled={updateSettings.isPending}
-            onChange={(value: SlurpSettings["storyAutomation"]) => void update("storyAutomation", value)}
-          />
+          {eventAutomation}
           <ChoiceSetting
             settingKey="arcAutoMode"
             label={t("ui.slurp.settings.arcAutoMode")}
@@ -154,30 +216,7 @@ export function SlpStorylinesPanel(page: SlpBackstagePageProps) {
           />
         </SettingsGroup>
       </div>
-      <SettingsGroup title={t("ui.slurp.settings.prompts.sharedPreseed")}>
-        <Toggle
-          settingKey="sharedPreseed"
-          label={t("ui.slurp.settings.prompts.sharedPreseed")}
-          detail={t("ui.slurp.settings.prompts.sharedPreseedDetail")}
-          value={settings.sharedPreseed}
-          onChange={(value) => update("sharedPreseed", value)}
-          disabledReason={beats ? null : t("ui.slurp.settings.hints.needsLifeIdeas")}
-        />
-        <Toggle
-          settingKey="sharedWorldEvents"
-          label={t("ui.slurp.settings.prompts.sharedWorldEvents")}
-          detail={t("ui.slurp.settings.prompts.sharedWorldEventsDetail")}
-          value={settings.sharedWorldEvents}
-          onChange={(value) => update("sharedWorldEvents", value)}
-          disabledReason={
-            !beats
-              ? t("ui.slurp.settings.hints.needsLifeIdeas")
-              : !settings.sharedPreseed
-                ? t("ui.slurp.settings.hints.needsSharedIdeas")
-                : null
-          }
-        />
-      </SettingsGroup>
+      {sharedIdeas}
       <AdvancedGroup title={t("ui.slurp.settings.advanced.group")}>
         <ChoiceSetting
           settingKey="arcSource"

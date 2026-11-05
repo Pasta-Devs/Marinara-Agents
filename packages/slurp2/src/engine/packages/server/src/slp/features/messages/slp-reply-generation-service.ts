@@ -28,7 +28,9 @@ import {
 import { createLLMProvider } from "../../../services/llm/provider-registry.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { describeSlurpPostCondition } from "../feed/slp-feed-contract.js";
-import { createSlurpStorage } from "../../data/slp-storage.js";
+import { createSlurpMessagesStorage, createSlurpStorage } from "../../data/slp-storage.js";
+import { describeSlurpRapport } from "../../modules/messages/slp-rapport.js";
+import type { SlurpMessage } from "../../data/messages/slp-messages-storage-types.js";
 import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
 import { slurpAudienceArcDescription } from "../../modules/projects/slp-audience-arc.js";
 import { readSlurpDmReply } from "../../modules/messages/slp-dm-response.js";
@@ -174,7 +176,8 @@ export function buildCreatorReplyMessages(input: {
     viewer: {
       displayName: protect(input.viewer.displayName),
       handle: protect(input.viewer.handle),
-      relationship: input.relationship ?? "no history with this creator yet",
+      // Holds DM lines since R8, so it is redacted like the comment itself.
+      relationship: protect(input.relationship ?? "no history with this creator yet"),
     },
     viewerComment: protect(input.parent.content) || (input.parent.imageUrl ? "[image reply]" : ""),
     // Redacted like every neighbouring field. A Conversation Schedule activity is user-written and
@@ -241,7 +244,12 @@ export async function generateCreatorReply(input: {
     : undefined;
   // Who this commenter is to this Creator. Read from the funnel and from whether they subscribe,
   // both of which were already recorded and never reached this prompt.
-  const relationship = await describeCommenterRelationship(input.db, input.creator.id, input.viewer.id);
+  const relationship = await describeCommenterRelationship(
+    input.db,
+    input.creator.id,
+    input.viewer.id,
+    input.viewer.displayName,
+  );
   const creatorCondition = await describeSlurpPostCondition(input.db, input.creator.id);
   const imageContexts = await prepareSlurpPostImageContexts({
     posts: [input.post],
@@ -326,7 +334,16 @@ export async function generateCreatorReply(input: {
  * Deliberately short. A reply is one or two sentences, and a paragraph of history would dominate
  * the comment it is answering.
  */
-async function describeCommenterRelationship(db: DB, creatorAccountId: string, viewerId: string): Promise<string> {
+/** DM lines a comment reply remembers (R8): enough for "we talked about this", not a transcript. */
+const DM_GIST_MESSAGES = 6;
+const DM_GIST_CHARS = 160;
+
+async function describeCommenterRelationship(
+  db: DB,
+  creatorAccountId: string,
+  viewerId: string,
+  viewerName: string,
+): Promise<string> {
   const parts: string[] = [];
   try {
     const subscribed = (await createSlurpStorage(db).listSubscriptionsForViewer(viewerId)).some(
@@ -352,5 +369,36 @@ async function describeCommenterRelationship(db: DB, creatorAccountId: string, v
     // A missing relationship is not a reason to refuse a reply.
     return "no history with this creator yet";
   }
-  return parts.length > 0 ? parts.join(", ") : "no history with this creator yet";
+  const line = parts.length > 0 ? parts.join(", ") : "no history with this creator yet";
+  return `${line}${await describeCommenterDms(db, creatorAccountId, viewerId, viewerName)}`;
+}
+
+/**
+ * R8: someone the Creator talks to in DMs is not a stranger in the comments. Their rapport and the
+ * last few DM lines, or nothing when they never wrote. A DM read failure costs the context, not the reply.
+ */
+async function describeCommenterDms(
+  db: DB,
+  creatorAccountId: string,
+  viewerId: string,
+  viewerName: string,
+): Promise<string> {
+  try {
+    const dms = createSlurpMessagesStorage(db);
+    const thread = await dms.getThread(viewerId, creatorAccountId);
+    if (!thread) return "";
+    const recent = ((await dms.listMessages(thread.id, DM_GIST_MESSAGES * 2)) as SlurpMessage[])
+      .filter((message) => message.content.trim())
+      .slice(-DM_GIST_MESSAGES)
+      .map((message) => {
+        const text = message.content.replace(/\s+/gu, " ").trim();
+        const short = text.length > DM_GIST_CHARS ? `${text.slice(0, DM_GIST_CHARS - 1)}…` : text;
+        return `${message.role === "creator" ? "you" : viewerName}: ${short}`;
+      });
+    if (!recent.length) return "";
+    const rapport = describeSlurpRapport(await dms.rapportFor(viewerId, creatorAccountId), viewerName);
+    return `. You also talk in DMs; this is someone you know, not a stranger. ${rapport} Your latest DMs, oldest first: ${recent.join(" | ")}. Do not quote private DMs in public; let them shape how you answer.`;
+  } catch {
+    return "";
+  }
 }

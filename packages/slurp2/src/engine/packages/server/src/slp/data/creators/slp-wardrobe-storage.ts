@@ -12,11 +12,14 @@ export const slurpWardrobeKey = (creatorAccountId: string) => `slurp2.creator.${
 export function createWardrobeStorage(context: SlurpStorageContext) {
   const { settingsStore } = context;
   const write = async (creatorAccountId: string, looks: readonly SlpWardrobeLook[]) => {
-    if (looks.length === 0) await settingsStore.remove(slurpWardrobeKey(creatorAccountId));
-    else await settingsStore.set(slurpWardrobeKey(creatorAccountId), JSON.stringify(looks));
+    // An emptied closet keeps its key, so the card fill never brings back looks the player deleted.
+    await settingsStore.set(slurpWardrobeKey(creatorAccountId), JSON.stringify(looks));
     return [...looks];
   };
   return {
+    async hasWardrobeRecord(creatorAccountId: string): Promise<boolean> {
+      return (await settingsStore.get(slurpWardrobeKey(creatorAccountId))) != null;
+    },
     async listWardrobeLooks(creatorAccountId: string): Promise<SlpWardrobeLook[]> {
       return readSlpWardrobeLooks(await settingsStore.get(slurpWardrobeKey(creatorAccountId)));
     },

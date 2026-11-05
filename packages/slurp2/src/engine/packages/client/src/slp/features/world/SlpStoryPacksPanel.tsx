@@ -18,6 +18,14 @@ import {
 const button =
   "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--slurp-outline)] px-3 text-sm font-semibold hover:bg-[var(--slurp-surface-raised)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50";
 
+const KIND_LABEL: Record<string, string> = {
+  arc: "Storyline type",
+  event: "Event",
+  situation: "Situation",
+  drama: "Drama",
+  storyline: "Storyline",
+};
+
 export function SlpStoryPacksPanel({ arcs, events }: { arcs: SlurpArcType[]; events: SlurpPlatformEvent[] }) {
   const packs = useSlpBundledStoryPacks();
   const bundledPreview = usePreviewBundledStoryPack();
@@ -196,7 +204,7 @@ export function SlpStoryPacksPanel({ arcs, events }: { arcs: SlurpArcType[]; eve
                     <div>
                       <h3 className="font-bold">{entry.name}</h3>
                       <p className="text-xs text-[var(--slurp-muted)]">
-                        {entry.kind === "arc" ? "Storyline type" : "Event"} · {entry.status.replace("-", " ")}
+                        {KIND_LABEL[entry.kind] ?? "Event"} · {entry.status.replace("-", " ")}
                       </p>
                     </div>
                     {entry.kind === "arc" && (

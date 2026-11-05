@@ -30,7 +30,7 @@ export function useSlpMaintenanceBackstageState({
 }) {
   const { t } = useTranslation();
   const runAutopurge = useRunSlurpAutopurge();
-  const maintenanceSummary = useSlurpMaintenanceSummary(section === "maintenance" || section === "overview");
+  const maintenanceSummary = useSlurpMaintenanceSummary(section === "basic" || section === "overview");
   const autopurgePreview = useSlurpAutopurgePreview(settings, target === "autopurge");
   const deleteAllData = useDeleteAllSlurpData();
   const deleteUnusedData = useDeleteUnusedSlurpData();

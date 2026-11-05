@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { slurpSextingPhase } from "../../modules/messages/slp-sexting.js";
 import { SLURP_DEFAULT_RAPPORT_WEIGHTS } from "../../modules/messages/slp-rapport.js";
 import { SLURP_DM_POLICIES } from "../../modules/messages/slp-messaging.js";
 import { replyToSlurpMessage } from "./slp-message-operation.js";
@@ -303,6 +304,7 @@ export async function slpMessagesCreatorRoutes(app: FastifyInstance, messaging: 
       subscribed: subscriptions.some(
         (entry: { creatorAccountId: string }) => entry.creatorAccountId === thread.creatorAccountId,
       ),
+      sexting: slurpSextingPhase(thread.sexting) !== null,
       dmPolicy: messaging.dmPolicy,
       isRequest: thread.state === "request",
       mood: thread.mood,

@@ -66,6 +66,8 @@ export type SlurpTieCreator = {
   cardPartners?: readonly string[];
   /** For bonds (`slp-creator-bonds.ts`): everyone the card names, with how they relate (canon anchors). */
   cardPeople?: readonly { name: string; relation: string }[];
+  /** Creators this one is family with by an active family bond (R3): never an automatic couple. */
+  kin?: readonly string[];
   /** Polyamory (0.3.5): their steering's relationship style, else poly words on their card. */
   poly?: boolean;
   /** The player's romance setting for them (0.3.17): never, or only with some Creators. */

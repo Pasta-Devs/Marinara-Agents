@@ -129,7 +129,10 @@ assert.equal(slurpArcLifeLine([move]), "Moving house (deciding to move)");
     ),
   );
   // Gated by the setting, and protected: an arc title can name a Secret Creator's real city.
-  assert.match(threadStance, /settings\.arcAffectsMood\s+\? \(protectCreatorGeneratedIdentity\(\s+slurpArcLifeLine/u);
+  assert.match(
+    threadStance,
+    /settings\.arcAffectsMood && slpArcsLive\(settings\)\s+\? \(protectCreatorGeneratedIdentity\(\s+slurpArcLifeLine/u,
+  );
   const store = slurp2Source(join(serverRoot, "storage/slurp.storage.ts"));
   assert.match(store, /"arc_complete"/u);
   assert.match(store, /await this\.recordArcChange\(creatorAccountId, current, next\)/u);
@@ -286,7 +289,10 @@ assert.match(
 );
 // Player direction stands both rotations down: their direction is the subject.
 assert.match(generation, /const directed = Boolean\(input\.request\.noodlerPostGuide\?\.trim\(\) \|\| classicIdea\)/u);
-assert.match(generation, /const project =\s*directed \|\| nudge\s*\?\s*null/u);
+assert.match(
+  generation,
+  /const project =\s*directed \|\| nudge \|\| !slpExtensionOn\(settings, "storylines"\)\s*\?\s*null/u,
+);
 // The project's own posts, not the page's: page history says nothing about where this thread got to.
 assert.match(generation, /listPostsByProject\(project\.id, 4\)/u);
 // Project text is untrusted user input like every other supplied value.

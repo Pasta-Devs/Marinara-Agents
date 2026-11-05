@@ -23,6 +23,8 @@ export type SlurpNavigationState =
       returnTo?: SlurpNavigationState;
     }
   | { mode: "creator"; view: "wallet" }
+  /** A live show, full screen (LIVE-V3-PLAN.md). */
+  | { mode: "creator"; view: "live"; showId: string; returnTo?: SlurpNavigationState }
   /** W: the Stir tab (make things happen). */
   | { mode: "creator"; view: "stir" }
   /** Before W, the Creator home. Old links open the Stir tab (the Dashboard is on the own profile now). */

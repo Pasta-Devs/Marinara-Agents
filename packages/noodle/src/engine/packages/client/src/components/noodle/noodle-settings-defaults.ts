@@ -6,11 +6,24 @@ export type PackageNoodleSettings = NoodleSettings & {
   enableImageInterpretation: boolean;
   autoTranslatePosts: boolean;
   showImagesToWriter: boolean;
+  useLtmMemories: boolean;
+  ltmMemoriesConfirmed: boolean;
+  ltmMemoryRecall: "whole" | "relevant";
   promptPresets: import("./noodle-prompt-presets").NoodlePromptPreset[];
 };
 export type PackageNoodleSettingsUpdateInput = NoodleSettingsUpdateInput &
   Partial<Pick<PackageNoodleSettings, "imageWidth" | "imageHeight">> &
-  Partial<Pick<PackageNoodleSettings, "enableImageInterpretation" | "autoTranslatePosts" | "showImagesToWriter">> &
+  Partial<
+    Pick<
+      PackageNoodleSettings,
+      | "enableImageInterpretation"
+      | "autoTranslatePosts"
+      | "showImagesToWriter"
+      | "useLtmMemories"
+      | "ltmMemoriesConfirmed"
+      | "ltmMemoryRecall"
+    >
+  > &
   Partial<Pick<PackageNoodleSettings, "promptPresets">>;
 const PACKAGE_NOODLE_SETTINGS_DEFAULTS: PackageNoodleSettings = {
   ...DEFAULT_NOODLE_SETTINGS,
@@ -19,6 +32,9 @@ const PACKAGE_NOODLE_SETTINGS_DEFAULTS: PackageNoodleSettings = {
   enableImageInterpretation: true,
   autoTranslatePosts: false,
   showImagesToWriter: true,
+  useLtmMemories: false,
+  ltmMemoriesConfirmed: false,
+  ltmMemoryRecall: "whole",
   promptPresets: [],
 };
 
@@ -65,6 +81,9 @@ export const NOODLE_SETTINGS_SECTION_KEYS: Record<NoodleSettingsSectionId, reado
   advanced: [
     "enableLorebookContext",
     "includeCharacterSchedules",
+    "useLtmMemories",
+    "ltmMemoriesConfirmed",
+    "ltmMemoryRecall",
     "enableEnhancedTimelineWriting",
     "carryoverMode",
     "carryoverModes",
@@ -87,6 +106,7 @@ const NOODLE_SETTINGS_RESET_EXCLUDED: ReadonlySet<keyof PackageNoodleSettings> =
   "generationConnectionId",
   "imageGenerationConnectionId",
   "imageCaptioningConnectionId",
+  "ltmMemoriesConfirmed",
   "promptPresets",
 ]);
 

@@ -6,6 +6,12 @@
  */
 import { slpApplyModifiers } from "../../base/modifiers/slp-modifier-resolver.js";
 import type { SlpActiveModifierProvider } from "../../../../../shared/src/slp/slp-modifier.types.js";
+import {
+  SLURP_RAPPORT_CUSTOM_DISCOUNT,
+  slurpRapportDoors,
+  slurpRapportDoorTier,
+  type SlurpRapport,
+} from "../messages/slp-rapport.js";
 
 export type SlurpCommissionPricing = {
   commissionBase: number;
@@ -43,6 +49,21 @@ export function slurpCommissionQuote(brief: string, pricing: SlurpCommissionPric
   const min = Math.max(1, Math.min(pricing.commissionMin, pricing.commissionMax));
   const max = Math.max(min, pricing.commissionMax);
   return Math.min(max, Math.max(min, Math.round(pricing.commissionBase * slurpCommissionComplexity(brief))));
+}
+
+/** One fan's pricing: a favourite's customs cost less (rapport ladder, docs/SPICY.md). */
+export function slurpCommissionPricingFor<T extends SlurpCommissionPricing>(
+  pricing: T,
+  rapport: Pick<SlurpRapport, "tier" | "peak">,
+): T {
+  if (!slurpRapportDoors(slurpRapportDoorTier(rapport)).includes("customDiscount")) return pricing;
+  const off = (value: number) => Math.max(1, Math.round(value * (1 - SLURP_RAPPORT_CUSTOM_DISCOUNT)));
+  return {
+    ...pricing,
+    commissionBase: off(pricing.commissionBase),
+    commissionMin: off(pricing.commissionMin),
+    commissionMax: off(pricing.commissionMax),
+  };
 }
 
 /** The range `slurpCommissionQuote` can return, for the DM prompt (#45). */

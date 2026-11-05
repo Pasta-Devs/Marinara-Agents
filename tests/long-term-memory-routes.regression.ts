@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { runRegressionToCompletion } from "./regression-helpers.ts";
 
-export type RouteScenario = "all" | "notes" | "imports" | "drafts" | "scope-identity" | "backup";
+export type RouteScenario = "all" | "imports" | "scope-identity" | "backup";
 
 // Every route the package registers, so a change to the route files cannot add, drop or rename one unnoticed.
 const EXPECTED_ROUTES = [
@@ -20,6 +20,7 @@ const EXPECTED_ROUTES = [
   "DELETE /api/long-term-memory/rejected-suggestions",
   "DELETE /api/long-term-memory/rejected-suggestions/:id",
   "GET /api/long-term-memory/backup/export",
+  "GET /api/long-term-memory/chat-memories/:chatId",
   "GET /api/long-term-memory/debug-log",
   "GET /api/long-term-memory/debug-log/export",
   "GET /api/long-term-memory/drafts",
@@ -36,6 +37,7 @@ const EXPECTED_ROUTES = [
   "GET /api/long-term-memory/rejected-suggestions",
   "GET /api/long-term-memory/scope-targets",
   "GET /api/long-term-memory/settings",
+  "GET /api/long-term-memory/settings/package-readers",
   "GET /api/long-term-memory/status",
   "PATCH /api/long-term-memory/notes/:id",
   "POST /api/long-term-memory/backup/import",
@@ -85,6 +87,10 @@ async function main(routeScenario: RouteScenario) {
   );
   const { activate } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/server-entry.ts");
+  const { LongTermMemoryStorage } =
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/persistence/storage.ts");
+  const { LongTermMemoryDraftStore } =
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/drafts/draft-store.ts");
   const {
     ltmDraftNoteInputSchema,
     ltmDraftPreflightResponseSchema,
@@ -97,7 +103,9 @@ async function main(routeScenario: RouteScenario) {
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/drafts/rejected-suggestions.ts");
   const { extractionFingerprintForLtmSourceNote, sourceHashForLtmSourceNote } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/extraction/source-hash.ts");
-  const { buildTrustedLtmSubjectCatalog, loadTrustedLtmSubjectCatalog, prepareLtmSubjectIdentityContext } =
+  const { buildTrustedLtmSubjectCatalog, loadTrustedLtmSubjectCatalog } =
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/identity/subject-catalog.ts");
+  const { prepareLtmSubjectIdentityContext } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/identity/subject-identity.ts");
   const { compileEvidenceUnitExtraction } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/extraction/evidence-unit-extraction.ts");
@@ -148,6 +156,7 @@ async function main(routeScenario: RouteScenario) {
   const completionOptions: any[] = [];
   const completionMessages: any[] = [];
   const debugOverrides: any[] = [];
+  const loggedErrors: unknown[] = [];
   let failGameRefine = false;
   let emptyModelResponse = false;
   let truncatedModelResponse = false;
@@ -330,7 +339,9 @@ async function main(routeScenario: RouteScenario) {
             debug() {},
             info() {},
             warn() {},
-            error() {},
+            error(error: unknown) {
+              loggedErrors.push(error);
+            },
             debugOverride(enabled: boolean, message: string, ...args: any[]) {
               debugOverrides.push({ enabled, message, args });
             },
@@ -340,6 +351,11 @@ async function main(routeScenario: RouteScenario) {
               modelRequests.push(request);
               if (request.model === "missing-model")
                 throw new Error("Language model connection not found: connection-a");
+              // Any other resolver failure, such as the Engine's corrupt key file, can name an absolute path.
+              if (request.model?.startsWith("corrupt-key-"))
+                throw new Error(
+                  `Encryption key file at /private/marinara/${request.model}/.encryption-key is corrupt.`,
+                );
               return {
                 name: "FixtureModel",
                 connectionId: request.connectionId ?? "connection-a",
@@ -492,22 +508,43 @@ async function main(routeScenario: RouteScenario) {
           },
           persistence: {
             async getChat(chatId: string) {
+              if (chatId === "chat-unreadable") throw new Error("ENOENT: open '/private/marinara/chats.db'");
               return chats.find((chat) => chat.id === chatId) ?? null;
             },
             async listChats() {
               return chats;
             },
+            async listMessages(chatId: string) {
+              return chatId === "chat-a"
+                ? [
+                    {
+                      id: "message-a1",
+                      chatId,
+                      role: "user",
+                      characterId: null,
+                      content: "Mara asks about the observatory gate.",
+                      activeSwipeIndex: 0,
+                      extra: {},
+                      createdAt: "2026-10-27T00:00:00.000Z",
+                    },
+                  ]
+                : [];
+            },
           },
         },
-        registerService(name: string, service: unknown) {
-          if (name === "long-term-memory:storage") storageService = service;
-          return () => undefined;
-        },
+        registerService: () => () => undefined,
         registerPrivilegedRoutes: (routes: any, options: { prefix: string }) =>
           registerCapabilityPrivilegedRoutes(app, installed as any, routes, options),
       },
     });
     await app.ready();
+    // Direct handles on the vault the package activated; other packages get only a filtered note list.
+    const ltmRoot = join(dataDir, "long-term-memory");
+    storageService = {
+      root: ltmRoot,
+      storage: new LongTermMemoryStorage(ltmRoot),
+      drafts: new LongTermMemoryDraftStore(ltmRoot),
+    };
     assert.deepEqual(registeredRoutes.sort(), EXPECTED_ROUTES);
     const headers = { "x-admin-secret": "ltm-route-secret" };
     const routeNoteFixture = {
@@ -531,7 +568,7 @@ async function main(routeScenario: RouteScenario) {
         },
       },
     };
-    if (routeScenario !== "all" && routeScenario !== "notes") {
+    if (routeScenario !== "all") {
       const seededRouteNote = await app.inject({
         method: "POST",
         url: "/api/long-term-memory/notes",
@@ -589,7 +626,7 @@ async function main(routeScenario: RouteScenario) {
         );
       }
     }
-    if (routeScenario === "all" || routeScenario === "notes") {
+    if (routeScenario === "all") {
       assert.equal(
         (
           await app.inject({
@@ -632,6 +669,19 @@ async function main(routeScenario: RouteScenario) {
         },
         { total: 0, sourceNotes: 0, savedMemories: 0, pendingDrafts: 0 },
       );
+      const chatMemoriesFor = async (chatId: string) =>
+        app.inject({ method: "GET", url: `/api/long-term-memory/chat-memories/${chatId}`, headers });
+      assert.deepEqual((await chatMemoriesFor("chat-a")).json(), { chatMemories: null });
+      chats[1].metadata = { longTermMemoryChatMemories: "review" };
+      assert.deepEqual((await chatMemoriesFor("chat-b")).json(), { chatMemories: "review" });
+      chats[1].metadata = JSON.stringify({ longTermMemoryChatMemories: "everything" });
+      assert.deepEqual(
+        (await chatMemoriesFor("chat-b")).json(),
+        { chatMemories: null },
+        "an unknown stored choice reads as the global default",
+      );
+      chats[1].metadata = {};
+      assert.equal((await chatMemoriesFor("missing-chat")).statusCode, 404);
       const missingInjection = await app.inject({
         method: "GET",
         url: "/api/long-term-memory/last-injection/no-recorded-recall",
@@ -1018,6 +1068,7 @@ async function main(routeScenario: RouteScenario) {
       });
       assert.equal(filterOnSettingsSave.statusCode, 200, filterOnSettingsSave.body);
       assert.equal(filterOnSettingsSave.json().rebuild?.status, "complete");
+      const builtRecallIndex = await readFile(rebuildPath, "utf8");
       await rm(rebuildPath, { force: true });
       await mkdir(rebuildPath);
       const settingsSaveWithFailedRebuild = await app.inject({
@@ -1047,6 +1098,20 @@ async function main(routeScenario: RouteScenario) {
       });
       assert.equal(failedSettingsStatus.json().indexes.rebuildState, "failed");
       assert.deepEqual(failedSettingsStatus.json().indexes.errors, [{ index: "recall", code: "index_rebuild_failed" }]);
+      // The raw failure names the vault's file paths.
+      const fixedRebuildFailure = "The latest index rebuild failed; see the server log.";
+      assert.deepEqual(failedSettingsStatus.json().indexes.warnings, [fixedRebuildFailure]);
+      // The integrity check reports a failed rebuild only beside a readable index.
+      await writeFile(rebuildPath, builtRecallIndex);
+      const failedSettingsIntegrity = await app.inject({
+        method: "GET",
+        url: "/api/long-term-memory/integrity",
+        headers,
+      });
+      assert.equal(
+        failedSettingsIntegrity.json().issues.find((issue: any) => issue.code === "index_rebuild_failed")?.message,
+        fixedRebuildFailure,
+      );
       // Restore defaults through the settings route so a later rebuild succeeds without
       // resetting extraction settings mid-scenario (reset rewrites legacy prompt state).
       const restoredSettings = await app.inject({
@@ -1062,6 +1127,48 @@ async function main(routeScenario: RouteScenario) {
       assert.equal(restoredSettings.statusCode, 200, restoredSettings.body);
       assert.equal(restoredSettings.json().rebuild?.status, "complete");
       assert.equal((await readFile(rebuildPath, "utf8")).length > 0, true);
+      {
+        // A host that cannot show hidden messages must not cost a stop-word save its index rebuild (#1914).
+        const { configurePackageRuntime, getPackageRuntime } =
+          await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/package-runtime.ts");
+        const { readLtmHiddenMessages, writeLtmHiddenMessages } =
+          await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/persistence/hidden-messages.ts");
+        const ltmRoot = join(dataDir, "long-term-memory");
+        const originalHost = getPackageRuntime();
+        const owned = { "chat-a": { "note-a": ["message-a1"] } };
+        let savedWithJammedHost: Awaited<ReturnType<typeof app.inject>> | undefined;
+        try {
+          await writeLtmHiddenMessages(owned, ltmRoot);
+          configurePackageRuntime({
+            ...originalHost,
+            persistence: {
+              ...originalHost.persistence,
+              async setMessagesHiddenFromAI() {
+                throw new Error("host cannot show messages");
+              },
+            },
+          });
+          savedWithJammedHost = await app.inject({
+            method: "PUT",
+            url: "/api/long-term-memory/settings",
+            headers,
+            payload: { longTermMemoryStopWords: ["quartz"] },
+          });
+        } finally {
+          configurePackageRuntime(originalHost);
+        }
+        assert.equal(savedWithJammedHost.statusCode, 200, savedWithJammedHost.body);
+        assert.equal(savedWithJammedHost.json().rebuild?.status, "complete", "the index still rebuilds");
+        assert.deepEqual(await readLtmHiddenMessages(ltmRoot), owned, "and the record stays for a later retry");
+        await writeLtmHiddenMessages({}, ltmRoot);
+        const clearedStopWords = await app.inject({
+          method: "PUT",
+          url: "/api/long-term-memory/settings",
+          headers,
+          payload: { longTermMemoryStopWords: [] },
+        });
+        assert.equal(clearedStopWords.json().rebuild?.status, "complete", clearedStopWords.body);
+      }
       const renameSectionCollision = await app.inject({
         method: "POST",
         url: "/api/long-term-memory/notes/world_route_fixture/sections/rename",
@@ -3373,6 +3480,18 @@ async function main(routeScenario: RouteScenario) {
       });
       assert.equal(missingModel.statusCode, 400, missingModel.body);
       assert.equal(missingModel.json().code, "ltm_model_configuration");
+      assert.equal(missingModel.json().error, "Language model connection not found: connection-a");
+      const brokenModel = await app.inject({
+        method: "POST",
+        url: "/api/long-term-memory/notes/source_route_extract/extract",
+        headers,
+        payload: { chatId: "chat-a", model: "corrupt-key-extract" },
+      });
+      assert.equal(brokenModel.statusCode, 500, brokenModel.body);
+      assert.deepEqual(brokenModel.json(), {
+        error: "Failed to extract long-term memory from source note",
+        code: "ltm_unexpected_failure",
+      });
       const extracted = await app.inject({
         method: "POST",
         url: "/api/long-term-memory/notes/source_route_extract/extract",
@@ -3893,13 +4012,50 @@ async function main(routeScenario: RouteScenario) {
         .json()
         .candidates.find((candidate: any) => candidate.duplicateNoteIds.includes("char_nyra_persona_b"));
       assert.ok(personaIdentityCandidate);
-      // Issue #1328: a repair backup only serves its own rollback, so a successful identity repair
-      // keeps the newest three and always keeps its own.
+      const personaIdentityRepair = {
+        scope: { personaId: "persona-fixture" },
+        repairs: [
+          {
+            candidateId: personaIdentityCandidate.id,
+            canonicalNoteId: personaIdentityCandidate.canonicalNoteId,
+            excludedNoteIds: [],
+            sectionChoices: [],
+          },
+        ],
+      };
       const identityBackupsRoot = join(
         dirname(storageService.storage.root),
         "backups",
         "long-term-memory-identity-repairs",
       );
+      // A repair that fails and cannot restore its backup says so without the underlying message, which is logged.
+      const earlierIdentityBackups = new Set(await readdir(identityBackupsRoot));
+      const originalUpdateNote = storagePrototype.updateNote;
+      const repairWriteError = new Error("EIO: write '/private/marinara/char_nyra_persona_a.json'");
+      storagePrototype.updateNote = async () => {
+        for (const name of await readdir(identityBackupsRoot))
+          if (!earlierIdentityBackups.has(name)) await rm(join(identityBackupsRoot, name), { recursive: true });
+        throw repairWriteError;
+      };
+      let unrestoredIdentityApply: any;
+      try {
+        unrestoredIdentityApply = await app.inject({
+          method: "POST",
+          url: "/api/long-term-memory/identity-repair/apply",
+          headers,
+          payload: personaIdentityRepair,
+        });
+      } finally {
+        storagePrototype.updateNote = originalUpdateNote;
+      }
+      assert.equal(unrestoredIdentityApply.statusCode, 500, unrestoredIdentityApply.body);
+      assert.deepEqual(unrestoredIdentityApply.json(), {
+        error: "Identity repair failed and its backup could not be restored. Details are in the server log.",
+        code: "identity_repair_restore_failed",
+      });
+      assert.equal(loggedErrors.includes(repairWriteError), true);
+      // Issue #1328: a repair backup only serves its own rollback, so a successful identity repair
+      // keeps the newest three and always keeps its own.
       const staleBackupNames = ["stale-1", "stale-2", "stale-3", "stale-4"];
       for (const [position, name] of staleBackupNames.entries()) {
         await mkdir(join(identityBackupsRoot, name), { recursive: true });
@@ -3910,17 +4066,7 @@ async function main(routeScenario: RouteScenario) {
         method: "POST",
         url: "/api/long-term-memory/identity-repair/apply",
         headers,
-        payload: {
-          scope: { personaId: "persona-fixture" },
-          repairs: [
-            {
-              candidateId: personaIdentityCandidate.id,
-              canonicalNoteId: personaIdentityCandidate.canonicalNoteId,
-              excludedNoteIds: [],
-              sectionChoices: [],
-            },
-          ],
-        },
+        payload: personaIdentityRepair,
       });
       assert.equal(personaIdentityApply.statusCode, 200, personaIdentityApply.body);
       const keptIdentityBackups = await readdir(identityBackupsRoot);
@@ -3935,6 +4081,127 @@ async function main(routeScenario: RouteScenario) {
         personaId: "persona-fixture",
         personaIds: ["persona-fixture"],
       });
+      // A read failure's message names the absolute path, so the integrity report leaves it in the server log. The
+      // identity-repair, repair and backup-restore responses carry the same report. A parse or schema error describes
+      // the note, so its message stays.
+      const ltmRoot = storageService.storage.root;
+      const unreadableNote = join(ltmRoot, "vault", "characters", "char_nyra_persona_a.json");
+      const unreadableEventLog = join(ltmRoot, "events", "log.jsonl");
+      const unparsableNote = join(ltmRoot, "vault", "world", "world_unparsable.json");
+      const schemaInvalidNote = join(ltmRoot, "vault", "world", "world_schema_invalid.json");
+      await chmod(unreadableNote, 0o000);
+      await chmod(unreadableEventLog, 0o000);
+      await writeFile(unparsableNote, "{");
+      await writeFile(
+        schemaInvalidNote,
+        JSON.stringify({ id: "world_schema_invalid", type: "world", status: "bogus" }),
+      );
+      let unreadableIntegrity: any;
+      try {
+        unreadableIntegrity = await app.inject({ method: "GET", url: "/api/long-term-memory/integrity", headers });
+      } finally {
+        await chmod(unreadableNote, 0o600);
+        await chmod(unreadableEventLog, 0o600);
+        await rm(unparsableNote);
+        await rm(schemaInvalidNote);
+      }
+      assert.equal(unreadableIntegrity.statusCode, 200, unreadableIntegrity.body);
+      const issueAt = (path: string) => unreadableIntegrity.json().issues.find((issue: any) => issue.path === path);
+      assert.deepEqual(issueAt("vault/characters/char_nyra_persona_a.json"), {
+        severity: "error",
+        code: "malformed_note",
+        path: "vault/characters/char_nyra_persona_a.json",
+        message:
+          "Note file vault/characters/char_nyra_persona_a.json could not be read or validated. Details are in the server log.",
+      });
+      assert.deepEqual(issueAt("events/log.jsonl"), {
+        severity: "error",
+        code: "event_log_unreadable",
+        path: "events/log.jsonl",
+        message: "Event log could not be read. Details are in the server log.",
+      });
+      assert.match(issueAt("vault/world/world_unparsable.json").message, /JSON/);
+      assert.match(
+        issueAt("vault/world/world_schema_invalid.json").message,
+        /invalid_enum_value|invalid_value|Required/,
+      );
+      assert.equal(unreadableIntegrity.body.includes(ltmRoot), false, unreadableIntegrity.body);
+      // An unexpected failure is logged, and the client gets the route's fallback, not the internal message.
+      const failedIdentityApply = await app.inject({
+        method: "POST",
+        url: "/api/long-term-memory/identity-repair/apply",
+        headers,
+        payload: {
+          scope: { chatId: "chat-unreadable", chatIds: ["chat-unreadable"] },
+          repairs: [
+            {
+              candidateId: "a".repeat(64),
+              canonicalNoteId: "char_mara_legacy_a",
+              excludedNoteIds: [],
+              sectionChoices: [],
+            },
+          ],
+        },
+      });
+      assert.equal(failedIdentityApply.statusCode, 500, failedIdentityApply.body);
+      assert.deepEqual(failedIdentityApply.json(), {
+        error: "Failed to repair long-term memory identities",
+        code: "ltm_unexpected_failure",
+      });
+      assert.equal(
+        loggedErrors.some((error) => error instanceof Error && error.message.includes("/private/marinara/chats.db")),
+        true,
+      );
+      // A message written for users still reaches the client: fork review takes only thread and world memories.
+      const characterForkPreview = await app.inject({
+        method: "POST",
+        url: "/api/long-term-memory/fork-repair/preview",
+        headers,
+        payload: { noteIds: ["char_mara_legacy_a", "char_mara_legacy_b"] },
+      });
+      assert.equal(characterForkPreview.statusCode, 400, characterForkPreview.body);
+      assert.deepEqual(characterForkPreview.json(), {
+        error: "Only thread and world notes can be reviewed as forks.",
+        code: "ltm_fork_selection_invalid",
+      });
+      const { rebuildAfterMutation, routeError } =
+        await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/routes/shared.ts");
+      const internalError = new Error("ENOENT: open '/private/path'");
+      assert.deepEqual(routeError(internalError, "Fallback text"), {
+        statusCode: 500,
+        body: { error: "Fallback text", code: "ltm_unexpected_failure" },
+      });
+      assert.equal(loggedErrors.includes(internalError), true);
+      // A library error that carries a code but no status is not a service error either.
+      const socketError = Object.assign(new Error("connect ECONNREFUSED /private/socket"), {
+        statusCode: undefined,
+        code: "ECONNREFUSED",
+      });
+      assert.deepEqual(routeError(socketError, "Fallback text"), {
+        statusCode: 500,
+        body: { error: "Fallback text", code: "ltm_unexpected_failure" },
+      });
+      assert.equal(loggedErrors.includes(socketError), true);
+      // Nor is one with a status and a code, such as Fastify's.
+      const fastifyError = Object.assign(new Error("Request body is too large: /private/upload"), {
+        statusCode: 413,
+        code: "FST_ERR_CTP_BODY_TOO_LARGE",
+      });
+      assert.deepEqual(routeError(fastifyError, "Fallback text"), {
+        statusCode: 500,
+        body: { error: "Fallback text", code: "ltm_unexpected_failure" },
+      });
+      assert.equal(loggedErrors.includes(fastifyError), true);
+      // A cancelled request has no reader and is not a failure, so it is not logged.
+      const cancelled = Object.assign(new Error("Long-term memory import was cancelled."), { name: "AbortError" });
+      assert.equal(routeError(cancelled, "Fallback text").body.error, "Fallback text");
+      assert.equal(loggedErrors.includes(cancelled), false);
+      const notADirectory = join(dataDir, "rebuild-root-file");
+      await writeFile(notADirectory, "");
+      assert.deepEqual(await rebuildAfterMutation(notADirectory), {
+        status: "deferred",
+        error: "Index rebuild failed",
+      });
     }
     if (routeScenario === "all" || routeScenario === "imports") {
       const preview = await app.inject({
@@ -3944,6 +4211,18 @@ async function main(routeScenario: RouteScenario) {
         payload: { source: "chats", limit: 10 },
       });
       assert.equal(preview.statusCode, 200, preview.body);
+      const messagesPreview = await app.inject({
+        method: "POST",
+        url: "/api/long-term-memory/import/preview",
+        headers,
+        payload: { source: "messages", limit: 10, scope: { chatId: "chat-a" } },
+      });
+      assert.equal(messagesPreview.statusCode, 200, messagesPreview.body);
+      assert.deepEqual(
+        messagesPreview.json().samples.map((sample: any) => sample.sourceId),
+        ["chat-a:messages:message-a1"],
+        "the messages source previews a chat's own messages through the route",
+      );
       assert.equal(
         preview
           .json()
@@ -4128,6 +4407,29 @@ async function main(routeScenario: RouteScenario) {
       });
       assert.equal(failedProvider.statusCode, 400, failedProvider.body);
       assert.equal(failedProvider.json().code, "ltm_model_configuration");
+      assert.equal(failedProvider.json().error, "Language model connection not found: connection-a");
+      const brokenProvider = await app.inject({
+        method: "POST",
+        url: "/api/long-term-memory/import/source-notes",
+        headers,
+        payload: {
+          source: "chats",
+          sourceIds: ["chat-a:summary-provider-fail"],
+          model: "corrupt-key-import",
+          destinationScope: { chatId: "chat-a", chatIds: ["chat-a"] },
+        },
+      });
+      assert.equal(brokenProvider.statusCode, 500, brokenProvider.body);
+      assert.deepEqual(brokenProvider.json(), {
+        error: "Failed to import long-term memory sources",
+        code: "ltm_unexpected_failure",
+      });
+      assert.equal(
+        loggedErrors.some(
+          (error) => error instanceof Error && error.message.includes("/private/marinara/corrupt-key-import/"),
+        ),
+        true,
+      );
       assert.equal(
         (await storageService.storage.listNotes({ type: "source" })).some(
           (note: any) => note.provenance?.entryId === "summary-provider-fail",
@@ -4176,7 +4478,15 @@ async function main(routeScenario: RouteScenario) {
         .samples.find((sample: any) => sample.sourceId === "chat-a:summary-a");
       assert.equal(currentChatSample.status, "imported");
       assert.ok(currentChatPreview.json().totals.imported > 0);
-      assert.equal(currentChatSample.freshness, "extraction_incomplete");
+      // On its own the import keeps all three units and is current. In the full run an earlier step makes Mara
+      // ambiguous, so the character unit is left out and the source stays incomplete.
+      assert.equal(currentChatSample.freshness, routeScenario === "imports" ? "current" : "extraction_incomplete");
+      if (routeScenario !== "imports") {
+        assert.deepEqual(
+          importedChat.json().imported[0]?.outcome?.droppedCandidates.map((candidate: any) => candidate.validatorCode),
+          ["ambiguous_subject_identity"],
+        );
+      }
       assert.equal(currentChatSample.existingNoteId, importedChatNote.id);
       const destinationChatPreview = await app.inject({
         method: "POST",
@@ -4322,6 +4632,35 @@ async function main(routeScenario: RouteScenario) {
       assert.deepEqual(refreshedNote.keywords, ["preserve-me"]);
       assert.deepEqual(refreshedNote.links, [{ target: "world_route_fixture", relation: "evidenced_by" }]);
       assert.equal(refreshedNote.sections.notes.text, "User-owned section.");
+      // A source that cannot be written is listed with a message that points to the server log, not the cause.
+      const storagePrototype = Object.getPrototypeOf(storageService.storage);
+      const originalUpdateNote = storagePrototype.updateNote;
+      const sourceWriteError = new Error("EACCES: open '/private/marinara/source_chat_a.json'");
+      storagePrototype.updateNote = async () => {
+        throw sourceWriteError;
+      };
+      let failedSourceWrite: any;
+      try {
+        failedSourceWrite = await app.inject({
+          method: "POST",
+          url: "/api/long-term-memory/import/source-notes",
+          headers,
+          payload: {
+            source: "chats",
+            sourceIds: ["chat-a:summary-a"],
+            extract: false,
+            destinationScope: { chatIds: ["chat-a", "chat-b"] },
+          },
+        });
+      } finally {
+        storagePrototype.updateNote = originalUpdateNote;
+      }
+      assert.equal(failedSourceWrite.statusCode, 200, failedSourceWrite.body);
+      assert.deepEqual(failedSourceWrite.json().writeFailures[0].error, {
+        code: "source_write_failed",
+        message: "Failed to write imported source note. Details are in the server log.",
+      });
+      assert.equal(loggedErrors.includes(sourceWriteError), true);
       chats[0].metadata.summaryEntries.push({
         id: "summary-empty-response",
         content: "An empty provider response must remain retryable.",
@@ -4458,7 +4797,10 @@ async function main(routeScenario: RouteScenario) {
           warn(...args: any[]) {
             refineWarnings.push(args.map((value) => (value instanceof Error ? value.message : value)));
           },
-          error() {},
+          // The full suite runs the drafts scenario under this runtime, and it checks a logged error.
+          error(error: unknown) {
+            loggedErrors.push(error);
+          },
           debugOverride() {},
         },
         isDebugAgentsEnabled() {
@@ -4494,19 +4836,14 @@ async function main(routeScenario: RouteScenario) {
                     );
                   });
                 }
+                // Match the summary text: the request no longer carries summary entry ids.
                 const isCrossScope = messages.some(
                   (message: any) =>
                     typeof message.content === "string" &&
-                    (message.content.includes("cross-extract") ||
-                      message.content.includes("persona-write-scope") ||
-                      message.content.includes("chat-only-default") ||
+                    (message.content.includes("inherit the chat persona") ||
+                      message.content.includes("chat-only availability") ||
                       message.content.includes("destination")),
                 );
-                let requiredEvidence = ["source"];
-                try {
-                  const parsedPayload = JSON.parse(messages.at(-1).content);
-                  requiredEvidence = parsedPayload.requiredEvidence ?? [`source_note:${parsedPayload.sourceNote?.id}`];
-                } catch {}
                 return {
                   content: JSON.stringify({
                     summary: "Extracted Moon Vault discovery.",
@@ -4523,7 +4860,6 @@ async function main(routeScenario: RouteScenario) {
                             confidence: 0.9,
                             salience: 0.8,
                             status: "active",
-                            evidence: requiredEvidence,
                             links: [],
                           },
                         ]
@@ -4914,6 +5250,11 @@ async function main(routeScenario: RouteScenario) {
       assert.equal(fallbackGame.statusCode, 200, fallbackGame.body);
       assert.equal(fallbackGame.json().imported[0].extractionStatus, "failed");
       assert.equal(fallbackGame.json().imported[0].retryable, true);
+      // The provider's text stays out of the source's result, which points to the server log instead.
+      assert.deepEqual(fallbackGame.json().imported[0].error, {
+        code: "extract_failed",
+        message: "Failed to extract imported source. Details are in the server log.",
+      });
       failGameRefine = false;
       await app.inject({
         method: "PUT",
@@ -5033,7 +5374,7 @@ async function main(routeScenario: RouteScenario) {
         true,
       );
     }
-    if (routeScenario === "all" || routeScenario === "drafts") {
+    if (routeScenario === "all") {
       const source = await app.inject({
         method: "POST",
         url: "/api/long-term-memory/notes",
@@ -5375,6 +5716,36 @@ async function main(routeScenario: RouteScenario) {
       assert.deepEqual(blockedPreflight.json().blockedMutationIds, [blockedMutationId]);
       assert.equal(blockedPreflight.json().rows[0].status, "blocked");
       assert.match(blockedPreflight.json().rows[0].blockers[0].message, /link target not found/u);
+      // An unexpected failure inside the check blocks the row without its message. Preflight's first read, before
+      // the check, passes, so the failure comes from the check's own reads.
+      const storagePrototype = Object.getPrototypeOf(storageService.storage);
+      const originalGetNotesByIds = storagePrototype.getNotesByIds;
+      const vaultReadError = new Error("EIO: read '/private/marinara/world_missing_target.json'");
+      let preflightReads = 0;
+      storagePrototype.getNotesByIds = async function (ids: string[]) {
+        preflightReads += 1;
+        if (preflightReads > 1 && ids.includes("world_missing_target")) throw vaultReadError;
+        return originalGetNotesByIds.call(this, ids);
+      };
+      let unreadablePreflight: any;
+      try {
+        unreadablePreflight = await app.inject({
+          method: "POST",
+          url: `/api/long-term-memory/drafts/${blockedDraft.id}/preflight`,
+          headers,
+          payload: { mutationIds: [blockedMutationId] },
+        });
+      } finally {
+        storagePrototype.getNotesByIds = originalGetNotesByIds;
+      }
+      assert.equal(unreadablePreflight.statusCode, 200, unreadablePreflight.body);
+      assert.deepEqual(unreadablePreflight.json().rows[0].blockers, [
+        {
+          code: "preflight_blocked",
+          message: "Long-term memory preflight failed. Details are in the server log.",
+        },
+      ]);
+      assert.equal(loggedErrors.includes(vaultReadError), true);
       const emptyDraft = await storageService.drafts.createDraft({
         source: { sourceNoteId: "source_route_blocked", chatId: "chat-a" },
         scope: { chatId: "chat-a", chatIds: ["chat-a"] },
@@ -5695,6 +6066,15 @@ async function main(routeScenario: RouteScenario) {
       assert.equal(dismissed.statusCode, 200, dismissed.body);
       assert.deepEqual(dismissed.json(), { deleted: true, id: groundingDraft.id });
       assert.equal(await storageService.drafts.getDraft(groundingDraft.id), null);
+      // A draft file that no longer parses can still be cleared: the source-note lookup is only for the hide step.
+      const unreadableDraftId = "10000000-0000-4000-8000-0000000000aa";
+      await writeFile(join(storageService.root, "drafts", `${unreadableDraftId}.json`), "{not-json", "utf8");
+      const unreadableDismissed = await app.inject({
+        method: "DELETE",
+        url: `/api/long-term-memory/drafts/${unreadableDraftId}`,
+        headers,
+      });
+      assert.equal(unreadableDismissed.statusCode, 200, unreadableDismissed.body);
       const reviewAfterDismissal = await app.inject({
         method: "GET",
         url: "/api/long-term-memory/drafts/review?includeInvalidated=true",
@@ -5725,7 +6105,9 @@ async function main(routeScenario: RouteScenario) {
       });
       assert.equal(backup.statusCode, 200, backup.body);
       assert.equal(backup.json().format, "marinara-long-term-memory");
-      const expectedRejectedCount = routeScenario === "backup" ? 1 : 11;
+      // Evidence is server-owned: the fixture model's fixed source_note evidence no longer rejects units from
+      // other sources, so only format, identity and link rejections remain.
+      const expectedRejectedCount = routeScenario === "backup" ? 1 : 4;
       assert.equal(backup.json().rejectedSuggestions.length, expectedRejectedCount);
       const backupPreview = await app.inject({
         method: "POST",

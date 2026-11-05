@@ -93,7 +93,7 @@ async function main() {
   const shell = read("client/src/slp/app/backstage/SlpBackstageShell.tsx");
   assert.match(
     shell,
-    /section === "overview"\s*\?\s*t\("ui\.slurp\.settings\.autoSave"\)\s*:\s*t\("ui\.slurp\.settings\.stagedSave"/u,
+    /section === "overview" \|\|\s*target === "basic" \|\|\s*slpTargetSwitchedOff\(target, settings\)\s*\?\s*t\("ui\.slurp\.settings\.autoSave"\)\s*:\s*t\("ui\.slurp\.settings\.stagedSave"/u,
   );
   const controls = read("client/src/slp/features/backstage/SlpBackstageControls.tsx");
   assert.match(controls, /export function useSlpBackstageLeaveGuard/u);

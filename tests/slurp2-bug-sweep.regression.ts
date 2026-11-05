@@ -45,7 +45,7 @@ for (const brief of ["a quick sketch", "a detailed full-body scene of the two of
   assert.ok(quote >= range.from && quote <= range.upTo, "every quote is inside the range the DM names");
 }
 const dm = server("features/messages/slp-message-generation-service.ts");
-assert.match(dm, /commissionPrices: supportDesk\s*\? undefined/u);
+assert.match(dm, /commissionPrices: supportThread\s*\? undefined/u);
 assert.match(dm, /\.\.\.\(input\.commissionPrices \? \{ commissionPrices: input\.commissionPrices \} : \{\}\)/u);
 
 // ── Cancel ends a subscription to a removed Creator at once (#28) ──
@@ -131,6 +131,20 @@ assert.match(
   server("data/creators/slp-creators-storage-3.ts"),
   /sourceStatus: slurpIsCouplePage\(account\)\s*\? \{ state: "current" as const \}/u,
 );
+
+// ── Professor Mari's Engine-updated card never asks for attention (0.4.16, player report) ──
+{
+  const storage = server("data/creators/slp-creators-storage-3.ts");
+  assert.match(
+    storage,
+    /engineOwned = publicAccount\?\.kind === "character" && publicAccount\.entityId === PROFESSOR_MARI_ID;/u,
+  );
+  assert.match(
+    storage,
+    /const baseline = engineOwned \? undefined : account\.settings\.profile\.noodlerSourceSnapshot;/u,
+  );
+  assert.match(storage, /needsReview: appearance\.needsReview && !engineOwned,/u);
+}
 
 // ── A model that is off gets a clear sign-up error (#74) ──
 const refused = new TypeError("fetch failed", {

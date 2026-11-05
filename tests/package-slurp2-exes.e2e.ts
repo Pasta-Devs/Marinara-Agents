@@ -40,7 +40,9 @@ test("breakup memory choices and existing exes work in the installed package", a
   expect(personaResponse.ok()).toBe(true);
   const persona = (await personaResponse.json()) as { id: string };
   await expect.poll(async () => (await page.request.get("/api/slurp2/settings")).ok(), { timeout: 30_000 }).toBe(true);
-  const paused = await page.request.patch("/api/slurp2/settings", { data: { onboarding: "completed", paused: true } });
+  const paused = await page.request.patch("/api/slurp2/settings", {
+    data: { onboarding: "completed", paused: true, extStorylines: true },
+  });
   expect(paused.ok()).toBe(true);
   const makePage = async (id: string, displayName: string, gender: string) => {
     const response = await page.request.post(`/api/slurp2/accounts/${id}/noodler`, {

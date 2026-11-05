@@ -5,11 +5,7 @@
     "format": "png",
     "width": 512,
     "height": 512,
-    "displaySizes": [
-      44,
-      80,
-      96
-    ]
+    "displaySizes": [44, 80, 96]
   },
   "referenceRoles": [
     "chibi-professor-mari.png: compact chibi proportions, mascot silhouette, thick outline language",
@@ -30,6 +26,12 @@
       "name": "Background",
       "concept": "Mari relaxes contentedly against a spectacular layered fantasy landscape with mountains, flowers, a lake, and a glowing sunset, visibly enjoying the scenery.",
       "palette": "sunset coral, sky blue, leaf green, warm gold"
+    },
+    {
+      "id": "blackjack",
+      "name": "Blackjack",
+      "concept": "Mari winks behind a curved blackjack table, holding up an Ace of Spades and a King of Hearts for a natural twenty-one, with chip stacks and one face-down card on the felt.",
+      "palette": "emerald felt, casino gold, heart red, navy"
     },
     {
       "id": "card-evolution-auditor",
@@ -206,6 +208,12 @@
       "palette": "coral red, paper white, steel blue, sunny yellow"
     },
     {
+      "id": "story-writer",
+      "name": "Story Writer",
+      "concept": "Mari writes with a feather quill into a large open antique book by candlelight while ink sparkles and loose pages curl around her.",
+      "palette": "parchment cream, leather brown, ink navy, Marinara orange, warm gold"
+    },
+    {
       "id": "storyboard",
       "name": "Storyboard",
       "concept": "Mari leans over a storyboard board arranging three visual keyframes with a pencil while a colorful film strip curves around the sequence.",
@@ -252,6 +260,18 @@
       "name": "3D Avatars",
       "concept": "Mari waves at a glowing holographic figurine of herself spinning on a small turntable pedestal, drawn flat in the same cel-shaded style.",
       "palette": "cyan, violet, navy, soft white"
+    },
+    {
+      "id": "saucelings",
+      "name": "Saucelings",
+      "concept": "Mari cuddles a happy little rigatoni sauceling up by her cheek in a cosy lamplit nook, with its cracked eggshell in a woven nest and a small bowl of pasta below.",
+      "palette": "Marinara tomato red, warm orange, pasta gold, cream, basil green, deep navy"
+    },
+    {
+      "id": "otome-forge",
+      "name": "Otome Hearth",
+      "concept": "At the maintainer's request, Dottore stands beside Mari as her love interest: chibi Dottore, at Mari's chibi scale, with swept-back pale icy blue hair, his black crested mask, black gloves and a white laboratory coat, smiles as he offers a blushing, heart-eyed Professor Mari a single red rose, his other hand over his heart, while she clasps her hands under her chin; bold red hearts float above them against a soft heart-shaped glow.",
+      "palette": "rose pink, lavender, heart red, icy light blue, laboratory white, deep navy, warm gold"
     }
   ]
 }

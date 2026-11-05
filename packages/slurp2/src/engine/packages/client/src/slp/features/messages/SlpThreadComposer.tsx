@@ -1,4 +1,5 @@
 import { requestHintGuidance } from "./SlpMessages";
+import { SlpDeskQuickReplies } from "./SlpDeskQuickReplies";
 import { SlpTextAssist } from "../assist/slp-assist-contract";
 import { slurpAssistChatContext } from "./slp-assist-chat-context";
 import { ArrowDown, ChevronLeft, Plus, Send, X } from "lucide-react";
@@ -12,6 +13,7 @@ import { SlpButton, SlpChip, SlpPrimaryButton } from "../../modules/chrome/SlpBu
 import { SlpSheet, SlpSheetGroup } from "../../modules/chrome/SlpSheet";
 import { SlurpConnectionSwitcher } from "./SlpThreadChrome";
 import { SLP_THREAD_COLUMN_CLASS } from "./slp-thread-view-model";
+import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 import type { SlurpThreadViewModel } from "./slp-thread-actions";
 import {
   SlpDeskComposerChip,
@@ -73,15 +75,18 @@ export function SlpThreadComposer({ model }: { model: SlurpThreadViewModel }) {
     typing,
     updateSlurpSettings,
   } = model;
+  // Support desk off: Support still talks, sends pictures and asks for a photo, but plays no desk game.
+  const desk = asSupport && (!settingsQuery.data || slpExtensionOn(settingsQuery.data, "supportDesk"));
   // These tools act on a conversation that exists. In a new chat they opened an empty panel.
   const availableTabs = toolTabs.filter(
     (tab) =>
-      thread ||
-      (tab.id !== "photo" &&
-        tab.id !== "generated-photo" &&
-        tab.id !== "request" &&
-        tab.id !== "creator" &&
-        tab.id !== "show-post"),
+      (desk || (tab.id !== "offer" && tab.id !== "move" && tab.id !== "note")) &&
+      (thread ||
+        (tab.id !== "photo" &&
+          tab.id !== "generated-photo" &&
+          tab.id !== "request" &&
+          tab.id !== "creator" &&
+          tab.id !== "show-post")),
   );
   const activeTab = availableTabs.find((tab) => tab.id === toolTab) ?? null;
   // A paid first message says its price where it is spent: on the Send button. The server charges it
@@ -160,7 +165,8 @@ export function SlpThreadComposer({ model }: { model: SlurpThreadViewModel }) {
           </div>
         )}
         <div className={cn(SLP_THREAD_COLUMN_CLASS, "flex flex-col gap-2")}>
-          {asSupport && <SlpDeskComposerChip model={model} />}
+          {desk && <SlpDeskQuickReplies model={model} />}
+          {desk && <SlpDeskComposerChip model={model} />}
           {asSupport && <SlpPhotoDemandChip model={model} />}
           {composerTipAmount > 0 && !asSupport && (
             <div className="slurp-bubble-in flex h-9 items-center gap-2 self-start rounded-full bg-[var(--slurp-tint)] ps-3 pe-1 text-xs font-semibold text-[var(--slurp-text)]">
@@ -541,7 +547,7 @@ export function SlpThreadComposer({ model }: { model: SlurpThreadViewModel }) {
 
         {toolTab === "show-post" && asSupport && thread && <SlpSupportPostPicker model={model} onDone={closeTools} />}
         {toolTab === "demand" && asSupport && <SlpPhotoDemandTool model={model} onDone={closeTools} />}
-        {(toolTab === "offer" || toolTab === "move" || toolTab === "note") && asSupport && (
+        {(toolTab === "offer" || toolTab === "move" || toolTab === "note") && desk && (
           <SlpDeskToolPanel model={model} onPicked={closeTools} />
         )}
 
@@ -560,7 +566,7 @@ export function SlpThreadComposer({ model }: { model: SlurpThreadViewModel }) {
           />
         )}
       </SlpSheet>
-      {asSupport && <SlpDeskPlayHost model={model} />}
+      {desk && <SlpDeskPlayHost model={model} />}
     </>
   );
 }

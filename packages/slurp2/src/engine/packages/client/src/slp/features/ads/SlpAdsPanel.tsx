@@ -3,6 +3,7 @@ import { RotateCcw } from "lucide-react";
 import { BackstagePageHeader } from "../../modules/settings/SlpSettingsKit";
 
 import { Field, HowItWorks, SettingsGroup, Toggle } from "../../modules/settings/SlpSettingsControls";
+import { SlpExtensionSwitch } from "../../modules/settings/SlpExtensionSwitch";
 import { ChoiceSetting } from "../../modules/settings/SlpSettingsInputs";
 
 import { api } from "../../../lib/api-client";
@@ -15,6 +16,7 @@ import { SlpButton } from "../../modules/chrome/SlpButton";
 
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
+import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
 /** Ads: the inline ad settings, the ad pool and the ad editors. */
 export function SlpAdsPanel(page: SlpBackstagePageProps) {
@@ -35,13 +37,35 @@ export function SlpAdsPanel(page: SlpBackstagePageProps) {
     adsWorldDraft,
     setAdsWorldDraft,
     update,
+    updateNow,
     updatePatch,
     connectionsQuery,
   } = page;
 
+  // The extension's own switch heads the page; while it is off the page is only that switch.
+  const extensionSwitch = (
+    <SlpExtensionSwitch
+      settingKey="extAds"
+      label={t("ui.slurp.settings.ext.ads.label", { defaultValue: "Brands & ads" })}
+      detail={t("ui.slurp.settings.ext.ads.detail", {
+        defaultValue: "Inline ads, brand deals, ad pictures and brand packs.",
+      })}
+      on={slpExtensionOn(settings, "ads")}
+      onChange={(value) => void updateNow("extAds", value)}
+    />
+  );
+  if (!slpExtensionOn(settings, "ads"))
+    return (
+      <div className="space-y-5">
+        <BackstagePageHeader detail={t("ui.slurp.settings.ads.detail")} />
+        {extensionSwitch}
+      </div>
+    );
+
   return (
     <div className="space-y-5">
       <BackstagePageHeader detail={t("ui.slurp.settings.ads.detail")} />
+      {extensionSwitch}
       <HowItWorks label={t("ui.slurp.settings.howItWorks")}>
         <p>{t("ui.slurp.settings.ads.explainer")}</p>
         <p>{t("ui.slurp.settings.ads.explainerPool")}</p>

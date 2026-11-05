@@ -20,7 +20,7 @@ assert.match(seam, /function garnishTagsFromPersona/u);
 
 const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
 assert.match(routes, /\/slurp\/viewer\/ads/u);
-assert.match(routes, /inlineAdsEnabled/u);
+assert.match(routes, /if \(!slpInlineAdsOn\(settings\)\) return \{ items: \[\] \};/u);
 
 const card = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpInlineAd.tsx");
 assert.match(card, /labels\.sponsored/u);
@@ -29,12 +29,8 @@ assert.match(card, /onAction/u, "inline promotion CTA must be wired");
 assert.match(card, /ExternalLink/u, "inline promotion CTA must communicate an action");
 
 const home = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
-assert.match(
-  home,
-  /slurpSettingsQuery\.data\?\.inlineAdsEnabled !== false/u,
-  "Home must honor the inline promotion setting",
-);
-assert.match(home, /ui\.slurp\.ads\.opened/u, "the inline promotion CTA must provide user feedback");
+assert.match(home, /slpInlineAdsOn\(slurpSettingsQuery\.data\)/u, "Home must honor the inline promotion setting");
+assert.match(card, /<SlurpAdSheet /u, "the inline promotion CTA must provide user feedback");
 
 const settings = slurp2BackstageSource();
 assert.match(settings, /ui\.slurp\.settings\.inlinePromotions/u);

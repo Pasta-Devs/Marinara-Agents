@@ -2,6 +2,7 @@ import type { SlpBackstagePanelEntry } from "../../features/backstage/slp-backst
 import { SlpAdsPanel } from "../../features/ads/SlpAdsPanel";
 import { SlpAudiencePanel } from "../../features/audience/SlpAudiencePanel";
 import { SlpBackstageOverviewPanel } from "../../features/backstage/SlpBackstageOverviewPanel";
+import { SlpBasicPanel } from "../../features/backstage/SlpBasicPanel";
 import { SlpCreatorImprovePanel } from "../../features/creators/SlpCreatorImprovePanel";
 import { SlpCreatorsPanel } from "../../features/creators/SlpCreatorsPanel";
 import { SlpDiscoveryPanel } from "../../features/discovery/SlpDiscoveryPanel";
@@ -10,6 +11,7 @@ import { SlpPublishingPanel } from "../../features/feed/SlpPublishingPanel";
 import { SlpAutopurgePanel } from "../../features/maintenance/SlpAutopurgePanel";
 import { SlpImagesPanel } from "../../features/media/SlpImagesPanel";
 import { SlpConnectionsPanel } from "../../features/settings/SlpConnectionsPanel";
+import { SlpEngineLinkPanel } from "../../features/settings/SlpEngineLinkPanel";
 import { SlpMessagingPanel } from "../../features/messages/SlpMessagingPanel";
 import { SlpProjectsPanel } from "../../features/projects/SlpProjectsPanel";
 import { SlpStorylinesPanel } from "../../features/projects/SlpStorylinesPanel";
@@ -19,6 +21,8 @@ import { SlpWorldEventsPanel } from "../../features/world/SlpWorldEventsPanel";
 import { SlpPacksPanel } from "../../features/world/SlpPacksPanel";
 import { SlpCalendarPanel } from "../../features/world/SlpCalendarPanel";
 import { SlpStirSettingsPanel } from "../../features/stir/SlpStirSettingsPanel";
+import { SlpLiveSettingsPanel } from "../../features/live/SlpLiveSettingsPanel";
+import { SlpDramaLovePanel } from "../../features/stir/SlpDramaLovePanel";
 import type { SlpBackstageTarget } from "../../base/navigation/slp-backstage-target";
 
 /**
@@ -31,12 +35,14 @@ import type { SlpBackstageTarget } from "../../base/navigation/slp-backstage-tar
  */
 export const SLP_BACKSTAGE_PANELS: readonly SlpBackstagePanelEntry[] = [
   { target: "overview", Component: SlpBackstageOverviewPanel },
+  { target: "basic", Component: SlpBasicPanel },
   { target: "creators", Component: SlpCreatorsPanel },
   { target: "improve", Component: SlpCreatorImprovePanel },
   { target: "tags", Component: SlpDiscoveryPanel },
   { target: "events", Component: SlpWorldEventsPanel },
   { target: "storylines", Component: SlpStorylinesPanel },
   { target: "packs", Component: SlpPacksPanel },
+  { target: "drama", Component: SlpDramaLovePanel },
   { target: "calendar", Component: SlpCalendarPanel },
   { target: "arcs", Component: SlpProjectsPanel },
   { target: "messaging", Component: SlpMessagingPanel },
@@ -46,10 +52,12 @@ export const SLP_BACKSTAGE_PANELS: readonly SlpBackstagePanelEntry[] = [
   { target: "general", Component: SlpPublishingPanel },
   { target: "images", Component: SlpImagesPanel },
   { target: "connections", Component: SlpConnectionsPanel },
+  { target: "engine", Component: SlpEngineLinkPanel },
   { target: "spice", Component: SlpSpicePanel },
   { target: "prompts", Component: SlpPromptsPanel },
   { target: "autopurge", Component: SlpAutopurgePanel },
   { target: "stir", Component: SlpStirSettingsPanel },
+  { target: "live", Component: SlpLiveSettingsPanel },
 ];
 
 const byTarget = new Map(SLP_BACKSTAGE_PANELS.map((entry) => [entry.target, entry]));

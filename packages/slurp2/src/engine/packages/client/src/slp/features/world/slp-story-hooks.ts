@@ -29,6 +29,18 @@ export type SlpContentPackSummary = {
   arcs: string[];
   extras: string[];
 };
+/** An imported pack in the Packs list (docs/STORYLINES.md, PR 5b); `contentPacks[id]` switches it. */
+export type SlpImportedPackSummary = {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  author?: string;
+  topics: string[];
+  occasionCount: number;
+  importedAt: string;
+};
+
 export type SlpPackPreviewEntry = {
   kind: "arc" | "event";
   contentId: string;
@@ -63,9 +75,11 @@ export function useSlpBundledStoryPacks() {
   return useQuery({
     queryKey: [...storyKey, "packs"],
     queryFn: () =>
-      api.get<{ packs: SlpBundledPackSummary[]; contentPacks?: SlpContentPackSummary[] }>(
-        "/slurp2/story-packs/bundled",
-      ),
+      api.get<{
+        packs: SlpBundledPackSummary[];
+        contentPacks?: SlpContentPackSummary[];
+        imported?: SlpImportedPackSummary[];
+      }>("/slurp2/story-packs/bundled"),
     staleTime: Infinity,
   });
 }
@@ -112,6 +126,19 @@ export function useApplyStoryPack() {
       ]),
   });
 }
+/** Removes an imported pack and everything that came from it. */
+export function useRemoveStoryPack() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete<void>(`/slurp2/story-packs/${encodeURIComponent(id)}`),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: slpKeys.settings() }),
+        queryClient.invalidateQueries({ queryKey: storyKey }),
+      ]),
+  });
+}
+
 /** Start a manual occasion now. Pack occasions are mostly manual, and nothing could start them. */
 export function useStartStoryEvent() {
   const queryClient = useQueryClient();

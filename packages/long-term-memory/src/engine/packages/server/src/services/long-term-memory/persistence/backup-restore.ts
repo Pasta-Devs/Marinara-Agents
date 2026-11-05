@@ -13,7 +13,7 @@ import {
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { DEFAULT_LTM_EXTRACTION_CONFIG } from "../extraction/extraction-config.js";
 import { DEFAULT_LTM_RETENTION_CONFIG } from "../default-config.js";
-import { writeJsonAtomic } from "./atomic-json.js";
+import { readJsonFile, writeJsonAtomic } from "./atomic-json.js";
 import {
   createLtmBackupRestoreJournal,
   ltmBackupRestoreWorkspacePath,
@@ -24,6 +24,7 @@ import {
 } from "./restore-recovery.js";
 import { getLongTermMemoryDirectories, getLongTermMemoryRoot, notePathForId, safeJoin } from "./paths.js";
 import { getLtmGlobalSettings, ltmSettingsPath, readLtmSettingsFile } from "../settings.js";
+import { showLtmHiddenMessages } from "./hidden-messages.js";
 import { ltmExtractionConfigPath } from "../extraction/extraction-config.js";
 import { longTermMemoryRetentionConfigPath, removeLtmRepairBackups } from "./retention.js";
 import { LongTermMemoryDraftStore } from "../drafts/draft-store.js";
@@ -32,10 +33,11 @@ import { rebuildLongTermMemoryIndexes } from "../recall/rebuild.js";
 import { checkLongTermMemoryIntegrity } from "../maintenance/maintenance.js";
 import { withLtmVaultLock } from "./vault-lock.js";
 import { readAllRejectedSuggestions, writeRejectedSuggestions } from "../drafts/rejected-suggestions.js";
+import { LtmServiceError } from "../service-error.js";
 
 const backupFormat = "marinara-long-term-memory" as const;
 
-async function readConfig<T>(path: string, schema: z.ZodType<T, z.ZodTypeDef, unknown>, fallback: unknown) {
+async function readConfig<T>(path: string, schema: z.ZodType<T, any, any>, fallback: unknown) {
   // A field written by a newer version is left out of the backup instead of failing the export.
   return (await readLtmSettingsFile(path, schema, fallback)).settings;
 }
@@ -96,7 +98,9 @@ async function pathExists(path: string) {
     .catch(() => false);
 }
 
-async function writeBackupRoot(root: string, backup: LtmBackup) {
+type LtmSettingsFiles = Partial<Record<keyof LtmBackup["settings"], unknown>>;
+
+async function writeBackupRoot(root: string, backup: LtmBackup, stored: LtmSettingsFiles) {
   const storage = new LongTermMemoryStorage(root);
   await storage.initializeLtmStore();
   const dirs = getLongTermMemoryDirectories(root);
@@ -111,10 +115,10 @@ async function writeBackupRoot(root: string, backup: LtmBackup) {
     await writeJsonAtomic(safeJoin(dirs.drafts, `${draft.id}.json`), ltmExtractionDraftSchema.parse(draft));
   await writeRejectedSuggestions(backup.rejectedSuggestions, root);
   await Promise.all([
-    writeJsonAtomic(ltmSettingsPath(root), backup.settings.global),
-    writeJsonAtomic(ltmExtractionConfigPath(root), backup.settings.extraction),
-    writeJsonAtomic(longTermMemoryRetentionConfigPath(root), backup.settings.retention),
-    writeJsonAtomic(safeJoin(dirs.config, "agent-settings.json"), backup.settings.agent),
+    writeJsonAtomic(ltmSettingsPath(root), stored.global ?? backup.settings.global),
+    writeJsonAtomic(ltmExtractionConfigPath(root), stored.extraction ?? backup.settings.extraction),
+    writeJsonAtomic(longTermMemoryRetentionConfigPath(root), stored.retention ?? backup.settings.retention),
+    writeJsonAtomic(safeJoin(dirs.config, "agent-settings.json"), stored.agent ?? backup.settings.agent),
   ]);
   await Promise.all([
     rm(dirs.indexes, { recursive: true, force: true }),
@@ -125,7 +129,12 @@ async function writeBackupRoot(root: string, backup: LtmBackup) {
   await storage.cleanup();
 }
 
-export async function replaceLongTermMemoryData(value: unknown, root = getLongTermMemoryRoot()) {
+/** `stored` replaces a backup's settings with files the vault already holds; Delete all passes them. */
+export async function replaceLongTermMemoryData(
+  value: unknown,
+  root = getLongTermMemoryRoot(),
+  stored: LtmSettingsFiles = {},
+) {
   const backup = parseLongTermMemoryBackup(value);
   return withLtmVaultLock(root, () =>
     withActiveLtmBackupRestore(root, async () => {
@@ -138,10 +147,17 @@ export async function replaceLongTermMemoryData(value: unknown, root = getLongTe
         await rm(staging, { recursive: true, force: true });
         await rm(previous, { recursive: true, force: true });
         journal = createLtmBackupRestoreJournal(await pathExists(root));
-        await writeBackupRoot(staging, backup);
+        await writeBackupRoot(staging, backup, stored);
         const stagedRebuild = await rebuildLongTermMemoryIndexes({ root: staging });
         const stagedIntegrity = await checkLongTermMemoryIntegrity(staging);
-        if (!stagedIntegrity.ok) throw new Error("Imported Long-Term Memory data failed integrity verification.");
+        if (!stagedIntegrity.ok)
+          throw new LtmServiceError(
+            "Imported Long-Term Memory data failed integrity verification.",
+            400,
+            "ltm_backup_integrity_failed",
+          );
+        // The notes "Hide imported messages from the AI" hid messages for are replaced, so it shows them first.
+        await showLtmHiddenMessages(root);
         await writeLtmBackupRestoreJournal(root, journal);
         journalWritten = true;
         const activeStorage = new LongTermMemoryStorage(root);
@@ -188,6 +204,17 @@ export async function replaceLongTermMemoryData(value: unknown, root = getLongTe
 export async function deleteAllLongTermMemoryData(root = getLongTermMemoryRoot()) {
   return withLtmVaultLock(root, async () => {
     const backup = await exportLongTermMemoryData(root);
+    const dirs = getLongTermMemoryDirectories(root);
+    // The settings files go back as stored: the export holds this version's fallback for a
+    // newer value, and writing it would replace that value and resume retention by it.
+    const [global, extraction, retention, agent] = await Promise.all(
+      [
+        ltmSettingsPath(root),
+        ltmExtractionConfigPath(root),
+        longTermMemoryRetentionConfigPath(root),
+        safeJoin(dirs.config, "agent-settings.json"),
+      ].map((path) => readJsonFile<unknown>(path, undefined)),
+    );
     const replaced = await replaceLongTermMemoryData(
       {
         ...backup,
@@ -197,6 +224,7 @@ export async function deleteAllLongTermMemoryData(root = getLongTermMemoryRoot()
         rejectedSuggestions: [],
       },
       root,
+      { global, extraction, retention, agent },
     );
     // Identity- and fork-repair backups are whole copies of the vault; deleting the data must not keep them.
     await removeLtmRepairBackups(root);

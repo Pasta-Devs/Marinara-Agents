@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { validateDottoreReadiness } from "./validate-dottore-readiness.mjs";
 
 function extractNamedStep(workflow, stepName) {
   const marker = `      - name: ${stepName}\n`;
@@ -30,6 +31,7 @@ function extractJob(workflow, jobId) {
 }
 
 export function validatePullRequestTriage() {
+  validateDottoreReadiness();
   const triageWorkflow = readFileSync(new URL("../.github/workflows/pull-request-triage.yml", import.meta.url), "utf8");
   const reviewSignal = readFileSync(
     new URL("../.github/workflows/owner-approval-review-signal.yml", import.meta.url),

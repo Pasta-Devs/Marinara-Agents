@@ -90,9 +90,9 @@ assert.match(
 const audience = client("features/audience/SlpAudiencePanel.tsx");
 assert.match(audience, /settingKey="creatorRepliesPerDay"[\s\S]*?min=\{1\}\s+max=\{200\}/u);
 const placement = client("features/backstage/slp-backstage-placement.ts");
-assert.match(placement, /messagesViewerImageCooldownMinutes: world\("messaging"/u);
-assert.match(placement, /messagesCoolOffMinutes: world\("messaging"/u);
-assert.match(placement, /creatorRepliesPerDay: world\("audience"/u);
+assert.match(placement, /messagesViewerImageCooldownMinutes: slurp\("messaging"/u);
+assert.match(placement, /messagesCoolOffMinutes: slurp\("messaging"/u);
+assert.match(placement, /creatorRepliesPerDay: slurp\("audience"/u);
 const defaults = client("features/settings/slp-settings-defaults.ts");
 for (const key of ["messagesViewerImageCooldownMinutes", "messagesCoolOffMinutes", "creatorRepliesPerDay"])
   assert.match(defaults, new RegExp(`"${key}"`, "u"), key);

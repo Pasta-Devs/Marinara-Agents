@@ -2,6 +2,8 @@
 
 Slurp is the local Creator and fan roleplay feed. Create local Creator profiles from Engine characters or personas, publish public or locked Slurp posts, and simulate subscriptions, unlocks, replies, and audience activity.
 
+If an image service says a failed request must not be repeated, Slurp stops automatic retries and keeps the prompt. You can still deliberately retry the picture.
+
 The shipped default guidance is adult-first. It can produce flirty, suggestive, sensual, and explicit posts when they fit the Creator. Review generated content and edit the guidance for a different balance.
 
 Find the package in **Agents -> Download Agents**. After installation and an Engine restart, Slurp appears as its own tab in **Home**. Slurp starts with empty package-owned state.

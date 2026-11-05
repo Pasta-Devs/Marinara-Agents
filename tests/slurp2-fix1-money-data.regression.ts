@@ -87,7 +87,7 @@ assert.match(
 );
 assert.match(
   economy2,
-  /async getCreatorSubscriptionCharges\([\s\S]*?slurpSubscriptionCharge\([\s\S]*?slurpPlatformEventModifierSource\(settings\.platformEvents/u,
+  /async getCreatorSubscriptionCharges\([\s\S]*?slurpSubscriptionCharge\([\s\S]*?slurpPlatformEventModifierSource\(slpLiveEvents\(settings\)/u,
 );
 assert.match(
   read("server/src/slp/features/economy/slp-wallet-routes.ts"),

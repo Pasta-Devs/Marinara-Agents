@@ -1,5 +1,42 @@
 # Quartermaster changelog
 
+## 0.1.33 — 2026-11-01
+- The item editor's Delete file / Unlink choice closes if the item's image changes while it's
+  open, so Delete never removes a different file than the one it names.
+- A failed Unlink in the item editor can be tried again.
+- The [i] details on bag cards stay inside the dock after they load.
+
+## 0.1.32 — 2026-10-28 [highlight]
+- Attempted fix for item images going missing. An uploaded or generated image now stays with its
+  item, even after a rename. Images uploaded before this update are kept on rename too.
+- A dropped connection no longer hides item images until you reload.
+- Item editor: a line under the name shows which image file the item uses. Unlink sends this
+  chat's item back to matching by name without deleting the file.
+- Bag cards have an [i] on the image with the same details. Deleting an image file moved to the
+  × in the item editor, which says the file is shared by every chat and offers Unlink instead.
+- A new image never replaces another item's file: it's saved as "apple (1).png" and so on.
+- Item names with characters like "/" upload correctly.
+
+## 0.1.31 — 2026-10-25
+- No changes you'll notice: a code comment was corrected.
+
+## 0.1.30 — 2026-10-25
+- Accepting or keeping a pending item change and then switching chats before it finishes no
+  longer shows that chat's result in the chat you switched to.
+- The "Only you can change it — becomes shown" help now says removals are skipped too.
+
+## 0.1.29 — 2026-10-25 [highlight]
+- Hide items and outfits from their ⋯ menu. Hidden ones get their own Bag tab and are kept from
+  the agent: it only sees a hidden item while you're wearing it.
+- New Hidden Items settings choose what the agent may do to a hidden item, and whether it asks
+  first. Asking shows the change side by side so you can accept it or keep the old details.
+- Lock an item's description from the item editor so the agent can't change it.
+- Feed appearance has seven options, including equipped item names and descriptions. Outfit
+  portraits follow the same setting.
+- Build Wardrobe can use hidden items when you allow it, and always asks you about each one first.
+- Optional Delete button on item and outfit cards (Settings → Display, saved per device).
+- Re-equipping an outfit whose item was deleted now brings the item back with its default slot.
+
 ## 0.1.28 — 2026-10-17
 - Build Wardrobe layers clothing properly: when two pieces of an outfit share a layer (tights and a
   skirt over them), the outer one moves up a layer instead of being left out.

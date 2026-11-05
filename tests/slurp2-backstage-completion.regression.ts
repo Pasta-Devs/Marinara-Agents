@@ -72,7 +72,7 @@ assert.match(
 assert.match(creators, /refreshingConversationSchedule/u, "the schedule refresh reports that it is working");
 assert.match(
   creators,
-  /section: "world", target: "messaging"/u,
+  /section: "basic", target: "messaging"/u,
   "the Messages tab must lead to the rules that govern a world-run Creator",
 );
 assert.match(

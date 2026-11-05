@@ -23,6 +23,7 @@ import {
   slpDeskSeed,
   slpDeskTier,
 } from "../../../../../../shared/src/slp/slp-support-desk.js";
+import { slpExtensionOn } from "../../../../../../shared/src/slp/slp-extensions.js";
 
 export async function applySlurpDeskTalk(
   db: DB,
@@ -37,7 +38,10 @@ export async function applySlurpDeskTalk(
 ): Promise<void> {
   const at = input.at ?? new Date();
   const messages = createSlurpMessagesStorage(db);
-  const settings = (await createSlurpStorage(db).getSettings()).supportDesk;
+  const allSettings = await createSlurpStorage(db).getSettings();
+  // Support desk off: Support's talk changes no case file (the prompt asks for no "desk" answer either).
+  if (!slpExtensionOn(allSettings, "supportDesk")) return;
+  const settings = allSettings.supportDesk;
   const reply = readSlurpDeskReply(input.desk);
   const history = (await messages.listMessages(input.threadId, 40)) as {
     id: string;

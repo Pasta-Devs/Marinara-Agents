@@ -316,7 +316,7 @@ async function main() {
 
   // ─── 7. Wiring pins ───
   const ties = slurp2Source(`${SERVER}/slp/features/projects/slp-creator-ties-service.ts`);
-  assert.match(ties, /SLURP_DEAL_PACE\[settings\.brandDealsPace/u);
+  assert.match(ties, /SLURP_DEAL_PACE\[slpBrandDealsPace\(settings\)/u);
   assert.match(ties, /pace,\n\s+spice,/u);
   const routes = slurp2Source(`${SERVER}/slp/features/ads/slp-ads-routes.ts`);
   assert.match(routes, /brandLogoUrl: logos\.get\(garnishAdBrandId\(item\)\)/u);

@@ -1,5 +1,6 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import englishCatalog from "./locales/en.json";
+import koreanCatalog from "./locales/ko.json";
 
 export type LtmLocalizationContext = {
   locale?: string;
@@ -10,10 +11,15 @@ type TranslationValues = Record<string, string | number | boolean | null | undef
 type TranslationCatalog = Record<string, string>;
 export type LtmTranslationFunction = (key: string, values?: TranslationValues) => string;
 
+function stringEntries(catalog: object) {
+  return Object.fromEntries(
+    Object.entries(catalog).filter(([key, value]) => key !== "_meta" && typeof value === "string"),
+  ) as TranslationCatalog;
+}
+
 const catalogs: Record<string, TranslationCatalog> = {
-  en: Object.fromEntries(
-    Object.entries(englishCatalog).filter(([key, value]) => key !== "_meta" && typeof value === "string"),
-  ) as TranslationCatalog,
+  en: stringEntries(englishCatalog),
+  ko: stringEntries(koreanCatalog),
 };
 const pluralRulesByLocale = new Map<string, Intl.PluralRules>();
 

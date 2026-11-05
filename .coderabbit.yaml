@@ -6,7 +6,7 @@ reviews:
   request_changes_workflow: false
   high_level_summary: true
   poem: false
-  review_status: true
+  review_status: false
   path_filters:
     - "!artifacts/**"
     - "!packages/**/agents.json"
@@ -23,11 +23,11 @@ reviews:
     - path: "catalog/v*/catalog.json"
       instructions: "Verify every Engine-major catalog lane matches package manifests and artifacts. Canonical catalog URLs remain on main; Engine staging securely maps official artifacts to this repository's staging branch for testing."
   auto_review:
-    enabled: true
+    enabled: false
     drafts: false
-    auto_incremental_review: true
+    auto_incremental_review: false
     auto_pause_after_reviewed_commits: 0
     base_branches:
       - "staging"
 chat:
-  auto_reply: true
+  auto_reply: false

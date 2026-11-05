@@ -30,6 +30,11 @@ export function slpImageAuthFailure(error: unknown): boolean {
   );
 }
 
+/** Host errors cross package boundaries, so their explicit retry policy is structural. */
+export function slpImageRetryable(error: unknown): boolean {
+  return !(error && typeof error === "object" && "retryable" in error && error.retryable === false);
+}
+
 export const SLP_IMAGE_GENERATION_MAX_ATTEMPTS = 2;
 export const SLP_IMAGE_GENERATION_RETRY_DELAY_MS = 500;
 
@@ -49,7 +54,7 @@ export async function generateSlpImageWithRetry<T>(
       // sooner, and the caller needs the rejection now so the run defers instead of degrading.
       if (slpIsAdmissionFailure(error)) throw error;
       lastError = error;
-      if (slpImageAuthFailure(error)) {
+      if (slpImageAuthFailure(error) || !slpImageRetryable(error)) {
         await onAttemptFailure?.(error, attempt, attempt);
         throw error;
       }

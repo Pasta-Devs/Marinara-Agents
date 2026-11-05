@@ -21,13 +21,12 @@ export function useSlpMediaBackstageState({
 }) {
   const { t } = useTranslation();
   const imageSettingsQuery = useSlurpImageConnections(
-    section === "overview" || section === "models" || section === "automation" || section === "creators",
+    section === "overview" || section === "basic" || section === "creators",
   );
   const updateImages = useUpdateSlurpImageConnections();
   const connectionsQuery = useSlurpConnections(
     section === "overview" ||
-      section === "models" ||
-      section === "automation" ||
+      section === "basic" ||
       target === "images" ||
       target === "ads" ||
       section === "creators" ||

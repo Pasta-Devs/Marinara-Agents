@@ -1,9 +1,8 @@
 // Build the Relationship Tracker package: re-derive its manifest hashes and
-// English locale from the committed payloads, write a reproducible artifact
-// zip, and update the catalog family. The runtime payloads (client.js,
-// server.mjs, and its modules) are maintained and validated in a separate
-// Relationship Tracker source tree; this builder never regenerates them — it
-// only re-derives everything the catalog checks from the committed bytes.
+// English locale from the committed sources, write a reproducible artifact
+// zip, and update the catalog family. client.js is generated from this package's
+// src/client.js.template and canonical UI English catalog; the remaining
+// payloads are committed runtime modules maintained inside this package.
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
@@ -19,6 +18,18 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageRoot = join(repoRoot, "packages/relationship-tracker");
 const artifactsDir = join(repoRoot, "artifacts");
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
+
+const uiEnglish = JSON.parse(await readFile(join(packageRoot, "src/locales/en.json"), "utf8"));
+for (const key of ["ui.relationshipTracker.open", "ui.relationshipTracker.close"]) {
+  if (typeof uiEnglish[key] !== "string" || !uiEnglish[key].trim()) throw new Error(`Missing UI English: ${key}`);
+}
+const clientTemplate = await readFile(join(packageRoot, "src/client.js.template"), "utf8");
+const uiPlaceholder = "__RELATIONSHIP_TRACKER_UI_ENGLISH__";
+if (clientTemplate.split(uiPlaceholder).length !== 2) throw new Error("Expected one client UI English placeholder");
+await writeFile(
+  join(packageRoot, "client.js"),
+  clientTemplate.replace(uiPlaceholder, () => JSON.stringify(uiEnglish)),
+);
 
 const manifest = JSON.parse(await readFile(join(packageRoot, "manifest.json"), "utf8"));
 manifest.description = withPackageActivationGuidance(manifest.id, manifest.description);

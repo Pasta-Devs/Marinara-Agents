@@ -15,24 +15,29 @@
  * - **Spice.** A stage above a Creator's spice (or the player's ceiling) is skipped, never forced.
  * - **Nothing piles up.** A job that could not go out in its stage expires and drops.
  */
-import { slpRomancePairAllowed } from "../../../../../../shared/src/slp/slp-creator-steering.js";
 import { hash } from "../../projects/slp-project.js";
+import { slurpTasteWeight } from "../../creators/slp-spice.js";
 import { slpDramaPlayerWords, slpDramaRoleWords, slpDramaText } from "./slp-drama-words.js";
 import {
-  slpDramaCouplePairs,
-  type SlpDrama,
   type SlpDramaBeat,
   type SlpDramaLevel,
   type SlpDramaOutcome,
   type SlpDramaRole,
-  type SlpDramaStage,
   type SlpRelationToPlayer,
-  type SlpSituation,
 } from "../../../../../../shared/src/slp/slp-drama.js";
+import {
+  slpStorylineEdges,
+  type SlpStoryline,
+  type SlpStorylineEnding,
+  type SlpStorylineOutcome,
+} from "../../../../../../shared/src/slp/slp-storyline.js";
+import { couplePairs, meets, slpDramaCast, slpFitsCreator, stageRoles, tieOutcomes } from "./slp-drama-cast.js";
+import { slurpStageOutcomes } from "../../projects/slp-project-storyline.js";
+import type { SlpInfluenceTarget, SlpStoryOutcome } from "../../../../../../shared/src/slp/slp-story-engine.js";
+import type { SlpTaste } from "../../../../../../shared/src/slp/slp-spice.js";
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
-const NEWCOMER_DAYS = 14;
 const KEEP_ENDED = 30;
 const KEEP_DONE_DAYS = 7;
 const ROLE_CHOICE_HOURS = 3;
@@ -57,6 +62,15 @@ export type SlpDramaCreator = {
   followers: number;
   /** The player's romance setting (0.3.17). */
   romance?: { off: boolean; only: string[] };
+  /** What is true for them now (story state and ties), for `requires`, `lacks` and `when`. */
+  storyTags?: readonly string[];
+  /** Card text and hard noes for `fit` gates; filled only when a switched-on storyline has one. */
+  fitText?: string;
+  hardNoes?: readonly string[];
+  /** Topics the player asked this Creator to leave out (Steering). */
+  avoid?: readonly string[];
+  /** The Creator's turn-ons: a lead whose turn-ons match a storyline's fit is likelier to take it. */
+  turnOns?: readonly string[];
 };
 
 /** What the ties say, as the runtime needs it. */
@@ -112,6 +126,8 @@ export type SlpDramaRun = {
     /** Who is asked, and how many answers there are: an answer is checked against these. */
     asks?: "fans" | "player" | "role";
     count?: number;
+    /** The options that fit the lead, when some do not: the player's answer is an index into these. */
+    offered?: number[];
   } | null;
   log: SlpDramaLog[];
 };
@@ -171,133 +187,61 @@ export function readSlpDramaState(raw: unknown): SlpDramaState {
   };
 }
 
+/** Story state for the lead: a stage's condition and outcomes, an ending's outcomes (Storylines). */
+export type SlpDramaStoryEffect = { creatorId: string; sourceId: string; outcomes: SlpStoryOutcome[]; label?: string };
+
 export type SlpDramaTieEffect = { runId: string; outcome: SlpDramaOutcome; ids: [string, string] };
 
 export type SlpDramaInput = {
   at: Date;
   level: SlpDramaLevel;
-  /** Only the switched-on entries (`slpEnabledDrama`). */
-  situations: readonly SlpSituation[];
-  dramas: readonly SlpDrama[];
+  /** Only the switched-on entries (`slpEnabledDrama`), as storylines (`slpDramaStorylines`). */
+  situations: readonly SlpStoryline[];
+  dramas: readonly SlpStoryline[];
+  /** Every drama in the library, switched on or off: a run whose drama went off still takes its condition away. */
+  known?: readonly SlpStoryline[];
   dials: Readonly<Record<string, Readonly<Record<string, string>>>>;
   world: SlpDramaWorld;
   /** World activity; 0 starts nothing new (running dramas still move and end). */
   activity: number;
+  /** The player's tastes: a drama whose fit shares their words starts more often. */
+  tastes?: readonly SlpTaste[];
   newId: () => string;
 };
 
 const active = <T extends { endedAt: string | null }>(entry: T) => entry.endedAt === null;
-const pairKey = (kind: string, a: string, b: string) => `${kind}:${[a, b].sort().join("|")}`;
 const iso = (ms: number) => new Date(ms).toISOString();
 
-// ─── Casting ────────────────────────────────────────────────────────────────────────────────────
-
-function fits(
-  role: SlpDramaRole,
-  creator: SlpDramaCreator,
-  cast: Readonly<Record<string, string>>,
-  world: SlpDramaWorld,
-  playerKey: string | undefined,
-): { ok: boolean; player?: string } {
-  if (Boolean(role.player) !== !creator.automatic) return { ok: false };
-  const needs = role.needs;
-  if (needs.gender && creator.gender !== needs.gender) return { ok: false };
-  if (needs.minSpice !== undefined && creator.spice < needs.minSpice) return { ok: false };
-  if (needs.sharesNicheWith) {
-    const other = world.creators.find((entry) => entry.id === cast[needs.sharesNicheWith!]);
-    const tags = new Set(other?.tags.map((tag) => tag.toLocaleLowerCase()) ?? []);
-    if (!other || !creator.tags.some((tag) => tags.has(tag.toLocaleLowerCase()))) return { ok: false };
-  }
-  if (needs.tiedTo) {
-    const other = cast[needs.tiedTo.role];
-    if (!other || !needs.tiedTo.kinds.some((kind) => world.ties.has(pairKey(kind, creator.id, other))))
-      return { ok: false };
-  }
-  if (needs.relationToPlayer) {
-    const match = (world.relations.get(creator.id) ?? []).find(
-      (entry) =>
-        needs.relationToPlayer!.includes(entry.relation) &&
-        (!playerKey || !cast[playerKey] || cast[playerKey] === entry.playerId),
-    );
-    return match ? { ok: true, player: match.playerId } : { ok: false };
-  }
-  return { ok: true };
-}
+/** The id runs, cooldowns and settings use: a converted v1 entry keeps its own id. */
+export const slpDramaId = (storyline: Pick<SlpStoryline, "id" | "source">): string =>
+  storyline.source?.id ?? storyline.id;
 
 /**
- * Fills `keys` that are not cast yet. Returns the new cast, or null when a key cannot be filled. A
- * player role is the page tied to whoever needed a relation to the player, else the first page.
+ * The running storylines' stage influences on one target for their lead: the product of the "multiply"
+ * ones (docs/STORYLINES.md, PR 6) — a pregnancy announced brings subscribers, a secret one costs some.
  */
-export function slpDramaCast(
-  roles: readonly SlpDramaRole[],
-  keys: readonly string[],
-  cast: Readonly<Record<string, string>>,
-  input: {
-    world: SlpDramaWorld;
-    busy: ReadonlySet<string>;
-    seed: string;
-    at: Date;
-    couples?: readonly (readonly [string, string])[];
-  },
-): Record<string, string> | null {
-  const next = { ...cast };
-  // Couple roles keep the romance settings, cast before (a situation, a stage) or now.
-  const who = (id?: string) => input.world.creators.find((creator) => creator.id === id);
-  const pairOk = (a?: string, b?: string) => slpRomancePairAllowed(who(a), who(b));
-  if (!(input.couples ?? []).every(([x, y]) => pairOk(cast[x], cast[y]))) return null;
-  const byKey = new Map(roles.map((role) => [role.key, role]));
-  const playerKey = roles.find((role) => role.player)?.key;
-  // A role's conditions name other roles ("tied to him"): those are cast too, and first.
-  const wanted = new Set(keys);
-  for (const key of keys) {
-    const needs = byKey.get(key)?.needs;
-    if (needs?.tiedTo) wanted.add(needs.tiedTo.role);
-    if (needs?.sharesNicheWith) wanted.add(needs.sharesNicheWith);
-  }
-  const order = [...wanted].sort((a, b) => {
-    const depends = (key: string) =>
-      Number(Boolean(byKey.get(key)?.needs.sharesNicheWith || byKey.get(key)?.needs.tiedTo || byKey.get(key)?.player));
-    return depends(a) - depends(b);
-  });
-  // A small search: try the best candidates for each role in order and step back when a later role
-  // cannot be filled ("her partner" only works for someone who has one). Bounded, so it stays cheap.
-  let budget = 400;
-  const fill = (index: number, current: Record<string, string>): Record<string, string> | null => {
-    const key = order[index];
-    if (key === undefined) return current;
-    if (current[key]) return fill(index + 1, current);
-    const role = byKey.get(key);
-    if (!role) return null;
-    const taken = new Set(Object.values(current));
-    const options = input.world.creators
-      .filter((creator) => !taken.has(creator.id) && (role.player || !input.busy.has(creator.id)))
-      .map((creator) => ({ creator, fit: fits(role, creator, current, input.world, playerKey) }))
-      .filter((option) => {
-        const as = (role: string) => (role === key ? option.creator.id : current[role]);
-        return option.fit.ok && (input.couples ?? []).every(([x, y]) => pairOk(as(x), as(y)));
-      })
-      .sort((left, right) => {
-        const newcomer = (creator: SlpDramaCreator) =>
-          Number(input.at.getTime() - Date.parse(creator.joinedAt) < NEWCOMER_DAYS * DAY);
-        if (role.prefer === "newcomer" && newcomer(left.creator) !== newcomer(right.creator))
-          return newcomer(right.creator) - newcomer(left.creator);
-        if (role.prefer === "popular" && left.creator.followers !== right.creator.followers)
-          return right.creator.followers - left.creator.followers;
-        return hash(`${input.seed}:${key}:${left.creator.id}`) - hash(`${input.seed}:${key}:${right.creator.id}`);
-      });
-    for (const pick of options) {
-      if ((budget -= 1) < 0) return null;
-      const tried = { ...current, [key]: pick.creator.id };
-      // Whoever needs a relation to the player brings that player's page along.
-      if (pick.fit.player && playerKey && !tried[playerKey]) tried[playerKey] = pick.fit.player;
-      const done = fill(index + 1, tried);
-      if (done) return done;
-    }
-    return null;
-  };
-  return fill(0, next);
+export function slpDramaStageMultiplier(
+  state: Pick<SlpDramaState, "runs">,
+  storylines: readonly SlpStoryline[],
+  creatorId: string,
+  target: SlpInfluenceTarget,
+): number {
+  const byId = new Map(storylines.map((storyline) => [slpDramaId(storyline), storyline]));
+  return state.runs.filter(active).reduce((product, run) => {
+    const storyline = byId.get(run.dramaId);
+    if (!storyline || run.cast[storyline.cast[0]!.key] !== creatorId) return product;
+    const stage = storyline.stages.find((entry) => entry.key === run.stage);
+    return (stage?.influences ?? [])
+      .filter((effect) => effect.target === target && effect.operation === "multiply")
+      .reduce((value, effect) => value * effect.value, product);
+  }, 1);
 }
 
+/** A run stopped from outside (switched off, Stir) only takes its stage's condition away; the stage's own outcomes never ran. */
+export const slpDramaStopOutcomes = (storyline: SlpStoryline, stage: string): SlpStoryOutcome[] => {
+  const tag = storyline.stages.find((entry) => entry.key === stage)?.condition?.tag;
+  return tag ? [{ kind: "remove-creator-fact", tag }] : [];
+};
 // ─── Jobs ───────────────────────────────────────────────────────────────────────────────────────
 
 function job(
@@ -348,13 +292,54 @@ function job(
 export function slpAdvanceDrama(
   state: SlpDramaState,
   input: SlpDramaInput,
-): { state: SlpDramaState; ties: SlpDramaTieEffect[] } {
+): { state: SlpDramaState; ties: SlpDramaTieEffect[]; story: SlpDramaStoryEffect[] } {
   const now = input.at.getTime();
   const stamp = iso(now);
   const live = new Map(input.world.creators.map((creator) => [creator.id, creator]));
-  const dramas = new Map(input.dramas.map((drama) => [drama.id, drama]));
-  const situations = new Map(input.situations.map((situation) => [situation.id, situation]));
+  const dramas = new Map(input.dramas.map((drama) => [slpDramaId(drama), drama]));
+  const known = new Map((input.known ?? []).map((drama) => [slpDramaId(drama), drama]));
+  const situations = new Map(input.situations.map((situation) => [slpDramaId(situation), situation]));
+  const situationKey = new Map(input.situations.map((situation) => [situation.id, slpDramaId(situation)]));
+  /** The situation a drama stands in, by its run id; `start.within` names the storyline. */
+  const withinOf = (drama: SlpStoryline) =>
+    drama.start.within === undefined ? undefined : (situationKey.get(drama.start.within) ?? drama.start.within);
+  /** The lead's tags, and the situation the drama stands in is true for it. */
+  const tagsOf = (drama: SlpStoryline, cast: Readonly<Record<string, string>>) => {
+    const within = withinOf(drama);
+    return new Set([...(live.get(cast[drama.cast[0]!.key]!)?.storyTags ?? []), ...(within ? [within] : [])]);
+  };
+  /** The way on from a stage with no answer: the first edge whose `when` holds, else the last. */
+  const wayOn = (drama: SlpStoryline, index: number, cast: Readonly<Record<string, string>>): string => {
+    const stage = drama.stages[index]!;
+    const edges =
+      stage.next !== undefined
+        ? slpStorylineEdges(stage.next)
+        : [{ to: drama.stages[index + 1]?.key ?? drama.endings[0]?.key ?? "end" }];
+    const tags = tagsOf(drama, cast);
+    return (edges.find((edge) => !edge.when || tags.has(edge.when.tag) === edge.when.set) ?? edges.at(-1)!).to;
+  };
   const ties: SlpDramaTieEffect[] = [];
+  const story: SlpDramaStoryEffect[] = [];
+  /** The stage left, and the stage entered or the ending reached, write the lead's story state. */
+  const write = (
+    run: SlpDramaRun,
+    drama: SlpStoryline,
+    move: { leave?: string | null; enter?: string | null; ending?: string | null },
+  ) => {
+    const creatorId = run.cast[drama.cast[0]!.key];
+    const outcomes = slurpStageOutcomes(drama, {
+      leave: move.leave || null,
+      enter: move.enter ?? null,
+      ending: move.ending ?? null,
+    });
+    if (creatorId && outcomes.length)
+      story.push({
+        creatorId,
+        sourceId: `${run.id}:${move.enter ?? move.ending ?? `${move.leave}:leave`}`,
+        outcomes,
+        label: drama.name,
+      });
+  };
   let jobs = [...state.jobs];
   const ended = { ...state.ended };
   const names = (cast: Readonly<Record<string, string>>) => ({
@@ -383,6 +368,7 @@ export function slpAdvanceDrama(
   ) => {
     const playerIds = Object.values(run.cast).filter((id) => live.get(id)?.automatic === false);
     beats.forEach((beat, index) => {
+      if (!slpFitsCreator(beat.fit, live.get(run.cast[beat.role]!))) return;
       const made = job(beat, run, {
         dueAt: now,
         expiresAt: until,
@@ -403,18 +389,18 @@ export function slpAdvanceDrama(
       : { ...run, endedAt: stamp, ending: "left" as const };
   });
   for (const situation of input.situations) {
-    if (situationRuns.some((run) => active(run) && run.situationId === situation.id)) continue;
+    if (situationRuns.some((run) => active(run) && run.situationId === slpDramaId(situation))) continue;
     const id = input.newId();
     const cast = slpDramaCast(
-      situation.roles,
-      situation.roles.map((role) => role.key),
+      situation.cast,
+      situation.cast.map((role) => role.key),
       {},
-      { world: input.world, busy: new Set(), seed: id, at: input.at },
+      { world: input.world, busy: new Set(), seed: id, at: input.at, leadFit: situation.fit },
     );
     if (cast)
       situationRuns.push({
         id,
-        situationId: situation.id,
+        situationId: slpDramaId(situation),
         cast,
         startedAt: stamp,
         endedAt: null,
@@ -435,10 +421,12 @@ export function slpAdvanceDrama(
     if (hash(`${run.id}:${Math.floor(now / HOUR)}:draw`) % 100 >= 25) return { ...run, day, drawn };
     const dials = {
       ...Object.fromEntries(situation.dials.map((dial) => [dial.key, dial.default])),
-      ...input.dials[situation.id],
+      ...input.dials[slpDramaId(situation)],
     };
-    const deck = situation.deck.filter((beat) =>
-      Object.entries(beat.when ?? {}).every(([key, value]) => dials[key] === value),
+    const deck = (situation.stages[0]?.deck ?? []).filter(
+      (beat) =>
+        Object.entries(beat.when ?? {}).every(([key, value]) => dials[key] === value) &&
+        slpFitsCreator(beat.fit, live.get(run.cast[beat.role]!)),
     );
     const beat = deck[hash(`${run.id}:${Math.floor(now / HOUR)}:pick`) % Math.max(1, deck.length)];
     if (!beat) return { ...run, day, drawn };
@@ -454,30 +442,45 @@ export function slpAdvanceDrama(
     return new Set([...count].filter(([, value]) => value >= 2).map(([id]) => id));
   };
   let runs = [...state.runs];
-  const end = (run: SlpDramaRun, ending: NonNullable<SlpDramaRun["ending"]>, exit: boolean): SlpDramaRun => {
-    const drama = dramas.get(run.dramaId);
+  const end = (
+    run: SlpDramaRun,
+    ending: NonNullable<SlpDramaRun["ending"]>,
+    exit: SlpStorylineEnding | undefined,
+  ): SlpDramaRun => {
     // Switched off, lead gone, out of time: what it still had queued goes nowhere (the exit is new).
     if (ending !== "done")
       jobs = jobs.map((entry) =>
         entry.runId === run.id && entry.status === "queued" ? { ...entry, status: "dropped" as const } : entry,
       );
-    if (exit && drama) queue([drama.exit], { id: run.id, cast: aliveCast(run.cast) }, now + 2 * DAY, "exit");
+    if (exit?.beat) queue([exit.beat], { id: run.id, cast: aliveCast(run.cast) }, now + 2 * DAY, "exit");
     ended[run.dramaId] = stamp;
     return log({ ...run, endedAt: stamp, ending, choice: null }, "ended", ending);
   };
   const aliveCast = (cast: Record<string, string>) =>
     Object.fromEntries(Object.entries(cast).filter(([, id]) => live.has(id)));
+  /** Its tie outcomes, between cast people who are still on Slurp. */
+  const settle = (run: SlpDramaRun, outcomes: readonly SlpStorylineOutcome[]) => {
+    for (const outcome of tieOutcomes(outcomes)) {
+      const a = run.cast[outcome.between[0]];
+      const b = run.cast[outcome.between[1]];
+      if (a && b && live.has(a) && live.has(b)) ties.push({ runId: run.id, outcome, ids: [a, b] });
+    }
+  };
 
-  /** Enters `key` (or ends the drama): casts its roles, skips it when it cannot run, queues its beats. */
-  const enter = (run: SlpDramaRun, drama: SlpDrama, key: string, depth = 0): SlpDramaRun => {
-    if (key === "end" || depth > drama.stages.length) return end(run, "done", true);
+  /** Enters `key` (or an ending): casts its roles, skips it when it cannot run, queues its beats. */
+  const enter = (run: SlpDramaRun, drama: SlpStoryline, key: string, depth = 0): SlpDramaRun => {
+    const ending = drama.endings.find((entry) => entry.key === key);
     const index = drama.stages.findIndex((stage) => stage.key === key);
+    if (ending) settle(run, ending.outcomes);
+    if (ending || index < 0 || depth > drama.stages.length) {
+      write(run, drama, { leave: run.stage, ending: ending?.key });
+      return end(run, "done", ending ?? drama.endings[0]);
+    }
     const stage = drama.stages[index]!;
-    const next = () => stage.next ?? drama.stages[index + 1]?.key ?? "end";
-    const needed = stageRoles(stage, drama.roles);
-    const playerKey = drama.roles.find((role) => role.player)?.key;
-    const cast = slpDramaCast(drama.roles, needed, aliveCast(run.cast), {
-      couples: slpDramaCouplePairs(drama),
+    const needed = stageRoles(stage, drama.cast);
+    const playerKey = drama.cast.find((role) => role.player)?.key;
+    const cast = slpDramaCast(drama.cast, needed, aliveCast(run.cast), {
+      couples: couplePairs(drama),
       world: input.world,
       busy: busy(),
       seed: `${run.id}:${key}`,
@@ -488,14 +491,32 @@ export function slpAdvanceDrama(
       .filter(Boolean) as SlpDramaCreator[];
     const tooHot =
       stage.minSpice !== undefined && actors.some((creator) => creator.automatic && creator.spice < stage.minSpice!);
-    if (!cast || tooHot) return enter(log(run, "skipped", key), drama, next(), depth + 1);
-    const days = stage.days[0] + (hash(`${run.id}:${key}:days`) % (stage.days[1] - stage.days[0] + 1));
+    const lead = cast ? live.get(cast[drama.cast[0]!.key]!) : undefined;
+    const dials = {
+      ...Object.fromEntries(drama.dials.map((dial) => [dial.key, dial.default])),
+      ...input.dials[slpDramaId(drama)],
+    };
+    const offered = (stage.choice?.options ?? []).flatMap((option, at) =>
+      slpFitsCreator(option.fit, lead) &&
+      Object.entries(option.when ?? {}).every(([key, value]) => dials[key] === value)
+        ? [at]
+        : [],
+    );
+    // A choice with no option that fits the lead is skipped like a stage that does not fit.
+    const offFit = !slpFitsCreator(stage.fit, lead) || Boolean(stage.choice && !offered.length);
+    if (!cast || tooHot || offFit)
+      return enter(log(run, "skipped", key), drama, wayOn(drama, index, run.cast), depth + 1);
+    // A stage with no days stands until its choice is answered, or until the storyline runs out of time.
+    const days = stage.days
+      ? stage.days[0] + (hash(`${run.id}:${key}:days`) % (stage.days[1] - stage.days[0] + 1))
+      : drama.maxDays;
     let entered: SlpDramaRun = log(
       { ...run, cast, stage: key, stageAt: stamp, stageDays: days, choice: null },
       "stage",
       key,
     );
     queue(stage.beats, entered, now + Math.max(days, 1) * DAY, key);
+    write(entered, drama, { leave: run.stage, enter: key });
     if (stage.choice) {
       const dueAt =
         stage.choice.asks === "role" ? now + ROLE_CHOICE_HOURS * HOUR : now + stage.choice.timeoutDays * DAY;
@@ -508,11 +529,12 @@ export function slpAdvanceDrama(
           answer: null,
           by: null,
           asks: stage.choice.asks,
-          count: stage.choice.options.length,
+          count: offered.length,
+          ...(offered.length < stage.choice.options.length ? { offered } : {}),
         },
       };
       if (stage.choice.asks === "player" && playerKey && cast[playerKey]) {
-        const asker = cast[drama.roles[0]!.key] ?? null;
+        const asker = cast[drama.cast[0]!.key] ?? null;
         jobs.push({
           id: input.newId(),
           runId: run.id,
@@ -521,7 +543,7 @@ export function slpAdvanceDrama(
           toId: cast[playerKey],
           choice: {
             question: stage.choice.question,
-            options: stage.choice.options.map((option) => option.label),
+            options: offered.map((at) => stage.choice!.options[at]!.label),
             stage: key,
           },
           names: names(cast),
@@ -537,23 +559,38 @@ export function slpAdvanceDrama(
   runs = runs.map((run) => {
     if (!active(run)) return run;
     const drama = dramas.get(run.dramaId);
-    if (!drama) return end(run, "off", false);
-    const lead = drama.roles[0]!.key;
-    if (run.cast[lead] && !live.has(run.cast[lead]!)) return end(run, "left", true);
-    if (now - Date.parse(run.startedAt) >= drama.maxDays * DAY) return end(run, "time", true);
+    if (!drama) {
+      const off = known.get(run.dramaId);
+      const creatorId = off && run.cast[off.cast[0]!.key];
+      const outcomes = off ? slpDramaStopOutcomes(off, run.stage) : [];
+      if (creatorId && outcomes.length) story.push({ creatorId, sourceId: `${run.id}:${run.stage}:off`, outcomes });
+      return end(run, "off", undefined);
+    }
+    const lead = drama.cast[0]!.key;
+    const gone = run.cast[lead] && !live.has(run.cast[lead]!);
+    if (gone || now - Date.parse(run.startedAt) >= drama.maxDays * DAY) {
+      write(run, drama, { leave: run.stage });
+      return end(run, gone ? "left" : "time", drama.endings[0]);
+    }
     const index = drama.stages.findIndex((stage) => stage.key === run.stage);
     const stage = drama.stages[index];
-    if (!stage) return end(run, "done", true);
+    if (!stage) return end(run, "done", drama.endings[0]);
     let current = run;
     const choice = stage.choice;
     if (choice && current.choice && current.choice.answer === null && now >= Date.parse(current.choice.dueAt)) {
       // Nobody answered in time (player), the vote closed (fans), or the role made up their mind (role).
-      const decided =
+      const picked =
         choice.asks === "player"
           ? choice.default
           : hash(`${run.id}:${stage.key}:vote`) % 3 === 0
             ? hash(`${run.id}:${stage.key}:pick`) % choice.options.length
             : choice.default;
+      // An option that does not fit the lead was never offered: the pick falls on one that was.
+      const offered = current.choice.offered;
+      const decided =
+        !offered || offered.includes(picked)
+          ? picked
+          : offered[hash(`${run.id}:${stage.key}:offered`) % offered.length]!;
       current = log(
         {
           ...current,
@@ -566,38 +603,36 @@ export function slpAdvanceDrama(
     const waiting = choice && current.choice?.answer === null;
     if (waiting || now - Date.parse(current.stageAt) < current.stageDays * DAY) return current;
     // The stage is over: its outcomes happen, then the next stage.
-    for (const outcome of stage.outcomes) {
-      const a = current.cast[outcome.between[0]];
-      const b = current.cast[outcome.between[1]];
-      if (a && b && live.has(a) && live.has(b)) ties.push({ runId: run.id, outcome, ids: [a, b] });
-    }
+    settle(current, stage.leave);
     const answer =
       choice && current.choice?.answer !== null && current.choice
         ? choice.options[current.choice.answer]?.next
         : undefined;
-    return enter(current, drama, answer ?? stage.next ?? drama.stages[index + 1]?.key ?? "end");
+    return enter(current, drama, answer ?? wayOn(drama, index, current.cast));
   });
 
   // A drama starts: cast its lead and first stage; on a situation, with the situation's people.
   const standing = new Map(situationRuns.filter(active).map((run) => [run.situationId, run]));
-  const start = (pick: SlpDrama, lead?: string | null): boolean => {
-    if (pick.requires && !standing.has(pick.requires.situation)) return false;
+  const start = (pick: SlpStoryline, lead?: string | null): boolean => {
+    const within = withinOf(pick);
+    if (within && !standing.has(within)) return false;
     const id = input.newId();
-    const base: Record<string, string> = pick.requires ? { ...standing.get(pick.requires.situation)!.cast } : {};
+    const base: Record<string, string> = within ? { ...standing.get(within)!.cast } : {};
     // The player's pick for the first role (Stir), when it still fits once the rest is cast.
-    if (lead && !pick.requires) base[pick.roles[0]!.key] = lead;
+    if (lead && !within) base[pick.cast[0]!.key] = lead;
     const first = pick.stages[0]!;
-    const cast = slpDramaCast(pick.roles, [pick.roles[0]!.key, ...stageRoles(first, pick.roles)], base, {
-      couples: slpDramaCouplePairs(pick),
+    const cast = slpDramaCast(pick.cast, [pick.cast[0]!.key, ...stageRoles(first, pick.cast)], base, {
+      couples: couplePairs(pick),
+      leadFit: pick.fit,
       world: input.world,
       busy: busy(),
       seed: id,
       at: input.at,
     });
-    if (!cast) return false;
+    if (!cast || !meets(pick.requires, tagsOf(pick, cast))) return false;
     const run: SlpDramaRun = {
       id,
-      dramaId: pick.id,
+      dramaId: slpDramaId(pick),
       cast,
       stage: "",
       stageAt: stamp,
@@ -615,7 +650,7 @@ export function slpAdvanceDrama(
 
   // The player asked for this one: now, whatever the level (once; a drama with no cast waits no longer).
   const requested = state.requested ? dramas.get(state.requested) : undefined;
-  if (requested && !running().has(requested.id)) start(requested, state.requestedLead);
+  if (requested && !running().has(slpDramaId(requested))) start(requested, state.requestedLead);
 
   // Now and then a new drama starts, within the level's cap and each drama's cooldown.
   const window = Math.floor(now / START_WINDOW);
@@ -626,15 +661,21 @@ export function slpAdvanceDrama(
     const room = runs.filter(active).length < rules.running;
     const roll = hash(`${window}:drama-start`) % 100 < Math.round(rules.startChance * Math.max(0, input.activity));
     if (room && roll) {
-      const options = input.dramas.filter(
-        (drama) =>
-          !running().has(drama.id) &&
-          (!ended[drama.id] || now - Date.parse(ended[drama.id]!) >= drama.cooldownDays * DAY) &&
-          (!drama.requires || standing.has(drama.requires.situation)),
-      );
-      const total = options.reduce((sum, drama) => sum + drama.weight, 0);
+      const options = input.dramas.filter((drama) => {
+        const id = slpDramaId(drama);
+        const within = withinOf(drama);
+        return (
+          !running().has(id) &&
+          // ponytail: the one seasonal drama is gated by id; add a `months` field to the schema when a second one comes.
+          (id !== "costume-contest" || new Date(now).getUTCMonth() === 9) &&
+          (!ended[id] || now - Date.parse(ended[id]!) >= drama.start.cooldownDays * DAY) &&
+          (!within || standing.has(within))
+        );
+      });
+      const weight = (drama: SlpStoryline) => drama.start.weight * slurpTasteWeight(drama.fit, input.tastes);
+      const total = options.reduce((sum, drama) => sum + weight(drama), 0);
       let point = ((hash(`${window}:drama-pick`) % 10_000) / 10_000) * total;
-      const pick = options.find((drama) => (point -= drama.weight) < 0) ?? options.at(-1);
+      const pick = options.find((drama) => (point -= weight(drama)) < 0) ?? options.at(-1);
       if (pick) start(pick);
     }
   }
@@ -660,18 +701,8 @@ export function slpAdvanceDrama(
       requestedLead: null,
     },
     ties,
+    story,
   };
-}
-
-/** Every role a stage names: its beats' actors, targets and heat people, its choice role, its outcomes. */
-export function stageRoles(stage: SlpDramaStage, roles: readonly SlpDramaRole[]): string[] {
-  const keys = [
-    ...stage.beats.flatMap((beat) => [beat.role, beat.to, beat.on, beat.heat?.with, beat.heat?.shotBy, beat.heat?.for]),
-    stage.choice?.role,
-    stage.choice?.asks === "player" ? roles.find((role) => role.player)?.key : undefined,
-    ...stage.outcomes.flatMap((outcome) => outcome.between),
-  ];
-  return [...new Set(keys.filter((key): key is string => Boolean(key) && key !== "crowd" && key !== "fans"))];
 }
 
 // ─── The player's answer, and the planner's pick ────────────────────────────────────────────────
@@ -696,7 +727,7 @@ export function slpAnswerDramaChoice(
       entry === run
         ? {
             ...run,
-            choice: { ...run.choice!, answer: option, by: "player" },
+            choice: { ...run.choice!, answer: run.choice!.offered?.[option] ?? option, by: "player" },
             log: [...run.log, { at: at.toISOString(), code: "choice", detail: `#${option}` }].slice(-20),
           }
         : entry,
@@ -754,29 +785,3 @@ export const slpRequestDrama = (state: SlpDramaState, dramaId: string, lead?: st
   requested: dramaId,
   requestedLead: lead ?? null,
 });
-
-/**
- * Whether this drama can start now with `leadId` in its first role: the rest of its first stage is
- * cast as the tick would, and the lead must still fit once they are (Stir's lead pick, 0.3.11).
- */
-export function slpDramaLeadFits(
-  drama: SlpDrama,
-  leadId: string,
-  input: { world: SlpDramaWorld; busy: ReadonlySet<string>; at: Date },
-): boolean {
-  const role = drama.roles[0]!;
-  const lead = input.world.creators.find((creator) => creator.id === leadId);
-  if (!lead || drama.requires || (input.busy.has(leadId) && !role.player)) return false;
-  const cast = slpDramaCast(
-    drama.roles,
-    [role.key, ...stageRoles(drama.stages[0]!, drama.roles)],
-    { [role.key]: leadId },
-    {
-      ...input,
-      seed: `lead:${leadId}`,
-      couples: slpDramaCouplePairs(drama),
-    },
-  );
-  const playerKey = drama.roles.find((entry) => entry.player)?.key;
-  return Boolean(cast && fits(role, lead, cast, input.world, playerKey).ok);
-}

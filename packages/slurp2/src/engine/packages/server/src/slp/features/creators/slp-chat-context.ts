@@ -27,6 +27,7 @@ import { slurpArcLifeLine } from "../../modules/projects/slp-arc-progress.js";
 import { slurpChatBridgeRapportLine } from "../../modules/messages/slp-rapport.js";
 import { listSlurpContinuityFor } from "../../data/continuity/slp-continuity-storage.js";
 import { SLURP_CONTINUITY_FACT_LABELS } from "../../modules/continuity/slp-continuity-prompt.js";
+import { slpArcsLive } from "../../../../../shared/src/slp/slp-extensions.js";
 
 type WrapFormat = "xml" | "markdown" | "none";
 
@@ -177,8 +178,9 @@ export async function buildSlurpChatContext(db: DB, request: SlurpChatContextReq
   const names = new Map(accounts.map((account) => [account.id, account.displayName]));
   // Every page the player runs, not only this persona's: those couples are the player's own business.
   const playerIds = new Set(accounts.filter((account) => !slurpRunsItself(account)).map((account) => account.id));
+  const arcsLive = slpArcsLive(await slurp.getSettings());
   for (const creator of creators) {
-    const story = slurpArcLifeLine(await slurp.listProjects(creator.id).catch(() => []));
+    const story = arcsLive ? slurpArcLifeLine(await slurp.listProjects(creator.id).catch(() => [])) : null;
     if (story)
       entries.push({ at: SLURP_STANDING.life, line: `${creator.displayName}'s ongoing story on Slurp: ${story}.` });
     for (const line of slurpChatBridgeLoveLines(couples, creator.id, {

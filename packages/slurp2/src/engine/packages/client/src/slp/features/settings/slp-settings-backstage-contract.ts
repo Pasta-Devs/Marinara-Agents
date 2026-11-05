@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
-import type { SlpBackstageSection } from "../../base/navigation/slp-backstage-target";
+import type { SlpBackstageSection, SlpBackstageTarget } from "../../base/navigation/slp-backstage-target";
 import type { SlurpSettings } from "./slp-settings-contract";
 import { useSlurpSettings, useSlurpSettingsDefaults, useUpdateSlurpSettings } from "./slp-settings-hooks";
 
@@ -10,7 +10,7 @@ import { useSlurpSettings, useSlurpSettingsDefaults, useUpdateSlurpSettings } fr
  * The staged settings draft behind Backstage: what is saved, what is staged for Review and apply,
  * and how a save reports itself. Backstage composes this; the settings feature owns it.
  */
-export function useSlpSettingsDraft({ section }: { section: SlpBackstageSection }) {
+export function useSlpSettingsDraft({ section, target }: { section: SlpBackstageSection; target: SlpBackstageTarget }) {
   const { t } = useTranslation();
   const settingsQuery = useSlurpSettings();
   const settingsDefaultsQuery = useSlurpSettingsDefaults();
@@ -36,17 +36,28 @@ export function useSlpSettingsDraft({ section }: { section: SlpBackstageSection 
     }
   };
 
-  /** Stages a patch for Review and apply; only Overview quick toggles save at once, with Undo. */
-  const updatePatch = async (patch: Partial<SlurpSettings>) => {
-    if (section !== "overview") {
+  /**
+   * Stages a patch for Review and apply; only Overview and the Basic page save at once, with Undo.
+   * `now` saves at once on any page (extension switches: a staged Off is lost on leaving the page).
+   */
+  const updatePatch = async (patch: Partial<SlurpSettings>, now = false) => {
+    if (!now && section !== "overview" && target !== "basic") {
       setDraftPatch((current) => ({ ...current, ...patch }));
       return true;
     }
     const keys = Object.keys(patch) as Array<keyof SlurpSettings>;
+    // "Grows" sizes postsPerDay on the server; Undo must restore the old pace, not the sized one.
+    if ("postsPerDayCustom" in patch && !keys.includes("postsPerDay")) keys.push("postsPerDay");
     const previous = savedSettings
       ? (Object.fromEntries(keys.map((key) => [key, savedSettings[key]])) as Partial<SlurpSettings>)
       : undefined;
     const changed = await save(patch);
+    // A staged edit of the same key would hide this save and write the old value back on Apply.
+    if (changed)
+      setDraftPatch(
+        (current) =>
+          Object.fromEntries(Object.entries(current).filter(([key]) => !(key in patch))) as Partial<SlurpSettings>,
+      );
     if (changed && previous) {
       toast.success(t("ui.slurp.settings.backstage.quickSaved", { defaultValue: "Quick setting updated." }), {
         action: {
@@ -59,6 +70,8 @@ export function useSlpSettingsDraft({ section }: { section: SlpBackstageSection 
   };
 
   const update = (key: keyof SlurpSettings, value: unknown) => updatePatch({ [key]: value } as Partial<SlurpSettings>);
+  const updateNow = (key: keyof SlurpSettings, value: unknown) =>
+    updatePatch({ [key]: value } as Partial<SlurpSettings>, true);
 
   const restore = async (patch: Partial<SlurpSettings>, message = "Settings saved.") => {
     setSaveState("saving");
@@ -86,6 +99,7 @@ export function useSlpSettingsDraft({ section }: { section: SlpBackstageSection 
     settings,
     save,
     update,
+    updateNow,
     updatePatch,
     restore,
   };

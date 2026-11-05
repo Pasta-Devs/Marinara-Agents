@@ -48,12 +48,7 @@ import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 import { recordSlurpContinuityEvent } from "../../data/continuity/slp-continuity-storage.js";
 import { slurpContinuityIdentityOf } from "../../modules/continuity/slp-continuity-rules.js";
-const slurpCreatorPostCreateBaseSchema = (
-  slpCreatorPostCreateWithMediaSchema instanceof z.ZodEffects
-    ? slpCreatorPostCreateWithMediaSchema.innerType()
-    : slpCreatorPostCreateWithMediaSchema
-) as typeof slpCreatorPostCreateWithMediaSchema;
-const slurpCreatorPostCreateWithMediaSchema = slurpCreatorPostCreateBaseSchema
+const slurpCreatorPostCreateWithMediaSchema = slpCreatorPostCreateWithMediaSchema
   .extend({
     postType: slurpPostTypeSchema.default("post"),
     linkedPostId: z.string().trim().min(1).nullable().optional(),

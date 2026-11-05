@@ -114,6 +114,7 @@ export async function resolveSlurpCreatorFlavour(
      * who they are to the Creator (the DM role): a fan, a fellow Creator's page, or Slurp's staff.
      */
     chat?: {
+      /** Talks at her full level: a subscriber, or a regular and up on the rapport ladder. */
       subscribed: boolean;
       player: boolean;
       seed: string;

@@ -20,9 +20,14 @@ export function resolveSlurpMediaOffer(input: {
   spicy?: boolean;
   /** She is with the viewer (Drama, "your relationship"): what she sends her partner is never sold. */
   partner?: boolean;
+  /** A favourite's spicy picture, now and then a gift "just for you" (rapport ladder). */
+  gift?: boolean;
 }): SlurpMediaOffer {
   if (input.intent === "hostile") return { visibility: "free", price: 0, reason: "hostile_free" };
   if (input.partner) return { visibility: "free", price: 0, reason: "relationship_reward" };
+  if (input.gift && input.spicy && input.intent === "friendly") {
+    return { visibility: "free", price: 0, reason: "relationship_reward" };
+  }
   if (input.subscribed && input.spicy !== undefined && input.intent !== "premium")
     return input.spicy
       ? { visibility: "locked", price: slurpPpvPrice(input.configuredPrice), reason: "premium_content" }
@@ -43,7 +48,8 @@ export function resolveSlurpMediaOffer(input: {
   return { visibility: "free", price: 0, reason: "relationship_reward" };
 }
 
-const slurpPpvPrice = (configured: number) => Math.max(1, Math.min(9999, Math.trunc(configured || 10)));
+export const slurpPpvPrice = (configured: number | undefined) =>
+  Math.max(1, Math.min(9999, Math.trunc(configured || 10)));
 
 // Nudity or sex in a picture prompt. Only the fallback for a reply that did not say whether its
 // picture is spicy; the model's own "spicy" flag decides first.

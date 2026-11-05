@@ -1,10 +1,8 @@
-import { MAX_RELATIONSHIP_DESCRIPTION_LENGTH, MAX_RELATIONSHIP_LABEL_LENGTH } from "./state.mjs";
+import { MAX_RELATIONSHIP_DESCRIPTION_LENGTH, MAX_RELATIONSHIP_LABEL_LENGTH, leadingNamePattern, namePattern } from "./state.mjs";
 
 export const PERSONA_TRACKING_INSTRUCTIONS = "Also track each assigned character's subjective perception of the active persona. Return a compact p array alongside u. existingPersonaPerceptions is the compact persona baseline; each item is [characterAlias,state,label,perception,colorCategory,locked]. Each p item must contain exactly five positional values: characterAlias, state, label, perception, colorCategory. Never copy the baseline locked value or the activePersona alias into p; copy characterAlias only from allowedCharacters.alias. Never put the activePersona alias in u; a character's view of the persona belongs only in p. perception must begin with the character's natural name, name the persona, and describe only that character's subjective, possibly mistaken view. Never assert or invent the persona's thoughts, feelings, wants, intentions, dialogue, decisions, or actions. Omit unchanged and locked perceptions.";
 const COLORS = new Set(["positive", "neutral", "negative", "complicated"]);
 const compact = (value) => typeof value === "string" ? value.replace(/\s+/gu, " ").trim() : "";
-const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-const mentions = (text, name) => new RegExp(`(^|[^\\p{L}\\p{N}_])${escapeRegex(name)}(?=$|[^\\p{L}\\p{N}_])`, "iu").test(text);
 export class PersonaTrackingError extends Error {
   constructor(message) {
     super(message);
@@ -54,6 +52,7 @@ export function normalizePersonaDelta(input, allowedCharacters, personaSnapshot,
   }
   const byAlias = new Map(allowedCharacters.map((entry) => [entry.alias, entry]));
   const baseline = new Map(personaSnapshot.perceptions.map((entry) => [entry.characterId, entry]));
+  const names = [...allowedCharacters.map((entry) => entry.name), personaSnapshot.persona.name];
   const seen = new Set();
   const updates = [];
   for (const [index, tuple] of input.entries()) {
@@ -78,8 +77,11 @@ export function normalizePersonaDelta(input, allowedCharacters, personaSnapshot,
       if (!label || label.length > MAX_RELATIONSHIP_LABEL_LENGTH || !description || description.length > MAX_RELATIONSHIP_DESCRIPTION_LENGTH || !COLORS.has(colorCategory)) {
         fail("Defined persona perception prose or color is invalid.");
       }
-      if (!new RegExp(`^${escapeRegex(character.name)}(?=$|[^\\p{L}\\p{N}_])`, "iu").test(description) || !mentions(description, personaSnapshot.persona.name)) {
-        fail("Persona perception must begin with the character's name and name the active persona.");
+      if (!leadingNamePattern(character.name, names).test(description)) {
+        fail(`Persona perception must begin with the character's name (${character.name}).`);
+      }
+      if (!namePattern(personaSnapshot.persona.name, "iu", names).test(description)) {
+        fail(`Persona perception must name the active persona (${personaSnapshot.persona.name}).`);
       }
       const forbidden = /\b(?:the persona|the user)\s+(?:thinks|feels|wants|intends|decides|says|does|will)\b/iu;
       if (forbidden.test(description)) fail("Persona perception must not assert the persona's internal state or agency.");

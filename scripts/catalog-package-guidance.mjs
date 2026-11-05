@@ -155,6 +155,18 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
     modes: ["conversation", "roleplay", "game"],
     activation: "Install it, restart Marinara Engine when prompted, then open Home → Life Sim.",
   },
+  saucelings: {
+    modes: ["conversation", "roleplay", "game"],
+    activation: "Install it, restart Marinara Engine when prompted, then open Home → Saucelings.",
+  },
+  "story-writer": {
+    modes: ["conversation", "roleplay", "game"],
+    activation: "Install it, restart Marinara Engine when prompted, then open Home → Story Writer.",
+  },
+  "otome-forge": {
+    modes: ["conversation", "roleplay", "game"],
+    activation: "Install it, restart Marinara Engine when prompted, then open Home → Otome Hearth.",
+  },
   pixelforge: {
     modes: ["game"],
     activation: "Install it, then choose Pixelforge as the Experience when creating a Game Mode chat.",
@@ -169,6 +181,14 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
     modes: ["conversation", "roleplay", "game"],
     activation:
       "Enable the music player in Settings → General. Add both as a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents/Music DJ for Conversation, Roleplay, and Game modes.",
+  },
+  // The Engine has no Chat Settings command toggle for Blackjack yet, so characters cannot start it on their own.
+  // Typing "let's play blackjack" still opens the setup: the Engine's input matches play/start/deal plus any installed
+  // game's name or aliases (ConversationInput), with no per-game wiring.
+  blackjack: {
+    modes: ["conversation"],
+    activation:
+      'Install to use /blackjack manually in any Conversation chat, or type a message like "let\'s play blackjack" to open the table setup. Characters cannot start a game on their own yet.',
   },
   poker: {
     modes: ["conversation"],

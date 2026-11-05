@@ -12,6 +12,7 @@ import {
   type SlpDrama,
   type SlpSituation,
 } from "../../../../../../shared/src/slp/slp-drama.js";
+import { SLURP_COSTUME_CONTEST } from "./slp-holiday-dramas.js";
 
 const situation = (value: Record<string, unknown>): SlpSituation =>
   slpSituationSchema.parse({ ...value, builtin: true });
@@ -204,6 +205,7 @@ export const SLURP_BUILTIN_DRAMAS: readonly SlpDrama[] = [
     ],
     exit: { role: "a", channel: "post", heat: { line: "truce. for now." } },
   }),
+  SLURP_COSTUME_CONTEST,
   drama({
     id: "top-fan",
     name: "Top fan",

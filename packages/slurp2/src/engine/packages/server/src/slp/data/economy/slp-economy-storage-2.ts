@@ -28,6 +28,7 @@ import { slurpViewerSettingsKey } from "../host/slp-storage-constants.js";
 import { mapAccount, mapPost, mapPostUnlock } from "../host/slp-storage-mappers.js";
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
 import { CREATOR_PRICES_KEY } from "../host/slp-storage-constants.js";
+import { slpLiveEvents } from "../../../../../shared/src/slp/slp-extensions.js";
 
 export function createEconomyStorage2(context: SlurpStorageContext) {
   const {
@@ -307,7 +308,7 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
         base,
         createSlpActiveModifierProvider([
           slurpPlatformEventModifierSource(
-            settings.platformEvents,
+            slpLiveEvents(settings),
             await this.platformInfluenceStory(creatorAccountId),
           ),
         ]),
@@ -335,7 +336,7 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
             ? slurpSubscriptionCharge(
                 prices[creator.id] ?? settings.walletSubscriptionCost,
                 createSlpActiveModifierProvider([
-                  slurpPlatformEventModifierSource(settings.platformEvents, {
+                  slurpPlatformEventModifierSource(slpLiveEvents(settings), {
                     occurrences,
                     creator: { id: creator.id, tags: creator.settings.profile.tags ?? [] },
                   }),

@@ -68,9 +68,9 @@ export function SlpCollectCard({
           </span>
           <HelpTooltip
             side="bottom"
-            text={localizeUi("ui.slurp.wallet.creatorEarningsHelp", {
+            text={localizeUi("ui.slurp.wallet.creatorEarningsInfo", {
               defaultValue:
-                "What your Creator page earns, in dollars, after Slurp's 20% fee. Collect turns it into SlurpCoins for your Wallet, up to a daily limit shared by all your Creators.",
+                "What your Creator page earns, in dollars, after Slurp's 20% fee. Collect turns it into SlurpCoins for your Wallet. If the daily limit is on in Settings, it is shared by all your Creators.",
             })}
           />
         </p>
@@ -80,8 +80,8 @@ export function SlpCollectCard({
         <p className={cn(SLP_TYPE.meta, "mt-0.5 text-[var(--slurp-muted)]")}>
           {allowance > 0 ? (
             <SlpCoinText>
-              {localizeUi("ui.slurp.wallet.collectTodayDollars", {
-                defaultValue: "{{dollars}} become {{amount}} <coin/> today",
+              {localizeUi("ui.slurp.wallet.collectNowDollars", {
+                defaultValue: "{{dollars}} become {{amount}} <coin/> when you collect",
                 dollars: formatSlpDollars(allowance, i18n.language),
                 amount: coins,
               })}
@@ -90,8 +90,8 @@ export function SlpCollectCard({
             // Nothing earned is not "all collected" (R1-087).
             localizeUi("ui.slurp.wallet.nothingToCollect", { defaultValue: "Nothing to collect yet." })
           ) : (
-            localizeUi("ui.slurp.wallet.collectedToday", {
-              defaultValue: "All collected for today. More after the daily reset.",
+            localizeUi("ui.slurp.wallet.collectedAll", {
+              defaultValue: "All collected. More arrives as you earn.",
             })
           )}
         </p>

@@ -108,13 +108,17 @@ export type SlurpRapport = {
   score: number;
   tier: SlurpRapportTier;
   contributions: SlurpRapportContribution[];
+  /** The highest tier this pair ever reached: its doors stay open (docs/SPICY.md, item 1). */
+  peak?: SlurpRapportTier;
+  /** The highest tier the creator has told the viewer about; below `peak` she says it once. */
+  said?: SlurpRapportTier;
 };
 
 export type SlurpRapportTier = "stranger" | "acquaintance" | "regular" | "favourite" | "whale";
 
 /**
- * Tiers are presentation only: they name a score band for the panel and for the prompt. Nothing
- * is gated on them, so a band edge never silently removes a feature the viewer had a moment ago.
+ * Tiers name a score band for the panel and for the prompt. What a tier opens (`slurpRapportDoors`)
+ * reads `peak`, the highest tier reached, so a band edge never removes a feature the viewer had.
  */
 export function slurpRapportTier(score: number): SlurpRapportTier {
   if (score >= 80) return "whale";
@@ -123,6 +127,66 @@ export function slurpRapportTier(score: number): SlurpRapportTier {
   if (score >= 15) return "acquaintance";
   return "stranger";
 }
+
+export const SLURP_RAPPORT_TIERS: readonly SlurpRapportTier[] = [
+  "stranger",
+  "acquaintance",
+  "regular",
+  "favourite",
+  "whale",
+];
+
+export function slurpRapportHigher(...tiers: (SlurpRapportTier | undefined)[]): SlurpRapportTier {
+  return SLURP_RAPPORT_TIERS[Math.max(0, ...tiers.map((tier) => (tier ? SLURP_RAPPORT_TIERS.indexOf(tier) : 0)))]!;
+}
+
+/** The tier whose doors are open: the highest one reached, never just today's band. */
+export function slurpRapportDoorTier(rapport: Pick<SlurpRapport, "tier" | "peak">): SlurpRapportTier {
+  return slurpRapportHigher(rapport.tier, rapport.peak);
+}
+
+export type SlurpRapportDoor = "spicierTalk" | "gifts" | "customDiscount" | "fullSpice";
+const DOORS_FROM: Record<SlurpRapportDoor, SlurpRapportTier> = {
+  spicierTalk: "regular",
+  gifts: "favourite",
+  customDiscount: "favourite",
+  fullSpice: "whale",
+};
+/** A favourite's customs cost this much less. */
+export const SLURP_RAPPORT_CUSTOM_DISCOUNT = 0.15;
+/** How often a favourite's spicy chat picture is a free gift "just for you". */
+export const SLURP_RAPPORT_GIFT_CHANCE = 0.25;
+
+/** What a tier opens, within her spice level and never past a hard-no (docs/SPICY.md, item 1). */
+export function slurpRapportDoors(tier: SlurpRapportTier): SlurpRapportDoor[] {
+  const at = SLURP_RAPPORT_TIERS.indexOf(tier);
+  return (Object.keys(DOORS_FROM) as SlurpRapportDoor[]).filter(
+    (door) => at >= SLURP_RAPPORT_TIERS.indexOf(DOORS_FROM[door]),
+  );
+}
+
+export function slurpRapportOpens(rapport: Pick<SlurpRapport, "tier" | "peak">, door: SlurpRapportDoor): boolean {
+  return slurpRapportDoors(slurpRapportDoorTier(rapport)).includes(door);
+}
+
+/** Carries the stored peak and announcement through a fresh score. A pair stored before the ladder starts at its tier. */
+export function slurpRapportKeepPeak(
+  computed: SlurpRapport,
+  stored: Partial<SlurpRapport> | null | undefined,
+): SlurpRapport {
+  const known = stored?.peak ?? stored?.tier;
+  return {
+    ...computed,
+    peak: slurpRapportHigher(known, computed.tier),
+    said: stored?.said ?? known ?? "stranger",
+  };
+}
+
+const STEP_UP: Partial<Record<SlurpRapportTier, string>> = {
+  regular: "one of your regulars",
+  favourite: "one of your favourite fans",
+  whale: "one of your biggest supporters",
+};
 
 /** Rapport points a relationship with the viewer's own page brings (Drama, the player as a partner). */
 export const SLURP_PARTNER_RAPPORT = 60;
@@ -287,6 +351,21 @@ export function describeSlurpRapport(rapport: SlurpRapport, viewerName: string):
   const tier = partner ? (partner === "crush" ? "your crush" : "your partner") : rapport.tier;
   return `Your history with ${viewerName}: ${tier} (${rapport.score}/100).${
     notable.length > 0 ? ` What stands out: ${notable.join("; ")}.` : ""
+  }`;
+}
+
+/** The DM reply prompt's rapport line: adds the step-up once the peak passes what she has said (`markRapportSaid`). */
+export function describeSlurpRapportForDm(rapport: SlurpRapport, viewerName: string): string {
+  const peak = slurpRapportDoorTier(rapport);
+  const stepUp =
+    !slurpRapportPartner(rapport) &&
+    SLURP_RAPPORT_TIERS.indexOf(peak) > SLURP_RAPPORT_TIERS.indexOf(rapport.said ?? peak)
+      ? STEP_UP[peak]
+      : undefined;
+  return `${describeSlurpRapport(rapport, viewerName)}${
+    stepUp
+      ? ` ${viewerName} just became ${stepUp}: tell them once in this reply, in one short line, in your own words.`
+      : ""
   }`;
 }
 

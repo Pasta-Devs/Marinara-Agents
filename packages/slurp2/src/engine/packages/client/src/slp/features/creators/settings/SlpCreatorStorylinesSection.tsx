@@ -5,6 +5,7 @@ import { useSlurpSettings } from "../../settings/slp-settings-contract";
 import { useCreatorAccounts, useSlpViewerPersonaId } from "../slp-creators-hooks";
 import { noteClass } from "../slp-creator-classes";
 import type { SlpCreatorSettingsSectionProps } from "./slp-creator-settings-contract";
+import { SlpCreatorLifeCard } from "../SlpCreatorLifeCard";
 
 /**
  * This Creator's storylines: the running ones with accept / dismiss / direct / end, a new one, and
@@ -23,6 +24,7 @@ export function SlpCreatorStorylinesSection({ creator }: SlpCreatorSettingsSecti
   return (
     <div className="space-y-3">
       <p className={noteClass}>{t("ui.slurp.settings.creators.storylinesDetail")}</p>
+      <SlpCreatorLifeCard creatorId={creator.id} name={creator.displayName} />
       <SlurpProjectsPanel personaId={personaId} creatorAccountId={creator.id} otherCreators={others} />
     </div>
   );

@@ -26,6 +26,7 @@ import { createConnectionsStorage } from "../../../services/storage/connections.
 import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { type SlurpSettings } from "../../modules/settings/slp-settings.js";
+import { slpArcsLive } from "../../../../../shared/src/slp/slp-extensions.js";
 import {
   SLURP_AUDIENCE_TONES,
   slurpAudienceToneInstruction,
@@ -480,7 +481,7 @@ export async function prepareCreatorFanCreatorCandidates(input: {
   // The running arc, so a regular can ask how the move is going. Protected before it leaves: fan
   // comments are public, and an arc title can name a Secret Creator's real city.
   const arcByCreator = new Map<string, string | null>();
-  if (input.settings.arcFanReactions !== false) {
+  if (input.settings.arcFanReactions !== false && slpArcsLive(input.settings)) {
     const accountsById = new Map((await noodle.listNoodlerAccounts()).map((account) => [account.id, account]));
     const arcEntries = await Promise.all(
       creators.map(async (creator): Promise<[string, string | null]> => {

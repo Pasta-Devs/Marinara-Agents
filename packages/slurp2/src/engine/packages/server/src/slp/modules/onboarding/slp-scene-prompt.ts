@@ -165,7 +165,7 @@ export function buildSlpSceneTurnMessages(input: {
   request: Pick<
     SlpSceneTurnRequest,
     "preset" | "moment" | "action" | "transcript" | "draft" | "locked" | "direction" | "disclosureMode"
-  >;
+  > & { updating?: boolean };
   /** The newcomer's source card, already cut to what the disclosure mode allows. */
   newcomerCanon: string;
   /** Name and page of the helping Creator (seat preset). */
@@ -199,7 +199,9 @@ export function buildSlpSceneTurnMessages(input: {
   const system = [
     "You write the next lines of a chat scene inside Slurp, a creator subscription app. Everyone is an adult. Stay in the scene: Slurp is a real app to everyone in it, and nobody mentions AI, prompts, models, JSON or forms.",
     PRESET_FRAME[request.preset](host),
-    "The goal of the scene: get the newcomer's Creator page live tonight. The page fills in by itself from what is said: the stage name and handle, a photo, the bio, the limits, then the first post.",
+    input.request.updating
+      ? "The newcomer already has a live Creator page on Slurp and is back to fill in what it is missing. The draft holds what the page says now: treat it as known, never ask again about what it already has, and ask only about the empty fields. They do not need a first post."
+      : "The goal of the scene: get the newcomer's Creator page live tonight. The page fills in by itself from what is said: the stage name and handle, a photo, the bio, the limits, then the first post.",
     PRESET_LEAD[request.preset](host),
     `Now: ${MOMENT_LABEL[request.moment]}. ${MOMENT_BRIEF[request.moment]}`,
     collect.length ? `This step fills: ${collect.join(", ")}.` : "",
@@ -299,18 +301,37 @@ export function sanitizeSlpScenePatch(
   return patch;
 }
 
+/** Labels that are never the newcomer (a narrator, the player, the model itself). */
+const SLP_SCENE_NOT_NEWCOMER = new Set(["narrator", "system", "player", "user", "you", "assistant", "support"]);
+
 /** Clean one model answer into the lines and patch the client applies. Null when nothing usable came back. */
 export function readSlpSceneTurn(
   raw: unknown,
-  context: Parameters<typeof sanitizeSlpScenePatch>[1] & { writesHost: boolean },
+  context: Parameters<typeof sanitizeSlpScenePatch>[1] & { writesHost: boolean; hostName?: string },
 ): SlpSceneTurnResponse | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const value = raw as Record<string, unknown>;
   const lines: SlpSceneLine[] = [];
   for (const entry of Array.isArray(value.lines) ? value.lines : []) {
-    if (!entry || typeof entry !== "object") continue;
-    const line = entry as Record<string, unknown>;
-    const speaker = line.speaker === "host" ? "host" : line.speaker === "newcomer" ? "newcomer" : null;
+    // A turn that answers the player's own line is the newcomer's alone. Models often label those
+    // lines with the newcomer's name or "Newcomer", or send plain strings; dropping them lost every
+    // typed reply ("The reply got lost", feedback B1).
+    const line: Record<string, unknown> =
+      typeof entry === "string"
+        ? { text: entry }
+        : entry && typeof entry === "object"
+          ? (entry as Record<string, unknown>)
+          : {};
+    const label = typeof line.speaker === "string" ? line.speaker.trim().toLocaleLowerCase() : "";
+    const speaker =
+      label === "host"
+        ? "host"
+        : label === "newcomer" ||
+            (!context.writesHost &&
+              !SLP_SCENE_NOT_NEWCOMER.has(label) &&
+              label !== context.hostName?.trim().toLocaleLowerCase())
+          ? "newcomer"
+          : null;
     if (!speaker || (speaker === "host" && !context.writesHost)) continue;
     // Protect first, then cut: the replacement can be longer than the name it replaces, and a
     // line over the limit would fail every later turn that sends it back.

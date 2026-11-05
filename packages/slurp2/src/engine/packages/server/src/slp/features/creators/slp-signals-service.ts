@@ -20,6 +20,7 @@ import {
   slurpSignalFromWorldEvent,
   type SlurpSignal,
 } from "../../modules/continuity/slp-signals.js";
+import { slpLiveEvents } from "../../../../../shared/src/slp/slp-extensions.js";
 
 const SIGNAL_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 const SIGNAL_LIMIT = 100;
@@ -49,7 +50,7 @@ export async function listSlurpSignals(db: DB, creatorId: string, at = new Date(
       ...continuity.facts.map(slurpSignalFromFact),
       ...continuity.events.map(slurpSignalFromEvent),
       ...plans.filter((plan) => plan.sourceEventId).map((plan) => slurpSignalFromPromise(creatorId, plan)),
-      ...(settings ? slurpActivePlatformEvents(settings.platformEvents, at) : []).map((event) =>
+      ...(settings ? slurpActivePlatformEvents(slpLiveEvents(settings), at) : []).map((event) =>
         slurpSignalFromWorldEvent(event, at),
       ),
       ...others.map((title, index) => slurpSignalFromOtherCreator(title, index, at)),

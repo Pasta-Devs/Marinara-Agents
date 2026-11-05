@@ -61,7 +61,9 @@ const host: Record<string, any> = {
   useSlurpCreatorSteering: () => ({ data: { steering: { nudges: [{ id: "idea", text: "Beach day" }] } } }),
   useSlurpWardrobe: () => ({ data: { looks: [{ id: "look", name: "Red dress", enabled: true }] } }),
   slurpIntentFitsAccess: () => true,
-  useSlurpSettings: () => ({ data: {} }),
+  useSlurpSettings: () => ({ data: { extStorylines: true } }),
+  slpExtensionOn: (settings: Record<string, unknown>, id: string) =>
+    id === "storylines" && settings.extStorylines === true,
   useSlurpCreatorMessagingSettings: () => ({ data: undefined }),
   isEmptyCreatorPostDraft: (draft: any) => !draft.body && !draft.image,
   SLP_TYPE: { meta: "", body: "", title: "" },

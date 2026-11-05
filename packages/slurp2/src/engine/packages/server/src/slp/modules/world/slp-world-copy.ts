@@ -14,24 +14,13 @@
  * before reaching for the model — the combinations here already run into the hundreds.
  */
 
+import type { SlurpWorldLens } from "../creators/slp-world-lens.js";
 import type { SlurpAudienceTone } from "../../../../../shared/src/slp/slp-tone.js";
-import { SLURP_COMMISSION_OPENERS, SLURP_FAN_OPENERS } from "../../../../../shared/src/slp/slp-world.js";
-
-const COMMISSION_ASKS = [
-  "something soft, whatever direction you feel like taking it",
-  "something in your usual style, but just for me",
-  "a set built around one idea, your pick of which",
-  "something a bit moodier than your last few",
-  "whatever you have been wanting to make and have not yet",
-  "something I can keep for myself rather than scroll past",
-  "a piece with the feel of your older work",
-  "a quick sketch, nothing polished",
-  "a detailed full-body piece with a proper background",
-  "the two of us together in one scene",
-  "a small set of three around the same theme",
-  "a simple headshot I can use as an icon",
-  "a painted scene, as detailed as you like",
-] as const;
+import {
+  SLURP_COMMISSION_ASKS,
+  SLURP_COMMISSION_OPENERS,
+  SLURP_FAN_OPENERS,
+} from "../../../../../shared/src/slp/slp-world.js";
 
 const COMMISSION_CLOSERS = [
   "No rush at all.",
@@ -53,7 +42,110 @@ const QUESTIONS = [
   "would you ever do this again?",
   "did this turn out how you planned?",
   "is the locked one from the same day?",
+  "where was this taken?",
+  "what are you wearing in the next one?",
+  "do you take custom sets?",
+  "when is the next drop?",
+  "who does your hair?",
+  "is this the new camera?",
+  "how many takes was this?",
+  "can we get a longer version?",
+  "do you ever post this side of you more?",
+  "was this planned or spontaneous?",
+  "what song were you listening to?",
+  "do you read every comment?",
+  "is there a behind the scenes for this?",
+  "favourite one from this set?",
+  "would you do a poll for the next look?",
+  "how did you get the light like that?",
 ] as const;
+
+/** A fan naming the post: real comment sections quote the title back. `{title}` is the post's title. */
+const TITLED_QUESTIONS = [
+  'part two of "{title}" when?',
+  'how long did "{title}" take?',
+  'is "{title}" a one-off or a series?',
+  'who came up with "{title}"?',
+  'is there more of "{title}" behind the lock?',
+  'will "{title}" get a sequel?',
+] as const;
+const TITLED_REACTIONS = [
+  '"{title}" is the right name for this',
+  'saving "{title}" for later',
+  '"{title}" lived up to the title',
+  'not me reading "{title}" three times',
+  '"{title}" made my day',
+  '"{title}" >>> everything else this week',
+] as const;
+
+/** A title short enough for a fan to quote, or null. */
+const quotable = (title: string | null | undefined) => {
+  const text = title?.trim().replace(/^["']|["']$/gu, "") ?? "";
+  return text.length > 0 && text.length <= 40 ? text : null;
+};
+
+/** The first pick whose line is not already under this post (`taken`: its comments, lower case). */
+function freshLine(
+  seed: string,
+  salt: string,
+  bank: readonly string[],
+  taken: readonly string[],
+  fill = (line: string) => line,
+): string | null {
+  const start = pickIndex(seed, salt, bank.length);
+  for (let offset = 0; offset < bank.length; offset += 1) {
+    const line = fill(bank[(start + offset) % bank.length]!);
+    const key = line.toLowerCase().trim();
+    if (!key || !taken.some((text) => text.includes(key))) return line;
+  }
+  return null;
+}
+
+/** The first fresh line from the hashed start, or the start line when every line is taken. */
+function pickFresh(seed: string, salt: string, bank: readonly string[], taken: readonly string[] = []): string {
+  return freshLine(seed, salt, bank, taken) ?? bank[pickIndex(seed, salt, bank.length)]!;
+}
+
+/** Fans meeting a Creator from another era or world (world lens): free, one per era, about the world, never the body. */
+const WORLD_SHOCK: Record<SlurpWorldLens["era"], readonly string[]> = {
+  historical: [
+    "sorry what year is it where you are",
+    "posting from the past and still the best page I follow",
+    "the drama in your town is better than any show",
+    "no filter, just a century of good lighting",
+    "how do you even get these to us",
+    "history class was never this good",
+  ],
+  fantasy: [
+    "is any of this place real??",
+    "what app is your world even on",
+    "ok but is magic doing the lighting",
+    "excuse me, wizard, this is a creator page",
+    "how do you get these out of a fantasy world",
+    "I want a holiday wherever you are",
+  ],
+  scifi: [
+    "what planet is this even",
+    "you're posting from the future and still look this good",
+    "send help, my century feels so behind",
+    "is that the future? it looks expensive",
+    "how is the signal out there",
+    "the future is cooler than they told us",
+  ],
+  other: [
+    "I don't know where you are but I want to go",
+    "every post from your world is a whole new map",
+    "explain your world to me slowly",
+    "where even is this place",
+    "the sky behind you is not a colour I know",
+  ],
+};
+
+export const slurpWorldShockBodies = (lens: SlurpWorldLens | undefined): readonly string[] =>
+  lens ? WORLD_SHOCK[lens.era] : [];
+
+/** What a fan's comment can see of the post: its title, and the comments already under it. */
+export type SlurpCommentContext = { title?: string | null; taken?: readonly string[] };
 
 /** Deterministic index, so the same request always reads the same way. */
 function pickIndex(seed: string, salt: string, length: number): number {
@@ -70,19 +162,31 @@ function pickIndex(seed: string, salt: string, length: number): number {
 }
 
 /** One commission brief. Three banks combined give several hundred distinct requests. */
-export function slurpCommissionBrief(seed: string, openers: readonly string[] = []): string {
-  // The player's own openers (Messaging settings) replace the built-in ones when there are any.
+export function slurpCommissionBrief(
+  seed: string,
+  openers: readonly string[] = [],
+  asks: readonly string[] = [],
+): string {
+  // The player's own lists (Messaging settings) replace the built-in ones when there are any.
   const bank = openers.length > 0 ? openers : SLURP_COMMISSION_OPENERS;
+  const wants = asks.length > 0 ? asks : SLURP_COMMISSION_ASKS;
   return [
     bank[pickIndex(seed, "opener", bank.length)]!,
-    COMMISSION_ASKS[pickIndex(seed, "ask", COMMISSION_ASKS.length)]!,
+    wants[pickIndex(seed, "ask", wants.length)]!,
     COMMISSION_CLOSERS[pickIndex(seed, "closer", COMMISSION_CLOSERS.length)]!,
   ].join(" ");
 }
 
 /** One question for a post. */
-export function slurpAudienceQuestion(seed: string): string {
-  return QUESTIONS[pickIndex(seed, "question", QUESTIONS.length)]!;
+export function slurpAudienceQuestion(seed: string, context: SlurpCommentContext = {}): string {
+  const title = quotable(context.title);
+  if (title && pickIndex(seed, "titled", 3) === 0) {
+    const line = freshLine(seed, "titled-question", TITLED_QUESTIONS, context.taken ?? [], (text) =>
+      text.replace("{title}", () => title),
+    );
+    if (line) return line;
+  }
+  return pickFresh(seed, "question", QUESTIONS, context.taken);
 }
 
 /** An opening line from somebody who has never written before; the player's own list wins when set. */
@@ -319,10 +423,20 @@ export function slurpAudienceReaction(seed: string, extraBodies: readonly string
  * shipped bodies is exactly what the fan types were added to stop. An empty pool falls back to the
  * shipped bodies, so a caller can never produce a blank comment.
  */
-export function slurpAudienceReactionFrom(seed: string, pool: readonly string[]): string {
+export function slurpAudienceReactionFrom(
+  seed: string,
+  pool: readonly string[],
+  context: SlurpCommentContext = {},
+): string {
   const bodies = pool.length > 0 ? pool : SLURP_SHIPPED_REACTIONS;
   const opener = REACTION_OPENERS[pickIndex(seed, "reaction-open", REACTION_OPENERS.length)]!;
-  const body = bodies[pickIndex(seed, "reaction", bodies.length)]!;
+  const title = quotable(context.title);
+  const body =
+    title && pickIndex(seed, "titled", 4) === 0
+      ? (freshLine(seed, "titled-reaction", TITLED_REACTIONS, context.taken ?? [], (line) =>
+          line.replace("{title}", () => title),
+        ) ?? pickFresh(seed, "reaction", bodies, context.taken))
+      : pickFresh(seed, "reaction", bodies, context.taken);
   const tail = REACTION_TAILS[pickIndex(seed, "reaction-tail", REACTION_TAILS.length)]!;
   return `${opener ? `${opener} ` : ""}${body}${tail}`;
 }

@@ -1,3 +1,4 @@
+import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 import { slpCoinPlainText } from "../../modules/coin/SlpCoin";
 import { useLayoutEffect, useRef } from "react";
 import { toast } from "sonner";
@@ -6,7 +7,7 @@ import { playSlpSpendMoment } from "../../modules/sparkle/SlpSparkle";
 import { useSlurpThreadViewState, type SlurpThreadViewProps, type SlurpThreadViewState } from "./slp-thread-view-model";
 
 /** `crypto.randomUUID` exists only in a secure context; a plain-HTTP LAN Engine does not have one. */
-const newRequestId = () =>
+export const newRequestId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
 
 /**
@@ -231,7 +232,10 @@ function useSlurpThreadActions(state: SlurpThreadViewState) {
         // Slurp Support never tips; an attached tip waits in the composer for the persona.
         tip: !asSupport && composerTipAmount > 0 ? { amount: composerTipAmount, note: composerTipNote.trim() } : null,
         ...(asSupport ? { asSupport: true } : {}),
-        ...(asSupport && composerDesk
+        // A desk step left attached after the Support desk was switched off is not sent.
+        ...(asSupport &&
+        composerDesk &&
+        (!state.settingsQuery.data || slpExtensionOn(state.settingsQuery.data, "supportDesk"))
           ? {
               desk: {
                 mode: composerDesk.mode,

@@ -27,6 +27,31 @@ function DiscordMark() {
   );
 }
 
+/** A word struck out by hand: a wobbly marker scribble over it, still read as deleted text. */
+function CrudeStrike({ children }: { children: ReactNode }) {
+  return (
+    <del className="relative inline-block" style={{ textDecoration: "none" }}>
+      {children}
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 40 12"
+        preserveAspectRatio="none"
+        className="pointer-events-none absolute overflow-visible"
+        style={{ left: "-5%", top: "30%", width: "110%", height: "50%" }}
+      >
+        <path
+          d="M1 7 C8 3 13 9 20 5 S31 8 39 4 M3 9 C12 5 22 10 37 6"
+          fill="none"
+          // A red pen, whatever the theme: the Slurp theme turns --destructive pink.
+          stroke="#e11d2e"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+        />
+      </svg>
+    </del>
+  );
+}
+
 function readSeenVersion(): string | null {
   try {
     return window.localStorage.getItem(SEEN_KEY);
@@ -133,7 +158,7 @@ function SlurpWelcome({ open, onDismiss, onLeave }: { open: boolean; onDismiss: 
           <div className="min-w-0">
             <h2 className="text-2xl font-black leading-tight sm:text-3xl">Hey, I’m G.</h2>
             <p className="mt-1 text-sm leading-5 text-[var(--muted-foreground)] sm:text-base sm:leading-6">
-              The dude responsible for all the bugs.
+              The dude responsible for <CrudeStrike>all</CrudeStrike> most of the bugs.
             </p>
           </div>
           <div className="relative flex h-24 w-24 shrink-0 items-center justify-center sm:h-32 sm:w-32">
@@ -306,7 +331,7 @@ function SlurpWhatsNew({ open, seen, onDismiss }: { open: boolean; seen: string 
             <div className="min-w-0 flex-1">
               <h2 className="text-2xl font-black leading-tight sm:text-3xl">Hey, I’m G.</h2>
               <p className={cn(SLP_TYPE.body, "mt-1 text-pretty text-[var(--slurp-muted)]")}>
-                The dude responsible for all the bugs.
+                The dude responsible for <CrudeStrike>all</CrudeStrike> most of the bugs.
               </p>
             </div>
           </div>

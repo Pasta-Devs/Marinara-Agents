@@ -132,7 +132,8 @@ const hooks = read("client/src/hooks/use-slurp.ts");
 const threadsQuery = hooks.slice(hooks.indexOf("export function useSlurpThreads"));
 assert.match(threadsQuery.slice(0, 1200), /refetchInterval: personaId \? 30_000 : false/u);
 const threadQuery = hooks.slice(hooks.indexOf("export function useSlurpThread("));
-assert.match(threadQuery.slice(0, 1600), /refetchInterval: threadId && personaId \? 30_000 : false/u);
+// 1800: the response type grew by the sexting price (0.3.63).
+assert.match(threadQuery.slice(0, 1800), /refetchInterval: threadId && personaId \? 30_000 : false/u);
 
 // ── Comments must be a conversation, not parallel monologues ─────────────────
 const fanService = read("server/src/services/slurp/slurp-fan-activity.service.ts");

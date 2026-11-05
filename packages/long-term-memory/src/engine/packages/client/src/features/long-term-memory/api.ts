@@ -16,7 +16,15 @@ export function mergeSourcePreviewPages(pages: LtmInteropPreviewResponse[] | und
     ...new Map(pages!.flatMap((page) => page.samples).map((sample) => [sample.sourceId, sample])).values(),
   ];
   const importedCount = samples.filter((sample) => sample.status === "imported").length;
-  return { ...last, samples, scanned: samples.length, importedCount, draftable: samples.length - importedCount };
+  // Only an unfiltered first page reports outdated notes.
+  return {
+    ...last,
+    samples,
+    scanned: samples.length,
+    importedCount,
+    draftable: samples.length - importedCount,
+    outdated: pages![0]!.outdated,
+  };
 }
 
 export function mergeLorebookPreviewPages(pages: LtmLorebookPreviewResponse[] | undefined) {
@@ -62,7 +70,7 @@ export function mergeLorebookPreviewPages(pages: LtmLorebookPreviewResponse[] | 
     }),
     { books: 0, entries: 0, candidates: 0, imported: 0, pending: 0 },
   );
-  return { ...last, books, counts };
+  return { ...last, books, counts, outdated: pages![0]!.outdated };
 }
 
 const CSRF_HEADER = "x-marinara-csrf";
@@ -90,9 +98,11 @@ export const queryKeys = {
   scopeTargetsRoot: ["long-term-memory", "scope-targets"] as const,
   localCharactersRoot: ["long-term-memory", "local-characters"] as const,
   lastInjectionRoot: ["long-term-memory", "last-injection"] as const,
+  packageReaders: ["long-term-memory", "package-readers"] as const,
   scopeTargets: (chatId: string | null | undefined) => ["long-term-memory", "scope-targets", chatId] as const,
   localCharacters: (chatId: string | null | undefined) => ["long-term-memory", "local-characters", chatId] as const,
   lastInjection: (chatId: string | null | undefined) => ["long-term-memory", "last-injection", chatId] as const,
+  chatMemories: (chatId: string | null | undefined) => ["long-term-memory", "chat-memories", chatId] as const,
 } as const;
 
 export const ltmScopeTargetsKey = (chatId: string | null | undefined) =>
@@ -101,7 +111,8 @@ export const ltmScopeTargetsKey = (chatId: string | null | undefined) =>
 /** One definition per shared query, so every screen reads and invalidates the same cache entry. */
 export const settingsQueryOptions = {
   queryKey: queryKeys.settings,
-  queryFn: () => request<LtmGlobalSettings>("/settings"),
+  // The flag is false on an Engine that cannot hide chat messages.
+  queryFn: () => request<LtmGlobalSettings & { hideImportedMessagesAvailable?: boolean }>("/settings"),
 };
 
 export const scopeTargetsQueryOptions = (chatId: string | null | undefined) => ({
@@ -160,7 +171,10 @@ export async function failedResponseError(response: Response): Promise<Error> {
   const serverMessage = typeof payload?.error === "string" ? payload.error : "";
   const error = new Error(serverMessage || response.statusText || "Long-Term Memory request failed");
   Object.assign(error, { status: response.status });
-  if (!serverMessage) withoutUserMessage(error);
+  // An unexpected failure has no message for users: LTM's route fallback, or the Engine's generic 500 for a
+  // route without routeError. The caller's own localized message shows instead.
+  if (!serverMessage || payload?.code === "ltm_unexpected_failure" || serverMessage === "Internal Server Error")
+    withoutUserMessage(error);
   if (typeof payload?.code === "string") Object.assign(error, { code: payload.code });
   return error;
 }
@@ -185,10 +199,16 @@ export async function request<TResponse, TBody = unknown>(
   return response.json() as Promise<TResponse>;
 }
 
-export async function requestHost<TResponse>(path: string): Promise<TResponse> {
+export async function requestHost<TResponse>(path: string, method = "GET", body?: unknown): Promise<TResponse> {
+  const headers = new Headers(getAdminSecretHeader());
+  if (method !== "GET") headers.set(CSRF_HEADER, CSRF_HEADER_VALUE);
+  if (body !== undefined) headers.set("Content-Type", "application/json");
   const response = await fetch(path, {
+    method,
+    headers,
     cache: "no-store",
     credentials: "same-origin",
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as {

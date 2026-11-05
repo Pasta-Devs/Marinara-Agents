@@ -23,7 +23,10 @@ import {
   SLURP_SHIPPED_TYPE_REACTIONS,
   slurpCommissionBrief,
   slurpCreatorPeerComment,
+  slurpWorldShockBodies,
+  type SlurpCommentContext,
 } from "../../modules/world/slp-world-copy.js";
+import { readSlurpWorldLens } from "../../data/creators/slp-canon-anchor-storage.js";
 import { slurpReactionBodiesForType, type SlurpReactionBanks } from "../../modules/world/slp-reaction-bank.js";
 import { enqueueSlurpPendingText } from "./slp-pending-text-service.js";
 import { createSlurpEventsStorage } from "../../data/notifications/slp-notification-storage.js";
@@ -107,7 +110,10 @@ export async function applyAction(
   action: SlurpWorldAction,
   at: Date,
   noodle: ReturnType<typeof createSlurpStorage>,
-  settings: Pick<SlurpSettings, "fanTypes" | "messagesFanOpeners" | "messagesCommissionOpeners">,
+  settings: Pick<
+    SlurpSettings,
+    "fanTypes" | "messagesFanOpeners" | "messagesCommissionOpeners" | "messagesCommissionAsks"
+  >,
   characterFanPinnedTypeIds: ReadonlyMap<string, string | null>,
 ): Promise<boolean> {
   const { fanTypes } = settings;
@@ -231,6 +237,7 @@ export async function applyAction(
     const brief = slurpCommissionBrief(
       `${action.creatorAccountId}:${action.actorAccountId}:${at.toISOString()}`,
       settings.messagesCommissionOpeners,
+      settings.messagesCommissionAsks,
     );
     const commission = await messages.createCommission(action.actorAccountId, action.creatorAccountId, brief);
     // `"open_request"` means this fan already has one waiting. Piling on a second is exactly what
@@ -255,7 +262,10 @@ export async function applyAction(
     creatorAccountId: action.creatorAccountId,
     actorId: actor.id,
     type: "reply",
-    content: slurpAudienceQuestion(`${action.postId}:${action.actorAccountId}`),
+    content: slurpAudienceQuestion(
+      `${action.postId}:${action.actorAccountId}`,
+      await slurpCommentContext(noodle, action.postId),
+    ),
   });
   if (!result?.created) return false;
   await enqueueSlurpPendingText(db, {
@@ -293,6 +303,11 @@ export async function applyAction(
  * highest-volume text on the platform and the least worth reading. The batched run keeps the
  * model, and keeps it for comments that have actually seen the post.
  */
+// ponytail: one process-wide cache for a pulse tick, so a busy post is read once; a comment written
+// elsewhere in the same minute is missed by the repeat check, which only costs a rare repeat.
+const PULSE_CONTEXT_MS = 60_000;
+const PULSE_CONTEXTS = new Map<string, { at: number; context: Promise<SlurpCommentContext> }>();
+
 export async function applyPulse(
   db: DB,
   action: SlurpPulseAction,
@@ -304,6 +319,13 @@ export async function applyPulse(
   const actor = await resolveActor(db, action.actorAccountId, characterFanPinnedTypeIds, fanTypes);
   if (!actor) return false;
   const isComment = action.kind === "comment";
+  const pulseContext = () => {
+    const now = Date.now();
+    for (const [postId, entry] of PULSE_CONTEXTS) if (now - entry.at > PULSE_CONTEXT_MS) PULSE_CONTEXTS.delete(postId);
+    const entry = PULSE_CONTEXTS.get(action.postId) ?? { at: now, context: slurpCommentContext(noodle, action.postId) };
+    PULSE_CONTEXTS.set(action.postId, entry);
+    return entry.context;
+  };
   // Whose words these are. A comment is the only place the audience is heard, so it draws from the
   // actor's own Fan Type bank before the shared one.
   // An ambient account has no population row, so it is drawn onto a type by id, as the money pass
@@ -314,11 +336,16 @@ export async function applyPulse(
       ? slurpResolveFanType(fanTypes, actor).id
       : slurpPickFanType(fanTypes, actor.id).id;
   const sides = isComment ? await rivalrySides(noodle, action.postId) : null;
-  // Somebody she is publicly with: now and then the crowd talks to her about them (her public side).
+  // Somebody the Creator is publicly with: now and then the crowd asks about them (their public side).
   const partner =
     isComment && !sides && hash(`${action.postId}:${actor.id}:partner`) % 4 === 0
       ? await publicPartnerName(db, action.creatorAccountId)
       : null;
+  // A Creator from another era or world: now and then a regular fan reacts to the culture shock.
+  const shock =
+    isComment && !sides && !partner && fanTypeId === "regular" && hash(`${action.postId}:${actor.id}:shock`) % 4 === 0
+      ? slurpWorldShockBodies(await readSlurpWorldLens(db, action.creatorAccountId))
+      : [];
   const result = await noodle.createNoodlerWorldInteraction(action.postId, {
     creatorAccountId: action.creatorAccountId,
     actorId: actor.id,
@@ -334,11 +361,19 @@ export async function applyPulse(
               : slurpRivalryBodies(sides.self, sides.rival)
             : partner
               ? slurpPartnerCommentBodies(partner)
-              : slurpReactionBodiesForType(banks, fanTypeId, SLURP_SHIPPED_TYPE_REACTIONS[fanTypeId ?? ""] ?? []),
+              : shock.length
+                ? shock
+                : slurpReactionBodiesForType(banks, fanTypeId, SLURP_SHIPPED_TYPE_REACTIONS[fanTypeId ?? ""] ?? []),
+          // Only the regular voice with no own bank takes a generic titled line; every other voice keeps its own pool.
+          sides || partner || shock.length || fanTypeId !== "regular" || banks.byType.regular?.length
+            ? { ...(await pulseContext()), title: null }
+            : await pulseContext(),
         )
       : null,
   });
   if (!result) return false;
+  if (isComment && result.created && result.interaction.content)
+    ((await pulseContext()).taken as string[]).push(result.interaction.content.toLowerCase());
   const advance = slurpPulseTieAdvance(action.kind, result.created);
   if (!advance) return false;
   const population = createSlurpPopulationStorage(db);
@@ -350,6 +385,21 @@ export async function applyPulse(
   if (!result.created && (!before || !after || after.stage === before.stage)) return false;
   await population.touch(actor.id).catch(() => undefined);
   return true;
+}
+
+/** The post's title and the comments already under it, so a fan quotes the post and never repeats a line. */
+async function slurpCommentContext(
+  noodle: ReturnType<typeof createSlurpStorage>,
+  postId: string,
+): Promise<SlurpCommentContext> {
+  const [post, comments] = await Promise.all([
+    noodle.getNoodlerPostById(postId).catch(() => null),
+    noodle.listNoodlerInteractions([postId]).catch(() => []),
+  ]);
+  return {
+    title: post?.title ?? null,
+    taken: comments.flatMap((comment) => (comment.content ? [comment.content.toLowerCase()] : [])),
+  };
 }
 
 /** What fans say under a rivalry or a couple post, or null for any other post. */

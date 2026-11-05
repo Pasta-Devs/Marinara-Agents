@@ -31,6 +31,8 @@ export type SlurpDmParty = {
   us?: boolean;
   /** "he/him", from the page's gender (`slpPronouns`). */
   pronouns?: string;
+  /** The page's latest public posts, newest first, so the Creator can bring them up. */
+  recentPosts?: string[];
 };
 
 /** The message fields the transcript reads. A subset of `SlurpMessage`. */
@@ -70,6 +72,8 @@ export type SlurpDmRoleInput = {
   isRequest?: boolean;
   /** Slurp Support's own thread (`slp-support.ts`): the viewer is Slurp's staff, not a fan. */
   support?: boolean;
+  /** Support's thread with the Support desk on: the Creator also answers in "desk". */
+  desk?: boolean;
   /** The Creator may pitch a roleplay scene in this reply (docs/SCENES.md). */
   sceneInvite?: boolean;
 };
@@ -143,9 +147,12 @@ export function slurpDmRoleHeader(input: SlurpDmRoleInput & { history: readonly 
     lines.push(
       `You are ${at(input.creator)}, a Creator on Slurp. This is your private chat with ${viewer}, Slurp's own staff team: the people who run the platform you post on. ${viewer} is not a fan and not a customer; talk to them the way ${creator} talks to the platform's staff. Every line on their side is marked "${viewer} (Slurp staff)" or "${viewer} (during the sign-up)".`,
       `What ${viewer} tells you can change things for you: your mood, what you are into, what you plan to post, what you bring up more or leave alone. It never changes how you feel about any fan. When this talk really changes something and you go along with it, add "staff" to your JSON: {"mood": "bright"|"cozy"|"restless"|"low"|"flirty"|"stressed"|null, "focus": what you are into or working on now, or null, "idea": one post you now plan, or null, "more": a topic you will bring up more, or null, "less": a topic you will leave alone for now, or null, "takeaway": one sentence you will remember, starting "${viewer} told me", or null, "stir": when ${viewer} asks for something beyond you (a collab, being set up with someone, a rivalry, an event), that wish in plain words, or null}. Otherwise "staff" is null. You can also say no to them. Nothing changes until ${viewer} confirms it, so answer the way you really feel about it.`,
-      // The Support desk (docs/SUPPORT-DESK.md). "slurpStanding" in the data says where you stand with Slurp.
-      `Also add "desk" to your JSON every time: {"trust": "up" if this talk made you think better of Slurp, "down" if worse, else "same", "offer": when slurpStanding.pendingOffer is set, your answer to that offer: "accept", "counter" (you want something different) or "decline"; otherwise null, "counter": what you would take instead, in plain words, or null, "intel": rarely, and only when you trust Slurp, one thing you let slip about another Creator on Slurp, or null, "rating": when slurpStanding.ticketResolved is set, 1 to 5 for how Slurp handled your ticket; otherwise null}. When slurpStanding.youGoAlong is set you accept the offer, however you feel about it. Your "content" says your answer in your own words; decide the way you really would, from slurpStanding.standing.`,
     );
+    // The Support desk (docs/SUPPORT-DESK.md). "slurpStanding" in the data says where you stand with Slurp.
+    if (input.desk !== false)
+      lines.push(
+        `Also add "desk" to your JSON every time: {"trust": "up" if this talk made you think better of Slurp, "down" if worse, else "same", "offer": when slurpStanding.pendingOffer is set, your answer to that offer: "accept", "counter" (you want something different) or "decline"; otherwise null, "counter": what you would take instead, in plain words, or null, "intel": rarely, and only when you trust Slurp, one thing you let slip about another Creator on Slurp, or null, "rating": when slurpStanding.ticketResolved is set, 1 to 5 for how Slurp handled your ticket; otherwise null}. When slurpStanding.youGoAlong is set you accept the offer, however you feel about it. Your "content" says your answer in your own words; decide the way you really would, from slurpStanding.standing.`,
+      );
   } else if (input.writer === "creator") {
     const page = input.viewerPage;
     lines.push(
@@ -160,6 +167,8 @@ export function slurpDmRoleHeader(input: SlurpDmRoleInput & { history: readonly 
             : `${viewer} is a fan writing to you.`,
     );
     if (page?.relationship) lines.push(page.relationship);
+    if (page?.recentPosts?.length)
+      lines.push(`Latest posts on ${at(page)}: ${page.recentPosts.map((post) => `"${post}"`).join(" ")}`);
     // Her public side: she is a Creator, and the one she is with sees her page like everyone else.
     if (page?.partner)
       lines.push(

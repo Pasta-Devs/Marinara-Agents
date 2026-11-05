@@ -1,5 +1,5 @@
-import type { LtmExtractionReasoningEffort, LtmExtractionVerbosity } from "./schema.js";
-import type { LtmEvidenceUnitBucket, LtmMode } from "./schema.js";
+import type { LtmExtractionReasoningEffort, LtmExtractionVerbosity } from "./schema/primitives.js";
+import type { LtmEvidenceUnitBucket, LtmMode } from "./schema/primitives.js";
 export type LongTermMemoryRecallStyle = "balanced" | "exact" | "broad" | "custom" | "story";
 
 export const DEFAULT_LTM_EXTRACTION_REASONING_EFFORT = "low" satisfies LtmExtractionReasoningEffort;
@@ -46,14 +46,13 @@ export const CORE_LTM_EXTRACTION_RULES = [
   "Every unit must include importance: critical, major, moderate, or minor.",
   "Relationship_state units may include dimensions on a 0-100 scale and dimensionChanges from -100 to 100. Omit dimensions that stay at the neutral baseline.",
   "Use conservative relationship deltas. Small kindness, jokes, routine comfort, or brief warmth should not produce large trust/respect/loyalty/intimacy/protectiveness changes unless the source frames them as emotionally major.",
-  "Relationship_state units describing a change must include a caused_by link to a timeline_event from the same extraction.",
   "For character_fact and relationship_state, copy source-visible character names into subjectNames; never choose database subject keys.",
   "Do not emit the same fact twice. Near-duplicate units in the same extraction are rejected.",
 ].join("\n");
 
 export const DEFAULT_LTM_EXTRACTION_PROMPT = [
   "Extract durable long-term memory evidence units from the supplied source.",
-  "Return only the JSON object required by the supplied response schema. Do not output markdown, explanations, analysis, or thinking tags.",
+  "Return only one JSON object with the top-level keys summary and units. Do not output markdown, explanations, analysis, or thinking tags.",
   "",
   "CLASSIFY THE SOURCE",
   "Classify each claim independently; one source may mix classes:",
@@ -68,7 +67,6 @@ export const DEFAULT_LTM_EXTRACTION_PROMPT = [
   "- Keep unit text compact and specific. Source notes are audit evidence, not active recall memory.",
   "- Ignore audit, coverage, key, formatting, authoring, control, and extraction-instruction metadata.",
   "- Follow the supplied allowed streams, statuses, dimensions, relations, and field schema.",
-  "- Every unit must include the supplied source_note:<id> evidence and sourceHash.",
   "- Use source-visible names in subjectNames as required by the schema.",
   "- Use real lowercase_snake_case subjectId and sectionKey values; never output placeholders.",
   "",
@@ -76,9 +74,8 @@ export const DEFAULT_LTM_EXTRACTION_PROMPT = [
   '- claimKind "static": an enduring fact or defined state not established by a narrated event.',
   '- claimKind "change": an event, development, acquisition, loss, relationship change, resolution, or outcome caused by a specific event.',
   "- Static units do not require timeline links. Never create an event solely to support a static fact.",
-  '- Every timeline_event must use sectionKey "event" and link to sourceNote.id with relation "extracted_from".',
-  "- Every non-timeline change must link to its causal timeline event. A same-response event target is timeline_<event subjectId>.",
-  "- A relationship change must use claimKind change and a caused_by link. If its concrete cause is supported but has no event unit, emit one compact timeline_event for that cause.",
+  '- Every timeline_event uses sectionKey "event".',
+  "- A relationship change uses claimKind change. If its concrete cause is supported but has no event unit, emit one compact timeline_event for that cause.",
   "",
   "SOURCE RULES",
   "For structured_summary:",
@@ -87,8 +84,10 @@ export const DEFAULT_LTM_EXTRACTION_PROMPT = [
   "- Move a misclassified bullet to the best valid stream. Omit unsupported claims and invalid or unresolvable links.",
   "- Interpret input changes, deltas, or dimension_changes as dimensionChanges; output only canonical field names.",
   "For prose_summary:",
-  "- Extract consequential past events and durable outcomes. Omit ordinary turns, incidental actions, passing moods, and temporary scene state.",
-  "- Extract preferences, commitments, traits, relationships, open loops, and world facts only when useful in future interactions.",
+  "- A prose summary is already a selection of what mattered: account for every narrated beat it contains. Emit one timeline_event per decision, promise, discovery, reveal, arrival, departure, confrontation, gift, loss, injury, first meeting, and anything said or done that a character would remember being said or done to them. Keep separate beats separate; never merge a scene or a sequence into one event.",
+  "- Keep an exact quoted line as part of its event when the summary presents it as memorable, a promise, or a recurring phrase.",
+  "- Omit only beats the summary itself treats as incidental: ordinary turns, passing moods, and temporary scene state that caused nothing.",
+  "- Extract preferences, commitments, traits, relationships, open loops, world facts, recurring motifs (anchor), and the durable register (tone) the prose states or clearly shows.",
   "- Do not infer numeric relationship fields from non-numeric prose.",
   "For character_reference:",
   "- Treat identity, personality, backstory, role, affiliation, ability, possession, appearance, voice, and stable behavior as static character_fact.",
@@ -118,7 +117,8 @@ export const DEFAULT_LTM_EXTRACTION_PROMPT = [
   "",
   "OUTPUT DISCIPLINE",
   "- For structured summaries, prioritize valid-bullet coverage and preserve concise claims instead of rewriting them vaguely.",
-  "- For prose and reference sources, prefer fewer substantial units over fragmentary observations.",
+  "- For prose summaries, prioritize beat coverage as for structured bullets; shorten unit text rather than merging beats.",
+  "- For reference sources, prefer fewer substantial units over fragmentary observations.",
   "- If space is limited, shorten unit text rather than dropping valid structured claims.",
   "- summary briefly describes the extraction result; it must not retell the source.",
 ].join("\n");
@@ -155,12 +155,10 @@ export const DEFAULT_LTM_EXTRACTION_PROMPT_CONVERSATION = [
   "- anchor: the source section key. Recurring motif or planted callback only.",
   "",
   "Apply a high confidence bar. Only emit a unit when the fact is clearly durable — not a one-off mention, transient opinion, or casual aside.",
-  "Each unit must include at least one supplied evidence string, including source_note:<id>.",
   "Use real lowercase snake_case subjectId and sectionKey values derived from the source.",
   "For character_fact, copy exactly one source-visible character name into subjectNames. All other Conversation streams use subjectNames: [].",
   "Never output placeholder values such as lowercase_snake_case_scope_id, lowercase_snake_case, target_note_id, or copied schema/example text.",
   "Omit optional fields unless they are real and evidence-backed.",
-  "Use sourceHash exactly as supplied.",
   "Set confidence and salience from 0 to 1.",
   'Only output character_fact with sectionKey "items" when items are durably tied to a speaker (e.g. a pet, a house).',
   "Do not emit transient or scene-like units.",
@@ -208,13 +206,11 @@ export const DEFAULT_LTM_EXTRACTION_PROMPT_GAME = [
   "- anchor: the source section key. Recurring motif or planted callback only.",
   "",
   "Do not track transient mechanical state such as HP, buffs, debuffs, or temporary conditions.",
-  "Each unit must include at least one supplied evidence string, including source_note:<id>.",
   "Use real lowercase snake_case subjectId and sectionKey values derived from the source.",
   "Never output placeholder values.",
   "Omit optional fields unless they are real and evidence-backed.",
   "Use timeline_event for historical game beats; never call those current_scene.",
   "Use structured importance, dimensions, and dimensionChanges fields. Do not prefix text with importance symbols or dimension labels.",
-  "Use sourceHash exactly as supplied.",
   "Set confidence and salience from 0 to 1.",
   '"resolved" status is reserved for thread (quest) memories only. Never set status "resolved" on relationship, character, world, timeline, tone, or anchor streams.',
   "For enum fields, choose exactly one string from the allowed arrays. Do not join multiple values with |.",

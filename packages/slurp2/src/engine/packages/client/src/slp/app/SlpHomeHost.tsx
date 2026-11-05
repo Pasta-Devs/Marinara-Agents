@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SlpEmptyState, SlpErrorState, SlpSkeleton } from "../modules/chrome/SlpStateKit";
 import { toast } from "sonner";
 import { ViewerHub } from "./screens/SlpScreenHub";
@@ -23,8 +23,10 @@ import { SlpBackstageSidebar } from "../features/backstage/SlpBackstageSidebar";
 import { Modal } from "../../components/ui/Modal";
 import { useSlurpHomeState } from "./slp-home-actions";
 import type { SlurpHomeProps } from "./slp-home.types";
+import type { SlurpNavigationState } from "../base/navigation/slp-navigation.types";
+import { useSlpStirDeck } from "../base/state/slp-stir-sheet-store";
 import { renderSlurpHomeCreatorFlow } from "./screens/SlpHomeCreatorFlow";
-import { renderSlurpHomeDestinations } from "./screens/SlpHomeDestinations";
+import { renderSlurpHomeDestinations, SlpStirDeck } from "./screens/SlpHomeDestinations";
 import { SlpHomeFeedRail } from "./screens/SlpHomeFeedRail";
 import { SlpStirCreatorSheet, SlpStirReadyPlanHost } from "../features/stir/slp-stir-contract";
 import type { SlpStoryRings } from "../modules/story/SlpStoryRing";
@@ -32,11 +34,30 @@ import { slpStoryRings, slpStoryStartId } from "../modules/story/slp-story-rings
 import { slurpLiveStories } from "./screens/slp-hub-view";
 import { slpShowPostWhenRendered } from "../modules/post/SlpPostPurposeNote";
 import type { SlpPulseTarget } from "../base/state/slp-task-store";
+import { slpExtensionOn, slpInlineAdsOn } from "../../../../shared/src/slp/slp-extensions.js";
 
 /** Slurp's own tree and its portalled sheets. */
 const SLP_SCOPE_SELECTOR = 'marinara-capability-slurp2, [data-marinara-capability-scope="slurp2"]';
 
-export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
+/** W: Stir slides up over the page it was opened from, and any other move closes it. Leaving a chat for it
+ * (the Support desk's back) lands on the feed under it. Stable like `onNavigate`, effects depend on it. */
+function useSlpStirDeckNavigate({ navigation, onNavigate }: Pick<SlurpHomeProps, "navigation" | "onNavigate">) {
+  const latest = useRef({ navigation, onNavigate });
+  latest.current = { navigation, onNavigate };
+  const [navigate] = useState(() => (next: SlurpNavigationState) => {
+    const { navigation: current, onNavigate: go } = latest.current;
+    const stir = next.mode === "creator" && (next.view === "stir" || next.view === "studio");
+    useSlpStirDeck.setState({ open: stir });
+    if (!stir) go(next);
+    else if (current.mode === "creator" && current.view === "messages") go({ mode: "creator", view: "hub" });
+  });
+  // Leaving Slurp with Stir open must not reopen it on the next visit.
+  useEffect(() => () => useSlpStirDeck.setState({ open: false }), []);
+  return navigate;
+}
+
+export function SlurpHome({ navigation, onNavigate: navigateRaw, onLeave }: SlurpHomeProps) {
+  const onNavigate = useSlpStirDeckNavigate({ navigation, onNavigate: navigateRaw });
   const model = useSlurpHomeState({ navigation, onNavigate, onLeave });
   const {
     localizeUi,
@@ -221,7 +242,13 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     onOpenSearch: goToNoodlerSearch,
     onOpenMessages: goToMessages,
     onOpenWallet: goToWallet,
-    onOpenStir: goToStir,
+    // Stir and Support desk off: no tab (the desk shares the Stir screen). Shown while settings load.
+    onOpenStir:
+      !slurpSettingsQuery.data ||
+      slpExtensionOn(slurpSettingsQuery.data, "stir") ||
+      slpExtensionOn(slurpSettingsQuery.data, "supportDesk")
+        ? goToStir
+        : undefined,
     // Pulse's tap-through (task C): the post a task made, your chat it wrote in, or the Creator.
     onOpenPulseTarget: (target: SlpPulseTarget) => {
       if ("chatCreatorId" in target) {
@@ -233,7 +260,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
       if (postId) window.setTimeout(() => slpShowPostWhenRendered(postId), 250);
     },
     onOpenBudget: () =>
-      onNavigate({ mode: "creator-settings", section: "world", target: "audience", settingKey: "modelBudget" }),
+      onNavigate({ mode: "creator-settings", section: "basic", target: "audience", settingKey: "modelBudget" }),
     pulseStarts: {
       // The Creator picker in Backstage; its Generate is a Pulse task (task B).
       onGeneratePosts: () =>
@@ -251,7 +278,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
       ? {
           onOpenBudget: () => {
             dismissBudgetNote();
-            onNavigate({ mode: "creator-settings", section: "world", target: "audience", settingKey: "modelBudget" });
+            onNavigate({ mode: "creator-settings", section: "basic", target: "audience", settingKey: "modelBudget" });
           },
           onDismiss: dismissBudgetNote,
         }
@@ -338,6 +365,8 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
         )}
         {/* B: a Stir plan that came back after the player left its box. */}
         <SlpStirReadyPlanHost />
+        {/* W: the Stir tab, sliding up over the page it was opened from. */}
+        <SlpStirDeck model={model} onOpenTarget={(target) => shellProps.onOpenPulseTarget(target)} />
         {/* W: the ✦ sheet, opened from a profile, a post's ⋯ or Creator tools. */}
         <SlpStirCreatorSheet
           personaId={viewerPersonaId}
@@ -513,7 +542,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
         onToggleSubscription={toggleCreatorSubscription}
         togglePending={toggleSubscription.isPending || toggleFollow.isPending}
         connectionCounts={connectionCountsQuery.data ?? {}}
-        inlineAdsEnabled={slurpSettingsQuery.data?.inlineAdsEnabled !== false}
+        inlineAdsEnabled={Boolean(slurpSettingsQuery.data && slpInlineAdsOn(slurpSettingsQuery.data))}
         inlineAdsFrequency={slurpSettingsQuery.data?.inlineAdsFrequency ?? "standard"}
         storyLifetimeHours={slurpSettingsQuery.data?.storyLifetimeHours ?? 72}
       />

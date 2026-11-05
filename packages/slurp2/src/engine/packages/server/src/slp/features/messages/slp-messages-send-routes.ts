@@ -17,6 +17,10 @@ import { SLURP_SUPPORT_ACCOUNT_ID } from "../../../../../shared/src/slp/slp-supp
 import { SLURP_SUPPORT_PHOTO_GUIDANCE } from "../../modules/messages/slp-support.js";
 import { SLURP_SUPPORT_NAME } from "../../modules/messages/slp-dm-roles.js";
 import { markSlurpDeskSupportTurn, prepareSlurpDeskSend, slurpDeskSendSchema } from "./desk/slp-desk-send.js";
+import { SLP_DESK_OFF } from "./desk/slp-desk-routes.js";
+import { slurpSextingPrice, slurpSextingStart } from "../../modules/messages/slp-sexting.js";
+import { isSlurpSupportThread } from "../../modules/messages/slp-support.js";
+import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
 const sendSchema = z.object({
   personaId: z.string().trim().min(1),
@@ -43,6 +47,11 @@ const tipSchema = z.object({
   creatorAccountId: z.string().trim().min(1),
   amount: z.number().int().min(1).max(9999),
   note: z.string().trim().max(280).default(""),
+  requestId: z.string().trim().min(8).max(100).optional(),
+});
+const sextingSchema = z.object({
+  personaId: z.string().trim().min(1),
+  threadId: z.string().trim().min(1),
   requestId: z.string().trim().min(8).max(100).optional(),
 });
 /** Why a chat cannot start, in Slurp's words. A shared couple page points to the two people behind it. */
@@ -139,6 +148,8 @@ export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: Slp
     const viewer = await requireViewer(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     // Support's desk step: checked before anything is sent (docs/SUPPORT-DESK.md).
+    if (parsed.data.desk && !slpExtensionOn(await slurp.getSettings(), "supportDesk"))
+      return reply.code(409).send({ error: SLP_DESK_OFF });
     const deskStep = parsed.data.desk
       ? parsed.data.asSupport && !(await ownsCreator(viewer.id, parsed.data.creatorAccountId))
         ? await prepareSlurpDeskSend(app.db, {
@@ -215,9 +226,10 @@ export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: Slp
             deskMove: { ...(deskStep.metadata.deskMove as Record<string, unknown>), error: moved.error },
           });
       }
-      await markSlurpDeskSupportTurn(app.db, parsed.data.creatorAccountId).catch((error: unknown) =>
-        logger.warn(error, "[slurp-desk] Could not update the ticket"),
-      );
+      if (slpExtensionOn(await slurp.getSettings(), "supportDesk"))
+        await markSlurpDeskSupportTurn(app.db, parsed.data.creatorAccountId).catch((error: unknown) =>
+          logger.warn(error, "[slurp-desk] Could not update the ticket"),
+        );
     }
     let outcome;
     let tipError: string | null = null;
@@ -451,6 +463,42 @@ export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: Slp
     });
     return {
       thread: (await freshView(sent.thread.id)) ?? sent.thread,
+      message: sent.message,
+      reply: outcome.status === "replied" ? maskForViewer(outcome.message) : null,
+      replyStatus: outcome.status,
+      typingMs: "pacing" in outcome ? outcome.pacing.typingMs : 0,
+      wallet: await slurp.getWallet(viewer.id),
+    };
+  });
+
+  // A paid sexting session (docs/SPICY.md, item 2): claimed first, then paid like a tip, then she answers.
+  app.post("/messages/sexting", async (req, reply) => {
+    const parsed = sextingSchema.safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await requireViewer(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const thread = await messages.getThreadById(parsed.data.threadId);
+    const creator = thread ? await slurp.getNoodlerAccountById(thread.creatorAccountId) : null;
+    if (!thread || !creator || thread.viewerAccountId !== viewer.id || thread.state !== "active")
+      return reply.code(404).send({ error: "Thread not found" });
+    if (creator.sourceKind === "persona" || isSlurpSupportThread(thread))
+      return reply.code(400).send({ error: "This Creator does not offer sessions." });
+    const price = slurpSextingPrice((await messages.getCreatorMessaging(creator.id)).ppvPrice, thread.rapport);
+    const session = slurpSextingStart(new Date());
+    if (!(await messages.startSexting(thread.id, session)))
+      return reply.code(409).send({ error: "A session is already running." });
+    // The request id is scoped to this session: a stale id replayed later must not pay for a new one.
+    const requestId = parsed.data.requestId && `${parsed.data.requestId}:${session.startedAt}`;
+    const sent = await messages.tipInThread(viewer.id, creator.id, price, "Sexting session", requestId);
+    if (sent.status !== "sent") {
+      await messages.cancelSexting(thread.id, session.startedAt);
+      if (sent.status === "insufficient_funds")
+        return reply.code(402).send({ error: "Not enough coins.", required: sent.required });
+      return reply.code(403).send({ error: "This Creator is not accepting messages." });
+    }
+    const outcome = await replyToSlurpMessage(app.db, { threadId: thread.id, triggerMessageId: sent.message.id });
+    return {
+      thread: (await freshView(thread.id)) ?? sent.thread,
       message: sent.message,
       reply: outcome.status === "replied" ? maskForViewer(outcome.message) : null,
       replyStatus: outcome.status,

@@ -9,8 +9,12 @@
  * whether it is a tease, a drop or a Story. `{partner}` is the Creator's couple partner, `{collab}`
  * someone they collab with; a line that needs one is only used when there is one.
  */
+import type { SlpFit } from "../../../../../../shared/src/slp/slp-drama.js";
 import type { SlpExplicitLevelName } from "../../../../../../shared/src/slp/slp-spice.js";
 import type { SlurpBeatType } from "../../feed/slp-post-beat.js";
+import type { SlpStoryline } from "../../../../../../shared/src/slp/slp-storyline.js";
+import { SLURP_FAMILY_PACK } from "./slp-family-pack.js";
+import { SLURP_KINK_PACKS } from "./slp-kink-packs.js";
 
 export type SlurpPackLevel = Exclude<SlpExplicitLevelName, "none">;
 
@@ -20,12 +24,7 @@ export type SlurpPackLevel = Exclude<SlpExplicitLevelName, "none">;
  * steering leave-out topic) about it rules it out. `level`: the Creator's spice level must reach it.
  * `hardNo`: a hard no sharing a word with one of these rules it out.
  */
-export type SlurpPackFit = {
-  needs?: RegExp;
-  topic?: RegExp;
-  level?: SlurpPackLevel;
-  hardNo?: readonly string[];
-};
+export type SlurpPackFit = SlpFit;
 
 export type SlurpPackBeat = {
   type: SlurpBeatType;
@@ -76,6 +75,8 @@ export type SlurpContentPack = {
   defaultOn: boolean;
   events: SlurpPackEvent[];
   arcs: SlurpPackArc[];
+  /** Storylines run by the drama runtime while the pack is on (docs/STORYLINES.md, PR 6). */
+  storylines?: SlpStoryline[];
   dateBeats?: Record<string, SlurpPackDateBeats>;
   /** Each Creator's own birthday (from their card, else a steady day of their own). */
   birthday?: true;
@@ -83,9 +84,41 @@ export type SlurpContentPack = {
   firstThousandSubs?: true;
 };
 
-const CROWDS = /\b(crowds?|conventions?|cons|people|going out|leaving the house|fans in person|meet(ing)? fans)\b/iu;
-const STUDENT =
-  /\b(student|studies|studying|study|uni|university|college|campus|exams?|semester|lectures?|thesis|degree|school|Studium|Studentin|Student|Uni|Klausur\w*|Prüfung\w*)\b/iu;
+const CROWDS = [
+  "crowd",
+  "crowds",
+  "convention",
+  "conventions",
+  "cons",
+  "people",
+  "going out",
+  "leaving the house",
+  "fans in person",
+  "meet fans",
+  "meeting fans",
+];
+const STUDENT = [
+  "student",
+  "studies",
+  "studying",
+  "study",
+  "uni",
+  "university",
+  "college",
+  "campus",
+  "exam",
+  "exams",
+  "semester",
+  "lecture",
+  "lectures",
+  "thesis",
+  "degree",
+  "school",
+  "studium",
+  "studentin",
+  "klausur*",
+  "prüfung*",
+];
 const TOYS = ["toys", "dildo", "vibrator"];
 
 export const SLURP_CONTENT_PACK_LIBRARY: readonly SlurpContentPack[] = [
@@ -224,7 +257,7 @@ export const SLURP_CONTENT_PACK_LIBRARY: readonly SlurpContentPack[] = [
         day: 1,
         days: 30,
         storyTags: ["community", "pride"],
-        fit: { topic: /\bpride\b/iu },
+        fit: { topic: ["pride"] },
         beats: [
           { type: "showcase", line: "A Pride look of your own: your colours, your way." },
           {
@@ -250,7 +283,7 @@ export const SLURP_CONTENT_PACK_LIBRARY: readonly SlurpContentPack[] = [
       },
       halloween: {
         name: "Halloween",
-        fit: { topic: /\b(halloween|costumes?|dress(ing)? up)\b/iu },
+        fit: { topic: ["halloween", "costume", "costumes", "dress up", "dressing up"] },
         beats: [
           {
             type: "anticipation",
@@ -303,7 +336,21 @@ export const SLURP_CONTENT_PACK_LIBRARY: readonly SlurpContentPack[] = [
         day: 20,
         days: 21,
         storyTags: ["fitness", "summer"],
-        fit: { topic: /\b(gym|work ?outs?|exercis\w*|sports?|fitness|diet\w*|body)\b/iu },
+        fit: {
+          topic: [
+            "gym",
+            "work out",
+            "work outs",
+            "workout",
+            "workouts",
+            "exercis*",
+            "sport",
+            "sports",
+            "fitness",
+            "diet*",
+            "body",
+          ],
+        },
         beats: [
           { type: "achievement", line: "You are getting in shape for summer and today's session actually felt good." },
           { type: "showcase", line: "New swimwear for the summer. Time to try it on properly." },
@@ -364,7 +411,7 @@ export const SLURP_CONTENT_PACK_LIBRARY: readonly SlurpContentPack[] = [
           ["the package arrives: the unboxing", 1, 1],
           ["trying it for the first time, for the subscribers", 1, 2],
         ],
-        fit: { level: "explicit", hardNo: TOYS, topic: /\b(toys?|dildos?|vibrators?)\b/iu },
+        fit: { level: "explicit", hardNo: TOYS, topic: ["toy", "toys", "dildo", "dildos", "vibrator", "vibrators"] },
         once: true,
         storyTags: ["spicy", "toys"],
       },
@@ -379,7 +426,7 @@ export const SLURP_CONTENT_PACK_LIBRARY: readonly SlurpContentPack[] = [
           ["making the custom", 1, 3],
           ["delivering it and hearing back", 1, 2],
         ],
-        fit: { topic: /\b(customs?|requests?)\b/iu },
+        fit: { topic: ["custom", "customs", "request", "requests"] },
         once: true,
         storyTags: ["spicy", "business"],
       },
@@ -430,11 +477,13 @@ export const SLURP_CONTENT_PACK_LIBRARY: readonly SlurpContentPack[] = [
           ["the next review", 2, 4],
           ["the series favourite", 1, 3],
         ],
-        fit: { level: "explicit", hardNo: TOYS, topic: /\b(toys?|dildos?|vibrators?)\b/iu },
+        fit: { level: "explicit", hardNo: TOYS, topic: ["toy", "toys", "dildo", "dildos", "vibrator", "vibrators"] },
         storyTags: ["spicy", "toys"],
       },
     ],
   },
+  SLURP_FAMILY_PACK,
+  ...SLURP_KINK_PACKS,
 ];
 
 /** The birthday moments: two days before, the day, and the day after. */

@@ -121,6 +121,9 @@ const QM_UI_SIZES = { S: 0.85, M: 1, L: 1.2 };
 // those cards already get rebuilt on every repaint anyway.
 const QM_THUMBNAIL_SIZE_KEY = "marinara.quartermaster.thumbnailSize";
 const QM_THUMBNAIL_SIZES = { S: 48, M: 72, L: 100 };
+// Per-device like UI Size: shows a Delete button straight on item and
+// outfit cards (still behind a confirm) instead of only in the "⋯" menu.
+const QM_QUICK_DELETE_KEY = "marinara.quartermaster.quickDelete";
 // Independent from QM_THUMBNAIL_SIZES above (which still governs item/
 // outfit thumbnails, unchanged) — the portrait needs to scale far more
 // aggressively per size, since 5 equip-slot-box pairs beside it need real
@@ -268,6 +271,13 @@ const QM_ITEM_CARD_FRAME_STYLE = {
 // button's own success color instead of the theme accent — a visually
 // distinct "this is the create-new form, not one more item" cue, without
 // needing a different shape or extra ornamentation to say it.
+// A hidden item/outfit's card: a dimmed dashed border with no glow, so it
+// reads as set aside even when shown outside the Hidden tab.
+const QM_HIDDEN_CARD_FRAME_STYLE = {
+  border: "1px dashed color-mix(in srgb, var(--muted-foreground, #888) 70%, transparent)",
+  boxShadow: "none",
+};
+
 const QM_ADD_ITEM_FRAME_STYLE = {
   border: `1px solid ${QM_COLOR_SUCCESS}`,
   borderRadius: "var(--radius, 4px)",
@@ -291,6 +301,43 @@ const QM_DESC_LINE_HEIGHT_PX = 14;
 const QM_LAYER_SPINE_WIDTH = 26;
 const QM_LAYER_SPINE_OVERLAP = 6;
 const QM_CARD_DESC_MAX_HEIGHT_PX = QM_DESC_LINE_HEIGHT_PX * 5;
+
+// Small stroke icons for card chrome (24x24 viewBox, currentColor).
+const QM_LOCK_ICON_MARKUP =
+  '<rect x="5" y="11" width="14" height="10" rx="2" fill="currentColor"/>' +
+  '<path d="M8 11V7a4 4 0 0 1 8 0v4" fill="none" stroke="currentColor" stroke-width="2"/>';
+const QM_UNLOCK_ICON_MARKUP =
+  '<rect x="5" y="11" width="14" height="10" rx="2" fill="currentColor"/>' +
+  '<path d="M8 11V7a4 4 0 0 1 7.7-1.5" fill="none" stroke="currentColor" stroke-width="2"/>';
+const QM_TRASH_ICON_MARKUP =
+  '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" fill="none" stroke="currentColor" ' +
+  'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+
+function qmBuildSmallIcon(markup, sizePx) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", String(sizePx));
+  svg.setAttribute("height", String(sizePx));
+  svg.setAttribute("aria-hidden", "true");
+  svg.innerHTML = markup;
+  svg.style.flexShrink = "0";
+  return svg;
+}
+
+// The small uppercase tag beside a card's name ("Equipped", "Hidden").
+function qmBuildCardBadge(text, color) {
+  const badge = document.createElement("span");
+  badge.textContent = text;
+  Object.assign(badge.style, {
+    fontSize: "10px",
+    fontWeight: "600",
+    color,
+    textTransform: "uppercase",
+    letterSpacing: "0.02em",
+    whiteSpace: "nowrap",
+  });
+  return badge;
+}
 
 function qmBuildCardCornerDot(corner) {
   const dot = document.createElement("span");
@@ -345,6 +392,22 @@ function qmWriteUiSize(size) {
   }
 }
 
+function qmReadQuickDelete() {
+  try {
+    return window.localStorage.getItem(QM_QUICK_DELETE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function qmWriteQuickDelete(enabled) {
+  try {
+    window.localStorage.setItem(QM_QUICK_DELETE_KEY, enabled ? "1" : "0");
+  } catch {
+    // Persisting is a convenience; the session still works without it.
+  }
+}
+
 function qmReadThumbnailSize() {
   try {
     const stored = window.localStorage.getItem(QM_THUMBNAIL_SIZE_KEY);
@@ -385,8 +448,13 @@ const QM_BAG_TABS = [
   { key: "items", label: "Items" },
   { key: "wearables", label: "Wearables" },
   { key: "stored", label: "Stored" },
+  { key: "hidden", label: "Hidden" },
 ];
-function qmItemMatchesBagTab(item, tab) {
+// A hidden item lists under Hidden, and also under its usual tab when the
+// chat's "Hidden items only in the Hidden tab" setting is off.
+function qmItemMatchesBagTab(item, tab, hiddenOnlyInHiddenTab = true) {
+  if (tab === "hidden") return item.hidden === true;
+  if (item.hidden === true && hiddenOnlyInHiddenTab) return false;
   const stored = item.location.startsWith("stored:");
   if (tab === "stored") return stored;
   if (stored) return false;
@@ -447,6 +515,34 @@ function qmClampPopoverToContainer(popoverEl, containerEl, defaults) {
     popoverEl.style.top = "auto";
     popoverEl.style.bottom = "100%";
   }
+}
+
+const QM_ITEM_IMAGE_SOURCE_LABELS = {
+  uploaded: "Uploaded filename",
+  generated: "Generated filename",
+  name: "Matched by name",
+};
+const QM_UNLINK_IMAGE_HELP = "Go back to matching this item's name. The image file isn't deleted.";
+
+// An item image's details (QM.state.itemImageInfo) as label/file lines, for a
+// bag card's [i] and the item editor's image line. Empty when the item shows
+// no image and has none saved.
+function qmItemImageDetailLines(info) {
+  const lines = [];
+  if (info.savedMissing) lines.push({ label: "Saved file missing", file: info.savedFile });
+  if (info.file) lines.push({ label: QM_ITEM_IMAGE_SOURCE_LABELS[info.source] ?? "Matched by name", file: info.file });
+  return lines;
+}
+
+// Fills a details box at most once per request: a slower, older answer never
+// replaces a newer one for the same box.
+const qmImageDetailRequests = new WeakMap();
+
+// Closes the item editor's Delete/Unlink choice, dropping any details still loading for it.
+function qmHideItemImageRemoveChoice(box) {
+  qmImageDetailRequests.delete(box);
+  box.style.display = "none";
+  box.replaceChildren();
 }
 
 function qmReadColumnCollapsed() {
@@ -523,8 +619,12 @@ QM.dock = {
   armorToggle: null,
   weaponsToggle: null,
   replaceRealAvatarToggle: null,
+  hiddenSettingControls: null,
   restoreInventoryButton: null,
   recentChangesContainer: null,
+  pendingSection: null,
+  pendingList: null,
+  _pendingLabel: null,
   recentUpdateContainer: null,
   recentUpdateChevron: null,
   recentUpdateCountBadge: null,
@@ -547,6 +647,7 @@ QM.dock = {
   bodyWidth: QM_WINDOW_DEFAULT_WIDTH,
   uiSize: qmReadUiSize(),
   thumbnailSize: qmReadThumbnailSize(),
+  quickDelete: qmReadQuickDelete(),
   // Top-level dock view: the 3-column inventory grid (plus Recent Agent
   // Update above it) or the restructured Settings groups. A session-only UI
   // preference, same as bagTab/recentUpdateExpanded below — not reset on
@@ -565,6 +666,7 @@ QM.dock = {
   imageGenBackdrop: null,
   addItemBackdrop: null,
   _itemEditorEscapeHandler: null,
+  _itemEditorUnsubscribe: null,
   _outfitEditorEscapeHandler: null,
   _saveOutfitEscapeHandler: null,
   _wardrobeEscapeHandler: null,
@@ -620,8 +722,12 @@ QM.dock = {
     this.armorToggle = null;
     this.weaponsToggle = null;
     this.replaceRealAvatarToggle = null;
+    this.hiddenSettingControls = null;
     this.restoreInventoryButton = null;
     this.recentChangesContainer = null;
+    this.pendingSection = null;
+    this.pendingList = null;
+    this._pendingLabel = null;
     this.equippedContainer = null;
     this.outfitsContainer = null;
     this.listContainer = null;
@@ -1140,12 +1246,12 @@ QM.dock = {
 
       columns.append(outfitsColumn, equippedColumn, bagColumn);
 
-      // Inventory view: Recent Agent Update (moved into the slot the old
+      // Inventory view: Pending Item Changes and Recent Item Updates (moved into the slot the old
       // Settings accordion used to occupy) above the 3-column grid. Settings
       // view: the regrouped settings content. Visibility toggled by
       // _applyActiveView, not rebuilt on every tab switch.
       this.inventoryView = document.createElement("div");
-      this.inventoryView.append(this._buildRecentUpdateSection(), columns);
+      this.inventoryView.append(this._buildPendingSection(), this._buildRecentUpdateSection(), columns);
       this.settingsView = this.settingsSection;
 
       this.zoomWrapper.append(this.errorNode, viewTabRow, this.inventoryView, this.settingsView);
@@ -1167,11 +1273,16 @@ QM.dock = {
     this._applyOutfitSearch();
     this._applySectionHeaders();
     this._applyRecentUpdateHeader();
+    this._applyPendingSection();
     this.feedSelect.value = QM.state.appearanceFeedMode;
     this.underwearToggle.checked = QM.state.showUnderwear;
     this.armorToggle.checked = QM.state.showArmor;
     this.weaponsToggle.checked = QM.state.showWeapons;
     this.replaceRealAvatarToggle.checked = QM.state.replaceRealAvatarOnEquip;
+    for (const [key, control] of Object.entries(this.hiddenSettingControls)) {
+      if (control.type === "checkbox") control.checked = QM.state[key];
+      else control.value = QM.state[key];
+    }
     this.restoreInventoryButton.disabled = !QM.state.previousSnapshot;
     this.recentChangesContainer.replaceChildren(this._buildRecentChangesList());
     if (this.imageConnectionSelect && !this.imageConnectionSelect.disabled) {
@@ -1260,10 +1371,11 @@ QM.dock = {
     const tooltip = this._buildInfoTooltip(
       "Writes the chosen text into a per-chat variable so a {{getvar::quartermaster_appearance_persona}} " +
         "token in the persona's own Appearance field resolves to it — letting image generation (e.g. " +
-        "Illustrator) pick up what's actually equipped. Off writes nothing; Outfit description uses the " +
-        "saved outfit that exactly matches the current equip state (falling back to a plain list of " +
-        "equipped item names when nothing matches, e.g. after equipping something outside any saved " +
-        "outfit); Equipped item names always lists what's equipped, regardless of outfit.",
+        "Illustrator) pick up what's actually equipped. Outfit portraits follow it too.\n\n" +
+        QM_APPEARANCE_FEED_OPTIONS.map((option) => `${option.label}: ${option.help}`).join("\n") +
+        "\n\nThe outfit options use the saved outfit that exactly matches what's equipped, and fall back " +
+        "to the matching item option when none matches, it's hidden, or it has no text for that option. " +
+        "Hidden items only count while worn.",
     );
 
     row.append(label, select, tooltip);
@@ -1550,6 +1662,7 @@ QM.dock = {
     popover.className = "qm-tooltip-popover";
     popover.textContent = text;
     Object.assign(popover.style, {
+      whiteSpace: "pre-line",
       position: "absolute",
       top: "18px",
       left: "0",
@@ -1663,7 +1776,7 @@ QM.dock = {
   },
 
   // Small caps-label divider used to break Settings' controls into named
-  // groups — Appearance/Display/Image Generation/Data — instead of one flat
+  // groups — Appearance/Hidden Items/Display/Image Generation/Data — instead of one flat
   // run of unrelated rows.
   _buildSettingsGroupHeader(label) {
     const wrapper = document.createElement("div");
@@ -1694,8 +1807,11 @@ QM.dock = {
       this._buildSettingsGroupHeader("Appearance"),
       this._buildAppearanceFeedRow(),
       this._buildRealAvatarToggleRow(),
+      this._buildSettingsGroupHeader("Hidden Items"),
+      ...this._buildHiddenItemSettingsRows(),
       this._buildSettingsGroupHeader("Display"),
       this._buildSlotVisibilityRow(),
+      this._buildQuickDeleteRow(),
       this._buildSettingsGroupHeader("Image Generation"),
       this._buildImageGenerationSettingsRow(),
       this._buildRefreshImagesRow(),
@@ -1842,10 +1958,47 @@ QM.dock = {
     return row;
   },
 
+  // Agent changes to hidden items waiting on the user (13-pending.js's
+  // qmBuildPendingEntry cards) -- above Recent Item Updates, and only there
+  // at all while something is waiting. Always expanded: each needs a choice.
+  _buildPendingSection() {
+    const section = document.createElement("div");
+    Object.assign(section.style, {
+      border: `1px solid ${QM_COLOR_WARNING}`,
+      borderRadius: "var(--radius, 4px)",
+      marginBottom: "8px",
+      padding: "6px 8px 8px",
+      flexDirection: "column",
+      gap: "6px",
+    });
+    const label = document.createElement("span");
+    Object.assign(label.style, {
+      fontWeight: "600",
+      fontSize: "11px",
+      textTransform: "uppercase",
+      letterSpacing: "0.04em",
+      color: QM_COLOR_WARNING,
+    });
+    const list = document.createElement("div");
+    Object.assign(list.style, { display: "flex", flexDirection: "column", gap: "6px" });
+    section.append(label, list);
+    this.pendingSection = section;
+    this.pendingList = list;
+    this._pendingLabel = label;
+    return section;
+  },
+
+  _applyPendingSection() {
+    const entries = QM.state.pendingHiddenChanges ?? [];
+    this.pendingSection.style.display = entries.length > 0 ? "flex" : "none";
+    this._pendingLabel.textContent = `Pending Item Changes (${entries.length})`;
+    this.pendingList.replaceChildren(...entries.map((entry) => qmBuildPendingEntry(entry)));
+  },
+
   // The collapsible accordion that replaced Settings in this same visual
   // slot (see _paint()'s top-level view split) — everything about reviewing
   // and recovering from what the tracker agent just did, in one place:
-  // Restore Inventory (whole-state) above the per-item Recent Agent Update
+  // Restore Inventory (whole-state) above the per-item Recent Item Updates
   // list. Collapsed by default; the header itself always shows a compact
   // +N/↑N/−N count (see _applyRecentUpdateHeader) so there's something to
   // glance at without expanding.
@@ -1884,7 +2037,7 @@ QM.dock = {
     this.recentUpdateChevron = chevron;
 
     const label = document.createElement("span");
-    label.textContent = "Recent Agent Update";
+    label.textContent = "Recent Item Updates";
     Object.assign(label.style, {
       fontWeight: "600",
       fontSize: "11px",
@@ -2085,7 +2238,14 @@ QM.dock = {
     const weapons = build("Weapons", (value) => QM.state.updateShowWeapons(value));
     this.weaponsToggle = weapons.checkbox;
 
-    row.append(underwear.label, armor.label, weapons.label);
+    row.append(
+      underwear.label,
+      armor.label,
+      weapons.label,
+      this._buildInfoTooltip(
+        "Unticked groups drop out of the portrait ring and the slot pickers. Items stay in your Bag.",
+      ),
+    );
     return row;
   },
 
@@ -2100,27 +2260,113 @@ QM.dock = {
   // behavior — generation-time reads (e.g. "send avatar as reference") are
   // unaffected, this dock's own portrait display is unaffected either way.
   _buildRealAvatarToggleRow() {
-    const wrapper = document.createElement("div");
-    Object.assign(wrapper.style, { display: "flex", alignItems: "center", gap: "6px", fontSize: "12px" });
+    const { row, checkbox } = this._buildSettingsCheckboxRow(
+      "Replace persona's real avatar on equip",
+      "Reverts automatically when unequipped. Each change adds a permanent entry to the persona's " +
+        "version history (can't be turned off), and other Marinara screens showing this avatar may take " +
+        "a bit to catch up visually — image generation itself isn't affected.",
+      (checked) => QM.state.updateReplaceRealAvatarOnEquip(checked),
+    );
+    this.replaceRealAvatarToggle = checkbox;
+    return row;
+  },
+
+  // [ ] label [?] -- one Settings checkbox with its help popover.
+  _buildSettingsCheckboxRow(labelText, help, onChange) {
+    const row = document.createElement("div");
+    Object.assign(row.style, { display: "flex", alignItems: "center", gap: "6px", fontSize: "12px" });
 
     const checkboxLabel = document.createElement("label");
     Object.assign(checkboxLabel.style, { display: "flex", alignItems: "center", gap: "4px", cursor: "pointer" });
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
-    checkbox.addEventListener("change", () => QM.state.updateReplaceRealAvatarOnEquip(checkbox.checked));
+    checkbox.addEventListener("change", () => onChange(checkbox.checked));
     const text = document.createElement("span");
-    text.textContent = "Replace persona's real avatar on equip";
+    text.textContent = labelText;
     checkboxLabel.append(checkbox, text);
-    this.replaceRealAvatarToggle = checkbox;
 
-    const tooltip = this._buildInfoTooltip(
-      "Reverts automatically when unequipped. Each change adds a permanent entry to the persona's " +
-        "version history (can't be turned off), and other Marinara screens showing this avatar may take " +
-        "a bit to catch up visually — image generation itself isn't affected.",
+    row.append(checkboxLabel, this._buildInfoTooltip(help));
+    return { row, checkbox };
+  },
+
+  // Settings → Hidden Items. All four are per chat and synced every _paint
+  // from QM.state via this.hiddenSettingControls (keyed by setting name).
+  _buildHiddenItemSettingsRows() {
+    const controls = {};
+    const toggle = (key, labelText, help) => {
+      const { row, checkbox } = this._buildSettingsCheckboxRow(labelText, help, (checked) =>
+        QM.state.updateHiddenSetting(key, checked),
+      );
+      controls[key] = checkbox;
+      return row;
+    };
+
+    const accessRow = document.createElement("div");
+    Object.assign(accessRow.style, { display: "flex", alignItems: "center", gap: "6px", fontSize: "12px" });
+    const accessLabel = document.createElement("span");
+    accessLabel.textContent = "Hidden item access:";
+    accessLabel.style.color = "var(--muted-foreground, currentcolor)";
+    const accessSelect = QM.smallInput("select");
+    accessSelect.style.flex = "1";
+    accessSelect.style.minWidth = "0";
+    for (const option of QM_HIDDEN_ITEM_ACCESS_OPTIONS) {
+      const optionEl = document.createElement("option");
+      optionEl.value = option.value;
+      optionEl.textContent = option.label;
+      accessSelect.appendChild(optionEl);
+    }
+    accessSelect.addEventListener("change", () => QM.state.updateHiddenSetting("hiddenItemAccess", accessSelect.value));
+    controls.hiddenItemAccess = accessSelect;
+    accessRow.append(
+      accessLabel,
+      accessSelect,
+      this._buildInfoTooltip(
+        "What the agent may do to a hidden item while Ask before is off (while it's on, every change " +
+          "waits for you and this only presets its Show box):\n\n" +
+          QM_HIDDEN_ITEM_ACCESS_OPTIONS.map((option) => `${option.label}: ${option.help}`).join("\n\n") +
+          "\n\nThe agent never changes a locked description, whichever you pick.",
+      ),
     );
 
-    wrapper.append(checkboxLabel, tooltip);
-    return wrapper;
+    const rows = [
+      toggle(
+        "askBeforeHiddenChanges",
+        "Ask before agent changes to hidden items",
+        "On: every agent change to a hidden item waits for you under Pending Item Changes, showing what " +
+          "would change. Off: Hidden item access decides, and a notice says what happened.",
+      ),
+      accessRow,
+      toggle(
+        "wardrobeUsesHidden",
+        "Build Wardrobe can use hidden items",
+        "Off: Build Wardrobe never sees hidden items. On: it may use them, and you choose per item what " +
+          "happens before anything is saved. A new piece named like a hidden item always asks first.",
+      ),
+      toggle(
+        "hiddenOnlyInHiddenTab",
+        "Hidden items only in the Hidden tab",
+        "On: hidden items list only under the Bag's Hidden tab. Off: they also show in their usual tab, " +
+          "marked Hidden.",
+      ),
+    ];
+    this.hiddenSettingControls = controls;
+    return rows;
+  },
+
+  // Per device (localStorage), unlike the per-chat settings around it.
+  _buildQuickDeleteRow() {
+    const { row, checkbox } = this._buildSettingsCheckboxRow(
+      "Quick delete (this device only)",
+      "Adds a Delete button straight on item and outfit cards, instead of only in the ⋯ menu. It still " +
+        "asks before deleting. Saved in this browser, so it applies to every chat here.",
+      (checked) => {
+        this.quickDelete = checked;
+        qmWriteQuickDelete(checked);
+        this._paint();
+      },
+    );
+    checkbox.checked = this.quickDelete;
+    return row;
   },
 
   // Built once (like the forms) and cached on this.portraitImage/
@@ -3085,16 +3331,15 @@ QM.dock = {
     return wrapper;
   },
 
-  // Unlike outfit portraits, an item's image isn't a stored reference —
-  // it's resolved server-side by name (findItemImageFile, matching an
-  // uploaded file or a hand-placed image-pack file the same way — see
-  // server.mjs's own comment). So the client doesn't know in advance
-  // whether one exists; it just tries the URL and falls back to the dashed
-  // placeholder on a 404 via onerror/onload, rather than checking a flag.
+  // The server picks the file (server.mjs's resolveItemImage): the item's saved
+  // upload or generation, else a name match, uploaded or from an image pack. So
+  // the client doesn't know in advance whether one exists; it just tries the
+  // URL and falls back to the dashed placeholder on a 404 via onerror/onload.
   // Clicking the thumbnail opens the Generate/Upload choice modal
   // (12-image-gen.js); the hidden fileInput below is reused as-is by its own
-  // "Upload" choice, this control's own upload logic is untouched either way.
-  _buildItemImageControl(item, sizePx) {
+  // "Upload" choice. The corner button is [i] (details and Unlink) on a bag
+  // card, and × in the item editor, where `onRemove` asks Delete or Unlink.
+  _buildItemImageControl(item, sizePx, { onRemove } = {}) {
     const wrapper = document.createElement("div");
     Object.assign(wrapper.style, {
       position: "relative",
@@ -3113,7 +3358,7 @@ QM.dock = {
       if (!file) return;
       try {
         const dataUrl = await QM.compressImageFile(file);
-        await QM.state.uploadItemImage(item.id, dataUrl);
+        await QM.state.uploadItemImage(item.id, dataUrl, "uploaded");
       } catch (error) {
         QM.state.error = error && error.message ? error.message : String(error);
         QM.state._notify();
@@ -3146,31 +3391,35 @@ QM.dock = {
     });
     thumbButton.appendChild(placeholderMark);
 
-    const removeButton = document.createElement("button");
-    removeButton.type = "button";
-    removeButton.title = "Remove uploaded image (a matching image-pack file, if any, would still show)";
-    removeButton.textContent = "×";
-    Object.assign(removeButton.style, {
-      position: "absolute",
-      top: "-6px",
-      right: "-6px",
-      width: "14px",
-      height: "14px",
-      lineHeight: "12px",
-      padding: "0",
-      fontSize: "11px",
-      borderRadius: "50%",
-      cursor: "pointer",
-      background: QM_COLOR_DANGER,
-      color: QM_COLOR_DANGER_FG,
-      border: "none",
-      display: "none",
-    });
-    removeButton.addEventListener("click", () => {
-      if (window.confirm(`Remove ${item.name}'s image? This can't be undone.`)) {
-        QM.state.deleteItemImage(item.id);
-      }
-    });
+    // The editor gets ×, a bag card gets [i].
+    let cornerButton;
+    if (onRemove) {
+      cornerButton = document.createElement("button");
+      cornerButton.type = "button";
+      cornerButton.title = "Delete or unlink this image";
+      cornerButton.textContent = "×";
+      Object.assign(cornerButton.style, {
+        position: "absolute",
+        top: "-6px",
+        right: "-6px",
+        width: "14px",
+        height: "14px",
+        lineHeight: "12px",
+        padding: "0",
+        fontSize: "11px",
+        borderRadius: "50%",
+        cursor: "pointer",
+        background: QM_COLOR_DANGER,
+        color: QM_COLOR_DANGER_FG,
+        border: "none",
+        display: "none",
+      });
+      cornerButton.addEventListener("click", () => onRemove());
+    } else {
+      cornerButton = this._buildItemImageInfoBadge(item);
+    }
+    // A saved file that's gone still gets its corner button, so it can be unlinked.
+    if (item.imageFile) cornerButton.style.display = onRemove ? "block" : "inline-flex";
 
     // No matching image (uploaded or pack) — fall back to that item's own
     // default-slot icon rather than the bare "+" mark, same artwork the
@@ -3209,7 +3458,7 @@ QM.dock = {
         placeholderMark.style.display = "none";
         thumbButton.style.border = "1px solid var(--border, rgba(128,128,128,0.3))";
         img.style.display = "block";
-        removeButton.style.display = "block";
+        cornerButton.style.display = onRemove ? "block" : "inline-flex";
       });
       img.addEventListener("error", (event) => {
         if (!event.qmRetryable) QM._missingItemImageIds.add(item.id);
@@ -3220,8 +3469,176 @@ QM.dock = {
       thumbButton.appendChild(img);
     }
 
-    wrapper.append(thumbButton, fileInput, removeButton);
+    wrapper.append(thumbButton, fileInput, cornerButton);
     return wrapper;
+  },
+
+  // A bag card's [i]: a small popover with the image's filename and where it
+  // comes from, plus Unlink when this item has a saved file. It loads the
+  // details only when opened.
+  _buildItemImageInfoBadge(item) {
+    const wrapper = document.createElement("span");
+    wrapper.className = "qm-overflow-wrap";
+    Object.assign(wrapper.style, { position: "absolute", top: "-6px", right: "-6px", display: "none" });
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = "i";
+    button.title = "Image file details";
+    button.setAttribute("aria-label", "Image file details");
+    Object.assign(button.style, {
+      width: "14px",
+      height: "14px",
+      lineHeight: "12px",
+      padding: "0",
+      fontSize: "10px",
+      fontWeight: "700",
+      fontFamily: "Georgia, serif",
+      borderRadius: "50%",
+      cursor: "pointer",
+      background: "var(--secondary, #3a3a3a)",
+      color: "var(--secondary-foreground, #fff)",
+      border: "1px solid var(--border, rgba(128,128,128,0.5))",
+    });
+
+    const panel = document.createElement("div");
+    panel.className = "qm-overflow-menu";
+    Object.assign(panel.style, {
+      position: "absolute",
+      top: "100%",
+      right: "0",
+      zIndex: "30",
+      marginTop: "2px",
+      flexDirection: "column",
+      gap: "6px",
+      width: "200px",
+      padding: "8px",
+      boxSizing: "border-box",
+      borderRadius: "var(--radius, 4px)",
+      border: "1px solid var(--border, rgba(128,128,128,0.4))",
+      background: "var(--popover, var(--card, #1a1a1a))",
+      boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
+      fontSize: "11px",
+      textAlign: "left",
+      cursor: "default",
+    });
+    // Clicks inside (Unlink) mustn't reach the document listener that closes it.
+    panel.addEventListener("click", (event) => event.stopPropagation());
+
+    const panelDefaults = { left: "auto", right: "0", top: "100%", bottom: "auto" };
+    // Clamped again once the details load, since they're taller than "Loading…".
+    const clamp = () => qmClampPopoverToContainer(panel, this.body, panelDefaults);
+    button.addEventListener("click", (event) =>
+      qmTogglePopover(wrapper, "qm-overflow-open", event, () => {
+        clamp();
+        this._fillItemImageDetails(panel, item.id, { onUnlink: qmClosePopover }).then(clamp);
+      }),
+    );
+
+    wrapper.append(button, panel);
+    return wrapper;
+  },
+
+  // Fills `box` with an item image's details: one line per qmItemImageDetailLines
+  // entry, plus Unlink when this item has a saved file. `inline` is the item
+  // editor's form, which hides the box when there's nothing to show.
+  async _fillItemImageDetails(box, itemId, { inline = false, onUnlink } = {}) {
+    const request = {};
+    qmImageDetailRequests.set(box, request);
+    if (!inline) box.replaceChildren(document.createTextNode("Loading…"));
+    let info;
+    try {
+      info = await QM.state.itemImageInfo(itemId);
+    } catch (error) {
+      info = { error: error && error.message ? error.message : String(error) };
+    }
+    if (qmImageDetailRequests.get(box) !== request) return;
+
+    const lines = info.error ? [] : qmItemImageDetailLines(info);
+    const nodes = [];
+    if (info.error) nodes.push(document.createTextNode(`Couldn't load image details: ${info.error}`));
+    if (!info.error && lines.length === 0) nodes.push(document.createTextNode("No image file."));
+    for (const line of lines) {
+      const row = document.createElement("div");
+      Object.assign(row.style, { overflowWrap: "anywhere" });
+      const label = document.createElement("span");
+      label.textContent = `${line.label}: `;
+      label.style.color = "var(--muted-foreground, currentcolor)";
+      const name = document.createElement("span");
+      name.textContent = line.file;
+      row.append(label, name);
+      nodes.push(row);
+    }
+    if (info.savedFile) {
+      const unlink = QM.button("Unlink", { bg: "transparent", border: true, fg: "inherit" });
+      unlink.title = QM_UNLINK_IMAGE_HELP;
+      Object.assign(unlink.style, {
+        padding: "1px 8px",
+        fontSize: "11px",
+        alignSelf: inline ? "center" : "flex-start",
+      });
+      unlink.addEventListener("click", async () => {
+        unlink.disabled = true;
+        onUnlink?.();
+        // On success the editor repaints this line; otherwise the button works again.
+        const outcome = await QM.state.unlinkItemImage(itemId);
+        if (!outcome?.ok) unlink.disabled = false;
+      });
+      nodes.push(unlink);
+    }
+    box.replaceChildren(...nodes);
+    if (inline) box.style.display = lines.length > 0 || info.error ? "flex" : "none";
+  },
+
+  // The item editor's × on the image. Deleting the file reaches every item using
+  // it, in any chat, so this says so first, and offers Unlink (this chat's item
+  // only, file kept) when the item has a saved file.
+  async _showItemImageRemoveChoice(box, itemId, onChanged) {
+    const request = {};
+    qmImageDetailRequests.set(box, request);
+    box.style.display = "flex";
+    box.replaceChildren(document.createTextNode("Loading…"));
+    let info;
+    try {
+      info = await QM.state.itemImageInfo(itemId);
+    } catch (error) {
+      info = { error: error && error.message ? error.message : String(error) };
+    }
+    if (qmImageDetailRequests.get(box) !== request) return;
+
+    const hide = () => qmHideItemImageRemoveChoice(box);
+    const message = document.createElement("div");
+    Object.assign(message.style, { overflowWrap: "anywhere" });
+    const buttons = document.createElement("div");
+    Object.assign(buttons.style, { display: "flex", gap: "6px", flexWrap: "wrap" });
+    const act = (label, danger, run) => {
+      const button = QM.button(label, danger ? { bg: QM_COLOR_DANGER, fg: QM_COLOR_DANGER_FG } : { border: true });
+      button.style.padding = "2px 8px";
+      button.addEventListener("click", async () => {
+        hide();
+        await run();
+        onChanged?.();
+      });
+      buttons.appendChild(button);
+    };
+
+    if (info.error) {
+      message.textContent = `Couldn't load image details: ${info.error}`;
+    } else if (info.deletable) {
+      message.textContent = `Delete ${info.file}? This deletes the file. Every item using it, in any chat, loses its image.`;
+      if (info.savedFile) message.textContent += " To remove it from just this item and keep the file, use Unlink.";
+      act("Delete file", true, () => QM.state.deleteItemImage(itemId));
+    } else if (info.file) {
+      message.textContent = `${info.file} is from an image pack and can't be deleted here.`;
+    } else {
+      message.textContent = "This item's saved image file is missing.";
+    }
+    if (info.savedFile) act("Unlink", false, () => QM.state.unlinkItemImage(itemId));
+    const cancel = QM.button("Cancel", { bg: "transparent", border: true, fg: "inherit" });
+    cancel.style.padding = "2px 8px";
+    cancel.addEventListener("click", hide);
+    buttons.appendChild(cancel);
+    box.replaceChildren(message, buttons);
   },
 
   // Read-only display card, same rhythm as the item card: full-height
@@ -3241,6 +3658,7 @@ QM.dock = {
   // its neighbors.
   _buildOutfitRow(outfit) {
     const equipped = QM.state.outfitMatchesCurrent(outfit);
+    const hidden = outfit.hidden === true;
     const thumbnailPx = QM_THUMBNAIL_SIZES[this.thumbnailSize];
     const row = document.createElement("li");
     Object.assign(row.style, {
@@ -3249,6 +3667,7 @@ QM.dock = {
       alignItems: "stretch",
       position: "relative",
       ...QM_ITEM_CARD_FRAME_STYLE,
+      ...(hidden ? QM_HIDDEN_CARD_FRAME_STYLE : {}),
       ...(equipped
         ? {
             border: `2px solid ${QM_COLOR_SUCCESS}`,
@@ -3285,36 +3704,28 @@ QM.dock = {
       whiteSpace: "nowrap",
     });
     nameLine.appendChild(nameLabel);
-    if (equipped) {
-      const badge = document.createElement("span");
-      badge.textContent = "Equipped";
-      Object.assign(badge.style, {
-        fontSize: "10px",
-        fontWeight: "600",
-        color: QM_COLOR_SUCCESS,
-        textTransform: "uppercase",
-        letterSpacing: "0.02em",
-        whiteSpace: "nowrap",
-      });
-      nameLine.appendChild(badge);
+    if (hidden) {
+      nameLabel.style.color = "var(--muted-foreground, currentcolor)";
+      nameLine.appendChild(qmBuildCardBadge("Hidden", "var(--muted-foreground, currentcolor)"));
     }
+    if (equipped) nameLine.appendChild(qmBuildCardBadge("Equipped", QM_COLOR_SUCCESS));
 
-    // [Name] [Equipped?] [⋯] [Equip] -- Edit/Update/Delete collapsed into
-    // the overflow menu, Equip promoted up here so the description below
-    // (no more actionColumn beside it) gets the full card width.
+    // [Name] [Hidden?] [Equipped?] [⋯] [Equip] -- Hide/Edit/Update/Delete
+    // collapsed into the overflow menu, Equip promoted up here so the
+    // description below (no more actionColumn beside it) gets the full card
+    // width.
+    const deleteOutfit = () => this._confirmDelete(outfit.name, () => QM.state.deleteOutfit(outfit.id));
     const overflowMenu = this._buildCardOverflowMenu([
+      {
+        label: hidden ? "Show Outfit" : "Hide Outfit",
+        onClick: () => QM.state.setOutfitHidden(outfit.id, !hidden),
+      },
       { label: "Edit", onClick: () => this._openOutfitEditor(outfit) },
       {
         label: "Update",
         onClick: () => QM.state.updateOutfit(outfit.id, { resnapshot: true }),
       },
-      {
-        label: "Delete",
-        danger: true,
-        onClick: () => {
-          if (window.confirm(`Delete "${outfit.name}"? This can't be undone.`)) QM.state.deleteOutfit(outfit.id);
-        },
-      },
+      { label: "Delete", danger: true, onClick: deleteOutfit },
     ]);
     nameLine.appendChild(overflowMenu);
     const equipButton = QM.button("Equip");
@@ -3322,6 +3733,7 @@ QM.dock = {
     equipButton.style.opacity = equipped ? "0.5" : "1";
     equipButton.addEventListener("click", () => QM.state.equipOutfit(outfit.id));
     nameLine.appendChild(equipButton);
+    if (this.quickDelete) nameLine.appendChild(this._buildQuickDeleteButton(deleteOutfit));
 
     const descriptionRow = document.createElement("div");
     descriptionRow.className = "qm-card-desc-row";
@@ -3497,7 +3909,7 @@ QM.dock = {
     for (const { key, label } of QM_BAG_TABS) {
       const button = this.bagTabButtons[key];
       if (!button) continue;
-      const count = items.filter((item) => qmItemMatchesBagTab(item, key)).length;
+      const count = items.filter((item) => qmItemMatchesBagTab(item, key, QM.state.hiddenOnlyInHiddenTab)).length;
       button.textContent = `${label} (${count})`;
       const active = this.bagTab === key;
       button.style.background = active ? "var(--primary, #444)" : "var(--secondary, transparent)";
@@ -3742,7 +4154,7 @@ QM.dock = {
     const slotSearchActive = this.bagSearchMode === "slot" && query;
     let items = slotSearchActive
       ? QM.state.bagItems()
-      : QM.state.bagItems().filter((item) => qmItemMatchesBagTab(item, this.bagTab));
+      : QM.state.bagItems().filter((item) => qmItemMatchesBagTab(item, this.bagTab, QM.state.hiddenOnlyInHiddenTab));
     if (query) {
       items = items.filter((item) => {
         if (this.bagSearchMode === "slot") {
@@ -3754,7 +4166,11 @@ QM.dock = {
     }
     if (items.length === 0) {
       const emptyLabel =
-        this.bagTab === "wearables" ? "No wearables." : this.bagTab === "stored" ? "Nothing stored." : "No items.";
+        {
+          wearables: "No wearables.",
+          stored: "Nothing stored.",
+          hidden: "No hidden items.",
+        }[this.bagTab] ?? "No items.";
       const empty = QM.textNode(query ? "No matching items." : emptyLabel);
       empty.style.color = "var(--muted-foreground, currentcolor)";
       empty.style.margin = "0";
@@ -3777,6 +4193,7 @@ QM.dock = {
   // carries real info, see below) / description, full width.
   _buildItemRow(item) {
     const thumbnailPx = QM_THUMBNAIL_SIZES[this.thumbnailSize];
+    const hidden = item.hidden === true;
     const row = document.createElement("li");
     Object.assign(row.style, {
       display: "flex",
@@ -3784,6 +4201,7 @@ QM.dock = {
       alignItems: "stretch",
       position: "relative",
       ...QM_ITEM_CARD_FRAME_STYLE,
+      ...(hidden ? QM_HIDDEN_CARD_FRAME_STYLE : {}),
     });
     for (const corner of ["top left", "top right", "bottom left", "bottom right"]) {
       row.appendChild(qmBuildCardCornerDot(corner));
@@ -3839,20 +4257,21 @@ QM.dock = {
     favoriteButton.title = item.favorite ? "Remove from favorites" : "Add to favorites";
     favoriteButton.addEventListener("click", () => QM.state.updateItem(item.id, { favorite: !item.favorite }));
 
-    nameLine.append(favoriteButton, nameLabel, quantityInput);
+    nameLine.append(favoriteButton, nameLabel);
+    if (hidden) {
+      nameLabel.style.color = "var(--muted-foreground, currentcolor)";
+      nameLine.appendChild(qmBuildCardBadge("Hidden", "var(--muted-foreground, currentcolor)"));
+    }
+    nameLine.appendChild(quantityInput);
 
-    // [⋯] [Equip] -- Edit/Delete collapsed into the overflow menu, Equip
+    // [⋯] [Equip] -- Hide/Edit/Delete collapsed into the overflow menu, Equip
     // promoted up here so the description below (no more actionColumn
     // beside it) gets the full card width.
+    const deleteItem = () => this._confirmDelete(item.name, () => QM.state.deleteItem(item.id));
     const overflowMenu = this._buildCardOverflowMenu([
+      { label: hidden ? "Show Item" : "Hide Item", onClick: () => QM.state.setItemHidden(item.id, !hidden) },
       { label: "Edit", onClick: () => this._openItemEditor(item) },
-      {
-        label: "Delete",
-        danger: true,
-        onClick: () => {
-          if (window.confirm(`Delete "${item.name}"? This can't be undone.`)) QM.state.deleteItem(item.id);
-        },
-      },
+      { label: "Delete", danger: true, onClick: deleteItem },
     ]);
     nameLine.appendChild(overflowMenu);
     const equipButton = QM.button("Equip");
@@ -3867,6 +4286,7 @@ QM.dock = {
       if (canEquip) QM.state.updateItem(item.id, { location: `equipped:${item.defaultSlot}` });
     });
     nameLine.appendChild(equipButton);
+    if (this.quickDelete) nameLine.appendChild(this._buildQuickDeleteButton(deleteItem));
 
     // Slot/stored-at info only takes a row at all when it actually carries
     // information -- "Default Slot" (no slot set) and "Stored at: Bag"
@@ -3916,12 +4336,48 @@ QM.dock = {
       color: "var(--muted-foreground, currentcolor)",
       fontStyle: item.description ? "normal" : "italic",
     });
+    if (item.descriptionLocked) {
+      // Set in the item editor: the agent can't change this description.
+      const lockIcon = qmBuildSmallIcon(QM_LOCK_ICON_MARKUP, 11);
+      lockIcon.style.marginTop = "1px";
+      lockIcon.style.color = "var(--muted-foreground, currentcolor)";
+      lockIcon.removeAttribute("aria-hidden");
+      lockIcon.setAttribute("role", "img");
+      lockIcon.setAttribute("aria-label", "Description locked");
+      Object.assign(descriptionLine.style, { display: "flex", gap: "4px", alignItems: "flex-start" });
+      descriptionPreview.style.flex = "1";
+      descriptionPreview.style.minWidth = "0";
+      descriptionLine.appendChild(lockIcon);
+    }
     descriptionLine.appendChild(descriptionPreview);
     detailRows.push(descriptionLine);
 
     detailsColumn.append(...detailRows);
     row.append(imageControl, detailsColumn);
     return row;
+  },
+
+  _confirmDelete(name, run) {
+    if (window.confirm(`Delete "${name}"? This can't be undone.`)) run();
+  },
+
+  // The card's own Delete shortcut when Settings → Display → Quick delete is
+  // on; onDelete still asks for confirmation (_confirmDelete).
+  _buildQuickDeleteButton(onDelete) {
+    const button = QM.button("", { bg: "transparent", fg: QM_COLOR_DANGER, border: true });
+    Object.assign(button.style, {
+      width: "24px",
+      padding: "2px 0",
+      flexShrink: "0",
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+    });
+    button.title = "Delete";
+    button.setAttribute("aria-label", "Delete");
+    button.appendChild(qmBuildSmallIcon(QM_TRASH_ICON_MARKUP, 14));
+    button.addEventListener("click", onDelete);
+    return button;
   },
 
   // Shared by all three modals below (item editor, outfit editor,
@@ -4002,9 +4458,56 @@ QM.dock = {
     closeButton.addEventListener("click", () => this._closeItemEditor());
     header.append(title, closeButton);
 
+    // `item` is the snapshot this editor opened with; the image parts follow
+    // the live item, so an upload, Unlink, delete or rename shows straight away.
+    const liveItem = () => QM.state.items?.find((candidate) => candidate.id === item.id) ?? item;
     const imageRow = document.createElement("div");
     Object.assign(imageRow.style, { display: "flex", justifyContent: "center" });
-    imageRow.appendChild(this._buildItemImageControl(item, 96));
+    const removeChoice = document.createElement("div");
+    Object.assign(removeChoice.style, {
+      display: "none",
+      flexDirection: "column",
+      gap: "6px",
+      padding: "8px",
+      fontSize: "11px",
+      borderRadius: "var(--radius, 4px)",
+      border: `1px solid ${QM_COLOR_DANGER}`,
+    });
+    const imageFileLine = document.createElement("div");
+    Object.assign(imageFileLine.style, {
+      display: "none",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: "6px",
+      marginTop: "-4px",
+      fontSize: "11px",
+    });
+    // Any repaint also closes an open Delete/Unlink choice (and drops its pending
+    // load), since the file it names may no longer be the one the item shows.
+    const paintImage = () => {
+      qmHideItemImageRemoveChoice(removeChoice);
+      imageRow.replaceChildren(
+        this._buildItemImageControl(liveItem(), 96, {
+          onRemove: () => this._showItemImageRemoveChoice(removeChoice, item.id, paintImage),
+        }),
+      );
+      this._fillItemImageDetails(imageFileLine, item.id, { inline: true });
+    };
+    paintImage();
+    // Only a change to what picks the image repaints it (typing a description
+    // notifies too). Delete and Unlink from here repaint themselves, since a
+    // deleted name match changes nothing on the item.
+    const imageKey = () => {
+      const current = liveItem();
+      return JSON.stringify([current.name, current.imageFile ?? null, current.imageSource ?? null]);
+    };
+    let lastImageKey = imageKey();
+    this._itemEditorUnsubscribe = QM.state.subscribe(() => {
+      const key = imageKey();
+      if (key === lastImageKey) return;
+      lastImageKey = key;
+      paintImage();
+    });
 
     const nameInput = QM.smallInput("input");
     nameInput.type = "text";
@@ -4050,7 +4553,49 @@ QM.dock = {
     );
     description.rows = 4;
 
-    panel.append(header, imageRow, nameInput, slotSelect, storedLine, description);
+    // Sits at the description's top-left: locked, no automatic agent change
+    // reaches this description (server.mjs's applyAgentItemChange). Tracks
+    // its own state since `item` is the snapshot this editor opened with.
+    let locked = item.descriptionLocked === true;
+    const lockLine = document.createElement("div");
+    Object.assign(lockLine.style, { display: "flex", alignItems: "center", gap: "6px", marginBottom: "-4px" });
+    const lockButton = QM.button("", { bg: "transparent", border: true, fg: "inherit" });
+    Object.assign(lockButton.style, {
+      width: "24px",
+      padding: "2px 0",
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+    });
+    const lockHint = document.createElement("span");
+    Object.assign(lockHint.style, { fontSize: "11px", color: "var(--muted-foreground, currentcolor)" });
+    const paintLock = () => {
+      lockButton.replaceChildren(qmBuildSmallIcon(locked ? QM_LOCK_ICON_MARKUP : QM_UNLOCK_ICON_MARKUP, 13));
+      lockButton.style.color = locked ? QM_COLOR_WARNING : "inherit";
+      lockButton.title = locked ? "Unlock description" : "Lock description";
+      lockButton.setAttribute("aria-label", lockButton.title);
+      lockButton.setAttribute("aria-pressed", String(locked));
+      lockHint.textContent = locked ? "Locked: the agent can't change this description" : "Description";
+    };
+    lockButton.addEventListener("click", () => {
+      locked = !locked;
+      paintLock();
+      QM.state.setDescriptionLocked(item.id, locked);
+    });
+    paintLock();
+    lockLine.append(lockButton, lockHint);
+
+    panel.append(
+      header,
+      imageRow,
+      removeChoice,
+      nameInput,
+      imageFileLine,
+      slotSelect,
+      storedLine,
+      lockLine,
+      description,
+    );
     backdrop.appendChild(panel);
     this.itemEditorBackdrop = backdrop;
     (this.root || this.body).appendChild(backdrop);
@@ -4058,6 +4603,8 @@ QM.dock = {
   },
 
   _closeItemEditor() {
+    this._itemEditorUnsubscribe?.();
+    this._itemEditorUnsubscribe = null;
     this.itemEditorBackdrop?.remove();
     this.itemEditorBackdrop = null;
     this._unbindEscapeClose(this._itemEditorEscapeHandler);

@@ -1,5 +1,6 @@
 import type { SlurpMessageKind, SlurpThreadState } from "../../modules/messages/slp-messaging.js";
 import type { SlurpRapport } from "../../modules/messages/slp-rapport.js";
+import type { SlurpSexting } from "../../modules/messages/slp-sexting.js";
 import type { SlurpThreadNote } from "../../modules/messages/slp-thread-notes.js";
 import type { SlurpThreadState as SlurpConversationState } from "../../modules/creators/slp-creator-state.js";
 
@@ -57,6 +58,8 @@ export type SlurpThread = {
   /** The Engine scene this thread is in, while it runs. */
   sceneChatId: string | null;
   sceneStartedAt: string | null;
+  /** The latest paid sexting session, running or over. */
+  sexting: SlurpSexting | null;
   createdAt: string;
   updatedAt: string;
 };

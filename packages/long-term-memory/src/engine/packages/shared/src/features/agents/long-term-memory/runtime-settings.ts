@@ -140,3 +140,32 @@ export function resolveLongTermMemoryRecallSettings(input: {
       "",
   };
 }
+
+/** "Memories from chats": manual = I add them myself, review = collect them for review, save = save them for me. */
+export const LTM_CHAT_MEMORIES_MODES = ["manual", "review", "save"] as const;
+export type LtmChatMemoriesMode = (typeof LTM_CHAT_MEMORIES_MODES)[number];
+
+export function readLtmChatMemoriesMode(value: unknown): LtmChatMemoriesMode | undefined {
+  return value === "manual" || value === "review" || value === "save" ? value : undefined;
+}
+
+/** The global choice is stored as the two extraction booleans; import off with accept on reads as manual. */
+export function ltmChatMemoriesModeOf(config: {
+  autoImportChatSources?: boolean;
+  autoAcceptSafeChanges?: boolean;
+}): LtmChatMemoriesMode {
+  return config.autoImportChatSources !== true ? "manual" : config.autoAcceptSafeChanges === true ? "save" : "review";
+}
+
+/**
+ * One chat's background import and safe-change acceptance: its `longTermMemoryChatMemories` override, else the global
+ * extraction booleans as stored (so a manual import keeps today's global auto-accept until the choice is saved).
+ */
+export function resolveLtmChatMemories(
+  chatMetadata: Record<string, unknown>,
+  config: { autoImportChatSources: boolean; autoAcceptSafeChanges: boolean },
+) {
+  const override = readLtmChatMemoriesMode(chatMetadata.longTermMemoryChatMemories);
+  if (!override) return { autoImport: config.autoImportChatSources, autoAccept: config.autoAcceptSafeChanges };
+  return { autoImport: override !== "manual", autoAccept: override === "save" };
+}

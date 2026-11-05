@@ -16,6 +16,8 @@ const entries = (text: string) =>
     .map((line) => line.trim())
     .filter(Boolean);
 const HEAT_LEVELS = [0, 1, 2, 3] as const;
+const ERAS = ["modern", "historical", "fantasy", "scifi", "other"] as const;
+const WORLD_TEXT = ["worldDevice", "worldMoney", "worldFestivals"] as const;
 /** The server keeps six entries per list; a seventh would be dropped after a "saved". */
 const LIST_MAX = 6;
 
@@ -46,7 +48,7 @@ export function SlpCanonAnchorsEditor({ creatorId }: { creatorId: string }) {
           ? t("ui.slurp.canonAnchors.edited")
           : t("ui.slurp.canonAnchors.extracted");
   const onSave = () =>
-    save.mutate(slpCanonAnchorsFromDraft(draft, state.anchors?.palette ?? {}), {
+    save.mutate(slpCanonAnchorsFromDraft(draft, state.anchors?.palette ?? {}, state.anchors?.niches), {
       onSuccess: () => toast.success(t("ui.slurp.canonAnchors.saved")),
       onError: (error) => toast.error(errorMessage(error)),
     });
@@ -115,6 +117,31 @@ export function SlpCanonAnchorsEditor({ creatorId }: { creatorId: string }) {
           />
         ))}
       </div>
+      <ChoiceSetting
+        label={t("ui.slurp.canonAnchors.worldEra")}
+        options={ERAS.map((era) => ({ value: era, label: t(`ui.slurp.canonAnchors.era.${era}`) }))}
+        value={
+          (ERAS as readonly string[]).includes(draft.worldEra) ? (draft.worldEra as (typeof ERAS)[number]) : "modern"
+        }
+        disabled={busy || !state.hasCard}
+        onChange={(era) => setDraft((current) => ({ ...current, worldEra: era }))}
+      />
+      {draft.worldEra !== "modern" && (
+        <div className="grid gap-3 lg:grid-cols-3">
+          {WORLD_TEXT.map((field) => (
+            <ChipListInput
+              key={field}
+              label={t(`ui.slurp.canonAnchors.${field}`)}
+              values={entries(draft[field])}
+              disabled={busy || !state.hasCard}
+              max={field === "worldFestivals" ? 4 : 1}
+              maxLength={60}
+              onChange={(values) => setDraft((current) => ({ ...current, [field]: values.join("\n") }))}
+              placeholder={t(`ui.slurp.canonAnchors.${field}Placeholder`)}
+            />
+          ))}
+        </div>
+      )}
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={onSave} disabled={busy || !state.hasCard} className={accentButton}>
           {t("ui.slurp.canonAnchors.save")}

@@ -95,9 +95,7 @@ order(
 assert.doesNotMatch(plan, /"fan_thread"|"canon_only"/u);
 assert.doesNotMatch(generation, /"fan_thread"|"canon_only"/u);
 assert.match(
-  slurp2Source(
-    "packages/slurp2/src/engine/packages/server/src/slp/features/messages/slp-message-generation-service.ts",
-  ),
+  slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/messages/slp-reply-continuity.ts"),
   /"fan_thread"/u,
 );
 

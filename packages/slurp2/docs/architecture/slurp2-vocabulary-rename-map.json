@@ -112,6 +112,7 @@
  "extractNoodleMentionHandles": "extractSlpMentionHandles",
  "findNoodleTextMentions": "findSlpTextMentions",
  "mergeNoodlePollVoteInteractions": "mergeSlpPollVoteInteractions",
+  "partialInput": "slpPartialInput",
  "noodleAccountAccessSettingsSchema": "slpAccountAccessSettingsSchema",
  "noodleAccountFollowUpdateSchema": "slpAccountFollowUpdateSchema",
  "noodleAccountIdentityUpdateShape": "slpAccountIdentityUpdateShape",

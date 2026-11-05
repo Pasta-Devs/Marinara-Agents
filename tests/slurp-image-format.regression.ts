@@ -32,13 +32,20 @@ assert.equal(slurpImageExtension(b64([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]), "
 // The generated-image path must actually use it.
 const images = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-images.service.ts");
 // 0.3.6: the sniff moved into slpCompactGeneratedImage, which every generated post picture goes through.
-assert.match(images, /const stored = await slpCompactGeneratedImage\(image\);/u, "staged bytes must be sniffed");
+assert.match(
+  images,
+  /const stored = await slpCompactGeneratedImage\(image, input\.settings\.imageKeepOriginalFiles\);/u,
+  "staged bytes must be sniffed",
+);
 
 // 0.3.6: a generated PNG is stored as a WebP (quality 90, same size) through the one post-picture path.
 {
   const root = "packages/slurp2/src/engine/packages/server/src/slp";
   const media = readFileSync(`${root}/base/media/slp-media.ts`, "utf8");
-  assert.match(media, /if \(ext !== "png" && ext !== "bmp"\) return \{ base64: image\.base64, ext \};/u);
+  assert.match(
+    media,
+    /if \(keepOriginal \|\| \(ext !== "png" && ext !== "bmp"\)\) return \{ base64: image\.base64, ext \};/u,
+  );
   assert.match(media, /\.webp\(\{ quality: 90 \}\)/u);
   assert.match(media, /const ext = slurpImageExtension\(image\.base64, image\.ext\);/u);
 }

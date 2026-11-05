@@ -2,19 +2,23 @@ import { join } from "node:path";
 import { configurePackageRuntime, type CapabilityRuntimeHost } from "./package-runtime.js";
 import { activateLongTermMemoryStorage, withLongTermMemoryVaultMutation } from "./runtime.js";
 import { refreshLongTermMemoryIndexes } from "./recall/rebuild.js";
+import { resumeLtmIndexRebuild, stopLtmIndexRebuild } from "./recall/rebuild-job.js";
+import { resumeLtmAutoImport, stopLtmAutoImport } from "./sources/auto-import-job.js";
 import {
   prepareGenerationLongTermMemory,
   recordGenerationLongTermMemoryDispatch,
 } from "./recall/generation-injection.js";
 import { createLongTermMemoryRoutes } from "./routes.js";
-import { adoptLegacyLongTermMemoryAgentConfig, adoptLegacyLongTermMemoryChats } from "./maintenance/legacy-adoption.js";
+import { createLtmIntakeService } from "./services/intake.js";
+import { createLtmRecallService } from "./services/recall.js";
+import { adoptLegacyLongTermMemoryAgentConfig } from "./maintenance/legacy-adoption.js";
 import type { FastifyPluginAsync } from "fastify";
 
 let active: Awaited<ReturnType<typeof activateLongTermMemoryStorage>> | null = null;
 
 type Api = {
   runtime: CapabilityRuntimeHost;
-  registerService(name: string, service: unknown): () => void;
+  registerService(name: string, service: unknown, options?: { hostOnly?: boolean }): () => void;
   registerPrivilegedRoutes(routes: FastifyPluginAsync, options: { prefix: string }): Promise<() => void>;
 };
 
@@ -28,37 +32,47 @@ export async function activate({ api, dataDir }: ActivationContext) {
   try {
     active = await activateLongTermMemoryStorage(join(dataDir, "long-term-memory"));
     const activationRoot = active.root;
+    resumeLtmIndexRebuild(activationRoot);
+    resumeLtmAutoImport(activationRoot);
     await adoptLegacyLongTermMemoryAgentConfig(active.root);
-    await adoptLegacyLongTermMemoryChats();
     const releaseRoutes = await api.registerPrivilegedRoutes(createLongTermMemoryRoutes(active), {
       prefix: "/api/long-term-memory",
     });
-    const releaseStorageService = api.registerService("long-term-memory:storage", {
-      root: active.root,
-      storage: active.storage,
-      drafts: active.draftStore,
-    });
-    const releaseRuntimeService = api.registerService("long-term-memory:runtime", {
-      refresh: async ({ signal }: { signal: AbortSignal }) => {
-        await refreshLongTermMemoryIndexes(activationRoot, signal);
-        return { status: "refreshed" as const };
+    const releaseRecallService = api.registerService("long-term-memory:recall", createLtmRecallService(active.storage));
+    const releaseIntakeService = api.registerService("long-term-memory:intake", createLtmIntakeService(active.storage));
+    // Host-only from Capability API 1.388: only the Engine reads it. Older Engines ignore the option.
+    const releaseRuntimeService = api.registerService(
+      "long-term-memory:runtime",
+      {
+        refresh: async ({ signal }: { signal: AbortSignal }) => {
+          await refreshLongTermMemoryIndexes(activationRoot, signal);
+          return { status: "refreshed" as const };
+        },
+        recall: (input: {
+          chatId: string;
+          chatMode: string;
+          characterIds: string[];
+          messages: Array<{ role: string; content: string }>;
+          signal?: AbortSignal;
+          debugMode?: boolean;
+        }) => prepareGenerationLongTermMemory({ ...input, root: active!.root }),
+        recordPromptAccepted: (input: { chatId: string; receipt: unknown; messages: Array<{ content: string }> }) =>
+          recordGenerationLongTermMemoryDispatch({ ...input, root: active!.root }),
+        withVaultMutation: <T>(operation: () => Promise<T>) =>
+          withLongTermMemoryVaultMutation(activationRoot, operation),
       },
-      recall: (input: {
-        chatId: string;
-        chatMode: string;
-        characterIds: string[];
-        messages: Array<{ role: string; content: string }>;
-        signal?: AbortSignal;
-        debugMode?: boolean;
-      }) => prepareGenerationLongTermMemory({ ...input, root: active!.root }),
-      recordPromptAccepted: (input: { chatId: string; receipt: unknown; messages: Array<{ content: string }> }) =>
-        recordGenerationLongTermMemoryDispatch({ ...input, root: active!.root }),
-      withVaultMutation: <T>(operation: () => Promise<T>) => withLongTermMemoryVaultMutation(activationRoot, operation),
-    });
+      { hostOnly: true },
+    );
     return async () => {
       releaseRoutes();
       releaseRuntimeService();
-      releaseStorageService();
+      releaseRecallService();
+      releaseIntakeService();
+      // A background import must not write after deactivation; the next reply after activation arms it again. It stops
+      // first, so a rebuild it requests on the way out is stopped below.
+      await stopLtmAutoImport(activationRoot);
+      // A scheduled rebuild must not publish after deactivation; the index stays dirty and the next recall rebuilds it.
+      await stopLtmIndexRebuild(activationRoot);
       await active?.cleanup();
       active = null;
       releaseHost();

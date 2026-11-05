@@ -3,6 +3,7 @@ import { createReadStream } from "node:fs";
 import { mkdir, readdir, readFile, rename } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { basename, dirname, relative } from "node:path";
+import { z } from "zod";
 import {
   ltmEventSchema,
   ltmIndexStateSchema,
@@ -25,7 +26,12 @@ import {
   safeJoin,
   vaultFolderForNoteType,
 } from "../persistence/paths.js";
-import { longTermMemoryRecallIndexPath, parseLtmRecallIndex, rebuildLongTermMemoryIndexes } from "../recall/rebuild.js";
+import {
+  longTermMemoryRecallIndexPath,
+  parseLtmRecallIndex,
+  rebuildLongTermMemoryIndexes,
+  waitForScheduledLtmIndexRebuild,
+} from "../recall/rebuild.js";
 import { getLtmGlobalSettings, ltmGeneratedStopWords } from "../settings.js";
 import { LongTermMemoryStorage } from "../persistence/storage.js";
 import { parseStoredLtmNote } from "../persistence/stored-note.js";
@@ -91,7 +97,8 @@ async function checkEventLog(root: string, issues: LtmIntegrityIssue[]) {
       severity: "error",
       code: "event_log_unreadable",
       path: displayPath,
-      message: error instanceof Error ? error.message : "Event log could not be read.",
+      // A read failure's message names the absolute path.
+      message: "Event log could not be read. Details are in the server log.",
     });
   }
   return eventCount;
@@ -192,6 +199,8 @@ async function checkRecallIndex(root: string, notes: LtmNote[], issues: LtmInteg
 }
 
 export async function checkLongTermMemoryIntegrity(root = getLongTermMemoryRoot()): Promise<LtmIntegrityResponse> {
+  // A rebuild a write scheduled would otherwise show as a stale index until it runs.
+  await waitForScheduledLtmIndexRebuild(root);
   return withLtmVaultLock(root, () => checkLongTermMemoryIntegrityUnlocked(root));
 }
 
@@ -239,7 +248,11 @@ async function checkLongTermMemoryIntegrityUnlocked(root: string): Promise<LtmIn
         severity: "error",
         code: "malformed_note",
         path: displayPath,
-        message: error instanceof Error ? error.message : "Note could not be read or validated.",
+        // A parse or schema error describes the note; a read failure's message names the absolute path.
+        message:
+          error instanceof SyntaxError || error instanceof z.ZodError
+            ? error.message
+            : `Note file ${displayPath} could not be read or validated. Details are in the server log.`,
       });
     }
   }

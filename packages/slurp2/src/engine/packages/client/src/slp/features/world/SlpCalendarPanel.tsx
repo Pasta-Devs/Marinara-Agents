@@ -5,6 +5,8 @@ import { useMemo, useState } from "react";
 import type { SlpStoryCalendarItem } from "../../../../../shared/src/slp/slp-story-engine.js";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
 import { useSlpStoryCalendar } from "./slp-story-hooks.js";
+import { SlpWorldSwitch } from "./SlpWorldEventsPanel";
+import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
 const buttonClass =
   "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--slurp-outline)] px-3 text-sm font-semibold transition-[background-color,color,transform] hover:bg-[var(--slurp-surface-raised)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100";
@@ -40,6 +42,21 @@ const itemTone = (item: SlpStoryCalendarItem) =>
         : "bg-[var(--slurp-surface-raised)] text-[var(--slurp-text)] ring-[var(--slurp-outline)]";
 
 export function SlpCalendarPanel(page: SlpBackstagePageProps) {
+  if (!slpExtensionOn(page.settings, "world"))
+    return (
+      <div className="space-y-5">
+        <SlpWorldSwitch {...page} />
+      </div>
+    );
+  return (
+    <div className="space-y-8">
+      <SlpWorldSwitch {...page} />
+      <SlpCalendarBody {...page} />
+    </div>
+  );
+}
+
+function SlpCalendarBody(page: SlpBackstagePageProps) {
   const { t } = page;
   const kindLabel = (kind: SlpStoryCalendarItem["kind"]) => t(`ui.slurp.calendar.kind.${kind}`);
   const statusLabel = (status: SlpStoryCalendarItem["status"]) =>

@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 
-import { scopeTargetLabel } from "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/display-labels.js";
+import {
+  labelKeys,
+  localizedLabel,
+  scopeTargetLabel,
+} from "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/display-labels.js";
 
 const localizedDefaults = {
   chat: "Localized chat",
@@ -50,4 +54,17 @@ assert.equal(
   "local_character respects fallback overrides",
 );
 
-process.stdout.write("Long-Term Memory scope fallback regression: localized defaults and per-kind overrides ok\n");
+const testLocalize = (key: string) => `translated:${key}`;
+assert.equal(
+  localizedLabel("critical", testLocalize, labelKeys.importance),
+  "translated:ui.longTermMemory.memoryvault.critical",
+);
+assert.equal(
+  localizedLabel("roleplay", testLocalize, labelKeys.mode),
+  "translated:ui.longTermMemory.sourcesworkspace.roleplay",
+);
+assert.equal(localizedLabel("future_value", testLocalize, labelKeys.mode), "Future value");
+
+process.stdout.write(
+  "Long-Term Memory scope fallback regression: localized defaults, per-kind overrides, and display labels ok\n",
+);

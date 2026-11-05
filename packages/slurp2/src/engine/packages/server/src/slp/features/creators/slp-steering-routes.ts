@@ -112,7 +112,11 @@ export async function slpSteeringRoutes(app: FastifyInstance, deps: SlpRouteDeps
         relationshipStyle: z.enum(SLP_RELATIONSHIP_STYLES).nullable().optional(),
         /** Romance with other Creators (0.3.17): never, or only with these. */
         romance: z
-          .object({ off: z.boolean(), only: z.array(z.string().trim().min(1).max(128)).max(SLP_ROMANCE_ONLY_MAX) })
+          .object({
+            off: z.boolean(),
+            only: z.array(z.string().trim().min(1).max(128)).max(SLP_ROMANCE_ONLY_MAX),
+            never: z.array(z.string().trim().min(1).max(128)).max(SLP_ROMANCE_ONLY_MAX).optional(),
+          })
           .optional(),
         turnOns: spiceChips.optional(),
         hardNoes: spiceChips.optional(),

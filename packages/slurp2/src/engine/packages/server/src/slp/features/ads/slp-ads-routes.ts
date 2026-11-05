@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { slpPartialInput } from "../../../../../shared/src/slp/slp-schema-defaults.js";
 import { SLURP_GARNISH_PLATFORM, garnishContextForViewer } from "./slp-garnish-context.js";
 import { newId } from "../../../utils/id-generator.js";
 import { unlinkGarnishAdImage, resolveGarnishAdImageAbsolutePath } from "./slp-garnish-image.js";
@@ -20,9 +21,13 @@ import {
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
+import { slpExtensionOn, slpInlineAdsOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
 export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   const { ads, characters, noodle, resolveViewerPersona } = deps;
+  // Brands & ads off: nothing new is drawn, synced or written by the model; the pool stays editable.
+  const ADS_OFF = { error: "Brands & ads is switched off in Backstage." };
+  const adsOff = async () => !slpExtensionOn(await noodle.getSettings(), "ads");
   const garnishAdInputSchema = z.object({
     id: z.string().trim().min(1).max(120).optional(),
     kind: z.enum(["creator", "inline"]).default("inline"),
@@ -51,7 +56,7 @@ export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const settings = await noodle.getSettings();
-    if (!settings.inlineAdsEnabled) return { items: [] };
+    if (!slpInlineAdsOn(settings)) return { items: [] };
     const persona = await characters.getPersona(parsed.data.personaId);
     const creator = parsed.data.creatorId ? await noodle.getNoodlerAccountById(parsed.data.creatorId) : null;
     const items = await ads.listInline(
@@ -181,10 +186,9 @@ export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
     return { ok: true };
   });
 
-  const garnishAdPatchSchema = garnishAdInputSchema
-    .omit({ id: true })
-    .partial()
-    .extend({ retiredAt: z.null().optional() });
+  const garnishAdPatchSchema = slpPartialInput(garnishAdInputSchema.omit({ id: true })).extend({
+    retiredAt: z.null().optional(),
+  });
 
   app.patch("/slurp/ads/pool/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
@@ -205,6 +209,7 @@ export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   });
 
   app.post("/slurp/ads/:id/image", async (req, reply) => {
+    if (await adsOff()) return reply.code(409).send(ADS_OFF);
     const { id } = req.params as { id: string };
     const ad = (await ads.pool.listAll(SLURP_GARNISH_PLATFORM)).find((row) => row.id === id);
     if (!ad) return reply.code(404).send({ error: "Not Found" });
@@ -240,6 +245,7 @@ export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   });
 
   app.post("/slurp/ads/lorebook/sync", async (req, reply) => {
+    if (await adsOff()) return reply.code(409).send(ADS_OFF);
     const parsed = z.object({ force: z.boolean().optional() }).safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const outcome = await syncGarnishAdsWithLorebook(app.db, ads.pool, { force: parsed.data.force });
@@ -257,6 +263,7 @@ export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   }));
 
   app.post("/slurp/ads/generate", async (req, reply) => {
+    if (await adsOff()) return reply.code(409).send(ADS_OFF);
     const parsed = z
       .object({ connectionId: z.string().trim().min(1).optional(), count: z.number().int().min(1).max(10).optional() })
       .safeParse(req.body ?? {});

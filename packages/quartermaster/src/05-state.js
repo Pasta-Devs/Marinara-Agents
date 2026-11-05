@@ -183,11 +183,67 @@ const QM_OVERLAY_SLOT_LABEL_LINES = {
   extra_wearable_2: ["Extra", "Wearable 2"],
   extra_wearable_3: ["Extra", "Wearable 3"],
 };
+// Mirrors server.mjs's APPEARANCE_FEED_MODES; `help` is the line the Settings
+// popover shows for each.
 const QM_APPEARANCE_FEED_OPTIONS = [
-  { value: "off", label: "Off" },
-  { value: "outfitDescription", label: "Outfit description" },
-  { value: "equippedNames", label: "Equipped item names" },
+  { value: "off", label: "Off", help: "Nothing is written." },
+  { value: "outfitName", label: "Outfit name", help: "The saved outfit you're wearing, by name." },
+  { value: "outfitDescription", label: "Outfit description", help: "That outfit's description." },
+  {
+    value: "outfitNameDescription",
+    label: "Outfit name + description",
+    help: "Both, e.g. “Casual, A relaxed weekend look.”",
+  },
+  { value: "equippedNames", label: "Equipped item names", help: "Every worn item by name." },
+  {
+    value: "equippedDescriptions",
+    label: "Equipped item descriptions",
+    help: "Every worn item's description (its name if it has none).",
+  },
+  {
+    value: "equippedNamesDescriptions",
+    label: "Equipped item names + descriptions",
+    help: "Both, e.g. “Red hat, A weathered red hat. Black boots, …”",
+  },
 ];
+// Mirrors server.mjs's HIDDEN_ITEM_ACCESS_MODES.
+const QM_HIDDEN_ITEM_ACCESS_OPTIONS = [
+  {
+    value: "userHidden",
+    label: "Only you can change it — stays hidden",
+    help: "The agent's changes are skipped. It can still take a worn hidden item off.",
+  },
+  {
+    value: "userShown",
+    label: "Only you can change it — becomes shown",
+    help: "The agent's description, quantity and removal changes are skipped, but it can equip or move the item, which then shows it.",
+  },
+  {
+    value: "agentHidden",
+    label: "Agent can change it — stays hidden",
+    help: "The agent's changes apply. It stays hidden, showing only while worn.",
+  },
+  {
+    value: "agentShown",
+    label: "Agent can change it — becomes shown",
+    help: "The agent's changes apply and the item becomes shown.",
+  },
+];
+// Once an item's image may have changed, forget what this session remembers
+// about it (QM.setImageSrc's cache and _missingItemImageIds), after the request
+// succeeds and before _mutate repaints, so the next paint loads it fresh.
+function qmForgetItemImageAfter(request, chatId, itemId) {
+  return request.then((result) => {
+    QM._missingItemImageIds.delete(itemId);
+    QM.forgetImage(QM.itemImageUrl(chatId, QM_OWNER_ID, itemId));
+    return result;
+  });
+}
+
+// Whether the pending-change "Show item" box starts ticked for this mode.
+function qmAccessModeShows(mode) {
+  return mode === "userShown" || mode === "agentShown";
+}
 const QM_COLOR_DANGER = "#dc2626";
 const QM_COLOR_DANGER_FG = "#fff";
 const QM_COLOR_SUCCESS = "#16a34a";
@@ -293,6 +349,18 @@ function qmDescribeTrackerChangeForToast(change) {
   if (change.equippedOutfitName) {
     lines.push({ text: `Outfit "${change.equippedOutfitName}" equipped`, color: "inherit" });
   }
+  // What the agent's change did to a hidden item (server.mjs's
+  // applyAgentItemChange). "pending" gets the review popup instead.
+  const hiddenText = {
+    skipped: (name) => `${name} is hidden — agent change skipped`,
+    shown: (name) => `${name} is now shown — its details were kept`,
+    applied: (name) => `${name} updated — still hidden`,
+    appliedShown: (name) => `${name} updated and now shown`,
+  };
+  for (const entry of change.hiddenOutcomes ?? []) {
+    const describe = hiddenText[entry.outcome];
+    if (describe) lines.push({ text: describe(entry.name), color: "inherit" });
+  }
   return lines;
 }
 
@@ -352,6 +420,7 @@ function qmStateSnapshotForChangeDetection() {
     replaceRealAvatarOnEquip: QM.state.replaceRealAvatarOnEquip,
     previousSnapshot: QM.state.previousSnapshot,
     lastTrackerChange: QM.state.lastTrackerChange,
+    pendingHiddenChanges: QM.state.pendingHiddenChanges,
   });
 }
 
@@ -437,6 +506,13 @@ QM.state = {
   imageConnectionId: null,
   itemImagePromptTemplate: "",
   outfitPortraitPromptTemplate: "",
+  // Hidden items (per chat; see server.mjs's loadInventoryState for each).
+  askBeforeHiddenChanges: true,
+  hiddenItemAccess: "userHidden",
+  wardrobeUsesHidden: false,
+  hiddenOnlyInHiddenTab: true,
+  // Agent changes to hidden items waiting for the user (QM.pending shows them).
+  pendingHiddenChanges: [],
   error: null,
   _chatToken: 0,
   _reloadToken: 0,
@@ -469,6 +545,11 @@ QM.state = {
     this.imageConnectionId = null;
     this.itemImagePromptTemplate = "";
     this.outfitPortraitPromptTemplate = "";
+    this.askBeforeHiddenChanges = true;
+    this.hiddenItemAccess = "userHidden";
+    this.wardrobeUsesHidden = false;
+    this.hiddenOnlyInHiddenTab = true;
+    this.pendingHiddenChanges = [];
     this.error = null;
     // A selected equip-slot picker (QM.dock's own UI state, not this
     // object's) doesn't carry any meaning across a chat switch — the slot
@@ -528,6 +609,11 @@ QM.state = {
         imageConnectionId: result.imageConnectionId ?? null,
         itemImagePromptTemplate: result.itemImagePromptTemplate || "",
         outfitPortraitPromptTemplate: result.outfitPortraitPromptTemplate || "",
+        askBeforeHiddenChanges: result.askBeforeHiddenChanges !== false,
+        hiddenItemAccess: result.hiddenItemAccess || "userHidden",
+        wardrobeUsesHidden: result.wardrobeUsesHidden === true,
+        hiddenOnlyInHiddenTab: result.hiddenOnlyInHiddenTab !== false,
+        pendingHiddenChanges: result.pendingHiddenChanges ?? [],
       };
       // A repaint rebuilds every card's DOM wholesale (there's no cheap way
       // to patch just the one thing that changed) — item images in
@@ -551,6 +637,11 @@ QM.state = {
         imageConnectionId: this.imageConnectionId,
         itemImagePromptTemplate: this.itemImagePromptTemplate,
         outfitPortraitPromptTemplate: this.outfitPortraitPromptTemplate,
+        askBeforeHiddenChanges: this.askBeforeHiddenChanges,
+        hiddenItemAccess: this.hiddenItemAccess,
+        wardrobeUsesHidden: this.wardrobeUsesHidden,
+        hiddenOnlyInHiddenTab: this.hiddenOnlyInHiddenTab,
+        pendingHiddenChanges: this.pendingHiddenChanges,
       };
       // "Item Acquired!" toasts: only for a genuinely NEW tracker turn, not the
       // first load of a chat that already has history (previousChange starts
@@ -567,6 +658,7 @@ QM.state = {
         (incomingChange.addedItems.length > 0 ||
           incomingChange.updatedItems.length > 0 ||
           incomingChange.removedItems.length > 0 ||
+          (incomingChange.hiddenOutcomes ?? []).length > 0 ||
           incomingChange.equippedOutfitName)
       ) {
         qmEnqueueChangeToasts(incomingChange);
@@ -605,6 +697,15 @@ QM.state = {
       if (result.itemImagePromptTemplate !== undefined) this.itemImagePromptTemplate = result.itemImagePromptTemplate;
       if (result.outfitPortraitPromptTemplate !== undefined)
         this.outfitPortraitPromptTemplate = result.outfitPortraitPromptTemplate;
+      for (const key of [
+        "askBeforeHiddenChanges",
+        "hiddenItemAccess",
+        "wardrobeUsesHidden",
+        "hiddenOnlyInHiddenTab",
+        "pendingHiddenChanges",
+      ]) {
+        if (result[key] !== undefined) this[key] = result[key];
+      }
       this.error = null;
       outcome = { ok: true, result };
     } catch (error) {
@@ -621,34 +722,35 @@ QM.state = {
   addItem(item) {
     return this._mutate(QM.addItem(this.chatId, QM_OWNER_ID, item));
   },
+  // A rename can change which image an item shows (a different name match),
+  // and Unlink ({ imageFile: null }) always does.
   updateItem(itemId, patch) {
-    return this._mutate(QM.updateItem(this.chatId, QM_OWNER_ID, itemId, patch));
+    const request = QM.updateItem(this.chatId, QM_OWNER_ID, itemId, patch);
+    const imageMayChange = "name" in patch || "imageFile" in patch;
+    return this._mutate(imageMayChange ? qmForgetItemImageAfter(request, this.chatId, itemId) : request);
   },
   deleteItem(itemId) {
     return this._mutate(QM.deleteItem(this.chatId, QM_OWNER_ID, itemId));
   },
-  // Each image change drops that image from QM.setImageSrc's cache once it
-  // succeeds, before _mutate repaints, so the next render fetches the new one.
-  uploadItemImage(itemId, imageDataUrl) {
-    QM._missingItemImageIds.delete(itemId);
-    const chatId = this.chatId;
-    return this._mutate(
-      QM.uploadItemImage(chatId, QM_OWNER_ID, itemId, imageDataUrl).then((result) => {
-        QM.forgetImage(QM.itemImageUrl(chatId, QM_OWNER_ID, itemId));
-        return result;
-      }),
-    );
+  // source: "uploaded" or "generated".
+  uploadItemImage(itemId, imageDataUrl, source = "uploaded") {
+    const request = QM.uploadItemImage(this.chatId, QM_OWNER_ID, itemId, imageDataUrl, source);
+    return this._mutate(qmForgetItemImageAfter(request, this.chatId, itemId));
   },
+  // Another name match may show once the file is gone, so this re-checks
+  // rather than marking the item as having no image.
   deleteItemImage(itemId) {
-    const chatId = this.chatId;
-    return this._mutate(
-      QM.deleteItemImage(chatId, QM_OWNER_ID, itemId).then((result) => {
-        // Suppress image lookups only after this delete succeeds.
-        QM._missingItemImageIds.add(itemId);
-        QM.forgetImage(QM.itemImageUrl(chatId, QM_OWNER_ID, itemId));
-        return result;
-      }),
-    );
+    const request = QM.deleteItemImage(this.chatId, QM_OWNER_ID, itemId);
+    return this._mutate(qmForgetItemImageAfter(request, this.chatId, itemId));
+  },
+  // This chat's item stops using its saved file and goes back to name
+  // matching; the file stays on disk for anything else using it.
+  unlinkItemImage(itemId) {
+    return this.updateItem(itemId, { imageFile: null });
+  },
+  // Read-only, like exportInventory: the dock's image details.
+  itemImageInfo(itemId) {
+    return QM.itemImageInfo(this.chatId, QM_OWNER_ID, itemId);
   },
   unequipAll() {
     return this._mutate(QM.unequipAll(this.chatId, QM_OWNER_ID));
@@ -689,10 +791,53 @@ QM.state = {
   // same (already-settled) request lets the caller read `summary` too,
   // without a second network round trip; a caller doing so must wrap it in
   // its own try/catch, since a rejection is still a rejection on re-await.
-  async confirmWardrobe(proposal) {
-    const request = QM.confirmWardrobe(this.chatId, QM_OWNER_ID, proposal);
+  async confirmWardrobe(proposal, hiddenChoices) {
+    const request = QM.confirmWardrobe(this.chatId, QM_OWNER_ID, proposal, hiddenChoices);
     await this._mutate(request);
     return request;
+  },
+  // Hiding a worn item takes it off (server.mjs's item PATCH route).
+  setItemHidden(itemId, hidden) {
+    return this.updateItem(itemId, { hidden });
+  },
+  setDescriptionLocked(itemId, locked) {
+    return this.updateItem(itemId, { descriptionLocked: locked });
+  },
+  setOutfitHidden(outfitId, hidden) {
+    return this.updateOutfit(outfitId, { hidden });
+  },
+  // askBeforeHiddenChanges, hiddenItemAccess, wardrobeUsesHidden, hiddenOnlyInHiddenTab.
+  updateHiddenSetting(key, value) {
+    return this._mutate(QM.updateSettings(this.chatId, QM_OWNER_ID, { [key]: value }));
+  },
+  // decision: { decision: "accept" | "keep", show, override }. Returns the
+  // server's answer; a stale accept comes back as { stale: true, before,
+  // current, after } (status 409) for the caller to show, without an error.
+  // An answer that arrives after the user left the chat changes nothing.
+  async resolvePending(pendingId, decision) {
+    const chatId = this.chatId;
+    const chatToken = this._chatToken;
+    const response = await QM.resolvePending(chatId, QM_OWNER_ID, pendingId, decision).catch((error) => ({
+      ok: false,
+      status: 0,
+      body: { error: error.message },
+    }));
+    if (this.chatId !== chatId || chatToken !== this._chatToken) return {};
+    if (response.ok) {
+      await this._mutate(Promise.resolve(response.body));
+    } else if (response.status === 409 && response.body?.stale) {
+      return { stale: true, ...response.body };
+    } else if (response.body?.gone) {
+      return { gone: true };
+    } else {
+      this.error = response.body?.error || "Couldn't settle that change";
+      this._notify();
+    }
+    return response.body ?? {};
+  },
+  markPendingSeen(ids) {
+    if (ids.length === 0) return Promise.resolve();
+    return this._mutate(QM.markPendingSeen(this.chatId, QM_OWNER_ID, ids));
   },
   uploadOutfitPortrait(outfitId, imageDataUrl) {
     const chatId = this.chatId;
@@ -802,6 +947,10 @@ QM.state = {
 
   itemInSlot(slot) {
     return (this.items ?? []).find((item) => item.location === `equipped:${slot}`) ?? null;
+  },
+
+  itemById(itemId) {
+    return (this.items ?? []).find((item) => item.id === itemId) ?? null;
   },
 
   sortedOutfits() {

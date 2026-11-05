@@ -2,7 +2,7 @@
   {
     "id": "long-term-memory",
     "name": "Long-Term Memory",
-    "description": "Remembers important things from your chat summaries, characters, and lorebooks, and brings them back when they matter.",
+    "description": "Remembers important things from your chats, characters, and lorebooks, and brings them back when they matter.",
     "author": "Pasta Devs",
     "phase": "pre_generation",
     "enabledByDefault": false,

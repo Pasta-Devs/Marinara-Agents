@@ -233,7 +233,10 @@ export function slpCreatorGoalOf(
 // Shared small components
 // ---------------------------------------------------------------------------
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { useDialogFocusScope } from "../../../hooks/use-dialog-focus-scope";
+import { registerSlpBackLayer } from "../../base/navigation/slp-back-layer";
 import { motion, useReducedMotion } from "framer-motion";
 import { SlurpSparkleVeil } from "../../base/chrome/SlpSparkleVeil";
 import { cn } from "../../../lib/utils";
@@ -248,7 +251,7 @@ import {
 } from "../../base/chrome/SlpChrome";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { useSlurpMediaSrc } from "../../base/media/slp-media-src";
-import { Modal } from "../../../components/ui/Modal";
+import { Modal, ModalPortalContext } from "../../../components/ui/Modal";
 import type { SlpPostCardCtx } from "../../modules/post/SlpPostTypes";
 import { SlpPostCard } from "../../modules/post/SlpPostCard";
 
@@ -507,53 +510,58 @@ export function SlurpMediaDialog({
   pictured?: boolean;
 }) {
   const story = variant === "story";
+  const body = (
+    <div
+      className={cn(
+        "flex h-full min-h-0 flex-col",
+        story
+          ? "relative sm:h-[min(90vh,56rem)]"
+          : // Phones scroll the whole post, so the picture keeps most of the screen and the card follows it.
+            "max-sm:overflow-y-auto sm:h-[min(84vh,48rem)] sm:flex-row",
+      )}
+    >
+      <div
+        className={cn(
+          "relative flex items-center justify-center overflow-hidden bg-black",
+          pictured && SLP_IMG_FRAME_CLASS,
+          story ? "min-h-0 flex-1" : "h-[min(72dvh,40rem)] shrink-0 sm:h-auto sm:min-h-0 sm:flex-1",
+        )}
+      >
+        {media}
+      </div>
+      <aside
+        className={cn(
+          "flex w-full shrink-0 flex-col",
+          story
+            ? "absolute inset-x-0 bottom-0 z-20 max-h-[46%] min-h-0 overflow-y-auto bg-gradient-to-t from-black via-black/88 to-transparent px-1 pb-2 pt-16 text-white"
+            : "bg-[var(--slurp-surface-raised)] shadow-[var(--slurp-highlight)] sm:min-h-0 sm:w-[24rem] sm:overflow-y-auto @min-[1280px]:w-[26rem]",
+        )}
+      >
+        {side}
+      </aside>
+    </div>
+  );
+  // A Story is its own full-screen layer with its own close button; the Engine modal would add a second one.
+  if (story)
+    return (
+      <SlpStoryLayer title={title} onClose={onClose}>
+        {body}
+      </SlpStoryLayer>
+    );
   return (
     <Modal
       open
       onClose={onClose}
       title={title}
-      width={story ? "max-w-xl" : "max-w-6xl"}
+      width="max-w-6xl"
       mobileFullscreen
       // `!`: the Modal content area carries px-5 py-4, which beats a plain p-0 in the CSS order and
       // left the Story and the picture inset on phones.
       contentClassName="!p-0"
-      panelClassName={cn(
-        "noodle-icon-scope overflow-hidden",
-        story &&
-          // The Modal header is hidden: a Story draws its own close button over the picture, top right.
-          "bg-black [&>div:first-child]:hidden",
-      )}
+      panelClassName="noodle-icon-scope overflow-hidden"
       panelStyle={getSlpAccentStyle(SLP_PINK)}
     >
-      <div
-        className={cn(
-          "flex h-full min-h-0 flex-col",
-          story
-            ? "relative sm:h-[min(90vh,56rem)]"
-            : // Phones scroll the whole post, so the picture keeps most of the screen and the card follows it.
-              "max-sm:overflow-y-auto sm:h-[min(84vh,48rem)] sm:flex-row",
-        )}
-      >
-        <div
-          className={cn(
-            "relative flex items-center justify-center overflow-hidden bg-black",
-            pictured && SLP_IMG_FRAME_CLASS,
-            story ? "min-h-0 flex-1" : "h-[min(72dvh,40rem)] shrink-0 sm:h-auto sm:min-h-0 sm:flex-1",
-          )}
-        >
-          {media}
-        </div>
-        <aside
-          className={cn(
-            "flex w-full shrink-0 flex-col",
-            story
-              ? "absolute inset-x-0 bottom-0 z-20 max-h-[46%] min-h-0 overflow-y-auto bg-gradient-to-t from-black via-black/88 to-transparent px-1 pb-2 pt-16 text-white"
-              : "bg-[var(--slurp-surface-raised)] shadow-[var(--slurp-highlight)] sm:min-h-0 sm:w-[24rem] sm:overflow-y-auto @min-[1280px]:w-[26rem]",
-          )}
-        >
-          {side}
-        </aside>
-      </div>
+      {body}
     </Modal>
   );
 }
@@ -690,5 +698,45 @@ function SlurpPostDialogThumb({
         />
       )}
     </button>
+  );
+}
+
+/** The Story viewer's layer: black, full screen on phones, centred on wide screens; Escape or a scrim tap closes. */
+function SlpStoryLayer({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  const portal = useContext(ModalPortalContext);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useDialogFocusScope(true, panelRef);
+  useEffect(() => registerSlpBackLayer(() => onCloseRef.current()), []);
+  useEffect(() => {
+    // Window capture, stopped: an Engine dialog underneath listens on document and would close too.
+    const escape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      onCloseRef.current();
+    };
+    window.addEventListener("keydown", escape, true);
+    return () => window.removeEventListener("keydown", escape, true);
+  }, []);
+  return createPortal(
+    <div
+      className="pointer-events-auto fixed inset-0 z-[10000] flex items-center justify-center bg-black/90 sm:p-4"
+      style={getSlpAccentStyle(SLP_PINK)}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onCloseRef.current();
+      }}
+    >
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className="noodle-icon-scope relative h-full w-full overflow-hidden bg-black sm:h-auto sm:max-w-xl sm:rounded-2xl"
+      >
+        {children}
+      </div>
+    </div>,
+    portal ?? document.body,
   );
 }

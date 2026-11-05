@@ -1,19 +1,33 @@
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   LtmExtractionSettingsPatch,
   LtmGlobalSettings,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { LTM_RECALL_STYLE_WEIGHTS } from "../../../../../shared/src/features/agents/long-term-memory/constants.js";
-import { LTM_RECALL_SCORE_THRESHOLD_CEILING } from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
+import {
+  LTM_RECALL_SCORE_THRESHOLD_CEILING,
+  ltmChatMemoriesModeOf,
+  type LtmChatMemoriesMode,
+} from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
 import { errorMessage, invalidateLtmQueries, queryKeys, request, requestHost, settingsQueryOptions } from "../api";
-import { Button, InfoPopover, NumberField, StatusSurface, inputClass } from "../shared-controls";
+import { autoImportNeedsConnection, useAutoImportEvents } from "../auto-import-status";
+import {
+  ChatMemoriesSample,
+  chatMemoriesDescriptionKey,
+  chatMemoriesFlags,
+  chatMemoriesLabelKey,
+  chatMemoriesModes,
+} from "../chat-memories";
+import { Button, InfoPopover, NumberField, StatusSurface, inputClass, lockedActionProps } from "../shared-controls";
 import { nextTabIndex } from "../tab-keys";
 import type { LongTermMemoryDestinationProps } from "../types";
 import ActivityView from "./ActivityView";
+import { formatAge } from "./debug-activity";
 import { ExtractionPromptTemplates } from "./ExtractionPromptTemplates";
 import { MaintenancePanel } from "./MaintenancePanel";
 import { confirm, Toggle, type SettingsRebuildOutcome } from "./settings-shared";
+import { offerSlurpMemories, type SlurpMemorySetting } from "./slurp-memory-offer";
 import { useLtmTranslation } from "../localization";
 import { recallStyleDescriptionKey } from "../recall-style";
 
@@ -33,6 +47,9 @@ type GlobalForm = {
   longTermMemoryIncludeResolved: boolean;
   longTermMemoryRecallPreamble: string;
   longTermMemoryDebug: boolean;
+  longTermMemoryShareWithPackages: boolean;
+  longTermMemoryAcceptFromPackages: boolean;
+  longTermMemoryHideImportedMessages: boolean;
   sourcesAvailabilityModes?: ("conversation" | "roleplay" | "game")[];
 };
 type ExtractionForm = Required<LtmExtractionSettingsPatch> & {
@@ -90,6 +107,9 @@ function settingsForm(settings: LtmGlobalSettings): GlobalForm {
     longTermMemoryIncludeResolved: settings.longTermMemoryIncludeResolved ?? false,
     longTermMemoryRecallPreamble: settings.longTermMemoryRecallPreamble ?? "",
     longTermMemoryDebug: settings.longTermMemoryDebug ?? false,
+    longTermMemoryShareWithPackages: settings.longTermMemoryShareWithPackages ?? true,
+    longTermMemoryAcceptFromPackages: settings.longTermMemoryAcceptFromPackages ?? false,
+    longTermMemoryHideImportedMessages: settings.longTermMemoryHideImportedMessages ?? false,
     ...(settings.sourcesAvailabilityModes ? { sourcesAvailabilityModes: settings.sourcesAvailabilityModes } : {}),
   };
 }
@@ -159,6 +179,10 @@ function extractionForm(settings: LtmExtractionSettingsPatch): ExtractionForm {
     promptTemplates: resolved.promptTemplates ?? [],
     activePromptTemplateIdsByMode: resolved.activePromptTemplateIdsByMode ?? {},
     aiKeywordExtraction: resolved.aiKeywordExtraction ?? false,
+    finishCutOffAnswers: resolved.finishCutOffAnswers ?? false,
+    autoAcceptSafeChanges: resolved.autoAcceptSafeChanges ?? false,
+    autoImportChatSources: resolved.autoImportChatSources ?? false,
+    chatImportDetail: resolved.chatImportDetail ?? "standard",
     useExtractionAgentOnGameMode: resolved.useExtractionAgentOnGameMode ?? false,
     ...(resolved.systemPrompt === undefined ? {} : { systemPrompt: resolved.systemPrompt }),
     ...(resolved.activePromptTemplateId === undefined
@@ -172,7 +196,8 @@ function extractionPayload({
   activePromptTemplateId: _activePromptTemplateId,
   ...settings
 }: ExtractionForm) {
-  return settings;
+  // Saving writes the two flags the shown choice stands for, so a stored import-off + accept-on becomes "I add them myself".
+  return { ...settings, ...chatMemoriesFlags(ltmChatMemoriesModeOf(settings)) };
 }
 
 export default function MemorySettings({
@@ -183,24 +208,43 @@ export default function MemorySettings({
   openActivityRequest,
   openActivityMemoryId,
   onOpenActivityHandled,
+  openForConnection,
+  onOpenForConnectionHandled,
 }: LongTermMemoryDestinationProps) {
-  const { t: localizeUi } = useLtmTranslation();
+  const { t: localizeUi, locale } = useLtmTranslation();
   const memorySettingsTitleId = useId();
   const recallStyleLabelId = useId();
+  const recallGroupId = useId();
   const recallPreambleLabelId = useId();
   const memoryStopWordsLabelId = useId();
   const reasoningEffortLabelId = useId();
   const verbosityLabelId = useId();
+  const chatImportDetailLabelId = useId();
   const extractionConnectionLabelId = useId();
+  const chatMemoriesLabelId = useId();
   const queryClient = useQueryClient();
   const global = useQuery(settingsQueryOptions);
   const extraction = useQuery({
     queryKey: queryKeys.extractionSettings,
     queryFn: () => request<LtmExtractionSettingsPatch>("/extraction-settings"),
   });
+  const autoImportEvents = useAutoImportEvents(extraction.data?.autoImportChatSources === true);
   const connections = useQuery({
     queryKey: ["long-term-memory", "language-connections"],
     queryFn: () => requestHost<LanguageConnection[]>("/api/connections"),
+  });
+  const packageReaders = useQuery({
+    queryKey: queryKeys.packageReaders,
+    queryFn: () =>
+      request<{
+        readers: Array<{
+          caller: string | null;
+          lastReadAt: string | null;
+          reads: number;
+          memories: number;
+          added: number;
+        }>;
+      }>("/settings/package-readers"),
   });
   const availableConnections = (connections.data ?? []).filter(
     (connection) => connection.provider !== "image_generation" && connection.provider !== "video_generation",
@@ -211,6 +255,9 @@ export default function MemorySettings({
   const [savedExtraction, setSavedExtraction] = useState<ExtractionForm | null>(null);
   // Reset and backup import clear the forms, which then refill only from settings fetched since
   // the action started, so a failed reload shows the error surface instead of the cached settings.
+  // `refillSince` resets when Settings remounts, so the fill effects also wait while a query is in
+  // error: react-query keeps the data cached before the failed read, and filling from it would let
+  // the next Save write the replaced settings back.
   const [refillSince, setRefillSince] = useState(0);
   const [pending, setPending] = useState("");
   const [messageState, setMessageState] = useState<{
@@ -224,7 +271,9 @@ export default function MemorySettings({
   const message = messageState.text;
   const setMessage = (text: string, tone: "success" | "danger" = "success", surface: "shared" | "debug" = "shared") =>
     setMessageState({ text, tone, surface });
-  const [activeTab, setActiveTab] = useState<SettingsTab>("recall");
+  // Chat Settings can open this tab with the connection field focused (once).
+  const [activeTab, setActiveTab] = useState<SettingsTab>(openForConnection ? "extraction" : "recall");
+  const connectionSelectRef = useRef<HTMLSelectElement>(null);
   // Capture the Vault memory link's target before the handoff request is reset, so the
   // Debug tab can open filtered to that memory without a stale filter on later entries.
   const [debugMemoryId, setDebugMemoryId] = useState<string | null>(null);
@@ -240,18 +289,32 @@ export default function MemorySettings({
     if (maintenanceBusy) setMessage("");
   }, [maintenanceBusy]);
 
+  // "Reset to preset" returns to the last named style: the one chosen or saved before the weights were
+  // edited. Whenever the form equals the saved settings (first load, Save, Discard, import or reset) the
+  // history restarts from them, so a form saved as Custom has none and falls back to Balanced.
+  const [lastRecallPreset, setLastRecallPreset] =
+    useState<Exclude<GlobalForm["longTermMemoryRecallStyle"], "custom">>("balanced");
+  const restartRecallPreset = (form: GlobalForm) =>
+    setLastRecallPreset(form.longTermMemoryRecallStyle === "custom" ? "balanced" : form.longTermMemoryRecallStyle);
+  const recallStyle = globalForm?.longTermMemoryRecallStyle;
   useEffect(() => {
-    if (!global.data || globalForm || global.dataUpdatedAt < refillSince) return;
+    if (recallStyle && recallStyle !== "custom") setLastRecallPreset(recallStyle);
+  }, [recallStyle]);
+  useEffect(() => {
+    if (globalForm && savedGlobal && same(globalForm, savedGlobal)) restartRecallPreset(savedGlobal);
+  }, [globalForm, savedGlobal]);
+  useEffect(() => {
+    if (!global.data || global.isError || globalForm || global.dataUpdatedAt < refillSince) return;
     const next = settingsForm(global.data);
     setGlobalForm(next);
     setSavedGlobal(next);
-  }, [global.data, global.dataUpdatedAt, globalForm, refillSince]);
+  }, [global.data, global.dataUpdatedAt, global.isError, globalForm, refillSince]);
   useEffect(() => {
-    if (!extraction.data || extractionFormState || extraction.dataUpdatedAt < refillSince) return;
+    if (!extraction.data || extraction.isError || extractionFormState || extraction.dataUpdatedAt < refillSince) return;
     const next = extractionForm(extraction.data);
     setExtractionFormState(next);
     setSavedExtraction(next);
-  }, [extraction.data, extraction.dataUpdatedAt, extractionFormState, refillSince]);
+  }, [extraction.data, extraction.dataUpdatedAt, extraction.isError, extractionFormState, refillSince]);
 
   const globalDirty = Boolean(globalForm && savedGlobal && !same(globalForm, savedGlobal));
   const extractionDirty = Boolean(
@@ -263,28 +326,70 @@ export default function MemorySettings({
   const debugDirty = Boolean(
     globalForm && savedGlobal && globalForm.longTermMemoryDebug !== savedGlobal.longTermMemoryDebug,
   );
+  // Save and Discard sit in a sticky header, but the tab holding the edit still needs its own cue: Debug owns
+  // only the debug toggle, Extraction owns the extraction form, and Recall owns every other global field.
+  const recallDirty = Boolean(
+    globalForm &&
+    savedGlobal &&
+    !same({ ...globalForm, longTermMemoryDebug: false }, { ...savedGlobal, longTermMemoryDebug: false }),
+  );
+  const dirtyTabs: Partial<Record<SettingsTab, boolean>> = {
+    recall: recallDirty,
+    extraction: extractionDirty,
+    debug: debugDirty,
+  };
   useEffect(() => {
     onDirtyChange?.(dirty);
     return () => onDirtyChange?.(false);
   }, [dirty, onDirtyChange]);
 
+  // Save and Discard unmount once the form is clean, so focus moves to the save result, or to
+  // the active tab when there is none, instead of dropping to the page. A dismissed host
+  // confirmation settles first, hence the frame.
+  const [focusAfterSaveRequest, setFocusAfterSaveRequest] = useState(0);
+  useEffect(() => {
+    if (!focusAfterSaveRequest) return;
+    const frame = requestAnimationFrame(() => {
+      const active = document.activeElement;
+      if (active && active !== document.body && active.isConnected) return;
+      const result = Array.from(document.querySelectorAll<HTMLElement>("[data-ltm-settings-message]")).find(
+        (element) => element.getClientRects().length > 0,
+      );
+      const tab = document.querySelector<HTMLElement>(
+        '[data-ltm-surface="memory-settings"] [role="tab"][aria-selected="true"]',
+      );
+      (result ?? tab)?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [focusAfterSaveRequest]);
+  // Save keeps its button focusable while it runs (aria-disabled), so this synchronous guard
+  // blocks a second save before React re-renders.
+  const savingRef = useRef(false);
+
   const saveSettings = async () => {
-    if (!globalDirty && !extractionDirty) return;
+    if (savingRef.current || (!globalDirty && !extractionDirty)) return;
+    savingRef.current = true;
     // Keep the Debug panel's surface for saves started there; every other save shows in
     // the shared surface (D05).
     const surface: "shared" | "debug" = activeTab === "debug" ? "debug" : "shared";
     setPending("global");
     setMessage("");
     let rebuild: SettingsRebuildOutcome | null = null;
+    let sharingTurnedOn = false;
+    let acceptTurnedOn = false;
     try {
       if (globalDirty && globalForm) {
         const submitted = globalForm;
+        const sharingWasOff = savedGlobal?.longTermMemoryShareWithPackages === false;
+        const acceptWasOff = savedGlobal?.longTermMemoryAcceptFromPackages === false;
         const response = await request<LtmGlobalSettings & { rebuild?: SettingsRebuildOutcome | null }>(
           "/settings",
           "PUT",
           globalPayload(submitted),
         );
         const saved = settingsForm(response);
+        sharingTurnedOn = sharingWasOff && saved.longTermMemoryShareWithPackages;
+        acceptTurnedOn = acceptWasOff && saved.longTermMemoryAcceptFromPackages;
         setSavedGlobal(saved);
         // Saving now awaits an index rebuild, so only clear the form when no newer edit
         // arrived while it was in flight; otherwise those edits stay dirty.
@@ -316,6 +421,50 @@ export default function MemorySettings({
       } else {
         setMessage(localizeUi("ui.longTermMemory.memorysettings.memorySettingsSaved"), "success", surface);
       }
+      // Slurp's Creators need their own switches too, so each offer comes once the save has landed.
+      const slurpOffers: { setting: SlurpMemorySetting; title: string; message: string; failed: string }[] = [
+        ...(sharingTurnedOn
+          ? [
+              {
+                setting: "flavourFromAgents" as const,
+                title: localizeUi("ui.longTermMemory.memorysettings.slurpMemoryOfferTitle"),
+                message: localizeUi("ui.longTermMemory.memorysettings.slurpMemoryOfferMessage"),
+                failed: localizeUi("ui.longTermMemory.memorysettings.slurpMemoryOfferFailed"),
+              },
+            ]
+          : []),
+        ...(acceptTurnedOn
+          ? [
+              {
+                setting: "shareWithMemory" as const,
+                title: localizeUi("ui.longTermMemory.memorysettings.slurpAddOfferTitle"),
+                message: localizeUi("ui.longTermMemory.memorysettings.slurpAddOfferMessage"),
+                failed: localizeUi("ui.longTermMemory.memorysettings.slurpAddOfferFailed"),
+              },
+            ]
+          : []),
+      ];
+      for (const offer of slurpOffers) {
+        try {
+          await offerSlurpMemories({
+            setting: offer.setting,
+            read: () => requestHost<Partial<Record<SlurpMemorySetting, boolean>>>("/api/slurp2/settings"),
+            confirm: () =>
+              confirm(
+                props,
+                offer.title,
+                offer.message,
+                localizeUi("ui.longTermMemory.memorysettings.slurpMemoryOfferConfirm"),
+                false,
+                localizeUi("ui.longTermMemory.memorysettings.slurpMemoryOfferCancel"),
+              ),
+            save: () => requestHost("/api/slurp2/settings", "PATCH", { [offer.setting]: true }),
+          });
+        } catch {
+          // The fixed text keeps saying that Long-Term Memory itself saved.
+          setMessage(offer.failed, "danger", surface);
+        }
+      }
     } catch (error) {
       setMessage(
         errorMessage(error, localizeUi("ui.longTermMemory.memorysettings.couldNotSaveMemorySettings")),
@@ -323,7 +472,9 @@ export default function MemorySettings({
         surface,
       );
     } finally {
+      savingRef.current = false;
       setPending("");
+      setFocusAfterSaveRequest((request) => request + 1);
     }
   };
 
@@ -338,8 +489,13 @@ export default function MemorySettings({
         true,
       ))
     ) {
-      if (savedGlobal) setGlobalForm(savedGlobal);
+      if (savedGlobal) {
+        setGlobalForm(savedGlobal);
+      }
       if (savedExtraction) setExtractionFormState(savedExtraction);
+      // An earlier save's result no longer describes the form, so focus goes to the tab.
+      setMessage("");
+      setFocusAfterSaveRequest((request) => request + 1);
     }
   };
 
@@ -380,13 +536,20 @@ export default function MemorySettings({
     </section>
   );
 
+  // The form (and its connection field) mounts only once both settings have loaded.
+  const formReady = Boolean(globalForm && extractionFormState);
+  useEffect(() => {
+    if (!openForConnection || !formReady) return;
+    connectionSelectRef.current?.focus({ preventScroll: true });
+    onOpenForConnectionHandled?.();
+  }, [formReady, onOpenForConnectionHandled, openForConnection]);
   if (global.isError || extraction.isError)
     return loadScreen(
       <StatusSurface tone="danger">
         {localizeUi("ui.longTermMemory.memorysettings.couldNotLoadMemorySettings")}{" "}
         <button
           type="button"
-          className="underline"
+          className="inline-flex min-h-11 items-center underline"
           onClick={() => {
             void global.refetch();
             void extraction.refetch();
@@ -402,6 +565,7 @@ export default function MemorySettings({
     );
 
   const busy = pending !== "" || maintenanceBusy;
+  const busyActionProps = lockedActionProps(busy);
 
   return (
     <section
@@ -414,6 +578,18 @@ export default function MemorySettings({
       }}
     >
       <style>{`
+        /* The Engine's unlayered .mari-editor-tab sets min-height: 2.25rem, which beats min-h-11. */
+        [data-ltm-surface="memory-settings"] [role="tablist"] > .mari-editor-tab {
+          min-height: 2.75rem;
+        }
+        /* The Engine's muted tab text is 4.46:1 in the light theme; inactive tabs read from the editor text. */
+        [data-ltm-surface="memory-settings"] [role="tablist"] > .mari-editor-tab[data-active="false"]:not(:hover) {
+          color: color-mix(in srgb, var(--marinara-editor-text) 78%, transparent);
+        }
+        /* Keep a control focused by keyboard clear of the sticky Save bar. */
+        .mari-editor-content:has([data-ltm-surface="memory-settings"]) {
+          scroll-padding-top: 4rem;
+        }
         [data-ltm-extraction-grid] {
           display: grid;
           gap: 0.5rem;
@@ -436,9 +612,21 @@ export default function MemorySettings({
           [data-ltm-prompt-template-grid] {
             grid-template-columns: 12rem minmax(0, 1fr);
           }
+          [data-ltm-active-template-grid] {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+          }
+          [data-ltm-settings-tab-rail] {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+          }
+          [data-ltm-recall-grid] {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
         }
       `}</style>
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div
+        data-ltm-settings-header
+        className={`flex flex-wrap items-center justify-between gap-2 py-1 ${dirty ? "sticky top-0 z-10 bg-[var(--marinara-editor-bg)]" : ""}`}
+      >
         <div>
           <h2 id={memorySettingsTitleId} className="text-sm font-semibold">
             {localizeUi("ui.longTermMemory.memorysettings.memorySettings")}
@@ -446,10 +634,22 @@ export default function MemorySettings({
         </div>
         {dirty ? (
           <div className="flex flex-wrap gap-2">
-            <Button primary disabled={busy} onClick={() => void saveSettings()}>
+            <Button
+              primary
+              {...busyActionProps}
+              onClick={() => {
+                if (!busy) void saveSettings();
+              }}
+            >
               {localizeUi("ui.longTermMemory.memorysettings.saveSettings")}
             </Button>
-            <Button destructive disabled={busy} onClick={() => void discard()}>
+            <Button
+              destructive
+              {...busyActionProps}
+              onClick={() => {
+                if (!busy) void discard();
+              }}
+            >
               {localizeUi("ui.longTermMemory.memorysettings.discardChanges")}
             </Button>
           </div>
@@ -461,7 +661,8 @@ export default function MemorySettings({
       <div
         role="tablist"
         aria-label={localizeUi("ui.longTermMemory.memorysettings.memorySettingsSections")}
-        className="mari-editor-tab-rail grid grid-cols-2 gap-1 rounded-lg border p-1 sm:grid-cols-4"
+        data-ltm-settings-tab-rail
+        className="mari-editor-tab-rail grid grid-cols-2 gap-1 rounded-lg border p-1"
         style={{ display: "grid" }}
       >
         {settingsTabs.map((tab, index) => (
@@ -483,22 +684,36 @@ export default function MemorySettings({
             }}
             data-active={activeTab === tab.id}
             data-ltm-tab-focus
-            className="mari-editor-tab min-h-10 rounded-md px-2 text-xs font-semibold transition-colors"
+            className="mari-editor-tab min-h-11 rounded-md px-2 text-xs font-semibold transition-colors"
           >
             {localizeUi(tab.labelKey)}
+            {dirtyTabs[tab.id] ? (
+              <>
+                <span
+                  aria-hidden="true"
+                  data-ltm-tab-dirty
+                  className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[var(--marinara-editor-accent)] align-middle"
+                />
+                <span className="sr-only"> {localizeUi("ui.longTermMemory.memorysettings.tabUnsavedChanges")}</span>
+              </>
+            ) : null}
           </button>
         ))}
       </div>
       {/* The Debug panel renders its own message beside the toggle, so the shared
           surface yields there instead of showing the same save feedback twice. */}
-      {message && activeTab !== "debug" ? <StatusSurface tone={messageState.tone}>{message}</StatusSurface> : null}
+      {message && activeTab !== "debug" ? (
+        <StatusSurface tone={messageState.tone} tabIndex={-1} data-ltm-settings-message>
+          {message}
+        </StatusSurface>
+      ) : null}
 
       <section
         id="settings-panel-recall"
         role="tabpanel"
         aria-labelledby="settings-tab-recall"
         hidden={activeTab !== "recall"}
-        className="mari-editor-panel space-y-3 p-3"
+        className="mari-editor-panel space-y-4 p-3"
       >
         <div className="flex items-center gap-1">
           <h3 className="text-sm font-semibold">{localizeUi("ui.longTermMemory.memorysettings.globalRecall")}</h3>
@@ -507,190 +722,314 @@ export default function MemorySettings({
             content={localizeUi("ui.longTermMemory.memorysettings.defaultsUsedByEveryChatUnlessThatChatOverrides")}
           />
         </div>
-        <div className="grid gap-2 sm:grid-cols-2">
-          <Toggle
-            label={localizeUi("ui.longTermMemory.memorysettings.includeResolvedMemories")}
-            help={localizeUi(
-              "ui.longTermMemory.memorysettings.allowsResolvedMemoriesToParticipateInRecallArchivedMemories",
-            )}
-            checked={globalForm.longTermMemoryIncludeResolved}
-            onChange={(value) =>
-              setGlobalForm({
-                ...globalForm,
-                longTermMemoryIncludeResolved: value,
-              })
-            }
-          />
-          <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-            <span id={recallStyleLabelId} className="flex items-center gap-1">
-              {localizeUi("ui.longTermMemory.chatsettings.recallStyle")}
+        <div
+          role="group"
+          aria-labelledby={`${recallGroupId}-budget`}
+          data-ltm-recall-group="budget"
+          className="space-y-2"
+        >
+          <h4 id={`${recallGroupId}-budget`} className="text-xs font-semibold">
+            {localizeUi("ui.longTermMemory.memorysettings.recallBudgetGroup")}
+          </h4>
+          <div data-ltm-recall-grid className="grid gap-2">
+            <NumberField
+              label={localizeUi("ui.longTermMemory.memorysettings.recallBudgetTokens")}
+              help={localizeUi("ui.longTermMemory.memorysettings.maximumTokenBudgetAvailableForMemoriesAddedToA")}
+              value={globalForm.longTermMemoryBudgetTokens}
+              integer
+              min={128}
+              max={16384}
+              step={128}
+              onChange={(value) =>
+                setGlobalForm({
+                  ...globalForm,
+                  longTermMemoryBudgetTokens: value,
+                })
+              }
+            />
+            <NumberField
+              label={localizeUi("ui.longTermMemory.memorysettings.maximumRecalledMemories")}
+              help={localizeUi("ui.longTermMemory.memorysettings.maximumNumberOfMemoriesThatMayBeIncludedIn")}
+              value={globalForm.longTermMemoryMaxChunks}
+              integer
+              min={1}
+              max={100}
+              onChange={(value) => setGlobalForm({ ...globalForm, longTermMemoryMaxChunks: value })}
+            />
+            <NumberField
+              label={localizeUi("ui.longTermMemory.memorysettings.recentMessagesForRecall")}
+              help={localizeUi("ui.longTermMemory.memorysettings.numberOfRecentChatMessagesUsedToBuildThe")}
+              value={globalForm.longTermMemoryRecallContextMessages}
+              integer
+              min={1}
+              max={20}
+              onChange={(value) =>
+                setGlobalForm({
+                  ...globalForm,
+                  longTermMemoryRecallContextMessages: value,
+                })
+              }
+            />
+          </div>
+        </div>
+        <div
+          role="group"
+          aria-labelledby={`${recallGroupId}-ranking`}
+          data-ltm-recall-group="ranking"
+          className="space-y-2"
+        >
+          <h4 id={`${recallGroupId}-ranking`} className="text-xs font-semibold">
+            {localizeUi("ui.longTermMemory.memorysettings.recallRankingGroup")}
+          </h4>
+          <div data-ltm-recall-grid className="grid gap-2">
+            <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+              <span id={recallStyleLabelId} className="flex items-center gap-1">
+                {localizeUi("ui.longTermMemory.chatsettings.recallStyle")}
+                <InfoPopover
+                  label={localizeUi("ui.longTermMemory.chatsettings.recallStyle")}
+                  content={localizeUi(recallStyleDescriptionKey(globalForm.longTermMemoryRecallStyle))}
+                />
+              </span>
+              <select
+                aria-labelledby={recallStyleLabelId}
+                className={inputClass}
+                value={globalForm.longTermMemoryRecallStyle}
+                onChange={(event) =>
+                  setGlobalForm(
+                    applyRecallStyle(globalForm, event.target.value as GlobalForm["longTermMemoryRecallStyle"]),
+                  )
+                }
+              >
+                <option value="balanced">{localizeUi("ui.longTermMemory.chatsettings.balanced")}</option>
+                <option value="exact">{localizeUi("ui.longTermMemory.chatsettings.exact")}</option>
+                <option value="broad">{localizeUi("ui.longTermMemory.chatsettings.broad")}</option>
+                <option value="story">{localizeUi("ui.longTermMemory.chatsettings.story")}</option>
+                <option value="custom">{localizeUi("ui.longTermMemory.chatsettings.custom")}</option>
+              </select>
+              {/* The status span stays mounted (inline and empty, so it takes no room) so the flip to Custom is
+                  announced; the button sits outside it so a screen reader does not read it as part of the message. */}
+              <span
+                role="status"
+                className={globalForm.longTermMemoryRecallStyle === "custom" ? "block" : undefined}
+                data-ltm-recall-custom
+              >
+                {globalForm.longTermMemoryRecallStyle === "custom"
+                  ? localizeUi("ui.longTermMemory.memorysettings.recallCustomNote", {
+                      preset: localizeUi(`ui.longTermMemory.chatsettings.${lastRecallPreset}`),
+                    })
+                  : null}
+              </span>
+              {globalForm.longTermMemoryRecallStyle === "custom" ? (
+                <Button
+                  onClick={() => setGlobalForm(applyRecallStyle(globalForm, lastRecallPreset))}
+                  data-ltm-recall-reset-preset
+                >
+                  {localizeUi("ui.longTermMemory.memorysettings.resetToPreset")}
+                </Button>
+              ) : null}
+            </div>
+            <Toggle
+              label={localizeUi("ui.longTermMemory.memorysettings.includeResolvedMemories")}
+              help={localizeUi(
+                "ui.longTermMemory.memorysettings.allowsResolvedMemoriesToParticipateInRecallArchivedMemories",
+              )}
+              checked={globalForm.longTermMemoryIncludeResolved}
+              onChange={(value) =>
+                setGlobalForm({
+                  ...globalForm,
+                  longTermMemoryIncludeResolved: value,
+                })
+              }
+            />
+            <NumberField
+              label={localizeUi("ui.longTermMemory.memorysettings.scoreThreshold")}
+              help={localizeUi(
+                "ui.longTermMemory.memorysettings.excludesCandidatesWhoseCombinedRetrievalScoreFallsBelowThis",
+              )}
+              value={globalForm.longTermMemoryScoreThreshold}
+              min={0}
+              max={LTM_RECALL_SCORE_THRESHOLD_CEILING}
+              step={0.01}
+              onChange={(value) =>
+                setGlobalForm({
+                  ...globalForm,
+                  longTermMemoryScoreThreshold: value,
+                })
+              }
+            />
+            <NumberField
+              label={localizeUi("ui.longTermMemory.memorysettings.meaningMatch")}
+              help={localizeUi("ui.longTermMemory.memorysettings.weightGivenToSemanticSimilarityBetweenTheCurrentChat")}
+              value={globalForm.longTermMemorySemanticWeight}
+              min={0}
+              max={1}
+              step={0.01}
+              onChange={(value) => setGlobalForm(applyCustomWeight(globalForm, "longTermMemorySemanticWeight", value))}
+            />
+            <NumberField
+              label={localizeUi("ui.longTermMemory.memorysettings.exactWordsMatch")}
+              help={localizeUi("ui.longTermMemory.memorysettings.weightGivenToMatchingWordsAndPhrases")}
+              value={globalForm.longTermMemoryLexicalWeight}
+              min={0}
+              max={1}
+              step={0.01}
+              onChange={(value) => setGlobalForm(applyCustomWeight(globalForm, "longTermMemoryLexicalWeight", value))}
+            />
+            <NumberField
+              label={localizeUi("ui.longTermMemory.memorysettings.linkedMemoriesMatch")}
+              help={localizeUi("ui.longTermMemory.memorysettings.weightGivenToRelationshipsBetweenLinkedMemories")}
+              value={globalForm.longTermMemoryGraphWeight}
+              min={0}
+              max={1}
+              step={0.01}
+              onChange={(value) => setGlobalForm(applyCustomWeight(globalForm, "longTermMemoryGraphWeight", value))}
+            />
+            <NumberField
+              label={localizeUi("ui.longTermMemory.memorysettings.storedKeywordsMatch")}
+              help={localizeUi("ui.longTermMemory.memorysettings.weightGivenToMatchingStoredKeywords")}
+              value={globalForm.longTermMemoryKeywordWeight}
+              min={0}
+              max={1}
+              step={0.01}
+              onChange={(value) => setGlobalForm(applyCustomWeight(globalForm, "longTermMemoryKeywordWeight", value))}
+            />
+          </div>
+        </div>
+        <div role="group" aria-labelledby={`${recallGroupId}-text`} data-ltm-recall-group="text" className="space-y-2">
+          <h4 id={`${recallGroupId}-text`} className="text-xs font-semibold">
+            {localizeUi("ui.longTermMemory.memorysettings.recallTextFiltersGroup")}
+          </h4>
+          <div className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+            <span id={recallPreambleLabelId} className="flex items-center gap-1">
+              {localizeUi("ui.longTermMemory.memorysettings.memoryContextInstructions")}
               <InfoPopover
-                label={localizeUi("ui.longTermMemory.chatsettings.recallStyle")}
-                content={localizeUi(recallStyleDescriptionKey(globalForm.longTermMemoryRecallStyle))}
+                label={localizeUi("ui.longTermMemory.memorysettings.memoryContextInstructions")}
+                content={localizeUi(
+                  "ui.longTermMemory.memorysettings.instructionsPlacedBeforeRecalledMemoryContextWhenItIs",
+                )}
               />
             </span>
-            <select
-              aria-labelledby={recallStyleLabelId}
-              className={inputClass}
-              value={globalForm.longTermMemoryRecallStyle}
+            <textarea
+              aria-labelledby={recallPreambleLabelId}
+              className={`${inputClass} min-h-24 py-2`}
+              maxLength={500}
+              value={globalForm.longTermMemoryRecallPreamble}
               onChange={(event) =>
-                setGlobalForm(
-                  applyRecallStyle(globalForm, event.target.value as GlobalForm["longTermMemoryRecallStyle"]),
-                )
+                setGlobalForm({
+                  ...globalForm,
+                  longTermMemoryRecallPreamble: event.target.value,
+                })
               }
-            >
-              <option value="balanced">{localizeUi("ui.longTermMemory.chatsettings.balanced")}</option>
-              <option value="exact">{localizeUi("ui.longTermMemory.chatsettings.exact")}</option>
-              <option value="broad">{localizeUi("ui.longTermMemory.chatsettings.broad")}</option>
-              <option value="story">{localizeUi("ui.longTermMemory.chatsettings.story")}</option>
-              <option value="custom">{localizeUi("ui.longTermMemory.chatsettings.custom")}</option>
-            </select>
+            />
           </div>
-          <NumberField
-            label={localizeUi("ui.longTermMemory.memorysettings.recallBudgetTokens")}
-            help={localizeUi("ui.longTermMemory.memorysettings.maximumTokenBudgetAvailableForMemoriesAddedToA")}
-            value={globalForm.longTermMemoryBudgetTokens}
-            min={128}
-            max={16384}
-            step={128}
-            onChange={(value) =>
-              setGlobalForm({
-                ...globalForm,
-                longTermMemoryBudgetTokens: value,
-              })
-            }
-          />
-          <NumberField
-            label={localizeUi("ui.longTermMemory.memorysettings.maximumRecalledMemories")}
-            help={localizeUi("ui.longTermMemory.memorysettings.maximumNumberOfMemoriesThatMayBeIncludedIn")}
-            value={globalForm.longTermMemoryMaxChunks}
-            min={1}
-            max={100}
-            onChange={(value) => setGlobalForm({ ...globalForm, longTermMemoryMaxChunks: value })}
-          />
-          <NumberField
-            label={localizeUi("ui.longTermMemory.memorysettings.scoreThreshold")}
+          <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+            <span id={memoryStopWordsLabelId} className="flex items-center gap-1">
+              {localizeUi("ui.longTermMemory.memorysettings.memoryStopWords")}
+              <InfoPopover
+                label={localizeUi("ui.longTermMemory.memorysettings.memoryStopWords")}
+                content={localizeUi("ui.longTermMemory.memorysettings.wordsIgnoredDuringKeywordMatchingOnePerLine")}
+              />
+            </span>
+            <textarea
+              aria-labelledby={memoryStopWordsLabelId}
+              className={`${inputClass} min-h-20 py-2`}
+              spellCheck={false}
+              value={globalForm.longTermMemoryStopWordsText}
+              onChange={(event) =>
+                setGlobalForm({
+                  ...globalForm,
+                  longTermMemoryStopWordsText: event.target.value,
+                })
+              }
+            />
+          </div>
+          <Toggle
+            label={localizeUi("ui.longTermMemory.memorysettings.blockStopWordsInGeneratedKeywords")}
             help={localizeUi(
-              "ui.longTermMemory.memorysettings.excludesCandidatesWhoseCombinedRetrievalScoreFallsBelowThis",
+              "ui.longTermMemory.memorysettings.preventsListedWordsFromBecomingGeneratedKeywordsWhileStill",
             )}
-            value={globalForm.longTermMemoryScoreThreshold}
-            min={0}
-            max={LTM_RECALL_SCORE_THRESHOLD_CEILING}
-            step={0.01}
+            checked={globalForm.longTermMemoryStopWordsFilterGenerated}
             onChange={(value) =>
               setGlobalForm({
                 ...globalForm,
-                longTermMemoryScoreThreshold: value,
+                longTermMemoryStopWordsFilterGenerated: value,
               })
             }
-          />
-          <NumberField
-            label={localizeUi("ui.longTermMemory.memorysettings.recentMessagesForRecall")}
-            help={localizeUi("ui.longTermMemory.memorysettings.numberOfRecentChatMessagesUsedToBuildThe")}
-            value={globalForm.longTermMemoryRecallContextMessages}
-            min={1}
-            max={20}
-            onChange={(value) =>
-              setGlobalForm({
-                ...globalForm,
-                longTermMemoryRecallContextMessages: value,
-              })
-            }
-          />
-          <NumberField
-            label={localizeUi("ui.longTermMemory.memorysettings.meaningMatch")}
-            help={localizeUi("ui.longTermMemory.memorysettings.weightGivenToSemanticSimilarityBetweenTheCurrentChat")}
-            value={globalForm.longTermMemorySemanticWeight}
-            min={0}
-            max={1}
-            step={0.01}
-            onChange={(value) => setGlobalForm(applyCustomWeight(globalForm, "longTermMemorySemanticWeight", value))}
-          />
-          <NumberField
-            label={localizeUi("ui.longTermMemory.memorysettings.exactWordsMatch")}
-            help={localizeUi("ui.longTermMemory.memorysettings.weightGivenToMatchingWordsAndPhrases")}
-            value={globalForm.longTermMemoryLexicalWeight}
-            min={0}
-            max={1}
-            step={0.01}
-            onChange={(value) => setGlobalForm(applyCustomWeight(globalForm, "longTermMemoryLexicalWeight", value))}
-          />
-          <NumberField
-            label={localizeUi("ui.longTermMemory.memorysettings.graphWeight")}
-            help={localizeUi("ui.longTermMemory.memorysettings.weightGivenToRelationshipsBetweenLinkedMemories")}
-            value={globalForm.longTermMemoryGraphWeight}
-            min={0}
-            max={1}
-            step={0.01}
-            onChange={(value) => setGlobalForm(applyCustomWeight(globalForm, "longTermMemoryGraphWeight", value))}
-          />
-          <NumberField
-            label={localizeUi("ui.longTermMemory.memorysettings.keywordWeight")}
-            help={localizeUi("ui.longTermMemory.memorysettings.weightGivenToMatchingStoredKeywords")}
-            value={globalForm.longTermMemoryKeywordWeight}
-            min={0}
-            max={1}
-            step={0.01}
-            onChange={(value) => setGlobalForm(applyCustomWeight(globalForm, "longTermMemoryKeywordWeight", value))}
           />
         </div>
-        <div className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-          <span id={recallPreambleLabelId} className="flex items-center gap-1">
-            {localizeUi("ui.longTermMemory.memorysettings.memoryContextInstructions")}
-            <InfoPopover
-              label={localizeUi("ui.longTermMemory.memorysettings.memoryContextInstructions")}
-              content={localizeUi(
-                "ui.longTermMemory.memorysettings.instructionsPlacedBeforeRecalledMemoryContextWhenItIs",
-              )}
+        <div
+          role="group"
+          aria-labelledby={`${recallGroupId}-sharing`}
+          data-ltm-recall-group="sharing"
+          className="space-y-2"
+        >
+          <h4 id={`${recallGroupId}-sharing`} className="text-xs font-semibold">
+            {localizeUi("ui.longTermMemory.memorysettings.recallSharingGroup")}
+          </h4>
+          <div className="space-y-1">
+            <Toggle
+              label={localizeUi("ui.longTermMemory.memorysettings.otherAgentsCanReadMemories")}
+              help={localizeUi("ui.longTermMemory.memorysettings.otherAgentsReadOnlyMemoriesAvailableEverywhere")}
+              checked={globalForm.longTermMemoryShareWithPackages}
+              onChange={(value) => setGlobalForm({ ...globalForm, longTermMemoryShareWithPackages: value })}
             />
-          </span>
-          <textarea
-            aria-labelledby={recallPreambleLabelId}
-            className={`${inputClass} min-h-24 py-2`}
-            maxLength={500}
-            value={globalForm.longTermMemoryRecallPreamble}
-            onChange={(event) =>
-              setGlobalForm({
-                ...globalForm,
-                longTermMemoryRecallPreamble: event.target.value,
-              })
-            }
+          </div>
+          <Toggle
+            label={localizeUi("ui.longTermMemory.memorysettings.otherAgentsCanAddMemories")}
+            help={localizeUi("ui.longTermMemory.memorysettings.otherAgentsCanAddMemoriesHelp")}
+            checked={globalForm.longTermMemoryAcceptFromPackages}
+            onChange={(value) => setGlobalForm({ ...globalForm, longTermMemoryAcceptFromPackages: value })}
           />
+          {packageReaders.data ? (
+            packageReaders.data.readers.length ? (
+              <table
+                aria-label={localizeUi("ui.longTermMemory.memorysettings.otherAgentsTable")}
+                className="w-full text-left text-xs text-[var(--muted-foreground)]"
+              >
+                <thead>
+                  <tr>
+                    <th scope="col" className="py-1 pr-3 font-medium">
+                      {localizeUi("ui.longTermMemory.memorysettings.otherAgentsAgent")}
+                    </th>
+                    <th scope="col" className="py-1 pr-3 font-medium">
+                      {localizeUi("ui.longTermMemory.memorysettings.otherAgentsLastRead")}
+                    </th>
+                    <th scope="col" className="py-1 pr-3 text-right font-medium">
+                      {localizeUi("ui.longTermMemory.memorysettings.otherAgentsReadsThisWeek")}
+                    </th>
+                    <th scope="col" className="py-1 pr-3 text-right font-medium">
+                      {localizeUi("ui.longTermMemory.memorysettings.otherAgentsMemoriesThisWeek")}
+                    </th>
+                    <th scope="col" className="py-1 text-right font-medium">
+                      {localizeUi("ui.longTermMemory.memorysettings.otherAgentsMemoriesAddedThisWeek")}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {packageReaders.data.readers.map((reader) => (
+                    <tr key={reader.caller ?? ""}>
+                      <th scope="row" className="py-1 pr-3 font-normal">
+                        {reader.caller ?? localizeUi("ui.longTermMemory.memorysettings.anAgentWithoutAName")}
+                      </th>
+                      <td className="py-1 pr-3">
+                        {reader.lastReadAt
+                          ? formatAge(reader.lastReadAt, locale, Date.now())
+                          : localizeUi("ui.longTermMemory.memorysettings.otherAgentsNoReads")}
+                      </td>
+                      <td className="py-1 pr-3 text-right tabular-nums">{reader.reads.toLocaleString(locale)}</td>
+                      <td className="py-1 pr-3 text-right tabular-nums">{reader.memories.toLocaleString(locale)}</td>
+                      <td className="py-1 text-right tabular-nums">{reader.added.toLocaleString(locale)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="text-xs text-[var(--muted-foreground)]">
+                {localizeUi("ui.longTermMemory.memorysettings.noOtherAgentHasUsedMemoriesLately")}
+              </p>
+            )
+          ) : null}
         </div>
-        <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-          <span id={memoryStopWordsLabelId} className="flex items-center gap-1">
-            {localizeUi("ui.longTermMemory.memorysettings.memoryStopWords")}
-            <InfoPopover
-              label={localizeUi("ui.longTermMemory.memorysettings.memoryStopWords")}
-              content={localizeUi("ui.longTermMemory.memorysettings.wordsIgnoredDuringKeywordMatchingOnePerLine")}
-            />
-          </span>
-          <textarea
-            aria-labelledby={memoryStopWordsLabelId}
-            className={`${inputClass} min-h-20 py-2`}
-            spellCheck={false}
-            value={globalForm.longTermMemoryStopWordsText}
-            onChange={(event) =>
-              setGlobalForm({
-                ...globalForm,
-                longTermMemoryStopWordsText: event.target.value,
-              })
-            }
-          />
-        </div>
-        <Toggle
-          label={localizeUi("ui.longTermMemory.memorysettings.blockStopWordsInGeneratedKeywords")}
-          help={localizeUi(
-            "ui.longTermMemory.memorysettings.preventsListedWordsFromBecomingGeneratedKeywordsWhileStill",
-          )}
-          checked={globalForm.longTermMemoryStopWordsFilterGenerated}
-          onChange={(value) =>
-            setGlobalForm({
-              ...globalForm,
-              longTermMemoryStopWordsFilterGenerated: value,
-            })
-          }
-        />
       </section>
 
       <section
@@ -704,11 +1043,59 @@ export default function MemorySettings({
           <h3 className="text-sm font-semibold">{localizeUi("ui.longTermMemory.memorysettings.extraction")}</h3>
         </div>
         <div data-ltm-extraction-grid>
+          {/* The leading choice takes its own row, so connection and model stay paired below it. */}
+          <div
+            data-ltm-chat-memories-field
+            className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]"
+            style={{ gridColumn: "1 / -1" }}
+          >
+            <span id={chatMemoriesLabelId} className="flex items-center gap-1">
+              {localizeUi("ui.longTermMemory.memorysettings.memoriesFromChats")}
+              <InfoPopover
+                label={localizeUi("ui.longTermMemory.memorysettings.memoriesFromChats")}
+                content={
+                  <ul className="space-y-1.5">
+                    {chatMemoriesModes.map((mode) => (
+                      <li key={mode}>
+                        <strong className="font-semibold">{localizeUi(chatMemoriesLabelKey(mode))}</strong>{" "}
+                        {localizeUi(chatMemoriesDescriptionKey(mode))}
+                      </li>
+                    ))}
+                  </ul>
+                }
+              />
+            </span>
+            <select
+              aria-labelledby={chatMemoriesLabelId}
+              aria-describedby={`${chatMemoriesLabelId}-hint`}
+              data-ltm-chat-memories="global"
+              className={inputClass}
+              value={ltmChatMemoriesModeOf(extractionFormState)}
+              onChange={(event) =>
+                setExtractionFormState({
+                  ...extractionFormState,
+                  ...chatMemoriesFlags(event.target.value as LtmChatMemoriesMode),
+                })
+              }
+            >
+              {chatMemoriesModes.map((mode) => (
+                <option key={mode} value={mode}>
+                  {localizeUi(chatMemoriesLabelKey(mode))}
+                </option>
+              ))}
+            </select>
+            <p id={`${chatMemoriesLabelId}-hint`} className="text-[0.6875rem] font-normal">
+              {localizeUi(chatMemoriesDescriptionKey(ltmChatMemoriesModeOf(extractionFormState)))}{" "}
+              {localizeUi("ui.longTermMemory.memorysettings.memoriesFromChatsInherit")}
+            </p>
+            <ChatMemoriesSample mode={ltmChatMemoriesModeOf(extractionFormState)} compact />
+          </div>
           <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
             <span id={extractionConnectionLabelId} className="flex min-h-11 items-center">
               {localizeUi("ui.longTermMemory.memorysettings.extractionConnection")}
             </span>
             <select
+              ref={connectionSelectRef}
               aria-labelledby={extractionConnectionLabelId}
               aria-describedby={`${extractionConnectionLabelId}-hint`}
               className={inputClass}
@@ -738,10 +1125,26 @@ export default function MemorySettings({
             <p id={`${extractionConnectionLabelId}-hint`} className="text-[0.6875rem] font-normal">
               {localizeUi("ui.longTermMemory.memorysettings.extractionConnectionHint")}
             </p>
+            {extractionFormState.autoImportChatSources &&
+            !extractionFormState.connectionId &&
+            autoImportNeedsConnection(autoImportEvents.data?.events ?? []) ? (
+              <StatusSurface tone="warning" compact data-ltm-connection-warning>
+                <span className="min-w-0 flex-1">
+                  {localizeUi("ui.longTermMemory.memorysettings.autoImportNeedsConnection")}
+                </span>
+                <Button onClick={() => connectionSelectRef.current?.focus()}>
+                  {localizeUi("ui.longTermMemory.memorysettings.autoImportChooseConnection")}
+                </Button>
+              </StatusSurface>
+            ) : null}
             {connections.isError ? (
               <StatusSurface tone="danger">
                 {localizeUi("ui.longTermMemory.memorysettings.couldNotLoadLanguageConnections")}{" "}
-                <button type="button" className="underline" onClick={() => void connections.refetch()}>
+                <button
+                  type="button"
+                  className="inline-flex min-h-11 items-center underline"
+                  onClick={() => void connections.refetch()}
+                >
                   {localizeUi("ui.longTermMemory.activityview.retry")}
                 </button>
               </StatusSurface>
@@ -805,6 +1208,7 @@ export default function MemorySettings({
             label={localizeUi("ui.longTermMemory.memorysettings.maximumOutputTokens")}
             help={localizeUi("ui.longTermMemory.memorysettings.maximumTokensTheModelMayProduceForOneExtraction")}
             value={extractionFormState.maxOutputTokens}
+            integer
             min={512}
             max={32768}
             step={256}
@@ -815,6 +1219,57 @@ export default function MemorySettings({
               })
             }
           />
+          <Toggle
+            label={localizeUi("ui.longTermMemory.memorysettings.finishCutOffAnswers")}
+            help={localizeUi("ui.longTermMemory.memorysettings.whenTheModelsAnswerStopsAtTheOutputLimit")}
+            checked={extractionFormState.finishCutOffAnswers}
+            onChange={(value) =>
+              setExtractionFormState({
+                ...extractionFormState,
+                finishCutOffAnswers: value,
+              })
+            }
+          />
+          <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+            <span id={chatImportDetailLabelId} className="flex items-center gap-1">
+              {localizeUi("ui.longTermMemory.memorysettings.chatImportDetail")}
+              <InfoPopover
+                label={localizeUi("ui.longTermMemory.memorysettings.chatImportDetail")}
+                content={localizeUi("ui.longTermMemory.memorysettings.chatImportDetailHelp")}
+              />
+            </span>
+            <select
+              aria-labelledby={chatImportDetailLabelId}
+              className={inputClass}
+              value={extractionFormState.chatImportDetail}
+              onChange={(event) =>
+                setExtractionFormState({
+                  ...extractionFormState,
+                  chatImportDetail: event.target.value as ExtractionForm["chatImportDetail"],
+                })
+              }
+            >
+              <option value="standard">
+                {localizeUi("ui.longTermMemory.memorysettings.chatImportDetailStandard")}
+              </option>
+              <option value="detailed">
+                {localizeUi("ui.longTermMemory.memorysettings.chatImportDetailDetailed")}
+              </option>
+            </select>
+          </div>
+          {globalForm ? (
+            <Toggle
+              label={localizeUi("ui.longTermMemory.memorysettings.hideImportedMessages")}
+              help={localizeUi(
+                global.data?.hideImportedMessagesAvailable === false
+                  ? "ui.longTermMemory.memorysettings.hideImportedMessagesUnavailable"
+                  : "ui.longTermMemory.memorysettings.hideImportedMessagesHelp",
+              )}
+              checked={globalForm.longTermMemoryHideImportedMessages}
+              disabled={global.data?.hideImportedMessagesAvailable === false}
+              onChange={(value) => setGlobalForm({ ...globalForm, longTermMemoryHideImportedMessages: value })}
+            />
+          ) : null}
           <NumberField
             label={localizeUi("ui.longTermMemory.memorysettings.temperature")}
             help={localizeUi(
@@ -835,6 +1290,7 @@ export default function MemorySettings({
             label={localizeUi("ui.longTermMemory.memorysettings.maximumSourceTokens")}
             help={localizeUi("ui.longTermMemory.memorysettings.rejectsASourceWhenItsEstimatedSizeExceedsThis")}
             value={extractionFormState.maxSourceTokens}
+            integer
             min={128}
             max={65536}
             step={128}
@@ -851,6 +1307,7 @@ export default function MemorySettings({
               "ui.longTermMemory.memorysettings.maximumNumberOfExistingMemoryChunksConsideredWhileChecking",
             )}
             value={extractionFormState.existingNoteMaxChunks}
+            integer
             min={1}
             max={100}
             onChange={(value) =>
@@ -864,6 +1321,7 @@ export default function MemorySettings({
             label={localizeUi("ui.longTermMemory.memorysettings.existingNoteTokenBudget")}
             help={localizeUi("ui.longTermMemory.memorysettings.maximumTokensFromThoseExistingChunksIncludedInThe")}
             value={extractionFormState.existingNoteMaxTokens}
+            integer
             min={128}
             max={32768}
             step={128}
@@ -925,13 +1383,21 @@ export default function MemorySettings({
             <span className="text-xs text-[var(--muted-foreground)]">
               {localizeUi("ui.longTermMemory.memorysettings.unsavedDebugChange")}
             </span>
-            <Button primary disabled={busy} onClick={() => void saveSettings()}>
+            <Button
+              primary
+              {...busyActionProps}
+              onClick={() => {
+                if (!busy) void saveSettings();
+              }}
+            >
               {localizeUi("ui.longTermMemory.memorysettings.saveDebugChange")}
             </Button>
           </div>
         ) : null}
         {message && messageState.surface === "debug" ? (
-          <StatusSurface tone={messageState.tone}>{message}</StatusSurface>
+          <StatusSurface tone={messageState.tone} tabIndex={-1} data-ltm-settings-message>
+            {message}
+          </StatusSurface>
         ) : null}
         {activeTab === "debug" ? (
           <ActivityView

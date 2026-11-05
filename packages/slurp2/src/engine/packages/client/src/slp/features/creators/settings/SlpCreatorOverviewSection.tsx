@@ -14,6 +14,7 @@ import { focusRing, noteClass, quietButton } from "../slp-creator-classes";
 import { slpPageStyleLine } from "../SlpPageStyleSuggest";
 import type { SlpCreatorSettingsSectionProps } from "./slp-creator-settings-contract";
 import { useSlpCreatorSettingsStore, type SlpCreatorSettingsBlock } from "./slp-creator-settings-store";
+import { SlpSceneUpdate } from "../../onboarding/slp-onboarding-contract";
 
 /** One status tile: what is true now, and a way into the block that changes it. */
 function StatusTile({
@@ -106,6 +107,12 @@ export function SlpCreatorOverviewSection({ creator, active }: SlpCreatorSetting
             <ArrowUpRight size={15} aria-hidden="true" />
           </button>
           {creator.bio && <p className="w-full text-sm leading-6 text-[var(--slurp-muted)]">{creator.bio}</p>}
+          {/* R6: a page from before some fields existed (hard noes, wardrobe) fills in through the sign-up chat. */}
+          {!personaBacked && (
+            <div className="w-full">
+              <SlpSceneUpdate creator={creator} />
+            </div>
+          )}
         </div>
       </section>
 

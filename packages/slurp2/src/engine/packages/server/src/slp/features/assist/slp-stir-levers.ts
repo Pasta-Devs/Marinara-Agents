@@ -22,6 +22,7 @@ import {
 } from "../projects/slp-projects-contract.js";
 import { runCreatorFanActivity } from "../audience/slp-audience-contract.js";
 import { SLP_SPICE_TO_EXPLICIT } from "../../../../../shared/src/slp/slp-spice.js";
+import { slpLiveEvents } from "../../../../../shared/src/slp/slp-extensions.js";
 import {
   SLURP_PLATFORM_EVENTS_MAX,
   slurpPlatformEventSchema,
@@ -123,7 +124,8 @@ export async function readSlpStirWorld(db: DB, at = new Date()): Promise<SlpStir
     ...ties,
     ...(await readSlurpStirDramas(db)),
     trends: (await listSlurpTrendViews(db, at)).map(({ id, label, lean, stage }) => ({ id, label, lean, stage })),
-    events: settings.platformEvents
+    // Living world off: Stir shows, suggests and plans no event (the actions refuse too).
+    events: slpLiveEvents(settings)
       .filter((event: { enabled: boolean }) => event.enabled)
       .map((event: { id: string; name: string }) => ({ id: event.id, name: event.name, running: live.has(event.id) })),
     storylines,

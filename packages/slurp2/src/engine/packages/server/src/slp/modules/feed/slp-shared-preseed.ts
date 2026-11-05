@@ -40,7 +40,10 @@ const IDEA_RULES = [
 ].join("\n");
 
 /** The daily world tick: seasonal and platform moments for everyone, and optionally one event. */
-export function slurpWorldTickPrompt(input: { date: string; withEvent: boolean }): { system: string; user: string } {
+export function slurpWorldTickPrompt(input: { date: string; withEvent: boolean; avoid?: readonly string[] }): {
+  system: string;
+  user: string;
+} {
   return {
     system: [
       "You plan shared moments for a simulated creator platform, one day at a time.",
@@ -54,7 +57,9 @@ export function slurpWorldTickPrompt(input: { date: string; withEvent: boolean }
           ]
         : []),
     ].join("\n"),
-    user: `Date: ${input.date}`,
+    user: input.avoid?.length
+      ? `Date: ${input.date}\nThemes of the last days: ${input.avoid.join("; ")}. Pick a different theme and do not reuse their key words.`
+      : `Date: ${input.date}`,
   };
 }
 

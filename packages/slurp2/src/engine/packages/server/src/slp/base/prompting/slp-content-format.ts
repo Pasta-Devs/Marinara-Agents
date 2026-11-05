@@ -6,8 +6,9 @@ import { slpCreatorContentFormatSchema } from "../../../../../shared/src/slp/slp
  *
  * Formats used to carry their own hard caps (a caption was cut at 300 characters), which chopped
  * posts mid-sentence whenever a model wrote a little long. A format is now only a target in the
- * prompt; the player's `postMaxLength` setting is the one generated-post ceiling, and edits are held
- * to the shared schema maximum.
+ * prompt; the player's `postMaxLength` setting is the ceiling for directed posts, and edits are held
+ * to the shared schema maximum. Automatic posts also stop at `SLURP_FORMAT_CEILING`
+ * (feed/slp-post-prompt.ts): models overshot the caption target (prod median 309 characters).
  */
 
 export type SlpCreatorContentFormat = z.infer<typeof slpCreatorContentFormatSchema>;

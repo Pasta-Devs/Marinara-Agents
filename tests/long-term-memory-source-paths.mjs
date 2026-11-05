@@ -16,6 +16,8 @@ export const ltmSourcePaths = {
   interop: at(`${server}sources/interop.ts`),
   lastInjectionSummary: at(`${client}LastInjectionSummary.tsx`),
   locale: at(`${client}locales/en.json`),
+  localeKo: at(`${client}locales/ko.json`),
+  localization: at(`${client}localization.tsx`),
   maintenance: at(`${client}settings/MaintenancePanel.tsx`),
   navigation: at(`${client}LongTermMemoryNavigation.tsx`),
   reviewQueue: at(`${client}review/ReviewQueue.tsx`),
@@ -27,5 +29,6 @@ export const ltmSourcePaths = {
   targetPicker: at(`${client}vault/TargetPicker.tsx`),
   types: at(`${client}types.ts`),
   vault: at(`${client}vault/MemoryVault.tsx`),
+  vaultRow: at(`${client}vault/VaultRow.tsx`),
   workspaceLayout: at(`${client}LtmWorkspace.tsx`),
 };

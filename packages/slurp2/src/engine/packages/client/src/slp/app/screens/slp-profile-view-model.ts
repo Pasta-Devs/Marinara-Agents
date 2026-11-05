@@ -12,6 +12,7 @@ import { useCreatorViewer } from "../../features/feed/slp-feed-viewer-hooks";
 import { useSlurpCompose } from "../../features/messages/slp-messages-hooks";
 import { useSlurpArcs } from "../../features/projects/slp-projects-hooks";
 import { useSlurpSettings } from "../../features/settings/slp-settings-hooks";
+import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 import { type SlpPostCardCtx } from "../../modules/post/SlpPostTypes";
 import { useSlurpMediaSrc } from "../../base/media/slp-media-src";
 import { slpPrefersReducedMotion } from "../../base/chrome/slp-motion";
@@ -196,7 +197,11 @@ export function useStageProfileViewModel(props: StageProfileViewProps) {
   // The goal the audience sees. It rides on the viewer scope beside `subscriptionPrice`, because
   // the audience profile projection is a strict allowlist and must stay that way.
   const goalForViewer = slpCreatorGoalOf(viewerCreator);
-  const arcsQuery = useSlurpArcs(viewerAccount?.entityId ?? null, profile.id);
+  // Storylines off: no storyline card and no "Storyline effects" (the arcs stand still and do nothing).
+  const arcsQuery = useSlurpArcs(
+    slurpSettings && !slpExtensionOn(slurpSettings, "storylines") ? null : (viewerAccount?.entityId ?? null),
+    profile.id,
+  );
   const editing = Boolean(profileDraft);
   const editDraft = profileDraft ?? {
     displayName: profile.displayName,

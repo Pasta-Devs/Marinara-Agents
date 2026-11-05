@@ -27,6 +27,19 @@ export function SlpDramaSettings({
   const nameOf = (id: string) => catalog.find((entry) => entry.id === id)?.name ?? slpDramaWords(id);
   const situations = catalog.filter((entry) => entry.kind === "situation");
   const dramas = catalog.filter((entry) => entry.kind === "drama");
+  const dialsOf = (entry: (typeof catalog)[number]) =>
+    entry.dials.map((dial) => (
+      <ChoiceSetting
+        key={dial.key}
+        label={slpDramaWords(dial.key)}
+        options={dial.options.map((value) => ({ value, label: slpDramaWords(value) }))}
+        value={drama.dials[entry.id]?.[dial.key] ?? dial.default}
+        disabled={updateSettings.isPending}
+        onChange={(value) =>
+          set({ dials: { ...drama.dials, [entry.id]: { ...drama.dials[entry.id], [dial.key]: value } } })
+        }
+      />
+    ));
   return (
     <>
       <SettingsGroup title={tx("title")}>
@@ -50,19 +63,7 @@ export function SlpDramaSettings({
                 value={on.has(entry.id)}
                 onChange={(value) => toggle(entry.id, value)}
               />
-              {on.has(entry.id) &&
-                entry.dials.map((dial) => (
-                  <ChoiceSetting
-                    key={dial.key}
-                    label={slpDramaWords(dial.key)}
-                    options={dial.options.map((value) => ({ value, label: slpDramaWords(value) }))}
-                    value={drama.dials[entry.id]?.[dial.key] ?? dial.default}
-                    disabled={updateSettings.isPending}
-                    onChange={(value) =>
-                      set({ dials: { ...drama.dials, [entry.id]: { ...drama.dials[entry.id], [dial.key]: value } } })
-                    }
-                  />
-                ))}
+              {on.has(entry.id) && dialsOf(entry)}
             </div>
           ))}
         </SettingsGroup>
@@ -70,16 +71,22 @@ export function SlpDramaSettings({
       {dramas.length > 0 && (
         <SettingsGroup title={tx("dramas")}>
           {dramas.map((entry) => (
-            <Toggle
-              key={entry.id}
-              label={entry.name}
-              detail={entry.description}
-              value={on.has(entry.id)}
-              onChange={(value) => toggle(entry.id, value)}
-              disabledReason={
-                entry.requires && !on.has(entry.requires) ? tx("needs", { name: nameOf(entry.requires) }) : null
-              }
-            />
+            <div key={entry.id} className="space-y-3" data-slurp-drama-entry={entry.id}>
+              <Toggle
+                label={entry.name}
+                detail={entry.description}
+                value={entry.pack ? entry.pack.on : on.has(entry.id)}
+                onChange={(value) => toggle(entry.id, value)}
+                disabledReason={
+                  entry.pack
+                    ? tx("fromPack", { name: entry.pack.name })
+                    : entry.requires && !on.has(entry.requires)
+                      ? tx("needs", { name: nameOf(entry.requires) })
+                      : null
+                }
+              />
+              {(entry.pack ? entry.pack.on : on.has(entry.id)) && dialsOf(entry)}
+            </div>
           ))}
         </SettingsGroup>
       )}

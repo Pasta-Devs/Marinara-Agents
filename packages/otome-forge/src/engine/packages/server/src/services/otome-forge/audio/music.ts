@@ -1,0 +1,199 @@
+// ──────────────────────────────────────────────
+// Otome Forge: music briefs (P14) and the generated soundtrack (plan M2b "Music")
+// ──────────────────────────────────────────────
+// P14 is the kit's forgeMusicBriefMessages with Otome's six cue scenes (SH/cues.ts) and medium "romance visual novel",
+// in English. It is written from the world's premise and setting only: never the mystery's truth, nobody's bible and
+// no story, so it needs neither the content contract nor the knowledge boundary. The kit's service keeps one brief per
+// cue in world.audio.briefs, keyed by its messages' fingerprint (a changed premise writes a new one), and joins
+// requests for the same cue into one model call. Briefs are written only while the world generates music.
+// The client generates the track itself (POST /api/audio/generate, scope `otome-forge`) and reports it; recordTrack
+// keeps it only when its tag and path are the ones the Engine files under this run's context key, which the kit's
+// recordForgeSoundtrack checks (so a track another package or run filed is refused).
+import {
+  createForgeMusicPromptService,
+  forgeMusicBriefMessages,
+  normalizeForgeMusicPrompt,
+} from "@forge-kit/audio-prompts.mjs";
+import { availableForgeSoundtracks, recordForgeSoundtrack } from "@forge-kit/audio-settings.mjs";
+import { z } from "zod";
+import type { SoundtrackTrack, WorldAudio } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import { MUSIC_MEDIUM, MUSIC_SCENES } from "../../../../../client/src/features/otome-forge/shared/cues.js";
+import { MUSIC_MOODS, type MusicMood } from "../../../../../client/src/features/otome-forge/shared/faces.js";
+import { chapterMusicCue } from "../../../../../client/src/features/otome-forge/shared/audio.js";
+import { generateJson, readOrGenerate, type GenerationDeps } from "../generation.js";
+import { OtomeForgeError } from "../http.js";
+import { OTOME_FORGE_PACKAGE_ID, chapterId, runDocTarget, worldId } from "../ids.js";
+import { normalizeChapter } from "../schemas/story.js";
+import { keepNewest } from "../schemas/state.js";
+import { TRACKS_MAX, normalizeWorld } from "../schemas/world.js";
+import type { OtomeStore } from "../store.js";
+import { musicScenario } from "../prompts.js";
+
+const BRIEF_TOKENS = 600;
+
+const BriefSchema = z.object({ prompt: z.string() });
+
+export interface MusicDeps extends GenerationDeps {
+  store: OtomeStore;
+}
+
+const worldTarget = (runId: string) => runDocTarget("world", worldId(runId));
+
+/** POST .../audio/brief: the cue's brief, written once (one model call per cue and premise) and then kept. */
+export function createMusicBriefs(deps: MusicDeps) {
+  const brief = createForgeMusicPromptService({
+    async readWorld(runId) {
+      const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
+      return world ? { scenario: musicScenario(world) } : null;
+    },
+    async readSession(runId) {
+      const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
+      return world ? { audioPrompts: world.audio.briefs } : null;
+    },
+    updateSession: (runId, change) =>
+      deps.store.updateDoc(worldTarget(runId), normalizeWorld, (current) => {
+        const session = { audioPrompts: { ...current.audio.briefs } };
+        change(session);
+        return { ...current, audio: { ...current.audio, briefs: session.audioPrompts ?? {} } };
+      }),
+    async generate({ runId, messages, debugMode }) {
+      const { value } = await generateJson(deps, {
+        runId,
+        job: "structured",
+        label: "music-brief",
+        messages,
+        schema: BriefSchema,
+        normalize: (reply) =>
+          normalizeForgeMusicPrompt(reply) ?? "prompt must be one non-empty string of at most 1000 characters",
+        maxTokens: BRIEF_TOKENS,
+        debugMode,
+        lane: "foreground",
+      });
+      return { ok: true, value };
+    },
+    scenes: MUSIC_SCENES,
+    medium: MUSIC_MEDIUM,
+  });
+
+  return async (runId: string, cue: MusicMood, debugMode: boolean): Promise<string> => {
+    const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
+    if (!world) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+    // No music is generated, so no brief is paid for.
+    if (!world.audio.generate) throw new OtomeForgeError(409, "This world does not generate music.", "conflict");
+    const result = await brief({ runId, cue, debugMode });
+    if (result.ok) return result.prompt;
+    switch (result.error) {
+      case "bad-request":
+        throw new OtomeForgeError(400, `No music cue ${cue}.`, "bad-request");
+      case "not-found":
+        throw new OtomeForgeError(404, "This world has no premise to write music for.", "not-found");
+      case "generation-failed":
+        throw new OtomeForgeError(502, "The music brief did not match the format.", "bad-format");
+      default:
+        throw new OtomeForgeError(409, "The world changed while its music brief was written.", "conflict");
+    }
+  };
+}
+
+/** The kit's view of the world's tracks (its `session`). */
+const soundtrackOf = (audio: Pick<WorldAudio, "tracks">) => ({ audioTracks: [...audio.tracks] });
+
+/** The tracks the client may play: each one's cue is one of Otome's six. */
+export const playableTracks = (audio: Pick<WorldAudio, "tracks">): SoundtrackTrack[] =>
+  availableForgeSoundtracks(soundtrackOf(audio), { cues: MUSIC_MOODS }).map(({ cue, connectionId, tag, path }) => ({
+    cue,
+    connectionId,
+    tag,
+    path,
+  }));
+
+/**
+ * The world's audio with `track` kept (the same tag replaced), or null when the track is not one the Engine filed for
+ * this run under scope `otome-forge` and one of the six cues.
+ */
+export function recordTrack(audio: WorldAudio, runId: string, track: SoundtrackTrack): WorldAudio | null {
+  const soundtrack = soundtrackOf(audio);
+  if (!recordForgeSoundtrack(soundtrack, runId, track, { scope: OTOME_FORGE_PACKAGE_ID, cues: MUSIC_MOODS })) {
+    return null;
+  }
+  return { ...audio, tracks: keepNewest(soundtrack.audioTracks, TRACKS_MAX) };
+}
+
+/** The world's audio as the client sees it: the settings and the tracks, without the briefs. */
+export function audioView(audio: WorldAudio): Omit<WorldAudio, "briefs"> {
+  const { briefs: _briefs, ...rest } = audio;
+  return { ...rest, tracks: playableTracks(audio) };
+}
+
+/** A chapter's brief uses only the same public metadata shown before reading, never its hidden plan. */
+export async function chapterMusicBrief(
+  deps: MusicDeps,
+  runId: string,
+  key: string,
+  debugMode: boolean,
+): Promise<string> {
+  const allowedWorld = async () => {
+    const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
+    if (!world) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+    if (!world.audio.generate || !world.audio.chapterThemes || world.audio.muted || world.audio.musicVolume <= 0)
+      throw new OtomeForgeError(409, "Chapter music generation is off or muted.", "conflict");
+    return world;
+  };
+  await allowedWorld();
+  const target = runDocTarget("chapter", chapterId(runId, key));
+  const readChapter = () => deps.store.readDoc(target.id, normalizeChapter);
+  if (!(await readChapter())) throw new OtomeForgeError(404, "No such chapter.", "not-found");
+  return readOrGenerate(
+    runId,
+    async () => (await readChapter())?.music?.prompt ?? null,
+    async () => {
+      const world = await allowedWorld();
+      const chapter = await readChapter();
+      if (!chapter) throw new OtomeForgeError(404, "No such chapter.", "not-found");
+      const scenario = `${musicScenario(world)}\n\n${JSON.stringify({
+        chapter: chapter.title,
+        kind: chapter.kind,
+        summary: chapter.summary,
+        tags: chapter.tags,
+      })}`;
+      const { value } = await generateJson(deps, {
+        runId,
+        job: "structured",
+        label: `chapter-music-brief/${key}`,
+        messages: forgeMusicBriefMessages({ scenario }, "chapter", null, {
+          scenes: {
+            chapter:
+              "a distinctive recurring theme for this entire chapter, reflecting its public summary and emotional arc",
+          },
+          medium: MUSIC_MEDIUM,
+        }),
+        schema: BriefSchema,
+        normalize: (reply) => normalizeForgeMusicPrompt(reply) ?? "prompt must be one non-empty musical brief",
+        maxTokens: 8192,
+        debugMode,
+        lane: "foreground",
+      });
+      const saved = await deps.store.updateDoc(target, normalizeChapter, (current) =>
+        !current || current.music?.prompt
+          ? current
+          : { ...current, music: { ...current.music, prompt: value.prompt.trim() } },
+      );
+      if (!saved?.music?.prompt) throw new OtomeForgeError(404, "No such chapter.", "not-found");
+      return saved.music.prompt;
+    },
+  );
+}
+
+/** Keep the first chapter-owned track; replay and later audio settings never evict it with the mood cache. */
+export async function recordChapterTrack(deps: MusicDeps, runId: string, key: string, track: SoundtrackTrack) {
+  const soundtrack = { audioTracks: [] as SoundtrackTrack[] };
+  if (!recordForgeSoundtrack(soundtrack, runId, track, { scope: OTOME_FORGE_PACKAGE_ID, cues: [chapterMusicCue(key)] }))
+    throw new OtomeForgeError(400, "That track was not generated for this chapter.", "bad-request");
+  const saved = await deps.store.updateDoc(
+    runDocTarget("chapter", chapterId(runId, key)),
+    normalizeChapter,
+    (current) => (!current || current.music?.track ? current : { ...current, music: { ...current.music, track } }),
+  );
+  if (!saved?.music?.track) throw new OtomeForgeError(404, "No such chapter.", "not-found");
+  return saved.music.track;
+}

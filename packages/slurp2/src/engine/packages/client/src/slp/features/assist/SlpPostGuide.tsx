@@ -19,6 +19,8 @@ import { SlpChip, SlpPrimaryButton } from "../../modules/chrome/SlpButton";
 import { useSlurpCreatorSteering, useSlurpWardrobe } from "../creators/slp-creators-contract";
 import { useSlurpProjects, useSlurpTies } from "../projects/slp-projects-contract";
 import { runSlpAction } from "./slp-assist-hooks";
+import { useSlurpSettings } from "../settings/slp-settings-contract";
+import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
 export type SlpPostGuideDraft = {
   title: string;
@@ -68,6 +70,8 @@ export function SlpPostGuide({
   const addId = useId();
   const ties = useSlurpTies(personaId).data;
   const projects = useSlurpProjects(personaId, accountId).data?.projects ?? [];
+  const settings = useSlurpSettings().data;
+  const storylinesOn = !settings || slpExtensionOn(settings, "storylines");
   const ideas = useSlurpCreatorSteering(accountId).data?.steering.nudges ?? [];
   const looks = (useSlurpWardrobe(accountId).data?.looks ?? []).filter((look) => look.enabled);
   const [idea, setIdea] = useState(initialIdea);
@@ -122,7 +126,7 @@ export function SlpPostGuide({
       options: looks.map(({ id, name }) => ({ id, label: name })),
       pick: setLookId,
     },
-  ];
+  ].filter((group) => storylinesOn || group.kind !== "storyline");
   const open = groups.find((group) => group.kind === openKind) ?? null;
 
   async function write(text = idea) {

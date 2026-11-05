@@ -20,6 +20,7 @@ import { noteIdForEvidenceUnit, riskForEvidenceUnit } from "./evidence-unit-vali
 import { uniqueStrings } from "../ltm-utils.js";
 import { subjectsEqual } from "../identity/subject-equality.js";
 import { isLocalCharacterSubject } from "../identity/chat-scope.js";
+import { canUpdateLtmScopedTarget } from "./scoped-targets.js";
 
 export interface CompileLtmEvidenceUnitsOptions {
   units: LtmEvidenceUnit[];
@@ -273,11 +274,20 @@ export function compileLtmEvidenceUnits(options: CompileLtmEvidenceUnitsOptions)
     }
   }
 
+  // A note this scope may not update reaches the compiler only when it was shared beyond the source
+  // (`resolveScopedEvidenceUnitTargets`), so its changes always wait for review.
+  const sharedNoteIds = new Set(
+    options.existingNotes.filter((note) => !canUpdateLtmScopedTarget(note.scope, options.scope)).map((note) => note.id),
+  );
   return {
     summary:
       options.summary ??
       `Compiled ${options.units.length} evidence unit(s) into ${mutations.length} draft mutation(s).`,
-    mutations,
+    mutations: mutations.map((mutation) =>
+      mutation.kind !== "create_note" && mutation.risk === "low" && sharedNoteIds.has(mutation.noteId)
+        ? { ...mutation, risk: "medium" as const }
+        : mutation,
+    ),
   };
 }
 

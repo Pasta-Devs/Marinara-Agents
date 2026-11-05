@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, RotateCcw, Trash2, Upload } from "lucide-react";
+import { Download, Trash2, TriangleAlert, Upload } from "lucide-react";
 import type {
   LtmExtractionSettingsPatch,
   LtmGlobalSettings,
@@ -8,11 +8,13 @@ import type {
   LtmIntegrityResponse,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { errorMessage, failedResponseError, invalidateLtmQueries, queryKeys, request, requestRaw } from "../api";
-import { Button, InfoPopover, StatusSurface } from "../shared-controls";
+import { Button, InfoPopover, LiveResult, StatusSurface, lockedActionProps } from "../shared-controls";
 import type { LongTermMemoryDestinationProps } from "../types";
-import { useLtmTranslation } from "../localization";
+import { selectLtmPluralForm, useLtmTranslation } from "../localization";
 import { labelKeys, localizedLabel } from "../display-labels";
 import { confirm, Toggle, type SettingsRebuildOutcome } from "./settings-shared";
+
+type MaintenanceArea = "backup" | "repair" | "identity" | "reset";
 
 type RepairAction = "rebuild_indexes" | "quarantine_malformed_notes" | "backfill_imported_source_titles";
 
@@ -62,19 +64,39 @@ export function MaintenancePanel({
   onBusyChange: (busy: boolean) => void;
 }) {
   const { t: localizeUi, locale } = useLtmTranslation();
+  const joinList = (items: string[], type: "conjunction" | "unit" = "conjunction") => {
+    try {
+      return new Intl.ListFormat(locale, { style: "long", type }).format(items);
+    } catch {
+      return items.join(type === "unit" ? ", " : " and ");
+    }
+  };
   const queryClient = useQueryClient();
   const integrity = useQuery({
     queryKey: queryKeys.integrity,
     queryFn: () => request<LtmIntegrityResponse>("/integrity"),
   });
   const [pending, setPending] = useState("");
-  const [messageState, setMessageState] = useState<{ text: string; tone: "success" | "danger" }>({
-    text: "",
-    tone: "success",
-  });
-  const message = messageState.text;
-  const setMessage = (text: string, tone: "success" | "danger" = "success") => setMessageState({ text, tone });
+  // Each result shows under the controls that produced it; an action names its area when it starts.
+  const [messageState, setMessageState] = useState<{
+    text: string;
+    tone: "success" | "danger";
+    area: MaintenanceArea;
+  }>({ text: "", tone: "success", area: "backup" });
+  const setMessage = (text: string, tone: "success" | "danger" = "success", area?: MaintenanceArea) =>
+    setMessageState((current) => ({ text, tone, area: area ?? current.area }));
+  const resultFor = (area: MaintenanceArea, className = "") => (
+    <LiveResult
+      text={messageState.area === area ? messageState.text : ""}
+      tone={messageState.tone}
+      className={className}
+      data-ltm-maintenance-result={area}
+      tabIndex={-1}
+    />
+  );
+  // Running work and the parent's save lock keep focus (`aria-disabled`), so each handler returns early on `busy`.
   const busy = pending !== "" || disabled;
+  const lock = lockedActionProps(busy);
   useEffect(() => {
     onBusyChange(pending !== "");
   }, [onBusyChange, pending]);
@@ -90,6 +112,42 @@ export function MaintenancePanel({
     current: { notes: number; drafts: number; rejectedSuggestions: number };
   } | null>(null);
   const backupInput = useRef<HTMLInputElement>(null);
+  const chooseBackupButton = useRef<HTMLButtonElement>(null);
+  const resetButton = useRef<HTMLButtonElement>(null);
+  const deleteButton = useRef<HTMLButtonElement>(null);
+  const exportFirstButton = useRef<HTMLButtonElement>(null);
+  // Delete all data asks first whether to export a backup; the host's confirm dialog cannot hold that button.
+  const [deletePromptOpen, setDeletePromptOpen] = useState(false);
+  useEffect(() => {
+    if (hidden) setDeletePromptOpen(false);
+  }, [hidden]);
+  const closeDeletePrompt = () => {
+    if (busy) return;
+    setDeletePromptOpen(false);
+    deleteButton.current?.focus();
+  };
+  // Reset and backup import hide this panel while the forms reload, which drops focus to the page.
+  // Once the panel is back and idle, return focus to the control that started the action, unless
+  // the user has already moved it. Import's Replace button is gone by then, so it uses Choose backup.
+  const focusAfterReload = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const target = focusAfterReload.current;
+    if (hidden || pending || !target) return;
+    focusAfterReload.current = null;
+    if (target.isConnected && document.activeElement === document.body) target.focus();
+  }, [hidden, pending]);
+  // A finished run empties the selection, so Run selected maintenance turns natively disabled and drops focus
+  // to the page. Once the run settles, move focus to its result, unless the user has already moved it.
+  const repairResultBox = useRef<HTMLDivElement>(null);
+  const focusRepairResult = useRef(false);
+  useEffect(() => {
+    if (pending || !focusRepairResult.current) return;
+    focusRepairResult.current = false;
+    const active = document.activeElement;
+    if (!active || active === document.body || active.matches(":disabled")) {
+      repairResultBox.current?.querySelector<HTMLElement>("[data-ltm-maintenance-result]")?.focus();
+    }
+  }, [pending]);
 
   /** True when `key` was refetched at or after `since`; a failed or paused refetch leaves the old data in the cache. */
   const refetchedSince = (key: readonly unknown[], since: number) => {
@@ -105,7 +163,7 @@ export function MaintenancePanel({
   };
 
   const runRepair = async () => {
-    if (!selectedActions.length) return;
+    if (busy || !selectedActions.length) return;
     if (
       !(await confirm(
         props,
@@ -117,7 +175,7 @@ export function MaintenancePanel({
     )
       return;
     setPending("repair");
-    setMessage("");
+    setMessage("", "success", "repair");
     try {
       const result = await request<{
         actions: Array<{ action: string; result: string; count?: number }>;
@@ -134,6 +192,7 @@ export function MaintenancePanel({
           .join(" "),
       );
       setSelectedActions([]);
+      focusRepairResult.current = true;
       await invalidateLtmQueries(queryClient, [
         queryKeys.integrity,
         queryKeys.status,
@@ -151,8 +210,12 @@ export function MaintenancePanel({
   };
 
   const previewIdentities = async () => {
+    if (busy) return;
     setPending("identity-preview");
-    setMessage("");
+    setMessage("", "success", "identity");
+    // A failed preview must not leave Apply counting candidates from the cleared one.
+    setIdentityPreview(null);
+    setSelectedIdentityCandidates([]);
     try {
       const preview = await request<LtmIdentityRepairPreviewResponse>("/identity-repair/preview", "POST", {});
       setIdentityPreview(preview);
@@ -175,13 +238,13 @@ export function MaintenancePanel({
   };
 
   const selectIdentityCanonical = async (candidateId: string, canonicalNoteId: string) => {
-    if (!identityPreview) return;
+    if (busy || !identityPreview) return;
     const canonicalNoteIds = {
       ...identityCanonicalNoteIds,
       [candidateId]: canonicalNoteId,
     };
     setPending(`identity-canonical-${candidateId}`);
-    setMessage("");
+    setMessage("", "success", "identity");
     try {
       const preview = await request<LtmIdentityRepairPreviewResponse>("/identity-repair/preview", "POST", {
         scope: identityPreview.scope,
@@ -204,7 +267,7 @@ export function MaintenancePanel({
   };
 
   const applyIdentities = async () => {
-    if (!identityPreview || !selectedIdentityCandidates.length) return;
+    if (busy || !identityPreview || !selectedIdentityCandidates.length) return;
     const preview = identityPreview;
     const selectedCandidateIds = [...selectedIdentityCandidates];
     const sectionChoices = structuredClone(identitySectionChoices);
@@ -250,26 +313,40 @@ export function MaintenancePanel({
       0,
     );
     if (includedDuplicateCount === 0) {
-      setMessage(localizeUi("ui.longTermMemory.memorysettings.includeDuplicateBeforeApplyingRepairs"), "danger");
+      setMessage(
+        localizeUi("ui.longTermMemory.memorysettings.includeDuplicateBeforeApplyingRepairs"),
+        "danger",
+        "identity",
+      );
       return;
     }
     setPending("identity-confirm");
-    setMessage("");
+    setMessage("", "success", "identity");
     let confirmed = false;
     try {
       confirmed = await confirm(
         props,
         localizeUi("ui.longTermMemory.memorysettings.applyIdentityRepairs"),
         localizeUi("ui.longTermMemory.memorysettings.applyIdentityRepairsDescription", {
-          repairCount: repairs.length,
-          repairSuffix: repairs.length === 1 ? "" : "s",
-          duplicateCount: includedDuplicateCount,
-          duplicateSuffix: includedDuplicateCount === 1 ? "" : "s",
+          repairs: localizeUi(
+            selectLtmPluralForm(locale, repairs.length) === "one"
+              ? "ui.longTermMemory.memorysettings.selectedIdentityRepairsOne"
+              : "ui.longTermMemory.memorysettings.selectedIdentityRepairsOther",
+            { count: repairs.length },
+          ),
+          duplicates: localizeUi(
+            selectLtmPluralForm(locale, includedDuplicateCount) === "one"
+              ? "ui.longTermMemory.memorysettings.includedDuplicateNotesOne"
+              : "ui.longTermMemory.memorysettings.includedDuplicateNotesOther",
+            { count: includedDuplicateCount },
+          ),
         }),
-        localizeUi("ui.longTermMemory.memorysettings.applyIdentityRepairsAction", {
-          count: repairs.length,
-          suffix: repairs.length === 1 ? "" : "s",
-        }),
+        localizeUi(
+          selectLtmPluralForm(locale, repairs.length) === "one"
+            ? "ui.longTermMemory.memorysettings.applyIdentityRepairsActionOne"
+            : "ui.longTermMemory.memorysettings.applyIdentityRepairsActionOther",
+          { count: repairs.length },
+        ),
         true,
       );
     } catch (error) {
@@ -294,6 +371,7 @@ export function MaintenancePanel({
       setMessage(
         localizeUi("ui.longTermMemory.memorysettings.appliedIdentityRepairs", {
           count: result.repairs.length,
+          backup: result.backup.id.slice(0, 8),
         }),
       );
       setIdentityPreview(null);
@@ -323,9 +401,10 @@ export function MaintenancePanel({
     }
   };
 
-  const exportBackup = async () => {
+  const exportBackup = async (area: MaintenanceArea = "backup") => {
+    if (busy) return;
     setPending("backup-export");
-    setMessage("");
+    setMessage("", "success", area);
     try {
       const response = await requestRaw("/backup/export");
       if (!response.ok) throw await failedResponseError(response);
@@ -349,7 +428,7 @@ export function MaintenancePanel({
 
   const previewBackup = async (file: File) => {
     setPending("backup-preview");
-    setMessage("");
+    setMessage("", "success", "backup");
     try {
       const backup = JSON.parse(await file.text());
       const preview = await request<{
@@ -372,7 +451,7 @@ export function MaintenancePanel({
   };
 
   const importBackup = async () => {
-    if (!backupPreview) return;
+    if (busy || !backupPreview) return;
     if (
       !(await confirm(
         props,
@@ -389,17 +468,19 @@ export function MaintenancePanel({
     )
       return;
     setPending("backup-import");
-    setMessage("");
+    setMessage("", "success", "backup");
+    focusAfterReload.current = chooseBackupButton.current;
     try {
       await request("/backup/import", "POST", backupPreview.backup);
       setBackupPreview(null);
       // The import replaces the whole vault, so everything cached is stale. The call waits for the
-      // active queries to refetch; the forms and the integrity report read that result below.
+      // active queries to refetch; the forms read that result below. A failed integrity read shows
+      // its own error with Retry, so only a failed settings read changes the message.
       const startedAt = Date.now();
       await invalidateLtmQueries(queryClient, [queryKeys.root]);
       setMessage(localizeUi("ui.longTermMemory.memorysettings.memoryBackupImported"));
       const refreshed = refreshedSettings(startedAt);
-      if (!refreshed || !refetchedSince(queryKeys.integrity, startedAt)) {
+      if (!refreshed) {
         settings.clear(startedAt);
         setMessage(localizeUi("ui.longTermMemory.memorysettings.backupImportedSettingsNotRefreshed"));
       } else {
@@ -416,6 +497,7 @@ export function MaintenancePanel({
   };
 
   const resetSettings = async () => {
+    if (busy) return;
     if (
       !(await confirm(
         props,
@@ -427,7 +509,8 @@ export function MaintenancePanel({
     )
       return;
     setPending("settings-reset");
-    setMessage("");
+    setMessage("", "success", "reset");
+    focusAfterReload.current = resetButton.current;
     try {
       const response = await request<{ rebuild?: SettingsRebuildOutcome | null }>("/settings/reset", "POST");
       const startedAt = Date.now();
@@ -461,6 +544,7 @@ export function MaintenancePanel({
   };
 
   const deleteAll = async () => {
+    if (busy) return;
     if (
       !(await confirm(
         props,
@@ -471,8 +555,10 @@ export function MaintenancePanel({
       ))
     )
       return;
+    setDeletePromptOpen(false);
+    focusAfterReload.current = deleteButton.current;
     setPending("data-delete");
-    setMessage("");
+    setMessage("", "success", "reset");
     try {
       await request("/data", "DELETE");
       setBackupPreview(null);
@@ -515,28 +601,39 @@ export function MaintenancePanel({
       hidden={hidden}
       className="mari-editor-panel space-y-3 p-3"
     >
-      {message ? <StatusSurface tone={messageState.tone}>{message}</StatusSurface> : null}
       <div>
         <h3 className="text-sm font-semibold">{localizeUi("ui.longTermMemory.memorysettings.vaultMaintenance")}</h3>
         <p className="mt-1 text-xs text-[var(--muted-foreground)]">
           {localizeUi("ui.longTermMemory.memorysettings.integrityState")}{" "}
-          {localizedLabel(integrity.data?.health ?? "loading", localizeUi, labelKeys.integrity)}.
+          {/* A retained "healthy" reading from before a failed reload would contradict the error below it. */}
+          {localizedLabel(
+            integrity.isError ? "loading" : (integrity.data?.health ?? "loading"),
+            localizeUi,
+            labelKeys.integrity,
+          )}
+          .
         </p>
       </div>
-      <div className="border-t border-[var(--border)] pt-3">
+      <div data-ltm-maintenance-group="backup" className="border-t border-[var(--border)] pt-3">
         <div className="flex items-center gap-1">
-          <h4 className="text-xs font-semibold">{localizeUi("ui.longTermMemory.memorysettings.backupAndReset")}</h4>
+          <h4 className="text-xs font-semibold">{localizeUi("ui.longTermMemory.memorysettings.backupGroup")}</h4>
           <InfoPopover
-            label={localizeUi("ui.longTermMemory.memorysettings.backupAndReset")}
+            label={localizeUi("ui.longTermMemory.memorysettings.backupGroup")}
             content={localizeUi("ui.longTermMemory.memorysettings.exportOrReplaceThePackageOwnedMemoryVaultAnd")}
           />
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
-          <Button disabled={busy} onClick={() => void exportBackup()}>
+          <Button {...lock} onClick={() => void exportBackup()}>
             <Download aria-hidden="true" size="0.875rem" />{" "}
             {localizeUi("ui.longTermMemory.memorysettings.exportBackup")}
           </Button>
-          <Button disabled={busy} onClick={() => backupInput.current?.click()}>
+          <Button
+            ref={chooseBackupButton}
+            {...lock}
+            onClick={() => {
+              if (!busy) backupInput.current?.click();
+            }}
+          >
             <Upload aria-hidden="true" size="0.875rem" /> {localizeUi("ui.longTermMemory.memorysettings.chooseBackup")}
           </Button>
           <input
@@ -545,18 +642,13 @@ export function MaintenancePanel({
             aria-label={localizeUi("ui.longTermMemory.memorysettings.chooseBackup")}
             accept="application/json,.json"
             className="sr-only"
+            tabIndex={-1}
+            aria-hidden="true"
             onChange={(event) => {
               const file = event.target.files?.[0];
               if (file) void previewBackup(file);
             }}
           />
-          <Button disabled={busy} onClick={() => void resetSettings()}>
-            <RotateCcw aria-hidden="true" size="0.875rem" />{" "}
-            {localizeUi("ui.longTermMemory.memorysettings.resetSettings")}
-          </Button>
-          <Button destructive disabled={busy} onClick={() => void deleteAll()}>
-            <Trash2 aria-hidden="true" size="0.875rem" /> {localizeUi("ui.longTermMemory.memorysettings.deleteAllData")}
-          </Button>
         </div>
         {backupPreview ? (
           <div className="mari-editor-panel mari-editor-panel--soft mt-2 space-y-2 p-3 text-xs">
@@ -574,58 +666,67 @@ export function MaintenancePanel({
               {backupPreview.incoming.rejectedSuggestions}{" "}
               {localizeUi("ui.longTermMemory.memorysettings.rejectedSuggestionsIncoming")}
             </p>
-            <Button primary disabled={busy} onClick={() => void importBackup()}>
+            <Button primary {...lock} onClick={() => void importBackup()}>
               {localizeUi("ui.longTermMemory.memorysettings.replaceWithThisBackup")}
             </Button>
           </div>
         ) : null}
+        {resultFor("backup", "mt-2")}
       </div>
-      {integrity.isError ? (
-        <StatusSurface tone="danger">
-          {localizeUi("ui.longTermMemory.memorysettings.integrityCheckCouldNotLoad")}{" "}
-          <button type="button" className="underline" onClick={() => void integrity.refetch()}>
-            {localizeUi("ui.longTermMemory.activityview.retry")}
-          </button>
-        </StatusSurface>
-      ) : null}
-      {integrity.data ? (
-        <StatusSurface tone={integrity.data.ok ? "success" : "danger"}>
-          {integrity.data.ok
-            ? localizeUi("ui.longTermMemory.memorysettings.integrityCheckPassedForValue1Notes", {
-                value1: integrity.data.noteCount,
-              })
-            : localizeUi("ui.longTermMemory.memorysettings.value1IntegrityIssueSFound", {
-                value1: integrity.data.issues.length,
-              })}
-        </StatusSurface>
-      ) : null}
-      {integrity.data?.issues.length ? (
-        <ul className="space-y-1 text-xs text-[var(--muted-foreground)]">
-          {integrity.data.issues.slice(0, 20).map((issue, index) => (
-            <li key={`${issue.code}-${index}`}>
-              {issue.severity}: {issue.message}
-            </li>
+      <div data-ltm-maintenance-group="repair" className="space-y-2 border-t border-[var(--border)] pt-3">
+        <h4 className="text-xs font-semibold">{localizeUi("ui.longTermMemory.memorysettings.repairGroup")}</h4>
+        {integrity.isError ? (
+          <StatusSurface tone="danger">
+            {localizeUi("ui.longTermMemory.memorysettings.integrityCheckCouldNotLoad")}{" "}
+            <button
+              type="button"
+              className="inline-flex min-h-11 items-center underline"
+              onClick={() => void integrity.refetch()}
+            >
+              {localizeUi("ui.longTermMemory.activityview.retry")}
+            </button>
+          </StatusSurface>
+        ) : null}
+        {integrity.data && !integrity.isError ? (
+          <StatusSurface tone={integrity.data.ok ? "success" : "danger"}>
+            {integrity.data.ok
+              ? localizeUi("ui.longTermMemory.memorysettings.integrityCheckPassedForValue1Notes", {
+                  value1: integrity.data.noteCount,
+                })
+              : localizeUi("ui.longTermMemory.memorysettings.value1IntegrityIssueSFound", {
+                  value1: integrity.data.issues.length,
+                })}
+          </StatusSurface>
+        ) : null}
+        {integrity.data?.issues.length && !integrity.isError ? (
+          <ul className="space-y-1 text-xs text-[var(--muted-foreground)]">
+            {integrity.data.issues.slice(0, 20).map((issue, index) => (
+              <li key={`${issue.code}-${index}`}>
+                {issue.severity}: {issue.message}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <div className="space-y-2">
+          {repairActions.map((action) => (
+            <Toggle
+              key={action.id}
+              label={localizeUi(action.labelKey)}
+              help={localizeUi(action.descriptionKey)}
+              checked={selectedActions.includes(action.id)}
+              onChange={(checked) =>
+                setSelectedActions(
+                  checked ? [...selectedActions, action.id] : selectedActions.filter((id) => id !== action.id),
+                )
+              }
+            />
           ))}
-        </ul>
-      ) : null}
-      <div className="space-y-2">
-        {repairActions.map((action) => (
-          <Toggle
-            key={action.id}
-            label={localizeUi(action.labelKey)}
-            help={localizeUi(action.descriptionKey)}
-            checked={selectedActions.includes(action.id)}
-            onChange={(checked) =>
-              setSelectedActions(
-                checked ? [...selectedActions, action.id] : selectedActions.filter((id) => id !== action.id),
-              )
-            }
-          />
-        ))}
+        </div>
+        <Button primary disabled={!selectedActions.length} {...lock} onClick={() => void runRepair()}>
+          {localizeUi("ui.longTermMemory.memorysettings.runSelectedMaintenance")}
+        </Button>
+        <div ref={repairResultBox}>{resultFor("repair")}</div>
       </div>
-      <Button destructive disabled={busy || !selectedActions.length} onClick={() => void runRepair()}>
-        {localizeUi("ui.longTermMemory.memorysettings.runSelectedMaintenance")}
-      </Button>
       <div className="border-t border-[var(--border)] pt-3">
         <div className="flex items-center gap-1">
           <h4 className="text-xs font-semibold">{localizeUi("ui.longTermMemory.memorysettings.identityRepair")}</h4>
@@ -637,46 +738,61 @@ export function MaintenancePanel({
           />
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
-          <Button disabled={busy} onClick={() => void previewIdentities()}>
+          <Button {...lock} onClick={() => void previewIdentities()}>
             {localizeUi("ui.longTermMemory.memorysettings.previewIdentityRepairs")}
           </Button>
           <Button
             destructive
-            disabled={busy || selectedIdentityCount === 0 || identitySelectionUnresolved}
+            disabled={selectedIdentityCount === 0 || identitySelectionUnresolved}
+            {...lock}
             onClick={() => void applyIdentities()}
           >
             {localizeUi("ui.longTermMemory.memorysettings.applySelectedRepairs", { count: selectedIdentityCount })}
           </Button>
         </div>
-        {identityPreview ? (
-          <div className="mt-3 space-y-2 text-xs">
-            <p>
+        {resultFor("identity", "mt-2")}
+        {/* Always mounted, so a finished preview is read out; a new preview clears it first. */}
+        <p role="status" data-ltm-identity-preview-summary className={identityPreview ? "mt-3 text-xs" : "sr-only"}>
+          {identityPreview ? (
+            <>
               {identityPreview.counts.candidateCount} {localizeUi("ui.longTermMemory.memorysettings.candidateGroupS")}{" "}
               {identityPreview.counts.duplicateNotes} {localizeUi("ui.longTermMemory.memorysettings.duplicateNoteS")}{" "}
               {identityPreview.counts.unresolvedNotes} {localizeUi("ui.longTermMemory.memorysettings.unresolved")}
-            </p>
+            </>
+          ) : null}
+        </p>
+        {identityPreview ? (
+          <div className="mt-2 space-y-2 text-xs">
             {identityPreview.candidates.map((candidate) => (
               <div key={candidate.id} className="space-y-2 rounded border border-[var(--border)] p-3">
                 <label className="flex min-h-11 items-start gap-2">
                   <input
-                    className="mt-0.5"
+                    className={`mt-0.5 ${busy ? "opacity-50" : ""}`}
                     type="checkbox"
                     checked={selectedIdentityCandidates.includes(candidate.id)}
-                    disabled={busy || candidate.blockingReasons.length > 0}
-                    onChange={(event) =>
+                    disabled={candidate.blockingReasons.length > 0}
+                    {...lock}
+                    onChange={(event) => {
+                      if (busy) return;
                       setSelectedIdentityCandidates((current) =>
                         event.target.checked ? [...current, candidate.id] : current.filter((id) => id !== candidate.id),
-                      )
-                    }
+                      );
+                    }}
                   />
                   <span>
-                    <span className="block font-semibold">{candidate.subjectNames.join(" and ")}</span>
+                    <span className="block font-semibold">{joinList(candidate.subjectNames)}</span>
                     <span className="block text-[var(--muted-foreground)]">
                       {candidate.noteType === "relationship"
                         ? localizeUi("ui.longTermMemory.memorysettings.relationship")
                         : localizeUi("ui.longTermMemory.memorysettings.character")}{" "}
                       {localizeUi("ui.longTermMemory.memorysettings.matchVia")}{" "}
-                      {candidate.matchBasis.join(", ").replaceAll("_", " ")}.
+                      {joinList(
+                        candidate.matchBasis.map((basis) =>
+                          localizedLabel(basis, localizeUi, labelKeys.identityMatchBasis),
+                        ),
+                        "unit",
+                      )}
+                      .
                     </span>
                   </span>
                 </label>
@@ -693,11 +809,12 @@ export function MaintenancePanel({
                       >
                         <label className="flex items-start gap-2">
                           <input
-                            className="mt-0.5"
+                            className={`mt-0.5 ${busy ? "opacity-50" : ""}`}
                             type="radio"
                             name={`canonical-${candidate.id}`}
                             checked={canonical}
-                            disabled={busy || !selectedIdentityCandidates.includes(candidate.id)}
+                            disabled={!selectedIdentityCandidates.includes(candidate.id)}
+                            {...lock}
                             onChange={() => void selectIdentityCanonical(candidate.id, note.noteId)}
                           />
                           <span className="font-medium text-[var(--foreground)]">
@@ -706,18 +823,20 @@ export function MaintenancePanel({
                         </label>
                         <label className="flex min-w-0 flex-1 items-start gap-2">
                           <input
-                            className="mt-0.5"
+                            className={`mt-0.5 ${busy ? "opacity-50" : ""}`}
                             type="checkbox"
                             checked={canonical || (includedIdentityNoteIds[candidate.id] ?? []).includes(note.noteId)}
-                            disabled={busy || canonical || !selectedIdentityCandidates.includes(candidate.id)}
-                            onChange={(event) =>
+                            disabled={canonical || !selectedIdentityCandidates.includes(candidate.id)}
+                            {...lock}
+                            onChange={(event) => {
+                              if (busy) return;
                               setIncludedIdentityNoteIds((current) => ({
                                 ...current,
                                 [candidate.id]: event.target.checked
                                   ? [...(current[candidate.id] ?? []), note.noteId]
                                   : (current[candidate.id] ?? []).filter((id) => id !== note.noteId),
-                              }))
-                            }
+                              }));
+                            }}
                           />
                           <span>
                             <span className="block font-medium text-[var(--foreground)]">
@@ -727,7 +846,7 @@ export function MaintenancePanel({
                               : {note.title}
                             </span>
                             <span className="block">
-                              {note.basis.replaceAll("_", " ")}
+                              {localizedLabel(note.basis, localizeUi, labelKeys.identityMatchBasis)}
                               {note.alreadyBound ? localizeUi("ui.longTermMemory.memorysettings.alreadyBound") : ""}
                               {note.exactFullName ? localizeUi("ui.longTermMemory.memorysettings.exactFullName") : ""}
                               {localizeUi("ui.longTermMemory.memorysettings.created")}{" "}
@@ -753,7 +872,7 @@ export function MaintenancePanel({
                   <fieldset
                     key={conflict.sectionKey}
                     className="space-y-1 border-t border-[var(--border)] pt-2"
-                    disabled={busy || !selectedIdentityCandidates.includes(candidate.id)}
+                    disabled={!selectedIdentityCandidates.includes(candidate.id)}
                   >
                     <legend className="font-medium">
                       {localizeUi("ui.longTermMemory.memorysettings.chooseSectionContent", {
@@ -775,16 +894,17 @@ export function MaintenancePanel({
                           className="flex min-h-11 items-start gap-2 rounded border border-[var(--border)] p-2"
                         >
                           <input
-                            className="mt-0.5"
+                            className={`mt-0.5 ${busy ? "opacity-50" : ""}`}
                             type="radio"
                             name={`${candidate.id}-${conflict.sectionKey}`}
                             disabled={!noteId}
+                            {...lock}
                             checked={
                               noteId !== undefined &&
                               option.noteIds.includes(identitySectionChoices[candidate.id]?.[conflict.sectionKey] ?? "")
                             }
                             onChange={() => {
-                              if (!noteId) return;
+                              if (busy || !noteId) return;
                               setIdentitySectionChoices((current) => ({
                                 ...current,
                                 [candidate.id]: {
@@ -809,6 +929,78 @@ export function MaintenancePanel({
             ))}
           </div>
         ) : null}
+      </div>
+      <div data-ltm-maintenance-group="reset" className="border-t border-[var(--border)] pt-3">
+        <h4 className="text-xs font-semibold">{localizeUi("ui.longTermMemory.memorysettings.deleteOrResetGroup")}</h4>
+        <div className="mt-2 space-y-3">
+          <div>
+            {/* No Engine defines a warning color: the strong editor border and an icon carry the tone. */}
+            <Button
+              ref={resetButton}
+              {...lock}
+              data-ltm-tone="warning"
+              style={{ borderColor: "var(--marinara-editor-border-strong)" }}
+              onClick={() => void resetSettings()}
+            >
+              <TriangleAlert aria-hidden="true" size="0.875rem" />{" "}
+              {localizeUi("ui.longTermMemory.memorysettings.resetSettings")}
+            </Button>
+            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+              {localizeUi("ui.longTermMemory.memorysettings.resetSettingsHint")}
+            </p>
+          </div>
+          <div className="border-t border-[var(--border)] pt-3">
+            <Button
+              ref={deleteButton}
+              destructive
+              {...lock}
+              aria-expanded={deletePromptOpen}
+              onClick={() => {
+                if (busy) return;
+                setDeletePromptOpen(true);
+                requestAnimationFrame(() => exportFirstButton.current?.focus());
+              }}
+            >
+              <Trash2 aria-hidden="true" size="0.875rem" />{" "}
+              {localizeUi("ui.longTermMemory.memorysettings.deleteAllData")}
+            </Button>
+            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+              {localizeUi("ui.longTermMemory.memorysettings.deleteAllMemoryDataDescription")}
+            </p>
+            {deletePromptOpen ? (
+              <div
+                role="group"
+                aria-label={localizeUi("ui.longTermMemory.memorysettings.deleteAllData")}
+                aria-describedby="ltm-delete-prompt-text"
+                data-ltm-delete-prompt
+                onKeyDown={(event) => {
+                  if (event.key === "Escape" && !busy) {
+                    event.stopPropagation();
+                    closeDeletePrompt();
+                  }
+                }}
+                className="mari-editor-panel mari-editor-panel--soft mt-2 space-y-2 p-3 text-xs"
+              >
+                <p id="ltm-delete-prompt-text">
+                  {localizeUi("ui.longTermMemory.memorysettings.exportBackupFirstPrompt")}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button ref={exportFirstButton} primary {...lock} onClick={() => void exportBackup("reset")}>
+                    <Download aria-hidden="true" size="0.875rem" />{" "}
+                    {localizeUi("ui.longTermMemory.memorysettings.exportBackupFirst")}
+                  </Button>
+                  <Button destructive {...lock} onClick={() => void deleteAll()}>
+                    {localizeUi("ui.longTermMemory.memorysettings.continueToDelete")}
+                  </Button>
+                  <Button {...lock} onClick={closeDeletePrompt}>
+                    {localizeUi("ui.longTermMemory.memoryvault.cancel")}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+        {resultFor("reset", "mt-2")}
       </div>
     </section>
   );

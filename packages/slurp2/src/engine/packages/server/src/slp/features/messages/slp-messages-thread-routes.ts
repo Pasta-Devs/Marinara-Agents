@@ -1,9 +1,14 @@
 import { z } from "zod";
 import { logger } from "../../../lib/logger.js";
-import { type SlurpCommissionPricing, slurpCommissionQuote } from "../../modules/economy/slp-creator-pricing.js";
+import {
+  type SlurpCommissionPricing,
+  slurpCommissionPricingFor,
+  slurpCommissionQuote,
+} from "../../modules/economy/slp-creator-pricing.js";
 import { selectSlurpAttentionCommissions } from "./slp-inbox-attention.js";
 import { activeSlurpStrikes, slurpDmPictureVerdict } from "../../modules/world/slp-stance.js";
 import { slurpAdultRiseBlock, slurpCreatorStateMediaBlock } from "../../modules/creators/slp-creator-state.js";
+import { slurpSextingPrice } from "../../modules/messages/slp-sexting.js";
 import { isSlurpSupportThread } from "../../modules/messages/slp-support.js";
 import { resolveSlurpThreadStance } from "./slp-thread-stance.js";
 import { describeSlurpDayVibe } from "../world/slp-world-contract.js";
@@ -16,6 +21,7 @@ import {
 } from "../../modules/messages/slp-thread-notes.js";
 import type { FastifyInstance } from "fastify";
 import { SLURP_SUPPORT_ACCOUNT_ID } from "../../../../../shared/src/slp/slp-support.js";
+import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 import { SLURP_SUPPORT_NAME } from "../../modules/messages/slp-dm-roles.js";
 import { personaQuerySchema } from "../../modules/messages/slp-messages-schemas.js";
 import { listSlurpMessageDeepDetailIds } from "../../data/messages/slp-message-deep-details-storage.js";
@@ -150,6 +156,9 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
       [],
       accounts.filter((account) => !operatedCreatorAccountIds.includes(account.id)).map((account) => account.id),
     );
+    // Support desk off: Support's threads sit in the inbox, so the inbox badge counts them.
+    if (!slpExtensionOn(await slurp.getSettings(), "supportDesk"))
+      return { ...own, unread: own.unread + support.unread, deskUnread: 0 };
     return { ...own, deskUnread: support.unread };
   });
   app.get("/messages/threads", async (req, reply) => {
@@ -166,11 +175,14 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
         .filter((account) => account.sourceKind === "persona" && account.sourceEntityId === viewer.id)
         .map((account) => account.id),
     );
-    const threads = (await messages.listThreadsForViewer(viewer.id)).sort((left, right) =>
-      right.lastMessageAt.localeCompare(left.lastMessageAt),
-    );
-    const deskThreads = (await messages.listThreadsForViewer(SLURP_SUPPORT_ACCOUNT_ID)).filter(
+    const supportThreads = (await messages.listThreadsForViewer(SLURP_SUPPORT_ACCOUNT_ID)).filter(
       (thread) => !operatedIds.has(thread.creatorAccountId),
+    );
+    // Support desk off: no desk holds Support's threads, so they sit in the inbox like any other.
+    const deskOn = slpExtensionOn(await slurp.getSettings(), "supportDesk");
+    const deskThreads = deskOn ? supportThreads : [];
+    const threads = [...(await messages.listThreadsForViewer(viewer.id)), ...(deskOn ? [] : supportThreads)].sort(
+      (left, right) => right.lastMessageAt.localeCompare(left.lastMessageAt),
     );
     // Threads written *to* the Creators this persona operates. Without these the inbox showed only
     // conversations the player started, and anything a fan or the world opened was unreachable.
@@ -295,9 +307,14 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
       counterpart,
       ...presence,
       messaging: await messages.getCreatorMessaging(thread.creatorAccountId),
+      // The session button's price; null where sessions are not sold (her own thread, Support, a hand-run Creator).
+      sextingPrice:
+        side === "viewer" && creator.sourceKind !== "persona" && !isSlurpSupportThread(thread)
+          ? slurpSextingPrice((await messages.getCreatorMessaging(thread.creatorAccountId)).ppvPrice, thread.rapport)
+          : null,
       commissions: withSuggestedQuotes(
         await messages.listCommissionsForThread(thread.id),
-        await messages.getCreatorMessaging(thread.creatorAccountId),
+        slurpCommissionPricingFor(await messages.getCreatorMessaging(thread.creatorAccountId), thread.rapport),
       ),
       relationship: await relationshipFor(thread, creator, side, presence.creatorAvailability),
       // Roleplay scenes (docs/SCENES.md): the player's own thread with an Engine character's page.
@@ -479,6 +496,10 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
         !parsed.data.support &&
         thread?.state === "active" &&
         creator.sourceKind === "character",
+      sextingPrice:
+        thread && !parsed.data.support && creator.sourceKind !== "persona"
+          ? slurpSextingPrice((await messages.getCreatorMessaging(creator.id)).ppvPrice, thread.rapport)
+          : null,
     };
   });
 }

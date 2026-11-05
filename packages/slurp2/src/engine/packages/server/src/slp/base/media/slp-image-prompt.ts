@@ -65,12 +65,15 @@ export function stripAppearanceLabel(value: string): string {
  * clothes are dropped here: only the clothing part of a sentence (V, user), so "Her curvy figure looks
  * great in tight clothing" keeps "Her curvy figure looks great" and "red hair, green eyes and a black
  * hoodie" keeps the hair and eyes. A Creator's own Stage appearance is trusted as written.
+ * A tag list (Danbooru card) is the exception: it goes over whole, outfit tags too (`slurpImageLook`).
  * ponytail: a keyword filter over sentences and clauses. If cards need finer handling, generate a look
  * once per Creator with a language model and store it as Stage appearance.
  */
 const CLOTHING_SENTENCE =
   /\b(?:wear|wears|wearing|worn|dress|dresses|dressed|outfits?|cloth(?:es|ing)|fashion|favou?rs|cosplay|costumes?|accessor(?:y|ies)|carries|carrying|shoes|boots|jewel(?:ry|lery)|hoodies?|shirts?|skirts?|jeans|jackets?|gowns?|couture|heels|lingerie|bikinis?|sweaters?|uniforms?)\b/iu;
 const MAX_LOOK_LENGTH = 600;
+/** Two or more commas and no sentence end: a tag list, not prose. */
+const TAG_LIST = /^[^.!?]*,[^.!?]*,[^.!?]*$/u;
 /** Where a sentence splits into clauses; the separator stays with the clause after it. */
 const CLAUSE_BREAK = /(,\s*|;\s*|\s+(?:and|but|while)\s+|\s+[—–]\s+)/u;
 /** What a kept clause of a clothing sentence must be about: the body, not a mood or a habit. */
@@ -117,11 +120,15 @@ export function slurpImageSexWord(appearance: string, gender: string | null | un
 export function slurpImageLook(appearance: string): string {
   const text = stripAppearanceLabel(appearance).replace(/\s+/gu, " ").trim();
   if (!text) return "";
-  const kept = text
-    .split(/(?<=[.!?])\s+/u)
-    .map(withoutClothes)
-    .filter(Boolean)
-    .join(" ");
+  // A tag list (Danbooru-style card) goes over one-to-one: the clause filter is for prose and dropped every
+  // tag without a body word, even the character's own name.
+  const kept = TAG_LIST.test(text)
+    ? text
+    : text
+        .split(/(?<=[.!?])\s+/u)
+        .map(withoutClothes)
+        .filter(Boolean)
+        .join(" ");
   const look = kept || text;
   return look.length <= MAX_LOOK_LENGTH ? look : `${look.slice(0, look.lastIndexOf(" ", MAX_LOOK_LENGTH))}`;
 }
@@ -152,13 +159,17 @@ const ART_STYLES: readonly { tag: string; negative: string; pattern: RegExp }[] 
     tag: "digital illustration",
     negative: "photograph, photorealistic",
     pattern:
-      /\b(?:illustrat(?:ed|ion)|drawn (?:in|as|like)|cartoon(?:ish|y)?|comic(?:[- ]book)? style|painterly|pixel art|3d render(?:ed)?|cgi)\b/iu,
+      /\b(?:illustrat(?:ed|ion)|drawn (?:in|as|like)|cartoon(?:ish|y)?|comic(?:[- ]book)? style|3d render(?:ed)?|cgi)\b/iu,
   },
 ];
 const PHOTO_STYLE =
   /\b(?:photo[- ]?real(?:istic)?|photograph(?:ic|ed)?|realistic (?:style|render|photo)|real[- ]life|live[- ]action)\b/iu;
 
-export function slurpArtStyle(look: string): { tag: string; negative: string } | null {
+// A painted medium counts only in the image instructions or style profile: on a card it is often a hobby.
+const PAINTED_MEDIUM = /\b(?:painterly|digital painting|oil painting|concept art|watercolou?r|pixel art)\b/iu;
+
+export function slurpArtStyle(look: string, medium = ""): { tag: string; negative: string } | null {
+  if (PAINTED_MEDIUM.test(medium)) look = `${look}\nillustration`;
   if (!look.trim() || PHOTO_STYLE.test(look)) return null;
   const found = ART_STYLES.filter((style) => style.pattern.test(look));
   if (found.length === 0) return null;
@@ -184,8 +195,8 @@ const PHOTO_ONLY_WORDS: readonly [RegExp, string][] = [
 ];
 
 /** The prompt in the Creator's medium: their style leads, Slurp's photo words go (see `slurpArtStyle`). */
-export function slurpStyledImagePrompt(prompt: string, look: string): string {
-  const style = slurpArtStyle(look);
+export function slurpStyledImagePrompt(prompt: string, look: string, medium = ""): string {
+  const style = slurpArtStyle(look, medium);
   if (!style) return prompt;
   let styled = prompt;
   for (const [pattern, replacement] of PHOTO_ONLY_WORDS) styled = styled.replace(pattern, replacement);

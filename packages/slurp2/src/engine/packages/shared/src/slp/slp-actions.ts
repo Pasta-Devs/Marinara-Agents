@@ -71,7 +71,7 @@ export type SlpPictureTarget = (typeof SLP_PICTURE_TARGETS)[number];
 
 const accountId = z.string().trim().min(1).max(200);
 /** Bonds the player can set between two Creators (mirrors `SLURP_BOND_KINDS`). */
-export const SLP_BOND_KINDS = ["friend", "roommate", "coworker", "ex"] as const;
+export const SLP_BOND_KINDS = ["friend", "roommate", "coworker", "ex", "family"] as const;
 /**
  * What a player can do to a couple (7b-couples); the Stir sheet and the couples panel share it.
  * "official": sparks or dating become together. "secret"/"public": a couple with the player's own page only.
@@ -324,7 +324,7 @@ export const SLP_ACTIONS = {
   },
   "set-bond": {
     summary:
-      "Make two Creators friends, best friends, roommates, coworkers or exes. A bond the player sets stays until the player ends it.",
+      "Make two Creators friends, best friends, roommates, coworkers, exes or family (family never become a couple). A bond the player sets stays until the player ends it.",
     inputs: {
       aId: "One Creator.",
       bId: "The other Creator.",

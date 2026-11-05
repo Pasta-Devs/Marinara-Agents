@@ -49,7 +49,8 @@ const sheet = src("modules/chrome/SlpSheet.tsx");
 assert.match(sheet, /closeOpenOverlay\?\.\(\)/u, "opening a sheet closes the one already open");
 // A history entry of its own made the Engine's back handler close the Engine's top layer.
 assert.doesNotMatch(sheet, /history\.(pushState|back)\(/u);
-assert.match(sheet, /useDialogFocusScope\(open && mounted, panelRef\)/u, "focus is trapped");
+// A base sheet (Stir, 0.3.63) also counts the sheets stacked on it.
+assert.match(sheet, /useDialogFocusScope\(open && mounted, panelRef[,)]/u, "focus is trapped");
 for (const file of ["modules/post/SlpPostMenu.tsx", "modules/post/SlpInteractionMenu.tsx"]) {
   const menu = src(file);
   const fan = menu.indexOf("<SlpSheetGroup>");

@@ -139,6 +139,7 @@ setWalletCoinsForDevelopment
 tipCreator
 spendCoins
 hasWalletSpendOperation
+hasWardrobeRecord
 refundCoins
 reverseCreatorIncome
 hasCreatorIncomeOperation
@@ -163,6 +164,7 @@ updateProject
 deleteProject
 advanceProject
 directProject
+storyTags
 arcEffectMultiplier
 resolveArcProfile
 recordArcChange
@@ -208,3 +210,5 @@ setStoryOccurrenceStatus
 cancelStartedStoryEvent
 removeStoryFact
 removeArcOpportunity
+applyStoryOutcomes
+putStoryCondition

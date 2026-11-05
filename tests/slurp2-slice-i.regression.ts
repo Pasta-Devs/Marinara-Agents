@@ -731,7 +731,7 @@ const creator = (id: string, text: string, tags: string[], over: Partial<SlurpTi
   const runner = server("features/assist/slp-action-runner.ts");
   assert.match(
     runner,
-    /return \{\s+list: slpActionCatalog,\s+run: \(name: string, input: unknown\) => runSlpAction\(db, name, input\),\s+preview: \(name: string, input: unknown\) => previewSlpAction\(db, name, input\),\s+\};/u,
+    /return \{\s+(?:\/\/[^\n]*\s+)?list: async \(\) => \{\s+const settings = await createSlurpStorage\(db\)\.getSettings\(\);\s+return slpActionCatalog\(\)\.filter\(\(action\) => slpActionAllowed\(settings, action\.name\)\);\s+\},\s+run: \(name: string, input: unknown\) => runSlpAction\(db, name, input\),\s+preview: \(name: string, input: unknown\) => previewSlpAction\(db, name, input\),\s+\};/u,
   );
   assert.match(runner, /case "list-creators":\s*return \{\s*ok: true,/u);
   // The server feature-detects from its own manifest.

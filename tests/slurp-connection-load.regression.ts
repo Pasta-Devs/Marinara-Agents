@@ -67,16 +67,14 @@ assert.match(images, /retryNextFailedPostImage/);
 assert.match(images, /admissionMode: \{ kind: "background" \}/);
 assert.match(autoPost, /retryNextFailedPostImage\(\)/);
 
-const awaiting = storage.slice(storage.indexOf("async listNoodlerPostsAwaitingImageRetry"));
+const awaitingStart = storage.indexOf("async listNoodlerPostsAwaitingImageRetry");
+const awaiting = storage.slice(awaitingStart, storage.indexOf("// Unbounded", awaitingStart));
 // Posts waiting on the user's own prompt review are never hijacked by the automatic retry.
 assert.match(
-  awaiting.slice(0, 1600),
+  awaiting,
   /metadata\.imagePendingReview === true \|\|\s*\(metadata\.imageGenerationFailed !== true && metadata\.imageGenerationDeferred !== true\)/,
 );
-assert.match(
-  awaiting.slice(0, 1600),
-  /slpCreatorPostImageRetryAttempts\(metadata\) >= SLP_CREATOR_POST_IMAGE_RETRY_LIMIT/,
-);
+assert.match(awaiting, /slpCreatorPostImageRetryAttempts\(metadata\) >= SLP_CREATOR_POST_IMAGE_RETRY_LIMIT/);
 
 // The failure fallbacks persist the prompt, or there would be nothing to redraw from.
 const generation = read("slurp-generation.service.ts");

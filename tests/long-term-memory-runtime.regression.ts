@@ -1,28 +1,21 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { Module } from "node:module";
+import { randomUUID } from "node:crypto";
+import { appendFile, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { delimiter, dirname, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { mock } from "node:test";
 import { runRegressionToCompletion, runWithSafeCleanup } from "./regression-helpers.ts";
 
 async function main() {
   const repoRoot = resolve(dirname(process.argv[1] ?? process.cwd()), "..");
-  const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || join(repoRoot, "../Marinara-Engine"));
   const packageManifest = JSON.parse(await readFile(join(repoRoot, "packages/long-term-memory/manifest.json"), "utf8"));
+  // engine.min cannot tell Engine staging from the 2.5.1 release; capability API 1.390 (E2 + E3, Engine header) can.
+  assert.equal(packageManifest.engine.min, "2.5.1");
   assert.deepEqual(
     packageManifest.capabilityApi,
-    { major: 1, minor: 341 },
-    "Long-Term Memory takes its query client and libraries from the Engine's host (capability API 1.341)",
+    { major: 1, minor: 390 },
+    "Long-Term Memory is gated by its capability API",
   );
-  assert.equal(packageManifest.engine.min, "2.4.1", "Long-Term Memory is gated by its capability API, not engine.min");
-  process.env.NODE_PATH = [
-    join(engineRoot, "packages/server/node_modules"),
-    join(engineRoot, "packages/shared/node_modules"),
-    process.env.NODE_PATH,
-  ]
-    .filter(Boolean)
-    .join(delimiter);
-  Module._initPaths();
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
   const { activate } = await import(`${source}/server-entry.ts`);
   const {
@@ -31,9 +24,18 @@ async function main() {
     rebuildLongTermMemoryIndexes,
     loadOrRebuildLongTermMemoryIndexes,
   } = await import(`${source}/recall/rebuild.ts`);
+  const { LTM_REBUILD_QUIET_MS, resumeLtmIndexRebuild, stopLtmIndexRebuild } = await import(
+    `${source}/recall/rebuild-job.ts`
+  );
   const { withLtmVaultLock } = await import(`${source}/persistence/vault-lock.ts`);
   const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
-  const { notePathForId } = await import(`${source}/persistence/paths.ts`);
+  const { isLtmNoteShareable, listLtmPackageReaders, recordLtmPackageAdd, recordLtmPackageRead } = await import(
+    `${source}/services/storage-read.ts`
+  );
+  const { createLtmRecallService } = await import(`${source}/services/recall.ts`);
+  const { ltmPackageSourceNoteId } = await import(`${source}/services/intake.ts`);
+  const { updateLtmGlobalSettings } = await import(`${source}/settings.ts`);
+  const { getLongTermMemoryDirectories, notePathForId } = await import(`${source}/persistence/paths.ts`);
   const { invalidateLtmVaultSnapshot } = await import(`${source}/persistence/vault-snapshot.ts`);
   const { ltmIndexStatePath, readLtmIndexState } = await import(`${source}/persistence/index-state.ts`);
   const { repairLongTermMemory } = await import(`${source}/maintenance/maintenance.ts`);
@@ -71,9 +73,12 @@ async function main() {
     ),
     true,
   );
-  const { configurePackageRuntime, getPackageEmbeddingAdapter, resolvePackageEmbeddingAdapter } = await import(
-    `${source}/package-runtime.ts`
-  );
+  const {
+    configurePackageRuntime,
+    getPackageEmbeddingAdapter,
+    logger: packageLogger,
+    resolvePackageEmbeddingAdapter,
+  } = await import(`${source}/package-runtime.ts`);
   const { embedLongTermMemoryTexts } = await import(`${source}/recall/embedding-adapter.ts`);
   const timestamp = "2026-07-17T00:00:00.000Z";
   const makeChunk = (
@@ -106,6 +111,7 @@ async function main() {
     estimatedTokens: 1,
   });
   const services = new Map<string, any>();
+  const serviceOptions = new Map<string, { hostOnly?: boolean } | undefined>();
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-runtime-"));
   const logger = { debug() {}, info() {}, warn() {}, error() {} };
   let resolvedAdapter = {
@@ -237,8 +243,9 @@ async function main() {
         },
       },
     },
-    registerService(name: string, service: unknown) {
+    registerService(name: string, service: unknown, options?: { hostOnly?: boolean }) {
       services.set(name, service);
+      serviceOptions.set(name, options);
       return () => services.delete(name);
     },
     async registerPrivilegedRoutes() {
@@ -295,8 +302,377 @@ async function main() {
         "explicit adapter",
         "explicit test adapters must bypass the runtime resolver",
       );
-      storage = services.get("long-term-memory:storage").storage;
+      // The test writes to the vault directly.
+      storage = new LongTermMemoryStorage(join(dataDir, "long-term-memory"));
       runtime = services.get("long-term-memory:runtime");
+      assert.equal(
+        services.has("long-term-memory:storage"),
+        false,
+        "the older storage read must not be registered; other packages read through recall",
+      );
+      assert.equal(
+        services.get("long-term-memory:recall")?.version,
+        1,
+        "the recall service other packages read must carry its contract version",
+      );
+      assert.equal(
+        serviceOptions.get("long-term-memory:runtime")?.hostOnly,
+        true,
+        "the runtime service gives recall for any chat and the vault lock, so only the Engine may read it",
+      );
+      assert.notEqual(
+        serviceOptions.get("long-term-memory:recall")?.hostOnly,
+        true,
+        "other packages read recall, so it must stay open to them",
+      );
+      assert.equal(
+        services.get("long-term-memory:intake")?.version,
+        1,
+        "the intake service other packages write through must carry its contract version",
+      );
+      assert.notEqual(
+        serviceOptions.get("long-term-memory:intake")?.hostOnly,
+        true,
+        "Slurp adds memories through intake, so it must stay open to packages",
+      );
+      const recallRoot = await mkdtemp(join(tmpdir(), "marinara-ltm-shared-recall-"));
+      const recallStorage = new LongTermMemoryStorage(recallRoot);
+      try {
+        const about = (...ids: string[]) => ({
+          subjects: ids.map((id) => ({ key: `character:${id}`, ref: { kind: "character", id } })),
+        });
+        const forA = { scope: { characterIds: ["char-a"] } };
+        for (const [id, overrides] of [
+          ["world_recall_a", forA],
+          ["thread_recall_a", { ...forA, type: "thread" }],
+          ["timeline_recall_a", { ...forA, type: "timeline_event", status: "resolved" }],
+          ["char_recall_a", { ...forA, type: "character", ...about("char-a") }],
+          ["char_recall_z", { ...forA, type: "character", ...about("char-z") }],
+          [
+            "rel_recall_a_b",
+            { scope: { characterIds: ["char-a", "char-b"] }, type: "relationship", ...about("char-a", "char-b") },
+          ],
+          [
+            "tone_recall_a",
+            {
+              ...forA,
+              type: "tone",
+              sections: { profile: { text: "tone_recall_a keeps the cobalt archive", updatedAt: timestamp } },
+            },
+          ],
+          ["char_recall_no_subject", { ...forA, type: "character" }],
+          ["world_recall_chat_only", {}],
+          ["world_recall_archived", { ...forA, status: "archived" }],
+          ["world_recall_game", { ...forA, modes: ["game"] }],
+          ["world_recall_persona", { scope: { personaIds: ["persona-p"] } }],
+          [
+            "source_recall_summary",
+            {
+              ...forA,
+              type: "source",
+              provenance: { kind: "chat_summary", sourceId: "chat-r", entryId: "shared" },
+              sections: { source: { text: "source_recall_summary keeps the cobalt archive", updatedAt: timestamp } },
+            },
+          ],
+        ] as const)
+          await recallStorage.createNote(note(id, "chat-r", `${id} keeps the cobalt archive`, overrides));
+        const recall = createLtmRecallService(recallStorage);
+        const recalled = async (input: Record<string, unknown>) =>
+          (
+            (await recall.recall({ queryText: "cobalt archive", ...input })) as {
+              sections: Array<{ noteId: string; type: string; title?: string; text: string }>;
+            } | null
+          )?.sections.map((section) => section.noteId);
+        const result = await recall.recall({ caller: "slurp", queryText: "cobalt archive", characterIds: ["char-a"] });
+        assert.equal(result?.version, 1);
+        assert.deepEqual(
+          result?.sections.map((section: { noteId: string }) => section.noteId),
+          ["thread_recall_a", "timeline_recall_a", "rel_recall_a_b", "char_recall_a", "world_recall_a"],
+          "recall must return the accounts' memories available everywhere, threads and events first, " +
+            "without tone, chat-limited, archived, game-only, other characters' or subject-less character memories",
+        );
+        assert.equal(
+          (await recalled({ characterIds: ["char-a"], whole: true }))?.includes("source_recall_summary"),
+          false,
+          "an imported source must never be recalled, whole or ranked",
+        );
+        assert.equal(
+          isLtmNoteShareable({ type: "source", status: "active", modes: ["roleplay", "conversation"] }),
+          false,
+          "an imported source must stay unshareable even when recall's own type list changes",
+        );
+        assert.ok(
+          result?.sections.every((section: { title?: string; text: string }) => section.title && section.text),
+          "every section must carry its memory's title and text",
+        );
+        assert.ok(
+          (await recalled({ characterIds: ["char-a"], personaId: "persona-p" }))?.includes("world_recall_persona"),
+          "a persona's memories must be recalled when the package names the persona",
+        );
+        assert.deepEqual(await recalled({ characterIds: ["char-nobody"] }), [], "no memories must give no sections");
+        assert.deepEqual(await recalled({ characterIds: ["char-a"], mode: "conversation" }), []);
+        const forW = { scope: { characterIds: ["char-w"] } };
+        const bigText = `world_w_big keeps the cobalt archive. ${"The vault door stays shut until dusk. ".repeat(10)}`;
+        for (const [id, text, overrides] of [
+          ["world_w_old", `world_w_old keeps the cobalt archive`, { ...forW, updatedAt: "2026-07-18T00:00:00.000Z" }],
+          ["world_w_new", `world_w_new keeps the cobalt archive`, { ...forW, updatedAt: "2026-07-20T00:00:00.000Z" }],
+          ["world_w_big", bigText, { ...forW, updatedAt: "2026-07-21T00:00:00.000Z" }],
+          ["thread_w", `thread_w keeps the cobalt archive`, { ...forW, type: "thread" }],
+          ["char_w_other", `char_w_other keeps the cobalt archive`, { ...forW, type: "character", ...about("char-z") }],
+          ["char_w_nobody", `char_w_nobody keeps the cobalt archive`, { ...forW, type: "character" }],
+        ] as const)
+          await recallStorage.createNote(note(id, "chat-r", text, overrides));
+        const wholeSections = async (input: Record<string, unknown> = {}) =>
+          (
+            (await recall.recall({ queryText: "cobalt archive", characterIds: ["char-w"], whole: true, ...input })) as {
+              version: number;
+              sections: Array<{ noteId: string; text: string }>;
+            }
+          ).sections;
+        const rankedIds = await recalled({ characterIds: ["char-w"] });
+        const wholeAll = await wholeSections();
+        assert.deepEqual(
+          wholeAll.map((section) => section.noteId),
+          ["thread_w", "world_w_big", "world_w_new", "world_w_old"],
+          "whole recall must apply the subject rule, order by type and then newest first",
+        );
+        assert.deepEqual(
+          [...(rankedIds ?? [])].sort(),
+          wholeAll.map((section) => section.noteId).sort(),
+          "whole recall must share the same memories as ranked recall",
+        );
+        assert.equal(wholeAll.find((section) => section.noteId === "world_w_big")?.text, bigText.trim());
+        const wholeTight = await wholeSections({ maxTokens: 50 });
+        assert.deepEqual(
+          wholeTight.map((section) => section.noteId),
+          ["thread_w", "world_w_new", "world_w_old"],
+          "a whole recall must skip a memory that does not fit, never cut it, and still fit later ones",
+        );
+        assert.equal(
+          wholeTight.find((section) => section.noteId === "world_w_new")?.text,
+          "world_w_new keeps the cobalt archive",
+        );
+        assert.deepEqual(await wholeSections({ mode: "conversation" }), []);
+        // #1998: `excludeFrom` leaves out sections that hold only records the named callers added through intake.
+        const slurpLine = {
+          owner: "source",
+          sourceNoteId: ltmPackageSourceNoteId("slurp2", "fact:f1"),
+          sourceHash: "a".repeat(64),
+          text: "char_s from_slurp2 keeps the cobalt archive",
+          updatedAt: timestamp,
+        };
+        const manualLine = { owner: "manual", text: "char_s history keeps the cobalt archive", updatedAt: timestamp };
+        const forS = { scope: { characterIds: ["char-s"] }, type: "character", ...about("char-s") };
+        // The create API turns every contribution into a manual one, so the intake-owned notes are written directly.
+        const writeNote = (fixture: { id: string; type: string }) =>
+          writeFile(notePathForId(fixture.id, fixture.type, recallRoot), JSON.stringify(fixture));
+        await writeNote(
+          note("char_s_slurp", "chat-r", "", {
+            ...forS,
+            sections: {
+              from_slurp2: { text: slurpLine.text, updatedAt: timestamp, contributions: [slurpLine] },
+              history: { text: manualLine.text, updatedAt: timestamp },
+            },
+          }),
+        );
+        await writeNote(
+          note("char_s_mixed", "chat-r", "", {
+            ...forS,
+            sections: {
+              mixed: {
+                text: "char_s mixed-slurp keeps the cobalt archive\nchar_s mixed keeps the cobalt archive",
+                updatedAt: timestamp,
+                contributions: [
+                  { ...slurpLine, text: "char_s mixed-slurp keeps the cobalt archive" },
+                  { ...manualLine, text: "char_s mixed keeps the cobalt archive" },
+                ],
+              },
+            },
+          }),
+        );
+        await writeNote(
+          note("char_s_only", "chat-r", "", {
+            ...forS,
+            sections: { from_slurp2: { text: slurpLine.text, updatedAt: timestamp, contributions: [slurpLine] } },
+          }),
+        );
+        // A strong intake chunk that nearly fills a 50-token budget, and one weaker manual chunk for the same account.
+        const forT = { scope: { characterIds: ["char-t"] }, type: "character", ...about("char-t") };
+        const bigSlurpText = Array.from({ length: 5 }, () => "char_t from_slurp2 cobalt archive").join(" ");
+        await writeNote(
+          note("char_t_slurp", "chat-r", "", {
+            ...forT,
+            sections: {
+              from_slurp2: {
+                text: bigSlurpText,
+                updatedAt: timestamp,
+                contributions: [{ ...slurpLine, text: bigSlurpText }],
+              },
+            },
+          }),
+        );
+        await writeNote(
+          note("char_t_keep", "chat-r", "", {
+            ...forT,
+            sections: {
+              history: {
+                text: "char_t history keeps the cobalt archive and a few more words to take room",
+                updatedAt: timestamp,
+              },
+            },
+          }),
+        );
+        invalidateLtmVaultSnapshot(recallRoot);
+        await rebuildLongTermMemoryIndexes({ root: recallRoot });
+        const textOf = async (whole: boolean, input: Record<string, unknown> = {}) =>
+          (
+            (await recall.recall({ queryText: "cobalt archive", characterIds: ["char-s"], whole, ...input })) as {
+              sections: Array<{ noteId: string; text: string }>;
+            }
+          ).sections.map((section) => `${section.noteId}: ${section.text}`);
+        for (const whole of [true, false]) {
+          const label = whole ? "whole" : "ranked";
+          const all = (await textOf(whole)).join("\n");
+          assert.match(all, /from_slurp2 keeps/, `${label} recall without excludeFrom must keep the intake line`);
+          assert.match(all, /history keeps/, `${label} recall without excludeFrom must keep the history section`);
+          assert.match(all, /char_s_only:/, `${label} recall without excludeFrom must return a memory of intake lines`);
+          const kept = (await textOf(whole, { excludeFrom: ["slurp2"] })).join("\n");
+          assert.doesNotMatch(
+            kept,
+            /from_slurp2 keeps/,
+            `${label} recall must leave out a section that holds only slurp2's records`,
+          );
+          assert.doesNotMatch(kept, /char_s_only:/, `${label} recall must omit a memory with nothing left`);
+          assert.match(kept, /history keeps/, `${label} recall must keep a section no excluded caller wrote`);
+          assert.match(kept, /mixed keeps/, `${label} recall must keep a section with a manual line`);
+        }
+        const tight = (input: Record<string, unknown> = {}) =>
+          recall
+            .recall({ queryText: "cobalt archive", characterIds: ["char-t"], maxTokens: 50, ...input })
+            .then((result) => (result as { sections: Array<{ text: string }> }).sections.map((s) => s.text).join("\n"));
+        assert.match(await tight(), /from_slurp2/, "the intake chunk must outrank and fill a tight ranked budget");
+        assert.match(
+          await tight({ excludeFrom: ["slurp2"] }),
+          /history keeps/,
+          "an excluded chunk must not spend the ranked budget before it is dropped",
+        );
+        assert.equal(
+          await recall.recall({ queryText: "cobalt archive", characterIds: ["char-s"], excludeFrom: ["Bad Name!"] }),
+          null,
+          "a malformed excludeFrom entry must make the call invalid, not be dropped",
+        );
+        assert.equal(
+          await recall.recall({ queryText: "cobalt archive" }),
+          null,
+          "a recall without accounts is invalid",
+        );
+        assert.equal(await recall.recall({ characterIds: ["char-a"] }), null, "a recall without a query is invalid");
+        assert.equal(
+          await recall.recall({ queryText: "cobalt archive", characterIds: ["char-a"], signal: AbortSignal.abort() }),
+          null,
+          "an aborted recall must return null",
+        );
+        assert.ok(
+          await recall.recall({ caller: "Slurp 0.3!", queryText: "cobalt archive", characterIds: ["char-a"] }),
+          "a malformed caller name must not stop the read",
+        );
+        const noodleRead = await recall.recall({
+          caller: "noodle",
+          queryText: "cobalt archive",
+          characterIds: ["char-a"],
+        });
+        assert.deepEqual(
+          (await listLtmPackageReaders(recallRoot))
+            .map((reader: { caller: string | null }) => String(reader.caller))
+            .sort(),
+          ["noodle", "null", "slurp"],
+          "Memory Settings must list the packages that read memories, and one that gave no name",
+        );
+        await recordLtmPackageRead(recallRoot, "package_recall", "tally", 3);
+        await recordLtmPackageRead(recallRoot, "package_list", "tally", 2);
+        // Log timestamps have millisecond resolution; pauses keep the read, add and later add in a known order.
+        const pause = () => new Promise((done) => setTimeout(done, 5));
+        await pause();
+        const afterTallyReads = new Date().toISOString();
+        await pause();
+        await recordLtmPackageAdd(recallRoot, "tally", 2);
+        const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
+        for (const [source, phase, action, memories] of [
+          ["tally", "retrieval", "package_list", 7],
+          ["tally", "apply", "package_add", 6],
+          ["stale", "retrieval", "package_list", 4],
+        ] as const)
+          await appendFile(
+            getLongTermMemoryDirectories(recallRoot).debugLog,
+            `${JSON.stringify({
+              id: randomUUID(),
+              ts: eightDaysAgo,
+              operationId: randomUUID(),
+              phase,
+              action,
+              status: "ok",
+              source,
+              counts: { memories },
+            })}\n`,
+          );
+        await pause();
+        await recordLtmPackageAdd(recallRoot, "adder", 1);
+        const readers = (await listLtmPackageReaders(recallRoot)) as Array<{
+          caller: string | null;
+          lastReadAt: string | null;
+          reads: number;
+          memories: number;
+          added: number;
+        }>;
+        const tally = readers.find((reader) => reader.caller === "tally");
+        assert.deepEqual(
+          tally,
+          { caller: "tally", lastReadAt: tally?.lastReadAt, reads: 2, memories: 5, added: 2 },
+          "a reader's week must count the reads, returned memories and added memories from the last 7 days, not older ones",
+        );
+        assert.ok(
+          tally?.lastReadAt && tally.lastReadAt < afterTallyReads,
+          "an add must not move an Agent's last read, which stays at its newest read",
+        );
+        assert.deepEqual(
+          readers[0],
+          { caller: "adder", lastReadAt: null, reads: 0, memories: 0, added: 1 },
+          "an Agent that only added memories must be listed first when it added last, with no last read",
+        );
+        assert.deepEqual(
+          readers.find((reader) => reader.caller === "stale"),
+          { caller: "stale", lastReadAt: eightDaysAgo, reads: 0, memories: 0, added: 0 },
+          "a reader whose only read is older than 7 days must still be listed, with no reads this week",
+        );
+        assert.deepEqual(
+          readers.flatMap((reader) => (reader.lastReadAt ? [reader.lastReadAt] : [])),
+          readers
+            .flatMap((reader) => (reader.lastReadAt ? [reader.lastReadAt] : []))
+            .sort()
+            .reverse(),
+          "readers that have reads must keep last-read order, newest first",
+        );
+        assert.ok(noodleRead?.sections.length, "the noodle read must return memories for the sum to mean anything");
+        assert.equal(
+          readers.find((reader) => reader.caller === "noodle")?.memories,
+          noodleRead?.sections.length,
+          "a reader's memories must add up what its reads returned",
+        );
+        await updateLtmGlobalSettings({ longTermMemoryShareWithPackages: false }, recallRoot);
+        assert.equal(
+          await recall.recall({ queryText: "cobalt archive", characterIds: ["char-a"] }),
+          null,
+          "turning off Other Agents can read memories must stop recall for other packages",
+        );
+        assert.equal(
+          await recall.recall({ queryText: "cobalt archive", characterIds: ["char-w"], whole: true }),
+          null,
+          "turning off Other Agents can read memories must stop whole recall too",
+        );
+      } finally {
+        await recallStorage.cleanup();
+        await rm(recallRoot, { recursive: true, force: true });
+      }
       for (const testCase of [
         {
           input: {
@@ -523,15 +899,10 @@ async function main() {
       assert.ok(runtime, "package activation must register the runtime service");
       assert.deepEqual(
         chats[0].metadata,
-        {
-          enableLongTermMemory: true,
-          longTermMemoryBudgetTokens: 2048,
-          activeAgentIds: ["long-term-memory"],
-          enableAgents: true,
-          longTermMemoryPackageAdopted: true,
-        },
-        "legacy chat settings must be preserved while activating the package agent",
+        { enableLongTermMemory: true, longTermMemoryBudgetTokens: 2048 },
+        "activation must leave legacy chat settings alone; users switch the package on per chat",
       );
+      assert.equal(metadataUpdates, 0, "activation must not write chat metadata");
       assert.deepEqual(
         JSON.parse(await readFile(join(dataDir, "long-term-memory", "config", "agent-settings.json"), "utf8")),
         {
@@ -991,27 +1362,33 @@ async function main() {
       const mismatchedSpace = JSON.parse(indexBeforeRecall);
       mismatchedSpace.embeddings.spaceId = "other-space";
       await writeFile(recallIndexPath, JSON.stringify(mismatchedSpace));
-      const lexicalFallback = await retrieveLongTermMemory({
+      const cobaltRecall = {
         root: storage.root,
         queryText: "cobalt archive",
         scope: { chatId: "chat-a", chatIds: ["chat-a"] },
-        mode: "roleplay",
+        mode: "roleplay" as const,
         semanticWeight: 1,
         maxChunks: 5,
         maxTokens: 4096,
-      });
+      };
+      const lexicalFallback = await retrieveLongTermMemory(cobaltRecall);
       assert.equal(lexicalFallback.embeddingsAvailable, false);
-      assert.equal(
-        lexicalFallback.semanticOutcome,
-        "no_matches",
-        "#1211: an unavailable-looking embeddingsAvailable must distinguish a valid index with no matches",
-      );
-      assert.equal(lexicalFallback.indexSnapshot.loadOutcome, "upgraded");
+      // Recall answers from the keyword lanes at once and moves the index to the new source in the background.
+      assert.equal(lexicalFallback.semanticOutcome, "incompatible");
+      assert.equal(lexicalFallback.indexSnapshot.loadOutcome, "loaded");
       assert.equal(
         lexicalFallback.chunks.some((chunk: any) => chunk.chunk.noteId === "world_visible"),
         true,
       );
+      assert.equal(JSON.parse(await readFile(recallIndexPath, "utf8")).embeddings.spaceId, "other-space");
       await rebuildLongTermMemoryIndexes({ root: storage.root });
+      const upgraded = await retrieveLongTermMemory(cobaltRecall);
+      assert.equal(upgraded.embeddingsAvailable, false);
+      assert.equal(
+        upgraded.semanticOutcome,
+        "no_matches",
+        "#1211: an unavailable-looking embeddingsAvailable must distinguish a valid index with no matches",
+      );
       const thresholded = await retrieveLongTermMemory({
         root: storage.root,
         queryText: "world_visible cobalt archive",
@@ -1299,6 +1676,48 @@ async function main() {
         }
       } finally {
         chats.pop();
+      }
+      // #1962: a recall arms the chat's background import only when the setting is on, and never waits for it.
+      {
+        const { isLtmAutoImportArmed, resumeLtmAutoImport, stopLtmAutoImport } = await import(
+          `${source}/sources/auto-import-job.ts`
+        );
+        const { updateLtmExtractionConfig } = await import(`${source}/extraction/extraction-config.ts`);
+        const settle = () => new Promise((done) => setTimeout(done, 20));
+        assert.match((await runtime.recall(input)).text, /beneath the observatory/);
+        await settle();
+        assert.equal(isLtmAutoImportArmed(storage.root, input.chatId), false, "the setting off arms nothing");
+        await updateLtmExtractionConfig({ autoImportChatSources: true }, storage.root);
+        assert.match((await runtime.recall(input)).text, /beneath the observatory/, "recall results do not change");
+        for (let wait = 0; wait < 100 && !isLtmAutoImportArmed(storage.root, input.chatId); wait += 1) await settle();
+        assert.equal(isLtmAutoImportArmed(storage.root, input.chatId), true, "the setting on arms the chat's import");
+        await stopLtmAutoImport(storage.root);
+        assert.equal(isLtmAutoImportArmed(storage.root, input.chatId), false, "deactivation drops a pending import");
+        resumeLtmAutoImport(storage.root);
+        // "Memories from this chat": the chat's choice beats the global one; no choice uses the global one.
+        const armedChat = chats.find((chat) => chat.id === input.chatId)!;
+        const metadataBefore = armedChat.metadata;
+        const armsWith = async (choice: string | undefined) => {
+          await stopLtmAutoImport(storage.root);
+          resumeLtmAutoImport(storage.root);
+          armedChat.metadata = { ...metadataBefore, ...(choice ? { longTermMemoryChatMemories: choice } : {}) };
+          await runtime.recall(input);
+          for (let wait = 0; wait < 10 && !isLtmAutoImportArmed(storage.root, input.chatId); wait += 1) await settle();
+          return isLtmAutoImportArmed(storage.root, input.chatId);
+        };
+        try {
+          assert.equal(await armsWith("manual"), false, "a chat set to manual arms nothing while the global is on");
+          await updateLtmExtractionConfig({ autoImportChatSources: false }, storage.root);
+          assert.equal(await armsWith("review"), true, "a chat set to review arms while the global is off");
+          assert.equal(await armsWith("save"), true, "a chat set to save arms while the global is off");
+          assert.equal(await armsWith(undefined), false, "no chat choice falls back to the global off");
+          assert.equal(await armsWith("bogus"), false, "an unknown chat choice falls back to the global");
+        } finally {
+          armedChat.metadata = metadataBefore;
+          await stopLtmAutoImport(storage.root);
+          resumeLtmAutoImport(storage.root);
+        }
+        await updateLtmExtractionConfig({ autoImportChatSources: false }, storage.root);
       }
       const legacyReadable = await runtime.recall(input);
       assert.match(legacyReadable.text, /beneath the observatory/);
@@ -1871,6 +2290,20 @@ async function main() {
       assert.equal(getPackageEmbeddingAdapter()?.label, "newer");
       assert.equal(getPackageEmbeddingAdapter()?.spaceId, "newer-space");
       releaseNewer();
+      // Like pino, the Engine's logger, this host keeps only the message: pino drops an argument it has no placeholder for.
+      const warnings: unknown[][] = [];
+      const releaseWarnings = configurePackageRuntime({
+        dataDir,
+        logger: { ...logger, warn: (...args: unknown[]) => void warnings.push(args) },
+      });
+      packageLogger.warn(new Error("cause text"), "message %s", "chat-1");
+      releaseWarnings();
+      assert.match(
+        String(warnings[0]?.[0] ?? ""),
+        /^message %s: .*cause text/,
+        "a warning logged with its error first must keep the cause",
+      );
+      assert.deepEqual(warnings[0]?.slice(1), ["chat-1"], "the printf arguments must reach the host unchanged");
       releaseRestoredRuntime?.();
       releaseRestoredRuntime = configurePackageRuntime({
         ...api.runtime,
@@ -1943,7 +2376,7 @@ async function main() {
       legacyAgentConfig = null;
       cleanup = await activate({ dataDir, api });
       assert.deepEqual(chats[0].metadata.activeAgentIds, [], "reinstall must not reverse explicit uninstall cleanup");
-      assert.equal(metadataUpdates, 1, "legacy adoption must be idempotent across restarts");
+      assert.equal(metadataUpdates, 0, "reactivation must not write chat metadata");
       assert.equal(
         agentConfigReads,
         1,
@@ -2210,36 +2643,59 @@ async function main() {
         assert.equal(waiterDone, true, "cancelled rebuild must release the vault lock for waiters");
         assert.equal(recallOutcome?.error?.name, "AbortError", "cancelled recall must not resolve after abort");
 
-        // Cancellation during a semantic upgrade must not quarantine the valid lexical
-        // index or suppress a later upgrade retry.
+        // A semantic upgrade runs in the background. Stopping it mid-embed (package deactivation) must not
+        // quarantine or rewrite the valid lexical index, or suppress an upgrade once the package is active again.
         await rebuildLongTermMemoryIndexes({ root: vaultRoot, embeddingAdapter: null, stopWords: [] });
         const lexicalIndexBytes = await readFile(recallIndexPath, "utf8");
-        const upgradeController = new AbortController();
+        const upgradeEntered = deferred();
+        let upgradeSignal: AbortSignal | undefined;
         const abortingAdapter = {
           spaceId: "test-space",
           label: "aborting test embeddings",
-          async embed() {
-            upgradeController.abort();
-            throw new DOMException("cancelled", "AbortError");
+          embed(_texts: string[], signal?: AbortSignal) {
+            upgradeSignal = signal;
+            upgradeEntered.resolve();
+            return new Promise<number[][]>((_resolve, reject) =>
+              signal?.addEventListener("abort", () => reject(signal.reason), { once: true }),
+            );
           },
         };
-        await assert.rejects(
-          () => loadOrRebuildLongTermMemoryIndexes(vaultRoot, abortingAdapter, [], upgradeController.signal),
-          { name: "AbortError" },
-          "a cancelled semantic upgrade must surface cancellation",
-        );
+        mock.timers.enable({ apis: ["setTimeout"] });
+        try {
+          const lexical = await loadOrRebuildLongTermMemoryIndexes(vaultRoot, abortingAdapter, []);
+          assert.equal(lexical.embeddings.embeddedChunkCount, 0, "recall must not wait for a semantic upgrade");
+          mock.timers.tick(LTM_REBUILD_QUIET_MS);
+        } finally {
+          mock.timers.reset();
+        }
+        await upgradeEntered.promise;
+        await stopLtmIndexRebuild(vaultRoot);
+        assert.equal(upgradeSignal?.aborted, true, "deactivation must abort the upgrade's embedding");
         assert.equal(
           await readFile(recallIndexPath, "utf8"),
           lexicalIndexBytes,
           "cancellation must not quarantine or rewrite the valid lexical index",
         );
-        const upgraded = await loadOrRebuildLongTermMemoryIndexes(vaultRoot, {
+        resumeLtmIndexRebuild(vaultRoot);
+        const retryAdapter = {
           spaceId: "test-space",
           label: "retry test embeddings",
           async embed(texts: string[]) {
             return texts.map(() => [1, 0]);
           },
-        });
+        };
+        mock.timers.enable({ apis: ["setTimeout"] });
+        try {
+          await loadOrRebuildLongTermMemoryIndexes(vaultRoot, retryAdapter, []);
+          mock.timers.tick(LTM_REBUILD_QUIET_MS);
+        } finally {
+          mock.timers.reset();
+        }
+        let upgraded = parseLtmRecallIndex(JSON.parse(lexicalIndexBytes));
+        for (let turn = 0; turn < 1_000 && !upgraded.embeddings.embeddedChunkCount; turn += 1) {
+          await new Promise((resolve) => setImmediate(resolve));
+          upgraded = await loadOrRebuildLongTermMemoryIndexes(vaultRoot, retryAdapter, []);
+        }
         assert.ok(upgraded.embeddings.embeddedChunkCount > 0, "a later semantic upgrade must still be attempted");
 
         // A cancelled recall that is handed an already-current index must reject before
@@ -2636,21 +3092,29 @@ async function main() {
           "a refresh that cannot embed the new space must reject so the Engine reports failure",
         );
 
-        // A failed in-flight upgrade must not suppress the retry a save just asked for: the save
-        // clears the guard under the vault lock, so refresh cannot skip on a restored guard.
+        // A save's refresh while an upgrade to the same space is still embedding, and about to fail: the refresh
+        // aborts the upgrade and embeds with the corrected source.
         let releaseRaceEmbed!: () => void;
         let raceEmbedEntered!: () => void;
+        let raceSignal: AbortSignal | undefined;
         const raceEmbedStarted = new Promise<void>((resolve) => (raceEmbedEntered = resolve));
         const raceEmbedHeld = new Promise<void>((resolve) => (releaseRaceEmbed = resolve));
-        const staleUpgrade = loadOrRebuildLongTermMemoryIndexes(vaultRoot, {
-          spaceId: "refresh-race-space",
-          label: "race failing",
-          async embed() {
-            raceEmbedEntered();
-            await raceEmbedHeld;
-            throw new Error("provider unavailable");
-          },
-        });
+        mock.timers.enable({ apis: ["setTimeout"] });
+        try {
+          await loadOrRebuildLongTermMemoryIndexes(vaultRoot, {
+            spaceId: "refresh-race-space",
+            label: "race failing",
+            async embed(_texts: string[], signal?: AbortSignal) {
+              raceSignal = signal;
+              raceEmbedEntered();
+              await raceEmbedHeld;
+              throw new Error("provider unavailable");
+            },
+          });
+          mock.timers.tick(LTM_REBUILD_QUIET_MS);
+        } finally {
+          mock.timers.reset();
+        }
         await raceEmbedStarted;
         let raceEmbeds = 0;
         resolvedAdapter = {
@@ -2661,16 +3125,14 @@ async function main() {
             return texts.map(() => [8]);
           },
         };
-        const retryRefresh = liveRuntime.refresh({ signal: new AbortController().signal });
-        await new Promise((resolve) => setImmediate(resolve)); // let refresh queue on the lock first
-        releaseRaceEmbed();
-        await staleUpgrade;
         assert.deepEqual(
-          await retryRefresh,
+          await liveRuntime.refresh({ signal: new AbortController().signal }),
           { status: "refreshed" },
-          "a refresh must retry after an in-flight upgrade fails, not skip on the guard it restored",
+          "a refresh during an in-flight upgrade must embed with the corrected source",
         );
         assert.ok(raceEmbeds > 0, "the corrected embedding source must actually run");
+        assert.equal(raceSignal?.aborted, true, "the refresh must abort the in-flight upgrade");
+        releaseRaceEmbed();
       }
     },
     [
@@ -2678,6 +3140,7 @@ async function main() {
       () => releaseRestoredRuntime?.(),
       () => assert.equal(services.has("long-term-memory:runtime"), false, "cleanup must unregister runtime service"),
       () => assert.equal(services.has("long-term-memory:storage"), false, "cleanup must unregister storage service"),
+      () => assert.equal(services.has("long-term-memory:recall"), false, "cleanup must unregister recall service"),
       () => rm(dataDir, { recursive: true, force: true }),
     ],
   );

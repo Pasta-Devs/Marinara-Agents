@@ -100,6 +100,18 @@ async function main() {
   assert.deepEqual([parsedOld.situations, parsedOld.dramas], [[], []]);
   const withDrama = parseSlpStoryPack({ ...old, id: "pack-a", situations: [partner], dramas: [rivals] });
   assert.equal(withDrama.errors.length, 0);
+  // The runtime runs storylines: a drama that loops back passes v1 but is refused, with the reason.
+  const last = rivals.stages.length - 1;
+  const loop = {
+    ...rivals,
+    id: "loop",
+    stages: rivals.stages.map((stage, index) =>
+      index === last ? { ...stage, choice: undefined, next: rivals.stages[0]!.key } : stage,
+    ),
+  };
+  const looped = parseSlpStoryPack({ ...old, id: "pack-loop", dramas: [loop] });
+  assert.equal(looped.pack, null);
+  assert.match(looped.errors.join(" "), /drama:loop: .*leads back to itself/);
   assert.ok(slpBundledStoryPacks().length > 0);
 
   // Preview → apply → library: new first, then an update of the same pack; another pack's id conflicts.
@@ -143,6 +155,82 @@ async function main() {
   const exported = exportSlpStoryPack({ id: "mine", name: "Mine", arcs: [], events: [], drama: read });
   assert.deepEqual([exported.situations.length, exported.dramas.length], [1, 1]);
   assert.equal("packId" in exported.dramas[0]!, false);
+
+  // A v2 pack imports its storylines into the drama library, switched off until picked.
+  const v2 = parseSlpStoryPack({
+    format: "marinara-slurp-story-pack",
+    schemaVersion: 2,
+    id: "pack-v2",
+    version: "1",
+    name: "V2",
+    description: "",
+    tracks: [],
+    storylines: [
+      {
+        id: "baby",
+        name: "Baby",
+        cast: [{ key: "her" }],
+        stages: [{ key: "early", label: "Early", days: [1, 2], next: "born" }],
+        endings: [{ key: "born", label: "Born" }],
+      },
+    ],
+  });
+  assert.equal(v2.errors.length, 0, v2.errors.join(" "));
+  const v2Preview = previewSlpStoryPack(v2.pack!, { arcs: [], events: [], drama: SLP_EMPTY_DRAMA_LIBRARY });
+  assert.deepEqual(
+    v2Preview.entries.map((entry) => `${entry.kind}:${entry.status}`),
+    ["storyline:new"],
+  );
+  const v2Library = applySlpDramaEntries(SLP_EMPTY_DRAMA_LIBRARY, "pack-v2", [
+    { kind: "storyline", value: v2.pack!.storylines![0]! },
+  ]);
+  assert.deepEqual(
+    readSlpDramaLibrary(JSON.parse(JSON.stringify(v2Library))).storylines.map((entry) => [entry.id, entry.packId]),
+    [["baby", "pack-v2"]],
+  );
+  // The routes parse the stored shell again: it reads as the v2 file, with the pack's own checks.
+  assert.equal(parseSlpStoryPack(v2.pack).errors.length, 0);
+  const badTrack = parseSlpStoryPack({
+    ...v2.pack!,
+    storylines: [{ ...v2.pack!.storylines![0]!, track: "nowhere" }],
+  });
+  assert.equal(badTrack.pack, null, "an unknown track is refused on the second parse too");
+  assert.equal(parseSlpStoryPack({ ...v2.pack!, dramas: [rivals] }).pack, null, "storylines hold no other entries");
+  // A v2 storyline may not take a v1 drama's id, and an imported one keeps no `source`.
+  const clash = previewSlpStoryPack(
+    { ...v2.pack!, storylines: [{ ...v2.pack!.storylines![0]!, id: rivals.id }] },
+    {
+      arcs: [],
+      events: [],
+      drama: applySlpDramaEntries(SLP_EMPTY_DRAMA_LIBRARY, "x", [{ kind: "drama", value: rivals }]),
+    },
+  );
+  assert.deepEqual(
+    clash.entries.map((entry) => entry.status),
+    ["conflict"],
+  );
+  const sourced = applySlpDramaEntries(SLP_EMPTY_DRAMA_LIBRARY, "pack-v2", [
+    { kind: "storyline", value: { ...v2.pack!.storylines![0]!, source: { kind: "drama", id: rivals.id } } },
+  ]);
+  assert.equal(JSON.parse(JSON.stringify(sourced)).storylines[0].source, undefined);
+  // A storyline that stands in a situation is on only with that situation on.
+  const within = {
+    ...v2.pack!.storylines![0]!,
+    id: "within",
+    start: { ...v2.pack!.storylines![0]!.start, within: "situation:calm" },
+  };
+  const calm = { ...v2.pack!.storylines![0]!, id: "calm", stages: [{ key: "on", label: "On", next: [] }], endings: [] };
+  const v2Catalog = { situations: [], dramas: [], storylines: [within, calm] } as unknown as Parameters<
+    typeof slpEnabledDrama
+  >[0];
+  assert.deepEqual(
+    slpEnabledDrama(v2Catalog, ["within"]).storylines.map((entry) => entry.id),
+    [],
+  );
+  assert.deepEqual(
+    slpEnabledDrama(v2Catalog, ["within", "calm"]).storylines.map((entry) => entry.id),
+    ["within", "calm"],
+  );
 
   // Only switched-on entries run, and a drama only with its situation on.
   const catalog = slpDramaCatalog(read);

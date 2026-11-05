@@ -1,5 +1,5 @@
 /**
- * Bonds: friends, roommates, coworkers and exes between Creators (Drama, `docs/DRAMA.md`).
+ * Bonds: friends, roommates, coworkers, exes and family between Creators (Drama, `docs/DRAMA.md`).
  *
  * Pure and deterministic, like couples and collabs beside it. Nothing here calls a model: who is
  * whose friend, how close, and how warm it is right now are decided by code on the world clock.
@@ -11,6 +11,8 @@
  *   while they still have something in common, and drifts back down when they do not.
  * - **Roommates and coworkers are facts of life.** Only a card or the player makes them; the world
  *   never invents a flatmate.
+ * - **Family is never an automatic couple (R3).** Only a card or the player makes it; couple fit reads
+ *   every active family bond as kin (`kin` in `loadSlurpTieCreators`).
  * - **Exes come from breakups.** A couple that broke up leaves an ex bond; getting back together ends it.
  * - **Cards first.** A person the card names (canon anchors) who is another Creator on Slurp becomes
  *   that bond. Only a Creator Slurp writes for seeds from its card: a persona's text is the player's.
@@ -23,7 +25,7 @@ import { DAY_MS, clampText, hash } from "./slp-project.js";
 import { slurpPairKey, slurpSharedNiche, type SlurpTieCreator } from "./slp-creator-ties.js";
 import { slurpCoupleOf, type SlurpCouple } from "./slp-creator-couples.js";
 
-export const SLURP_BOND_KINDS = ["friend", "roommate", "coworker", "ex"] as const;
+export const SLURP_BOND_KINDS = ["friend", "roommate", "coworker", "ex", "family"] as const;
 export type SlurpBondKind = (typeof SLURP_BOND_KINDS)[number];
 export const SLURP_BOND_TEMPERATURES = ["warm", "tense", "cold"] as const;
 export type SlurpBondTemperature = (typeof SLURP_BOND_TEMPERATURES)[number];
@@ -95,11 +97,16 @@ const EX = /\b(ex|ex-\w+|former (partner|girlfriend|boyfriend|wife|husband|lover
 const BEST = /\b(best ?friends?|bff|bestie|beste freundin|bester freund)\b/iu;
 const ROOMMATE = /\b(room ?mates?|flat ?mates?|house ?mates?|lives with|mitbewohner(in)?)\b/iu;
 const COWORKER = /\b(co-?workers?|colleagues?|works? with|boss|employee|kolleg(e|in))\b/iu;
+// Before EX and FRIEND: "ex-wife's daughter" is still a daughter. Not family: "family friend",
+// "mom friend", "twin flame", or a possessive ("my sister's ex" is an ex, "her brother's best friend" a friend).
+const FAMILY =
+  /\b(mother|mom|mum|father|dad|daughter|son|sister|brother|sibling|twin|aunt|uncle|niece|nephew|cousin|grand(mother|father|ma|pa|daughter|son)|step-?\w+|(?<!co-)parent|child|mutter|vater|tochter|sohn|schwester|bruder)\b(?!['’]s\b| ?friend| ?flame)/iu;
 const FRIEND = /\b(friends?|buddy|pal|kumpel|childhood friend)\b/iu;
 
 /** What a card relation line means as a bond, or null (a partner is a couple, not a bond). */
 export function slurpBondFromRelation(relation: string): { kind: SlurpBondKind; level: number; detail: string } | null {
   const detail = clampText(relation, 60);
+  if (FAMILY.test(relation)) return { kind: "family", level: 1, detail };
   if (EX.test(relation)) return { kind: "ex", level: 1, detail };
   if (BEST.test(relation)) return { kind: "friend", level: 3, detail };
   if (ROOMMATE.test(relation)) return { kind: "roommate", level: 1, detail };
@@ -109,7 +116,11 @@ export function slurpBondFromRelation(relation: string): { kind: SlurpBondKind; 
 }
 
 /** The Creator a card's person means: the full name, else a first name only one Creator has. */
-function creatorNamed(name: string, creators: readonly SlurpTieCreator[], selfId: string): SlurpTieCreator | null {
+export function slurpCreatorNamed(
+  name: string,
+  creators: readonly SlurpTieCreator[],
+  selfId: string,
+): SlurpTieCreator | null {
   const wanted = name.trim().toLocaleLowerCase();
   if (!wanted) return null;
   const others = creators.filter((creator) => creator.id !== selfId);
@@ -311,7 +322,7 @@ export function slurpAdvanceBonds(bonds: readonly SlurpBond[], input: SlurpBonds
     if (!creator.automatic) continue;
     for (const person of creator.cardPeople ?? []) {
       const meant = slurpBondFromRelation(person.relation);
-      const other = meant && creatorNamed(person.name, input.creators, creator.id);
+      const other = meant && slurpCreatorNamed(person.name, input.creators, creator.id);
       // Seeded once: a card bond that ended (drifted, or the player ended it) does not come back.
       if (!meant || !other || everOf(next, creator.id, other.id, meant.kind)) continue;
       // A card ex while they are a couple again is old news; the couple wins. A forgotten ex stays
@@ -431,8 +442,9 @@ export function slurpSetBond(
   if (input.aId === input.bId) return "same";
   const stamp = options.at.toISOString();
   const level = input.kind === "friend" ? Math.min(SLURP_BOND_MAX_LEVEL, Math.max(0, Math.round(input.level ?? 1))) : 1;
+  // An ex while they are together is a couple's business; family is never a couple (R3).
   if (
-    input.kind === "ex" &&
+    (input.kind === "ex" || input.kind === "family") &&
     input.couples?.some(
       (couple) =>
         couple.stage !== "split" && slurpPairKey(couple.aId, couple.bId) === slurpPairKey(input.aId, input.bId),

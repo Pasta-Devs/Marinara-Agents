@@ -5,18 +5,45 @@ import {
   useRef,
   useState,
   type ButtonHTMLAttributes,
+  type FocusEvent,
   type HTMLAttributes,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { Info, Loader2, type LucideIcon } from "lucide-react";
+import { Check, Info, Loader2, TriangleAlert, type LucideIcon } from "lucide-react";
 import { useLtmTranslation } from "./localization";
 
 let activePopover: { id: string; close: () => void } | null = null;
 
 export const inputClass = "mari-editor-field min-h-11 w-full px-3 text-sm";
 export const compactInputClass = "mari-chrome-field min-h-9 w-full !rounded-md px-3 py-2 text-xs";
-export const compactInputStyle = { color: "var(--foreground)" } as const;
+// `relative` paints the field above a compact info button's enlarged hit area.
+export const compactInputStyle = { color: "var(--foreground)", position: "relative" } as const;
+
+/**
+ * Scrolls a keyboard-focused control out from under a pinned batch bar. The browser scrolls focus
+ * only to the edge of the scroller, which leaves Shift+Tab under a top bar and Tab under a bottom one.
+ */
+export function revealFocusUnderStickyBar(event: FocusEvent<HTMLElement>, bar: HTMLElement | null) {
+  const target = event.target;
+  if (!bar || bar.contains(target)) return;
+  requestAnimationFrame(() => {
+    if (getComputedStyle(bar).position !== "sticky" || !target.matches(":focus-visible")) return;
+    const barRect = bar.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    if (targetRect.bottom > barRect.top && targetRect.top < barRect.bottom) target.scrollIntoView({ block: "center" });
+  });
+}
+
+/**
+ * Props for a control whose lock is temporary (work running, loading, edits unsaved elsewhere): it stays
+ * focusable and `Button`/`IconButton` dim on `aria-disabled`. Enter and Space still fire `onClick`, and a
+ * submit button still submits, so the caller's handler needs its own early return. Native `disabled` is for
+ * permanent unavailability or input validity.
+ */
+export function lockedActionProps(locked: boolean, reasonId?: string) {
+  return locked ? ({ "aria-disabled": true, ...(reasonId ? { "aria-describedby": reasonId } : {}) } as const) : {};
+}
 
 export const Button = forwardRef<
   HTMLButtonElement,
@@ -32,7 +59,7 @@ export const Button = forwardRef<
       ref={ref}
       type="button"
       data-ltm-control="button"
-      className={`mari-editor-action min-h-11 px-3 ${tone} ${className}`}
+      className={`mari-editor-action min-h-11 px-3 ${props["aria-disabled"] ? "opacity-50" : ""} ${tone} ${className}`}
       style={className.includes("mari-editor-action--compact") ? style : { minHeight: "2.75rem", ...style }}
       {...props}
     >
@@ -62,7 +89,7 @@ export function IconButton({
       aria-label={label}
       title={label}
       data-ltm-control="icon-button"
-      className={`mari-editor-action h-11 min-h-11 w-11 min-w-11 shrink-0 p-0 ${destructive ? "mari-editor-action--danger" : ""} ${className}`}
+      className={`mari-editor-action h-11 min-h-11 w-11 min-w-11 shrink-0 p-0 ${props["aria-disabled"] ? "opacity-50" : ""} ${destructive ? "mari-editor-action--danger" : ""} ${className}`}
       {...props}
     >
       <Icon aria-hidden="true" size={iconSize} className={iconClassName} />
@@ -181,7 +208,7 @@ export function InfoPopover({
         className={`${compact ? "h-7 w-7" : "h-11 w-11"} inline-flex shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]`}
         style={
           compact
-            ? { height: "1.75rem", width: "1.75rem", flexShrink: 0 }
+            ? { position: "relative", height: "1.75rem", width: "1.75rem", flexShrink: 0 }
             : { height: "2.75rem", width: "2.75rem", flexShrink: 0 }
         }
         onMouseEnter={show}
@@ -199,6 +226,8 @@ export function InfoPopover({
         }}
       >
         <Info aria-hidden="true" size="0.875rem" />
+        {/* The compact glyph keeps its 1.75rem box; this layer widens the touch target to 2.75rem. */}
+        {compact ? <span aria-hidden="true" style={{ position: "absolute", inset: "-0.5rem" }} /> : null}
       </button>
       {open
         ? createPortal(
@@ -236,22 +265,32 @@ export function NumberField({
   step = 1,
   onChange,
   disabled = false,
+  busy = false,
   help,
   compact = false,
+  placeholder,
+  integer = false,
 }: {
   label: string;
-  value: number;
+  /** `null` is a value not yet known: the field stays empty (showing `placeholder`) instead of an invented number. */
+  value: number | null;
   min: number;
   max: number;
   step?: number;
   onChange: (value: number) => void;
   disabled?: boolean;
+  /** A save is in flight: stay focusable (aria-disabled, read-only) instead of dropping focus like `disabled`. */
+  busy?: boolean;
   help?: ReactNode;
   compact?: boolean;
+  placeholder?: string;
+  /** Whole numbers only: a typed decimal is rounded after the clamp, before it is shown or reported. */
+  integer?: boolean;
 }) {
   const id = useId();
-  const [text, setText] = useState(String(value));
-  const committedText = useRef(String(value));
+  const valueText = value === null ? "" : String(value);
+  const [text, setText] = useState(valueText);
+  const committedText = useRef(valueText);
   const commit = () => {
     if (!text.trim()) {
       setText(committedText.current);
@@ -259,19 +298,19 @@ export function NumberField({
     }
     const next = Number(text);
     if (!Number.isFinite(next)) {
-      setText(String(value));
+      setText(valueText);
       return;
     }
-    const clamped = Math.max(min, Math.min(max, next));
+    const clamped = Math.max(min, Math.min(max, integer ? Math.round(next) : next));
     setText(String(clamped));
     if (String(clamped) === committedText.current) return;
     committedText.current = String(clamped);
     onChange(clamped);
   };
   useEffect(() => {
-    setText(String(value));
-    committedText.current = String(value);
-  }, [value]);
+    setText(valueText);
+    committedText.current = valueText;
+  }, [valueText]);
   return (
     <div className={`space-y-1 font-medium ${compact ? "text-[0.625rem]" : "text-xs"}`}>
       <span className="flex items-center gap-1 text-[var(--foreground)]">
@@ -282,14 +321,17 @@ export function NumberField({
         id={id}
         aria-labelledby={`${id}-label`}
         data-ltm-control="number"
-        className={compact ? compactInputClass : inputClass}
+        className={`${compact ? compactInputClass : inputClass}${busy ? " opacity-50" : ""}`}
         style={compact ? compactInputStyle : undefined}
         type="number"
         value={text}
         min={min}
         max={max}
         step={step}
+        placeholder={placeholder}
         disabled={disabled}
+        aria-disabled={busy || undefined}
+        readOnly={busy}
         onChange={(event) => setText(event.target.value)}
         onBlur={commit}
         onKeyDown={(event) => {
@@ -298,7 +340,7 @@ export function NumberField({
             commit();
             event.currentTarget.blur();
           } else if (event.key === "Escape") {
-            setText(String(value));
+            setText(valueText);
           }
         }}
       />
@@ -312,6 +354,7 @@ export function StatusSurface({
   busy = false,
   compact = false,
   className = "",
+  style,
   ...props
 }: {
   children: ReactNode;
@@ -322,20 +365,69 @@ export function StatusSurface({
 } & HTMLAttributes<HTMLDivElement>) {
   const toneClass = {
     neutral: "text-[var(--marinara-editor-muted)]",
-    success: "text-[var(--marinara-editor-accent)]",
-    warning: "",
-    danger: "border-[var(--destructive)]/35 text-[var(--destructive)]",
+    success: "",
+    warning: "text-[var(--marinara-editor-text)]",
+    danger: "text-[var(--destructive)]",
   }[tone];
+  // No Engine defines a warning color, so a warning says so with an icon and the strong editor border. Tone
+  // borders are inline because the Engine's unlayered .mari-editor-panel border outranks utility classes.
+  const warning = tone === "warning";
+  const borderColor = warning
+    ? "var(--marinara-editor-border-strong)"
+    : tone === "danger"
+      ? "color-mix(in oklab, var(--destructive) 35%, transparent)"
+      : undefined;
   return (
     <div
       role={tone === "danger" ? "alert" : "status"}
       aria-live="polite"
       data-ltm-status={tone}
-      className={`${compact ? "rounded-md border border-[var(--border)] bg-[var(--background)]/75 px-2 py-1.5 text-[0.625rem]" : "mari-editor-panel mari-editor-panel--soft min-h-11 px-3 text-xs"} flex items-center gap-2 ${toneClass} ${className}`}
+      className={`${compact ? `rounded-md border ${borderColor ? "" : "border-[var(--border)]"} bg-[var(--background)]/75 px-2 py-1.5 text-[0.625rem]` : "mari-editor-panel mari-editor-panel--soft min-h-11 px-3 py-2 text-xs"} flex items-center gap-2 ${toneClass} ${className}`}
+      style={{
+        ...(borderColor ? { borderColor } : null),
+        // Accent text on the accent-tinted surface is below 4.5:1 in the light theme, so success text uses a
+        // package-local token (accent mixed toward the editor text) set in LongTermMemoryDetail's style block.
+        ...(tone === "success" ? { color: "var(--ltm-success, var(--marinara-editor-text))" } : null),
+        ...style,
+      }}
       {...props}
     >
       {busy ? <Loader2 aria-hidden="true" size="0.875rem" className="animate-spin motion-reduce:animate-none" /> : null}
+      {warning ? (
+        <TriangleAlert
+          aria-hidden="true"
+          size={compact ? "0.75rem" : "1rem"}
+          className="shrink-0"
+          data-ltm-status-icon
+        />
+      ) : null}
+      {tone === "success" ? (
+        <Check aria-hidden="true" size={compact ? "0.75rem" : "1rem"} className="shrink-0" data-ltm-status-icon />
+      ) : null}
       {children}
     </div>
+  );
+}
+
+/**
+ * A result line read out when its text changes. The hidden copy stays mounted, because a live region that
+ * mounts together with its text is often not announced; the visible surface is not live, so one save speaks once.
+ */
+export function LiveResult({
+  text,
+  tone = "success",
+  ...props
+}: { text: string; tone?: "neutral" | "success" | "warning" | "danger" } & HTMLAttributes<HTMLDivElement>) {
+  return (
+    <>
+      <p role="status" className="sr-only">
+        {text}
+      </p>
+      {text ? (
+        <StatusSurface tone={tone} {...props} role={undefined} aria-live={undefined}>
+          {text}
+        </StatusSurface>
+      ) : null}
+    </>
   );
 }

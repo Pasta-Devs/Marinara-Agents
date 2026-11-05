@@ -1,5 +1,8 @@
 # Inventory Tracker
 
+## 1.2.2 — 2026-11-03 [highlight]
+- Fixed the tracker often missing purchases, drops and pickups. The agent is now shown that every change belongs under currencies, equipped or inventory, so it stops sending changes in a form the tracker ignored.
+
 ## 1.2.1 — 2026-10-01
 - The description now says what it does in plain words.
 

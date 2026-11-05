@@ -1,4 +1,4 @@
-import { ArrowRight, Search } from "lucide-react";
+import { ArrowRight, ChevronLeft, Search } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -15,7 +15,12 @@ import {
   type SlpBackstageSection,
   type SlpBackstageTarget,
 } from "../../base/navigation/slp-backstage-target";
-import { SLP_BACKSTAGE_SETTING_PLACEMENT } from "./slp-backstage-placement";
+import {
+  SLP_BACKSTAGE_PAGE_PLACEMENT,
+  SLP_BACKSTAGE_SETTING_PLACEMENT,
+  slpPlacementSwitchedOff,
+} from "./slp-backstage-placement";
+import { useSlurpSettings } from "../settings/slp-settings-contract";
 import { SLP_BACKSTAGE_LABEL_KEYS } from "./slp-backstage-label-keys";
 
 export const humanize = (value: string) =>
@@ -37,6 +42,20 @@ export function SlurpBackstageSubnav({
 }) {
   const { t } = useTranslation();
   const targets = SLP_BACKSTAGE_TARGETS_BY_SECTION[section];
+  // Basic's other pages are its "More for …" depth: they open from the Basic page, and only lead back.
+  if (section === "basic") {
+    if (target === "basic") return null;
+    return (
+      <button
+        type="button"
+        onClick={() => onSelect("basic")}
+        className="inline-flex min-h-11 w-fit items-center gap-1 rounded-full bg-[var(--slurp-surface-raised)] px-4 text-sm font-semibold text-[var(--slurp-muted)] ring-1 ring-inset ring-[var(--slurp-outline)] hover:text-[var(--slurp-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+      >
+        <ChevronLeft size={16} className="rtl:rotate-180" aria-hidden="true" />
+        {t("ui.slurp.settings.basic.back", { defaultValue: "Back to Basic" })}
+      </button>
+    );
+  }
   if (targets.length < 2) return null;
   return (
     <nav
@@ -71,7 +90,7 @@ export function SlurpBackstageSearch({
   onSelect,
   className,
 }: {
-  onSelect: (section: SlpBackstageSection, target: SlpBackstageTarget, setting: keyof SlurpSettings) => void;
+  onSelect: (section: SlpBackstageSection, target: SlpBackstageTarget, setting?: keyof SlurpSettings) => void;
   className?: string;
 }) {
   const { t, i18n } = useTranslation();
@@ -80,11 +99,17 @@ export function SlurpBackstageSearch({
   const inputRef = useRef<HTMLInputElement>(null);
   // The phone settings home and the page header can both hold a search box.
   const inputId = useId();
+  const settings = useSlurpSettings().data;
   /** The label the setting shows on its page (R1-132); the key made readable only as a last resort. */
-  const labelFor = (key: keyof SlurpSettings) => {
+  const settingLabel = (key: keyof SlurpSettings) => {
     const labelKey = SLP_BACKSTAGE_LABEL_KEYS[key] ?? `ui.slurp.settings.${key}`;
     return i18n.exists(labelKey) ? t(labelKey) : humanize(key);
   };
+  /** A page entry is named like its page; a setting like the label on its page. */
+  const labelFor = (key: string) =>
+    key in SLP_BACKSTAGE_PAGE_PLACEMENT
+      ? t(`ui.slurp.settings.backstage.targets.${key}`, { defaultValue: humanize(key) })
+      : settingLabel(key as keyof SlurpSettings);
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
@@ -100,13 +125,14 @@ export function SlurpBackstageSearch({
     const needle = query.trim().toLocaleLowerCase();
     if (!needle) return [];
     return (
-      Object.entries(SLP_BACKSTAGE_SETTING_PLACEMENT) as Array<
-        [keyof SlurpSettings, (typeof SLP_BACKSTAGE_SETTING_PLACEMENT)[keyof SlurpSettings]]
+      Object.entries({ ...SLP_BACKSTAGE_SETTING_PLACEMENT, ...SLP_BACKSTAGE_PAGE_PLACEMENT }) as Array<
+        [string, (typeof SLP_BACKSTAGE_SETTING_PLACEMENT)[keyof SlurpSettings]]
       >
     )
       .filter(
         ([key, placement]) =>
           !placement.internal &&
+          !slpPlacementSwitchedOff(key, placement, settings) &&
           [
             key,
             humanize(key),
@@ -123,12 +149,16 @@ export function SlurpBackstageSearch({
       .slice(0, 8);
     // labelFor only reads i18n, which re-renders this component on a language change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query]);
+  }, [query, settings]);
   useEffect(() => setActive(0), [query]);
   const choose = (index: number) => {
     const result = results[index];
     if (!result) return;
-    onSelect(result[1].section, result[1].target, result[0]);
+    onSelect(
+      result[1].section,
+      result[1].target,
+      result[0] in SLP_BACKSTAGE_PAGE_PLACEMENT ? undefined : (result[0] as keyof SlurpSettings),
+    );
     setQuery("");
   };
   const open = query.trim().length > 0;

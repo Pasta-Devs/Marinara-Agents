@@ -41,18 +41,15 @@ export function createSlurpReplyMethods(db: DB) {
       { status: "claimed"; claimId: string } | { status: "completed"; messageId: string } | { status: "busy" }
     > {
       const staleBefore = new Date(Date.now() - 10 * 60_000).toISOString();
-      const stale = await db
-        .select()
-        .from(slurpMessageClaims)
-        .where(
-          and(eq(slurpMessageClaims.threadId, threadId), eq(slurpMessageClaims.creatorAccountId, creatorAccountId)),
-        );
+      // Every claim on the thread, not only this Creator's: a claim is unique per thread, so a stale
+      // one left by an earlier Creator (or a scene) would answer "busy" forever.
+      const stale = await db.select().from(slurpMessageClaims).where(eq(slurpMessageClaims.threadId, threadId));
       let completedClaimId: string | null = null;
       for (const row of stale) {
         if (row.replyMessageId) {
           const completed = await db.select().from(slurpMessages).where(eq(slurpMessages.id, row.replyMessageId));
           if (completed.length > 0) {
-            if (row.triggerMessageId === triggerMessageId) {
+            if (row.triggerMessageId === triggerMessageId && row.creatorAccountId === creatorAccountId) {
               return { status: "completed", messageId: String(row.replyMessageId) };
             }
             completedClaimId = String(row.id);

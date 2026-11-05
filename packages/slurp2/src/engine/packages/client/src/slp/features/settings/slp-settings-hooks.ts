@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client.js";
 import { slpKeys } from "../../base/state/slp-query-keys.js";
 import type { SlurpReusablePromptInstruction } from "../../base/state/slp-state-types.js";
+import { currentMemoryStatus, type SlurpMemoryStatus } from "./slp-ltm-sharing-offer.js";
 import type {
   SlurpPromptBlocksResponse,
   SlurpPromptPreviewResponse,
@@ -25,6 +26,21 @@ export function useSlurpCarryoverReach(enabled: boolean) {
     queryFn: () => api.get<{ on: number; off: number }>("/slurp2/settings/carryover-reach"),
     enabled,
     staleTime: 30_000,
+  });
+}
+/** How the last read of Long-Term Memory went, while Creators are allowed to read it. */
+export function useSlurpMemoryStatus(enabled: boolean) {
+  return useQuery({
+    queryKey: [...slpKeys.settings(), "memory-status"] as const,
+    queryFn: () =>
+      currentMemoryStatus({
+        read: () => api.get<{ status: SlurpMemoryStatus }>("/slurp2/settings/memory-status"),
+        readLtm: () => api.get<{ longTermMemoryShareWithPackages?: boolean }>("/long-term-memory/settings"),
+      }),
+    enabled,
+    staleTime: 30_000,
+    // Long-Term Memory's own settings can turn sharing on without telling Slurp, so ask again on every open.
+    refetchOnMount: "always",
   });
 }
 export function useSlurpSettingsDefaults() {
@@ -87,8 +103,11 @@ export function useUpdateSlurpSettings() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (patch: SlurpSettingsUpdate) => api.patch<SlurpSettings>("/slurp2/settings", patch),
-    onSuccess: (settings) => {
+    onSuccess: (settings, patch) => {
       queryClient.setQueryData(slpKeys.settings(), settings);
+      // An extension or pack switch changes what the feed, trends and Stir may show: drop their cached reads.
+      if (Object.keys(patch).some((key) => key.startsWith("ext") || key === "trendsEnabled" || key === "contentPacks"))
+        void queryClient.invalidateQueries({ queryKey: slpKeys.noodlerRoot() });
       return queryClient.invalidateQueries({ queryKey: slpKeys.noodlerFanStatus() });
     },
   });

@@ -22,7 +22,9 @@ test("persona Stir previews a draft and opens Edit without losing it", async ({ 
   const personaResponse = await page.request.post("/api/characters/personas", { data: { name: "Guided persona" } });
   expect(personaResponse.ok(), await personaResponse.text()).toBeTruthy();
   const persona = await personaResponse.json();
-  const settings = await page.request.patch("/api/slurp2/settings", { data: { onboarding: "completed" } });
+  const settings = await page.request.patch("/api/slurp2/settings", {
+    data: { onboarding: "completed", extStorylines: true },
+  });
   expect(settings.ok(), await settings.text()).toBeTruthy();
   const response = await page.request.post(`/api/slurp2/accounts/${persona.id}/noodler`, {
     data: {

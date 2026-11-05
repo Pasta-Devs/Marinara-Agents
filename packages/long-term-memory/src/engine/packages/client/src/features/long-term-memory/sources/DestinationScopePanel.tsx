@@ -108,7 +108,6 @@ export function DestinationScopePanel({
       role="group"
       aria-labelledby={labelId}
       className="mari-editor-panel flex min-h-0 flex-col gap-3 p-3"
-      style={{ maxHeight: "calc(100vh - 12rem)" }}
     >
       <div className="flex shrink-0 items-center gap-2 text-xs font-semibold">
         <span id={labelId}>{localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}</span>
@@ -117,6 +116,15 @@ export function DestinationScopePanel({
           content={localizeUi("ui.longTermMemory.sourcesworkspace.bulkDestinationHelp")}
         />
       </div>
+      {disabled ? (
+        <p
+          id={`${labelId}-lock`}
+          className="shrink-0 text-xs text-[var(--muted-foreground)]"
+          data-ltm-import-lock="destination"
+        >
+          {localizeUi("ui.longTermMemory.sourcesworkspace.lockedWhileImportRuns")}
+        </p>
+      ) : null}
       <fieldset
         className="shrink-0 space-y-1.5 border-b border-[var(--border)] pb-2.5"
         data-ltm-availability-modes-fieldset
@@ -136,11 +144,14 @@ export function DestinationScopePanel({
               >
                 <input
                   type="checkbox"
-                  className={sourceCheckboxClass}
+                  className={`${sourceCheckboxClass}${availabilityDisabled || disabled ? " opacity-50" : ""}`}
                   data-ltm-availability-mode-checkbox={chatMode}
                   checked={checked}
-                  disabled={disabled || availabilityDisabled || isLastSelected}
+                  disabled={isLastSelected}
+                  aria-disabled={availabilityDisabled || disabled || undefined}
+                  aria-describedby={disabled ? `${labelId}-lock` : undefined}
                   onChange={() => {
+                    if (availabilityDisabled || disabled) return;
                     const next = checked
                       ? availabilityModes.filter((m) => m !== chatMode)
                       : [...availabilityModes, chatMode];
@@ -177,12 +188,14 @@ export function DestinationScopePanel({
                 </span>
                 <button
                   type="button"
-                  disabled={disabled}
+                  aria-disabled={disabled || undefined}
                   aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.removeLocationValue1", {
                     value1: targetDisplayLabel(target, true),
                   })}
-                  className="grid h-11 w-11 shrink-0 place-items-center rounded hover:bg-[var(--accent)]"
-                  onClick={() => onChange(selectedIds.filter((id) => id !== target.id))}
+                  className={`grid h-11 w-11 shrink-0 place-items-center rounded hover:bg-[var(--accent)]${disabled ? " opacity-50" : ""}`}
+                  onClick={() => {
+                    if (!disabled) onChange(selectedIds.filter((id) => id !== target.id));
+                  }}
                 >
                   <X aria-hidden="true" size="0.75rem" />
                 </button>
@@ -247,18 +260,18 @@ export function DestinationScopePanel({
           onToggle={toggleRail}
         />
       </details>
-      {!selectedTargets.length ? (
-        <span role="alert" className="block shrink-0 text-xs">
-          {localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport")}
-        </span>
-      ) : null}
+      {/* Always mounted, so emptying the selection is read as a change. Screen-reader only: the import bar shows
+          the same reason, and the summary above already reads "Choose a destination". */}
+      <span role="status" className="sr-only" data-ltm-destination-hint>
+        {selectedTargets.length ? null : localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport")}
+      </span>
       <p className="shrink-0 text-xs text-[var(--muted-foreground)]" data-ltm-import-mode-summary>
         {availabilityModes.length > 1
           ? `${localizeUi("ui.longTermMemory.memoryvault.availableIn")}: ${availabilityModes
               .map((m) => localizedLabel(m, localizeUi, labelKeys.mode))
               .join(", ")}`
           : mode === "all"
-            ? source === "chats"
+            ? source === "chats" || source === "messages"
               ? localizeUi("ui.longTermMemory.sourcesworkspace.automatic")
               : localizeUi("ui.longTermMemory.sourcesworkspace.importsDefaultToRoleplay")
             : sourceModeLabel(mode, localizeUi)}

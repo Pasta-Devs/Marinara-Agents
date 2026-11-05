@@ -1,13 +1,21 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
-import { createSlurpMessagesStorage } from "../../data/slp-storage.js";
+import { createSlurpMessagesStorage, createSlurpStorage } from "../../data/slp-storage.js";
+import { SLP_STORYLINES_OFF, slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 import { readSlurpDramaLibrary, readSlurpDramaState } from "../../data/world/slp-drama-storage.js";
-import { slpDramaCatalog } from "../../modules/world/events/slp-drama-library.js";
+import { slpDramaCatalog, slpStorylineStands } from "../../modules/world/events/slp-drama-library.js";
 import { answerSlurpDramaChoice } from "./slp-drama-service.js";
+import { SLURP_CONTENT_PACK_LIBRARY } from "../../modules/world/events/slp-content-pack-library.js";
+import { slurpContentPackOn } from "../../modules/world/events/slp-content-packs.js";
 import { runSlurpDramaLever } from "./slp-drama-levers.js";
 
 const RECENT = 12;
+/** A built-in pack's storyline: its pack switch turns it on, not the drama list. */
+const packOf = (id: string, toggles: Readonly<Record<string, boolean>>) => {
+  const pack = SLURP_CONTENT_PACK_LIBRARY.find((entry) => entry.storylines?.some((storyline) => storyline.id === id));
+  return pack ? { name: pack.name, on: slurpContentPackOn(pack, toggles) } : null;
+};
 
 /**
  * Drama (`docs/DRAMA.md`) for Stir and the thread view: what can run and what runs now, with its
@@ -53,6 +61,17 @@ export async function slpDramaRoutes(app: FastifyInstance, { noodle, resolveView
           dials: [],
           requires: entry.requires?.situation ?? null,
         })),
+        // v2 entries, listed by their shape.
+        ...catalog.storylines.map((entry) => ({
+          id: entry.id,
+          kind: slpStorylineStands(entry) ? ("situation" as const) : ("drama" as const),
+          name: entry.name,
+          description: entry.description,
+          builtin: false,
+          dials: entry.dials,
+          pack: packOf(entry.id, settings.contentPacks ?? {}),
+          requires: entry.start.within?.replace(/^situation:/, "") ?? null,
+        })),
       ],
       runs: newest(state.runs).map((run) => ({ ...run, cast: cast(run.cast) })),
       situations: newest(state.situations).map((run) => ({ ...run, cast: cast(run.cast) })),
@@ -78,6 +97,8 @@ export async function slpDramaRoutes(app: FastifyInstance, { noodle, resolveView
     if (choice.chosen !== null && choice.chosen !== undefined)
       return reply.code(409).send({ error: "You already answered." });
     if (parsed.data.option >= options.length) return reply.code(400).send({ error: "That is not one of the answers." });
+    if (!slpExtensionOn(await createSlurpStorage(app.db).getSettings(), "storylines"))
+      return reply.code(409).send({ error: SLP_STORYLINES_OFF });
     const answered = await answerSlurpDramaChoice(app.db, {
       runId: choice.runId,
       option: parsed.data.option,

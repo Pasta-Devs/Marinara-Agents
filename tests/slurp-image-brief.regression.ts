@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  slurpPictureOutfit,
   slurpImageBrief,
   slurpImageNegativePrompt,
   slurpImageNegativeWithCompany,
@@ -47,7 +48,7 @@ assert.match(slurpImageNegativePrompt("explicit"), /second person/u);
 assert.doesNotMatch(slurpImageNegativePrompt("explicit"), /nudity/u);
 
 // A callback keeps the shoot's place and clothes and never nests an earlier draft.
-const continuity = slurpShootContinuity({ scene, outfit: scene.outfit });
+const continuity = slurpShootContinuity({ scene });
 assert.ok(continuity?.includes(scene.setting) && continuity.includes(scene.outfit));
 const callback = slurpImageBrief({
   cameraPhoto: slurpCameraSourcePhoto("tripod"),
@@ -58,6 +59,44 @@ const callback = slurpImageBrief({
 });
 assert.ok(callback.includes(scene.setting) && !callback.includes("a different place"));
 assert.ok(!callback.includes("a different outfit"));
+const bareBrief = slurpImageBrief({
+  cameraPhoto: slurpCameraSourcePhoto("tripod"),
+  variation,
+  sexualLevel: "explicit",
+  stageFacts: { wardrobe: "hoodies and jeans" },
+  scene: { ...scene, outfit: "nothing" },
+});
+assert.doesNotMatch(
+  bareBrief,
+  /Wearing|hoodies/u,
+  "a body-showing level never dresses the picture from the usual wardrobe",
+);
+assert.equal(slurpShootContinuity({ scene: { ...scene, outfit: "nothing" }, bare: true })?.includes("Wearing"), false);
+assert.match(slurpShootContinuity({ scene: { ...scene, outfit: "nothing" } }) ?? "", /Wearing nothing/u);
+const clothedShoot = slurpShootContinuity({ scene: { ...scene, outfit: "hoodie and jeans" } });
+const bareCallback = slurpImageBrief({
+  cameraPhoto: slurpCameraSourcePhoto("tripod"),
+  variation,
+  sexualLevel: "explicit",
+  shoot: { place: "loft", company: "", brief: clothedShoot ?? "" },
+  scene,
+});
+assert.doesNotMatch(bareCallback, /hoodie/u, "a body-showing callback keeps the shoot's place, not its clothes");
+assert.equal(slurpPictureOutfit({ level: "nudity", scene: "Nothing but a towel" }), "Nothing but a towel");
+const wearingPlace = slurpShootContinuity({
+  scene: { ...scene, setting: "a loft, people wearing masks. Rain outside", outfit: "hoodie and jeans" },
+});
+const bareWearing = slurpImageBrief({
+  cameraPhoto: slurpCameraSourcePhoto("tripod"),
+  variation,
+  sexualLevel: "explicit",
+  shoot: { place: "loft", company: "", brief: wearingPlace ?? "" },
+  scene,
+});
+assert.match(bareWearing, /wearing masks/u, "only the Wearing clause is cut, not place text");
+assert.doesNotMatch(bareWearing, /hoodie/u);
+const periodShoot = slurpShootContinuity({ scene: { ...scene, outfit: "A red hoodie. Black jeans. Boots" } });
+assert.equal(periodShoot?.match(/Wearing [^.]*\./u)?.[0].includes("Boots"), true, "the clothes stay one sentence");
 const legacy = slurpImageBrief({
   cameraPhoto: slurpCameraSourcePhoto("tripod"),
   variation,
@@ -203,6 +242,9 @@ assert.doesNotMatch(slurpImageNegativePrompt("none", true) ?? "", /second person
 // The writer gets their looks with the choice; a reference picture only for somebody the final prompt names.
 assert.match(images, /Put one in the picture only when the post or the scene calls for them/u);
 assert.match(images, /slurpCompanionReferenceImages\([^)]*finalPrompt,/u);
+// A companion's picture goes along even when the Creator has no picture of their own (0.4.16, player report).
+assert.match(images, /companionRefs = input\.settings\.imageGenerationUseAvatarReferences && allowAvatarReferences;/u);
+assert.match(images, /if \(referenceImages\?\.length \|\| \(companionRefs && inPicture\.length\)\)/u);
 assert.match(
   slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/media/slp-image-companions.ts"),
   /promptText: prompt,/u,
@@ -233,8 +275,8 @@ assert.match(
 const generation = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-generation-service.ts",
 );
-assert.match(generation, /companionIds: pictureCast \? beat\?\.castIds : undefined,/u);
-assert.match(generation, /pictureCast && beat\?\.castIds\?\.length \? \{ slurpPictureCast: beat\.castIds \}/u);
+assert.match(generation, /companionIds: pictureCast && pictureIds\.length \? pictureIds : undefined,/u);
+assert.match(generation, /pictureCast && pictureIds\.length \? \{ slurpPictureCast: pictureIds \}/u);
 for (const path of ["feed/reserve/slp-reserve-operation.ts", "media/slp-reviewed-images-service.ts"]) {
   assert.match(
     slurp2Source(`packages/slurp2/src/engine/packages/server/src/slp/features/${path}`),

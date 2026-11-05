@@ -2,80 +2,20 @@ import assert from "node:assert/strict";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { createHash, randomUUID } from "node:crypto";
 import { runRegressionToCompletion, runWithSafeCleanup } from "./regression-helpers.ts";
 
 async function main() {
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
-  const { requestAllNotes, requestNotesByIds } =
-    await import("../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/api.ts");
-  const originalFetch = globalThis.fetch;
-  const originalWindow = globalThis.window;
-  const requestedOffsets: string[] = [];
-  const requestedHeaders: Headers[] = [];
-  try {
-    Object.defineProperty(globalThis, "window", {
-      configurable: true,
-      value: { localStorage: { getItem: () => "  ltm-secret  " } },
-    });
-    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-      const url = new URL(
-        typeof input === "string" ? input : input instanceof URL ? input : input.url,
-        "http://localhost",
-      );
-      requestedHeaders.push(new Headers(init?.headers));
-      requestedOffsets.push(url.searchParams.get("offset") ?? "");
-      const offset = Number(url.searchParams.get("offset"));
-      return new Response(JSON.stringify(offset === 0 ? Array.from({ length: 500 }, (_, id) => id) : [500]));
-    }) as typeof fetch;
-    assert.equal((await requestAllNotes<number>("/notes?includeGlobal=true")).length, 501);
-    assert.deepEqual(requestedOffsets, ["0", "500"]);
-    assert.equal(requestedHeaders[0].get("X-Admin-Secret"), "ltm-secret");
-  } finally {
-    globalThis.fetch = originalFetch;
-    if (originalWindow === undefined) delete (globalThis as { window?: Window }).window;
-    else globalThis.window = originalWindow;
-  }
-  try {
-    globalThis.fetch = (async () => new Response(JSON.stringify([]))) as typeof fetch;
-    await assert.rejects(requestNotesByIds<{ id: string }>(["source_missing"]), /context unavailable for 1 note/u);
-    assert.deepEqual(await requestNotesByIds<{ id: string }>(["target_missing"], undefined, true), []);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-  requestedOffsets.length = 0;
-  requestedHeaders.length = 0;
-  try {
-    Object.defineProperty(globalThis, "window", {
-      configurable: true,
-      value: { localStorage: { getItem: () => null } },
-    });
-    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-      const url = new URL(
-        typeof input === "string" ? input : input instanceof URL ? input : input.url,
-        "http://localhost",
-      );
-      requestedHeaders.push(new Headers(init?.headers));
-      requestedOffsets.push(url.searchParams.get("offset") ?? "");
-      return new Response(JSON.stringify(Array.from({ length: 500 }, (_, id) => id)));
-    }) as typeof fetch;
-    await assert.rejects(requestAllNotes<number>("/notes"), {
-      message: "Long-Term Memory note limit exceeded (100,000 notes)",
-    });
-    assert.equal(requestedOffsets.length, 201);
-    assert.equal(requestedOffsets.at(-1), "100000");
-    assert.equal(requestedHeaders[0].has("X-Admin-Secret"), false);
-  } finally {
-    globalThis.fetch = originalFetch;
-    if (originalWindow === undefined) delete (globalThis as { window?: Window }).window;
-    else globalThis.window = originalWindow;
-  }
   const { configurePackageRuntime } = await import(`${source}/package-runtime.ts`);
   const { readLtmDebugLog } = await import(`${source}/maintenance/debug-log.ts`);
   const { getLongTermMemoryDirectories, getLongTermMemoryRoot, ltmRejectedSuggestionsPath, notePathForId } =
     await import(`${source}/persistence/paths.ts`);
   const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
-  const { invalidateLtmVaultSnapshot, readLtmVaultSnapshot } = await import(`${source}/persistence/vault-snapshot.ts`);
+  const { invalidateLtmVaultSnapshot, readLtmVaultSnapshot, watchLtmVaultWrites } = await import(
+    `${source}/persistence/vault-snapshot.ts`
+  );
   const { LongTermMemoryDraftStore } = await import(`${source}/drafts/draft-store.ts`);
   const { applyLongTermMemoryDraft, preflightLongTermMemoryDraft, LtmDraftApplyError } = await import(
     `${source}/drafts/reconciliation.ts`
@@ -83,14 +23,27 @@ async function main() {
   const { compileEvidenceUnitExtraction, sourceMetadataForEvidenceUnitDraft } = await import(
     `${source}/extraction/evidence-unit-extraction.ts`
   );
+  const { buildTrustedLtmSubjectCatalog } = await import(`${source}/identity/subject-catalog.ts`);
+  const { resolveLtmSubjectIdentities } = await import(`${source}/identity/subject-identity.ts`);
   const { extractionFingerprintForLtmSourceNote, isLtmSourceExtractionFingerprintCurrent, sourceHashForLtmSourceNote } =
     await import(`${source}/extraction/source-hash.ts`);
   const { projectLongTermMemoryDraftReview } = await import(`${source}/drafts/draft-review.ts`);
   const { activateLongTermMemoryStorage } = await import(`${source}/runtime.ts`);
-  const { getLtmGlobalSettings, ltmSettingsPath, updateLtmGlobalSettings } = await import(`${source}/settings.ts`);
-  const { getLtmExtractionConfig, ltmExtractionConfigPath, updateLtmExtractionConfig } = await import(
-    `${source}/extraction/extraction-config.ts`
-  );
+  const { registerSettingsRoutes } = await import(`${source}/routes/settings.ts`);
+  const engineRoot =
+    process.env.MARINARA_ENGINE_ROOT ?? join(dirname(fileURLToPath(import.meta.url)), "../../Marinara-Engine");
+  const Fastify = (
+    await import(pathToFileURL(join(engineRoot, "packages/server/node_modules/fastify/fastify.js")).href)
+  ).default;
+  const {
+    getLtmGlobalSettings,
+    ltmSettingsPath,
+    readLtmSettingsFile,
+    splitUnknownLtmSettings,
+    updateLtmGlobalSettings,
+  } = await import(`${source}/settings.ts`);
+  const { DEFAULT_LTM_EXTRACTION_CONFIG, getLtmExtractionConfig, ltmExtractionConfigPath, updateLtmExtractionConfig } =
+    await import(`${source}/extraction/extraction-config.ts`);
   const { ltmMutationTransactionSchema, recoverLtmMutations } = await import(
     `${source}/persistence/mutation-transaction.ts`
   );
@@ -129,7 +82,7 @@ async function main() {
     deleteRejectedSuggestionsForSource,
     listRejectedSuggestions,
   } = await import(`${source}/drafts/rejected-suggestions.ts`);
-  const { DEFAULT_LTM_GLOBAL_SETTINGS, ltmGlobalSettingsSchema } =
+  const { DEFAULT_LTM_GLOBAL_SETTINGS, ltmAgentSettingsSchema, ltmGlobalSettingsSchema } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
 
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-storage-"));
@@ -232,9 +185,24 @@ async function main() {
       assert.ok(capturedTurnQuarantine);
       assert.deepEqual(await readdir(join(root, "quarantine", capturedTurnQuarantine)), ["source_turn_legacy.json"]);
       await first.storage.createNote(noteInput);
+      const transcriptProvenance = { kind: "chat_transcript" as const, sourceId: "chat-a", entryId: "message-1" };
+      await first.storage.createNote({
+        ...noteInput,
+        id: "source_transcript_import",
+        title: "Imported chat messages",
+        type: "source",
+        tags: ["imported_chat_messages"],
+        provenance: transcriptProvenance,
+        sections: { source: { text: "User: Hello.", updatedAt: timestamp } },
+      });
       await first.cleanup();
       first = null;
       restarted = await activateLongTermMemoryStorage(root);
+      assert.deepEqual(
+        (await restarted.storage.getNote("source_transcript_import"))?.provenance,
+        transcriptProvenance,
+        "chat_transcript provenance survives a restart",
+      );
       assert.equal(
         (await restarted.storage.getNote(noteInput.id))?.sections.facts?.text,
         "This note survives runtime restart.",
@@ -348,14 +316,402 @@ async function main() {
         false,
         "backup export must succeed and leave out fields this version does not know",
       );
-      await updateLtmExtractionConfig({ aiKeywordExtraction: true }, root);
+      assert.equal((await getLtmExtractionConfig(root)).finishCutOffAnswers, false, "finishCutOffAnswers defaults off");
+      assert.equal(
+        (await getLtmExtractionConfig(root)).chatImportDetail,
+        "standard",
+        "chatImportDetail defaults to standard",
+      );
+      assert.equal(
+        (await getLtmExtractionConfig(root)).autoAcceptSafeChanges,
+        false,
+        "autoAcceptSafeChanges defaults off so imports stay review-first",
+      );
+      assert.equal(
+        (await getLtmExtractionConfig(root)).autoImportChatSources,
+        false,
+        "autoImportChatSources defaults off so nothing imports without asking",
+      );
+      await updateLtmExtractionConfig(
+        {
+          aiKeywordExtraction: true,
+          finishCutOffAnswers: true,
+          chatImportDetail: "detailed",
+          autoAcceptSafeChanges: true,
+          autoImportChatSources: true,
+        },
+        root,
+      );
       assert.equal(
         JSON.parse(await readFile(ltmExtractionConfigPath(root), "utf8")).someNewExtractionSetting,
         true,
         "saving extraction settings must keep a newer field",
       );
+      assert.equal((await getLtmExtractionConfig(root)).finishCutOffAnswers, true, "finishCutOffAnswers saves");
+      assert.equal((await getLtmExtractionConfig(root)).chatImportDetail, "detailed", "chatImportDetail saves");
+      assert.equal((await getLtmExtractionConfig(root)).autoAcceptSafeChanges, true, "autoAcceptSafeChanges saves");
+      assert.equal((await getLtmExtractionConfig(root)).autoImportChatSources, true, "autoImportChatSources saves");
       await writeFile(ltmSettingsPath(root), '{"version":1,"someNewSetting":true,"longTermMemoryBudgetTokens":"x"}\n');
       await assert.rejects(getLtmGlobalSettings(root), /expected number/i, "an invalid known field must still fail");
+
+      // A newer version can also write keys inside nested objects, enum values this
+      // version does not have, and values outside its range. Those load their defaults (a
+      // list keeps its other entries), are logged by path without values, and stay in the
+      // file until the user changes them. Retention cleanup pauses while its settings hold
+      // one. Wrong types, a different version, request bodies and newer backups stay strict.
+      let rollbackRoots = 0;
+      const rollbackRoot = async (
+        files: Partial<Record<"settings" | "extraction" | "agent" | "retention", unknown>>,
+      ) => {
+        const target = join(dataDir, `rollback-${++rollbackRoots}`);
+        const config = getLongTermMemoryDirectories(target).config;
+        const paths = {
+          settings: ltmSettingsPath(target),
+          extraction: ltmExtractionConfigPath(target),
+          agent: join(config, "agent-settings.json"),
+          retention: longTermMemoryRetentionConfigPath(target),
+        };
+        await mkdir(config, { recursive: true });
+        for (const [name, value] of Object.entries(files)) {
+          await writeFile(paths[name as keyof typeof paths], `${JSON.stringify(value)}\n`);
+        }
+        return { root: target, paths };
+      };
+      const readConfigFile = async (path: string) => JSON.parse(await readFile(path, "utf8"));
+      const newerFiles = {
+        settings: {
+          version: 1,
+          longTermMemoryRecallContextMessages: 5,
+          sourcesAvailabilityModes: ["roleplay", "conversation", "game", "adventure"],
+          longTermMemoryBudgetTokens: 99_999,
+          longTermMemoryMaxChunks: 0,
+          longTermMemorySemanticWeight: 5,
+          longTermMemoryStopWords: ["Kept", "w".repeat(100)],
+        },
+        extraction: {
+          version: 1,
+          verbosity: "low",
+          temperature: 0.3,
+          reasoningEffort: "xhigh",
+          maxOutputTokens: 100_000,
+          promptTemplates: [
+            { id: "mine", name: "Mine", prompt: "Extract carefully.", description: "newer-description" },
+            { id: "adv", name: "Adventure", prompt: "Adventure prompt." },
+          ],
+          activePromptTemplateIdsByMode: { roleplay: "mine", adventure: "adv" },
+        },
+        agent: { autoApplyLowRisk: true, importSource: "worldbooks" },
+        retention: { version: 1, auditWindowDays: 20, receiptRetentionDays: 100_000 },
+      };
+      const newerValues = ["xhigh", "worldbooks", "newer-description", "99999", "100000", "www"];
+      const newer = await rollbackRoot(newerFiles);
+      const oldReceipt = join(getLongTermMemoryDirectories(newer.root).receipts, "receipt_rollback_old.json");
+      await mkdir(dirname(oldReceipt), { recursive: true });
+      await writeFile(oldReceipt, `${JSON.stringify({ dispatchedAt: new Date(Date.now() - 365 * 86_400_000) })}\n`);
+      const warningsBeforeNewer = warnings.length;
+      await (await activateLongTermMemoryStorage(newer.root)).cleanup();
+      await stat(oldReceipt).catch(() =>
+        assert.fail("retention must not delete by a default that replaced a newer retention value"),
+      );
+      const newerWarnings = warnings.slice(warningsBeforeNewer).map((args) => args.join(" "));
+      for (const path of [
+        "sourcesAvailabilityModes.3",
+        "longTermMemoryBudgetTokens",
+        "longTermMemoryMaxChunks",
+        "longTermMemoryStopWords.1",
+        "reasoningEffort",
+        "maxOutputTokens",
+        "promptTemplates.0.description",
+        "activePromptTemplateIdsByMode.adventure",
+        "importSource",
+        "receiptRetentionDays",
+      ]) {
+        assert.ok(
+          newerWarnings.some((line) => line.includes(path)),
+          `activation must load a newer file and log ${path}`,
+        );
+      }
+      assert.ok(
+        newerWarnings.every((line) => newerValues.every((value) => !line.includes(value))),
+        "the warning names newer fields by path, never their values",
+      );
+      for (const name of ["settings", "extraction"] as const) {
+        assert.deepEqual(
+          await readConfigFile(newer.paths[name]),
+          newerFiles[name],
+          `activation must leave the newer ${name} values on disk`,
+        );
+      }
+      assert.equal(
+        (await readConfigFile(newer.paths.retention)).receiptRetentionDays,
+        100_000,
+        "activation must leave the newer retention value on disk",
+      );
+      const rolledBackGlobal = await getLtmGlobalSettings(newer.root);
+      assert.equal(rolledBackGlobal.longTermMemoryRecallContextMessages, 5);
+      assert.deepEqual(rolledBackGlobal.sourcesAvailabilityModes, ["roleplay", "conversation", "game"]);
+      assert.deepEqual(rolledBackGlobal.longTermMemoryStopWords, ["Kept"]);
+      for (const key of [
+        "longTermMemoryBudgetTokens",
+        "longTermMemoryMaxChunks",
+        "longTermMemorySemanticWeight",
+      ] as const) {
+        assert.equal(rolledBackGlobal[key], DEFAULT_LTM_GLOBAL_SETTINGS[key], `${key} out of range loads its default`);
+      }
+      const rolledBackExtraction = await getLtmExtractionConfig(newer.root, "roleplay");
+      assert.equal(rolledBackExtraction.verbosity, "low");
+      assert.equal(rolledBackExtraction.temperature, 0.3);
+      assert.equal(rolledBackExtraction.reasoningEffort, DEFAULT_LTM_EXTRACTION_CONFIG.reasoningEffort);
+      assert.equal(rolledBackExtraction.maxOutputTokens, DEFAULT_LTM_EXTRACTION_CONFIG.maxOutputTokens);
+      assert.equal(rolledBackExtraction.systemPrompt, "Extract carefully.");
+      assert.deepEqual(rolledBackExtraction.promptTemplates, [
+        { id: "mine", name: "Mine", prompt: "Extract carefully." },
+        { id: "adv", name: "Adventure", prompt: "Adventure prompt." },
+      ]);
+      assert.deepEqual(rolledBackExtraction.activePromptTemplateIdsByMode, { roleplay: "mine" });
+      assert.deepEqual(
+        (await readLtmSettingsFile(newer.paths.agent, ltmAgentSettingsSchema, {})).settings,
+        { autoApplyLowRisk: true },
+        "a newer agent setting must not reach runtime settings",
+      );
+
+      // The Settings page sends its whole form: every field as the GET showed it, plus the change.
+      // It saves stop words lowercased and without repeats.
+      const settingsApp = Fastify();
+      registerSettingsRoutes(settingsApp, {
+        root: newer.root,
+        storage: undefined as never,
+        draftStore: undefined as never,
+      });
+      const saveForm = async (url: "/settings" | "/extraction-settings", change: Record<string, unknown>) => {
+        const {
+          enableLongTermMemory: _enabled,
+          systemPrompt: _systemPrompt,
+          activePromptTemplateId: _activePromptTemplateId,
+          hideImportedMessagesAvailable: _hideImportedMessagesAvailable,
+          ...form
+        } = (await settingsApp.inject({ method: "GET", url })).json();
+        if (form.longTermMemoryStopWords)
+          form.longTermMemoryStopWords = [
+            ...new Set(form.longTermMemoryStopWords.map((word: string) => word.toLowerCase())),
+          ];
+        const response = await settingsApp.inject({ method: "PUT", url, payload: { ...form, ...change } });
+        assert.equal(response.statusCode, 200, response.body);
+      };
+      await saveForm("/extraction-settings", { temperature: 0.5 });
+      await saveForm("/extraction-settings", { activePromptTemplateIdsByMode: { roleplay: null } });
+      const savedExtraction = await readConfigFile(newer.paths.extraction);
+      assert.equal(savedExtraction.temperature, 0.5);
+      assert.deepEqual(
+        [savedExtraction.reasoningEffort, savedExtraction.maxOutputTokens, savedExtraction.promptTemplates],
+        [newerFiles.extraction.reasoningEffort, 100_000, newerFiles.extraction.promptTemplates],
+        "saving the extraction form must keep every newer value it showed as a default",
+      );
+      assert.deepEqual(savedExtraction.activePromptTemplateIdsByMode, { roleplay: null, adventure: "adv" });
+      await saveForm("/settings", { longTermMemoryDebug: true });
+      const savedSettings = await readConfigFile(newer.paths.settings);
+      assert.equal(savedSettings.longTermMemoryDebug, true);
+      for (const [key, value] of Object.entries(newerFiles.settings)) {
+        assert.deepEqual(savedSettings[key], value, `saving the settings form must keep the newer ${key}`);
+      }
+      await saveForm("/extraction-settings", { reasoningEffort: "high" });
+      assert.equal((await readConfigFile(newer.paths.extraction)).reasoningEffort, "high");
+      await saveForm("/extraction-settings", {
+        promptTemplates: [{ id: "mine", name: "Mine", prompt: "Extract carefully." }],
+      });
+      assert.deepEqual(
+        (await readConfigFile(newer.paths.extraction)).activePromptTemplateIdsByMode,
+        { roleplay: null },
+        "deleting a template must drop a newer mode's choice of it, or the newer version cannot load the file",
+      );
+      await saveForm("/settings", { sourcesAvailabilityModes: ["conversation"], longTermMemoryBudgetTokens: 4000 });
+      const changedSettings = await readConfigFile(newer.paths.settings);
+      assert.deepEqual(changedSettings.sourcesAvailabilityModes, ["conversation"], "a list the user sets replaces it");
+      assert.equal(changedSettings.longTermMemoryBudgetTokens, 4000, "a value the user sets replaces it");
+      assert.equal(changedSettings.longTermMemoryMaxChunks, 0, "a newer value the user did not change stays");
+      await settingsApp.close();
+      // A legacy prompt request replaces the templates; the saved active choices must name them.
+      const legacyPrompt = await rollbackRoot({
+        extraction: {
+          version: 1,
+          promptTemplates: [{ id: "mine", name: "Mine", prompt: "Mine.", description: "newer-description" }],
+          activePromptTemplateIdsByMode: { roleplay: "mine" },
+        },
+      });
+      await updateLtmExtractionConfig({ systemPrompt: "Custom" }, legacyPrompt.root);
+      await assert.doesNotReject(
+        getLtmExtractionConfig(legacyPrompt.root),
+        "a legacy prompt request must save a loadable file",
+      );
+
+      // zod 4 names an enum or literal miss `invalid_value`; zod 3 names them `invalid_enum_value` and `invalid_literal`.
+      const enumMiss = ["invalid_enum_value", "invalid_value"] as const;
+      const zodIssue =
+        (code: string | readonly string[], at: string) => (error: { issues?: { code: string; path: unknown[] }[] }) =>
+          Boolean(error.issues?.some((issue) => [code].flat().includes(issue.code) && issue.path.join(".") === at));
+      for (const [request, update, code, at] of [
+        [{ reasoningEffort: "xhigh" }, updateLtmExtractionConfig, enumMiss, "reasoningEffort"],
+        [{ maxOutputTokens: 100_000 }, updateLtmExtractionConfig, "too_big", "maxOutputTokens"],
+        [
+          { promptTemplates: [{ id: "x", name: "X", prompt: "p", description: "d" }] },
+          updateLtmExtractionConfig,
+          "unrecognized_keys",
+          "promptTemplates.0",
+        ],
+        [{ sourcesAvailabilityModes: ["adventure"] }, updateLtmGlobalSettings, enumMiss, "sourcesAvailabilityModes.0"],
+        [{ longTermMemoryBudgetTokens: 99_999 }, updateLtmGlobalSettings, "too_big", "longTermMemoryBudgetTokens"],
+      ] as const) {
+        await assert.rejects(update(request, newer.root), zodIssue(code, at), `a request with ${at} must stay strict`);
+      }
+      for (const [files, code, at] of [
+        [
+          { settings: { version: 1, sourcesAvailabilityModes: "roleplay" } },
+          "invalid_type",
+          "sourcesAvailabilityModes",
+        ],
+        [{ settings: { version: 1, longTermMemoryMaxChunks: 2.5 } }, "invalid_type", "longTermMemoryMaxChunks"],
+        [{ settings: { version: 2 } }, ["invalid_literal", "invalid_value"], "version"],
+      ] as const) {
+        await assert.rejects(
+          getLtmGlobalSettings((await rollbackRoot(files)).root),
+          zodIssue(code, at),
+          `${at} must still fail`,
+        );
+      }
+      // The Engine may ship zod 4, which names an enum miss `invalid_value` and checks a list's length before its
+      // entries; a newer entry in an oversized list must still be found and dropped alone.
+      const z4 = await import(pathToFileURL(join(engineRoot, "packages/server/node_modules/zod/v4/index.js")).href);
+      const z4Schema = z4
+        .object({
+          version: z4.literal(1).default(1),
+          mode: z4.enum(["a", "b"]).optional(),
+          modes: z4
+            .array(z4.enum(["a", "b"]))
+            .min(1)
+            .max(3)
+            .optional(),
+          count: z4.number().max(10).optional(),
+          nested: z4.object({ ok: z4.string().optional() }).strict().optional(),
+        })
+        .strict();
+      const z4Split = splitUnknownLtmSettings(
+        z4Schema,
+        { version: 1, mode: "c", modes: ["a", "b", "a", "c"], count: 11, nested: { ok: "x", extra: 1 }, top: 1 },
+        join(tmpdir(), `ltm-zod4-${randomUUID()}.json`),
+      );
+      assert.deepEqual(z4Split.known, { version: 1, modes: ["a", "b", "a"], nested: { ok: "x" } });
+      assert.deepEqual(z4Split.unknown, { top: 1 });
+      assert.deepEqual(z4Split.newer.map((entry: (string | number)[]) => entry.join(".")).sort(), [
+        "count",
+        "mode",
+        "modes.3",
+        "nested.extra",
+      ]);
+      const z4Version = splitUnknownLtmSettings(
+        z4Schema,
+        { version: 2 },
+        join(tmpdir(), `ltm-zod4-${randomUUID()}.json`),
+      );
+      assert.deepEqual(z4Version.known, { version: 2 }, "a different version is kept so the parse still fails");
+      assert.deepEqual(z4Version.newer, [], "a different version never counts as newer");
+      assert.equal(z4Schema.safeParse(z4Version.known).success, false);
+      const z4Oversized = splitUnknownLtmSettings(
+        z4Schema,
+        { version: 1, modes: ["a", "b", "a", "a", "c"] },
+        join(tmpdir(), `ltm-zod4-${randomUUID()}.json`),
+      );
+      assert.deepEqual(z4Oversized.known, { version: 1 }, "a list still over its maximum after the drop falls back");
+      assert.deepEqual(z4Oversized.newer.map((entry: (string | number)[]) => entry.join(".")).sort(), [
+        "modes",
+        "modes.4",
+      ]);
+      // zod 4 also reports `too_big` for a string given where a list belongs; the wrong type must not read as newer.
+      const z4WrongType = splitUnknownLtmSettings(
+        z4Schema,
+        { version: 1, modes: "abcd" },
+        join(tmpdir(), `ltm-zod4-${randomUUID()}.json`),
+      );
+      assert.deepEqual(
+        z4WrongType.known,
+        { version: 1, modes: "abcd" },
+        "a wrong-typed list is kept so the parse fails",
+      );
+      assert.deepEqual(z4WrongType.newer, []);
+      // zod 4 reports any enum non-member as `invalid_value`; only a string is a newer option, the rest a wrong type.
+      for (const stored of [{ mode: null }, { modes: ["a", 5] }]) {
+        const wrong = splitUnknownLtmSettings(
+          z4Schema,
+          { version: 1, ...stored },
+          join(tmpdir(), `ltm-zod4-${randomUUID()}.json`),
+        );
+        assert.deepEqual(
+          wrong.known,
+          { version: 1, ...stored },
+          `${JSON.stringify(stored)} is kept so the parse fails`,
+        );
+        assert.deepEqual(wrong.newer, []);
+        assert.equal(z4Schema.safeParse(wrong.known).success, false);
+      }
+      const tooLongPrompt = await rollbackRoot({
+        extraction: { version: 1, promptTemplates: [{ id: "t", name: "T", prompt: "x".repeat(20_001) }] },
+      });
+      await assert.rejects(
+        getLtmExtractionConfig(tooLongPrompt.root),
+        zodIssue("too_big", "promptTemplates.0.prompt"),
+        "a range fallback that would leave a required field missing must fail naming the range",
+      );
+      const tooManyTemplates = await rollbackRoot({
+        extraction: {
+          version: 1,
+          promptTemplates: Array.from({ length: 51 }, (_, index) => ({ id: `t${index}`, name: "T", prompt: "p" })),
+          activePromptTemplateIdsByMode: { roleplay: "t0" },
+        },
+      });
+      await assert.rejects(
+        getLtmExtractionConfig(tooManyTemplates.root),
+        zodIssue("too_big", "promptTemplates"),
+        "a range fallback that would break the active-template rule must fail naming the range",
+      );
+      const onlyNewerModes = await rollbackRoot({ settings: { version: 1, sourcesAvailabilityModes: ["adventure"] } });
+      await (await activateLongTermMemoryStorage(onlyNewerModes.root)).cleanup();
+      assert.equal((await getLtmGlobalSettings(onlyNewerModes.root)).sourcesAvailabilityModes, undefined);
+      assert.deepEqual((await readConfigFile(onlyNewerModes.paths.settings)).sourcesAvailabilityModes, ["adventure"]);
+
+      const newerExport = await exportLongTermMemoryData((await rollbackRoot(newerFiles)).root);
+      const exportedSettings = JSON.stringify(newerExport.settings);
+      for (const value of [...newerValues, "description"]) {
+        assert.ok(!exportedSettings.includes(value), `backup export must leave out the newer ${value}`);
+      }
+      assert.deepEqual(newerExport.settings.global.sourcesAvailabilityModes, ["roleplay", "conversation", "game"]);
+      await replaceLongTermMemoryData(newerExport, (await rollbackRoot({})).root);
+      await assert.rejects(
+        replaceLongTermMemoryData(
+          { ...newerExport, settings: { ...newerExport.settings, extraction: newerFiles.extraction } },
+          (await rollbackRoot({})).root,
+        ),
+        zodIssue(enumMiss, "settings.extraction.reasoningEffort"),
+        "restoring a backup made by a newer version must still fail",
+      );
+      // Delete all restores an export, which holds this version's fallbacks; the settings files stay as stored.
+      const deleted = await rollbackRoot(newerFiles);
+      await deleteAllLongTermMemoryData(deleted.root);
+      assert.equal(
+        (await readConfigFile(deleted.paths.retention)).receiptRetentionDays,
+        100_000,
+        "Delete all must leave the newer retention value on disk",
+      );
+      assert.equal(
+        (await runLongTermMemoryRetention({ root: deleted.root, force: true })).skippedNewerSettings,
+        true,
+        "retention must stay paused after Delete all",
+      );
+      for (const name of ["settings", "extraction", "agent"] as const) {
+        assert.deepEqual(
+          await readConfigFile(deleted.paths[name]),
+          newerFiles[name],
+          `Delete all must leave the newer ${name} values on disk`,
+        );
+      }
       await writeFile(ltmSettingsPath(root), '{"version":1,"someNewSetting":"newer-value"}\n');
       const stopWordSettings = await updateLtmGlobalSettings({ longTermMemoryStopWords: ["Cobalt-Moon"] }, root);
       assert.deepEqual(
@@ -550,10 +906,7 @@ async function main() {
         assert.ok(
           warnings
             .slice(previousWarnings)
-            .some(
-              (args) =>
-                args[1] instanceof Error && args[0] === "[ltm] Deferred activity index pruning during retention",
-            ),
+            .some((args) => String(args[0]).startsWith("[ltm] Deferred activity index pruning during retention: ")),
           "a failed derived-index prune logs a recoverable warning rather than a missing-logger exception",
         );
         assert.equal((await new LongTermMemoryStorage(root).getNote(noteInput.id))?.id, noteInput.id);
@@ -855,7 +1208,7 @@ async function main() {
               ...exported,
               settings: { ...exported.settings, [key]: value },
             }),
-          /unrecognized|unknown|greater than or equal/i,
+          /unrecognized|unknown|greater than or equal|too small/i,
           `malformed legacy ${key} fields must remain rejected`,
         );
       }
@@ -1248,6 +1601,165 @@ async function main() {
         .find((line) => line.includes(oversizedSubjectOperationId));
       assert.ok(oversizedLine && Buffer.byteLength(`${oversizedLine}\n`) <= 64 * 1024);
       assert.equal(oversizedLine.includes(rejectedCandidateText), false);
+
+      // A dropped unit matched to a note whose id has a digit after the prefix (an older
+      // `rel_96dfe1cd8f75` note, or a new character named "2B", `char_2_b`) keeps the full note id
+      // in its recovery copy. Removing the prefix left an id that fails the identifier rule, so the
+      // draft was never written.
+      const digitCatalog = buildTrustedLtmSubjectCatalog({
+        roster: [
+          { kind: "character", id: "alice", name: "Alice" },
+          { kind: "character", id: "rowan", name: "Rowan" },
+          { kind: "character", id: "two-b", name: "2B" },
+        ],
+        notes: [],
+      });
+      const digitRelationshipNote = {
+        id: "rel_96dfe1cd8f75",
+        title: "Alice and Rowan",
+        type: "relationship",
+        status: "active",
+        modes: ["roleplay"],
+        scope: legacySource.scope,
+        tags: [],
+        keywords: [],
+        links: [],
+        subjects: ["Alice", "Rowan"].map(
+          (name) => digitCatalog.entries.find((entry: any) => entry.name === name)!.subject,
+        ),
+        sections: { state: { text: "Alice and Rowan are wary allies.", updatedAt: timestamp } },
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        version: 1,
+      } as any;
+      digitCatalog.notes.push(digitRelationshipNote);
+      // The compile step normalizes structured summaries again, so a structured source is
+      // checked as well as the unstructured legacy one.
+      const structuredDigitSource = {
+        ...legacySource,
+        id: "source_import_chat_structured_digit",
+        sections: {
+          source: {
+            text: [
+              "## relationship_state",
+              "- Alice and Rowan | text: Alice trusts Rowan less after the argument.",
+              "## character_fact",
+              "- 2B | section: developments | text: 2B started guarding the gate.",
+            ].join("\n"),
+            updatedAt: timestamp,
+          },
+        },
+      };
+      const digitUnit = (
+        source: typeof legacySource,
+        input: {
+          bucket: "relationship_state" | "character_fact" | "timeline_event";
+          subjectId: string;
+          sectionKey: string;
+          text: string;
+          claimKind: "static" | "change";
+          subjectNames?: string[];
+        },
+      ) => ({
+        id: randomUUID(),
+        ...input,
+        importance: "major" as const,
+        keywords: [],
+        evidence: [`source_note:${source.id}`],
+        confidence: 0.9,
+        salience: 0.8,
+        status: "active" as const,
+        links: [],
+        sourceHash: sourceHashForLtmSourceNote(source),
+      });
+      const digitRelationshipUnit = (claimKind: "static" | "change", source = legacySource) =>
+        digitUnit(source, {
+          bucket: "relationship_state",
+          subjectId: "alice_rowan",
+          sectionKey: "state",
+          text: "Alice trusts Rowan less after the argument.",
+          claimKind,
+          subjectNames: ["Alice", "Rowan"],
+        });
+      const digitCharacterUnit = (source: typeof legacySource) =>
+        digitUnit(source, {
+          bucket: "character_fact",
+          subjectId: "two_b",
+          sectionKey: "developments",
+          text: "2B started guarding the gate.",
+          claimKind: "change",
+          subjectNames: ["2B"],
+        });
+      const compileDigit = (unit: ReturnType<typeof digitUnit>, noteId: string, source = legacySource) => {
+        const identity = resolveLtmSubjectIdentities({
+          units: [unit],
+          catalog: digitCatalog,
+          existingNotes: [digitRelationshipNote],
+          scope: source.scope,
+          mode: "roleplay",
+        });
+        return compileEvidenceUnitExtraction({
+          unitResponse: { summary: "Digit-led note id", units: identity.units },
+          providerCandidates: 1,
+          sourceText: source.sections.source.text,
+          sourceNote: source,
+          existingNotes: [digitRelationshipNote],
+          scope: source.scope,
+          modes: ["roleplay"],
+          mode: "roleplay",
+          sourceHash: sourceHashForLtmSourceNote(source),
+          skipStructuredBackfill: true,
+        });
+      };
+      for (const [source, unit, noteId] of [
+        [legacySource, digitRelationshipUnit("change"), "rel_96dfe1cd8f75"],
+        [structuredDigitSource, digitRelationshipUnit("change", structuredDigitSource), "rel_96dfe1cd8f75"],
+        [legacySource, digitCharacterUnit(legacySource), "char_2_b"],
+        [structuredDigitSource, digitCharacterUnit(structuredDigitSource), "char_2_b"],
+      ] as const) {
+        const droppedDigit = compileDigit(unit, noteId, source);
+        assert.equal(droppedDigit.accounting.keptUnits, 0);
+        assert.equal(droppedDigit.outcome.droppedCandidates[0]?.recoveryCandidate?.subjectId, noteId);
+        const droppedDigitOperationId = randomUUID();
+        const droppedDigitDraft = await draftStore.createDraft({
+          source: { sourceNoteId: source.id, chatId: "chat-a" },
+          scope: source.scope,
+          modes: ["roleplay"],
+          response: droppedDigit.compiledResponse,
+          operationId: droppedDigitOperationId,
+          outcome: droppedDigit.outcome,
+        });
+        assert.equal(
+          (await draftStore.getDraft(droppedDigitDraft.id))?.extractionOutcome?.droppedCandidates[0]?.recoveryCandidate
+            ?.subjectId,
+          noteId,
+          "a draft whose dropped unit matched a digit-led note id must be written",
+        );
+        assert.equal(
+          (await readLtmDebugLog({ operationId: droppedDigitOperationId }, root)).some(
+            (entry: any) => entry.action === "recovery_subject_id_validation_failed",
+          ),
+          false,
+        );
+        await draftStore.deleteDraft(droppedDigitDraft.id);
+      }
+      // Identity drops a unit whose subject it cannot resolve, with the unit as its recovery copy.
+      const unknownDigit = resolveLtmSubjectIdentities({
+        units: [{ ...digitCharacterUnit(legacySource), subjectId: "3_c", subjectNames: [] }],
+        catalog: digitCatalog,
+        existingNotes: [digitRelationshipNote],
+        scope: legacySource.scope,
+        mode: "roleplay",
+      });
+      assert.equal(unknownDigit.units.length, 0);
+      assert.equal(unknownDigit.droppedCandidates[0]?.recoveryCandidate?.subjectId, "char_3_c");
+      const keptDigit = compileDigit(digitRelationshipUnit("static"), "rel_96dfe1cd8f75");
+      assert.equal(keptDigit.accounting.keptUnits, 1);
+      assert.deepEqual(
+        keptDigit.compiledResponse.mutations.map((mutation: any) => mutation.noteId ?? mutation.note?.id),
+        keptDigit.compiledResponse.mutations.map(() => "rel_96dfe1cd8f75"),
+        "a kept unit still updates the digit-led note and creates no rel_rel_ note",
+      );
       let afterWriteRan = false;
       let afterWriteDraftId = "";
       await assert.rejects(
@@ -2168,6 +2680,40 @@ async function main() {
         links: [],
         sections: { status: { text: "The gate remains unresolved.", updatedAt: timestamp } },
       });
+      // createNote makes sections manual, which win over a later source update; a thread opened by an earlier
+      // piece carries a source contribution.
+      for (const [id, tags] of [
+        ["thread_section_update", []],
+        ["thread_section_anchor", ["anchor"]],
+      ] as const) {
+        await storage.createNote({
+          ...noteInput,
+          id,
+          title: id,
+          type: "thread",
+          scope: legacySource.scope,
+          tags: [...tags],
+          links: [],
+          sections: { status: { text: "The thread is open.", updatedAt: timestamp } },
+        });
+        await storage.projectNote(id, "thread", (current) => ({
+          ...current!,
+          sections: {
+            status: renderSectionContributions(
+              [
+                {
+                  owner: "source",
+                  sourceNoteId: "earlier_piece",
+                  sourceHash: "e".repeat(64),
+                  text: "The thread is open.",
+                  updatedAt: timestamp,
+                },
+              ],
+              false,
+            )!,
+          },
+        }));
+      }
       const destructiveEventId = randomUUID();
       const destructiveLinkId = randomUUID();
       const destructiveMutationId = randomUUID();
@@ -2263,6 +2809,105 @@ async function main() {
         new Set([destructiveEventId, destructiveLinkId, destructiveMutationId]),
       );
       assert.equal((await storage.getNote(destructiveTarget.id))?.status, "resolved");
+
+      // A section the compiler replaces on purpose (a thread's status) applies beside other rows; an anchor's does not.
+      const sectionUpdateDraft = async (noteId: string) => {
+        const updateId = randomUUID();
+        const linkId = randomUUID();
+        const draft = await draftStore.createDraft({
+          source: { sourceNoteId: canonicalSourceId, chatId: "chat-a" },
+          scope: destructiveTarget.scope,
+          modes: destructiveTarget.modes,
+          response: {
+            summary: "Continue a thread beside a link.",
+            mutations: [
+              {
+                id: updateId,
+                claimKind: "change",
+                kind: "update_section",
+                risk: "low",
+                confidence: 0.9,
+                summary: "Continue the thread",
+                evidence: [`source_note:${canonicalSourceId}`],
+                noteId,
+                sectionKey: "status",
+                section: { text: "The thread moved on.", updatedAt: timestamp },
+              },
+              {
+                id: linkId,
+                kind: "add_link",
+                risk: "low",
+                confidence: 0.9,
+                summary: "Link the thread",
+                evidence: [`source_note:${canonicalSourceId}`],
+                noteId,
+                link: { target: "timeline_destructive_gate", relation: "evidenced_by" },
+              },
+            ],
+          },
+        });
+        return { draft, mutationIds: [updateId, linkId] };
+      };
+      const threadUpdate = await sectionUpdateDraft("thread_section_update");
+      const threadUpdatePreflight = await preflightLongTermMemoryDraft(threadUpdate.draft.id, {
+        root,
+        mutationIds: threadUpdate.mutationIds,
+      });
+      assert.equal(threadUpdatePreflight.blockedMutationIds.length, 0);
+      assert.equal(
+        threadUpdatePreflight.rows.find((row) => row.mutationId === threadUpdate.mutationIds[0])?.disposition,
+        "rewrite",
+      );
+      const threadUpdateApplied = await applyLongTermMemoryDraft(threadUpdate.draft.id, {
+        root,
+        mutationIds: threadUpdate.mutationIds,
+        rebuildIndexes: false,
+      });
+      assert.deepEqual(new Set(threadUpdateApplied.appliedMutationIds), new Set(threadUpdate.mutationIds));
+      assert.equal((await storage.getNote("thread_section_update"))?.sections.status?.text, "The thread moved on.");
+
+      const anchorUpdate = await sectionUpdateDraft("thread_section_anchor");
+      const anchorUpdatePreflight = await preflightLongTermMemoryDraft(anchorUpdate.draft.id, {
+        root,
+        mutationIds: anchorUpdate.mutationIds,
+      });
+      assert.ok(
+        anchorUpdatePreflight.rows
+          .find((row) => row.mutationId === anchorUpdate.mutationIds[0])
+          ?.blockers.some((blocker) => blocker.code === "destructive_disposition_requires_explicit_review"),
+      );
+      await assert.rejects(
+        applyLongTermMemoryDraft(anchorUpdate.draft.id, {
+          root,
+          mutationIds: anchorUpdate.mutationIds,
+          rebuildIndexes: false,
+        }),
+        (error: unknown) =>
+          error instanceof Error &&
+          error.message === "Rewrite and other destructive changes must be reviewed and applied one at a time.",
+      );
+
+      // OT-3: auto-accepting the safe part of a draft must not fail because a rewrite sits beside it.
+      const safePartApplied = await applyLongTermMemoryDraft(anchorUpdate.draft.id, {
+        root,
+        autoApplyLowRiskOnly: true,
+        rebuildIndexes: false,
+      });
+      assert.deepEqual(
+        safePartApplied.appliedMutationIds,
+        [anchorUpdate.mutationIds[1]],
+        "auto-apply keeps the safe link and leaves the rewrite out",
+      );
+      assert.ok(
+        safePartApplied.skippedMutationIds.includes(anchorUpdate.mutationIds[0]),
+        "the anchor rewrite is skipped, not applied",
+      );
+      assert.equal(safePartApplied.draft.status, "pending", "the rewrite stays pending for review");
+      assert.deepEqual(
+        safePartApplied.draft.mutations.map((mutation) => mutation.id),
+        [anchorUpdate.mutationIds[0]],
+        "only the rewrite remains in the draft",
+      );
 
       const unlinkedChangeMutationId = randomUUID();
       const unlinkedChangeDraft = await draftStore.createDraft({
@@ -3219,6 +3864,57 @@ async function main() {
       invalidateLtmVaultSnapshot(countRoot);
       await readLtmVaultSnapshot(countRoot, loadSnapshot);
       assert.equal(snapshotLoads, 2, "snapshot invalidation must permit a fresh scan");
+
+      // A source batch keeps one committed-note listing and re-reads only the notes later writes
+      // touched, so every vault write must report the root-relative paths it wrote, or undefined when it
+      // names none, and nothing once the watcher stops.
+      const watchRoot = join(dataDir, "vault-write-watch");
+      const watchStorage = new LongTermMemoryStorage(watchRoot);
+      await watchStorage.initializeLtmStore();
+      const reportedWrites: (readonly string[] | undefined)[] = [];
+      const stopWatching = watchLtmVaultWrites(watchRoot, (paths: readonly string[] | undefined) =>
+        reportedWrites.push(paths),
+      );
+      const reportedBy = async (operation: () => Promise<unknown>) => {
+        const start = reportedWrites.length;
+        await operation();
+        return reportedWrites.slice(start);
+      };
+      const watchedPath = "vault/world/world_watch_a.json";
+      for (const [name, operation] of [
+        ["create", () => watchStorage.createNote({ ...noteInput, id: "world_watch_a", title: "Watch A" })],
+        ["update", () => watchStorage.updateNote("world_watch_a", { title: "Watch A updated" })],
+        ["delete", () => watchStorage.deleteNotesPermanently(["world_watch_a"])],
+      ] as const) {
+        const reports = await reportedBy(operation);
+        assert.ok(
+          reports.some((paths) => paths?.includes(watchedPath)),
+          `${name} must report the note's root-relative path: ${JSON.stringify(reports)}`,
+        );
+        assert.ok(
+          reports.every((paths) => paths?.every((path) => !path.startsWith("/") && !path.includes(".."))),
+          `${name} must report only root-relative paths: ${JSON.stringify(reports)}`,
+        );
+      }
+      assert.ok(
+        (await reportedBy(() => watchStorage.cleanup())).includes(undefined),
+        "a vault write that names no files must report undefined",
+      );
+      stopWatching();
+      assert.deepEqual(
+        await reportedBy(() => watchStorage.createNote({ ...noteInput, id: "world_watch_b", title: "Watch B" })),
+        [],
+        "a stopped watcher must not hear later writes",
+      );
+      const laterWrites: (readonly string[] | undefined)[] = [];
+      const stopLaterWatcher = watchLtmVaultWrites(watchRoot, (paths: readonly string[] | undefined) =>
+        laterWrites.push(paths),
+      );
+      stopWatching();
+      await watchStorage.updateNote("world_watch_b", { title: "Watch B updated" });
+      assert.ok(laterWrites.length > 0, "stopping a watcher again must not remove another watcher on the same root");
+      stopLaterWatcher();
+      await watchStorage.cleanup();
 
       const isolationRoot = join(dataDir, "vault-error-isolation");
       const isolationStorage = new LongTermMemoryStorage(isolationRoot);

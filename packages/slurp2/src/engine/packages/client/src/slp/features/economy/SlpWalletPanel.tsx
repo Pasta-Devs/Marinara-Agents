@@ -118,7 +118,7 @@ export function SlpWalletPanel(page: SlpBackstagePageProps) {
         title={t("ui.slurp.settings.backstage.landing.earningFineTune", {
           defaultValue: "Earning, stipend, and revenue share",
         })}
-        count={7}
+        count={8}
       >
         <Field
           settingKey="walletStipendFloor"
@@ -147,6 +147,16 @@ export function SlpWalletPanel(page: SlpBackstagePageProps) {
             format={(hour) => `${String(hour).padStart(2, "0")}:00`}
           />
         </Field>
+        <Toggle
+          settingKey="walletPayoutDailyLimit"
+          label={t("ui.slurp.settings.wallet.payoutDailyLimit", { defaultValue: "Daily limit on Collect" })}
+          detail={t("ui.slurp.settings.wallet.payoutDailyLimitDetail", {
+            defaultValue:
+              "Collect moves a daily share of your Creator earnings into the Wallet. Off: Collect moves all of them at once.",
+          })}
+          value={settings.walletPayoutDailyLimit}
+          onChange={(value) => update("walletPayoutDailyLimit", value)}
+        />
         <Field
           settingKey="walletAdReward"
           label={t("ui.slurp.settings.wallet.adReward", { defaultValue: "Paid per ad you act on" })}

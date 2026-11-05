@@ -17,7 +17,8 @@ export type SlurpEventKind =
   | "drama"
   | "couple"
   | "fan_note"
-  | "sign_up";
+  | "sign_up"
+  | "live";
 export type SlurpEventItem = {
   id: string;
   kind: SlurpEventKind;

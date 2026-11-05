@@ -8,6 +8,7 @@ import { stripTypeScriptTypes } from "node:module";
 import { runInNewContext } from "node:vm";
 import { slurp2Source } from "./slurp2-source";
 import { slurpArcLifeLine } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-arc-progress.ts";
+import { slpArcsLive } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-extensions.ts";
 import {
   slurpChatBridgeCoupleLine,
   slurpChatBridgeLoveLines,
@@ -79,6 +80,7 @@ const { buildSlurpChatContext, slurpCarryoverReach } = runInNewContext(
       `<${section} format="${format}">\n${content}\n</${section}>`,
     sinceHoursIso: (hours: number) => hoursAgo(hours),
     slurpArcLifeLine,
+    slpArcsLive,
     slurpChatBridgeCoupleLine,
     slurpChatBridgeLoveLines,
     slurpCoupleOf,
@@ -109,7 +111,7 @@ const { buildSlurpChatContext, slurpCarryoverReach } = runInNewContext(
       };
     },
     createSlurpStorage: () => ({
-      getSettings: async () => ({ carryoverModes, carryoverHours: 24, carryoverMaxItems }),
+      getSettings: async () => ({ carryoverModes, carryoverHours: 24, carryoverMaxItems, extStorylines: true }),
       listNoodlerAccounts: async () => creators,
       listNoodlerPostsByAccounts: async (ids: string[]) =>
         new Map(

@@ -7,12 +7,13 @@ import { createSlurpStorage } from "../../data/slp-storage.js";
 import { resolveSlurpCreatorSpice } from "../../data/creators/slp-spice-storage.js";
 import type { SlurpDealAd, SlurpDealSpice } from "../../modules/economy/slp-brand-deals.js";
 import { createGarnishAds, garnishAdBrandId, garnishRatingAllowed } from "../ads/slp-ads-contract.js";
+import { slpInlineAdsOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
 type Settings = Awaited<ReturnType<ReturnType<typeof createSlurpStorage>["getSettings"]>>;
 
 /** Live products of switched-on brands under the ads ceiling, with their brand's category and voice. */
 export async function loadSlurpDealAds(db: DB, settings: Settings): Promise<SlurpDealAd[]> {
-  if (!settings.inlineAdsEnabled) return [];
+  if (!slpInlineAdsOn(settings)) return [];
   const { pool } = createGarnishAds(db);
   const [ads, brands] = await Promise.all([pool.listActive("slurp"), pool.listBrands("slurp")]);
   const byId = new Map(brands.map((brand) => [brand.id, brand]));

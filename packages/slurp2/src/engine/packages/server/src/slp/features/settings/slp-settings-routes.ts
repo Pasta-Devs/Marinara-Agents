@@ -4,8 +4,9 @@ import {
   slurpPromptDescriptions,
   slurpPromptEditableDefaults,
 } from "../../base/prompting/slp-prompt-blocks.js";
+import { lastSlurpMemoryStatus } from "../../data/creators/slp-ltm-recall.js";
 import { slpIsAdmissionFailure } from "../../base/host/slp-admission.js";
-import { normalizeSlurpSettings, slurpSettingsSchema } from "../../modules/settings/slp-settings.js";
+import { normalizeSlurpSettings, slurpSettingsPatchSchema } from "../../modules/settings/slp-settings.js";
 import {
   countSlurpActiveCreators,
   getSlurpModelBudgetLedger,
@@ -19,6 +20,8 @@ import { createConnectionsStorage } from "../../../services/storage/connections.
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import { z } from "zod";
+import { SLP_EXTRAS_OFFER_ORDER } from "../../../../../shared/src/slp/slp-extras-offer.js";
+import { answerSlurpExtrasOffer, readSlurpExtrasOffer } from "../../data/settings/slp-extras-offer-storage.js";
 import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
 import { generateCreatorPost, previewSlurpPromptBlocks } from "../feed/slp-feed-contract.js";
 import { SLURP_PROMPT_IDS } from "../../base/prompting/slp-prompt-blocks.js";
@@ -55,6 +58,8 @@ const slurpPromptResultPreviewSchema = slurpPromptPreviewSchema.extend({
 export async function slpSettingsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   const { noodle } = deps;
   app.get("/settings", async () => noodle.getSlurpSettings());
+  // How the last read of Long-Term Memory's recall went, so the panel can say why no memories arrive.
+  app.get("/settings/memory-status", async () => ({ status: lastSlurpMemoryStatus() }));
 
   // `classicPreset` is a layout the builder can load into its draft. Loading it changes prompt
   // text only; nothing is saved until the player saves.
@@ -141,7 +146,7 @@ export async function slpSettingsRoutes(app: FastifyInstance, deps: SlpRouteDeps
     postsPerDay: slurpSizedPostsPerDay(await countSlurpActiveCreators(app.db)),
   }));
   app.patch("/settings", async (req, reply) => {
-    const body = slurpSettingsSchema.partial().safeParse(req.body ?? {});
+    const body = slurpSettingsPatchSchema.safeParse(req.body ?? {});
     if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
     return noodle.updateSlurpSettings(body.data);
   });
@@ -162,6 +167,13 @@ export async function slpSettingsRoutes(app: FastifyInstance, deps: SlpRouteDeps
       pendingRewrites: await countSlurpPendingText(app.db),
       rewritingAll: slurpRewritingAllPending(),
     };
+  });
+  // Support's offer of an extra that is still off; the client switches it on itself, then answers.
+  app.get("/extras/offer", async () => ({ offer: await readSlurpExtrasOffer(app.db) }));
+  app.post("/extras/offer/answer", async (req, reply) => {
+    const body = z.object({ id: z.enum(SLP_EXTRAS_OFFER_ORDER), add: z.boolean() }).safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    return { ok: await answerSlurpExtrasOffer(app.db, body.data.id, body.data.add) };
   });
   // "Rewrite all pending" runs in the background; Settings polls the usage above for progress.
   app.post("/model-budget/rewrite-pending", async () => ({ started: startSlurpRewriteAllPending(app.db) }));

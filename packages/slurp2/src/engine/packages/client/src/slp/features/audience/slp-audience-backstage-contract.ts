@@ -15,7 +15,7 @@ export function useSlpAudienceBackstageState({
   target: SlpBackstageTarget;
 }) {
   const fanStatusQuery = useCreatorFanActivityStatus(
-    section === "overview" || target === "audience" || target === "automation",
+    section === "overview" || target === "audience" || target === "basic",
   );
   const refreshFans = useRefreshCreatorFanActivityNow();
   // Only the Audience page lists characters (0.3.6: every Backstage page used to load them).

@@ -61,6 +61,7 @@ import {
   slurpEffectiveModelBudget,
   spendSlurpModelBudget,
 } from "../../base/model/slp-model-worker.js";
+import { slpLiveEvents } from "../../../../../shared/src/slp/slp-extensions.js";
 
 const FAN_PLAN_ROW_PREFIX = "fan-day:";
 
@@ -74,7 +75,7 @@ const FAN_ACTIVITY_RECOVERY_MAX_AGE_MS = 15 * 60 * 1000;
 
 export function slpCreatorFanActivityRunLimit(
   settings: Pick<SlurpSettings, "fanActivityRunsPerDay" | "modelBudget"> &
-    Partial<Pick<SlurpSettings, "platformEvents">>,
+    Partial<Pick<SlurpSettings, "platformEvents" | "extWorld">>,
   at = new Date(),
   /** Occurrences, so a started manual event counts and a dismissed one does not (R1-112). */
   story: SlurpInfluenceStory = {},
@@ -83,7 +84,12 @@ export function slpCreatorFanActivityRunLimit(
   // The day plan is shared by every Creator, so only events aimed at everybody move it.
   const boosted = Math.round(
     settings.fanActivityRunsPerDay *
-      slurpInfluenceMultiplier(settings.platformEvents ?? [], at, "audience.activity", story),
+      slurpInfluenceMultiplier(
+        slpLiveEvents({ ...settings, platformEvents: settings.platformEvents ?? [] }),
+        at,
+        "audience.activity",
+        story,
+      ),
   );
   return Math.min(boosted, settings.modelBudget.jobs.thread.maxPerDay);
 }

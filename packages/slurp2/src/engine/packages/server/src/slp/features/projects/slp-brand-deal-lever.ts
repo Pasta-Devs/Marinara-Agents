@@ -17,6 +17,7 @@ import type { SlpBrandFit } from "../../../../../shared/src/slp/slp-brand-deal-p
 import { createGarnishAds } from "../ads/slp-ads-contract.js";
 import { loadSlurpDealAds, loadSlurpDealSpice } from "./slp-brand-deal-source.js";
 import { loadSlurpTieCreators } from "./slp-creator-ties-service.js";
+import { slpInlineAdsOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
 export type SlurpBrandDealLeverInput = { accountId: string; brandId?: string; productId?: string; happen?: boolean };
 
@@ -68,7 +69,7 @@ export async function slurpBrandDealLever(
   };
   if (!found)
     return { preview: { ...empty, error: "notFound", summary: "That Creator does not exist." }, dealId: null };
-  if (!settings.inlineAdsEnabled)
+  if (!slpInlineAdsOn(settings))
     return { preview: { ...empty, error: "adsOff", summary: "Ads are switched off in Backstage." }, dealId: null };
   const creator = { ...found, spice: spice.get(found.id) };
   const id = newId();
@@ -124,7 +125,7 @@ export async function listSlurpBrandCatalog(db: DB, accountId?: string) {
           ? "fits"
           : "offBrand";
   return {
-    adsOn: settings.inlineAdsEnabled,
+    adsOn: slpInlineAdsOn(settings),
     brands: brands
       .filter((brand) => !brand.disabledAt)
       .map((brand) => ({

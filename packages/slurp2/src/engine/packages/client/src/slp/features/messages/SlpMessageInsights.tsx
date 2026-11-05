@@ -37,10 +37,10 @@ import {
 const ADULT_LEVELS = ["ordinary", "suggestive", "provocative", "intimate", "explicit"] as const;
 const ADULT_LEVEL_HINT: Record<string, string> = {
   ordinary: "Ordinary conversation. Nothing adult is on the table here yet.",
-  suggestive: "Flirting and innuendo. She will hint, but not more than that.",
-  provocative: "Openly forward. She will say what she means.",
+  suggestive: "Flirting and innuendo. Hints, but not more than that.",
+  provocative: "Openly forward. Says it plainly.",
   intimate: "Explicitly intimate, and personal about it.",
-  explicit: "No limit beyond the ones she sets herself.",
+  explicit: "No limit beyond the ones the Creator sets.",
 };
 
 export function SlurpRapportBadge({ rapport, ownsCreator }: { rapport: SlurpRapport; ownsCreator: boolean }) {
@@ -114,6 +114,34 @@ export function SlurpTierLadder({ tier, className }: { tier: SlurpRapport["tier"
         );
       })}
     </ol>
+  );
+}
+
+// What each tier opens; mirrors `slurpRapportDoors` (server modules/messages/slp-rapport.ts).
+const SLURP_TIER_DOORS: Partial<Record<SlurpRapport["tier"], string[]>> = {
+  regular: ["spicierTalk"],
+  favourite: ["gifts", "customDiscount"],
+  whale: ["fullSpice"],
+};
+
+/** The doors the highest reached tier has opened (rapport ladder). */
+export function SlurpTierDoors({ tier }: { tier: SlurpRapport["tier"] }) {
+  const { t: localizeUi } = useUiTranslation();
+  const at = SLURP_TIERS.indexOf(tier);
+  const doors = SLURP_TIERS.slice(0, at + 1).flatMap((step) => SLURP_TIER_DOORS[step] ?? []);
+  return (
+    <div className="mt-4">
+      <p className="text-xs font-bold text-[var(--muted-foreground)]">{localizeUi("ui.slurp.rapport.doorsTitle")}</p>
+      {doors.length === 0 ? (
+        <p className="mt-1 text-sm text-[var(--muted-foreground)]">{localizeUi("ui.slurp.rapport.doorsNone")}</p>
+      ) : (
+        <ul className="mt-1 space-y-1 text-sm">
+          {doors.map((door) => (
+            <li key={door}>✓ {localizeUi(`ui.slurp.rapport.door.${door}`)}</li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -251,7 +279,7 @@ export function SlurpRelationshipPanel({
                 label="Exposure"
                 value={creatorState.exposure}
                 tone="warning"
-                hint="How far out on a limb she is in public. It fades overnight."
+                hint="How far out on a limb the Creator is in public. It fades overnight."
               />
               <div>
                 <p className="mb-1 text-[0.7rem] text-[var(--muted-foreground)]">True right now ({modifiers.length})</p>
@@ -315,7 +343,7 @@ export function SlurpRelationshipPanel({
                   blockedBy ??
                   (riseBlock === "top"
                     ? "Already at the top step."
-                    : "Comfort, respect and posture all clear the bar she sets.")
+                    : "Comfort, respect and posture all clear the bar the Creator sets.")
                 }
               />
               {cooling && (
@@ -323,7 +351,7 @@ export function SlurpRelationshipPanel({
                   icon={SlpLockGlyph}
                   tone="warning"
                   title="Taking space from this conversation"
-                  detail="She is not answering until the cool-off ends."
+                  detail="No answer until the cool-off ends."
                 />
               )}
               <Field label="Cool-off until" value={relationship.coolUntil ?? "Not cooling off"} />
@@ -521,7 +549,7 @@ export function SlurpRelationshipPanel({
                   icon={SlpHeartGlyph}
                   tone="good"
                   title="Nothing is for sale between you"
-                  detail="Her pictures to you are free, and she goes as far with you as she goes anywhere."
+                  detail="Pictures to you are free, and as far as the page goes anywhere."
                 />
               </PanelSection>
             ) : (
@@ -549,7 +577,7 @@ export function SlurpRelationshipPanel({
                     detail={
                       blockedBy
                         ? `${blockedBy} It moves when that does, and it never skips a step.`
-                        : "It rises a step at a time, and only while they are somebody she wants and thinks well of."
+                        : "It rises a step at a time, and only while you are somebody the Creator wants and thinks well of."
                     }
                   />
                   <StatusRow
@@ -561,7 +589,7 @@ export function SlurpRelationshipPanel({
                         ? PICTURE_BLOCK_TEXT[pictures.blockedBy]
                         : pictures.mode === "none"
                           ? "This changes as the conversation warms up."
-                          : "She will send one if the conversation calls for it."
+                          : "Sends one if the conversation calls for it."
                     }
                   />
                 </PanelSection>

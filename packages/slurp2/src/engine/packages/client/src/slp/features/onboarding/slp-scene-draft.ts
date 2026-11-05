@@ -226,7 +226,12 @@ export function slpSceneChapters(
  * Whether a moment already has what it needs from the page itself, whatever the model said. The
  * two closing moments only end when the model says so (they fill nothing of their own).
  */
-export function slpSceneMomentFilled(moment: SlpSceneMoment, draft: SlpSceneDraft, photo = false): boolean {
+export function slpSceneMomentFilled(
+  moment: SlpSceneMoment,
+  draft: SlpSceneDraft,
+  photo = false,
+  strict = false,
+): boolean {
   switch (moment) {
     case "arrival":
       return Boolean(draft.gender) && draft.tags.length >= SLP_SCENE_MIN_TAGS;
@@ -236,13 +241,16 @@ export function slpSceneMomentFilled(moment: SlpSceneMoment, draft: SlpSceneDraf
     case "bio":
       return Boolean(draft.bio.trim());
     case "look":
-      return Boolean(draft.appearance.trim());
+      // An update (R6) asks until every field of the step is there, not just the first.
+      return Boolean(draft.appearance.trim() && (!strict || draft.wardrobe.trim()));
     case "voice":
       return Boolean(draft.stagePersonality.trim());
     case "shoot":
       return photo;
     case "limits":
-      return Boolean(draft.spice || draft.turnOns.trim() || draft.hardNoes.trim());
+      return strict
+        ? Boolean(draft.turnOns.trim() && draft.hardNoes.trim())
+        : Boolean(draft.spice || draft.turnOns.trim() || draft.hardNoes.trim());
     default:
       return false;
   }
@@ -256,13 +264,18 @@ export function slpSceneMomentFilled(moment: SlpSceneMoment, draft: SlpSceneDraf
 export function slpSceneNextMoment(
   preset: SlpScenePreset,
   moment: SlpSceneMoment,
-  { modelDone, draft, photo = false }: { modelDone: boolean; draft: SlpSceneDraft; photo?: boolean },
+  {
+    modelDone,
+    draft,
+    photo = false,
+    strict = false,
+  }: { modelDone: boolean; draft: SlpSceneDraft; photo?: boolean; strict?: boolean },
 ): SlpSceneMoment | null {
   const moments = SLP_SCENE_MOMENTS[preset] as readonly SlpSceneMoment[];
-  const done = moment === "shoot" ? photo : modelDone || slpSceneMomentFilled(moment, draft, photo);
+  const done = moment === "shoot" ? photo : modelDone || slpSceneMomentFilled(moment, draft, photo, strict);
   if (!done) return null;
   const rest = moments.slice(moments.indexOf(moment) + 1);
-  return rest.find((entry) => !slpSceneMomentFilled(entry, draft, photo)) ?? null;
+  return rest.find((entry) => !slpSceneMomentFilled(entry, draft, photo, strict)) ?? null;
 }
 
 /** The suggestion that moves each moment on; it goes first and is the highlighted one. */
@@ -417,4 +430,48 @@ export function slpSceneShootGuidance(kind: "avatar" | "banner", outfit: string,
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+/**
+ * R6: an existing Creator's page as a scene draft, so the sign-up scene can fill in what it is
+ * missing. Every field the page already has is locked: the scene asks about the empty ones only.
+ */
+export function slpSceneUpdateState(
+  page: {
+    displayName: string;
+    handle: string;
+    bio: string;
+    stagePersonality: string;
+    appearance: string;
+    wardrobe: string;
+    locations: string;
+    gender: SlpSceneDraft["gender"];
+    tags: readonly string[];
+  },
+  limits: { turnOns: readonly string[]; hardNoes: readonly string[] } | null,
+  /**
+   * Their spice as it is now. It is set (their own or Slurp-wide), so the field is locked and left
+   * empty: saving never writes a level, and a Slurp-wide level stays Slurp-wide.
+   */
+  spice: { level: string | null } | null,
+): SlpSceneDraftState {
+  const draft: SlpSceneDraft = {
+    ...SLP_SCENE_EMPTY_DRAFT,
+    displayName: page.displayName,
+    handle: page.handle,
+    bio: page.bio,
+    stagePersonality: page.stagePersonality,
+    appearance: page.appearance,
+    wardrobe: page.wardrobe,
+    locations: page.locations,
+    gender: page.gender,
+    tags: [...page.tags],
+    turnOns: limits?.turnOns.join(", ") ?? "",
+    hardNoes: limits?.hardNoes.join(", ") ?? "",
+  };
+  const filled = SLP_SCENE_FIELDS.filter((field) => {
+    const value = draft[field];
+    return Array.isArray(value) ? value.length > 0 : typeof value === "string" ? Boolean(value.trim()) : value !== null;
+  });
+  return slpSceneInitialState(draft, spice ? [...filled, "spice"] : filled);
 }

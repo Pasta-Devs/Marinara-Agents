@@ -10,7 +10,8 @@ const repoRoot = join(import.meta.dirname, "../..");
 const tree = await mkdtemp(join(tmpdir(), "marinara-typecheck-no-tsc-"));
 try {
   await mkdir(join(tree, "scripts"));
-  await copyFile(join(repoRoot, "scripts/typecheck-packages.mjs"), join(tree, "scripts/typecheck-packages.mjs"));
+  for (const name of ["typecheck-packages.mjs", "esbuild-host-plugins.mjs"])
+    await copyFile(join(repoRoot, "scripts", name), join(tree, "scripts", name));
   await mkdir(join(tree, "sources/engine/packages"), { recursive: true });
   await mkdir(join(tree, "sources/claude-subscription-overlay"));
   const source = join(tree, "packages/fixture/src/engine/packages/server/src");

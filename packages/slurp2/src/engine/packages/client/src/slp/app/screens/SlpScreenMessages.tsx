@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   Coins,
+  Radio,
   Crown,
   Gift,
   MessageCircle,
@@ -15,6 +16,7 @@ import {
 } from "lucide-react";
 import { SlpHeartGlyph, SlpLockGlyph } from "../../base/chrome/SlpGlyphs";
 import type { LucideIcon } from "lucide-react";
+import { useSlurpUIStore } from "../../base/state/slp-package-store";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import {
@@ -407,6 +409,13 @@ function SlurpNotificationsView({
   const items = notificationsQuery.data?.items ?? [];
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const unseenIds = new Set(unseen.flatMap((entry) => (entry.type === "single" ? [entry.event.id] : entry.ids)));
+  const navigation = useSlurpUIStore((state) => state.navigation);
+  const setNavigation = useSlurpUIStore((state) => state.setNavigation);
+  // "X is live" opens the show itself, not the Creator's page.
+  const openLive = (event: SlurpEventItem) =>
+    event.kind === "live" && event.subjectId
+      ? () => setNavigation({ mode: "creator", view: "live", showId: event.subjectId!, returnTo: navigation })
+      : null;
   const describeEvent = (event: SlurpEventItem) => {
     const { kind, amount, actorLabel } = event;
     // A fan's direction change names its direction: burning out or getting too attached is not
@@ -471,6 +480,7 @@ function SlurpNotificationsView({
     if (kind === "fan_note") return { icon: MessageCircle, tone: pink };
     if (kind === "sign_up") return { icon: Star, tone: violet };
     if (kind === "tip") return { icon: Coins, tone: warm };
+    if (kind === "live") return { icon: Radio, tone: pink };
     if (kind === "unlock" || kind === "ppv_unlock") return { icon: SlpLockGlyph, tone: warm };
     if (kind === "subscribed") return { icon: Crown, tone: pink };
     if (kind === "milestone") return { icon: Star, tone: violet };
@@ -585,7 +595,8 @@ function SlurpNotificationsView({
                 {group.events.map((event) => {
                   const appearance = eventAppearance(event.kind);
                   const EventIcon = appearance.icon;
-                  const destination = event.creatorAccountId ? () => onOpenProfile(event.creatorAccountId!) : null;
+                  const destination =
+                    openLive(event) ?? (event.creatorAccountId ? () => onOpenProfile(event.creatorAccountId!) : null);
                   const row = (
                     <>
                       {event.actorAvatarUrl ? (
@@ -643,11 +654,13 @@ function SlurpNotificationsView({
       const actionable = group.event.kind === "commission_requested";
       const fanNote = group.event.kind === "fan_note";
       const creatorId = group.event.creatorAccountId;
-      const destination = actionable
-        ? () => onOpenMessages(group.event.subjectId)
-        : creatorId && !fanNote
-          ? () => onOpenProfile(creatorId)
-          : null;
+      const destination =
+        openLive(group.event) ??
+        (actionable
+          ? () => onOpenMessages(group.event.subjectId)
+          : creatorId && !fanNote
+            ? () => onOpenProfile(creatorId)
+            : null);
       const appearance = eventAppearance(group.event.kind);
       const EventIcon = appearance.icon;
       const content = (

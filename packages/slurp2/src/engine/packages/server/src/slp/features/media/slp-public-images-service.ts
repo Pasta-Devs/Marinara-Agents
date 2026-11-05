@@ -26,7 +26,7 @@ import { createConnectionsStorage } from "../../../services/storage/connections.
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { createPromptOverridesStorage } from "../../../services/storage/prompt-overrides.storage.js";
 import { loadPrompt, NOODLE_IMAGE_POST } from "../../../services/prompt-overrides/index.js";
-import { generateSlpImageWithRetry } from "../../base/media/slp-image-retry.js";
+import { generateSlpImageWithRetry, slpImageRetryable } from "../../base/media/slp-image-retry.js";
 import { rewriteSlpImagePrompt } from "../../base/media/slp-image-prompt-rewrite.js";
 import { slpImageReferencesSupported } from "../../base/media/slp-image-references.js";
 import { resolveImageAppearance } from "./slp-appearance-service.js";
@@ -52,6 +52,7 @@ import {
 } from "../../modules/creators/slp-public-support.js";
 import { bootstrapVisibleSlp } from "../../data/creators/slp-creator-accounts.js";
 import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
+import { withSlurpConditionLook } from "../storylines/slp-storylines-contract.js";
 
 type ImageConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -85,6 +86,8 @@ const CLIENT_PUBLIC_DIR = resolve(SLP_SERVICE_DIR, "../../../../client/public");
 const PROFESSOR_MARI_REFERENCE_ASSETS = [
   "sprites/mari/Mari_profile.png",
   "sprites/mari/chibi-professor-mari.png",
+  // Newer Engines ship the chibi as WebP only.
+  "sprites/mari/chibi-professor-mari.webp",
 ] as const;
 const REVIEWED_IMAGE_CLAIM_LEASE_MS = 2 * 60 * 1000;
 const REVIEWED_IMAGE_CLAIM_RENEW_MS = 30 * 1000;
@@ -311,6 +314,7 @@ export async function generateSlpPostImage(input: {
   ]
     .filter(Boolean)
     .join("\n");
+  characterImageInstructions = await withSlurpConditionLook(input.db, input.account.id, characterImageInstructions);
   const lookMode = input.settings.imageAppearanceMode ?? "writer";
   const characterContext = [
     characterDescription && slurpLookForWriter(lookMode) ? `Appearance:\n${characterDescription}` : "",
@@ -585,6 +589,7 @@ export function createPublicSlpImagesService(db: DB) {
               imagePrompt: post.imagePrompt,
               metadata: {
                 imageGenerationFailed: true,
+                imageGenerationRetryable: slpImageRetryable(error),
                 imageGenerationError: getErrorMessage(error).slice(0, 500),
               },
             });

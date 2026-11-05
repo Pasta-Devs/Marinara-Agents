@@ -289,9 +289,24 @@ export function slurpCameraSourceNegative(source: SlurpCameraSource): string {
   return NEGATIVE[source];
 }
 
+/** Sources that show a phone or a screen; a Creator whose world has neither never gets them. */
+const SCREEN_SOURCES: readonly SlurpCameraSource[] = ["mirror", "desk", "screenshot"];
+
+/** A stored camera (a reused shoot) without screens, null when it shows one in a world that has none. */
+export const slurpScreenFreeCamera = (source: SlurpCameraSource | null | undefined, screens: boolean) =>
+  source && (screens || !SCREEN_SOURCES.includes(source)) ? source : null;
+
 /** The sources this variation can actually pay for. */
-export function slurpPermittedCameraSources(options: { companyCanHoldCamera: boolean }): readonly SlurpCameraSource[] {
-  return SLURP_CAMERA_SOURCES.filter((source) => !RULES[source].needsHelper || options.companyCanHoldCamera);
+export function slurpPermittedCameraSources(options: {
+  companyCanHoldCamera: boolean;
+  /** False for a Creator from another era or world (the world lens). */
+  screens?: boolean;
+}): readonly SlurpCameraSource[] {
+  return SLURP_CAMERA_SOURCES.filter(
+    (source) =>
+      (!RULES[source].needsHelper || options.companyCanHoldCamera) &&
+      (options.screens !== false || !SCREEN_SOURCES.includes(source)),
+  );
 }
 
 /**
@@ -379,6 +394,7 @@ export function slurpPostCameraSource(
   sequence: number,
   options: {
     companyCanHoldCamera: boolean;
+    screens?: boolean;
     prefers?: readonly SlurpCameraSource[];
     /** What this post is for, from `slp-content-axes.ts`. */
     intent?: string;

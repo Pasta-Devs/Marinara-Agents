@@ -91,7 +91,42 @@ async function main() {
   assert.equal(slurpBondFromRelation("coworker at the bar")?.kind, "coworker");
   assert.equal(slurpBondFromRelation("ex-girlfriend")?.kind, "ex");
   assert.equal(slurpBondFromRelation("girlfriend"), null);
-  assert.equal(slurpBondFromRelation("sister"), null);
+  // R3: family is a bond of its own, never romance; a "mom friend" or a "family friend" is a friend.
+  assert.equal(slurpBondFromRelation("sister")?.kind, "family");
+  assert.equal(slurpBondFromRelation("her daughter")?.kind, "family");
+  assert.equal(slurpBondFromRelation("stepmom")?.kind, "family");
+  assert.equal(slurpBondFromRelation("ex-wife's son")?.kind, "family");
+  assert.equal(slurpBondFromRelation("mom friend")?.kind, "friend");
+  assert.equal(slurpBondFromRelation("family friend")?.kind, "friend");
+  assert.equal(slurpBondFromRelation("personal trainer"), null, 'not "son"');
+  assert.equal(slurpBondFromRelation("my sister's ex")?.kind, "ex", "a possessive is about someone else");
+  assert.equal(slurpBondFromRelation("her brother's best friend")?.kind, "friend");
+  assert.equal(slurpBondFromRelation("twin flame"), null);
+  assert.equal(slurpBondFromRelation("ex and co-parent")?.kind, "ex", "a co-parent is not family");
+  {
+    const couple = newSlurpCouple("c", "mum", "kid", "world", T0.toISOString());
+    assert.equal(
+      slurpSetBond([], { aId: "mum", bId: "kid", kind: "family", couples: [couple] }, { at: T0, id: "f" }),
+      "couple",
+      "a couple cannot be made family; end the couple first",
+    );
+    const set = slurpSetBond([], { aId: "mum", bId: "kid", kind: "family" }, { at: T0, id: "f" });
+    assert.ok(Array.isArray(set) && set[0]!.kind === "family" && set[0]!.locked);
+    const people = slpPagePeople("mum", {
+      creators: [
+        { id: "mum", name: "Mum", avatarUrl: null },
+        { id: "kid", name: "Kid", avatarUrl: null },
+      ],
+      couples: [],
+      collabs: [],
+      rivalries: [],
+      bonds: [{ aId: "mum", bId: "kid", kind: "family", level: 1, endedAt: null }],
+    });
+    assert.deepEqual(
+      people.map((person) => person.relation),
+      ["family"],
+    );
+  }
 
   // Cards seed once; persona text never seeds; a name must mean exactly one Creator.
   {

@@ -1,5 +1,19 @@
-import { useEffect, useState } from "react";
-import { Button } from "./shared-controls";
+import { useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { LtmExtractionSettingsPatch } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import {
+  ltmChatMemoriesModeOf,
+  type LtmChatMemoriesMode,
+} from "../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
+import { errorMessage, invalidateLtmQueries, queryKeys, request } from "./api";
+import {
+  ChatMemoriesSample,
+  chatMemoriesDescriptionKey,
+  chatMemoriesFlags,
+  chatMemoriesLabelKey,
+  chatMemoriesModes,
+} from "./chat-memories";
+import { Button, StatusSurface, lockedActionProps } from "./shared-controls";
 import { useLtmTranslation } from "./localization";
 import type { CapabilityProps, SourceTab } from "./types";
 
@@ -15,7 +29,7 @@ const persistOnboardingStep = (step: number) => {
 // Mari_*.png files these replaced are gone from the Engine, which left the guide with broken images.
 const onboardingSteps = [
   {
-    labelKey: "ui.longTermMemory.longtermmemorydetail.save",
+    labelKey: "ui.longTermMemory.longtermmemorydetail.fromSourceToSavedMemory",
     titleKey: "ui.longTermMemory.longtermmemorydetail.fromSourceToSavedMemory",
     mobileSprite: "basic/pose-wave.webp",
     desktopSprite: "basic/pose-wave.webp",
@@ -63,10 +77,10 @@ const onboardingSteps = [
     alt: "",
   },
   {
-    labelKey: "ui.longTermMemory.longtermmemorydetail.underTheHood",
-    titleKey: "ui.longTermMemory.longtermmemorydetail.underTheHoodTitle",
-    mobileSprite: "basic/pose-thinking.webp",
-    desktopSprite: "basic/pose-thinking.webp",
+    labelKey: "ui.longTermMemory.longtermmemorydetail.ready",
+    titleKey: "ui.longTermMemory.longtermmemorydetail.youReSetUp",
+    mobileSprite: "basic/pose-wave.webp",
+    desktopSprite: "basic/pose-wave.webp",
     mobileFlip: false,
     alt: "",
   },
@@ -76,6 +90,8 @@ type OnboardingProps = {
   props: CapabilityProps;
   /** True once the status query has loaded; the guide opens on first run after that. */
   ready: boolean;
+  /** The full guide shows on the Memory Vault only; every other destination gets a one-line bar. */
+  onVault: boolean;
   savedMemoryCount: number;
   pendingDraftCount: number | undefined;
   chatLabel: string;
@@ -89,11 +105,18 @@ type OnboardingProps = {
   onOpenVault: () => Promise<boolean>;
   /** Hands the parent the function that reopens the guide at its first step. */
   onOpen: (open: () => void) => void;
+  /** Called after Not now, Don't show again, Done or Dismiss hides the guide, so the parent can return focus to the control that reopens it. */
+  onClose: () => void;
 };
+
+// "full" is the guide on the Vault, "bar" the one-line stand-in a suspended guide leaves behind. Off the Vault a
+// "full" guide also renders as the bar, so it comes back in place when the user returns to the Vault.
+type GuideMode = "closed" | "full" | "bar";
 
 export function Onboarding({
   props,
   ready,
+  onVault,
   savedMemoryCount,
   pendingDraftCount,
   chatLabel,
@@ -105,21 +128,87 @@ export function Onboarding({
   onOpenSources,
   onOpenVault,
   onOpen,
+  onClose,
 }: OnboardingProps) {
   const { t: localizeUi } = useLtmTranslation();
-  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [mode, setMode] = useState<GuideMode>("closed");
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [onboardingSource, setOnboardingSource] = useState<SourceTab>("chats");
+  const queryClient = useQueryClient();
+  const extraction = useQuery({
+    queryKey: queryKeys.extractionSettings,
+    queryFn: () => request<LtmExtractionSettingsPatch>("/extraction-settings"),
+  });
+  const storedChatMemories = extraction.data ? ltmChatMemoriesModeOf(extraction.data) : null;
+  const [chatMemoriesChoice, setChatMemoriesChoice] = useState<LtmChatMemoriesMode | null>(null);
+  const [chatMemoriesError, setChatMemoriesError] = useState("");
+  // A new setup (empty vault, still on the stored default) starts on "Save them for me"; an existing one shows its choice.
+  // Until the status loads, the count reads 0, so the stored choice shows and advancing writes nothing.
+  const shownChatMemories =
+    chatMemoriesChoice ??
+    (ready && storedChatMemories === "manual" && savedMemoryCount === 0 ? "save" : storedChatMemories);
+  const saveChatMemories = async (choice: LtmChatMemoriesMode | null) => {
+    if (!choice || choice === storedChatMemories) return;
+    setChatMemoriesError("");
+    try {
+      await request("/extraction-settings", "PUT", chatMemoriesFlags(choice));
+      await invalidateLtmQueries(queryClient, [queryKeys.extractionSettings]);
+    } catch (error) {
+      setChatMemoriesError(
+        errorMessage(error, localizeUi("ui.longTermMemory.longtermmemorydetail.chatMemoriesCouldNotSave")),
+      );
+    }
+  };
+  const chooseChatMemories = (choice: LtmChatMemoriesMode) => {
+    // The locked buttons only set aria-disabled, so a click during a pending turn-on still arrives here.
+    if (activationPending) return;
+    setChatMemoriesChoice(choice);
+    void saveChatMemories(choice);
+  };
+  const showFull = mode === "full" && onVault;
+  const showBar = mode !== "closed" && !showFull;
+  // A step change replaces the action buttons, so focus moves to the step title when the user
+  // opens the guide or changes step; the guide's automatic first-run open leaves focus alone.
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const focusTitleRef = useRef(false);
+  // A step button that leaves for another screen unmounts under the user's focus; the bar takes it.
+  const barRef = useRef<HTMLElement>(null);
+  const focusBarRef = useRef(false);
+  const autoOpenedRef = useRef(false);
+
+  // The full guide lives on the Vault, so reopening or resuming it from another screen goes there first.
+  const showGuide = (restart: boolean) => {
+    const show = () => {
+      focusTitleRef.current = true;
+      if (restart) setOnboardingStep(0);
+      setMode("full");
+    };
+    if (onVault) show();
+    else void onOpenVault().then((arrived) => arrived && show());
+  };
+
+  // Re-registered every render: the reopen closure reads the current destination.
+  useEffect(() => {
+    onOpen(() => showGuide(true));
+  });
 
   useEffect(() => {
-    onOpen(() => {
-      setOnboardingStep(0);
-      setOnboardingOpen(true);
-    });
-  }, [onOpen]);
+    if (!showFull || !focusTitleRef.current) return;
+    focusTitleRef.current = false;
+    titleRef.current?.focus();
+  }, [showFull, onboardingStep]);
 
   useEffect(() => {
-    if (!ready) return;
+    if (!showBar || !focusBarRef.current) return;
+    focusBarRef.current = false;
+    barRef.current?.focus();
+  }, [showBar, mode]);
+
+  // Only the first loaded status decides whether the guide opens by itself; a later reload of the vault
+  // counts must not reopen a guide the user put away with Not now.
+  useEffect(() => {
+    if (!ready || autoOpenedRef.current) return;
+    autoOpenedRef.current = true;
     let stored = "";
     try {
       stored = localStorage.getItem(onboardingStorageKey) ?? "";
@@ -129,54 +218,101 @@ export function Onboarding({
     const savedStep = match ? Number(match[1]) : null;
     if (savedStep !== null && Number.isInteger(savedStep) && savedStep >= 0 && savedStep < onboardingSteps.length) {
       setOnboardingStep(savedStep);
-      setOnboardingOpen(true);
+      setMode("full");
       return;
     }
     if (savedMemoryCount !== 0) return;
-    setOnboardingOpen(true);
+    setMode("full");
   }, [ready, savedMemoryCount]);
 
+  // Done and Don't show again: the guide is finished for good.
   const completeOnboarding = () => {
-    setOnboardingOpen(false);
+    setMode("closed");
     try {
       localStorage.setItem(onboardingStorageKey, "complete");
     } catch {}
+    onClose();
+  };
+  // Not now and the bar's Dismiss: the saved step stays, so the guide returns at that step on the next visit.
+  const putAwayOnboarding = () => {
+    persistOnboardingStep(onboardingStep);
+    setMode("closed");
+    onClose();
   };
   const suspendOnboarding = () => {
     persistOnboardingStep(onboardingStep);
-    setOnboardingOpen(false);
+    setMode("bar");
+  };
+  // A step button that opens another screen steps the guide aside once the screen has opened; a refused
+  // navigation (unsaved work kept) leaves the guide where it was.
+  const leaveForScreen = async (navigate: () => Promise<boolean>) => {
+    if (!(await navigate())) return;
+    focusBarRef.current = true;
+    suspendOnboarding();
   };
 
   useEffect(() => {
-    if (!onboardingOpen) return;
+    if (mode === "closed") return;
     persistOnboardingStep(onboardingStep);
-  }, [onboardingOpen, onboardingStep]);
+  }, [mode, onboardingStep]);
 
   const openPromptPresetSections = () => {
+    focusBarRef.current = true;
     suspendOnboarding();
     props.onOpenActivePromptPresetEditor?.();
   };
   const openChatSummarySettings = () => {
+    focusBarRef.current = true;
     suspendOnboarding();
     props.onOpenChatSummarySettings?.();
   };
-  const advanceOnboarding = () =>
+  const advanceOnboarding = () => {
+    focusTitleRef.current = true;
     setOnboardingStep((step) => {
       const next = Math.min(step + 1, onboardingSteps.length - 1);
       persistOnboardingStep(next);
       return next;
     });
+  };
+  // Leaving the Activate step forward keeps the choice it shows, including the preselected one.
+  const advanceFromActivate = () => {
+    void saveChatMemories(shownChatMemories);
+    advanceOnboarding();
+  };
   const activateForOnboarding = async () => {
-    if (await onActivate()) advanceOnboarding();
+    if (activationPending) return;
+    if (await onActivate()) advanceFromActivate();
   };
 
-  if (!onboardingOpen) return null;
+  if (showBar) {
+    return (
+      <section
+        ref={barRef}
+        tabIndex={-1}
+        aria-label={localizeUi("ui.longTermMemory.longtermmemorydetail.professorMariSSetupGuide")}
+        data-ltm-surface="onboarding-bar"
+        className="mari-editor-panel mari-editor-panel--soft flex flex-wrap items-center gap-2 px-3 py-2"
+      >
+        <p className="min-w-0 flex-1 text-xs font-semibold">
+          {localizeUi("ui.longTermMemory.longtermmemorydetail.setupGuideBar", {
+            current: onboardingStep + 1,
+            total: onboardingSteps.length,
+          })}
+        </p>
+        <Button onClick={() => showGuide(false)}>{localizeUi("ui.longTermMemory.longtermmemorydetail.resume")}</Button>
+        <Button onClick={putAwayOnboarding}>{localizeUi("ui.longTermMemory.longtermmemorydetail.dismiss")}</Button>
+      </section>
+    );
+  }
+  if (!showFull) return null;
+  const sprite = onboardingSteps[onboardingStep];
   return (
     <section
       aria-labelledby="ltm-onboarding-title"
       aria-describedby="ltm-onboarding-description"
       data-ltm-surface="onboarding"
       className="mari-editor-panel mari-editor-panel--soft overflow-hidden"
+      style={{ containerName: "ltm-onboarding", containerType: "inline-size" }}
     >
       <style>{`
                 [data-ltm-onboarding-body] {
@@ -184,6 +320,7 @@ export function Onboarding({
                   grid-template-columns: minmax(0, 1fr);
                   align-items: center;
                   gap: 1.25rem;
+                  padding: 1rem;
                 }
                 [data-ltm-onboarding-sprite-wrap] {
                   display: flex;
@@ -204,6 +341,9 @@ export function Onboarding({
                 [data-ltm-onboarding-sprite][data-ltm-onboarding-mobile-shift="left"] {
                   transform: translateX(-40px);
                 }
+                [data-ltm-onboarding-sprite-wide] {
+                  display: none;
+                }
                 [data-ltm-onboarding-actions] {
                   display: flex;
                   flex-direction: column;
@@ -212,12 +352,14 @@ export function Onboarding({
                 [data-ltm-onboarding-actions] > button {
                   width: 100%;
                 }
-                [data-ltm-source-choice] {
+                [data-ltm-source-choice],
+                [data-ltm-chat-memories-choice] {
                   display: grid;
                   grid-template-columns: repeat(3, minmax(0, 1fr));
                   gap: 0.5rem;
                 }
-                [data-ltm-source-choice] > button {
+                [data-ltm-source-choice] > button,
+                [data-ltm-chat-memories-choice] > button {
                   min-width: 0;
                   width: 100%;
                   justify-content: center;
@@ -226,20 +368,26 @@ export function Onboarding({
                 }
                 [data-ltm-onboarding-footer] {
                   display: flex;
+                  flex-wrap: wrap;
                   justify-content: flex-start;
                   border-top: 1px solid var(--border);
                   padding: 0.75rem 1rem;
                 }
                 [data-ltm-onboarding-footer] > p {
                   min-width: 0;
-                  flex: 1;
+                  flex: 1 1 12rem;
                 }
                 [data-ltm-onboarding-close] {
                   min-height: 2.75rem;
                   padding: 0.375rem 0.625rem;
                   font-size: 0.75rem;
                 }
-                @media (min-width: 768px) {
+                @container ltm-onboarding (min-width: 40rem) {
+                  [data-ltm-onboarding-body] {
+                    padding: 1.5rem;
+                  }
+                }
+                @container ltm-onboarding (min-width: 48rem) {
                   [data-ltm-onboarding-body] {
                     grid-template-columns: minmax(0, 1fr) 12rem;
                   }
@@ -250,6 +398,12 @@ export function Onboarding({
                   [data-ltm-onboarding-sprite] {
                     height: 11rem;
                     max-width: 12rem;
+                  }
+                  [data-ltm-onboarding-sprite-wide] {
+                    display: block;
+                  }
+                  [data-ltm-onboarding-sprite-narrow] {
+                    display: none;
                   }
                   [data-ltm-onboarding-sprite][data-ltm-onboarding-mobile-flip] {
                     transform: none;
@@ -284,10 +438,17 @@ export function Onboarding({
           })}
         </p>
       </div>
-      <div data-ltm-onboarding-body className="p-4 sm:p-6">
+      <div data-ltm-onboarding-body>
         <div className="space-y-4">
-          <div className="space-y-2" aria-live="polite" aria-atomic="true">
-            <h2 id="ltm-onboarding-title" className="text-lg font-semibold">
+          <div className="space-y-2">
+            <h2
+              ref={titleRef}
+              id="ltm-onboarding-title"
+              tabIndex={-1}
+              // Focus lands here on each step, so the step's text is read with its title.
+              aria-describedby="ltm-onboarding-description"
+              className="text-lg font-semibold"
+            >
               {localizeUi(onboardingSteps[onboardingStep].titleKey)}
             </h2>
             <div
@@ -460,6 +621,15 @@ export function Onboarding({
                 )
               ) : onboardingStep === 6 ? (
                 <>
+                  <p>
+                    {localizeUi(
+                      shownChatMemories === "save"
+                        ? "ui.longTermMemory.longtermmemorydetail.youReSetUpIntroSave"
+                        : shownChatMemories === "review"
+                          ? "ui.longTermMemory.longtermmemorydetail.youReSetUpIntroReview"
+                          : "ui.longTermMemory.longtermmemorydetail.youReSetUpIntro",
+                    )}
+                  </p>
                   <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.underTheHoodIntro")}</p>
                   <details className="rounded-md border border-[var(--border)] px-3 py-2">
                     <summary className="cursor-pointer font-semibold text-[var(--foreground)]">
@@ -547,6 +717,39 @@ export function Onboarding({
                 </>
               ) : null}
             </div>
+            {onboardingStep === 2 ? (
+              <div className="space-y-2">
+                <p id="ltm-onboarding-chat-memories" className="text-sm font-semibold">
+                  {localizeUi("ui.longTermMemory.longtermmemorydetail.chatMemoriesQuestion")}
+                </p>
+                <div data-ltm-chat-memories-choice role="group" aria-labelledby="ltm-onboarding-chat-memories">
+                  {chatMemoriesModes.map((choice) => (
+                    <Button
+                      key={choice}
+                      primary={shownChatMemories === choice}
+                      aria-pressed={shownChatMemories === choice}
+                      {...lockedActionProps(activationPending)}
+                      onClick={() => chooseChatMemories(choice)}
+                    >
+                      {localizeUi(chatMemoriesLabelKey(choice))}
+                    </Button>
+                  ))}
+                </div>
+                {shownChatMemories ? (
+                  <>
+                    <p className="max-w-[65ch] text-sm leading-6 text-[var(--muted-foreground)]">
+                      {localizeUi(chatMemoriesDescriptionKey(shownChatMemories))}
+                    </p>
+                    <ChatMemoriesSample mode={shownChatMemories} />
+                  </>
+                ) : null}
+                {chatMemoriesError ? (
+                  <StatusSurface tone="danger" compact>
+                    {chatMemoriesError}
+                  </StatusSurface>
+                ) : null}
+              </div>
+            ) : null}
             {onboardingStep === 3 ? (
               <>
                 <div
@@ -569,7 +772,13 @@ export function Onboarding({
                 </div>
                 {onboardingSource === "chats" ? (
                   <div className="max-w-[65ch] space-y-4 text-sm leading-6 text-[var(--muted-foreground)]">
-                    <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.chatSummarySetupIntro")}</p>
+                    <p>
+                      {localizeUi(
+                        shownChatMemories === "save" || shownChatMemories === "review"
+                          ? "ui.longTermMemory.longtermmemorydetail.chatSummarySetupIntroCollecting"
+                          : "ui.longTermMemory.longtermmemorydetail.chatSummarySetupIntro",
+                      )}
+                    </p>
                     <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.chatSummarySetupOpen")}</p>
                   </div>
                 ) : null}
@@ -579,13 +788,14 @@ export function Onboarding({
           <div data-ltm-onboarding-actions>
             {onboardingStep > 0 ? (
               <Button
-                onClick={() =>
+                onClick={() => {
+                  focusTitleRef.current = true;
                   setOnboardingStep((step) => {
                     const previous = step - 1;
                     persistOnboardingStep(previous);
                     return previous;
-                  })
-                }
+                  });
+                }}
               >
                 {localizeUi("ui.longTermMemory.longtermmemorydetail.back")}
               </Button>
@@ -601,7 +811,7 @@ export function Onboarding({
             ) : onboardingStep === 2 ? (
               activeChat ? (
                 <>
-                  <Button primary onClick={advanceOnboarding}>
+                  <Button primary onClick={advanceFromActivate}>
                     {localizeUi("ui.longTermMemory.longtermmemorydetail.nextChooseASource")}
                   </Button>
                   {(props.chatMode === "roleplay" || props.chatMode === "game") &&
@@ -615,12 +825,13 @@ export function Onboarding({
                 <>
                   <Button
                     primary
-                    disabled={activationPending || !props.onEnabledForChatChange}
+                    disabled={!props.onEnabledForChatChange}
+                    {...lockedActionProps(activationPending)}
                     onClick={() => void activateForOnboarding()}
                   >
                     {localizeUi("ui.longTermMemory.longtermmemorydetail.turnOnForThisChat")}
                   </Button>
-                  <Button onClick={advanceOnboarding}>
+                  <Button onClick={advanceFromActivate}>
                     {localizeUi("ui.longTermMemory.longtermmemorydetail.continueWithoutActivating")}
                   </Button>
                   {(props.chatMode === "roleplay" || props.chatMode === "game") &&
@@ -631,7 +842,7 @@ export function Onboarding({
                   ) : null}
                 </>
               ) : (
-                <Button primary onClick={advanceOnboarding}>
+                <Button primary onClick={advanceFromActivate}>
                   {localizeUi("ui.longTermMemory.longtermmemorydetail.continueWithoutAChat")}
                 </Button>
               )
@@ -647,22 +858,12 @@ export function Onboarding({
                         {localizeUi("ui.longTermMemory.longtermmemorydetail.openChatSummarySettings")}
                       </Button>
                     ) : null}
-                    <Button
-                      primary
-                      onClick={async () => {
-                        await onOpenSources("chats");
-                      }}
-                    >
+                    <Button primary onClick={() => void leaveForScreen(() => onOpenSources("chats"))}>
                       {localizeUi("ui.longTermMemory.longtermmemorydetail.openChatSources")}
                     </Button>
                   </>
                 ) : (
-                  <Button
-                    primary
-                    onClick={async () => {
-                      await onOpenSources(onboardingSource);
-                    }}
-                  >
+                  <Button primary onClick={() => void leaveForScreen(() => onOpenSources(onboardingSource))}>
                     {localizeUi(
                       onboardingSource === "characters"
                         ? "ui.longTermMemory.longtermmemorydetail.importACharacter"
@@ -678,10 +879,9 @@ export function Onboarding({
                 </Button>
                 <Button
                   primary
-                  onClick={async () => {
-                    if (pendingDraftCount) await onOpenReview();
-                    else await onOpenSources("characters");
-                  }}
+                  onClick={() =>
+                    void leaveForScreen(() => (pendingDraftCount ? onOpenReview() : onOpenSources(onboardingSource)))
+                  }
                 >
                   {localizeUi(
                     pendingDraftCount
@@ -693,13 +893,12 @@ export function Onboarding({
             ) : onboardingStep === 5 ? (
               <>
                 <Button primary onClick={advanceOnboarding}>
-                  {localizeUi("ui.longTermMemory.longtermmemorydetail.nextUnderTheHood")}
+                  {localizeUi("ui.longTermMemory.longtermmemorydetail.finishSetup")}
                 </Button>
                 <Button
-                  onClick={async () => {
-                    if (savedMemoryCount) await onOpenVault();
-                    else await onOpenSources("characters");
-                  }}
+                  onClick={() =>
+                    void leaveForScreen(() => (savedMemoryCount ? onOpenVault() : onOpenSources(onboardingSource)))
+                  }
                 >
                   {localizeUi(
                     savedMemoryCount
@@ -709,43 +908,47 @@ export function Onboarding({
                 </Button>
               </>
             ) : (
-              <Button
-                primary
-                onClick={async () => {
-                  if (savedMemoryCount) await onOpenVault();
-                  else await onOpenSources("characters");
-                }}
-              >
-                {localizeUi(
-                  savedMemoryCount
-                    ? "ui.longTermMemory.longtermmemorydetail.goToSavedMemories"
-                    : "ui.longTermMemory.longtermmemorydetail.chooseASource",
-                )}
+              <Button primary onClick={completeOnboarding}>
+                {localizeUi("ui.longTermMemory.longtermmemorydetail.done")}
               </Button>
             )}
           </div>
         </div>
         <div data-ltm-onboarding-sprite-wrap>
-          <picture>
-            <source
-              media="(min-width: 768px)"
-              srcSet={`/sprites/mari/${onboardingSteps[onboardingStep].desktopSprite}`}
-            />
+          {/* The container, not the window, decides the layout, so it decides the sprite; a media-query picture element follows the window. */}
+          <img
+            src={`/sprites/mari/${sprite.mobileSprite}`}
+            alt={sprite.alt}
+            draggable={false}
+            loading={sprite.mobileSprite === sprite.desktopSprite ? undefined : "lazy"}
+            data-ltm-onboarding-sprite={sprite.mobileSprite}
+            data-ltm-onboarding-sprite-narrow={sprite.mobileSprite === sprite.desktopSprite ? undefined : ""}
+            data-ltm-onboarding-mobile-flip={sprite.mobileFlip || undefined}
+            data-ltm-onboarding-mobile-shift={onboardingStep === 4 ? "left" : undefined}
+          />
+          {sprite.mobileSprite === sprite.desktopSprite ? null : (
             <img
-              src={`/sprites/mari/${onboardingSteps[onboardingStep].mobileSprite}`}
-              alt={onboardingSteps[onboardingStep].alt}
+              src={`/sprites/mari/${sprite.desktopSprite}`}
+              alt={sprite.alt}
               draggable={false}
-              data-ltm-onboarding-sprite={onboardingSteps[onboardingStep].mobileSprite}
-              data-ltm-onboarding-mobile-flip={onboardingSteps[onboardingStep].mobileFlip || undefined}
-              data-ltm-onboarding-mobile-shift={onboardingStep === 4 ? "left" : undefined}
+              loading="lazy"
+              data-ltm-onboarding-sprite={sprite.desktopSprite}
+              data-ltm-onboarding-sprite-wide=""
             />
-          </picture>
+          )}
         </div>
       </div>
       <div data-ltm-onboarding-footer className="items-center gap-3">
-        <Button data-ltm-onboarding-close onClick={completeOnboarding}>
-          {localizeUi("ui.longTermMemory.longtermmemorydetail.close")}
-        </Button>
+        {onboardingStep < onboardingSteps.length - 1 ? (
+          <>
+            <Button data-ltm-onboarding-close onClick={putAwayOnboarding}>
+              {localizeUi("ui.longTermMemory.longtermmemorydetail.notNow")}
+            </Button>
+            <Button data-ltm-onboarding-close onClick={completeOnboarding}>
+              {localizeUi("ui.longTermMemory.longtermmemorydetail.dontShowAgain")}
+            </Button>
+          </>
+        ) : null}
         <p className="text-xs text-[var(--muted-foreground)]">
           {localizeUi("ui.longTermMemory.longtermmemorydetail.youCanReplayThisGuideWithTheHelpButton")}
         </p>

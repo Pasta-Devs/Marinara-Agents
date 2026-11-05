@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { type SlurpNavigationState } from "../navigation/slp-navigation.types";
 import {
+  destinationForTarget,
   isSlpBackstageSection,
   isSlpBackstageTarget,
   SLP_BACKSTAGE_DEFAULT_TARGET,
@@ -102,6 +103,8 @@ function isSlurpNavigation(value: unknown): value is SlurpNavigationState {
       );
     case "profiles":
       return value.returnToSettings === undefined || isSlurpNavigation(value.returnToSettings);
+    case "live":
+      return typeof value.showId === "string" && (value.returnTo === undefined || isSlurpNavigation(value.returnTo));
     case "create-profile":
       return (
         typeof value.sourceAccountId === "string" &&
@@ -114,6 +117,9 @@ function isSlurpNavigation(value: unknown): value is SlurpNavigationState {
 
 function normalizeSettingsNavigation(value: Record<string, unknown>): Record<string, unknown> {
   if (value.mode !== "creator-settings") return value;
+  // A page that still exists opens where it lives now, whatever its old section was called.
+  if (!isSlpBackstageSection(value.section) && isSlpBackstageTarget(value.target))
+    return { ...value, section: destinationForTarget(value.target) };
   const legacy =
     typeof value.section === "string"
       ? SLP_LEGACY_SETTINGS_DESTINATION[value.section as keyof typeof SLP_LEGACY_SETTINGS_DESTINATION]

@@ -213,6 +213,11 @@ export function markLtmIndexesFailed(root: string, error: unknown) {
     dirty: true,
     rebuildState: "failed",
     rebuildCompletedAt: nowIso(),
-    error: error instanceof Error ? error.message.slice(0, 2_000) : "Recall index rebuild failed.",
+    // `/integrity` and `/status` serve this. A raw failure can name the vault's file paths, so its text stays in
+    // the thrown error for the caller to log; a cancellation keeps its own message.
+    error:
+      error instanceof Error && error.name === "AbortError"
+        ? error.message.slice(0, 2_000)
+        : "The latest index rebuild failed; see the server log.",
   }));
 }

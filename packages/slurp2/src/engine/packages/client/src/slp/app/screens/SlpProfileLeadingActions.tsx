@@ -13,6 +13,7 @@ import { useSlpBalance } from "../../modules/chrome/SlpShell";
 import { playSlpBurst, playSlpPop, playSlpSpendMoment } from "../../modules/sparkle/SlpSparkle";
 import { slurpSubscriptionPriceOf } from "./SlpHomeHelpers";
 import type { StageProfileViewModel } from "./slp-profile-view-model";
+import { SlpLiveGoLive } from "../../features/live/SlpLiveGoLive";
 
 const TIP_AMOUNTS = [5, 10, 25, 50];
 
@@ -81,6 +82,7 @@ export function SlpProfileLeadingActions({
             </SlpButton>
           )}
         </div>
+        <SlpLiveGoLive className="h-11 w-full justify-center text-[13px]" />
         {/* Pulse + E (user): Settings was only behind ⋯ on the Me tab; a plain row finds it. */}
         {onOpenSettings && (
           <button

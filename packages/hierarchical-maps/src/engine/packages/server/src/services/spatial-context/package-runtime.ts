@@ -17,9 +17,33 @@ let resolveAgentConfig: ((agentType: string) => Promise<unknown>) | null = null;
 let writeAgentConfig: ((agentType: string, patch: Record<string, unknown>) => Promise<unknown>) | null = null;
 let agentConfigUpdateQueue = Promise.resolve();
 
+export class SpatialPackageRuntimeError extends Error {
+  constructor(
+    public readonly statusCode: 501 | 503,
+    public readonly code: "host_feature_unavailable" | "spatial_runtime_unavailable",
+    message: string,
+  ) {
+    super(message);
+    this.name = "SpatialPackageRuntimeError";
+  }
+}
+
 function getRuntimeHost(): CapabilityRuntimeHost {
-  if (!runtimeHost) throw new Error("World Maps runtime is not configured");
+  if (!runtimeHost)
+    throw new SpatialPackageRuntimeError(503, "spatial_runtime_unavailable", "World Maps runtime is not configured");
   return runtimeHost;
+}
+
+export function assertPackageRuntimeAvailable(expectedRegistration?: number): number {
+  getRuntimeHost();
+  if (expectedRegistration !== undefined && expectedRegistration !== runtimeRegistration) {
+    throw new SpatialPackageRuntimeError(
+      503,
+      "spatial_runtime_unavailable",
+      "World Maps runtime is no longer available",
+    );
+  }
+  return runtimeRegistration;
 }
 
 export function configurePackageRuntime(
@@ -145,6 +169,21 @@ export function getPackageResources(): CapabilityResourceHost {
 
 export function getPackageLanguageModels(): CapabilityLanguageModelHost {
   return getRuntimeHost().languageModels;
+}
+
+export async function resolvePackageAgentLorebookEntries(
+  chatId: string,
+  signal?: AbortSignal,
+): Promise<Array<{ id: string; name?: string; content: string }>> {
+  const host = getRuntimeHost();
+  if (typeof host.resolveAgentLorebookEntries !== "function") {
+    throw new SpatialPackageRuntimeError(
+      501,
+      "host_feature_unavailable",
+      "World Maps reference lorebooks require a newer Marinara Engine.",
+    );
+  }
+  return host.resolveAgentLorebookEntries({ chatId, signal });
 }
 
 export function getPackageJson(): CapabilityJsonHost {

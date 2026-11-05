@@ -1,3 +1,5 @@
+import { slurpCommissionPricingFor } from "../../modules/economy/slp-creator-pricing.js";
+import { readSlurpSexting, slurpSextingPhase, type SlurpSexting } from "../../modules/messages/slp-sexting.js";
 import { slpOverrideRapport } from "../../../../../shared/src/slp/slp-message-details.js";
 // ──────────────────────────────────────────────
 // Storage: Slurp direct messages
@@ -57,6 +59,7 @@ import {
 import {
   emptySlurpRapportFacts,
   scoreSlurpRapport,
+  slurpRapportKeepPeak,
   type SlurpRapport,
   type SlurpRapportFacts,
 } from "../../modules/messages/slp-rapport.js";
@@ -421,6 +424,63 @@ export function createMessagesStorageBase(context: SlurpMessagesContext) {
      * Computed rather than incremented: a counter that drifts is a counter nobody can debug, and
      * the inputs are all small reads the send path already pays for.
      */
+    /** She said the step-up her reply prompt asked for (rapport ladder). Reads the raw row: no detail overrides baked in. */
+    async markRapportSaid(threadId: string, said: SlurpRapport["tier"]): Promise<void> {
+      const rows = await db.select().from(slurpThreads).where(eq(slurpThreads.id, threadId));
+      const stored = json(rows[0]?.rapport as string);
+      if (!rows[0] || stored.said === said) return;
+      await db
+        .update(slurpThreads)
+        .set({ rapport: JSON.stringify({ ...stored, said }) })
+        .where(eq(slurpThreads.id, threadId));
+    },
+    /** Claim a sexting session before it is paid; false while one still runs, so a double buy never pays twice. */
+    async startSexting(threadId: string, session: SlurpSexting): Promise<boolean> {
+      return db.transaction(async (tx) => {
+        const current = (await tx.select().from(slurpThreads).where(eq(slurpThreads.id, threadId)))[0];
+        if (!current || slurpSextingPhase(readSlurpSexting(current.sexting))) return false;
+        await tx
+          .update(slurpThreads)
+          .set({ sexting: JSON.stringify(session), updatedAt: now() })
+          .where(eq(slurpThreads.id, threadId));
+        return true;
+      });
+    },
+    /** Drop a claimed session whose payment failed; a newer one stays. */
+    async cancelSexting(threadId: string, startedAt: string): Promise<void> {
+      const rows = await db.select().from(slurpThreads).where(eq(slurpThreads.id, threadId));
+      if (readSlurpSexting(rows[0]?.sexting)?.startedAt !== startedAt) return;
+      await db.update(slurpThreads).set({ sexting: null }).where(eq(slurpThreads.id, threadId));
+    },
+    /**
+     * Claim her one in-session PPV (`offered`), or give the claim back when the picture failed; false when it
+     * is already in that state or a newer session replaced this one.
+     */
+    async markSextingPicture(threadId: string, startedAt: string, offered = true): Promise<boolean> {
+      return db.transaction(async (tx) => {
+        const current = (await tx.select().from(slurpThreads).where(eq(slurpThreads.id, threadId)))[0];
+        const session = readSlurpSexting(current?.sexting);
+        if (!session || session.startedAt !== startedAt || session.pictureOffered === offered) return false;
+        await tx
+          .update(slurpThreads)
+          .set({ sexting: JSON.stringify({ ...session, pictureOffered: offered }) })
+          .where(eq(slurpThreads.id, threadId));
+        return true;
+      });
+    },
+    /** The Creator's commission pricing for one fan: a favourite's customs cost less (rapport ladder). */
+    async commissionPricingFor({
+      viewerAccountId,
+      creatorAccountId,
+    }: {
+      viewerAccountId: string;
+      creatorAccountId: string;
+    }) {
+      return slurpCommissionPricingFor(
+        await context.storage.getCreatorMessaging(creatorAccountId),
+        await context.storage.rapportFor(viewerAccountId, creatorAccountId),
+      );
+    },
     async rapportFor(viewerAccountId: string, creatorAccountId: string): Promise<SlurpRapport> {
       const messaging = await context.storage.getCreatorMessaging(creatorAccountId);
       const facts = await context.storage.rapportFactsFor(viewerAccountId, creatorAccountId);
@@ -445,7 +505,10 @@ export function createMessagesStorageBase(context: SlurpMessagesContext) {
           : {}),
       });
       const thread = await context.storage.getThread(viewerAccountId, creatorAccountId);
-      return thread ? slpOverrideRapport(computed, await context.storage.getDetailsOverrides(thread.id)) : computed;
+      return slurpRapportKeepPeak(
+        thread ? slpOverrideRapport(computed, await context.storage.getDetailsOverrides(thread.id)) : computed,
+        thread?.rapport,
+      );
     },
     /**
      * The facts behind one pair's rapport.

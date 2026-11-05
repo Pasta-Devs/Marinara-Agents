@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 2,
+  "capabilityApi": {
+    "major": 1,
+    "minor": 386
+  },
+  "builtAgainst": {
+    "engineVersion": "2.5.1",
+    "engineCommit": "a3ceb0162b1629c6b99885759b11794aa6274869"
+  },
+  "id": "otome-forge",
+  "name": "Otome Hearth",
+  "version": "0.8.10",
+  "description": "An otome game in its own Home tab, made from your own characters: love interests who remember what you chose, their messages to you, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn. Install it, restart Marinara Engine when prompted, then open Home → Otome Hearth.",
+  "engine": {
+    "min": "2.5.1",
+    "maxExclusive": "4.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json",
+    "server": "server.mjs",
+    "client": "client.js"
+  },
+  "contributions": {
+    "slots": [
+      "home-browser-tab"
+    ],
+    "homeBrowserTab": {
+      "label": "Otome Hearth",
+      "ariaLabel": "Open Otome Hearth",
+      "iconPaths": [
+        "otome-hearth-tab-heart.png"
+      ]
+    }
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "09424f88d12fdf3e542d3e67a3eb0c88071176658183fc4ead92e5a11d7dfac2",
+      "bytes": 681
+    },
+    {
+      "path": "server.mjs",
+      "sha256": "913d5ad715f46238dbd2ed342ec33612d131e69cf203bb0fb4ab6344b83c2812",
+      "bytes": 540909
+    },
+    {
+      "path": "client.js",
+      "sha256": "67fccc469807381a7d69e0dab876bd4824997da2c068151d0f3e19f7c17402d3",
+      "bytes": 1235432
+    },
+    {
+      "path": "otome-hearth-icon.png",
+      "sha256": "8a579710820c718e3f3e1a2535fc12a251c5b91569bd7f5bb59961f1e873bce8",
+      "bytes": 141313
+    },
+    {
+      "path": "otome-hearth-tab-heart.png",
+      "sha256": "301ef798d226eff3f2100daa1206b9ee1abe0654a070dd07718d98af4c7070d9",
+      "bytes": 2277
+    },
+    {
+      "path": "fonts/OFL.txt",
+      "sha256": "42a08de2370044e2966c8158770a86c67a8b343c9422a1b30b8599d25c05dd5f",
+      "bytes": 4558
+    }
+  ],
+  "permissions": [
+    "routes",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": true
+}

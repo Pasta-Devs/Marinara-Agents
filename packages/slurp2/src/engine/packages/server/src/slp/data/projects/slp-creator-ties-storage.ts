@@ -10,6 +10,7 @@ import { readSlurpCreatorTies, type SlurpCreatorTies } from "../../modules/proje
 import { readSlurpBrandDeals, type SlurpBrandDeal } from "../../modules/economy/slp-brand-deals.js";
 import type { SlurpCouple } from "../../modules/projects/slp-creator-couples.js";
 import { readSlurpCouples } from "../../modules/projects/slp-couple-read.js";
+import { shareSlurpTieChanges } from "../creators/slp-ltm-intake.js";
 import { readSlurpBonds, type SlurpBond } from "../../modules/projects/slp-creator-bonds.js";
 
 export const SLURP_CREATOR_TIES_KEY = "slurp2.creator-ties";
@@ -60,6 +61,8 @@ export function mutateSlurpCreatorTies<T>(
         bonds: next.document.bonds,
       }),
     );
+    // After the write has committed, and not awaited: Long-Term Memory never slows or fails a tie change.
+    void shareSlurpTieChanges(db, current, next.document);
     return next.result;
   });
   queue = run.catch(() => undefined);

@@ -29,6 +29,8 @@ export type CapabilityProps = {
     longTermMemoryRecallStyle?: string;
     longTermMemoryBudgetTokens?: number;
     longTermMemoryMaxChunks?: number;
+    // Not passed by the Engine today; ChatSettings reads it from GET /chat-memories/:chatId.
+    longTermMemoryChatMemories?: string | null;
   };
   onEnabledForChatChange?: (enabled: boolean) => void | Promise<void>;
   onChatSettingsChange?: (patch: Record<string, unknown>) => void | Promise<void>;
@@ -37,11 +39,15 @@ export type CapabilityProps = {
   onOpenActivePromptPresetEditor?: () => void;
   onClose?: () => void;
   onManagePackage?: () => void;
+  /** Capability API 1.390: the Engine draws the header and gives a slot for header buttons. */
+  engineHeader?: boolean;
+  headerSlot?: HTMLElement | null;
   onDirtyChange?: (dirty: boolean) => void;
   confirmAction?: (options: {
     title: string;
     message: string;
     confirmLabel?: string;
+    cancelLabel?: string;
     tone?: "destructive" | "default";
   }) => boolean | Promise<boolean>;
 };
@@ -54,7 +60,7 @@ export type CapabilityElement = HTMLElement & {
 
 export type LongTermMemoryDestination = "vault" | "review" | "sources" | "settings";
 
-export type SourceTab = "characters" | "lorebooks" | "chats";
+export type SourceTab = "characters" | "lorebooks" | "chats" | "messages";
 
 export type LtmRecoveryHandoff = {
   key: number;
@@ -80,6 +86,9 @@ export type LongTermMemoryDestinationProps = {
   openActivityRequest?: number;
   openActivityMemoryId?: string | null;
   onOpenActivityHandled?: () => void;
+  /** Chat Settings asked to choose the extraction connection: open Extraction with that field focused. */
+  openForConnection?: boolean;
+  onOpenForConnectionHandled?: () => void;
   onOpenActivityMemoryIdHandled?: () => void;
   onRecoverCandidate?: (
     candidate: LtmExtractionDroppedCandidate,

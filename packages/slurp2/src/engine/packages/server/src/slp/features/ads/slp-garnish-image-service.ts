@@ -37,6 +37,7 @@ import {
   readGarnishBannerRedrawState,
 } from "./slp-garnish-banner-redraw.js";
 import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
+import { slpInlineAdsOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
 /** Ads read as feed content, so the artwork is product photography rather than a poster. */
 function adImagePrompt(ad: GarnishAd): string {
@@ -298,7 +299,7 @@ export async function redrawOldGarnishAdBanner(
   at = new Date(),
 ): Promise<GarnishAdImageOutcome | "off" | "paced" | "done"> {
   const settings = await createSlurpStorage(db).getSettings();
-  if (!settings.inlineAdsEnabled || !settings.inlineAdsImagesEnabled) return "off";
+  if (!slpInlineAdsOn(settings) || !settings.inlineAdsImagesEnabled) return "off";
   const store = createAppSettingsStorage(db);
   const state = readGarnishBannerRedrawState(await store.get(GARNISH_BANNER_REDRAW_KEY), at);
   const next = nextGarnishBannerRedraw(await pool.listActive(SLURP_GARNISH_PLATFORM), state, (ad) =>

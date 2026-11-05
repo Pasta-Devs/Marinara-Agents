@@ -5,7 +5,13 @@ import { join } from "node:path";
 import { runRegressionToCompletion } from "./regression-helpers.ts";
 
 async function main() {
-  const { LTM_DEBUG_MAX_EVENT_BYTES, LTM_DEBUG_MAX_LOG_BYTES, readLtmDebugLog, recordLtmDebugEvent } =
+  const {
+    LTM_DEBUG_MAX_EVENT_BYTES,
+    LTM_DEBUG_MAX_LOG_BYTES,
+    LTM_DEBUG_TRIM_TARGET_BYTES,
+    readLtmDebugLog,
+    recordLtmDebugEvent,
+  } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/maintenance/debug-log.ts");
   const { getLongTermMemoryDirectories } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/persistence/paths.ts");
@@ -85,6 +91,37 @@ async function main() {
         true,
       );
     }
+
+    // A full log is trimmed well below the cap, so the lines after a trim are plain appends again.
+    const largeEvent = (action: string) =>
+      recordLtmDebugEvent({
+        root,
+        phase: "retrieval",
+        action,
+        status: "ok",
+        diagnostics: Array.from({ length: 30 }, (_, diagnosticIndex) => ({
+          diagnosticIndex,
+          payload: `${action}:`.padEnd(2_000, "z"),
+        })),
+      });
+    let size = (await stat(debugPath)).size;
+    let trimmed = false;
+    for (let index = 0; index < 80 && !trimmed; index += 1) {
+      await largeEvent(`trim-${index}`);
+      const next = (await stat(debugPath)).size;
+      trimmed = next < size;
+      size = next;
+    }
+    assert.equal(trimmed, true, "filling the log must trim it");
+    assert.equal(size <= LTM_DEBUG_TRIM_TARGET_BYTES, true, "a trimmed log must end at or below the trim target");
+    const afterTrim = await readFile(debugPath, "utf8");
+    await largeEvent("after-trim");
+    const afterNext = await readFile(debugPath, "utf8");
+    assert.equal(
+      afterNext.startsWith(afterTrim),
+      true,
+      "the line after a trim must be appended, not trigger another rewrite",
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

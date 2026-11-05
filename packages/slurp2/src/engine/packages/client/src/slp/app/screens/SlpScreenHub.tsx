@@ -52,6 +52,7 @@ import { useSlurpHubDiscoveryFilters } from "./slp-hub-discovery-filters";
 import { SlurpInlineSuggestedCreators } from "./SlpScreenSuggestedCreators";
 import { SlpHubDiscover } from "./SlpHubDiscover";
 import { useSlurpSettings, useTurnOnSlurpAutoPosting } from "../../features/settings/slp-settings-hooks";
+import { SlpHubTopCards } from "./SlpHubTopCards";
 
 // ---------------------------------------------------------------------------
 // Local types
@@ -387,7 +388,6 @@ export function ViewerHub({
       onAction={() => {
         // The rating system has no positive signal without this.
         recordSlurpAdAction.mutate({ personaId: scope!.viewer.entityId, promotionId: ad.id });
-        toast.info(localizeUi("ui.slurp.ads.opened", { brand: ad.brand }));
       }}
       // A silently failed hide leaves the ad on screen, so say so rather than
       // letting the reader think it worked.
@@ -563,6 +563,7 @@ export function ViewerHub({
           </div>
         </div>
       )}
+      <SlpHubTopCards />
       {isLoading ? (
         <div className="relative">
           <div className="flex items-center gap-2 px-4 pt-4 text-xs font-semibold text-[var(--noodle-accent-foreground)] sm:px-5">
@@ -637,7 +638,6 @@ export function ViewerHub({
               }}
               onAdAction={(ad) => {
                 recordSlurpAdAction.mutate({ personaId: scope!.viewer.entityId, promotionId: ad.id });
-                toast.info(localizeUi("ui.slurp.ads.opened", { brand: ad.brand }));
               }}
               onAdHide={(ad) =>
                 hideSlurpAd.mutate(

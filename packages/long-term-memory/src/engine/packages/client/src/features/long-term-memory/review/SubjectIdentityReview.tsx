@@ -6,9 +6,10 @@ import type {
   LtmSubjectIdentityDecision,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { errorMessage, invalidateLtmQueries, queryKeys, request } from "../api";
-import { Button, inputClass, StatusSurface } from "../shared-controls";
+import { Button, inputClass, lockedActionProps, StatusSurface } from "../shared-controls";
 import { useLtmTranslation } from "../localization";
 
+type Candidate = LtmSubjectIdentityReview["candidates"][number];
 type IdentityChoice = { name: string; action: "" } | LtmSubjectIdentityDecision;
 
 type Props = {
@@ -90,7 +91,32 @@ export default function SubjectIdentityReview({
 
   useEffect(() => () => onDirtyChange(suggestionId, false), [onDirtyChange, suggestionId]);
 
+  // A candidate reads as its name plus its kind. Two candidates with the same name and kind also show their id.
+  const candidateLabel = (candidate: Candidate, siblings: Candidate[]) => {
+    const { name, subject } = candidate;
+    const kind = localizeUi(
+      subject.ref?.kind === "character"
+        ? "ui.longTermMemory.reviewqueue.identityKindCharacter"
+        : subject.ref?.kind === "persona"
+          ? "ui.longTermMemory.reviewqueue.identityKindPersona"
+          : subject.ref?.kind === "local_character"
+            ? "ui.longTermMemory.reviewqueue.identityKindLocalCharacter"
+            : "ui.longTermMemory.reviewqueue.identityKindOther",
+    );
+    const sameLook = siblings.filter(
+      (other) => other.name === name && (other.subject.ref?.kind ?? "") === (subject.ref?.kind ?? ""),
+    );
+    return sameLook.length > 1
+      ? localizeUi("ui.longTermMemory.reviewqueue.identityOptionWithId", {
+          name,
+          kind,
+          id: subject.ref?.id ?? subject.key,
+        })
+      : localizeUi("ui.longTermMemory.reviewqueue.identityOption", { name, kind });
+  };
+
   const setChoice = (index: number, value: string) => {
+    if (busy) return;
     const participant = review[index]!;
     const nextChoice: IdentityChoice = !value
       ? { name: participant.name, action: "" }
@@ -126,15 +152,20 @@ export default function SubjectIdentityReview({
             </label>
             <select
               id={fieldId}
-              className={inputClass}
+              className={`${inputClass}${busy ? " opacity-50" : ""}`}
               value={choice.action === "bind" ? (choice.subjectKey ?? "") : choice.action}
-              disabled={busy}
+              aria-disabled={busy || undefined}
               onChange={(event) => setChoice(index, event.currentTarget.value)}
             >
               <option value="">{localizeUi("ui.longTermMemory.reviewqueue.chooseIdentity")}</option>
-              {participant.candidates.map(({ name, subject }) => (
-                <option key={subject.key} value={subject.key} disabled={usedSubjectKeys.has(subject.key)}>
-                  {`${name} (${subject.ref?.kind ?? "identity"}: ${subject.ref?.id ?? subject.key}) · ${subject.key}`}
+              {participant.candidates.map((candidate) => (
+                <option
+                  key={candidate.subject.key}
+                  value={candidate.subject.key}
+                  title={candidate.subject.key}
+                  disabled={usedSubjectKeys.has(candidate.subject.key)}
+                >
+                  {candidateLabel(candidate, participant.candidates)}
                 </option>
               ))}
               {participant.allowDifferent ? (
@@ -161,7 +192,8 @@ export default function SubjectIdentityReview({
       ) : null}
       <Button
         primary={!choices.some((choice) => choice.action === "skip")}
-        disabled={busy || choices.some((choice) => !choice.action || (choice.action === "bind" && !choice.subjectKey))}
+        disabled={choices.some((choice) => !choice.action || (choice.action === "bind" && !choice.subjectKey))}
+        {...lockedActionProps(busy)}
         onClick={() => void save()}
       >
         {busy
@@ -174,8 +206,9 @@ export default function SubjectIdentityReview({
       </Button>
       {dirty ? (
         <Button
-          disabled={busy}
+          {...lockedActionProps(busy)}
           onClick={() => {
+            if (busy) return;
             setChoices(initialChoices());
             setDirty(false);
             setError("");

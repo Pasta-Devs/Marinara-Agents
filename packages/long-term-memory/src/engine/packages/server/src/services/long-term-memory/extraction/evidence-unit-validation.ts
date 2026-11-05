@@ -19,7 +19,7 @@ const PLACEHOLDER_UUID = "550e8400-e29b-41d4-a716-446655440000";
 const CHARACTER_FACT_EVENT_SECTION_KEYS = new Set(["facts", "core", "profile"]);
 const CHARACTER_FACT_DURABLE_SECTION_KEYS = new Set(["developments", "abilities", "items", "voice"]);
 const EVENT_SHAPED_CHARACTER_FACT_PATTERN =
-  /\b(?:arrived|departed|entered|left|went|came|returned|walked|walking|ran|fled|attacked|fought|killed|died|met|spoke|told|asked|answered|promised|decided|agreed|refused|accepted|rejected|gave|took|found|discovered|revealed|learned|opened|closed|escaped|rescued|betrayed|confronted|warned|saved|stopped|uses?|holds?|keeps?|wears?|carries?)\b/i;
+  /\b(?:arrived|departed|entered|left|went|came|returned|walked|walking|ran|fled|attacked|fought|killed|died|met|spoke|told|asked|answered|promised|decided|agreed|refused|accepted|rejected|gave|took|found|discovered|revealed|learned|opened|closed|escaped|rescued|betrayed|confronted|warned|saved|stopped)\b/i;
 const INCIDENTAL_CHARACTER_NARRATION_PATTERN = /\b(?:met|told)\b/gi;
 const DURABLE_CHARACTER_ASSERTION_PATTERN =
   /\b(?:(?:is|are|was|were|remains?|(?:works?|serves?)\s+as)\s+(?:an?\s+|the\s+|their\s+|his\s+|her\s+|its\s+)?(?:assigned\s+)?(?:case\s+)?(?:officer|member|ally|captain|guard|leader|partner|friend|sibling|parent|doctor|lawyer|teacher|owner|resident|citizen|exoneree)\b|belongs?\s+to\b|can\s+(?:read|speak|write|understand|control|operate)\b|knows?\s+(?:how\s+to|the|a|an)\b|lives?\s+in\b)/i;
@@ -91,6 +91,8 @@ function isSourceNote(note: LtmNote) {
 
 export function riskForEvidenceUnit(unit: LtmEvidenceUnit): "low" | "medium" | "high" {
   if (unit.bucket === "relationship_state") return "medium";
+  // An event-shaped character fact holds only its own mutation for review; the rest of the draft still applies.
+  if (isEventShapedCharacterFact(unit)) return "medium";
   return "low";
 }
 
@@ -755,8 +757,26 @@ export function noteIdForEvidenceUnit(unit: Pick<LtmEvidenceUnit, "bucket" | "su
   return prefixed("char", unit.subjectId);
 }
 
+/**
+ * The copy of a dropped unit that Review can recover. Removing the bucket prefix from a note id with a digit after
+ * it (`rel_96dfe1cd8f75`, or `char_2_b` for a character named "2B") leaves a subject id the draft schema rejects,
+ * which fails the whole draft. That copy carries the full note id instead, which names the same note.
+ */
+export function recoveryCandidateForUnit(unit: LtmEvidenceUnit): LtmEvidenceUnit {
+  return /^[a-z]/.test(unit.subjectId) ? unit : { ...unit, subjectId: noteIdForEvidenceUnit(unit) };
+}
+
 function prefixed(prefix: string, subjectId: string) {
   return subjectId.startsWith(`${prefix}_`) ? subjectId : `${prefix}_${subjectId}`;
+}
+
+/**
+ * `id` without its prefix, unless what is left starts with the prefix again, so `prefixed` maps the result back to
+ * the same note. A character named "Char Aznable" has the note `char_char_aznable`, and `char_aznable` names another.
+ */
+export function unprefixedSubjectId(prefix: string, id: string) {
+  const rest = id.startsWith(`${prefix}_`) ? id.slice(prefix.length + 1) : id;
+  return rest.startsWith(`${prefix}_`) ? id : rest;
 }
 
 function noteIdForAnchor(subjectId: string, sectionKey: string) {
@@ -784,7 +804,7 @@ function droppedCandidate(
       ? { snippet: safeSnippet(input.snippet ?? input.unit.text)! }
       : {}),
     ...(recovery ? { recovery } : {}),
-    ...(input.unit ? { recoveryCandidate: input.unit } : {}),
+    ...(input.unit ? { recoveryCandidate: recoveryCandidateForUnit(input.unit) } : {}),
   };
 }
 

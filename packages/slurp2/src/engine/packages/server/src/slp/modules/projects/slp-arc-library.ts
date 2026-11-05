@@ -146,6 +146,36 @@ export const SLURP_ARC_LIBRARY_SEED: readonly SlurpArcType[] = [
     ["the visit", 2, 5],
     ["quiet again", 1, 3],
   ]),
+  seed("sale_week", "Sale week", "A subscription sale to win new fans, and the rush that follows.", [
+    ["teasing the sale", 1, 3],
+    ["the sale is on", 2, 4],
+    ["new faces everywhere", 2, 5],
+    ["back to normal prices", 1, 2],
+  ]),
+  seed("burnout_break", "Burnout and comeback", "Posting too much, a short break, then a comeback.", [
+    ["running on empty", 2, 5],
+    ["taking a break", 3, 7],
+    ["the comeback post", 1, 2],
+    ["finding the rhythm again", 3, 7],
+  ]),
+  seed("gear_upgrade", "New gear", "Saving for a better camera, lights or set, then showing it off.", [
+    ["the old gear acts up", 1, 3],
+    ["picking the new gear", 2, 4],
+    ["unboxing day", 1, 1],
+    ["the first shoot with it", 2, 5],
+  ]),
+  seed("leak_scare", "Leak scare", "Paid content shows up where it should not, and the page deals with it.", [
+    ["finding the leak", 1, 2],
+    ["taking it down", 2, 4],
+    ["a word to the fans", 1, 2],
+    ["back to business", 2, 5],
+  ]),
+  seed("page_anniversary", "Page anniversary", "A year on the page: looking back and a party for the fans.", [
+    ["counting down", 2, 4],
+    ["the throwback posts", 2, 4],
+    ["the anniversary set", 1, 2],
+    ["thanking the fans", 1, 3],
+  ]),
 ];
 
 const PARTNER =

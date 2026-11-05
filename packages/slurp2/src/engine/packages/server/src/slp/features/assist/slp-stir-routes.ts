@@ -7,6 +7,7 @@ import { previewSlpAction } from "./slp-action-preview.js";
 import {
   planSlpStir,
   playSlpStir,
+  SLP_STIR_OFF,
   previewSlpStirSteps,
   readSlpStirHidden,
   readSlpStirView,
@@ -19,7 +20,8 @@ import {
   slpStirPlaySchema,
   slpStirStepSchema,
 } from "../../../../../shared/src/slp/slp-stir.js";
-import { createSlurpMessagesStorage } from "../../data/slp-storage.js";
+import { createSlurpMessagesStorage, createSlurpStorage } from "../../data/slp-storage.js";
+import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 import { slpSupportPlayOnce } from "../../modules/assist/slp-stir-play.js";
 import { dismissSlurpStirSuggestion } from "../../data/assist/slp-stir-plays-storage.js";
 
@@ -52,6 +54,7 @@ export async function slpStirRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
     const own = (account: unknown) => creatorBelongsToViewer(account as never, viewer);
     return { viewer, own, hidden: await readSlpStirHidden(app.db, own) };
   };
+  const settings = () => createSlurpStorage(app.db).getSettings();
   const OTHER_PERSONA = "That page belongs to another of your personas. Switch to it to play with it.";
   const guard = async <T>(
     label: string,
@@ -144,6 +147,7 @@ export async function slpStirRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   app.post("/slurp/stir/suggestions/:id/dismiss", async (req, reply) => {
     const parsed = z.object({ id: z.string().trim().min(1).max(300) }).safeParse(req.params ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    if (!slpExtensionOn(await settings(), "stir")) return reply.code(409).send({ error: SLP_STIR_OFF });
     return guard("dismiss", reply, async () => {
       await dismissSlurpStirSuggestion(app.db, parsed.data.id);
       return { ok: true };

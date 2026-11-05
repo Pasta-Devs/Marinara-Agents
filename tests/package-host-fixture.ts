@@ -8,21 +8,24 @@
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { HOST_MODULE_SPECIFIERS } from "../scripts/esbuild-host-plugins.mjs";
+import { readHostContractSpecifiers, readHostModuleImports } from "../scripts/esbuild-host-plugins.mjs";
 
 export async function buildPackageHostFixture(engineRoot: string): Promise<string> {
   const clientRoot = join(engineRoot, "packages/client");
   const esbuild = createRequire(pathToFileURL(join(engineRoot, "package.json")))("esbuild") as typeof import("esbuild");
-  const imports = HOST_MODULE_SPECIFIERS.map(
-    (specifier, index) => `import * as m${index} from ${JSON.stringify(specifier)};`,
+  const specifiers: string[] = readHostContractSpecifiers(engineRoot);
+  const moduleImports = readHostModuleImports(engineRoot, specifiers);
+  const imports = specifiers.map(
+    (specifier, index) => `import * as m${index} from ${JSON.stringify(moduleImports[specifier])};`,
   );
-  const modules = HOST_MODULE_SPECIFIERS.map((specifier, index) => `${JSON.stringify(specifier)}: m${index}`);
+  const modules = specifiers.map((specifier, index) => `${JSON.stringify(specifier)}: m${index}`);
   const contents = `${imports.join("\n")}
 import { queryClient } from ${JSON.stringify(join(clientRoot, "src/lib/query-client.ts"))};
+import { supportedCapabilityApi } from ${JSON.stringify(join(engineRoot, "packages/shared/src/schemas/capability-package.schema.ts"))};
 Object.defineProperty(globalThis, "__MARINARA_HOST__", {
   value: Object.freeze({
     version: 1,
-    capabilityApi: Object.freeze({ major: 1, minor: 341 }),
+    capabilityApi: supportedCapabilityApi,
     stores: Object.freeze({}),
     services: Object.freeze({}),
     modules: Object.freeze({ ${modules.join(", ")} }),

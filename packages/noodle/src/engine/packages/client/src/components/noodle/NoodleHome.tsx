@@ -90,6 +90,7 @@ import {
 import { useUploadGlobalGalleryImages } from "../../hooks/use-global-gallery";
 import type { ChatImage } from "../../hooks/use-gallery";
 import type { PackageNoodleSettings, PackageNoodleSettingsUpdateInput } from "./noodle-settings-defaults";
+import { offerLtmSharing } from "./noodle-ltm-sharing";
 import { forgetNoodleTranslations, stopNoodleAutoTranslations } from "./noodle-translation";
 import {
   mergeNoodlePromptPreset,
@@ -140,6 +141,7 @@ import {
   useUpdateNoodleAccountProfile,
   useUpdateNoodleInteraction,
   useUpdateNoodlePost,
+  useNoodleMemoryStatus,
   useUpdateNoodleSettings,
 } from "../../hooks/use-noodle";
 import { useUIStore } from "../../stores/noodle-package.store";
@@ -854,6 +856,10 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
 
   const activeNoodleView = navigation.mode === "public" ? navigation.view : navigation.mode;
   const settings = data?.settings;
+  const memoryStatusQuery = useNoodleMemoryStatus(
+    Boolean((settings as PackageNoodleSettings | undefined)?.useLtmMemories),
+  );
+  const memoryStatus = memoryStatusQuery.data?.status;
   const autoTranslatePosts = (settings as PackageNoodleSettings | undefined)?.autoTranslatePosts === true;
   useEffect(() => {
     if (!autoTranslatePosts) stopNoodleAutoTranslations();
@@ -1126,13 +1132,48 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
     setRefreshTimeDraft("");
   }, [editingRefreshTime, scheduler?.scheduledTimes]);
 
-  const saveSettings = (patch: PackageNoodleSettingsUpdateInput) => {
+  const saveSettings = (patch: PackageNoodleSettingsUpdateInput, onSaved?: () => void) => {
     updateSettings.mutate(patch, {
+      onSuccess: onSaved,
       onError: (error) =>
         toast.error(
           error instanceof Error ? error.message : localizeUi("ui.noodle.noodlehome.couldNotUpdateNoodleSettings"),
         ),
     });
+  };
+
+  // Noodle's own switch is already on and saved here; a failed read or save leaves it on.
+  const offerSharing = () =>
+    offerLtmSharing({
+      read: () => api.get<{ longTermMemoryShareWithPackages?: boolean }>("/long-term-memory/settings"),
+      confirm: () =>
+        showConfirmDialog({
+          title: localizeUi("ui.noodle.noodlehome.ltmSharingOfferTitle"),
+          message: localizeUi("ui.noodle.noodlehome.ltmSharingOfferMessage"),
+          confirmLabel: localizeUi("ui.noodle.noodlehome.ltmSharingOfferConfirm"),
+          cancelLabel: localizeUi("ui.noodle.noodlehome.ltmSharingOfferCancel"),
+        }),
+      save: () => api.put("/long-term-memory/settings", { longTermMemoryShareWithPackages: true }),
+    })
+      .then((result) => {
+        if (result === "enabled") void memoryStatusQuery.refetch();
+      })
+      .catch(() => toast.error(localizeUi("ui.noodle.noodlehome.ltmSharingOfferFailed")));
+
+  const toggleLtmMemories = async (checked: boolean) => {
+    const packageSettings = settings as PackageNoodleSettings;
+    if (checked && !packageSettings.ltmMemoriesConfirmed) {
+      const confirmed = await showConfirmDialog({
+        title: localizeUi("ui.noodle.noodlehome.ltmMemoriesConfirmTitle"),
+        message: localizeUi("ui.noodle.noodlehome.ltmMemoriesConfirmMessage"),
+        confirmLabel: localizeUi("ui.noodle.noodlehome.ltmMemoriesConfirmUse"),
+        cancelLabel: localizeUi("ui.noodle.noodlehome.ltmMemoriesConfirmCancel"),
+      });
+      if (!confirmed) return;
+      saveSettings({ useLtmMemories: true, ltmMemoriesConfirmed: true }, offerSharing);
+      return;
+    }
+    saveSettings({ useLtmMemories: checked }, checked ? offerSharing : undefined);
   };
 
   const saveSettingsAsync = useCallback(
@@ -4217,6 +4258,64 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
                 disabled={updateSettings.isPending}
                 onChange={(checked) => saveSettings({ includeCharacterSchedules: checked })}
               />
+            </div>
+          </Section>
+
+          <Section
+            visible={settingsTab === "noodle" && settingsSection === "advanced"}
+            title={localizeUi("ui.noodle.noodlehome.ltmMemories")}
+          >
+            <div className="space-y-3">
+              <ToggleSetting
+                asSwitch
+                label={localizeUi("ui.noodle.noodlehome.ltmMemories")}
+                help={localizeUi("ui.noodle.noodlehome.ltmMemoriesHelp")}
+                checked={(settings as PackageNoodleSettings).useLtmMemories === true}
+                disabled={updateSettings.isPending}
+                onChange={(checked) => void toggleLtmMemories(checked)}
+              />
+              {(settings as PackageNoodleSettings).useLtmMemories === true && (
+                <div className="space-y-2">
+                  <FieldLabel>{localizeUi("ui.noodle.noodlehome.ltmMemoryRecall")}</FieldLabel>
+                  <div className="flex flex-wrap gap-2">
+                    {(["whole", "relevant"] as const).map((mode) => {
+                      const active = ((settings as PackageNoodleSettings).ltmMemoryRecall ?? "whole") === mode;
+                      return (
+                        <button
+                          key={mode}
+                          type="button"
+                          aria-pressed={active}
+                          disabled={updateSettings.isPending}
+                          onClick={() => saveSettings({ ltmMemoryRecall: mode })}
+                          className={cn(
+                            "min-h-8 rounded-md border px-2.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+                            active
+                              ? "border-[var(--noodle-accent)]/40 bg-[var(--noodle-accent)]/10 text-[var(--foreground)]"
+                              : "border-transparent text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]",
+                          )}
+                        >
+                          {localizeUi(
+                            mode === "whole"
+                              ? "ui.noodle.noodlehome.ltmMemoryRecallWhole"
+                              : "ui.noodle.noodlehome.ltmMemoryRecallRelevant",
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {memoryStatus && memoryStatus !== "ok" && (
+                    <p role="status" className="text-xs text-[var(--muted-foreground)]">
+                      {localizeUi(
+                        memoryStatus === "missing"
+                          ? "ui.noodle.noodlehome.ltmStatusMissing"
+                          : memoryStatus === "off"
+                            ? "ui.noodle.noodlehome.ltmStatusOff"
+                            : "ui.noodle.noodlehome.ltmStatusError",
+                      )}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </Section>
 

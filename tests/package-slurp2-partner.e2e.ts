@@ -102,7 +102,14 @@ test("0.3.11: your relationship, story-first Stir, Pause all", async ({ page }, 
   expect(
     (
       await page.request.patch("/api/slurp2/settings", {
-        data: { onboarding: "completed", drama: { ...settings.drama, enabled: ["rivals", "roommates"] } },
+        // A fresh install starts on Basic only; this flow needs Stir, its Desk mode and Storylines.
+        data: {
+          onboarding: "completed",
+          extStir: true,
+          extStorylines: true,
+          extSupportDesk: true,
+          drama: { ...settings.drama, enabled: ["rivals", "roommates"] },
+        },
       })
     ).ok(),
   ).toBe(true);

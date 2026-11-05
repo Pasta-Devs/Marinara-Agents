@@ -54,6 +54,7 @@ export function SlpSheet({
   headerAccessory,
   footer,
   back = false,
+  base = false,
   children,
 }: {
   open: boolean;
@@ -83,6 +84,8 @@ export function SlpSheet({
    * browser back closes it and returns to the screen under it. Desktop keeps the plain header.
    */
   back?: boolean;
+  /** A screen sheet (the Stir tab): opening it closes the open overlay, but sheets it opens stack on top. */
+  base?: boolean;
   children: ReactNode;
 }) {
   const { t: localizeUi } = useUiTranslation();
@@ -122,10 +125,11 @@ export function SlpSheet({
     if (!open) return;
     const close = () => onCloseRef.current();
     closeOpenOverlay?.();
-    closeOpenOverlay = close;
+    if (!base) closeOpenOverlay = close;
     // Window capture, stopped: an Engine dialog underneath listens on document and would close too.
     const escape = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
+      // A sheet stacked on a base sheet takes the Escape for itself.
+      if (event.key === "Escape" && !(base && closeOpenOverlay)) {
         event.stopPropagation();
         requestClose();
       }
@@ -135,9 +139,10 @@ export function SlpSheet({
       window.removeEventListener("keydown", escape, true);
       if (closeOpenOverlay === close) closeOpenOverlay = null;
     };
-  }, [open]);
+  }, [open, base]);
 
-  useDialogFocusScope(open && mounted, panelRef);
+  // A base sheet counts the sheets stacked on it as its own, so Tab stays inside the top one.
+  useDialogFocusScope(open && mounted, panelRef, undefined, undefined, base ? "[data-slp-sheet]" : undefined);
 
   useEffect(() => (open && back ? registerSlpBackLayer(() => onCloseRef.current()) : undefined), [open, back]);
 

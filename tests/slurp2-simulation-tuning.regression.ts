@@ -1,4 +1,13 @@
 import assert from "node:assert/strict";
+import { z } from "zod";
+import { z as z4 } from "zod/v4";
+
+import { slpFilledDefault } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-schema-defaults.js";
+import { slpSettingsUpdateSchema } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-social.schema.js";
+import { slurpFanTypesSchema } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-fan-types.js";
+import { slurpModelBudgetSchema } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-model-budget.js";
+import { slpPartialInput } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-schema-defaults.js";
+import { slurp2Source } from "./slurp2-source.js";
 
 import { slurpCreatorReach } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-reach.js";
 import {
@@ -90,5 +99,26 @@ assert.equal(partial.prompts.replyMaxChars, 90);
 assert.deepEqual({ ...partial, reach: realistic.reach, prompts: realistic.prompts }, SLURP_REALISTIC_TUNING);
 assert.deepEqual(slurpSimulationTuningSchema.parse({}), SLURP_REALISTIC_TUNING);
 assert.notEqual(slurpTuningForPreset("realistic"), slurpTuningForPreset("realistic"), "presets are copies");
+
+// Zod 4 returns a `.default({})` value unparsed, so nested defaults stayed unset and the
+// server crashed at load reading `world.commission.curve`. The helper fills them on zod 3 and 4.
+assert.equal(typeof SLURP_REALISTIC_TUNING.world.commission.curve, "number");
+const nested = z4.object({ inner: slpFilledDefault(z4.object({ a: z4.number().default(1) }) as never) });
+assert.deepEqual(nested.parse({}), { inner: { a: 1 } }, "zod 4 fills nested defaults");
+// Zod 4 `.partial()` would fill every unsent settings field with its default and reset it on save.
+assert.deepEqual(slpSettingsUpdateSchema.parse({}), {}, "a settings update leaves unsent fields out");
+// The PATCH /settings body: modelBudget and fanTypes carry filled defaults, which a plain
+// `.partial()` would add to every save on zod 4.
+const settingsPatch = slpPartialInput(z.object({ modelBudget: slurpModelBudgetSchema, fanTypes: slurpFanTypesSchema }));
+assert.deepEqual(settingsPatch.parse({}), {}, "a settings PATCH leaves unsent fields out");
+const settingsSource = slurp2Source(
+  "packages/slurp2/src/engine/packages/server/src/slp/modules/settings/slp-settings.ts",
+);
+assert.match(settingsSource, /slurpSettingsPatchSchema = slpPartialInput\(slurpSettingsSchema\)/u);
+const routesSource = slurp2Source(
+  "packages/slurp2/src/engine/packages/server/src/slp/features/settings/slp-settings-routes.ts",
+);
+assert.match(routesSource, /slurpSettingsPatchSchema\.safeParse\(req\.body/u);
+assert.doesNotMatch(routesSource, /slurpSettingsSchema\.partial\(\)/u);
 
 console.log("slurp2 simulation tuning regression passed");

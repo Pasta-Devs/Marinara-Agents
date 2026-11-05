@@ -63,10 +63,11 @@ assert.match(hub, /<SlpBalanceChip \/>/u);
 assert.match(shell, /export function SlpBalanceChip[\s\S]*?SLP_BALANCE_CHIP_CLASS/u);
 
 // More is an SlpSheet; Pulse closes it first so Pulse is not hidden under the sheet.
-// Step 7: Pulse is a SlpSheet too, and opening a sheet closes the one that is open (B8).
+// Step 7: Pulse is a SlpSheet too, and opening a sheet closes the one that is open (B8). Only the Stir
+// tab's base sheet (0.3.63) lets the sheets it opens stack on top.
 assert.match(shell, /<SlpSheet\s+open=\{mobileDrawerOpen\}/u);
 assert.match(src("modules/chrome/SlpPulse.tsx"), /<SlpSheet open=\{open\} onClose=\{onClose\}/u);
-assert.match(src("modules/chrome/SlpSheet.tsx"), /closeOpenOverlay\?\.\(\);\s*closeOpenOverlay = close;/u);
+assert.match(src("modules/chrome/SlpSheet.tsx"), /closeOpenOverlay\?\.\(\);\s*if \(!base\) closeOpenOverlay = close;/u);
 
 // Hub header: wordmark left, chip right. Step 3.1 (user): the refresh ⋯ is gone, the feed updates itself.
 assert.match(hub, /<SlpWordmark \/>/u);

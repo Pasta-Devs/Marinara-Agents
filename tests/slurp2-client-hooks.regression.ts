@@ -360,6 +360,8 @@ const callsBefore = readFileSync(join(import.meta.dirname, "fixtures/slurp2-clie
   .filter(Boolean);
 const mapStagingCall = (call: string) => call.replace("/slurp2/noodler/", "/slurp2/slurp/");
 const addedCalls = [
+  "get /slurp2/extras/offer",
+  "post /slurp2/extras/offer/answer",
   "get /slurp2/messages/unread-count?personaId=${encodeURIComponent(personaId!)}",
   "get /slurp2/slurp/notifications/unseen-count?personaId=${encodeURIComponent(personaId!)}",
   "get /slurp2/slurp/posts/${encodeURIComponent(postId)}/deep-details",
@@ -370,6 +372,8 @@ const addedCalls = [
   "get /slurp2/continuity/${encodeURIComponent(creatorAccountId!)}?${query}",
   "get /slurp2/messages/threads/${encodeURIComponent(threadId!)}/requests?personaId=${encodeURIComponent(personaId!)}",
   "get /slurp2/slurp/tasks",
+  // Paid sexting sessions (docs/SPICY.md, item 2).
+  "post /slurp2/messages/sexting",
   "get /slurp2/slurp/trends",
   "get /slurp2/slurp/viewer/feed?personaId=${encodeURIComponent(personaId)}&tab=all&limit=20${cursorQuery(current.nextCursor)}",
   "get /slurp2/slurp/viewer/feed?personaId=${encodedPersonaId}&tab=all&limit=20",
@@ -426,6 +430,13 @@ const addedCalls = [
   "get /slurp2/slurp/ads/lorebooks",
   "get /slurp2/slurp/desk?personaId=${encodeURIComponent(personaId!)}",
   "get /slurp2/slurp/drama",
+  "get /slurp2/slurp/live",
+  "get /slurp2/slurp/live/${encodeURIComponent(showId)}${query}",
+  "post /slurp2/slurp/live/${encodeURIComponent(showId)}/beat",
+  "post /slurp2/slurp/live/${encodeURIComponent(showId)}/end",
+  "post /slurp2/slurp/live/${encodeURIComponent(showId)}/private",
+  "post /slurp2/slurp/live/${encodeURIComponent(showId)}/tip",
+  "post /slurp2/slurp/live/host",
   "get /slurp2/slurp/eligible-accounts?limit=100&offset=${pageParam}&search=${encodeURIComponent(normalizedSearch)}${kind === ",
   "get /slurp2/slurp/fan-activity/status",
   "get /slurp2/slurp/first-posts/status?executionId=${encodeURIComponent(executionId!)}",
@@ -439,6 +450,8 @@ const addedCalls = [
   "get /slurp2/slurp/wardrobe/lorebooks",
   "get /slurp2/story/calendar?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}",
   "get /slurp2/story/timeline",
+  "delete /slurp2/story-packs/${encodeURIComponent(id)}",
+  "delete /slurp2/story/facts/${encodeURIComponent(factId)}",
   "patch /slurp2/messages/threads/${encodeURIComponent(threadId!)}/details",
   "patch /slurp2/slurp/accounts/${encodeURIComponent(id)}/steering",
   "patch /slurp2/slurp/ads/brands/${encodeURIComponent(id)}",
@@ -461,8 +474,12 @@ const addedCalls = [
   "post /slurp2/messages/creators/${encodeURIComponent(input.creatorAccountId)}/request-fan-reply",
   "post /slurp2/messages/ppv/unlock",
   "post /slurp2/messages/share-post",
+  "post /slurp2/messages/threads/${encodeURIComponent(input.threadId)}/messages/${encodeURIComponent(input.messageId)}/delete",
+  "post /slurp2/messages/threads/${encodeURIComponent(input.threadId)}/messages/${encodeURIComponent(input.messageId)}/edit",
+  "post /slurp2/messages/threads/${encodeURIComponent(input.threadId)}/regenerate",
   "post /slurp2/messages/threads/${encodeURIComponent(input.threadId)}/request-reply",
   "post /slurp2/messages/threads/${encodeURIComponent(input.threadId)}/viewer-image",
+  "post /slurp2/messages/threads/${encodeURIComponent(threadId)}/summary",
   "post /slurp2/refresh",
   "post /slurp2/slurp/accounts/${encodeURIComponent(accountId)}/page/compose",
   "post /slurp2/slurp/accounts/${encodeURIComponent(creatorId)}/wardrobe/import-preview",
@@ -497,6 +514,9 @@ const addedCalls = [
   "post /slurp2/slurp/accounts/${encodeURIComponent(accountId)}/strategy/suggest",
   "upload /slurp2/messages/threads/${encodeURIComponent(input.threadId)}/image-upload",
   "get /slurp2/settings/carryover-reach",
+  "get /slurp2/settings/memory-status",
+  // useSlurpMemoryStatus asks whether Long-Term Memory's sharing switch is on before it reports "off" (#1856).
+  "get /long-term-memory/settings",
 ];
 const removedCalls = [
   // The staging ads-pool GET went with the removed useSlurpAdPool hook (0.3.9).
@@ -556,22 +576,28 @@ assert.deepEqual(
   {
     // 0.3.27 "Suggest page style": one mutation, its two error states, and the strategy save now
     // refreshes the list when settled (a refused apply also means the list is stale).
-    useMutation: 213,
+    // 0.3.63: +1 (useStartSlurpSexting buys a sexting session).
+    // 0.4.12: Live v3 hooks: +4 useMutation, +7 useQuery, +3 setQueryData (a tip, a beat or a private block returns the fresh show).
+    useMutation: 231,
     // 0.3.28: +2 (the import and the one query of SlpMessageDeepDetails). 0.3.42: +1 (carryover reach).
     // 0.3.44: +2 (the import and the trends row query).
-    useQuery: 287,
+    // 0.3.63: +1 (its useQueryClient). Long-Term Memory recall: +1 (useSlurpMemoryStatus).
+    useQuery: 310,
     useInfiniteQuery: 9,
     // 0.3.35: +2 (adding a Creator refreshes the settings, which now hold the image name choice).
-    invalidateQueries: 153,
-    setQueryData: 26,
+    // Configurator: +1 (an extension switch drops the cached feed, trend and Stir reads).
+    // Life panel: +3 useMutation, +4 useQuery, +1 invalidateQueries, +3 onError.
+    invalidateQueries: 159,
+    setQueryData: 32,
     cancelQueries: 7,
     removeQueries: 1,
     refetchQueries: 0,
     onMutate: 2,
     // SlpConnectionsPanel.tsx moved into the SlurpBackstagePrompts component mapping, so its one
-    // onError no longer counts as state-layer code.
-    onError: 93,
-    onSettled: 37,
+    // onError no longer counts as state-layer code. +1: SlpDeskQuickReplies (R2) toasts a failed save.
+    onError: 98,
+    // 0.3.63: +1 (the sexting buy refreshes the thread when settled).
+    onSettled: 41,
   },
   "query and mutation wiring counts match the monolith plus the later Slurp2 hooks",
 );
@@ -584,7 +610,12 @@ const invalidatorCalls = {
 };
 assert.deepEqual(
   invalidatorCalls,
-  { invalidateSlurpMessages: 32, invalidateSlurpProjects: 5, mergeSlurpViewerShell: 4 },
+  {
+    // 0.3.63: +1 (the sexting buy).
+    invalidateSlurpMessages: 36,
+    invalidateSlurpProjects: 5,
+    mergeSlurpViewerShell: 4,
+  },
   "shared invalidation helpers must stay wired to the same call sites",
 );
 

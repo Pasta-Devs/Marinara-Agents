@@ -12,14 +12,15 @@ import { logger } from "../../../lib/logger.js";
 import { slpIsAdmissionFailure } from "../../base/host/slp-admission.js";
 import { createAppSettingsStorage } from "../../../services/storage/app-settings.storage.js";
 import type { SlurpCanonAnchors } from "../../modules/feed/slp-post-beat.js";
+import type { SlurpWorldLens } from "../../modules/creators/slp-world-lens.js";
 import { mergeSlurpCanonAnchors, normalizeSlurpCanonAnchors } from "../../modules/feed/slp-post-brief.js";
 
 /** One JSON blob in app settings. `slp-flavour-source.ts` reads it for the brief, stale or not. */
 export const SLURP_CANON_ANCHORS_KEY = "slurp2.canon-anchors";
 
 // Bumped when the extraction asks for more (v2 added the routine, v3 the essentials and the wider
-// card text), so every cache refreshes once. The player's edits are merged into the new reading.
-const ANCHORS_VERSION = "v3";
+// card text, v4 the niches, v5 the world lens), so every cache refreshes once. The player's edits are merged into the new reading.
+const ANCHORS_VERSION = "v5";
 const anchorKey = (text: string) => createHash("sha256").update(`${ANCHORS_VERSION}:${text}`).digest("hex");
 const FAILED_WAIT_MS = 30 * 60_000;
 
@@ -180,8 +181,19 @@ export async function saveSlurpCanonAnchors(
       anchors && unread && !anchors.essentials?.length
         ? normalizeSlurpCanonAnchors({ ...anchors, essentials: undefined })
         : anchors;
-    return { key: stored?.key ?? "", anchors: mine, edited: true, ...(extracted === undefined ? {} : { extracted }) };
+    // The editor does not edit niches, so a stale body must not erase the stored ones.
+    return {
+      key: stored?.key ?? "",
+      anchors: mine && { ...mine, niches: stored?.anchors?.niches ?? mine.niches },
+      edited: true,
+      ...(extracted === undefined ? {} : { extracted }),
+    };
   });
+}
+
+/** The Creator's world lens from the stored reading, for prompts without the card at hand. */
+export async function readSlurpWorldLens(db: DB, accountId: string): Promise<SlurpWorldLens | undefined> {
+  return (await readAnchorCache(db).catch(() => ({}) as AnchorCache))[accountId]?.anchors?.world;
 }
 
 /** Forget the anchors, the player's edits included, so the next post reads the card again. */

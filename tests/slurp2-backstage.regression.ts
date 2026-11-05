@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   SLP_BACKSTAGE_SECTIONS,
   SLP_LEGACY_SETTINGS_DESTINATION,
+  isSlpBackstageSection,
   isSlpBackstageTarget,
   slpBackstageSectionFor,
   targetBelongsToSection,
@@ -20,45 +21,52 @@ const settingKeys = [...hooks.slice(settingsStart, settingsEnd).matchAll(/^\s{2}
   (match) => match[1],
 );
 
+// Configurator slice 1: Basic, then the pages every player needs, then one section per extension.
 assert.deepEqual(SLP_BACKSTAGE_SECTIONS, [
   "overview",
-  "models",
+  "basic",
   "creators",
-  "automation",
-  "content",
-  "world",
-  // 0.3.5: Settings › Stir (the Support desk, polyamory).
-  "stir",
-  "fans",
   // 7b-spice: Backstage › Spice (user plan: "Backstage › Spice › Your taste").
   "spice",
   "prompts",
-  "maintenance",
+  "ads",
+  "content",
+  "world",
+  // 0.3.5: Settings › Stir, now labelled Support desk; polyamory and drama moved to Storylines.
+  "stir",
+  "live",
+  "engine",
 ]);
 // A page shows under the section that holds it, whatever section an older caller or saved state names.
-assert.equal(slpBackstageSectionFor("automation", "connections"), "models");
-assert.equal(slpBackstageSectionFor("automation", "images"), "models");
-assert.equal(slpBackstageSectionFor("world", "audience"), "fans");
+assert.equal(slpBackstageSectionFor("prompts", "connections"), "basic");
+assert.equal(slpBackstageSectionFor("creators", "images"), "basic");
+assert.equal(slpBackstageSectionFor("world", "audience"), "basic");
 assert.equal(slpBackstageSectionFor("content", "events"), "world");
 assert.equal(slpBackstageSectionFor("content", "storylines"), "content");
+assert.equal(slpBackstageSectionFor("stir", "drama"), "content");
 // Overview is the only hub: the Posting, Stories and World landing pages and the Backup page are gone.
 for (const removed of ["automation", "content", "world", "advanced"])
   assert.equal(isSlpBackstageTarget(removed), false);
-assert.equal(SLP_LEGACY_SETTINGS_DESTINATION.advanced.target, "autopurge", "old Backup links land on Maintenance");
+assert.equal(SLP_LEGACY_SETTINGS_DESTINATION.advanced.target, "autopurge", "old Backup links land on Storage");
+// The four sections slice 1 folded into Basic still open a page.
+for (const old of ["models", "automation", "fans", "maintenance"] as const) {
+  assert.equal(isSlpBackstageSection(old), false);
+  assert.equal(SLP_LEGACY_SETTINGS_DESTINATION[old].section, "basic");
+}
 for (const [setting, placement] of Object.entries(SLP_BACKSTAGE_SETTING_PLACEMENT)) {
   assert.ok(
     targetBelongsToSection(placement.section, placement.target),
     `${setting} is placed under its page's section`,
   );
 }
-assert.equal(SLP_BACKSTAGE_SETTING_PLACEMENT.inlineAdsEnabled.section, "fans");
+assert.equal(SLP_BACKSTAGE_SETTING_PLACEMENT.inlineAdsEnabled.section, "ads");
 // "Reset page" only resets the settings that page shows.
 for (const [page, keys] of Object.entries(SLURP_SETTINGS_SECTION_KEYS)) {
   for (const key of keys) {
     assert.equal(SLP_BACKSTAGE_SETTING_PLACEMENT[key].target, page, `${key} resets with the page it is on`);
   }
 }
-assert.equal(SLP_BACKSTAGE_SETTING_PLACEMENT.imageWidth.section, "models");
+assert.equal(SLP_BACKSTAGE_SETTING_PLACEMENT.imageWidth.section, "basic");
 const packageStore = read("packages/slurp2/src/engine/packages/client/src/slp/base/state/slp-package-store.ts");
 assert.match(
   packageStore,
@@ -80,11 +88,15 @@ assert.deepEqual(Object.keys(SLP_LEGACY_SETTINGS_DESTINATION).sort(), [
   "advanced",
   "arcs",
   "audience",
+  "automation",
   "autopurge",
   "creators",
+  "fans",
   "general",
   "images",
+  "maintenance",
   "messaging",
+  "models",
   "overview",
   "tags",
   "wallet",

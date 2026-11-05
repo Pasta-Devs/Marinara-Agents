@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -13,8 +14,9 @@ import {
 } from "lucide-react";
 import type { LtmStatusResponse } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { errorMessage, queryKeys, request } from "./api";
+import { clearLtmOpenRequest, peekLtmOpenRequest } from "./auto-import-status";
 import { LongTermMemoryNavigation } from "./LongTermMemoryNavigation";
-import { Button, IconButton, InfoPopover, StatusSurface } from "./shared-controls";
+import { Button, IconButton, InfoPopover, StatusSurface, lockedActionProps } from "./shared-controls";
 import type {
   CapabilityProps,
   LongTermMemoryDestination,
@@ -55,11 +57,24 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     queryKey: queryKeys.pendingDrafts,
     queryFn: () => request<{ count: number }>("/drafts/pending-count"),
   });
-  const [destination, setDestination] = useState<LongTermMemoryDestination>("vault");
+  // Chat Settings can ask for the Review Queue or the Extraction settings; the request is read once, on open.
+  const [destination, setDestination] = useState<LongTermMemoryDestination>(() => {
+    const target = peekLtmOpenRequest();
+    return target === "review" || target === "sources" ? target : target === "extraction" ? "settings" : "vault";
+  });
+  const [openForConnection, setOpenForConnection] = useState(() => peekLtmOpenRequest() === "extraction");
+  useEffect(() => {
+    clearLtmOpenRequest();
+  }, []);
   const [activationPending, setActivationPending] = useState(false);
   const [activationError, setActivationError] = useState("");
   const [repairPending, setRepairPending] = useState(false);
-  const [repairMessage, setRepairMessage] = useState("");
+  // Pending controls stay focusable (aria-disabled, not `disabled`); these refs make their handlers ignore input meanwhile.
+  const activationBusyRef = useRef(false);
+  const repairBusyRef = useRef(false);
+  const [repairResult, setRepairResult] = useState<{ text: string; tone: "neutral" | "success" | "danger" } | null>(
+    null,
+  );
   const [addOpen, setAddOpen] = useState(false);
   const addMenuRef = useRef<HTMLDivElement>(null);
   const addTriggerRef = useRef<HTMLButtonElement>(null);
@@ -69,6 +84,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   const navigationSaveInFlightRef = useRef(false);
   const [navigationSaveInFlight, setNavigationSaveInFlight] = useState(false);
   const [navigationPrompt, setNavigationPrompt] = useState<string | null>(null);
+  const [navigationSaveFailed, setNavigationSaveFailed] = useState(false);
   const navigationDialogRef = useRef<HTMLDialogElement>(null);
   const navigationResolveRef = useRef<((allow: boolean) => void) | null>(null);
   const navigationTriggerRef = useRef<HTMLElement | null>(null);
@@ -118,6 +134,8 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     props.onDirtyChange?.(destinationDirty);
     return () => props.onDirtyChange?.(false);
   }, [destinationDirty, props.onDirtyChange]);
+  // A Reindex result belongs to the screen it ran on; every way of leaving that screen clears it.
+  useEffect(() => setRepairResult(null), [destination]);
 
   const confirmDestinationChange = async (next: string) => {
     if (!destinationDirty) return true;
@@ -126,6 +144,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
         navigationResolveRef.current?.(false);
         navigationResolveRef.current = resolve;
         navigationTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        setNavigationSaveFailed(false);
         setNavigationPrompt(next);
       });
     }
@@ -133,17 +152,27 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       props,
       localizeUi("ui.longTermMemory.longtermmemorydetail.discardUnsavedChanges"),
       localizeUi("ui.longTermMemory.longtermmemorydetail.unsavedChangesLostBeforeOpening", { destination: next }),
-      localizeUi("ui.longTermMemory.longtermmemorydetail.discardChanges"),
+      localizeUi("ui.longTermMemory.memoryvault.discardAndContinue"),
       true,
     );
   };
   const finishNavigationPrompt = async (decision: "save" | "discard" | "stay") => {
+    // The dialog's buttons stay focusable with `aria-disabled` while a save runs; this ignores
+    // them, and Escape, until it ends.
+    if (navigationSaveInFlightRef.current) return;
     if (decision === "save") {
-      if (navigationSaveInFlightRef.current) return;
       navigationSaveInFlightRef.current = true;
       setNavigationSaveInFlight(true);
+      setNavigationSaveFailed(false);
       try {
-        if (!(await destinationSaveRef.current?.())) return;
+        // A failed save keeps the dialog open; its own errors sit behind the modal, so say so here.
+        if (!(await destinationSaveRef.current?.())) {
+          setNavigationSaveFailed(true);
+          return;
+        }
+      } catch {
+        setNavigationSaveFailed(true);
+        return;
       } finally {
         navigationSaveInFlightRef.current = false;
         setNavigationSaveInFlight(false);
@@ -154,8 +183,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     navigationDialogRef.current?.close();
     setNavigationPrompt(null);
     resolve?.(decision !== "stay");
-    requestAnimationFrame(() => navigationTriggerRef.current?.focus({ preventScroll: true }));
+    const trigger = navigationTriggerRef.current;
     navigationTriggerRef.current = null;
+    requestAnimationFrame(() => trigger?.focus({ preventScroll: true }));
   };
   const selectDestination = async (next: LongTermMemoryDestination) => {
     if (next === destination) return true;
@@ -225,7 +255,8 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     setDestination("settings");
   };
   const toggleActivation = async () => {
-    if (!props.onEnabledForChatChange) return;
+    if (!props.onEnabledForChatChange || activationBusyRef.current) return;
+    activationBusyRef.current = true;
     setActivationPending(true);
     setActivationError("");
     try {
@@ -235,6 +266,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
         errorMessage(error, localizeUi("ui.longTermMemory.longtermmemorydetail.couldNotUpdateThisChat")),
       );
     } finally {
+      activationBusyRef.current = false;
       setActivationPending(false);
     }
   };
@@ -272,21 +304,35 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   const healthNeedsDangerTone = health === "corrupt" || health === "failed";
   const indexedChunks = status.data?.indexes.chunkCount ?? "--";
   const repairRecall = async () => {
+    const running = { text: localizeUi("ui.longTermMemory.longtermmemorydetail.reindexing"), tone: "neutral" as const };
+    // Leaving the screen clears the running surface, and the run's outcome is then not shown on another screen.
+    const finish = (result: { text: string; tone: "success" | "danger" }) =>
+      setRepairResult((current) => (current === running ? result : current));
+    if (repairBusyRef.current) return;
+    repairBusyRef.current = true;
     setRepairPending(true);
-    setRepairMessage("");
+    setRepairResult(running);
     try {
       await request("/repair", "POST", { actions: ["rebuild_indexes"] });
-      setRepairMessage(localizeUi("ui.longTermMemory.longtermmemorydetail.reindexComplete"));
+      finish({ text: localizeUi("ui.longTermMemory.longtermmemorydetail.reindexComplete"), tone: "success" });
       await status.refetch();
     } catch (error) {
-      setRepairMessage(errorMessage(error, localizeUi("ui.longTermMemory.longtermmemorydetail.reindexFailed")));
+      finish({
+        text: errorMessage(error, localizeUi("ui.longTermMemory.longtermmemorydetail.reindexFailed")),
+        tone: "danger",
+      });
     } finally {
+      repairBusyRef.current = false;
       setRepairPending(false);
     }
   };
   const repairButton = () => (
-    <Button disabled={repairPending} onClick={() => void repairRecall()}>
-      <RefreshCw aria-hidden="true" size="0.75rem" className={repairPending ? "animate-spin" : ""} />
+    <Button {...lockedActionProps(repairPending)} onClick={() => void repairRecall()}>
+      <RefreshCw
+        aria-hidden="true"
+        size="0.75rem"
+        className={repairPending ? "animate-spin motion-reduce:animate-none" : ""}
+      />
       {localizeUi("ui.longTermMemory.longtermmemorydetail.reindexRecall")}
     </Button>
   );
@@ -324,14 +370,27 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       ) : null}
       <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.embeddingSourceHelp")}</p>
       {repairButton()}
-      {repairMessage ? <p role="status">{repairMessage}</p> : null}
     </div>
   );
+  // The result sits under the health banners, not inside them: a successful reindex can clear the
+  // banner that held the button. The busy surface stays mounted into a success, so the result is
+  // read as a change; a failure mounts its own alert.
+  const repairStatus = repairResult ? (
+    <StatusSurface
+      key={repairResult.tone === "danger" ? "failed" : "status"}
+      tone={repairResult.tone}
+      busy={repairResult.tone === "neutral"}
+      data-ltm-reindex-result={repairResult.tone === "neutral" ? "pending" : repairResult.tone}
+    >
+      {repairResult.text}
+    </StatusSurface>
+  ) : null;
   const chatLabel = props.chatName ?? localizeUi("ui.longTermMemory.longtermmemorydetail.thisChat");
   const connectedChat = Boolean(props.chatId);
   const activeChat = connectedChat && props.enabledForChat === true;
   const enableForOnboarding = async () => {
-    if (!props.onEnabledForChatChange || activationPending) return false;
+    if (!props.onEnabledForChatChange || activationBusyRef.current) return false;
+    activationBusyRef.current = true;
     setActivationPending(true);
     setActivationError("");
     try {
@@ -343,14 +402,103 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       );
       return false;
     } finally {
+      activationBusyRef.current = false;
       setActivationPending(false);
     }
   };
+  const navigationBusyProps = lockedActionProps(navigationSaveInFlight);
+
+  const headerExtras = (
+    <>
+      {destination === "vault" ? (
+        <div ref={addMenuRef} className="relative">
+          <Button
+            ref={addTriggerRef}
+            primary
+            className="min-h-11 min-w-11"
+            onClick={() => setAddOpen((value) => !value)}
+            aria-expanded={addOpen}
+            aria-controls={addOpen ? "ltm-add-menu" : undefined}
+            aria-label={addMemoriesLabel}
+            title={addMemoriesLabel}
+          >
+            <Plus aria-hidden="true" size="0.75rem" />
+            {/* In the Engine header the panel container query cannot reach the label; use the viewport instead. */}
+            <span data-ltm-add-label className={props.engineHeader ? "hidden md:inline" : "hidden"}>
+              {addMemoriesLabel}
+            </span>
+          </Button>
+          {addOpen ? (
+            <div
+              id="ltm-add-menu"
+              role="group"
+              aria-labelledby="ltm-add-menu-title"
+              aria-describedby="ltm-add-menu-description"
+              className="mari-editor-panel absolute right-0 z-30 mt-2 w-72 p-2 text-[var(--marinara-editor-text)] shadow-lg"
+            >
+              <div className="px-2 py-1">
+                <h2 id="ltm-add-menu-title" className="text-sm font-semibold">
+                  {localizeUi("ui.longTermMemory.longtermmemorydetail.addMemories")}
+                </h2>
+                <p id="ltm-add-menu-description" className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                  {localizeUi("ui.longTermMemory.longtermmemorydetail.durableContextUsuallyStartsInAnExistingSource")}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void openSources()}
+                className="mari-editor-tab mt-1 flex min-h-16 w-full items-center gap-3 rounded-md p-3 text-left"
+              >
+                <Upload aria-hidden="true" size="1rem" className="shrink-0 text-[var(--marinara-editor-accent)]" />
+                <span>
+                  <strong className="block text-sm">
+                    {localizeUi("ui.longTermMemory.longtermmemorydetail.importSources")}
+                  </strong>
+                  <span className="block text-xs text-[var(--marinara-editor-accent)]">
+                    {localizeUi("ui.longTermMemory.longtermmemorydetail.recommended")}
+                  </span>
+                  <span className="block text-xs text-[var(--muted-foreground)]">
+                    {localizeUi("ui.longTermMemory.longtermmemorydetail.charactersLorebooksAndChatSummaries")}
+                  </span>
+                </span>
+              </button>
+              <div className="my-1 border-t border-[var(--border)]" />
+              <button
+                type="button"
+                onClick={() => {
+                  setAddOpen(false);
+                  setCreateMemoryRequest(Date.now());
+                }}
+                className="mari-editor-tab flex min-h-14 w-full items-center gap-3 rounded-md p-3 text-left"
+              >
+                <Pencil aria-hidden="true" size="1rem" className="shrink-0" />
+                <span>
+                  <strong className="block text-sm">
+                    {localizeUi("ui.longTermMemory.longtermmemorydetail.createManually")}
+                  </strong>
+                  <span className="block text-xs text-[var(--muted-foreground)]">
+                    {localizeUi("ui.longTermMemory.longtermmemorydetail.oneOffDurableContext")}
+                  </span>
+                </span>
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      <IconButton
+        icon={CircleHelp}
+        label={localizeUi("ui.longTermMemory.longtermmemorydetail.showSetupGuide")}
+        onClick={() => openOnboardingRef.current?.()}
+        className="h-11 min-h-11 w-11 min-w-11"
+        data-ltm-onboarding-help
+      />
+    </>
+  );
 
   return (
     <main
       data-ltm-surface="detail"
-      aria-labelledby="ltm-detail-title"
+      aria-labelledby={props.engineHeader ? undefined : "ltm-detail-title"}
       className="mari-editor-shell mari-editor-legacy-bridge flex min-h-0 flex-1 flex-col overflow-hidden"
       style={{ containerName: "ltm-detail", containerType: "inline-size" }}
     >
@@ -364,7 +512,21 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
         [data-ltm-mobile-navigation] {
           display: none;
         }
+        [data-ltm-surface="detail"] [data-ltm-navigation="desktop"] .mari-editor-tab {
+          height: auto;
+          min-height: 2.75rem;
+        }
+        [data-ltm-surface="detail"] [data-ltm-detail-content] {
+          padding: 1.5rem;
+        }
         @container ltm-detail (max-width: 47.99rem) {
+          [data-ltm-surface="detail"] [data-ltm-detail-icon] {
+            width: 0.875rem;
+            height: 0.875rem;
+          }
+          [data-ltm-surface="detail"] [data-ltm-detail-content] {
+            padding: 1rem;
+          }
           [data-ltm-surface="detail"] [data-ltm-navigation="desktop"] {
             display: none;
           }
@@ -404,7 +566,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
         }
         [data-ltm-activation-label] {
           color: var(--marinara-editor-text);
-          font-size: 0.8125rem;
+          font-size: 0.75rem;
           font-weight: 600;
           line-height: 1.25;
         }
@@ -430,7 +592,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           height: 1.25rem;
           border-radius: 9999px;
           background: var(--marinara-editor-text);
-          box-shadow: 0 1px 2px color-mix(in srgb, #000 25%, transparent);
+          box-shadow: 0 1px 2px var(--marinara-editor-border-strong);
           transform: translateX(0);
           transition: transform 150ms ease;
         }
@@ -443,6 +605,10 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
         [data-ltm-tab-focus]:focus-visible {
           outline: 2px solid var(--marinara-editor-focus-ring);
         }
+        [data-ltm-surface="detail"] {
+          /* Measured on the status panel in the default Engine themes: at least 10.0:1 light, 9.1:1 dark (WCAG 2.x, 2026-10-25). */
+          --ltm-success: color-mix(in oklab, var(--marinara-editor-accent) 40%, var(--marinara-editor-text));
+        }
         [data-ltm-accent-border],
         [data-ltm-status="success"]:not(.mari-editor-panel),
         [data-ltm-freshness="fresh"] {
@@ -452,13 +618,28 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           outline: none;
           box-shadow: 0 0 0 0.125rem var(--marinara-editor-focus-ring);
         }
-        [data-ltm-control="activation"]:disabled {
+        [data-ltm-control="activation"]:disabled,
+        [data-ltm-control="activation"][aria-disabled="true"] {
           cursor: not-allowed;
           opacity: 0.5;
         }
         @container ltm-detail (max-width: 47.99rem) {
           [data-ltm-control="activation"] {
             min-width: 3rem;
+          }
+        }
+        /* Panel width decides these, so a narrow panel on a wide window keeps the compact header. */
+        @container ltm-detail (min-width: 40rem) {
+          [data-ltm-health-detail] {
+            display: inline;
+          }
+        }
+        @container ltm-detail (min-width: 48rem) {
+          [data-ltm-add-label] {
+            display: inline;
+          }
+          [data-ltm-surface="vault-health-pill"] {
+            display: flex;
           }
         }
         @container ltm-detail (max-width: 47.99rem) {
@@ -530,186 +711,115 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
               {localizeUi("ui.longTermMemory.memoryvault.unsavedNavigationTitle")}
             </h2>
             <p id="ltm-destination-unsaved-description" className="text-sm text-[var(--muted-foreground)]">
-              {localizeUi("ui.longTermMemory.memoryvault.unsavedNavigationDescription", { action: navigationPrompt })}
+              {localizeUi("ui.longTermMemory.longtermmemorydetail.unsavedNavigationDescription", {
+                action: navigationPrompt,
+              })}
             </p>
+            {navigationSaveFailed ? (
+              <StatusSurface tone="danger" data-ltm-destination-save-failed>
+                {localizeUi("ui.longTermMemory.longtermmemorydetail.saveBeforeLeavingFailed")}
+              </StatusSurface>
+            ) : null}
             <div className="flex flex-wrap justify-end gap-2">
               <Button
-                disabled={navigationSaveInFlight}
+                {...navigationBusyProps}
                 data-ltm-destination-stay
                 onClick={() => void finishNavigationPrompt("stay")}
               >
                 {localizeUi("ui.longTermMemory.memoryvault.stay")}
               </Button>
-              <Button
-                disabled={navigationSaveInFlight}
-                destructive
-                onClick={() => void finishNavigationPrompt("discard")}
-              >
+              <Button {...navigationBusyProps} destructive onClick={() => void finishNavigationPrompt("discard")}>
                 {localizeUi("ui.longTermMemory.memoryvault.discardAndContinue")}
               </Button>
-              <Button disabled={navigationSaveInFlight} primary onClick={() => void finishNavigationPrompt("save")}>
+              <Button {...navigationBusyProps} primary onClick={() => void finishNavigationPrompt("save")}>
                 {localizeUi("ui.longTermMemory.memoryvault.saveAndContinue")}
               </Button>
             </div>
           </section>
         </dialog>
       ) : null}
-      <header className="mari-editor-header relative z-20">
-        <div className="mari-editor-header-main">
-          <button
-            type="button"
-            aria-label={backToAgentsLabel}
-            title={backToAgentsLabel}
-            data-ltm-control="back"
-            onClick={() => void close()}
-            className="mari-editor-action inline-flex"
-          >
-            <ArrowLeft aria-hidden="true" size="1.125rem" />
-          </button>
-          <span className="mari-editor-icon-tile">
-            <Sparkles aria-hidden="true" size="1.125rem" className="max-md:!h-[0.875rem] max-md:!w-[0.875rem]" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h1 id="ltm-detail-title" className="mari-editor-title truncate">
-              {props.agent?.name?.trim() || localizeUi("ui.longTermMemory.longtermmemorydetail.longTermMemory")}
-            </h1>
-            <p className="mari-editor-meta mt-0.5">
-              {props.agent?.author?.trim() || "Pasta Devs"}
-              {props.package?.version ? ` · v${props.package.version}` : ""}
-            </p>
-          </div>
-        </div>
-        <div className="mari-editor-actions flex">
-          {props.chatId || props.onEnabledForChatChange ? (
-            <button
-              type="button"
-              role="switch"
-              aria-checked={props.enabledForChat === true}
-              aria-label={localizeUi(
-                props.enabledForChat === true
-                  ? "ui.longTermMemory.longtermmemorydetail.activeInValue1"
-                  : "ui.longTermMemory.longtermmemorydetail.inactiveInValue1",
-                {
-                  value1: props.chatName ?? localizeUi("ui.longTermMemory.longtermmemorydetail.thisChat"),
-                },
-              )}
-              title={localizeUi(
-                props.enabledForChat === true
-                  ? "ui.longTermMemory.longtermmemorydetail.activeInValue1"
-                  : "ui.longTermMemory.longtermmemorydetail.inactiveInValue1",
-                {
-                  value1: props.chatName ?? localizeUi("ui.longTermMemory.longtermmemorydetail.thisChat"),
-                },
-              )}
-              data-ltm-control="activation"
-              className="inline-flex h-11 shrink-0 items-center justify-center rounded-md disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={activationPending || !props.onEnabledForChatChange}
-              onClick={() => void toggleActivation()}
-            >
-              <span data-ltm-activation-label>
-                {localizeUi(
-                  props.enabledForChat === true
-                    ? "ui.longTermMemory.longtermmemorydetail.active"
-                    : "ui.longTermMemory.longtermmemorydetail.inactive",
-                )}
-              </span>
-              <span aria-hidden="true" data-ltm-activation-track>
-                <span data-ltm-activation-knob />
-              </span>
-            </button>
-          ) : null}
-          {destination === "vault" ? (
-            <div ref={addMenuRef} className="relative">
-              <Button
-                ref={addTriggerRef}
-                primary
-                className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-0"
-                onClick={() => setAddOpen((value) => !value)}
-                aria-expanded={addOpen}
-                aria-controls={addOpen ? "ltm-add-menu" : undefined}
-                aria-label={addMemoriesLabel}
-                title={addMemoriesLabel}
-              >
-                <Plus aria-hidden="true" size="0.75rem" />
-                <span className="hidden sm:inline">{addMemoriesLabel}</span>
-              </Button>
-              {addOpen ? (
-                <div
-                  id="ltm-add-menu"
-                  role="group"
-                  aria-labelledby="ltm-add-menu-title"
-                  aria-describedby="ltm-add-menu-description"
-                  className="mari-editor-panel absolute right-0 z-30 mt-2 w-72 p-2 text-[var(--marinara-editor-text)] shadow-lg"
-                >
-                  <div className="px-2 py-1">
-                    <h2 id="ltm-add-menu-title" className="text-sm font-semibold">
-                      {localizeUi("ui.longTermMemory.longtermmemorydetail.addMemories")}
-                    </h2>
-                    <p id="ltm-add-menu-description" className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-                      {localizeUi(
-                        "ui.longTermMemory.longtermmemorydetail.durableContextUsuallyStartsInAnExistingSource",
-                      )}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => void openSources()}
-                    className="mari-editor-tab mt-1 flex min-h-16 w-full items-center gap-3 rounded-md p-3 text-left"
-                  >
-                    <Upload aria-hidden="true" size="1rem" className="shrink-0 text-[var(--marinara-editor-accent)]" />
-                    <span>
-                      <strong className="block text-sm">
-                        {localizeUi("ui.longTermMemory.longtermmemorydetail.importSources")}
-                      </strong>
-                      <span className="block text-xs text-[var(--marinara-editor-accent)]">
-                        {localizeUi("ui.longTermMemory.longtermmemorydetail.recommended")}
-                      </span>
-                      <span className="block text-xs text-[var(--muted-foreground)]">
-                        {localizeUi("ui.longTermMemory.longtermmemorydetail.charactersLorebooksAndChatSummaries")}
-                      </span>
-                    </span>
-                  </button>
-                  <div className="my-1 border-t border-[var(--border)]" />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAddOpen(false);
-                      setCreateMemoryRequest(Date.now());
-                    }}
-                    className="mari-editor-tab flex min-h-14 w-full items-center gap-3 rounded-md p-3 text-left"
-                  >
-                    <Pencil aria-hidden="true" size="1rem" className="shrink-0" />
-                    <span>
-                      <strong className="block text-sm">
-                        {localizeUi("ui.longTermMemory.longtermmemorydetail.createManually")}
-                      </strong>
-                      <span className="block text-xs text-[var(--muted-foreground)]">
-                        {localizeUi("ui.longTermMemory.longtermmemorydetail.oneOffDurableContext")}
-                      </span>
-                    </span>
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-          <IconButton
-            icon={CircleHelp}
-            label={localizeUi("ui.longTermMemory.longtermmemorydetail.showSetupGuide")}
-            onClick={() => openOnboardingRef.current?.()}
-            className="h-11 min-h-11 w-11 min-w-11"
-          />
-          {props.onManagePackage ? (
+      {/* Capability API 1.390: the Engine draws the header; put our extra buttons in its slot. */}
+      {props.engineHeader ? (
+        props.headerSlot ? (
+          createPortal(headerExtras, props.headerSlot)
+        ) : null
+      ) : (
+        <header className="mari-editor-header relative z-20">
+          <div className="mari-editor-header-main">
             <IconButton
-              icon={Settings2}
-              label={localizeUi("ui.longTermMemory.longtermmemorydetail.managePackage")}
-              data-ltm-control="manage-package"
-              onClick={props.onManagePackage}
-              className="h-11 min-h-11 w-11 min-w-11"
+              icon={ArrowLeft}
+              iconSize="1.125rem"
+              label={backToAgentsLabel}
+              data-ltm-control="back"
+              onClick={() => void close()}
             />
-          ) : null}
-        </div>
-      </header>
-      <div className="mari-editor-content max-md:p-4">
+            <span className="mari-editor-icon-tile">
+              <Sparkles aria-hidden="true" size="1.125rem" data-ltm-detail-icon />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h1 id="ltm-detail-title" className="mari-editor-title truncate">
+                {props.agent?.name?.trim() || localizeUi("ui.longTermMemory.longtermmemorydetail.longTermMemory")}
+              </h1>
+              <p className="mari-editor-meta mt-0.5">
+                {props.agent?.author?.trim() || "Pasta Devs"}
+                {props.package?.version ? ` · v${props.package.version}` : ""}
+              </p>
+            </div>
+          </div>
+          <div className="mari-editor-actions flex">
+            {props.chatId || props.onEnabledForChatChange ? (
+              <button
+                type="button"
+                role="switch"
+                aria-checked={props.enabledForChat === true}
+                aria-label={localizeUi(
+                  props.enabledForChat === true
+                    ? "ui.longTermMemory.longtermmemorydetail.activeInValue1"
+                    : "ui.longTermMemory.longtermmemorydetail.inactiveInValue1",
+                  {
+                    value1: props.chatName ?? localizeUi("ui.longTermMemory.longtermmemorydetail.thisChat"),
+                  },
+                )}
+                title={localizeUi(
+                  props.enabledForChat === true
+                    ? "ui.longTermMemory.longtermmemorydetail.activeInValue1"
+                    : "ui.longTermMemory.longtermmemorydetail.inactiveInValue1",
+                  {
+                    value1: props.chatName ?? localizeUi("ui.longTermMemory.longtermmemorydetail.thisChat"),
+                  },
+                )}
+                data-ltm-control="activation"
+                className="inline-flex h-11 shrink-0 items-center justify-center rounded-md"
+                disabled={!props.onEnabledForChatChange}
+                aria-disabled={activationPending || undefined}
+                onClick={() => void toggleActivation()}
+              >
+                <span data-ltm-activation-label>
+                  {localizeUi(
+                    props.enabledForChat === true
+                      ? "ui.longTermMemory.longtermmemorydetail.active"
+                      : "ui.longTermMemory.longtermmemorydetail.inactive",
+                  )}
+                </span>
+                <span aria-hidden="true" data-ltm-activation-track>
+                  <span data-ltm-activation-knob />
+                </span>
+              </button>
+            ) : null}
+            {headerExtras}
+            {props.onManagePackage ? (
+              <IconButton
+                icon={Settings2}
+                label={localizeUi("ui.longTermMemory.longtermmemorydetail.managePackage")}
+                data-ltm-control="manage-package"
+                onClick={props.onManagePackage}
+                className="h-11 min-h-11 w-11 min-w-11"
+              />
+            ) : null}
+          </div>
+        </header>
+      )}
+      <div className="mari-editor-content" data-ltm-detail-content>
         <div
           className="mari-editor-content-inner mari-editor-content-inner--wide space-y-5"
           style={{ maxWidth: "90rem" }}
@@ -725,19 +835,15 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                     review: pendingDrafts.data?.count,
                   }}
                 />
-                {health !== "healthy" && !needsHealthAttention ? (
+                {health !== "healthy" && !needsHealthAttention && !status.isError ? (
                   <div
                     aria-busy={status.isFetching}
                     data-ltm-surface="vault-health-pill"
-                    className="mari-editor-panel mari-editor-panel--soft hidden min-h-11 shrink-0 items-center gap-2 px-3 text-xs text-[var(--marinara-editor-muted)] md:flex"
+                    className="mari-editor-panel mari-editor-panel--soft hidden min-h-11 shrink-0 items-center gap-2 px-3 text-xs text-[var(--marinara-editor-muted)]"
                   >
                     <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${healthTone}`} />
                     <span aria-live="polite" aria-atomic="true">
-                      {status.isError
-                        ? localizeUi("ui.longTermMemory.longtermmemorydetail.statusUnavailable")
-                        : status.data
-                          ? healthLabel
-                          : localizeUi("ui.longTermMemory.longtermmemorydetail.loadingStatus")}
+                      {status.data ? healthLabel : localizeUi("ui.longTermMemory.longtermmemorydetail.loadingStatus")}
                     </span>
                     {needsHealthAttention ? null : (
                       <InfoPopover
@@ -755,10 +861,12 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   data-ltm-surface="vault-health-warning"
                   className="min-h-12 justify-between px-3 py-2 text-sm font-medium"
                 >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <TriangleAlert aria-hidden="true" size="1rem" className="shrink-0" />
+                  <span className="flex min-w-0 flex-1 items-center gap-2">
+                    {healthNeedsDangerTone ? (
+                      <TriangleAlert aria-hidden="true" size="1rem" className="shrink-0" />
+                    ) : null}
                     <span className="font-semibold">{healthLabel}</span>
-                    <span className="hidden truncate sm:inline">
+                    <span data-ltm-health-detail className="hidden truncate">
                       {localizeUi("ui.longTermMemory.longtermmemorydetail.checkSettingsMaintenanceReindexRecallData")}
                     </span>
                   </span>
@@ -775,8 +883,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   data-ltm-surface="semantic-recall-warning"
                   className="min-h-12 justify-between px-3 py-2 text-sm font-medium"
                 >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <TriangleAlert aria-hidden="true" size="1rem" className="shrink-0" />
+                  <span className="flex min-w-0 flex-1 items-center gap-2">
                     <span className="font-semibold">
                       {localizeUi("ui.longTermMemory.longtermmemorydetail.savedButNotSearchable")}
                     </span>
@@ -785,8 +892,10 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                     label={localizeUi("ui.longTermMemory.longtermmemorydetail.howToRepairVaultHealth")}
                     content={healthInfo}
                   />
+                  {repairButton()}
                 </StatusSurface>
               ) : null}
+              {repairStatus}
               <div
                 data-ltm-destination-content
                 role="region"
@@ -799,13 +908,24 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
               >
                 {activationError ? <StatusSurface tone="danger">{activationError}</StatusSurface> : null}
                 {status.isError ? (
-                  <StatusSurface tone="danger">
+                  <StatusSurface tone="danger" data-ltm-status-error className="justify-between">
                     {localizeUi("ui.longTermMemory.longtermmemorydetail.longTermMemoryStatusCouldNotLoad")}
+                    <Button onClick={() => void status.refetch()}>
+                      <RefreshCw
+                        aria-hidden="true"
+                        size="0.75rem"
+                        className={status.isFetching ? "animate-spin motion-reduce:animate-none" : ""}
+                      />
+                      {localizeUi("ui.longTermMemory.activityview.retry")}
+                    </Button>
                   </StatusSurface>
                 ) : null}
                 <Onboarding
                   props={props}
+                  // A failed read leaves the vault count unknown, not zero: the guide waits for a read that succeeds
+                  // (Retry is on the error above) so it never opens or saves a step over a populated vault.
                   ready={status.isSuccess}
+                  onVault={destination === "vault"}
                   savedMemoryCount={savedMemoryCount}
                   pendingDraftCount={pendingDrafts.data?.count}
                   chatLabel={chatLabel}
@@ -819,6 +939,11 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   onOpen={(open) => {
                     openOnboardingRef.current = open;
                   }}
+                  onClose={() =>
+                    requestAnimationFrame(() =>
+                      document.querySelector<HTMLElement>("[data-ltm-onboarding-help]")?.focus({ preventScroll: true }),
+                    )
+                  }
                 />
                 <Destination
                   props={props}
@@ -836,6 +961,8 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   openActivityRequest={openActivityRequest}
                   openActivityMemoryId={openActivityMemoryId}
                   onOpenActivityHandled={() => setOpenActivityRequest(0)}
+                  openForConnection={openForConnection}
+                  onOpenForConnectionHandled={() => setOpenForConnection(false)}
                   onRecoverCandidate={recoverCandidate}
                   openedNoteId={openedNoteId}
                   createMemoryRequest={createMemoryRequest}

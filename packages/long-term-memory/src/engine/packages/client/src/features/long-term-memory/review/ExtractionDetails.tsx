@@ -70,7 +70,7 @@ export function ExtractionDetails({
         ) : null}
         {item.deduplications.length ? (
           <details data-ltm-deduplications className="space-y-1">
-            <summary className="cursor-pointer font-medium text-[var(--foreground)]">
+            <summary className="min-h-11 cursor-pointer py-3 font-medium text-[var(--foreground)]">
               {localizeUi("ui.longTermMemory.extractiondetails.deduplications")} ( {item.deduplications.length} )
             </summary>
             <div className="mt-2 space-y-1">
@@ -82,13 +82,13 @@ export function ExtractionDetails({
         ) : null}
         {diagnostics.length ? (
           <details data-ltm-draft-diagnostics>
-            <summary className="cursor-pointer font-medium text-[var(--foreground)]">
+            <summary className="min-h-11 cursor-pointer py-3 font-medium text-[var(--foreground)]">
               {localizeUi("ui.longTermMemory.extractiondetails.advancedExtractionDetails")}
             </summary>
             <div className="mt-2 space-y-2">
               {[...diagnosticsByCategory].map(([category, entries]) => (
                 <details key={category}>
-                  <summary className="cursor-pointer font-medium">
+                  <summary className="min-h-11 cursor-pointer py-3 font-medium">
                     {localizeUi(category)} ({entries.length})
                   </summary>
                   <div className="mt-1 space-y-1 pl-3">

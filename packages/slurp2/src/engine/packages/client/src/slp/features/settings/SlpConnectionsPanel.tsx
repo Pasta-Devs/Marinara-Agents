@@ -1,16 +1,15 @@
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { BackstagePageHeader, SettingAnchor } from "../../modules/settings/SlpSettingsKit";
-import { Field, NumberSetting, SettingsGroup, Toggle } from "../../modules/settings/SlpSettingsControls";
+import { BackstagePageHeader } from "../../modules/settings/SlpSettingsKit";
+import { Field, SettingsGroup } from "../../modules/settings/SlpSettingsControls";
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
-import { useSlurpCarryoverReach } from "./slp-settings-hooks";
 
 type Connection = { id: string; name?: string; model?: string; provider?: string };
 
 /**
- * Every model Slurp uses, one row per job, and whether Engine chats remember Slurp. A row says
+ * Every model Slurp uses, one row per job. A row says
  * what the model does; the status under the picker only speaks up when a fallback is in use.
  */
 export function SlpConnectionsPanel({
@@ -22,7 +21,6 @@ export function SlpConnectionsPanel({
   imageSettingsQuery,
   updateImages,
 }: SlpBackstagePageProps) {
-  const reach = useSlurpCarryoverReach(settings.carryoverModes.length > 0).data;
   const connections = (connectionsQuery.data ?? []) as Connection[];
   const textConnections = connections.filter((connection) => connection.provider !== "image_generation");
   const imageConnections = connections.filter((connection) => connection.provider === "image_generation");
@@ -183,69 +181,6 @@ export function SlpConnectionsPanel({
             onChange: (id) => void update("inlineAdsImageConnectionId", id),
           })}
         </Field>
-      </SettingsGroup>
-      {/* Engine chats that remember what a character did on Slurp. Moved here from Publishing:
-          it is about the link to Engine chats, not about posting. */}
-      <SettingsGroup title={t("ui.slurp.settings.carryover.title")}>
-        <p className="text-xs leading-5 text-[var(--slurp-muted)]">{t("ui.slurp.settings.carryover.detail")}</p>
-        <SettingAnchor settingKey="carryoverModes">
-          <div className="grid gap-x-8 sm:grid-cols-3">
-            {(["conversation", "roleplay", "game"] as const).map((mode) => (
-              <Toggle
-                key={mode}
-                compact
-                label={t(`ui.slurp.settings.carryover.${mode}`)}
-                value={settings.carryoverModes.includes(mode)}
-                onChange={(value) =>
-                  update(
-                    "carryoverModes",
-                    value
-                      ? [...settings.carryoverModes.filter((entry) => entry !== mode), mode]
-                      : settings.carryoverModes.filter((entry) => entry !== mode),
-                  )
-                }
-              />
-            ))}
-          </div>
-        </SettingAnchor>
-        {settings.carryoverModes.length > 0 && (
-          <>
-            {reach && (
-              <p className="text-xs leading-5 text-[var(--slurp-muted)]">
-                {reach.on + reach.off === 0
-                  ? t("ui.slurp.settings.carryover.reachNone")
-                  : t("ui.slurp.settings.carryover.reach", { on: reach.on, total: reach.on + reach.off })}
-                {reach.off > 0 && ` ${t("ui.slurp.settings.carryover.reachOff")}`}
-              </p>
-            )}
-            <Field
-              settingKey="carryoverHours"
-              label={t("ui.slurp.settings.carryover.hours")}
-              detail={t("ui.slurp.settings.carryover.hoursDetail")}
-            >
-              <NumberSetting
-                stepper
-                value={settings.carryoverHours}
-                min={1}
-                max={24 * 365}
-                onSave={(value) => update("carryoverHours", value)}
-              />
-            </Field>
-            <Field
-              settingKey="carryoverMaxItems"
-              label={t("ui.slurp.settings.carryover.maxItems")}
-              detail={t("ui.slurp.settings.carryover.maxItemsDetail")}
-            >
-              <NumberSetting
-                stepper
-                value={settings.carryoverMaxItems}
-                min={1}
-                max={100}
-                onSave={(value) => update("carryoverMaxItems", value)}
-              />
-            </Field>
-          </>
-        )}
       </SettingsGroup>
     </div>
   );

@@ -206,18 +206,20 @@ test.describe("standalone Slurp package", () => {
       await page.goto("/");
       await openSlurp(page);
       if (testInfo.project.name.includes("mobile")) {
-        // Phones go back to the settings list and open Posting from it.
+        // Phones go back to the settings list and open Basic from it.
         await page.getByRole("button", { name: "Settings", exact: true }).first().click();
         await page
           .getByRole("navigation", { name: "Settings", exact: true })
-          .getByRole("button", { name: /^Posting/u })
+          .getByRole("button", { name: /^Basic/u })
           .click();
       } else {
         await page
           .getByRole("navigation", { name: "Creator settings sections" })
-          .getByRole("button", { name: "Posting", exact: true })
+          .getByRole("button", { name: "Basic", exact: true })
           .click();
       }
+      // Posting is Basic's "How busy" page now (configurator slice 1).
+      await page.getByRole("button", { name: "More for How busy", exact: true }).click();
       await page.getByRole("button", { name: "Generate posts", exact: true }).click();
       const dialog = page.getByRole("dialog", { name: "Generate posts", exact: true });
       await dialog.getByRole("button", { name: "Generate 3", exact: true }).click();
@@ -287,7 +289,8 @@ test.describe("standalone Slurp package", () => {
     const errors = collectUnexpectedErrors(page);
     await getSlurpSettings(page);
     const settingsResponse = await page.request.patch("/api/slurp2/settings", {
-      data: { onboarding: "completed" },
+      // A fresh install starts on Basic only; the Stir tab shows once Stir is on.
+      data: { onboarding: "completed", extStir: true },
     });
     expect(settingsResponse.ok()).toBe(true);
     await page.addInitScript(() => {
@@ -455,10 +458,11 @@ test.describe("standalone Slurp package", () => {
   test("ad settings stay usable and older ads use the tame label", async ({ page }, testInfo) => {
     const errors = collectUnexpectedErrors(page);
     await getSlurpSettings(page);
+    // A fresh install starts on Basic only; the ad settings show once Brands & ads is on.
     expect(
       (
         await page.request.patch("/api/slurp2/settings", {
-          data: { onboarding: "completed", inlineAdsImagesEnabled: false },
+          data: { onboarding: "completed", extAds: true, inlineAdsImagesEnabled: false },
         })
       ).ok(),
     ).toBe(true);
@@ -970,7 +974,7 @@ test("update sheet restores G and the alpha message", async ({ page }, testInfo)
   const errors = collectUnexpectedErrors(page);
   const sheet = page.getByRole("dialog", { name: `What's new in ${SLURP_VERSION}`, exact: true });
   await expect(sheet.getByRole("heading", { name: "Hey, I’m G." })).toBeVisible();
-  await expect(sheet.getByText("The dude responsible for all the bugs.")).toBeVisible();
+  await expect(sheet.getByText(/The dude responsible for\s*all\s*most of the bugs\./)).toBeVisible();
   await expect(sheet.getByText(/You’re testing alpha software/)).toBeVisible();
   await expect(
     sheet.getByText(

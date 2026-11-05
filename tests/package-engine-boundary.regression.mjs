@@ -56,6 +56,14 @@ try {
     displayName: "Fixture",
     capabilityApi: { major: 1, minor: 3 },
   });
+  await assert.rejects(
+    readPackageEngineBoundary({
+      boundaryPath,
+      displayName: "Fixture",
+      capabilityApi: { major: 1, minor: 377 },
+    }),
+    /must target capability API 1\.377/u,
+  );
   await writeFile(
     join(root, "boundary.json"),
     JSON.stringify({

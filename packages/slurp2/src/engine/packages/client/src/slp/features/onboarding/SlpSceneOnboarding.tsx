@@ -46,6 +46,7 @@ export function SlpSceneOnboarding({
   onQuickSetup,
   onFinished,
   onSeeFeed,
+  existing,
 }: {
   accounts: readonly SlpAccount[];
   connectionId?: string;
@@ -55,8 +56,10 @@ export function SlpSceneOnboarding({
   onQuickSetup: () => void;
   onFinished: () => void;
   onSeeFeed: () => void;
+  /** R6: update a Creator already on Slurp. The scene starts at once; leaving it is `onBack`. */
+  existing?: SlpSceneSetup;
 }) {
-  const [setup, setSetup] = useState<SlpSceneSetup | null>(null);
+  const [setup, setSetup] = useState<SlpSceneSetup | null>(existing ?? null);
   const [session, setSession] = useState(0);
   if (!setup) {
     return (
@@ -76,11 +79,11 @@ export function SlpSceneOnboarding({
     <SceneStage
       key={session}
       setup={setup}
-      onBack={() => setSetup(null)}
+      onBack={existing ? onBack : () => setSetup(null)}
       onQuickSetup={onQuickSetup}
       onFinished={onFinished}
       onSeeFeed={onSeeFeed}
-      onAnother={() => setSetup(null)}
+      onAnother={existing ? onBack : () => setSetup(null)}
     />
   );
 }

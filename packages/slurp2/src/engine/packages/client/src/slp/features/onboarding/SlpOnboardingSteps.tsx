@@ -1,22 +1,18 @@
-import { DISCLOSURES, disclosureLabel, DisclosureChoice, StepHeading } from "./SlpOnboardingPanel";
+import { DISCLOSURES, disclosureLabel, StepHeading } from "./SlpOnboardingPanel";
 import { useId, useState } from "react";
-import { Check, ChevronRight, RefreshCw, SlidersHorizontal, Users } from "lucide-react";
-import {
-  SLP_CREATOR_BULK_ACCOUNT_MAX,
-  SLP_CREATOR_POSTS_PER_DAY_MAX,
-} from "../../../../../shared/src/slp/slp-social.schema.js";
+import { Check, ChevronRight, RefreshCw, Users } from "lucide-react";
+import { SLP_CREATOR_BULK_ACCOUNT_MAX } from "../../../../../shared/src/slp/slp-social.schema.js";
 import { cn } from "../../../lib/utils";
 import { Avatar, SLP_GROUP_CLASS, SLP_TYPE } from "../../base/chrome/SlpChrome";
 import { SlpButton, SlpSegment, SlpSquareCheck } from "../../modules/chrome/SlpButton";
 import { SlpRadioRow, SlpSheet } from "../../modules/chrome/SlpSheet";
-import { NumberSetting, Toggle } from "../../modules/settings/SlpSettingsControls";
+import { Toggle } from "../../modules/settings/SlpSettingsControls";
 import type { SlurpOnboardingWizardModel } from "./slp-onboarding-wizard-model";
 
 /** The wizard body: pick the creators, tune them, run the setup, and read what came back. */
 export function SlpOnboardingSteps({ model }: { model: SlurpOnboardingWizardModel }) {
   const {
     accounts,
-    autoPostingEnabled,
     completion,
     completionHeadingRef,
     connectionsQuery,
@@ -39,34 +35,24 @@ export function SlpOnboardingSteps({ model }: { model: SlurpOnboardingWizardMode
     hasNextPage,
     imageConnectionId,
     imagesEnabled,
-    intro,
-    nightQuiet,
     onComplete,
     outcomes,
     pending,
-    postsPerDay,
     refreshTargeted,
     resolveCompletion,
     runGeneration,
     saveSettings,
     selected,
     selectionFull,
-    selectionOnly,
-    setAutoPostingEnabled,
     setCompletion,
-    setDisclosure,
     setExceptions,
     setGenerateNow,
     setGenerationConnectionId,
     setImageConnectionId,
     imageNameKnown,
     setImageNameKnown,
-    setImagesEnabled,
-    setNightQuiet,
-    setPostsPerDay,
     setSelected,
     setSettingsFailed,
-    setSetupLane,
     setStep,
     setupLane,
     step,
@@ -79,16 +65,6 @@ export function SlpOnboardingSteps({ model }: { model: SlurpOnboardingWizardMode
     id: connection.id,
     label: connection.name ?? connection.model ?? connection.id,
   });
-  const postsPerDayStepper = (
-    <NumberSetting
-      stepper
-      label={t("ui.noodle.noodlerwizard.postsPerDay")}
-      value={postsPerDay}
-      min={1}
-      max={SLP_CREATOR_POSTS_PER_DAY_MAX}
-      onSave={setPostsPerDay}
-    />
-  );
   const connectionPickers = (
     <>
       <ConnectionPicker
@@ -127,29 +103,12 @@ export function SlpOnboardingSteps({ model }: { model: SlurpOnboardingWizardMode
 
   return (
     <>
-      {intro === null && setupLane !== null && step === 1 && (
+      {setupLane !== null && step === 1 && (
         <div className="space-y-4">
-          <div className="flex items-start justify-between gap-3">
-            <StepHeading
-              title={t("ui.noodle.noodlerwizard.chooseCharacters")}
-              help={t("ui.noodle.noodlerwizard.selectionRule")}
-            />
-            {/* The easy lane skips identity/activity/images; this is the way back to them
-            without putting a decision screen in front of the character list. */}
-            {selectionOnly && (
-              <SlpButton
-                className="shrink-0 px-3.5"
-                onClick={() => setSetupLane(setupLane === "easy" ? "customize" : "easy")}
-              >
-                <SlidersHorizontal size={16} aria-hidden="true" />
-                {t(
-                  setupLane === "easy"
-                    ? "ui.noodle.noodlerwizard.handoff.customize.action"
-                    : "ui.noodle.noodlerwizard.handoff.easy.action",
-                )}
-              </SlpButton>
-            )}
-          </div>
+          <StepHeading
+            title={t("ui.noodle.noodlerwizard.chooseCharacters")}
+            help={t("ui.noodle.noodlerwizard.selectionRule")}
+          />
           {accounts.length > 0 && (
             <div className="sticky top-0 z-10 flex min-h-11 items-center justify-between gap-3 rounded-full bg-[var(--slurp-glass)] ps-4 pe-1 shadow-[var(--slurp-shadow-floating),var(--slurp-highlight)] backdrop-blur-xl">
               <span className={cn(SLP_TYPE.meta, "font-semibold")}>
@@ -241,26 +200,9 @@ export function SlpOnboardingSteps({ model }: { model: SlurpOnboardingWizardMode
                 ))}
             </div>
           )}
-          {selectionFull && (
-            <p aria-live="polite" className={cn(SLP_TYPE.meta, "font-semibold text-[var(--slurp-muted)]")}>
-              {t("ui.noodle.noodlerwizard.selectionLimit", {
-                count: SLP_CREATOR_BULK_ACCOUNT_MAX,
-              })}
-            </p>
-          )}
-        </div>
-      )}
-
-      {intro === null && setupLane !== null && step === 2 && (
-        <div className="space-y-4">
-          <StepHeading
-            title={t("ui.noodle.noodlerwizard.disclosure.question")}
-            help={t("ui.noodle.noodlerwizard.disclosure.help")}
-          />
-          <DisclosureChoice value={disclosure} onChange={setDisclosure} t={t} />
-          {setupLane === "customize" && selected.size > 0 && (
-            <section aria-label={t("ui.noodle.noodlerwizard.exceptions")} className="space-y-2">
-              <h4 className={cn(SLP_TYPE.body, "font-semibold")}>{t("ui.noodle.noodlerwizard.exceptions")}</h4>
+          {selected.size > 0 && (
+            <section aria-label={t("ui.noodle.noodlerwizard.disclosure.question")} className="space-y-2">
+              <h4 className={cn(SLP_TYPE.body, "font-semibold")}>{t("ui.noodle.noodlerwizard.disclosure.question")}</h4>
               <div className={SLP_GROUP_CLASS}>
                 {accounts
                   .filter((account) => selected.has(account.id))
@@ -285,143 +227,40 @@ export function SlpOnboardingSteps({ model }: { model: SlurpOnboardingWizardMode
               </div>
             </section>
           )}
+          {selectionFull && (
+            <p aria-live="polite" className={cn(SLP_TYPE.meta, "font-semibold text-[var(--slurp-muted)]")}>
+              {t("ui.noodle.noodlerwizard.selectionLimit", {
+                count: SLP_CREATOR_BULK_ACCOUNT_MAX,
+              })}
+            </p>
+          )}
         </div>
       )}
 
-      {intro === null && setupLane !== null && step === 3 && (
-        <div className="space-y-4">
-          <StepHeading title={t("ui.noodle.noodlerwizard.activity")} help={t("ui.noodle.noodlerwizard.activityHelp")} />
-          <p className={cn(SLP_TYPE.meta, "text-pretty text-[var(--slurp-muted)]")}>
-            {t("ui.noodle.noodlerschedulemanagermodal.limitsTemporary")}
-          </p>
-          <div className={SLP_GROUP_CLASS}>
-            <div className="px-4 py-1">
-              <Toggle
-                label={t("ui.noodle.noodlerwizard.autoPosting")}
-                detail={t("ui.noodle.noodlerwizard.autoPostingHelp")}
-                value={autoPostingEnabled}
-                onChange={setAutoPostingEnabled}
-              />
-            </div>
-            {autoPostingEnabled && (
-              <>
-                <div className="flex min-h-14 flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2">
-                  <span className={cn(SLP_TYPE.body, "font-semibold")}>{t("ui.noodle.noodlerwizard.postsPerDay")}</span>
-                  {postsPerDayStepper}
-                </div>
-                <div className="px-4 py-1">
-                  <Toggle
-                    label={t("ui.noodle.noodlerwizard.nightQuiet")}
-                    detail={t("ui.noodle.noodlerwizard.nightQuietHelp")}
-                    value={nightQuiet}
-                    onChange={setNightQuiet}
-                  />
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {intro === null && setupLane !== null && step === 4 && (
+      {setupLane !== null && step === 4 && (
         <div className="space-y-4">
           <StepHeading
-            title={
-              setupLane === "easy" ? t("ui.noodle.noodlerwizard.reviewTitle") : t("ui.noodle.noodlerwizard.images")
-            }
-            help={
-              setupLane === "easy" ? t("ui.noodle.noodlerwizard.reviewHelp") : t("ui.noodle.noodlerwizard.imagesHelp")
-            }
+            title={t("ui.noodle.noodlerwizard.reviewTitle")}
+            help={t("ui.noodle.noodlerwizard.reviewHelp")}
           />
-          {setupLane === "easy" ? (
-            <div className={SLP_GROUP_CLASS}>
-              <div className="flex min-h-14 items-center justify-between gap-4 px-4 py-2">
-                <span className="min-w-0">
-                  <span className={cn(SLP_TYPE.body, "block font-semibold")}>
-                    {t("ui.noodle.noodlerwizard.characters")}
-                  </span>
-                  <span className={cn(SLP_TYPE.meta, "block text-[var(--slurp-muted)]")}>
-                    {t("ui.noodle.noodlerwizard.selectedCount", {
-                      count: selected.size,
-                    })}
-                  </span>
+          {/* Pace, nights, pictures and names are Slurp-wide now: the Basic screen and the Basic page set them. */}
+          <div className={SLP_GROUP_CLASS}>
+            <div className="flex min-h-14 items-center justify-between gap-4 px-4 py-2">
+              <span className="min-w-0">
+                <span className={cn(SLP_TYPE.body, "block font-semibold")}>
+                  {t("ui.noodle.noodlerwizard.characters")}
                 </span>
-                <SlpButton variant="tertiary" className="shrink-0" onClick={() => setStep(1)}>
-                  {t("ui.noodle.noodlerwizard.change")}
-                </SlpButton>
-              </div>
-              <div className="flex min-h-14 items-center justify-between gap-4 px-4 py-2">
-                <span className={cn(SLP_TYPE.body, "font-semibold")}>{t("ui.noodle.noodlerwizard.identity")}</span>
-                <SlpSegment
-                  label={t("ui.noodle.noodlerwizard.identity")}
-                  options={identityOptions}
-                  value={disclosure}
-                  onChange={setDisclosure}
-                />
-              </div>
-              <div className="px-4 py-1">
-                <Toggle
-                  label={t("ui.noodle.noodlerwizard.activity")}
-                  value={autoPostingEnabled}
-                  onChange={setAutoPostingEnabled}
-                />
-              </div>
-              {autoPostingEnabled && (
-                <div className="flex min-h-14 flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2">
-                  <span className={cn(SLP_TYPE.body, "text-[var(--slurp-muted)]")}>
-                    {t("ui.noodle.noodlerwizard.easyPostingPace")}
-                  </span>
-                  {postsPerDayStepper}
-                </div>
-              )}
-              <div className="px-4 py-1">
-                <Toggle label={t("ui.noodle.noodlerwizard.nightQuiet")} value={nightQuiet} onChange={setNightQuiet} />
-              </div>
-              <div className="px-4 py-1">
-                <Toggle label={t("ui.noodle.noodlerwizard.images")} value={imagesEnabled} onChange={setImagesEnabled} />
-              </div>
+                <span className={cn(SLP_TYPE.meta, "block text-[var(--slurp-muted)]")}>
+                  {t("ui.noodle.noodlerwizard.selectedCount", {
+                    count: selected.size,
+                  })}
+                </span>
+              </span>
+              <SlpButton variant="tertiary" className="shrink-0" onClick={() => setStep(1)}>
+                {t("ui.noodle.noodlerwizard.change")}
+              </SlpButton>
             </div>
-          ) : (
-            <>
-              <div className={SLP_GROUP_CLASS}>
-                <div className="px-4 py-1">
-                  <Toggle
-                    label={t("ui.noodle.noodlerwizard.imagesShort")}
-                    value={imagesEnabled}
-                    onChange={setImagesEnabled}
-                  />
-                </div>
-              </div>
-              <div className={SLP_GROUP_CLASS}>
-                {[
-                  [
-                    t("ui.noodle.noodlerwizard.characters"),
-                    t("ui.noodle.noodlerwizard.selectedCount", {
-                      count: selected.size,
-                    }),
-                  ],
-                  [t("ui.noodle.noodlerwizard.identity"), disclosureLabel(disclosure, t)],
-                  [
-                    t("ui.noodle.noodlerwizard.activity"),
-                    autoPostingEnabled
-                      ? t("ui.noodle.noodlerwizard.automaticActivityDetail", {
-                          count: postsPerDay,
-                        })
-                      : t("ui.noodle.noodlerwizard.manualOnly"),
-                  ],
-                  [
-                    t("ui.noodle.noodlerwizard.nightQuiet"),
-                    nightQuiet ? t("ui.noodle.noodlerwizard.on") : t("ui.noodle.noodlerwizard.off"),
-                  ],
-                ].map(([label, value]) => (
-                  <div key={label} className={cn(SLP_TYPE.body, "flex items-start justify-between gap-4 px-4 py-3")}>
-                    <span className="font-semibold">{label}</span>
-                    <span className="max-w-[65%] text-end text-pretty text-[var(--slurp-muted)]">{value}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
+          </div>
           <div className={SLP_GROUP_CLASS}>{connectionPickers}</div>
           <div className={SLP_GROUP_CLASS}>
             <div className="px-4 py-1">

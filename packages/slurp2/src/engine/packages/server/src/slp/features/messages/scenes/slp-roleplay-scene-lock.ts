@@ -19,6 +19,9 @@ const SCENE_LOCKED_ROUTES = new Set([
   "/messages/threads/:threadId/request",
   "/messages/threads/:threadId/force-reply",
   "/messages/threads/:threadId/request-reply",
+  "/messages/threads/:threadId/messages/:messageId/edit",
+  "/messages/threads/:threadId/messages/:messageId/delete",
+  "/messages/threads/:threadId/regenerate",
   "/messages/threads/:threadId/requests/:requestId/action",
 ]);
 

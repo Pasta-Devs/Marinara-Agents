@@ -13,7 +13,7 @@ const automation = slurp2Source(`${clientRoot}/components/slurp/SlurpBackstageAu
 
 assert.match(
   backstage,
-  /arcLibrary: content\("arcs", "plan templates", "stories"\)/u,
+  /arcLibrary: slurp\("arcs", "plan templates", "stories"\)/u,
   "templates must use product vocabulary and stories must remain searchable as templates",
 );
 // The Posting, Stories and World landing pages (and their "World simulation" / landing.stories

@@ -191,6 +191,8 @@ export interface SlpPostCardCtx {
   openProfile?: (account: SlpAccount | null) => void;
   /** Navigate by NoodleR author ID when no Noodle account object exists. */
   openAuthorProfile?: (accountId: string) => void;
+  /** False hides the trend chip (Living world or its "Viral trends" is off). */
+  trendsShown?: boolean;
   /** Open the whole post in the media dialog. Absent → the image opens a plain lightbox. */
   openPost?: (postId: string) => void;
   /** Vote in a post's poll. Pollless posts never call it. */

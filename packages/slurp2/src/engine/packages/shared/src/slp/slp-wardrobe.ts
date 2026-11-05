@@ -3,7 +3,7 @@ import { z } from "zod";
 export const SLP_WARDROBE_LOOK_LIMIT = 64;
 export const SLP_WARDROBE_TAG_LIMIT = 12;
 export const SLP_WARDROBE_SUITABILITIES = ["public", "locked", "both"] as const;
-export const SLP_WARDROBE_SOURCE_KINDS = ["manual", "character", "lorebook", "text", "legacy"] as const;
+export const SLP_WARDROBE_SOURCE_KINDS = ["manual", "character", "lorebook", "text", "legacy", "storyline"] as const;
 
 export const slpWardrobeLookInputSchema = z
   .object({
@@ -35,10 +35,10 @@ export const slpWardrobeImportDraftSchema = slpWardrobeLookInputSchema.extend({
 export const slpWardrobeSceneSchema = z
   .object({
     wardrobeId: z.string().trim().max(80).nullable().optional(),
-    setting: z.string().trim().max(500),
-    action: z.string().trim().max(500),
+    setting: z.string().trim().max(1500),
+    action: z.string().trim().max(1500),
     expression: z.string().trim().max(300),
-    visualDirection: z.string().trim().max(500),
+    visualDirection: z.string().trim().max(1500),
     /** What they wear in this photo. Optional so scenes stored before it existed still parse. */
     outfit: z.string().trim().max(300).optional(),
     /**
@@ -80,8 +80,22 @@ export function readSlpWardrobeLooks(value: unknown): SlpWardrobeLook[] {
   return looks;
 }
 
+// ponytail: an English word list on the look's name and tags only (free text such as "sports bra" would match), so looks named in other languages are missed; ceiling is an explicit intimate field on the look.
+const INTIMATE_LOOK =
+  /\b(?:nude|naked|topless|lingerie|underwear|undies|panties|bra|bralette|thong|briefs|boxers|bikini|swimsuit|swimwear|towel|negligee|babydoll|corset|stockings|garter|boudoir|bathrobe|bodysuit|chemise|nightgown|fishnets)\b/iu;
+
+/** A look that suits a picture showing the body: lingerie, swimwear, a towel, or nothing. Everyday clothes do not. */
+export function slpWardrobeLookIntimate(look: SlpWardrobeLook): boolean {
+  return INTIMATE_LOOK.test([look.name, ...look.tags].join(" "));
+}
+
 export function slpWardrobeLookFits(look: SlpWardrobeLook, access: "public" | "locked"): boolean {
   return look.enabled && (look.suitability === "both" || look.suitability === access);
+}
+
+/** The closet a post may choose from: when the picture shows the body, only the intimate looks. */
+export function slpWardrobeForPicture(looks: readonly SlpWardrobeLook[], bare: boolean): SlpWardrobeLook[] {
+  return bare ? looks.filter(slpWardrobeLookIntimate) : [...looks];
 }
 
 /** Compact enough to show the model the complete closet; full descriptions are expanded later. */

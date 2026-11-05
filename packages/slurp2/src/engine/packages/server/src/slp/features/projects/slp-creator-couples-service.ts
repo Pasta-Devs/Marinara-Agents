@@ -223,7 +223,13 @@ export async function slurpCoupleDmPage(
   creatorId: string,
   viewerId: string,
 ): Promise<SlurpDmParty | null> {
-  const party = slurpDmViewerPage(page, creatorId, viewerId);
+  const open = slurpDmViewerPage(page, creatorId, viewerId);
+  const posts = open && page ? await createSlurpStorage(db).listNoodlerPostsByAccount(page.id, 6) : [];
+  const recentPosts = posts
+    .filter((post) => post.access === "public" && post.content.trim())
+    .slice(0, 3)
+    .map((post) => post.content.slice(0, 200));
+  const party = open && { ...open, ...(recentPosts.length ? { recentPosts } : {}) };
   if (!page || page.id === creatorId || page.id === viewerId || page.invited) return party;
   const player = page.kind === "persona" && page.sourceKind === "persona";
   const { couples } = await readSlurpCreatorTiesDocument(db).catch(() => ({ couples: [] as SlurpCouple[] }));

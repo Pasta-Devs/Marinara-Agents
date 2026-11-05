@@ -7,10 +7,13 @@ import { fileURLToPath } from "node:url";
 // bundle actually references against the catalog that ships beside it.
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packagesRoot = join(repoRoot, "packages");
-// Slurp2 keeps its catalog inside its slp namespace; every other package uses the Engine location.
+// Slurp2 keeps its catalog inside its slp namespace, and Long-Term Memory and Otome Forge inside their feature
+// folders; every other package uses the Engine location.
 const catalogPaths = [
   "src/engine/packages/client/src/localization/locales/en.json",
   "src/engine/packages/client/src/slp/locales/en.json",
+  "src/engine/packages/client/src/features/long-term-memory/locales/en.json",
+  "src/engine/packages/client/src/features/otome-forge/locales/en.json",
 ];
 // i18next resolves a plural key through its suffixed variants, so a bare reference is satisfied by
 // any of them.

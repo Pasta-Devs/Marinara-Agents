@@ -12,15 +12,18 @@ import { logger } from "../../../../lib/logger.js";
 import { newId } from "../../../../utils/id-generator.js";
 import { createSlurpMessagesStorage, createSlurpStorage } from "../../../data/slp-storage.js";
 import { createSlurpPopulationStorage } from "../../../data/audience/slp-audience-storage-funnel.js";
-import { updateSlurpSupportDesk } from "../../../data/creators/slp-support-desk-storage.js";
+import { readSlurpSupportDesk, updateSlurpSupportDesk } from "../../../data/creators/slp-support-desk-storage.js";
 import { countSlurpDeskPublished } from "../../../data/creators/slp-support-desk-counts.js";
 import { appendSlurpDeskLine } from "../../../data/messages/slp-support-desk-thread.js";
 import { enqueueSlurpPendingText } from "../../world/slp-world-contract.js";
+import { slurpDeskSituation } from "../../../modules/messages/slp-desk-situation.js";
+import { readSlurpCreatorTiesDocument } from "../../../data/projects/slp-creator-ties-storage.js";
 import { readSlurpDeskOffer, slurpDeskOfferSummary } from "../../../modules/messages/slp-support-desk-talk.js";
 import { SLURP_SUPPORT_ACCOUNT_ID } from "../../../../../../shared/src/slp/slp-support.js";
 import { slurpCreatorReach } from "../../../../../../shared/src/slp/slp-reach.js";
 import { slurpRunsItself } from "../../projects/slp-projects-contract.js";
 import { slurpPlatformScaleMultiplier } from "../../../../../../shared/src/slp/slp-scale.js";
+import { slpExtensionOn } from "../../../../../../shared/src/slp/slp-extensions.js";
 import { isSlurpViewerActorAccount } from "../../../modules/settings/slp-settings.js";
 import {
   SLP_DESK_STAY_AT,
@@ -346,6 +349,22 @@ export async function advanceSlurpSupportDesk(db: DB, at = new Date()): Promise<
   lastPassMs = at.getTime();
   const storage = createSlurpStorage(db);
   const allSettings = await storage.getSettings();
+  // Support desk off: no tickets, no risk, no milestones. Case files keep their state for later.
+  // ponytail: tickedAt stands still while off, so the first pass back rolls up to a week's odds at once;
+  // move tickedAt on switch-on if that burst shows.
+  if (!slpExtensionOn(allSettings, "supportDesk")) {
+    // Only the desk keeps a Creator who left away: with it off, they are back and post again.
+    for (const account of await storage.listNoodlerAccounts()) {
+      if (!(await readSlurpSupportDesk(db, account.id)).pausedAt) continue;
+      let resume = false;
+      await updateSlurpSupportDesk(db, account.id, (desk) => {
+        resume = desk.pausedAutoPosting;
+        return { ...desk, pausedAt: null, pausedAutoPosting: false };
+      });
+      if (resume) await storage.bulkUpdateCreatorProfiles([account.id], { autoPosting: true });
+    }
+    return;
+  }
   const settings = allSettings.supportDesk;
   // Milestones count the followers the profile shows (reach plus real followers), not the real ones alone.
   const reachScale = slurpPlatformScaleMultiplier(allSettings.platformScale);
@@ -353,6 +372,7 @@ export async function advanceSlurpSupportDesk(db: DB, at = new Date()): Promise<
   const followers = await createSlurpPopulationStorage(db)
     .countFollowersForCreators(accounts.map((account) => account.id))
     .catch(() => new Map<string, number>());
+  const collabs = (await readSlurpCreatorTiesDocument(db).catch(() => null))?.ties.collabs ?? [];
   for (const account of accounts) {
     // Lines, coins and switches wait until the desk is written: a pass that fails writes nothing twice.
     const effects: (() => Promise<unknown>)[] = [];
@@ -373,6 +393,16 @@ export async function advanceSlurpSupportDesk(db: DB, at = new Date()): Promise<
       }
       const needsCounts =
         desk.challenges.some((entry) => entry.status === "active") || desk.contract?.status === "active";
+      // Only a Creator who may write in, with no ticket open, needs their week read.
+      const situation =
+        !yours && settings.tickets !== "off" && !desk.pausedAt && (!desk.ticket || desk.ticket.status === "resolved")
+          ? slurpDeskSituation({
+              creatorId: account.id,
+              at,
+              ledger: (await storage.getEarnings(account.id).catch(() => null))?.ledger ?? [],
+              collabs,
+            })
+          : undefined;
       const ticked = slpDeskTick(desk, {
         at,
         // The player's own Creators never catch Slurp, leave or write tickets: the player is them.
@@ -386,6 +416,7 @@ export async function advanceSlurpSupportDesk(db: DB, at = new Date()): Promise<
           : settings,
         counts: needsCounts ? await countSlurpDeskPublished(db, account.id) : { posts: 0, stories: 0 },
         rolls: [Math.random(), Math.random(), Math.random()],
+        situation,
       });
       desk = await applyEvents(later, db, account, ticked.events, ticked.desk, settings, at);
       if (settings.noticeMilestones)

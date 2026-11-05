@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ChevronDown,
@@ -24,6 +24,18 @@ import {
 } from "../pending-spatial-transitions";
 import { useSpatialMapTranslation } from "../localization";
 import { findSpatialRoute } from "../spatial-route-plans";
+import {
+  STORY_LOCATION_DISPLAYS,
+  STORY_LOCATION_ELLIPSIS,
+  STORY_LOCATION_SEPARATOR,
+  formatStoryLocationTrail,
+  readStoryLocationDisplay,
+  saveStoryLocationDisplay,
+  storyLocationDisplay,
+  storyLocationTrail,
+  trailingCrumbsThatFit,
+  type StoryLocationDisplay,
+} from "../story-location-trail";
 import { SpatialLocationIcon } from "./SpatialLocationIcon";
 import { useMapConfirmation } from "./use-map-confirmation";
 
@@ -67,6 +79,11 @@ export function SpatialContextRuntimeBar({
   const data = spatial.data;
   const { confirmAction, confirmationDialog } = useMapConfirmation();
   const { t } = useSpatialMapTranslation();
+  // #1995: how the bar shows a deep breadcrumb (this device's choice), and how many trailing levels fit its width.
+  const [locationDisplay, setLocationDisplay] = useState<StoryLocationDisplay>(readStoryLocationDisplay);
+  const [fittingCrumbs, setFittingCrumbs] = useState<number | undefined>();
+  const trailBoxRef = useRef<HTMLSpanElement | null>(null);
+  const trailMeasureRef = useRef<HTMLSpanElement | null>(null);
   const pendingRoute = useMemo(() => {
     if (!pending?.transition.travelMode || !data?.definition || !data.currentLocationId) return null;
     return findSpatialRoute(data.definition, data.currentLocationId, pending.transition.destinationId);
@@ -175,9 +192,33 @@ export function SpatialContextRuntimeBar({
     onPendingSelected?.();
   };
 
+  const crumbNames = useMemo(() => data?.breadcrumb.map((crumb) => crumb.name) ?? [], [data?.breadcrumb]);
   const breadcrumbLabel =
-    data?.breadcrumb.map((crumb) => crumb.name).join(" › ") ||
+    crumbNames.join(STORY_LOCATION_SEPARATOR) ||
     (!data?.definition ? "No map yet" : !data.definition.enabled ? "Map disabled" : "Location unavailable");
+  // The bar shows the chosen trail; its title and label keep the whole path, and the options panel spells it out.
+  const trailLabel = crumbNames.length
+    ? formatStoryLocationTrail(storyLocationTrail(crumbNames, locationDisplay, fittingCrumbs))
+    : breadcrumbLabel;
+
+  // Adaptive keeps as many trailing levels as fit: each crumb is measured once in a hidden row with the bar's font,
+  // and the count follows the bar's width.
+  useLayoutEffect(() => {
+    const box = trailBoxRef.current;
+    const measure = trailMeasureRef.current;
+    if (locationDisplay !== "adaptive" || !box || !measure || crumbNames.length === 0) return;
+    const widthOf = (selector: string) =>
+      [...measure.querySelectorAll<HTMLElement>(selector)].map((element) => element.getBoundingClientRect().width);
+    const update = () => {
+      const [separator = 0] = widthOf("[data-trail-separator]");
+      const [ellipsis = 0] = widthOf("[data-trail-ellipsis]");
+      setFittingCrumbs(trailingCrumbsThatFit(widthOf("[data-trail-crumb]"), separator, ellipsis, box.clientWidth));
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, [crumbNames, locationDisplay]);
 
   if (spatial.isLoading && !pending) {
     return (
@@ -253,7 +294,26 @@ export function SpatialContextRuntimeBar({
           <span className="shrink-0 text-[0.625rem] font-semibold uppercase tracking-[0.12em] text-[var(--marinara-chat-chrome-panel-muted)] max-sm:hidden">
             Story location
           </span>
-          <span className="min-w-0 flex-1 truncate text-xs font-medium max-sm:hidden">{breadcrumbLabel}</span>
+          <span
+            ref={trailBoxRef}
+            data-story-location-trail={locationDisplay}
+            className="min-w-0 flex-1 truncate text-xs font-medium max-sm:hidden"
+          >
+            {trailLabel}
+          </span>
+          <span
+            ref={trailMeasureRef}
+            aria-hidden="true"
+            className="pointer-events-none invisible absolute left-0 top-0 whitespace-pre text-xs font-medium"
+          >
+            {crumbNames.map((name, index) => (
+              <span key={`${index}:${name}`} data-trail-crumb>
+                {name}
+              </span>
+            ))}
+            <span data-trail-separator>{STORY_LOCATION_SEPARATOR}</span>
+            <span data-trail-ellipsis>{STORY_LOCATION_ELLIPSIS}</span>
+          </span>
           {enabled &&
             (open ? (
               <ChevronDown size="0.875rem" className="shrink-0 max-sm:hidden" />
@@ -562,6 +622,38 @@ export function SpatialContextRuntimeBar({
                   </p>
                 )}
               </div>
+            </div>
+          )}
+
+          {crumbNames.length > 0 && (
+            // The whole path, wrapped rather than cut: what the bar's hover title shows, for keyboard and touch too.
+            <div className="mb-2 flex flex-wrap items-end gap-x-3 gap-y-2 px-1">
+              <div className="min-w-0 flex-1">
+                <p className="text-[0.625rem] font-semibold uppercase tracking-[0.12em] text-[var(--marinara-chat-chrome-panel-muted)]">
+                  {t("ui.worldMaps.runtime.fullPath")}
+                </p>
+                <p data-story-location-full-path className="break-words text-xs">
+                  {breadcrumbLabel}
+                </p>
+              </div>
+              <label className="flex shrink-0 flex-col gap-1 text-[0.625rem] font-semibold uppercase tracking-[0.12em] text-[var(--marinara-chat-chrome-panel-muted)]">
+                {t("ui.worldMaps.runtime.locationDisplay")}
+                <select
+                  value={locationDisplay}
+                  onChange={(event) => {
+                    const next = storyLocationDisplay(event.target.value);
+                    setLocationDisplay(next);
+                    saveStoryLocationDisplay(next);
+                  }}
+                  className="min-h-11 rounded-lg border border-[var(--marinara-chat-chrome-button-border)] bg-[var(--marinara-chat-chrome-button-bg)] px-2 text-xs font-medium normal-case tracking-normal text-[var(--marinara-chat-chrome-button-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]"
+                >
+                  {STORY_LOCATION_DISPLAYS.map((display) => (
+                    <option key={display} value={display}>
+                      {t(`ui.worldMaps.runtime.locationDisplay.${display}`)}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
           )}
 

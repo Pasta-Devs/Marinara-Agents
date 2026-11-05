@@ -38,6 +38,13 @@ import {
   SlurpResolvedArcConfig,
 } from "../../modules/projects/slp-arc-library.js";
 import { isSlurpCrossover } from "../../modules/projects/slp-project.js";
+import { sendSlurpStoryEnding } from "../creators/slp-ltm-intake.js";
+import {
+  slurpProjectSync,
+  slurpProjectWithType,
+  slurpStageOutcomes,
+} from "../../modules/projects/slp-project-storyline.js";
+import { slurpStoryState } from "../../modules/storylines/slp-story-state.js";
 import {
   slurpCrossoverLeave,
   slurpCrossoverStart,
@@ -47,6 +54,7 @@ import { newId, now } from "../../../utils/id-generator.js";
 import { addSlurpModifier } from "../../modules/creators/slp-creator-state.js";
 
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
+import { slpArcsLive, slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 
 export function createProjectsStorage1(context: SlurpStorageContext) {
   const {
@@ -116,7 +124,19 @@ export function createProjectsStorage1(context: SlurpStorageContext) {
     },
     /** Every project this Creator has, newest first. Paused and complete ones are included. */
     async listProjects(creatorAccountId: string): Promise<SlurpProject[]> {
-      const projects = await loadProjects(creatorAccountId);
+      const loaded = await loadProjects(creatorAccountId);
+      // Records from before PR 3 take their outcomes from the library type once more.
+      const library = loaded.some((project) => project.typeId && project.storyline?.id.startsWith("project:"))
+        ? (await this.getSettings()).arcLibrary
+        : [];
+      const projects = library.length
+        ? loaded.map((project) =>
+            slurpProjectWithType(
+              project,
+              library.find((entry: { id: string }) => entry.id === project.typeId),
+            ),
+          )
+        : loaded;
       // The other participants by public display name, never the source character behind them.
       for (const project of projects.filter(isSlurpCrossover)) {
         const names: string[] = [];
@@ -280,7 +300,7 @@ export function createProjectsStorage1(context: SlurpStorageContext) {
           : current.intensity,
         updatedAt,
       };
-      const next = slurpProjectRecord(current, edited, new Date(updatedAt));
+      const next = slurpProjectRecord(current, slurpProjectSync(edited), new Date(updatedAt));
       const saved = next.intensity === "focus" ? slurpArcsWithoutFocus(projects) : projects;
       saved[index] = next;
       await writeProjects(creatorAccountId, saved);
@@ -335,7 +355,7 @@ export function createProjectsStorage1(context: SlurpStorageContext) {
       const { pace } = await this.resolveArcConfig(creatorAccountId);
       const next = slurpProjectRecord(
         current,
-        { ...slurpProjectAdvance(current, at, pace, poll), twist: "" },
+        { ...slurpProjectAdvance(current, at, pace, poll, await this.storyTags(creatorAccountId, at)), twist: "" },
         at,
         postId,
         creatorAccountId,
@@ -368,16 +388,19 @@ export function createProjectsStorage1(context: SlurpStorageContext) {
       await this.recordArcChange(creatorAccountId, current, next);
       return next;
     },
+    /** The Creator's story tags, for a stage's `when` ways out. */
+    async storyTags(creatorAccountId: string, at = new Date()): Promise<ReadonlySet<string>> {
+      return new Set(slurpStoryState({ facts: await this.listStoryFacts(), creatorId: creatorAccountId, at }).tags);
+    },
     /**
      * The running arcs' multiplier for one stat, under `arcStatEffects`, times the platform events
      * aimed at this Creator on the same stat (R1-112: growth, loyalty and earnings were never read).
      */
     async arcEffectMultiplier(creatorAccountId: string, stat: SlurpArcEffectStat): Promise<number> {
-      const arcs = slurpArcEffectMultiplier(
-        await this.listProjects(creatorAccountId),
-        stat,
-        (await this.getSettings()).arcStatEffects,
-      );
+      const settings = await this.getSettings();
+      const arcs = slpArcsLive(settings)
+        ? slurpArcEffectMultiplier(await this.listProjects(creatorAccountId), stat, settings.arcStatEffects)
+        : 1;
       const target = {
         growth: "audience.growth",
         earnings: "economy.creator-earnings",
@@ -424,10 +447,38 @@ export function createProjectsStorage1(context: SlurpStorageContext) {
       // A new chapter, or a storyline that just started (created active or accepted): the first
       // chapter's mood applied to nobody before (R1-071).
       const started = after.status === "active" && before.status !== "active";
-      const mood =
-        (after.chapter !== before.chapter || started) && after.status !== "complete"
-          ? slurpArcChapterMood(after, (await this.getSettings()).arcAffectsMood)
-          : null;
+      const entered = (after.chapter !== before.chapter || started) && after.status !== "complete";
+      const finished = after.status === "complete" && before.status !== "complete";
+      const moved = after.stage !== before.stage && after.status !== "complete";
+      const settings = entered || finished || moved ? await this.getSettings() : null;
+      const mood = settings && entered ? slurpArcChapterMood(after, settings.arcAffectsMood) : null;
+      // The stage left and the stage entered (or the ending reached) write their outcomes and conditions (a
+      // bump, a new flat). A resume enters nothing again, so a removed condition stays removed.
+      const outcomes =
+        after.storyline && settings && slpExtensionOn(settings, "storylines")
+          ? slurpStageOutcomes(after.storyline, {
+              leave: (moved || finished) && before.status !== "suggested" ? before.stage : null,
+              enter: moved || (started && before.status !== "paused") ? after.stage : null,
+              ending: finished ? after.ending : null,
+            })
+          : [];
+      if (outcomes.length)
+        await this.applyStoryOutcomes({
+          outcomes,
+          participants: isSlurpCrossover(after) ? after.creatorIds : [creatorAccountId],
+          sourceKind: "arc",
+          sourceId: `${after.id}:${after.stage}`,
+          label: after.title,
+          at: new Date(),
+        });
+      const ending = finished ? after.storyline?.endings.find((entry) => entry.key === after.ending)?.label : null;
+      if (ending && settings?.shareWithMemory)
+        void sendSlurpStoryEnding(db, {
+          id: after.id,
+          title: after.title,
+          creatorIds: isSlurpCrossover(after) ? after.creatorIds : [creatorAccountId],
+          ending,
+        });
       // A crossover moves every participant: mood and events reach each of them.
       for (const id of isSlurpCrossover(after) ? after.creatorIds : [creatorAccountId]) {
         if (mood) await mutateCreatorStateNow(id, (state) => addSlurpModifier(state, mood, after.title));

@@ -20,6 +20,7 @@ import {
   type SlpActionName,
   type SlpActionParsed,
 } from "../../../../../shared/src/slp/slp-actions.js";
+import { slpActionAllowed } from "../../../../../shared/src/slp/slp-extensions.js";
 import { SLP_STEERING_NUDGES_MAX } from "../../../../../shared/src/slp/slp-creator-steering.js";
 import { SLP_SPICE_LEVELS } from "../../../../../shared/src/slp/slp-spice.js";
 import { SLURP_PLATFORM_EVENTS_MAX } from "../../../../../shared/src/slp/slp-platform-events.js";
@@ -51,6 +52,8 @@ export async function previewSlpAction(
   at = new Date(),
 ): Promise<SlpAssistOutcome<SlpActionPreview>> {
   if (!isSlpActionName(name)) return { ok: false, status: 404, error: `Slurp has no action called "${name}".` };
+  if (!slpActionAllowed(await createSlurpStorage(db).getSettings(), name))
+    return { ok: false, status: 409, error: "That part of Slurp is switched off in Backstage." };
   const parsed = SLP_ACTIONS[name].schema.safeParse(raw ?? {});
   if (!parsed.success) return { ok: false, status: 400, error: parsed.error.issues[0]?.message ?? "Invalid input." };
   const input = parsed.data as Record<string, unknown>;
