@@ -1286,12 +1286,14 @@ ${R} .of-couple[data-complete="true"] { border-color: rgb(230 201 138 / 0.6); }
 ${R} .of-couple-title {
   display: flex; align-items: center; gap: 8px; font-family: var(--of-font-display); font-weight: 600; font-size: 1.12rem;
 }
-${R} .of-couple-pair { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; }
+/* Both halves start at the top, so a look name that wraps to two lines never lifts its picture above the other's; the
+   heart sits level with the middle of the 64px pictures (832 x 1216). */
+${R} .of-couple-pair { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: start; gap: 8px; }
 ${R} .of-couple-half { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; text-align: center; }
 ${R} .of-couple-half[data-owned="false"] .of-ward-frame { opacity: 0.45; filter: grayscale(0.6); }
 ${R} .of-couple-name { font-size: 0.82rem; font-weight: 700; overflow-wrap: anywhere; }
 ${R} .of-couple-state { display: inline-flex; align-items: center; gap: 3px; font-size: 0.7rem; color: var(--of-text-soft); }
-${R} .of-couple-heart { color: var(--of-li-accent, var(--of-rose)); filter: drop-shadow(0 0 6px var(--of-glow)); }
+${R} .of-couple-heart { margin-top: calc(64px * 1216 / 832 / 2 - 8px); color: var(--of-li-accent, var(--of-rose)); filter: drop-shadow(0 0 6px var(--of-glow)); }
 ${R} .of-couple-portrait { width: 100%; border-radius: 14px; aspect-ratio: 9 / 16; max-height: 320px; object-fit: cover; }
 /* "{name} noticed: …", in their colour and her handwriting. */
 ${R} .of-noticed {
