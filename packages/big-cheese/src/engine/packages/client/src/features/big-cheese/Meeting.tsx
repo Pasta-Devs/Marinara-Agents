@@ -4,6 +4,7 @@
 import { type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { MeetingItem } from "./api";
+import { CallFavour, UseSecret } from "./Favours"; // M4 T12
 import { dayKey, Face, nameOf, person, stanceKey, type Ctx } from "./parts";
 
 export function HearingPrep({ ctx }: { ctx: Ctx }) {
@@ -100,6 +101,11 @@ export function HearingPrep({ ctx }: { ctx: Ctx }) {
         )}
       </section>
 
+      <CallFavour
+        ctx={ctx}
+        people={[...new Set((run.game.favours ?? []).map((f) => f.from))]}
+        done={!!hearing.favour}
+      />
       <section className="bc-section" aria-labelledby="bc-evidence">
         <h2 id="bc-evidence" className="bc-subhead">
           {t("ui.bigCheese.hearing.evidence", { n: hearing.evidence.length })}
@@ -229,6 +235,8 @@ export function MeetingScreen({ ctx }: { ctx: Ctx }) {
               against: m.people.filter((id) => sideOf(current.base[id] ?? 0) === "against").length,
             })}
           </p>
+          <CallFavour ctx={ctx} people={m.people} done={!!current.swing?.length} />
+          <UseSecret ctx={ctx} people={m.people} done={!!current.swing?.length} />
           {election && (
             <section className="bc-section" aria-labelledby="bc-candidates">
               <h3 id="bc-candidates" className="bc-subhead">

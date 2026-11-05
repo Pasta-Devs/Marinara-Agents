@@ -183,7 +183,9 @@ export function BigCheeseView() {
   if (open) {
     return (
       <RunView
+        key={open}
         id={open}
+        onOpen={setOpen}
         onExit={() => {
           setOpen(null);
           void refresh();
@@ -326,6 +328,12 @@ export function BigCheeseView() {
                         >
                           {place}
                           {run.cheeseMark && <span className="bc-muted"> {t("ui.bigCheese.mode.mark")}</span>}
+                          {(run.generation ?? 1) > 1 && (
+                            <span className="bc-chip">
+                              {" "}
+                              {t("ui.bigCheese.legacy.generation", { n: run.generation })}
+                            </span>
+                          )}
                           {run.adult && <span className="bc-chip"> {t("ui.bigCheese.adult.mark")}</span>}
                         </span>
                         <span>{t("ui.bigCheese.card.progress", { week: run.week, day: t(dayKey(run.day ?? 0)) })}</span>

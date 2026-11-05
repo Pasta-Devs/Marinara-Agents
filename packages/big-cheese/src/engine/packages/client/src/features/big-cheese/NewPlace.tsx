@@ -52,6 +52,10 @@ const withBundle = (kit: unknown, id: string) => {
   return b ? { ...k, layers: { ...k.layers, ...b.layers } } : kit;
 };
 
+/** Switches the depth option "detailed money" on the drafted kit. */
+const withMoney = (kit: unknown, on: boolean) =>
+  on ? { ...(kit as object), depth: { ...(kit as { depth?: object }).depth, money: true } } : kit;
+
 export function NewPlace({
   busy,
   failure,
@@ -70,6 +74,7 @@ export function NewPlace({
   const [authority, setAuthority] = useState<WishBody["authority"]>("manager");
   const [boss, setBoss] = useState("");
   const [bundle, setBundle] = useState(""); // M4 T7: one-tap story mix, applied to the draft kit on take
+  const [money, setMoney] = useState("off"); // M4 T15: detailed money, applied to the draft kit on take
   const [staff, setStaff] = useState<CastItem[]>([]);
   const [cast, setCast] = useState<CastList | null>(null);
   const [draft, setDraft] = useState<{ kit: unknown; view: PreviewKit } | null>(null);
@@ -105,7 +110,7 @@ export function NewPlace({
         failure={error ? t(error) : failure}
         rerolling={working}
         onReroll={(part) => void make(part)}
-        onTake={(body) => onTake(withBundle(draft.kit, bundle), body)}
+        onTake={(body) => onTake(withMoney(withBundle(draft.kit, bundle), money === "on"), body)}
         onCast={() => {}}
         onBack={() => setDraft(null)}
       />
@@ -218,6 +223,15 @@ export function NewPlace({
                 ...BUNDLES.map((b): [string, string] => [b.id, t(b.key)]),
               ]}
               onChange={setBundle}
+            />
+            <Choice
+              label={t("ui.bigCheese.ledger.switch")}
+              value={money}
+              options={[
+                ["off", t("ui.bigCheese.ledger.switchOff")],
+                ["on", t("ui.bigCheese.ledger.switchOn")],
+              ]}
+              onChange={setMoney}
             />
           </details>
           {working && (

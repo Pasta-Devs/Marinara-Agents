@@ -10,6 +10,7 @@ export interface RunSummary {
   adult?: boolean; // the run has the adult module on: the title card shows "18+"
   mode?: RunMode;
   cheeseMark?: boolean;
+  generation?: number; // M4 T6: 2 or more on a legacy run
   id: string;
   newer: boolean;
   kitId?: string;
@@ -73,6 +74,7 @@ export interface MeetingItem {
   chosen?: string;
   scores?: Record<string, number>;
   passed?: boolean;
+  swing?: string[]; // M4 T12
 }
 
 export interface Meeting {
@@ -89,6 +91,7 @@ export interface Hearing {
   day: number;
   witnesses: string[];
   evidence: string[];
+  favour?: string; // M4 T12
 }
 
 export interface Game {
@@ -96,10 +99,12 @@ export interface Game {
   // T13: what the Board's settings groups read
   authority?: "manager" | "strong_leader" | "absolute";
   layers?: Record<string, number>;
+  legacy?: { generation: number; heir?: string; from?: string; next?: string } | null; // M4 T6
   tally?: Record<string, number>; // M4: counters; `clear.<thread>.<person>` marks a cleared suspect
   culture?: Record<string, number>; // M4 T1: tag -> points
   traditions?: { id: string; text: string; count: number; active: boolean }[];
   perkOffer?: string[] | null; // M4 T8
+  depth?: { money: boolean; building: boolean }; // M4 T15
   difficulty?: string;
   storyteller?: string;
   mutators?: string[];
@@ -118,9 +123,12 @@ export interface Game {
   informants?: { person: string; target: string; kind: "room" | "group"; paid: boolean }[]; // M4 T13
   eyes?: { week: number; text: string }[]; // M4 T13
   delegated?: Record<string, string>; // M4 T11: area (meter, room or group id) -> person
+  favours?: { from: string; to?: string; why: string; week: number; used: boolean }[]; // M4 T12
+  leverage?: { about: string; thread?: string; used: boolean; found: boolean }[]; // M4 T12
   delegateLog?: { week: number; who: string; need: Meter; stance: string }[]; // M4 T11
   advisors?: string[]; // T11: person ids in the inner circle (up to 3)
   officeHours?: { day: number; slot: string; visitors: string[] }; // T11: one booked hour, up to 4 visitors
+  pendingTerm?: { term: number; review: string[]; award?: string } | null; // T10: the term review that is open
   hearing: Hearing | null;
   hearingBody: { id: string }[];
   meeting?: Meeting | null;
@@ -163,7 +171,15 @@ export interface PlaceText {
   grapevine: Record<string, { source: string; text: string }>;
 }
 
+/** M4 T9: the ending card of a finished run (server endings.ts), sent in `run.end`. */
+export interface EndCard {
+  id: string | null;
+  title: string;
+  text: string;
+  achievements: { id: string; name: string }[];
+}
 export interface RunDoc {
+  end?: EndCard;
   id: string;
   revision: number;
   kitId: string;
@@ -381,3 +397,26 @@ export interface GoalsState {
   perkOffer: PerkInfo[];
 }
 export const getGoals = (id: string) => api.get<GoalsState>(`${runPath(id)}/goals`);
+
+// M4 T10: term reviews, the award and the yearbook (server chronicle.ts).
+export interface ChronicleState {
+  pending: { term: number; review: string[]; award?: string; done?: { who: string; pick: string }[] } | null;
+  pages: { term: number; title: string; text: string; source: "model" | "lite" }[];
+}
+export const getChronicle = (id: string) => api.get<ChronicleState>(`${runPath(id)}/chronicle`);
+
+// M4 T15: detailed money (server ledger.ts). The audit week stays hidden.
+export interface LedgerState {
+  on: boolean;
+  week: number;
+  quarter: number;
+  revenue: number;
+  salaries: number;
+  upkeep: number;
+  audit: number | null;
+  loans: { id: string; amount: number; due: number; repaid: boolean; missed?: boolean; owed: number }[];
+  budget: Record<Meter, number>;
+  even: Record<Meter, number>;
+  offers: { amounts: number[]; weeks: number[] };
+}
+export const getLedger = (id: string) => api.get<LedgerState>(`${runPath(id)}/ledger`);

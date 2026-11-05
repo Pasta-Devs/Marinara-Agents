@@ -52,7 +52,7 @@ export const GOALS: Goal[] = [
     text: "Repay a loan on time.",
     check: (s, c) => {
       const due = (s.ledger?.loans ?? []).filter((l) => l.due > c.since && l.due <= s.clock.week);
-      return due.length > 0 && due.every((l) => l.repaid);
+      return due.length > 0 && due.every((l) => l.repaid && !l.missed);
     },
   },
   { id: "money_up", meter: "money", text: "Raise Money by 15 over the term.", check: (_s, c) => c.gain("money") >= 15 },

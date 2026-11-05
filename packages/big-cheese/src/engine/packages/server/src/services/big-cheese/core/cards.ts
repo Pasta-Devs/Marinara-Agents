@@ -3,10 +3,12 @@ import { perkAfter, perkChance, perkEffect, perkPre, perkTrust } from "./perks.j
 import { stancePower } from "./authority.js";
 import { logStance, trustWeight } from "./culture.js";
 import { addTrust, applyDelta, newId, pure, spendHour } from "./run.js";
+import { noteAnswer } from "./achievements.js"; // M4 T9
 import { FOLLOW, K, effect, offer, trustChange } from "./stances.js";
 import { severityCuts, morning } from "./storyteller.js";
 import { closeThread, openPromise, planCardBeat, openThread, storyBeat } from "./threads.js";
 import { DIFFICULTY_FACTOR, METERS } from "./types.js";
+import { earnFavour } from "./favours.js"; // M4 T12
 import type { Meter, Run, Severity, Thread } from "./types.js";
 
 export { meterTension } from "./storyteller.js";
@@ -78,6 +80,7 @@ export function answerCard(
   addTrust(s, c.asker, byDelegate ? trust : perkTrust(s, stance, trust));
   if (!byDelegate) {
     logStance(s, stance);
+    noteAnswer(s, stance); // M4 T9
     const pre = perkPre(s);
     stancePower(s, stance, c.severity); // T7: Fear and Love in absolute kits
     perkAfter(s, stance, pre);
@@ -89,6 +92,7 @@ export function answerCard(
     addTrust(s, s.deputy, 3);
     s.deputyAmbition = Math.min(100, s.deputyAmbition + 15); // at 100 the challenge is an item at the next board meeting
   }
+  if (!byDelegate) earnFavour(s, c, stance); // M4 T12
   promises.forEach((p) => openPromise(s, p));
   const t = s.threads[c.thread];
   if (!t) return;

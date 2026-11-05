@@ -15,15 +15,20 @@ import { createDraft } from "./draft.js";
 import { createMeetings } from "./meetings.js";
 import { createRules } from "./rules.js";
 import { createPolitics } from "./politics.js";
+import { createLegacy } from "./legacy.js"; // M4 T6
 import { createCulture } from "./culture.js";
 import { createGoals } from "./goals.js";
+import { createLedger } from "./ledger.js"; // M4 T15
+import { createEndings } from "./endings.js"; // M4 T9
 import { createAdult } from "./adult.js";
 import { createThings } from "./things.js"; // T2
 import { createWish } from "./wish.js";
 import { createEyes } from "./eyes.js"; // T13
 import { createInvestigate } from "./investigate.js"; // M4 T4
 import { createDelegation } from "./delegation.js"; // T11
+import { createFavours } from "./favours.js"; // M4 T12
 import { createExport } from "./export.js";
+import { createChronicle } from "./chronicle.js"; // M4 T10
 import { createPlace } from "./place.js";
 import { createOutside } from "./outside.js"; // T14
 import { BigCheeseError, CreateRunBody, createRunStore, type RunStore } from "./store.js";
@@ -74,15 +79,22 @@ export async function activate({ api }: ActivationContext) {
   const meetings = createMeetings(store, () => engineModel(runtime, null).catch(() => undefined));
   const rules = createRules(store);
   const politics = createPolitics(store);
+  const legacy = createLegacy(store); // M4 T6
   const culture = createCulture(store);
   const goals = createGoals(store); // M4 T8
+  const ledger = createLedger(store); // M4 T15
+  const endings = createEndings(store); // M4 T9
   const adult = createAdult(store);
   const things = createThings(store); // T2
   const investigateRoute = createInvestigate(store); // M4 T4
   const eyes = createEyes(store, () => engineModel(runtime, null).catch(() => undefined)); // T13
   const delegation = createDelegation(store); // T11
+  const favours = createFavours(store); // M4 T12
   const wish = createWish(store, () => engineModel(runtime, null).catch(() => undefined));
   const exporter = createExport(store, runtime);
+  const chronicle = createChronicle(store, runtime.persistence.documents, () =>
+    engineModel(runtime, null).catch(() => undefined),
+  ); // M4 T10
   const kits = createKits(runtime.persistence.documents, () => engineModel(runtime, null).catch(() => undefined));
   const draft = createDraft(() => engineModel(runtime, null).catch(() => undefined));
   const runId = (request: Request) => (request.params as { id?: unknown } | undefined)?.id;
@@ -262,6 +274,9 @@ export async function activate({ api }: ActivationContext) {
       action("rule", (r) => rules.set(runId(r), r.body));
       // T5: back a candidate in an election (modules.md section 2).
       action("politics/back", (r) => politics.back(runId(r), r.body));
+      // M4 T6: name an heir; start the next boss's run from a finished one (modules.md section 2).
+      action("heir", (r) => legacy.heir(runId(r), r.body));
+      action("legacy", (r) => legacy.next(runId(r), r.body));
       // M4 T1: stop a tradition (content.md 7.2).
       action("traditions", (r) => culture.traditions(runId(r), r.body));
       // M4 T8: term goals (pick 3 of 5) and the perk after each term
@@ -271,6 +286,23 @@ export async function activate({ api }: ActivationContext) {
       );
       action("goals", (r) => goals.pick(runId(r), r.body));
       action("perk", (r) => goals.perk(runId(r), r.body));
+      // M4 T15: detailed money. The books, a loan, and the quarter's budget.
+      router.get(
+        "/runs/:id/ledger",
+        handle((r) => ledger.list(runId(r))),
+      );
+      action("loan", (r) => ledger.loan(runId(r), r.body));
+      action("budget", (r) => ledger.budget(runId(r), r.body));
+      // M4 T9: quit, sell or abdicate ends the run (content.md 10.1).
+      action("quit", (r) => endings.quit(runId(r), r.body));
+      // M4 T10: term reviews, the award and the yearbook (modules.md section 4)
+      router.get(
+        "/runs/:id/chronicle",
+        handle((r) => chronicle.list(runId(r))),
+      );
+      action("chronicle", (r) => chronicle.write(runId(r), r.body));
+      action("review", (r) => chronicle.review(runId(r), r.body));
+      action("award", (r) => chronicle.award(runId(r), r.body));
       // T6: adult module (README Adult module).
       router.get(
         "/runs/:id/adult",
@@ -287,6 +319,13 @@ export async function activate({ api }: ActivationContext) {
       // T11: give an area to a person, or take it back (modules.md section 4)
       action("delegate", (r) => delegation.give(runId(r), r.body));
       action("delegate/back", (r) => delegation.takeBack(runId(r), r.body));
+      // M4 T12: favours and leverage
+      router.get(
+        "/runs/:id/favours",
+        handle((r) => favours.list(runId(r))),
+      );
+      action("favour", (r) => favours.spend(runId(r), r.body));
+      action("leverage", (r) => favours.leverage(runId(r), r.body));
       action("adult/affairs/:threadId", (r) => adult.choose(runId(r), param(r, "threadId"), r.body));
 
       // T2: the drawer and hidden rooms (design.md 14).
@@ -304,6 +343,7 @@ export async function activate({ api }: ActivationContext) {
         "/runs/:id",
         handle(async (request) => {
           await board.remove(runId(request));
+          await chronicle.remove(runId(request)); // M4 T10
           await store.remove(runId(request));
           return { ok: true };
         }),

@@ -6,6 +6,7 @@ import { roll } from "./rng.js";
 import { effect, offer, type Stance } from "./stances.js";
 import { closeThread, planCardBeat, storyBeat } from "./threads.js";
 import { DIFFICULTY_FACTOR, METERS } from "./types.js";
+import { swingScores } from "./favours.js"; // M4 T12
 import type { Authority, Meeting, MeetingItem, Run, Severity } from "./types.js";
 
 // Meetings (design.md section 7, content.md section 13). The code picks the people, the agenda,
@@ -164,6 +165,7 @@ export function meetingChoice(s: Run, stance: string, kit: PlaceKit) {
   if (!item.offer.some((a) => a.stance === stance)) throw new Error(`Stance ${stance} is not offered`);
   item.chosen = stance;
   item.scores = Object.fromEntries(m.people.map((id) => [id, support(s, id, fit(s, id, stance, kit), faction(s, id))]));
+  swingScores(item); // M4 T12
   item.passed = passes(m.mode, Object.values(item.scores));
   proposalVote(s, kit, item.thread, item.passed); // T7
   electionVote(s, item.thread, item.passed); // T5

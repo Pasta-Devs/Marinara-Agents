@@ -164,6 +164,7 @@ export function createRunStore(documents: CapabilityDocumentStore) {
             kitId,
             mode: game.mode,
             cheeseMark: game.cheeseMark,
+            generation: game.legacy?.generation ?? 1, // T6
             adult: !!game.adult,
             week,
             day,

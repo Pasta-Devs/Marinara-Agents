@@ -101,11 +101,23 @@ export function Office({ ctx, canStart }: { ctx: Ctx; canStart: boolean }) {
       >
         {t(run.game.perkOffer ? "ui.bigCheese.goals.openPerk" : "ui.bigCheese.goals.open")}
       </button>
+      {run.game.depth?.money && (
+        <button type="button" className="bc-btn bc-btn-quiet" onClick={() => go("ledger")}>
+          {t("ui.bigCheese.ledger.open")}
+        </button>
+      )}
       <button type="button" className="bc-btn bc-btn-quiet" onClick={() => go("rules")}>
         {t("ui.bigCheese.rules.open")}
       </button>
       <button type="button" className="bc-btn bc-btn-quiet" onClick={() => go("wish")}>
         {t("ui.bigCheese.wish.open")}
+      </button>
+      <button
+        type="button"
+        className={run.game.pendingTerm?.review.length ? "bc-btn bc-btn-primary" : "bc-btn bc-btn-quiet"}
+        onClick={() => go("yearbook")}
+      >
+        {t(run.game.pendingTerm?.review.length ? "ui.bigCheese.yearbook.openReview" : "ui.bigCheese.yearbook.open")}
       </button>
       <section className="bc-section" aria-labelledby="bc-threads">
         <h2 id="bc-threads" className="bc-subhead">

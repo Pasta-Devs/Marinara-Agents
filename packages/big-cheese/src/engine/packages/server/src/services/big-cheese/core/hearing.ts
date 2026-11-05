@@ -1,5 +1,6 @@
 import { addTrust, applyDelta, pure, spendHour } from "./run.js";
 import { support } from "./meetings.js";
+import { favourWitness } from "./favours.js"; // M4 T12
 import { closeThread, openThread } from "./threads.js";
 import type { Meter, Run } from "./types.js";
 
@@ -55,7 +56,7 @@ export function holdHearing(s: Run) {
   const witness = h.witnesses.reduce((a, id) => {
     const tr = s.people[id]?.trust ?? 50;
     return a + (tr >= 60 ? 1 : tr < 40 ? -1 : 0);
-  }, 0);
+  }, favourWitness(h)); // M4 T12
   const backing = s.hearingBody.filter((m) => {
     const item = support(s, m.id, m.fit, m.faction);
     return item * 3 + witness + 3 * h.evidence.length > 0;

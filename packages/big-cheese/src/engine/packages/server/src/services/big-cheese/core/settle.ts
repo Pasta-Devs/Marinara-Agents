@@ -13,11 +13,14 @@ import { eyesWeek } from "./eyes.js";
 import { delegateDay } from "./delegation.js"; // T11
 import { perkWear } from "./perks.js";
 import { endTerm } from "./term.js";
+import { judgeRun } from "./endings.js"; // M4 T9
+import { weekLeverage } from "./favours.js"; // M4 T12
 import { checkPromises } from "./threads.js";
 import { METERS, WISH_POINTS_PER_TERM } from "./types.js";
 import { weekThings } from "./things.js";
 import type { PlaceKit } from "./kits/types.js";
 import type { Run } from "./types.js";
+import { ledgerIncome } from "./ledger.js"; // M4 T15
 
 // Sim numbers (content.md 1.5): income 2 + (O-50)/5, drift 10% toward 50, wear 2.
 const BASE = 2;
@@ -27,7 +30,7 @@ const WEAR = 2;
 
 // Friday settle, in order: income, drift + wear, extra meters, loss check.
 export function settleWeek(s: Run, before = { ...s.meters }, kit?: PlaceKit) {
-  const income = BASE + Math.round((s.meters.output - 50) * INCOME);
+  const income = s.depth?.money ? ledgerIncome(s) : BASE + Math.round((s.meters.output - 50) * INCOME); // T15
   s.meters = applyDelta(s.meters, { money: income });
   for (const k of METERS)
     s.meters[k] = clamp(Math.round(s.meters[k] + (50 - s.meters[k]) * DRIFT - WEAR * perkWear(s)));
@@ -44,6 +47,7 @@ export function settleWeek(s: Run, before = { ...s.meters }, kit?: PlaceKit) {
   checkRevolt(s);
   weekThings(s, kit); // T2: wear, secrets
   sulkAdvisors(s); // T11
+  weekLeverage(s); // M4 T12
 }
 
 // End of day: promises due, waiting cards age, a pending hearing is held on its day, Friday
@@ -66,11 +70,13 @@ export function endDay(s: Run, kit: PlaceKit) {
       endTerm(s, kit);
     }
   }
+  const yearEnd = s.clock.week >= WEEKS && isFriday(s.clock);
+  // A hearing still pending at year end is held at once, so a lost meter cannot slip past it.
+  if (yearEnd && s.status === "playing" && s.hearing) holdHearing(s);
+  judgeRun(s); // M4 T9: Burnout, Scandal, Legend, achievements (after the year-end hearing)
   if (s.status !== "playing") return;
-  if (s.clock.week >= WEEKS && isFriday(s.clock)) {
-    // A hearing still pending at year end is held at once, so a lost meter cannot slip past it.
-    if (s.hearing) holdHearing(s);
-    if (s.status === "playing") s.status = "complete";
+  if (yearEnd) {
+    s.status = "complete";
   } else {
     s.clock = nextDay(s.clock);
     // A new term refills the in-run wish points (design.md 3.7).

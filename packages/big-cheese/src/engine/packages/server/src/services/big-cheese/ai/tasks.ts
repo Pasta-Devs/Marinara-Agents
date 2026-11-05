@@ -6,6 +6,7 @@ import type { PlaceKit } from "../core/kits/types.js";
 import { pick } from "../core/rng.js";
 import { STANCES } from "../core/stances.js";
 import { TRAITS } from "../core/traits.js";
+import type { TermFacts } from "../core/reviews.js"; // T10
 import { METERS, SLOTS } from "../core/types.js";
 import type { Meter, Severity, Tier } from "../core/types.js";
 import { adultNotes, fadeOf, type Adult } from "../core/adult.js";
@@ -41,6 +42,8 @@ const LAYER_NOTES: Record<string, string> = {
     "Horror: a dark place at night. Dark secrets, strange sounds, missing staff and a sealed room. Tone follows the place.",
   strange:
     "The strange: magic, curses, odd artefacts and odd machines. A crew member may be an AI. Tone follows the place.",
+  legacy:
+    "Legacy: a young worker wants to learn the boss's trade, and someone may take the job one day. Staff talk about who comes after the boss.",
   crime: "Crime: bribes, fraud and blackmail. A fixer on the staff knows who to pay and who to ask.",
   mystery: "Mystery: a case with clues in rooms and a few suspects. A detective on the staff helps the boss look.",
 };
@@ -1168,6 +1171,63 @@ const wishClassify: Task<WishClassifyInput, WishClassifyOutput> = {
   lite: () => ({ kind: "wish", need: "standing", people: [] }),
 };
 
+// chronicle.term (design.md section 15): the yearbook page of one term, written from facts the code picked.
+export interface ChronicleTermInput {
+  kit: PlaceKit;
+  rng: number;
+  facts: TermFacts;
+  adult: Adult | null; // null unless the player chose adult text for the page
+}
+export interface ChronicleTermOutput {
+  title: string;
+  text: string;
+}
+
+const TERM_WORD = ["one", "two", "three", "four", "five"];
+const REVIEW_WORDS: Record<string, string> = {
+  praise: "got praise",
+  raise: "got a raise",
+  role: "got a new role",
+  warning: "got a warning",
+};
+
+const chronicleTerm: Task<ChronicleTermInput, ChronicleTermOutput> = {
+  tokens: 700,
+  prompt: (i) =>
+    msgs(
+      i.kit,
+      `${adultNotes(i.adult)}Write the yearbook page for one term at ${i.kit.name}: a short title and 3 to 6 sentences of text, the way the place would tell it to its staff. Use only the facts. Add no new event, person or number. Call the term by the word "term" only. Shape: {"title":"","text":""}`,
+      i.facts,
+    ),
+  parse: (raw) => {
+    const o = obj(raw);
+    return { title: words(o.title, 1, 60, "title"), text: words(o.text, 20, 1400, "text") };
+  },
+  lite: (i) => {
+    const f = i.facts;
+    const met = f.goals.filter((g) => g.met).length;
+    return {
+      title: `Term ${TERM_WORD[f.term - 1] ?? "after term"} at ${i.kit.name}`,
+      text: [
+        f.closed.length
+          ? `The office closed: ${f.closed.map((c) => c.title).join(", ")}.`
+          : "No story came to an end this term.",
+        !f.goals.length
+          ? ""
+          : met === f.goals.length
+            ? "The boss met every goal."
+            : met
+              ? "The boss met some goals."
+              : "The boss missed every goal.",
+        ...f.reviews.map((r) => `${r.person} ${REVIEW_WORDS[r.pick] ?? "got a review"}.`),
+        f.award ? `${f.award} was named Employee of the term.` : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
+    };
+  },
+};
+
 export const tasks = {
   "wish.classify": wishClassify,
   "place.draft": placeDraft,
@@ -1184,6 +1244,7 @@ export const tasks = {
   "meeting.turn": meetingTurn,
   "board.plan": boardPlan,
   "kit.fix": kitFix,
+  "chronicle.term": chronicleTerm,
 };
 type Tasks = typeof tasks;
 

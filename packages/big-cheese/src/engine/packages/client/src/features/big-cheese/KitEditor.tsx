@@ -283,6 +283,15 @@ export function KitEditor({
                   )}
                 </>
               )}
+              <label htmlFor="kit-money">
+                <input
+                  id="kit-money"
+                  type="checkbox"
+                  checked={!!(kit.depth as { money?: boolean } | undefined)?.money}
+                  onChange={(e) => patch({ depth: { ...(kit.depth as object), money: e.target.checked } })}
+                />{" "}
+                {t("ui.bigCheese.ledger.switch")}
+              </label>
             </>
           )}
           {tab === "meters" && (

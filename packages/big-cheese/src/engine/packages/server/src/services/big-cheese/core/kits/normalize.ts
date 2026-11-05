@@ -162,7 +162,7 @@ function pick(r: Record<string, unknown>, base: PlaceKit): Partial<PlaceKit> {
       continue;
     if (typeof r[k] === typeof d && Array.isArray(r[k]) === Array.isArray(d) && r[k] !== null) out[k] = r[k];
   }
-  for (const k of ["layers", "extras", "scenario", "adult", "officeHours", "authorityStart", "court", "roles"])
+  for (const k of ["layers", "extras", "scenario", "adult", "officeHours", "authorityStart", "court", "roles", "depth"])
     if (typeof r[k] === "object" && r[k] !== null) out[k] = r[k];
   for (const [k, check] of Object.entries(DEEP)) if (k in out) out[k] = check(out[k]);
   for (const k of Object.keys(out)) if (out[k] === undefined) delete out[k];
@@ -209,6 +209,7 @@ const DEEP: Record<string, (v: unknown) => unknown> = {
   houseRules: list(Rule),
   authorityStart: one(Start),
   scenario: one(z.object({ goal: z.string() })),
+  depth: one(z.object({ money: z.boolean().optional(), building: z.boolean().optional() })), // M4 T15
   // T2: at most 2 extra meters; reserved and repeated ids are dropped
   extras: (v) => {
     const seen = new Set<string>();

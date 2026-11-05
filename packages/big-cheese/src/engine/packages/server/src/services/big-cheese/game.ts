@@ -27,6 +27,7 @@ import {
 } from "./core/index.js";
 import { advisorLeans, pureFollowAdvice } from "./core/advisors.js";
 import { placeKitOf } from "./core/kits/index.js";
+import { endView } from "./core/endings.js"; // M4 T9
 import type { PlaceKit } from "./core/kits/types.js";
 import { BLUEPRINTS, choices, dueBig, finishBig, settleBig } from "./core/bigscenes.js";
 import { addTrust } from "./core/run.js";
@@ -108,7 +109,11 @@ export function kitView(r: { kitId: string; kit?: PlaceKit }, cast?: Cast) {
     letters: k.guidedLetters,
   };
 }
-export const view = (run: Run) => ({ run, kit: kitView(run, run.cast) });
+// M4 T9: a finished run carries its ending card (`run.end`), built here and never saved.
+export const view = (run: Run) => ({
+  run: run.game.status === "playing" ? run : { ...run, end: endView(run.game, withCast(placeKitOf(run), run.cast)) },
+  kit: kitView(run, run.cast),
+});
 
 export function createGame(store: RunStore, getModel: () => Promise<ModelCall | undefined>) {
   const placeOf = (run: Run) => withCast(placeKitOf(run), run.cast, run.game.clock);

@@ -62,7 +62,12 @@ export { horrorSeeds, horrorClosed } from "./horror.js"; // M4 T7
 export { strangeSeeds, strangeClosed, isAiCrew, AI_CREW } from "./strange.js";
 export * from "./eyes.js";
 export * from "./delegation.js"; // T11
+export * from "./favours.js"; // M4 T12
 export { crimeSeeds } from "./crime.js"; // M4 T4
 export { mysterySeeds, isCleared, pureInvestigate as investigate } from "./mystery.js";
 export { GOALS, goalById, checkGoal, currentGoals, offerGoals, pickGoals } from "./goals.js"; // M4 T8
 export { PERKS, choosePerk, offerPerks, perkWeight } from "./perks.js";
+export * from "./ledger.js"; // M4 T15
+export { legacyRun, legacyTerm, pureNameHeir as nameHeir } from "./legacy.js"; // M4 T6
+export { ENDINGS, endingIdOf, endView, judgeRun, leaveRun, wonYear } from "./endings.js"; // M4 T9
+export { ACHIEVEMENTS } from "./achievements.js";

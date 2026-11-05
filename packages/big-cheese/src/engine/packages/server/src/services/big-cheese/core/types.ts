@@ -118,6 +118,7 @@ export interface MeetingItem {
   chosen?: string;
   scores?: Record<string, number>;
   passed?: boolean;
+  swing?: string[]; // M4 T12: the one attendee a favour or leverage swung
 }
 
 export interface Meeting {
@@ -154,7 +155,8 @@ export interface Thread {
     | "wish"
     | "guided"
     | "hearing"
-    | "revolt";
+    | "revolt"
+    | "audit"; // M4 T15: detailed money, opened by a missed loan or a failed audit
   secret?: boolean; // the boss does not know it yet
   title: string;
   people: string[];
@@ -184,6 +186,7 @@ export interface Hearing {
   day: number; // hearing day (1 = second working day)
   witnesses: string[];
   evidence: string[]; // evidence cards played, at most 2 count
+  favour?: string; // M4 T12: a person who owed the boss spoke for them (one witness)
 }
 
 export interface Report {
@@ -225,6 +228,7 @@ export interface Run {
   endingName: string;
   status: "playing" | "complete" | "ended";
   ending: string | null;
+  endingId?: string; // M4 T9: the id in core/endings.ts when the code ended the run itself
   report: Report | null;
   meterHistory: ({ week: number } & Meters)[];
   rooms: Record<string, { condition: number; people: string[] }>;
@@ -285,14 +289,23 @@ export interface Run {
   depth: { money: boolean; building: boolean };
   ledger: {
     salaries: number;
-    loans: { id: string; amount: number; due: number; repaid: boolean }[];
+    loans: { id: string; amount: number; due: number; repaid: boolean; missed?: boolean }[];
+    budget?: Record<Meter, number>; // T15: this quarter's 100 points, missing = 25 each
+    auditWeek?: number; // T15: the week of this quarter's audit, hidden from the player
     quarter: number;
     audit?: number;
   };
   buildOrders: { room: string; kind: "upgrade" | "decor" | "new"; doneWeek: number }[];
-  legacy: { generation: number; heir?: string; from?: string } | null; // from = the run id of the boss before
+  legacy: { generation: number; heir?: string; from?: string; next?: string } | null; // from = the run id of the boss before
   yearbook: string[]; // child document ids, one per term
-  pendingTerm: { term: number; review: string[]; award?: string } | null;
+  pendingTerm: {
+    term: number;
+    review: string[];
+    award?: string;
+    done?: { who: string; pick: string }[]; // T10: reviews already given
+    from?: number; // T10: s.closed range of this term, for the yearbook page
+    closed?: number;
+  } | null;
   openedRooms: string[]; // hidden rooms the boss has opened
   boss: { stress: number; energy: number; peak: number; weeksAt100: number }; // see core/boss.ts
   lastTerm: number; // the last term whose end ran (endTerm fires once per term)

@@ -4,6 +4,7 @@
 import { useState, type FormEvent, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import type { Card } from "./api";
+import { CardSecret } from "./Favours"; // M4 T12
 import { Face, nameOf, person, stanceKey, type Ctx } from "./parts";
 
 function Waited({ card }: { card: Card }) {
@@ -136,6 +137,7 @@ export function CardScreen({ ctx, id }: { ctx: Ctx; id: string }) {
       ))}
 
       {noHours && <p className="bc-note">{t("ui.bigCheese.card.noHours")}</p>}
+      <CardSecret ctx={ctx} card={card} noHours={noHours} />
       {promiseOpen ? (
         <div className="bc-form">
           <label htmlFor="bc-promise">{t("ui.bigCheese.card.promise")}</label>

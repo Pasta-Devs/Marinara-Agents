@@ -83,7 +83,11 @@ const SEEDS: Record<Layer, Seed[]> = {
     { title: "Something moves in the cellar at night", need: "people" },
     { title: "Two people swear they saw the same shape", need: "standing" },
   ],
-  legacy: [],
+  legacy: [
+    { title: "A young worker asks to learn the boss's trade", need: "people" },
+    { title: "Someone says they could run this place one day", need: "standing" },
+    { title: "An old hand wants to hand over their keys", need: "people" },
+  ],
   strange: [
     { title: "A guest leaves a strange gift", need: "output" },
     { title: "A clock runs backwards", need: "standing" },

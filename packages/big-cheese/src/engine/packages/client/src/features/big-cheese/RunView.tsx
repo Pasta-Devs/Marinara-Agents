@@ -11,13 +11,15 @@ import { CardScreen, Inbox } from "./Inbox";
 import { People, PersonSheet } from "./People";
 import { Place } from "./Place";
 import { Scene } from "./Scene";
-import { Report, RunEnd } from "./Report";
+import { Leave, Report, RunEnd } from "./Report";
 import { HearingPrep, MeetingScreen } from "./Meeting";
 import { Board } from "./Board";
 import { Rules } from "./Rules";
 import { Goals } from "./Goals";
+import { Ledger } from "./Ledger"; // M4 T15
 import { Wish } from "./Wish";
 import { Export } from "./Export";
+import { Yearbook } from "./Yearbook"; // M4 T10
 import { Calls } from "./Calls";
 
 const TABS = [
@@ -48,7 +50,7 @@ const HALT_KEYS: Record<string, string> = {
   secret: "ui.bigCheese.viewer.halt.secret",
 };
 
-export function RunView({ id, onExit }: { id: string; onExit: () => void }) {
+export function RunView({ id, onExit, onOpen }: { id: string; onExit: () => void; onOpen?: (id: string) => void }) {
   const { t } = useTranslation();
   const [data, setData] = useState<RunState | null>(null);
   const [load, setLoad] = useState<"loading" | "slow" | "error" | "ready">("loading");
@@ -199,7 +201,7 @@ export function RunView({ id, onExit }: { id: string; onExit: () => void }) {
       />
     );
   } else if (game.status !== "playing") {
-    stage = <RunEnd ctx={ctx} onExit={onExit} />;
+    stage = <RunEnd ctx={ctx} onExit={onExit} onOpen={onOpen} />;
   } else if (showReport) {
     stage = (
       <Report
@@ -237,8 +239,14 @@ export function RunView({ id, onExit }: { id: string; onExit: () => void }) {
   else if (base === "rules") screen = <Rules ctx={ctx} />;
   else if (base === "goals")
     screen = <Goals ctx={ctx} />; // M4 T8
+  else if (base === "ledger")
+    screen = <Ledger ctx={ctx} />; // M4 T15
   else if (base === "wish") screen = <Wish ctx={ctx} />;
   else if (base === "export") screen = <Export ctx={ctx} />;
+  else if (base === "leave")
+    screen = <Leave ctx={ctx} />; // M4 T9
+  else if (base === "yearbook")
+    screen = <Yearbook ctx={ctx} />; // M4 T10
   else screen = <Office ctx={ctx} canStart={canStart} />;
 
   const { clock } = game;
@@ -295,6 +303,26 @@ export function RunView({ id, onExit }: { id: string; onExit: () => void }) {
                 }}
               >
                 {t("ui.bigCheese.run.menuExport")}
+              </button>
+              <button
+                type="button"
+                className="bc-btn bc-btn-quiet"
+                onClick={() => {
+                  setMenu(false);
+                  setView("leave"); // M4 T9
+                }}
+              >
+                {t("ui.bigCheese.run.menuLeave")}
+              </button>
+              <button
+                type="button"
+                className="bc-btn bc-btn-quiet"
+                onClick={() => {
+                  setMenu(false);
+                  setView("yearbook");
+                }}
+              >
+                {t("ui.bigCheese.yearbook.open")}
               </button>
             </span>
           )}
