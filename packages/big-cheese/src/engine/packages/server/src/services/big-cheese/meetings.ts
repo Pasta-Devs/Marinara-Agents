@@ -7,8 +7,9 @@ import { z } from "zod";
 import { runTask, type ModelCall } from "./ai/tasks.js";
 import { withCast } from "./cast.js";
 import { meetingChoice, meetingText, MEETINGS, startMeeting, type Run as Game } from "./core/index.js";
+import { placeKitOf } from "./core/kits/index.js";
 import type { PlaceKit } from "./core/kits/types.js";
-import { PLACES, BigCheeseError, type Run, type RunStore } from "./store.js";
+import { BigCheeseError, type Run, type RunStore } from "./store.js";
 import { view } from "./game.js";
 import { HOURS } from "./core/clock.js";
 
@@ -20,7 +21,7 @@ const ChooseBody = Body.extend({
 }).refine((b) => (b.stance === undefined) !== (b.text === undefined), "Send one of stance or text.");
 
 export function createMeetings(store: RunStore, getModel: () => Promise<ModelCall | undefined>) {
-  const kitOf = (run: Run): PlaceKit => withCast(PLACES[run.kitId as keyof typeof PLACES], run.cast, run.game.clock);
+  const kitOf = (run: Run): PlaceKit => withCast(placeKitOf(run), run.cast, run.game.clock);
   const modelFor = (run: { lite: boolean }) => (run.lite ? Promise.resolve(undefined) : getModel());
 
   async function open<S extends z.ZodType<{ expectedRevision: number }>>(id: unknown, body: unknown, schema: S) {

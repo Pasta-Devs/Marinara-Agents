@@ -1,6 +1,7 @@
 import { newClock } from "./clock.js";
 import { movePeople } from "./people.js";
 import { openGuided } from "./threads.js";
+import { WISH_POINTS_PER_TERM } from "./types.js";
 import type { Authority, Letter, Member, Meter, Meters, Relation, Run, Storyteller } from "./types.js";
 
 export interface Kit {
@@ -72,9 +73,25 @@ export const HAFENKAI: Kit = {
   },
 };
 
+/** The M3 fields a fresh run starts with. Also what a v2 save gets. */
+const m3Defaults = () => ({
+  mode: "normal" as const,
+  cheeseMark: false,
+  difficulty: "normal" as const,
+  mutators: [] as Run["mutators"],
+  power: { fear: 0, love: 0 },
+  adult: null,
+  systems: {},
+  advisors: [] as string[],
+  houseRules: {},
+  officeHours: { day: 2, slot: "afternoon" as const, visitors: [] as string[] }, // Wednesday afternoon
+  wishPoints: { term: 1, left: WISH_POINTS_PER_TERM },
+});
+
 export function newRun(kit: Kit, seed: number): Run {
   const s: Run = {
-    saveVersion: 2,
+    saveVersion: 3,
+    ...m3Defaults(),
     rng: seed | 0,
     nextId: 0,
     storyteller: kit.storyteller,
@@ -129,5 +146,10 @@ export function migrate(v1: Run | Record<string, any>, kit: Kit): Run {
   const people = Object.fromEntries(
     Object.entries(v1.people).map(([id, p]) => [id, { room: "home", ambition: 0, status: "active", ...(p as object) }]),
   );
-  return { ...fresh, ...v1, saveVersion: 2, people, rooms: fresh.rooms, relations: fresh.relations } as Run;
+  return { ...fresh, ...v1, saveVersion: 2, people, rooms: fresh.rooms, relations: fresh.relations } as unknown as Run; // still v2, migrate3 finishes it
+}
+
+/** Save v2 to v3: fills the M3 fields with the defaults a fresh run gets. Pure. */
+export function migrate3(v2: Run | Record<string, any>): Run {
+  return { ...m3Defaults(), ...v2, saveVersion: 3 } as Run;
 }

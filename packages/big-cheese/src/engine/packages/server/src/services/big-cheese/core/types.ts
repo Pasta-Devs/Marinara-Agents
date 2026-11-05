@@ -8,6 +8,25 @@ export type Authority = "manager" | "strong_leader" | "absolute";
 export type Tier = "strong" | "middle" | "weak";
 export type Storyteller = "calm" | "classic" | "chaos";
 
+/** Story layers (README, Story layers); drama and romance are M2, the rest come with M3. */
+export type Layer = "drama" | "romance" | "press" | "rivals" | "family" | "adult";
+export type Mode = "normal" | "honest" | "sandbox" | "ironman";
+export const DIFFICULTIES = ["easy", "normal", "hard"] as const;
+export type Difficulty = (typeof DIFFICULTIES)[number];
+/** Easy 0.75, Normal 1, Hard 1.25 on all negative deltas (design.md section 4.1). */
+export const DIFFICULTY_FACTOR: Record<Difficulty, number> = { easy: 0.75, normal: 1, hard: 1.25 };
+export const MUTATORS = [
+  "ironman",
+  "everyone_hates_you",
+  "double_drama",
+  "inherited_mess",
+  "speed_run",
+  "silent_boss",
+] as const;
+export type Mutator = (typeof MUTATORS)[number];
+export const WISH_POINTS_PER_TERM = 3;
+export const OFFICE_HOURS_CAP = 4;
+
 export interface Clock {
   week: number; // 1-24, 3 terms of 8
   day: number; // 0-4 = Mon-Fri
@@ -29,6 +48,9 @@ export interface Person {
   memories: Memory[];
   room: string; // a room id, or "home"
   ambition: number; // 0-100, progress toward their own goal
+  influence?: number; // advisors only, rises when the boss follows their advice
+  romance?: number; // 0-100, how they feel about the boss
+  attraction?: number; // 0-100, how the boss feels about them
   name?: string; // set when a cast card replaces or adds this person
   routine?: Record<Slot, string>; // hired people and visitors are not in the kit
   until?: number; // visitors: the day index on which they go home
@@ -43,6 +65,7 @@ export interface Relation {
   b: string;
   kind: "friend" | "rival" | "crush" | "couple" | "mentor" | "enemy" | "family" | "secret_affair";
   level: number; // 0-100
+  attraction?: number; // romance layer, 0-100
 }
 
 export interface Answer {
@@ -129,7 +152,7 @@ export interface Thread {
   beats: Beat[];
   state: "open" | "won" | "lost" | "dropped";
   promise?: { to: string; what: string; due: { week: number; day: number }; kept: boolean };
-  layer?: "drama" | "romance"; // set when a story layer opened it (layers.ts)
+  layer?: Layer; // set when a story layer opened it (layers.ts)
 }
 
 export interface Member {
@@ -155,7 +178,7 @@ export interface Report {
 }
 
 export interface Run {
-  saveVersion: 2;
+  saveVersion: 3;
   rng: number;
   nextId: number;
   storyteller: Storyteller;
@@ -187,5 +210,17 @@ export interface Run {
   story: { tension: number; lastSurprise: { week: number; day: number } | null; wave: number };
   bigScenes: { week: number; used: number }; // the weekly big-scene budget
   reasons?: { person: string; text: string }[]; // Board reason seeds for the next ambient batch (cheese-board.md §6)
-  layers?: { drama: number; romance: number }; // story layer dials 0-100; missing = 50 (layers.ts)
+  layers?: { drama: number; romance: number } & Partial<Record<Layer, number>>; // story layer dials 0-100; missing = 50 (layers.ts)
+  // M3 state (modules.md section 1, cheese-board.md section 7). Filled by migrate, read by later tickets.
+  mode: Mode;
+  cheeseMark: boolean; // an honest or ironman run, shown on the title card
+  difficulty: Difficulty; // stored only; the factor is applied by core where deltas land
+  mutators: Mutator[]; // switched on
+  power: { fear: number; love: number }; // legitimacy stays in extras (the tier is `authority`)
+  adult: { intensity: number; themes: string[] } | null; // null = module off
+  systems: Record<string, { on: boolean; fixtures?: { week: number; won: boolean }[] }>; // the season table is fixtures
+  advisors: string[]; // person ids in the inner circle
+  houseRules: Record<string, string>; // rule id -> chosen option
+  officeHours: { day: number; slot: Slot; visitors: string[] }; // one booked hour, up to OFFICE_HOURS_CAP visitors
+  wishPoints: { term: number; left: number }; // in-run wishes, WISH_POINTS_PER_TERM per term
 }

@@ -7,27 +7,28 @@ import { randomBytes } from "node:crypto";
 import type { CapabilityDocumentStore } from "@marinara-engine/shared";
 import type { Cast } from "./cast.js";
 import { z } from "zod";
-import { HAFENKAI, migrate, newRun, type Run as Game } from "./core/index.js";
-import { HAFENKAI_PLACE } from "./core/kits/hafenkai.js";
+import { migrate, migrate3, newRun, type Run as Game } from "./core/index.js";
+import { KITS } from "./core/kits/index.js";
+import type { PlaceKit } from "./core/kits/types.js";
 
 export const PACKAGE_ID = "big-cheese";
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
-const KITS = { hafenkai: { ...HAFENKAI, letters: HAFENKAI_PLACE.guidedLetters } } as const;
-/** Reads a v1 game (a run, or a copy in a Cheese Board snapshot) as v2. */
+/** Reads a v1 or v2 game (a run, or a copy in a Cheese Board snapshot) as v3. */
 export function upgradeGame(game: Game, kitId: string): Game {
-  const kit = Object.hasOwn(KITS, kitId) ? KITS[kitId as keyof typeof KITS] : null;
-  return kit && (game.saveVersion as number) === 1 ? migrate(game, kit) : game;
+  const kit = Object.hasOwn(KITS, kitId) ? KITS[kitId as keyof typeof KITS].rules : null;
+  const v = game.saveVersion as number;
+  if (v >= SAVE_VERSION) return game;
+  // Only the v1 step needs the kit's rules; v2 to v3 fills defaults without them.
+  if (v === 1) return kit ? migrate3(migrate(game, kit)) : game;
+  return migrate3(game);
 }
 const upgrade = (data: unknown): unknown => {
   const d = data as { saveVersion?: unknown; kitId?: string; game?: Game } | null;
-  return d?.saveVersion === 1 && d.game
+  return typeof d?.saveVersion === "number" && d.saveVersion < SAVE_VERSION && d.game
     ? { ...d, saveVersion: SAVE_VERSION, game: upgradeGame(d.game, d.kitId ?? "") }
     : data;
 };
-
-/** The full place kit (words and people) for each built-in place. */
-export const PLACES = { hafenkai: HAFENKAI_PLACE } as const;
 
 // The words of a run, kept next to the rules-core state (route contract).
 export interface SceneText {
@@ -93,6 +94,7 @@ const RunData = z.object({
   text: z.custom<RunText>((v) => typeof v === "object" && v !== null && "scenes" in v),
   scene: z.string().nullable(),
   cast: z.custom<Cast>((v) => typeof v === "object" && v !== null && "people" in v).optional(),
+  kit: z.custom<PlaceKit>((v) => typeof v === "object" && v !== null && "rooms" in v).optional(), // a frozen custom kit
   game: z.custom<Game>((v) => typeof v === "object" && v !== null && "clock" in v),
 });
 export type Run = z.infer<typeof RunData>;
@@ -150,7 +152,7 @@ export function createRunStore(documents: CapabilityDocumentStore) {
       prepare?: (game: Game) => Promise<Pick<Run, "text" | "scene">>,
       cast?: Cast,
     ) {
-      const kit = Object.hasOwn(KITS, kitId) ? KITS[kitId as keyof typeof KITS] : undefined;
+      const kit = Object.hasOwn(KITS, kitId) ? KITS[kitId as keyof typeof KITS].rules : undefined;
       if (!kit) throw new BigCheeseError(400, "Unknown place.", "bad-request");
       const key = `r-${randomBytes(6).toString("hex")}`;
       const at = new Date().toISOString();

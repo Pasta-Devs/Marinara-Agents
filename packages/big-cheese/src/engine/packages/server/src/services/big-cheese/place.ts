@@ -6,8 +6,9 @@ import { withCast } from "./cast.js";
 import { dayIndex, pick, roll, slot, spendHours, type Run as Game } from "./core/index.js";
 import { dayFacts, isKnown, movePeople, overheard, relKey } from "./core/people.js";
 import { newId } from "./core/run.js";
+import { placeKitOf } from "./core/kits/index.js";
 import type { PlaceKit } from "./core/kits/types.js";
-import { BigCheeseError, PLACES, type PlaceText, type Run, type RunStore } from "./store.js";
+import { BigCheeseError, type PlaceText, type Run, type RunStore } from "./store.js";
 import { view } from "./game.js";
 
 const MORNING_ROOMS = 6; // rooms with a line in the morning batch
@@ -18,7 +19,7 @@ const Body = z.object({ expectedRevision: z.number().int().min(0) });
 const Query = z.object({ page: z.coerce.number().int().min(0).catch(0) });
 
 export function createPlace(store: RunStore, getModel: () => Promise<ModelCall | undefined>) {
-  const kitOf = (run: Run) => withCast(PLACES[run.kitId as keyof typeof PLACES], run.cast, run.game.clock);
+  const kitOf = (run: Run) => withCast(placeKitOf(run), run.cast, run.game.clock);
   const modelFor = (run: Run) => (run.lite ? Promise.resolve(undefined) : getModel());
   const nameOf = (kit: PlaceKit, id: string) => kit.rooms.find((r) => r.id === id)?.name ?? id;
 

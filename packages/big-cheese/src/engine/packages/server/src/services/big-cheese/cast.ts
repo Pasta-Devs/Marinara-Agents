@@ -11,7 +11,8 @@ import { dayIndex } from "./core/index.js";
 import { STORY_ROLES, openStoryRole } from "./core/storyteller.js";
 import type { Clock, Person } from "./core/types.js";
 import { TRAITS } from "./core/traits.js";
-import { BigCheeseError, PLACES, type Run, type RunStore } from "./store.js";
+import { BigCheeseError, type Run, type RunStore } from "./store.js";
+import { KITS, placeKitOf } from "./core/kits/index.js";
 
 export interface CastPerson {
   engineId: string;
@@ -105,8 +106,8 @@ function fields(raw: unknown): Record<string, unknown> {
 }
 
 const placeKit = (kitId: string): PlaceKit => {
-  if (!Object.hasOwn(PLACES, kitId)) throw bad("Unknown place.");
-  return PLACES[kitId as keyof typeof PLACES];
+  if (!Object.hasOwn(KITS, kitId)) throw bad("Unknown place.");
+  return placeKitOf({ kitId });
 };
 
 /** The lowest age the card states, from plain phrases like "34 years old", "age: 34" or "aged 34". */
@@ -352,7 +353,7 @@ export async function midCast(
   const { engineId, mode, replaces, days = 3, sheet, expectedRevision, storyRole } = b.data;
   if ((mode === "story") !== !!storyRole) throw bad("Pick a story role for a story card.");
   const run = await store.get(id);
-  const kit = placeKit(run.kitId);
+  const kit = placeKitOf(run);
   const d = await readOne(runtime, "character", engineId);
   const age = checkAge(d);
   const name = str(d.name, 80);

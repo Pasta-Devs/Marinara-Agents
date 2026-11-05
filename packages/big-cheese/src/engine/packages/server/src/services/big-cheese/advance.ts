@@ -8,7 +8,8 @@ import { POLICIES, digestFacts, drama, runSlots, watch } from "./core/viewer.js"
 import { HOURS } from "./core/clock.js";
 import type { createBoard } from "./board.js";
 import { view, type createGame } from "./game.js";
-import { BigCheeseError, PLACES, type RunStore } from "./store.js";
+import { BigCheeseError, type RunStore } from "./store.js";
+import { placeKitOf } from "./core/kits/index.js";
 
 const MAX_SLOTS = 25; // five days
 
@@ -58,7 +59,7 @@ export function createAdvance(
 
     let digest: string | null = null;
     if (b.skip && used) {
-      const kit = withCast(PLACES[run.kitId as keyof typeof PLACES], run.cast, run.game.clock);
+      const kit = withCast(placeKitOf(run), run.cast, run.game.clock);
       const facts = digestFacts(first.game, run.game, (m) => kit.meters[m as keyof typeof kit.meters].label);
       const model = run.lite ? undefined : await getModel();
       digest = (await runTask("digest.away", { kit, facts }, { model })).output.text;

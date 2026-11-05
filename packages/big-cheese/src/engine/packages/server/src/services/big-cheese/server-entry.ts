@@ -137,7 +137,7 @@ export async function activate({ api }: ActivationContext) {
           const body = CreateRunBody.merge(CastRequest).safeParse(request.body ?? {});
           if (!body.success) throw new BigCheeseError(400, "Invalid request.", "bad-request");
           const cast = await resolveCast(runtime, body.data.kitId, body.data);
-          return { kit: { ...kitView(body.data.kitId, cast), systems: systemsOf(body.data.kitId, cast) } };
+          return { kit: { ...kitView(body.data, cast), systems: systemsOf(body.data.kitId, cast) } };
         }),
       );
 

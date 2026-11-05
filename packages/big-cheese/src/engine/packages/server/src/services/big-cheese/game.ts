@@ -25,11 +25,12 @@ import {
   trustChange,
   type Run as Game,
 } from "./core/index.js";
+import { placeKitOf } from "./core/kits/index.js";
 import type { PlaceKit } from "./core/kits/types.js";
 import { BLUEPRINTS, choices, dueBig, finishBig, settleBig } from "./core/bigscenes.js";
 import { addTrust } from "./core/run.js";
 import { METERS, type Thread } from "./core/types.js";
-import { BigCheeseError, PLACES, type Run, type RunStore, type SceneText } from "./store.js";
+import { BigCheeseError, type Run, type RunStore, type SceneText } from "./store.js";
 
 type Patch = Partial<Pick<Run, "game" | "text" | "scene">>;
 type Rng = { rng: number };
@@ -79,8 +80,8 @@ const withChoice = (summary: string, stance: string) => `${summary} ${CHOSE[stan
 const band = (trust: number): Band =>
   trust < 25 ? "cold" : trust < 45 ? "wary" : trust < 60 ? "neutral" : trust < 80 ? "warm" : "loyal";
 
-export function kitView(kitId: string, cast?: Cast) {
-  const k = withCast(PLACES[kitId as keyof typeof PLACES], cast);
+export function kitView(r: { kitId: string; kit?: PlaceKit }, cast?: Cast) {
+  const k = withCast(placeKitOf(r), cast);
   return {
     id: k.id,
     name: k.name,
@@ -102,10 +103,10 @@ export function kitView(kitId: string, cast?: Cast) {
     letters: k.guidedLetters,
   };
 }
-export const view = (run: Run) => ({ run, kit: kitView(run.kitId, run.cast) });
+export const view = (run: Run) => ({ run, kit: kitView(run, run.cast) });
 
 export function createGame(store: RunStore, getModel: () => Promise<ModelCall | undefined>) {
-  const placeOf = (run: Run) => withCast(PLACES[run.kitId as keyof typeof PLACES], run.cast, run.game.clock);
+  const placeOf = (run: Run) => withCast(placeKitOf(run), run.cast, run.game.clock);
   const modelFor = (run: { lite: boolean }) => (run.lite ? Promise.resolve(undefined) : getModel());
 
   // One part of a scene. The code picks the offered stances; `h.rng` moves on after the call.
@@ -186,13 +187,7 @@ export function createGame(store: RunStore, getModel: () => Promise<ModelCall | 
           lite,
           async (game) => {
             const h = { rng: game.rng };
-            const arrival = await openScene(
-              withCast(PLACES[kitId as keyof typeof PLACES], cast),
-              h,
-              game,
-              "arrival",
-              model,
-            );
+            const arrival = await openScene(withCast(placeKitOf({ kitId }), cast), h, game, "arrival", model);
             game.rng = h.rng;
             return { text: { cards: {}, scenes: { arrival }, feelings: {} }, scene: "arrival" };
           },

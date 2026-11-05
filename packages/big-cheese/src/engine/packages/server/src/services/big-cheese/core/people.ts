@@ -7,7 +7,7 @@ import { clamp } from "./run.js";
 import { closeThread, openThread } from "./threads.js";
 import type { Relation, Run, Slot } from "./types.js";
 
-// shortcut: one built-in place, add the next one here (a kit is found by its people)
+// shortcut: one built-in place, add the next one here (a kit is found by its people); not via kits/index (import cycle)
 const PLACES: PlaceKit[] = [HAFENKAI_PLACE];
 export const kitOf = (s: Run) => PLACES.find((k) => k.people.some((p) => Object.hasOwn(s.people, p.id))) ?? PLACES[0];
 

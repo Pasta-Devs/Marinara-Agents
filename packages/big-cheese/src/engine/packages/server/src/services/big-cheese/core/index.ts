@@ -19,7 +19,7 @@ export {
 export { K, STANCES, TIERS, FOLLOW, effect, trustChange, offer } from "./stances.js";
 export type { Stance } from "./stances.js";
 export { applyDelta, clamp, pure } from "./run.js";
-export { HAFENKAI, migrate, newRun } from "./kit.js";
+export { HAFENKAI, migrate, migrate3, newRun } from "./kit.js";
 export type { Kit } from "./kit.js";
 export { meterTension, pureSeedDay as seedDay, pureAnswerCard as answerCard } from "./cards.js";
 export {

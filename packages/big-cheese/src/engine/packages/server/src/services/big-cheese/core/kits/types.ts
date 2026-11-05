@@ -1,4 +1,4 @@
-import type { Authority, Letter, Meter, Relation, Severity, Slot, Storyteller } from "../types.js";
+import type { Authority, Layer, Letter, Meter, Relation, Severity, Slot, Storyteller } from "../types.js";
 
 // Place Kit shape (design.md section 14) with the fields the M1 screens need. Plain data only.
 export interface KitPerson {
@@ -56,13 +56,26 @@ export interface PlaceKit {
   groups: { id: string; name: string; spokesperson?: string; text: string }[];
   relations: Relation[];
   systems: { kind: "project" | "event" | "season"; name: string; text: string }[];
-  layers: { drama: number; romance: number }; // 0-100
+  layers: { drama: number; romance: number } & Partial<Record<Layer, number>>; // 0-100
   smallMoments: string[]; // {person} {room} {place} are filled by the code
   surprises: string[];
   outside: { id: string; name: string; kind: string; text: string }[];
   meetings: { id: string; name: string; type: string; every: "week" | "month" | "quarter"; attendees: string }[];
   rituals: { id: string; name: string; text: string }[];
-  houseRules: { id: string; text: string; options: string[]; touches: Meter[] }[];
+  houseRules: {
+    id: string;
+    text: string;
+    options: string[];
+    touches: (Meter | "fear" | "love" | "legitimacy")[];
+    decree?: boolean;
+  }[];
+  // M3 additions, all optional so older kits stay valid
+  scenario?: { goal: string }; // fixed start meters, a fixed opening thread and one set goal
+  adult?: { intensity: number; themes: string[] }; // start values when the adult module is switched on
+  officeHours?: { day: number; slot: Slot }; // 0-4 = Mon-Fri; default Wednesday afternoon (2, "afternoon")
+  authorityStart?: { fear: number; love: number; legitimacy: number };
+  court?: string[]; // advisor roles in an absolute place (chancellor, marshal, spymaster)
+  roles?: { id: string; name: string; about: string }[]; // role list the AI makes up for the place
   traditions: { id: string; tag: string; text: string }[];
   crisisDeck: { id: string; name: string; text: string; meters: Meter[]; stances: string[] }[];
   openingThreads: KitThread[];

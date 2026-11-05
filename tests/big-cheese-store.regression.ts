@@ -4,11 +4,27 @@ import {
   newRun,
   HAFENKAI,
 } from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/core/index.js";
+import { placeKitOf } from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/core/kits/index.js";
+import { HAFENKAI_PLACE } from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/core/kits/hafenkai.js";
 import type { CapabilityDocumentRecord, CapabilityDocumentStore } from "@marinara-engine/shared";
 import {
   BigCheeseError,
   createRunStore,
 } from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/store.js";
+
+const M3 = [
+  "mode",
+  "cheeseMark",
+  "difficulty",
+  "mutators",
+  "power",
+  "adult",
+  "systems",
+  "advisors",
+  "houseRules",
+  "officeHours",
+  "wishPoints",
+];
 
 function fakeDocuments(): CapabilityDocumentStore {
   const docs = new Map<string, CapabilityDocumentRecord>();
@@ -63,7 +79,7 @@ test("a run saved by a newer version is listed as newer and refused with a 409",
     kind: "run",
     name: "x",
     description: "",
-    data: { saveVersion: 3 },
+    data: { saveVersion: 4 },
     createdAt: at,
     updatedAt: at,
   });
@@ -72,11 +88,11 @@ test("a run saved by a newer version is listed as newer and refused with a 409",
   await assert.rejects(store.get("r-000000000000"), (e) => e instanceof BigCheeseError && e.code === "newer-save");
 });
 
-test("a v1 document migrates on read, loads, saves as v2 and round-trips", async () => {
+test("a v1 document migrates on read, loads, saves as v3 and round-trips", async () => {
   const documents = fakeDocuments();
   const at = new Date().toISOString();
   const game: Record<string, any> = { ...newRun(HAFENKAI, 7), saveVersion: 1 };
-  for (const k of ["rooms", "relations", "grapevine", "story", "bigScenes"]) delete game[k];
+  for (const k of ["rooms", "relations", "grapevine", "story", "bigScenes", ...M3]) delete game[k];
   for (const p of Object.values<any>(game.people)) for (const k of ["room", "ambition", "status"]) delete p[k];
   await documents.create({
     id: "big-cheese:run:r-000000000001",
@@ -99,7 +115,11 @@ test("a v1 document migrates on read, loads, saves as v2 and round-trips", async
   } as never);
   const store = createRunStore(documents);
   const run = await store.get("r-000000000001");
-  assert.equal(run.game.saveVersion, 2);
+  assert.equal(run.game.saveVersion, 3);
+  assert.equal(run.game.mode, "normal");
+  assert.equal(run.game.difficulty, "normal");
+  assert.deepEqual(run.game.officeHours, { day: 2, slot: "afternoon", visitors: [] });
+  assert.equal(run.game.wishPoints.left, 3);
   assert.equal(Object.keys(run.game.rooms).length, 12);
   assert.equal(run.game.people.henrike!.status, "active");
   assert.equal(run.game.people.henrike!.trust, 50);
@@ -107,10 +127,56 @@ test("a v1 document migrates on read, loads, saves as v2 and round-trips", async
   const saved = (await documents.getById("big-cheese", "big-cheese:run:r-000000000001"))!.data as {
     saveVersion: number;
   };
-  assert.equal(saved.saveVersion, 2);
+  assert.equal(saved.saveVersion, 3);
   const fresh = await store.create("hafenkai");
   assert.deepEqual((await store.get(fresh.id)).game, fresh.game);
   const bytes = JSON.stringify(fresh.game).length;
   assert.ok(bytes < 5000, `fresh run is ${bytes} bytes`);
   console.log(`fresh run: ${bytes} bytes`);
+});
+
+test("a v2 document migrates to v3 and round-trips", async () => {
+  const documents = fakeDocuments();
+  const at = new Date().toISOString();
+  const game: Record<string, any> = { ...newRun(HAFENKAI, 7), saveVersion: 2 };
+  for (const k of M3) delete game[k];
+  await documents.create({
+    id: "big-cheese:run:r-000000000002",
+    packageId: "big-cheese",
+    kind: "run",
+    name: "x",
+    description: "",
+    data: {
+      saveVersion: 2,
+      revision: 0,
+      kitId: "hafenkai",
+      createdAt: at,
+      lite: false,
+      text: { cards: {}, scenes: {}, feelings: {} },
+      scene: null,
+      game,
+    },
+    createdAt: at,
+    updatedAt: at,
+  } as never);
+  const store = createRunStore(documents);
+  const run = await store.get("r-000000000002");
+  assert.equal(run.game.saveVersion, 3);
+  assert.deepEqual(run.game.mutators, []);
+  assert.equal(run.game.adult, null);
+  assert.equal(run.game.difficulty, "normal");
+  await store.update(run.id, 0, (r) => r);
+  const saved = (await documents.getById("big-cheese", "big-cheese:run:r-000000000002"))!.data as {
+    saveVersion: number;
+    game: typeof run.game;
+  };
+  assert.equal(saved.saveVersion, 3);
+  assert.deepEqual(saved.game, run.game);
+  assert.deepEqual((await store.get(run.id)).game, run.game);
+});
+
+test("a run resolves its kit through placeKitOf", () => {
+  assert.equal(placeKitOf({ kitId: "hafenkai" }), HAFENKAI_PLACE);
+  const own = { ...HAFENKAI_PLACE, id: "mine" };
+  assert.equal(placeKitOf({ kitId: "hafenkai", kit: own }), own);
 });
