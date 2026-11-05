@@ -124,7 +124,7 @@ export function kitView(kitId: string, cast?: Cast) {
 export const view = (run: Run) => ({ run, kit: kitView(run.kitId, run.cast) });
 
 export function createGame(store: RunStore, getModel: () => Promise<ModelCall | undefined>) {
-  const placeOf = (run: Run) => withCast(PLACES[run.kitId as keyof typeof PLACES], run.cast);
+  const placeOf = (run: Run) => withCast(PLACES[run.kitId as keyof typeof PLACES], run.cast, run.game.clock);
   const modelFor = (run: { lite: boolean }) => (run.lite ? Promise.resolve(undefined) : getModel());
 
   // One part of a scene. The code picks the offered stances; `h.rng` moves on after the call.

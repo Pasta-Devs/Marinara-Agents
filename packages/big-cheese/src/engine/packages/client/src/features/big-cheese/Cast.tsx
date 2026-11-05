@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { errorKey, listCast, readCast, type CastItem, type CastList, type CastRead, type StartBody } from "./api";
-import { initials } from "./parts";
+import { initials, type Ctx } from "./parts";
 
 const MAX_STAFF = 3;
 const SHOWN = 50;
@@ -302,5 +302,178 @@ export function Cast({
         </button>
       </main>
     </div>
+  );
+}
+
+interface HireSheet {
+  role: string;
+  traits: string[];
+  tone: string;
+  lines: string; // one voice line per row
+  core: string;
+}
+
+/** Mid-run: take on one more character, for good or as a visitor (cast.md §9). */
+export function Hire({ ctx, onClose }: { ctx: Ctx; onClose: () => void }) {
+  const { t } = useTranslation();
+  const [list, setList] = useState<CastList | null>(null);
+  const [search, setSearch] = useState("");
+  const [note, setNote] = useState<string | null>(null);
+  const [reading, setReading] = useState(false);
+  const [pick, setPick] = useState<{ item: CastItem; sheet: HireSheet } | null>(null);
+  const [visitor, setVisitor] = useState(false);
+  const [days, setDays] = useState(3);
+  const heading = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    listCast().then(setList, (error) => setNote(errorKey(error)));
+  }, []);
+  useEffect(() => heading.current?.focus(), [pick]);
+
+  async function choose(item: CastItem) {
+    if (reading) return;
+    setReading(true);
+    setNote(null);
+    try {
+      const { sheet } = await readCast(ctx.run.kitId, item.id);
+      setPick({ item, sheet: { ...sheet, lines: sheet.lines.join("\n") } });
+    } catch (error) {
+      setNote(errorKey(error));
+    } finally {
+      setReading(false);
+    }
+  }
+
+  const sheet = pick?.sheet;
+  const set = (change: Partial<NonNullable<typeof sheet>>) =>
+    sheet && pick && setPick({ ...pick, sheet: { ...sheet, ...change } });
+  const ready = sheet && sheet.role.trim() && sheet.traits.length > 0 && lineList(sheet.lines).length > 0;
+  async function submit() {
+    if (!pick || !sheet) return;
+    const body = {
+      engineId: pick.item.id,
+      mode: visitor ? "visitor" : "hire",
+      ...(visitor && { days }),
+      sheet: { ...sheet, role: sheet.role.trim(), lines: lineList(sheet.lines) },
+    };
+    if (await ctx.act("cast", body)) onClose();
+  }
+
+  const shown = (list?.characters ?? [])
+    .filter((c) => c.name.toLowerCase().includes(search.trim().toLowerCase()))
+    .slice(0, SHOWN);
+  return (
+    <>
+      <h1 className="bc-heading" tabIndex={-1} ref={heading}>
+        {t("ui.bigCheese.cast.hireTitle")}
+      </h1>
+      <p>{t("ui.bigCheese.cast.hireHelp")}</p>
+      {note && (
+        <p role="alert" className="bc-note">
+          {t(note)}
+        </p>
+      )}
+      {!pick || !sheet ? (
+        <>
+          <div className="bc-form">
+            <label htmlFor="bc-hire-search">{t("ui.bigCheese.cast.search")}</label>
+            <input
+              id="bc-hire-search"
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </div>
+          <ul className="bc-list">
+            {shown.map((item) => (
+              <Row key={item.id} item={item} on={false} disabled={reading} onClick={() => void choose(item)} />
+            ))}
+          </ul>
+        </>
+      ) : (
+        <section className="bc-panel" aria-labelledby="bc-hire-name">
+          <h2 id="bc-hire-name" className="bc-subhead">
+            {pick.item.name}
+          </h2>
+          <div className="bc-form">
+            <label htmlFor="bc-hire-role">{t("ui.bigCheese.cast.hireRole")}</label>
+            <input
+              id="bc-hire-role"
+              maxLength={60}
+              value={sheet.role}
+              onChange={(event) => set({ role: event.target.value })}
+            />
+          </div>
+          <p className="bc-muted">{t("ui.bigCheese.cast.traits")}</p>
+          <div className="bc-row-meta">
+            {(list?.traits ?? []).map((trait) => {
+              const on = sheet.traits.includes(trait);
+              return (
+                <button
+                  key={trait}
+                  type="button"
+                  className="bc-btn"
+                  aria-pressed={on}
+                  disabled={!on && sheet.traits.length >= 2}
+                  onClick={() =>
+                    set({ traits: on ? sheet.traits.filter((x) => x !== trait) : [...sheet.traits, trait] })
+                  }
+                >
+                  {trait}
+                </button>
+              );
+            })}
+          </div>
+          <div className="bc-form">
+            <label htmlFor="bc-hire-tone">{t("ui.bigCheese.cast.tone")}</label>
+            <input
+              id="bc-hire-tone"
+              maxLength={40}
+              value={sheet.tone}
+              onChange={(event) => set({ tone: event.target.value })}
+            />
+            <label htmlFor="bc-hire-lines">{t("ui.bigCheese.cast.lines")}</label>
+            <textarea
+              id="bc-hire-lines"
+              rows={3}
+              value={sheet.lines}
+              onChange={(event) => set({ lines: event.target.value })}
+            />
+          </div>
+          <div className="bc-row-meta" role="group" aria-label={t("ui.bigCheese.cast.hireStay")}>
+            <button type="button" className="bc-btn" aria-pressed={!visitor} onClick={() => setVisitor(false)}>
+              {t("ui.bigCheese.cast.hireStays")}
+            </button>
+            <button type="button" className="bc-btn" aria-pressed={visitor} onClick={() => setVisitor(true)}>
+              {t("ui.bigCheese.cast.hireVisits")}
+            </button>
+          </div>
+          {visitor && (
+            <div className="bc-form">
+              <label htmlFor="bc-hire-days">{t("ui.bigCheese.cast.hireDays")}</label>
+              <input
+                id="bc-hire-days"
+                type="number"
+                min={1}
+                max={10}
+                value={days}
+                onChange={(event) => setDays(Math.min(10, Math.max(1, Number(event.target.value) || 1)))}
+              />
+            </div>
+          )}
+          <button
+            type="button"
+            className="bc-btn bc-btn-primary"
+            disabled={ctx.busy || !ready}
+            onClick={() => void submit()}
+          >
+            {visitor ? t("ui.bigCheese.cast.hireVisitGo") : t("ui.bigCheese.cast.hireGo")}
+          </button>
+        </section>
+      )}
+      <button type="button" className="bc-btn bc-btn-quiet" onClick={pick ? () => setPick(null) : onClose}>
+        {t("ui.bigCheese.cast.hireBack")}
+      </button>
+    </>
   );
 }

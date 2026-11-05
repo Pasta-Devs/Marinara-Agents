@@ -16,7 +16,12 @@ export function Office({ ctx, canStart }: { ctx: Ctx; canStart: boolean }) {
   const { run, kit, busy, act, go } = ctx;
   const { clock, meters, hearing } = run.game;
   const friday = clock.day === 4;
-  const threads = Object.values(run.game.threads);
+  // Story cards, most urgent first (design.md 3.5). A secret thread shows once the boss learns of it.
+  const due = (thread: { clock: { dueWeek: number | "open" } }) =>
+    thread.clock.dueWeek === "open" ? Infinity : thread.clock.dueWeek;
+  const threads = Object.values(run.game.threads)
+    .filter((thread) => !thread.secret)
+    .sort((a, b) => due(a) - due(b));
   const coming = kit.letters.filter((letter) => !arrived(letter, clock));
   const promises = threads.filter((thread) => thread.kind === "promise" && thread.promise);
 
@@ -93,7 +98,11 @@ export function Office({ ctx, canStart }: { ctx: Ctx; canStart: boolean }) {
                           read: thread.beats.filter((beat) => beat.read).length,
                           total: thread.beats.length,
                         })
-                      : [thread.people.map((id) => nameOf(kit, id)).join(", "), thread.stakes]
+                      : [
+                          thread.people.map((id) => nameOf(kit, id)).join(", "),
+                          t(`ui.bigCheese.story.pressure.${thread.clock.pressure}`, { defaultValue: "" }),
+                          thread.stakes,
+                        ]
                           .filter(Boolean)
                           .join(" · ")}
                   </span>

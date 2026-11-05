@@ -186,7 +186,7 @@ test("the deputy, an unknown role, repeats and Mari are refused", async () => {
   const h = await harness([card("c1", "Rhea Sand"), card("c2", "Silas Marr"), card(MARI, "Professor Mari")]);
   const cases = [
     [{ characterId: "c1", replaces: "henrike", sheet: sheet() }],
-    [{ characterId: "c1", sheet: sheet({ role: "Deputy, day shift lead" }) }],
+    [{ characterId: "c1", sheet: sheet({ role: kit.people.find((p) => p.deputy)!.role }) }],
     [{ characterId: "c1", sheet: sheet({ role: "Astronaut" }) }],
     [
       { characterId: "c1", sheet: sheet() },
@@ -266,4 +266,87 @@ test("cards that state an age under 18 are refused; a stated adult age is kept",
   const ok = await start(h, { staff: [{ characterId: "adult", sheet: sheet() }] });
   assert.equal(ok.code, 200);
   assert.equal(ok.body.run.cast.people.tomasz.age, 34);
+});
+
+test("mid-run: a swap keeps the role and the run state, a hire runs the age check", async () => {
+  const h = await harness([
+    card("c1", "Rhea Sand", { avatarPath: "/api/avatars/r.png" }),
+    card("c2", "Silas Marr", { description: "Silas Marr is 40 years old, a night watchman." }),
+    card("kid", "Pip", { description: "Pip is a 16-year-old deckhand." }),
+    card(MARI, "Professor Mari"),
+  ]);
+  const made = await start(h, {});
+  const id = made.body.run.id;
+  const mid = (body: object) =>
+    h.call("POST", `/runs/${id}/cast`, { expectedRevision: made.body.run.revision, ...body });
+  const before = made.body.run.game.people.tomasz;
+
+  const swap = await mid({ engineId: "c1", mode: "swap", replaces: "tomasz", sheet: sheet() });
+  assert.equal(swap.code, 200, JSON.stringify(swap.body));
+  const who = swap.body.kit.people.find((p: { id: string }) => p.id === "tomasz");
+  assert.equal(who.name, "Rhea Sand");
+  assert.equal(who.role, tomasz.role);
+  assert.deepEqual(swap.body.run.game.people.tomasz, before);
+
+  const rev = swap.body.run.revision;
+  const hire = (body: object) =>
+    h.call("POST", `/runs/${id}/cast`, { expectedRevision: rev, mode: "hire", sheet: sheet(), ...body });
+  assert.equal((await hire({ engineId: "kid" })).code, 400);
+  assert.equal((await hire({ engineId: MARI })).code, 400);
+  assert.equal((await hire({ engineId: "c1" })).code, 400, "a card is used once");
+  assert.equal(
+    (await hire({ engineId: "c2", sheet: sheet({ role: kit.people.find((p) => p.deputy)!.role }) })).code,
+    400,
+  );
+  const hired = await hire({ engineId: "c2", sheet: sheet({ role: "Night watch" }) });
+  assert.equal(hired.code, 200, JSON.stringify(hired.body));
+  const added = hired.body.kit.people.find((p: { name: string }) => p.name === "Silas Marr");
+  assert.equal(added.role, "Night watch");
+  assert.ok(hired.body.run.game.people[added.id], "the hire has run state");
+  assert.equal(hired.body.run.cast.people[added.id].age, 40);
+  // A stale revision is a conflict, as for every action.
+  assert.equal((await hire({ engineId: "c2" })).code, 409);
+});
+
+test("a visitor leaves after n days", () => {
+  const cast = {
+    people: {
+      v1: {
+        engineId: "c1",
+        name: "Rhea Sand",
+        core: "",
+        traits: ["loyal"],
+        tone: "",
+        lines: ["Hello."],
+        avatar: "",
+        role: "Guest",
+        until: 7,
+      },
+    },
+  };
+  const at = (week: number, day: number) =>
+    withCast(kit, cast, { week, day, hoursLeft: 5 }).people.some((p) => p.id === "v1");
+  assert.equal(at(2, 1), true, "day 6 of 7");
+  assert.equal(at(2, 2), false, "day 7: gone");
+  assert.equal(
+    withCast(kit, cast).people.some((p) => p.id === "v1"),
+    true,
+    "no clock, no leaving",
+  );
+});
+
+test("a refresh follows the card and keeps the run state", async () => {
+  const cards = [card("c1", "Rhea Sand")];
+  const h = await harness(cards);
+  const made = await start(h, { staff: [{ characterId: "c1", sheet: sheet() }] });
+  const id = made.body.run.id;
+  cards[0].data.name = "Rhea Stone";
+  const r = await h.call("POST", `/runs/${id}/cast/tomasz/refresh`, { expectedRevision: made.body.run.revision });
+  assert.equal(r.code, 200, JSON.stringify(r.body));
+  assert.equal(r.body.kit.people.find((p: { id: string }) => p.id === "tomasz").name, "Rhea Stone");
+  assert.deepEqual(r.body.run.game, made.body.run.game);
+  assert.equal(
+    (await h.call("POST", `/runs/${id}/cast/nobody/refresh`, { expectedRevision: r.body.run.revision })).code,
+    404,
+  );
 });

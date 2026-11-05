@@ -31,6 +31,7 @@ export interface Person {
   trust: number;
   stress: number;
   mood: string;
+  room: string; // a room id, or "home"
   memories: { week: number; thread: string; stance: string }[];
 }
 
@@ -41,6 +42,8 @@ export interface Thread {
   need?: Meter;
   people: string[];
   stakes: string;
+  clock: { dueWeek: number | "open"; pressure: string };
+  secret?: boolean;
   beats: { read?: boolean }[];
   promise?: { to: string; what: string; due: { week: number; day: number }; kept: boolean };
 }
@@ -60,6 +63,9 @@ export interface Game {
   threads: Record<string, Thread>;
   closed: { id: string; state: string; title?: string; need?: Meter }[];
   inbox: Card[];
+  rooms: Record<string, { condition: number; people: string[] }>;
+  relations: { a: string; b: string; kind: string; level: number }[];
+  grapevine: string[]; // ids of rumour lines in `text.place.grapevine`
   hearing: Hearing | null;
   hearingBody: { id: string }[];
   status: "playing" | "complete" | "ended";
@@ -85,6 +91,16 @@ export interface SceneText {
   outcome?: string;
 }
 
+// What the rooms and the grapevine wrote (server place.ts).
+export interface PlaceText {
+  day: number;
+  evening: number;
+  morning: { room: string; person: string; text: string }[];
+  visit?: { room: string; lines: { person: string; text: string }[] };
+  known: string[];
+  grapevine: Record<string, { source: string; text: string }>;
+}
+
 export interface RunDoc {
   id: string;
   revision: number;
@@ -95,8 +111,11 @@ export interface RunDoc {
     cards: Record<string, { line: string; answers: { stance: string; text: string }[] }>;
     scenes: Record<string, SceneText>;
     feelings: Record<string, { person: string; band: string; line: string }[]>;
+    place?: PlaceText;
   };
   scene: string | null;
+  /** Added people and visitors: a visitor leaves on day number `until`. */
+  cast?: { people: Record<string, { until?: number }> };
 }
 
 export interface KitPerson {
@@ -181,6 +200,7 @@ export interface CastRead {
   sheet: CastSheet;
 }
 export interface StartBody {
+  systems?: SystemEdit[];
   boss?: string;
   staff?: { characterId: string; replaces: string; sheet: CastSheet }[];
 }
@@ -192,3 +212,13 @@ export const getRun = (id: string) => api.get<RunState>(runPath(id));
 /** One game action: `path` is relative to the run, e.g. `day/start` or `cards/c3/answer`. */
 export const postAction = (run: RunDoc, path: string, body: object = {}) =>
   api.post<RunState>(`${runPath(run.id)}/${path}`, { ...body, expectedRevision: run.revision });
+
+// T6: the Preview screen (ui.md section 5.3).
+export interface SystemEdit {
+  index: number;
+  name?: string;
+  remove?: true;
+}
+export type PreviewKit = KitView & { systems: { kind: string; name: string; text: string }[] };
+export const previewKit = (kitId: string, cast: StartBody = {}) =>
+  api.post<{ kit: PreviewKit }>(`${PREFIX}/preview`, { kitId, ...cast }).then((r) => r.kit);

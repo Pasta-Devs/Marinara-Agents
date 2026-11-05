@@ -1,7 +1,9 @@
 import { ageCards } from "./cards.js";
 import { WEEKS, dayIndex, isFriday, nextDay } from "./clock.js";
 import { callHearing, holdHearing } from "./hearing.js";
+import { dayTurn } from "./people.js";
 import { applyDelta, clamp, pure } from "./run.js";
+import { checkRevolt } from "./storyteller.js";
 import { checkPromises } from "./threads.js";
 import { METERS } from "./types.js";
 import type { Run } from "./types.js";
@@ -23,6 +25,7 @@ export function settleWeek(s: Run, before = { ...s.meters }) {
   for (const k of METERS) s.low[k] = s.meters[k] < 10 ? s.low[k] + 1 : 0;
   const bad = METERS.find((k) => s.low[k] >= 2);
   if (bad) callHearing(s, bad);
+  checkRevolt(s);
 }
 
 // End of day: promises due, waiting cards age, a pending hearing is held on its day, Friday
@@ -41,7 +44,10 @@ export function endDay(s: Run) {
     // A hearing still pending at year end is held at once, so a lost meter cannot slip past it.
     if (s.hearing) holdHearing(s);
     if (s.status === "playing") s.status = "complete";
-  } else s.clock = nextDay(s.clock);
+  } else {
+    s.clock = nextDay(s.clock);
+    dayTurn(s);
+  }
 }
 
 export const pureSettleWeek = pure(settleWeek);

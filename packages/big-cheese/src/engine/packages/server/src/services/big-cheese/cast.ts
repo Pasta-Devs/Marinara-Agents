@@ -7,8 +7,10 @@ import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import { z } from "zod";
 import { engineModel, runTask } from "./ai/tasks.js";
 import type { PlaceKit } from "./core/kits/types.js";
+import { dayIndex } from "./core/index.js";
+import type { Clock, Person } from "./core/types.js";
 import { TRAITS } from "./core/traits.js";
-import { BigCheeseError, PLACES } from "./store.js";
+import { BigCheeseError, PLACES, type Run, type RunStore } from "./store.js";
 
 export interface CastPerson {
   engineId: string;
@@ -20,10 +22,16 @@ export interface CastPerson {
   tone: string;
   lines: string[];
   avatar: string;
+  /** A hired person or visitor: the role they were taken on for. */
+  role?: string;
+  /** A visitor: the day number (core dayIndex) they leave on. */
+  until?: number;
 }
 export interface Cast {
   boss?: { engineId: string; name: string; about: string; avatar: string };
   people: Record<string, CastPerson>; // by the kit person they replace
+  /** Edits to the kit's systems, by position: rename or remove. */
+  systems?: SystemEdit[];
 }
 
 // ponytail: the Engine's PROFESSOR_MARI_ID. The server bundle may not import Engine modules, so update this if the Engine renames her.
@@ -49,6 +57,19 @@ export const ReadBody = z.object({
   lite: z.boolean().optional(),
 });
 
+const SystemEdits = z
+  .array(
+    z
+      .object({
+        index: z.number().int().min(0).max(20),
+        name: z.string().trim().min(1).max(40).optional(),
+        remove: z.literal(true).optional(),
+      })
+      .refine((e) => e.name !== undefined || e.remove, "Rename or remove."),
+  )
+  .max(8);
+export type SystemEdit = z.infer<typeof SystemEdits>[number];
+
 /** The cast part of POST /runs. */
 export const CastRequest = z.object({
   boss: z.string().min(1).max(80).optional(),
@@ -56,6 +77,7 @@ export const CastRequest = z.object({
     .array(z.object({ characterId: z.string().min(1).max(80), replaces: z.string().max(40).optional(), sheet: Sheet }))
     .max(3)
     .optional(),
+  systems: SystemEdits.optional(),
 });
 
 const bad = (message: string) => new BigCheeseError(400, message, "bad-request");
@@ -182,7 +204,7 @@ export async function castRead(runtime: CapabilityRuntimeHost, body: z.infer<typ
 
 /** Reads the picked cards again and builds the run's cast. The names come from the Engine, never from the client. */
 export async function resolveCast(runtime: CapabilityRuntimeHost, kitId: string, req: z.infer<typeof CastRequest>) {
-  if (!req.boss && !req.staff?.length) return undefined;
+  if (!req.boss && !req.staff?.length && !req.systems?.length) return undefined;
   const kit = placeKit(kitId);
   const cast: Cast = { people: {} };
   if (req.boss) {
@@ -215,11 +237,19 @@ export async function resolveCast(runtime: CapabilityRuntimeHost, kitId: string,
       age,
     };
   }
+  if (req.systems) {
+    const seen = new Set<number>();
+    for (const e of req.systems) {
+      if (e.index >= kit.systems.length || seen.has(e.index)) throw bad("No such system.");
+      seen.add(e.index);
+    }
+    cast.systems = req.systems;
+  }
   return cast;
 }
 
 /** The kit as this run plays it: cast people replace the kit people with the same id, and the boss is named. */
-export function withCast(kit: PlaceKit, cast?: Cast): PlaceKit {
+export function withCast(kit: PlaceKit, cast?: Cast, clock?: Clock): PlaceKit {
   if (!cast) return kit;
   // The kit's own text names the people it ships with, so their names become the cast person's names.
   // ponytail: plain text replace. Pronouns in the kit text stay as written; rewrite per person when a kit needs it.
@@ -258,6 +288,135 @@ export function withCast(kit: PlaceKit, cast?: Cast): PlaceKit {
         }
       : p;
   });
+  const edits = cast.systems;
+  if (edits) {
+    out.systems = out.systems.flatMap((s, i) => {
+      const e = edits.find((x) => x.index === i);
+      return e?.remove ? [] : [e?.name ? { ...s, name: e.name } : s];
+    });
+  }
+  // Hired people and visitors are not in the kit. A visitor is gone once their last day has passed.
+  for (const [id, c] of Object.entries(cast.people)) {
+    if (kit.people.some((p) => p.id === id) || (clock && c.until !== undefined && dayIndex(clock) >= c.until)) continue;
+    out.people.push({
+      id,
+      name: c.name,
+      role: c.role ?? "",
+      colour: "#8a8f98",
+      deputy: false,
+      traits: c.traits,
+      ambition: "",
+      secret: "",
+      routine: {} as PlaceKit["people"][number]["routine"],
+      voice: { style: c.tone || "natural", phrases: c.lines },
+      core: c.core,
+    });
+  }
   if (cast.boss) out.boss = { name: cast.boss.name, about: cast.boss.about };
   return out;
+}
+
+/** The kit's systems as the Preview screen shows them: with the player's renames and removals applied. */
+export const systemsOf = (kitId: string, cast?: Cast) => withCast(placeKit(kitId), cast).systems;
+
+/** One card joins a run that is already playing (cast.md section 9). Story roles come with the story engine. */
+export const MidBody = z.object({
+  expectedRevision: z.number().int().min(0),
+  engineId: z.string().min(1).max(80),
+  mode: z.enum(["swap", "hire", "visitor"]),
+  replaces: z.string().max(40).optional(),
+  days: z.number().int().min(1).max(10).optional(),
+  sheet: Sheet,
+});
+
+const MAX_EXTRA = 6;
+
+/** Reads the picked card, then writes through the run queue. A changed run is a 409, as for every action. */
+export async function midCast(
+  runtime: CapabilityRuntimeHost,
+  store: RunStore,
+  id: unknown,
+  body: unknown,
+): Promise<Run> {
+  const b = MidBody.safeParse(body ?? {});
+  if (!b.success) throw bad("Invalid request.");
+  const { engineId, mode, replaces, days = 3, sheet, expectedRevision } = b.data;
+  const run = await store.get(id);
+  const kit = placeKit(run.kitId);
+  const d = await readOne(runtime, "character", engineId);
+  const age = checkAge(d);
+  const name = str(d.name, 80);
+  if (!name) throw bad("This card has no name.");
+  const person: CastPerson = {
+    engineId,
+    age,
+    name,
+    core: sheet.core,
+    traits: sheet.traits,
+    tone: sheet.tone,
+    lines: sheet.lines,
+    avatar: avatarOf(d.avatarPath),
+  };
+  const deputy = kit.people.find((p) => p.deputy);
+  return store.update(id, expectedRevision, (r) => {
+    const cast: Cast = { ...r.cast, people: { ...r.cast?.people } };
+    if (Object.values(cast.people).some((p) => p.engineId === engineId)) throw bad("Each card can be used once.");
+    if (mode === "swap") {
+      const slot = kit.people.find((p) => (replaces ? p.id === replaces : p.role === sheet.role));
+      if (!slot || slot.deputy) throw bad("This role cannot be filled from your library.");
+      cast.people[slot.id] = person;
+      return { ...r, cast };
+    }
+    if (deputy && sheet.role.toLowerCase() === deputy.role.toLowerCase()) {
+      throw bad("This role cannot be filled from your library.");
+    }
+    if (Object.keys(cast.people).filter((k) => !kit.people.some((p) => p.id === k)).length >= MAX_EXTRA) {
+      throw bad("The place has no room for more people.");
+    }
+    let n = 1;
+    while (cast.people[`${mode[0]}${n}`] || r.game.people[`${mode[0]}${n}`]) n++;
+    const key = `${mode[0]}${n}`;
+    cast.people[key] = {
+      ...person,
+      role: sheet.role,
+      ...(mode === "visitor" && { until: dayIndex(r.game.clock) + days }),
+    };
+    const fresh: Person = {
+      trust: 50,
+      stress: 20,
+      mood: "fine",
+      memories: [],
+      room: "home",
+      ambition: 0,
+      status: "active",
+    };
+    return { ...r, cast, game: { ...r.game, people: { ...r.game.people, [key]: fresh } } };
+  });
+}
+
+/** Reads one cast person's card again: name, age and picture follow the card. The sheet and the run state stay. */
+export async function refreshCast(
+  runtime: CapabilityRuntimeHost,
+  store: RunStore,
+  id: unknown,
+  pid: string,
+  body: unknown,
+): Promise<Run> {
+  const b = z.object({ expectedRevision: z.number().int().min(0) }).safeParse(body ?? {});
+  if (!b.success) throw bad("Invalid request.");
+  const missing = () => new BigCheeseError(404, "No such cast person.", "not-found");
+  const old = (await store.get(id)).cast?.people[pid];
+  if (!old) throw missing();
+  const d = await readOne(runtime, "character", old.engineId);
+  const age = checkAge(d);
+  const name = str(d.name, 80);
+  if (!name) throw bad("This card has no name.");
+  return store.update(id, b.data.expectedRevision, (r) => {
+    const cur = r.cast?.people[pid];
+    if (!r.cast || !cur) throw missing();
+    return {
+      ...r,
+      cast: { ...r.cast, people: { ...r.cast.people, [pid]: { ...cur, age, name, avatar: avatarOf(d.avatarPath) } } },
+    };
+  });
 }

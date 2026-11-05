@@ -45,10 +45,21 @@ export interface SceneText {
   done: boolean;
   outcome?: string;
 }
+/** What the rooms and the grapevine wrote (place.ts). `day` and `evening` are the day indexes of the last batches. */
+export interface PlaceText {
+  day: number;
+  evening: number;
+  morning: { room: string; person: string; text: string }[];
+  visit?: { room: string; lines: { person: string; text: string }[] };
+  known: string[]; // relation keys the boss has heard about
+  grapevine: Record<string, { source: string; text: string }>; // keyed by the ids in `game.grapevine`
+}
+
 export interface RunText {
   cards: Record<string, { line: string; answers: { stance: string; text: string }[]; source: "model" | "lite" }>;
   scenes: Record<string, SceneText>;
   feelings: Record<string, { person: string; band: string; line: string }[]>;
+  place?: PlaceText;
 }
 
 export class BigCheeseError extends Error {

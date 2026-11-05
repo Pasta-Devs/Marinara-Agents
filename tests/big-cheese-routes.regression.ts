@@ -345,3 +345,39 @@ test("Lite arrival: each part has its own lines, and the summary and next part n
   assert.equal(done[1].lines[0].text, CHOSE[picked[0]]);
   assert.equal(done[2].lines[0].text, CHOSE[picked[1]]);
 });
+
+test("the Preview route reads the place and applies system overrides, bad ones are refused", async () => {
+  const h = await harness();
+  const base = await h.call("POST", "/preview", { kitId: "hafenkai" });
+  assert.equal(base.code, 200, JSON.stringify(base.body));
+  const systems = base.body.kit.systems as { name: string }[];
+  assert.ok(systems.length >= 2);
+  const edited = await h.call("POST", "/preview", {
+    kitId: "hafenkai",
+    systems: [
+      { index: 0, name: "  Renamed  " },
+      { index: 1, remove: true },
+    ],
+  });
+  assert.equal(edited.code, 200);
+  assert.equal(edited.body.kit.systems[0].name, "Renamed");
+  assert.equal(edited.body.kit.systems.length, systems.length - 1);
+  for (const bad of [
+    [{ index: systems.length, remove: true }],
+    [
+      { index: 0, remove: true },
+      { index: 0, name: "Twice" },
+    ],
+    [{ index: 0 }],
+    [{ index: 0, name: "x".repeat(41) }],
+  ])
+    assert.equal(
+      (await h.call("POST", "/preview", { kitId: "hafenkai", systems: bad })).code,
+      400,
+      JSON.stringify(bad),
+    );
+  assert.equal(
+    (await h.call("POST", "/runs", { kitId: "hafenkai", systems: [{ index: 99, remove: true }] })).code,
+    400,
+  );
+});

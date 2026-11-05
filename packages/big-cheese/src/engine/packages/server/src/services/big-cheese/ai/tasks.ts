@@ -398,12 +398,143 @@ const castRead: Task<CastReadInput, CastReadOutput> = {
   },
 };
 
+// --- ambient.batch and grapevine.batch (design.md section 6, 8.2 and 15) ---------------
+
+export interface AmbientBatchInput {
+  kit: PlaceKit;
+  rng: number;
+  // One entry per person overheard: where they are, their mood and who they are close to or at odds with.
+  people: { person: string; room: string; mood: string; with: { person: string; kind: string }[] }[];
+}
+export interface AmbientBatchOutput {
+  lines: { person: string; line: string }[];
+}
+
+const ambientBatch: Task<AmbientBatchInput, AmbientBatchOutput> = {
+  tokens: 600,
+  prompt: (i) =>
+    msgs(
+      i.kit,
+      `Write one short line for each person: something they say out loud or a small thing they do, as the boss overhears it in the room. Echo "person". Use the mood and the relations as a hint, and never state them. Shape: {"lines":[{"person":"","line":""}]}\nPeople:\n${i.people
+        .map(
+          (p) =>
+            `- ${p.person}, in ${p.room}, mood ${p.mood}${p.with.map((w) => `, ${w.kind} of ${w.person}`).join("")}`,
+        )
+        .join("\n")}\nVoices:\n${voiceSheet(
+        i.kit,
+        i.people.map((p) => p.person),
+      )}`,
+      { people: i.people },
+    ),
+  parse(raw, i) {
+    const lines = list(obj(raw).lines, i.people.length);
+    return {
+      lines: i.people.map((p, n) => {
+        const x = obj(lines[n]);
+        if (x.person !== p.person) throw new Error("ambient: person out of order");
+        return { person: p.person, line: words(x.line, 3, 160, "line") };
+      }),
+    };
+  },
+  lite(i) {
+    const h = { rng: i.rng };
+    return {
+      lines: i.people.map((p, n) => {
+        const other = i.kit.people.find((x) => x.id === i.people[(n + 1) % i.people.length]?.person);
+        let k = 0;
+        const line = pick(h, i.kit.smallMoments)
+          .replace(/\{person\}/g, () => (k++ ? (other ?? person(i.kit, p.person)).name : person(i.kit, p.person).name))
+          .replace("{room}", p.room)
+          .replace("{place}", i.kit.name);
+        return { person: p.person, line };
+      }),
+    };
+  },
+};
+
+export interface GrapevineBatchInput {
+  kit: PlaceKit;
+  rng: number;
+  facts: { person: string; text: string }[]; // the day's moments, picked by the code
+}
+export interface GrapevineBatchOutput {
+  lines: { source: string; line: string }[];
+}
+
+const grapevineBatch: Task<GrapevineBatchInput, GrapevineBatchOutput> = {
+  tokens: 700,
+  prompt: (i) =>
+    msgs(
+      i.kit,
+      `Turn the day's moments into 3 to 6 rumours the staff pass on. "source" is the person who tells it, from the list. Rumours stay close to the facts and add no new facts. Shape: {"lines":[{"source":"","line":""}]}\nMoments:\n${i.facts.map((f) => `- ${f.person}: ${f.text}`).join("\n")}\nVoices:\n${voiceSheet(
+        i.kit,
+        i.kit.people.map((p) => p.id),
+      )}`,
+      { facts: i.facts },
+    ),
+  parse(raw, i) {
+    const lines = list(obj(raw).lines, Math.min(3, i.facts.length), 6);
+    return {
+      lines: lines.map((l) => {
+        const x = obj(l);
+        return { source: person(i.kit, x.source).id, line: words(x.line, 3, 160, "line") };
+      }),
+    };
+  },
+  lite: (i) => ({ lines: i.facts.slice(0, 6).map((f) => ({ source: f.person, line: f.text })) }),
+};
+
+// thread.beat (design.md 3.4): a thread opens from text. The code plans the kind, people, need and beat types; the model writes
+// the title, the stakes line and one line per beat.
+export interface ThreadBeatInput {
+  kit: PlaceKit;
+  rng: number;
+  kind: string;
+  idea: string; // the wish, the action seed or the arc in the player's words
+  people: string[];
+  need: Meter;
+  beats: { type: string }[];
+}
+export interface ThreadBeatOutput {
+  title: string;
+  stakes: string;
+  lines: string[];
+}
+
+const threadBeat: Task<ThreadBeatInput, ThreadBeatOutput> = {
+  tokens: 700,
+  prompt: (i) =>
+    msgs(
+      i.kit,
+      `Write the plan of one story in the place. Kind: ${i.kind}. Idea: ${i.idea.slice(0, 200)}. It puts ${i.need} at risk. A short title, one line on what is at stake, and one line for each beat in order: ${i.beats.map((b) => b.type).join(", ")}. Shape: {"title":"","stakes":"","lines":[""]}\nVoices:\n${voiceSheet(i.kit, i.people)}`,
+      { people: i.people, beats: i.beats },
+    ),
+  parse(raw, i) {
+    const o = obj(raw);
+    const n = i.beats.length;
+    return {
+      title: words(o.title, 1, 60, "title"),
+      stakes: words(o.stakes, 3, 200, "stakes"),
+      lines: list(o.lines, n, n).map((l) => words(l, 3, 160, "line")),
+    };
+  },
+  // Lite: the idea is the title, each beat gets a plain line.
+  lite: (i) => ({
+    title: i.idea.slice(0, 60) || i.kind,
+    stakes: i.idea.slice(0, 200) || `Something is at stake for ${i.need}.`,
+    lines: i.beats.map((b) => (b.type === "card" ? "Someone asks for help." : "Something happens in the place.")),
+  }),
+};
+
 export const tasks = {
   "cast.read": castRead,
   "cards.day": cardsDay,
   "answer.tag": answerTag,
   "scene.part": scenePart,
   "feeling.lines": feelingLines,
+  "thread.beat": threadBeat,
+  "ambient.batch": ambientBatch,
+  "grapevine.batch": grapevineBatch,
 };
 type Tasks = typeof tasks;
 

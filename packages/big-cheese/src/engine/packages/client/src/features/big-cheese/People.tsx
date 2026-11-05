@@ -1,8 +1,10 @@
 // ──────────────────────────────────────────────
 // Big Cheese: People and one person's file (ui.md §5.10)
 // ──────────────────────────────────────────────
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Face, initials, memoryKey, moodKey, threadTitle, trustKey, type Ctx } from "./parts";
+import { Hire } from "./Cast";
+import { Face, initials, memoryKey, moodKey, nameOf, threadTitle, trustKey, type Ctx } from "./parts";
 
 /** The newest feeling line the Friday report wrote for this person. */
 const feeling = (ctx: Ctx, id: string) => {
@@ -14,9 +16,42 @@ const feeling = (ctx: Ctx, id: string) => {
   return null;
 };
 
+// A relation reads from the person's side. Crushes and affairs show only once the boss heard of them (place.ts).
+const RELATIONS: Record<string, [string, string]> = {
+  friend: ["ui.bigCheese.relation.friend", "ui.bigCheese.relation.friend"],
+  rival: ["ui.bigCheese.relation.rival", "ui.bigCheese.relation.rival"],
+  crush: ["ui.bigCheese.relation.crush", "ui.bigCheese.relation.crushBy"],
+  couple: ["ui.bigCheese.relation.couple", "ui.bigCheese.relation.couple"],
+  mentor: ["ui.bigCheese.relation.mentor", "ui.bigCheese.relation.mentorBy"],
+  enemy: ["ui.bigCheese.relation.enemy", "ui.bigCheese.relation.enemy"],
+  family: ["ui.bigCheese.relation.family", "ui.bigCheese.relation.family"],
+  secret_affair: ["ui.bigCheese.relation.affair", "ui.bigCheese.relation.affair"],
+};
+
+/** The relations of one person the boss knows, as { key, other } for a translation line. */
+const knownRelations = (ctx: Ctx, id: string) =>
+  ctx.run.game.relations
+    .filter((r) => (r.a === id || r.b === id) && RELATIONS[r.kind])
+    .filter(
+      (r) =>
+        (r.kind !== "crush" && r.kind !== "secret_affair") ||
+        ctx.run.text.place?.known.includes([r.a, r.b].sort().join("|")),
+    )
+    .map((r) => ({ key: RELATIONS[r.kind][r.a === id ? 0 : 1], other: r.a === id ? r.b : r.a }));
+
+const whereLine = (t: (key: string, options?: Record<string, unknown>) => string, ctx: Ctx, id: string) => {
+  const room = ctx.kit.rooms.find((r) => r.id === ctx.run.game.people[id]?.room);
+  return room ? t("ui.bigCheese.people.in", { room: room.name }) : t("ui.bigCheese.people.home");
+};
+
 export function People({ ctx }: { ctx: Ctx }) {
   const { t } = useTranslation();
   const { run, kit, go } = ctx;
+  const [hiring, setHiring] = useState(false);
+  if (hiring) return <Hire ctx={ctx} onClose={() => setHiring(false)} />;
+  // A visitor is gone once their last day has passed (dayIndex: 5 days a week).
+  const today = (run.game.clock.week - 1) * 5 + run.game.clock.day;
+  const until = (id: string) => run.cast?.people[id]?.until;
   return (
     <>
       <h1 className="bc-heading" tabIndex={-1} data-focus>
@@ -34,23 +69,30 @@ export function People({ ctx }: { ctx: Ctx }) {
         </div>
       )}
       <ul className="bc-list">
-        {kit.people.map((who) => {
-          const state = run.game.people[who.id];
-          return (
-            <li key={who.id}>
-              <button type="button" className="bc-row" onClick={() => go(`person:${who.id}`)}>
-                <Face kit={kit} id={who.id} />
-                <span className="bc-row-text">
-                  <span className="bc-row-title">{who.name}</span>
-                  <span className="bc-muted">{who.role}</span>
-                  {who.library && <span className="bc-chip">{t("ui.bigCheese.cast.badge")}</span>}
-                  <span className="bc-clamp">{feeling(ctx, who.id) ?? (state && t(trustKey(state.trust)))}</span>
-                </span>
-              </button>
-            </li>
-          );
-        })}
+        {kit.people
+          .filter((who) => (until(who.id) ?? today + 1) > today)
+          .map((who) => {
+            const state = run.game.people[who.id];
+            return (
+              <li key={who.id}>
+                <button type="button" className="bc-row" onClick={() => go(`person:${who.id}`)}>
+                  <Face kit={kit} id={who.id} />
+                  <span className="bc-row-text">
+                    <span className="bc-row-title">{who.name}</span>
+                    <span className="bc-muted">{who.role}</span>
+                    <span className="bc-muted">{whereLine(t, ctx, who.id)}</span>
+                    {who.library && <span className="bc-chip">{t("ui.bigCheese.cast.badge")}</span>}
+                    {until(who.id) !== undefined && <span className="bc-chip">{t("ui.bigCheese.people.visitor")}</span>}
+                    <span className="bc-clamp">{feeling(ctx, who.id) ?? (state && t(trustKey(state.trust)))}</span>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
       </ul>
+      <button type="button" className="bc-btn" disabled={ctx.busy} onClick={() => setHiring(true)}>
+        {t("ui.bigCheese.people.hire")}
+      </button>
     </>
   );
 }
@@ -96,6 +138,19 @@ export function PersonSheet({ ctx, id }: { ctx: Ctx; id: string }) {
             </span>
           ))}
         </p>
+      )}
+
+      {knownRelations(ctx, id).length > 0 && (
+        <section className="bc-section" aria-labelledby="bc-knows">
+          <h2 id="bc-knows" className="bc-subhead">
+            {t("ui.bigCheese.person.knows")}
+          </h2>
+          <ul className="bc-plain">
+            {knownRelations(ctx, id).map((relation) => (
+              <li key={`${relation.key}${relation.other}`}>{t(relation.key, { name: nameOf(kit, relation.other) })}</li>
+            ))}
+          </ul>
+        </section>
       )}
 
       <section className="bc-section" aria-labelledby="bc-remembers">

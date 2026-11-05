@@ -1,4 +1,5 @@
 import { newClock } from "./clock.js";
+import { movePeople } from "./people.js";
 import { openGuided } from "./threads.js";
 import type { Authority, Letter, Member, Meter, Meters, Relation, Run, Storyteller } from "./types.js";
 
@@ -115,6 +116,7 @@ export function newRun(kit: Kit, seed: number): Run {
     report: null,
     meterHistory: [],
   };
+  movePeople(s);
   if (kit.letters?.length) openGuided(s, kit.letters);
   return s;
 }

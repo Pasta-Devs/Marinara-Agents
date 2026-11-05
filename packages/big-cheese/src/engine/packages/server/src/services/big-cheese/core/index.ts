@@ -40,3 +40,5 @@ export {
 import { answerCard as answerCardIn, seedDay as seedDayIn } from "./cards.js";
 import { endDay as endDayIn } from "./settle.js";
 export const draft = { seedDay: seedDayIn, answerCard: answerCardIn, endDay: endDayIn };
+export * from "./people.js";
+export { PRESETS, tension } from "./storyteller.js";

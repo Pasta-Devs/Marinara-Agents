@@ -5,8 +5,9 @@
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import { engineModel } from "./ai/tasks.js";
 import { createBoard } from "./board.js";
-import { CastRequest, ReadBody, castRead, listCast, resolveCast } from "./cast.js";
-import { createGame, view } from "./game.js";
+import { CastRequest, ReadBody, castRead, listCast, midCast, refreshCast, resolveCast, systemsOf } from "./cast.js";
+import { createGame, kitView, view } from "./game.js";
+import { createPlace } from "./place.js";
 import { BigCheeseError, CreateRunBody, createRunStore, type RunStore } from "./store.js";
 
 interface Request {
@@ -42,6 +43,7 @@ export async function activate({ api }: ActivationContext) {
   // The default connection. Without one the game plays in Lite mode.
   const board = createBoard(store, runtime.persistence.documents);
   const game = createGame(store, () => engineModel(runtime, null).catch(() => undefined));
+  const place = createPlace(store, () => engineModel(runtime, null).catch(() => undefined));
   const runId = (request: Request) => (request.params as { id?: unknown } | undefined)?.id;
 
   // Known failures go out as { error, code }; anything else is logged and hidden behind a 500.
@@ -107,6 +109,43 @@ export async function activate({ api }: ActivationContext) {
       action("hearing/talk", (r) => game.talk(runId(r), r.body));
       action("promises/:threadId/keep", (r) => game.keepPromise(runId(r), param(r, "threadId"), r.body));
       action("hearing/start", (r) => game.hearingStart(runId(r), r.body));
+      // T6: the Preview screen reads the place with a cast applied, without making a run.
+      router.post(
+        "/preview",
+        handle(async (request) => {
+          const body = CreateRunBody.merge(CastRequest).safeParse(request.body ?? {});
+          if (!body.success) throw new BigCheeseError(400, "Invalid request.", "bad-request");
+          const cast = await resolveCast(runtime, body.data.kitId, body.data);
+          return { kit: { ...kitView(body.data.kitId, cast), systems: systemsOf(body.data.kitId, cast) } };
+        }),
+      );
+
+      // T9: mid-run cast (cast.md section 9). Both go through the run write queue.
+      action("cast", async (r) => view(await midCast(runtime, store, runId(r), r.body)));
+      action("cast/:pid/refresh", async (r) =>
+        view(await refreshCast(runtime, store, runId(r), param(r, "pid"), r.body)),
+      );
+
+      router.get(
+        "/runs/:id/rooms",
+        handle((r) => place.rooms(runId(r))),
+      );
+      router.get(
+        "/runs/:id/grapevine",
+        handle((r) => place.grapevine(runId(r), r.query)),
+      );
+      action("rooms/refresh", (r) => place.refresh(runId(r), r.body));
+      action("rooms/:room/visit", (r) => place.visit(runId(r), param(r, "room"), r.body));
+      router.get(
+        "/runs/:id/rooms",
+        handle((r) => place.rooms(runId(r))),
+      );
+      router.get(
+        "/runs/:id/grapevine",
+        handle((r) => place.grapevine(runId(r), r.query)),
+      );
+      action("rooms/refresh", (r) => place.refresh(runId(r), r.body));
+      action("rooms/:room/visit", (r) => place.visit(runId(r), param(r, "room"), r.body));
       router.delete(
         "/runs/:id",
         handle(async (request) => {

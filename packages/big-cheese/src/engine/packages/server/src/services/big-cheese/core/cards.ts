@@ -1,19 +1,12 @@
 import { pick, roll } from "./rng.js";
 import { addTrust, applyDelta, newId, pure, spendHour } from "./run.js";
 import { FOLLOW, K, effect, offer, trustChange } from "./stances.js";
-import { closeThread, openPromise, planCardBeat, openThread } from "./threads.js";
+import { severityCuts, morning } from "./storyteller.js";
+import { closeThread, openPromise, planCardBeat, openThread, storyBeat } from "./threads.js";
 import { METERS } from "./types.js";
-import type { Meter, Meters, Run, Severity, Thread } from "./types.js";
+import type { Meter, Run, Severity, Thread } from "./types.js";
 
-// Tension, meter part only (design.md 5.1): the average gap below 50 across the four meters.
-export const meterTension = (m: Meters) => METERS.reduce((a, k) => a + Math.max(0, 50 - m[k]), 0) / 4;
-
-// Severity mix as cumulative cut points. A calm place (tension below 20) gets harder cards.
-function severityCuts(s: Run): [number, number] {
-  if (s.storyteller === "calm") return [0.6, 0.95];
-  if (meterTension(s.meters) < 20) return [0.25, 0.7];
-  return s.storyteller === "chaos" ? [0.33, 0.66] : [0.45, 0.85];
-}
+export { meterTension } from "./storyteller.js";
 
 export function addCard(s: Run, t: Thread, seed: { need: Meter; severity: Severity }) {
   const id = newId(s, "c");
@@ -24,15 +17,25 @@ export function addCard(s: Run, t: Thread, seed: { need: Meter; severity: Severi
 // Morning: due follow-up beats land first, then the day's budget of new deck cards.
 export function seedDay(s: Run) {
   for (const t of Object.values(s.threads)) {
+    if (t.kind === "promise") continue; // its check beat belongs to checkPromises
+    let landed = false;
     for (const b of t.beats) {
       const p = b.planned;
-      if (b.type === "card" && b.seed && !b.card && p?.week === s.clock.week && p.day === s.clock.day) {
-        b.card = addCard(s, t, b.seed);
-        delete b.planned;
-      }
+      if (!p || p.week !== s.clock.week || p.day !== s.clock.day) continue;
+      if (b.type === "card" && b.seed && !b.card) b.card = addCard(s, t, b.seed);
+      else if (b.type !== "check") continue;
+      delete b.planned;
+      landed = true;
     }
+    // A wish or surprise with only code beats is won when its last beat lands.
+    if (
+      landed &&
+      (t.kind === "wish" || t.kind === "follow_up") &&
+      t.beats.every((b) => b.type !== "card" && !b.planned)
+    )
+      closeThread(s, t.id, "won");
   }
-  const n = s.storyteller === "calm" ? 2 : s.storyteller === "classic" ? 3 : 2 + Math.floor(roll(s) * 4);
+  const n = morning(s);
   const [s1, s2] = severityCuts(s);
   for (let i = 0; i < n; i++) {
     const x = roll(s);
@@ -76,10 +79,12 @@ export function answerCard(s: Run, id: string, stance: string, promises: Paramet
   if (!t) return;
   const beat = t.beats.find((b) => b.card === c.id);
   if (beat) beat.result = stance;
+  if (t.kind !== "follow_up") return storyBeat(s, t, c.id, c.answers.find((a) => a.stance === stance)!.tier !== "weak");
   const f = FOLLOW[stance as keyof typeof FOLLOW];
   if (roll(s) * 100 >= f.chance[c.severity - 1]) return closeThread(s, t.id, "won");
   const severity = Math.min(3, c.severity + f.worse) as Severity;
   planCardBeat(s, t, { need: c.need, severity }, 1 + Math.floor(roll(s) * 3));
+  t.clock.pressure = stance === "cheap_fix" ? "patched" : f.worse ? "worse" : "building";
 }
 
 // Evening: waiting cards age. On day 5 the problem happens: full -k, no follow-up, thread lost.
@@ -87,7 +92,9 @@ export function ageCards(s: Run) {
   for (const c of s.inbox) c.age++;
   for (const c of s.inbox.filter((c) => c.age >= 5)) {
     s.meters = applyDelta(s.meters, { [c.need]: -K[c.severity] });
-    closeThread(s, c.thread, "lost");
+    const t = s.threads[c.thread];
+    if (t && t.kind !== "follow_up") storyBeat(s, t, c.id, false);
+    else closeThread(s, c.thread, "lost");
   }
   s.inbox = s.inbox.filter((c) => c.age < 5);
 }
