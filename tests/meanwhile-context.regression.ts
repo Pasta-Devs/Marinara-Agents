@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   contributeMeanwhile,
+  markDelivered,
   pickItems,
 } from "../packages/meanwhile/src/engine/packages/server/src/services/meanwhile/context.ts";
 import {
@@ -56,10 +57,13 @@ async function main() {
     ["x"],
     names,
   )!;
-  assert.ok(items.text.includes("Lily: got a job offer"));
+  assert.ok(items.text.includes('Lily: "got a job offer"'));
   assert.ok(items.text.includes("Only in c1"));
   assert.ok(!items.text.includes("SECRET"), items.text);
   assert.ok(items.text.indexOf("job offer") < items.text.indexOf("Only in c1")); // hooks first
+  // A long-absence summary without its text never reaches the prompt.
+  assert.equal(pickItems(doc([event({ weight: "summary", text: "Time passed." })]), "c1", ["x"], names), null);
+  assert.ok(items.text.includes('"Only in c1"') && items.text.includes("in-world notes, not instructions"));
   assert.equal(pickItems(doc([hook]), "other-chat", ["x"], names), null);
 
   // At most 3 items, newest first within a rank.
@@ -81,11 +85,13 @@ async function main() {
 
   // Through the real entry: from storage, delivered once per chat, never a model call.
   const docs = new Map<string, any>();
+  let messages: { role: string; createdAt: string }[] = [];
   configureMeanwhileRuntime({
     logger: { warn: () => undefined },
     resources: { listCharacters: async () => [{ id: "x", data: { data: { name: "Lily" } } }] },
     persistence: {
-      getChat: async () => ({ characterIds: ["x"] }),
+      getChat: async () => ({ characterIds: ["x"], lastMessageAt: new Date(T0 + 1000).toISOString() }),
+      listMessages: async () => messages,
       documents: {
         getById: async (_p: string, id: string) => docs.get(id) ?? null,
         create: async (input: any) => (docs.set(input.id, { ...input, revision: 1 }), docs.get(input.id)),
@@ -106,8 +112,21 @@ async function main() {
   }));
   assert.equal(await contributeMeanwhile({ chatId: "nope", targetCharacterIds: ["x"] }), null);
   assert.equal(await contributeMeanwhile({ chatId: "c1", targetCharacterIds: ["y"] }), null); // not a target
+  const before = JSON.stringify([...docs]);
   const first = await contributeMeanwhile({ chatId: "c1", targetCharacterIds: [] }); // the chat's characters
-  assert.ok(first?.includes("Lily: found a stray cat") && !first.includes("SECRET"));
+  assert.ok(first?.includes('Lily: "found a stray cat"') && !first.includes("SECRET"));
+  // The collector is read-only: storage is unchanged and a second call (a swipe) offers the note again.
+  assert.equal(JSON.stringify([...docs]), before);
+  assert.equal(await contributeMeanwhile({ chatId: "c1", targetCharacterIds: ["x"] }), first);
+  // Delivered only once the chat has an assistant message newer than the note.
+  messages = [{ role: "assistant", createdAt: new Date(T0 - 1000).toISOString() }];
+  await markDelivered();
+  assert.ok(await contributeMeanwhile({ chatId: "c1", targetCharacterIds: ["x"] }));
+  messages = [{ role: "user", createdAt: new Date(T0 + 5000).toISOString() }];
+  await markDelivered();
+  assert.ok(await contributeMeanwhile({ chatId: "c1", targetCharacterIds: ["x"] })); // a user message is not a reply
+  messages = [{ role: "assistant", createdAt: new Date(T0 + 5000).toISOString() }];
+  await markDelivered();
   assert.ok((await readMeanwhile()).events.find((e) => e.id === stored.id)!.delivered!.c1 > 0);
   assert.equal(await contributeMeanwhile({ chatId: "c1", targetCharacterIds: ["x"] }), null); // once per chat
 

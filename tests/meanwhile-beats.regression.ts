@@ -66,7 +66,9 @@ const check = (over: Record<string, unknown> = {}, c: Partial<Parameters<typeof 
     kinds: new Set(["friends", "job loss"]),
     chatTruth: {},
     banned: bannedWords(["Sam"], ["Lily", "Mia"]),
+    bannedHook: bannedWords(["Sam"], ["Lily", "Mia"], false),
     now: T0,
+    toMs: T0 + 2 * DAY,
     ...c,
   });
 
@@ -115,6 +117,15 @@ async function main() {
   ] as const) {
     assert.equal(typeof check(over), "string", label);
   }
+  // The {{user}} macro is banned without any persona name, and names that end in a non-ASCII letter match.
+  assert.equal(typeof check({ text: "Mira texts {{user}}." }, { banned: bannedWords([], ["Lily", "Mia"]) }), "string");
+  assert.equal(typeof check({ text: "Lily met Zoë." }, { banned: bannedWords(["Zoë"], ["Lily"]) }), "string");
+  assert.ok(typeof check({ text: "Lily met Zoëtrope." }, { banned: bannedWords(["Zoë"], ["Lily"]) }) !== "string");
+  // Diary lines are checked like text; a hook may say "you" but not name the persona; a beat must end before now.
+  assert.equal(typeof check({ diary: { "0": "I told Sam." } }), "string");
+  assert.ok(typeof check({ hook: { "0": "Wants to show you a cat" } }) !== "string");
+  assert.equal(typeof check({ hook: { "0": "Wants to tell Sam" } }), "string");
+  assert.equal(typeof check({}, { toMs: T0 + 19 * 3600_000 }), "string");
   // A beat inside the time span of a chat is rejected: 18:10 is before the chat message at 19:00.
   assert.equal(typeof check({}, { chatTruth: { x: T0 + 19 * 3600_000 } }), "string");
   assert.ok(typeof check({}, { chatTruth: { x: T0 + 18 * 3600_000 } }) !== "string");
@@ -246,6 +257,7 @@ async function schedulerCases() {
   };
   let calls = 0;
   let broken = false;
+  let onRead: (() => Promise<void>) | null = null;
   const docs = new Map<string, any>();
   configureMeanwhileRuntime({
     logger: { warn: () => undefined },
@@ -276,10 +288,13 @@ async function schedulerCases() {
       }),
     },
     resources: {
-      listCharacters: async () => [
-        { id: "x", data: card },
-        { id: "y", data: card },
-      ],
+      listCharacters: async () => (
+        await onRead?.(),
+        [
+          { id: "x", data: card },
+          { id: "y", data: card },
+        ]
+      ),
     },
     persistence: {
       listChats: async () => [],
@@ -344,6 +359,57 @@ async function schedulerCases() {
   assert.ok(calls >= 1 && calls <= 3); // a day with no seeds needs no call
   assert.equal(doc.beatDays.length, 4);
   assert.equal(doc.circles[0]!.lastRunCircle, new Date(T0 + 4 * DAY + 2 * 3600_000).toISOString());
+
+  // Same day: Monday 23:00 is past the last seed time plus 90 minutes, so today gets its one call and is marked done.
+  const real1 = Date.UTC(2026, 0, 12, 23);
+  const clock = {
+    anchorCircle: new Date(T0 + 23 * 3600_000).toISOString(),
+    anchorReal: real1,
+    speed: 1,
+    timezone: "UTC",
+  };
+  const same = {
+    ...defaultCircle("t", T0),
+    castIds: ["x", "y"],
+    connectionId: "m",
+    budgetCallsPerDay: 6,
+    clock,
+    lastRunCircle: new Date(T0 + 3 * 3600_000).toISOString(),
+  };
+  await updateMeanwhile((d) => ({ ...d, circles: [...d.circles, same, { ...same, id: "u" }] }));
+  calls = 0;
+  await runCircleNow("t", real1);
+  doc = await readMeanwhile();
+  assert.ok(calls >= 1);
+  assert.deepEqual(
+    doc.beatDays.filter((k) => k.startsWith("t:")),
+    ["t:2026-01-05"],
+  );
+  assert.ok(doc.events.some((e) => e.circleId === "t" && e.weight === "notable"));
+  // At 10:00 the last seed (09:00) plus 90 minutes is not over yet: no call.
+  const noon = { ...clock, anchorCircle: new Date(T0 + 10 * 3600_000).toISOString() };
+  await updateMeanwhile((d) => ({ ...d, circles: d.circles.map((c) => (c.id === "u" ? { ...c, clock: noon } : c)) }));
+  calls = 0;
+  await runCircleNow("u", real1);
+  assert.equal(calls, 0);
+
+  // A stale result is dropped, but the calls it made stay counted.
+  await updateMeanwhile((d) => ({
+    ...d,
+    circles: d.circles.map((c) => (c.id === "u" ? { ...c, clock, lastRunCircle: same.lastRunCircle } : c)),
+  }));
+  onRead = async () => {
+    onRead = null;
+    await updateMeanwhile((d) => ({
+      ...d,
+      circles: d.circles.map((c) => (c.id === "u" ? { ...c, clock: { ...c.clock, speed: 24 } } : c)),
+    }));
+  };
+  await runCircleNow("u", real1);
+  doc = await readMeanwhile();
+  assert.ok(calls >= 1);
+  assert.equal(usageRow(doc.usage, "u", real1).calls, calls);
+  assert.equal(doc.circles.find((c) => c.id === "u")!.lastRunCircle, same.lastRunCircle);
 }
 
 main().catch((error) => {

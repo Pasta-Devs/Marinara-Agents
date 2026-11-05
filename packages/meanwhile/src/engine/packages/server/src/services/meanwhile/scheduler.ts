@@ -16,7 +16,18 @@ import {
 } from "./clock.js";
 import { getMeanwhileRuntime, markOf, readMeanwhile, updateMeanwhile, withMark, type Circle } from "./store.js";
 import { SUMMARY_PLACEHOLDER, at, cardInfo, json, pickSchedule, planLife } from "./routine.js";
-import { askPlaces, askSummary, makeGate, runBeats, usageRow, type BeatRun, type World } from "./beats.js";
+import {
+  TIME_TOLERANCE_MIN,
+  askPlaces,
+  askSummary,
+  makeGate,
+  runBeats,
+  usageRow,
+  type BeatRun,
+  type World,
+} from "./beats.js";
+import { markDelivered } from "./context.js";
+import type { Seed } from "./deck.js";
 
 /** Claims the lease for one Circle. Returns false when another run holds it. */
 async function claim(circleId: string, now: number): Promise<boolean> {
@@ -31,6 +42,7 @@ async function claim(circleId: string, now: number): Promise<boolean> {
 
 /** Days of routine events that stay in storage. */
 const ROUTINE_KEEP_DAYS = 14;
+const NOTABLE_KEEP = 500;
 
 /** Schedules, chat-truth times (Circle ms of the newest linked chat message), cast cards and the user's persona names. */
 export async function readSchedules(circle: Circle) {
@@ -74,13 +86,30 @@ export async function readSchedules(circle: Circle) {
   return { schedules, chatTruth, cast, personas };
 }
 
-/** Circle days (wall dates) in the window that are over, have no beat call yet, in order. */
-function beatDays(window: RunWindow, tz: string, done: ReadonlySet<string>, circleId: string): string[] {
+/**
+ * Circle days (wall dates) in the window that have no beat call yet, in order: the days that are over, and
+ * today once its last seed time plus the beat tolerance has passed. Still one call per day.
+ */
+function beatDays(
+  window: RunWindow,
+  tz: string,
+  done: ReadonlySet<string>,
+  circleId: string,
+  seeds: readonly Seed[],
+): string[] {
   const out: string[] = [];
   const end = Date.parse(window.to);
   for (let day = msToWall(Date.parse(window.from), tz).slice(0, 10); ; day = shiftDay(day, 1)) {
     const over = wallToMs(`${shiftDay(day, 1)}T00:00`, tz);
-    if (over === null || over > end) return out;
+    if (over === null) return out;
+    if (over > end) {
+      const times = seeds
+        .filter((s) => s.circleId === circleId && s.day === day)
+        .map((s) => wallToMs(`${day}T${s.time}`, tz) ?? Infinity);
+      if (!done.has(`${circleId}:${day}`) && times.length && Math.max(...times) + TIME_TOLERANCE_MIN * 60_000 <= end)
+        out.push(day);
+      return out;
+    }
     if (!done.has(`${circleId}:${day}`)) out.push(day);
   }
 }
@@ -104,6 +133,7 @@ async function finish(circleId: string, now: number): Promise<void> {
     let usage = usageRow(first.usage, circleId, now);
     const run: BeatRun = { events: [], done: [], stoppedAt: null };
     let error: string | null = null;
+    let held = false;
     if (window) {
       const inputs = await readSchedules(start);
       const base = {
@@ -134,9 +164,17 @@ async function finish(circleId: string, now: number): Promise<void> {
           });
         }
         const world: World = { circle: start, ...inputs, tags: plan.tags, events: first.events, now };
-        for (const event of plan.events.filter((e) => e.weight === "summary")) await askSummary(world, gate, event);
-        days = beatDays(window, tz, new Set(first.beatDays), circleId);
-        await runBeats(run, world, gate, days, [...first.seeds, ...plan.seeds], to);
+        const summaries = plan.events.filter((e) => e.weight === "summary");
+        if (summaries.length && gate.left() < 1) {
+          // No budget for the summary: drop the placeholder, do not move past the cut, try again on the next real day.
+          plan.events = plan.events.filter((e) => e.weight !== "summary");
+          held = true;
+        } else {
+          for (const event of summaries) await askSummary(world, gate, event);
+          const seeds = [...first.seeds, ...plan.seeds];
+          days = beatDays(window, tz, new Set(first.beatDays), circleId, seeds);
+          await runBeats(run, world, gate, days, seeds, to);
+        }
       } catch (e) {
         error = e instanceof Error ? e.message.slice(0, 200) : "Run failed";
         run.stoppedAt = days[run.done.length] ?? null;
@@ -148,7 +186,7 @@ async function finish(circleId: string, now: number): Promise<void> {
     const lastRun = Date.parse(start.lastRunCircle);
     // Not done: stay at the first undone day. Failed before any day: stay where we were.
     const advanceTo =
-      error && !run.stoppedAt ? lastRun : stopMs === null ? to : Math.min(to, Math.max(lastRun, stopMs));
+      (error && !run.stoppedAt) || held ? lastRun : stopMs === null ? to : Math.min(to, Math.max(lastRun, stopMs));
 
     await updateMeanwhile((doc) => {
       const circle = doc.circles.find((c) => c.id === circleId);
@@ -163,29 +201,55 @@ async function finish(circleId: string, now: number): Promise<void> {
         lastWindow: window,
         lastError: error,
       };
+      const usageCutoff = new Date(now - 7 * DAY).toISOString().slice(0, 10);
+      // The calls were made even if the result is dropped.
+      const withUsage = (d: typeof doc) =>
+        window
+          ? {
+              ...d,
+              usage: [
+                ...d.usage.filter(
+                  (u) => !(u.circleId === circleId && u.realDay === usage.realDay) && u.realDay >= usageCutoff,
+                ),
+                usage,
+              ],
+            }
+          : d;
       if (
         circle.lastRunCircle !== start.lastRunCircle ||
         JSON.stringify(circle.clock) !== JSON.stringify(start.clock)
       ) {
-        return withMark(doc, { ...done, lastWindow: markOf(doc, circleId).lastWindow }); // stale: free the lease, keep the mark
+        return withMark(withUsage(doc), { ...done, lastWindow: markOf(doc, circleId).lastWindow }); // stale: free the lease, keep the mark
       }
       let next = doc;
       if (window && plan) {
         const seedCutoff = shiftDay(msToWall(to, tz).slice(0, 10), -ROUTINE_KEEP_DAYS);
         const mine = (circleOf: string) => circleOf === circleId;
         const have = new Set(doc.events.map((e) => e.id));
-        const usageCutoff = new Date(now - 7 * DAY).toISOString().slice(0, 10);
         const stored = plan;
+        const all = [...doc.events, ...stored.events, ...run.events.filter((e) => !have.has(e.id))];
+        const keep = new Set(
+          all
+            .filter((e) => mine(e.circleId) && e.weight !== "routine")
+            .sort((a, b) => Date.parse(b.start) - Date.parse(a.start))
+            .slice(0, NOTABLE_KEEP)
+            .map((e) => e.id),
+        );
+        const events = all.filter((e) =>
+          !mine(e.circleId)
+            ? true
+            : e.weight === "routine"
+              ? Date.parse(e.start) >= to - ROUTINE_KEEP_DAYS * DAY
+              : keep.has(e.id),
+        );
         next = {
           ...doc,
           circles: doc.circles.map((c) =>
             c.id === circleId ? { ...c, lastRunCircle: new Date(advanceTo).toISOString() } : c,
           ),
-          // ponytail: routine is cheap to recompute, so only the last 14 Circle days stay.
-          // Notable events are kept for good.
-          events: [...doc.events, ...stored.events, ...run.events.filter((e) => !have.has(e.id))].filter(
-            (e) => !mine(e.circleId) || e.weight !== "routine" || Date.parse(e.start) >= to - ROUTINE_KEEP_DAYS * DAY,
-          ),
+          // ponytail: routine is cheap to recompute, so only the last 14 Circle days stay. Notable events
+          // are capped per Circle (diary and hooks derive from them); an archive store would lift the cap.
+          events,
           placeTags: [
             ...doc.placeTags.filter((t) => !stored.tags.some((n) => n.characterId === t.characterId)),
             ...stored.tags,
@@ -199,15 +263,9 @@ async function finish(circleId: string, now: number): Promise<void> {
             ...doc.beatDays.filter((k) => !k.startsWith(`${circleId}:`) || k.slice(-10) >= seedCutoff),
             ...run.done.map((d) => `${circleId}:${d}`),
           ],
-          usage: [
-            ...doc.usage.filter(
-              (u) => !(u.circleId === circleId && u.realDay === usage.realDay) && u.realDay >= usageCutoff,
-            ),
-            usage,
-          ],
         };
       }
-      return withMark(next, done);
+      return withMark(withUsage(next), done);
     });
   } catch (error) {
     await updateMeanwhile((doc) => {
@@ -250,6 +308,9 @@ export async function runDuePass(now = Date.now()): Promise<string[]> {
   const logger = getMeanwhileRuntime().logger;
   const doc = await readMeanwhile();
   if (doc.circles.length === 0) return [];
+  await markDelivered().catch((error) =>
+    logger.warn(`[meanwhile] delivery check failed: ${error instanceof Error ? error.message : String(error)}`),
+  );
   const chatTimes = new Map<string, number>();
   if (doc.circles.some((c) => c.linkedChatIds.length > 0)) {
     for (const chat of await getMeanwhileRuntime().persistence.listChats()) {

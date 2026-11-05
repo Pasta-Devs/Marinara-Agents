@@ -6,7 +6,7 @@ import { PLACES, beatMessages, placeMessages, retryMessage, summaryMessages, typ
 import { getMeanwhileRuntime, type Circle, type LifeEvent, type Usage } from "./store.js";
 
 /** How far a beat may start from its seed time. */
-const TIME_TOLERANCE_MIN = 90;
+export const TIME_TOLERANCE_MIN = 90;
 const LINE_MAX = 160;
 
 export interface Gate {
@@ -14,7 +14,7 @@ export interface Gate {
   /** Model calls left today for this Circle. */
   left(): number;
   /** Parsed JSON, or null when the reply is not JSON. Throws on a provider error. */
-  complete(messages: Msg[], maxTokens: number): Promise<unknown>;
+  complete(messages: Msg[], maxTokens: number, temperature?: number): Promise<unknown>;
 }
 
 export function usageRow(rows: readonly Usage[], circleId: string, now: number): Usage {
@@ -38,11 +38,11 @@ export async function makeGate(circle: Circle, row: Usage): Promise<Gate> {
   return {
     usage,
     left: () => circle.budgetCallsPerDay - usage.calls,
-    async complete(messages, maxTokens) {
+    async complete(messages, maxTokens, temperature = 0.9) {
       usage.calls += 1;
       const out = await model.chatComplete(messages, {
         maxTokens,
-        temperature: 0.8,
+        temperature,
         responseFormat: { type: "json_object" },
       });
       usage.promptTokens += out.usage?.promptTokens ?? 0;
@@ -112,6 +112,20 @@ function motifs(w: World, toMs: number): string[] {
   return [...out].slice(0, 12);
 }
 
+/** One filled beat for the first seed, with that seed's own cast numbers, so the model copies the shape. */
+function exampleBeat(w: World, seed: Seed): string {
+  const nums = seed.cast.map((id) => castNumber(w.circle, id));
+  const names = seed.cast.map((id) => w.cast[id]?.name ?? "Someone");
+  return JSON.stringify({
+    seed: "s1",
+    start: seed.time,
+    end: hhmm(((minutes(seed.time) ?? 0) + 30) % 1440),
+    text: `${names.join(" and ")} spend half an hour at the ${seed.place}.`,
+    diary: { [nums[0]!]: `That half hour at the ${seed.place} was the best part of my day.` },
+    hook: { [nums[0]!]: `Wants to show you what they found at the ${seed.place}` },
+  });
+}
+
 const SEASONS = [
   "winter",
   "winter",
@@ -127,13 +141,19 @@ const SEASONS = [
   "winter",
 ];
 
-/** Words the text of a beat must not contain: the user's persona names and second person. */
-export function bannedWords(personas: string[], castNames: string[]): RegExp {
+/**
+ * Words a line must not contain: the user's persona names, the {{user}} macro and, unless `secondPerson`
+ * is false, "you". Edges use letters and digits, so names that end in "ë" still match.
+ */
+export function bannedWords(personas: string[], castNames: string[], secondPerson = true): RegExp {
   const cast = new Set(castNames.map((n) => n.toLowerCase()));
   const names = personas
     .filter((p) => p && !cast.has(p.toLowerCase()))
     .map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  return new RegExp(`\\b(?:${["you", "your", "yours", "yourself", ...names].join("|")})\\b|\\{\\{?user\\}?\\}`, "i");
+  const words = [...(secondPerson ? ["you", "your", "yours", "yourself"] : []), ...names];
+  const parts = ["\\{\\{?user\\}?\\}"];
+  if (words.length) parts.unshift(`(?<![\\p{L}\\p{N}])(?:${words.join("|")})(?![\\p{L}\\p{N}])`);
+  return new RegExp(parts.join("|"), "iu");
 }
 
 export interface BeatCheck {
@@ -144,7 +164,11 @@ export interface BeatCheck {
   kinds: ReadonlySet<string>;
   chatTruth: Record<string, number>;
   banned: RegExp;
+  /** For hooks: persona names only, "you" is fine there. */
+  bannedHook: RegExp;
   now: number;
+  /** Circle now: a beat must end before it. */
+  toMs: number;
 }
 
 const clock = /^(\d{2}):(\d{2})$/;
@@ -176,21 +200,23 @@ export function checkBeat(raw: unknown, c: BeatCheck): { label: string; event: L
   const text = typeof raw.text === "string" ? raw.text.trim() : "";
   if (!text || text.length > 140) return bad("text must have 1 to 140 characters");
   if (c.banned.test(text)) return bad("text must not name or address the user");
+  if (end > c.toMs) return bad("it ends in the future");
   if (!c.kinds.has(seed.kind)) return bad("the kind is not allowed");
   const inSeed = new Set(seed.cast.map((id) => String(castNumber(c.circle, id))));
-  const byId = (field: unknown): Record<string, string> | string => {
+  const byId = (field: unknown, banned: RegExp): Record<string, string> | string => {
     if (field === undefined) return {};
     if (!isRecord(field)) return bad("diary and hook must be objects");
     const out: Record<string, string> = {};
     for (const [key, value] of Object.entries(field)) {
       if (!inSeed.has(key)) return bad(`cast number ${key} is not in the seed`);
       const id = c.circle.castIds[Number(key)]!;
+      if (banned.test(line(value))) return bad("diary and hook must not name or address the user");
       if (line(value)) out[id] = line(value);
     }
     return out;
   };
-  const diary = byId(raw.diary);
-  const hook = byId(raw.hook);
+  const diary = byId(raw.diary, c.banned);
+  const hook = byId(raw.hook, c.bannedHook);
   if (typeof diary === "string") return diary;
   if (typeof hook === "string") return hook;
   const major = BIG_KINDS.includes(seed.kind);
@@ -241,7 +267,9 @@ async function beatDay(w: World, gate: Gate, day: string, seeds: Seed[], toMs: n
     pace: circle.pace,
     kinds: [...kinds],
     spicy: circle.allowedKinds.includes("spicy"),
+    example: exampleBeat(w, [...labels][0]![1]),
   });
+  const castNames = circle.castIds.map((id) => w.cast[id]?.name ?? "");
   const check: BeatCheck = {
     circle,
     day,
@@ -249,11 +277,10 @@ async function beatDay(w: World, gate: Gate, day: string, seeds: Seed[], toMs: n
     used: new Set(),
     kinds,
     chatTruth: w.chatTruth,
-    banned: bannedWords(
-      w.personas,
-      circle.castIds.map((id) => w.cast[id]?.name ?? ""),
-    ),
+    banned: bannedWords(w.personas, castNames),
+    bannedHook: bannedWords(w.personas, castNames, false),
     now: w.now,
+    toMs,
   };
   const accepted = new Map<string, LifeEvent>();
   let messages = base;
@@ -336,7 +363,7 @@ export async function askPlaces(
     ),
   ];
   if (!unknown.length || gate.left() < 1) return { tags: [...tags], changed: false };
-  const data = await gate.complete(placeMessages(unknown), 400);
+  const data = await gate.complete(placeMessages(unknown), 400, 0.2);
   const answer = isRecord(data) ? data : {};
   return {
     changed: true,
