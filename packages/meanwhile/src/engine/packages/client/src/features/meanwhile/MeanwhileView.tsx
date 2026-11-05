@@ -808,6 +808,7 @@ function NudgesPanel({ circle }: { circle: Circle }) {
                 <button
                   type="button"
                   className="mw-btn"
+                  aria-label={`${COPY.nudgeRemove} ${n.text}`}
                   disabled={remove.isPending}
                   onClick={() => remove.mutate(n.id)}
                 >

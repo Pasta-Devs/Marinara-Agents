@@ -550,6 +550,14 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
               ? "Days must be a whole number from 1 to 7"
               : null;
     if (error) return reply.code(400).send({ error });
+    // The window starts at the first Circle day that is not dealt yet, so a new nudge gets all its days.
+    const nowMs = circleNowMs(circle.clock, Date.now());
+    const tz = circle.clock.timezone;
+    const dealt = new Set((await readMeanwhile()).dealtDays);
+    let day = msToWall(nowMs, tz).slice(0, 10);
+    const today = day;
+    while (dealt.has(`${circle.id}:${day}`)) day = shiftDay(day, 1);
+    const createdCircle = new Date(day === today ? nowMs : (wallToMs(`${day}T00:00`, tz) ?? nowMs)).toISOString();
     const nudge: Nudge = {
       id: randomUUID(),
       circleId: circle.id,
@@ -557,7 +565,7 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
       text,
       kind: src.kind as string,
       withinDays: days as number,
-      createdCircle: new Date(circleNowMs(circle.clock, Date.now())).toISOString(),
+      createdCircle,
       status: "open",
     };
     let added = false;

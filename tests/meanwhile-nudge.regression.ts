@@ -99,9 +99,9 @@ const circle = {
   clock: { anchorCircle: iso(T0 + 23 * HOUR), anchorReal: REAL0, speed: 1, timezone: "UTC" },
   lastRunCircle: iso(T0),
 };
-const reset = async (nudges: Nudge[]) => {
+const reset = async (nudges: Nudge[], extra: Record<string, unknown> = {}, c = circle) => {
   docs.clear();
-  await updateMeanwhile((d) => ({ ...d, circles: [circle], nudges }));
+  await updateMeanwhile((d) => ({ ...d, circles: [c], nudges, ...extra }));
 };
 
 async function main() {
@@ -137,6 +137,28 @@ async function main() {
   assert.deepEqual(plan(2), plan(2), "same input, same seed");
   assert.equal(plan(2)[0]!.nudge, "Lily gets a job offer");
   assert.equal(plan(2, { holdIds: new Set(["x"]) }).length, 0, "pending big event: the nudge waits");
+
+  // One run that deals several days places the nudge once.
+  const many = planLife({
+    circle: {
+      id: "q",
+      castIds: ["x", "y"],
+      clock: { timezone: "UTC" },
+      pace: "cozy",
+      allowedKinds: ["friends"],
+      bigKindsAllowed: [],
+    },
+    window: { from: iso(T0), to: iso(T0 + 3 * DAY + 23 * HOUR) } as any,
+    schedules: {},
+    chatTruth: {},
+    tags: [],
+    seeds: [],
+    haveIds: new Set(),
+    dealtDays: new Set(),
+    nudges: [nudge()],
+    now: T0,
+  }).seeds.filter((s) => s.nudgeId);
+  assert.equal(many.length, 1, "one seed per nudge");
 
   // A full day gives up a normal card; a day with room gets one more. Big kinds are never replaced.
   const card_ = (n: number, kind: string): Seed => ({
@@ -190,6 +212,9 @@ async function main() {
   doc = await run({ createdCircle: iso(T0 - DAY + HOUR) }, false);
   assert.equal(doc.nudges[0]!.status, "expired", "past its window");
 
+  doc = await run({ id: "old", status: "used", createdCircle: iso(T0 - 30 * DAY) }, true);
+  assert.equal(doc.nudges.filter((n) => n.id === "old").length, 0, "old finished nudges are dropped");
+
   // Routes.
   const handlers = new Map<string, (request: any, reply: any) => Promise<any>>();
   const app: any = {};
@@ -207,6 +232,14 @@ async function main() {
     }
     throw new Error(`no route ${method} ${url}`);
   }
+  await reset([], { dealtDays: ["q:2026-01-05"] }, { ...circle, clock: { ...circle.clock, speed: 0 } });
+  const lateOne = await call("POST", "/circles/q/nudges", {
+    cast: ["x"],
+    text: "Late",
+    kind: "friends",
+    withinDays: 1,
+  });
+  assert.equal(lateOne.body.createdCircle, "2026-01-06T00:00:00.000Z", "window starts at the first undealt day");
   await reset([]);
   const ok = { cast: ["x"], text: "Lily gets a job offer", kind: "friends", withinDays: 3 };
   for (const bad of [

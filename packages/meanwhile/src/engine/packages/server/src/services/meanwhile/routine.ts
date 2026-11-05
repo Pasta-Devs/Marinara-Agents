@@ -152,6 +152,8 @@ export function planLife(input: {
   holdIds?: ReadonlySet<string>;
   /** Open nudges of this Circle. */
   nudges?: readonly Nudge[];
+  /** "circleId:day" for every day whose beat call is done. */
+  beatDays?: ReadonlySet<string>;
   now: number;
 }): { events: LifeEvent[]; seeds: Seed[]; tags: PlaceTags[]; dealtDays: string[] } {
   const { circle, window } = input;
@@ -228,6 +230,8 @@ export function planLife(input: {
     const open = Object.fromEntries(Object.entries(byChar).filter(([id]) => !input.holdIds?.has(id)));
     const nudges = (input.nudges ?? [])
       .filter((n) => n.cast.every((id) => !input.holdIds?.has(id)))
+      // One seed per nudge at a time: a seed whose day is not beaten yet still carries it.
+      .filter((n) => !known.some((s) => s.nudgeId === n.id && !input.beatDays?.has(`${circle.id}:${s.day}`)))
       .map((n) => ({ ...n, startDay: msToWall(Date.parse(n.createdCircle), tz).slice(0, 10) }));
     const cards = placeNudges(dealDay({ circle, day, blocks: open, recent: known }), {
       circleId: circle.id,
