@@ -141,7 +141,7 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
           e.hook &&
           Object.keys(e.delivered ?? {}).length === 0,
       )
-      .sort((a, b) => Date.parse(b.start) - Date.parse(a.start))
+      .sort((a, b) => b.createdAt - a.createdAt)
       .flatMap((e) =>
         Object.entries(e.hook!).map(([characterId, text]) => ({
           eventId: e.id,

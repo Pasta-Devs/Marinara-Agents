@@ -20,7 +20,7 @@ class MeanwhileElement extends HTMLElement {
       <QueryClientProvider client={queryClient}>
         <style>{MEANWHILE_STYLES}</style>
         {this.getAttribute("view") === "widget" ? (
-          <MeanwhileWidget open={() => props()?.onOpenNoodle?.()} />
+          <MeanwhileWidget open={() => props()?.onOpenNoodle?.()} active={props()?.active !== false} />
         ) : (
           <MeanwhileView openChat={(id) => props()?.openChat?.(id)} />
         )}
