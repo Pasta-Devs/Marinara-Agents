@@ -5,7 +5,7 @@
 - **The story knows what you're wearing**, like it does for love interests: the look you put on with Wear at home or picked for a date.
 - **Chapters keep the world you chose.** The planner reads your premise for its genre, era and technology whenever it plans an arc or a chapter, instead of drifting to a period look you never picked. A new story's world keeps them from the start.
 - **Your 5★ look gets a first-wear scene** with the love interest of its couple set, like theirs does. A 5★ look you already own gets it the next time you open it, at no cost.
-- **Story memory no longer fails while condensing** a long story on thinking models such as Claude Opus 5.5.
+- **Story memory no longer fails while condensing** a long story on thinking models such as Claude Opus 5.5, and **Retry the summary** runs at once: the banner goes, and comes back only if it fails again.
 - **Couple set looks line up** at the top, and the premise box shows a new example.
 
 ## 0.8.6 — 2026-11-04
