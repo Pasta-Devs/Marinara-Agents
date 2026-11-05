@@ -338,6 +338,7 @@ export function Board({ ctx, note, onClose }: { ctx: Ctx; note: ReactNode; onClo
         <label>
           {t("ui.bigCheese.board.field.value")}
           <input
+            autoFocus
             type="number"
             inputMode="numeric"
             min={0}
@@ -363,7 +364,7 @@ export function Board({ ctx, note, onClose }: { ctx: Ctx; note: ReactNode; onClo
         <>
           <label>
             {t("ui.bigCheese.board.field.asker")}
-            <select value={draft.asker} onChange={(e) => setDraft({ ...draft, asker: e.target.value })}>
+            <select autoFocus value={draft.asker} onChange={(e) => setDraft({ ...draft, asker: e.target.value })}>
               {people.map((p) => (
                 <option key={p} value={p}>
                   {nameOf(kit, p)}
@@ -397,6 +398,7 @@ export function Board({ ctx, note, onClose }: { ctx: Ctx; note: ReactNode; onClo
         <label>
           {t(row.ask === "hours" ? "ui.bigCheese.board.field.hours" : "ui.bigCheese.board.field.days")}
           <input
+            autoFocus
             type="number"
             inputMode="numeric"
             min={row.ask === "hours" ? 0 : 1}

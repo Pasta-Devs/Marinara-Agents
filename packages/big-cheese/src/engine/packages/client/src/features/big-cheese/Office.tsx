@@ -126,7 +126,7 @@ export function Office({ ctx, canStart }: { ctx: Ctx; canStart: boolean }) {
                 <p>
                   {t("ui.bigCheese.promise.line", {
                     name: nameOf(kit, promise!.to),
-                    what: promise!.what,
+                    what: promise!.what.replace(/[.!?]+$/, ""),
                     day: t(dayKey(promise!.due.day)),
                     week: promise!.due.week,
                   })}

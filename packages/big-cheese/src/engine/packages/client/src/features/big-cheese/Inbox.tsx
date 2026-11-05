@@ -136,6 +136,7 @@ export function CardScreen({ ctx, id }: { ctx: Ctx; id: string }) {
           <label htmlFor="bc-promise">{t("ui.bigCheese.card.promise")}</label>
           <input
             id="bc-promise"
+            autoFocus
             aria-describedby="bc-promise-help"
             aria-invalid={promiseShort}
             maxLength={120}
