@@ -169,6 +169,17 @@ Each slice is one PR into `staging`, version bump by patch, tests listed below.
 5. **Write-outs (behind switches):** character status at x1 first (D3), then LTM intake + retract, then Slurp2 post idea. Each waits 24 h and is undone on veto (status: overwritten by the next accepted event).
 6. **Delight:** phone view, Monday paper, Home widget, nudges, surprise mode.
 
+### Slice 6 decisions (2026-11-05)
+
+One sub-slice each, in this order, each merged `--no-ff` into `background-simulation`:
+- **6a Home widget:** `home-widget` slot (Saucelings/Noodle pattern). Newest hooks across Circles, link to the tab.
+- **6b Nudges:** "This week Lily gets a job offer". A nudge becomes a planned seed for a Circle day.
+- **6c Phone view:** up to 3 texts per day between characters in that day's beats, from the same beat call.
+- **6d Monday paper:** one model call per Circle per week from the week's notable events; counts against the budget.
+- **6e Surprise mode:** per Circle; hides hooks and notable events until a character told them in a chat.
+  Routine, the Now card and big events in review stay visible.
+- Failed fast forward: the clock keeps the full move; the content catches up later (no rollback).
+
 ## Tests (smallest proof per slice)
 
 1. Clock math: speed changes, x0, set time, long absence → summary window. Lease: two runs, one wins; crash → expiry.
