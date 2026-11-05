@@ -632,11 +632,7 @@ test("easing off a Make it right date's scenes before their choices never mends 
   const started = await startDate(t);
   assert.equal(started.date.makeItRight, true);
   for (const i of [0, 1, 2]) assert.equal((await ease(t, started.date.key, i)).status, 200);
-  await t.settle();
-  // An Ease off makes no call of its own. The date is still written ahead from each cut (the maintainer's, 2026-11-05:
-  // every scene's art is ready before the reader gets there), and no scene is written twice.
-  const scenes = t.calls.filter((call) => !isDatePlanner(call.messages)).map((call) => nodeOf(call.messages));
-  assert.equal(new Set(scenes).size, scenes.length, "no scene written twice");
+  assert.equal(t.calls.length, 1, "only the plan was written");
   const before = (await t.state()).wallet.starlight;
   const done = await finish(t, started.date.key);
   assert.equal(done.status, 200, JSON.stringify(done.body));
@@ -737,8 +733,10 @@ test("a rupture mended elsewhere while a Make it right date is open: the rest of
   const written = t.calls.length;
   await playDate(t, key, [1, 1], 1);
   const later = t.calls.slice(written);
-  // The date was written ahead before the repair (the maintainer's, 2026-11-05), so its scenes already exist; any
-  // written from now on are an ordinary date's, and the ending below is an ordinary date's either way.
+  assert.ok(
+    later.some((call) => nodeOf(call.messages) === 2),
+    "the last scene was written after the repair",
+  );
   for (const call of later) assert.equal(call.messages.at(-1)!.content.includes("MAKE IT RIGHT"), false);
   // Its finish mends nothing and says nothing of mending: the ending is an ordinary date's.
   const done = await finish(t, key);
