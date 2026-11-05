@@ -358,3 +358,28 @@ test("a refresh follows the card and keeps the run state", async () => {
     404,
   );
 });
+
+test("a story role opens its thread; a role needs the story mode", async () => {
+  const cards = [
+    card("c1", "Rhea Sand"),
+    card("c2", "Silas Marr", { description: "Silas Marr is 40 years old, a night watchman." }),
+  ];
+  const h = await harness(cards);
+  const made = await play(h, {});
+  const id = made.body.run.id;
+  const mid = (body: object) =>
+    h.call("POST", `/runs/${id}/cast`, {
+      expectedRevision: made.body.run.revision,
+      sheet: sheet({ role: "Inspector" }),
+      ...body,
+    });
+  assert.equal((await mid({ engineId: "c2", mode: "story" })).code, 400, "story needs a role");
+  assert.equal((await mid({ engineId: "c2", mode: "hire", storyRole: "inspector" })).code, 400);
+  const r = await mid({ engineId: "c2", mode: "story", storyRole: "inspector" });
+  assert.equal(r.code, 200, JSON.stringify(r.body));
+  const game = r.body.run.game;
+  const key = Object.keys(game.people).find((k) => game.people[k].name === "Silas Marr")!;
+  const t = Object.values<any>(game.threads).find((x) => x.people.includes(key));
+  assert.equal(t.kind, "crisis");
+  assert.ok(t.title.includes("Silas Marr"));
+});

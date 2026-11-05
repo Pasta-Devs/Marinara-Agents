@@ -104,6 +104,19 @@ test("rooms: a worn room costs its meter 1 point a week, never more", () => {
   );
 });
 
+test("tasks: the ambient prompt carries a person's reason seeds", async () => {
+  const seen: string[] = [];
+  const spy = async (...a: unknown[]) => {
+    seen.push(JSON.stringify(a));
+    return JSON.stringify({ lines: [{ person: "mira", line: "Hello." }] });
+  };
+  const people = [
+    { person: "mira", room: "Dispatch", mood: "fine", with: [], reasons: ["Mira heard you stood up for the porters"] },
+  ];
+  await runTask("ambient.batch", { kit: HAFENKAI_PLACE, rng: 3, people }, { model: spy as never });
+  assert.ok(seen.join().includes("Mira heard you stood up for the porters"));
+});
+
 test("tasks: ambient and grapevine fall back to Lite and reject a wrong person", async () => {
   const kit = HAFENKAI_PLACE;
   const people = [

@@ -405,7 +405,13 @@ export interface AmbientBatchInput {
   kit: PlaceKit;
   rng: number;
   // One entry per person overheard: where they are, their mood and who they are close to or at odds with.
-  people: { person: string; room: string; mood: string; with: { person: string; kind: string }[] }[];
+  people: {
+    person: string;
+    room: string;
+    mood: string;
+    with: { person: string; kind: string }[];
+    reasons?: string[];
+  }[];
 }
 export interface AmbientBatchOutput {
   lines: { person: string; line: string }[];
@@ -419,7 +425,7 @@ const ambientBatch: Task<AmbientBatchInput, AmbientBatchOutput> = {
       `Write one short line for each person: something they say out loud or a small thing they do, as the boss overhears it in the room. Echo "person". Use the mood and the relations as a hint, and never state them. Shape: {"lines":[{"person":"","line":""}]}\nPeople:\n${i.people
         .map(
           (p) =>
-            `- ${p.person}, in ${p.room}, mood ${p.mood}${p.with.map((w) => `, ${w.kind} of ${w.person}`).join("")}`,
+            `- ${p.person}, in ${p.room}, mood ${p.mood}${p.with.map((w) => `, ${w.kind} of ${w.person}`).join("")}${(p.reasons ?? []).map((r) => `. True now, react in character: ${r}`).join("")}`,
         )
         .join("\n")}\nVoices:\n${voiceSheet(
         i.kit,

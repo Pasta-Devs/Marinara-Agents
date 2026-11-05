@@ -41,11 +41,17 @@ export function createPlace(store: RunStore, getModel: () => Promise<ModelCall |
 
   const empty = (): PlaceText => ({ day: -1, evening: -1, morning: [], known: [], grapevine: {} });
 
+  /** Reason seeds are used once: the batch that read them drops them (cheese-board.md section 6). */
+  const spend = (game: Game, people: { person: string }[]) => {
+    game.reasons = game.reasons?.filter((r) => !people.some((p) => p.person === r.person));
+  };
+
   /** One person as the ambient batch reads them: only relations the boss knows go in. */
   const ambient = (game: Game, kit: PlaceKit, place: PlaceText, id: string, room: string) => ({
     person: id,
     room: nameOf(kit, room),
     mood: game.people[id].mood,
+    reasons: (game.reasons ?? []).filter((r) => r.person === id).map((r) => r.text),
     with: game.relations
       .filter((r) => (r.a === id || r.b === id) && isKnown(r, place.known))
       .map((r) => ({ person: r.a === id ? r.b : r.a, kind: r.kind })),
@@ -95,6 +101,7 @@ export function createPlace(store: RunStore, getModel: () => Promise<ModelCall |
           ? (await runTask("ambient.batch", { kit, rng: h.rng, people }, { model })).output.lines
           : [];
         place.morning = lines.map((l, n) => ({ room: rooms[n].id, person: l.person, text: l.line }));
+        spend(game, people);
         place.day = today;
         roll(h);
       }
@@ -140,6 +147,7 @@ export function createPlace(store: RunStore, getModel: () => Promise<ModelCall |
       roll(h);
       game.rng = h.rng;
       game.clock = spendHours(game.clock, 1);
+      spend(game, output.lines);
       place.visit = { room, lines: output.lines.map((l) => ({ person: l.person, text: l.line })) };
       return save(run, game, place);
     },

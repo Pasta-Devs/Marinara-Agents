@@ -168,6 +168,17 @@ export function Office({ ctx, canStart }: { ctx: Ctx; canStart: boolean }) {
         </section>
       )}
 
+      {!threads.some((thread) => thread.kind === "project") && (
+        <button
+          type="button"
+          className="bc-btn"
+          disabled={busy || canStart || clock.hoursLeft === 0}
+          onClick={() => void act("projects/start", {})}
+        >
+          {t("ui.bigCheese.project.start")}
+        </button>
+      )}
+
       {coming.length > 0 && (
         <section className="bc-section" aria-labelledby="bc-coming">
           <h2 id="bc-coming" className="bc-subhead">

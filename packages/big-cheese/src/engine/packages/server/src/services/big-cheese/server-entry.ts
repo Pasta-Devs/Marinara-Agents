@@ -125,6 +125,7 @@ export async function activate({ api }: ActivationContext) {
       action("hearing/evidence", (r) => game.evidence(runId(r), r.body));
       action("hearing/talk", (r) => game.talk(runId(r), r.body));
       action("promises/:threadId/keep", (r) => game.keepPromise(runId(r), param(r, "threadId"), r.body));
+      action("projects/start", (r) => game.projectStart(runId(r), r.body));
       action("hearing/start", (r) => game.hearingStart(runId(r), r.body));
       // T3: big scenes
       action("big-scene/start", (r) => game.bigStart(runId(r), r.body));

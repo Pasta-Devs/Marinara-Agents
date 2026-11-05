@@ -18,6 +18,7 @@ import {
   readLetter,
   keepPromise,
   spendHours,
+  startProject,
   roll,
   seedDay,
   talkToMember,
@@ -35,6 +36,8 @@ type Rng = { rng: number };
 
 const BIG_HOURS = 2;
 const bad = (message: string) => new BigCheeseError(400, message, "bad-request");
+/** A fresh day before Start the day: hours spent now would block the day from starting. */
+const notStarted = (g: Game) => g.clock.hoursLeft === HOURS && !g.inbox.some((c) => c.age === 0);
 const wrongPhase = (message: string) => new BigCheeseError(409, message, "wrong-phase");
 
 // Messages thrown by the rules core, mapped to the contract's error codes.
@@ -66,6 +69,7 @@ const AnswerBody = Base.extend({
   text: text.optional(),
   promise: z.object({ what: z.string().trim().min(3).max(120) }).optional(),
 }).refine((b) => (b.stance === undefined) !== (b.text === undefined), "Send one of stance or text.");
+const ProjectBody = Base.extend({ title: z.string().trim().min(1).max(60).optional() });
 const PersonBody = Base.extend({ person: z.string().min(1).max(40) });
 const EvidenceBody = Base.extend({ threadId: z.string().min(1).max(40) });
 
@@ -357,10 +361,22 @@ export function createGame(store: RunStore, getModel: () => Promise<ModelCall | 
     // Keeping a promise takes one hour of the boss's day; the Friday check then closes it as won.
     keepPromise: (id: unknown, threadId: string, body: unknown) =>
       act(id, body, Base, "idle", async (run) => {
+        if (notStarted(run.game)) throw wrongPhase("The day has not started.");
         const p = run.game.threads[threadId]?.promise;
         if (!p || p.kept) throw new BigCheeseError(404, "No open promise.", "not-found");
         const game = keepPromise(run.game, threadId);
         game.clock = spendHours(game.clock, 1);
+        return { game };
+      }),
+    // "Start a project" costs one hour (design.md 10.1); one project at a time (modules.md Project block).
+    projectStart: (id: unknown, body: unknown) =>
+      act(id, body, ProjectBody, "idle", async (run, b) => {
+        if (notStarted(run.game)) throw wrongPhase("The day has not started.");
+        const game = structuredClone(run.game);
+        if (Object.values(game.threads).some((t) => t.kind === "project"))
+          throw new BigCheeseError(409, "A project is already running.", "wrong-phase");
+        game.clock = spendHours(game.clock, 1);
+        startProject(game, b.title);
         return { game };
       }),
     talk: (id: unknown, body: unknown) =>
@@ -385,8 +401,7 @@ export function createGame(store: RunStore, getModel: () => Promise<ModelCall | 
       act(id, body, Base, "idle", async (run) => {
         const due = dueBig(run.game);
         if (!due) throw wrongPhase("No big scene is booked for today.");
-        if (run.game.clock.hoursLeft === HOURS && !run.game.inbox.some((c) => c.age === 0))
-          throw wrongPhase("The day has not started.");
+        if (notStarted(run.game)) throw wrongPhase("The day has not started.");
         const clock = spendHours(run.game.clock, BIG_HOURS);
         const h = { rng: run.game.rng };
         const sceneId = `big-${due.beat.id}`; // a stale finished scene from a rewind is replaced

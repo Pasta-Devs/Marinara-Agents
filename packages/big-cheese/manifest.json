@@ -44,13 +44,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "697e161b8754ece0559bc9fb10d2bbcb88cd98e862177f749546d9ac2616dbba",
-      "bytes": 123095
+      "sha256": "5ff77a0b56671cf5a25522ec37b063abba02d3ca8e838fe4f35b5cc724aa1e8c",
+      "bytes": 124558
     },
     {
       "path": "client.js",
-      "sha256": "e844e92743ee536db2ac11667091e9edd8f9c916a834bb13944b2f51a7df0ce9",
-      "bytes": 126117
+      "sha256": "cf9e94bad305f32e22fc645a0c4b08a5ab9ab93e753cab3dd6b1d915a4e355ae",
+      "bytes": 126757
     },
     {
       "path": "big-cheese-icon.png",

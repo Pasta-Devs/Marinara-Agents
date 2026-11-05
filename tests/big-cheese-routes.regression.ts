@@ -238,6 +238,21 @@ test("a typed answer with a promise opens a promise thread", async () => {
   assert.equal((await h.act(`promises/${promise.id}/keep`, {})).code, 404);
 });
 
+test("start a project: one hour, one at a time, a project thread opens", async () => {
+  const h = await harness();
+  await h.start();
+  await finishArrival(h);
+  assert.equal((await h.act("projects/start", {})).code, 409, "not before Start the day");
+  await h.act("day/start");
+  const hours = h.doc().run.game.clock.hoursLeft;
+  const r = await h.act("projects/start", { title: "A new wing" });
+  assert.equal(r.code, 200, JSON.stringify(r.body));
+  const t = Object.values<any>(r.body.run.game.threads).find((x) => x.kind === "project");
+  assert.equal(t.title, "A new wing");
+  assert.equal(r.body.run.game.clock.hoursLeft, hours - 1);
+  assert.equal((await h.act("projects/start", {})).code, 409);
+});
+
 test("the hearing: prep actions, a scene of 3 parts, and the last choice holds the hearing", async () => {
   const h = await harness();
   await h.start();

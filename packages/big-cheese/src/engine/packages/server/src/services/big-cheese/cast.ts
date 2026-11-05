@@ -8,6 +8,7 @@ import { z } from "zod";
 import { engineModel, runTask } from "./ai/tasks.js";
 import type { PlaceKit } from "./core/kits/types.js";
 import { dayIndex } from "./core/index.js";
+import { STORY_ROLES, openStoryRole } from "./core/storyteller.js";
 import type { Clock, Person } from "./core/types.js";
 import { TRAITS } from "./core/traits.js";
 import { BigCheeseError, PLACES, type Run, type RunStore } from "./store.js";
@@ -323,7 +324,8 @@ export const systemsOf = (kitId: string, cast?: Cast) => withCast(placeKit(kitId
 export const MidBody = z.object({
   expectedRevision: z.number().int().min(0),
   engineId: z.string().min(1).max(80),
-  mode: z.enum(["swap", "hire", "visitor"]),
+  mode: z.enum(["swap", "hire", "visitor", "story"]),
+  storyRole: z.enum(STORY_ROLES).optional(),
   replaces: z.string().max(40).optional(),
   days: z.number().int().min(1).max(10).optional(),
   sheet: Sheet,
@@ -347,7 +349,8 @@ export async function midCast(
 ): Promise<Run> {
   const b = MidBody.safeParse(body ?? {});
   if (!b.success) throw bad("Invalid request.");
-  const { engineId, mode, replaces, days = 3, sheet, expectedRevision } = b.data;
+  const { engineId, mode, replaces, days = 3, sheet, expectedRevision, storyRole } = b.data;
+  if ((mode === "story") !== !!storyRole) throw bad("Pick a story role for a story card.");
   const run = await store.get(id);
   const kit = placeKit(run.kitId);
   const d = await readOne(runtime, "character", engineId);
@@ -408,7 +411,10 @@ export async function midCast(
       ).routine,
       ...(mode === "visitor" && { until: dayIndex(r.game.clock) + days }),
     };
-    return { ...r, cast, game: { ...r.game, people: { ...r.game.people, [key]: fresh } } };
+    const game = structuredClone(r.game);
+    game.people[key] = fresh;
+    if (storyRole) openStoryRole(game, key, storyRole);
+    return { ...r, cast, game };
   });
 }
 

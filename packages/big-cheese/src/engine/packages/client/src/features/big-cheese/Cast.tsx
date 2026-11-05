@@ -323,6 +323,7 @@ export function Hire({ ctx, onClose }: { ctx: Ctx; onClose: () => void }) {
   const [pick, setPick] = useState<{ item: CastItem; sheet: HireSheet } | null>(null);
   const [visitor, setVisitor] = useState(false);
   const [days, setDays] = useState(3);
+  const [story, setStory] = useState("");
   const heading = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -352,7 +353,8 @@ export function Hire({ ctx, onClose }: { ctx: Ctx; onClose: () => void }) {
     if (!pick || !sheet) return;
     const body = {
       engineId: pick.item.id,
-      mode: visitor ? "visitor" : "hire",
+      mode: story ? "story" : visitor ? "visitor" : "hire",
+      ...(story && { storyRole: story }),
       ...(visitor && { days }),
       sheet: { ...sheet, role: sheet.role.trim(), lines: lineList(sheet.lines) },
     };
@@ -441,12 +443,42 @@ export function Hire({ ctx, onClose }: { ctx: Ctx; onClose: () => void }) {
             />
           </div>
           <div className="bc-row-meta" role="group" aria-label={t("ui.bigCheese.cast.hireStay")}>
-            <button type="button" className="bc-btn" aria-pressed={!visitor} onClick={() => setVisitor(false)}>
+            <button
+              type="button"
+              className="bc-btn"
+              aria-pressed={!visitor && !story}
+              onClick={() => {
+                setVisitor(false);
+                setStory("");
+              }}
+            >
               {t("ui.bigCheese.cast.hireStays")}
             </button>
-            <button type="button" className="bc-btn" aria-pressed={visitor} onClick={() => setVisitor(true)}>
+            <button
+              type="button"
+              className="bc-btn"
+              aria-pressed={visitor && !story}
+              onClick={() => {
+                setVisitor(true);
+                setStory("");
+              }}
+            >
               {t("ui.bigCheese.cast.hireVisits")}
             </button>
+            {["old_flame", "rival_boss", "inspector"].map((role) => (
+              <button
+                key={role}
+                type="button"
+                className="bc-btn"
+                aria-pressed={story === role}
+                onClick={() => {
+                  setVisitor(false);
+                  setStory(role);
+                }}
+              >
+                {t(`ui.bigCheese.cast.role.${role}`)}
+              </button>
+            ))}
           </div>
           {visitor && (
             <div className="bc-form">

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as core from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/core/index.js";
 import { openStory } from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/core/threads.js";
+import { openStoryRole } from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/core/storyteller.js";
 import type {
   Run,
   Thread,
@@ -125,4 +126,12 @@ test("a year has a surprise every week", () => {
     core.draft.endDay(s);
   }
   for (let w = 1; w < s.clock.week; w++) assert.ok(weeks.has(w), `week ${w} had no surprise`);
+});
+
+test("every story role opens a thread with beats, so it can end", () => {
+  for (const role of ["old_flame", "rival_boss", "inspector"] as const) {
+    const s = fresh();
+    const t = openStoryRole(s, who(s)[0]!, role);
+    assert.ok(t.beats.length > 0, `${role} has beats`);
+  }
 });

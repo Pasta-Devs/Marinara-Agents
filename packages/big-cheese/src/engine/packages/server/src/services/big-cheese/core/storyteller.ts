@@ -164,6 +164,24 @@ function fill(s: Run) {
   });
 }
 
+/** A card cast into a story role (cast.md section 9): the role opens the thread it plays in. */
+export const STORY_ROLES = ["old_flame", "rival_boss", "inspector"] as const;
+const ROLE_STORY = {
+  old_flame: { kind: "personal_arc", need: "people", line: "{n} comes back into your life" },
+  rival_boss: { kind: "personal_arc", need: "standing", line: "{n} runs the rival place" },
+  inspector: { kind: "crisis", need: "standing", line: "{n} comes to inspect the place" },
+} as const;
+export function openStoryRole(s: Run, id: string, role: (typeof STORY_ROLES)[number]) {
+  const r = ROLE_STORY[role];
+  return openStory(s, r.kind, {
+    title: r.line.replace("{n}", s.people[id]!.name ?? id),
+    need: r.need,
+    people: [id],
+    severity: 2,
+    origin: "action",
+  });
+}
+
 /** The morning pass (design.md 3.3): tension, clocks, weekly crisis, surprise, thread target. Returns today's request-card budget. */
 export function morning(s: Run): number {
   s.story.wave = target(s);
