@@ -15,6 +15,8 @@ Each finished day gets one model call that writes the events, a diary line per c
 
 Fast forward moves a Circle clock by 1 to 7 days or up to 168 hours and writes each day. It shows the model calls first and asks before it passes the daily limit. Big events wait in "Waiting for you" until you accept or veto them. Plans that characters state in a linked chat become promises. Meanwhile checks them again when a chat message is edited or deleted.
 
+A Circle can also write the status of its characters (switch "Character status", off by default). Only at real time (x1), it sets what each person does now as their Engine status in the first linked Conversation chat that has them. A notable event that is accepted and visible to the whole Circle gives the text. Otherwise the schedule block does. Only one Circle writes a character's status: the one that turned the switch on last. The Engine keeps a status that you set by hand. Proposed, vetoed and stale events are never written. This needs the chat write permission, because the Engine only lets a package change a status with it. Meanwhile uses it for nothing else.
+
 ## Install
 
 Meanwhile is offered to Engine `staging` testers. Install it, restart Marinara Engine when prompted, then open Home -> Meanwhile.

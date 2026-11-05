@@ -78,7 +78,16 @@ function parseDay(list: unknown): DayBlock[] {
     const time = at(b, "time");
     const activity = at(b, "activity");
     const span = typeof time === "string" && typeof activity === "string" ? parseBlock(time) : null;
-    return span ? [{ ...span, activity: (activity as string).slice(0, 80), place: "" }] : [];
+    return span
+      ? [
+          {
+            ...span,
+            activity: (activity as string).slice(0, 80),
+            place: "",
+            status: at(b, "status") as string | undefined,
+          },
+        ]
+      : [];
   });
 }
 
@@ -229,7 +238,7 @@ export function currentBlock(
   nowMs: number,
   tz: string,
   byActivity: Record<string, string> = {},
-): { activity: string; place: string; until: string } | null {
+): { activity: string; place: string; until: string; status?: string; left: number } | null {
   const wall = msToWall(nowMs, tz);
   const day = wall.slice(0, 10);
   const minute = +wall.slice(11, 13) * 60 + +wall.slice(14, 16);
@@ -240,7 +249,13 @@ export function currentBlock(
   ] as const) {
     const b = blocksFor(schedule, d).find((x) => x.start - shift <= minute && minute < x.end - shift);
     if (b)
-      return { activity: b.activity, place: byActivity[b.activity] ?? placeOf(b.activity), until: hhmm(b.end - shift) };
+      return {
+        activity: b.activity,
+        place: byActivity[b.activity] ?? placeOf(b.activity),
+        until: hhmm(b.end - shift),
+        status: b.status,
+        left: b.end - shift - minute,
+      };
   }
   return null;
 }

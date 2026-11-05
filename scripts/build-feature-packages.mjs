@@ -720,7 +720,7 @@ const features = [
     category: "misc",
     kind: ["agent"],
     modes: ["conversation", "roleplay"],
-    permissions: ["routes", "storage", "ui", "chat-read", "prompt-context"],
+    permissions: ["routes", "storage", "ui", "chat-read", "chat-write", "prompt-context"],
     serverImport: "packages/server/src/services/meanwhile/server-entry.ts",
     serverEntry: true,
     clientImport: "packages/client/src/features/meanwhile/client-entry.tsx",

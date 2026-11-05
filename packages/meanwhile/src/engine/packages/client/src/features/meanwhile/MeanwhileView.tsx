@@ -43,6 +43,11 @@ const COPY = {
   person: "Person",
   everyone: "Everyone",
   noEvents: "Nothing yet. Press Run now to fill the days.",
+  statusSwitch: "Character status",
+  statusExplain:
+    "Writes what each person does now to their first linked Conversation chat, as their status. It only follows real time (x1). At other speeds, or paused, nothing is written.",
+  statusElsewhere: (name: string, circle: string) => `${name}'s status is set by ${circle}.`,
+  statusSent: (chat: string, at: string) => `Status sent to ${chat} at ${at}`,
   needModel: "Choose a model to start",
   edit: "Edit",
   runNow: "Run now",
@@ -243,6 +248,7 @@ function CircleForm({ circle, onDone }: { circle: Circle | null; onDone: () => v
     sharedWorld: circle?.sharedWorld ?? false,
     pace: circle?.pace ?? "cozy",
     backgroundTimer: circle?.backgroundTimer ?? false,
+    writeStatus: circle?.writeStatus ?? false,
     connectionId: circle?.connectionId ?? "",
     timezone: circle?.clock.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
   });
@@ -349,6 +355,16 @@ function CircleForm({ circle, onDone }: { circle: Circle | null; onDone: () => v
         />
         <span>Also run every 6 hours in the background</span>
       </label>
+      <label className="mw-check">
+        <input type="checkbox" checked={draft.writeStatus} onChange={(e) => set({ writeStatus: e.target.checked })} />
+        <span>{COPY.statusSwitch}</span>
+      </label>
+      <div className="mw-muted">{COPY.statusExplain}</div>
+      {circle?.statusElsewhere.map((s) => (
+        <div key={s.characterId} className="mw-warn">
+          {COPY.statusElsewhere(characters.data?.find((c) => c.id === s.characterId)?.name ?? "Someone", s.circle)}
+        </div>
+      ))}
       <label className="mw-field">
         <span className="mw-label">Model</span>
         <select
@@ -844,6 +860,7 @@ function TimelinePanel({ circle }: { circle: Circle }) {
     enabled: open,
     refetchInterval: 15_000,
   });
+  const chats = useQuery({ queryKey: ["meanwhile", "chats"], queryFn: listChats });
   const name = (id: string) => characters.data?.find((c) => c.id === id)?.name ?? "Someone";
   const names = (ids: string[]) => ids.map(name).join(" and ");
   const data = timeline.data;
@@ -865,10 +882,14 @@ function TimelinePanel({ circle }: { circle: Circle }) {
             <span className="mw-label">{COPY.now}</span>
             {circle.castIds.map((id) => {
               const now = data.now[id];
+              const sent = data.statusSent[id];
               return (
                 <div key={id} className="mw-muted">
                   {name(id)}:{" "}
                   {now ? [now.activity, now.place, `until ${now.until}`].filter(Boolean).join(" · ") : COPY.nothingYet}
+                  {sent
+                    ? ` · ${COPY.statusSent(chats.data?.find((c) => c.id === sent.chatId)?.name ?? "chat", new Date(sent.at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }))}`
+                    : null}
                 </div>
               );
             })}

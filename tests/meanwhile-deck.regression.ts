@@ -142,11 +142,15 @@ assert.deepEqual(currentBlock(night, T0 + 9.5 * 3600_000, "UTC"), {
   activity: "coffee",
   place: "cafe",
   until: "10:00",
+  status: undefined,
+  left: 30,
 });
 assert.deepEqual(currentBlock(night, T0 + 3 * 3600_000, "UTC"), {
   activity: "sleeping",
   place: "home",
   until: "06:00",
+  status: undefined,
+  left: 180,
 });
 assert.equal(currentBlock(night, T0 + 11 * 3600_000, "UTC"), null);
 
