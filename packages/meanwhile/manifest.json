@@ -26,7 +26,8 @@
   },
   "contributions": {
     "slots": [
-      "home-browser-tab"
+      "home-browser-tab",
+      "home-widget"
     ],
     "homeBrowserTab": {
       "label": "Meanwhile",
@@ -34,7 +35,19 @@
       "iconPaths": [
         "meanwhile-icon.png"
       ]
-    }
+    },
+    "homeWidgets": [
+      {
+        "id": "meanwhile-hooks",
+        "label": "Meanwhile",
+        "description": "What your characters want to tell you, from the Circles where life went on",
+        "size": "compact",
+        "icon": "sparkles",
+        "accent": "violet",
+        "surface": "soft",
+        "header": "compact"
+      }
+    ]
   },
   "files": [
     {
@@ -44,13 +57,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "6215a96e61b95301ae39d07d704cd07503c626668189e3643976d61224727d42",
-      "bytes": 50925
+      "sha256": "ba4f94d30dbc4a796ef14eed6fdd203c5cb7810eb87d8b2a862726dd168c0b46",
+      "bytes": 51527
     },
     {
       "path": "client.js",
-      "sha256": "5615a58e64aef646638c5d3d2976de11c411b0d58b42dab0519d7e706fb356bc",
-      "bytes": 28382
+      "sha256": "3b26b7d678c7874f1d4b46167f6daf98afdc58de2ff35b3e75f2d9efef864f65",
+      "bytes": 29868
     },
     {
       "path": "meanwhile-icon.png",

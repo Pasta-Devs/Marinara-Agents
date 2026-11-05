@@ -126,6 +126,40 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
     return { circles: doc.circles.map((c) => view(doc, c, now)), speedMax: SPEED_MAX };
   });
 
+  // Home widget: the newest unheard hooks over all Circles. The widget sits outside any chat, so only
+  // accepted, Circle-visible, non-spicy events count. "Heard" matches the tab: a chat took it into a prompt.
+  app.get("/widget", async () => {
+    const doc = await readMeanwhile();
+    const circles = new Map(doc.circles.map((c) => [c.id, c]));
+    const all = doc.events
+      .filter(
+        (e) =>
+          circles.has(e.circleId) &&
+          e.status === "accepted" &&
+          e.visibility === "circle" &&
+          e.kind !== "spicy" &&
+          e.hook &&
+          Object.keys(e.delivered ?? {}).length === 0,
+      )
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .flatMap((e) =>
+        Object.entries(e.hook!).map(([characterId, text]) => ({
+          eventId: e.id,
+          circleId: e.circleId,
+          circleName: circles.get(e.circleId)!.name,
+          characterId,
+          text,
+        })),
+      );
+    const withHooks = new Set(all.map((h) => h.circleId));
+    return {
+      hooks: all.slice(0, 3),
+      quiet: doc.circles
+        .filter((c) => !withHooks.has(c.id))
+        .map((c) => ({ id: c.id, name: c.name, lastRunCircle: c.lastRunCircle, timezone: c.clock.timezone })),
+    };
+  });
+
   app.post("/circles", async (request, reply) => {
     const src = body(request);
     const error = await inputError(src);

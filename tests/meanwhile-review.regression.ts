@@ -500,6 +500,36 @@ async function promiseCases() {
   }));
   await runCircleNow("q", REAL0);
   assert.equal((await readMeanwhile()).promises.find((p) => p.id === "p")!.status, "dropped");
+
+  // Home widget: only accepted, Circle-visible, non-spicy, unheard hooks; newest first, at most 3.
+  const at = (h: number) => iso(T0 + h * HOUR);
+  const hooked = (id: string, h: number, over: Partial<LifeEvent> = {}) =>
+    event({ id, start: at(h), end: at(h + 1), createdAt: T0 + h * HOUR, hook: { x: id }, ...over });
+  await reset(circle({ name: "Berlin friends" }), [
+    hooked("w1", 1, { createdAt: T0 + 10 * HOUR }),
+    hooked("w2", 2),
+    hooked("w3", 3),
+    hooked("w4", 4),
+    hooked("spicy", 9, { kind: "spicy" }),
+    hooked("proposed", 9, { status: "proposed" }),
+    hooked("vetoed", 9, { status: "vetoed" }),
+    hooked("stale", 9, { status: "stale" }),
+    hooked("chat", 9, { visibility: "chat:c1" }),
+    hooked("told", 9, { delivered: { c1: T0 } }),
+  ]);
+  const shown = (await call("GET", "/widget")).body as any;
+  assert.deepEqual(
+    shown.hooks.map((h: any) => h.text),
+    ["w1", "w4", "w3"],
+  );
+  assert.equal(shown.hooks[0].circleName, "Berlin friends");
+  assert.equal(shown.quiet.length, 0);
+
+  // A Circle with nothing to tell is listed as caught up.
+  await reset(circle({ name: "Berlin friends" }), [hooked("spicy", 9, { kind: "spicy" })]);
+  const quiet = (await call("GET", "/widget")).body as any;
+  assert.equal(quiet.hooks.length, 0);
+  assert.equal(quiet.quiet[0].name, "Berlin friends");
 }
 
 main().catch((error) => {

@@ -732,12 +732,24 @@ const features = [
     libraryHidden: true,
     assetPaths: ["meanwhile-icon.png"],
     contributions: {
-      slots: ["home-browser-tab"],
+      slots: ["home-browser-tab", "home-widget"],
       homeBrowserTab: {
         label: "Meanwhile",
         ariaLabel: "Open Meanwhile",
         iconPaths: ["meanwhile-icon.png"],
       },
+      homeWidgets: [
+        {
+          id: "meanwhile-hooks",
+          label: "Meanwhile",
+          description: "What your characters want to tell you, from the Circles where life went on",
+          size: "compact",
+          icon: "sparkles",
+          accent: "violet",
+          surface: "soft",
+          header: "compact",
+        },
+      ],
     },
   },
   {

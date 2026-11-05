@@ -190,6 +190,12 @@ export const vetoEvent = (id: string, eventId: string) =>
 export const editEvent = (id: string, eventId: string, text: string) =>
   api<{ ok: true }>(`/circles/${id}/events/${eventId}`, "PATCH", { text });
 
+export interface WidgetData {
+  hooks: { eventId: string; circleId: string; circleName: string; characterId: string; text: string }[];
+  quiet: { id: string; name: string; lastRunCircle: string; timezone: string }[];
+}
+export const getWidget = () => api<WidgetData>("/widget");
+
 export interface PromiseItem {
   id: string;
   characterId: string;
