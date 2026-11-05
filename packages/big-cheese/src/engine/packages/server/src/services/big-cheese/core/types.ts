@@ -113,7 +113,7 @@ export interface Run {
   deputy: string;
   deputyAmbition: number;
   threads: Record<string, Thread>; // open threads
-  closed: { id: string; state: Thread["state"] }[];
+  closed: { id: string; state: Thread["state"]; title?: string; need?: Meter }[];
   inbox: Card[];
   lastWarning: boolean; // whole run
   hearing: Hearing | null;

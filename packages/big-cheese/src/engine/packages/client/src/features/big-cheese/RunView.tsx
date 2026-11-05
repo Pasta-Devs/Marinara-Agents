@@ -81,6 +81,11 @@ export function RunView({ id, onExit }: { id: string; onExit: () => void }) {
   useEffect(() => {
     root.current?.querySelector<HTMLElement>("[data-focus]")?.focus();
   }, [screenKey]);
+  // An action can remove the control that had focus (Start the day, a scene choice). Focus then
+  // falls to <body>, so the screen's heading takes it back.
+  useEffect(() => {
+    if (document.activeElement === document.body) root.current?.querySelector<HTMLElement>("[data-focus]")?.focus();
+  }, [data]);
 
   const noteBlock = note && (
     <div role="alert" className="bc-note">
@@ -168,11 +173,21 @@ export function RunView({ id, onExit }: { id: string; onExit: () => void }) {
 
   const { clock } = game;
   return (
-    <div className="bc-root" ref={root}>
+    <div
+      className="bc-root"
+      ref={root}
+      // The person file reads like a sheet, so Esc closes it (the Board sheet handles its own Esc).
+      onKeyDown={(event) => event.key === "Escape" && base === "person" && !board && setView("people")}
+    >
       <header className="bc-top">
         {tab ? (
-          <button type="button" className="bc-btn bc-btn-quiet" onClick={onExit}>
-            {t("ui.bigCheese.office.back")}
+          <button
+            type="button"
+            className="bc-btn bc-btn-quiet"
+            aria-label={t("ui.bigCheese.office.back")}
+            onClick={onExit}
+          >
+            {t("ui.bigCheese.run.back")}
           </button>
         ) : (
           <button

@@ -85,7 +85,9 @@ export function CardScreen({ ctx, id }: { ctx: Ctx; id: string }) {
   const name = asker?.name ?? card.asker;
   const [own, setOwn] = useState("");
   const [promise, setPromise] = useState("");
+  const [promiseOpen, setPromiseOpen] = useState(false);
   const noHours = run.game.clock.hoursLeft === 0;
+  const reply = (stance: string) => text?.answers.find((a) => a.stance === stance)?.text;
   const position = run.game.inbox.indexOf(card) + 1;
   // The server takes a promise of 3-120 characters.
   const promiseShort = promise.trim().length > 0 && promise.trim().length < 3;
@@ -126,25 +128,30 @@ export function CardScreen({ ctx, id }: { ctx: Ctx; id: string }) {
         <NeedChip ctx={ctx} card={card} />
         <Waited card={card} />
       </p>
-      {text?.line && <blockquote className="bc-quote">{text.line}</blockquote>}
-
-      <div className="bc-form">
-        <label htmlFor="bc-promise">{t("ui.bigCheese.card.promise")}</label>
-        <input
-          id="bc-promise"
-          aria-describedby="bc-promise-help"
-          aria-invalid={promiseShort}
-          maxLength={120}
-          value={promise}
-          onChange={(event) => setPromise(event.target.value)}
-          placeholder={t("ui.bigCheese.card.promiseExample")}
-        />
-        <p id="bc-promise-help" className="bc-muted">
-          {promiseShort ? t("ui.bigCheese.card.promiseShort") : t("ui.bigCheese.card.promiseHelp", { name })}
-        </p>
-      </div>
+      {text?.line && <blockquote className="bc-quote bc-said">{text.line}</blockquote>}
 
       {noHours && <p className="bc-note">{t("ui.bigCheese.card.noHours")}</p>}
+      {promiseOpen ? (
+        <div className="bc-form">
+          <label htmlFor="bc-promise">{t("ui.bigCheese.card.promise")}</label>
+          <input
+            id="bc-promise"
+            aria-describedby="bc-promise-help"
+            aria-invalid={promiseShort}
+            maxLength={120}
+            value={promise}
+            onChange={(event) => setPromise(event.target.value)}
+            placeholder={t("ui.bigCheese.card.promiseExample")}
+          />
+          <p id="bc-promise-help" className="bc-muted">
+            {promiseShort ? t("ui.bigCheese.card.promiseShort") : t("ui.bigCheese.card.promiseHelp", { name })}
+          </p>
+        </div>
+      ) : (
+        <button type="button" className="bc-btn bc-btn-quiet" onClick={() => setPromiseOpen(true)}>
+          {t("ui.bigCheese.card.addPromise")}
+        </button>
+      )}
       <ul className="bc-list" aria-label={t("ui.bigCheese.card.answers")}>
         {card.answers.map((entry, index) => (
           <li key={entry.stance}>
@@ -155,7 +162,11 @@ export function CardScreen({ ctx, id }: { ctx: Ctx; id: string }) {
               onClick={() => void answer({ stance: entry.stance })}
             >
               <span className="bc-pill">{t(stanceKey(entry.stance))}</span>
-              <span>{text?.answers.find((a) => a.stance === entry.stance)?.text ?? t(stanceKey(entry.stance))}</span>
+              {reply(entry.stance) ? (
+                <span className="bc-said">{reply(entry.stance)}</span>
+              ) : (
+                <span>{t(stanceKey(entry.stance))}</span>
+              )}
               <kbd className="bc-key" aria-hidden="true">
                 {index + 1}
               </kbd>

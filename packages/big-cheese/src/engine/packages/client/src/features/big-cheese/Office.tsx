@@ -3,7 +3,7 @@
 // ──────────────────────────────────────────────
 import { useTranslation } from "react-i18next";
 import type { Meter } from "./api";
-import { dayKey, Face, nameOf, type Ctx } from "./parts";
+import { dayKey, Face, nameOf, threadTitle, type Ctx } from "./parts";
 
 const METERS: Meter[] = ["money", "output", "people", "standing"];
 
@@ -18,7 +18,7 @@ export function Office({ ctx, canStart }: { ctx: Ctx; canStart: boolean }) {
   const friday = clock.day === 4;
   const threads = Object.values(run.game.threads);
   const coming = kit.letters.filter((letter) => !arrived(letter, clock));
-  const promises = threads.filter((thread) => thread.kind === "promise" && thread.promise && !thread.promise.kept);
+  const promises = threads.filter((thread) => thread.kind === "promise" && thread.promise);
 
   return (
     <>
@@ -86,7 +86,7 @@ export function Office({ ctx, canStart }: { ctx: Ctx; canStart: boolean }) {
               <>
                 {lead && <Face kit={kit} id={lead} size="s" />}
                 <span className="bc-row-text">
-                  <span className="bc-row-title">{thread.title}</span>
+                  <span className="bc-row-title">{threadTitle(t, kit, thread)}</span>
                   <span className="bc-muted">
                     {thread.kind === "guided"
                       ? t("ui.bigCheese.letters.progress", {
@@ -131,14 +131,26 @@ export function Office({ ctx, canStart }: { ctx: Ctx; canStart: boolean }) {
                     week: promise!.due.week,
                   })}
                 </p>
-                <button
-                  type="button"
-                  className="bc-btn"
-                  disabled={busy || clock.hoursLeft === 0}
-                  onClick={() => void act(`promises/${encodeURIComponent(id)}/keep`)}
-                >
-                  {t("ui.bigCheese.promise.keep")}
-                </button>
+                {promise!.kept ? (
+                  <p role="status" className="bc-stamp" tabIndex={-1} data-focus-kept={id}>
+                    {t("ui.bigCheese.promise.kept", { day: t(dayKey(promise!.due.day)), week: promise!.due.week })}
+                  </p>
+                ) : (
+                  <button
+                    type="button"
+                    className="bc-btn"
+                    disabled={busy || clock.hoursLeft === 0}
+                    onClick={async () => {
+                      // The button goes away, so focus moves to the "Kept" line that replaces it.
+                      if (await act(`promises/${encodeURIComponent(id)}/keep`))
+                        requestAnimationFrame(() =>
+                          document.querySelector<HTMLElement>(`[data-focus-kept="${CSS.escape(id)}"]`)?.focus(),
+                        );
+                    }}
+                  >
+                    {t("ui.bigCheese.promise.keep")}
+                  </button>
+                )}
               </li>
             ))}
           </ul>

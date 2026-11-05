@@ -2,7 +2,7 @@
 // The model only writes words. The code picks every stance, number and outcome. A model call runs before
 // the store's write, and the write carries `expectedRevision`, so a changed run is a 409 and the client reloads.
 import { z } from "zod";
-import { runTask, type Band, type ModelCall } from "./ai/tasks.js";
+import { CHOSE, runTask, type Band, type ModelCall } from "./ai/tasks.js";
 import { withCast, type Cast } from "./cast.js";
 import {
   HOURS,
@@ -92,6 +92,9 @@ const SCENES = {
   },
 };
 
+/** A part's summary plus what the player chose there, so the receipt names the choice. */
+const withChoice = (summary: string, stance: string) => `${summary} ${CHOSE[stance] ?? CHOSE.other}`;
+
 const band = (trust: number): Band =>
   trust < 25 ? "cold" : trust < 45 ? "wary" : trust < 60 ? "neutral" : trust < 80 ? "warm" : "loyal";
 
@@ -138,6 +141,7 @@ export function createGame(store: RunStore, getModel: () => Promise<ModelCall | 
         people: s.people,
         offer: stances,
         earlier: s.parts.map((p) => p.summary),
+        chose: s.parts.map((p) => p.chosen ?? "other"),
       },
       { model },
     );
@@ -228,6 +232,7 @@ export function createGame(store: RunStore, getModel: () => Promise<ModelCall | 
           stance = (await runTask("answer.tag", { kit, text: b.text, allowed }, { model })).output.stance;
         }
         last.chosen = stance;
+        if (stance) last.summary = withChoice(last.summary, stance);
         const picks = [stance];
         if (b.skip) {
           // Skip: the middle answer for every part left, with no model calls.
@@ -236,7 +241,7 @@ export function createGame(store: RunStore, getModel: () => Promise<ModelCall | 
             s.parts.push({
               lines: [],
               suggestions: [],
-              summary: SCENES[s.blueprint].goals[s.parts.length],
+              summary: withChoice(SCENES[s.blueprint].goals[s.parts.length], mid),
               chosen: mid,
             });
             picks.push(mid);

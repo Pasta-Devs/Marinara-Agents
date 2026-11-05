@@ -260,3 +260,26 @@ test("trust table pinned at severity 2 (content.md 1.2)", () => {
   const want = { invest: 8, cheap_fix: -2, delay: -3, delegate: -2, refuse: -7, ask_others: 2 };
   for (const [stance, v] of Object.entries(want)) assert.equal(core.trustChange(stance, 2), v, stance);
 });
+
+test("closed threads keep their title and need, so a memory can still name them", () => {
+  const s = seedDay(fresh(4));
+  const c = s.inbox[0]!;
+  const t = s.threads[c.thread]!;
+  const e = endDay({ ...s, inbox: [{ ...c, age: 4 }] });
+  assert.deepEqual(
+    e.closed.find((x) => x.id === t.id),
+    { id: t.id, state: "lost", title: t.title, need: c.need },
+  );
+});
+
+test("Friday report: 'before' is the meters the Office showed when the week ended", () => {
+  let s = fresh(5);
+  for (let d = 0; d < 4; d++) s = endDay(s);
+  s = seedDay(s);
+  const c = s.inbox[0]!;
+  s = { ...s, inbox: [{ ...c, age: 4 }], meters: { money: 50, output: 50, people: 50, standing: 50 } };
+  const shown = { ...s.meters };
+  const e = endDay(s);
+  assert.deepEqual(e.report!.before, shown, "the ignored card's loss shows in the change, not in 'before'");
+  assert.ok(e.report!.after[c.need] < shown[c.need]);
+});

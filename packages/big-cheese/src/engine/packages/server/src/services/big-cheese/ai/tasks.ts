@@ -51,7 +51,8 @@ export interface ScenePartInput {
   room: string;
   people: string[]; // on stage
   offer: string[]; // stances the player can pick from; empty for a `check` part
-  earlier?: string[]; // one-line summaries of earlier parts
+  earlier?: string[]; // one-line summaries of earlier parts; its length is this part's index
+  chose?: string[]; // the stance the player picked in each earlier part
 }
 export interface ScenePartOutput {
   lines: { who: string; text: string }[];
@@ -245,6 +246,17 @@ People ids: ${i.kit.people.map((p) => p.id).join(", ")}`,
 };
 
 // Stock suggestion lines for Lite mode, one per stance.
+/** What the player chose, in plain words, for scene summaries and the next part's first line. */
+export const CHOSE: Record<string, string> = {
+  invest: "You chose to pay for it.",
+  cheap_fix: "You chose the cheap fix.",
+  delay: "You chose to wait.",
+  delegate: "You handed it to someone else.",
+  refuse: "You said no.",
+  ask_others: "You asked the others first.",
+  other: "You answered in your own words.",
+};
+
 const SUGGEST: Record<string, string> = {
   invest: "Do it properly. I will pay for it.",
   cheap_fix: "A quick fix for now.",
@@ -282,14 +294,19 @@ People on stage:\n${voiceSheet(i.kit, i.people)}`,
   },
   lite(i) {
     const h = { rng: i.rng };
-    const arrival = i.kit.templates.arrival;
-    const lines =
-      i.blueprint === "arrival" && arrival.length >= 3
+    const part = i.earlier?.length ?? 0;
+    // The kit's arrival lines come in groups of 4, one group per part.
+    const arrival = i.kit.templates.arrival.slice(part * 4, part * 4 + 4);
+    const last = i.chose?.[part - 1];
+    const lines = [
+      ...(last ? [{ who: "narrator", text: CHOSE[last] ?? CHOSE.other! }] : []),
+      ...(i.blueprint === "arrival" && arrival.length >= 3
         ? arrival.map((text) => ({ who: "narrator", text }))
         : Array.from({ length: Math.max(3, i.people.length) }, (_, n) => {
-            const p = person(i.kit, i.people[n % i.people.length]);
+            const p = person(i.kit, i.people[(n + part) % i.people.length]);
             return { who: p.id, text: pick(h, p.voice.phrases) };
-          });
+          })),
+    ];
     return {
       lines,
       suggestions: i.offer.map((stance) => ({ stance, text: SUGGEST[stance] ?? SUGGEST.delay! })),

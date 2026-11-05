@@ -17,7 +17,9 @@ ${R} {
   --bc-on-gold: #1f1409;
   --bc-danger: var(--destructive, #e5675d);
   --bc-display: "Young Serif", Georgia, serif;
-  --bc-body: "Schibsted Grotesk", system-ui, sans-serif;
+  /* system-ui sits late: on a Linux host without a UI font, Chromium resolves it to fontconfig's
+     default, which can be a monospace font. Arial maps to Liberation Sans there. */
+  --bc-body: "Schibsted Grotesk", -apple-system, "Segoe UI", Roboto, Arial, system-ui, sans-serif;
   container: bc-frame / size;
   display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; overflow: hidden;
   background: var(--bc-bg); color: var(--bc-fg);
@@ -68,7 +70,7 @@ ${R} .bc-sheet-tall { max-height: 92cqh; overflow-y: auto; }
     ${R} .bc-sheet h2 { font-family: var(--bc-display); font-weight: 400; font-size: 1.375rem; margin: 0; }
 ${R} .bc-muted { color: var(--muted-foreground, currentColor); }
 ${R} .bc-top { gap: .5rem; }
-${R} .bc-top-day { margin-inline-start: auto; font-weight: 600; }
+${R} .bc-top-day { margin-inline-start: auto; font-weight: 600; white-space: nowrap; }
 ${R} .bc-pips { display: inline-flex; gap: 4px; }
 ${R} .bc-pip { width: 10px; height: 20px; border-radius: 3px; border: 2px solid var(--bc-gold); transition: background-color 200ms; }
 ${R} .bc-pip-full { background: var(--bc-gold); }
@@ -123,11 +125,18 @@ ${R} .bc-stamp { padding: .75rem 1rem; border: 1px solid var(--bc-gold); border-
 ${R} .bc-card-screen { display: flex; flex-direction: column; gap: 1rem; }
 ${R} .bc-heading-s { font-size: 1.5rem; }
 ${R} .bc-answer {
-  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: .75rem; width: 100%; min-height: 56px;
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: .375rem .75rem; width: 100%; min-height: 56px;
   padding: .625rem .875rem; text-align: start; cursor: pointer; color: inherit; font: inherit;
   background: var(--bc-card); border: 1px solid var(--bc-border); border-radius: .75rem;
 }
 ${R} .bc-answer:disabled { opacity: .6; cursor: default; }
+/* Answer rows stack the stance pill over the reply, so every reply starts at the same edge. */
+${R} .bc-answer > .bc-pill { justify-self: start; }
+${R} .bc-answer > :not(.bc-pill, .bc-key) { grid-column: 1; }
+${R} .bc-answer > .bc-key { grid-column: 2; grid-row: 1 / span 2; }
+${R} .bc-said { quotes: "\\201C" "\\201D"; }
+${R} .bc-said::before { content: open-quote; }
+${R} .bc-said::after { content: close-quote; }
 ${R} .bc-pill { padding: .125rem .625rem; border-radius: 999px; background: color-mix(in oklch, var(--bc-gold) 20%, transparent); font-size: .875rem; white-space: nowrap; }
 ${R} .bc-key { min-width: 1.75rem; text-align: center; border: 1px solid var(--bc-border); border-radius: .375rem; font: inherit; font-size: .875rem; }
 @media (hover: none) { ${R} .bc-key { display: none; } }
@@ -177,7 +186,7 @@ ${R} .bc-line-text { font-family: var(--bc-display); font-size: 1.25rem; line-he
 ${R} .bc-btn-next { align-self: flex-end; }
 ${R} .bc-choice { display: flex; flex-direction: column; gap: .75rem; }
 @container bc-frame (min-width: 900px) {
-  ${R} .bc-dock { grid-template-columns: repeat(4, minmax(0, 10rem)); justify-content: center; }
+  ${R} .bc-dock, ${R} .bc-top { width: 100%; max-width: 40rem; margin-inline: auto; }
 }
 @container bc-frame (max-height: 520px) { ${R} .bc-face-l { width: 56px; height: 56px; font-size: 1.125rem; } }
 @keyframes bc-stamp { from { transform: scale(1.15) rotate(-4deg); opacity: 0; } }

@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CapabilityDocumentRecord, CapabilityDocumentStore } from "@marinara-engine/shared";
-import type { ModelCall } from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/ai/tasks.js";
+import {
+  CHOSE,
+  type ModelCall,
+} from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/ai/tasks.js";
 import { createGame } from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/game.js";
 import { activate } from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/server-entry.js";
 import { createRunStore } from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/store.js";
@@ -323,4 +326,22 @@ test("Lite text moves on between calls: the rng advances", async () => {
   const first = h.doc().run.game.rng;
   await h.act("scenes/arrival/choose", { stance: h.doc().run.text.scenes.arrival.parts[0].suggestions[0].stance });
   assert.notEqual(h.doc().run.game.rng, first);
+});
+
+test("Lite arrival: each part has its own lines, and the summary and next part name the choice", async () => {
+  const h = await harness();
+  await h.start();
+  const parts = () => h.doc().run.text.scenes.arrival.parts;
+  const picked: string[] = [];
+  for (let i = 0; i < 3; i++) {
+    const stance = parts().at(-1)!.suggestions[i % 3].stance;
+    picked.push(stance);
+    assert.equal((await h.act("scenes/arrival/choose", { stance })).code, 200);
+  }
+  const done = parts();
+  const texts = done.map((part) => part.lines.map((line) => line.text).join("|"));
+  assert.equal(new Set(texts).size, 3, "no two parts repeat the same lines");
+  done.forEach((part, i) => assert.ok(part.summary.endsWith(CHOSE[picked[i]]), part.summary));
+  assert.equal(done[1].lines[0].text, CHOSE[picked[0]]);
+  assert.equal(done[2].lines[0].text, CHOSE[picked[1]]);
 });

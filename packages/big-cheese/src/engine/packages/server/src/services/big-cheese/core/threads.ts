@@ -20,9 +20,11 @@ export function openThread(s: Run, init: Init): Thread {
 }
 
 export function closeThread(s: Run, id: string, state: Thread["state"]) {
-  if (!s.threads[id]) return;
+  const t = s.threads[id];
+  if (!t) return;
   delete s.threads[id];
-  s.closed.push({ id, state });
+  // The title stays, so a person's memory of a closed thread can still name it.
+  s.closed.push({ id, state, title: t.title, ...(t.need && { need: t.need }) });
 }
 
 // A follow-up is the next beat of the card's thread, planned for the same weekday some weeks later.

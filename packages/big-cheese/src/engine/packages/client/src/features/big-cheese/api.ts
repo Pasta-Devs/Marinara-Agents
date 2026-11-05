@@ -38,6 +38,7 @@ export interface Thread {
   id: string;
   kind: string;
   title: string;
+  need?: Meter;
   people: string[];
   stakes: string;
   beats: { read?: boolean }[];
@@ -57,7 +58,7 @@ export interface Game {
   meters: Meters;
   people: Record<string, Person>;
   threads: Record<string, Thread>;
-  closed: { id: string; state: string }[];
+  closed: { id: string; state: string; title?: string; need?: Meter }[];
   inbox: Card[];
   hearing: Hearing | null;
   hearingBody: { id: string }[];

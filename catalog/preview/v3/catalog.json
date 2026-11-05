@@ -249,13 +249,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "2b992e749f95d10fb88a010fad71c9d50aa7e5c064e50d14f66ab0bd45b7b33a",
-            "bytes": 64665
+            "sha256": "ba9e4591ae7fad90e4225512ec834f90e1fcff57e9f9201624567bd7848e10e7",
+            "bytes": 65704
           },
           {
             "path": "client.js",
-            "sha256": "e0c06127d73465ffefc2d53c292b07e46a7dda27318e9777c995a854560c1ff7",
-            "bytes": 79528
+            "sha256": "3e83b1c9962b85d5a563565ba4d70213394ea60873f0cfc23eacfc20ca445120",
+            "bytes": 82175
           },
           {
             "path": "big-cheese-icon.png",
@@ -274,8 +274,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/big-cheese.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/big-cheese-0.0.1.zip",
-        "sha256": "00f53d9c909bde17465b87e1c84d91892be7fd933f3c2d3999baacac1b2f307c",
-        "bytes": 147860
+        "sha256": "5baa785d25378f1ef3eed8f5898da8c843607cdb81ff24dfb8a3179cac7a11cb",
+        "bytes": 151546
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/big-cheese/README.md"
     },

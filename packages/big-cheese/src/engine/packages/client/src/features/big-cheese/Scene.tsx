@@ -86,7 +86,7 @@ function PartView({ ctx, id, part, onLeave, onClose }: Props & { part: ScenePart
                 {speaker.name} <span className="bc-muted">{speaker.role}</span>
               </p>
             )}
-            <p className="bc-line-text" aria-live="polite">
+            <p className={speaker ? "bc-line-text bc-said" : "bc-line-text"} aria-live="polite">
               {current.text}
             </p>
             <button type="button" className="bc-btn bc-btn-next" onClick={() => setLine(line + 1)}>
@@ -110,7 +110,7 @@ function PartView({ ctx, id, part, onLeave, onClose }: Props & { part: ScenePart
                     onClick={() => choose({ stance: entry.stance })}
                   >
                     <span className="bc-pill">{t(stanceKey(entry.stance))}</span>
-                    <span>{entry.text}</span>
+                    <span className="bc-said">{entry.text}</span>
                   </button>
                 </li>
               ))}

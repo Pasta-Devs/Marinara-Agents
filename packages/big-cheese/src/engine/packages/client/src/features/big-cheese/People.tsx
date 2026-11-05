@@ -2,7 +2,7 @@
 // Big Cheese: People and one person's file (ui.md §5.10)
 // ──────────────────────────────────────────────
 import { useTranslation } from "react-i18next";
-import { Face, initials, moodKey, stanceKey, trustKey, type Ctx } from "./parts";
+import { Face, initials, memoryKey, moodKey, threadTitle, trustKey, type Ctx } from "./parts";
 
 /** The newest feeling line the Friday report wrote for this person. */
 const feeling = (ctx: Ctx, id: string) => {
@@ -62,7 +62,11 @@ export function PersonSheet({ ctx, id }: { ctx: Ctx; id: string }) {
   const state = run.game.people[id];
   const name = who?.name ?? id;
   const line = feeling(ctx, id);
-  const threadTitle = (threadId: string) => run.game.threads[threadId]?.title;
+  // A memory points at an open thread or, once it closed, at its entry in `closed`.
+  const memoryThread = (threadId: string) => {
+    const thread = run.game.threads[threadId] ?? run.game.closed.find((entry) => entry.id === threadId);
+    return thread?.title ? threadTitle(t, kit, thread) : null;
+  };
   const open = Object.values(run.game.threads).filter((thread) => thread.people.includes(id));
 
   return (
@@ -106,8 +110,8 @@ export function PersonSheet({ ctx, id }: { ctx: Ctx; id: string }) {
               <li key={index}>
                 {t("ui.bigCheese.person.memory", {
                   week: memory.week,
-                  stance: t(stanceKey(memory.stance)),
-                  thread: threadTitle(memory.thread) ?? t("ui.bigCheese.person.oldThread"),
+                  stance: t(memoryKey(memory.stance)),
+                  thread: memoryThread(memory.thread) ?? t("ui.bigCheese.person.oldThread"),
                 })}
               </li>
             ))}
@@ -122,7 +126,7 @@ export function PersonSheet({ ctx, id }: { ctx: Ctx; id: string }) {
           </h2>
           <ul className="bc-plain">
             {open.map((thread) => (
-              <li key={thread.id}>{thread.title}</li>
+              <li key={thread.id}>{threadTitle(t, kit, thread)}</li>
             ))}
           </ul>
         </section>

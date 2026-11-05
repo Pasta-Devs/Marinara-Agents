@@ -2,7 +2,7 @@
 // Big Cheese: small pieces every screen shares
 // ──────────────────────────────────────────────
 import type { CSSProperties } from "react";
-import type { KitPerson, KitView, RunDoc } from "./api";
+import type { KitPerson, KitView, Meter, RunDoc } from "./api";
 
 export const HOURS = 5;
 
@@ -53,6 +53,25 @@ const TRUST_KEYS = [
   "ui.bigCheese.trust.loyal",
 ];
 export const trustKey = (trust: number) => TRUST_KEYS[Math.min(4, Math.max(0, Math.floor(trust / 20)))];
+
+const MEMORY_KEYS: Record<string, string> = {
+  invest: "ui.bigCheese.memory.invest",
+  cheap_fix: "ui.bigCheese.memory.cheapFix",
+  delay: "ui.bigCheese.memory.delay",
+  delegate: "ui.bigCheese.memory.delegate",
+  refuse: "ui.bigCheese.memory.refuse",
+  ask_others: "ui.bigCheese.memory.askOthers",
+};
+/** A remembered answer in plain words, such as "you paid for it". */
+export const memoryKey = (stance: string) => MEMORY_KEYS[stance] ?? "ui.bigCheese.memory.other";
+
+type T = (key: string, options?: Record<string, unknown>) => string;
+
+/** A thread's title as players read it: a card's thread names the meter at risk, others start with a capital. */
+export const threadTitle = (t: T, kit: KitView, thread: { title?: string; need?: Meter }) =>
+  thread.need
+    ? t("ui.bigCheese.thread.request", { meter: kit.meters[thread.need]?.label ?? thread.need })
+    : (thread.title ?? "").charAt(0).toUpperCase() + (thread.title ?? "").slice(1);
 
 export const person = (kit: KitView, id: string): KitPerson | undefined => kit.people.find((p) => p.id === id);
 export const nameOf = (kit: KitView, id: string) => person(kit, id)?.name ?? id;

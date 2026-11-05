@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createRun, deleteRun, errorKey, listRuns, type RunSummary, type StartBody } from "./api";
 import { Cast } from "./Cast";
+import { dayKey } from "./parts";
 import { RunView } from "./RunView";
 
 type Load = "loading" | "slow" | "error" | "ready";
@@ -64,6 +65,8 @@ export function BigCheeseView() {
       await deleteRun(doomed.id);
       setDoomed(null);
       await refresh();
+      // The Delete button that opened the confirm is gone with its run, so the heading takes focus.
+      heading.current?.focus();
     } catch (error) {
       setFailure(errorKey(error));
       setDoomed(null);
@@ -130,6 +133,9 @@ export function BigCheeseView() {
               {t(failure)}
             </p>
           )}
+          <button type="button" className="bc-btn bc-btn-primary" disabled={busy} onClick={() => setCasting(true)}>
+            {t("ui.bigCheese.titleScreen.start")}
+          </button>
           <ul className="bc-cards">
             {runs.map((run) => {
               const place = placeName(t, run.kitId);
@@ -140,7 +146,15 @@ export function BigCheeseView() {
                   ) : (
                     <button type="button" className="bc-card-main" onClick={() => setOpen(run.id)}>
                       <span className="bc-card-name">{place}</span>
-                      <span>{t("ui.bigCheese.card.progress", { week: run.week, day: run.day })}</span>
+                      <span>{t("ui.bigCheese.card.progress", { week: run.week, day: t(dayKey(run.day ?? 0)) })}</span>
+                      <span className="bc-muted">
+                        {t("ui.bigCheese.card.played", {
+                          when: new Date(run.updatedAt).toLocaleString(undefined, {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          }),
+                        })}
+                      </span>
                       <span className="bc-sr">{t("ui.bigCheese.card.continue", { place })}</span>
                     </button>
                   )}
@@ -159,9 +173,6 @@ export function BigCheeseView() {
               );
             })}
           </ul>
-          <button type="button" className="bc-btn bc-btn-primary" disabled={busy} onClick={() => setCasting(true)}>
-            {t("ui.bigCheese.titleScreen.start")}
-          </button>
         </>
       </main>
       {doomed && (

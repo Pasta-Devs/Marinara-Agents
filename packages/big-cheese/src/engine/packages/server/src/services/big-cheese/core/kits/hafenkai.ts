@@ -774,10 +774,19 @@ export const HAFENKAI_PLACE: PlaceKit = {
       ],
     },
     arrival: [
+      // 4 lines per part of the arrival: the gate, the office, the first problem.
       "The ferry horn goes off as you walk through the gate of Hafenkai.",
       "Henrike waits at the door of the Manager's office with a folder under her arm.",
+      "She shakes your hand and tells you the first trucks leave at six.",
+      "The coffee machine in the corridor has a note on it: out of order.",
+      "Henrike unlocks the office. It smells of old paper and diesel.",
       "On the desk lies a key and an envelope with five letters inside.",
+      "The letters are from the last manager. Henrike says to read one a day.",
+      "The key opens the cabinet with the safety files.",
       "Outside, Tomasz is shouting at a forklift. The forklift is winning.",
+      "A pallet of tins lies on its side next to Dock A.",
+      "Tomasz waves you over before you can sit down.",
+      "Two drivers stop their trucks and wait to see what you do.",
     ],
   },
 };
