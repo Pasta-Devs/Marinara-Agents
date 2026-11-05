@@ -106,6 +106,13 @@ import {
  */
 const SUMMARY_OUTPUT_TOKENS = 10240;
 /**
+ * The reply room of the timeline-condensing call. It writes about TIMELINE_FOLD_WORDS (5000) words of JSON, five times
+ * a chapter summary, and a thinking model (Claude Opus 5.5) spends its thinking from the same room: with only
+ * SUMMARY_OUTPUT_TOKENS it was cut off every time ("the reply was cut"). A model whose context is smaller still gets
+ * what its context leaves (generation.ts fitPrompt), as before.
+ */
+const TIMELINE_OUTPUT_TOKENS = 24576;
+/**
  * #2066: the small memories that go beside the timeline, newest first, at most this many estimated tokens and
  * HEADROOM_TOKENS of leeway (S/memory/timeline.ts).
  */
@@ -405,7 +412,7 @@ export function createOtomeMemory({
       const request = value as SummaryRequest;
       const job = running.get(request.runId) ?? (await summaryJob(request.runId));
       if (!job) throw new Error("memory-unavailable");
-      const ask = async (kind: string, messages: OtomeMessage[]) => {
+      const ask = async (kind: string, messages: OtomeMessage[], maxTokens = SUMMARY_OUTPUT_TOKENS) => {
         const { value: reply } = await generateJson(
           { runtime, store },
           {
@@ -414,7 +421,7 @@ export function createOtomeMemory({
             label: `memory-${kind}`,
             messages,
             schema: SummarySchema,
-            maxTokens: SUMMARY_OUTPUT_TOKENS,
+            maxTokens,
             debugMode: request.debugMode === true,
             lane: "background",
             connectionId: job.connectionId,
@@ -468,7 +475,9 @@ export function createOtomeMemory({
           failures.set(request.runId, tooSmall(job.maxContext ?? 0, "condense the story's timeline"));
           throw new Error("summary-context-too-small");
         }
-        head = cleanSummary(await ask("timeline", condense({ head, entries: pending.slice(0, take) })));
+        head = cleanSummary(
+          await ask("timeline", condense({ head, entries: pending.slice(0, take) }), TIMELINE_OUTPUT_TOKENS),
+        );
         pending = pending.slice(take);
       }
       return serializeTimeline({ head, entries: keptPart(timeline) });
