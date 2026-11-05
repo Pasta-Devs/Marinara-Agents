@@ -1,7 +1,7 @@
 import { SLURP2_LEGACY_RELEASES } from "./slp-release-archive";
 
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.4.17";
+export const SLURP2_VERSION = "0.4.18";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -14,6 +14,13 @@ export interface Slurp2ReleaseEntry {
  * in-universe bullets per release (technical detail lives in CHANGELOG.md).
  */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.4.18",
+    date: "2026-11-05",
+    notes: [
+      "Live shows can have your own tip goals: set an amount and what happens for any Creator, or make every room's goals smaller or bigger, in Backstage > Live shows.",
+    ],
+  },
   {
     version: "0.4.17",
     date: "2026-11-02",

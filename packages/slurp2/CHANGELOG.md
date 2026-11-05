@@ -1,5 +1,9 @@
 # Slurp release notes
 
+## 0.4.18 — 2026-11-05
+
+- Added: Backstage > Live shows has a Tip goals group. "Goal size" makes the room's goals and menu prices smaller or bigger. "Own goals" sets up to three goals for one Creator: an amount and what happens. They replace the made goals in that Creator's next shows, and the Creator acts out the text when the room hits the goal. Viewers cannot tip for an own goal's reward directly.
+
 ## 0.4.17 — 2026-11-02
 
 - Fixed: refreshing a Creator's conversation schedule read only the card description and personality. An Engine card split (Engine #8543) moves scenario and backstory into their own fields, so the schedule lost them. It now reads description, scenario and backstory (top-level or `extensions.backstory`). The canon reading, picture look and flavour brief already read the split fields.
