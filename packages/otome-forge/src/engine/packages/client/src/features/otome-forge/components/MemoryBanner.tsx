@@ -5,18 +5,18 @@
 // focused), to give it a model with a larger context; or that no connection can write summaries, with only the way to
 // Connections (the story's own connection is the one missing then). A Retry request that fails itself (no connection,
 // the server unreachable) says so on a line of its own, never as the connection's words, until the status moves on.
-// Ordinary catch-up shows nothing (lib/memory-notice.ts).
+// Ordinary catch-up shows nothing, and neither does a Retry while it is sent and runs: the banner comes back only when
+// the summary fails again (lib/memory-notice.ts).
 // ──────────────────────────────────────────────
 // It sits in the stage's flow below the top bar (above the reader's own header, which then leaves the safe area to it),
 // so it pushes the screen down and covers none of its controls; its height goes to --of-memory-banner-h for the
-// reader's phone menu (styles.ts). Retry stays mounted (aria-disabled) while it runs, so focus never falls to the
-// page; once memory is well again the banner goes, gives the focus it held to the screen's heading, and a status line
-// says so.
+// reader's phone menu (styles.ts). When it goes (at Retry, or once memory is well) it gives the focus it held to the
+// screen's heading; a status line says that the summary is being tried again, then that memory is working again.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CircleAlert, PlugZap, RotateCcw } from "lucide-react";
 import { useMemoryStatus } from "../hooks/use-memory";
-import { retryAction, type MemoryNotice } from "../lib/memory-notice";
+import type { MemoryNotice } from "../lib/memory-notice";
 
 interface MemoryBannerProps {
   runKey: string;
@@ -30,29 +30,29 @@ export function MemoryBanner({ runKey, onOpenConnections, onLeave }: MemoryBanne
   const { t } = useTranslation();
   const memory = useMemoryStatus(runKey);
   const { notice } = memory;
-  const kind = notice?.kind ?? null;
-  // "Story memory is working again" once a retry's banner goes; cleared when another shows.
+  // What the status line follows: the banner shown, else a retry while it is sent or runs (no banner then).
+  const state = notice?.kind ?? (memory.busy || memory.status?.retrying ? "retrying" : null);
+  // "Story memory is working again" once a retry ends with no banner; cleared when one shows.
   const [said, setSaid] = useState("");
-  const before = useRef(kind);
+  const before = useRef(state);
   useEffect(() => {
-    if (kind === before.current) return;
-    setSaid(!kind && before.current === "retrying" ? t("ui.otomeForge.memory.fixed") : "");
-    before.current = kind;
-  }, [kind, t]);
+    if (state === before.current) return;
+    setSaid(!state && before.current === "retrying" ? t("ui.otomeForge.memory.fixed") : "");
+    before.current = state;
+  }, [state, t]);
   return (
     <>
       {notice ? (
         <MemoryBannerBox
           notice={notice}
           error={memory.error}
-          busy={memory.busy}
           onRetry={() => void memory.retry()}
           onOpenConnections={onOpenConnections}
           onLeave={onLeave}
         />
       ) : null}
       <p className="of-visually-hidden" role="status">
-        {kind === "retrying" ? t("ui.otomeForge.memory.retrying") : said}
+        {state === "retrying" ? t("ui.otomeForge.memory.retrying") : said}
       </p>
     </>
   );
@@ -61,14 +61,12 @@ export function MemoryBanner({ runKey, onOpenConnections, onLeave }: MemoryBanne
 function MemoryBannerBox({
   notice,
   error,
-  busy,
   onRetry,
   onOpenConnections,
   onLeave,
 }: {
   notice: NonNullable<MemoryNotice>;
   error: string | null;
-  busy: boolean;
   onRetry: () => void;
   onOpenConnections: (memory: boolean) => void;
   onLeave: () => void;
@@ -98,30 +96,17 @@ function MemoryBannerBox({
       if (element.contains((element.getRootNode() as Document | ShadowRoot).activeElement)) leave.current();
     };
   }, []);
-  const retrying = notice.kind === "retrying";
-  const retry = retryAction(notice, busy);
-  const detail = notice.kind === "failed" ? notice.message : null;
-  const own = notice.kind === "failed" && notice.own;
+  const failed = notice.kind === "failed";
+  const detail = failed ? notice.message : null;
+  const own = failed && notice.own;
   return (
     <div ref={box} className="of-memory-banner of-glass" data-kind={notice.kind}>
       {/* A new element for each state, so a failure (again) is announced as it appears; a retry's progress is said by
           MemoryBanner's status line. */}
-      <div key={notice.kind} className="of-memory-banner-text" role={retrying ? undefined : "alert"}>
-        {retrying ? (
-          <RotateCcw className="of-pulse" size={16} strokeWidth={2} aria-hidden="true" />
-        ) : (
-          <CircleAlert size={16} strokeWidth={2} aria-hidden="true" />
-        )}
+      <div key={notice.kind} className="of-memory-banner-text" role="alert">
+        <CircleAlert size={16} strokeWidth={2} aria-hidden="true" />
         <p>
-          <span>
-            {t(
-              retrying
-                ? "ui.otomeForge.memory.retrying"
-                : notice.kind === "failed"
-                  ? "ui.otomeForge.memory.failed"
-                  : "ui.otomeForge.memory.noConnection",
-            )}
-          </span>
+          <span>{t(failed ? "ui.otomeForge.memory.failed" : "ui.otomeForge.memory.noConnection")}</span>
           {detail ? (
             <span className="of-memory-banner-said">
               {" "}
@@ -131,15 +116,8 @@ function MemoryBannerBox({
         </p>
       </div>
       <div className="of-memory-banner-actions">
-        {retry ? (
-          <button
-            type="button"
-            className="of-button of-button--quiet of-glass of-button--small"
-            aria-disabled={retry === "running" || undefined}
-            onClick={() => {
-              if (retry === "offered") onRetry();
-            }}
-          >
+        {failed ? (
+          <button type="button" className="of-button of-button--quiet of-glass of-button--small" onClick={onRetry}>
             <RotateCcw size={15} strokeWidth={2} aria-hidden="true" />
             {t("ui.otomeForge.memory.retry")}
           </button>
@@ -153,7 +131,7 @@ function MemoryBannerBox({
           {t("ui.otomeForge.memory.connection")}
         </button>
       </div>
-      {notice.kind === "failed" && error ? (
+      {failed && error ? (
         <p className="of-memory-banner-error" role="alert">
           {error}
         </p>
