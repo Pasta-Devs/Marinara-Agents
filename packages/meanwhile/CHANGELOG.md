@@ -7,3 +7,4 @@
 - A character brings a hook up in a linked chat once. "Pick up this thread" brings it up now.
 - Fast forward 1 to 7 days or up to 168 hours. It shows the model calls first and has a cancel button.
 - Big events wait in "Waiting for you": accept, veto or edit them. Plans that characters state in chat become promises that the next day honours.
+- Switch "Character status" (off by default) writes what a person does now to their chat as their status. It needs chat write access and runs at x1 only.

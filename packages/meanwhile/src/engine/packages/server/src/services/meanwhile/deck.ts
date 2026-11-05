@@ -6,6 +6,8 @@ export interface DayBlock {
   start: number;
   end: number;
   activity: string;
+  /** The schedule's own status for the block, when it has one. */
+  status?: string;
   place: string;
 }
 

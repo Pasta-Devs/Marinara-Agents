@@ -28,6 +28,9 @@ export interface Circle {
   clock: { speed: number; timezone: string };
   pace: "cozy" | "eventful" | "dramatic";
   backgroundTimer: boolean;
+  writeStatus: boolean;
+  /** Characters whose status another Circle writes. */
+  statusElsewhere: { characterId: string; circle: string; note: string }[];
   connectionId: string;
   status: CircleStatus;
   /** Big events that wait for the user. */
@@ -37,7 +40,15 @@ export interface Circle {
 export type CircleFields = Partial<
   Pick<
     Circle,
-    "name" | "castIds" | "setting" | "linkedChatIds" | "sharedWorld" | "pace" | "backgroundTimer" | "connectionId"
+    | "name"
+    | "castIds"
+    | "setting"
+    | "linkedChatIds"
+    | "sharedWorld"
+    | "pace"
+    | "backgroundTimer"
+    | "writeStatus"
+    | "connectionId"
   >
 > & { timezone?: string };
 
@@ -129,6 +140,7 @@ export interface Timeline {
   events: TimelineEvent[];
   now: Record<string, { activity: string; place: string | null; until: string } | null>;
   today: string;
+  statusSent: Record<string, { chatId: string; at: number }>;
   nowTime: string;
   dealt: { id: string; kind: string; cast: string[]; place: string; time: string }[];
 }

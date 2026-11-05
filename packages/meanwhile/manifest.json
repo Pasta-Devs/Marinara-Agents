@@ -44,13 +44,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "28cd4129ac4ea7d8ca9ec7b46a4bd590399c852d458e44b0a08ee1ca6e0e9391",
-      "bytes": 48112
+      "sha256": "6215a96e61b95301ae39d07d704cd07503c626668189e3643976d61224727d42",
+      "bytes": 50925
     },
     {
       "path": "client.js",
-      "sha256": "6a6faff5afc9ef4838a3bd7f02763ecef2717e6c63cbd26362f2f1604f0b9770",
-      "bytes": 27232
+      "sha256": "5615a58e64aef646638c5d3d2976de11c411b0d58b42dab0519d7e706fb356bc",
+      "bytes": 28382
     },
     {
       "path": "meanwhile-icon.png",
@@ -63,6 +63,7 @@
     "storage",
     "ui",
     "chat-read",
+    "chat-write",
     "prompt-context"
   ],
   "restartRequired": true

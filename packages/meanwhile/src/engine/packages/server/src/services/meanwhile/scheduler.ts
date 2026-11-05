@@ -39,6 +39,7 @@ import {
   type World,
 } from "./beats.js";
 import { markDelivered } from "./context.js";
+import { writeStatuses } from "./status.js";
 import { applyStale, askPromises, dropOld, hasNewMessages, readChats, staleAnchors } from "./promises.js";
 import type { Seed } from "./deck.js";
 
@@ -488,6 +489,9 @@ export async function runDuePass(now = Date.now()): Promise<string[]> {
       logger.warn(`[meanwhile] run failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
+  await writeStatuses(now, readSchedules).catch((error) =>
+    logger.warn(`[meanwhile] status pass failed: ${error instanceof Error ? error.message : String(error)}`),
+  );
   return ran;
 }
 

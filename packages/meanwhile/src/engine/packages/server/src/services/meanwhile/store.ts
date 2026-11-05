@@ -23,6 +23,10 @@ export interface Circle {
   bigKindsAllowed: string[];
   connectionId: string; // "" until chosen; no run without it (decision D1)
   backgroundTimer: boolean;
+  /** Slice 5: write what each character does now to their linked conversation chat. Off by default. */
+  writeStatus: boolean;
+  /** When writeStatus was turned on. The Circle that turned it on last owns a character's status. */
+  statusSince: number;
   budgetCallsPerDay: number;
   connections: Record<string, { read: boolean; write: boolean }>;
 }
@@ -79,6 +83,12 @@ export interface PromiseRecord {
   status: "open" | "kept" | "dropped" | "stale";
 }
 
+export interface StatusSent {
+  key: string;
+  chatId: string;
+  at: number;
+}
+
 export interface MeanwhileDocument {
   schemaVersion: 1;
   circles: Circle[];
@@ -94,6 +104,8 @@ export interface MeanwhileDocument {
   promises: PromiseRecord[];
   /** chatId -> createdAt (ms) of the newest message the promise pass has read. */
   promisePass: Record<string, number>;
+  /** characterId -> the last status written (`key` = chat|status|activity). `at` is 0 when the Engine kept a status set by hand. */
+  statusSent: Record<string, StatusSent>;
 }
 
 let runtime: CapabilityRuntimeHost | null = null;
@@ -129,6 +141,8 @@ export function defaultCircle(id: string, now: number): Circle {
     bigKindsAllowed: [],
     connectionId: "",
     backgroundTimer: false,
+    writeStatus: false,
+    statusSince: 0,
     budgetCallsPerDay: 12,
     connections: {},
   };
@@ -189,6 +203,7 @@ export function applyCircleFields(base: Circle, src: Record<string, unknown>): C
     allowedKinds: ids(src.allowedKinds, 30, base.allowedKinds),
     bigKindsAllowed: ids(src.bigKindsAllowed, 30, base.bigKindsAllowed),
     connectionId: text(src.connectionId, 200, base.connectionId),
+    writeStatus: typeof src.writeStatus === "boolean" ? src.writeStatus : base.writeStatus,
     backgroundTimer: typeof src.backgroundTimer === "boolean" ? src.backgroundTimer : base.backgroundTimer,
     budgetCallsPerDay: Number.isFinite(budget)
       ? Math.max(1, Math.min(200, Math.round(budget)))
@@ -204,6 +219,7 @@ function normalizeCircle(value: unknown): Circle | null {
   const circle = applyCircleFields(base, value);
   return {
     ...circle,
+    statusSince: typeof value.statusSince === "number" && Number.isFinite(value.statusSince) ? value.statusSince : 0,
     clock: {
       anchorCircle: anchor ? (clock.anchorCircle as string) : base.clock.anchorCircle,
       anchorReal:
@@ -250,6 +266,7 @@ export function emptyMeanwhileDocument(): MeanwhileDocument {
     usage: [],
     promises: [],
     promisePass: {},
+    statusSent: {},
   };
 }
 
@@ -275,6 +292,7 @@ export function normalizeMeanwhile(value: unknown): MeanwhileDocument {
     promises: list(value.promises).filter(
       (p): p is PromiseRecord => isRecord(p) && typeof p.id === "string" && typeof p.circleId === "string",
     ),
+    statusSent: isRecord(value.statusSent) ? (value.statusSent as Record<string, StatusSent>) : {},
     promisePass: isRecord(value.promisePass) ? (value.promisePass as Record<string, number>) : {},
     usage: list(value.usage).filter(
       (u): u is Usage =>

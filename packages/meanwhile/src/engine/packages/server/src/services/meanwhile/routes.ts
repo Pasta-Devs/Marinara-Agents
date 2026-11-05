@@ -27,6 +27,7 @@ import {
   startFastForward,
 } from "./scheduler.js";
 import { currentBlock } from "./routine.js";
+import { statusOwner } from "./status.js";
 import { bannedWords, usageRow } from "./beats.js";
 import {
   applyCircleFields,
@@ -96,6 +97,22 @@ const view = (doc: MeanwhileDocument, circle: Circle, now: number) => ({
   ...circle,
   status: statusOf(circle, markOf(doc, circle.id), now, usageRow(doc.usage, circle.id, now).calls),
   waiting: doc.events.filter((e) => e.circleId === circle.id && e.status === "proposed").length,
+  // Characters whose status another Circle writes, with that Circle's name.
+  statusElsewhere: circle.writeStatus
+    ? circle.castIds.flatMap((id) => {
+        const owner = statusOwner(doc.circles, id);
+        const other = owner && owner !== circle.id ? doc.circles.find((c) => c.id === owner) : null;
+        return other
+          ? [
+              {
+                characterId: id,
+                circle: other.name,
+                note: other.clock.speed === 0 ? "paused" : other.clock.speed !== 1 ? "not real time" : "",
+              },
+            ]
+          : [];
+      })
+    : [],
 });
 
 export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
@@ -118,6 +135,7 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
     let circle = applyCircleFields(base, src);
     if (typeof src.sharedWorld !== "boolean") circle = { ...circle, sharedWorld: circle.linkedChatIds.length === 1 };
     if (validTimezone(src.timezone)) circle = { ...circle, clock: { ...circle.clock, timezone: src.timezone } };
+    if (circle.writeStatus) circle = { ...circle, statusSince: now };
     const doc = await updateMeanwhile((d) => ({ ...d, circles: [...d.circles, circle] }));
     return view(doc, circle, now);
   });
@@ -132,7 +150,8 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
       ...d,
       circles: d.circles.map((c) => {
         if (c.id !== id) return c;
-        const next = applyCircleFields(c, src);
+        const applied = applyCircleFields(c, src);
+        const next = applied.writeStatus && !c.writeStatus ? { ...applied, statusSince: Date.now() } : applied;
         return validTimezone(src.timezone) ? { ...next, clock: { ...next.clock, timezone: src.timezone } } : next;
       }),
     }));
@@ -254,6 +273,15 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
         today,
         nowTime: msToWall(nowMs, tz).slice(11),
         dealt: doc.seeds.filter((s) => s.circleId === circle.id && s.day === today),
+        // Where and when the status was last written for each character.
+        statusSent: Object.fromEntries(
+          circle.castIds.flatMap((id) => {
+            const sent = doc.statusSent[id];
+            return sent?.at && circle.linkedChatIds.includes(sent.chatId)
+              ? [[id, { chatId: sent.chatId, at: sent.at }]]
+              : [];
+          }),
+        ),
       };
     },
   );
