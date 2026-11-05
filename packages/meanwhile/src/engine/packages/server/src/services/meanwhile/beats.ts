@@ -3,7 +3,7 @@ import { DAY, hhmm, msToWall, wallToMs } from "./clock.js";
 import { BIG_KINDS, KINDS, type Seed } from "./deck.js";
 import { blocksFor, isRecord, placeOf, type PlaceTags } from "./routine.js";
 import { PLACES, beatMessages, placeMessages, retryMessage, summaryMessages, type Msg } from "./prompts.js";
-import { getMeanwhileRuntime, type Circle, type LifeEvent, type Usage } from "./store.js";
+import { getMeanwhileRuntime, type Circle, type LifeEvent, type PromiseRecord, type Usage } from "./store.js";
 
 /** How far a beat may start from its seed time. */
 export const TIME_TOLERANCE_MIN = 90;
@@ -31,13 +31,18 @@ export function usageRow(rows: readonly Usage[], circleId: string, now: number):
 }
 
 /** Resolves the Circle's model. Every call is counted before it runs, so a failure still costs a call. */
-export async function makeGate(circle: Circle, row: Usage): Promise<Gate> {
+/** `over` ignores the daily limit (calls still count). `stop` ends the run at the next check. */
+export async function makeGate(
+  circle: Circle,
+  row: Usage,
+  opts: { over?: boolean; stop?: () => boolean } = {},
+): Promise<Gate> {
   const runtime = getMeanwhileRuntime();
   const model = await runtime.languageModels.resolve(circle.connectionId);
   const usage = { ...row };
   return {
     usage,
-    left: () => circle.budgetCallsPerDay - usage.calls,
+    left: () => (opts.stop?.() ? 0 : opts.over ? Infinity : circle.budgetCallsPerDay - usage.calls),
     async complete(messages, maxTokens, temperature = 0.9) {
       usage.calls += 1;
       const out = await model.chatComplete(messages, {
@@ -66,6 +71,8 @@ export interface World {
   personas: string[];
   /** Events known so far, for the last-14-days lines. */
   events: readonly LifeEvent[];
+  /** Promises of this Circle. `beatDay` marks the ones it honours as kept. */
+  promises: PromiseRecord[];
   now: number;
 }
 
@@ -113,7 +120,7 @@ function motifs(w: World, toMs: number): string[] {
 }
 
 /** One filled beat for the first seed, with that seed's own cast numbers, so the model copies the shape. */
-function exampleBeat(w: World, seed: Seed): string {
+function exampleBeat(w: World, seed: Seed, withKept = false): string {
   const nums = seed.cast.map((id) => castNumber(w.circle, id));
   const names = seed.cast.map((id) => w.cast[id]?.name ?? "Someone");
   return JSON.stringify({
@@ -123,6 +130,7 @@ function exampleBeat(w: World, seed: Seed): string {
     text: `${names.join(" and ")} spend half an hour at the ${seed.place}.`,
     diary: { [nums[0]!]: `That half hour at the ${seed.place} was the best part of my day.` },
     hook: { [nums[0]!]: `Wants to show you what they found at the ${seed.place}` },
+    ...(withKept ? { kept: [1] } : {}),
   });
 }
 
@@ -157,6 +165,8 @@ export function bannedWords(personas: string[], castNames: string[], secondPerso
 }
 
 export interface BeatCheck {
+  /** How many promises the beat call listed. */
+  promiseCount: number;
   circle: Circle;
   day: string;
   labels: ReadonlyMap<string, Seed>;
@@ -178,7 +188,7 @@ const minutes = (v: unknown) => {
 };
 
 /** One model beat against its seed. Returns the event, or the reason it was rejected. */
-export function checkBeat(raw: unknown, c: BeatCheck): { label: string; event: LifeEvent } | string {
+export function checkBeat(raw: unknown, c: BeatCheck): { label: string; event: LifeEvent; kept: number[] } | string {
   if (!isRecord(raw)) return "A beat must be an object";
   const label = String(raw.seed);
   const seed = c.labels.get(label);
@@ -220,7 +230,12 @@ export function checkBeat(raw: unknown, c: BeatCheck): { label: string; event: L
   if (typeof diary === "string") return diary;
   if (typeof hook === "string") return hook;
   const major = BIG_KINDS.includes(seed.kind);
+  // The promises this beat says it carries out.
+  const kept = Array.isArray(raw.kept)
+    ? [...new Set(raw.kept.filter((n): n is number => Number.isInteger(n) && n >= 1 && n <= c.promiseCount))]
+    : [];
   return {
+    kept,
     label,
     event: {
       id: `b:${seed.id}`,
@@ -249,7 +264,10 @@ async function beatDay(w: World, gate: Gate, day: string, seeds: Seed[], toMs: n
   const circle = w.circle;
   const labels = new Map(seeds.map((s, n) => [`s${n + 1}`, s] as const));
   const kinds = new Set([...(circle.allowedKinds.length ? circle.allowedKinds : KINDS), ...circle.bigKindsAllowed]);
+  // Open promises that are due by this day, in the model's cast numbers.
+  const due = w.promises.filter((p) => p.circleId === circle.id && p.status === "open" && p.due <= day);
   const base = beatMessages({
+    promises: due.map((p, n) => `P${n + 1} (${castNumber(circle, p.characterId)}): ${line(p.text)}`),
     setting: circle.setting,
     day,
     weekday: new Date(`${day}T00:00:00Z`).toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" }),
@@ -267,10 +285,11 @@ async function beatDay(w: World, gate: Gate, day: string, seeds: Seed[], toMs: n
     pace: circle.pace,
     kinds: [...kinds],
     spicy: circle.allowedKinds.includes("spicy"),
-    example: exampleBeat(w, [...labels][0]![1]),
+    example: exampleBeat(w, [...labels][0]![1], due.length > 0),
   });
   const castNames = circle.castIds.map((id) => w.cast[id]?.name ?? "");
   const check: BeatCheck = {
+    promiseCount: due.length,
     circle,
     day,
     labels,
@@ -283,6 +302,7 @@ async function beatDay(w: World, gate: Gate, day: string, seeds: Seed[], toMs: n
     toMs,
   };
   const accepted = new Map<string, LifeEvent>();
+  const keptBy = new Map<string, number[]>();
   let messages = base;
   for (let attempt = 0; attempt < 2; attempt++) {
     const data = await gate.complete(messages, 1200);
@@ -297,6 +317,7 @@ async function beatDay(w: World, gate: Gate, day: string, seeds: Seed[], toMs: n
       if (typeof result === "string") errors.push(result);
       else {
         accepted.set(result.label, result.event);
+        keptBy.set(result.event.id, result.kept);
         check.used.add(result.label);
       }
     }
@@ -313,6 +334,16 @@ async function beatDay(w: World, gate: Gate, day: string, seeds: Seed[], toMs: n
       told.add(id);
     }
     if (e.hook && !Object.keys(e.hook).length) delete e.hook;
+  }
+  // Only a beat that names a promise (kept) takes its anchor and visibility, and marks it kept.
+  for (const e of events) {
+    for (const n of keptBy.get(e.id) ?? []) {
+      const p = due[n - 1];
+      if (!p || !e.cast.includes(p.characterId)) continue;
+      e.anchors = [...(e.anchors ?? []), p.anchor];
+      if (e.visibility === "circle") e.visibility = p.visibility;
+      p.status = "kept";
+    }
   }
   return events;
 }
@@ -333,6 +364,7 @@ export async function runBeats(
   days: string[],
   seeds: readonly Seed[],
   toMs: number,
+  onDay?: (done: number) => void,
 ): Promise<void> {
   for (const day of days) {
     const mine = seeds.filter((s) => s.circleId === w.circle.id && s.day === day);
@@ -344,6 +376,7 @@ export async function runBeats(
       run.events.push(...(await beatDay({ ...w, events: [...w.events, ...run.events] }, gate, day, mine, toMs)));
     }
     run.done.push(day);
+    onDay?.(run.done.length);
   }
 }
 

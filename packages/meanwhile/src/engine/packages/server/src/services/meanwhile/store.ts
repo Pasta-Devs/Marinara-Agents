@@ -63,6 +63,22 @@ export interface Usage {
   outputTokens: number;
 }
 
+/** A plan or stated fact from a linked chat that the beat call must honour. */
+export interface PromiseRecord {
+  id: string;
+  circleId: string;
+  characterId: string;
+  text: string;
+  /** Circle day, YYYY-MM-DD. */
+  due: string;
+  visibility: string;
+  anchor: { chatId: string; messageId: string };
+  /** Short hash of the anchor message text, to spot an edit. */
+  hash: string;
+  createdAt: number;
+  status: "open" | "kept" | "dropped" | "stale";
+}
+
 export interface MeanwhileDocument {
   schemaVersion: 1;
   circles: Circle[];
@@ -75,6 +91,9 @@ export interface MeanwhileDocument {
   /** "circleId:day" for every Circle day whose beat call is done. */
   beatDays: string[];
   usage: Usage[];
+  promises: PromiseRecord[];
+  /** chatId -> createdAt (ms) of the newest message the promise pass has read. */
+  promisePass: Record<string, number>;
 }
 
 let runtime: CapabilityRuntimeHost | null = null;
@@ -229,6 +248,8 @@ export function emptyMeanwhileDocument(): MeanwhileDocument {
     dealtDays: [],
     beatDays: [],
     usage: [],
+    promises: [],
+    promisePass: {},
   };
 }
 
@@ -251,6 +272,10 @@ export function normalizeMeanwhile(value: unknown): MeanwhileDocument {
     ),
     dealtDays: list(value.dealtDays).filter((d): d is string => typeof d === "string"),
     beatDays: list(value.beatDays).filter((d): d is string => typeof d === "string"),
+    promises: list(value.promises).filter(
+      (p): p is PromiseRecord => isRecord(p) && typeof p.id === "string" && typeof p.circleId === "string",
+    ),
+    promisePass: isRecord(value.promisePass) ? (value.promisePass as Record<string, number>) : {},
     usage: list(value.usage).filter(
       (u): u is Usage =>
         isRecord(u) && typeof u.realDay === "string" && typeof u.circleId === "string" && typeof u.calls === "number",

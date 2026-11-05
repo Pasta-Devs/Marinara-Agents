@@ -40,6 +40,7 @@ const world = (over: Partial<World> = {}): World => ({
   schedules: {},
   tags: [],
   chatTruth: {},
+  promises: [],
   personas: ["Sam"],
   events: [],
   now: T0,

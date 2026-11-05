@@ -15,6 +15,7 @@ export interface CircleStatus {
   retryAt: number | null;
   lastError: string | null;
   dueReason: string | null;
+  fastForward: { running: boolean; dayIndex: number; days: number };
 }
 
 export interface Circle {
@@ -29,6 +30,8 @@ export interface Circle {
   backgroundTimer: boolean;
   connectionId: string;
   status: CircleStatus;
+  /** Big events that wait for the user. */
+  waiting: number;
 }
 
 export type CircleFields = Partial<
@@ -144,8 +147,43 @@ export interface HookCard {
 export interface Home {
   hooks: HookCard[];
   diary: Record<string, { id: string; day: string; text: string }[]>;
+  waiting: { id: string; cast: string[]; kind: string; text: string; day: string }[];
 }
 
 export const getHome = (id: string) => api<Home>(`/circles/${id}/home`);
 export const pickUp = (id: string, eventId: string, chatId: string) =>
   api<{ ok: true }>(`/circles/${id}/hooks/${eventId}/pick`, "POST", { chatId });
+
+/** Fast forward: `{ days }` (1 to 7) or `{ hours }`. */
+export type Span = { days: number } | { hours: number };
+export interface Estimate {
+  days: number;
+  calls: number;
+  left: number;
+  overBudget: boolean;
+  /** Days the Circle was already behind, covered by one summary. */
+  missed: number;
+}
+
+export const previewFastForward = (id: string, span: Span) =>
+  api<Estimate>(`/circles/${id}/fast-forward/preview`, "POST", span);
+export const fastForward = (id: string, span: Span, allowOverBudget: boolean) =>
+  api<Circle>(`/circles/${id}/fast-forward`, "POST", { ...span, allowOverBudget });
+export const cancelFastForward = (id: string) => api<{ ok: boolean }>(`/circles/${id}/fast-forward/cancel`, "POST", {});
+
+export const acceptEvent = (id: string, eventId: string) =>
+  api<{ ok: true }>(`/circles/${id}/events/${eventId}/accept`, "POST", {});
+export const vetoEvent = (id: string, eventId: string) =>
+  api<{ ok: true }>(`/circles/${id}/events/${eventId}/veto`, "POST", {});
+export const editEvent = (id: string, eventId: string, text: string) =>
+  api<{ ok: true }>(`/circles/${id}/events/${eventId}`, "PATCH", { text });
+
+export interface PromiseItem {
+  id: string;
+  characterId: string;
+  text: string;
+  due: string;
+  status: "open" | "kept" | "dropped" | "stale";
+  visibility: string;
+}
+export const getPromises = (id: string) => api<{ promises: PromiseItem[] }>(`/circles/${id}/promises`);

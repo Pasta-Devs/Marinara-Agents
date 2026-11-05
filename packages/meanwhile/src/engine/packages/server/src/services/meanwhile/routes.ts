@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
 import {
+  DAY,
+  HOUR,
   SPEED_MAX,
   BACKGROUND_EVERY_MS,
   RUN_AHEAD_MS,
@@ -14,9 +16,18 @@ import {
   wallToMs,
   type RunMark,
 } from "./clock.js";
-import { dueNow, readSchedules, runCircleNow, runDuePass } from "./scheduler.js";
+import {
+  cancelFastForward,
+  dueNow,
+  ffStatus,
+  previewFastForward,
+  readSchedules,
+  runCircleNow,
+  runDuePass,
+  startFastForward,
+} from "./scheduler.js";
 import { currentBlock } from "./routine.js";
-import { usageRow } from "./beats.js";
+import { bannedWords, usageRow } from "./beats.js";
 import {
   applyCircleFields,
   circleFieldError,
@@ -27,6 +38,7 @@ import {
   updateMeanwhile,
   withMark,
   type Circle,
+  type LifeEvent,
   type MeanwhileDocument,
 } from "./store.js";
 
@@ -75,6 +87,7 @@ function statusOf(circle: Circle, mark: RunMark, now: number, calls: number) {
     failures: mark.failures,
     retryAt: mark.nextAt > now ? mark.nextAt : null,
     lastError: mark.lastError,
+    fastForward: ffStatus(circle.id),
     dueReason: dueNow(circle, mark, false, now),
   };
 }
@@ -82,6 +95,7 @@ function statusOf(circle: Circle, mark: RunMark, now: number, calls: number) {
 const view = (doc: MeanwhileDocument, circle: Circle, now: number) => ({
   ...circle,
   status: statusOf(circle, markOf(doc, circle.id), now, usageRow(doc.usage, circle.id, now).calls),
+  waiting: doc.events.filter((e) => e.circleId === circle.id && e.status === "proposed").length,
 });
 
 export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
@@ -136,6 +150,7 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
       events: d.events.filter((e) => e.circleId !== id),
       seeds: d.seeds.filter((s) => s.circleId !== id),
       dealtDays: d.dealtDays.filter((k) => !k.startsWith(`${id}:`)),
+      promises: d.promises.filter((p) => p.circleId !== id),
     }));
     return { ok: true };
   });
@@ -277,7 +292,17 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
         .slice(0, 20)
         .map((e) => ({ id: e.id, day: msToWall(Date.parse(e.start), tz).slice(0, 10), text: e.diary![id]! }));
     }
-    return { hooks, diary };
+    const waiting = doc.events
+      .filter((e) => e.circleId === circle.id && e.status === "proposed")
+      .sort((a, b) => Date.parse(a.start) - Date.parse(b.start))
+      .map((e) => ({
+        id: e.id,
+        cast: e.cast,
+        kind: e.kind,
+        text: e.text,
+        day: msToWall(Date.parse(e.start), tz).slice(0, 10),
+      }));
+    return { hooks, diary, waiting };
   });
 
   // "Pick up this thread": the next generation in that chat brings the hook up.
@@ -302,6 +327,142 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
       }),
     }));
     return { ok: true };
+  });
+
+  // Fast forward: 1 to 7 days, or hours up to that. Body: { days } or { hours }.
+  const spanOf = (src: Record<string, unknown>): number | null => {
+    const unit = src.days !== undefined ? DAY : HOUR;
+    const n = src.days ?? src.hours;
+    return typeof n === "number" && Number.isInteger(n) && n >= 1 && n * unit <= 7 * DAY ? n * unit : null;
+  };
+  const SPAN_ERROR = "Pick 1 to 7 days, or up to 168 hours";
+
+  app.post<{ Params: { id: string } }>("/circles/:id/fast-forward/preview", async (request, reply) => {
+    const span = spanOf(body(request));
+    if (span === null) return reply.code(400).send({ error: SPAN_ERROR });
+    const estimate = await previewFastForward(request.params.id, span);
+    return estimate ? { ...estimate, overBudget: estimate.calls > estimate.left } : notFound(reply);
+  });
+
+  app.post<{ Params: { id: string } }>("/circles/:id/fast-forward", async (request, reply) => {
+    const circle = find(await readMeanwhile(), request.params.id);
+    if (!circle) return notFound(reply);
+    const src = body(request);
+    const span = spanOf(src);
+    if (span === null) return reply.code(400).send({ error: SPAN_ERROR });
+    if (!circle.connectionId) return reply.code(409).send({ error: "Choose a model to start" });
+    const over = src.allowOverBudget === true;
+    const now = Date.now();
+    const estimate = await previewFastForward(circle.id, span, now);
+    if (estimate && estimate.calls > estimate.left && !over) {
+      const left = Math.max(0, estimate.left);
+      return reply.code(409).send({
+        error: `This uses ${estimate.calls} of ${left} calls left today. Go on?`,
+        ...estimate,
+        overBudget: true,
+      });
+    }
+    if (!(await startFastForward(circle.id, span, over, now))) {
+      return reply.code(409).send({ error: "A run is already live for this Circle" });
+    }
+    const doc = await readMeanwhile();
+    return view(doc, find(doc, circle.id) ?? circle, Date.now());
+  });
+
+  app.post<{ Params: { id: string } }>("/circles/:id/fast-forward/cancel", async (request, reply) => {
+    if (!find(await readMeanwhile(), request.params.id)) return notFound(reply);
+    return { ok: cancelFastForward(request.params.id) };
+  });
+
+  // Review queue. Accept a proposed event, veto a proposed or accepted one, edit the text of a notable or major one.
+  type Change = (
+    event: LifeEvent,
+    circle: Circle,
+    src: Record<string, unknown>,
+  ) => Promise<LifeEvent | { code: number; error: string }>;
+  // `from` is checked again inside the write, so an expiry or a second click between read and write gives a 409.
+  const changeEvent =
+    (from: LifeEvent["status"][], change: Change) =>
+    async (
+      request: { params: { id: string; eventId: string }; body?: unknown },
+      reply: Parameters<typeof notFound>[0],
+    ) => {
+      const doc = await readMeanwhile();
+      const circle = find(doc, request.params.id);
+      const event = doc.events.find((e) => e.id === request.params.eventId && e.circleId === request.params.id);
+      if (!circle || !event) return notFound(reply);
+      const next = await change(event, circle, body(request));
+      if ("error" in next) return reply.code(next.code).send({ error: next.error });
+      let moved = false;
+      await updateMeanwhile((d) => {
+        const now = d.events.find((e) => e.id === next.id);
+        moved = !now || !from.includes(now.status);
+        return moved
+          ? d
+          : {
+              ...d,
+              events: d.events.map((e) => (e.id === next.id ? { ...e, text: next.text, status: next.status } : e)),
+            };
+      });
+      return moved ? reply.code(409).send({ error: "This event changed. Reload and try again." }) : { ok: true };
+    };
+  type EventParams = { Params: { id: string; eventId: string } };
+
+  app.post<EventParams>(
+    "/circles/:id/events/:eventId/accept",
+    changeEvent(["proposed"], async (e) =>
+      e.status === "proposed"
+        ? { ...e, status: "accepted" }
+        : { code: 409, error: "Only an event that waits can be accepted" },
+    ),
+  );
+  app.post<EventParams>(
+    "/circles/:id/events/:eventId/veto",
+    changeEvent(["proposed", "accepted"], async (e) =>
+      e.status === "proposed" || e.status === "accepted"
+        ? { ...e, status: "vetoed" }
+        : { code: 409, error: "This event is already gone" },
+    ),
+  );
+  app.patch<EventParams>(
+    "/circles/:id/events/:eventId",
+    changeEvent(["accepted", "proposed"], async (e, circle, src) => {
+      const text = typeof src.text === "string" ? src.text.trim().replace(/\s+/g, " ") : "";
+      if (e.weight !== "notable" && e.weight !== "major")
+        return { code: 409, error: "Only notable and major events can be edited" };
+      if (e.status !== "accepted" && e.status !== "proposed") return { code: 409, error: "This event is already gone" };
+      if (!text || text.length > 140) return { code: 400, error: "Text must have 1 to 140 characters" };
+      const { personas, cast } = await readSchedules(circle);
+      if (
+        bannedWords(
+          personas,
+          Object.values(cast).map((c) => c.name),
+        ).test(text)
+      ) {
+        return { code: 400, error: "The text must not name or address you" };
+      }
+      return { ...e, text };
+    }),
+  );
+
+  // Plans that the characters said in chat, newest first.
+  app.get<{ Params: { id: string } }>("/circles/:id/promises", async (request, reply) => {
+    const doc = await readMeanwhile();
+    if (!find(doc, request.params.id)) return notFound(reply);
+    return {
+      promises: doc.promises
+        .filter((p) => p.circleId === request.params.id)
+        .sort((a, b) => b.due.localeCompare(a.due))
+        .slice(0, 30)
+        .map(({ id, characterId, text, due, status, visibility }) => ({
+          id,
+          characterId,
+          text,
+          due,
+          status,
+          visibility,
+        })),
+    };
   });
 
   app.get<{ Params: { id: string } }>("/circles/:id/status", async (request, reply) => {
