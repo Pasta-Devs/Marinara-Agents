@@ -30,7 +30,7 @@ export interface Circle {
   backgroundTimer: boolean;
   writeStatus: boolean;
   /** Characters whose status another Circle writes. */
-  statusElsewhere: { characterId: string; circle: string }[];
+  statusElsewhere: { characterId: string; circle: string; note: string }[];
   connectionId: string;
   status: CircleStatus;
   /** Big events that wait for the user. */

@@ -102,7 +102,15 @@ const view = (doc: MeanwhileDocument, circle: Circle, now: number) => ({
     ? circle.castIds.flatMap((id) => {
         const owner = statusOwner(doc.circles, id);
         const other = owner && owner !== circle.id ? doc.circles.find((c) => c.id === owner) : null;
-        return other ? [{ characterId: id, circle: other.name }] : [];
+        return other
+          ? [
+              {
+                characterId: id,
+                circle: other.name,
+                note: other.clock.speed === 0 ? "paused" : other.clock.speed !== 1 ? "not real time" : "",
+              },
+            ]
+          : [];
       })
     : [],
 });
@@ -267,12 +275,12 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
         dealt: doc.seeds.filter((s) => s.circleId === circle.id && s.day === today),
         // Where and when the status was last written for each character.
         statusSent: Object.fromEntries(
-          circle.castIds.flatMap((id) =>
-            circle.linkedChatIds.flatMap((chatId) => {
-              const sent = doc.statusSent[`${chatId}:${id}`];
-              return sent?.at ? [[id, { chatId, at: sent.at }]] : [];
-            }),
-          ),
+          circle.castIds.flatMap((id) => {
+            const sent = doc.statusSent[id];
+            return sent?.at && circle.linkedChatIds.includes(sent.chatId)
+              ? [[id, { chatId: sent.chatId, at: sent.at }]]
+              : [];
+          }),
         ),
       };
     },

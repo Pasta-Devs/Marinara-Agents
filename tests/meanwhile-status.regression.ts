@@ -18,6 +18,7 @@ const T0 = Date.parse("2026-11-05T12:00:00Z");
 const docs = new Map<string, any>();
 const calls: any[] = [];
 let handSet = false;
+let throwFor = "";
 const chats = [
   { id: "rp", mode: "roleplay", characterIds: ["x"] },
   { id: "c1", mode: "conversation", characterIds: ["x"] },
@@ -29,6 +30,7 @@ configureMeanwhileRuntime({
     listChats: async () => chats,
     updateCharacterStatus: async (chatId: string, characterId: string, update: unknown) => {
       calls.push({ chatId, characterId, update });
+      if (characterId === throwFor) throw new Error("update failed");
       return handSet ? null : { targetChatId: chatId };
     },
     documents: {
@@ -94,6 +96,7 @@ for (const bad of [
   { weight: "routine" },
   { weight: "summary" },
   { visibility: "chat:c1" },
+  { anchors: [{ chatId: "c1", messageId: "m" }] },
   { cast: ["y"] },
   { end: new Date(T0 - 1).toISOString() },
   { start: new Date(T0 + 1).toISOString() },
@@ -101,7 +104,7 @@ for (const bad of [
   assert.equal(plan([event(bad)])!.activity, "deep work", JSON.stringify(bad));
 // Duration bounds: min 15 minutes, max 12 hours.
 assert.equal(plan([event({ end: new Date(T0 + 60_000).toISOString() })])!.duration, "15m");
-assert.equal(plan([event({ end: new Date(T0 + 30 * 3600_000).toISOString() })])!.duration, "12h");
+assert.equal(plan([event({ end: new Date(T0 + 30 * 3600_000).toISOString() })])!.duration, "2h");
 // No status in the schedule: sleeping is offline, anything else online.
 assert.equal(
   plan([], circle(), { days: { Thursday: [{ time: "09:00-13:00", activity: "sleeping in" }] } })!.status,
@@ -137,7 +140,7 @@ async function main() {
   ]);
   await writeStatuses(T0 + 60_000, read);
   assert.equal(calls.length, 1);
-  assert.ok((await readMeanwhile()).statusSent["c1:x"].at > 0);
+  assert.ok((await readMeanwhile()).statusSent["x"].at > 0);
 
   // A veto of the written event makes the next pass write the routine again.
   const e = event({ end: new Date(T0 + 3600_000).toISOString() });
@@ -166,7 +169,41 @@ async function main() {
   await writeStatuses(T0, read);
   await writeStatuses(T0 + 60_000, read);
   assert.equal(calls.length, 1);
-  assert.equal((await readMeanwhile()).statusSent["c1:x"].at, 0);
+  assert.equal((await readMeanwhile()).statusSent["x"].at, 0);
+
+  // Hand-off back: B takes over, then B is deleted; A writes again even though the card key moved on.
+  handSet = false;
+  await seed([circle(), circle({ id: "b", statusSince: 2, linkedChatIds: ["c2"] })]);
+  await writeStatuses(T0, read);
+  await updateMeanwhile((d) => ({ ...d, circles: d.circles.filter((c) => c.id !== "b") }));
+  await writeStatuses(T0 + 60_000, read);
+  assert.deepEqual(
+    calls.map((c) => c.chatId),
+    ["c2", "c1"],
+  );
+
+  // One failing character does not stop the next; one failing Circle does not stop the next Circle.
+  await updateMeanwhile((d) => ({ ...d, statusSent: {} }));
+  calls.length = 0;
+  chats.push({ id: "c3", mode: "conversation", characterIds: ["y"] });
+  await seed([circle({ castIds: ["x", "y"], linkedChatIds: ["c1", "c3"] })]);
+  throwFor = "x";
+  await writeStatuses(T0, read);
+  assert.deepEqual(
+    calls.map((c) => c.characterId),
+    ["x", "y"],
+  );
+  throwFor = "";
+  await seed([circle({ id: "a1", statusSince: 1 }), circle({ id: "a2", castIds: ["y"], linkedChatIds: ["c3"] })]);
+  let reads = 0;
+  await writeStatuses(T0, async (c) => {
+    if (reads++ === 0) throw new Error("read failed");
+    return read(c);
+  });
+  assert.deepEqual(
+    calls.map((c) => c.characterId),
+    ["y"],
+  );
 
   // No linked Conversation chat with the character: nothing is written.
   await seed([circle({ linkedChatIds: ["rp"] })]);

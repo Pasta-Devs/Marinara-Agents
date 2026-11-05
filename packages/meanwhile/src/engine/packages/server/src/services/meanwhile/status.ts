@@ -6,7 +6,8 @@ import { currentBlock } from "./routine.js";
 
 const STATUSES = new Set(["online", "idle", "dnd", "offline"]);
 const MIN_MINUTES = 15;
-const MAX_MINUTES = 12 * 60;
+// Short on purpose: the override stays on the card after the switch is turned off, paused or deleted.
+const MAX_MINUTES = 2 * 60;
 
 export interface StatusPlan {
   status: string;
@@ -42,6 +43,8 @@ export function planStatus(input: {
         e.status === "accepted" &&
         (e.weight === "notable" || e.weight === "major") &&
         e.visibility === "circle" &&
+        // Chat-born events (promises, anchored to a message) stay out: the card shows in chats outside the Circle.
+        !e.anchors?.length &&
         e.cast.includes(characterId) &&
         Date.parse(e.start) <= nowMs &&
         nowMs < Date.parse(e.end),
@@ -82,31 +85,38 @@ export async function writeStatuses(
   if (!update || mine.length === 0) return;
   const chats = await runtime.persistence.listChats();
   const sent: Record<string, StatusSent> = {};
+  const warn = (error: unknown) =>
+    runtime.logger.warn(`[meanwhile] status write failed: ${error instanceof Error ? error.message : String(error)}`);
   for (const circle of mine) {
-    const { schedules } = await readSchedules(circle);
-    const nowMs = circleNowMs(circle.clock, now);
-    for (const id of circle.castIds) {
-      if (statusOwner(doc.circles, id) !== circle.id) continue;
-      const chat = circle.linkedChatIds
-        .map((chatId) => chats.find((c) => c.id === chatId))
-        .find((c) => c?.mode === "conversation" && c.characterIds.includes(id));
-      const plan = chat && planStatus({ circle, characterId: id, schedule: schedules[id], events: doc.events, nowMs });
-      if (!chat || !plan || doc.statusSent[`${chat.id}:${id}`]?.key === plan.key) continue;
-      try {
-        const result = await update(chat.id, id, {
-          status: plan.status as never,
-          activity: plan.activity,
-          duration: plan.duration,
-        });
-        // null: the Engine kept a status set by hand or a shared room. Remember it so the pass stays quiet.
-        sent[`${chat.id}:${id}`] = { key: plan.key, at: result ? now : 0 };
-      } catch (error) {
-        runtime.logger.warn(
-          `[meanwhile] status write failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
+    try {
+      const { schedules } = await readSchedules(circle);
+      const nowMs = circleNowMs(circle.clock, now);
+      for (const id of circle.castIds) {
+        if (statusOwner(doc.circles, id) !== circle.id) continue;
+        const chat = circle.linkedChatIds
+          .map((chatId) => chats.find((c) => c.id === chatId))
+          .find((c) => c?.mode === "conversation" && c.characterIds.includes(id));
+        const plan =
+          chat && planStatus({ circle, characterId: id, schedule: schedules[id], events: doc.events, nowMs });
+        // The override sits on the card, so the last write is remembered per character, not per chat.
+        const key = plan && chat ? `${chat.id}|${plan.key}` : "";
+        if (!chat || !plan || doc.statusSent[id]?.key === key) continue;
+        try {
+          const result = await update(chat.id, id, {
+            status: plan.status as never,
+            activity: plan.activity,
+            duration: plan.duration,
+          });
+          // null: the Engine kept a status set by hand or a shared room. Remember it so the pass stays quiet.
+          sent[id] = { key, chatId: chat.id, at: result ? now : 0 };
+        } catch (error) {
+          warn(error);
+        }
       }
+    } catch (error) {
+      warn(error);
     }
   }
-  // ponytail: entries of unlinked chats stay in storage (a few bytes each), prune if it ever matters.
+  // ponytail: entries of deleted characters stay in storage (a few bytes each), prune if it ever matters.
   if (Object.keys(sent).length) await updateMeanwhile((d) => ({ ...d, statusSent: { ...d.statusSent, ...sent } }));
 }

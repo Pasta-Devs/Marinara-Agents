@@ -45,8 +45,9 @@ const COPY = {
   noEvents: "Nothing yet. Press Run now to fill the days.",
   statusSwitch: "Character status",
   statusExplain:
-    "Writes what each person does now to their first linked Conversation chat, as their status. It only follows real time (x1). At other speeds, or paused, nothing is written.",
-  statusElsewhere: (name: string, circle: string) => `${name}'s status is set by ${circle}.`,
+    "Writes what each person does now to their first linked Conversation chat, as their status. It only follows real time (x1). At other speeds, or paused, nothing is written. A status can stay up to 2 hours after you turn this off.",
+  statusElsewhere: (name: string, circle: string, note: string) =>
+    `${name}'s status is set by ${circle}${note ? ` (${note})` : ""}.`,
   statusSent: (chat: string, at: string) => `Status sent to ${chat} at ${at}`,
   needModel: "Choose a model to start",
   edit: "Edit",
@@ -356,13 +357,24 @@ function CircleForm({ circle, onDone }: { circle: Circle | null; onDone: () => v
         <span>Also run every 6 hours in the background</span>
       </label>
       <label className="mw-check">
-        <input type="checkbox" checked={draft.writeStatus} onChange={(e) => set({ writeStatus: e.target.checked })} />
+        <input
+          type="checkbox"
+          aria-describedby={`mw-status-explain-${circle?.id ?? "new"}`}
+          checked={draft.writeStatus}
+          onChange={(e) => set({ writeStatus: e.target.checked })}
+        />
         <span>{COPY.statusSwitch}</span>
       </label>
-      <div className="mw-muted">{COPY.statusExplain}</div>
+      <div id={`mw-status-explain-${circle?.id ?? "new"}`} className="mw-muted">
+        {COPY.statusExplain}
+      </div>
       {circle?.statusElsewhere.map((s) => (
         <div key={s.characterId} className="mw-warn">
-          {COPY.statusElsewhere(characters.data?.find((c) => c.id === s.characterId)?.name ?? "Someone", s.circle)}
+          {COPY.statusElsewhere(
+            characters.data?.find((c) => c.id === s.characterId)?.name ?? "Someone",
+            s.circle,
+            s.note,
+          )}
         </div>
       ))}
       <label className="mw-field">

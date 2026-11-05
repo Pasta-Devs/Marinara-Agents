@@ -85,6 +85,7 @@ export interface PromiseRecord {
 
 export interface StatusSent {
   key: string;
+  chatId: string;
   at: number;
 }
 
@@ -103,7 +104,7 @@ export interface MeanwhileDocument {
   promises: PromiseRecord[];
   /** chatId -> createdAt (ms) of the newest message the promise pass has read. */
   promisePass: Record<string, number>;
-  /** "chatId:characterId" -> the last status written there. `at` is 0 when the Engine kept a status set by hand. */
+  /** characterId -> the last status written (`key` = chat|status|activity). `at` is 0 when the Engine kept a status set by hand. */
   statusSent: Record<string, StatusSent>;
 }
 
