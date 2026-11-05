@@ -74,6 +74,11 @@ export interface PlaceKit {
   scenario?: { goal: string }; // fixed start meters, a fixed opening thread and one set goal
   adult?: { intensity: number; themes: string[] }; // start values when the adult module is switched on
   officeHours?: { day: number; slot: Slot }; // 0-4 = Mon-Fri; default Wednesday afternoon (2, "afternoon")
+  // M4 additions, all optional so older kits stay valid
+  things?: { id: string; kind: "key" | "gift" | "document" | "evidence" | "artefact"; name: string; about?: string }[]; // drawer start items
+  equipment?: { id: string; name: string; room?: string; condition: number }[];
+  culture?: Record<string, number>; // tag -> start points
+  depth?: { money?: boolean; building?: boolean }; // start values of the depth options
   authorityStart?: { fear: number; love: number; legitimacy: number };
   court?: string[]; // advisor roles in an absolute place (chancellor, marshal, spymaster)
   roles?: { id: string; name: string; about: string }[]; // role list the AI makes up for the place

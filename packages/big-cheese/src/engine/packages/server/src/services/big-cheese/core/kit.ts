@@ -77,6 +77,35 @@ export const HAFENKAI: Kit = {
   },
 };
 
+/** The M4 fields a fresh run starts with. The place kit seeds the drawer, equipment, culture, depth and traditions. A v3 save gets them too. */
+export const m4Defaults = (place?: PlaceKit) => ({
+  things: {
+    drawer: (place?.things ?? []).map((t) => ({ ...t })),
+    equipment: (place?.equipment ?? []).map((e) => ({ ...e })),
+  },
+  culture: { ...place?.culture } as Record<string, number>,
+  cultureLog: [] as Run["cultureLog"],
+  traditions: (place?.traditions ?? []).map((t) => ({ id: t.id, text: t.text, count: 0, active: false })),
+  goals: [] as Run["goals"],
+  perks: [] as string[],
+  perkOffer: null as string[] | null,
+  achievements: [] as string[],
+  tally: {} as Record<string, number>,
+  favours: [] as Run["favours"],
+  leverage: [] as Run["leverage"],
+  informants: [] as Run["informants"],
+  delegated: {} as Record<string, string>,
+  depth: { money: !!place?.depth?.money, building: !!place?.depth?.building },
+  ledger: { salaries: 0, loans: [], quarter: 0 } as Run["ledger"],
+  buildOrders: [] as Run["buildOrders"],
+  legacy: null as Run["legacy"],
+  yearbook: [] as string[],
+  pendingTerm: null as Run["pendingTerm"],
+  openedRooms: [] as string[],
+  boss: { stress: 20, energy: 100, peak: 20, weeksAt100: 0 }, // core/boss.ts
+  lastTerm: 0,
+});
+
 /** The M3 fields a fresh run starts with. Also what a v2 save gets. */
 const m3Defaults = () => ({
   mode: "normal" as const,
@@ -94,8 +123,9 @@ const m3Defaults = () => ({
 
 export function newRun(kit: Kit, seed: number, place: PlaceKit = HAFENKAI_PLACE): Run {
   const s: Run = {
-    saveVersion: 3,
+    saveVersion: 4,
     ...m3Defaults(),
+    ...m4Defaults(place),
     rng: seed | 0,
     nextId: 0,
     storyteller: kit.storyteller,
@@ -158,5 +188,10 @@ export function migrate(v1: Run | Record<string, any>, kit: Kit): Run {
 
 /** Save v2 to v3: fills the M3 fields with the defaults a fresh run gets. Pure. */
 export function migrate3(v2: Run | Record<string, any>): Run {
-  return { ...m3Defaults(), ...v2, saveVersion: 3 } as Run;
+  return { ...m3Defaults(), ...v2, saveVersion: 3 } as unknown as Run; // still v3, migrate4 finishes it
+}
+
+/** Save v3 to v4: fills the M4 fields (the place kit seeds the drawer and the rest). Pure. */
+export function migrate4(v3: Run | Record<string, any>, place?: PlaceKit): Run {
+  return { ...m4Defaults(place), ...v3, saveVersion: 4 } as Run;
 }

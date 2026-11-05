@@ -9,7 +9,19 @@ export type Tier = "strong" | "middle" | "weak";
 export type Storyteller = "calm" | "classic" | "chaos";
 
 /** Story layers (README, Story layers); drama and romance are M2, the rest come with M3. */
-export type Layer = "drama" | "romance" | "press" | "rivals" | "family" | "adult";
+export type Layer =
+  | "drama"
+  | "romance"
+  | "press"
+  | "rivals"
+  | "family"
+  | "adult"
+  | "crime"
+  | "politics"
+  | "mystery"
+  | "horror"
+  | "legacy"
+  | "strange";
 export type Mode = "normal" | "honest" | "sandbox" | "ironman";
 export const DIFFICULTIES = ["easy", "normal", "hard"] as const;
 export type Difficulty = (typeof DIFFICULTIES)[number];
@@ -56,7 +68,7 @@ export interface Person {
   name?: string; // set when a cast card replaces or adds this person
   routine?: Record<Slot, string>; // hired people and visitors are not in the kit
   until?: number; // visitors: the day index on which they go home
-  status: "active" | "on_leave" | "sick" | "quit" | "fired" | "banished" | "imprisoned" | "dead";
+  status: "active" | "on_leave" | "sick" | "quit" | "fired" | "banished" | "imprisoned" | "dead" | "missing";
 }
 
 export const SLOTS = ["morning", "midday", "afternoon", "evening", "night"] as const;
@@ -182,7 +194,7 @@ export interface Report {
 }
 
 export interface Run {
-  saveVersion: 3;
+  saveVersion: 4;
   rng: number;
   nextId: number;
   storyteller: Storyteller;
@@ -244,4 +256,41 @@ export interface Run {
   houseRules: Record<string, string>; // rule id -> chosen option
   officeHours: { day: number; slot: Slot; visitors: string[] }; // one booked hour, up to OFFICE_HOURS_CAP visitors
   wishPoints: { term: number; left: number }; // in-run wishes, WISH_POINTS_PER_TERM per term
+  // M4 state (all default empty, see kit.ts m4Defaults)
+  things: {
+    drawer: {
+      id: string;
+      kind: "key" | "gift" | "document" | "evidence" | "artefact";
+      name: string;
+      about?: string;
+      thread?: string;
+    }[];
+    equipment: { id: string; name: string; room?: string; condition: number }[];
+  };
+  culture: Record<string, number>; // tag -> points
+  cultureLog: { stance: string; week: number }[]; // last 8 weeks only
+  traditions: { id: string; text: string; count: number; active: boolean }[];
+  goals: { term: number; offered: string[]; picked: string[]; met: string[] }[];
+  perks: string[];
+  perkOffer: string[] | null;
+  achievements: string[];
+  tally: Record<string, number>; // counters the achievements read
+  favours: { from: string; to?: string; why: string; week: number; used: boolean }[];
+  leverage: { about: string; thread?: string; used: boolean; found: boolean }[];
+  informants: { person: string; target: string; kind: "room" | "group"; paid: boolean }[];
+  delegated: Record<string, string>; // area id -> person id
+  depth: { money: boolean; building: boolean };
+  ledger: {
+    salaries: number;
+    loans: { id: string; amount: number; due: number; repaid: boolean }[];
+    quarter: number;
+    audit?: number;
+  };
+  buildOrders: { room: string; kind: "upgrade" | "decor" | "new"; doneWeek: number }[];
+  legacy: { generation: number; heir?: string; from?: string } | null; // from = the run id of the boss before
+  yearbook: string[]; // child document ids, one per term
+  pendingTerm: { term: number; review: string[]; award?: string } | null;
+  openedRooms: string[]; // hidden rooms the boss has opened
+  boss: { stress: number; energy: number; peak: number; weeksAt100: number }; // see core/boss.ts
+  lastTerm: number; // the last term whose end ran (endTerm fires once per term)
 }

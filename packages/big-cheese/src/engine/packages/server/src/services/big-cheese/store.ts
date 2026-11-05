@@ -7,29 +7,30 @@ import { randomBytes } from "node:crypto";
 import type { CapabilityDocumentStore } from "@marinara-engine/shared";
 import type { Cast } from "./cast.js";
 import { z } from "zod";
-import { migrate, migrate3, newRun, startSystems, type Run as Game } from "./core/index.js";
+import { migrate, migrate3, migrate4, newRun, startSystems, type Run as Game } from "./core/index.js";
 import { KITS, placeKitOf, rulesOf } from "./core/kits/index.js";
 import type { PlaceKit } from "./core/kits/types.js";
 
 export const PACKAGE_ID = "big-cheese";
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
-/** Reads a v1 or v2 game (a run, or a copy in a Cheese Board snapshot) as v3. */
-export function upgradeGame(game: Game, kitId: string): Game {
+/** Reads a v1, v2 or v3 game (a run, or a copy in a Cheese Board snapshot) as v4. */
+export function upgradeGame(game: Game, kitId: string, custom?: PlaceKit | null): Game {
   const kit = Object.hasOwn(KITS, kitId) ? KITS[kitId as keyof typeof KITS].rules : null;
   const v = game.saveVersion as number;
   if (v >= SAVE_VERSION) return game;
   // Only the v1 step needs the kit's rules; v2 to v3 fills defaults without them.
-  const g = v === 1 ? (kit ? migrate3(migrate(game, kit)) : game) : migrate3(game);
   // migrate3 leaves the system table empty; an old save gets its kit's blocks (Founders' day) here.
   const place = kit ? KITS[kitId as keyof typeof KITS].place : null; // a custom kit has no place here
+  const v3 = v === 1 ? (kit ? migrate3(migrate(game, kit)) : game) : migrate3(game);
+  const g = migrate4(v3, place ?? custom ?? undefined);
   if (place && !Object.keys(g.systems).length) startSystems(g, place);
   return g;
 }
 const upgrade = (data: unknown): unknown => {
-  const d = data as { saveVersion?: unknown; kitId?: string; game?: Game } | null;
+  const d = data as { saveVersion?: unknown; kitId?: string; game?: Game; kit?: PlaceKit | null } | null;
   return typeof d?.saveVersion === "number" && d.saveVersion < SAVE_VERSION && d.game
-    ? { ...d, saveVersion: SAVE_VERSION, game: upgradeGame(d.game, d.kitId ?? "") }
+    ? { ...d, saveVersion: SAVE_VERSION, game: upgradeGame(d.game, d.kitId ?? "", d.kit) }
     : data;
 };
 

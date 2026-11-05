@@ -10,7 +10,19 @@ import { bookBigScene } from "./bigscenes.js";
 import { adultSeeds } from "./adult.js";
 import type { Meter, Run, Thread } from "./types.js";
 
-const LAYERS = ["drama", "romance", "press", "rivals", "family"] as const;
+const LAYERS = [
+  "drama",
+  "romance",
+  "press",
+  "rivals",
+  "family",
+  "crime",
+  "politics",
+  "mystery",
+  "horror",
+  "legacy",
+  "strange",
+] as const;
 type Layer = (typeof LAYERS)[number];
 const WEEKLY = 0.6; // chance per Monday at dial 100, scales down with the dial
 
@@ -47,6 +59,12 @@ const SEEDS: Record<Layer, Seed[]> = {
     { title: "A mole passes your plans to the rival", need: "standing" },
     { title: "The rival sabotages a delivery", need: "output" },
   ],
+  crime: [],
+  politics: [],
+  mystery: [],
+  horror: [],
+  legacy: [],
+  strange: [], // M4 tickets fill their own row
   family: [
     { title: "Your family asks you home for the evening", need: "people" },
     { title: "A family birthday lands on a work day", need: "people" },
@@ -107,6 +125,7 @@ export function layerSeeds(s: Run, cap: number) {
   }
   for (const r of s.relations) if (r.kind === "crush" && r.level >= 80 && dial(s, "romance") > 0) r.kind = "couple";
   for (const l of LAYERS) {
+    if (!SEEDS[l].length) continue; // M4 layers with no seeds yet
     const d = dial(s, l);
     const open = Object.values(s.threads);
     if (!d || open.length >= cap || open.some((t) => t.layer === l) || roll(s) >= (d / 100) * WEEKLY) continue;

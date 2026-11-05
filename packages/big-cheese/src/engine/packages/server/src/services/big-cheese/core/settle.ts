@@ -7,6 +7,8 @@ import { dayTurn } from "./people.js";
 import { applyDelta, clamp, pure } from "./run.js";
 import { checkRevolt } from "./storyteller.js";
 import { sulkAdvisors } from "./advisors.js";
+import { bossWeek } from "./boss.js";
+import { endTerm } from "./term.js";
 import { checkPromises } from "./threads.js";
 import { METERS, WISH_POINTS_PER_TERM } from "./types.js";
 import type { PlaceKit } from "./kits/types.js";
@@ -25,6 +27,7 @@ export function settleWeek(s: Run, before = { ...s.meters }, kit?: PlaceKit) {
   for (const k of METERS) s.meters[k] = clamp(Math.round(s.meters[k] + (50 - s.meters[k]) * DRIFT - WEAR));
   for (const e of s.extras) if (e.value < 20) s.meters[e.main] = clamp(s.meters[e.main] - 2);
   if (kit) weeklyAuthority(s, kit); // T7: house rules, the absolute rule
+  bossWeek(s);
   s.report = { week: s.clock.week, income, before, after: { ...s.meters } };
   s.meterHistory.push({ week: s.clock.week, ...s.meters });
   for (const k of METERS) s.low[k] = s.meters[k] < 10 ? s.low[k] + 1 : 0;
@@ -44,7 +47,15 @@ export function endDay(s: Run, kit: PlaceKit) {
   checkPromises(s);
   ageCards(s);
   if (s.hearing && dayIndex(s.clock) >= dayIndex(s.hearing)) holdHearing(s);
-  if (isFriday(s.clock)) settleWeek(s, before, kit);
+  if (isFriday(s.clock)) {
+    settleWeek(s, before, kit);
+    const n = term(s.clock, termWeeks(s));
+    // lastTerm keeps a mid-run speed_run switch from ending a term twice
+    if (s.status === "playing" && s.clock.week % termWeeks(s) === 0 && n > s.lastTerm) {
+      s.lastTerm = n;
+      endTerm(s, kit);
+    }
+  }
   if (s.status !== "playing") return;
   if (s.clock.week >= WEEKS && isFriday(s.clock)) {
     // A hearing still pending at year end is held at once, so a lost meter cannot slip past it.

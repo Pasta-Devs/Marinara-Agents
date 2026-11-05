@@ -10,9 +10,14 @@ import type { CapabilityDocumentRecord, CapabilityDocumentStore } from "@marinar
 import {
   BigCheeseError,
   createRunStore,
+  upgradeGame,
 } from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/store.js";
 
-import { settleWeek } from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/core/index.js";
+import {
+  settleWeek,
+  endDay,
+} from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/core/index.js";
+import { bossWeek } from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/core/boss.js";
 
 const M3 = [
   "mode",
@@ -81,7 +86,7 @@ test("a run saved by a newer version is listed as newer and refused with a 409",
     kind: "run",
     name: "x",
     description: "",
-    data: { saveVersion: 4 },
+    data: { saveVersion: 5 },
     createdAt: at,
     updatedAt: at,
   });
@@ -117,7 +122,7 @@ test("a v1 document migrates on read, loads, saves as v3 and round-trips", async
   } as never);
   const store = createRunStore(documents);
   const run = await store.get("r-000000000001");
-  assert.equal(run.game.saveVersion, 3);
+  assert.equal(run.game.saveVersion, 4);
   assert.equal(run.game.mode, "normal");
   assert.equal(run.game.difficulty, "normal");
   assert.deepEqual(run.game.officeHours, { day: 2, slot: "afternoon", visitors: [] });
@@ -129,11 +134,11 @@ test("a v1 document migrates on read, loads, saves as v3 and round-trips", async
   const saved = (await documents.getById("big-cheese", "big-cheese:run:r-000000000001"))!.data as {
     saveVersion: number;
   };
-  assert.equal(saved.saveVersion, 3);
+  assert.equal(saved.saveVersion, 4);
   const fresh = await store.create("hafenkai");
   assert.deepEqual((await store.get(fresh.id)).game, fresh.game);
   const bytes = JSON.stringify(fresh.game).length;
-  assert.ok(bytes < 5000, `fresh run is ${bytes} bytes`);
+  assert.ok(bytes < 6500, `fresh run is ${bytes} bytes`);
   console.log(`fresh run: ${bytes} bytes`);
 });
 
@@ -163,7 +168,7 @@ test("a v2 document migrates to v3 and round-trips", async () => {
   } as never);
   const store = createRunStore(documents);
   const run = await store.get("r-000000000002");
-  assert.equal(run.game.saveVersion, 3);
+  assert.equal(run.game.saveVersion, 4);
   assert.deepEqual(run.game.mutators, []);
   assert.equal(run.game.adult, null);
   assert.equal(run.game.difficulty, "normal");
@@ -172,7 +177,7 @@ test("a v2 document migrates to v3 and round-trips", async () => {
     saveVersion: number;
     game: typeof run.game;
   };
-  assert.equal(saved.saveVersion, 3);
+  assert.equal(saved.saveVersion, 4);
   assert.deepEqual(saved.game, run.game);
   assert.deepEqual((await store.get(run.id)).game, run.game);
 });
@@ -198,4 +203,126 @@ test("T12: a sandbox run survives a meter at 0; the list shows mode and mark", a
   const [card] = await store.list();
   assert.equal(card.mode, "ironman");
   assert.equal(card.cheeseMark, true);
+});
+
+test("a v3 document migrates to v4 and round-trips 20 times", async () => {
+  const documents = fakeDocuments();
+  const at = new Date().toISOString();
+  const M4 = [
+    "things",
+    "culture",
+    "traditions",
+    "goals",
+    "perks",
+    "achievements",
+    "boss",
+    "depth",
+    "ledger",
+    "openedRooms",
+  ];
+  const game: Record<string, any> = { ...newRun(HAFENKAI, 7), saveVersion: 3 };
+  for (const k of M4) delete game[k];
+  await documents.create({
+    id: "big-cheese:run:r-000000000003",
+    packageId: "big-cheese",
+    kind: "run",
+    name: "x",
+    description: "",
+    data: {
+      saveVersion: 3,
+      revision: 0,
+      kitId: "hafenkai",
+      createdAt: at,
+      lite: false,
+      text: { cards: {}, scenes: {}, feelings: {} },
+      scene: null,
+      game,
+    },
+    createdAt: at,
+    updatedAt: at,
+  } as never);
+  const store = createRunStore(documents);
+  let run = await store.get("r-000000000003");
+  assert.equal(run.game.saveVersion, 4);
+  assert.deepEqual(run.game.boss, { stress: 20, energy: 100, peak: 20, weeksAt100: 0 });
+  assert.deepEqual(run.game.things.drawer, []);
+  assert.deepEqual(run.game.depth, { money: false, building: false });
+  assert.equal(run.game.traditions.length, HAFENKAI_PLACE.traditions?.length ?? 0);
+  assert.ok(run.game.traditions.every((t) => t.count === 0 && !t.active));
+  for (let i = 0; i < 20; i++) {
+    await store.update(run.id, run.revision ?? i, (r) => r);
+    run = await store.get(run.id);
+  }
+  assert.equal(run.game.saveVersion, 4);
+});
+
+test("a fresh run has empty M4 state; boss stress stays low in a quiet year and respects Thick skin", () => {
+  const g = newRun(HAFENKAI, 7);
+  assert.deepEqual(g.boss, { stress: 20, energy: 100, peak: 20, weeksAt100: 0 });
+  assert.deepEqual(g.perks, []);
+  assert.equal(g.pendingTerm, null);
+  assert.equal(g.legacy, null);
+  const a = newRun(HAFENKAI, 7);
+  const b = newRun(HAFENKAI, 7);
+  b.perks.push("thick_skin");
+  b.meters.people = 20;
+  a.meters.people = 20;
+  bossWeek(a);
+  bossWeek(b);
+  assert.ok(b.boss.stress < a.boss.stress);
+});
+
+test("a v3 run with a custom kit upgrades with the kit's traditions, drawer and culture", () => {
+  const kit = {
+    ...HAFENKAI_PLACE,
+    traditions: [{ id: "t1", tag: "family", text: "Friday lunch" }],
+    things: [{ id: "k1", kind: "key", name: "Old key" }],
+    culture: { family: 2 },
+  } as typeof HAFENKAI_PLACE;
+  const game: Record<string, any> = { ...newRun(HAFENKAI, 7), saveVersion: 3 };
+  for (const k of ["things", "culture", "traditions", "boss", "lastTerm"]) delete game[k];
+  const up = upgradeGame(game as never, "custom-x", kit);
+  assert.equal(up.saveVersion, 4);
+  assert.deepEqual(up.traditions, [{ id: "t1", text: "Friday lunch", count: 0, active: false }]);
+  assert.equal(up.things.drawer[0]!.name, "Old key");
+  assert.deepEqual(up.culture, { family: 2 });
+});
+
+test("boss weeksAt100 counts weeks that peak at 100 and resets otherwise", () => {
+  const g = newRun(HAFENKAI, 7);
+  g.boss.stress = 98;
+  bossWeek(g);
+  assert.equal(g.boss.peak, 100);
+  assert.equal(g.boss.weeksAt100, 1);
+  assert.ok(g.boss.stress < 100);
+  g.boss.stress = 98;
+  bossWeek(g);
+  assert.equal(g.boss.weeksAt100, 2);
+  g.boss.stress = 20;
+  bossWeek(g);
+  assert.equal(g.boss.weeksAt100, 0);
+});
+
+test("endTerm fires once per term even when speed_run is switched mid-run", () => {
+  const run = (on: number | null, off: number | null) => {
+    let s = newRun(HAFENKAI, 7);
+    const seen: number[] = [];
+    while (s.status === "playing") {
+      if (s.clock.day === 0 && s.clock.week === on) s.mutators = ["speed_run"];
+      if (s.clock.day === 0 && s.clock.week === off) s.mutators = [];
+      for (const k of ["money", "output", "people", "standing"] as const) s.meters[k] = 80;
+      const before = s.lastTerm;
+      s = endDay(s, HAFENKAI_PLACE);
+      if (s.lastTerm !== before) seen.push(s.lastTerm);
+    }
+    return seen;
+  };
+  assert.deepEqual(run(null, null), [1, 2, 3]);
+  const a = run(6, null);
+  assert.ok(a.every((n, i) => i === 0 || n > a[i - 1]!));
+  assert.equal(a[0], 2); // week 8 under 4-week terms
+  const b = run(1, 5);
+  assert.ok(b.every((n, i) => i === 0 || n > b[i - 1]!));
+  assert.equal(b[0], 1);
+  assert.equal(b[1], 2); // week 16 under 8-week terms: term 1 was not ended twice
 });

@@ -1074,18 +1074,18 @@ export function createBoard(
   >();
 
   // Snapshots keep the game as it was; an upgrade after an Engine update keeps old plays readable.
-  const upgradeData = (d: Data, kitid: string): Data => ({
+  const upgradeData = (d: Data, kitid: string, kit?: PlaceKit | null): Data => ({
     ...d,
-    snaps: d.snaps.map((s) => ({ ...s, game: upgradeGame(s.game, kitid) })),
-    mornings: d.mornings.map((s) => ({ ...s, game: upgradeGame(s.game, kitid) })),
+    snaps: d.snaps.map((s) => ({ ...s, game: upgradeGame(s.game, kitid, kit) })),
+    mornings: d.mornings.map((s) => ({ ...s, game: upgradeGame(s.game, kitid, kit) })),
   });
 
-  const load = async (key: string, kitid: string) => {
+  const load = async (key: string, kitid: string, kit?: PlaceKit | null) => {
     const record = await documents.getById(PACKAGE_ID, boardDocId(key));
     if (!record) return { record: null, data: emptyData() };
     const data = BoardData.safeParse(record.data);
     if (!data.success) throw new BigCheeseError(500, "This run's Cheese Board cannot be read.", "unreadable");
-    return { record, data: upgradeData(data.data as Data, kitid) };
+    return { record, data: upgradeData(data.data as Data, kitid, kit) };
   };
 
   const save = async (key: string, record: CapabilityDocumentRecord | null, data: Data) => {
@@ -1300,7 +1300,7 @@ export function createBoard(
     async preview(id: unknown, body: unknown) {
       const b = parse(PreviewBody, body);
       const run = await open(id);
-      const { data } = await load(run.id, run.kitId);
+      const { data } = await load(run.id, run.kitId, run.kit);
       let actions = b.actions;
       let spin: { text: string; summary: string } | undefined;
       let extra: Record<string, unknown> = {};
@@ -1345,7 +1345,7 @@ export function createBoard(
         previews.delete(b.previewId);
         throw new BigCheeseError(409, "The place changed since the preview. Preview again.", "stale-preview");
       }
-      const { record, data } = await load(run.id, run.kitId);
+      const { record, data } = await load(run.id, run.kitId, run.kit);
       const actions = b.edits ? await withPeople(b.edits) : p.actions;
       const morning = morningOf(data, run.game);
       // An Honest run gets its cheese mark with the first play, after the player agreed to it.
@@ -1372,7 +1372,7 @@ export function createBoard(
     async rewind(id: unknown, body: unknown) {
       const b = parse(RewindBody, body);
       const run = await open(id, b.expectedRevision);
-      const { record, data } = await load(run.id, run.kitId);
+      const { record, data } = await load(run.id, run.kitId, run.kit);
       const entry = data.journal.find((e) => e.id === b.playId);
       if (!entry) throw notFound("No such play.");
       if (!live(entry)) throw bad("That play is already rewound or reverted.");
@@ -1422,7 +1422,7 @@ export function createBoard(
     async journal(id: unknown, query: unknown) {
       const run = await store.get(id);
       if (isIronman(run)) throw ironmanClosed();
-      const { data } = await load(run.id, run.kitId);
+      const { data } = await load(run.id, run.kitId, run.kit);
       const page = z
         .object({ page: z.coerce.number().int().min(0).max(10_000).catch(0) })
         .catch({ page: 0 })
@@ -1444,7 +1444,7 @@ export function createBoard(
     async comingUp(id: unknown) {
       const run = await store.get(id);
       if (isIronman(run)) throw ironmanClosed();
-      const { data } = await load(run.id, run.kitId);
+      const { data } = await load(run.id, run.kitId, run.kit);
       const rows: {
         id: string;
         type: string;
@@ -1475,7 +1475,7 @@ export function createBoard(
     async patch(id: unknown, body: unknown) {
       const b = parse(PatchBody, body);
       const run = await open(id, b.expectedRevision);
-      const { record, data } = await load(run.id, run.kitId);
+      const { record, data } = await load(run.id, run.kitId, run.kit);
       const [kind, x = "", y = ""] = b.id.split(":");
       if (b.op === "move" && dayIndex(b.when!) <= dayIndex(run.game.clock)) throw bad("Pick a later day.");
       if (kind === "a") {
@@ -1530,7 +1530,7 @@ export function createBoard(
     async morning<V extends { run: Run }>(v: V): Promise<V> {
       try {
         const run = v.run as Doc; // the store adds the id; `view` types the run without it
-        const { record, data } = await load(run.id, run.kitId);
+        const { record, data } = await load(run.id, run.kitId, run.kit);
         // The snapshot is taken after today's due facts ran, so a rewind to this morning keeps them (see rearm).
         const due = isDue(data.journal, run.game);
         const g = structuredClone(run.game);
