@@ -4,6 +4,7 @@
 // The server bundle may not import Engine modules; everything goes through api.runtime.
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import { engineModel } from "./ai/tasks.js";
+import { createAdvance } from "./advance.js";
 import { createBoard } from "./board.js";
 import { CastRequest, ReadBody, castRead, listCast, midCast, refreshCast, resolveCast, systemsOf } from "./cast.js";
 import { createGame, kitView, view } from "./game.js";
@@ -48,6 +49,7 @@ export async function activate({ api }: ActivationContext) {
   );
   const game = createGame(store, () => engineModel(runtime, null).catch(() => undefined));
   const place = createPlace(store, () => engineModel(runtime, null).catch(() => undefined));
+  const advance = createAdvance(store, game, board, () => engineModel(runtime, null).catch(() => undefined));
   const meetings = createMeetings(store, () => engineModel(runtime, null).catch(() => undefined));
   const runId = (request: Request) => (request.params as { id?: unknown } | undefined)?.id;
 
@@ -154,6 +156,8 @@ export async function activate({ api }: ActivationContext) {
       );
       action("rooms/refresh", (r) => place.refresh(runId(r), r.body));
       action("rooms/:room/visit", (r) => place.visit(runId(r), param(r, "room"), r.body));
+      // T8: viewer mode and skip ahead (design.md sections 11 and 12).
+      action("advance", (r) => advance(runId(r), r.body));
       // T4: meetings (design.md section 7).
       action("meetings/start", (r) => meetings.start(runId(r), r.body));
       action("meetings/choose", (r) => meetings.choose(runId(r), r.body));

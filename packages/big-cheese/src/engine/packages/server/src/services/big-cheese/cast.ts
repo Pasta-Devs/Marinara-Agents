@@ -335,6 +335,7 @@ const MAX_EXTRA = 6;
 function open(r: Run) {
   if (r.game.status !== "playing") throw new BigCheeseError(409, "This run is over.", "wrong-phase");
   if (r.scene) throw new BigCheeseError(409, "Finish the scene first.", "wrong-phase");
+  if (r.game.meeting && !r.game.meeting.done) throw new BigCheeseError(409, "Finish the meeting first.", "wrong-phase");
 }
 
 /** Reads the picked card, then writes through the run queue. A changed run is a 409, as for every action. */

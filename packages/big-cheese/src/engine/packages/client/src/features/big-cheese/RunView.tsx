@@ -23,6 +23,26 @@ const TABS = [
   { view: "meeting", key: "ui.bigCheese.dock.meeting" },
 ];
 
+const DAYS = 5;
+// Each key is a literal, so the locale validator finds it.
+const POLICY_KEYS: Record<string, string> = {
+  nobody: "ui.bigCheese.viewer.policy.nobody",
+  deputy: "ui.bigCheese.viewer.policy.deputy",
+  kind: "ui.bigCheese.viewer.policy.kind",
+  strict: "ui.bigCheese.viewer.policy.strict",
+  greedy: "ui.bigCheese.viewer.policy.greedy",
+  chaotic: "ui.bigCheese.viewer.policy.chaotic",
+};
+const HALT_KEYS: Record<string, string> = {
+  hearing: "ui.bigCheese.viewer.halt.hearing",
+  crisis: "ui.bigCheese.viewer.halt.crisis",
+  quit: "ui.bigCheese.viewer.halt.quit",
+  couple: "ui.bigCheese.viewer.halt.couple",
+  plot: "ui.bigCheese.viewer.halt.plot",
+  low: "ui.bigCheese.viewer.halt.low",
+  secret: "ui.bigCheese.viewer.halt.secret",
+};
+
 export function RunView({ id, onExit }: { id: string; onExit: () => void }) {
   const { t } = useTranslation();
   const [data, setData] = useState<RunState | null>(null);
@@ -69,6 +89,43 @@ export function RunView({ id, onExit }: { id: string; onExit: () => void }) {
       setBusy(false);
     }
   };
+
+  // T8: viewer mode. One timer tick is one slot; the next tick waits for the last advance to finish.
+  const [watching, setWatching] = useState<{ speed: number; policy: string } | null>(null);
+  const [halt, setHalt] = useState<string | null>(null);
+  const [digest, setDigest] = useState<string | null>(null);
+  const [beat, setBeat] = useState(0);
+  const advance = async (body: object) => {
+    if (!data || busy) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      const next = (await postAction(data.run, "advance", body)) as RunState & {
+        paused: string | null;
+        digest: string | null;
+      };
+      setData(next);
+      setHalt(next.paused);
+      if (next.digest) setDigest(next.digest);
+    } catch (error) {
+      setNote(errorKey(error));
+      setWatching(null);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const live = !!data && !data.run.scene && data.run.game.status === "playing";
+  useEffect(() => {
+    if (!watching || halt || busy || !live) return;
+    const g = data.run.game; // the day must be started by hand first
+    if (g.clock.hoursLeft === HOURS && !g.inbox.some((c) => c.age === 0)) return;
+    const timer = setTimeout(
+      () => (document.hidden ? setBeat((b) => b + 1) : void advance({ slots: 1, policy: watching.policy })),
+      20000 / watching.speed,
+    );
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watching, halt, busy, live, data, beat]);
 
   const game = data?.run.game;
   const canStart = !!game && game.clock.hoursLeft === HOURS && !game.inbox.some((card) => card.age === 0);
@@ -213,6 +270,91 @@ export function RunView({ id, onExit }: { id: string; onExit: () => void }) {
       </header>
       <main className="bc-main" aria-busy={busy}>
         {!board && noteBlock}
+        {!board && live && !canStart && !(game.meeting && !game.meeting.done) && (
+          <div className="bc-note" role="group" aria-label={t("ui.bigCheese.viewer.label")}>
+            <button
+              type="button"
+              className="bc-btn"
+              aria-pressed={!!watching}
+              onClick={() => {
+                setHalt(null);
+                setWatching(watching ? null : { speed: 1, policy: "nobody" });
+              }}
+            >
+              {t(watching ? "ui.bigCheese.viewer.pause" : "ui.bigCheese.viewer.watch")}
+            </button>
+            {watching && (
+              <>
+                {[1, 2, 4].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    className="bc-btn bc-btn-quiet"
+                    aria-pressed={watching.speed === n}
+                    onClick={() => setWatching({ ...watching, speed: n })}
+                  >
+                    {t("ui.bigCheese.viewer.speed", { n })}
+                  </button>
+                ))}
+                <label>
+                  {t("ui.bigCheese.viewer.boss")}{" "}
+                  <select
+                    value={watching.policy}
+                    onChange={(event) => setWatching({ ...watching, policy: event.target.value })}
+                  >
+                    {Object.entries(POLICY_KEYS).map(([value, key]) => (
+                      <option key={value} value={value}>
+                        {t(key)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </>
+            )}
+            <button
+              type="button"
+              className="bc-btn bc-btn-quiet"
+              disabled={busy || clock.hoursLeft <= HOURS - 3}
+              onClick={() => void advance({ slots: 3 - (HOURS - clock.hoursLeft), skip: true })}
+            >
+              {t("ui.bigCheese.viewer.skipEvening")}
+            </button>
+            <button
+              type="button"
+              className="bc-btn bc-btn-quiet"
+              disabled={busy}
+              onClick={() => void advance({ slots: clock.hoursLeft + HOURS * (DAYS - 1 - clock.day), skip: true })}
+            >
+              {t("ui.bigCheese.viewer.skipMonday")}
+            </button>
+          </div>
+        )}
+        {halt && (
+          <div className="bc-note" role="alert">
+            <p>{t(HALT_KEYS[halt] ?? HALT_KEYS.hearing!)}</p>
+            <button type="button" className="bc-btn" onClick={() => setHalt(null)}>
+              {t("ui.bigCheese.viewer.keep")}
+            </button>
+            <button
+              type="button"
+              className="bc-btn bc-btn-quiet"
+              onClick={() => {
+                setHalt(null);
+                setWatching(null);
+              }}
+            >
+              {t("ui.bigCheese.viewer.step")}
+            </button>
+          </div>
+        )}
+        {digest && (
+          <div className="bc-note" role="status">
+            <p>{digest}</p>
+            <button type="button" className="bc-btn bc-btn-quiet" onClick={() => setDigest(null)}>
+              {t("ui.bigCheese.viewer.close")}
+            </button>
+          </div>
+        )}
         {screen}
       </main>
       {board && <Board ctx={ctx} note={noteBlock} onClose={() => setBoard(false)} />}

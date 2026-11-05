@@ -671,7 +671,28 @@ Shape: {"summary":"","question":null,"cant":[],"thread":{"title":"","people":[],
   lite: () => ({ summary: "", question: null, cant: [], thread: null, beats: [] }),
 };
 
+// digest.away (design.md section 12): one short note on what moved while the boss skipped ahead.
+export interface DigestAwayInput {
+  kit: PlaceKit;
+  facts: string[]; // written by the code from the state change
+}
+export interface DigestAwayOutput {
+  text: string;
+}
+const digestAway: Task<DigestAwayInput, DigestAwayOutput> = {
+  tokens: 400,
+  prompt: (i) =>
+    msgs(
+      i.kit,
+      `Write 2 to 4 short sentences for the boss about what happened at ${i.kit.name} while the boss skipped ahead. Use only the facts. Add no new event and no digits. Shape: {"text":""}`,
+      { facts: i.facts },
+    ),
+  parse: (raw) => ({ text: words(obj(raw).text, 10, 700, "text") }),
+  lite: (i) => ({ text: i.facts.length ? i.facts.join(" ") : "Nothing much happened." }),
+};
+
 export const tasks = {
+  "digest.away": digestAway,
   "cast.read": castRead,
   "cards.day": cardsDay,
   "answer.tag": answerTag,

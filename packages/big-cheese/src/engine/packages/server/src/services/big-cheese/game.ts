@@ -159,6 +159,7 @@ export function createGame(store: RunStore, getModel: () => Promise<ModelCall | 
     if (b.data.expectedRevision !== run.revision)
       throw new BigCheeseError(409, "The run changed. Reload it.", "conflict");
     if (guard !== "any" && run.scene) throw wrongPhase("Finish the scene first.");
+    if (guard !== "any" && run.game.meeting && !run.game.meeting.done) throw wrongPhase("Finish the meeting first.");
     if (run.game.status !== "playing") throw wrongPhase("This run is over.");
     let patch: Patch;
     try {
@@ -271,6 +272,11 @@ export function createGame(store: RunStore, getModel: () => Promise<ModelCall | 
           throw wrongPhase("The day has started.");
         const game = seedDay(run.game);
         const seeds = game.inbox.filter((c) => !run.game.inbox.some((o) => o.id === c.id));
+        // Cards a skip set aside come back after the seeds are picked, so they keep their text.
+        if (game.away) {
+          game.inbox = [...game.away, ...game.inbox];
+          delete game.away;
+        }
         const h = { rng: game.rng };
         const cards = { ...run.text.cards };
         if (seeds.length) {

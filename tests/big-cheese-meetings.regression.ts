@@ -55,22 +55,25 @@ async function start() {
     const cur = await store.get(run.id);
     await store.update(run.id, cur.revision, (r) => {
       const g = structuredClone(r.game);
+      g.clock.hoursLeft = 4; // the day has started: a meeting cannot be called before it
       change(g);
       return { ...r, scene: null, game: g };
     });
     return store.get(run.id);
   };
   const meetings = createMeetings(store, () => Promise.resolve(undefined));
-  return { store, meetings, open, id: run.id };
+  return { store, game, meetings, open, id: run.id };
 }
 
 test("a meeting: 1 hour, 4-6 attendees, 2-3 items, each answered by one of 3 stances", async () => {
-  const { meetings, open, id } = await start();
+  const { game, meetings, open, id } = await start();
   const cur = await open();
   const hours = cur.game.clock.hoursLeft;
   const view = (await meetings.start(id, { expectedRevision: cur.revision, kind: "board" })) as { run: any };
   const m = view.run.game.meeting;
   assert.equal(view.run.game.clock.hoursLeft, hours - 1);
+  const ended: any = await game.dayEnd(id, { expectedRevision: view.run.revision }).catch((e) => e);
+  assert.equal(ended.code, "wrong-phase", "the day cannot end while a meeting is open");
   assert.ok(m.people.length >= 4 && m.people.length <= 6);
   assert.ok(m.items.length >= 2 && m.items.length <= 3);
   assert.equal(m.items[0].suggestions.length, 3);

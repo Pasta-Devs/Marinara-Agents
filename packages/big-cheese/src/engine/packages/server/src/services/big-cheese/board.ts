@@ -690,6 +690,11 @@ function planToActions(g: Game, plan: BoardPlanOutput): { actions: BoardAction[]
         default:
           fail("unknown-verb");
       }
+      // Model words such as a mood or a relation kind must fit the same schema a Set action does.
+      if (!BoardAction.safeParse(actions[actions.length - 1]).success) {
+        actions.pop();
+        fail("bad-touch");
+      }
     } catch (e) {
       dropped.push({ beat: beat.id, code: e instanceof Error ? e.message : "bad-touch" });
     }
@@ -810,6 +815,7 @@ export function createBoard(
     const run = await store.get(id);
     if (expectedRevision !== undefined && expectedRevision !== run.revision) throw conflict();
     if (run.scene) throw wrongPhase("Finish the scene first.");
+    if (run.game.meeting && !run.game.meeting.done) throw wrongPhase("Finish the meeting first.");
     if (run.game.status !== "playing") throw wrongPhase("This run is over.");
     return run;
   };
@@ -895,8 +901,24 @@ export function createBoard(
     ...data,
     snaps: data.snaps.filter((s) => s.seq < to.seq),
     mornings: data.mornings.filter((s) => s.seq <= to.seq),
-    journal: data.journal.map((e) => (e.seq >= to.seq && live(e) ? { ...e, state: "rewound" as const } : e)),
+    journal: data.journal.map((e) => (e.seq >= to.seq && live(e) ? { ...e, state: "rewound" as const } : rearm(e, to))),
   });
+
+  /** A scheduled fact that ran after the snapshot's day is scheduled again, so the next morning runs it. */
+  // ponytail: compares days, not plays; a fact that ran on the snapshot's own day counts as run once the day started.
+  function rearm(e: Entry, to: Snapshot): Entry {
+    const c = to.game.clock;
+    const started = c.hoursLeft < HOURS || to.game.inbox.some((card) => card.age === 0);
+    const after = (f: Fact) =>
+      f.when !== "now" && (dayIndex(f.when) > dayIndex(c) || (dayIndex(f.when) === dayIndex(c) && !started));
+    if (!e.actions.some((f) => factState(f) === "done" && after(f))) return e;
+    const next = {
+      ...e,
+      actions: e.actions.map((f) => (factState(f) === "done" && after(f) ? { ...f, state: "scheduled" as const } : f)),
+    };
+    next.state = entryState(next);
+    return next;
+  }
 
   /** Runs the scheduled facts whose day has come. Returns the journal with their new state. */
   const runDue = (journal: Entry[], g: Game) => {
@@ -1125,6 +1147,8 @@ export function createBoard(
       if (kind === "b") {
         const beat = t.beats.find((bt) => bt.id === y && bt.planned);
         if (!beat) throw notFound("Nothing is scheduled there.");
+        // ponytail: big scenes keep their own day and budget rules, so Coming up does not move them.
+        if (beat.type === "big_scene") throw bad("Start or decline a big scene from the week strip.");
         if (b.op === "move") beat.planned = { week: b.when!.week, day: b.when!.day };
         else if (b.op === "cancel") t.beats = t.beats.filter((bt) => bt !== beat);
         else if (beat.type === "card" && beat.seed && !beat.card) {
@@ -1152,17 +1176,20 @@ export function createBoard(
       try {
         const run = v.run as Doc; // the store adds the id; `view` types the run without it
         const { record, data } = await load(run.id, run.kitId);
-        const snap = { ...snapshotOf(data, run), id: `m${data.n}` };
+        // The snapshot is taken after today's due facts ran, so a rewind to this morning keeps them (see rearm).
+        const due = isDue(data.journal, run.game);
+        const g = structuredClone(run.game);
+        const journal = due ? runDue(data.journal, g) : data.journal;
+        const snap = { ...snapshotOf(data, { ...run, game: g }), id: `m${data.n}` };
         const mornings = [...data.mornings.filter((m) => dayIndex(m.at) !== dayIndex(snap.at)), snap].slice(
           -MAX_MORNINGS,
         );
-        const next = { ...data, mornings };
-        if (!isDue(data.journal, run.game)) {
+        const next = { ...data, mornings, journal };
+        if (!due) {
           await save(run.id, record, next);
           return v;
         }
-        const g = structuredClone(run.game);
-        return (await commit(run, record, { ...next, journal: runDue(data.journal, g) }, g)) as unknown as V;
+        return (await commit(run, record, next, g)) as unknown as V;
       } catch {
         // ponytail: a missed morning snapshot only means "Rewind a day" cannot reach that day; it never blocks play.
       }

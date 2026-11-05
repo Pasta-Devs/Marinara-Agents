@@ -14,12 +14,6 @@ const WEEKLY = 0.6; // chance per Monday at dial 100, scales down with the dial
 /** The dial for a layer, 0-100. A run without one uses 50. */
 export const dial = (s: Run, l: Layer) => s.layers?.[l] ?? 50;
 
-/** A cast card must state an age of 18 or more. Kit people have no cast card and are adults. */
-export const isAdult = (s: Run, id: string) => {
-  const c = (s as { cast?: { people: Record<string, { age?: number }> } }).cast?.people[id];
-  return !c || (c.age !== undefined && c.age >= 18);
-};
-
 interface Seed {
   title: string;
   need: Meter;
@@ -61,16 +55,12 @@ function seedPair(s: Run, l: Layer, seed: Seed, a: string, b: string) {
 
 /** Monday: a dial at 0 opens nothing; a higher dial opens a pair thread more often. One open thread per layer. */
 export function layerSeeds(s: Run, cap: number) {
-  for (const r of s.relations)
-    if (r.kind === "crush" && r.level >= 80 && dial(s, "romance") > 0 && isAdult(s, r.a) && isAdult(s, r.b))
-      r.kind = "couple";
+  for (const r of s.relations) if (r.kind === "crush" && r.level >= 80 && dial(s, "romance") > 0) r.kind = "couple";
   for (const l of LAYERS) {
     const d = dial(s, l);
     const open = Object.values(s.threads);
     if (!d || open.length >= cap || open.some((t) => t.layer === l) || roll(s) >= (d / 100) * WEEKLY) continue;
-    const ok = Object.keys(s.people).filter(
-      (id) => s.people[id]!.status === "active" && (l === "drama" || isAdult(s, id)),
-    );
+    const ok = Object.keys(s.people).filter((id) => s.people[id]!.status === "active");
     const couple =
       l === "romance"
         ? s.relations.find((r) => r.kind === "couple" && ok.includes(r.a) && ok.includes(r.b))

@@ -654,8 +654,8 @@ export function Board({ ctx, note, onClose }: { ctx: Ctx; note: ReactNode; onClo
         <li key={i} className="bc-panel" style={removed.includes(i) ? { opacity: 0.4 } : undefined}>
           <strong>{sentence(t, kit, f, titleOf).join(" ")}</strong>
           <span className="bc-muted">{whenText(t, f.when)}</span>
-          {numbers(t, kit, f).map((n) => (
-            <span key={n}>{n}</span>
+          {numbers(t, kit, f).map((n, j) => (
+            <span key={j}>{n}</span>
           ))}
           <button
             type="button"

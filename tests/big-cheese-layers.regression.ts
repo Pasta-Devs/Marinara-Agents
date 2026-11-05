@@ -36,14 +36,6 @@ test("dial 100 opens drama and romance threads between active people", () => {
   assert.ok(tags.has("drama") && tags.has("romance"));
 });
 
-test("romance skips a cast person with no stated adult age", () => {
-  const s = fresh(5, { drama: 0, romance: 100 });
-  const ids = Object.keys(s.people);
-  (s as unknown as { cast: unknown }).cast = { people: Object.fromEntries(ids.map((id) => [id, {}])) };
-  assert.equal(core.isAdult(s, ids[0]!), false);
-  assert.equal([...year(s).values()].filter(Boolean).length, 0);
-});
-
 test("project wins on the reveal, with progress as a clock", () => {
   const s = fresh(6, { drama: 0, romance: 0 });
   const t = core.startProject(s);

@@ -10,6 +10,7 @@ import { meetingChoice, meetingText, MEETINGS, startMeeting, type Run as Game } 
 import type { PlaceKit } from "./core/kits/types.js";
 import { PLACES, BigCheeseError, type Run, type RunStore } from "./store.js";
 import { view } from "./game.js";
+import { HOURS } from "./core/clock.js";
 
 const Body = z.object({ expectedRevision: z.number().int().min(0) });
 const StartBody = Body.extend({ kind: z.string().max(40) });
@@ -76,6 +77,8 @@ export function createMeetings(store: RunStore, getModel: () => Promise<ModelCal
       if (!Object.hasOwn(MEETINGS, b.kind)) throw new BigCheeseError(400, "Not a meeting type.", "bad-request");
       if (run.game.meeting && !run.game.meeting.done)
         throw new BigCheeseError(409, "A meeting is already open.", "wrong-phase");
+      if (run.game.clock.hoursLeft === HOURS && !run.game.inbox.some((c) => c.age === 0))
+        throw new BigCheeseError(409, "The day has not started.", "wrong-phase");
       let game: Game;
       try {
         game = startMeeting(run.game, b.kind);

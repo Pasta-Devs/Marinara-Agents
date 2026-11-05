@@ -31,6 +31,8 @@ export function createPlace(store: RunStore, getModel: () => Promise<ModelCall |
       throw new BigCheeseError(409, "The run changed. Reload it.", "conflict");
     if (run.game.status !== "playing") throw new BigCheeseError(409, "This run is over.", "wrong-phase");
     if (run.scene) throw new BigCheeseError(409, "Finish the scene first.", "wrong-phase");
+    if (run.game.meeting && !run.game.meeting.done)
+      throw new BigCheeseError(409, "Finish the meeting first.", "wrong-phase");
     return run;
   }
 
