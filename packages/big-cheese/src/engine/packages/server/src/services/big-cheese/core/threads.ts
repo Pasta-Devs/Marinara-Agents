@@ -25,7 +25,14 @@ export function closeThread(s: Run, id: string, state: Thread["state"]) {
   if (!t) return;
   delete s.threads[id];
   // The title stays, so a person's memory of a closed thread can still name it.
-  s.closed.push({ id, state, title: t.title, ...(t.need && { need: t.need }) });
+  s.closed.push({
+    id,
+    state,
+    title: t.title,
+    ...(t.need && { need: t.need }),
+    layer: t.layer ?? null,
+    ...(t.secret && { secret: true }),
+  });
   // Won or lost: everyone in the thread remembers it (design.md 3.2).
   if (state !== "dropped") {
     for (const p of t.people) {

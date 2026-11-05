@@ -75,7 +75,20 @@ const STORYTELLER = [
 const MAX_EXTRAS = 2;
 const num = (v: string) => Math.min(100, Math.max(0, Math.round(Number(v)) || 0));
 
-export function KitEditor({ kitId, onSaved, onBack }: { kitId: string; onSaved: () => void; onBack: () => void }) {
+// `load` and `save` let the Board edit the kit of a running place (T13) instead of a saved kit.
+export function KitEditor({
+  kitId,
+  onSaved,
+  onBack,
+  load = getKit,
+  save: saveIt = saveKit,
+}: {
+  kitId: string;
+  onSaved: () => void;
+  onBack: () => void;
+  load?: (id: string) => Promise<unknown>;
+  save?: (kit: unknown) => Promise<unknown>;
+}) {
   const { t } = useTranslation();
   const [kit, setKit] = useState<EditKit | null>(null);
   const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("place");
@@ -85,9 +98,10 @@ export function KitEditor({ kitId, onSaved, onBack }: { kitId: string; onSaved: 
   const heading = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
-    getKit(kitId)
+    load(kitId)
       .then((k) => setKit(k as EditKit))
       .catch((error) => setFailure(errorKey(error)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `load` is a stable prop for one editor
   }, [kitId]);
   useEffect(() => heading.current?.focus(), []);
 
@@ -167,7 +181,7 @@ export function KitEditor({ kitId, onSaved, onBack }: { kitId: string; onSaved: 
     setFailure(null);
     setReasons(null);
     try {
-      await saveKit(kit);
+      await saveIt(kit);
       onSaved();
     } catch (error) {
       // ponytail: the server's reasons are English; localise them when they get codes.

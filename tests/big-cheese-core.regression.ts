@@ -269,7 +269,7 @@ test("closed threads keep their title and need, so a memory can still name them"
   const e = endDay({ ...s, inbox: [{ ...c, age: 4 }] }, HAFENKAI_PLACE);
   assert.deepEqual(
     e.closed.find((x) => x.id === t.id),
-    { id: t.id, state: "lost", title: t.title, need: c.need },
+    { id: t.id, state: "lost", title: t.title, need: c.need, layer: null },
   );
 });
 

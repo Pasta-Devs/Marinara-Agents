@@ -1,13 +1,14 @@
 import { ageCards } from "./cards.js";
 import { weeklyAuthority } from "./authority.js";
-import { WEEKS, dayIndex, isFriday, nextDay } from "./clock.js";
+import { WEEKS, dayIndex, isFriday, nextDay, term } from "./clock.js";
 import { callHearing, holdHearing } from "./hearing.js";
+import { termWeeks } from "./mutators.js";
 import { dayTurn } from "./people.js";
 import { applyDelta, clamp, pure } from "./run.js";
 import { checkRevolt } from "./storyteller.js";
 import { sulkAdvisors } from "./advisors.js";
 import { checkPromises } from "./threads.js";
-import { METERS } from "./types.js";
+import { METERS, WISH_POINTS_PER_TERM } from "./types.js";
 import type { PlaceKit } from "./kits/types.js";
 import type { Run } from "./types.js";
 
@@ -51,6 +52,9 @@ export function endDay(s: Run, kit: PlaceKit) {
     if (s.status === "playing") s.status = "complete";
   } else {
     s.clock = nextDay(s.clock);
+    // A new term refills the in-run wish points (design.md 3.7).
+    const termNow = term(s.clock, termWeeks(s));
+    if (termNow !== s.wishPoints.term) s.wishPoints = { term: termNow, left: WISH_POINTS_PER_TERM };
     dayTurn(s, kit);
   }
 }

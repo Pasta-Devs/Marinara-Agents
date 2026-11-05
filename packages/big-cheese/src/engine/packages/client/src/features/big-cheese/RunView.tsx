@@ -15,6 +15,9 @@ import { Report, RunEnd } from "./Report";
 import { HearingPrep, MeetingScreen } from "./Meeting";
 import { Board } from "./Board";
 import { Rules } from "./Rules";
+import { Wish } from "./Wish";
+import { Export } from "./Export";
+import { Calls } from "./Calls";
 
 const TABS = [
   { view: "office", key: "ui.bigCheese.dock.office" },
@@ -52,6 +55,7 @@ export function RunView({ id, onExit }: { id: string; onExit: () => void }) {
   const [note, setNote] = useState<string | null>(null);
   const [view, setView] = useState("office");
   const [board, setBoard] = useState(false);
+  const [menu, setMenu] = useState(false); // the "[...]" run menu
   // A finished scene leaves `run.scene`; we keep its id to show the receipt.
   const [ended, setEnded] = useState<string | null>(null);
   const [reportSeen, setReportSeen] = useState<number | null>(null);
@@ -230,6 +234,8 @@ export function RunView({ id, onExit }: { id: string; onExit: () => void }) {
   else if (base === "place") screen = <Place ctx={ctx} />;
   else if (base === "meeting") screen = <MeetingScreen ctx={ctx} />;
   else if (base === "rules") screen = <Rules ctx={ctx} />;
+  else if (base === "wish") screen = <Wish ctx={ctx} />;
+  else if (base === "export") screen = <Export ctx={ctx} />;
   else screen = <Office ctx={ctx} canStart={canStart} />;
 
   const { clock } = game;
@@ -264,6 +270,32 @@ export function RunView({ id, onExit }: { id: string; onExit: () => void }) {
             {t("ui.bigCheese.board.open")}
           </button>
         )}
+        <span className="bc-menu">
+          <button
+            type="button"
+            className="bc-btn bc-btn-quiet"
+            aria-expanded={menu}
+            aria-label={t("ui.bigCheese.run.menuLabel")}
+            onClick={() => setMenu((open) => !open)}
+          >
+            {t("ui.bigCheese.run.menu")}
+          </button>
+          {menu && (
+            // Items are append-only: each ticket adds its own button here.
+            <span role="group" aria-label={t("ui.bigCheese.run.menuLabel")}>
+              <button
+                type="button"
+                className="bc-btn bc-btn-quiet"
+                onClick={() => {
+                  setMenu(false);
+                  setView("export");
+                }}
+              >
+                {t("ui.bigCheese.run.menuExport")}
+              </button>
+            </span>
+          )}
+        </span>
         <span className="bc-top-day">
           {t("ui.bigCheese.run.when", { day: t(dayKey(clock.day)), week: clock.week })}
         </span>
@@ -360,6 +392,7 @@ export function RunView({ id, onExit }: { id: string; onExit: () => void }) {
           </div>
         )}
         {screen}
+        {base === "rules" && <Calls id={ctx.run.id} />}
       </main>
       {board && <Board ctx={ctx} note={noteBlock} onClose={() => setBoard(false)} />}
       {tab && (

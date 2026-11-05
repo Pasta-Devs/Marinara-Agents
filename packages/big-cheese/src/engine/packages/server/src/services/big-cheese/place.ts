@@ -1,7 +1,7 @@
 // Big Cheese: the floor map, room visits and the grapevine (design.md sections 6 and 8.2, ui.md 5.11).
 // The model writes the lines. The code picks who is where, who the boss overhears and what he learns.
 import { z } from "zod";
-import { runTask, type ModelCall } from "./ai/tasks.js";
+import { runTask, withCallLog, type ModelCall } from "./ai/tasks.js";
 import { withCast } from "./cast.js";
 import { dayIndex, pick, roll, slot, spendHours, type Run as Game } from "./core/index.js";
 import { dayFacts, isKnown, movePeople, overheard, relKey } from "./core/people.js";
@@ -20,7 +20,7 @@ const Query = z.object({ page: z.coerce.number().int().min(0).catch(0) });
 
 export function createPlace(store: RunStore, getModel: () => Promise<ModelCall | undefined>) {
   const kitOf = (run: Run) => withCast(placeKitOf(run), run.cast, run.game.clock);
-  const modelFor = (run: Run) => (run.lite ? Promise.resolve(undefined) : getModel());
+  const modelFor = async (run: Run, id: unknown) => (run.lite ? undefined : withCallLog(await getModel(), String(id)));
   const nameOf = (kit: PlaceKit, id: string) => kit.rooms.find((r) => r.id === id)?.name ?? id;
 
   /** Reads the run for a write: the revision must be the one the player has, and nothing else is open. */
@@ -90,7 +90,7 @@ export function createPlace(store: RunStore, getModel: () => Promise<ModelCall |
       const kit = kitOf(run);
       const game = structuredClone(run.game);
       const place = structuredClone(run.text.place ?? empty());
-      const model = await modelFor(run);
+      const model = await modelFor(run, id);
       const today = dayIndex(game.clock);
       const h = { rng: game.rng };
       movePeople(game, kit);
@@ -137,7 +137,7 @@ export function createPlace(store: RunStore, getModel: () => Promise<ModelCall |
       movePeople(game, kit);
       const heard = overheard(game, room);
       if (!heard.people.length) throw new BigCheeseError(409, "Nobody is there.", "wrong-phase");
-      const model = await modelFor(run);
+      const model = await modelFor(run, id);
       place.known = [...new Set([...place.known, ...heard.pairs.map(relKey)])];
       const h = { rng: game.rng };
       const { output } = await runTask(

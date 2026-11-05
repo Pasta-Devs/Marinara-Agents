@@ -91,6 +91,13 @@ export interface Hearing {
 
 export interface Game {
   mode?: RunMode;
+  // T13: what the Board's settings groups read
+  authority?: "manager" | "strong_leader" | "absolute";
+  layers?: Record<string, number>;
+  difficulty?: string;
+  storyteller?: string;
+  mutators?: string[];
+  wishPoints?: { term: number; left: number }; // in-run wishes (design.md 3.7)
   cheeseMark?: boolean;
   clock: { week: number; day: number; hoursLeft: number };
   meters: Meters;
@@ -201,6 +208,8 @@ const ERROR_KEYS: Record<string, string> = {
   "no-hours": "ui.bigCheese.errors.noHours",
   "stale-preview": "ui.bigCheese.errors.stalePreview",
   "confirm-later": "ui.bigCheese.errors.confirmLater",
+  ironman: "ui.bigCheese.errors.ironman",
+  "honest-first": "ui.bigCheese.errors.honestFirst",
 };
 export const CONFLICT_KEY = ERROR_KEYS.conflict;
 
@@ -293,6 +302,10 @@ export interface RulesState {
 }
 export const getRules = (id: string) => api.get<RulesState>(`${runPath(id)}/rules`);
 
+/** The model call debug log: task name, outcome and time only (server ai/tasks.ts). */
+export type CallEntry = { task: string; outcome: "ok" | "retry" | "refusal" | "lite"; ms: number };
+export const getCalls = (id: string) => api.get<{ calls: CallEntry[] }>(`${runPath(id)}/calls`);
+
 // T1: the saved kits library (design.md section 13 step 4).
 export interface KitSummary {
   id: string;
@@ -302,9 +315,28 @@ export interface KitSummary {
   updatedAt: string;
 }
 export const listKits = () => api.get<{ kits: KitSummary[] }>(`${PREFIX}/kits`).then((r) => r.kits);
+// T13: the kit a running place plays now, for the Board's "Edit the kit".
+export const getRunKit = (runId: string) => api.get<unknown>(`${runPath(runId)}/kit`);
 export const getKit = (id: string) => api.get<unknown>(`${PREFIX}/kits/${encodeURIComponent(id)}`);
 export const importKit = (kit: unknown) =>
   api.post<{ kit: { id: string; name: string }; fixes: string[] }>(`${PREFIX}/kits/import`, { kit });
 // T2: the Kit editor saves the same way an import does, with the same checks.
 export const saveKit = (kit: unknown) =>
   api.post<{ kit: { id: string; name: string }; fixes: string[] }>(`${PREFIX}/kits`, { kit });
+
+// T14: save to the Engine library (cast.md section 8). `preview` builds without writing.
+export interface ExportBody {
+  adult?: boolean;
+  preview?: boolean;
+}
+export interface ExportEntry {
+  name: string;
+  content: string;
+}
+export const exportLorebook = (id: string, kind: "memories" | "place", body: ExportBody) =>
+  api.post<{ entries?: ExportEntry[]; name?: string; count?: number }>(`${runPath(id)}/export/lorebook`, {
+    kind,
+    ...body,
+  });
+export const exportNote = (id: string, body: ExportBody) =>
+  api.post<{ description?: string; saved?: boolean }>(`${runPath(id)}/export/persona-note`, { kind: "note", ...body });

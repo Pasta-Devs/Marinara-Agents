@@ -133,7 +133,7 @@ export function setRule(s: Run, kit: PlaceKit, id: string, option: string, free 
     }).rule = { id, option };
     return;
   }
-  spendHour(s);
+  if (!free) spendHour(s); // the Cheese Board's free change costs no hour
   apply(s, r, option, free);
   if (s.authority === "strong_leader" && !free) {
     const t = openThread(s, {

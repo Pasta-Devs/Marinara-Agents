@@ -195,7 +195,14 @@ export interface Run {
   deputy: string;
   deputyAmbition: number;
   threads: Record<string, Thread>; // open threads
-  closed: { id: string; state: Thread["state"]; title?: string; need?: Meter }[];
+  closed: {
+    id: string;
+    state: Thread["state"];
+    title?: string;
+    need?: Meter;
+    layer?: Layer | null;
+    secret?: boolean;
+  }[];
   inbox: Card[];
   away?: Card[]; // cards a skip set aside at a day end; Start the day puts them back unaged
   lastWarning: boolean; // whole run

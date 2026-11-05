@@ -3,7 +3,7 @@
 // ──────────────────────────────────────────────
 // The server bundle may not import Engine modules; everything goes through api.runtime.
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
-import { engineModel } from "./ai/tasks.js";
+import { callsOf, engineModel } from "./ai/tasks.js";
 import { createAdvance } from "./advance.js";
 import { createAdvisors } from "./advisors.js";
 import { createBoard } from "./board.js";
@@ -15,6 +15,8 @@ import { createDraft } from "./draft.js";
 import { createMeetings } from "./meetings.js";
 import { createRules } from "./rules.js";
 import { createAdult } from "./adult.js";
+import { createWish } from "./wish.js";
+import { createExport } from "./export.js";
 import { createPlace } from "./place.js";
 import { BigCheeseError, CreateRunBody, createRunStore, type RunStore } from "./store.js";
 
@@ -50,8 +52,11 @@ export async function activate({ api }: ActivationContext) {
   const { runtime } = api;
   const store = createRunStore(runtime.persistence.documents);
   // The default connection. Without one the game plays in Lite mode.
-  const board = createBoard(store, runtime.persistence.documents, () =>
-    engineModel(runtime, null).catch(() => undefined),
+  const board = createBoard(
+    store,
+    runtime.persistence.documents,
+    () => engineModel(runtime, null).catch(() => undefined),
+    runtime,
   );
   const game = createGame(store, () => engineModel(runtime, null).catch(() => undefined));
   const place = createPlace(store, () => engineModel(runtime, null).catch(() => undefined));
@@ -60,6 +65,8 @@ export async function activate({ api }: ActivationContext) {
   const meetings = createMeetings(store, () => engineModel(runtime, null).catch(() => undefined));
   const rules = createRules(store);
   const adult = createAdult(store);
+  const wish = createWish(store, () => engineModel(runtime, null).catch(() => undefined));
+  const exporter = createExport(store, runtime);
   const kits = createKits(runtime.persistence.documents, () => engineModel(runtime, null).catch(() => undefined));
   const draft = createDraft(() => engineModel(runtime, null).catch(() => undefined));
   const runId = (request: Request) => (request.params as { id?: unknown } | undefined)?.id;
@@ -139,6 +146,14 @@ export async function activate({ api }: ActivationContext) {
         "/runs/:id",
         handle(async (request) => view(await store.get(runId(request)))),
       );
+      router.get(
+        "/runs/:id/calls",
+        handle(async (request) => {
+          const run = await store.get(runId(request)); // 404 for a run that does not exist
+          return { calls: callsOf(run.id) };
+        }),
+      );
+
       const param = (request: Request, key: string) => String((request.params as Record<string, unknown>)[key]);
       const action = (path: string, run: (request: Request) => Promise<unknown>) =>
         router.post(`/runs/:id/${path}`, handle(run));
@@ -147,6 +162,12 @@ export async function activate({ api }: ActivationContext) {
       action("board/preview", (r) => board.preview(runId(r), r.body));
       action("board/play", (r) => board.play(runId(r), r.body));
       action("board/rewind", (r) => board.rewind(runId(r), r.body));
+      // T13: "Edit the kit" reads the run's kit, and the one way out of Ironman.
+      router.get(
+        "/runs/:id/kit",
+        handle((r) => board.kit(runId(r))),
+      );
+      action("board/end-ironman", (r) => board.endIronman(runId(r), r.body));
       router.get(
         "/runs/:id/board/journal",
         handle((r) => board.journal(runId(r), r.query)),
@@ -221,7 +242,13 @@ export async function activate({ api }: ActivationContext) {
         handle((r) => adult.list(runId(r))),
       );
       action("adult", (r) => adult.set(runId(r), r.body));
+      // T3: an in-run wish (design.md 3.7).
+      action("wish", (r) => wish(runId(r), r.body));
       action("adult/affairs/:threadId", (r) => adult.choose(runId(r), param(r, "threadId"), r.body));
+
+      // T14: save to the Engine library (cast.md section 6). Reads the run, so no revision.
+      action("export/lorebook", (r) => exporter.lorebook(runId(r), r.body));
+      action("export/persona-note", (r) => exporter.note(runId(r), r.body));
 
       router.delete(
         "/runs/:id",

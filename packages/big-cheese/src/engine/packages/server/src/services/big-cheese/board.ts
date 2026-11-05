@@ -20,6 +20,55 @@ import { newId } from "./core/run.js";
 import { closeThread, openStory, openThread, planCardBeat } from "./core/threads.js";
 import { SLOTS, type Slot } from "./core/types.js";
 import { view } from "./game.js";
+import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
+import { withCallLog } from "./ai/tasks.js";
+import { addToCast, readPerson, Sheet, type Cast, type CastPerson } from "./cast.js";
+import { setAdult } from "./core/adult.js";
+import { setRule } from "./core/authority.js";
+import { normalizeKit } from "./core/kits/normalize.js";
+import { openLayerNow } from "./core/layers.js";
+import { setMutator } from "./core/mutators.js";
+import { STORY_ROLES } from "./core/storyteller.js";
+import { startSystems } from "./core/blocks.js";
+import { DIFFICULTIES, MUTATORS } from "./core/types.js";
+
+// The layers a Board play may switch. Adult has its own verb because it needs the confirm.
+const SET_LAYERS = ["drama", "romance", "press", "rivals", "family"] as const;
+// Verbs that change what the run is made of. They run now, and a cast or kit play also touches the
+// run document next to the game, so the code carries those two pieces as `__cast` and `__kit`.
+const SETTING_VERBS = new Set([
+  "layer.set",
+  "system.set",
+  "adult.set",
+  "rule.set",
+  "decree",
+  "dials.set",
+  "mutator.set",
+  "authority.set",
+  "cast.insert",
+  "cast.remove",
+  "kit.edit",
+]);
+const OUTER_VERBS = new Set(["cast.insert", "cast.remove", "kit.edit"]);
+const LOAD_OUTER = new Set([...OUTER_VERBS, "time.rewind"]);
+/** The game plus the two parts of the run document a setting play may change. `__kit` is the kit without the cast. */
+type World = Game & { __cast?: Cast | null; __kit?: PlaceKit | null };
+/** What a simulation reads of the run document. */
+interface Outer {
+  cast?: Cast;
+  base: PlaceKit;
+}
+/** What a play changed there: a new cast (null = none) and a new custom kit. */
+interface OuterChange {
+  cast?: Cast | null;
+  kit?: PlaceKit | null;
+}
+const outerChange = (o: Outer, cast: Cast | null, kit: PlaceKit): OuterChange | undefined => {
+  const c: OuterChange = {};
+  if (JSON.stringify(cast) !== JSON.stringify(o.cast ?? null)) c.cast = cast;
+  if (JSON.stringify(kit) !== JSON.stringify(o.base)) c.kit = kit;
+  return c.cast !== undefined || c.kit ? c : undefined;
+};
 import { BigCheeseError, PACKAGE_ID, upgradeGame, type Run, type RunStore } from "./store.js";
 
 // ponytail: 20 play snapshots (cheese-board.md §8 says 50 plus a base snapshot); raise the cap and add the base once M4 needs it.
@@ -33,6 +82,15 @@ const bad = (message: string) => new BigCheeseError(400, message, "bad-request")
 const conflict = () => new BigCheeseError(409, "The run changed. Reload it.", "conflict");
 const wrongPhase = (message: string) => new BigCheeseError(409, message, "wrong-phase");
 const kitOf = (run: Run): PlaceKit => withCast(placeKitOf(run), run.cast, run.game.clock);
+// Ironman keeps the Board closed (cheese-board.md section 7). The one way out is `endIronman`.
+const isIronman = (run: Run) => run.game.mode === "ironman";
+const ironmanClosed = () => new BigCheeseError(409, "Ironman keeps the Board closed.", "ironman");
+const outerOf = (run: Run): Outer => ({ cast: run.cast, base: placeKitOf(run) });
+/** The game as a journal entry sees it: with the run's cast and kit when the play touched them. */
+const liveGame = (run: Run, e: Entry): Game =>
+  e.actions.some((a) => Object.keys(a.after).some((p) => p.startsWith("__")))
+    ? ({ ...run.game, __cast: run.cast ?? null, __kit: placeKitOf(run) } as Game)
+    : run.game;
 const notFound = (message: string) => new BigCheeseError(404, message, "not-found");
 
 // ── Actions ──
@@ -152,6 +210,74 @@ export const BoardAction = z.discriminatedUnion("verb", [
     input: z.object({ value: Num.optional(), delta: Num.optional() }).refine(valueOrDelta, VOD),
     when,
   }),
+  // M3 Set verbs (cheese-board.md section 3). They run now and are never Spin beats.
+  z.object({
+    verb: z.literal("layer.set"),
+    input: z.object({ layer: z.enum(SET_LAYERS), dial: Num }),
+    when,
+  }),
+  z.object({
+    verb: z.literal("system.set"),
+    input: z.object({ system: Id, on: z.boolean() }),
+    when,
+  }),
+  z.object({
+    verb: z.literal("adult.set"),
+    input: z.object({
+      on: z.boolean(),
+      confirm: z.boolean().optional(),
+      intensity: Num.optional(),
+      themes: z.array(z.string().max(40)).max(12).optional(),
+    }),
+    when,
+  }),
+  z.object({ verb: z.literal("rule.set"), input: z.object({ rule: Id, option: z.string().max(60) }), when }),
+  z.object({ verb: z.literal("decree"), input: z.object({ rule: Id, option: z.string().max(60) }), when }),
+  z.object({
+    verb: z.literal("dials.set"),
+    input: z
+      .object({
+        difficulty: z.enum(DIFFICULTIES).optional(),
+        storyteller: z.enum(["calm", "classic", "chaos"]).optional(),
+      })
+      .refine(oneOf, "Change at least one dial."),
+    when,
+  }),
+  z.object({ verb: z.literal("mutator.set"), input: z.object({ mutator: z.enum(MUTATORS), on: z.boolean() }), when }),
+  z.object({
+    verb: z.literal("authority.set"),
+    input: z
+      .object({ fear: Num.optional(), love: Num.optional(), legitimacy: Num.optional() })
+      .refine(oneOf, "Set at least one value."),
+    when,
+  }),
+  z.object({
+    verb: z.literal("cast.insert"),
+    input: z.object({
+      engineId: z.string().min(1).max(80),
+      mode: z.enum(["swap", "hire", "visitor", "story"]),
+      storyRole: z.enum(STORY_ROLES).optional(),
+      replaces: z.string().max(40).optional(),
+      days: z.number().int().min(1).max(10).optional(),
+      sheet: Sheet,
+      // The server fills this in from the Engine card when it previews the play.
+      person: z
+        .object({
+          engineId: z.string().max(80),
+          age: z.number().optional(),
+          name: z.string().min(1).max(80),
+          core: z.string().max(500),
+          traits: z.array(z.string().max(30)).max(2),
+          tone: z.string().max(40),
+          lines: z.array(z.string().max(160)).max(3),
+          avatar: z.string().max(300),
+        })
+        .optional(),
+    }),
+    when,
+  }),
+  z.object({ verb: z.literal("cast.remove"), input: z.object({ person: Id }), when }),
+  z.object({ verb: z.literal("kit.edit"), input: z.object({ kit: z.record(z.string(), z.unknown()) }), when }),
   z.object({
     verb: z.literal("room.condition"),
     target: z.object({ kind: z.literal("room"), id: Id }),
@@ -174,6 +300,7 @@ const Actions = z
 
 // ── Stored data (child document `board-snapshots`) ──
 interface Snapshot {
+  outer?: { cast: Cast | null; kit: PlaceKit | null }; // the run's cast and custom kit then (null = none)
   id: string;
   seq: number;
   at: { week: number; day: number };
@@ -266,6 +393,7 @@ function prepare(
   morning: (days: number) => Snapshot,
   kit: PlaceKit,
 ): { paths: string[]; go: () => void } {
+  if (SETTING_VERBS.has(a.verb) && a.when && a.when !== "now") throw bad("Settings change now.");
   if (a.verb.startsWith("time.") && a.when && a.when !== "now") throw bad("Time actions happen now.");
   switch (a.verb) {
     case "meter.set": {
@@ -340,7 +468,17 @@ function prepare(
       const snap = morning(a.input.days);
       return {
         paths: ["clock.week", "clock.day", "clock.hoursLeft"],
-        go: () => void Object.assign(g, structuredClone(snap.game)),
+        go: () => {
+          // Rewinding never removes the cheese mark of an Honest run.
+          const mark = g.cheeseMark;
+          Object.assign(g, structuredClone(snap.game));
+          g.cheeseMark = mark || g.cheeseMark;
+          const w = g as World;
+          if (snap.outer && w.__kit) {
+            w.__cast = structuredClone(snap.outer.cast);
+            if (snap.outer.kit) w.__kit = structuredClone(snap.outer.kit);
+          }
+        },
       };
     }
     case "thread.open": {
@@ -443,6 +581,164 @@ function prepare(
       const path = a.target.id === g.deputy ? "deputyAmbition" : `people.${a.target.id}.ambition`;
       return { paths: [path], go: () => setPath(g, path, amount(g, path, a.input)) };
     }
+    case "layer.set": {
+      const { layer } = a.input;
+      const dial = clamp(Math.round(a.input.dial));
+      return {
+        paths: ["layers", "threads", "nextId", "rng", "relations"],
+        go: () => {
+          const was = g.layers?.[layer] ?? 50;
+          g.layers = { drama: 50, romance: 50, ...g.layers, [layer]: dial };
+          if (was === 0 && dial > 0) openLayerNow(g, layer);
+        },
+      };
+    }
+    case "system.set": {
+      const { system, on } = a.input;
+      known(g.systems, system, "system");
+      return { paths: [`systems.${system}.on`], go: () => void (g.systems[system]!.on = on) };
+    }
+    case "adult.set": {
+      const i = a.input;
+      return {
+        paths: ["adult", "threads", "closed"],
+        go: () => {
+          try {
+            setAdult(g, i);
+          } catch (e) {
+            throw bad(e instanceof Error ? e.message : "The adult module did not change.");
+          }
+        },
+      };
+    }
+    case "rule.set":
+    case "decree": {
+      const { rule, option } = a.input;
+      const r = kit.houseRules.find((x) => x.id === rule);
+      if (!r) throw bad("No such rule.");
+      if (a.verb === "decree" && !(r.decree && g.authority === "absolute"))
+        throw bad("Only an absolute ruler decrees this.");
+      return {
+        paths: ["houseRules", "power", "extras"],
+        go: () => {
+          try {
+            setRule(g, kit, rule, option, true);
+          } catch (e) {
+            throw bad(e instanceof Error ? e.message : "The rule did not change.");
+          }
+        },
+      };
+    }
+    case "dials.set": {
+      const { difficulty, storyteller } = a.input;
+      return {
+        paths: [...(difficulty ? ["difficulty"] : []), ...(storyteller ? ["storyteller"] : [])],
+        go: () => {
+          if (difficulty) g.difficulty = difficulty;
+          if (storyteller) g.storyteller = storyteller;
+        },
+      };
+    }
+    case "mutator.set": {
+      const { mutator, on } = a.input;
+      return {
+        paths: ["mutators", "people", "threads", "nextId", "rng"],
+        go: () => {
+          try {
+            setMutator(g, mutator, on);
+          } catch (e) {
+            throw bad(e instanceof Error ? e.message : "The mutator did not change.");
+          }
+        },
+      };
+    }
+    case "authority.set": {
+      if (g.authority !== "absolute") throw bad("Fear, Love and Legitimacy belong to an absolute ruler.");
+      const i = a.input;
+      const legit = g.extras.find((e) => e.id === "legitimacy");
+      if (i.legitimacy !== undefined && !legit) throw bad("This place has no Legitimacy.");
+      return {
+        paths: ["power", "extras"],
+        go: () => {
+          g.power = {
+            fear: i.fear === undefined ? g.power.fear : clamp(Math.round(i.fear)),
+            love: i.love === undefined ? g.power.love : clamp(Math.round(i.love)),
+          };
+          if (i.legitimacy !== undefined) legit!.value = clamp(Math.round(i.legitimacy));
+        },
+      };
+    }
+    case "cast.insert": {
+      const i = a.input;
+      if (!i.person || i.person.engineId !== i.engineId) throw bad("Read the card first.");
+      const person = i.person as CastPerson;
+      return {
+        paths: ["people", "threads", "nextId", "rng", "__cast"],
+        go: () => {
+          const w = g as World;
+          const r = addToCast({ game: g, cast: w.__cast ?? undefined }, w.__kit!, i, i.sheet, person);
+          Object.assign(g, r.game);
+          w.__cast = r.cast;
+        },
+      };
+    }
+    case "cast.remove": {
+      const id = a.input.person;
+      known(g.people, id, "person");
+      return {
+        paths: [`people.${id}.status`],
+        go: () => {
+          // A kit person stays: only hired people and visitors leave the run.
+          if ((g as World).__kit!.people.some((p) => p.id === id))
+            throw bad("Only hired people and visitors can leave this way.");
+          g.people[id]!.status = "quit";
+        },
+      };
+    }
+    case "kit.edit": {
+      const res = normalizeKit(a.input.kit);
+      if (!res.ok) throw bad(res.reasons.join(" ") || "The kit cannot be used.");
+      const next = res.kit;
+      return {
+        paths: ["__kit", "people", "rooms", "systems", "extras"],
+        go: () => {
+          const w = g as World;
+          const old = w.__kit!;
+          // The run keeps every person and room it has. Removing one mid-run waits for Remove person (M4).
+          for (const p of old.people)
+            if (!next.people.some((x) => x.id === p.id)) throw bad(`Keep ${p.name} in the kit.`);
+          for (const r of old.rooms)
+            if (!next.rooms.some((x) => x.id === r.id)) throw bad(`Keep ${r.name} in the kit.`);
+          // Systems are keyed by array index in the run, so an edit may only add systems at the end.
+          (old.systems ?? []).forEach((s, i) => {
+            const n = next.systems?.[i];
+            if (!n || n.kind !== s.kind || n.name !== s.name) throw bad(`Keep ${s.name} in the kit.`);
+          });
+          for (const r of next.rooms)
+            if (!Object.hasOwn(g.rooms, r.id)) g.rooms[r.id] = { condition: r.condition, people: [] };
+          for (const p of next.people) {
+            if (Object.hasOwn(g.people, p.id)) continue;
+            g.people[p.id] = {
+              trust: 50,
+              stress: 20,
+              mood: "fine",
+              memories: [],
+              room: "home",
+              ambition: 0,
+              status: "active",
+              traits: p.traits,
+              name: p.name,
+            };
+          }
+          for (const e of next.extras ?? [])
+            if (!g.extras.some((x) => x.id === e.id)) g.extras.push({ id: e.id, main: e.main, value: e.value });
+          const fresh = { systems: {} } as unknown as Game;
+          startSystems(fresh, next);
+          for (const [k, v] of Object.entries(fresh.systems)) if (!Object.hasOwn(g.systems, k)) g.systems[k] = v;
+          w.__kit = next;
+        },
+      };
+    }
     case "room.condition": {
       known(g.rooms, a.target.id, "room");
       const path = `rooms.${a.target.id}.condition`;
@@ -466,15 +762,27 @@ const REVERTABLE = new Set([
   "secret.add",
   "ambition.set",
   "room.condition",
+  ...SETTING_VERBS,
 ]);
 
 const snapshotPaths = (g: Game, paths: string[]) =>
   Object.fromEntries(paths.map((p) => [p, structuredClone(getPath(g, p))]));
 
 /** Runs the actions on a copy of the game. Returns the new game and the facts for the journal. */
-function simulate(game: Game, actions: BoardAction[], morning: (days: number) => Snapshot, kit: PlaceKit) {
-  const g = structuredClone(game);
+function simulate(
+  game: Game,
+  actions: BoardAction[],
+  morning: (days: number) => Snapshot,
+  kit: PlaceKit,
+  outer?: Outer,
+): { game: Game; facts: Fact[]; outer?: OuterChange } {
+  const g = structuredClone(game) as World;
   const facts: Fact[] = [];
+  // A cast, kit or day-rewind play also reads and writes the run's cast and kit (see `World`).
+  if (outer && actions.some((a) => LOAD_OUTER.has(a.verb))) {
+    g.__cast = structuredClone(outer.cast ?? null);
+    g.__kit = structuredClone(outer.base);
+  }
   for (const a of actions) {
     if (g.status !== "playing") throw wrongPhase("This run is over.");
     const { paths, go } = prepare(g, a, morning, kit);
@@ -496,7 +804,8 @@ function simulate(game: Game, actions: BoardAction[], morning: (days: number) =>
     const after = snapshotPaths(g, paths);
     facts.push({ ...base, when: "now", before, after, revertible: REVERTABLE.has(a.verb), state: "done" });
   }
-  return { game: g, facts };
+  const { __cast, __kit, ...rest } = g;
+  return { game: rest as Game, facts, outer: outer && __kit ? outerChange(outer, __cast ?? null, __kit) : undefined };
 }
 
 const noMorning = (): Snapshot => {
@@ -728,6 +1037,7 @@ const PreviewBody = z
   .refine((b) => (b.actions === undefined) !== (b.text === undefined), "Send actions or text.");
 const PlayBody = Base.extend({
   previewId: z.string().min(1).max(40),
+  confirmHonest: z.boolean().optional(), // the one-time Honest sheet (cheese-board.md section 7)
   edits: Actions.optional(),
   silent: z.boolean().optional(),
 });
@@ -755,6 +1065,7 @@ export function createBoard(
   store: RunStore,
   documents: CapabilityDocumentStore,
   getModel: () => Promise<ModelCall | undefined> = async () => undefined,
+  runtime?: CapabilityRuntimeHost,
 ) {
   // ponytail: previews live in memory (30 minutes, 100 at most); a restart drops them and the player previews again.
   const previews = new Map<
@@ -812,6 +1123,7 @@ export function createBoard(
     if (expectedRevision !== undefined && expectedRevision !== run.revision) throw conflict();
     if (run.scene) throw wrongPhase("Finish the scene first.");
     if (run.game.meeting && !run.game.meeting.done) throw wrongPhase("Finish the meeting first.");
+    if (isIronman(run)) throw ironmanClosed();
     if (run.game.status !== "playing") throw wrongPhase("This run is over.");
     return run;
   };
@@ -824,10 +1136,29 @@ export function createBoard(
   };
 
   /** Writes the board document, then the run. A failed run write puts the board document back. */
-  const commit = async (run: Doc, record: CapabilityDocumentRecord | null, after: Data, game: Game) => {
+  const commit = async (
+    run: Doc,
+    record: CapabilityDocumentRecord | null,
+    after: Data,
+    game: Game,
+    outer?: OuterChange,
+  ) => {
     const saved = await save(run.id, record, after);
     try {
-      return view(await store.update(run.id, run.revision, (r) => ({ ...r, game })));
+      return view(
+        await store.update(run.id, run.revision, (r) => {
+          const next = { ...r, game };
+          if (outer?.cast !== undefined) {
+            if (outer.cast) next.cast = outer.cast;
+            else delete next.cast;
+          }
+          if (outer && outer.kit !== undefined) {
+            if (outer.kit) next.kit = outer.kit;
+            else delete next.kit;
+          }
+          return next;
+        }),
+      );
     } catch (error) {
       await save(run.id, saved, record ? (record.data as Data) : emptyData()).catch(() => undefined);
       throw error;
@@ -839,6 +1170,8 @@ export function createBoard(
     seq: data.n,
     at: { week: run.game.clock.week, day: run.game.clock.day },
     game: structuredClone(run.game),
+    // ponytail: a custom kit is copied into every snapshot; diff it if kits grow large.
+    outer: { cast: structuredClone(run.cast ?? null), kit: structuredClone(run.kit ?? null) },
   });
 
   /** Plays whose snapshot left the window keep their words but drop stored arrays and objects (inbox, threads) and cap
@@ -941,13 +1274,23 @@ export function createBoard(
         ),
     );
 
-  const planOf = async (g: Game, text: string, target: string | null, kit: PlaceKit) => {
+  /** A cast play carries the card the server read from the Engine, so the play itself needs no Engine. */
+  const withPeople = (list: BoardAction[]) =>
+    Promise.all(
+      list.map(async (a) => {
+        if (a.verb !== "cast.insert") return a;
+        if (!runtime) throw bad("Casting needs the Engine.");
+        return { ...a, input: { ...a.input, person: await readPerson(runtime, a.input.engineId, a.input.sheet) } };
+      }),
+    );
+
+  const planOf = async (g: Game, text: string, target: string | null, kit: PlaceKit, runId: string) => {
     const rng = g.rng;
     const { output, source } = await runTask(
       "board.plan",
       { kit, rng, text, target, world: world(g, kit) },
       // ponytail: one model call; the spec's fix-up retry with the error list is not built, a refused plan just says so.
-      { model: await getModel() },
+      { model: withCallLog(await getModel(), runId) },
     );
     return { output, offline: source === "lite" };
   };
@@ -963,7 +1306,7 @@ export function createBoard(
       let extra: Record<string, unknown> = {};
       if (b.text !== undefined) {
         if (b.target) known(run.game.people, b.target, "person");
-        const { output, offline } = await planOf(run.game, b.text, b.target ?? null, kitOf(run));
+        const { output, offline } = await planOf(run.game, b.text, b.target ?? null, kitOf(run), run.id);
         const planned = planToActions(run.game, output);
         actions = planned.actions.length ? planned.actions : undefined;
         spin = { text: b.text, summary: output.summary };
@@ -979,7 +1322,8 @@ export function createBoard(
       for (const [key, p] of previews) if (now - p.at > PREVIEW_MS) previews.delete(key);
       while (previews.size >= 100) previews.delete(previews.keys().next().value!);
       if (!actions) return { id: "", revision: run.revision, expiresAt: "", actions: [], ...extra };
-      const { facts } = simulate(run.game, actions, morningOf(data, run.game), kitOf(run));
+      actions = await withPeople(actions);
+      const { facts } = simulate(run.game, actions, morningOf(data, run.game), kitOf(run), outerOf(run));
       const previewId = `v-${randomBytes(6).toString("hex")}`;
       previews.set(previewId, { runId: run.id, revision: run.revision, actions, at: now, ...(spin ? { spin } : {}) });
       return {
@@ -1002,9 +1346,14 @@ export function createBoard(
         throw new BigCheeseError(409, "The place changed since the preview. Preview again.", "stale-preview");
       }
       const { record, data } = await load(run.id, run.kitId);
-      const actions = b.edits ?? p.actions;
+      const actions = b.edits ? await withPeople(b.edits) : p.actions;
       const morning = morningOf(data, run.game);
-      const { game, facts } = simulate(run.game, actions, morning, kitOf(run));
+      // An Honest run gets its cheese mark with the first play, after the player agreed to it.
+      const marking = run.game.mode === "honest" && !run.game.cheeseMark;
+      if (marking && !b.confirmHonest)
+        throw new BigCheeseError(409, "This adds a cheese mark to the run.", "honest-first");
+      const { game, facts, outer } = simulate(run.game, actions, morning, kitOf(run), outerOf(run));
+      if (marking) game.cheeseMark = true;
       const first = actions[0]!;
       const silent = b.silent ?? false;
       if (!silent) addReasons(game, facts, kitOf(run));
@@ -1016,7 +1365,7 @@ export function createBoard(
         p.spin ? { layer: "spin", ...p.spin } : undefined,
       );
       previews.delete(b.previewId);
-      return commit(run, record, next, game);
+      return commit(run, record, next, game, outer);
     },
 
     /** Rewinds to before a play, or writes a play's old values back as a new play. */
@@ -1033,18 +1382,20 @@ export function createBoard(
         if (!snap) throw notFound("That point is too old to rewind to.");
         if (later > 0 && !b.confirmLater)
           throw new BigCheeseError(409, "Rewinding also undoes later plays.", "confirm-later");
-        return commit(run, record, rewindData(data, snap), structuredClone(snap.game));
+        const restored = structuredClone(snap.game);
+        restored.cheeseMark = run.game.cheeseMark || restored.cheeseMark; // a rewind never removes the Honest mark
+        return commit(run, record, rewindData(data, snap), restored, snap.outer);
       }
       if (entry.state !== "done" || !entry.actions.every((a) => a.revertible))
         throw bad("Only finished Set plays can be reverted.");
-      const g = structuredClone(run.game);
+      const g = structuredClone(liveGame(run, entry)) as World;
       const old = origins(entry);
       const before: Record<string, unknown> = {};
       for (const [path, value] of Object.entries(old)) {
         before[path] = structuredClone(getPath(g, path));
         setPath(g, path, structuredClone(value));
       }
-      if (changedSince(entry, run.game) && !b.confirmLater)
+      if (changedSince(entry, liveGame(run, entry)) && !b.confirmLater)
         throw new BigCheeseError(409, "Some values changed since this play.", "confirm-later");
       const fact: Fact = {
         verb: "revert",
@@ -1057,12 +1408,20 @@ export function createBoard(
       };
       const next = withPlay(data, run, [fact], false);
       next.journal = next.journal.map((e) => (e.id === entry.id ? { ...e, state: "reverted" as const } : e));
-      return commit(run, record, next, g);
+      const { __cast, __kit, ...rest } = g;
+      return commit(
+        run,
+        record,
+        next,
+        rest as Game,
+        __kit ? outerChange(outerOf(run), __cast ?? null, __kit) : undefined,
+      );
     },
 
     /** One page of the journal, newest first, with what the confirm sheet needs. */
     async journal(id: unknown, query: unknown) {
       const run = await store.get(id);
+      if (isIronman(run)) throw ironmanClosed();
       const { data } = await load(run.id, run.kitId);
       const page = z
         .object({ page: z.coerce.number().int().min(0).max(10_000).catch(0) })
@@ -1076,7 +1435,7 @@ export function createBoard(
         days: Math.max(0, dayIndex(run.game.clock) - dayIndex(e.at)),
         canRewind: live(e) && data.snaps.some((s) => s.id === e.snapshotId),
         canRevert: e.state === "done" && e.actions.every((a) => a.revertible),
-        changed: changedSince(e, run.game),
+        changed: changedSince(e, liveGame(run, e)),
       }));
       return { entries, page, more: all.length > (page + 1) * PAGE };
     },
@@ -1084,6 +1443,7 @@ export function createBoard(
     /** Everything scheduled, soonest first: Spin and Set plays, thread beats and thread clocks (cheese-board.md §5). */
     async comingUp(id: unknown) {
       const run = await store.get(id);
+      if (isIronman(run)) throw ironmanClosed();
       const { data } = await load(run.id, run.kitId);
       const rows: {
         id: string;
@@ -1192,6 +1552,24 @@ export function createBoard(
     },
 
     /** Deletes the child document with its run. */
+    /** The kit this run plays now, for "Edit the kit". The kit holds no secrets. */
+    async kit(id: unknown) {
+      const run = await store.get(id);
+      if (isIronman(run)) throw ironmanClosed();
+      return placeKitOf(run);
+    },
+
+    /** "End Ironman for this run": the run becomes a normal run and stays one, with the cheese mark. */
+    async endIronman(id: unknown, body: unknown) {
+      const b = parse(Base, body);
+      return view(
+        await store.update(id, b.expectedRevision, (r) => {
+          if (r.game.mode !== "ironman") throw wrongPhase("This run is not an Ironman run.");
+          return { ...r, game: { ...r.game, mode: "normal" as const, cheeseMark: true } };
+        }),
+      );
+    },
+
     async remove(id: unknown) {
       const key = typeof id === "string" ? id : "";
       const record = await documents.getById(PACKAGE_ID, boardDocId(key));

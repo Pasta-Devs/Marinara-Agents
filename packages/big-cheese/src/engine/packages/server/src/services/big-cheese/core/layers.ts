@@ -80,6 +80,23 @@ function seedPair(s: Run, l: Layer, seed: Seed, a: string, b: string) {
   }
 }
 
+/** The Board skips the Monday wait: a layer switched on opens its first pair thread now (cheese-board.md section 3). */
+export function openLayerNow(s: Run, l: Layer) {
+  const ok = Object.keys(s.people).filter((id) => s.people[id]!.status === "active");
+  if (ok.length < 2 || Object.values(s.threads).some((t) => t.state === "open" && t.layer === l)) return;
+  const a = pick(s, ok);
+  seedPair(
+    s,
+    l,
+    pick(s, SEEDS[l]),
+    a,
+    pick(
+      s,
+      ok.filter((id) => id !== a),
+    ),
+  );
+}
+
 /** Monday: a dial at 0 opens nothing; a higher dial opens a pair thread more often. One open thread per layer. */
 export function layerSeeds(s: Run, cap: number) {
   adultSeeds(s); // no-op unless the adult module is on

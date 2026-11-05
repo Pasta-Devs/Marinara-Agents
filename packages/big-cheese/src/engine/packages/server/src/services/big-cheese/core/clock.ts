@@ -8,7 +8,7 @@ export const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri"] as const;
 export const SLOTS = ["morning", "midday", "afternoon", "evening", "night"] as const;
 
 export const newClock = (): Clock => ({ week: 1, day: 0, hoursLeft: HOURS });
-export const term = (c: Clock) => Math.ceil(c.week / TERM_WEEKS);
+export const term = (c: Clock, weeks = TERM_WEEKS) => Math.ceil(c.week / weeks);
 export const dayName = (c: Clock) => DAY_NAMES[c.day]!;
 export const slot = (c: Clock) => SLOTS[Math.min(HOURS - c.hoursLeft, SLOTS.length - 1)]!;
 export const isFriday = (c: Clock) => c.day === DAYS - 1;

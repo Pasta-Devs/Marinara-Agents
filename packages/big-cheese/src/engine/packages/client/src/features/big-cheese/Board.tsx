@@ -6,8 +6,10 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { api } from "../../lib/api-client";
-import { errorKey, type KitView, type Meter } from "./api";
+import { errorKey, getRunKit, type KitView, type Meter } from "./api";
 import { dayKey, moodKey, nameOf, type Ctx } from "./parts";
+import { BoardSettings, LAYER_KEYS, MUTATOR_KEYS } from "./BoardSettings";
+import { KitEditor } from "./KitEditor";
 
 const METERS: Meter[] = ["money", "output", "people", "standing"];
 const MOODS = ["great", "fine", "low", "sick", "away"];
@@ -255,6 +257,58 @@ function sentence(
       ];
     case "thread.beat":
       return [t("ui.bigCheese.board.set.threadBeat", { title: title(id) })];
+    case "layer.set":
+      return [
+        t("ui.bigCheese.board.m3.set.layer", {
+          name: t(LAYER_KEYS[String(i.layer)] ?? "ui.bigCheese.board.m3.layers"),
+          value: Number(i.dial),
+        }),
+      ];
+    case "system.set":
+      return [
+        t("ui.bigCheese.board.m3.set.system", {
+          n: Number(i.system) + 1,
+          state: t(i.on ? "ui.bigCheese.board.m3.on" : "ui.bigCheese.board.m3.off"),
+        }),
+      ];
+    case "adult.set":
+      return [
+        t("ui.bigCheese.board.m3.set.adult", {
+          state: t(i.on ? "ui.bigCheese.board.m3.on" : "ui.bigCheese.board.m3.off"),
+        }),
+      ];
+    case "rule.set":
+    case "decree":
+      return [t("ui.bigCheese.board.m3.set.rule", { rule: String(i.rule), option: String(i.option) })];
+    case "dials.set":
+      return [
+        t("ui.bigCheese.board.m3.set.dials", { value: [i.difficulty, i.storyteller].filter(Boolean).join(", ") }),
+      ];
+    case "mutator.set":
+      return [
+        t("ui.bigCheese.board.m3.set.mutator", {
+          name: t(MUTATOR_KEYS[String(i.mutator)] ?? "ui.bigCheese.board.m3.mutators"),
+          state: t(i.on ? "ui.bigCheese.board.m3.on" : "ui.bigCheese.board.m3.off"),
+        }),
+      ];
+    case "authority.set":
+      return [
+        t("ui.bigCheese.board.m3.set.authority", {
+          value: [i.fear, i.love, i.legitimacy].map((v) => v ?? "-").join(" / "),
+        }),
+      ];
+    case "cast.insert":
+      return [
+        t("ui.bigCheese.board.m3.set.castInsert", {
+          name: String((i.person as { name?: string } | undefined)?.name ?? i.engineId),
+        }),
+      ];
+    case "cast.remove":
+      return [t("ui.bigCheese.board.m3.set.castRemove", { name: nameOf(kit, String(i.person)) })];
+    case "kit.edit":
+      return [
+        t("ui.bigCheese.board.m3.set.kitEdit", { name: String((i.kit as { name?: string } | undefined)?.name ?? "") }),
+      ];
     case "thread.followup":
       return [t("ui.bigCheese.board.set.threadFollowup", { title: title(id) })];
     default:
@@ -311,10 +365,61 @@ const base = (run: Ctx["run"]) => `/big-cheese/runs/${encodeURIComponent(run.id)
 /** An action without the numbers the server added, as the server wants it back. */
 const strip = ({ verb, target, input, when }: Fact): Action => ({ verb, target, input, when });
 
-export function Board({ ctx, note, onClose }: { ctx: Ctx; note: ReactNode; onClose: () => void }) {
+interface BoardProps {
+  ctx: Ctx;
+  note: ReactNode;
+  onClose: () => void;
+}
+
+/** Ironman keeps the Board closed. All it offers is the way out (cheese-board.md section 7). */
+export function Board(props: BoardProps) {
+  return props.ctx.run.game.mode === "ironman" ? <IronmanSheet {...props} /> : <BoardSheet {...props} />;
+}
+
+function IronmanSheet({ ctx, note, onClose }: BoardProps) {
+  const { t } = useTranslation();
+  const { busy, act } = ctx;
+  return (
+    <div className="bc-veil" onKeyDown={(event) => event.key === "Escape" && onClose()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="bc-board-title" className="bc-sheet" aria-busy={busy}>
+        <h2 id="bc-board-title">{t("ui.bigCheese.board.title")}</h2>
+        {note}
+        <p className="bc-note">{t("ui.bigCheese.board.m3.ironman")}</p>
+        <button
+          type="button"
+          className="bc-btn bc-btn-danger"
+          disabled={busy}
+          onClick={() => void act("board/end-ironman").then((ok) => ok && onClose())}
+        >
+          {t("ui.bigCheese.board.m3.endIronman")}
+        </button>
+        <button type="button" className="bc-btn bc-btn-quiet" onClick={onClose}>
+          {t("ui.bigCheese.board.close")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function BoardSheet({ ctx, note, onClose }: BoardProps) {
   const { t } = useTranslation();
   const { run, kit, busy, act } = ctx;
   const game = run.game;
+  const [kitEdit, setKitEdit] = useState(false);
+  // An Honest run gets its cheese mark with the first play, after the player agrees (cheese-board.md section 7).
+  const [honestAsk, setHonestAsk] = useState<(() => void) | null>(null);
+  // "Edit the kit" saves as one Board play, so a bad kit is refused with the reasons and the journal can revert it.
+  const saveRunKit = async (kitJson: unknown) => {
+    if (game.mode === "honest" && !game.cheeseMark) throw new Error(t("ui.bigCheese.board.m3.honest"));
+    const p = await api.post<Preview>(`${base(run)}/preview`, {
+      actions: [{ verb: "kit.edit", input: { kit: kitJson } }],
+    });
+    if (!(await act("board/play", { previewId: p.id, silent: true })))
+      throw new Error(t("ui.bigCheese.board.m3.kitNotSaved"));
+  };
+  const honestBody = game.mode === "honest" && !game.cheeseMark ? { confirmHonest: true } : {};
+  const guard = (play: () => void | Promise<void>) =>
+    game.mode === "honest" && !game.cheeseMark ? setHonestAsk(() => play) : void play();
   const [tab, setTab] = useState<"set" | "spin" | "coming" | "journal">("set");
   const [query, setQuery] = useState("");
   const [row, setRow] = useState<Row | null>(null);
@@ -583,7 +688,7 @@ export function Board({ ctx, note, onClose }: { ctx: Ctx; note: ReactNode; onClo
 
   const playIt = async () => {
     if (!preview) return;
-    const ok = await act("board/play", { previewId: preview.id, silent });
+    const ok = await act("board/play", { previewId: preview.id, silent, ...honestBody });
     if (ok) {
       setPlan([]);
       setPreview(null);
@@ -613,6 +718,7 @@ export function Board({ ctx, note, onClose }: { ctx: Ctx; note: ReactNode; onClo
     const kept = spin.actions.filter((_, i) => !skip.includes(i));
     const ok = await act("board/play", {
       previewId: spin.id,
+      ...honestBody,
       silent,
       ...(skip.length ? { edits: kept.map(strip) } : {}),
     });
@@ -931,7 +1037,7 @@ export function Board({ ctx, note, onClose }: { ctx: Ctx; note: ReactNode; onClo
                   type="button"
                   className="bc-btn bc-btn-primary"
                   disabled={busy || checking}
-                  onClick={() => void playIt()}
+                  onClick={() => guard(playIt)}
                 >
                   {t("ui.bigCheese.board.play")}
                 </button>
@@ -966,6 +1072,47 @@ export function Board({ ctx, note, onClose }: { ctx: Ctx; note: ReactNode; onClo
           </>
         )}
 
+        {tab === "set" && !preview && !form && (
+          <BoardSettings
+            ctx={ctx}
+            onAdd={(a) => void stage([...plan, a])}
+            onEditKit={() => setKitEdit(true)}
+            onError={(e) => setError(errorKey(e))}
+          />
+        )}
+        {kitEdit && (
+          <div className="bc-veil">
+            <KitEditor
+              kitId={run.kitId}
+              load={() => getRunKit(run.id)}
+              save={saveRunKit}
+              onSaved={() => setKitEdit(false)}
+              onBack={() => setKitEdit(false)}
+            />
+          </div>
+        )}
+        {honestAsk && (
+          <section className="bc-section" role="alertdialog" aria-labelledby="bc-board-honest">
+            <h3 id="bc-board-honest" className="bc-subhead">
+              {t("ui.bigCheese.board.m3.honestTitle")}
+            </h3>
+            <p className="bc-note">{t("ui.bigCheese.board.m3.honest")}</p>
+            <button
+              type="button"
+              className="bc-btn bc-btn-primary"
+              onClick={() => {
+                const play = honestAsk;
+                setHonestAsk(null);
+                void play();
+              }}
+            >
+              {t("ui.bigCheese.board.m3.honestAgree")}
+            </button>
+            <button type="button" className="bc-btn bc-btn-quiet" onClick={() => setHonestAsk(null)}>
+              {t("ui.bigCheese.board.cancel")}
+            </button>
+          </section>
+        )}
         {tab === "spin" && (
           <section className="bc-section" aria-labelledby="bc-board-spin">
             <h3 id="bc-board-spin" className="bc-subhead">
@@ -1043,7 +1190,7 @@ export function Board({ ctx, note, onClose }: { ctx: Ctx; note: ReactNode; onClo
                       type="button"
                       className="bc-btn bc-btn-primary"
                       disabled={busy || checking || skip.length >= spin.actions.length}
-                      onClick={() => void playSpin()}
+                      onClick={() => guard(playSpin)}
                     >
                       {t("ui.bigCheese.board.play")}
                     </button>

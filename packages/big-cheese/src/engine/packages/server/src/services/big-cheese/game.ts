@@ -2,7 +2,7 @@
 // The model only writes words. The code picks every stance, number and outcome. A model call runs before
 // the store's write, and the write carries `expectedRevision`, so a changed run is a 409 and the client reloads.
 import { z } from "zod";
-import { CHOSE, runTask, type Band, type ModelCall } from "./ai/tasks.js";
+import { CHOSE, runTask, withCallLog, type Band, type ModelCall } from "./ai/tasks.js";
 import { withCast, type Cast } from "./cast.js";
 import {
   HOURS,
@@ -31,6 +31,7 @@ import type { PlaceKit } from "./core/kits/types.js";
 import { BLUEPRINTS, choices, dueBig, finishBig, settleBig } from "./core/bigscenes.js";
 import { addTrust } from "./core/run.js";
 import { layerDials } from "./core/layers.js";
+import { silentBoss } from "./core/mutators.js";
 import { METERS, type Mode, type Thread } from "./core/types.js";
 import { BigCheeseError, type Run, type RunStore, type SceneText } from "./store.js";
 
@@ -109,7 +110,10 @@ export const view = (run: Run) => ({ run, kit: kitView(run, run.cast) });
 
 export function createGame(store: RunStore, getModel: () => Promise<ModelCall | undefined>) {
   const placeOf = (run: Run) => withCast(placeKitOf(run), run.cast, run.game.clock);
-  const modelFor = (run: { lite: boolean }) => (run.lite ? Promise.resolve(undefined) : getModel());
+  const modelFor = async (run: { lite: boolean; id?: string }) => {
+    const model = run.lite ? undefined : await getModel();
+    return run.id ? withCallLog(model, run.id) : model; // create() has no run id yet
+  };
 
   // One part of a scene. The code picks the offered stances; `h.rng` moves on after the call.
   async function nextPart(kit: PlaceKit, h: Rng, game: Game, s: SceneText, model?: ModelCall) {
@@ -221,6 +225,7 @@ export function createGame(store: RunStore, getModel: () => Promise<ModelCall | 
         const model = await modelFor(run);
         let stance = b.stance ?? (last.suggestions[1] ?? last.suggestions[0])?.stance;
         if (b.stance && !last.suggestions.some((x) => x.stance === b.stance)) throw bad("That answer is not offered.");
+        if (b.text && silentBoss(run.game)) throw bad("The silent boss picks one of the offered answers.");
         if (b.text) {
           if (BLUEPRINTS[s.blueprint]!.end !== "stance" && s.parts.length === s.total)
             throw bad("Pick one of the options.");
@@ -323,6 +328,7 @@ export function createGame(store: RunStore, getModel: () => Promise<ModelCall | 
         if (run.game.clock.hoursLeft < 1) throw new BigCheeseError(409, "No hours left today.", "no-hours");
         let stance = b.stance ?? "";
         let promise: { to: string; what: string } | undefined = b.promise && { to: card.asker, what: b.promise.what };
+        if (b.text && silentBoss(run.game)) throw bad("The silent boss picks one of the offered answers.");
         if (b.text) {
           // The tag can only land on an offered answer, because the core accepts nothing else.
           const input = {

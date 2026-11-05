@@ -54,3 +54,4 @@ export {
 export { blocks, setSystem, startSystems } from "./blocks.js";
 export { decreeCost, enforcerIn, plotChance, pureSetRule as setRule, ruleOption, stancePower } from "./authority.js";
 export * from "./adult.js";
+export * from "./wish.js";

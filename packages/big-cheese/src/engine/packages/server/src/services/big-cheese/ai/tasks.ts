@@ -13,7 +13,12 @@ import { adultNotes, fadeOf, type Adult } from "../core/adult.js";
 export type Band = "cold" | "wary" | "neutral" | "warm" | "loyal";
 type Msg = { role: "system" | "user"; content: string };
 /** Returns the model's raw text. Throw on any failure. */
-export type ModelCall = (messages: Msg[], o: { signal: AbortSignal; maxTokens: number }) => Promise<string>;
+/** One debug-log line: the task name, what happened and how long it took. No prompt or reply text. */
+export type CallEntry = { task: string; outcome: "ok" | "retry" | "refusal" | "lite"; ms: number };
+export type ModelCall = ((messages: Msg[], o: { signal: AbortSignal; maxTokens: number }) => Promise<string>) & {
+  /** Set by the route; runTask reports each call here. */
+  onCall?: (e: CallEntry) => void;
+};
 type Obj = Record<string, unknown>;
 
 // --- Inputs and outputs ---------------------------------------------------------------------
@@ -1117,7 +1122,40 @@ const placePeople: Task<PlacePeopleInput, PlacePeopleOutput> = {
   }),
 };
 
+// wish.classify (design.md 3.7): the player's wish line becomes a need, a size and people. The
+// code opens the thread; it never takes a number from here.
+export interface WishClassifyInput {
+  kit: PlaceKit;
+  rng: number;
+  text: string;
+}
+export interface WishClassifyOutput {
+  kind: "wish" | "crisis";
+  need: Meter;
+  people: string[];
+}
+const wishClassify: Task<WishClassifyInput, WishClassifyOutput> = {
+  tokens: 300,
+  prompt: (i) =>
+    msgs(
+      i.kit,
+      `Read the boss's wish. Say which need it touches: ${METERS.join(", ")}. Say "crisis" if it asks for trouble, "wish" if it asks for anything else. List up to 3 people it is about, only if it names them or their job. Shape: {"kind":"wish","need":"standing","people":["id"]}\nPeople:\n${i.kit.people.map((p) => `- ${p.id}: ${p.name}, ${p.role}`).join("\n")}`,
+      { wish: i.text.slice(0, 300) },
+    ),
+  parse(raw, i) {
+    const o = obj(raw);
+    if (!METERS.includes(o.need as Meter)) throw new Error("need: not a meter");
+    return {
+      kind: o.kind === "crisis" ? "crisis" : "wish",
+      need: o.need as Meter,
+      people: list(o.people, 0, 3).map((x) => person(i.kit, x).id),
+    };
+  },
+  lite: () => ({ kind: "wish", need: "standing", people: [] }),
+};
+
 export const tasks = {
+  "wish.classify": wishClassify,
   "place.draft": placeDraft,
   "place.people": placePeople,
   "digest.away": digestAway,
@@ -1166,6 +1204,8 @@ export async function runTask<K extends keyof Tasks>(
   const t = tasks[task] as unknown as Task<unknown, unknown>;
   const lite = () => ({ output: t.lite(input) as ReturnType<Tasks[K]["lite"]>, source: "lite" as const });
   if (!opts.model) return lite();
+  const t0 = Date.now();
+  const note = (outcome: CallEntry["outcome"]) => opts.model?.onCall?.({ task, outcome, ms: Date.now() - t0 });
   try {
     const signal = AbortSignal.any([
       AbortSignal.timeout(opts.timeoutMs ?? 60_000),
@@ -1182,15 +1222,23 @@ export async function runTask<K extends keyof Tasks>(
       return t.parse(parseJson(text), inp) as ReturnType<Tasks[K]["lite"]>;
     };
     try {
-      return { output: await call(input), source: "model" };
+      const output = await call(input);
+      note("ok");
+      return { output, source: "model" };
     } catch (e) {
       // A refused or blocked adult scene falls back to fade to black, then to Lite.
       const adult = (input as { adult?: Adult | null }).adult;
       if (!adult || adult.intensity === 0 || signal.aborted) throw e;
       opts.log?.(task, e);
-      return { output: await call({ ...(input as object), adult: fadeOf(adult) }), source: "model" };
+      note("refusal");
+      const output = await call({ ...(input as object), adult: fadeOf(adult) });
+      note("retry");
+      return { output, source: "model" };
     }
-  } catch {
+  } catch (e) {
+    // The retry failed too, or a non-Adult call failed: both end in Lite.
+    opts.log?.(task, e);
+    note("lite");
     return lite();
   }
 }
@@ -1214,4 +1262,25 @@ export async function engineModel(
     if (CUT_OFF.has(reply.finishReason ?? "")) throw new Error("reply cut off at the token limit");
     return reply.content ?? "";
   };
+}
+
+// --- Model call debug log (GET /runs/:id/calls) -----------------------------
+
+const CALL_LOG_CAP = 50;
+// ponytail: in memory, lost on restart; persist it only if the log must survive a restart.
+const callLogs = new Map<string, CallEntry[]>();
+
+/** The last 50 calls of one run, oldest first. */
+export const callsOf = (runId: string): CallEntry[] => callLogs.get(runId) ?? [];
+
+/** Hands the run's log to the model, so runTask records each call. A Lite run has no model and no log. */
+export function withCallLog(model: ModelCall | undefined, runId: string): ModelCall | undefined {
+  if (!model) return model;
+  const wrapped: ModelCall = (m, o) => model(m, o);
+  wrapped.onCall = (e) => {
+    const list = callLogs.get(runId) ?? [];
+    list.push(e);
+    callLogs.set(runId, list.slice(-CALL_LOG_CAP));
+  };
+  return wrapped;
 }

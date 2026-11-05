@@ -10,7 +10,7 @@ import type { PlaceKit } from "./core/kits/types.js";
 import { dayIndex } from "./core/index.js";
 import { HOME_ROLES, STORY_ROLES, openStoryRole } from "./core/storyteller.js";
 import { dial } from "./core/layers.js";
-import type { Clock, Person, Run as Game } from "./core/types.js";
+import type { Clock, Run as Game } from "./core/types.js";
 import { TRAITS } from "./core/traits.js";
 import { BigCheeseError, type Run, type RunStore } from "./store.js";
 import { KITS, placeKitOf } from "./core/kits/index.js";
@@ -42,7 +42,7 @@ const MARI_ID = "__professor_mari__";
 const MAX_LIST = 200;
 
 /** What the player may edit on the casting sheet. Every field is capped here, at the route boundary. */
-const Sheet = z.object({
+export const Sheet = z.object({
   role: z.string().trim().max(60),
   traits: z
     .array(z.enum(TRAITS))
@@ -88,7 +88,7 @@ const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v =
 /** One trimmed line of text, cut to `max`. */
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "");
 /** The Engine serves only its own paths, so a model or card cannot point the client at another site. */
-const avatarOf = (v: unknown) => {
+export const avatarOf = (v: unknown) => {
   const path = typeof v === "string" ? v.trim() : "";
   return path.length <= 300 && /^\/(?!\/)/.test(path) && !/[\\?#%]|\.\./.test(path) ? path : "";
 };
@@ -355,7 +355,7 @@ export async function midCast(
 ): Promise<Run> {
   const b = MidBody.safeParse(body ?? {});
   if (!b.success) throw bad("Invalid request.");
-  const { engineId, mode, replaces, days = 3, sheet, expectedRevision, storyRole } = b.data;
+  const { engineId, mode, sheet, expectedRevision, storyRole } = b.data;
   if ((mode === "story") !== !!storyRole) throw bad("Pick a story role for a story card.");
   const run = await store.get(id);
   if (storyRole && !homeRoleOk(run.game, storyRole))
@@ -375,56 +375,92 @@ export async function midCast(
     lines: sheet.lines,
     avatar: avatarOf(d.avatarPath),
   };
-  const deputy = kit.people.find((p) => p.deputy);
   return store.update(id, expectedRevision, (r) => {
     open(r);
-    const cast: Cast = { ...r.cast, people: { ...r.cast?.people } };
-    if (Object.values(cast.people).some((p) => p.engineId === engineId)) throw bad("Each card can be used once.");
-    if (mode === "swap") {
-      const slot = kit.people.find((p) => (replaces ? p.id === replaces : p.role === sheet.role));
-      if (!slot || slot.deputy) throw bad("This role cannot be filled from your library.");
-      cast.people[slot.id] = person;
-      const people = { ...r.game.people, [slot.id]: { ...r.game.people[slot.id], name } };
-      return { ...r, cast, game: { ...r.game, people } };
-    }
-    if (deputy && sheet.role.toLowerCase() === deputy.role.toLowerCase()) {
-      throw bad("This role cannot be filled from your library.");
-    }
-    const extras = Object.keys(cast.people).filter((k) => !kit.people.some((p) => p.id === k));
-    if (extras.filter((k) => r.game.people[k]?.status === "active").length >= MAX_EXTRA) {
-      throw bad("The place has no room for more people.");
-    }
-    let n = 1;
-    while (cast.people[`${mode[0]}${n}`] || r.game.people[`${mode[0]}${n}`]) n++;
-    const key = `${mode[0]}${n}`;
-    cast.people[key] = {
-      ...person,
-      role: sheet.role,
-      ...(mode === "visitor" && { until: dayIndex(r.game.clock) + days }),
-    };
-    const fresh: Person = {
-      trust: 50,
-      stress: 20,
-      mood: "fine",
-      memories: [],
-      room: "home",
-      ambition: 0,
-      status: "active",
-      traits: sheet.traits,
-      name,
-      // Extras work the routine of a kit person in the same role, or of the first non-deputy.
-      routine: (
-        kit.people.find((p) => p.role.toLowerCase() === sheet.role.toLowerCase()) ??
-        kit.people.find((p) => !p.deputy) ??
-        kit.people[0]
-      ).routine,
-      ...(mode === "visitor" && { until: dayIndex(r.game.clock) + days }),
-    };
-    const game = structuredClone(r.game);
-    game.people[key] = fresh;
-    if (storyRole) openStoryRole(game, key, storyRole);
+    const { cast, game } = addToCast(r, kit, b.data, sheet, person);
     return { ...r, cast, game };
   });
+}
+
+/**
+ * The pure part of a mid-run cast: the run state with one more card in it. The Board uses it, so a cast
+ * is one journal play. `base` is the kit without the cast. Nothing here reads the Engine.
+ */
+export function addToCast(
+  r: { game: Game; cast?: Cast },
+  base: PlaceKit,
+  b: Pick<z.infer<typeof MidBody>, "mode" | "storyRole" | "replaces" | "days">,
+  sheet: z.infer<typeof Sheet>,
+  person: CastPerson,
+): { game: Game; cast: Cast } {
+  const { mode, storyRole, replaces, days = 3 } = b;
+  if ((mode === "story") !== !!storyRole) throw bad("Pick a story role for a story card.");
+  if (storyRole && !homeRoleOk(r.game, storyRole))
+    throw bad("Turn on the Romance, Adult or Family layer for this role.");
+  const cast: Cast = { ...r.cast, people: { ...r.cast?.people } };
+  if (Object.values(cast.people).some((p) => p.engineId === person.engineId)) throw bad("Each card can be used once.");
+  const deputy = base.people.find((p) => p.deputy);
+  if (mode === "swap") {
+    const slot = base.people.find((p) => (replaces ? p.id === replaces : p.role === sheet.role));
+    if (!slot || slot.deputy) throw bad("This role cannot be filled from your library.");
+    cast.people[slot.id] = person;
+    const game = structuredClone(r.game);
+    game.people[slot.id] = { ...game.people[slot.id]!, name: person.name };
+    return { cast, game };
+  }
+  if (deputy && sheet.role.toLowerCase() === deputy.role.toLowerCase())
+    throw bad("This role cannot be filled from your library.");
+  const extras = Object.keys(cast.people).filter((k) => !base.people.some((p) => p.id === k));
+  if (extras.filter((k) => r.game.people[k]?.status === "active").length >= MAX_EXTRA)
+    throw bad("The place has no room for more people.");
+  let n = 1;
+  while (cast.people[`${mode[0]}${n}`] || r.game.people[`${mode[0]}${n}`]) n++;
+  const key = `${mode[0]}${n}`;
+  const until = mode === "visitor" ? { until: dayIndex(r.game.clock) + days } : {};
+  cast.people[key] = { ...person, role: sheet.role, ...until };
+  const routine = (
+    base.people.find((p) => p.role.toLowerCase() === sheet.role.toLowerCase()) ??
+    base.people.find((p) => !p.deputy) ??
+    base.people[0]!
+  ).routine;
+  const game = structuredClone(r.game);
+  game.people[key] = {
+    trust: 50,
+    stress: 20,
+    mood: "fine",
+    memories: [],
+    room: "home",
+    ambition: 0,
+    status: "active",
+    traits: sheet.traits,
+    name: person.name,
+    routine,
+    ...until,
+  };
+  if (storyRole) openStoryRole(game, key, storyRole);
+  return { cast, game };
+}
+
+/** Reads the card for a Board cast play: name, age and picture come from the Engine, never from the client. */
+export async function readPerson(
+  runtime: CapabilityRuntimeHost,
+  engineId: string,
+  sheet: z.infer<typeof Sheet>,
+): Promise<CastPerson> {
+  const d = await readOne(runtime, "character", engineId);
+  const age = checkAge(d);
+  const name = str(d.name, 80);
+  if (!name) throw bad("This card has no name.");
+  return {
+    engineId,
+    age,
+    name,
+    core: sheet.core,
+    traits: sheet.traits,
+    tone: sheet.tone,
+    lines: sheet.lines,
+    avatar: avatarOf(d.avatarPath),
+  };
 }
 
 /** Reads one cast person's card again: name, age and picture follow the card. The sheet and the run state stay. */

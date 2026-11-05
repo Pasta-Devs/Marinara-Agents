@@ -4,7 +4,7 @@
 // The code picks the people, the agenda and every number; the model writes the lines. A model call
 // runs before the store's write, so a changed revision is a 409 and the client reloads.
 import { z } from "zod";
-import { runTask, type ModelCall } from "./ai/tasks.js";
+import { runTask, withCallLog, type ModelCall } from "./ai/tasks.js";
 import { withCast } from "./cast.js";
 import { meetingChoice, meetingText, MEETINGS, startMeeting, type Run as Game } from "./core/index.js";
 import { placeKitOf } from "./core/kits/index.js";
@@ -22,7 +22,8 @@ const ChooseBody = Body.extend({
 
 export function createMeetings(store: RunStore, getModel: () => Promise<ModelCall | undefined>) {
   const kitOf = (run: Run): PlaceKit => withCast(placeKitOf(run), run.cast, run.game.clock);
-  const modelFor = (run: { lite: boolean }) => (run.lite ? Promise.resolve(undefined) : getModel());
+  const modelFor = async (run: { lite: boolean }, id: unknown) =>
+    run.lite ? undefined : withCallLog(await getModel(), String(id));
 
   async function open<S extends z.ZodType<{ expectedRevision: number }>>(id: unknown, body: unknown, schema: S) {
     const parsed = schema.safeParse(body ?? {});
@@ -37,7 +38,7 @@ export function createMeetings(store: RunStore, getModel: () => Promise<ModelCal
   }
 
   /** The model's words for the item that is up (the first one without an answer). */
-  async function writeItem(run: Run, game: Game): Promise<Game> {
+  async function writeItem(id: unknown, run: Run, game: Game): Promise<Game> {
     const m = game.meeting;
     const item = m?.items.find((i) => i.chosen === undefined);
     if (!m || !item) return game;
@@ -62,7 +63,7 @@ export function createMeetings(store: RunStore, getModel: () => Promise<ModelCal
           })),
           offer: item.offer.map((a) => a.stance),
         },
-        { model: await modelFor(run) },
+        { model: await modelFor(run, id) },
       )
     ).output;
     h.rng = (h.rng + 0x6d2b79f5) | 0; // the Lite path reads from `rng`; step it so the next turn differs
@@ -88,7 +89,7 @@ export function createMeetings(store: RunStore, getModel: () => Promise<ModelCal
           throw new BigCheeseError(409, e.message, "no-hours");
         throw new BigCheeseError(400, e instanceof Error ? e.message : "Invalid request.", "bad-request");
       }
-      return save(id, run, await writeItem(run, game));
+      return save(id, run, await writeItem(id, run, game));
     },
 
     async choose(id: unknown, body: unknown) {
@@ -100,13 +101,13 @@ export function createMeetings(store: RunStore, getModel: () => Promise<ModelCal
       let stance = b.stance;
       if (b.text) {
         // The tag only lands on an offered stance, because the core accepts nothing else.
-        const model = await modelFor(run);
+        const model = await modelFor(run, id);
         stance = (await runTask("answer.tag", { kit: kitOf(run), text: b.text, allowed }, { model })).output.stance;
       }
       if (!stance || !allowed.includes(stance))
         throw new BigCheeseError(400, "That answer is not offered.", "bad-request");
       const game = meetingChoice(run.game, stance, kitOf(run));
-      return save(id, run, await writeItem(run, game));
+      return save(id, run, await writeItem(id, run, game));
     },
   };
 }

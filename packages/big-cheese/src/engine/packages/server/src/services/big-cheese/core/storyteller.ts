@@ -5,6 +5,7 @@ import { dayIndex } from "./clock.js";
 import { bigToday, bookClimaxes, lapse } from "./bigscenes.js";
 import { pick, roll } from "./rng.js";
 import { layerSeeds, projects } from "./layers.js";
+import { dramaFactor } from "./mutators.js";
 import { K } from "./stances.js";
 import { closeThread, openStory, openThread } from "./threads.js";
 import { applyDelta, newId } from "./run.js";
@@ -116,7 +117,7 @@ function weekly(s: Run) {
   const peak = s.storyteller === "classic" && (s.clock.week - 1) % 4 === 2;
   if (
     Object.values(s.threads).some((t) => t.kind === "crisis") ||
-    roll(s) >= (peak ? 0.25 : PRESETS[s.storyteller].crisis)
+    roll(s) >= dramaFactor(s) * (peak ? 0.25 : PRESETS[s.storyteller].crisis)
   )
     return;
   const item = draw(s, CRISES);
@@ -125,7 +126,12 @@ function weekly(s: Run) {
 
 // At least 1 surprise a week: a 15% chance on Mon-Wed, and Thursday makes one if the week had none.
 function surprise(s: Run) {
-  if (s.story.lastSurprise?.week === s.clock.week || s.clock.day > 3 || (s.clock.day < 3 && roll(s) >= 0.15)) return;
+  if (
+    s.story.lastSurprise?.week === s.clock.week ||
+    s.clock.day > 3 ||
+    (s.clock.day < 3 && roll(s) >= 0.15 * dramaFactor(s))
+  )
+    return;
   const item = draw(s, SURPRISES);
   const t = openThread(s, {
     kind: "follow_up",

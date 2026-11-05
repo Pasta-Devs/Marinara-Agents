@@ -96,6 +96,9 @@ export function Office({ ctx, canStart }: { ctx: Ctx; canStart: boolean }) {
       <button type="button" className="bc-btn bc-btn-quiet" onClick={() => go("rules")}>
         {t("ui.bigCheese.rules.open")}
       </button>
+      <button type="button" className="bc-btn bc-btn-quiet" onClick={() => go("wish")}>
+        {t("ui.bigCheese.wish.open")}
+      </button>
       <section className="bc-section" aria-labelledby="bc-threads">
         <h2 id="bc-threads" className="bc-subhead">
           {t("ui.bigCheese.office.threads")}
