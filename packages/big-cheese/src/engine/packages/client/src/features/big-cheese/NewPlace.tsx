@@ -16,6 +16,7 @@ import {
   type WishBody,
 } from "./api";
 import { Preview } from "./Preview";
+import { BUNDLES } from "./bundles";
 
 const MAX_STAFF = 3;
 
@@ -44,6 +45,13 @@ function Choice<V extends string>({
   );
 }
 
+/** Applies the picked bundle's dials to the drafted kit. */
+const withBundle = (kit: unknown, id: string) => {
+  const b = BUNDLES.find((x) => x.id === id);
+  const k = kit as { layers?: Record<string, number> };
+  return b ? { ...k, layers: { ...k.layers, ...b.layers } } : kit;
+};
+
 export function NewPlace({
   busy,
   failure,
@@ -61,6 +69,7 @@ export function NewPlace({
   const [storyteller, setStoryteller] = useState<WishBody["storyteller"]>("classic");
   const [authority, setAuthority] = useState<WishBody["authority"]>("manager");
   const [boss, setBoss] = useState("");
+  const [bundle, setBundle] = useState(""); // M4 T7: one-tap story mix, applied to the draft kit on take
   const [staff, setStaff] = useState<CastItem[]>([]);
   const [cast, setCast] = useState<CastList | null>(null);
   const [draft, setDraft] = useState<{ kit: unknown; view: PreviewKit } | null>(null);
@@ -96,7 +105,7 @@ export function NewPlace({
         failure={error ? t(error) : failure}
         rerolling={working}
         onReroll={(part) => void make(part)}
-        onTake={(body) => onTake(draft.kit, body)}
+        onTake={(body) => onTake(withBundle(draft.kit, bundle), body)}
         onCast={() => {}}
         onBack={() => setDraft(null)}
       />
@@ -200,6 +209,15 @@ export function NewPlace({
                 ["strong_leader", t("ui.bigCheese.newPlace.authorityStrong")],
                 ["absolute", t("ui.bigCheese.newPlace.authorityAbsolute")],
               ]}
+            />
+            <Choice
+              label={t("ui.bigCheese.t7.bundles")}
+              value={bundle}
+              options={[
+                ["", t("ui.bigCheese.t7.bundleNone")],
+                ...BUNDLES.map((b): [string, string] => [b.id, t(b.key)]),
+              ]}
+              onChange={setBundle}
             />
           </details>
           {working && (

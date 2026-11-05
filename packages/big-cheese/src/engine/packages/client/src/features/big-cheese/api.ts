@@ -96,8 +96,10 @@ export interface Game {
   // T13: what the Board's settings groups read
   authority?: "manager" | "strong_leader" | "absolute";
   layers?: Record<string, number>;
+  tally?: Record<string, number>; // M4: counters; `clear.<thread>.<person>` marks a cleared suspect
   culture?: Record<string, number>; // M4 T1: tag -> points
   traditions?: { id: string; text: string; count: number; active: boolean }[];
+  perkOffer?: string[] | null; // M4 T8
   difficulty?: string;
   storyteller?: string;
   mutators?: string[];
@@ -115,6 +117,8 @@ export interface Game {
   grapevine: string[]; // ids of rumour lines in `text.place.grapevine`
   informants?: { person: string; target: string; kind: "room" | "group"; paid: boolean }[]; // M4 T13
   eyes?: { week: number; text: string }[]; // M4 T13
+  delegated?: Record<string, string>; // M4 T11: area (meter, room or group id) -> person
+  delegateLog?: { week: number; who: string; need: Meter; stance: string }[]; // M4 T11
   advisors?: string[]; // T11: person ids in the inner circle (up to 3)
   officeHours?: { day: number; slot: string; visitors: string[] }; // T11: one booked hour, up to 4 visitors
   hearing: Hearing | null;
@@ -360,3 +364,20 @@ export interface OutsideState {
   tripRooms: { id: string; name: string }[];
 }
 export const getOutside = (id: string) => api.get<OutsideState>(`${runPath(id)}/outside`);
+
+// M4 T8: term goals and perks (server goals.ts).
+export interface PerkInfo {
+  id: string;
+  name: string;
+  text: string;
+}
+export interface GoalsState {
+  term: number;
+  set: boolean;
+  offered: { id: string; text: string; meter?: Meter }[];
+  picked: { id: string; text: string; ok: boolean }[];
+  history: { term: number; picked: string[]; met: string[] }[];
+  perks: PerkInfo[];
+  perkOffer: PerkInfo[];
+}
+export const getGoals = (id: string) => api.get<GoalsState>(`${runPath(id)}/goals`);

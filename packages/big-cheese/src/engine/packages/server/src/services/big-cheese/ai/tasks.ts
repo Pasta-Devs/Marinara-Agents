@@ -37,6 +37,12 @@ const LAYER_NOTES: Record<string, string> = {
   rivals: "Rivals: a rival boss with moles and sabotage works against this place.",
   family: "Family and home: the boss has a home life, and evenings with family clash with work.",
   politics: "Politics: elections, campaigns and outside laws. Staff pick who speaks for them.",
+  horror:
+    "Horror: a dark place at night. Dark secrets, strange sounds, missing staff and a sealed room. Tone follows the place.",
+  strange:
+    "The strange: magic, curses, odd artefacts and odd machines. A crew member may be an AI. Tone follows the place.",
+  crime: "Crime: bribes, fraud and blackmail. A fixer on the staff knows who to pay and who to ask.",
+  mystery: "Mystery: a case with clues in rooms and a few suspects. A detective on the staff helps the boss look.",
 };
 export const layerNotes = (kit: PlaceKit, d?: Record<string, number>) =>
   Object.entries(LAYER_NOTES)
@@ -664,6 +670,8 @@ export const BOARD_PLAN_VERBS = [
   "room.condition",
   "card.add",
   "meter.set",
+  "evidence.add",
+  "tradition.set",
 ] as const;
 export const MAX_PLAN_BEATS = 8;
 
@@ -699,7 +707,7 @@ const boardPlan: Task<BoardPlanInput, BoardPlanOutput> = {
       i.kit,
       `Plan the player's wish as at most ${MAX_PLAN_BEATS} beats, each on its own day. Verbs: ${BOARD_PLAN_VERBS.join(", ")}.
 Never write a number. Size is "small", "medium" or "big"; "dir" is "up" or "down".
-touches by verb: person.feelings {trust|stress: {size, dir}, mood: "great|fine|low|sick|away"}; relation.shift {relation: {kind: friend|rival|crush|couple|mentor|enemy|family|secret_affair, size, dir}} with who of 2 people; ambition.set {ambition: {size, dir}}; secret.add {} with who = the person it is about, then who knows it ("boss" is the player), and "scene" = the secret in one line; room.condition {room: id, size, dir}; card.add {need: money|output|people|standing, size}; meter.set {meter, size, dir}.
+touches by verb: person.feelings {trust|stress: {size, dir}, mood: "great|fine|low|sick|away"}; relation.shift {relation: {kind: friend|rival|crush|couple|mentor|enemy|family|secret_affair, size, dir}} with who of 2 people; ambition.set {ambition: {size, dir}}; secret.add {} with who = the person it is about, then who knows it ("boss" is the player), and "scene" = the secret in one line; room.condition {room: id, size, dir}; card.add {need: money|output|people|standing, size}; meter.set {meter, size, dir}; evidence.add {} with who the person is about and "scene" = the secret in one line; tradition.set {op: "add" with text and count 0-9, or "remove" with id from the world traditions and loud: true when people protest}.
 "when" is {week, day 0-4, slot: morning|midday|afternoon|evening|night} or null for now. Set "question" when the words are unclear, and put parts you cannot plan in "cant".
 Shape: {"summary":"","question":null,"cant":[],"thread":{"title":"","people":[],"need":"people","stakes":""},"beats":[{"id":"b1","when":null,"verb":"","who":[],"touches":{},"scene":""}]}`,
       { text: i.text, target: i.target, world: i.world },

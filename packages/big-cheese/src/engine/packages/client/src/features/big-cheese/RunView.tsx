@@ -15,6 +15,7 @@ import { Report, RunEnd } from "./Report";
 import { HearingPrep, MeetingScreen } from "./Meeting";
 import { Board } from "./Board";
 import { Rules } from "./Rules";
+import { Goals } from "./Goals";
 import { Wish } from "./Wish";
 import { Export } from "./Export";
 import { Calls } from "./Calls";
@@ -234,6 +235,8 @@ export function RunView({ id, onExit }: { id: string; onExit: () => void }) {
   else if (base === "place") screen = <Place ctx={ctx} />;
   else if (base === "meeting") screen = <MeetingScreen ctx={ctx} />;
   else if (base === "rules") screen = <Rules ctx={ctx} />;
+  else if (base === "goals")
+    screen = <Goals ctx={ctx} />; // M4 T8
   else if (base === "wish") screen = <Wish ctx={ctx} />;
   else if (base === "export") screen = <Export ctx={ctx} />;
   else screen = <Office ctx={ctx} canStart={canStart} />;

@@ -16,10 +16,13 @@ import { createMeetings } from "./meetings.js";
 import { createRules } from "./rules.js";
 import { createPolitics } from "./politics.js";
 import { createCulture } from "./culture.js";
+import { createGoals } from "./goals.js";
 import { createAdult } from "./adult.js";
 import { createThings } from "./things.js"; // T2
 import { createWish } from "./wish.js";
 import { createEyes } from "./eyes.js"; // T13
+import { createInvestigate } from "./investigate.js"; // M4 T4
+import { createDelegation } from "./delegation.js"; // T11
 import { createExport } from "./export.js";
 import { createPlace } from "./place.js";
 import { createOutside } from "./outside.js"; // T14
@@ -72,9 +75,12 @@ export async function activate({ api }: ActivationContext) {
   const rules = createRules(store);
   const politics = createPolitics(store);
   const culture = createCulture(store);
+  const goals = createGoals(store); // M4 T8
   const adult = createAdult(store);
   const things = createThings(store); // T2
+  const investigateRoute = createInvestigate(store); // M4 T4
   const eyes = createEyes(store, () => engineModel(runtime, null).catch(() => undefined)); // T13
+  const delegation = createDelegation(store); // T11
   const wish = createWish(store, () => engineModel(runtime, null).catch(() => undefined));
   const exporter = createExport(store, runtime);
   const kits = createKits(runtime.persistence.documents, () => engineModel(runtime, null).catch(() => undefined));
@@ -258,6 +264,13 @@ export async function activate({ api }: ActivationContext) {
       action("politics/back", (r) => politics.back(runId(r), r.body));
       // M4 T1: stop a tradition (content.md 7.2).
       action("traditions", (r) => culture.traditions(runId(r), r.body));
+      // M4 T8: term goals (pick 3 of 5) and the perk after each term
+      router.get(
+        "/runs/:id/goals",
+        handle((r) => goals.list(runId(r))),
+      );
+      action("goals", (r) => goals.pick(runId(r), r.body));
+      action("perk", (r) => goals.perk(runId(r), r.body));
       // T6: adult module (README Adult module).
       router.get(
         "/runs/:id/adult",
@@ -269,6 +282,11 @@ export async function activate({ api }: ActivationContext) {
       // T13: eyes and ears, 1 hour each (modules.md section 4)
       action("informant", (r) => eyes.informant(runId(r), r.body));
       action("rumour", (r) => eyes.rumour(runId(r), r.body));
+      // M4 T4: investigate a case or a cover-up, or accuse a suspect
+      action("threads/:tid/investigate", (r) => investigateRoute.run(runId(r), param(r, "tid"), r.body));
+      // T11: give an area to a person, or take it back (modules.md section 4)
+      action("delegate", (r) => delegation.give(runId(r), r.body));
+      action("delegate/back", (r) => delegation.takeBack(runId(r), r.body));
       action("adult/affairs/:threadId", (r) => adult.choose(runId(r), param(r, "threadId"), r.body));
 
       // T2: the drawer and hidden rooms (design.md 14).

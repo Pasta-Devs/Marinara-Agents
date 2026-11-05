@@ -15,7 +15,23 @@ import { placeKitOf } from "./core/kits/index.js";
 import type { PlaceKit } from "./core/kits/types.js";
 import { withCast } from "./cast.js";
 import { TERM_WEEKS, WEEKS } from "./core/clock.js";
-import { DAYS, HOURS, K, METERS, clamp, dayIndex, draft, shiftRelation, type Run as Game } from "./core/index.js";
+import {
+  DAYS,
+  HOURS,
+  K,
+  METERS,
+  TAGS,
+  addThing,
+  applyDelta,
+  clamp,
+  dayIndex,
+  draft,
+  openRoom,
+  removeThing,
+  shiftRelation,
+  type Run as Game,
+} from "./core/index.js";
+import { startAuthority } from "./core/authority.js";
 import { newId } from "./core/run.js";
 import { closeThread, openStory, openThread, planCardBeat } from "./core/threads.js";
 import { SLOTS, type Slot } from "./core/types.js";
@@ -30,10 +46,22 @@ import { dial as layerDial, openLayerNow } from "./core/layers.js";
 import { setMutator } from "./core/mutators.js";
 import { STORY_ROLES } from "./core/storyteller.js";
 import { startSystems } from "./core/blocks.js";
-import { DIFFICULTIES, MUTATORS } from "./core/types.js";
+import { DIFFICULTIES, DIFFICULTY_FACTOR, MUTATORS } from "./core/types.js";
 
 // The layers a Board play may switch. Adult has its own verb because it needs the confirm.
-const SET_LAYERS = ["drama", "romance", "press", "rivals", "family"] as const;
+const SET_LAYERS = [
+  "drama",
+  "romance",
+  "press",
+  "rivals",
+  "family",
+  "crime",
+  "politics",
+  "mystery",
+  "horror",
+  "legacy",
+  "strange",
+] as const;
 // Verbs that change what the run is made of. They run now, and a cast or kit play also touches the
 // run document next to the game, so the code carries those two pieces as `__cast` and `__kit`.
 const SETTING_VERBS = new Set([
@@ -247,7 +275,12 @@ export const BoardAction = z.discriminatedUnion("verb", [
   z.object({
     verb: z.literal("authority.set"),
     input: z
-      .object({ fear: Num.optional(), love: Num.optional(), legitimacy: Num.optional() })
+      .object({
+        tier: z.enum(["manager", "strong_leader", "absolute"]).optional(),
+        fear: Num.optional(),
+        love: Num.optional(),
+        legitimacy: Num.optional(),
+      })
       .refine(oneOf, "Set at least one value."),
     when,
   }),
@@ -282,6 +315,47 @@ export const BoardAction = z.discriminatedUnion("verb", [
     verb: z.literal("room.condition"),
     target: z.object({ kind: z.literal("room"), id: Id }),
     input: z.object({ value: Num.optional(), delta: Num.optional() }).refine(valueOrDelta, VOD),
+    when,
+  }),
+  // M4 Set verbs (cheese-board.md section 3). They run now. evidence.add and tradition.set are also Spin beats.
+  z.object({
+    verb: z.literal("drawer.set"),
+    input: z
+      .object({
+        op: z.enum(["add", "remove"]),
+        id: Id.optional(),
+        kind: z.enum(["key", "gift", "document"]).optional(),
+        name: z.string().trim().min(1).max(60).optional(),
+        about: Id.optional(),
+      })
+      .refine((i) => (i.op === "add" ? !!(i.kind && i.name) : !!i.id), "Name the item."),
+    when,
+  }),
+  z.object({
+    verb: z.literal("evidence.add"),
+    input: z.object({ about: Id, text: z.string().trim().min(3).max(200) }),
+    when,
+  }),
+  z.object({
+    verb: z.literal("equipment.set"),
+    input: z.object({ item: Id, condition: Num, name: z.string().max(60).optional() }),
+    when,
+  }),
+  z.object({ verb: z.literal("room.open"), input: z.object({ room: Id }), when }),
+  z.object({
+    verb: z.literal("culture.set"),
+    input: z.object({ tag: z.string().max(40), level: Num }),
+    when,
+  }),
+  z.object({
+    verb: z.literal("tradition.set"),
+    input: z.object({
+      op: z.enum(["add", "remove"]),
+      id: Id.optional(),
+      text: z.string().trim().min(1).max(120).optional(),
+      count: Num.optional(),
+      outrage: z.boolean().optional(), // remove: with a protest (People -6) or quietly
+    }),
     when,
   }),
 ]);
@@ -329,11 +403,19 @@ interface Entry {
   state: "done" | "scheduled" | "rewound" | "reverted";
   snapshotId: string;
 }
+/** The state before a rewind, so "Redo" can put it back. */
+interface Redo {
+  revision: number; // the run revision right after the rewind
+  data: Data;
+  snap: Snapshot;
+}
+
 interface Data {
   n: number; // next sequence number; a snapshot or entry with a lower seq happened earlier
   snaps: Snapshot[];
   mornings: Snapshot[];
   journal: Entry[];
+  redo?: Redo | null; // what a rewind took away, until the next play
 }
 type Doc = Run & { id: string };
 
@@ -343,6 +425,7 @@ const BoardData = z.object({
   snaps: z.array(obj<Snapshot>()),
   mornings: z.array(obj<Snapshot>()),
   journal: z.array(obj<Entry>()),
+  redo: obj<Redo>().nullable().optional(),
 });
 
 const live = (e: Entry) => e.state === "done" || e.state === "scheduled";
@@ -652,19 +735,114 @@ function prepare(
         },
       };
     }
-    case "authority.set": {
-      if (g.authority !== "absolute") throw bad("Fear, Love and Legitimacy belong to an absolute ruler.");
+    case "drawer.set": {
       const i = a.input;
-      const legit = g.extras.find((e) => e.id === "legitimacy");
-      if (i.legitimacy !== undefined && !legit) throw bad("This place has no Legitimacy.");
+      if (i.op === "remove" && !g.things.drawer.some((t) => t.id === i.id))
+        throw bad("Nothing like that is in the drawer.");
+      if (i.op === "add" && i.kind === "key" && (!i.about || !Object.hasOwn(g.rooms, i.about)))
+        throw bad("A key opens a room. Name the room.");
       return {
-        paths: ["power", "extras"],
+        paths: ["things", "nextid"],
         go: () => {
+          if (i.op === "remove") removeThing(g, i.id!);
+          else addThing(g, { id: newId(g, "t"), kind: i.kind!, name: i.name!, ...(i.about ? { about: i.about } : {}) });
+        },
+      };
+    }
+    case "evidence.add": {
+      const i = a.input;
+      known(g.people, i.about, "person");
+      return {
+        paths: ["threads", "things", "nextid", "rng"],
+        go: () => {
+          const t = openThread(g, { kind: "cover_up", title: i.text, people: [i.about], origin: "board" });
+          addThing(g, {
+            id: `evidence-${t.id}`,
+            kind: "evidence",
+            name: `${kit.people.find((p) => p.id === i.about)?.name ?? i.about}: ${i.text}`,
+            about: i.about,
+            thread: t.id,
+          });
+        },
+      };
+    }
+    case "equipment.set": {
+      const e = g.things.equipment.find((x) => x.id === a.input.item);
+      if (!e) throw bad("No such equipment.");
+      return { paths: ["things"], go: () => void (e.condition = clamp(Math.round(a.input.condition))) };
+    }
+    case "room.open": {
+      known(g.rooms, a.input.room, "room");
+      return {
+        paths: ["openedRooms"],
+        go: () => {
+          try {
+            openRoom(g, kit, a.input.room, true);
+          } catch (e) {
+            throw bad(e instanceof Error ? e.message : "That room cannot be opened.");
+          }
+        },
+      };
+    }
+    case "culture.set": {
+      const { tag, level } = a.input;
+      if (!Object.hasOwn(TAGS, tag)) throw bad("No such culture tag.");
+      const path = `culture.${tag}`;
+      return { paths: [path], go: () => setPath(g, path, clamp(Math.round(level))) };
+    }
+    case "tradition.set": {
+      const i = a.input;
+      const t = i.id ? g.traditions.find((x) => x.id === i.id) : undefined;
+      if (i.op === "remove" && !t) throw bad("No such tradition.");
+      if (i.op === "add" && !t && !i.text) throw bad("Name the tradition.");
+      return {
+        paths: ["traditions", "meters", "threads", "nextid", "rng"],
+        go: () => {
+          if (i.op === "add") {
+            const row = t ?? { id: i.id ?? newId(g, "tr"), text: i.text!, count: 0, active: false };
+            if (!t) g.traditions.push(row);
+            row.count = clamp(Math.round(i.count ?? 3));
+            row.active = row.count >= 3;
+            return;
+          }
+          t!.active = false;
+          t!.count = 0;
+          if (!i.outrage) return;
+          g.meters = applyDelta(g.meters, { people: -6 }, DIFFICULTY_FACTOR[g.difficulty]);
+          openStory(g, "crisis", {
+            title: `Protest: ${t!.text}`,
+            origin: "board",
+            people: g.deputy ? [g.deputy] : [],
+            need: "people",
+            severity: 2,
+          });
+        },
+      };
+    }
+    case "authority.set": {
+      const i = a.input;
+      const tier = i.tier ?? g.authority;
+      const hasNumbers = i.fear !== undefined || i.love !== undefined || i.legitimacy !== undefined;
+      if (hasNumbers && tier !== "absolute") throw bad("Fear, Love and Legitimacy belong to an absolute ruler.");
+      const legit = () => g.extras.find((e) => e.id === "legitimacy");
+      // A switch to the absolute rule adds a Legitimacy meter when the place has a free extra slot.
+      if (i.legitimacy !== undefined && !legit() && !(i.tier && g.extras.length < 2))
+        throw bad("This place has no Legitimacy.");
+      return {
+        paths: ["authority", "power", "extras"],
+        go: () => {
+          if (i.tier && i.tier !== g.authority) {
+            g.authority = i.tier;
+            if (i.tier === "absolute")
+              startAuthority(g, {
+                authorityStart: kit.authorityStart ?? { fear: 50, love: 40, legitimacy: 60 },
+              } as PlaceKit);
+          }
           g.power = {
             fear: i.fear === undefined ? g.power.fear : clamp(Math.round(i.fear)),
             love: i.love === undefined ? g.power.love : clamp(Math.round(i.love)),
           };
-          if (i.legitimacy !== undefined) legit!.value = clamp(Math.round(i.legitimacy));
+          if (i.legitimacy !== undefined) legit()!.value = clamp(Math.round(i.legitimacy));
         },
       };
     }
@@ -762,6 +940,12 @@ const REVERTABLE = new Set([
   "secret.add",
   "ambition.set",
   "room.condition",
+  "drawer.set",
+  "evidence.add",
+  "equipment.set",
+  "room.open",
+  "culture.set",
+  "tradition.set",
   ...SETTING_VERBS,
 ]);
 
@@ -890,6 +1074,7 @@ const world = (g: Game, kit: PlaceKit): Record<string, unknown> => {
     }),
     rooms: Object.keys(g.rooms),
     threads: Object.values(g.threads).map((t) => t.title),
+    traditions: g.traditions.map((t) => ({ id: t.id, text: t.text, active: t.active })),
   };
 };
 
@@ -992,6 +1177,28 @@ function planToActions(g: Game, plan: BoardPlanOutput): { actions: BoardAction[]
           });
           break;
         }
+        case "evidence.add":
+          if (!beat.scene) fail("bad-touch");
+          actions.push({ verb: "evidence.add", input: { about: person(who[0]), text: beat.scene }, when: w });
+          break;
+        case "tradition.set": {
+          const remove = t.op === "remove";
+          const tid = typeof t.id === "string" && g.traditions.some((x) => x.id === t.id) ? t.id : undefined;
+          if (remove ? !tid : typeof t.text !== "string" || !t.text) fail("bad-touch");
+          actions.push({
+            verb: "tradition.set",
+            input: remove
+              ? {
+                  op: "remove",
+                  id: tid as string,
+                  text: g.traditions.find((x) => x.id === tid)?.text,
+                  outrage: t.loud === true,
+                }
+              : { op: "add", text: (t.text as string).slice(0, 120), count: typeof t.count === "number" ? t.count : 3 },
+            when: w,
+          });
+          break;
+        }
         default:
           fail("unknown-verb");
       }
@@ -1042,8 +1249,8 @@ const PlayBody = Base.extend({
   silent: z.boolean().optional(),
 });
 const RewindBody = Base.extend({
-  playId: z.string().min(1).max(40),
-  mode: z.enum(["rewind", "revert"]),
+  playId: z.string().min(1).max(40).optional(), // not needed for "redo"
+  mode: z.enum(["rewind", "revert", "redo"]),
   confirmLater: z.boolean().optional(),
 });
 const PatchBody = Base.extend({
@@ -1221,6 +1428,7 @@ export function createBoard(
       ...data,
       n: data.n + 1,
       snaps,
+      redo: null, // a new play drops the redo
       journal: slim([...data.journal, entry], snaps),
     };
   };
@@ -1373,6 +1581,15 @@ export function createBoard(
       const b = parse(RewindBody, body);
       const run = await open(id, b.expectedRevision);
       const { record, data } = await load(run.id, run.kitId, run.kit);
+      if (b.mode === "redo") {
+        // Redo works only while the run is exactly as the rewind left it (every play or day start bumps the revision).
+        const r = data.redo;
+        if (!r || r.revision !== run.revision) throw bad("There is nothing to redo.");
+        const back = structuredClone(r.snap.game);
+        back.cheeseMark = run.game.cheeseMark || back.cheeseMark;
+        return commit(run, record, { ...r.data, redo: null }, back, r.snap.outer);
+      }
+      if (!b.playId) throw bad("Pick a play.");
       const entry = data.journal.find((e) => e.id === b.playId);
       if (!entry) throw notFound("No such play.");
       if (!live(entry)) throw bad("That play is already rewound or reverted.");
@@ -1384,7 +1601,9 @@ export function createBoard(
           throw new BigCheeseError(409, "Rewinding also undoes later plays.", "confirm-later");
         const restored = structuredClone(snap.game);
         restored.cheeseMark = run.game.cheeseMark || restored.cheeseMark; // a rewind never removes the Honest mark
-        return commit(run, record, rewindData(data, snap), restored, snap.outer);
+        // ponytail: the redo keeps a full copy of the pre-rewind data, so the board document can double; store only the removed part if it grows.
+        const redo: Redo = { revision: run.revision + 1, data: { ...data, redo: null }, snap: snapshotOf(data, run) };
+        return commit(run, record, { ...rewindData(data, snap), redo }, restored, snap.outer);
       }
       if (entry.state !== "done" || !entry.actions.every((a) => a.revertible))
         throw bad("Only finished Set plays can be reverted.");
@@ -1437,7 +1656,12 @@ export function createBoard(
         canRevert: e.state === "done" && e.actions.every((a) => a.revertible),
         changed: changedSince(e, liveGame(run, e)),
       }));
-      return { entries, page, more: all.length > (page + 1) * PAGE };
+      return {
+        entries,
+        page,
+        more: all.length > (page + 1) * PAGE,
+        redo: !!data.redo && data.redo.revision === run.revision,
+      };
     },
 
     /** Everything scheduled, soonest first: Spin and Set plays, thread beats and thread clocks (cheese-board.md §5). */
@@ -1539,7 +1763,7 @@ export function createBoard(
         const mornings = [...data.mornings.filter((m) => dayIndex(m.at) !== dayIndex(snap.at)), snap].slice(
           -MAX_MORNINGS,
         );
-        const next = { ...data, mornings, journal };
+        const next = { ...data, mornings, journal, redo: null };
         if (!due) {
           await save(run.id, record, next);
           return v;

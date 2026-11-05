@@ -281,6 +281,7 @@ export interface Run {
   eyes?: { week: number; text: string }[]; // T13: what the informants and rumours reported, last 8
   rumours?: { id: string; line: string; starter: string; target: string; day: number; reached: string[] }[]; // T13: planted, settled on a Friday
   delegated: Record<string, string>; // area id -> person id
+  delegateLog?: { week: number; who: string; need: Meter; stance: string }[]; // T11: cards a delegate answered, last 25
   depth: { money: boolean; building: boolean };
   ledger: {
     salaries: number;

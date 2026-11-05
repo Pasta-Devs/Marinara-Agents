@@ -19,7 +19,23 @@ const LAYERS = [
   { id: "press", key: "ui.bigCheese.board.m3.layer.press" },
   { id: "rivals", key: "ui.bigCheese.board.m3.layer.rivals" },
   { id: "family", key: "ui.bigCheese.board.m3.layer.family" },
+  { id: "crime", key: "ui.bigCheese.board.m4.layer.crime" },
+  { id: "politics", key: "ui.bigCheese.board.m4.layer.politics" },
+  { id: "mystery", key: "ui.bigCheese.board.m4.layer.mystery" },
+  { id: "horror", key: "ui.bigCheese.board.m4.layer.horror" },
+  { id: "legacy", key: "ui.bigCheese.board.m4.layer.legacy" },
+  { id: "strange", key: "ui.bigCheese.board.m4.layer.strange" },
+  { id: "horror", key: "ui.bigCheese.t7.layer.horror" },
+  { id: "strange", key: "ui.bigCheese.t7.layer.strange" },
 ] as const;
+// The M4 layers stay at 0 until the boss turns them on (core/layers.ts).
+const OPT_IN = ["crime", "politics", "mystery", "horror", "legacy", "strange"];
+const TIERS = [
+  { id: "manager", key: "ui.bigCheese.board.m4.tier.manager" },
+  { id: "strong_leader", key: "ui.bigCheese.board.m4.tier.strongLeader" },
+  { id: "absolute", key: "ui.bigCheese.board.m4.tier.absolute" },
+] as const;
+
 const MUTATORS = [
   { id: "everyone_hates_you", key: "ui.bigCheese.board.m3.mutator.everyone_hates_you" },
   { id: "double_drama", key: "ui.bigCheese.board.m3.mutator.double_drama" },
@@ -76,6 +92,7 @@ export function BoardSettings({
   const [dials, setDials] = useState({ difficulty: g.difficulty ?? "normal", storyteller: g.storyteller ?? "classic" });
   const [mutator, setMutator] = useState("everyone_hates_you");
   const [power, setPower] = useState({ fear: "", love: "", legitimacy: "" });
+  const [tier, setTier] = useState<string>(g.authority ?? "manager");
   const [adult, setAdult] = useState({ on: "true", confirm: false });
   const [card, setCard] = useState({ id: "", mode: "hire" });
   const [leaver, setLeaver] = useState("");
@@ -141,7 +158,7 @@ export function BoardSettings({
             t("ui.bigCheese.board.m3.layer"),
             select(
               layer.id,
-              (id) => setLayer({ id, dial: String(g.layers?.[id] ?? 50) }),
+              (id) => setLayer({ id, dial: String(g.layers?.[id] ?? (OPT_IN.includes(id) ? 0 : 50)) }),
               LAYERS.map((l) => ({ id: l.id, label: t(l.key) })),
             ),
           )}
@@ -220,6 +237,20 @@ export function BoardSettings({
             {add(t("ui.bigCheese.board.m3.add"))}
           </form>,
         )}
+      {group(
+        t("ui.bigCheese.board.m4.tierTitle"),
+        <form className="bc-form" onSubmit={submit(() => onAdd({ verb: "authority.set", input: { tier } }))}>
+          {field(
+            t("ui.bigCheese.board.m4.tierField"),
+            select(
+              tier,
+              setTier,
+              TIERS.map((x) => ({ id: x.id, label: t(x.key) })),
+            ),
+          )}
+          {add(t("ui.bigCheese.board.m3.add"), tier === g.authority)}
+        </form>,
+      )}
       {g.authority === "absolute" &&
         group(
           t("ui.bigCheese.board.m3.authority"),

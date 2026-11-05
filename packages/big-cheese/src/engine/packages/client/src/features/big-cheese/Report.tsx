@@ -3,7 +3,7 @@
 // ──────────────────────────────────────────────
 import { useTranslation } from "react-i18next";
 import type { Meter, Meters } from "./api";
-import { Face, nameOf, type Ctx } from "./parts";
+import { Face, nameOf, stanceKey, type Ctx } from "./parts";
 
 const METERS: Meter[] = ["money", "output", "people", "standing"];
 const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`);
@@ -33,6 +33,7 @@ export function Report({ ctx, onNext }: { ctx: Ctx; onNext: () => void }) {
   const { run, kit, busy } = ctx;
   const report = run.game.report!;
   const feelings = run.text.feelings[String(report.week)] ?? [];
+  const handled = (run.game.delegateLog ?? []).filter((e) => e.week === report.week);
   return (
     <main className="bc-main">
       <article className="bc-receipt">
@@ -55,6 +56,22 @@ export function Report({ ctx, onNext }: { ctx: Ctx; onNext: () => void }) {
             </li>
           ))}
         </ul>
+        {handled.length > 0 && (
+          <>
+            <h2 className="bc-receipt-head">{t("ui.bigCheese.report.delegated")}</h2>
+            <ul className="bc-plain">
+              {handled.map((e, i) => (
+                <li key={i}>
+                  {t("ui.bigCheese.report.handledLine", {
+                    name: nameOf(kit, e.who),
+                    meter: kit.meters[e.need]?.label,
+                    stance: t(stanceKey(e.stance)),
+                  })}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
         {run.game.hearing && (
           <p className="bc-note bc-note-warn">
             {t("ui.bigCheese.report.hearing", { meter: kit.meters[run.game.hearing.meter]?.label })}

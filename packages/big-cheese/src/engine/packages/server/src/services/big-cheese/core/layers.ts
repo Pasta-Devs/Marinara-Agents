@@ -9,6 +9,10 @@ import { closeThread, openStory, openThread } from "./threads.js";
 import { bookBigScene } from "./bigscenes.js";
 import { adultSeeds } from "./adult.js";
 import { politicsSeeds } from "./politics.js";
+import { horrorSeeds } from "./horror.js"; // M4 T7
+import { strangeSeeds } from "./strange.js";
+import { crimeSeeds } from "./crime.js"; // M4 T4
+import { mysterySeeds } from "./mystery.js";
 import type { Meter, Run, Thread } from "./types.js";
 
 const LAYERS = [
@@ -61,16 +65,29 @@ const SEEDS: Record<Layer, Seed[]> = {
     { title: "A mole passes your plans to the rival", need: "standing" },
     { title: "The rival sabotages a delivery", need: "output" },
   ],
-  crime: [],
+  crime: [
+    { title: "A clerk looks the other way", need: "standing" },
+    { title: "Money goes missing from a till", need: "money" },
+    { title: "Someone knows a secret and wants paying", need: "people" },
+  ],
   politics: [
     { title: "Two people want the same seat", need: "standing", kind: "rival" },
     { title: "A group asks for a say in the rules", need: "standing" },
     { title: "A whisper about a vote goes round", need: "people" },
   ],
-  mystery: [],
-  horror: [],
+  mystery: [
+    { title: "Something is not where it was", need: "standing" },
+    { title: "A door is open that was locked", need: "people" },
+  ],
+  horror: [
+    { title: "Something moves in the cellar at night", need: "people" },
+    { title: "Two people swear they saw the same shape", need: "standing" },
+  ],
   legacy: [],
-  strange: [], // M4 tickets fill their own row
+  strange: [
+    { title: "A guest leaves a strange gift", need: "output" },
+    { title: "A clock runs backwards", need: "standing" },
+  ], // M4 tickets fill their own row
   family: [
     { title: "Your family asks you home for the evening", need: "people" },
     { title: "A family birthday lands on a work day", need: "people" },
@@ -124,7 +141,11 @@ export function openLayerNow(s: Run, l: Layer) {
 /** Monday: a dial at 0 opens nothing; a higher dial opens a pair thread more often. One open thread per layer. */
 export function layerSeeds(s: Run, cap: number) {
   adultSeeds(s); // no-op unless the adult module is on
+  horrorSeeds(s); // M4 T7
+  strangeSeeds(s);
   politicsSeeds(s); // T5: this term's election
+  crimeSeeds(s); // M4 T4: a crime thread
+  mysterySeeds(s); // M4 T4: this term's case
   // Rivals: once a term, in the last week of the term, the rival calls a showdown (a 3-severity story).
   if (dial(s, "rivals") > 0 && s.clock.week === WEEKS - 1) {
     const ids = Object.keys(s.people).filter((id) => s.people[id]!.status === "active");

@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { errorKey, getKit, saveKit } from "./api";
+import { BUNDLES } from "./bundles";
 
 type Item = { id: string; name?: string; text?: string; [key: string]: unknown };
 interface EditKit {
@@ -48,6 +49,8 @@ const LAYERS = [
   { id: "press", key: "ui.bigCheese.kitEditor.layer.press" },
   { id: "rivals", key: "ui.bigCheese.kitEditor.layer.rivals" },
   { id: "family", key: "ui.bigCheese.kitEditor.layer.family" },
+  { id: "horror", key: "ui.bigCheese.t7.layer.horror" },
+  { id: "strange", key: "ui.bigCheese.t7.layer.strange" },
 ] as const;
 const KINDS = [
   { id: "project", key: "ui.bigCheese.kitEditor.kind.project" },
@@ -512,6 +515,18 @@ export function KitEditor({
           {tab === "layers" && (
             <>
               <p className="bc-muted">{t("ui.bigCheese.kitEditor.layersHelp")}</p>
+              <div className="bc-cards" role="group" aria-label={t("ui.bigCheese.t7.bundles")}>
+                {BUNDLES.map((b) => (
+                  <button
+                    key={b.id}
+                    type="button"
+                    className="bc-btn bc-btn-quiet"
+                    onClick={() => patch({ layers: { ...kit.layers, ...b.layers } })}
+                  >
+                    {t(b.key)}
+                  </button>
+                ))}
+              </div>
               {LAYERS.map((l) =>
                 numField(`kit-l-${l.id}`, t(l.key), kit.layers[l.id] ?? 0, (v) =>
                   patch({ layers: { ...kit.layers, [l.id]: v } }),

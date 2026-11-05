@@ -42,7 +42,7 @@ type Rng = { rng: number };
 const BIG_HOURS = 2;
 const bad = (message: string) => new BigCheeseError(400, message, "bad-request");
 /** A fresh day before Start the day: hours spent now would block the day from starting. */
-const notStarted = (g: Game) => g.clock.hoursLeft === HOURS && !g.inbox.some((c) => c.age === 0);
+export const notStarted = (g: Game) => g.clock.hoursLeft === HOURS && !g.inbox.some((c) => c.age === 0);
 const wrongPhase = (message: string) => new BigCheeseError(409, message, "wrong-phase");
 
 // Messages thrown by the rules core, mapped to the contract's error codes.

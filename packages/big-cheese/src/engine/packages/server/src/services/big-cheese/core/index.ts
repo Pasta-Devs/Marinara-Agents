@@ -58,4 +58,11 @@ export { electionReady, isElection, lawArrives, pureBackCandidate as backCandida
 export * from "./adult.js";
 export * from "./wish.js";
 export * from "./things.js";
+export { horrorSeeds, horrorClosed } from "./horror.js"; // M4 T7
+export { strangeSeeds, strangeClosed, isAiCrew, AI_CREW } from "./strange.js";
 export * from "./eyes.js";
+export * from "./delegation.js"; // T11
+export { crimeSeeds } from "./crime.js"; // M4 T4
+export { mysterySeeds, isCleared, pureInvestigate as investigate } from "./mystery.js";
+export { GOALS, goalById, checkGoal, currentGoals, offerGoals, pickGoals } from "./goals.js"; // M4 T8
+export { PERKS, choosePerk, offerPerks, perkWeight } from "./perks.js";

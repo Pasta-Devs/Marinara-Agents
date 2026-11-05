@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Hire } from "./Cast";
 import { EyesAsk, EyesHeard } from "./Eyes"; // T13
+import { DelegateArea } from "./Delegate"; // T11
 import { Face, initials, memoryKey, moodKey, nameOf, threadTitle, trustKey, type Ctx } from "./parts";
 
 /** The newest feeling line the Friday report wrote for this person. */
@@ -170,6 +171,7 @@ export function PersonSheet({ ctx, id }: { ctx: Ctx; id: string }) {
       {line && <blockquote className="bc-quote">{line}</blockquote>}
       <Circle ctx={ctx} id={id} />
       <EyesAsk ctx={ctx} id={id} />
+      <DelegateArea ctx={ctx} id={id} />
 
       {who && who.traits.length > 0 && (
         <p className="bc-row-meta" aria-label={t("ui.bigCheese.person.traits")}>

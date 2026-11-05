@@ -78,6 +78,21 @@ export const BLUEPRINTS: Record<string, Blueprint> = {
     ],
     outcome: ["The evening ends. Your family remembers how you spent it."],
   },
+  // M4 T7: the last night of the year in a Horror run. The result is the check.
+  final_night: {
+    end: "check",
+    title: (k) => `The final night at ${k.name}`,
+    room: (k) => k.name,
+    people: (_k, g, t) => (t?.people.length ? t.people.slice(0, 3) : [g.deputy]),
+    goals: [
+      "The lamps go out one by one.",
+      "Everyone gathers in the main room.",
+      "Something knocks from the sealed side of the house.",
+      "Morning comes, or it does not.",
+    ],
+    check: (g) => g.meters.people >= 50 && Object.values(g.people).every((p) => p.status !== "missing"),
+    outcome: ["The night wins. The place stays dark for a long time.", "The sun comes up. Everyone is still here."],
+  },
   // T4: nights of the Season and Big event blocks (blocks.ts). The result is the check, not the end.
   match_night: {
     end: "check",

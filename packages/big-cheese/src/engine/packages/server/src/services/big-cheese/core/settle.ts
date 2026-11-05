@@ -10,6 +10,8 @@ import { checkRevolt } from "./storyteller.js";
 import { sulkAdvisors } from "./advisors.js";
 import { bossWeek } from "./boss.js";
 import { eyesWeek } from "./eyes.js";
+import { delegateDay } from "./delegation.js"; // T11
+import { perkWear } from "./perks.js";
 import { endTerm } from "./term.js";
 import { checkPromises } from "./threads.js";
 import { METERS, WISH_POINTS_PER_TERM } from "./types.js";
@@ -27,7 +29,8 @@ const WEAR = 2;
 export function settleWeek(s: Run, before = { ...s.meters }, kit?: PlaceKit) {
   const income = BASE + Math.round((s.meters.output - 50) * INCOME);
   s.meters = applyDelta(s.meters, { money: income });
-  for (const k of METERS) s.meters[k] = clamp(Math.round(s.meters[k] + (50 - s.meters[k]) * DRIFT - WEAR));
+  for (const k of METERS)
+    s.meters[k] = clamp(Math.round(s.meters[k] + (50 - s.meters[k]) * DRIFT - WEAR * perkWear(s)));
   for (const e of s.extras) if (e.value < 20) s.meters[e.main] = clamp(s.meters[e.main] - 2);
   weeklyCulture(s);
   if (kit) weeklyAuthority(s, kit); // T7: house rules, the absolute rule
@@ -51,6 +54,7 @@ export function endDay(s: Run, kit: PlaceKit) {
   // so cards ignored until Friday show up in the change, not in the starting value.
   const before = { ...s.meters };
   checkPromises(s);
+  delegateDay(s, kit); // T11: delegates answer their areas first
   ageCards(s);
   if (s.hearing && dayIndex(s.clock) >= dayIndex(s.hearing)) holdHearing(s);
   if (isFriday(s.clock)) {

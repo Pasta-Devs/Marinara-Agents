@@ -15,6 +15,47 @@ const METERS: Meter[] = ["money", "output", "people", "standing"];
 const MOODS = ["great", "fine", "low", "sick", "away"];
 const MAX_ACTIONS = 8;
 
+// M4 Set rows (cheese-board.md section 3): drawer, evidence, equipment, hidden rooms, culture, traditions.
+const M4_ASKS = new Set<Ask>([
+  "drawerAdd",
+  "drawerRemove",
+  "evidence",
+  "equipment",
+  "roomOpen",
+  "culture",
+  "traditionAdd",
+  "traditionStop",
+]);
+const CULTURE_TAGS = [
+  "family",
+  "cutthroat",
+  "chaotic",
+  "scholarly",
+  "strict",
+  "free",
+  "festive",
+  "frugal",
+  "secretive",
+  "honour_bound",
+];
+const CULTURE_KEYS: Record<string, string> = {
+  family: "ui.bigCheese.board.m4.tag.family",
+  cutthroat: "ui.bigCheese.board.m4.tag.cutthroat",
+  chaotic: "ui.bigCheese.board.m4.tag.chaotic",
+  scholarly: "ui.bigCheese.board.m4.tag.scholarly",
+  strict: "ui.bigCheese.board.m4.tag.strict",
+  free: "ui.bigCheese.board.m4.tag.free",
+  festive: "ui.bigCheese.board.m4.tag.festive",
+  frugal: "ui.bigCheese.board.m4.tag.frugal",
+  secretive: "ui.bigCheese.board.m4.tag.secretive",
+  honour_bound: "ui.bigCheese.board.m4.tag.honourBound",
+};
+const DRAWER_KINDS: Record<string, string> = {
+  key: "ui.bigCheese.board.m4.drawer.key",
+  gift: "ui.bigCheese.board.m4.drawer.gift",
+  document: "ui.bigCheese.board.m4.drawer.document",
+};
+
 interface Action {
   verb: string;
   target?: { kind: string; id: string };
@@ -82,7 +123,15 @@ type Ask =
   | "relation"
   | "secret"
   | "threadOpen"
-  | "thread";
+  | "thread"
+  | "drawerAdd"
+  | "drawerRemove"
+  | "evidence"
+  | "equipment"
+  | "roomOpen"
+  | "culture"
+  | "traditionAdd"
+  | "traditionStop";
 
 interface Row {
   key: string;
@@ -309,6 +358,35 @@ function sentence(
       return [
         t("ui.bigCheese.board.m3.set.kitEdit", { name: String((i.kit as { name?: string } | undefined)?.name ?? "") }),
       ];
+    case "drawer.set":
+      return [
+        t(i.op === "add" ? "ui.bigCheese.board.m4.set.drawerAdd" : "ui.bigCheese.board.m4.set.drawerRemove", {
+          name: String(i.name ?? ""),
+        }),
+      ];
+    case "evidence.add":
+      return [t("ui.bigCheese.board.m4.set.evidence", { name: nameOf(kit, String(i.about)), text: String(i.text) })];
+    case "equipment.set":
+      return [t("ui.bigCheese.board.m4.set.equipment", { name: String(i.name ?? i.item), value: String(i.condition) })];
+    case "room.open":
+      return [
+        t("ui.bigCheese.board.m4.set.roomOpen", {
+          name: kit.rooms.find((r) => r.id === i.room)?.name ?? String(i.room),
+        }),
+      ];
+    case "culture.set":
+      return [
+        t("ui.bigCheese.board.m4.set.culture", {
+          name: t(CULTURE_KEYS[String(i.tag)] ?? CULTURE_KEYS.family!),
+          value: String(i.level),
+        }),
+      ];
+    case "tradition.set":
+      return [
+        t(i.op === "add" ? "ui.bigCheese.board.m4.set.traditionAdd" : "ui.bigCheese.board.m4.set.traditionRemove", {
+          text: String(i.text ?? ""),
+        }),
+      ];
     case "thread.followup":
       return [t("ui.bigCheese.board.set.threadFollowup", { title: title(id) })];
     default:
@@ -440,6 +518,7 @@ function BoardSheet({ ctx, note, onClose }: BoardProps) {
   const [silent, setSilent] = useState(false);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [more, setMore] = useState(false);
+  const [redo, setRedo] = useState(false);
   const [page, setPage] = useState(0);
   const [confirm, setConfirm] = useState<{ id: string; mode: "rewind" | "revert" } | null>(null);
   const [spinText, setSpinText] = useState("");
@@ -506,6 +585,43 @@ function BoardSheet({ ctx, note, onClose }: BoardProps) {
     { key: "skip", ask: "skip" as const, label: t(ROW_KEYS.skip) },
     { key: "hours", ask: "hours" as const, label: t(ROW_KEYS.hours) },
     { key: "rewind", ask: "rewind" as const, label: t(ROW_KEYS.rewind) },
+    { key: "drawerAdd", ask: "drawerAdd" as const, label: t("ui.bigCheese.board.m4.row.drawerAdd") },
+    ...(game.things?.drawer ?? []).map((d) => ({
+      key: `drawer.${d.id}`,
+      ask: "drawerRemove" as const,
+      id: d.id,
+      label: t("ui.bigCheese.board.m4.row.drawerRemove", { name: d.name }),
+    })),
+    { key: "evidence", ask: "evidence" as const, label: t("ui.bigCheese.board.m4.row.evidence") },
+    ...(game.things?.equipment ?? []).map((e) => ({
+      key: `equip.${e.id}`,
+      ask: "equipment" as const,
+      id: e.id,
+      label: t("ui.bigCheese.board.m4.row.equipment", { name: e.name }),
+    })),
+    ...kit.rooms
+      .filter((r) => r.kind === "hidden" && !game.openedRooms?.includes(r.id))
+      .map((r) => ({
+        key: `open.${r.id}`,
+        ask: "roomOpen" as const,
+        id: r.id,
+        label: t("ui.bigCheese.board.m4.row.roomOpen", { name: r.name }),
+      })),
+    ...CULTURE_TAGS.map((tag) => ({
+      key: `culture.${tag}`,
+      ask: "culture" as const,
+      id: tag,
+      label: t("ui.bigCheese.board.m4.row.culture", { name: t(CULTURE_KEYS[tag]!) }),
+    })),
+    { key: "traditionAdd", ask: "traditionAdd" as const, label: t("ui.bigCheese.board.m4.row.traditionAdd") },
+    ...(game.traditions ?? [])
+      .filter((x) => x.active)
+      .map((x) => ({
+        key: `tradition.${x.id}`,
+        ask: "traditionStop" as const,
+        id: x.id,
+        label: t("ui.bigCheese.board.m4.row.traditionStop", { text: x.text }),
+      })),
   ];
   const q = query.toLowerCase();
   const shown = rows.filter((r) => r.label.toLowerCase().includes(q));
@@ -513,9 +629,10 @@ function BoardSheet({ ctx, note, onClose }: BoardProps) {
   // Journal: newest page first, reloaded after every play.
   const loadJournal = async (page: number) => {
     try {
-      const r = await api.get<{ entries: Entry[]; more: boolean }>(`${base(run)}/journal?page=${page}`);
+      const r = await api.get<{ entries: Entry[]; more: boolean; redo: boolean }>(`${base(run)}/journal?page=${page}`);
       setEntries((old) => (page === 0 ? r.entries : [...old, ...r.entries]));
       setMore(r.more);
+      setRedo(r.redo);
       setPage(page);
     } catch (e) {
       setError(errorKey(e));
@@ -561,6 +678,23 @@ function BoardSheet({ ctx, note, onClose }: BoardProps) {
   };
 
   const pick = (r: Row) => {
+    if (M4_ASKS.has(r.ask)) {
+      const now =
+        r.ask === "equipment"
+          ? game.things?.equipment.find((e) => e.id === r.id)?.condition
+          : game.culture?.[r.id ?? ""];
+      setDraft({
+        value: String(r.ask === "traditionAdd" ? 3 : (now ?? 0)),
+        asker: people[0] ?? "",
+        other: kit.rooms[0]?.id ?? "",
+        need: "money",
+        severity: "2",
+        text: "",
+        kind: r.ask === "drawerAdd" ? "gift" : "outrage",
+      });
+      setRow(r);
+      return;
+    }
     const person = r.id && game.people[r.id];
     const value =
       r.ask === "meter"
@@ -629,6 +763,48 @@ function BoardSheet({ ctx, note, onClose }: BoardProps) {
         return valid && draft.asker !== draft.other
           ? { verb: "relation.shift", input: { a: draft.asker, b: draft.other, kind: draft.kind, value: n } }
           : null;
+      case "drawerAdd": {
+        const name = draft.text.trim();
+        if (!name || (draft.kind === "key" && !draft.other)) return null;
+        return {
+          verb: "drawer.set",
+          input: { op: "add", kind: draft.kind, name, ...(draft.kind === "key" ? { about: draft.other } : {}) },
+        };
+      }
+      case "drawerRemove":
+        return {
+          verb: "drawer.set",
+          input: { op: "remove", id, name: game.things?.drawer.find((d) => d.id === id)?.name ?? id },
+        };
+      case "evidence":
+        return draft.text.trim().length >= 3
+          ? { verb: "evidence.add", input: { about: draft.asker, text: draft.text.trim() } }
+          : null;
+      case "equipment":
+        return valid
+          ? {
+              verb: "equipment.set",
+              input: { item: id, condition: n, name: game.things?.equipment.find((e) => e.id === id)?.name ?? id },
+            }
+          : null;
+      case "roomOpen":
+        return { verb: "room.open", input: { room: id } };
+      case "culture":
+        return valid ? { verb: "culture.set", input: { tag: id, level: n } } : null;
+      case "traditionAdd":
+        return valid && draft.text.trim()
+          ? { verb: "tradition.set", input: { op: "add", text: draft.text.trim(), count: n } }
+          : null;
+      case "traditionStop":
+        return {
+          verb: "tradition.set",
+          input: {
+            op: "remove",
+            id,
+            text: game.traditions?.find((x) => x.id === id)?.text ?? id,
+            outrage: draft.kind === "outrage",
+          },
+        };
       case "secret":
         return draft.text.trim().length >= 3
           ? {
@@ -733,6 +909,11 @@ function BoardSheet({ ctx, note, onClose }: BoardProps) {
     if (await act("board/rewind", { playId: e.id, mode, confirmLater })) setConfirm(null);
   };
 
+  // Puts back what the last rewind took away, while nothing else has happened since.
+  const redoAct = async () => {
+    await act("board/rewind", { mode: "redo" });
+  };
+
   const comingAct = async (id: string, op: string, when?: When) => {
     if (await act("board/coming-up", { id, op, ...(when ? { when } : {}) })) setMoving(null);
   };
@@ -797,7 +978,9 @@ function BoardSheet({ ctx, note, onClose }: BoardProps) {
         row.ask === "stress" ||
         row.ask === "ambition" ||
         row.ask === "room" ||
-        row.ask === "relation") && (
+        row.ask === "relation" ||
+        row.ask === "equipment" ||
+        row.ask === "culture") && (
         <>
           {row.ask === "relation" && (
             <>
@@ -952,6 +1135,94 @@ function BoardSheet({ ctx, note, onClose }: BoardProps) {
             </label>
           )}
         </>
+      )}
+      {row.ask === "drawerAdd" && (
+        <>
+          <label>
+            <span>{t("ui.bigCheese.board.m4.field.itemKind")}</span>
+            <select value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value })}>
+              {Object.entries(DRAWER_KINDS).map(([k, key]) => (
+                <option key={k} value={k}>
+                  {t(key)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>{t("ui.bigCheese.board.m4.field.itemName")}</span>
+            <input
+              autoFocus
+              type="text"
+              maxLength={60}
+              value={draft.text}
+              onChange={(e) => setDraft({ ...draft, text: e.target.value })}
+            />
+          </label>
+          {draft.kind === "key" && (
+            <label>
+              <span>{t("ui.bigCheese.board.m4.field.keyRoom")}</span>
+              <select value={draft.other} onChange={(e) => setDraft({ ...draft, other: e.target.value })}>
+                {kit.rooms.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </>
+      )}
+      {row.ask === "evidence" && (
+        <>
+          <label>
+            <span>{t("ui.bigCheese.board.field.person")}</span>
+            {personSelect(draft.asker, (v) => setDraft({ ...draft, asker: v }))}
+          </label>
+          <label>
+            <span>{t("ui.bigCheese.board.m4.field.evidence")}</span>
+            <input
+              autoFocus
+              type="text"
+              maxLength={200}
+              value={draft.text}
+              onChange={(e) => setDraft({ ...draft, text: e.target.value })}
+            />
+          </label>
+        </>
+      )}
+      {row.ask === "traditionAdd" && (
+        <>
+          <label>
+            <span>{t("ui.bigCheese.board.m4.field.tradition")}</span>
+            <input
+              autoFocus
+              type="text"
+              maxLength={120}
+              value={draft.text}
+              onChange={(e) => setDraft({ ...draft, text: e.target.value })}
+            />
+          </label>
+          <label>
+            <span>{t("ui.bigCheese.board.m4.field.count")}</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={9}
+              value={draft.value}
+              onChange={(e) => setDraft({ ...draft, value: e.target.value })}
+            />
+          </label>
+        </>
+      )}
+      {row.ask === "traditionStop" && (
+        <label>
+          <span>{t("ui.bigCheese.board.m4.field.ending")}</span>
+          <select value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value })}>
+            <option value="outrage">{t("ui.bigCheese.board.m4.ending.outrage")}</option>
+            <option value="quietly">{t("ui.bigCheese.board.m4.ending.quietly")}</option>
+          </select>
+        </label>
       )}
       {(row.ask === "skip" || row.ask === "hours" || row.ask === "rewind") && (
         <label>
@@ -1355,6 +1626,11 @@ function BoardSheet({ ctx, note, onClose }: BoardProps) {
                     </div>
                   ) : (
                     <>
+                      {redo && e.state === "rewound" && (
+                        <button type="button" className="bc-btn" disabled={busy} onClick={() => void redoAct()}>
+                          {t("ui.bigCheese.board.m4.redo")}
+                        </button>
+                      )}
                       {e.canRewind && (
                         <button
                           type="button"

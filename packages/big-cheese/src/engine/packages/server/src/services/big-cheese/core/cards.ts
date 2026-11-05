@@ -1,4 +1,5 @@
 import { pick, roll } from "./rng.js";
+import { perkAfter, perkChance, perkEffect, perkPre, perkTrust } from "./perks.js";
 import { stancePower } from "./authority.js";
 import { logStance, trustWeight } from "./culture.js";
 import { addTrust, applyDelta, newId, pure, spendHour } from "./run.js";
@@ -57,17 +58,30 @@ export function seedDay(s: Run) {
 }
 
 // Answer a card: costs 1 hour, applies the stance, moves trust, rolls the follow-up.
-export function answerCard(s: Run, id: string, stance: string, promises: Parameters<typeof openPromise>[1][] = []) {
+// `byDelegate`: a T11 delegate answers, so the boss's perks, culture log and Fear/Love stay out of it.
+export function answerCard(
+  s: Run,
+  id: string,
+  stance: string,
+  promises: Parameters<typeof openPromise>[1][] = [],
+  byDelegate = false,
+) {
   const i = s.inbox.findIndex((c) => c.id === id);
   const c = s.inbox[i];
   if (!c) throw new Error(`Card ${id} is not in the inbox`);
   if (!c.answers.some((a) => a.stance === stance)) throw new Error(`Stance ${stance} is not offered on ${id}`);
   spendHour(s);
   s.inbox.splice(i, 1);
-  s.meters = applyDelta(s.meters, effect(c, stance), DIFFICULTY_FACTOR[s.difficulty]);
-  addTrust(s, c.asker, Math.round(trustChange(stance, c.severity) * trustWeight(s.culture, stance)));
-  logStance(s, stance);
-  stancePower(s, stance, c.severity); // T7: Fear and Love in absolute kits
+  const base = effect(c, stance);
+  s.meters = applyDelta(s.meters, byDelegate ? base : perkEffect(s, c, stance, base), DIFFICULTY_FACTOR[s.difficulty]); // T8 perks
+  const trust = Math.round(trustChange(stance, c.severity) * trustWeight(s.culture, stance));
+  addTrust(s, c.asker, byDelegate ? trust : perkTrust(s, stance, trust));
+  if (!byDelegate) {
+    logStance(s, stance);
+    const pre = perkPre(s);
+    stancePower(s, stance, c.severity); // T7: Fear and Love in absolute kits
+    perkAfter(s, stance, pre);
+  }
   const mem = s.people[c.asker]?.memories;
   mem?.push({ week: s.clock.week, about: c.id, thread: c.thread, stance, weight: 1 });
   if (mem && mem.length > 5) mem.shift();
@@ -82,7 +96,9 @@ export function answerCard(s: Run, id: string, stance: string, promises: Paramet
   if (beat) beat.result = stance;
   if (t.kind !== "follow_up") return storyBeat(s, t, c.id, c.answers.find((a) => a.stance === stance)!.tier !== "weak");
   const f = FOLLOW[stance as keyof typeof FOLLOW];
-  if (roll(s) * 100 >= f.chance[c.severity - 1]) return closeThread(s, t.id, "won");
+  const chance = f.chance[c.severity - 1]!;
+  if (roll(s) * 100 >= (byDelegate ? chance : perkChance(s, stance, c.severity, chance)))
+    return closeThread(s, t.id, "won");
   const severity = Math.min(3, c.severity + f.worse) as Severity;
   planCardBeat(s, t, { need: c.need, severity }, 1 + Math.floor(roll(s) * 3));
   t.clock.pressure = stance === "cheap_fix" ? "patched" : f.worse ? "worse" : "building";

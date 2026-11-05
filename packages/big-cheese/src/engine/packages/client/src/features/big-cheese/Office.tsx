@@ -94,6 +94,13 @@ export function Office({ ctx, canStart }: { ctx: Ctx; canStart: boolean }) {
         </button>
       )}
 
+      <button
+        type="button"
+        className={run.game.perkOffer ? "bc-btn bc-btn-primary" : "bc-btn bc-btn-quiet"}
+        onClick={() => go("goals")}
+      >
+        {t(run.game.perkOffer ? "ui.bigCheese.goals.openPerk" : "ui.bigCheese.goals.open")}
+      </button>
       <button type="button" className="bc-btn bc-btn-quiet" onClick={() => go("rules")}>
         {t("ui.bigCheese.rules.open")}
       </button>
@@ -122,7 +129,9 @@ export function Office({ ctx, canStart }: { ctx: Ctx; canStart: boolean }) {
                       : [
                           thread.people.map((id) => nameOf(kit, id)).join(", "),
                           t(`ui.bigCheese.story.pressure.${thread.clock.pressure}`, { defaultValue: "" }),
-                          thread.stakes?.startsWith("election") ? undefined : thread.stakes,
+                          thread.stakes?.startsWith("election") || thread.stakes?.startsWith("culprit")
+                            ? undefined
+                            : thread.stakes,
                           thread.system !== undefined && fixtureLine(t, run.game.systems?.[thread.system]?.fixtures),
                         ]
                           .filter(Boolean)
@@ -139,6 +148,34 @@ export function Office({ ctx, canStart }: { ctx: Ctx; canStart: boolean }) {
                   </button>
                 ) : (
                   <div className="bc-row">{body}</div>
+                )}
+                {(thread.kind === "mystery" || thread.kind === "cover_up") && (
+                  <div className="bc-panel">
+                    <button
+                      type="button"
+                      className="bc-btn"
+                      disabled={busy || clock.hoursLeft === 0}
+                      onClick={() => void act(`threads/${encodeURIComponent(thread.id)}/investigate`, {})}
+                    >
+                      {t("ui.bigCheese.investigate.go")}
+                    </button>
+                    {thread.kind === "mystery" &&
+                      thread.people
+                        .filter((id) => !run.game.tally?.[`clear.${thread.id}.${id}`])
+                        .map((id) => (
+                          <button
+                            key={id}
+                            type="button"
+                            className="bc-btn bc-btn-quiet"
+                            disabled={busy}
+                            onClick={() =>
+                              void act(`threads/${encodeURIComponent(thread.id)}/investigate`, { accuse: id })
+                            }
+                          >
+                            {t("ui.bigCheese.investigate.accuse", { name: nameOf(kit, id) })}
+                          </button>
+                        ))}
+                  </div>
                 )}
               </li>
             );

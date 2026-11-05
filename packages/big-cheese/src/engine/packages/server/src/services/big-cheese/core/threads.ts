@@ -1,6 +1,8 @@
 import { DAYS, dayIndex } from "./clock.js";
 import { roll } from "./rng.js";
 import { addTrust, newId, pure } from "./run.js";
+import { horrorClosed } from "./horror.js"; // M4 T7
+import { strangeClosed } from "./strange.js";
 import type { Beat, Letter, Meter, Run, Severity, Thread } from "./types.js";
 
 type Init = Pick<Thread, "kind" | "title" | "origin"> &
@@ -24,6 +26,8 @@ export function closeThread(s: Run, id: string, state: Thread["state"]) {
   const t = s.threads[id];
   if (!t) return;
   delete s.threads[id];
+  horrorClosed(s, t, state); // M4 T7
+  strangeClosed(s, t, state);
   // The title stays, so a person's memory of a closed thread can still name it.
   s.closed.push({
     id,

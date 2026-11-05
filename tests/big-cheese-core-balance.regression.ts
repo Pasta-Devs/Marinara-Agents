@@ -24,11 +24,16 @@ const always =
   (c, m, h) =>
     stances(c).includes(s) ? s : random(c, m, h);
 
-const bots: Record<string, Bot> = { careful, random };
+const bots: Record<string, Bot> = {
+  careful,
+  random,
+  "careful+steady_hand": careful, // M4 T8: one perk row, the number is in the test log
+};
 for (const s of core.STANCES) bots[`always:${s}`] = always(s);
 
-function play(bot: Bot, seed: number) {
-  const s = core.newRun(core.HAFENKAI, seed); // one copy, then in-place steps (the pure API clones every call)
+function play(bot: Bot, seed: number, perk?: string) {
+  const s = core.newRun(core.HAFENKAI, seed);
+  if (perk) s.perks = [perk]; // one copy, then in-place steps (the pure API clones every call)
   const h = { rng: seed * 7919 + 13 };
   while (s.status === "playing") {
     core.draft.seedDay(s);
@@ -46,7 +51,7 @@ test("balance: Hafenkai year, 200 runs per bot (D12 gate)", () => {
   const rate: Record<string, number> = {};
   console.log("bot".padEnd(22) + "fired".padEnd(8) + "avgWeek".padEnd(9) + "killers".padEnd(26) + "M/O/P/S");
   for (const [name, bot] of Object.entries(bots)) {
-    const res = Array.from({ length: RUNS }, (_, i) => play(bot, i + 1));
+    const res = Array.from({ length: RUNS }, (_, i) => play(bot, i + 1, name.split("+")[1]));
     const fired = res.filter((r) => r.fired);
     const killers: Record<string, number> = {};
     for (const r of fired) killers[r.killer!] = (killers[r.killer!] ?? 0) + 1;
@@ -65,5 +70,6 @@ test("balance: Hafenkai year, 200 runs per bot (D12 gate)", () => {
     );
   }
   assert.equal(rate.careful, 0, "careful bot must never be fired");
+  assert.equal(rate["careful+steady_hand"], 0, "steady hand must not get a careful bot fired");
   assert.ok(rate.random! >= 0.2 && rate.random! <= 0.6, `random bot fired in ${rate.random! * 100}% of runs`);
 });
