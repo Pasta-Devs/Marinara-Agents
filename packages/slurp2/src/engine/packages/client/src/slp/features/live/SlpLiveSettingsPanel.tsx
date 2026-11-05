@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SLP_DEFAULT_LIVE_SETTINGS, type SlpLiveSettings } from "../../../../../shared/src/slp/slp-live.js";
 import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
@@ -254,10 +254,9 @@ function SlpLiveOwnGoals({
       return { target: goal ? String(goal.target) : "", text: goal?.text ?? "" };
     });
   const [rows, setRows] = useState<GoalRow[]>(() => rowsFor(""));
-  const pick = (id: string) => {
-    setCreatorId(id);
-    setRows(rowsFor(id));
-  };
+  // Reload the rows whenever the saved goals change under them (Discard, Reset, another Creator).
+  const saved = JSON.stringify(goals[creatorId] ?? []);
+  useEffect(() => setRows(rowsFor(creatorId)), [creatorId, saved]); // eslint-disable-line react-hooks/exhaustive-deps
   const edit = (index: number, patch: Partial<GoalRow>) =>
     setRows((current) => current.map((row, at) => (at === index ? { ...row, ...patch } : row)));
   // A row counts once it has both a whole amount and words; half-filled rows wait.
@@ -266,6 +265,7 @@ function SlpLiveOwnGoals({
     const list = rows
       .map((row) => ({ target: Number(row.target), text: row.text.trim() }))
       .filter((row) => row.text && Number.isInteger(row.target) && row.target >= 1 && row.target <= 1_000_000);
+    if (JSON.stringify(list) === saved) return;
     const { [creatorId]: _old, ...rest } = goals;
     onSave(list.length ? { ...rest, [creatorId]: list } : rest);
   };
@@ -285,7 +285,7 @@ function SlpLiveOwnGoals({
           aria-label={tx("ownGoalsCreator", "Creator")}
           value={creatorId}
           disabled={disabled}
-          onChange={(event) => pick(event.target.value)}
+          onChange={(event) => setCreatorId(event.target.value)}
           className={`${inputClass} w-full`}
         >
           <option value="">{tx("ownGoalsPick", "Pick a Creator")}</option>
