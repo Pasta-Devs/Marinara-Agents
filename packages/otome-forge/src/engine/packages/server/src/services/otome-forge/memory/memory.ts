@@ -33,6 +33,10 @@
 //   too: the overview is the story's timeline told as a recollection, which "What happened so far…" shows as written
 //   (0.6.19). An overview saved before that is read as none, so the next maintenance folds it again (OVERVIEW_STYLE).
 //   The knowledge boundary is left out: the summarizer writes no character's words (plan §1.7).
+// - The player's Retry (maintain's `retry`) is their own request, so its job runs under foreground admission
+//   (S/background-queue.ts): it runs at once even while they read, and status gives its outcome, done or failed again.
+//   Under background admission it waited for a connection idle for 30 s, which while the player reads may be never,
+//   and status stayed `pending` all that time.
 // - #2066, the timeline: the kit's overview is the story's timeline (S/memory/timeline.ts). Each chapter's summary
 //   (the kit's detail record, written once, at most 1000 words by its prompt) is appended to it as it is folded in,
 //   with no model call; only once the timeline passes 13k tokens and 1k of leeway (14k) is everything before the
@@ -199,9 +203,10 @@ export interface OtomeMemory {
   recall(options: ForgeRecallOptions): Promise<OtomeRecallResult>;
   /**
    * Queues maintenance (summaries, overview, recall vectors) on the background lane. False when the run has no world
-   * or no connection to summarize with; true once queued, or folded into the job already waiting or running.
+   * or no connection to summarize with; true once queued, or folded into the job already waiting or running. `retry`:
+   * the player's Retry, which never waits for an idle connection (see the header).
    */
-  maintain(options: { runId: string; debugMode?: boolean }): Promise<boolean>;
+  maintain(options: { runId: string; debugMode?: boolean; retry?: boolean }): Promise<boolean>;
   /** The kit's status, `pending` while a maintenance job is queued or running (see OtomeMemoryStatus). */
   status(runId: string): Promise<OtomeMemoryStatus>;
   /** Stops the run's maintenance and drops what it was doing (a deleted run). */
@@ -570,13 +575,14 @@ export function createOtomeMemory({
       return { ...rest, details: [], text: "", recalls };
     },
 
-    async maintain({ runId, debugMode = false }) {
+    async maintain({ runId, debugMode = false, retry = false }) {
       if (disposed) return false;
       const job = await summaryJob(runId);
       if (!job || disposed) return false;
       const fresh = queue.ensure({
         key: maintainKey(runId),
         connectionId: job.connectionId,
+        foreground: retry,
         run: async () => {
           running.set(runId, job);
           try {

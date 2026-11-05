@@ -15,7 +15,8 @@
 // nothing); a date is never in it (a Character Story joins it, titled private). Memory never waits for a context size
 // (the maintainer's, 2026-11-04): a memory model that reports none writes every summary, each request whole, and
 // condenses in one call; a summary its provider refuses is status `error` with the provider's own message, which Retry
-// clears; one that reports a context too small for any summary or condensing fails with no call, its message saying
+// clears, and Retry runs at once even while the player reads (foreground admission), its banner gone until it fails
+// again; one that reports a context too small for any summary or condensing fails with no call, its message saying
 // so in Otome's own words (reason `context-too-small`, a wording for each); a run with no connection for it says so in its status, with how many chapters wait for a summary; and a status
 // the earlier gate saved never waits for setup: it reads as behind and catches up, or as ready. Recall sends no ranked
 // details and no recent canon: the small memories this prompt may know come back as `recalls`, newest first within 5k
@@ -25,9 +26,15 @@ import test from "node:test";
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs";
 import type { ForgeMemorySource } from "@forge-kit/story-memory.mjs";
+import {
+  memoryNotice,
+  nextMemoryView,
+  type MemoryView,
+} from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/memory-notice.ts";
 import type {
   Bible,
   ChapterNode,
+  MemoryStatus,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import {
   createHandle,
@@ -128,7 +135,10 @@ function summarizer(messages: Array<{ content: string }>) {
 
 async function setup(
   connections: Record<string, string> = { narration: "conn-story", compress: "conn-memory" },
-  options: Pick<FakeRuntimeOptions, "replies" | "admissionRun" | "maxContext" | "maxOutputTokens"> & {
+  options: Pick<
+    FakeRuntimeOptions,
+    "replies" | "admissionRun" | "admissionFailures" | "maxContext" | "maxOutputTokens"
+  > & {
     sources?: ForgeMemorySource[];
   } = {},
 ) {
@@ -1094,6 +1104,94 @@ test("a summary the provider refuses as too long is status error with its own me
   assert.deepEqual([retried.phase, retried.message], ["pending", undefined]);
   const done = await settle(memory);
   assert.deepEqual([done.phase, done.message, done.unsummarized], ["ready", undefined, 0]);
+});
+
+test("Retry runs at once while the player reads: its banner goes until it fails again, in the new words, or is done", async () => {
+  // The Engine refuses background work on a connection while the player's own calls run on it and for 30 s after each
+  // (connection-admission.ts): here, every time once the player reads on. Before, Retry's job waited for that
+  // admission, backing off for as long as the player read, and the status stayed pending ("Trying the summary
+  // again…") all that time.
+  const TOO_LONG = "400 This model's maximum context length is 8192 tokens. However, your messages resulted in 9100.";
+  const AGAIN = "Upstream 413: the request is larger than this model's 8192-token context.";
+  const BUSY = new Error("Connection conn-memory is not available for background generation.");
+  let failure: string | null = TOO_LONG;
+  let reading = false;
+  const { store, memory, runtime, admissions } = await setup(undefined, {
+    maxContext: null,
+    admissionFailures: new Set([BUSY]),
+    admissionRun: async (operation, mode) => {
+      if (reading && mode.kind === "background") throw BUSY;
+      return operation();
+    },
+    replies: Array.from({ length: 12 }, () => (messages: Array<{ content: string }>) => {
+      if (failure) throw new Error(failure);
+      return summarizer(messages);
+    }),
+  });
+  const routes = new Map<string, RouteHandler>();
+  registerMemoryRoutes(
+    {
+      get: (path, handler) => routes.set(`GET ${path}`, handler),
+      post: (path, handler) => routes.set(`POST ${path}`, handler),
+    },
+    { store, handle: createHandle(runtime.logger), memory },
+  );
+  const reply: OtomeReply = { status: () => reply, send: () => reply };
+  const answer = async (method: "GET" | "POST", path: string) =>
+    (
+      (await routes.get(`${method} ${path}`)!({ params: { run: "r-memory-abcdef" }, body: {} }, reply)) as {
+        status: MemoryStatus;
+      }
+    ).status;
+  // The client as it caches each answer (Retry's, then every poll) and the banner each one shows, until it settles.
+  let view: MemoryView | undefined;
+  const retry = async () => {
+    // Pressed, Retry hides the banner at once, while its request is on its way.
+    assert.equal(memoryNotice(view, true), null);
+    view = nextMemoryView(view, await answer("POST", "/runs/:run/memory/retry"));
+    const shown = [memoryNotice(view)];
+    for (let turn = 0; view.phase === "pending"; turn += 1) {
+      if (turn > 2000) throw new Error("The retried summary never ran: its status stayed pending");
+      await new Promise((resolve) => setImmediate(resolve));
+      view = nextMemoryView(view, await answer("GET", "/runs/:run/memory/status"));
+      shown.push(memoryNotice(view));
+    }
+    return shown;
+  };
+
+  try {
+    assert.equal(await memory.maintain({ runId: RUN }), true);
+    await settle(memory);
+    view = nextMemoryView(view, await answer("GET", "/runs/:run/memory/status"));
+    assert.deepEqual(memoryNotice(view), { kind: "failed", message: TOO_LONG });
+
+    // The player reads on and presses Retry; the summary fails again. Nothing shows until it has: then the new words.
+    reading = true;
+    failure = AGAIN;
+    const again = await retry();
+    assert.deepEqual([view.phase, view.message], ["error", AGAIN], "the retry ran and failed again");
+    assert.deepEqual(again.at(-1), { kind: "failed", message: AGAIN });
+    assert.ok(again.length > 1 && again.slice(0, -1).every((notice) => notice === null), JSON.stringify(again));
+
+    // A chapter ends as she reads: its upkeep is refused and backs off. A Retry pressed then runs it at once, and
+    // this one writes the summary: nothing shows, before or after.
+    failure = null;
+    assert.equal(await memory.maintain({ runId: RUN }), true);
+    assert.equal((await memory.status(RUN)).phase, "pending");
+    const done = await retry();
+    assert.deepEqual([view.phase, view.message, view.unsummarized], ["ready", undefined, 0]);
+    assert.ok(
+      done.every((notice) => notice === null),
+      JSON.stringify(done),
+    );
+    assert.deepEqual(
+      admissions.map(({ mode }) => (mode as { kind: string }).kind),
+      ["background", "foreground", "background", "foreground"],
+      "each Retry runs as the player's own request; the upkeep waits for an idle connection",
+    );
+  } finally {
+    memory.dispose();
+  }
 });
 
 test("a memory model too small for any summary or condensing fails with no call, its status saying why", async () => {

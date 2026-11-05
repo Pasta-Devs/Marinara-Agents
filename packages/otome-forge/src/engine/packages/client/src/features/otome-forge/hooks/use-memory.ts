@@ -6,7 +6,8 @@
 // section open, `watching`), so a summary that fails in the background (after a date, a message thread, a scene's
 // recall) shows within half a minute; the reader asks again as a chapter ends, and a saved setting (a new connection)
 // asks again at once (hooks/use-run.ts useSaveSettings). The cache keeps memory-notice's `retrying` mark, so both
-// places show a retry's progress, whichever started it.
+// places read a retry fast, whichever started it. No notice shows while a Retry request is on its way (`busy`) or the
+// retry runs: the banner comes back only when it fails again.
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useOtomeApi } from "../api";
@@ -54,5 +55,5 @@ export function useMemoryStatus(runKey: string, { watching = false }: { watching
   // words. The next Retry clears it too.
   const error = failure && failure.on === query.data ? failure.message : null;
 
-  return { query, status: query.data, notice: memoryNotice(query.data), retry, busy, error };
+  return { query, status: query.data, notice: memoryNotice(query.data, busy), retry, busy, error };
 }

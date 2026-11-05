@@ -220,7 +220,6 @@ ${R} .of-memory-banner:first-child { margin-top: max(12px, env(safe-area-inset-t
 ${R} .of-memory-banner:first-child ~ .of-screen { --of-reader-top: 6px; }
 ${R} .of-memory-banner-text { flex: 1 1 15rem; min-width: 0; display: flex; align-items: flex-start; gap: 8px; }
 ${R} .of-memory-banner-text svg { flex: none; margin-top: 1px; color: var(--of-danger); }
-${R} .of-memory-banner[data-kind="retrying"] .of-memory-banner-text svg { color: var(--of-accent-text); }
 ${R} .of-memory-banner-said {
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
   color: var(--of-text-soft); overflow-wrap: anywhere;
