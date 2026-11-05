@@ -323,6 +323,20 @@ export function emptyMeanwhileDocument(): MeanwhileDocument {
   };
 }
 
+/** Stored texts that are not whole {from, to, time, text} strings with a real time are dropped. */
+function cleanTexts(e: LifeEvent): LifeEvent {
+  if (e.texts === undefined) return e;
+  const texts = (Array.isArray(e.texts) ? e.texts : []).filter(
+    (t) =>
+      isRecord(t) &&
+      [t.from, t.to, t.time, t.text].every((v) => typeof v === "string") &&
+      Number.isFinite(Date.parse(t.time as string)),
+  );
+  const next = { ...e, texts };
+  if (!texts.length) delete next.texts;
+  return next;
+}
+
 export function normalizeMeanwhile(value: unknown): MeanwhileDocument {
   if (!isRecord(value)) return emptyMeanwhileDocument();
   const list = (v: unknown) => (Array.isArray(v) ? v : []);
@@ -336,7 +350,9 @@ export function normalizeMeanwhile(value: unknown): MeanwhileDocument {
     schemaVersion: 1,
     circles,
     marks: marks.filter((m) => circles.some((c) => c.id === m.circleId)),
-    events: list(value.events).filter((e): e is LifeEvent => isRecord(e) && typeof e.id === "string"),
+    events: list(value.events)
+      .filter((e): e is LifeEvent => isRecord(e) && typeof e.id === "string")
+      .map(cleanTexts),
     placeTags: list(value.placeTags).filter(
       (t): t is PlaceTags => isRecord(t) && typeof t.characterId === "string" && isRecord(t.byActivity),
     ),

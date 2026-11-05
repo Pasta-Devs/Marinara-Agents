@@ -57,13 +57,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "cc59c7f92305e352f60457f4e36e2125f0d99416456bd25738ef48747f01d8c0",
-      "bytes": 57675
+      "sha256": "b6406b6950ba7bb3aa4e90f22a3c088d4aff1eec85f919988ac7f81d80f65dc9",
+      "bytes": 58004
     },
     {
       "path": "client.js",
-      "sha256": "aa036badd05bec6e2a5c5ccc6317eb38b8e044afc3522c651f61b1c3817bca89",
-      "bytes": 34980
+      "sha256": "ae53765c0a692cae32d2c0675be0ce484d9d59f4e29d4bf209c0c44377145895",
+      "bytes": 35154
     },
     {
       "path": "meanwhile-icon.png",

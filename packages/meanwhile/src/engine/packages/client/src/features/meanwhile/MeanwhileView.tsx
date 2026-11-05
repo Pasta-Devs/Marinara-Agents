@@ -1001,6 +1001,7 @@ function PhonePanel({ circle }: { circle: Circle }) {
               key={`${t.time}${t.from}${t.text}`}
               className={`mw-bubble${t.from === thread.b ? " mw-bubble-right" : ""}`}
             >
+              <span className="mw-sr">{name(t.from)}: </span>
               <div>{t.text}</div>
               <div className="mw-muted">{when(t.time, circle.clock.timezone)}</div>
             </div>

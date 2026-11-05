@@ -16,6 +16,7 @@ import { runCircleNow } from "../packages/meanwhile/src/engine/packages/server/s
 import {
   configureMeanwhileRuntime,
   defaultCircle,
+  normalizeMeanwhile,
   readMeanwhile,
   updateMeanwhile,
 } from "../packages/meanwhile/src/engine/packages/server/src/services/meanwhile/store.ts";
@@ -253,6 +254,59 @@ async function main() {
   );
   assert.equal(r2.events.length, 2);
   assert.equal(r2.events.find((e) => e.cast.includes("x"))!.texts![0]!.to, "z");
+
+  // A pair with a chat-only or spicy beat that day sends no texts, so none can leak into the Phone.
+  const quiet = async (second: Record<string, unknown>, seed2: Seed, over: Partial<World> = {}) => {
+    const g = fakeGate([{ beats: [beat(), beat({ diary: undefined, hook: undefined, ...second })], texts: [text()] }]);
+    const r: BeatRun = { events: [], done: [], stoppedAt: null };
+    await runBeats(r, world(over), g, [DAY0], [seeds[0]!, seed2], T0 + DAY);
+    assert.equal(r.events.length, 2);
+    assert.ok(r.events.every((e) => !e.texts));
+    return r.events;
+  };
+  const spicy = seed(2, "spicy", ["x", "y"], "home", "22:00");
+  await quiet({ seed: "s2", start: "22:05", end: "22:30" }, spicy, {
+    circle: { ...circle, allowedKinds: ["friends", "spicy"] },
+  });
+  const promise = {
+    id: "p",
+    circleId: "k",
+    characterId: "x",
+    text: "Call Mia.",
+    due: DAY0,
+    visibility: "chat:A",
+    anchor: { chatId: "A", messageId: "m" },
+    hash: "",
+    createdAt: T0,
+    status: "open",
+  } as World["promises"][number];
+  const evs = await quiet(
+    { seed: "s2", start: "22:05", end: "22:30", kept: [1] },
+    seed(2, "friends", ["x", "y"], "home", "22:00"),
+    { promises: [promise] },
+  );
+  assert.ok(evs.some((e) => e.visibility === "chat:A"));
+
+  // Texts about a beat the retry replaced do not survive: only the last reply's texts count.
+  const g3 = fakeGate([
+    { beats: [beat(), beat({ seed: "s9" })], texts: [text()] },
+    { beats: [beat({ seed: "s2", start: "10:05", end: "10:30", diary: undefined, hook: undefined })] },
+  ]);
+  const r3: BeatRun = { events: [], done: [], stoppedAt: null };
+  await runBeats(r3, world(), g3, [DAY0], seeds, T0 + DAY);
+  assert.equal(g3.sent.length, 2);
+  assert.ok(r3.events.every((e) => !e.texts));
+
+  // Bad stored texts are dropped when the document loads.
+  const goodText = { from: "x", to: "y", time: new Date(T0).toISOString(), text: "hi" };
+  const stored = normalizeMeanwhile({
+    events: [
+      { id: "a", texts: [goodText, { ...goodText, time: "nope" }, { from: "x" }, 5] },
+      { id: "b", texts: "oops" },
+    ],
+  }).events;
+  assert.deepEqual(stored[0]!.texts, [goodText]);
+  assert.equal(stored[1]!.texts, undefined);
 
   // A long-absence summary gets its text (cut to 280) and per-character diary; a bad reply keeps the placeholder.
   const summary = {
