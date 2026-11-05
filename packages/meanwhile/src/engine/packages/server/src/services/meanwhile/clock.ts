@@ -130,6 +130,13 @@ export function runWindow(lastRunMs: number, nowMs: number): RunWindow | null {
   return { from: iso(cut), to: iso(nowMs), summary: { from: iso(lastRunMs), to: iso(cut) } };
 }
 
+/** Fast forward: every day of the span gets beats, so it never turns into a long-absence summary. */
+export function fastForwardWindow(lastRunMs: number, nowMs: number, spanMs: number): RunWindow | null {
+  const from = Math.max(lastRunMs, nowMs - spanMs);
+  if (!(nowMs > from)) return null;
+  return { from: new Date(from).toISOString(), to: new Date(nowMs).toISOString(), summary: null };
+}
+
 /** Same shape as Slurp2's poll backoff: 5 min, 10, 20, then 30 min. */
 export function backoffMs(failures: number): number {
   return Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** Math.max(0, failures));

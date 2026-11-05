@@ -13,6 +13,8 @@ A Circle is a group of characters who share a setting. Each Circle has its own c
 
 Each finished day gets one model call that writes the events, a diary line per character and hooks. A character brings a hook up in a linked chat once, and "Pick up this thread" makes the next reply bring it up now. A daily call limit keeps the cost down.
 
+Fast forward moves a Circle clock by 1 to 7 days or up to 168 hours and writes each day. It shows the model calls first and asks before it passes the daily limit. Big events wait in "Waiting for you" until you accept or veto them. Plans that characters state in a linked chat become promises. Meanwhile checks them again when a chat message is edited or deleted.
+
 ## Install
 
 Meanwhile is offered to Engine `staging` testers. Install it, restart Marinara Engine when prompted, then open Home -> Meanwhile.

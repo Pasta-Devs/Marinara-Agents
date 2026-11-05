@@ -5,7 +5,9 @@ import {
   circleNowMs,
   claimLease,
   dueReason,
+  fastForwardWindow,
   runWindow,
+  setTime,
   type DueReason,
   type RunMark,
   type RunWindow,
@@ -14,7 +16,17 @@ import {
   shiftDay,
   wallToMs,
 } from "./clock.js";
-import { getMeanwhileRuntime, markOf, readMeanwhile, updateMeanwhile, withMark, type Circle } from "./store.js";
+import {
+  getMeanwhileRuntime,
+  markOf,
+  readMeanwhile,
+  updateMeanwhile,
+  withMark,
+  type Circle,
+  type LifeEvent,
+  type MeanwhileDocument,
+  type PromiseRecord,
+} from "./store.js";
 import { SUMMARY_PLACEHOLDER, at, cardInfo, json, pickSchedule, planLife } from "./routine.js";
 import {
   TIME_TOLERANCE_MIN,
@@ -27,6 +39,7 @@ import {
   type World,
 } from "./beats.js";
 import { markDelivered } from "./context.js";
+import { applyStale, askPromises, dropOld, hasNewMessages, staleAnchors } from "./promises.js";
 import type { Seed } from "./deck.js";
 
 /** Claims the lease for one Circle. Returns false when another run holds it. */
@@ -121,13 +134,63 @@ function beatDays(
  * processed day, in the same write that stores the events, so a crash never loses or doubles a day.
  * If the user changed the Circle's clock or `lastRunCircle` while the run read its inputs, the result is dropped.
  */
-async function finish(circleId: string, now: number): Promise<void> {
+/** What `planLife` needs. A character with a major event that waits for the user lives on routine only. */
+function lifeInput(
+  doc: MeanwhileDocument,
+  circle: Circle,
+  window: RunWindow,
+  inputs: Awaited<ReturnType<typeof readSchedules>>,
+  now: number,
+  lapsed: (e: LifeEvent) => boolean,
+) {
+  return {
+    circle,
+    window,
+    schedules: inputs.schedules,
+    chatTruth: inputs.chatTruth,
+    seeds: doc.seeds,
+    haveIds: new Set(doc.events.map((e) => e.id)),
+    dealtDays: new Set(doc.dealtDays),
+    now,
+    holdIds: new Set(
+      doc.events
+        .filter((e) => e.circleId === circle.id && e.status === "proposed" && !lapsed(e))
+        .flatMap((e) => e.cast),
+    ),
+  };
+}
+
+/** Live state of a fast forward, read by the status route and the cancel route. */
+export interface Ff {
+  running: boolean;
+  dayIndex: number;
+  days: number;
+  cancel: boolean;
+}
+interface FinishOpts {
+  ff?: Ff;
+  /** Circle time a fast forward moved the clock by. */
+  spanMs?: number;
+  /** Ignore the daily call limit (calls still count). */
+  over?: boolean;
+}
+/** A proposed big event that nobody answered is vetoed after this many Circle days. */
+export const PROPOSAL_DAYS = 7;
+
+async function finish(circleId: string, now: number, opts: FinishOpts = {}): Promise<void> {
   try {
     const first = await readMeanwhile();
     const start = first.circles.find((c) => c.id === circleId);
     if (!start) return;
     const to = circleNowMs(start.clock, now);
-    const window = runWindow(Date.parse(start.lastRunCircle), to);
+    const window =
+      opts.spanMs === undefined
+        ? runWindow(Date.parse(start.lastRunCircle), to)
+        : fastForwardWindow(Date.parse(start.lastRunCircle), to, opts.spanMs);
+    const lapsed = (e: LifeEvent) => e.status === "proposed" && Date.parse(e.end) < to - PROPOSAL_DAYS * DAY;
+    let promises: PromiseRecord[] = first.promises.filter((p) => p.circleId === circleId).map((p) => ({ ...p }));
+    let pass = first.promisePass;
+    let staleSet: ReadonlySet<string> = new Set();
     const tz = start.clock.timezone;
     let plan: ReturnType<typeof planLife> | null = null;
     let usage = usageRow(first.usage, circleId, now);
@@ -136,24 +199,11 @@ async function finish(circleId: string, now: number): Promise<void> {
     let held = false;
     if (window) {
       const inputs = await readSchedules(start);
-      const base = {
-        circle: start,
-        window,
-        schedules: inputs.schedules,
-        chatTruth: inputs.chatTruth,
-        seeds: first.seeds,
-        haveIds: new Set(first.events.map((e) => e.id)),
-        dealtDays: new Set(first.dealtDays),
-        now,
-        // A character with a major event waiting for the user lives on routine only.
-        holdIds: new Set(
-          first.events.filter((e) => e.circleId === circleId && e.status === "proposed").flatMap((e) => e.cast),
-        ),
-      };
+      const base = lifeInput(first, start, window, inputs, now, lapsed);
       plan = planLife({ ...base, tags: first.placeTags });
       let days: string[] = [];
       try {
-        const gate = await makeGate(start, usage);
+        const gate = await makeGate(start, usage, { over: opts.over, stop: () => opts.ff?.cancel === true });
         usage = gate.usage;
         const asked = await askPlaces(gate, plan.tags);
         if (asked.changed) {
@@ -163,7 +213,17 @@ async function finish(circleId: string, now: number): Promise<void> {
             tags: [...first.placeTags.filter((t) => !replaced.has(t.characterId)), ...asked.tags],
           });
         }
-        const world: World = { circle: start, ...inputs, tags: plan.tags, events: first.events, now };
+        if (start.linkedChatIds.length) {
+          staleSet = await staleAnchors(start, promises, to);
+          promises = applyStale(promises, [], staleSet).promises;
+          const asked = await askPromises(start, inputs.cast, first.promisePass, gate, to);
+          if (asked) {
+            const have = new Set(promises.map((p) => p.id));
+            promises = [...promises, ...asked.promises.filter((p) => !have.has(p.id))];
+            pass = asked.pass;
+          }
+        }
+        const world: World = { circle: start, ...inputs, tags: plan.tags, events: first.events, promises, now };
         const summaries = plan.events.filter((e) => e.weight === "summary");
         if (summaries.length && gate.left() < 1) {
           // No budget for the summary: drop the placeholder, do not move past the cut, try again on the next real day.
@@ -173,7 +233,10 @@ async function finish(circleId: string, now: number): Promise<void> {
           for (const event of summaries) await askSummary(world, gate, event);
           const seeds = [...first.seeds, ...plan.seeds];
           days = beatDays(window, tz, new Set(first.beatDays), circleId, seeds);
-          await runBeats(run, world, gate, days, seeds, to);
+          if (opts.ff) opts.ff.days = days.length;
+          await runBeats(run, world, gate, days, seeds, to, (n) => {
+            if (opts.ff) opts.ff.dayIndex = n;
+          });
         }
       } catch (e) {
         error = e instanceof Error ? e.message.slice(0, 200) : "Run failed";
@@ -235,13 +298,14 @@ async function finish(circleId: string, now: number): Promise<void> {
             .slice(0, NOTABLE_KEEP)
             .map((e) => e.id),
         );
-        const events = all.filter((e) =>
+        const kept = all.filter((e) =>
           !mine(e.circleId)
             ? true
             : e.weight === "routine"
               ? Date.parse(e.start) >= to - ROUTINE_KEEP_DAYS * DAY
               : keep.has(e.id),
         );
+        const swept = applyStale(dropOld(promises, msToWall(to, tz).slice(0, 10)), kept, staleSet);
         next = {
           ...doc,
           circles: doc.circles.map((c) =>
@@ -249,7 +313,12 @@ async function finish(circleId: string, now: number): Promise<void> {
           ),
           // ponytail: routine is cheap to recompute, so only the last 14 Circle days stay. Notable events
           // are capped per Circle (diary and hooks derive from them); an archive store would lift the cap.
-          events,
+          events: swept.events.map((e) => (mine(e.circleId) && lapsed(e) ? { ...e, status: "vetoed" } : e)),
+          promises: [
+            ...doc.promises.filter((p) => !mine(p.circleId)),
+            ...swept.promises.filter((p) => p.status === "open" || p.due >= seedCutoff),
+          ],
+          promisePass: { ...doc.promisePass, ...pass },
           placeTags: [
             ...doc.placeTags.filter((t) => !stored.tags.some((n) => n.characterId === t.characterId)),
             ...stored.tags,
@@ -286,6 +355,79 @@ async function finish(circleId: string, now: number): Promise<void> {
 export async function runCircleNow(circleId: string, now = Date.now()): Promise<boolean> {
   if (!(await claim(circleId, now))) return false;
   await finish(circleId, now);
+  return true;
+}
+
+const forwards = new Map<string, Ff>();
+
+export function ffStatus(circleId: string) {
+  const f = forwards.get(circleId);
+  return { running: f?.running ?? false, dayIndex: f?.dayIndex ?? 0, days: f?.days ?? 0 };
+}
+
+/** The run stops after the day it is on. Finished days stay stored and the mark covers only them. */
+export function cancelFastForward(circleId: string): boolean {
+  const f = forwards.get(circleId);
+  if (!f?.running) return false;
+  f.cancel = true;
+  return true;
+}
+
+/** What a fast forward would cost, without writing anything. Null when the Circle does not exist. */
+export async function previewFastForward(circleId: string, spanMs: number, now = Date.now()) {
+  const doc = await readMeanwhile();
+  const circle = doc.circles.find((c) => c.id === circleId);
+  if (!circle) return null;
+  const to = circleNowMs(circle.clock, now) + spanMs;
+  const window = fastForwardWindow(Date.parse(circle.lastRunCircle), to, spanMs);
+  const left = circle.budgetCallsPerDay - usageRow(doc.usage, circleId, now).calls;
+  if (!window) return { days: 0, calls: 0, left };
+  const lapsed = (e: LifeEvent) => e.status === "proposed" && Date.parse(e.end) < to - PROPOSAL_DAYS * DAY;
+  const plan = planLife({
+    ...lifeInput(doc, circle, window, await readSchedules(circle), now, lapsed),
+    tags: doc.placeTags,
+  });
+  const seeds = [...doc.seeds, ...plan.seeds];
+  const days = beatDays(window, circle.clock.timezone, new Set(doc.beatDays), circleId, seeds);
+  // A day without seeds is marked done without a call.
+  const beats = days.filter((d) => seeds.some((s) => s.circleId === circleId && s.day === d)).length;
+  const places = plan.tags.some((t) => !t.asked && Object.values(t.byActivity).includes("unknown")) ? 1 : 0;
+  const promises = (await hasNewMessages(circle, doc.promisePass)) ? 1 : 0;
+  return { days: days.length, calls: beats + places + promises, left };
+}
+
+/**
+ * Moves the Circle clock forward by `spanMs` (at any speed, also x0) and runs the generator for that span in
+ * the background. False when a run for this Circle is already live.
+ */
+export async function startFastForward(
+  circleId: string,
+  spanMs: number,
+  over: boolean,
+  now = Date.now(),
+): Promise<boolean> {
+  if (!(await claim(circleId, now))) return false;
+  const ff: Ff = { running: true, dayIndex: 0, days: 0, cancel: false };
+  forwards.set(circleId, ff);
+  try {
+    await updateMeanwhile((doc) => ({
+      ...doc,
+      circles: doc.circles.map((c) =>
+        c.id === circleId ? { ...c, clock: setTime(c.clock, circleNowMs(c.clock, now) + spanMs, now) } : c,
+      ),
+    }));
+  } catch (error) {
+    ff.running = false; // ponytail: the lease stays until it expires (30 min), release it here if that hurts
+    throw error;
+  }
+  const logger = getMeanwhileRuntime().logger;
+  void finish(circleId, now, { ff, spanMs, over })
+    .catch((error) =>
+      logger.warn(`[meanwhile] fast forward failed: ${error instanceof Error ? error.message : String(error)}`),
+    )
+    .finally(() => {
+      ff.running = false;
+    });
   return true;
 }
 

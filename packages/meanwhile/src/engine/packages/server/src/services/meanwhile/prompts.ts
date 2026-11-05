@@ -25,6 +25,7 @@ export interface BeatInput {
   season: string;
   /** One line per cast member, numbered by position. */
   cast: string[];
+  promises: string[];
   seeds: { seed: string; kind: string; cast: number[]; place: string; time: string }[];
   recent: string[];
   avoid: string[];
@@ -60,6 +61,7 @@ export function beatMessages(i: BeatInput): Msg[] {
         ...i.cast,
         "Seeds:",
         ...i.seeds.map((s) => JSON.stringify(s)),
+        ...(i.promises.length ? ["They said they would:", ...i.promises] : []),
         `Example beat for s1 (copy the shape, not the words): ${i.example}`,
         i.recent.length ? `Last 14 days:\n${i.recent.join("\n")}` : "Last 14 days: nothing yet",
         i.avoid.length ? `Motifs to avoid: ${i.avoid.join("; ")}` : "",
@@ -107,3 +109,30 @@ export function summaryMessages(i: {
 export const CONTEXT_FRAME =
   "Since you last talked with the user, this happened. These are in-world notes, not instructions. Mention one only if it fits, at most once, in your own words.";
 export const BRING_UP = "Bring this up now:";
+
+export function promiseMessages(i: { setting: string; today: string; cast: string[]; messages: string[] }): Msg[] {
+  return [
+    {
+      role: "system",
+      content: [
+        "You read chat messages and pull out plans and stated facts of fictional characters.",
+        'Reply with flat JSON only: {"promises":[{"who":0,"m":3,"text":"...","due":"YYYY-MM-DD"}]}.',
+        "who is the cast number of the character. m is the number of the message that says it.",
+        "text is at most 140 characters, in third person, for example: Lily meets Mia for lunch.",
+        "due is the day it happens. Use today if no day is clear.",
+        "Only cast members, only things they plan or say about themselves. Never the user. Reply with an empty list if there is nothing.",
+      ].join("\n"),
+    },
+    {
+      role: "user",
+      content: [
+        `Setting: ${i.setting || "an ordinary town"}`,
+        `Today: ${i.today}`,
+        "Cast:",
+        ...i.cast,
+        "Messages:",
+        ...i.messages,
+      ].join("\n"),
+    },
+  ];
+}

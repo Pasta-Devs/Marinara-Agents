@@ -1,9 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useState } from "react";
 import {
+  acceptEvent,
+  cancelFastForward,
   createCircle,
   deleteCircle,
+  editEvent,
+  fastForward,
   getHome,
+  getPromises,
   getTimeline,
   listChats,
   listCharacters,
@@ -11,13 +16,16 @@ import {
   listTextConnections,
   pickUp,
   pingTabOpened,
+  previewFastForward,
   runCircle,
   setCircleSpeed,
   setCircleTime,
   updateCircle,
+  vetoEvent,
   type Circle,
   type CircleFields,
   type NamedItem,
+  type Span,
 } from "./api.js";
 
 // One place for the copy, so it can move to a locale file later.
@@ -52,6 +60,27 @@ const COPY = {
   waiting: "Waiting for you",
   paused: "Paused: daily limit reached",
   confirmRemove: "Delete this Circle? This cannot be undone.",
+  accept: "Accept",
+  veto: "Veto",
+  editText: "Edit text",
+  ffTitle: "Fast forward",
+  ffHide: "Hide fast forward",
+  ffDays: "Days",
+  ffHours: "Hours",
+  ffExplain: "Time moves forward now. Each day gets one model call that writes what happened.",
+  ffCheck: "Check cost",
+  ffRun: "Run",
+  ffGo: "Go on anyway",
+  ffStop: "Stop after this day",
+  ffEstimate: (days: number, calls: number, left: number) =>
+    `${days} ${days === 1 ? "day" : "days"} with events. ${calls} model ${calls === 1 ? "call" : "calls"}. ${Math.max(0, left)} left today.`,
+  ffOver: (calls: number, left: number) => `This uses ${calls} of ${Math.max(0, left)} calls left today. Go on?`,
+  ffProgress: (done: number, total: number) => `Running: ${done} of ${total} days done.`,
+  promises: "Promises",
+  showPromises: "Show promises",
+  hidePromises: "Hide promises",
+  noPromises: "No promises yet.",
+  promiseState: { open: "waiting", kept: "kept", dropped: "dropped", stale: "out of date" } as Record<string, string>,
   loadFailed: "Could not load Circles.",
 };
 
@@ -381,6 +410,233 @@ function CircleForm({ circle, onDone }: { circle: Circle | null; onDone: () => v
   );
 }
 
+/** Accept, veto and edit for one event. Edit is only for notable and major events. */
+function EventActions({
+  circleId,
+  event,
+}: {
+  circleId: string;
+  event: { id: string; text: string; status: string; weight: string };
+}) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(event.text);
+  const change = useMutation({
+    mutationFn: (kind: "accept" | "veto" | "edit") =>
+      kind === "accept"
+        ? acceptEvent(circleId, event.id)
+        : kind === "veto"
+          ? vetoEvent(circleId, event.id)
+          : editEvent(circleId, event.id, text),
+    onSuccess: () => {
+      setEditing(false);
+      void queryClient.invalidateQueries({ queryKey: ["meanwhile"] });
+    },
+  });
+  return (
+    <div className="mw-field">
+      {editing ? (
+        <div className="mw-row">
+          <input
+            className="mw-input mw-grow"
+            aria-label={COPY.editText}
+            maxLength={140}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+          />
+          <button
+            type="button"
+            className="mw-btn mw-btn-primary"
+            disabled={change.isPending || !text.trim()}
+            onClick={() => change.mutate("edit")}
+          >
+            {COPY.save}
+          </button>
+          <button type="button" className="mw-btn" onClick={() => setEditing(false)}>
+            {COPY.cancel}
+          </button>
+        </div>
+      ) : (
+        <div className="mw-row">
+          {event.status === "proposed" ? (
+            <button
+              type="button"
+              className="mw-btn mw-btn-primary"
+              disabled={change.isPending}
+              onClick={() => change.mutate("accept")}
+            >
+              {COPY.accept}
+            </button>
+          ) : null}
+          <button type="button" className="mw-btn" disabled={change.isPending} onClick={() => change.mutate("veto")}>
+            {COPY.veto}
+          </button>
+          {event.weight === "notable" || event.weight === "major" ? (
+            <button
+              type="button"
+              className="mw-btn"
+              onClick={() => {
+                setText(event.text);
+                setEditing(true);
+              }}
+            >
+              {COPY.edit}
+            </button>
+          ) : null}
+        </div>
+      )}
+      {change.isError ? (
+        <span role="alert" className="mw-warn">
+          {errorText(change.error)}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/** Jump the Circle clock forward by days or hours. Shows the cost first, then progress. */
+function FastForwardPanel({ circle }: { circle: Circle }) {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [unit, setUnit] = useState<"days" | "hours">("days");
+  const [amount, setAmount] = useState(1);
+  const live = circle.status.fastForward;
+  // Poll faster while a run is live, so the progress moves.
+  useQuery({ queryKey: ["meanwhile", "circles"], queryFn: listCircles, refetchInterval: live.running ? 2000 : 15_000 });
+  const span: Span = unit === "days" ? { days: amount } : { hours: amount };
+  const refresh = () => void queryClient.invalidateQueries({ queryKey: ["meanwhile"] });
+  const estimate = useMutation({ mutationFn: () => previewFastForward(circle.id, span) });
+  const run = useMutation({
+    mutationFn: (over: boolean) => fastForward(circle.id, span, over),
+    onSuccess: () => {
+      estimate.reset();
+      refresh();
+    },
+  });
+  const stop = useMutation({ mutationFn: () => cancelFastForward(circle.id), onSuccess: refresh });
+  const max = unit === "days" ? 7 : 168;
+  const edited = () => estimate.reset();
+  const data = estimate.data;
+  return (
+    <div className="mw-field">
+      <button type="button" className="mw-btn" aria-expanded={open} onClick={() => setOpen(!open)}>
+        {open ? COPY.ffHide : COPY.ffTitle}
+      </button>
+      {open ? (
+        <div className="mw-field">
+          <div className="mw-muted">{COPY.ffExplain}</div>
+          <div className="mw-seg" role="group" aria-label={COPY.ffTitle}>
+            {(["days", "hours"] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                className={`mw-btn ${unit === value ? "mw-btn-on" : ""}`}
+                aria-pressed={unit === value}
+                onClick={() => {
+                  setUnit(value);
+                  setAmount(1);
+                  edited();
+                }}
+              >
+                {value === "days" ? COPY.ffDays : COPY.ffHours}
+              </button>
+            ))}
+            <input
+              className="mw-input"
+              type="number"
+              min={1}
+              max={max}
+              aria-label={unit === "days" ? COPY.ffDays : COPY.ffHours}
+              value={amount}
+              onChange={(e) => {
+                setAmount(Math.min(max, Math.max(1, Math.trunc(Number(e.target.value)) || 1)));
+                edited();
+              }}
+            />
+          </div>
+          {live.running ? (
+            <div className="mw-row">
+              <span className="mw-grow">{COPY.ffProgress(live.dayIndex, live.days)}</span>
+              <button type="button" className="mw-btn" disabled={stop.isPending} onClick={() => stop.mutate()}>
+                {COPY.ffStop}
+              </button>
+            </div>
+          ) : data ? (
+            <div className="mw-field">
+              <div className={data.overBudget ? "mw-warn" : "mw-muted"}>
+                {data.overBudget
+                  ? COPY.ffOver(data.calls, data.left)
+                  : COPY.ffEstimate(data.days, data.calls, data.left)}
+              </div>
+              <button
+                type="button"
+                className="mw-btn mw-btn-primary"
+                disabled={run.isPending || !circle.status.ready}
+                onClick={() => run.mutate(data.overBudget)}
+              >
+                {data.overBudget ? COPY.ffGo : COPY.ffRun}
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="mw-btn mw-btn-primary"
+              disabled={estimate.isPending || !circle.status.ready}
+              onClick={() => estimate.mutate()}
+            >
+              {COPY.ffCheck}
+            </button>
+          )}
+          {!circle.status.ready ? <span className="mw-muted">{COPY.needModel}</span> : null}
+          {estimate.isError || run.isError || stop.isError ? (
+            <span role="alert" className="mw-warn">
+              {errorText(estimate.error ?? run.error ?? stop.error)}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** What the characters said they would do in chat, and whether a beat kept it. Read only. */
+function PromisesPanel({ circle }: { circle: Circle }) {
+  const [open, setOpen] = useState(false);
+  const characters = useQuery({ queryKey: ["meanwhile", "characters"], queryFn: listCharacters });
+  const list = useQuery({
+    queryKey: ["meanwhile", "promises", circle.id],
+    queryFn: () => getPromises(circle.id),
+    enabled: open,
+    refetchInterval: 15_000,
+  });
+  const name = (id: string) => characters.data?.find((c) => c.id === id)?.name ?? "Someone";
+  const items = list.data?.promises ?? [];
+  return (
+    <div className="mw-field">
+      <button type="button" className="mw-btn" aria-expanded={open} onClick={() => setOpen(!open)}>
+        {open ? COPY.hidePromises : COPY.showPromises}
+      </button>
+      {open && list.isError ? (
+        <span role="alert" className="mw-warn">
+          {errorText(list.error)}
+        </span>
+      ) : null}
+      {open && list.data && items.length === 0 ? <div className="mw-muted">{COPY.noPromises}</div> : null}
+      {open
+        ? items.map((p) => (
+            <div key={p.id} className="mw-row mw-muted">
+              <span>{p.due}</span>
+              <span>
+                {name(p.characterId)}: {p.text}
+              </span>
+              <span className="mw-tag">{COPY.promiseState[p.status] ?? p.status}</span>
+            </div>
+          ))
+        : null}
+    </div>
+  );
+}
+
 /** Opens a chat in the Engine. The host passes it to the element; older hosts pass nothing. */
 type OpenChat = () => ((chatId: string) => void) | undefined;
 
@@ -406,8 +662,26 @@ function HomePanel({ circle, openChat }: { circle: Circle; openChat?: OpenChat }
     },
   });
   const hooks = home.data?.hooks ?? [];
+  const waiting = home.data?.waiting ?? [];
   return (
     <>
+      {waiting.length > 0 ? (
+        <div className="mw-field">
+          <span className="mw-label">{COPY.waiting}</span>
+          {waiting.map((w) => (
+            <div key={w.id} className="mw-field">
+              <div>{w.text}</div>
+              <div className="mw-muted">
+                {w.cast.map(name).join(" and ")} · {w.day}
+              </div>
+              <EventActions
+                circleId={circle.id}
+                event={{ id: w.id, text: w.text, status: "proposed", weight: "major" }}
+              />
+            </div>
+          ))}
+        </div>
+      ) : null}
       {hooks.length > 0 ? (
         <div className="mw-field">
           <span className="mw-label">{COPY.hooks}</span>
@@ -497,7 +771,14 @@ function CircleCard({ circle, onEdit, openChat }: { circle: Circle; onEdit: () =
     <div className="mw-card">
       <div className="mw-row">
         <div className="mw-grow">
-          <div className="mw-name">{circle.name}</div>
+          <div className="mw-name">
+            {circle.name}{" "}
+            {circle.waiting > 0 ? (
+              <span className="mw-tag">
+                {COPY.waiting} ({circle.waiting})
+              </span>
+            ) : null}
+          </div>
           <div className="mw-muted">{statusLine(circle)}</div>
           {circle.status.nextDueAt ? (
             <div className="mw-muted">
@@ -534,6 +815,8 @@ function CircleCard({ circle, onEdit, openChat }: { circle: Circle; onEdit: () =
         </span>
       ) : null}
       <HomePanel circle={circle} openChat={openChat} />
+      <FastForwardPanel circle={circle} />
+      <PromisesPanel circle={circle} />
       <TimelinePanel circle={circle} />
     </div>
   );
@@ -629,6 +912,7 @@ function TimelinePanel({ circle }: { circle: Circle }) {
                       <span>{e.time}</span>
                       <span>{e.text}</span>
                       {e.status === "proposed" ? <span className="mw-tag">{COPY.waiting}</span> : null}
+                      <EventActions circleId={circle.id} event={e} />
                     </div>
                   ))}
                 {circle.castIds
