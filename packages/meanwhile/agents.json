@@ -2,7 +2,7 @@
   {
     "id": "meanwhile",
     "name": "Meanwhile",
-    "description": "Circles of characters whose lives go on while you are away, on a clock you can speed up or set. This first slice has the Circle setup, the clock and the timer. It makes no model calls yet.",
+    "description": "Circles of characters whose lives go on while you are away, on a clock you can speed up or set. Each finished day gets a few short events, a diary line per character and hooks that the characters bring up in chat.",
     "author": "Pasta Devs",
     "phase": "pre_generation",
     "enabledByDefault": false,

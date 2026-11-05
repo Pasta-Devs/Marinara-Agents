@@ -3,11 +3,13 @@ import React, { useEffect, useState } from "react";
 import {
   createCircle,
   deleteCircle,
+  getHome,
   getTimeline,
   listChats,
   listCharacters,
   listCircles,
   listTextConnections,
+  pickUp,
   pingTabOpened,
   runCircle,
   setCircleSpeed,
@@ -39,6 +41,16 @@ const COPY = {
   save: "Save",
   cancel: "Cancel",
   remove: "Delete Circle",
+  hooks: "While you were away",
+  told: "told in a chat",
+  pickUp: "Pick up this thread",
+  noChat: "No linked chat has this character.",
+  openToContinue: (chat: string) => `Open ${chat} to continue.`,
+  showDiary: "Diary",
+  hideDiary: "Hide diary",
+  noDiary: "Nothing written yet.",
+  waiting: "Waiting for you",
+  paused: "Paused: daily limit reached",
   confirmRemove: "Delete this Circle? This cannot be undone.",
   loadFailed: "Could not load Circles.",
 };
@@ -58,6 +70,7 @@ function statusLine(circle: Circle) {
   const parts = [people(circle.castIds.length), `caught up to ${when(status.lastRunCircle, clock.timezone)}`];
   if (clock.speed === 0) parts.push("Paused");
   else if (clock.speed !== 1) parts.push(`x${clock.speed}`);
+  if (circle.status.paused) parts.push(COPY.paused);
   return parts.join(" · ");
 }
 
@@ -368,7 +381,112 @@ function CircleForm({ circle, onDone }: { circle: Circle | null; onDone: () => v
   );
 }
 
-function CircleCard({ circle, onEdit }: { circle: Circle; onEdit: () => void }) {
+/** Opens a chat in the Engine. The host passes it to the element; older hosts pass nothing. */
+type OpenChat = () => ((chatId: string) => void) | undefined;
+
+function HomePanel({ circle, openChat }: { circle: Circle; openChat?: OpenChat }) {
+  const queryClient = useQueryClient();
+  const [diary, setDiary] = useState(false);
+  const [note, setNote] = useState("");
+  const [chosen, setChosen] = useState<Record<string, string>>({});
+  const characters = useQuery({ queryKey: ["meanwhile", "characters"], queryFn: listCharacters });
+  const home = useQuery({
+    queryKey: ["meanwhile", "home", circle.id],
+    queryFn: () => getHome(circle.id),
+    refetchInterval: 15_000,
+  });
+  const name = (id: string) => characters.data?.find((c) => c.id === id)?.name ?? "Someone";
+  const pick = useMutation({
+    mutationFn: (v: { eventId: string; chat: NamedItem }) => pickUp(circle.id, v.eventId, v.chat.id).then(() => v.chat),
+    onSuccess: (chat) => {
+      void queryClient.invalidateQueries({ queryKey: ["meanwhile", "home", circle.id] });
+      const open = openChat?.();
+      if (open) open(chat.id);
+      else setNote(COPY.openToContinue(chat.name));
+    },
+  });
+  const hooks = home.data?.hooks ?? [];
+  return (
+    <>
+      {hooks.length > 0 ? (
+        <div className="mw-field">
+          <span className="mw-label">{COPY.hooks}</span>
+          {hooks.map((hook) => {
+            const key = `${hook.eventId}:${hook.characterId}`;
+            const chat = hook.chats.find((c) => c.id === chosen[key]) ?? hook.chats[0];
+            return (
+              <div key={key} className="mw-row">
+                <div className="mw-grow">
+                  <div>
+                    {name(hook.characterId)}: {hook.text}
+                  </div>
+                  <div className="mw-muted">
+                    {hook.day}
+                    {hook.told ? ` · ${COPY.told}` : ""}
+                  </div>
+                </div>
+                {hook.chats.length > 1 ? (
+                  <select
+                    className="mw-input"
+                    aria-label={COPY.pickUp}
+                    value={chat?.id}
+                    onChange={(e) => setChosen({ ...chosen, [key]: e.target.value })}
+                  >
+                    {hook.chats.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+                {chat ? (
+                  <button
+                    type="button"
+                    className="mw-btn"
+                    disabled={pick.isPending}
+                    onClick={() => pick.mutate({ eventId: hook.eventId, chat })}
+                  >
+                    {COPY.pickUp}
+                  </button>
+                ) : (
+                  <span className="mw-muted">{COPY.noChat}</span>
+                )}
+              </div>
+            );
+          })}
+          {note ? <div className="mw-muted">{note}</div> : null}
+          {pick.isError ? (
+            <span role="alert" className="mw-warn">
+              {errorText(pick.error)}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+      <button type="button" className="mw-btn" aria-expanded={diary} onClick={() => setDiary(!diary)}>
+        {diary ? COPY.hideDiary : COPY.showDiary}
+      </button>
+      {diary
+        ? circle.castIds.map((id) => {
+            const lines = home.data?.diary[id] ?? [];
+            return (
+              <div key={id} className="mw-field">
+                <span className="mw-label">{name(id)}</span>
+                {lines.length === 0 ? <div className="mw-muted">{COPY.noDiary}</div> : null}
+                {lines.map((line) => (
+                  <div key={line.id} className="mw-row mw-muted">
+                    <span>{line.day}</span>
+                    <span>{line.text}</span>
+                  </div>
+                ))}
+              </div>
+            );
+          })
+        : null}
+    </>
+  );
+}
+
+function CircleCard({ circle, onEdit, openChat }: { circle: Circle; onEdit: () => void; openChat?: OpenChat }) {
   const queryClient = useQueryClient();
   const run = useMutation({
     mutationFn: () => runCircle(circle.id),
@@ -415,6 +533,7 @@ function CircleCard({ circle, onEdit }: { circle: Circle; onEdit: () => void }) 
           {errorText(run.error)}
         </span>
       ) : null}
+      <HomePanel circle={circle} openChat={openChat} />
       <TimelinePanel circle={circle} />
     </div>
   );
@@ -503,10 +622,19 @@ function TimelinePanel({ circle }: { circle: Circle }) {
                       {e.text}
                     </div>
                   ))}
+                {events
+                  .filter((e) => (e.weight === "notable" || e.weight === "major") && (!who || e.cast.includes(who)))
+                  .map((e) => (
+                    <div key={e.id} className="mw-row">
+                      <span>{e.time}</span>
+                      <span>{e.text}</span>
+                      {e.status === "proposed" ? <span className="mw-tag">{COPY.waiting}</span> : null}
+                    </div>
+                  ))}
                 {circle.castIds
                   .filter((id) => !who || id === who)
                   .map((id) => {
-                    const lines = events.filter((e) => e.weight !== "summary" && e.cast.includes(id));
+                    const lines = events.filter((e) => e.weight === "routine" && e.cast.includes(id));
                     return lines.length ? (
                       <div key={id} className="mw-field">
                         <span className="mw-label">{name(id)}</span>
@@ -529,7 +657,7 @@ function TimelinePanel({ circle }: { circle: Circle }) {
   );
 }
 
-export function MeanwhileView() {
+export function MeanwhileView({ openChat }: { openChat?: OpenChat }) {
   const [editing, setEditing] = useState<string | "new" | null>(null);
   const queryClient = useQueryClient();
   const circles = useQuery({ queryKey: ["meanwhile", "circles"], queryFn: listCircles, refetchInterval: 15_000 });
@@ -564,7 +692,7 @@ export function MeanwhileView() {
         editing === circle.id ? (
           <CircleForm key={circle.id} circle={circle} onDone={done} />
         ) : (
-          <CircleCard key={circle.id} circle={circle} onEdit={() => setEditing(circle.id)} />
+          <CircleCard key={circle.id} circle={circle} onEdit={() => setEditing(circle.id)} openChat={openChat} />
         ),
       )}
       {!circles.isLoading && list.length === 0 && editing === null ? (

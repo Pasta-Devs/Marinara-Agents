@@ -16,6 +16,7 @@ import {
 } from "./clock.js";
 import { dueNow, readSchedules, runCircleNow, runDuePass } from "./scheduler.js";
 import { currentBlock } from "./routine.js";
+import { usageRow } from "./beats.js";
 import {
   applyCircleFields,
   circleFieldError,
@@ -46,10 +47,13 @@ async function inputError(src: Record<string, unknown>): Promise<string | null> 
   }
 }
 
-function statusOf(circle: Circle, mark: RunMark, now: number) {
+function statusOf(circle: Circle, mark: RunMark, now: number, calls: number) {
   const circleNow = circleNowMs(circle.clock, now);
   return {
     ready: circle.connectionId !== "",
+    callsToday: calls,
+    // The daily model-call limit is used up; the rest waits for the next real day.
+    paused: circle.connectionId !== "" && calls >= circle.budgetCallsPerDay,
     circleNow: new Date(circleNow).toISOString(),
     nowWall: msToWall(circleNow, circle.clock.timezone),
     lastRunCircle: circle.lastRunCircle,
@@ -77,7 +81,7 @@ function statusOf(circle: Circle, mark: RunMark, now: number) {
 
 const view = (doc: MeanwhileDocument, circle: Circle, now: number) => ({
   ...circle,
-  status: statusOf(circle, markOf(doc, circle.id), now),
+  status: statusOf(circle, markOf(doc, circle.id), now, usageRow(doc.usage, circle.id, now).calls),
 });
 
 export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
@@ -210,7 +214,12 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
       const oldest = shiftDay(today, 1 - days);
       const wall = (iso: string) => msToWall(Date.parse(iso), tz);
       const events = doc.events
-        .filter((e) => e.circleId === circle.id && e.status === "accepted" && wall(e.start).slice(0, 10) >= oldest)
+        .filter(
+          (e) =>
+            e.circleId === circle.id &&
+            (e.status === "accepted" || e.status === "proposed") &&
+            wall(e.start).slice(0, 10) >= oldest,
+        )
         .sort((a, b) => Date.parse(a.start) - Date.parse(b.start))
         .map((e) => ({
           ...e,
@@ -234,9 +243,72 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+  // Hook cards and diary lines per character, newest first.
+  app.get<{ Params: { id: string } }>("/circles/:id/home", async (request, reply) => {
+    const doc = await readMeanwhile();
+    const circle = find(doc, request.params.id);
+    if (!circle) return notFound(reply);
+    const tz = circle.clock.timezone;
+    const mine = doc.events
+      .filter((e) => e.circleId === circle.id && e.status === "accepted")
+      .sort((a, b) => Date.parse(b.start) - Date.parse(a.start));
+    const chats = circle.linkedChatIds.length
+      ? (await getMeanwhileRuntime().persistence.listChats()).filter((chat) => circle.linkedChatIds.includes(chat.id))
+      : [];
+    const hooks = mine
+      .filter((e) => e.hook)
+      .flatMap((e) =>
+        Object.entries(e.hook!).map(([characterId, text]) => ({
+          eventId: e.id,
+          characterId,
+          text,
+          day: msToWall(Date.parse(e.start), tz).slice(0, 10),
+          told: Object.keys(e.delivered ?? {}).length > 0,
+          chats: chats
+            .filter((chat) => chat.characterIds.includes(characterId))
+            .map((chat) => ({ id: chat.id, name: chat.name })),
+        })),
+      )
+      .slice(0, 12);
+    const diary: Record<string, { id: string; day: string; text: string }[]> = {};
+    for (const id of circle.castIds) {
+      diary[id] = mine
+        .filter((e) => e.diary?.[id])
+        .slice(0, 20)
+        .map((e) => ({ id: e.id, day: msToWall(Date.parse(e.start), tz).slice(0, 10), text: e.diary![id]! }));
+    }
+    return { hooks, diary };
+  });
+
+  // "Pick up this thread": the next generation in that chat brings the hook up.
+  app.post<{ Params: { id: string; eventId: string } }>("/circles/:id/hooks/:eventId/pick", async (request, reply) => {
+    const chatId = body(request).chatId;
+    const doc = await readMeanwhile();
+    const circle = find(doc, request.params.id);
+    if (!circle) return notFound(reply);
+    if (typeof chatId !== "string" || !circle.linkedChatIds.includes(chatId))
+      return reply.code(400).send({ error: "Pick a linked chat" });
+    const { eventId } = request.params;
+    if (!doc.events.some((e) => e.id === eventId && e.circleId === circle.id && e.status === "accepted" && e.hook)) {
+      return reply.code(404).send({ error: "Hook not found" });
+    }
+    await updateMeanwhile((d) => ({
+      ...d,
+      events: d.events.map((e) => {
+        if (e.id !== eventId) return e;
+        const delivered = { ...e.delivered };
+        delete delivered[chatId]; // it may go into the prompt once more
+        return { ...e, delivered, pickedUp: { ...e.pickedUp, [chatId]: Date.now() } };
+      }),
+    }));
+    return { ok: true };
+  });
+
   app.get<{ Params: { id: string } }>("/circles/:id/status", async (request, reply) => {
     const doc = await readMeanwhile();
     const circle = find(doc, request.params.id);
-    return circle ? statusOf(circle, markOf(doc, circle.id), Date.now()) : notFound(reply);
+    return circle
+      ? statusOf(circle, markOf(doc, circle.id), Date.now(), usageRow(doc.usage, circle.id, Date.now()).calls)
+      : notFound(reply);
   });
 };

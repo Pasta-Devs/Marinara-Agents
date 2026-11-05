@@ -42,7 +42,25 @@ export interface LifeEvent {
   source: "schedule" | "generated" | "chat" | "user" | "summary";
   status: "accepted" | "proposed" | "vetoed" | "stale";
   visibility: string;
+  /** Deck card the beat came from. */
+  seedId?: string;
+  anchors?: { chatId: string; messageId: string }[];
+  /** First-person diary lines and what each character wants to tell the user, by character id. */
+  diary?: Record<string, string>;
+  hook?: Record<string, string>;
+  /** Per chat id: when the hook went into that chat's prompt, and when the user asked to pick it up. */
+  delivered?: Record<string, number>;
+  pickedUp?: Record<string, number>;
   [key: string]: unknown;
+}
+
+/** Model calls and tokens for one Circle on one real (UTC) day. */
+export interface Usage {
+  realDay: string;
+  circleId: string;
+  calls: number;
+  promptTokens: number;
+  outputTokens: number;
 }
 
 export interface MeanwhileDocument {
@@ -54,6 +72,9 @@ export interface MeanwhileDocument {
   seeds: Seed[];
   /** "circleId:day" for each day already dealt, so a day with no seeds is not dealt again. */
   dealtDays: string[];
+  /** "circleId:day" for every Circle day whose beat call is done. */
+  beatDays: string[];
+  usage: Usage[];
 }
 
 let runtime: CapabilityRuntimeHost | null = null;
@@ -198,7 +219,17 @@ function normalizeMark(value: unknown): RunMark | null {
 }
 
 export function emptyMeanwhileDocument(): MeanwhileDocument {
-  return { schemaVersion: 1, circles: [], marks: [], events: [], placeTags: [], seeds: [], dealtDays: [] };
+  return {
+    schemaVersion: 1,
+    circles: [],
+    marks: [],
+    events: [],
+    placeTags: [],
+    seeds: [],
+    dealtDays: [],
+    beatDays: [],
+    usage: [],
+  };
 }
 
 export function normalizeMeanwhile(value: unknown): MeanwhileDocument {
@@ -219,6 +250,11 @@ export function normalizeMeanwhile(value: unknown): MeanwhileDocument {
       (t): t is PlaceTags => isRecord(t) && typeof t.characterId === "string" && isRecord(t.byActivity),
     ),
     dealtDays: list(value.dealtDays).filter((d): d is string => typeof d === "string"),
+    beatDays: list(value.beatDays).filter((d): d is string => typeof d === "string"),
+    usage: list(value.usage).filter(
+      (u): u is Usage =>
+        isRecord(u) && typeof u.realDay === "string" && typeof u.circleId === "string" && typeof u.calls === "number",
+    ),
     seeds: list(value.seeds).filter(
       (s): s is Seed =>
         isRecord(s) && typeof s.id === "string" && typeof s.circleId === "string" && Array.isArray(s.cast),

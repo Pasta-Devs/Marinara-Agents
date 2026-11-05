@@ -293,7 +293,7 @@
         "id": "meanwhile",
         "name": "Meanwhile",
         "version": "0.1.0",
-        "description": "Circles of characters whose lives go on while you are away, on a clock you can speed up or set. This first slice has the Circle setup, the clock and the timer. It makes no model calls yet. Install it, restart Marinara Engine when prompted, then open Home → Meanwhile.",
+        "description": "Circles of characters whose lives go on while you are away, on a clock you can speed up or set. Each finished day gets a few short events, a diary line per character and hooks that the characters bring up in chat. Install it, restart Marinara Engine when prompted, then open Home → Meanwhile.",
         "engine": {
           "min": "2.5.0",
           "maxExclusive": "4.0.0"
@@ -321,18 +321,18 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "0f1bd4fac6290c2be70577fb4d16b921b83825745622c6b5d34b04468b58ac73",
-            "bytes": 621
+            "sha256": "134278006012ab261d63e75017281b0696f2087c8e47fa9baa49e97e0cc3e92e",
+            "bytes": 646
           },
           {
             "path": "server.mjs",
-            "sha256": "9420934e04aba622866a9d0ff0037a3bb50ede4bf9ba496e0ad712093cde0c7e",
-            "bytes": 21740
+            "sha256": "e91c66bcc1de617e792299110b9f9da1526270ae51fdb534c983f2e165d133b2",
+            "bytes": 35844
           },
           {
             "path": "client.js",
-            "sha256": "b586c20226f992184f2374a02eec63d543efb972c42e476ff5f312cc1ad13a32",
-            "bytes": 18653
+            "sha256": "224c6f5a73b331793d42843df8e6b0d876f25c480b7ba6377963ef3d201747ef",
+            "bytes": 21363
           },
           {
             "path": "meanwhile-icon.png",
@@ -344,7 +344,8 @@
           "routes",
           "storage",
           "ui",
-          "chat-read"
+          "chat-read",
+          "prompt-context"
         ],
         "restartRequired": true
       },
@@ -352,8 +353,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/meanwhile.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/meanwhile-0.1.0.zip",
-        "sha256": "7460467f7495c987505e79a9c7a945bc38bb175f0433b1055de224c9c11d6e24",
-        "bytes": 43594
+        "sha256": "6783a7b228e84158504183b5e8d633c2fa91cf211913d0862ed4294e9106c43c",
+        "bytes": 60480
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#meanwhile"
     },

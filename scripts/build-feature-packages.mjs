@@ -716,11 +716,11 @@ const features = [
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Meanwhile",
     description:
-      "Circles of characters whose lives go on while you are away, on a clock you can speed up or set. This first slice has the Circle setup, the clock and the timer. It makes no model calls yet.",
+      "Circles of characters whose lives go on while you are away, on a clock you can speed up or set. Each finished day gets a few short events, a diary line per character and hooks that the characters bring up in chat.",
     category: "misc",
     kind: ["agent"],
     modes: ["conversation", "roleplay"],
-    permissions: ["routes", "storage", "ui", "chat-read"],
+    permissions: ["routes", "storage", "ui", "chat-read", "prompt-context"],
     serverImport: "packages/server/src/services/meanwhile/server-entry.ts",
     serverEntry: true,
     clientImport: "packages/client/src/features/meanwhile/client-entry.tsx",

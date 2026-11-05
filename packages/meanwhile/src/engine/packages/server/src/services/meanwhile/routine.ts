@@ -8,11 +8,13 @@ export interface PlaceTags {
   characterId: string;
   scheduleHash: string;
   byActivity: Record<string, string>;
+  /** The model was asked about the unknown places of this schedule once. */
+  asked?: boolean;
 }
 
-const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
-const at = (v: unknown, key: string): unknown => (isRecord(v) ? v[key] : undefined);
-const json = (v: unknown): unknown => {
+export const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+export const at = (v: unknown, key: string): unknown => (isRecord(v) ? v[key] : undefined);
+export const json = (v: unknown): unknown => {
   if (typeof v !== "string") return v;
   try {
     return JSON.parse(v);
@@ -20,6 +22,20 @@ const json = (v: unknown): unknown => {
     return null;
   }
 };
+
+/** Text of a long-absence summary until the model fills it. */
+export const SUMMARY_PLACEHOLDER = "Time passed.";
+
+/** Name and a one-line personality from a character card. */
+export function cardInfo(card: unknown): { name: string; about: string } {
+  const parsed = json(card);
+  const data = at(parsed, "data") ?? parsed;
+  const text = (v: unknown) => (typeof v === "string" ? v.trim().replace(/\s+/g, " ") : "");
+  return {
+    name: text(at(data, "name")) || "Someone",
+    about: (text(at(data, "personality")) || text(at(data, "description"))).slice(0, 100),
+  };
+}
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 // Characters without a schedule still live: sleep, day, evening.
@@ -123,6 +139,8 @@ export function planLife(input: {
   seeds: readonly Seed[];
   haveIds: ReadonlySet<string>;
   dealtDays: ReadonlySet<string>; // "circleId:day" for every day already dealt, even with zero seeds
+  /** Characters with a major event waiting for the user: routine only, no new seeds. */
+  holdIds?: ReadonlySet<string>;
   now: number;
 }): { events: LifeEvent[]; seeds: Seed[]; tags: PlaceTags[]; dealtDays: string[] } {
   const { circle, window } = input;
@@ -147,7 +165,7 @@ export function planLife(input: {
         cast: circle.castIds,
         kind: "summary",
         weight: "summary",
-        text: "Time passed.",
+        text: SUMMARY_PLACEHOLDER,
         source: "summary",
         status: "accepted",
         visibility: "circle",
@@ -196,7 +214,8 @@ export function planLife(input: {
     const marker = `${circle.id}:${day}`;
     if (day < firstDay || input.dealtDays.has(marker) || known.some((s) => s.circleId === circle.id && s.day === day))
       continue;
-    const cards = dealDay({ circle, day, blocks: byChar, recent: known });
+    const open = Object.fromEntries(Object.entries(byChar).filter(([id]) => !input.holdIds?.has(id)));
+    const cards = dealDay({ circle, day, blocks: open, recent: known });
     known.push(...cards);
     dealt.push(...cards);
     dealtDays.push(marker);

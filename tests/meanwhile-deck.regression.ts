@@ -156,6 +156,9 @@ async function main() {
   let onRead: (() => Promise<void>) | null = null;
   const docs = new Map<string, any>();
   configureMeanwhileRuntime({
+    // The model answers {}: no places, no summary text, no beats. The routine still runs.
+    languageModels: { resolve: async () => ({ chatComplete: async () => ({ content: "{}", usage: {} }) }) },
+    json: { parseJsonish: (raw: string) => JSON.parse(raw) },
     logger: { warn: () => undefined },
     resources: {
       listCharacters: async () => {
