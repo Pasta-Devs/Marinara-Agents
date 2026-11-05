@@ -26,7 +26,7 @@ import { addToCast, readPerson, Sheet, type Cast, type CastPerson } from "./cast
 import { setAdult } from "./core/adult.js";
 import { setRule } from "./core/authority.js";
 import { normalizeKit } from "./core/kits/normalize.js";
-import { openLayerNow } from "./core/layers.js";
+import { dial as layerDial, openLayerNow } from "./core/layers.js";
 import { setMutator } from "./core/mutators.js";
 import { STORY_ROLES } from "./core/storyteller.js";
 import { startSystems } from "./core/blocks.js";
@@ -587,7 +587,7 @@ function prepare(
       return {
         paths: ["layers", "threads", "nextId", "rng", "relations"],
         go: () => {
-          const was = g.layers?.[layer] ?? 50;
+          const was = layerDial(g, layer);
           g.layers = { drama: 50, romance: 50, ...g.layers, [layer]: dial };
           if (was === 0 && dial > 0) openLayerNow(g, layer);
         },

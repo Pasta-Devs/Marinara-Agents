@@ -30,6 +30,7 @@ import { placeKitOf } from "./core/kits/index.js";
 import type { PlaceKit } from "./core/kits/types.js";
 import { BLUEPRINTS, choices, dueBig, finishBig, settleBig } from "./core/bigscenes.js";
 import { addTrust } from "./core/run.js";
+import { finishOutside } from "./core/outside.js";
 import { layerDials } from "./core/layers.js";
 import { silentBoss } from "./core/mutators.js";
 import { METERS, type Mode, type Thread } from "./core/types.js";
@@ -103,6 +104,7 @@ export function kitView(r: { kitId: string; kit?: PlaceKit }, cast?: Cast) {
       voiceLines: p.voice.phrases,
     })),
     rooms: k.rooms.map(({ id, name, text, kind }) => ({ id, name, text, kind })),
+    groups: k.groups.map(({ id, name }) => ({ id, name })), // T13
     letters: k.guidedLetters,
   };
 }
@@ -148,7 +150,7 @@ export function createGame(store: RunStore, getModel: () => Promise<ModelCall | 
     const s: SceneText = {
       blueprint,
       title: plan.title(kit),
-      room: plan.room(kit),
+      room: plan.room(kit, thread),
       people: plan.people(kit, game, thread),
       parts: [],
       total: plan.goals.length,
@@ -265,7 +267,10 @@ export function createGame(store: RunStore, getModel: () => Promise<ModelCall | 
           s.done = true;
           if (s.blueprint === "arrival")
             s.outcome = `Your first hour at ${kit.name} is over. The letters are in the drawer.`;
-          else if (sceneId.startsWith("big-")) {
+          else if (sceneId.startsWith("out-")) {
+            game = structuredClone(game);
+            s.outcome = finishOutside(game, s);
+          } else if (sceneId.startsWith("big-")) {
             game = structuredClone(game);
             s.outcome = finishBig(game, sceneId.slice(4));
           } else {
@@ -430,6 +435,7 @@ export function createGame(store: RunStore, getModel: () => Promise<ModelCall | 
           scene: sceneId,
         };
       }),
+    openScene, // T14: outside.ts opens its own scenes
     bigDecline: (id: unknown, body: unknown) =>
       act(id, body, Base, "idle", async (run) => {
         const game = structuredClone(run.game);

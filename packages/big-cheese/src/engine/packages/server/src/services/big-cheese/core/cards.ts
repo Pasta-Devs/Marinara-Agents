@@ -1,5 +1,6 @@
 import { pick, roll } from "./rng.js";
 import { stancePower } from "./authority.js";
+import { logStance, trustWeight } from "./culture.js";
 import { addTrust, applyDelta, newId, pure, spendHour } from "./run.js";
 import { FOLLOW, K, effect, offer, trustChange } from "./stances.js";
 import { severityCuts, morning } from "./storyteller.js";
@@ -64,7 +65,8 @@ export function answerCard(s: Run, id: string, stance: string, promises: Paramet
   spendHour(s);
   s.inbox.splice(i, 1);
   s.meters = applyDelta(s.meters, effect(c, stance), DIFFICULTY_FACTOR[s.difficulty]);
-  addTrust(s, c.asker, trustChange(stance, c.severity));
+  addTrust(s, c.asker, Math.round(trustChange(stance, c.severity) * trustWeight(s.culture, stance)));
+  logStance(s, stance);
   stancePower(s, stance, c.severity); // T7: Fear and Love in absolute kits
   const mem = s.people[c.asker]?.memories;
   mem?.push({ week: s.clock.week, about: c.id, thread: c.thread, stance, weight: 1 });

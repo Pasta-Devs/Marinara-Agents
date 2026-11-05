@@ -36,6 +36,7 @@ const LAYER_NOTES: Record<string, string> = {
   press: "Press and gossip: the local paper, rumours and viral moments follow the boss.",
   rivals: "Rivals: a rival boss with moles and sabotage works against this place.",
   family: "Family and home: the boss has a home life, and evenings with family clash with work.",
+  politics: "Politics: elections, campaigns and outside laws. Staff pick who speaks for them.",
 };
 export const layerNotes = (kit: PlaceKit, d?: Record<string, number>) =>
   Object.entries(LAYER_NOTES)
@@ -524,6 +525,7 @@ export interface GrapevineBatchInput {
   kit: PlaceKit;
   rng: number;
   facts: { person: string; text: string }[]; // the day's moments, picked by the code
+  planted?: { person: string; text: string }; // T13: the boss's own rumour, told first
 }
 export interface GrapevineBatchOutput {
   lines: { source: string; line: string }[];
@@ -534,7 +536,7 @@ const grapevineBatch: Task<GrapevineBatchInput, GrapevineBatchOutput> = {
   prompt: (i) =>
     msgs(
       i.kit,
-      `Turn the day's moments into 3 to 6 rumours the staff pass on. "source" is the person who tells it, from the list. Rumours stay close to the facts and add no new facts. Shape: {"lines":[{"source":"","line":""}]}\nMoments:\n${i.facts.map((f) => `- ${f.person}: ${f.text}`).join("\n")}\nVoices:\n${voiceSheet(
+      `Turn the day's moments into 3 to 6 rumours the staff pass on. "source" is the person who tells it, from the list. Rumours stay close to the facts and add no new facts.${i.planted ? ` The boss planted this rumour, so tell it first and keep its meaning: ${i.planted.person}: ${i.planted.text}.` : ""} Shape: {"lines":[{"source":"","line":""}]}\nMoments:\n${i.facts.map((f) => `- ${f.person}: ${f.text}`).join("\n")}\nVoices:\n${voiceSheet(
         i.kit,
         i.kit.people.map((p) => p.id),
       )}`,
@@ -542,11 +544,15 @@ const grapevineBatch: Task<GrapevineBatchInput, GrapevineBatchOutput> = {
     ),
   parse(raw, i) {
     const lines = list(obj(raw).lines, Math.min(3, i.facts.length), 6);
+    const out = lines.map((l) => {
+      const x = obj(l);
+      return { source: person(i.kit, x.source).id, line: words(x.line, 3, 160, "line") };
+    });
+    // T13: the planted rumour always leads, in the model's words when it kept the starter
+    const p = i.planted;
     return {
-      lines: lines.map((l) => {
-        const x = obj(l);
-        return { source: person(i.kit, x.source).id, line: words(x.line, 3, 160, "line") };
-      }),
+      lines:
+        p && !out.some((l) => l.source === p.person) ? [{ source: p.person, line: p.text }, ...out].slice(0, 6) : out,
     };
   },
   lite: (i) => ({ lines: i.facts.slice(0, 6).map((f) => ({ source: f.person, line: f.text })) }),

@@ -8,6 +8,7 @@ import { K } from "./stances.js";
 import { closeThread, openStory, openThread } from "./threads.js";
 import { bookBigScene } from "./bigscenes.js";
 import { adultSeeds } from "./adult.js";
+import { politicsSeeds } from "./politics.js";
 import type { Meter, Run, Thread } from "./types.js";
 
 const LAYERS = [
@@ -26,8 +27,9 @@ const LAYERS = [
 type Layer = (typeof LAYERS)[number];
 const WEEKLY = 0.6; // chance per Monday at dial 100, scales down with the dial
 
-/** The dial for a layer, 0-100. A run without one uses 50. */
-export const dial = (s: Run, l: Layer) => s.layers?.[l] ?? 50;
+/** The dial for a layer, 0-100. A run without one uses 50, but the opt-in M4 layers use 0. */
+const OPT_IN: readonly Layer[] = ["crime", "politics", "mystery", "horror", "legacy", "strange"];
+export const dial = (s: Run, l: Layer) => s.layers?.[l] ?? (OPT_IN.includes(l) ? 0 : 50);
 
 /** Dials of every layer, for the prompt parts (ai/tasks.ts layerNotes). */
 export const layerDials = (s: Run): Record<string, number> => Object.fromEntries(LAYERS.map((l) => [l, dial(s, l)]));
@@ -60,7 +62,11 @@ const SEEDS: Record<Layer, Seed[]> = {
     { title: "The rival sabotages a delivery", need: "output" },
   ],
   crime: [],
-  politics: [],
+  politics: [
+    { title: "Two people want the same seat", need: "standing", kind: "rival" },
+    { title: "A group asks for a say in the rules", need: "standing" },
+    { title: "A whisper about a vote goes round", need: "people" },
+  ],
   mystery: [],
   horror: [],
   legacy: [],
@@ -118,6 +124,7 @@ export function openLayerNow(s: Run, l: Layer) {
 /** Monday: a dial at 0 opens nothing; a higher dial opens a pair thread more often. One open thread per layer. */
 export function layerSeeds(s: Run, cap: number) {
   adultSeeds(s); // no-op unless the adult module is on
+  politicsSeeds(s); // T5: this term's election
   // Rivals: once a term, in the last week of the term, the rival calls a showdown (a 3-severity story).
   if (dial(s, "rivals") > 0 && s.clock.week === WEEKS - 1) {
     const ids = Object.keys(s.people).filter((id) => s.people[id]!.status === "active");

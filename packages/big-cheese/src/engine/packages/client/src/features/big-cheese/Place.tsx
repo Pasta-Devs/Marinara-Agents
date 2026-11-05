@@ -6,6 +6,8 @@ import { useTranslation } from "react-i18next";
 import { Face, nameOf, type Ctx } from "./parts";
 import { Ticker } from "./Ticker";
 import { Adult } from "./Adult";
+import { Culture } from "./Culture";
+import { Trip, Walk } from "./Outside";
 
 // A room's condition shows as a word, never a number.
 const STATES = [
@@ -79,6 +81,7 @@ export function Place({ ctx }: { ctx: Ctx }) {
         >
           {t("ui.bigCheese.place.visit", { count: 1 })}
         </button>
+        <Walk ctx={ctx} room={open.id} here={here} />
         {heard.length > 0 && (
           <section className="bc-section" aria-labelledby="bc-overheard">
             <h2 id="bc-overheard" className="bc-subhead">
@@ -126,6 +129,24 @@ export function Place({ ctx }: { ctx: Ctx }) {
                   </span>
                 </li>
               );
+            // T2: a hidden room stays locked until its key is in the drawer.
+            if (room.kind === "hidden" && !run.game.openedRooms?.includes(room.id))
+              return (
+                <li key={room.id} className="bc-row bc-row-flat">
+                  <span className="bc-row-text">
+                    <span className="bc-row-title">{room.name}</span>
+                    <span className="bc-muted">{t("ui.bigCheese.place.locked")}</span>
+                  </span>
+                  <button
+                    type="button"
+                    className="bc-btn"
+                    disabled={busy}
+                    onClick={() => void act(`rooms/${room.id}/open`)}
+                  >
+                    {t("ui.bigCheese.place.openRoom")}
+                  </button>
+                </li>
+              );
             return (
               <li key={room.id}>
                 <button type="button" className="bc-row" onClick={() => setRoomId(room.id)}>
@@ -147,6 +168,12 @@ export function Place({ ctx }: { ctx: Ctx }) {
               </li>
             );
           })}
+          <li>
+            <Culture ctx={ctx} />
+          </li>
+          <li>
+            <Trip ctx={ctx} />
+          </li>
           <li>
             <Adult ctx={ctx} />
           </li>

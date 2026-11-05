@@ -15,7 +15,10 @@ export function HearingPrep({ ctx }: { ctx: Ctx }) {
   const today = clock.week === hearing.week && clock.day >= hearing.day;
   const members = new Set(hearingBody.map((member) => member.id));
   const witnesses = kit.people.filter((who) => !members.has(who.id) && !hearing.witnesses.includes(who.id));
-  const won = closed.filter((thread) => thread.state === "won");
+  const won = [
+    ...closed.filter((thread) => thread.state === "won"),
+    ...(run.game.things?.drawer ?? []).filter((t) => t.kind === "evidence"), // drawer evidence is accepted too
+  ];
   const full = (list: string[]) => list.length >= 2;
 
   return (
@@ -158,6 +161,10 @@ export function MeetingScreen({ ctx }: { ctx: Ctx }) {
   const items = m?.items ?? [];
   const current: MeetingItem | undefined = m && !m.done ? items.find((i) => i.chosen === undefined) : undefined;
   const closed = items.filter((i) => i.chosen !== undefined);
+  // T5: an election item shows its candidates (the server keeps the backed one in `stakes`).
+  const thread = current?.thread ? run.game.threads[current.thread] : undefined;
+  const election = thread?.layer === "politics" && thread.stakes.startsWith("election") ? thread : undefined;
+  const backed = election?.stakes.slice(9);
 
   const onOwn = (event: FormEvent) => {
     event.preventDefault();
@@ -222,6 +229,32 @@ export function MeetingScreen({ ctx }: { ctx: Ctx }) {
               against: m.people.filter((id) => sideOf(current.base[id] ?? 0) === "against").length,
             })}
           </p>
+          {election && (
+            <section className="bc-section" aria-labelledby="bc-candidates">
+              <h3 id="bc-candidates" className="bc-subhead">
+                {t("ui.bigCheese.politics.candidates")}
+              </h3>
+              {backed && <p className="bc-muted">{t("ui.bigCheese.politics.backed", { name: nameOf(kit, backed) })}</p>}
+              <ul className="bc-list">
+                {election.people.map((id) => (
+                  <li key={id} className="bc-row bc-row-flat">
+                    <Face kit={kit} id={id} size="s" />
+                    <span className="bc-row-text bc-row-title">{nameOf(kit, id)}</span>
+                    {!backed && (
+                      <button
+                        type="button"
+                        className="bc-btn"
+                        disabled={busy}
+                        onClick={() => void act("politics/back", { thread: election.id, person: id })}
+                      >
+                        {t("ui.bigCheese.politics.back", { name: nameOf(kit, id) })}
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           {current.suggestions.length > 0 ? (
             <div className="bc-choice">
               <h3 className="bc-subhead">{t("ui.bigCheese.scene.choose")}</h3>

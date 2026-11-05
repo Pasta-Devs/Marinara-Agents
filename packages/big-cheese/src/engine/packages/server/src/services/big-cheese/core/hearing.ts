@@ -33,7 +33,8 @@ export function addWitness(s: Run, id: string) {
 // ponytail: only won threads count as evidence; known secrets and fixed meters (design.md §7.4) come with M2.
 export function addEvidence(s: Run, threadId: string) {
   const h = need(s);
-  if (!s.closed.some((c) => c.id === threadId && c.state === "won")) throw new Error("Not a won thread");
+  const held = s.things.drawer.some((t) => t.id === threadId && t.kind === "evidence"); // T2: drawer evidence
+  if (!held && !s.closed.some((c) => c.id === threadId && c.state === "won")) throw new Error("Not a won thread");
   if (h.evidence.includes(threadId) || h.evidence.length >= 2) throw new Error("Cannot use this evidence");
   spendHour(s);
   h.evidence.push(threadId);

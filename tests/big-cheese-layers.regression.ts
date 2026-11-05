@@ -30,6 +30,13 @@ test("dial 0 opens no layer thread", () => {
   }
 });
 
+test("a missing dial is 50 for M1-M3 layers and 0 for the opt-in M4 layers", () => {
+  const s = fresh(1, {});
+  assert.equal(core.dial(s, "drama"), 50);
+  for (const l of ["crime", "politics", "mystery", "horror", "legacy", "strange"] as const)
+    assert.equal(core.dial(s, l), 0);
+});
+
 test("dial 100 opens drama and romance threads between active people", () => {
   const seen = year(fresh(4));
   const tags = new Set(seen.values());
@@ -63,7 +70,7 @@ test("press, rivals and family: dial 0 opens nothing, dial 100 opens their threa
     const seen = year(fresh(seed, off));
     assert.equal([...seen.values()].filter(Boolean).length, 0);
   }
-  const tags = new Set(year(fresh(4, { ...off, press: 100, rivals: 100, family: 100 })).values());
+  const tags = new Set(year(fresh(7, { ...off, press: 100, rivals: 100, family: 100 })).values());
   assert.ok(tags.has("press") && tags.has("rivals") && tags.has("family"));
 });
 

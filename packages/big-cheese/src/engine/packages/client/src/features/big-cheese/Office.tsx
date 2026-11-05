@@ -4,6 +4,7 @@
 import { useTranslation } from "react-i18next";
 import type { Meter } from "./api";
 import { WeekStrip } from "./WeekStrip";
+import { Invitation } from "./Outside";
 import { dayKey, Face, nameOf, threadTitle, type Ctx } from "./parts";
 
 const METERS: Meter[] = ["money", "output", "people", "standing"];
@@ -121,7 +122,7 @@ export function Office({ ctx, canStart }: { ctx: Ctx; canStart: boolean }) {
                       : [
                           thread.people.map((id) => nameOf(kit, id)).join(", "),
                           t(`ui.bigCheese.story.pressure.${thread.clock.pressure}`, { defaultValue: "" }),
-                          thread.stakes,
+                          thread.stakes?.startsWith("election") ? undefined : thread.stakes,
                           thread.system !== undefined && fixtureLine(t, run.game.systems?.[thread.system]?.fixtures),
                         ]
                           .filter(Boolean)
@@ -197,6 +198,8 @@ export function Office({ ctx, canStart }: { ctx: Ctx; canStart: boolean }) {
           {t("ui.bigCheese.project.start")}
         </button>
       )}
+
+      <Invitation ctx={ctx} />
 
       {hours && (
         <section className="bc-section" aria-labelledby="bc-office-hours">

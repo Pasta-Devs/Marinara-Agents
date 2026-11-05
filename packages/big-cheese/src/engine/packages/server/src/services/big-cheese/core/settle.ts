@@ -1,5 +1,6 @@
 import { ageCards } from "./cards.js";
 import { weeklyAuthority } from "./authority.js";
+import { weeklyCulture } from "./culture.js";
 import { WEEKS, dayIndex, isFriday, nextDay, term } from "./clock.js";
 import { callHearing, holdHearing } from "./hearing.js";
 import { termWeeks } from "./mutators.js";
@@ -8,9 +9,11 @@ import { applyDelta, clamp, pure } from "./run.js";
 import { checkRevolt } from "./storyteller.js";
 import { sulkAdvisors } from "./advisors.js";
 import { bossWeek } from "./boss.js";
+import { eyesWeek } from "./eyes.js";
 import { endTerm } from "./term.js";
 import { checkPromises } from "./threads.js";
 import { METERS, WISH_POINTS_PER_TERM } from "./types.js";
+import { weekThings } from "./things.js";
 import type { PlaceKit } from "./kits/types.js";
 import type { Run } from "./types.js";
 
@@ -26,7 +29,9 @@ export function settleWeek(s: Run, before = { ...s.meters }, kit?: PlaceKit) {
   s.meters = applyDelta(s.meters, { money: income });
   for (const k of METERS) s.meters[k] = clamp(Math.round(s.meters[k] + (50 - s.meters[k]) * DRIFT - WEAR));
   for (const e of s.extras) if (e.value < 20) s.meters[e.main] = clamp(s.meters[e.main] - 2);
+  weeklyCulture(s);
   if (kit) weeklyAuthority(s, kit); // T7: house rules, the absolute rule
+  if (kit) eyesWeek(s, kit); // T13: informants and rumours
   bossWeek(s);
   s.report = { week: s.clock.week, income, before, after: { ...s.meters } };
   s.meterHistory.push({ week: s.clock.week, ...s.meters });
@@ -34,6 +39,7 @@ export function settleWeek(s: Run, before = { ...s.meters }, kit?: PlaceKit) {
   const bad = METERS.find((k) => s.low[k] >= 2);
   if (bad) callHearing(s, bad);
   checkRevolt(s);
+  weekThings(s, kit); // T2: wear, secrets
   sulkAdvisors(s); // T11
 }
 

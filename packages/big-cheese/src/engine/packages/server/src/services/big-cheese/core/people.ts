@@ -27,7 +27,9 @@ function roomFor(s: Run, kit: PlaceKit, id: string, at: Slot): string {
   const routine = (kit.people.find((x) => x.id === id)?.routine ?? p.routine)?.[at] ?? "home";
   if (p.status !== "active" || p.mood === "sick" || p.mood === "away" || routine === "home") return "home";
   if (p.stress > STRESSED) return kit.rooms.find((r) => r.kind === "social")?.id ?? routine;
-  const open = kit.rooms.filter((r) => r.kind === "work" || r.kind === "social" || r.kind === "outside");
+  const open = kit.rooms.filter(
+    (r) => r.kind === "work" || r.kind === "social" || r.kind === "outside" || s.openedRooms.includes(r.id), // T2: opened hidden rooms
+  );
   return dice(s, id, at) < WANDER ? open[Math.floor(dice(s, `${id}w`, at) * open.length)].id : routine;
 }
 
@@ -66,7 +68,7 @@ export function overheard(s: Run, room: string) {
   return { people: [...people], pairs };
 }
 
-const PAIR_FACTS: Partial<Record<Relation["kind"], string>> = {
+export const PAIR_FACTS: Partial<Record<Relation["kind"], string>> = {
   friend: "{a} and {b} are good friends.",
   rival: "{a} and {b} compete for everything.",
   couple: "{a} and {b} are together.",

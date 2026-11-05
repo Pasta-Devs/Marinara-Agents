@@ -1,5 +1,6 @@
 import type { PlaceKit } from "./kits/types.js";
 import { proposalVote } from "./authority.js";
+import { electionReady, electionVote, isElection, lawArrives } from "./politics.js";
 import { addTrust, applyDelta, pure, spendHour } from "./run.js";
 import { roll } from "./rng.js";
 import { effect, offer, type Stance } from "./stances.js";
@@ -91,10 +92,13 @@ function agenda(s: Run, kind: string, kit: PlaceKit): Omit<MeetingItem, "offer" 
     items.push({ id: "deputy", title: "The deputy's challenge", deputy: true, need: "standing", severity: 2 });
   }
   const open = Object.values(s.threads)
-    .filter((t) => t.state === "open" && t.kind !== "guided" && t.kind !== "hearing" && t.kind !== "promise")
+    .filter(
+      (t) =>
+        t.state === "open" && t.kind !== "guided" && t.kind !== "hearing" && t.kind !== "promise" && electionReady(t),
+    )
     .sort(
       (a, b) =>
-        Number(!!b.rule) - Number(!!a.rule) || // T7: a rule proposal goes first
+        Number(!!b.rule || isElection(b)) - Number(!!a.rule || isElection(a)) || // T7: a rule proposal goes first
         Number(b.beats.some((x) => x.type === "meeting_item")) - Number(a.beats.some((x) => x.type === "meeting_item")),
     );
   for (const t of open) {
@@ -121,6 +125,7 @@ export function startMeeting(s: Run, kind: string, kit: PlaceKit) {
     throw new Error("Not a meeting you can call");
   if (s.meeting && !s.meeting.done) throw new Error("A meeting is already open");
   spendHour(s);
+  lawArrives(s, kit); // T5
   const def = MEETINGS[kind]!;
   const items = agenda(s, kind, kit);
   const want = def.size[0] + Math.floor(roll(s) * (def.size[1] - def.size[0] + 1));
@@ -161,6 +166,7 @@ export function meetingChoice(s: Run, stance: string, kit: PlaceKit) {
   item.scores = Object.fromEntries(m.people.map((id) => [id, support(s, id, fit(s, id, stance, kit), faction(s, id))]));
   item.passed = passes(m.mode, Object.values(item.scores));
   proposalVote(s, kit, item.thread, item.passed); // T7
+  electionVote(s, item.thread, item.passed); // T5
   for (const id of m.people) {
     const v = item.scores[id]!;
     addTrust(s, id, Math.sign(v));

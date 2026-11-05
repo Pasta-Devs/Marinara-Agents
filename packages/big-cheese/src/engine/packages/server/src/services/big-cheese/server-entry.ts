@@ -14,10 +14,15 @@ import { createKits } from "./kits.js";
 import { createDraft } from "./draft.js";
 import { createMeetings } from "./meetings.js";
 import { createRules } from "./rules.js";
+import { createPolitics } from "./politics.js";
+import { createCulture } from "./culture.js";
 import { createAdult } from "./adult.js";
+import { createThings } from "./things.js"; // T2
 import { createWish } from "./wish.js";
+import { createEyes } from "./eyes.js"; // T13
 import { createExport } from "./export.js";
 import { createPlace } from "./place.js";
+import { createOutside } from "./outside.js"; // T14
 import { BigCheeseError, CreateRunBody, createRunStore, type RunStore } from "./store.js";
 
 interface Request {
@@ -60,11 +65,16 @@ export async function activate({ api }: ActivationContext) {
   );
   const game = createGame(store, () => engineModel(runtime, null).catch(() => undefined));
   const place = createPlace(store, () => engineModel(runtime, null).catch(() => undefined));
+  const outside = createOutside(store, () => engineModel(runtime, null).catch(() => undefined), game.openScene);
   const advance = createAdvance(store, game, board, () => engineModel(runtime, null).catch(() => undefined));
   const advisors = createAdvisors(store);
   const meetings = createMeetings(store, () => engineModel(runtime, null).catch(() => undefined));
   const rules = createRules(store);
+  const politics = createPolitics(store);
+  const culture = createCulture(store);
   const adult = createAdult(store);
+  const things = createThings(store); // T2
+  const eyes = createEyes(store, () => engineModel(runtime, null).catch(() => undefined)); // T13
   const wish = createWish(store, () => engineModel(runtime, null).catch(() => undefined));
   const exporter = createExport(store, runtime);
   const kits = createKits(runtime.persistence.documents, () => engineModel(runtime, null).catch(() => undefined));
@@ -221,6 +231,14 @@ export async function activate({ api }: ActivationContext) {
       );
       action("rooms/refresh", (r) => place.refresh(runId(r), r.body));
       action("rooms/:room/visit", (r) => place.visit(runId(r), param(r, "room"), r.body));
+      // T14: out of the office
+      router.get(
+        "/runs/:id/outside",
+        handle((r) => outside.state(runId(r))),
+      );
+      action("walk", (r) => outside.walk(runId(r), r.body));
+      action("trip", (r) => outside.trip(runId(r), r.body));
+      action("after-work", (r) => outside.afterWork(runId(r), r.body));
       // T8: viewer mode and skip ahead (design.md sections 11 and 12).
       action("advance", (r) => advance(runId(r), r.body));
       // T11: advisors and office hours.
@@ -236,6 +254,10 @@ export async function activate({ api }: ActivationContext) {
         handle((r) => rules.list(runId(r))),
       );
       action("rule", (r) => rules.set(runId(r), r.body));
+      // T5: back a candidate in an election (modules.md section 2).
+      action("politics/back", (r) => politics.back(runId(r), r.body));
+      // M4 T1: stop a tradition (content.md 7.2).
+      action("traditions", (r) => culture.traditions(runId(r), r.body));
       // T6: adult module (README Adult module).
       router.get(
         "/runs/:id/adult",
@@ -244,7 +266,17 @@ export async function activate({ api }: ActivationContext) {
       action("adult", (r) => adult.set(runId(r), r.body));
       // T3: an in-run wish (design.md 3.7).
       action("wish", (r) => wish(runId(r), r.body));
+      // T13: eyes and ears, 1 hour each (modules.md section 4)
+      action("informant", (r) => eyes.informant(runId(r), r.body));
+      action("rumour", (r) => eyes.rumour(runId(r), r.body));
       action("adult/affairs/:threadId", (r) => adult.choose(runId(r), param(r, "threadId"), r.body));
+
+      // T2: the drawer and hidden rooms (design.md 14).
+      router.get(
+        "/runs/:id/things",
+        handle((r) => things.list(runId(r))),
+      );
+      action("rooms/:room/open", (r) => things.open(runId(r), param(r, "room"), r.body));
 
       // T14: save to the Engine library (cast.md section 6). Reads the run, so no revision.
       action("export/lorebook", (r) => exporter.lorebook(runId(r), r.body));

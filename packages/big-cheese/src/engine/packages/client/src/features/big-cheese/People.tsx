@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Hire } from "./Cast";
+import { EyesAsk, EyesHeard } from "./Eyes"; // T13
 import { Face, initials, memoryKey, moodKey, nameOf, threadTitle, trustKey, type Ctx } from "./parts";
 
 /** The newest feeling line the Friday report wrote for this person. */
@@ -57,6 +58,7 @@ export function People({ ctx }: { ctx: Ctx }) {
       <h1 className="bc-heading" tabIndex={-1} data-focus>
         {t("ui.bigCheese.people.title")}
       </h1>
+      <EyesHeard ctx={ctx} />
       {kit.boss && (
         <div className="bc-row bc-row-flat">
           <span className="bc-face bc-face-m" aria-hidden="true">
@@ -167,6 +169,7 @@ export function PersonSheet({ ctx, id }: { ctx: Ctx; id: string }) {
       )}
       {line && <blockquote className="bc-quote">{line}</blockquote>}
       <Circle ctx={ctx} id={id} />
+      <EyesAsk ctx={ctx} id={id} />
 
       {who && who.traits.length > 0 && (
         <p className="bc-row-meta" aria-label={t("ui.bigCheese.person.traits")}>

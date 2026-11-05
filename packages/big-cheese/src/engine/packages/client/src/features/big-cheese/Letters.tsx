@@ -18,6 +18,7 @@ const SCREEN_VIEWS: Record<string, { view: string; key: string }> = {
 export function Letters({ ctx }: { ctx: Ctx }) {
   const { t } = useTranslation();
   const { run, kit, busy, act, go } = ctx;
+  const { drawer = [], equipment = [] } = run.game.things ?? {};
   const guided = Object.values(run.game.threads).find((thread) => thread.kind === "guided");
 
   return (
@@ -63,6 +64,37 @@ export function Letters({ ctx }: { ctx: Ctx }) {
           );
         })}
       </ul>
+      {/* T2: the drawer holds keys, gifts, documents, evidence and artefacts */}
+      <h2 className="bc-subhead">{t("ui.bigCheese.drawer.title")}</h2>
+      {drawer.length === 0 ? (
+        <p className="bc-muted">{t("ui.bigCheese.drawer.empty")}</p>
+      ) : (
+        <ul className="bc-list">
+          {drawer.map((item) => (
+            <li key={item.id} className="bc-row bc-row-flat">
+              <span className="bc-row-text">
+                <span className="bc-row-title">{item.name}</span>
+                <span className="bc-muted">{t(`ui.bigCheese.drawer.kind_${item.kind}`)}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {equipment.length > 0 && (
+        <>
+          <h2 className="bc-subhead">{t("ui.bigCheese.drawer.equipment")}</h2>
+          <ul className="bc-list">
+            {equipment.map((item) => (
+              <li key={item.id} className="bc-row bc-row-flat">
+                <span className="bc-row-text">
+                  <span className="bc-row-title">{item.name}</span>
+                  <span className="bc-muted">{t("ui.bigCheese.drawer.condition", { value: item.condition })}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </>
   );
 }

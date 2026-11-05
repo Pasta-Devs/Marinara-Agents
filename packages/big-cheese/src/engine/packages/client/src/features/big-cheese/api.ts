@@ -50,6 +50,7 @@ export interface Thread {
   stakes: string;
   clock: { dueWeek: number | "open"; pressure: string };
   secret?: boolean;
+  layer?: string; // T5: the story layer that opened it
   system?: string; // the kit system that opened it
   beats: {
     read?: boolean;
@@ -64,6 +65,7 @@ export interface Thread {
 export interface MeetingItem {
   id: string;
   title: string;
+  thread?: string; // T5: the thread the item came from
   deputy?: boolean;
   base: Record<string, number>; // each attendee's score before the boss speaks
   lines: { who: string; text: string }[];
@@ -94,6 +96,8 @@ export interface Game {
   // T13: what the Board's settings groups read
   authority?: "manager" | "strong_leader" | "absolute";
   layers?: Record<string, number>;
+  culture?: Record<string, number>; // M4 T1: tag -> points
+  traditions?: { id: string; text: string; count: number; active: boolean }[];
   difficulty?: string;
   storyteller?: string;
   mutators?: string[];
@@ -109,6 +113,8 @@ export interface Game {
   rooms: Record<string, { condition: number; people: string[] }>;
   relations: { a: string; b: string; kind: string; level: number }[];
   grapevine: string[]; // ids of rumour lines in `text.place.grapevine`
+  informants?: { person: string; target: string; kind: "room" | "group"; paid: boolean }[]; // M4 T13
+  eyes?: { week: number; text: string }[]; // M4 T13
   advisors?: string[]; // T11: person ids in the inner circle (up to 3)
   officeHours?: { day: number; slot: string; visitors: string[] }; // T11: one booked hour, up to 4 visitors
   hearing: Hearing | null;
@@ -116,6 +122,11 @@ export interface Game {
   meeting?: Meeting | null;
   status: "playing" | "complete" | "ended";
   adult?: { intensity: number; themes: string[] } | null;
+  things?: {
+    drawer: { id: string; kind: string; name: string; about?: string; thread?: string }[];
+    equipment: { id: string; name: string; room?: string; condition: number }[];
+  }; // M4 T2
+  openedRooms?: string[];
   ending: string | null;
   report: { week: number; income: number; before: Meters; after: Meters } | null;
 }
@@ -188,6 +199,7 @@ export interface KitView {
   meters: Record<Meter, { label: string }>;
   people: KitPerson[];
   rooms: { id: string; name: string; text: string; kind?: string }[];
+  groups?: { id: string; name: string }[]; // M4 T13
   letters: { day: number; person: string; screen: string; text: string }[];
 }
 
@@ -340,3 +352,11 @@ export const exportLorebook = (id: string, kind: "memories" | "place", body: Exp
   });
 export const exportNote = (id: string, body: ExportBody) =>
   api.post<{ description?: string; saved?: boolean }>(`${runPath(id)}/export/persona-note`, { kind: "note", ...body });
+
+// T14: out of the office (server outside.ts).
+export interface OutsideState {
+  invitation: { host: string; people: string[] } | null;
+  tripUsed: boolean;
+  tripRooms: { id: string; name: string }[];
+}
+export const getOutside = (id: string) => api.get<OutsideState>(`${runPath(id)}/outside`);

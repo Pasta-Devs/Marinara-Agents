@@ -278,6 +278,8 @@ export interface Run {
   favours: { from: string; to?: string; why: string; week: number; used: boolean }[];
   leverage: { about: string; thread?: string; used: boolean; found: boolean }[];
   informants: { person: string; target: string; kind: "room" | "group"; paid: boolean }[];
+  eyes?: { week: number; text: string }[]; // T13: what the informants and rumours reported, last 8
+  rumours?: { id: string; line: string; starter: string; target: string; day: number; reached: string[] }[]; // T13: planted, settled on a Friday
   delegated: Record<string, string>; // area id -> person id
   depth: { money: boolean; building: boolean };
   ledger: {

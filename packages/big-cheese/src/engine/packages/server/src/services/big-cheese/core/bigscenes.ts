@@ -3,6 +3,7 @@
 import { DAYS, dayIndex, WEEKS } from "./clock.js";
 import type { PlaceKit } from "./kits/types.js";
 import { applyDelta, newId } from "./run.js";
+import { countEvent } from "./culture.js";
 import { closeThread } from "./threads.js";
 import { K, offer } from "./stances.js";
 import { DIFFICULTY_FACTOR } from "./types.js";
@@ -12,7 +13,7 @@ export interface Blueprint {
   /** What closes the scene: the player picks a stance, picks an option, or the code tests a condition. */
   end: "stance" | "pick" | "check";
   title: (k: PlaceKit) => string;
-  room: (k: PlaceKit) => string;
+  room: (k: PlaceKit, t?: Thread) => string;
   people: (k: PlaceKit, g: Run, t?: Thread) => string[];
   /** One line per part (3-6 parts). */
   goals: string[];
@@ -128,6 +129,53 @@ export const BLUEPRINTS: Record<string, Blueprint> = {
       "The room goes quiet. They believe you.",
     ],
   },
+  // T14: out of the office (outside.ts). The people and the room come in on a stage thread.
+  trip: {
+    end: "pick",
+    title: (k) => `A trip with ${k.name}`,
+    room: (k, t) => t?.title ?? k.name,
+    people: (_k, _g, t) => t?.people.slice(0, 4) ?? [],
+    goals: [
+      "You all leave the office behind. The air is different out here.",
+      "Someone laughs at something small. The mood lifts.",
+      "A quiet moment. People talk about things they never say at work.",
+      "The way back is slow. Nobody wants to be the first to mention Monday.",
+    ],
+    picks: [
+      { id: "easy", text: "Keep it easy and let the day be a day off" },
+      { id: "work", text: "Use the day to talk about work" },
+    ],
+  },
+  after_work: {
+    end: "pick",
+    title: () => "After work",
+    room: (k, t) => t?.title ?? k.name,
+    people: (_k, _g, t) => t?.people ?? [],
+    goals: [
+      "The day is over. Someone asks if you want to come along.",
+      "The table is full of people who are not at work.",
+      "Someone tells a story that is nearly true.",
+    ],
+    picks: [
+      { id: "go", text: "Go along" },
+      { id: "decline", text: "Decline and go home" },
+    ],
+  },
+  walk: {
+    end: "pick",
+    title: () => "Walk and talk",
+    room: (k, t) => t?.title ?? k.name,
+    people: (_k, _g, t) => t?.people.slice(0, 1) ?? [],
+    goals: [
+      "You walk the floor together. Your guest talks while you look at the rooms.",
+      "They slow down. There is something they wanted to say.",
+      "You reach the end of the walk.",
+    ],
+    picks: [
+      { id: "listen", text: "Listen" },
+      { id: "share", text: "Tell them what is on your mind" },
+    ],
+  },
 };
 
 /** The answers a part offers, as ids. Only the last part follows the blueprint end; earlier parts offer stances. */
@@ -227,6 +275,7 @@ export function finishBig(s: Run, beatId: string): string | undefined {
   if (!found) return undefined;
   const bp = BLUEPRINTS[found.beat!.blueprint ?? ""];
   settleBig(s, found.beat!, "done");
+  if (found.beat!.blueprint) countEvent(s, found.beat!.blueprint, found.thread.title);
   if (found.thread.system !== undefined) {
     const ok = bp!.check!(s, found.thread);
     endNight(s, found.thread, ok);

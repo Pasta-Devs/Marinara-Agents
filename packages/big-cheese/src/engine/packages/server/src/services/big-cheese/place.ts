@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { runTask, withCallLog, type ModelCall } from "./ai/tasks.js";
 import { withCast } from "./cast.js";
-import { dayIndex, pick, roll, slot, spendHours, type Run as Game } from "./core/index.js";
+import { dayIndex, isLocked, pick, roll, slot, spendHours, type Run as Game } from "./core/index.js";
 import { dayFacts, isKnown, movePeople, overheard, relKey } from "./core/people.js";
 import { newId } from "./core/run.js";
 import { placeKitOf } from "./core/kits/index.js";
@@ -69,6 +69,7 @@ export function createPlace(store: RunStore, getModel: () => Promise<ModelCall |
           id: r.id,
           name: r.name,
           condition: run.game.rooms[r.id]?.condition ?? r.condition,
+          locked: isLocked(run.game, kit, r.id), // T2
           people: run.game.rooms[r.id]?.people ?? [],
           line: lines.find((l) => l.room === r.id)?.text ?? null,
         })),
@@ -131,6 +132,8 @@ export function createPlace(store: RunStore, getModel: () => Promise<ModelCall |
       const run = await open(id, body);
       const kit = kitOf(run);
       if (!kit.rooms.some((r) => r.id === room)) throw new BigCheeseError(404, "No such room.", "not-found");
+      if (isLocked(run.game, kit, room))
+        throw new BigCheeseError(400, "That room is locked. Find its key first.", "bad-request");
       if (run.game.clock.hoursLeft < 1) throw new BigCheeseError(409, "No hours left today.", "no-hours");
       const game = structuredClone(run.game);
       const place = structuredClone(run.text.place ?? empty());

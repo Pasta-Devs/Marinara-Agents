@@ -1,4 +1,5 @@
-import { pick } from "./rng.js";
+import { roll } from "./rng.js";
+import { stanceWeight } from "./culture.js";
 import type { Answer, Authority, Meter, Meters, Severity, Tier } from "./types.js";
 
 // Numbers from content.md section 1 and sim/stance-sim.mjs. Change a number, run the balance test.
@@ -100,5 +101,11 @@ export const TIERS: Record<Authority, Record<Tier, readonly string[]>> = {
 };
 
 // One strong, one middle, one weak answer. Uniform inside a tier (weights are not in M1).
-export const offer = (h: { rng: number }, authority: Authority): Answer[] =>
-  (["strong", "middle", "weak"] as const).map((tier) => ({ tier, stance: pick(h, TIERS[authority][tier]) }));
+// Culture weights the pick (Strict: decree and punish x1.5). Equal weights give the old floor(roll * n).
+export const offer = (h: { rng: number; culture?: Record<string, number> }, authority: Authority): Answer[] =>
+  (["strong", "middle", "weak"] as const).map((tier) => {
+    const list = TIERS[authority][tier];
+    const w = list.map((x) => stanceWeight(h.culture, x));
+    let r = roll(h) * w.reduce((a, b) => a + b, 0);
+    return { tier, stance: list.find((_, i) => (r -= w[i]!) < 0) ?? list.at(-1)! };
+  });
