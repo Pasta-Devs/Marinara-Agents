@@ -52,6 +52,8 @@ export interface LifeEvent {
   /** First-person diary lines and what each character wants to tell the user, by character id. */
   diary?: Record<string, string>;
   hook?: Record<string, string>;
+  /** Short texts between two characters, made in the same beat call. */
+  texts?: { from: string; to: string; time: string; text: string }[];
   /** Per chat id: when the hook went into that chat's prompt, and when the user asked to pick it up. */
   delivered?: Record<string, number>;
   pickedUp?: Record<string, number>;

@@ -260,6 +260,36 @@ export function checkBeat(raw: unknown, c: BeatCheck): { label: string; event: L
   };
 }
 
+const TEXTS_MAX = 3;
+
+/**
+ * Keeps the day's texts that pass, at most 3, and stores each on the beat both characters share,
+ * else on the sender's first beat. A bad text is dropped without a retry.
+ */
+export function attachTexts(raw: unknown, events: readonly LifeEvent[], c: BeatCheck): void {
+  if (!Array.isArray(raw)) return;
+  const sorted = [...events].sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+  const tz = c.circle.clock.timezone;
+  let kept = 0;
+  for (const t of raw) {
+    if (kept >= TEXTS_MAX) break;
+    if (!isRecord(t)) continue;
+    const from = typeof t.from === "number" ? c.circle.castIds[t.from] : undefined;
+    const to = typeof t.to === "number" ? c.circle.castIds[t.to] : undefined;
+    const text = typeof t.text === "string" ? t.text.replace(/\s+/g, " ").trim() : "";
+    const m = typeof t.time === "string" ? minutes(t.time) : null;
+    if (!from || !to || from === to || m === null || !text || text.length > 140 || c.bannedHook.test(text)) continue;
+    const ms = wallToMs(`${c.day}T${hhmm(m)}`, tz);
+    if (ms === null || ms > c.toMs || ms < (c.chatTruth[from] ?? 0) || ms < (c.chatTruth[to] ?? 0)) continue;
+    const target =
+      sorted.find((e) => e.cast.includes(from) && e.cast.includes(to)) ??
+      (sorted.some((e) => e.cast.includes(to)) ? sorted.find((e) => e.cast.includes(from)) : undefined);
+    if (!target) continue;
+    (target.texts ??= []).push({ from, to, time: new Date(ms).toISOString(), text });
+    kept++;
+  }
+}
+
 /** One beat call for one Circle day, with one retry on a bad reply. Rejected beats are dropped. */
 async function beatDay(w: World, gate: Gate, day: string, seeds: Seed[], toMs: number): Promise<LifeEvent[]> {
   const circle = w.circle;
@@ -306,8 +336,10 @@ async function beatDay(w: World, gate: Gate, day: string, seeds: Seed[], toMs: n
   const accepted = new Map<string, LifeEvent>();
   const keptBy = new Map<string, number[]>();
   let messages = base;
+  let texts: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
-    const data = await gate.complete(messages, 1200);
+    const data = await gate.complete(messages, 1500);
+    if (texts === undefined && isRecord(data) && Array.isArray(data.texts)) texts = data.texts;
     const list = isRecord(data) && Array.isArray(data.beats) ? data.beats : null;
     const errors: string[] = list
       ? list.length
@@ -347,6 +379,7 @@ async function beatDay(w: World, gate: Gate, day: string, seeds: Seed[], toMs: n
       p.status = "kept";
     }
   }
+  attachTexts(texts, events, check);
   return events;
 }
 

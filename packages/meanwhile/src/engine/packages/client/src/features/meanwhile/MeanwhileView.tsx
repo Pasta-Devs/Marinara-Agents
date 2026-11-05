@@ -11,6 +11,7 @@ import {
   deleteNudge,
   getHome,
   getNudges,
+  getPhone,
   getPromises,
   getTimeline,
   listChats,
@@ -63,6 +64,10 @@ const COPY = {
   pickUp: "Pick up this thread",
   noChat: "No linked chat has this character.",
   openToContinue: (chat: string) => `Open ${chat} to continue.`,
+  showPhone: "Phone",
+  hidePhone: "Hide phone",
+  noTexts: "No texts yet.",
+  backToThreads: "All threads",
   showDiary: "Diary",
   hideDiary: "Hide diary",
   noDiary: "Nothing written yet.",
@@ -946,6 +951,66 @@ function HomePanel({ circle, openChat }: { circle: Circle; openChat?: OpenChat }
   );
 }
 
+/** Short texts the characters sent each other: threads by pair, then bubbles. */
+function PhonePanel({ circle }: { circle: Circle }) {
+  const [open, setOpen] = useState(false);
+  const [picked, setPicked] = useState<string | null>(null);
+  const characters = useQuery({ queryKey: ["meanwhile", "characters"], queryFn: listCharacters });
+  const phone = useQuery({
+    queryKey: ["meanwhile", "phone", circle.id],
+    queryFn: () => getPhone(circle.id),
+    enabled: open,
+    refetchInterval: 15_000,
+  });
+  const name = (id: string) => characters.data?.find((c) => c.id === id)?.name ?? "Someone";
+  const threads = phone.data?.threads ?? [];
+  const thread = threads.find((t) => `${t.a}|${t.b}` === picked);
+  return (
+    <>
+      <button type="button" className="mw-btn" aria-expanded={open} onClick={() => setOpen(!open)}>
+        {open ? COPY.hidePhone : COPY.showPhone}
+      </button>
+      {open && phone.isError ? (
+        <span role="alert" className="mw-warn">
+          {errorText(phone.error)}
+        </span>
+      ) : null}
+      {open && phone.data && !thread ? (
+        <div className="mw-field">
+          {threads.length === 0 ? <div className="mw-muted">{COPY.noTexts}</div> : null}
+          {threads.map((t) => (
+            <button key={`${t.a}|${t.b}`} type="button" className="mw-btn" onClick={() => setPicked(`${t.a}|${t.b}`)}>
+              <span className="mw-name">
+                {name(t.a)} and {name(t.b)}
+              </span>{" "}
+              <span className="mw-muted">{t.texts.at(-1)?.text.slice(0, 60)}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {open && thread ? (
+        <div className="mw-field">
+          <button type="button" className="mw-btn" onClick={() => setPicked(null)}>
+            {COPY.backToThreads}
+          </button>
+          <span className="mw-label">
+            {name(thread.a)} and {name(thread.b)}
+          </span>
+          {thread.texts.map((t) => (
+            <div
+              key={`${t.time}${t.from}${t.text}`}
+              className={`mw-bubble${t.from === thread.b ? " mw-bubble-right" : ""}`}
+            >
+              <div>{t.text}</div>
+              <div className="mw-muted">{when(t.time, circle.clock.timezone)}</div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 function CircleCard({ circle, onEdit, openChat }: { circle: Circle; onEdit: () => void; openChat?: OpenChat }) {
   const queryClient = useQueryClient();
   const run = useMutation({
@@ -1001,6 +1066,7 @@ function CircleCard({ circle, onEdit, openChat }: { circle: Circle; onEdit: () =
         </span>
       ) : null}
       <HomePanel circle={circle} openChat={openChat} />
+      <PhonePanel circle={circle} />
       <FastForwardPanel circle={circle} />
       <PromisesPanel circle={circle} />
       <NudgesPanel circle={circle} />

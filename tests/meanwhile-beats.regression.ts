@@ -210,6 +210,50 @@ async function main() {
   assert.ok(plan(new Set(["x"])).seeds.every((s) => !s.cast.includes("x")));
   assert.ok(plan(new Set(["x"])).events.some((e) => e.cast[0] === "x" && e.weight === "routine")); // routine goes on
 
+  // Texts: more than 3 are cut to 3, and a bad text is dropped without a retry.
+  const text = (over: Record<string, unknown> = {}) => ({ from: 0, to: 1, time: "19:45", text: "On my way.", ...over });
+  const run3 = async (texts: unknown[], over: Partial<World> = {}, toMs = T0 + DAY) => {
+    const g = fakeGate([{ beats: [beat()], texts }]);
+    const r: BeatRun = { events: [], done: [], stoppedAt: null };
+    await runBeats(r, world(over), g, [DAY0], seeds, toMs);
+    assert.equal(g.sent.length, 1);
+    return r.events[0]!.texts;
+  };
+  assert.equal((await run3([text(), text(), text(), text({ text: "fourth" })]))!.length, 3);
+  const z = { ...circle, castIds: ["x", "y", "z"] };
+  const bad = [
+    text({ from: 1, to: 1 }), // from = to
+    text({ from: 2, to: 0 }), // z is not in the day's beats
+    text({ from: 9 }),
+    text({ time: "24:30" }),
+    text({ time: "18:00" }), // before the chat message
+    text({ time: "21:40" }), // later than the run reaches
+    text({ text: "Sam says hi" }),
+    text({ text: "x".repeat(141) }),
+    text({ text: "  ok  " }),
+  ];
+  assert.deepEqual(await run3(bad, { circle: z, chatTruth: { x: T0 + 18 * 3600_000 + 300_000 } }, T0 + 20 * 3600_000), [
+    { from: "x", to: "y", time: new Date(T0 + 19.75 * 3600_000).toISOString(), text: "ok" },
+  ]);
+  // No shared beat: the text goes on the sender's first beat.
+  const g2 = fakeGate([
+    {
+      beats: [beat(), beat({ seed: "s2", start: "10:05", end: "10:30", diary: undefined, hook: undefined })],
+      texts: [text({ to: 2 })],
+    },
+  ]);
+  const r2: BeatRun = { events: [], done: [], stoppedAt: null };
+  await runBeats(
+    r2,
+    world({ circle: z }),
+    g2,
+    [DAY0],
+    [seeds[0]!, seed(2, "friends", ["z"], "park", "10:00")],
+    T0 + DAY,
+  );
+  assert.equal(r2.events.length, 2);
+  assert.equal(r2.events.find((e) => e.cast.includes("x"))!.texts![0]!.to, "z");
+
   // A long-absence summary gets its text (cut to 280) and per-character diary; a bad reply keeps the placeholder.
   const summary = {
     id: "s:k",

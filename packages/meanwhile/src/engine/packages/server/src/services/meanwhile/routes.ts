@@ -324,6 +324,35 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+  // Phone: texts between characters, one thread per pair, newest thread first. Like the widget it
+  // sits outside any chat, so only accepted, Circle-visible, non-spicy events count.
+  app.get<{ Params: { id: string }; Querystring: { days?: string } }>("/circles/:id/phone", async (request, reply) => {
+    const doc = await readMeanwhile();
+    const circle = find(doc, request.params.id);
+    if (!circle) return notFound(reply);
+    const tz = circle.clock.timezone;
+    const days = Math.min(14, Math.max(1, Math.trunc(Number(request.query.days)) || 7));
+    const oldest = shiftDay(msToWall(circleNowMs(circle.clock, Date.now()), tz).slice(0, 10), 1 - days);
+    const threads = new Map<string, { a: string; b: string; texts: { from: string; text: string; time: string }[] }>();
+    for (const e of doc.events) {
+      if (e.circleId !== circle.id || e.status !== "accepted" || e.visibility !== "circle" || e.kind === "spicy")
+        continue;
+      for (const t of e.texts ?? []) {
+        if (msToWall(Date.parse(t.time), tz).slice(0, 10) < oldest) continue;
+        const [a, b] = [t.from, t.to].sort() as [string, string];
+        const thread = threads.get(`${a}|${b}`) ?? { a, b, texts: [] };
+        thread.texts.push({ from: t.from, text: t.text, time: t.time });
+        threads.set(`${a}|${b}`, thread);
+      }
+    }
+    const last = (th: { texts: { time: string }[] }) => th.texts.at(-1)!.time;
+    return {
+      threads: [...threads.values()]
+        .map((th) => ({ ...th, texts: th.texts.sort((x, y) => x.time.localeCompare(y.time)) }))
+        .sort((x, y) => last(y).localeCompare(last(x))),
+    };
+  });
+
   // Hook cards and diary lines per character, newest first.
   app.get<{ Params: { id: string } }>("/circles/:id/home", async (request, reply) => {
     const doc = await readMeanwhile();

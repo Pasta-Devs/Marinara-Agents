@@ -24,3 +24,5 @@ Meanwhile is offered to Engine `staging` testers. Install it, restart Marinara E
 The Home screen has a Meanwhile card. It lists up to 3 hooks that no chat has used yet, or says how far each Circle is caught up. Tap it to open the tab.
 
 A nudge ("this week Lily gets a job offer") becomes one planned event for a Circle day inside its window.
+
+The same model call that writes a day can also write up to 3 short texts between characters who are in that day's events. Each text is checked and kept on the event. The "Phone" button on a Circle card shows them as threads, one per pair of characters. A text follows its event: it is not shown if the event is proposed, vetoed, stale, spicy or only for one chat.

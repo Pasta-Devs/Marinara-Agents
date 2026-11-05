@@ -185,7 +185,7 @@ for (const method of ["get", "post", "patch", "delete"]) {
 }
 async function call(method: string, path: string, params: Record<string, string>, body?: unknown) {
   const reply = { code: (status: number) => ({ send: (b: unknown) => ({ replied: true, status, body: b }) }) };
-  const out = await handlers.get(`${method} ${path}`)!({ params, body }, reply);
+  const out = await handlers.get(`${method} ${path}`)!({ params, body, query: {} }, reply);
   return out && typeof out === "object" && "replied" in out ? (out as any) : { status: 200, body: out };
 }
 
@@ -530,6 +530,28 @@ async function promiseCases() {
   const quiet = (await call("GET", "/widget")).body as any;
   assert.equal(quiet.hooks.length, 0);
   assert.equal(quiet.quiet[0].name, "Berlin friends");
+
+  // Phone: one thread per pair, newest thread first. Spicy, proposed, vetoed and chat-only texts stay out.
+  const texted = (id: string, h: number, over: Partial<LifeEvent> = {}, to = "y") =>
+    event({ id, texts: [{ from: "x", to, time: at(h), text: id }], ...over });
+  await reset(circle({ clock: { anchorCircle: at(30), anchorReal: Date.now(), speed: 1, timezone: "UTC" } }), [
+    texted("t1", 1),
+    texted("t2", 3),
+    texted("t3", 2, {}, "z"),
+    texted("spicy", 4, { kind: "spicy" }),
+    texted("proposed", 5, { status: "proposed" }),
+    texted("vetoed", 5, { status: "vetoed" }),
+    texted("chat", 5, { visibility: "chat:c1" }),
+  ]);
+  const phone = (await call("GET", "/circles/:id/phone", { id: "q" })).body as any;
+  assert.deepEqual(
+    phone.threads.map((t: any) => [t.a, t.b, t.texts.map((m: any) => m.text)]),
+    [
+      ["x", "y", ["t1", "t2"]],
+      ["x", "z", ["t3"]],
+    ],
+  );
+  assert.equal((await call("GET", "/circles/:id/phone", { id: "nope" })).status, 404);
 }
 
 main().catch((error) => {

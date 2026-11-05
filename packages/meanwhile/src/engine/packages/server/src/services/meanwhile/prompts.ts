@@ -42,10 +42,11 @@ export function beatMessages(i: BeatInput): Msg[] {
       role: "system",
       content: [
         "You write short off-screen events for fictional characters. Reply with flat JSON only:",
-        '{"beats":[{"seed":"s1","start":"HH:MM","end":"HH:MM","text":"...","diary":{"0":"..."},"hook":{"0":"..."}}]}',
+        '{"beats":[{"seed":"s1","start":"HH:MM","end":"HH:MM","text":"...","diary":{"0":"..."},"hook":{"0":"..."}}],"texts":[{"from":0,"to":2,"time":"HH:MM","text":"..."}]}',
         "Write one beat per seed and use each seed once. Keep start within an hour of the seed time and end after start on the same day.",
         "text is one plain third-person sentence of at most 140 characters. diary is one first-person line. Write each line in that character's own voice. hook is a concrete thing the character wants to share or ask, under 12 words. diary and hook are optional. Their keys are cast numbers from the seed.",
         "Vary openings: no two beats start with the same name or verb.",
+        "texts is optional: at most 3 short text messages for the day, only between two characters who are in that day's beats. Each is in the sender's own voice, under 140 characters, and the user is not in it. Use cast numbers and a time on that day.",
         "A seed with a nudge is a plot point the user asked for. Write that seed so the nudge happens.",
         ...(i.promises.length
           ? [
