@@ -56,6 +56,7 @@ import { Wardrobe } from "./screens/wardrobe/Wardrobe";
 import { WishScreen } from "./screens/wish/WishScreen";
 import { WorldPicker } from "./screens/WorldPicker";
 import type { OtomeIndex, RunView } from "./shared/api-types";
+import type { WardrobeOwner } from "./shared/wardrobe";
 
 const DOCKED: ReadonlySet<ScreenId> = new Set<ScreenId>(["home", ...DOCK_SCREENS]);
 /** The Dates activities this build opens (M5), each a screen taking ActivityScreenProps. */
@@ -92,6 +93,8 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
   const [phoneOpen, setPhoneOpen] = useState<PhoneOpen | null>(null);
   // Who Dates is about: the love interest picked there, kept while a game opens and closes.
   const [datesLi, setDatesLi] = useState<string | null>(null);
+  // Whose looks the Wardrobe shows, kept while the reader plays a look's first-wear scene (Back returns to them).
+  const [wardrobeOwner, setWardrobeOwner] = useState<WardrobeOwner>();
   // Date Night reads its scenes full-stage, as the reader does: the top bar steps aside while it says so.
   const [immersive, setImmersive] = useState(false);
   const [opening, setOpening] = useState<string | null>(null);
@@ -311,7 +314,13 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
         onOpenWardrobe={() => go("wardrobe")}
       />
     ) : screen === "wardrobe" && activeRun && view ? (
-      <Wardrobe runKey={activeRun} view={view} onOpenStory={openReader("wardrobe")} />
+      <Wardrobe
+        runKey={activeRun}
+        view={view}
+        onOpenStory={openReader("wardrobe")}
+        initialOwner={wardrobeOwner}
+        onOwnerChange={setWardrobeOwner}
+      />
     ) : screen === "album" && activeRun && view ? (
       <Album runKey={activeRun} view={view} onOpenStory={openReader("album")} />
     ) : screen === "home" && activeRun && view ? (

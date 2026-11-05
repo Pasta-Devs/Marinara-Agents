@@ -339,6 +339,33 @@ test("a look's first-wear scene stands him in that look, while it paints, on a r
   assert.equal(main.lookComing, undefined);
   assert.deepEqual(main.faces[KAI], { cold: clean(FACE) });
 
+  // Her 5★ look's first-wear scene pins nothing: she is never on stage, and he keeps the look he wears now, also while
+  // hers paints.
+  const HERS = "my-wardrobe-0-f";
+  const hersKey = itemStoryKey(HERS);
+  await t.store.mutateDoc(runDocTarget("item", itemId(t.runId, HERS)), normalizeItem, () => ({
+    id: HERS,
+    kind: "her-look5",
+    banner: "my-wardrobe-0",
+    li: KAI,
+    title: "Midnight gown",
+    look: { name: "Midnight gown", outfitLine: "black silk gown" },
+    coupleWith: LOOK,
+    art: { state: "pending", at },
+    story: { key: hersKey },
+    createdAt: at,
+  }));
+  await t.store.mutateDoc(runDocTarget("beat", beatId(t.runId, hersKey, 0)), normalizeBeat, () =>
+    beat(0, { key: hersKey, readThrough: 1 }),
+  );
+  const releaseHers = startPaint(t.runId, itemArtOwner(HERS))!;
+  const hers = await t.art("GET", "/runs/:run/art/scene", { key: hersKey, i: "0" });
+  releaseHers();
+  assert.equal(hers.status, 200, JSON.stringify(hers.body));
+  assert.equal(hers.body.looks, undefined, "her look's scene stands him in the coat he wears on Home");
+  assert.equal(hers.body.lookComing, undefined, "and waits for no paint of hers");
+  assert.deepEqual(hers.body.faces[KAI], { cold: clean(FACE) });
+
   // He wore the new look (its faces were painted then) and went back to his base look: the replay keeps the new look.
   await setKai((unit) => {
     const { wornOutfit: _worn, ...rest } = unit;
