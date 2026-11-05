@@ -3,6 +3,8 @@ const ADMIN_SECRET_STORAGE_KEY = "marinara_admin_secret";
 
 export interface CircleStatus {
   ready: boolean;
+  /** The daily model-call limit is used up. */
+  paused: boolean;
   circleNow: string;
   nowWall: string;
   lastRunCircle: string;
@@ -112,6 +114,7 @@ export interface TimelineEvent {
   id: string;
   cast: string[];
   weight: string;
+  status: string;
   text: string;
   place?: string;
   day: string;
@@ -128,3 +131,21 @@ export interface Timeline {
 }
 
 export const getTimeline = (id: string) => api<Timeline>(`/circles/${id}/timeline`);
+
+export interface HookCard {
+  eventId: string;
+  characterId: string;
+  text: string;
+  day: string;
+  told: boolean;
+  chats: NamedItem[];
+}
+
+export interface Home {
+  hooks: HookCard[];
+  diary: Record<string, { id: string; day: string; text: string }[]>;
+}
+
+export const getHome = (id: string) => api<Home>(`/circles/${id}/home`);
+export const pickUp = (id: string, eventId: string, chatId: string) =>
+  api<{ ok: true }>(`/circles/${id}/hooks/${eventId}/pick`, "POST", { chatId });

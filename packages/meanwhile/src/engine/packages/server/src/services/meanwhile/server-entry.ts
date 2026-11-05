@@ -1,5 +1,6 @@
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import type { FastifyPluginAsync } from "fastify";
+import { contributeMeanwhile } from "./context.js";
 import { meanwhileRoutes } from "./routes.js";
 import { startMeanwhileScheduler } from "./scheduler.js";
 import { configureMeanwhileRuntime, readMeanwhile } from "./store.js";
@@ -7,6 +8,7 @@ import { configureMeanwhileRuntime, readMeanwhile } from "./store.js";
 type ActivationContext = {
   api: {
     runtime: CapabilityRuntimeHost;
+    registerPromptContext(contributor: typeof contributeMeanwhile): () => void;
     registerPrivilegedRoutes(routes: FastifyPluginAsync, options: { prefix: string }): Promise<() => void>;
   };
 };
@@ -20,6 +22,7 @@ export async function activate({ api }: ActivationContext): Promise<() => void> 
   };
   try {
     releases.push(await api.registerPrivilegedRoutes(meanwhileRoutes, { prefix: "/api/meanwhile" }));
+    releases.push(api.registerPromptContext(contributeMeanwhile));
     releases.push(startMeanwhileScheduler());
     ready = true;
     return () => {

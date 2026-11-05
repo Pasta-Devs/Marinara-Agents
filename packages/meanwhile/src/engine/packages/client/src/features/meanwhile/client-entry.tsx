@@ -14,7 +14,11 @@ class MeanwhileElement extends HTMLElement {
     this.root.render(
       <QueryClientProvider client={queryClient}>
         <style>{MEANWHILE_STYLES}</style>
-        <MeanwhileView />
+        <MeanwhileView
+          openChat={() =>
+            (this as unknown as { capabilityProps?: { openChat?: (id: string) => void } }).capabilityProps?.openChat
+          }
+        />
       </QueryClientProvider>,
     );
   }
