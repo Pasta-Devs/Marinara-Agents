@@ -454,7 +454,8 @@ test("condensing the timeline has room for its 5000 words and a thinking model's
   const summaries = calls.filter((call) => JSON.parse(call.messages.at(-1)!.content).source !== undefined);
   assert.equal(condensing.length, 1, "a large model condenses in one call");
   assert.ok(condensing[0]!.options!.maxTokens! >= 24_576 + 16_000, `it may write ${condensing[0]!.options!.maxTokens}`);
-  for (const call of summaries) assert.ok(call.options!.maxTokens! < 24_576 + 16_000, "chapter summaries keep their room");
+  for (const call of summaries)
+    assert.ok(call.options!.maxTokens! < 24_576 + 16_000, "chapter summaries keep their room");
 });
 
 test("a condensed head that came back long is never condensed again by itself, and a date's fold condenses nothing", async () => {

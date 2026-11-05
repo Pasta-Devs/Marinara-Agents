@@ -3,6 +3,10 @@
 ## 0.8.7 — 2026-11-05
 
 - **The story knows what you're wearing.** Like it does for love interests, the story now knows the look you wear: the one you put on with Wear at home or picked for a date. Scenes and plans can describe it when your looks come up.
+- **Chapters keep the world you chose.** The story planner now reads your premise for its genre, era and technology whenever it plans an arc or a chapter, so the story keeps them instead of drifting to a period look you never picked. A story already under way gets this from its next plan, and a new story's world is written with your premise's era and technology from the start. Character Stories and extra stories plan a call as a call from afar rather than always a phone call, and an AU extra story still imagines a world of its own.
+- **A new example premise.** The premise box shows a new example.
+- **Couple set looks line up** at the top.
+- **Story memory no longer fails while condensing** a long story on thinking models such as Claude Opus 5.5.
 
 ## 0.8.6 — 2026-11-04
 
