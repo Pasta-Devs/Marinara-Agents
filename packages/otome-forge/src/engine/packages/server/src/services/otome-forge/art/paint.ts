@@ -240,6 +240,41 @@ export interface PaintRecordJob {
 const failure = (error: unknown) => (error instanceof Error ? error.message : String(error)).slice(0, ERROR_MAX);
 
 /**
+ * The longest one paid image may take before it counts as failed. A call that never answers held its connection's
+ * queue, so every place and key image behind it said "painting" for good; at this point it is saved as failed, with
+ * Retry, and the next paint starts. Generous, because a slow model or a busy local server can take minutes.
+ */
+export const PAINT_DEADLINE_MS = 10 * 60_000;
+
+/**
+ * `task`, or a rejection once `ms` pass first. The task itself is not stopped: a result that arrives after the
+ * deadline goes to `onLate`, so a late image can be deleted instead of left in the gallery.
+ */
+export function withDeadline<T>(
+  task: () => Promise<T>,
+  ms: number,
+  what: string,
+  onLate?: (value: T) => unknown,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let expired = false;
+  const running = task();
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      expired = true;
+      reject(new Error(`${what} took longer than ${Math.round(ms / 60_000)} minutes`));
+    }, ms);
+  });
+  void running.then(
+    (value) => {
+      if (expired) void Promise.resolve(onLate?.(value)).catch(() => undefined);
+    },
+    () => undefined,
+  );
+  return Promise.race([running, late]).finally(() => clearTimeout(timer));
+}
+
+/**
  * One paid image for a record its caller has just marked pending, in the job's lane (`high` unless it names one).
  * Resolves the record as left: `ready`, `failed` (never repainted without a tap), `stopped` or `waiting-consent`
  * (nothing was paid for), or null when the record is gone. An image that could not be saved onto its record is deleted
@@ -256,7 +291,9 @@ export function paintRecord(deps: ArtDeps, job: PaintRecordJob): Promise<Paint |
     }
     let image: PaintedImage;
     try {
-      image = await job.paint();
+      image = await withDeadline(job.paint, PAINT_DEADLINE_MS, "The image service", (late) =>
+        late.id ? images.deleteGalleryImage(late.id) : undefined,
+      );
     } catch (error) {
       const message = failure(error);
       deps.runtime.logger.warn("[otome-forge] painting %s failed: %s", job.label, message);

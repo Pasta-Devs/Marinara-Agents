@@ -8,6 +8,7 @@ import { createImageClient } from "../packages/otome-forge/src/engine/packages/s
 import {
   paintSlot,
   startPaint,
+  withDeadline,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/paint.ts";
 import { placeKey } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/places.ts";
 import {
@@ -861,4 +862,36 @@ test("Settings → Images lists the Engine's image style profiles, and the one p
     fetch: (async () => new Response("{}", { status: 500 })) as typeof globalThis.fetch,
   });
   assert.deepEqual(await broken.styleProfiles!(), { defaultProfileId: "", profiles: [] });
+});
+
+test("a paid image that never answers ends at its deadline, frees its connection's queue, and its late image is deleted", async () => {
+  // The maintainer's, 2026-11-05: a key image said "Painting this moment" for 30 minutes. One call that never answers
+  // held the connection's queue, so every paint behind it waited too.
+  let answer: (value: { id: string }) => void = () => undefined;
+  const hung = new Promise<{ id: string }>((resolve) => (answer = resolve));
+  const late: string[] = [];
+  const first = paintSlot("conn-deadline", () =>
+    withDeadline(
+      () => hung,
+      30,
+      "The image service",
+      (image) => late.push(image.id),
+    ),
+  );
+  const second = paintSlot("conn-deadline", async () => "painted");
+  await assert.rejects(first, /The image service took longer than/);
+  assert.equal(await second, "painted", "the next paint on the connection runs");
+  answer({ id: "g-late" });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.deepEqual(late, ["g-late"], "the image that came after the deadline goes to onLate, to be deleted");
+  // An answer in time is returned as is, and nothing is called late.
+  assert.equal(
+    await withDeadline(
+      async () => "ok",
+      1_000,
+      "x",
+      () => assert.fail("not late"),
+    ),
+    "ok",
+  );
 });

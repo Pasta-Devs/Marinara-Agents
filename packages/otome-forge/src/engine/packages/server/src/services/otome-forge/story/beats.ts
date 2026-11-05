@@ -857,30 +857,46 @@ function writable(run: RunDocuments, chapter: Chapter, i: number): boolean {
   return i < chapter.nodes.length && !progress?.completed && i <= (progress?.beatsRead ?? 0) + 1;
 }
 
+/** True when nothing may be written after `beat` yet: a big choice ends it, or its Confrontation has not ended. */
+const waitsForPick = (beat: Beat) =>
+  beat.choices.some((choice) => choice.kind === "big") || (!!beat.confrontation && !beat.confrontation.ending);
+
 /**
- * Queues the node after `beat` in the background of the run's queue, unless the beat ends on a big choice or is a
- * Confrontation that has not ended (the stance that ends it queues it).
+ * Writes the chapter ahead of the reader in the background, one node at a time in the run's queue: the node after
+ * `beat`, then the one after that, to the chapter's last node, each painted as it is saved (generateBeat), so every
+ * scene's art is ready when the reader gets there (the maintainer's, 2026-11-05). A node already written is walked
+ * past. It stops at a beat that ends on a big choice or a Confrontation that has not ended (what follows waits for the
+ * pick; the stance that ends it queues it again), at a beat rewritten, eased off or removed since (a Rewrite or an Ease
+ * off drops what followed it: nothing written from it is saved, so a dropped scene never comes back), at a route
+ * chapter a rupture locks, and at a Cancel.
  */
 function queueLookahead(deps: BeatDeps, runId: string, chapter: Chapter, beat: Beat, mode: PaintMode): void {
-  const next = beat.i + 1;
-  if (next >= chapter.nodes.length || beat.choices.some((choice) => choice.kind === "big")) return;
-  if (beat.confrontation && !beat.confrontation.ending) return;
+  let next = beat.i + 1;
   void (async () => {
-    if (await readBeat(deps.store, runId, chapter.key, next)) return;
-    await cancellable(deps, runId, (signal) =>
-      readOrGenerate(
-        runId,
-        () => readBeat(deps.store, runId, chapter.key, next),
-        async () => {
-          // The beat it follows may have been rewritten or eased off while this waited in the queue.
-          const current = await readBeat(deps.store, runId, chapter.key, beat.i);
-          if (!current || current.written.at !== beat.written.at || cutShort(current)) return null;
-          // A route chapter waits while a rupture stands (no beat of it opens), so nothing is paid for meanwhile.
-          if (await routeLocked(deps, runId, chapter)) return null;
-          return generateBeat(deps, runId, chapter.key, next, { ...mode, signal });
-        },
-      ),
-    );
+    for (let from = beat; next < chapter.nodes.length && !waitsForPick(from); next = from.i + 1) {
+      const basis = from;
+      const i = next;
+      const written =
+        (await readBeat(deps.store, runId, chapter.key, i)) ??
+        (await cancellable(deps, runId, (signal) =>
+          readOrGenerate(
+            runId,
+            () => readBeat(deps.store, runId, chapter.key, i),
+            async () => {
+              // The beat it follows may have been rewritten, eased off or removed while this waited in the queue.
+              const current = await readBeat(deps.store, runId, chapter.key, basis.i);
+              if (!current || current.written.at !== basis.written.at || cutShort(current) !== cutShort(basis)) {
+                return null;
+              }
+              // A route chapter waits while a rupture stands (no beat of it opens), so nothing is paid for meanwhile.
+              if (await routeLocked(deps, runId, chapter)) return null;
+              return generateBeat(deps, runId, chapter.key, i, { ...mode, signal });
+            },
+          ),
+        ));
+      if (!written) return;
+      from = written;
+    }
   })().catch((error: unknown) => {
     deps.runtime.logger.warn(
       "[otome-forge] Lookahead for %s/%d stopped: %s",
@@ -1352,7 +1368,7 @@ export async function easeOff(
   key: string,
   i: number,
   segment: number,
-  { debugMode }: { debugMode: boolean },
+  { debugMode, review }: PaintMode,
 ): Promise<{ beat: Beat; veilSuggestions: LimitId[] } & ReadResult> {
   const { run, chapter } = await load(deps, runId, key);
   const node = chapter.nodes[i];
@@ -1393,5 +1409,7 @@ export async function easeOff(
       (LIMIT_IDS as readonly string[]).includes(tag) && world?.content.limits[tag as LimitId] === "allow",
   );
   const read = await finishBeat(deps, runId, chapter, beat, debugMode);
+  // The rest of the chapter is written again from the cut, and painted, before the reader gets there.
+  if (!read.chapterDone) queueLookahead(deps, runId, chapter, beat, { debugMode, review });
   return { beat, veilSuggestions, ...read };
 }

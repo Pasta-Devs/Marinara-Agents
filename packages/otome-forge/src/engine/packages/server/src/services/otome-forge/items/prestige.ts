@@ -99,7 +99,7 @@ export async function ensurePrestigeStory(
       throw locked(`No extra story with ${unit.name} is unlocked yet.`);
     }
     const memory = await recallText(deps, runId, {
-      job: "structured",
+      job: "narration",
       cast: [li],
       query: { plan: unit.bible?.want ?? "", speakers: [unit.name] },
       signal,
@@ -108,7 +108,7 @@ export async function ensurePrestigeStory(
     const context = { units: now.units, state: now.state, world: now.world, li };
     const { value, connectionId } = await generateJson(deps, {
       runId,
-      job: "structured",
+      job: "narration",
       label: `prestige-plan/${key}`,
       messages: prestigePlanMessages({
         world: now.world,
