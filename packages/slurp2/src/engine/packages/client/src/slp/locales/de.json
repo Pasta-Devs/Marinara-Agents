@@ -3197,7 +3197,7 @@
   "ui.slurp.live.settings.ownGoalsDetail": "Lege bis zu drei Ziele für einen Creator fest. Sie ersetzen die erzeugten Ziele in den nächsten Shows dieses Creators.",
   "ui.slurp.live.settings.ownGoalsCreator": "Creator",
   "ui.slurp.live.settings.ownGoalsPick": "Creator wählen",
-  "ui.slurp.live.settings.ownGoalsAmount": "Zielbetrag",
+  "ui.slurp.live.settings.ownGoalsAmount": "Betrag",
   "ui.slurp.live.settings.ownGoalsText": "Was passiert",
   "ui.slurp.live.settings.groupPrivate": "Private Shows",
   "ui.slurp.live.settings.privateMinutes": "Privater Block",

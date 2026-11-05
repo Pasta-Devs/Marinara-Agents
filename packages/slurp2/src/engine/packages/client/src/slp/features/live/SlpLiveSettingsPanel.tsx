@@ -304,13 +304,13 @@ function SlpLiveOwnGoals({
                   inputMode="numeric"
                   min={1}
                   max={1_000_000}
-                  aria-label={tx("ownGoalsAmount", "Goal amount")}
-                  placeholder={tx("ownGoalsAmount", "Goal amount")}
+                  aria-label={tx("ownGoalsAmount", "Amount")}
+                  placeholder={tx("ownGoalsAmount", "Amount")}
                   value={row.target}
                   disabled={disabled}
                   onChange={(event) => edit(index, { target: event.target.value })}
                   onBlur={save}
-                  className={`${inputClass} w-28 tabular-nums`}
+                  className={`${inputClass} w-24 tabular-nums`}
                 />
                 <input
                   type="text"

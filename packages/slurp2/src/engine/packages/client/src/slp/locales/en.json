@@ -6767,7 +6767,7 @@
   "ui.slurp.live.settings.ownGoalsDetail": "Set up to three goals for one Creator. They replace the made goals in that Creator's next shows.",
   "ui.slurp.live.settings.ownGoalsCreator": "Creator",
   "ui.slurp.live.settings.ownGoalsPick": "Pick a Creator",
-  "ui.slurp.live.settings.ownGoalsAmount": "Goal amount",
+  "ui.slurp.live.settings.ownGoalsAmount": "Amount",
   "ui.slurp.live.settings.ownGoalsText": "What happens",
   "ui.slurp.live.settings.groupPrivate": "Private shows",
   "ui.slurp.live.settings.privateMinutes": "Private block",
