@@ -3,8 +3,8 @@
 // ──────────────────────────────────────────────
 // GET  /runs/:run/art/scene?key&i                          → SceneArt: the beat's places and CG with their paints, and
 //                                                            each love interest's ready faces (the reader polls it
-//                                                            while something is painting); in a look's first-wear
-//                                                            scene, its love interest in that look (`looks`), and
+//                                                            while something is painting); in his 5★ look's
+//                                                            first-wear scene, him in that look (`looks`), and
 //                                                            `lookComing` while that look paints or is cut out
 // POST /runs/:run/art/place {place, prompt?, negativePrompt?} → {place, world}; paints that place now (the tap)
 // POST /runs/:run/art/place/prompt {place}                 → {prompt, negativePrompt}; for the prompt review dialog
@@ -27,8 +27,8 @@
 // background, or after Paint under Ask before painting): his worn look stands in meanwhile, and `lookComing` keeps the
 // reader polling until he stands in the new one, cut out. A look waiting for Paint, failed or stopped is not waited
 // for. No face set is painted for it here: faces are paid for when he wears a look (S/routes/wardrobe.ts), so the
-// scene does not pay for one he may never wear. Worn now, it is his stage look already and needs nothing. Her looks
-// have no scene and she is never on stage.
+// scene does not pay for one he may never wear. Worn now, it is his stage look already and needs nothing. A her-look5's
+// first-wear scene pins nothing: the protagonist is never on stage, and he stands in the look he wears now.
 import { z } from "zod";
 import type { SceneArt, Unit } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { cutoutsPending, queueCutouts } from "../art/cutout.js";

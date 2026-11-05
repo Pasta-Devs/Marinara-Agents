@@ -139,7 +139,7 @@ function itemLook(runId: string, item: Item, owner: "me" | LiId, worn: string | 
     worn: worn === item.id,
     wearable: !!outfit,
     unopened: (STORY_KINDS.has(item.kind) && !item.story) || (hasArt(item) && !item.art && !!world.images.connectionId),
-    ...(item.kind === "his-look5" ? { story: item.story } : {}),
+    ...(STORY_KINDS.has(item.kind) ? { story: item.story } : {}),
   };
 }
 

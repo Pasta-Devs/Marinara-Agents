@@ -39,11 +39,13 @@
 //     betweenYou with romanceLine (also P16, P17, P19, P20, P21, P24, P26, Read Me, Read Him, the extra story plan),
 //     the Read Me notebook knowsAboutYou (also P16, P17, P21, P26, Read Me, Read Him, the extra story plan),
 //     protagonistBlock (also P19, P21, P24, P26, Read Me, the extra story plan), appearanceLine (also P19, P21, P24,
-//     P26, the extra story plan), bibleBlock (also P21, P26, the extra story plan), sceneCardBlock (also P19, P24),
-//     ledgerBlock (also P21), and what each love interest may know: knownRows (also P19, P21, P24, P26 and
-//     S/story/chapters.ts) and ownView (also P19, P24, P26, and the view S/home/note.ts gives P16, S/phone/chat.ts
-//     P17, S/minigames/read-me.ts Read Me and read-him.ts Read Him). The rules after them are the story prompts' own
-//     (briefRule is P20's too)
+//     P26, Read Me through protagonistBlock, the extra story plan), bibleBlock (also P21, P26, the extra story plan),
+//     sceneCardBlock (also P19, P24), ledgerBlock (also P21), and what each love interest may know: knownRows (also
+//     P19, P21, P24, P26 and S/story/chapters.ts) and ownView (also P19, P24, P26, and the view S/home/note.ts gives
+//     P16, S/phone/chat.ts P17, S/minigames/read-me.ts Read Me and read-him.ts Read Him). The rules after them are the
+//     story prompts' own (briefRule is P20's too)
+//   plannerPremise: the player's premise line, in the planners only (the arc planner, P5, P10, P11, P21 and the extra
+//     story plan); the other story prompts read the setting alone (P2, P14 and P20 send the premise their own way)
 //   arcPlanMessages: the arc planner, #1980 (S/story/arc.ts)
 //   chapterPlanMessages: P5 chapter plan (S/story/chapters.ts)
 //   beatMessages: P6 scene (beat) narrator, also for dates, Character Stories (P22, P23), extra stories and the
@@ -813,7 +815,7 @@ export function worldPlanMessages({
     '{"title": "...", "setting": "...", "mystery": {"question": "...", "truth": "..."}, "pieces": [{"li": "<love interest id>", "piece": "...", "reasonToHide": "..."}], "web": [{"a": "<love interest id>", "b": "<love interest id>", "history": "...", "stance": "allies|uneasy|rivals|enemies", "debt": "...", "secret": "..."}], "openingSituation": "..."}',
     "FIELDS",
     "- title: the story's name, 2 to 6 words.",
-    "- setting: 2 to 4 sentences: the place, its order, and what makes it strange or dangerous. When the premise or a love interest's card sets the story in an existing world from a game, book, film or show (such as Teyvat from Genshin Impact), the setting is that world, named as it is, with its canon intact; only this story's situation is new.",
+    "- setting: 2 to 4 sentences: the place, its era and technology level as the premise sets them, its order, and what makes it strange or dangerous. When the premise or a love interest's card sets the story in an existing world from a game, book, film or show (such as Teyvat from Genshin Impact), the setting is that world, named as it is, with its canon intact; only this story's situation is new.",
     "- mystery.question: the question the protagonist will chase, one sentence. mystery.truth: the full hidden answer, 2 to 4 sentences.",
     "- pieces: exactly one per love interest, with that love interest's exact id. piece: the part of the truth that love interest holds. reasonToHide: that love interest's own reason to keep it from the protagonist.",
     "- web: one row for each pair of love interests: their shared history, their stance, what one owes the other, and optionally a secret between them the protagonist does not know (omit it when there is none).",
@@ -823,6 +825,7 @@ export function worldPlanMessages({
     "- Every love interest is an adult, written as an adult, in an adult role. No school or student roles.",
     "- Never contradict a love interest's CANONICAL CHARACTER CARD: the card wins over the premise and over this plan.",
     "- In an existing world, the mystery, the pieces and the web fit its canon: they may add what canon leaves unsaid, never contradict it. The adult rule above still holds over canon.",
+    "- Keep the premise's genre, era and technology: never move the story to another period, and never add a technology or aesthetic its world does not have (in an existing world, its canon decides).",
     "- The love interests' goals compete with the protagonist's own goal.",
     "- Never assume the protagonist's gender: use their pronouns.",
     "- Omit an optional field rather than writing null.",
@@ -1288,13 +1291,28 @@ function knownShown(unit: Pick<Unit, "name">, known: readonly NotebookEntry[]): 
   return count;
 }
 
-/** Who the protagonist is (name, pronouns, traits, goal), for every story prompt. */
-export function protagonistBlock(player: Player): string {
+/**
+ * Who the protagonist is (name, pronouns, traits, goal, the persona) and what they wear now, for every story prompt.
+ * The outfit is a love interest's appearanceLine with the outfit alone: a worn Wardrobe look. Their base look is the
+ * persona's Appearance, in aboutLine already (no current code writes player.look.outfitLine), and an image-only
+ * appearance is not a story fact.
+ * `wearing: false` leaves it out where a prompt names the look itself (P19, P24).
+ */
+export function protagonistBlock(player: Player, { wearing = true } = {}): string {
   return [
     `${player.name || "The protagonist"} (${pronounText(player.pronouns)}). Never assume a gender the pronouns do not state.`,
     player.traits.length ? `Traits: ${player.traits.join("; ")}` : "",
     player.goal.trim() ? `Their own goal: ${player.goal.trim()}` : "",
     aboutLine(player),
+    wearing
+      ? appearanceLine({
+          ...player,
+          name: player.name || "the protagonist",
+          identityLine: "",
+          outfitLine: player.look.outfitLine,
+          bible: null,
+        })
+      : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -1495,6 +1513,19 @@ function storyMessages(
 const questionOf = (world: Pick<World, "mystery">) => world.mystery.question.trim();
 
 /**
+ * The player's premise, the line after the WORLD block's setting in the arc, chapter (P5: in its own part, since the
+ * story context is shared with the scenes), route, repair, Character Story and extra story planners, and in no other
+ * prompt. It is read for the genre, era and technology the setting must keep, never for its events: its opening
+ * situation is P2's openingSituation, which P5 shows for chapter 1 only. `keep` says what holds them (the extra story
+ * plan's own, since an au leaves them on purpose). No line with no premise, or when the WORLD block already shows the
+ * premise in place of a setting. The same text on every call of a run.
+ */
+const plannerPremise = (world: Pick<World, "premise" | "setting">, keep = "which the story keeps"): string[] =>
+  world.premise.trim() && world.setting.trim()
+    ? [`The player's premise, read only for its genre, era and technology, ${keep}: ${world.premise.trim()}`]
+    : [];
+
+/**
  * The arc planner's prompt: the world, the mystery in full (this is the only writer that always sees the truth), what
  * each love interest wants, the arcs before this one so it does not repeat them, and the rule that keeps it brief.
  */
@@ -1557,6 +1588,7 @@ export function arcPlanMessages({
   const user = [
     "WORLD",
     world.setting.trim() || world.premise.trim(),
+    ...plannerPremise(world),
     questionOf(world) ? `The mystery: ${questionOf(world)}` : "",
     world.mystery.truth ? `The hidden truth (reveal it only where you schedule it): ${world.mystery.truth}` : "",
     "",
@@ -1718,6 +1750,9 @@ export function chapterPlanMessages({
     "- Omit an optional field rather than writing null.",
   ].join("\n");
   const rest = [
+    // The story context's WORLD block is the scenes' too, so the premise comes here, in the plan's own part.
+    ...plannerPremise(world),
+    "",
     arc
       ? [
           "THE ARC AHEAD (for this plan only)",
@@ -2254,6 +2289,7 @@ function arcPlanUser(input: ArcPlanInput, heading: string, task: string[]): stri
   return [
     "WORLD",
     world.setting.trim() || world.premise.trim(),
+    ...plannerPremise(world),
     world.mystery.question ? `The mystery: ${world.mystery.question}` : "",
     world.mystery.truth ? `The hidden truth (never stated outright): ${world.mystery.truth}` : "",
     "",
@@ -3493,7 +3529,8 @@ export function datePlanMessages({
     "",
     otomeContentContract({ world, lis: [{ name }], kind: "planner" }),
   ].join("\n");
-  const wear = (who: string, line: string) => (line.trim() ? `- ${who}: ${line.trim()}` : "");
+  // What each of them wears (a date's picked looks are worn before it is planned) is in protagonistBlock and in the
+  // bible's appearanceLine.
   const user = [
     "WORLD",
     world.setting.trim() || world.premise.trim(),
@@ -3512,10 +3549,6 @@ export function datePlanMessages({
       : place === STORY_PLACE
         ? `"${storyPlace?.name ?? ""}", a place in this world${storyPlace?.tags.trim() ? ` (${storyPlace.tags.trim()})` : ""}. The date goes there: keep that name for it.`
         : `${PLACE_SPIRIT[place]}. Adapt it to this world's setting and era, keeping its spirit.`,
-    "",
-    "WHAT THEY WEAR (image tags; describe them in words if at all)",
-    wear(name, wornOutfitLine(unit) || unit.outfitLine || unit.bible?.look.outfitLine || ""),
-    wear(player.name || "The protagonist", wornOutfitLine(player) || player.look.outfitLine),
     makeItRight ? `\nMAKE IT RIGHT\nThe rupture (${makeItRight.id})${mendText ? `: ${mendText}` : ""}` : "",
     "",
     memory.trim() ? `STORY MEMORY\n${memory.trim()}` : "",
@@ -3950,7 +3983,7 @@ export function storyPlanMessages({ world, player, unit, state, item, memory }: 
     "- title: the Memory's title, exactly as given. summary: one or two lines on what the story is about, without giving away its turns (the player reads it).",
     `- tags: content tags a reader should see before it starts, from: ${CHAPTER_TAGS.join(", ")}. Only what the story really holds; [] when none apply.`,
     `- voicedLine: the one line ${name} says aloud in this story that holds its heart, in ${name}'s own voice, at most ${NOTICED_WORDS_MAX} words; it is voiced on the Memory's card. Not a question that demands an answer.`,
-    "- nodes: kind beat is an ordinary scene; kind moment is a scene with a special framing, set by moment: read-him (the protagonist reads their face to see what they really feel), call (a phone call), date (time together that turns on something real).",
+    "- nodes: kind beat is an ordinary scene; kind moment is a scene with a special framing, set by moment: read-him (the protagonist reads their face to see what they really feel), call (a call from afar, only voices), date (time together that turns on something real).",
     `- guide: what happens in that node, 2 to 4 sentences, for the narrator: who wants what, what changes, where it leaves things. cast: exactly ["${li}"]. place: where it opens (optional).`,
     `- ledger.relationship: one line on what moved between ${name} and the protagonist. ledger.conflict: optional: complicate or escalate an open conflict by its id, or plant a new seed (type from: ${ANGST_TYPES.join(", ")}). ledger.offscreen: [].`,
     "RULES",
@@ -3970,6 +4003,7 @@ export function storyPlanMessages({ world, player, unit, state, item, memory }: 
   const user = [
     "WORLD",
     world.setting.trim() || world.premise.trim(),
+    ...plannerPremise(world),
     world.mystery.question ? `The mystery: ${world.mystery.question}` : "",
     "",
     "PROTAGONIST",
@@ -4058,7 +4092,7 @@ export function prestigePlanMessages({
     "FIELDS",
     `- kind: one of ${kinds.join(", ")}. premise: one sentence on what they imagine (the player does not see it). title: a short title for it. summary: one or two lines on it, without giving away its turns (the player reads it).`,
     `- tags: content tags a reader should see before it starts, from: ${CHAPTER_TAGS.join(", ")}. Only what the story really holds; [] when none apply.`,
-    "- nodes: kind beat is an ordinary scene; kind moment is a scene with a special framing, set by moment: read-him (the protagonist reads their face to see what they really feel), call (a phone call), date (time together that turns on something real).",
+    "- nodes: kind beat is an ordinary scene; kind moment is a scene with a special framing, set by moment: read-him (the protagonist reads their face to see what they really feel), call (a call from afar, only voices), date (time together that turns on something real).",
     `- guide: what happens in that node, 2 to 4 sentences, for the narrator: who wants what, what changes, where it leaves things. cast: exactly ["${li}"]. place: where it opens (optional).`,
     "RULES",
     `- ${STORY_NODES_MIN} to ${STORY_NODES_MAX} nodes of kind beat or moment (no confrontation). ${name} is in every node, and no other love interest appears.`,
@@ -4076,6 +4110,10 @@ export function prestigePlanMessages({
   const user = [
     "WORLD",
     world.setting.trim() || world.premise.trim(),
+    ...plannerPremise(
+      world,
+      "which an extra story keeps unless its kind is au (an au imagines another world on purpose)",
+    ),
     "",
     "PROTAGONIST",
     protagonistBlock(player),
@@ -4147,7 +4185,8 @@ function lookUser({ player, unit, state, look }: LookLineInput, task: string, ki
     sceneCardBlock(unit, ownView(state, unit.id).liState),
     "",
     "PROTAGONIST",
-    protagonistBlock(player),
+    // THE LOOK below is the one this line is about (P19: the one worn now), so the block names no other.
+    protagonistBlock(player, { wearing: false }),
     "",
     lookBlock(look),
     "",

@@ -96,7 +96,7 @@ export function registerMemoryRoutes(router: OtomeRouter, { store, handle, memor
     handle(async (request) => {
       parseBody(NoFields, request.body);
       const runId = await runOf(request);
-      if (!(await memory.maintain({ runId, debugMode: debugModeOf(request) }))) {
+      if (!(await memory.maintain({ runId, debugMode: debugModeOf(request), retry: true }))) {
         throw new OtomeForgeError(503, "No connection is set to summarize the story with.", "no-connection");
       }
       return { status: await memory.status(runId) };
