@@ -206,6 +206,8 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
       events: d.events.filter((e) => e.circleId !== id),
       seeds: d.seeds.filter((s) => s.circleId !== id),
       dealtDays: d.dealtDays.filter((k) => !k.startsWith(`${id}:`)),
+      papers: d.papers.filter((p) => p.circleId !== id),
+      paperWeeks: d.paperWeeks.filter((k) => !k.startsWith(`${id}:`)),
       promises: d.promises.filter((p) => p.circleId !== id),
       nudges: d.nudges.filter((n) => n.circleId !== id),
     }));
@@ -351,6 +353,22 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
         .map((th) => ({ ...th, texts: th.texts.sort((x, y) => x.time.localeCompare(y.time)) }))
         .sort((x, y) => last(y).localeCompare(last(x))),
     };
+  });
+
+  // Monday papers, newest first. A paper is hidden once one of its events is vetoed or stale.
+  app.get<{ Params: { id: string } }>("/circles/:id/papers", async (request, reply) => {
+    const doc = await readMeanwhile();
+    if (!find(doc, request.params.id)) return notFound(reply);
+    const status = new Map(doc.events.map((e) => [e.id, e.status]));
+    const papers = doc.papers
+      .filter(
+        (p) =>
+          p.circleId === request.params.id &&
+          !p.eventIds.some((id) => status.get(id) === "vetoed" || status.get(id) === "stale"),
+      )
+      .sort((a, b) => b.weekStart.localeCompare(a.weekStart))
+      .map(({ id, weekStart, title, items, createdAt }) => ({ id, weekStart, title, items, createdAt }));
+    return { papers };
   });
 
   // Hook cards and diary lines per character, newest first.

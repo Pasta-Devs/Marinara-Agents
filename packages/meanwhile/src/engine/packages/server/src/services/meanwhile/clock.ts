@@ -177,6 +177,13 @@ export function hhmm(minutes: number): string {
   return `${two(Math.floor(minutes / 60) % 24)}:${two(minutes % 60)}`;
 }
 
+/** The newest Monday-to-Monday week (Circle days, `end` exclusive) that is over at `ms`. */
+export function lastWeek(ms: number, tz: string): { start: string; end: string } {
+  const today = msToWall(ms, tz).slice(0, 10);
+  const end = shiftDay(today, -((new Date(`${today}T00:00:00Z`).getUTCDay() + 6) % 7));
+  return { start: shiftDay(end, -7), end };
+}
+
 /** Moves a "YYYY-MM-DD" day by whole days. */
 export function shiftDay(day: string, days: number): string {
   return new Date(Date.parse(`${day}T00:00:00Z`) + days * DAY).toISOString().slice(0, 10);

@@ -26,3 +26,5 @@ The Home screen has a Meanwhile card. It lists up to 3 hooks that no chat has us
 A nudge ("this week Lily gets a job offer") becomes one planned event for a Circle day inside its window.
 
 The same model call that writes a day can also write up to 3 short texts between characters who are in that day's events. Each text is checked and kept on the event. The "Phone" button on a Circle card shows them as threads, one per pair of characters. A text follows its event: it is not shown if the event is proposed, vetoed, stale, spicy or only for one chat.
+
+Once a week, after a Monday to Monday week has passed in a Circle's time zone, one more model call can write a short paper for it, in the voice of the Circle's setting (a town paper, a notice board, a newsletter). It uses only accepted, Circle-wide, non-spicy notable and major events, and only the newest finished week gets one. A week with fewer than 2 such events gets no paper and no call. If the daily call limit is used up, the paper waits for the next run. The Circle card has a "Paper" button, and a paper is hidden if one of its events is later vetoed or goes stale.

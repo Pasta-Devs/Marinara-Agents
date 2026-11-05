@@ -2,7 +2,16 @@
 import { DAY, hhmm, msToWall, wallToMs } from "./clock.js";
 import { BIG_KINDS, KINDS, type Seed } from "./deck.js";
 import { blocksFor, isRecord, placeOf, type PlaceTags } from "./routine.js";
-import { PLACES, beatMessages, placeMessages, retryMessage, summaryMessages, type Msg } from "./prompts.js";
+import {
+  PLACES,
+  beatMessages,
+  paperMessages,
+  paperRetryMessage,
+  placeMessages,
+  retryMessage,
+  summaryMessages,
+  type Msg,
+} from "./prompts.js";
 import { getMeanwhileRuntime, type Circle, type LifeEvent, type PromiseRecord, type Usage } from "./store.js";
 
 /** How far a beat may start from its seed time. */
@@ -496,4 +505,57 @@ export async function askSummary(w: World, gate: Gate, event: LifeEvent): Promis
     }
   }
   if (Object.keys(diary).length) event.diary = diary;
+}
+
+type PaperBody = { title: string; items: { headline: string; text: string }[] };
+
+/** Checks one Monday paper reply. Returns the paper or the reasons it is rejected. */
+export function checkPaper(raw: unknown, banned: RegExp): PaperBody | string[] {
+  if (!isRecord(raw)) return ["The reply must be a JSON object"];
+  const errors: string[] = [];
+  const str = (v: unknown, max: number) => {
+    const s = typeof v === "string" ? v.replace(/\s+/g, " ").trim() : "";
+    return s && s.length <= max && !banned.test(s) ? s : null;
+  };
+  const title = str(raw.title, 80);
+  if (!title) errors.push("title must have 1 to 80 characters and must not name or address the user");
+  const list = Array.isArray(raw.items) ? raw.items : [];
+  if (list.length < 2 || list.length > 5) errors.push("items must have 2 to 5 entries");
+  const items = list.flatMap((it) => {
+    const headline = isRecord(it) ? str(it.headline, 80) : null;
+    const text = isRecord(it) ? str(it.text, 240) : null;
+    return headline && text ? [{ headline, text }] : [];
+  });
+  if (items.length !== list.length)
+    errors.push("each item needs a headline (80) and a text (240) without the user's name");
+  return errors.length || !title ? errors : { title, items };
+}
+
+/** One call for the week's paper, one retry on a rejected reply. Null when the model gives no valid paper. */
+export async function askPaper(
+  w: World,
+  gate: Gate,
+  week: { start: string; end: string },
+  events: readonly LifeEvent[],
+): Promise<PaperBody | null> {
+  const circle = w.circle;
+  const tz = circle.clock.timezone;
+  const castNames = Object.values(w.cast).map((c) => c.name);
+  const banned = bannedWords(w.personas, castNames, false);
+  const base = paperMessages({
+    setting: circle.setting,
+    from: week.start,
+    to: week.end,
+    cast: castNames,
+    events: events.map((e) => `${msToWall(Date.parse(e.start), tz).slice(5, 10)} ${e.text}`),
+  });
+  let messages = base;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const data = await gate.complete(messages, 800);
+    const result = checkPaper(data, banned);
+    if (!Array.isArray(result)) return result;
+    if (gate.left() < 1) return null;
+    messages = [...base, paperRetryMessage(result)];
+  }
+  return null;
 }
