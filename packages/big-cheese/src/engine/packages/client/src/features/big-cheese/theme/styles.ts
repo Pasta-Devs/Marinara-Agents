@@ -74,8 +74,10 @@ ${R} .bc-top-day { margin-inline-start: auto; font-weight: 600; white-space: now
 ${R} .bc-pips { display: inline-flex; gap: 4px; }
 ${R} .bc-pip { width: 10px; height: 20px; border-radius: 3px; border: 2px solid var(--bc-gold); transition: background-color 200ms; }
 ${R} .bc-pip-full { background: var(--bc-gold); }
-${R} .bc-dock {
-  display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--bc-border);
+${R} .bc-modes { display: flex; gap: .5rem; flex-wrap: wrap; }
+  ${R} .bc-modes .bc-btn[aria-pressed="true"] { border-color: var(--bc-gold); color: var(--bc-gold); }
+  ${R} .bc-dock {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border-top: 1px solid var(--bc-border);
   margin-inline: calc(-1 * max(1rem, env(safe-area-inset-left))); padding-bottom: env(safe-area-inset-bottom);
 }
 ${R} .bc-dock-tab {

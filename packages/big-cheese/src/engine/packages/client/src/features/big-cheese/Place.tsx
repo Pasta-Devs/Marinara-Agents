@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Face, nameOf, type Ctx } from "./parts";
 import { Ticker } from "./Ticker";
+import { Adult } from "./Adult";
 
 // A room's condition shows as a word, never a number.
 const STATES = [
@@ -115,6 +116,16 @@ export function Place({ ctx }: { ctx: Ctx }) {
         <ul className="bc-list">
           {kit.rooms.map((room) => {
             const here = peopleIn(room.id);
+            // A private room is a closed door unless the adult module is on.
+            if (room.kind === "private" && !run.game.adult)
+              return (
+                <li key={room.id} className="bc-row bc-row-flat">
+                  <span className="bc-row-text">
+                    <span className="bc-row-title">{room.name}</span>
+                    <span className="bc-muted">{t("ui.bigCheese.adult.door")}</span>
+                  </span>
+                </li>
+              );
             return (
               <li key={room.id}>
                 <button type="button" className="bc-row" onClick={() => setRoomId(room.id)}>
@@ -136,6 +147,9 @@ export function Place({ ctx }: { ctx: Ctx }) {
               </li>
             );
           })}
+          <li>
+            <Adult ctx={ctx} />
+          </li>
         </ul>
       ) : rumours.length === 0 ? (
         <p>{t("ui.bigCheese.place.noRumours")}</p>

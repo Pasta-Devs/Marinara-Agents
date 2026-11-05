@@ -11,8 +11,10 @@ import { CastRequest, ReadBody, castRead, listCast, midCast, refreshCast, resolv
 import { createGame, kitView, view } from "./game.js";
 import { KITS } from "./core/kits/index.js";
 import { createKits } from "./kits.js";
+import { createDraft } from "./draft.js";
 import { createMeetings } from "./meetings.js";
 import { createRules } from "./rules.js";
+import { createAdult } from "./adult.js";
 import { createPlace } from "./place.js";
 import { BigCheeseError, CreateRunBody, createRunStore, type RunStore } from "./store.js";
 
@@ -57,7 +59,9 @@ export async function activate({ api }: ActivationContext) {
   const advisors = createAdvisors(store);
   const meetings = createMeetings(store, () => engineModel(runtime, null).catch(() => undefined));
   const rules = createRules(store);
+  const adult = createAdult(store);
   const kits = createKits(runtime.persistence.documents, () => engineModel(runtime, null).catch(() => undefined));
+  const draft = createDraft(() => engineModel(runtime, null).catch(() => undefined));
   const runId = (request: Request) => (request.params as { id?: unknown } | undefined)?.id;
 
   // Known failures go out as { error, code }; anything else is logged and hidden behind a 500.
@@ -89,7 +93,13 @@ export async function activate({ api }: ActivationContext) {
           const kitId = custom
             ? (Object.values(KITS).find((k) => k.place.family === custom.family)?.place.id ?? "hafenkai")
             : body.data.kitId;
-          return game.create(kitId, body.data.lite, await resolveCast(runtime, kitId, body.data), custom);
+          return game.create(
+            kitId,
+            body.data.lite,
+            await resolveCast(runtime, kitId, body.data),
+            custom,
+            body.data.mode,
+          );
         }),
       );
       router.get(
@@ -107,6 +117,11 @@ export async function activate({ api }: ActivationContext) {
       router.post(
         "/kits/import",
         handle(async (request) => kits.import((request.body as { kit?: unknown } | undefined)?.kit)),
+      );
+      // T3: a wish becomes a kit draft, or one part of a draft is rerolled.
+      router.post(
+        "/place/draft",
+        handle(async (request) => draft.make(request.body)),
       );
       router.get(
         "/cast",
@@ -200,6 +215,13 @@ export async function activate({ api }: ActivationContext) {
         handle((r) => rules.list(runId(r))),
       );
       action("rule", (r) => rules.set(runId(r), r.body));
+      // T6: adult module (README Adult module).
+      router.get(
+        "/runs/:id/adult",
+        handle((r) => adult.list(runId(r))),
+      );
+      action("adult", (r) => adult.set(runId(r), r.body));
+      action("adult/affairs/:threadId", (r) => adult.choose(runId(r), param(r, "threadId"), r.body));
 
       router.delete(
         "/runs/:id",

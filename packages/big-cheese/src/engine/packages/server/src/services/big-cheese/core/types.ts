@@ -52,6 +52,7 @@ export interface Person {
   advisedWeek?: number; // advisors only, the last week the boss followed their advice (or joined)
   romance?: number; // 0-100, how they feel about the boss
   attraction?: number; // 0-100, how the boss feels about them
+  traits?: string[]; // from the kit or the cast card; the adult layer reads them (who strays)
   name?: string; // set when a cast card replaces or adds this person
   routine?: Record<Slot, string>; // hired people and visitors are not in the kit
   until?: number; // visitors: the day index on which they go home

@@ -31,7 +31,7 @@ import type { PlaceKit } from "./core/kits/types.js";
 import { BLUEPRINTS, choices, dueBig, finishBig, settleBig } from "./core/bigscenes.js";
 import { addTrust } from "./core/run.js";
 import { layerDials } from "./core/layers.js";
-import { METERS, type Thread } from "./core/types.js";
+import { METERS, type Mode, type Thread } from "./core/types.js";
 import { BigCheeseError, type Run, type RunStore, type SceneText } from "./store.js";
 
 type Patch = Partial<Pick<Run, "game" | "text" | "scene">>;
@@ -101,7 +101,7 @@ export function kitView(r: { kitId: string; kit?: PlaceKit }, cast?: Cast) {
       traits: p.traits,
       voiceLines: p.voice.phrases,
     })),
-    rooms: k.rooms.map(({ id, name, text }) => ({ id, name, text })),
+    rooms: k.rooms.map(({ id, name, text, kind }) => ({ id, name, text, kind })),
     letters: k.guidedLetters,
   };
 }
@@ -124,6 +124,7 @@ export function createGame(store: RunStore, getModel: () => Promise<ModelCall | 
         blueprint: s.blueprint,
         goal: BLUEPRINTS[s.blueprint].goals[s.parts.length],
         layers: layerDials(game),
+        adult: game.adult,
         room: s.room,
         people: s.people,
         offer: final && bp.end === "pick" ? [] : stances,
@@ -182,13 +183,15 @@ export function createGame(store: RunStore, getModel: () => Promise<ModelCall | 
   const withGame = (game: Game, h: Rng): Game => ({ ...game, rng: h.rng });
 
   return {
-    async create(kitId: string, lite = false, cast?: Cast, custom?: PlaceKit) {
+    async create(kitId: string, lite = false, cast?: Cast, custom?: PlaceKit, mode: Mode = "normal") {
       const model = await modelFor({ lite });
       return view(
         await store.create(
           kitId,
           lite,
           async (game) => {
+            game.mode = mode; // Honest sets its mark with the first Board play (T13)
+            game.cheeseMark = mode === "ironman";
             const h = { rng: game.rng };
             const arrival = await openScene(
               withCast(placeKitOf({ kitId, kit: custom }), cast),
@@ -295,6 +298,7 @@ export function createGame(store: RunStore, getModel: () => Promise<ModelCall | 
               kit: placeOf(run),
               rng: h.rng,
               layers: layerDials(game),
+              adult: game.adult,
               seeds: seeds.map((c) => ({
                 id: c.id,
                 asker: c.asker,

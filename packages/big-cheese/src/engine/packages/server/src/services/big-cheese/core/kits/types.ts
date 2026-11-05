@@ -70,6 +70,7 @@ export interface PlaceKit {
     decree?: boolean;
   }[];
   // M3 additions, all optional so older kits stay valid
+  extras?: { id: string; label: string; main: Meter; value: number }[]; // T2: up to 2 extra meters
   scenario?: { goal: string }; // fixed start meters, a fixed opening thread and one set goal
   adult?: { intensity: number; themes: string[] }; // start values when the adult module is switched on
   officeHours?: { day: number; slot: Slot }; // 0-4 = Mon-Fri; default Wednesday afternoon (2, "afternoon")

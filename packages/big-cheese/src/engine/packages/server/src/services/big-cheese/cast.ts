@@ -410,6 +410,7 @@ export async function midCast(
       room: "home",
       ambition: 0,
       status: "active",
+      traits: sheet.traits,
       name,
       // Extras work the routine of a kit person in the same role, or of the first non-deputy.
       routine: (

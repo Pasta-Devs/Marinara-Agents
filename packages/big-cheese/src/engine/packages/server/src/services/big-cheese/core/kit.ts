@@ -121,6 +121,7 @@ export function newRun(kit: Kit, seed: number, place: PlaceKit = HAFENKAI_PLACE)
           room: "home",
           ambition: 0,
           status: "active" as const,
+          traits: [...(place.people.find((q) => q.id === p.id)?.traits ?? [])],
         },
       ]),
     ),

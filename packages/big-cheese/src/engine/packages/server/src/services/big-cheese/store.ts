@@ -93,6 +93,7 @@ export const CreateRunBody = z.object({
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
     .max(40),
   lite: z.boolean().optional(),
+  mode: z.enum(["normal", "honest", "sandbox", "ironman"]).optional(),
   savedKit: z
     .string()
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
@@ -156,7 +157,18 @@ export function createRunStore(documents: CapabilityDocumentStore) {
           if (!run.success) return null;
           const { kitId, createdAt, game } = run.data;
           const { week, day } = game.clock;
-          return { id: key, newer: false as const, kitId, week, day, createdAt, updatedAt: record.updatedAt };
+          return {
+            id: key,
+            newer: false as const,
+            kitId,
+            mode: game.mode,
+            cheeseMark: game.cheeseMark,
+            adult: !!game.adult,
+            week,
+            day,
+            createdAt,
+            updatedAt: record.updatedAt,
+          };
         })
         .filter((summary) => summary !== null)
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));

@@ -4,7 +4,7 @@
 // ──────────────────────────────────────────────
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { errorKey, previewKit, type PreviewKit, type StartBody, type SystemEdit } from "./api";
+import { errorKey, previewKit, type DraftPart, type PreviewKit, type StartBody, type SystemEdit } from "./api";
 import { Face } from "./parts";
 
 const SHOWN = 5;
@@ -17,6 +17,10 @@ export function Preview({
   onTake,
   onCast,
   onBack,
+  onEdit,
+  draft,
+  rerolling,
+  onReroll,
 }: {
   kitId: string;
   cast?: StartBody;
@@ -25,6 +29,11 @@ export function Preview({
   onTake: (body: StartBody) => void;
   onCast: () => void;
   onBack: () => void;
+  onEdit?: () => void;
+  // T3: a drafted place. It is shown as it is, and parts of it can be rerolled.
+  draft?: PreviewKit;
+  rerolling?: DraftPart | null;
+  onReroll?: (part: DraftPart) => void;
 }) {
   const { t } = useTranslation();
   const [kit, setKit] = useState<PreviewKit | null>(null);
@@ -37,8 +46,9 @@ export function Preview({
 
   useEffect(() => {
     setProblem(null);
+    if (draft) return setKit(draft);
     previewKit(kitId, cast).then(setKit, (error) => setProblem(errorKey(error)));
-  }, [kitId, cast, tries]);
+  }, [kitId, cast, tries, draft]);
   useEffect(() => heading.current?.focus(), []);
 
   const editOf = (index: number) => edits.find((e) => e.index === index);
@@ -50,6 +60,19 @@ export function Preview({
       ...cast,
       systems: edits.map((e) => ({ ...e, name: e.name?.trim() || undefined })).filter((e) => e.name || e.remove),
     });
+
+  const reroll = (part: DraftPart, label: string) =>
+    onReroll && (
+      <button
+        type="button"
+        className="bc-btn bc-btn-quiet"
+        disabled={busy || !!rerolling}
+        onClick={() => onReroll(part)}
+      >
+        {label}
+      </button>
+    );
+  const skeleton = <p className="bc-skeleton">{t("ui.bigCheese.preview.rerolling")}</p>;
 
   const people = kit ? (all ? kit.people : kit.people.slice(0, SHOWN)) : [];
   return (
@@ -71,7 +94,8 @@ export function Preview({
         )}
         {kit && (
           <>
-            <p>{kit.premise}</p>
+            <p>{rerolling === "name" || rerolling === "all" ? skeleton : kit.premise}</p>
+            {reroll("name", t("ui.bigCheese.preview.rerollName"))}
             <p>
               {kit.boss
                 ? t("ui.bigCheese.preview.youPlay", { name: kit.boss.name, title: kit.bossTitle })
@@ -95,18 +119,22 @@ export function Preview({
               <h2 id="bc-pv-people" className="bc-subhead">
                 {t("ui.bigCheese.preview.people")}
               </h2>
-              <ul className="bc-list">
-                {people.map((who) => (
-                  <li key={who.id} className="bc-row bc-row-flat">
-                    <Face kit={kit} id={who.id} />
-                    <span className="bc-row-text">
-                      <span className="bc-row-title">{who.name}</span>
-                      <span className="bc-muted">{who.role}</span>
-                      {who.library && <span className="bc-chip">{t("ui.bigCheese.cast.badge")}</span>}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              {rerolling === "people" || rerolling === "all" ? (
+                skeleton
+              ) : (
+                <ul className="bc-list">
+                  {people.map((who) => (
+                    <li key={who.id} className="bc-row bc-row-flat">
+                      <Face kit={kit} id={who.id} />
+                      <span className="bc-row-text">
+                        <span className="bc-row-title">{who.name}</span>
+                        <span className="bc-muted">{who.role}</span>
+                        {who.library && <span className="bc-chip">{t("ui.bigCheese.cast.badge")}</span>}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
               {kit.people.length > SHOWN && (
                 <button type="button" className="bc-btn bc-btn-quiet" onClick={() => setAll(!all)}>
                   {all
@@ -114,16 +142,25 @@ export function Preview({
                     : t("ui.bigCheese.preview.seeAll", { count: kit.people.length })}
                 </button>
               )}
-              <button type="button" className="bc-btn" disabled={busy} onClick={onCast}>
-                {t("ui.bigCheese.preview.change")}
-              </button>
+              {draft ? (
+                reroll("people", t("ui.bigCheese.preview.rerollPeople"))
+              ) : (
+                <button type="button" className="bc-btn" disabled={busy} onClick={onCast}>
+                  {t("ui.bigCheese.preview.change")}
+                </button>
+              )}
             </section>
 
             <section className="bc-section" aria-labelledby="bc-pv-rooms">
               <h2 id="bc-pv-rooms" className="bc-subhead">
                 {t("ui.bigCheese.preview.rooms")}
               </h2>
-              <p className="bc-muted">{kit.rooms.map((room) => room.name).join(", ")}</p>
+              {rerolling === "rooms" || rerolling === "all" ? (
+                skeleton
+              ) : (
+                <p className="bc-muted">{kit.rooms.map((room) => room.name).join(", ")}</p>
+              )}
+              {reroll("rooms", t("ui.bigCheese.preview.rerollRooms"))}
             </section>
 
             {kit.systems.length > 0 && (
@@ -178,12 +215,18 @@ export function Preview({
             {t(failure)}
           </p>
         )}
+        {draft && reroll("all", t("ui.bigCheese.preview.rerollAll"))}
         <button type="button" className="bc-btn bc-btn-primary" disabled={busy || !kit} onClick={take}>
           {busy ? t("ui.bigCheese.titleScreen.starting") : t("ui.bigCheese.preview.take")}
         </button>
         <button type="button" className="bc-btn bc-btn-quiet" disabled={busy} onClick={onBack}>
           {t("ui.bigCheese.preview.back")}
         </button>
+        {onEdit && (
+          <button type="button" className="bc-btn bc-btn-quiet" disabled={busy} onClick={onEdit}>
+            {t("ui.bigCheese.preview.editKit")}
+          </button>
+        )}
       </main>
     </div>
   );

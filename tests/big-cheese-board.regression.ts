@@ -354,7 +354,7 @@ test("Coming up lists scheduled beats and moves, cancels and forces them", async
   await patch(second.id, "cancel");
   assert.equal((await rows()).filter((r) => r.type === "action").length, 1);
   // A thread beat moves as a play of its own, which rewinds like any other.
-  const b = (await rows()).find((r) => r.type === "beat");
+  const b = (await rows()).find((r) => r.type === "beat" && r.beat !== "big_scene");
   assert.ok(b);
   const before = await h.cur();
   await patch(b.id, "move", { week: 3, day: 2 });

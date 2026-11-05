@@ -162,7 +162,7 @@ function pick(r: Record<string, unknown>, base: PlaceKit): Partial<PlaceKit> {
       continue;
     if (typeof r[k] === typeof d && Array.isArray(r[k]) === Array.isArray(d) && r[k] !== null) out[k] = r[k];
   }
-  for (const k of ["layers", "scenario", "adult", "officeHours", "authorityStart", "court", "roles"])
+  for (const k of ["layers", "extras", "scenario", "adult", "officeHours", "authorityStart", "court", "roles"])
     if (typeof r[k] === "object" && r[k] !== null) out[k] = r[k];
   for (const [k, check] of Object.entries(DEEP)) if (k in out) out[k] = check(out[k]);
   for (const k of Object.keys(out)) if (out[k] === undefined) delete out[k];
@@ -198,10 +198,26 @@ const one = (sch: z.ZodType) => (v: unknown) => {
   const p = sch.safeParse(v);
   return p.success ? p.data : undefined;
 };
+const Extra = z.object({
+  id: z.string().transform(slug).pipe(z.string().min(1)),
+  label: z.string().transform((s) => s.slice(0, 40)),
+  main: z.enum(METERS),
+  value: Pct,
+});
 const DEEP: Record<string, (v: unknown) => unknown> = {
   systems: list(Block),
   houseRules: list(Rule),
   authorityStart: one(Start),
+  scenario: one(z.object({ goal: z.string() })),
+  // T2: at most 2 extra meters; reserved and repeated ids are dropped
+  extras: (v) => {
+    const seen = new Set<string>();
+    const ok = (id: string) =>
+      id !== "legitimacy" && !(METERS as readonly string[]).includes(id) && !seen.has(id) && !!seen.add(id);
+    return list(Extra)(v)
+      .filter((e) => ok(e.id))
+      .slice(0, 2);
+  },
   hearing: one(Hearing),
   templates: one(Templates),
 };

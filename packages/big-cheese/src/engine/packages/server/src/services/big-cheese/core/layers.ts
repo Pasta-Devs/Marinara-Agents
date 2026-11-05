@@ -7,6 +7,7 @@ import { applyDelta, newId } from "./run.js";
 import { K } from "./stances.js";
 import { closeThread, openStory, openThread } from "./threads.js";
 import { bookBigScene } from "./bigscenes.js";
+import { adultSeeds } from "./adult.js";
 import type { Meter, Run, Thread } from "./types.js";
 
 const LAYERS = ["drama", "romance", "press", "rivals", "family"] as const;
@@ -81,6 +82,7 @@ function seedPair(s: Run, l: Layer, seed: Seed, a: string, b: string) {
 
 /** Monday: a dial at 0 opens nothing; a higher dial opens a pair thread more often. One open thread per layer. */
 export function layerSeeds(s: Run, cap: number) {
+  adultSeeds(s); // no-op unless the adult module is on
   // Rivals: once a term, in the last week of the term, the rival calls a showdown (a 3-severity story).
   if (dial(s, "rivals") > 0 && s.clock.week === WEEKS - 1) {
     const ids = Object.keys(s.people).filter((id) => s.people[id]!.status === "active");

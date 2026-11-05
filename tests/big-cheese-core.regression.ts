@@ -17,7 +17,7 @@ test("effect: severity 2 numbers (content.md 1.1)", () => {
   assert.deepEqual(effect({ need: "money", severity: 2 }, "refuse"), { money: -3, people: 2 });
   // invest on need Money: Money pays, People takes the cost
   assert.deepEqual(effect({ need: "money", severity: 3 }, "invest"), { money: 10, people: -10 });
-  assert.throws(() => effect({ need: "money", severity: 1 }, "banish"));
+  assert.throws(() => effect({ need: "money", severity: 1 }, "nonsense"));
 });
 
 test("clock: 5 hours a day, week rolls on Friday", () => {

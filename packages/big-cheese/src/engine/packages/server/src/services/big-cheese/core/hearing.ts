@@ -6,7 +6,7 @@ import type { Meter, Run } from "./types.js";
 // Board hearing (design.md 7.4). A meter below 10 on a second Friday calls it; it sits on the
 // second working day of next week. Prep hours go to witnesses, evidence and talks with members.
 export function callHearing(s: Run, meter: Meter) {
-  if (s.authority === "absolute") return; // no hearing for an absolute ruler (design.md section 9)
+  if (s.mode === "sandbox" || s.authority === "absolute") return; // sandbox never fires you; no hearing for an absolute ruler (design.md section 9)
   if (s.lastWarning) return endRun(s); // second trigger in the run: no hearing
   const t = openThread(s, { kind: "hearing", title: "Board hearing", origin: "board", dueWeek: s.clock.week + 1 });
   s.hearing = { meter, thread: t.id, week: s.clock.week + 1, day: 1, witnesses: [], evidence: [] };

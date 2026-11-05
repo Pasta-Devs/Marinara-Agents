@@ -5,7 +5,11 @@ import { api, ApiError } from "../../lib/api-client";
 
 const PREFIX = "/big-cheese";
 
+export type RunMode = "normal" | "honest" | "sandbox" | "ironman";
 export interface RunSummary {
+  adult?: boolean; // the run has the adult module on: the title card shows "18+"
+  mode?: RunMode;
+  cheeseMark?: boolean;
   id: string;
   newer: boolean;
   kitId?: string;
@@ -86,6 +90,8 @@ export interface Hearing {
 }
 
 export interface Game {
+  mode?: RunMode;
+  cheeseMark?: boolean;
   clock: { week: number; day: number; hoursLeft: number };
   meters: Meters;
   people: Record<string, Person>;
@@ -102,6 +108,7 @@ export interface Game {
   hearingBody: { id: string }[];
   meeting?: Meeting | null;
   status: "playing" | "complete" | "ended";
+  adult?: { intensity: number; themes: string[] } | null;
   ending: string | null;
   report: { week: number; income: number; before: Meters; after: Meters } | null;
 }
@@ -173,7 +180,7 @@ export interface KitView {
   boss?: { name: string; avatar: string }; // the player's persona
   meters: Record<Meter, { label: string }>;
   people: KitPerson[];
-  rooms: { id: string; name: string; text: string }[];
+  rooms: { id: string; name: string; text: string; kind?: string }[];
   letters: { day: number; person: string; screen: string; text: string }[];
 }
 
@@ -237,6 +244,7 @@ export interface CastRead {
   sheet: CastSheet;
 }
 export interface StartBody {
+  mode?: RunMode;
   systems?: SystemEdit[];
   boss?: string;
   staff?: { characterId: string; replaces: string; sheet: CastSheet }[];
@@ -249,6 +257,20 @@ export const getRun = (id: string) => api.get<RunState>(runPath(id));
 /** One game action: `path` is relative to the run, e.g. `day/start` or `cards/c3/answer`. */
 export const postAction = (run: RunDoc, path: string, body: object = {}) =>
   api.post<RunState>(`${runPath(run.id)}/${path}`, { ...body, expectedRevision: run.revision });
+
+// T3: the wish and the kit draft (design.md section 13). `kit` is the whole draft; the client only holds it.
+export type DraftPart = "all" | "people" | "rooms" | "name";
+export interface WishBody {
+  wish: string;
+  size: "small" | "medium" | "large";
+  storyteller: "calm" | "classic" | "chaos";
+  authority: "manager" | "strong_leader" | "absolute";
+  fixed?: string[];
+  part?: DraftPart;
+  kit?: unknown;
+}
+export const draftPlace = (body: WishBody) =>
+  api.post<{ kit: unknown; view: PreviewKit; lite: boolean }>(`${PREFIX}/place/draft`, body);
 
 // T6: the Preview screen (ui.md section 5.3).
 export interface SystemEdit {
@@ -283,3 +305,6 @@ export const listKits = () => api.get<{ kits: KitSummary[] }>(`${PREFIX}/kits`).
 export const getKit = (id: string) => api.get<unknown>(`${PREFIX}/kits/${encodeURIComponent(id)}`);
 export const importKit = (kit: unknown) =>
   api.post<{ kit: { id: string; name: string }; fixes: string[] }>(`${PREFIX}/kits/import`, { kit });
+// T2: the Kit editor saves the same way an import does, with the same checks.
+export const saveKit = (kit: unknown) =>
+  api.post<{ kit: { id: string; name: string }; fixes: string[] }>(`${PREFIX}/kits`, { kit });

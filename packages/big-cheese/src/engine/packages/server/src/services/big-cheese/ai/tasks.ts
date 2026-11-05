@@ -8,6 +8,7 @@ import { STANCES } from "../core/stances.js";
 import { TRAITS } from "../core/traits.js";
 import { METERS, SLOTS } from "../core/types.js";
 import type { Meter, Severity, Tier } from "../core/types.js";
+import { adultNotes, fadeOf, type Adult } from "../core/adult.js";
 
 export type Band = "cold" | "wary" | "neutral" | "warm" | "loyal";
 type Msg = { role: "system" | "user"; content: string };
@@ -42,6 +43,7 @@ export const layerNotes = (kit: PlaceKit, d?: Record<string, number>) =>
 
 export interface CardsDayInput {
   layers?: Record<string, number>;
+  adult?: Adult | null; // null or missing = module off, no adult text
   kit: PlaceKit;
   rng: number;
   seeds: CardSeed[];
@@ -68,6 +70,7 @@ export interface AnswerTagOutput {
 
 export interface ScenePartInput {
   layers?: Record<string, number>;
+  adult?: Adult | null;
   kit: PlaceKit;
   rng: number;
   blueprint: string;
@@ -213,7 +216,7 @@ const cardsDay: Task<CardsDayInput, CardsDayOutput> = {
   prompt: (i) =>
     msgs(
       i.kit,
-      `${layerNotes(i.kit, i.layers)}Write each card: the asker's line, then one short answer line per given stance, in the given order. Echo "seed" and every "stance" exactly.${i.seeds.some((s) => s.advisors?.length) ? ADVICE_NOTE : ""}
+      `${layerNotes(i.kit, i.layers)}${adultNotes(i.adult)}Write each card: the asker's line, then one short answer line per given stance, in the given order. Echo "seed" and every "stance" exactly.${i.seeds.some((s) => s.advisors?.length) ? ADVICE_NOTE : ""}
 Shape: {"cards":[{"seed":"","text":"","answers":[{"stance":"","text":""}]}]}
 Stances: ${stanceHelp(STANCES)}
 Voices:\n${voiceSheet(i.kit, [...new Set(i.seeds.flatMap((s) => [s.asker, ...(s.advisors ?? []).map((a) => a.who)]))])}`,
@@ -325,7 +328,7 @@ const scenePart: Task<ScenePartInput, ScenePartOutput> = {
   prompt: (i) =>
     msgs(
       i.kit,
-      `${layerNotes(i.kit, i.layers)}Write one part of a scene in "${i.room}". Goal: ${i.goal}
+      `${layerNotes(i.kit, i.layers)}${adultNotes(i.adult)}Write one part of a scene in "${i.room}". Goal: ${i.goal}
 Write 3 to 12 lines. "who" is a person id from the list, or "narrator" for a line of narration.
 ${i.offer.length ? `Then write one short line the boss could say for each stance, in the given order. Echo each "stance". Stances: ${stanceHelp(i.offer)}` : `Write "suggestions": [].`}
 Write "summary": one sentence, at most 120 characters.
@@ -547,6 +550,7 @@ const grapevineBatch: Task<GrapevineBatchInput, GrapevineBatchOutput> = {
 // thread.beat (design.md 3.4): a thread opens from text. The code plans the kind, people, need and beat types; the model writes
 // the title, the stakes line and one line per beat.
 export interface ThreadBeatInput {
+  adult?: Adult | null;
   kit: PlaceKit;
   rng: number;
   kind: string;
@@ -566,7 +570,7 @@ const threadBeat: Task<ThreadBeatInput, ThreadBeatOutput> = {
   prompt: (i) =>
     msgs(
       i.kit,
-      `Write the plan of one story in the place. Kind: ${i.kind}. Idea: ${i.idea.slice(0, 200)}. It puts ${i.need} at risk. A short title, one line on what is at stake, and one line for each beat in order: ${i.beats.map((b) => b.type).join(", ")}. Shape: {"title":"","stakes":"","lines":[""]}\nVoices:\n${voiceSheet(i.kit, i.people)}`,
+      `${adultNotes(i.adult)}Write the plan of one story in the place. Kind: ${i.kind}. Idea: ${i.idea.slice(0, 200)}. It puts ${i.need} at risk. A short title, one line on what is at stake, and one line for each beat in order: ${i.beats.map((b) => b.type).join(", ")}. Shape: {"title":"","stakes":"","lines":[""]}\nVoices:\n${voiceSheet(i.kit, i.people)}`,
       { people: i.people, beats: i.beats },
     ),
   parse(raw, i) {
@@ -771,7 +775,351 @@ const kitFix: Task<KitFixInput, KitFixOutput> = {
   lite: (i) => ({ kit: i.kit }), // no model: the kit goes back unchanged and fails the check again
 };
 
+// --- T3: the place draft (design.md section 13 steps 2 and 3) -------------------
+// The model makes up the place and its roles. The code only checks and applies what comes back, and
+// fills every gap from the family's built-in kit. Counts are not checked here: the kit normalizer
+// does that, and the caller retries once with its reasons.
+
+export type DraftPart = "all" | "people" | "rooms" | "name";
+type KitRoom = PlaceKit["rooms"][number];
+type KitPerson = PlaceKit["people"][number];
+
+export interface PlaceDraftInput {
+  kit: PlaceKit; // the family's built-in kit, or the draft that is being rerolled
+  rng: number;
+  wish: string;
+  size: number;
+  storyteller: string;
+  part: DraftPart;
+  fixed?: string[]; // names the player picked as staff
+  problems?: string[]; // why the last answer was refused
+}
+
+export interface PlaceDraftOutput {
+  name?: string;
+  family?: string;
+  premise?: string;
+  bossTitle?: string;
+  meters?: Partial<Record<Meter, string>>;
+  rooms?: KitRoom[];
+  people?: KitPerson[];
+  roles?: NonNullable<PlaceKit["roles"]>;
+  groups?: PlaceKit["groups"];
+  relations?: PlaceKit["relations"];
+  traditions?: PlaceKit["traditions"];
+  surprises?: string[];
+  crisisDeck?: PlaceKit["crisisDeck"];
+  hearing?: { body: string; ending: string };
+}
+
+export interface PlacePeopleInput {
+  kit: PlaceKit;
+  rng: number;
+  rooms: { id: string; name: string; kind: string }[];
+  people: { id: string; name: string; role: string }[];
+  problems?: string[];
+}
+
+export interface PlacePeopleOutput {
+  people: {
+    id: string;
+    core: string;
+    ambition: string;
+    secret: string;
+    voice: KitPerson["voice"];
+    routine: KitPerson["routine"];
+  }[];
+}
+
+const ROOM_KINDS = ["work", "social", "outside", "private", "hidden"];
+const REL_KINDS = ["friend", "rival", "crush", "couple", "mentor", "enemy", "family"];
+const COLOURS = ["#8a5a44", "#4a7ba6", "#6a9a5b", "#b0803a", "#8a6aa6", "#a65a6a", "#4aa69a", "#a69a4a"];
+const LEAN =
+  "Write in-world words for a management game. No AI voice, no taglines, no em dashes. Reply with ONLY one JSON object in the given shape. No prose, no code fence.";
+
+/** Draft text is cleaned, not refused: one em dash must not throw away a whole place. */
+const say = (v: unknown, max: number, fb = ""): string =>
+  (typeof v === "string"
+    ? v
+        .replace(/\s*[—–]\s*/g, ", ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, max)
+    : "") || fb;
+const items = (v: unknown, max: number): Obj[] =>
+  (Array.isArray(v) ? v : []).filter((x): x is Obj => !!x && typeof x === "object" && !Array.isArray(x)).slice(0, max);
+const slugId = (v: unknown, fb: string) =>
+  say(v, 60)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 24) || fb;
+/** Unique ids in list order. */
+const idsOf = (list: Obj[], fb: string, taken: string[] = []): string[] => {
+  const seen = new Set(taken);
+  return list.map((x, i) => {
+    let id = slugId(x.id ?? x.name, `${fb}-${i + 1}`);
+    for (let n = 2; seen.has(id); n++) id = `${id.slice(0, 20)}-${n}`;
+    seen.add(id);
+    return id;
+  });
+};
+const clampN = (v: unknown, lo: number, hi: number, fb: number) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : fb;
+};
+
+/** A full routine: given rooms that exist win, gaps go to work rooms by day, a social room in the evening, home at night. */
+export const routineOf = (given: unknown, rooms: { id: string; kind: string }[], n: number): KitPerson["routine"] => {
+  const g = given && typeof given === "object" ? (given as Obj) : {};
+  const ok = (id: unknown): id is string => id === "home" || (typeof id === "string" && rooms.some((r) => r.id === id));
+  const work = rooms.filter((r) => r.kind === "work");
+  const social = rooms.filter((r) => r.kind === "social");
+  const day = (work[n % (work.length || 1)] ?? rooms[0])?.id ?? "home";
+  const eve = (social[n % (social.length || 1)] ?? work[0] ?? rooms[0])?.id ?? "home";
+  return Object.fromEntries(
+    SLOTS.map((s) => [s, ok(g[s]) ? g[s] : s === "night" ? "home" : s === "evening" ? eve : day]),
+  ) as KitPerson["routine"];
+};
+
+const draftRooms = (v: unknown): KitRoom[] => {
+  const l = items(v, 24);
+  const ids = idsOf(l, "room", ["home"]);
+  return l.map((x, i) => ({
+    id: ids[i]!,
+    name: say(x.name, 40, "A room"),
+    kind: ROOM_KINDS.includes(x.kind as string) ? (x.kind as KitRoom["kind"]) : "work",
+    condition: clampN(x.condition, 35, 70, 55), // the 35-70 start clamp applies to the draft only
+    feeds: null,
+    text: say(x.text, 200, "A room."),
+  }));
+};
+
+const draftPeople = (v: unknown): KitPerson[] => {
+  const l = items(v, 24);
+  const ids = idsOf(l, "person");
+  return l.map((x, i) => ({
+    id: ids[i]!,
+    name: say(x.name, 40, "Someone"),
+    role: say(x.role, 40, "Staff"),
+    colour: /^#[0-9a-f]{6}$/i.test(String(x.colour)) ? String(x.colour) : COLOURS[i % COLOURS.length]!,
+    deputy: x.deputy === true,
+    traits: (Array.isArray(x.traits) ? x.traits : [])
+      .filter((t) => (TRAITS as readonly unknown[]).includes(t))
+      .slice(0, 2) as string[],
+    ambition: "",
+    secret: "",
+    routine: {} as KitPerson["routine"],
+    voice: { style: "", phrases: [] },
+  }));
+};
+
+const FIELDS: Record<DraftPart, string> = {
+  all: "name premise bossTitle family meters rooms people roles groups relations traditions surprises crisisDeck hearing",
+  name: "name premise bossTitle",
+  rooms: "rooms",
+  people: "people roles groups relations",
+};
+const SHAPE: Record<string, string> = {
+  name: '"name":"short place name"',
+  premise: '"premise":"two plain sentences about the place"',
+  bossTitle: '"bossTitle":"what staff call the player"',
+  family: '"family":"one lowercase word for the kind of place"',
+  meters:
+    '"meters":{"money":"","output":"","people":"","standing":""} (a short label for each meter that fits this place)',
+  rooms: '"rooms":[{"id":"","name":"","kind":"work|social|outside|private|hidden","text":"one line"}] (6 to 10 rooms)',
+  people: `"people":[{"id":"","name":"","role":"","deputy":false,"traits":[""]}] (traits: 1 or 2 of ${TRAITS.join(", ")}; exactly one deputy)`,
+  roles: '"roles":[{"id":"","name":"","about":"one line"}] (3 to 5 job roles that fit this place)',
+  groups: '"groups":[{"id":"","name":"","spokesperson":"<person id>","text":""}] (1 to 3)',
+  relations:
+    '"relations":[{"a":"<person id>","b":"<person id>","kind":"friend|rival|crush|couple|mentor|enemy|family","level":50}] (5 to 10)',
+  traditions: '"traditions":[{"id":"","tag":"one word","text":""}] (2)',
+  surprises: '"surprises":[""] (4 odd events; you may use {place}, {person} and {room})',
+  crisisDeck: `"crisisDeck":[{"id":"","name":"","text":"","meters":["money|output|people|standing"],"stances":["${STANCES.join("|")}"]}] (3)`,
+  hearing: '"hearing":{"body":"who judges the player","ending":"title of the bad ending"}',
+};
+
+const placeDraft: Task<PlaceDraftInput, PlaceDraftOutput> = {
+  tokens: 3000,
+  prompt: (i) => {
+    const k = i.kit;
+    const keep =
+      i.part === "all"
+        ? ""
+        : `\nKeep the place "${k.name}": ${k.premise}\nRooms: ${k.rooms.map((r) => `${r.id} (${r.name})`).join(", ")}\nPeople: ${k.people.map((p) => `${p.id} (${p.name}, ${p.role})`).join(", ")}`;
+    return [
+      { role: "system", content: LEAN },
+      {
+        role: "user",
+        content:
+          `Wish: "${i.wish.slice(0, 400) || "a workplace of your choice"}"\nStoryteller: ${i.storyteller}.\nPeople to write: ${i.size}.${keep}` +
+          (i.fixed?.length
+            ? `\nThese people work here. Use their names and make up their roles: ${i.fixed.join(", ")}.`
+            : "") +
+          (i.problems?.length ? `\nYour last answer was refused: ${i.problems.join(" ")}` : "") +
+          `\nShape: {${FIELDS[i.part]
+            .split(" ")
+            .map((f) => SHAPE[f])
+            .join(",")}}`,
+      },
+    ];
+  },
+  parse(raw, i) {
+    const o = obj(raw);
+    const all = i.part === "all";
+    const out: PlaceDraftOutput = {};
+    if (all || i.part === "name") {
+      out.name = say(o.name, 60);
+      out.premise = say(o.premise, 400);
+      out.bossTitle = say(o.bossTitle, 40);
+      if (!out.name || !out.premise) throw new Error("no name or premise");
+    }
+    if (all || i.part === "rooms") {
+      out.rooms = draftRooms(o.rooms);
+      if (!out.rooms.length) throw new Error("no rooms");
+    }
+    if (all || i.part === "people") {
+      out.people = draftPeople(o.people);
+      if (!out.people.length) throw new Error("no people");
+      const ids = out.people.map((p) => p.id);
+      const gl = items(o.groups, 4);
+      const gid = idsOf(gl, "group");
+      out.groups = gl
+        .map((x, n) => ({
+          id: gid[n]!,
+          name: say(x.name, 40, "A group"),
+          spokesperson: say(x.spokesperson, 40),
+          text: say(x.text, 200),
+        }))
+        .filter((g) => ids.includes(g.spokesperson));
+      out.relations = items(o.relations, 16)
+        .filter(
+          (x) =>
+            ids.includes(x.a as string) &&
+            ids.includes(x.b as string) &&
+            x.a !== x.b &&
+            REL_KINDS.includes(x.kind as string),
+        )
+        .map((x) => ({
+          a: x.a as string,
+          b: x.b as string,
+          kind: x.kind as never,
+          level: clampN(x.level, 0, 100, 50),
+        }));
+      const rl = items(o.roles, 6);
+      const rid = idsOf(rl, "role");
+      out.roles = rl.map((x, n) => ({ id: rid[n]!, name: say(x.name, 40, "Staff"), about: say(x.about, 160) }));
+    }
+    if (all) {
+      out.family = slugId(o.family, "");
+      out.meters = Object.fromEntries(
+        METERS.map((m) => [m, say((obj(o.meters ?? {}) as Obj)[m], 24)]).filter(([, l]) => l),
+      ) as never;
+      const tl = items(o.traditions, 4);
+      const tid = idsOf(tl, "tradition");
+      out.traditions = tl
+        .map((x, n) => ({ id: tid[n]!, tag: say(x.tag, 20, "habit"), text: say(x.text, 200) }))
+        .filter((t) => t.text);
+      out.surprises = (Array.isArray(o.surprises) ? o.surprises : [])
+        .map((s) => say(s, 140))
+        .filter(Boolean)
+        .slice(0, 6);
+      const cl = items(o.crisisDeck, 4);
+      const cid = idsOf(cl, "crisis");
+      out.crisisDeck = cl
+        .map((x, n) => ({
+          id: cid[n]!,
+          name: say(x.name, 40, "A crisis"),
+          text: say(x.text, 200),
+          meters: (Array.isArray(x.meters) ? x.meters : [])
+            .filter((m) => (METERS as readonly unknown[]).includes(m))
+            .slice(0, 2) as Meter[],
+          stances: (Array.isArray(x.stances) ? x.stances : []).filter((s) =>
+            (STANCES as readonly unknown[]).includes(s),
+          ) as string[],
+        }))
+        .filter((c) => c.text && c.meters.length && c.stances.length);
+      const h = obj(o.hearing ?? {});
+      if (say(h.body, 80) && say(h.ending, 40)) out.hearing = { body: say(h.body, 80), ending: say(h.ending, 40) };
+    }
+    return out;
+  },
+  // No model: the kit that is already there. A reroll changes nothing, a first draft takes the wish as its name and premise.
+  lite(i) {
+    const k = i.kit;
+    const first = i.part === "all";
+    const out: PlaceDraftOutput = {};
+    if (first || i.part === "name") {
+      const w = i.wish.trim();
+      out.name =
+        first && w ? say(w.split(" ").slice(0, 3).join(" "), 40).replace(/^./, (c) => c.toUpperCase()) : k.name;
+      out.premise = w && first ? say(w, 300) : k.premise;
+      out.bossTitle = k.bossTitle;
+    }
+    if (first || i.part === "rooms") out.rooms = k.rooms;
+    if (first || i.part === "people") {
+      const head = k.people.slice(0, i.size);
+      const deputy = k.people.find((p) => p.deputy);
+      out.people = deputy && !head.includes(deputy) ? [...head.slice(0, -1), deputy] : head;
+    }
+    return out;
+  },
+};
+
+const placePeople: Task<PlacePeopleInput, PlacePeopleOutput> = {
+  tokens: 3600,
+  prompt: (i) => [
+    { role: "system", content: LEAN },
+    {
+      role: "user",
+      content:
+        `Write the inner life of each person in "${i.kit.name}": ${i.kit.premise}\nRooms:\n${i.rooms.map((r) => `- ${r.id}: ${r.name} (${r.kind})`).join("\n")}\nPeople:\n${i.people.map((p) => `- ${p.id}: ${p.name}, ${p.role}`).join("\n")}` +
+        (i.problems?.length ? `\nYour last answer was refused: ${i.problems.join(" ")}` : "") +
+        `\nPer person: "core" is one short line on who they are, "ambition" is what they want, "secret" is what they hide, "voice.style" is 2 or 3 words, "voice.phrases" are 3 short lines they say, "routine" maps morning, midday, afternoon, evening and night to a room id (or "home").\nShape: {"people":[{"id":"","core":"","ambition":"","secret":"","voice":{"style":"","phrases":[""]},"routine":{"morning":"","midday":"","afternoon":"","evening":"","night":"home"}}]}`,
+    },
+  ],
+  // A person the model left out or garbled gets plain values, so a long list never fails as a whole.
+  parse(raw, i) {
+    const l = items(obj(raw).people, 24);
+    return {
+      people: i.people.map((p, n) => {
+        const x = l.find((e) => e.id === p.id) ?? {};
+        const v = obj((x.voice as unknown) ?? {});
+        return {
+          id: p.id,
+          core: say(x.core, 120, p.role),
+          ambition: say(x.ambition, 160),
+          secret: say(x.secret, 160),
+          voice: {
+            style: say(v.style, 60, "plain"),
+            phrases: (Array.isArray(v.phrases) ? v.phrases : [])
+              .map((s) => say(s, 120))
+              .filter(Boolean)
+              .slice(0, 4),
+          },
+          routine: routineOf(x.routine, i.rooms, n),
+        };
+      }),
+    };
+  },
+  lite: (i) => ({
+    people: i.people.map((p, n) => {
+      const b = i.kit.people.find((x) => x.id === p.id);
+      return {
+        id: p.id,
+        core: b?.core ?? p.role,
+        ambition: b?.ambition ?? "",
+        secret: b?.secret ?? "",
+        voice: b?.voice ?? { style: "plain", phrases: [`I am the ${p.role}.`] },
+        routine: routineOf(b?.routine, i.rooms, n),
+      };
+    }),
+  }),
+};
+
 export const tasks = {
+  "place.draft": placeDraft,
+  "place.people": placePeople,
   "digest.away": digestAway,
   "cast.read": castRead,
   "cards.day": cardsDay,
@@ -808,7 +1156,12 @@ const parseJson = (text: string): unknown => {
 export async function runTask<K extends keyof Tasks>(
   task: K,
   input: Parameters<Tasks[K]["lite"]>[0],
-  opts: { model?: ModelCall; signal?: AbortSignal; timeoutMs?: number } = {},
+  opts: {
+    model?: ModelCall;
+    signal?: AbortSignal;
+    timeoutMs?: number;
+    log?: (task: string, error: unknown) => void;
+  } = {},
 ): Promise<{ output: ReturnType<Tasks[K]["lite"]>; source: "model" | "lite" }> {
   const t = tasks[task] as unknown as Task<unknown, unknown>;
   const lite = () => ({ output: t.lite(input) as ReturnType<Tasks[K]["lite"]>, source: "lite" as const });
@@ -821,11 +1174,22 @@ export async function runTask<K extends keyof Tasks>(
     const aborted = new Promise<never>((_, reject) =>
       signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
     );
-    const text = await Promise.race([
-      opts.model(t.prompt(input), { signal, maxTokens: t.tokens + REASONING_HEADROOM }),
-      aborted,
-    ]);
-    return { output: t.parse(parseJson(text), input) as ReturnType<Tasks[K]["lite"]>, source: "model" };
+    const call = async (inp: unknown) => {
+      const text = await Promise.race([
+        opts.model!(t.prompt(inp), { signal, maxTokens: t.tokens + REASONING_HEADROOM }),
+        aborted,
+      ]);
+      return t.parse(parseJson(text), inp) as ReturnType<Tasks[K]["lite"]>;
+    };
+    try {
+      return { output: await call(input), source: "model" };
+    } catch (e) {
+      // A refused or blocked adult scene falls back to fade to black, then to Lite.
+      const adult = (input as { adult?: Adult | null }).adult;
+      if (!adult || adult.intensity === 0 || signal.aborted) throw e;
+      opts.log?.(task, e);
+      return { output: await call({ ...(input as object), adult: fadeOf(adult) }), source: "model" };
+    }
   } catch {
     return lite();
   }

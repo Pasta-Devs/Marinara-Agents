@@ -84,6 +84,8 @@ export function createKits(documents: CapabilityDocumentStore, getModel: () => P
     },
     /** The kit a run is made from. Throws 404 when the id is unknown. */
     async get(key: unknown): Promise<PlaceKit> {
+      // The editor opens a built-in kit too; saving it makes a new kit (see put).
+      if (typeof key === "string" && Object.hasOwn(PLACES, key)) return PLACES[key as keyof typeof PLACES];
       return ((await read(key)).data as { kit: PlaceKit }).kit;
     },
     /** Saves a kit from the editor. The same id replaces the saved kit. */

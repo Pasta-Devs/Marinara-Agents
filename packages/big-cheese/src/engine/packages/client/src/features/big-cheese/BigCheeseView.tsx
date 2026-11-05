@@ -12,10 +12,13 @@ import {
   listKits,
   listRuns,
   type KitSummary,
+  type RunMode,
   type RunSummary,
   type StartBody,
 } from "./api";
 import { Cast } from "./Cast";
+import { KitEditor } from "./KitEditor";
+import { NewPlace } from "./NewPlace";
 import { dayKey } from "./parts";
 import { Preview } from "./Preview";
 import { RunView } from "./RunView";
@@ -31,9 +34,14 @@ export function BigCheeseView() {
   const [load, setLoad] = useState<Load>("loading");
   const [open, setOpen] = useState<string | null>(null);
   const [casting, setCasting] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
+  const [wishing, setWishing] = useState(false);
+  const [mode, setMode] = useState<RunMode>("normal");
   const [picked, setPicked] = useState<StartBody | undefined>();
   const [doomed, setDoomed] = useState<RunSummary | null>(null);
+  const [hide18, setHide18] = useState(false);
+  const [blur18, setBlur18] = useState(true); // 18+ title cards are blurred until the player turns it off
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [kits, setKits] = useState<KitSummary[]>([]);
@@ -60,13 +68,13 @@ export function BigCheeseView() {
 
   useEffect(() => void refresh(), [refresh]);
   // Focus follows the screen: the heading takes it when the screen changes.
-  useEffect(() => heading.current?.focus(), [open, casting, previewing]);
+  useEffect(() => heading.current?.focus(), [open, casting, previewing, editing, wishing]);
 
   async function start(cast?: StartBody) {
     setBusy(true);
     setFailure(null);
     try {
-      const { run } = await createRun("hafenkai", cast);
+      const { run } = await createRun("hafenkai", { ...cast, mode });
       setPreviewing(false);
       setPicked(undefined);
       setOpen(run.id);
@@ -78,11 +86,27 @@ export function BigCheeseView() {
   }
 
   // A saved kit starts a run at once, without a cast: its people are the kit's own.
+  // T3: a drafted kit is saved to the library, then the run starts from it.
+  async function startDrafted(kit: unknown, body: StartBody) {
+    setBusy(true);
+    setFailure(null);
+    try {
+      const saved = await importKit(kit);
+      const { run } = await createRun("hafenkai", { ...body, mode }, saved.kit.id);
+      setWishing(false);
+      setOpen(run.id);
+    } catch (error) {
+      setFailure(errorKey(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function startSaved(id: string) {
     setBusy(true);
     setFailure(null);
     try {
-      const { run } = await createRun("hafenkai", {}, id);
+      const { run } = await createRun("hafenkai", { mode }, id);
       setOpen(run.id);
     } catch (error) {
       setFailure(errorKey(error));
@@ -187,6 +211,32 @@ export function BigCheeseView() {
     );
   }
 
+  if (editing) {
+    return (
+      <KitEditor
+        kitId={editing}
+        onSaved={() => {
+          setEditing(null);
+          setPreviewing(false);
+          void refresh();
+        }}
+        onBack={() => setEditing(null)}
+      />
+    );
+  }
+  if (wishing) {
+    return (
+      <NewPlace
+        busy={busy}
+        failure={failure}
+        onTake={(kit, body) => void startDrafted(kit, body)}
+        onBack={() => {
+          setFailure(null);
+          setWishing(false);
+        }}
+      />
+    );
+  }
   if (previewing) {
     return (
       <Preview
@@ -196,6 +246,7 @@ export function BigCheeseView() {
         failure={failure}
         onTake={(body) => void start(body)}
         onCast={() => setCasting(true)}
+        onEdit={() => setEditing("hafenkai")}
         onBack={() => {
           setFailure(null);
           setPicked(undefined);
@@ -230,45 +281,79 @@ export function BigCheeseView() {
               {t(failure)}
             </p>
           )}
+          <div role="group" aria-label={t("ui.bigCheese.mode.label")} className="bc-modes">
+            {(["normal", "sandbox", "ironman"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                className="bc-btn bc-btn-quiet"
+                aria-pressed={mode === m}
+                onClick={() => setMode(m)}
+              >
+                {t(`ui.bigCheese.mode.${m}`)}
+              </button>
+            ))}
+          </div>
+          <p className="bc-muted">{t(`ui.bigCheese.mode.${mode}Note`)}</p>
           <button type="button" className="bc-btn bc-btn-primary" disabled={busy} onClick={() => setPreviewing(true)}>
             {t("ui.bigCheese.titleScreen.start")}
           </button>
+          <button type="button" className="bc-btn" disabled={busy} onClick={() => setWishing(true)}>
+            {t("ui.bigCheese.titleScreen.wish")}
+          </button>
+          <label>
+            <input type="checkbox" checked={hide18} onChange={(e) => setHide18(e.target.checked)} />{" "}
+            {t("ui.bigCheese.adult.hide")}
+          </label>
+          <label>
+            <input type="checkbox" checked={blur18} onChange={(e) => setBlur18(e.target.checked)} />{" "}
+            {t("ui.bigCheese.adult.blur")}
+          </label>
           <ul className="bc-cards">
-            {runs.map((run) => {
-              const place = placeName(t, run.kitId);
-              return (
-                <li key={run.id} className="bc-card">
-                  {run.newer ? (
-                    <p>{t("ui.bigCheese.card.newer")}</p>
-                  ) : (
-                    <button type="button" className="bc-card-main" onClick={() => setOpen(run.id)}>
-                      <span className="bc-card-name">{place}</span>
-                      <span>{t("ui.bigCheese.card.progress", { week: run.week, day: t(dayKey(run.day ?? 0)) })}</span>
-                      <span className="bc-muted">
-                        {t("ui.bigCheese.card.played", {
-                          when: new Date(run.updatedAt).toLocaleString(undefined, {
-                            dateStyle: "medium",
-                            timeStyle: "short",
-                          }),
-                        })}
-                      </span>
-                      <span className="bc-sr">{t("ui.bigCheese.card.continue", { place })}</span>
+            {runs
+              .filter((run) => !(hide18 && run.adult))
+              .map((run) => {
+                const place = placeName(t, run.kitId);
+                return (
+                  <li key={run.id} className="bc-card">
+                    {run.newer ? (
+                      <p>{t("ui.bigCheese.card.newer")}</p>
+                    ) : (
+                      <button type="button" className="bc-card-main" onClick={() => setOpen(run.id)}>
+                        <span
+                          className="bc-card-name"
+                          style={run.adult && blur18 ? { filter: "blur(6px)" } : undefined}
+                        >
+                          {place}
+                          {run.cheeseMark && <span className="bc-muted"> {t("ui.bigCheese.mode.mark")}</span>}
+                          {run.adult && <span className="bc-chip"> {t("ui.bigCheese.adult.mark")}</span>}
+                        </span>
+                        <span>{t("ui.bigCheese.card.progress", { week: run.week, day: t(dayKey(run.day ?? 0)) })}</span>
+                        <span className="bc-muted">
+                          {t("ui.bigCheese.card.played", {
+                            when: new Date(run.updatedAt).toLocaleString(undefined, {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            }),
+                          })}
+                        </span>
+                        <span className="bc-sr">{t("ui.bigCheese.card.continue", { place })}</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="bc-btn bc-btn-quiet"
+                      aria-label={t("ui.bigCheese.card.deleteLabel", { place })}
+                      onClick={(event) => {
+                        opener.current = event.currentTarget;
+                        setDoomed(run);
+                      }}
+                    >
+                      {t("ui.bigCheese.card.delete")}
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    className="bc-btn bc-btn-quiet"
-                    aria-label={t("ui.bigCheese.card.deleteLabel", { place })}
-                    onClick={(event) => {
-                      opener.current = event.currentTarget;
-                      setDoomed(run);
-                    }}
-                  >
-                    {t("ui.bigCheese.card.delete")}
-                  </button>
-                </li>
-              );
-            })}
+                  </li>
+                );
+              })}
           </ul>
           <section aria-labelledby="bc-kits-title">
             <h2 id="bc-kits-title">{t("ui.bigCheese.kits.title")}</h2>
@@ -294,6 +379,15 @@ export function BigCheeseView() {
                     onClick={() => void exportKit(kit)}
                   >
                     {t("ui.bigCheese.kits.export")}
+                  </button>
+                  <button
+                    type="button"
+                    className="bc-btn bc-btn-quiet"
+                    disabled={busy}
+                    aria-label={t("ui.bigCheese.kits.editLabel", { name: kit.name })}
+                    onClick={() => setEditing(kit.id)}
+                  >
+                    {t("ui.bigCheese.kits.edit")}
                   </button>
                 </li>
               ))}

@@ -259,9 +259,11 @@ export function RunView({ id, onExit }: { id: string; onExit: () => void }) {
             {t("ui.bigCheese.run.back")}
           </button>
         )}
-        <button type="button" className="bc-btn bc-btn-quiet" onClick={() => setBoard(true)}>
-          {t("ui.bigCheese.board.open")}
-        </button>
+        {game.mode !== "sandbox" && (
+          <button type="button" className="bc-btn bc-btn-quiet" onClick={() => setBoard(true)}>
+            {t("ui.bigCheese.board.open")}
+          </button>
+        )}
         <span className="bc-top-day">
           {t("ui.bigCheese.run.when", { day: t(dayKey(clock.day)), week: clock.week })}
         </span>
@@ -379,6 +381,11 @@ export function RunView({ id, onExit }: { id: string; onExit: () => void }) {
               )}
             </button>
           ))}
+          {game.mode === "sandbox" && (
+            <button type="button" className="bc-dock-tab" onClick={() => setBoard(true)}>
+              {t("ui.bigCheese.dock.board")}
+            </button>
+          )}
         </nav>
       )}
     </div>

@@ -209,6 +209,7 @@ export function morning(s: Run): number {
 
 /** Friday: Legitimacy 0 opens a revolt, 25 or more wins it, and a revolt that runs out of time ends the reign (design.md 9). */
 export function checkRevolt(s: Run) {
+  if (s.mode === "sandbox") return; // no revolt ends a sandbox
   const legitimacy = s.extras.find((e) => e.id === "legitimacy")?.value;
   if (legitimacy === undefined) return;
   const revolt = Object.values(s.threads).find((t) => t.kind === "revolt");

@@ -12,6 +12,8 @@ import {
   createRunStore,
 } from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/store.js";
 
+import { settleWeek } from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/core/index.js";
+
 const M3 = [
   "mode",
   "cheeseMark",
@@ -179,4 +181,21 @@ test("a run resolves its kit through placeKitOf", () => {
   assert.equal(placeKitOf({ kitId: "hafenkai" }), HAFENKAI_PLACE);
   const own = { ...HAFENKAI_PLACE, id: "mine" };
   assert.equal(placeKitOf({ kitId: "hafenkai", kit: own }), own);
+});
+
+test("T12: a sandbox run survives a meter at 0; the list shows mode and mark", async () => {
+  let s = newRun(HAFENKAI, 1);
+  s.mode = "sandbox";
+  s.meters = { money: 0, output: 50, people: 50, standing: 50 };
+  for (let i = 0; i < 4; i++) s = settleWeek(s);
+  assert.equal(s.hearing, null);
+  assert.equal(s.status, "playing");
+  const store = createRunStore(fakeDocuments());
+  await store.create("hafenkai", false, async (g) => {
+    g.mode = "ironman";
+    g.cheeseMark = true;
+  });
+  const [card] = await store.list();
+  assert.equal(card.mode, "ironman");
+  assert.equal(card.cheeseMark, true);
 });
