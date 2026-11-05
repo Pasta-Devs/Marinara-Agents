@@ -11,7 +11,7 @@ import { DAYS, HOURS, METERS, clamp, dayIndex, draft, type Run as Game } from ".
 import { newId } from "./core/run.js";
 import { closeThread, openThread } from "./core/threads.js";
 import { view } from "./game.js";
-import { BigCheeseError, PACKAGE_ID, type Run, type RunStore } from "./store.js";
+import { BigCheeseError, PACKAGE_ID, upgradeGame, type Run, type RunStore } from "./store.js";
 
 // ponytail: 20 play snapshots (cheese-board.md §8 says 50 plus a base snapshot); raise the cap and add the base once M4 needs it.
 export const MAX_SNAPSHOTS = 20;
@@ -273,12 +273,18 @@ export function createBoard(store: RunStore, documents: CapabilityDocumentStore)
   // ponytail: previews live in memory (30 minutes, 100 at most); a restart drops them and the player previews again.
   const previews = new Map<string, { runId: string; revision: number; actions: BoardAction[]; at: number }>();
 
-  const load = async (key: string) => {
+  const upgradeData = (d: Data, kitId: string): Data => ({
+    ...d,
+    snaps: d.snaps.map((s) => ({ ...s, game: upgradeGame(s.game, kitId) })),
+    mornings: d.mornings.map((s) => ({ ...s, game: upgradeGame(s.game, kitId) })),
+  });
+
+  const load = async (key: string, kitId: string) => {
     const record = await documents.getById(PACKAGE_ID, boardDocId(key));
     if (!record) return { record: null, data: emptyData() };
     const data = BoardData.safeParse(record.data);
     if (!data.success) throw new BigCheeseError(500, "This run's Cheese Board cannot be read.", "unreadable");
-    return { record, data: data.data as Data };
+    return { record, data: upgradeData(data.data as Data, kitId) };
   };
 
   const save = async (key: string, record: CapabilityDocumentRecord | null, data: Data) => {
@@ -401,7 +407,7 @@ export function createBoard(store: RunStore, documents: CapabilityDocumentStore)
     async preview(id: unknown, body: unknown) {
       const { actions } = parse(PreviewBody, body);
       const run = await open(id);
-      const { data } = await load(run.id);
+      const { data } = await load(run.id, run.kitId);
       const { facts } = simulate(run.game, actions, morningOf(data, run.game));
       const now = Date.now();
       for (const [key, p] of previews) if (now - p.at > PREVIEW_MS) previews.delete(key);
@@ -426,7 +432,7 @@ export function createBoard(store: RunStore, documents: CapabilityDocumentStore)
         previews.delete(b.previewId);
         throw new BigCheeseError(409, "The place changed since the preview. Preview again.", "stale-preview");
       }
-      const { record, data } = await load(run.id);
+      const { record, data } = await load(run.id, run.kitId);
       const actions = b.edits ?? p.actions;
       const morning = morningOf(data, run.game);
       const { game, facts } = simulate(run.game, actions, morning);
@@ -445,7 +451,7 @@ export function createBoard(store: RunStore, documents: CapabilityDocumentStore)
     async rewind(id: unknown, body: unknown) {
       const b = parse(RewindBody, body);
       const run = await open(id, b.expectedRevision);
-      const { record, data } = await load(run.id);
+      const { record, data } = await load(run.id, run.kitId);
       const entry = data.journal.find((e) => e.id === b.playId);
       if (!entry) throw new BigCheeseError(404, "No such play.", "not-found");
       if (entry.state !== "done") throw bad("That play is already rewound or reverted.");
@@ -485,7 +491,7 @@ export function createBoard(store: RunStore, documents: CapabilityDocumentStore)
     /** One page of the journal, newest first, with what the confirm sheet needs. */
     async journal(id: unknown, query: unknown) {
       const run = await store.get(id);
-      const { data } = await load(run.id);
+      const { data } = await load(run.id, run.kitId);
       const page = z
         .object({ page: z.coerce.number().int().min(0).max(10_000).catch(0) })
         .catch({ page: 0 })
@@ -506,7 +512,7 @@ export function createBoard(store: RunStore, documents: CapabilityDocumentStore)
     async morning<V extends { run: Run }>(v: V): Promise<V> {
       try {
         const run = v.run as Doc; // the store adds the id; `view` types the run without it
-        const { record, data } = await load(run.id);
+        const { record, data } = await load(run.id, run.kitId);
         const snap = { ...snapshotOf(data, run), id: `m${data.n}` };
         const mornings = [...data.mornings.filter((m) => dayIndex(m.at) !== dayIndex(snap.at)), snap].slice(
           -MAX_MORNINGS,

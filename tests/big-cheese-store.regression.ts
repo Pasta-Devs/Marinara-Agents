@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import {
+  newRun,
+  HAFENKAI,
+} from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/core/index.js";
 import type { CapabilityDocumentRecord, CapabilityDocumentStore } from "@marinara-engine/shared";
 import {
   BigCheeseError,
@@ -59,11 +63,54 @@ test("a run saved by a newer version is listed as newer and refused with a 409",
     kind: "run",
     name: "x",
     description: "",
-    data: { saveVersion: 2 },
+    data: { saveVersion: 3 },
     createdAt: at,
     updatedAt: at,
   });
   const store = createRunStore(documents);
   assert.equal((await store.list())[0].newer, true);
   await assert.rejects(store.get("r-000000000000"), (e) => e instanceof BigCheeseError && e.code === "newer-save");
+});
+
+test("a v1 document migrates on read, loads, saves as v2 and round-trips", async () => {
+  const documents = fakeDocuments();
+  const at = new Date().toISOString();
+  const game: Record<string, any> = { ...newRun(HAFENKAI, 7), saveVersion: 1 };
+  for (const k of ["rooms", "relations", "grapevine", "story", "bigScenes"]) delete game[k];
+  for (const p of Object.values<any>(game.people)) for (const k of ["room", "ambition", "status"]) delete p[k];
+  await documents.create({
+    id: "big-cheese:run:r-000000000001",
+    packageId: "big-cheese",
+    kind: "run",
+    name: "x",
+    description: "",
+    createdAt: at,
+    updatedAt: at,
+    data: {
+      saveVersion: 1,
+      revision: 0,
+      kitId: "hafenkai",
+      createdAt: at,
+      lite: false,
+      text: { cards: {}, scenes: {}, feelings: {} },
+      scene: null,
+      game,
+    },
+  } as never);
+  const store = createRunStore(documents);
+  const run = await store.get("r-000000000001");
+  assert.equal(run.game.saveVersion, 2);
+  assert.equal(Object.keys(run.game.rooms).length, 12);
+  assert.equal(run.game.people.henrike!.status, "active");
+  assert.equal(run.game.people.henrike!.trust, 50);
+  await store.update(run.id, 0, (r) => r);
+  const saved = (await documents.getById("big-cheese", "big-cheese:run:r-000000000001"))!.data as {
+    saveVersion: number;
+  };
+  assert.equal(saved.saveVersion, 2);
+  const fresh = await store.create("hafenkai");
+  assert.deepEqual((await store.get(fresh.id)).game, fresh.game);
+  const bytes = JSON.stringify(fresh.game).length;
+  assert.ok(bytes < 5000, `fresh run is ${bytes} bytes`);
+  console.log(`fresh run: ${bytes} bytes`);
 });

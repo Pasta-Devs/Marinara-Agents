@@ -27,7 +27,8 @@ test("every referenced person and room exists", () => {
     ...K.groups.flatMap((g) => (g.spokesperson ? [g.spokesperson] : [])),
   ];
   for (const r of refs) assert.ok(ids.has(r), `unknown person ${r}`);
-  for (const p of K.people) for (const r of Object.values(p.routine)) assert.ok(rooms.has(r), `unknown room ${r}`);
+  for (const p of K.people)
+    for (const r of Object.values(p.routine)) assert.ok(r === "home" || rooms.has(r), `unknown room ${r}`);
   assert.ok(K.people.every((p) => p.voice.phrases.length >= 2 && p.voice.phrases.length <= 3));
 });
 
@@ -51,4 +52,21 @@ test("no empty string, none over 300 chars, no AI-speak", () => {
     assert.ok(s.trim() !== "" && s.length <= 300, `bad string: ${s.slice(0, 40)}`);
     assert.ok(!/—|\bno \w+, no \w+/i.test(s), `AI-speak: ${s}`);
   }
+});
+
+test("M2 kit fields resolve and match the core kit", () => {
+  const home = (id: string) => id === "home" || rooms.has(id);
+  for (const p of K.people) {
+    assert.deepEqual(Object.keys(p.routine), ["morning", "midday", "afternoon", "evening", "night"]);
+    for (const r of Object.values(p.routine)) assert.ok(home(r), `unknown room ${r}`);
+  }
+  assert.ok(K.relations.length >= 6);
+  for (const r of K.relations) assert.ok(ids.has(r.a) && ids.has(r.b) && r.a !== r.b && r.level >= 0 && r.level <= 100);
+  assert.deepEqual(K.relations, HAFENKAI.relations);
+  assert.deepEqual(
+    HAFENKAI.rooms,
+    K.rooms.map((r) => ({ id: r.id, condition: r.condition })),
+  );
+  assert.ok(K.systems.length >= 2 && K.smallMoments.length >= 10 && K.surprises.length >= 5);
+  for (const n of Object.values(K.layers)) assert.ok(n >= 0 && n <= 100);
 });

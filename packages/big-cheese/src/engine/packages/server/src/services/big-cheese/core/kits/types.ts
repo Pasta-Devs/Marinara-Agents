@@ -1,4 +1,4 @@
-import type { Authority, Letter, Meter, Severity, Storyteller } from "../types.js";
+import type { Authority, Letter, Meter, Relation, Severity, Slot, Storyteller } from "../types.js";
 
 // Place Kit shape (design.md section 14) with the fields the M1 screens need. Plain data only.
 export interface KitPerson {
@@ -10,7 +10,7 @@ export interface KitPerson {
   traits: string[];
   ambition: string;
   secret: string;
-  routine: { morning: string; afternoon: string }; // room ids
+  routine: Record<Slot, string>; // room ids
   voice: { style: string; phrases: string[] }; // phrases[0] is the signature line
   core?: string; // a cast person's short card summary, added to prompts
 }
@@ -54,6 +54,11 @@ export interface PlaceKit {
   rooms: KitRoom[];
   people: KitPerson[];
   groups: { id: string; name: string; spokesperson?: string; text: string }[];
+  relations: Relation[];
+  systems: { kind: "project" | "event" | "season"; name: string; text: string }[];
+  layers: { drama: number; romance: number }; // 0-100
+  smallMoments: string[]; // {person} {room} {place} are filled by the code
+  surprises: string[];
   outside: { id: string; name: string; kind: string; text: string }[];
   meetings: { id: string; name: string; type: string; every: "week" | "month" | "quarter"; attendees: string }[];
   rituals: { id: string; name: string; text: string }[];

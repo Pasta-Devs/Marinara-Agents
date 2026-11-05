@@ -27,6 +27,19 @@ export interface Person {
   stress: number;
   mood: "great" | "fine" | "low" | "sick" | "away";
   memories: Memory[];
+  room: string; // a room id, or "home"
+  ambition: number; // 0-100, progress toward their own goal
+  status: "active" | "on_leave" | "sick" | "quit" | "fired" | "banished" | "imprisoned" | "dead";
+}
+
+export const SLOTS = ["morning", "midday", "afternoon", "evening", "night"] as const;
+export type Slot = (typeof SLOTS)[number];
+
+export interface Relation {
+  a: string;
+  b: string;
+  kind: "friend" | "rival" | "crush" | "couple" | "mentor" | "enemy" | "family" | "secret_affair";
+  level: number; // 0-100
 }
 
 export interface Answer {
@@ -64,14 +77,26 @@ export interface Beat {
 
 export interface Thread {
   id: string;
-  kind: "follow_up" | "promise" | "guided" | "hearing";
+  kind:
+    | "follow_up"
+    | "personal_arc"
+    | "crisis"
+    | "promise"
+    | "cover_up"
+    | "mystery"
+    | "project"
+    | "wish"
+    | "guided"
+    | "hearing"
+    | "revolt";
+  secret?: boolean; // the boss does not know it yet
   title: string;
   people: string[];
   need?: Meter;
   severity?: Severity;
   stakes: string;
   clock: { dueWeek: number | "open"; pressure: string };
-  origin: "deck" | "own_answer" | "guided" | "board";
+  origin: "deck" | "arc" | "block" | "own_answer" | "action" | "wish" | "guided" | "board";
   beats: Beat[];
   state: "open" | "won" | "lost" | "dropped";
   promise?: { to: string; what: string; due: { week: number; day: number }; kept: boolean };
@@ -100,7 +125,7 @@ export interface Report {
 }
 
 export interface Run {
-  saveVersion: 1;
+  saveVersion: 2;
   rng: number;
   nextId: number;
   storyteller: Storyteller;
@@ -124,4 +149,9 @@ export interface Run {
   ending: string | null;
   report: Report | null;
   meterHistory: ({ week: number } & Meters)[];
+  rooms: Record<string, { condition: number; people: string[] }>;
+  relations: Relation[];
+  grapevine: string[]; // ids of lines in a child document
+  story: { tension: number; lastSurprise: { week: number; day: number } | null; wave: number };
+  bigScenes: { week: number; used: number }; // the weekly big-scene budget
 }

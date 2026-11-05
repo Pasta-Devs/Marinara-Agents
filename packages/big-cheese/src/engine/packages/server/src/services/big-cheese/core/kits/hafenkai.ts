@@ -125,7 +125,7 @@ export const HAFENKAI_PLACE: PlaceKit = {
       traits: ["ambitious", "strict"],
       ambition: "Get your job",
       secret: "Changed a safety log once",
-      routine: { morning: "dispatch", afternoon: "dock-a" },
+      routine: { morning: "dispatch", midday: "dispatch", afternoon: "dock-a", evening: "dock-a", night: "home" },
       voice: {
         style: "clipped, exact",
         phrases: [
@@ -143,7 +143,7 @@ export const HAFENKAI_PLACE: PlaceKit = {
       traits: ["loyal", "joker"],
       ambition: "Run his own crew",
       secret: "His truck licence ran out in March",
-      routine: { morning: "garage", afternoon: "dock-b" },
+      routine: { morning: "garage", midday: "garage", afternoon: "dock-b", evening: "dock-b", night: "home" },
       voice: {
         style: "loud, jokes first",
         phrases: [
@@ -161,7 +161,7 @@ export const HAFENKAI_PLACE: PlaceKit = {
       traits: ["curious", "honest"],
       ambition: "Become a planner",
       secret: "Keeps a notebook of every delay and who caused it",
-      routine: { morning: "dispatch", afternoon: "dispatch" },
+      routine: { morning: "dispatch", midday: "dispatch", afternoon: "dispatch", evening: "dispatch", night: "home" },
       voice: {
         style: "quick, asks why",
         phrases: [
@@ -179,7 +179,7 @@ export const HAFENKAI_PLACE: PlaceKit = {
       traits: ["stubborn", "honest"],
       ambition: "A better contract",
       secret: "Talks to a rival firm about a job",
-      routine: { morning: "high-bay", afternoon: "kantine" },
+      routine: { morning: "high-bay", midday: "high-bay", afternoon: "kantine", evening: "kantine", night: "home" },
       voice: {
         style: "slow, firm",
         phrases: [
@@ -197,7 +197,7 @@ export const HAFENKAI_PLACE: PlaceKit = {
       traits: ["anxious", "nurturing"],
       ambition: "A quiet life",
       secret: "Her mother is ill and she hides it",
-      routine: { morning: "kantine", afternoon: "pack-line" },
+      routine: { morning: "kantine", midday: "kantine", afternoon: "pack-line", evening: "pack-line", night: "home" },
       voice: {
         style: "soft, worried",
         phrases: ["Go home, I have the night.", "Did you eat something today?", "It is fine. It is probably fine."],
@@ -211,7 +211,7 @@ export const HAFENKAI_PLACE: PlaceKit = {
       traits: ["flirty", "rebel"],
       ambition: "Leave and play in a band",
       secret: "Sold damaged stock on the side",
-      routine: { morning: "high-bay", afternoon: "fence" },
+      routine: { morning: "high-bay", midday: "high-bay", afternoon: "fence", evening: "fence", night: "home" },
       voice: {
         style: "easy, teasing",
         phrases: [
@@ -229,7 +229,7 @@ export const HAFENKAI_PLACE: PlaceKit = {
       traits: ["cautious", "perfectionist"],
       ambition: "A year with zero accidents",
       secret: "Hid a near miss to protect the record",
-      routine: { morning: "cold-store", afternoon: "dock-a" },
+      routine: { morning: "cold-store", midday: "cold-store", afternoon: "dock-a", evening: "dock-a", night: "home" },
       voice: {
         style: "careful, counts things",
         phrases: [
@@ -247,7 +247,7 @@ export const HAFENKAI_PLACE: PlaceKit = {
       traits: ["generous", "gossip"],
       ambition: "Open her own cafe",
       secret: "Knows her nephew steals from the pantry",
-      routine: { morning: "kantine", afternoon: "kantine" },
+      routine: { morning: "kantine", midday: "kantine", afternoon: "kantine", evening: "kantine", night: "home" },
       voice: {
         style: "warm, talks sideways",
         phrases: [
@@ -265,7 +265,7 @@ export const HAFENKAI_PLACE: PlaceKit = {
       traits: ["proud", "easygoing"],
       ambition: "Retire with honour",
       secret: "Holds the only key to the customs archive",
-      routine: { morning: "high-bay", afternoon: "archive" },
+      routine: { morning: "high-bay", midday: "high-bay", afternoon: "archive", evening: "archive", night: "home" },
       voice: {
         style: "dry, old-school",
         phrases: [
@@ -283,7 +283,7 @@ export const HAFENKAI_PLACE: PlaceKit = {
       traits: ["charming", "sly"],
       ambition: "Win the Rotterdam contract",
       secret: "Passes your price list to a rival",
-      routine: { morning: "dispatch", afternoon: "office" },
+      routine: { morning: "dispatch", midday: "dispatch", afternoon: "office", evening: "office", night: "home" },
       voice: {
         style: "smooth, smiling",
         phrases: [
@@ -301,7 +301,7 @@ export const HAFENKAI_PLACE: PlaceKit = {
       traits: ["shy", "dreamy"],
       ambition: "Pass the final exam",
       secret: "Fears heights, hides it from the roof crew",
-      routine: { morning: "pack-line", afternoon: "garage" },
+      routine: { morning: "pack-line", midday: "pack-line", afternoon: "garage", evening: "garage", night: "home" },
       voice: {
         style: "quiet, trails off",
         phrases: [
@@ -319,7 +319,7 @@ export const HAFENKAI_PLACE: PlaceKit = {
       traits: ["proud", "vengeful"],
       ambition: "Sell the site",
       secret: "Already talks to a buyer",
-      routine: { morning: "office", afternoon: "dispatch" },
+      routine: { morning: "office", midday: "office", afternoon: "dispatch", evening: "dispatch", night: "home" },
       voice: {
         style: "cool, polite",
         phrases: [
@@ -356,6 +356,51 @@ export const HAFENKAI_PLACE: PlaceKit = {
       spokesperson: "mira",
       text: "Twelve people who see the quay when you are asleep.",
     },
+  ],
+  relations: [
+    { a: "henrike", b: "sven", kind: "friend", level: 55 },
+    { a: "tomasz", b: "jonas", kind: "friend", level: 60 },
+    { a: "tomasz", b: "sven", kind: "rival", level: 35 },
+    { a: "gunnar", b: "leila", kind: "rival", level: 45 },
+    { a: "gunnar", b: "marlene", kind: "enemy", level: 50 },
+    { a: "mira", b: "olga", kind: "friend", level: 65 },
+    { a: "bernd", b: "finn", kind: "mentor", level: 60 },
+    { a: "dilek", b: "leila", kind: "rival", level: 30 },
+    { a: "jonas", b: "leila", kind: "crush", level: 25 },
+  ],
+  systems: [
+    {
+      kind: "project",
+      name: "Dock extension",
+      text: "A third bay on the quay. It needs money, a permit and a crew that does not quit halfway.",
+    },
+    {
+      kind: "event",
+      name: "Founders' day",
+      text: "The owner family visits once a year. Everything has to shine for one afternoon.",
+    },
+  ],
+  layers: { drama: 50, romance: 20 },
+  smallMoments: [
+    "{person} brings Fischbrotchen for the whole shift and will not say why.",
+    "{person} has a cold and says it is just the dock air.",
+    "{person} arrives early for the first time in a year.",
+    "{person} and {person} swap lunch boxes by mistake.",
+    "{person} hums the same shanty for three days.",
+    "The radio in {room} plays the same song for the third time today.",
+    "Someone has put a plant in {room}. It is doing well.",
+    "A gull sits on the roof of {room} and will not leave.",
+    "The clock in {room} is four minutes late again.",
+    "{room} smells of fresh paint. Nobody ordered paint.",
+    "Fog on the Elbe. The ferry horn sounds every minute and {person} counts along.",
+    "A strong wind takes the hat of {person} over the quay.",
+  ],
+  surprises: [
+    "A buyer for the site walks through {place} with a tape measure.",
+    "A driver from Nordtor Spedition asks {person} for a job.",
+    "{person} hands in a letter of notice, then takes it back an hour later.",
+    "A pallet of unordered goods arrives. The paper says it is a gift.",
+    "A film crew asks to shoot one scene in {room}.",
   ],
   outside: [
     {

@@ -7,13 +7,25 @@ import { randomBytes } from "node:crypto";
 import type { CapabilityDocumentStore } from "@marinara-engine/shared";
 import type { Cast } from "./cast.js";
 import { z } from "zod";
-import { HAFENKAI, newRun, type Run as Game } from "./core/index.js";
+import { HAFENKAI, migrate, newRun, type Run as Game } from "./core/index.js";
 import { HAFENKAI_PLACE } from "./core/kits/hafenkai.js";
 
 export const PACKAGE_ID = "big-cheese";
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 const KITS = { hafenkai: { ...HAFENKAI, letters: HAFENKAI_PLACE.guidedLetters } } as const;
+/** Reads a v1 game (a run, or a copy in a Cheese Board snapshot) as v2. */
+export function upgradeGame(game: Game, kitId: string): Game {
+  const kit = Object.hasOwn(KITS, kitId) ? KITS[kitId as keyof typeof KITS] : null;
+  return kit && (game.saveVersion as number) === 1 ? migrate(game, kit) : game;
+}
+const upgrade = (data: unknown): unknown => {
+  const d = data as { saveVersion?: unknown; kitId?: string; game?: Game } | null;
+  return d?.saveVersion === 1 && d.game
+    ? { ...d, saveVersion: SAVE_VERSION, game: upgradeGame(d.game, d.kitId ?? "") }
+    : data;
+};
+
 /** The full place kit (words and people) for each built-in place. */
 export const PLACES = { hafenkai: HAFENKAI_PLACE } as const;
 
@@ -95,7 +107,7 @@ export function createRunStore(documents: CapabilityDocumentStore) {
     if (typeof saved === "number" && saved > SAVE_VERSION) {
       throw new BigCheeseError(409, "This run was saved by a newer Big Cheese.", "newer-save");
     }
-    const run = RunData.safeParse(record.data);
+    const run = RunData.safeParse(upgrade(record.data));
     if (!run.success) throw new BigCheeseError(500, "This run cannot be read.", "unreadable");
     return { record, run: run.data };
   }
@@ -111,7 +123,7 @@ export function createRunStore(documents: CapabilityDocumentStore) {
           if (typeof saved === "number" && saved > SAVE_VERSION) {
             return { id: key, newer: true as const, updatedAt: record.updatedAt };
           }
-          const run = RunData.safeParse(record.data);
+          const run = RunData.safeParse(upgrade(record.data));
           if (!run.success) return null;
           const { kitId, createdAt, game } = run.data;
           const { week, day } = game.clock;
