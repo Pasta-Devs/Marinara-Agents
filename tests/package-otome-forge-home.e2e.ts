@@ -772,7 +772,7 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
   await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeFocused();
   await expect(root.locator(".of-quote-chip")).toContainText(WARM_AGAIN);
   await root.getByRole("textbox", { name: "Message Ilvar Thorne" }).fill("I left it on for you.");
-  await page.keyboard.press("Enter");
+  await root.getByRole("button", { name: "Send", exact: true }).click();
   await expect(root.getByText("Barely. The data kept me company.")).toBeVisible();
   expect(posts(stub, "/send")[0]!.body).toMatchObject({ text: "I left it on for you.", quote: WARM_AGAIN });
   await expect(root.locator(".of-quote-chip")).toHaveCount(0);
@@ -958,8 +958,16 @@ test("Otome Forge phone: a thread with typing, his sticker, her sticker and Clos
 
   // Her words fail to send and the server never saved them: they come back to the box, unsent.
   await expect(root.locator(".of-typing")).toHaveCount(0);
-  stub.state.sendFailures = 1;
+  // Enter starts a new line and sends nothing, on a phone and on a computer alike: only Send sends.
+  await box.press("End");
   await box.press("Enter");
+  await expect(box).toHaveValue("Half a thought\n");
+  await box.press("Shift+Enter");
+  await expect(box).toHaveValue("Half a thought\n\n");
+  expect(posts(stub, "/send")).toHaveLength(3);
+  await box.fill("Half a thought");
+  stub.state.sendFailures = 1;
+  await root.getByRole("button", { name: "Send", exact: true }).click();
   // The thread's own alert, beside the memory banner's.
   await expect(root.locator(".of-screen").getByRole("alert")).toContainText(catalog["ui.otomeForge.errors.unknown"]!);
   await expect(box).toHaveValue("Half a thought");
