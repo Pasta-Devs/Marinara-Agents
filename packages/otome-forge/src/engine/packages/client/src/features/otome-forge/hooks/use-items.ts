@@ -33,7 +33,7 @@ export async function invalidateCollection(queryClient: QueryClient, runKey: str
 }
 
 /** Kinds whose first open writes something: a Character Story, a Moment, a first-wear beat. */
-const WRITTEN_KINDS: ReadonlySet<ItemKind> = new Set(["memory5", "moment4", "his-look5"]);
+const WRITTEN_KINDS: ReadonlySet<ItemKind> = new Set(["memory5", "moment4", "his-look5", "her-look5"]);
 
 export const writesOnOpen = (item: Pick<ItemView, "kind">) => WRITTEN_KINDS.has(item.kind);
 

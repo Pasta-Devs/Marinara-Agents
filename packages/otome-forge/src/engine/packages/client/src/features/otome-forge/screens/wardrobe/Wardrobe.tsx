@@ -105,20 +105,24 @@ interface WardrobeProps {
   view: RunView;
   /** Opens a look's first-wear scene in the reader. */
   onOpenStory: (key: string) => void;
-  /** Whose looks show first: a love interest, or "me". */
+  /** Whose looks show first: a love interest, or "me" (the first love interest when it names no one in this story). */
   initialOwner?: WardrobeOwner;
+  /** The player picked whose looks to show, so a look's scene read in the reader comes back to them. */
+  onOwnerChange?: (owner: WardrobeOwner) => void;
 }
 
-export function Wardrobe({ runKey, view, onOpenStory, initialOwner }: WardrobeProps) {
+export function Wardrobe({ runKey, view, onOpenStory, initialOwner, onOwnerChange }: WardrobeProps) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const group = useId();
   const wardrobe = useWardrobe(runKey);
   const actions = useItemActions(runKey);
   const wearing = useWearLook(runKey);
-  const [owner, setOwner] = useState<WardrobeOwner>(initialOwner ?? view.lis[0]?.id ?? "me");
-  const [showing, setShowing] = useState<LookView | null>(null);
   const owners: WardrobeOwner[] = [...view.lis.map((li) => li.id), "me"];
+  const [owner, setOwner] = useState<WardrobeOwner>(
+    initialOwner && owners.includes(initialOwner) ? initialOwner : (owners[0] ?? "me"),
+  );
+  const [showing, setShowing] = useState<LookView | null>(null);
 
   const head = (
     <div className="of-page-head of-page-head--tight">
@@ -181,7 +185,10 @@ export function Wardrobe({ runKey, view, onOpenStory, initialOwner }: WardrobePr
                 name={group}
                 value={value}
                 checked={checked}
-                onChange={() => setOwner(value)}
+                onChange={() => {
+                  setOwner(value);
+                  onOwnerChange?.(value);
+                }}
               />
               <span className="of-ward-owner-dot" aria-hidden="true">
                 {person ? initialsOf(person.name) : <Sparkles size={12} strokeWidth={2} />}

@@ -2587,24 +2587,21 @@ test("Otome Hearth a failed summary is never silent: every screen of the story s
   await page.screenshot({ path: testInfo.outputPath(`memory-banner-reader-${mobile ? "phone" : "desktop"}.png`) });
   await setReaderControlsExpanded(root, false);
 
-  // Retry: its progress, with both buttons kept and focus on Retry; a second press sends nothing.
+  // Retry: the banner goes at once and stays gone while the retry runs (the maintainer's, 2026-11-05), giving its
+  // focus to the screen's heading; only the status line says the summary is being tried again.
   await retry.click();
-  await expect.poll(() => posts(stub, "/memory/retry").length).toBe(1);
-  await expect(banner).toContainText("Trying the summary again…");
-  await expect(retry).toHaveAttribute("aria-disabled", "true");
-  await expect(retry).toBeFocused();
-  await expect(connection).toBeVisible();
+  await expect(banner).toHaveCount(0);
+  await expect(root.locator(".of-reader-title")).toBeFocused();
   await expect(root.getByRole("status").filter({ hasText: "Trying the summary again…" })).toHaveCount(1);
-  // Playwright waits for an aria-disabled button to be enabled; the press itself must do nothing.
-  await retry.click({ force: true });
-  expect(posts(stub, "/memory/retry")).toHaveLength(1);
+  await expect.poll(() => posts(stub, "/memory/retry").length).toBe(1);
+  await expect(banner).toHaveCount(0);
 
-  // It fails again: the new error, and the buttons again.
+  // It fails again: the banner comes back with the new error and its buttons.
   const again = "Upstream 413: the request is larger than this model's 8192-token context.";
   stub.setMemory(failedMemory(again));
   await expect(banner.getByRole("alert")).toHaveText(`${failed} The connection said: ${again}`);
-  await expect(retry).not.toHaveAttribute("aria-disabled");
-  await expect(retry).toBeFocused();
+  await expect(retry).toBeVisible();
+  await expect(connection).toBeVisible();
 
   // The Memory connection: Settings → Connections with More connections open and Memory focused, and the provider's
   // whole message beside it; from Settings too.
@@ -2632,14 +2629,15 @@ test("Otome Hearth a failed summary is never silent: every screen of the story s
   await root.getByRole("button", { name: "Back", exact: true }).click();
   await expect(root.getByRole("button", { name: "Begin" })).toBeVisible();
 
-  // Retry writes the summary: the banner goes, gives its focus to the screen's heading, and says so.
+  // Retry writes the summary: the banner goes at once, gives its focus to the screen's heading, stays gone, and the
+  // status line says memory is working again.
   await retry.click();
-  await expect(banner).toContainText("Trying the summary again…");
-  stub.setMemory(MEMORY_READY);
   await expect(banner).toHaveCount(0);
   await expect(root.locator(".of-reader-title")).toBeFocused();
+  await expect.poll(() => posts(stub, "/memory/retry").length).toBe(2);
+  stub.setMemory(MEMORY_READY);
   await expect(root.getByRole("status").filter({ hasText: "Story memory is working again." })).toHaveCount(1);
-  expect(posts(stub, "/memory/retry")).toHaveLength(2);
+  await expect(banner).toHaveCount(0);
   expect(pageErrors).toEqual([]);
 });
 
@@ -2702,17 +2700,33 @@ test("Otome Hearth a Retry request that fails itself says so on its own line, no
   await expect(section.getByRole("alert")).toHaveText(RETRY_REFUSED);
   await expect(section).toContainText(CONTEXT_ERROR);
 
-  // A Retry from Settings goes through: memory moves on, and the banner's earlier request error goes with it.
+  // A Retry from Settings goes through: the banner beside it goes at once, before the request answers (both share
+  // it, so neither offers a second Retry meanwhile), and its earlier request error with it.
   refuse = false;
+  let answer!: () => void;
+  const held = new Promise<void>((resolve) => (answer = resolve));
+  let sent = 0;
+  await page.route("**/api/otome-forge/runs/*/memory/retry", async (route) => {
+    sent += 1;
+    await held;
+    await route.fallback();
+  });
   await sectionRetry.click();
-  await expect(banner).toContainText("Trying the summary again…");
+  await expect.poll(() => sent).toBe(1);
+  await expect(banner).toHaveCount(0);
+  await expect(root.getByRole("status").filter({ hasText: "Trying the summary again…" })).toHaveCount(1);
+  // Playwright waits for an aria-disabled button to be enabled; the press itself must send nothing.
+  await sectionRetry.click({ force: true });
+  answer();
   await expect(section.getByRole("alert")).toHaveCount(0);
+  await expect(banner).toHaveCount(0);
   // It fails anew: the banner shows the new failure's own words, with no earlier request error.
   const again = "Upstream 413: the request is larger than this model's 8192-token context.";
   stub.setMemory(failedMemory(again));
   await expect(banner.getByRole("alert")).toHaveText([`${MEMORY_FAILED} The connection said: ${again}`]);
   await expect(section).toContainText(again);
   await expect(section.getByRole("alert")).toHaveCount(0);
+  expect(sent).toBe(1);
 });
 
 test("Otome Hearth Change connection with no connection listed yet opens More connections at Memory once one is", async ({

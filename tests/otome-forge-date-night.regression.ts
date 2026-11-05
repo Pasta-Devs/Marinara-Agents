@@ -563,7 +563,10 @@ test("a date wears the owned looks picked for it, a 4★ included, and its plan 
     .find((call) => isDatePlanner(call.messages))!
     .messages.map((message) => message.content)
     .join("\n");
-  assert.match(plan, /WHAT THEY WEAR[\s\S]*HIS-LOOK: navy greatcoat[\s\S]*HER-LOOK: amber silk dress/);
+  // Each look once, in how each of them looks now (the bible's appearanceLine and the protagonist block).
+  assert.match(plan, /How Kai looks now [^\n]*; wearing HIS-LOOK: navy greatcoat, brass buttons\.\n/);
+  assert.match(plan, /looks now [^\n]*: wearing HER-LOOK: amber silk dress\.\n/);
+  for (const look of ["HIS-LOOK", "HER-LOOK"]) assert.equal(plan.split(look).length, 2, `${look} once`);
   // The keepsake draws them in their looks, on top of who they are.
   await playDate(t, "date-1", [1, 2, 1]);
   assert.equal((await finish(t, "date-1")).status, 200);

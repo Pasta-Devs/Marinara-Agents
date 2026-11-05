@@ -6,10 +6,15 @@
 // provider's own words (a context that is too small, say), or Otome's own when the memory model reports a context too
 // small for any summary (reason `context-too-small`), and the way to the Memory connection. Memory that waits
 // because no connection can write summaries asks for one instead, while a finished chapter waits (or while the count
-// is unknown). Ordinary catch-up (pending, stale) and ready memory ask for nothing.
+// is unknown). A Retry asks for nothing while it is sent and runs (the maintainer's, 2026-11-05: the banner goes at
+// once and comes back only when the summary fails again, with the new failure's words). Ordinary catch-up (pending,
+// stale) and ready memory ask for nothing.
 import type { MemoryStatus } from "../shared/api-types";
 
-/** The status as the client caches it: `retrying` while upkeep runs again after a failed summary. */
+/**
+ * The status as the client caches it: `retrying` while upkeep runs again after a failed summary, which is read fast and
+ * which the banner's status line says runs.
+ */
 export type MemoryView = MemoryStatus & { retrying?: true };
 
 export type MemoryNotice =
@@ -18,8 +23,6 @@ export type MemoryNotice =
    * wrote it (ownMessage), so it shows without "The connection said".
    */
   | { kind: "failed"; message: string | null; own?: true }
-  /** Upkeep runs again after a failure: its progress, the buttons kept. */
-  | { kind: "retrying" }
   /** No connection can write summaries: the way to the connection, no Retry. */
   | { kind: "no-connection" }
   | null;
@@ -50,23 +53,16 @@ export function shortMessage(message: string | undefined, limit = NOTICE_MESSAGE
   return `${(space > limit / 2 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
 
-/** What the status asks of the player (see the header), or null when it asks nothing. */
-export function memoryNotice(view: MemoryView | undefined): MemoryNotice {
-  if (!view) return null;
+/**
+ * What the status asks of the player (see the header), or null when it asks nothing; also null while a Retry request
+ * is on its way (`sending`). A retry that runs is `pending`, which asks nothing.
+ */
+export function memoryNotice(view: MemoryView | undefined, sending = false): MemoryNotice {
+  if (!view || sending) return null;
   if (view.noConnection && view.unsummarized !== 0) return { kind: "no-connection" };
-  if (view.retrying && view.phase === "pending") return { kind: "retrying" };
   if (view.phase === "error")
     return { kind: "failed", message: shortMessage(view.message), ...(ownMessage(view) ? { own: true } : {}) };
   return null;
-}
-
-/**
- * A notice's Retry: offered on a failure, kept but running while the Retry request (`busy`) or the upkeep it started
- * runs, and none without a connection. Every notice also offers the way to the connection.
- */
-export function retryAction(notice: NonNullable<MemoryNotice>, busy = false): "offered" | "running" | null {
-  if (notice.kind === "no-connection") return null;
-  return busy || notice.kind === "retrying" ? "running" : "offered";
 }
 
 /**
