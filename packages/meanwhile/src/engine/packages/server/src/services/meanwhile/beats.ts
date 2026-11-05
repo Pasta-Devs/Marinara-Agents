@@ -250,7 +250,8 @@ export function checkBeat(raw: unknown, c: BeatCheck): { label: string; event: L
       text,
       source: "generated",
       // Big events wait for the user; the review queue itself is the next slice.
-      status: major ? "proposed" : "accepted",
+      // A nudge is the user's own request, so even a big kind needs no review.
+      status: major && !seed.nudge ? "proposed" : "accepted",
       visibility: "circle",
       seedId: seed.id,
       ...(Object.keys(diary).length ? { diary } : {}),
@@ -279,6 +280,7 @@ async function beatDay(w: World, gate: Gate, day: string, seeds: Seed[], toMs: n
       cast: s.cast.map((id) => castNumber(circle, id)),
       place: s.place,
       time: s.time,
+      ...(s.nudge ? { nudge: s.nudge } : {}),
     })),
     recent: oneLiners(w, toMs),
     avoid: motifs(w, toMs),

@@ -8,13 +8,22 @@ const caughtUp = (iso: string, timeZone: string) =>
 
 /** Home card: the newest unheard hooks, or where each quiet Circle stands. Every tap opens the Meanwhile tab. */
 export function MeanwhileWidget({ open, active }: { open: () => void; active: boolean }) {
-  const widget = useQuery({ queryKey: ["meanwhile", "widget"], queryFn: getWidget, refetchInterval: active ? 60_000 : false });
+  const widget = useQuery({
+    queryKey: ["meanwhile", "widget"],
+    queryFn: getWidget,
+    refetchInterval: active ? 60_000 : false,
+  });
   const characters = useQuery({ queryKey: ["meanwhile", "characters"], queryFn: listCharacters });
   const names = new Map((characters.data ?? []).map((c) => [c.id, c.name]));
   const { hooks = [], quiet = [] } = widget.data ?? {};
   const empty = widget.data !== undefined && hooks.length === 0 && quiet.length === 0;
 
-  if (widget.isError) return <p className="mw-warn" role="alert">Meanwhile could not load.</p>;
+  if (widget.isError)
+    return (
+      <p className="mw-warn" role="alert">
+        Meanwhile could not load.
+      </p>
+    );
   if (!widget.data) return <p className="mw-muted">Loading.</p>;
   return (
     <div className="mw-widget">
