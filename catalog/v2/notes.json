@@ -670,6 +670,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.8.8",
+          "date": "2026-11-05",
+          "notes": "- **Chapters keep the world you chose.** The story planner now reads your premise whenever it plans an arc or a chapter, so the story keeps your world's genre, era and technology instead of drifting to a period look you never picked. A story already under way gets this from its next plan, and a new story's world is written with your premise's era and technology from the start.\n- **Messages know your world.** Messages and daily messages from your love interests now know the world they live in: a phone in a modern world, never a device your world doesn't have. Calls and dates in the story keep to what your world has too, and Home lines and notes can mention a modern world's phones and screens.\n- **A new example premise.** The premise box shows a new example.",
+          "highlight": false
+        },
+        {
           "version": "0.8.6",
           "date": "2026-11-04",
           "notes": "- **Each affection level takes a little more than the last.** Level 2 now takes 200 affection, and each level after it 50 more, up to 600 for level 10, so the first levels come sooner and the last ones mean more. Past level 10, every 300 affection still earns a prestige point. A love interest's level is worked out from their affection, so a story already under way may show a different level after updating; anything you've already unlocked stays.",
@@ -781,12 +787,6 @@
           "version": "0.6.24",
           "date": "2026-11-02",
           "notes": "- **Long lines show in full on iPhone.** On iPhone, a line longer than the dialogue box could come back cut off mid-word, with only its final period showing, although the Log had all of it. Every row now shows as it types, and a click on a line that is still typing still shows it whole.",
-          "highlight": false
-        },
-        {
-          "version": "0.6.23",
-          "date": "2026-11-02",
-          "notes": "- **Chibi stickers.** With images on, your five phone stickers are chibi busts of your protagonist, and each love interest gets nine of their own, one unlocked per affection level from 2 to 10 (\"You unlocked a new sticker\"). They're painted in the background, one at a time, and Ask before painting holds them for a tap; stories in progress catch up. Without images your five are simple labelled icons.\n- **Love interests send stickers too**, theirs or yours, by name in brackets, like `[dottore_pensive]`. Old face stickers still show.\n- **A Stickers tab in the Album** to view and save each sticker, named like `mari_laugh`.\n- **Messages a day from love interests**: in Settings → Connections, choose how many times a day one you've met may message you first (0 to 24, off by default). They're spread across your day and arrive unread.\n- **A love interest's thread header fits on one row on phones**, with **Close** beside their name.",
           "highlight": false
         }
       ]

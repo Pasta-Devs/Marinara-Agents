@@ -37,6 +37,9 @@
 // #2066: the chapter plan, beat, CG beat, confrontation and closer use the cached layout (the shared story context first,
 // with the whole cast's contract; each node's own rules after the cached part), so those digests moved once; the
 // route, repair and banner prompts are untouched.
+// 0.8.8: the arc and chapter planners read the player's premise in one line after the setting (the maintainer's: only
+// they get it), so the chapter, route and repair plan digests moved, by that line alone; the scenes, Confrontations,
+// Closers and banners are untouched (otome-forge-knowledge's 0.8.8 test pins both).
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
@@ -256,11 +259,11 @@ const EXPECTED_ANGST: Record<string, string> = {
   bannerMine: "109b0762d8bcf329",
   beat: "26d7ba0dafc6c0bf",
   beatWithCg: "8161431cbc12789d",
-  chapterPlan: "265af67c2fded21a",
+  chapterPlan: "02efaa961af23e07",
   closer: "a1a09309945e9e5d",
   confrontation: "d0a05079393b602d",
-  repairPlan: "66a0a3d0fc164ff3",
-  routePlan: "d2236d1d9f1d95cc",
+  repairPlan: "c19ab3b49602f77f",
+  routePlan: "804b9a74e856ea0a",
 };
 const EXPECTED_GENTLE: Record<string, string> = {
   bannerHis: "5b01874fc4fabd17",
@@ -268,11 +271,11 @@ const EXPECTED_GENTLE: Record<string, string> = {
   bannerMine: "75d0bd9aebbf79ad",
   beat: "7ec97d9b201b895e",
   beatWithCg: "ce1e12d2113f4eab",
-  chapterPlan: "fc83f5795c86773f",
+  chapterPlan: "a20e8610b320495a",
   closer: "54aafc5f0e85bc63",
   confrontation: "76c943bb55171273",
-  repairPlan: "27abea647217c7fe",
-  routePlan: "c4db47d78223bd2d",
+  repairPlan: "3b0bf1864e02724c",
+  routePlan: "deaa361d86ed7d3c",
 };
 
 test("the SFW defaults pin scene pacing and earned character change in story and banner prompts", () => {

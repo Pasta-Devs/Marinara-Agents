@@ -1,5 +1,11 @@
 # Otome Hearth release notes
 
+## 0.8.8 — 2026-11-05
+
+- **Chapters keep the world you chose.** The story planner now reads your premise whenever it plans an arc or a chapter, so the story keeps your world's genre, era and technology instead of drifting to a period look you never picked. A story already under way gets this from its next plan, and a new story's world is written with your premise's era and technology from the start.
+- **Messages know your world.** Messages and daily messages from your love interests now know the world they live in: a phone in a modern world, never a device your world doesn't have. Calls and dates in the story keep to what your world has too, and Home lines and notes can mention a modern world's phones and screens.
+- **A new example premise.** The premise box shows a new example.
+
 ## 0.8.6 — 2026-11-04
 
 - **Each affection level takes a little more than the last.** Level 2 now takes 200 affection, and each level after it 50 more, up to 600 for level 10, so the first levels come sooner and the last ones mean more. Past level 10, every 300 affection still earns a prestige point. A love interest's level is worked out from their affection, so a story already under way may show a different level after updating; anything you've already unlocked stays.
