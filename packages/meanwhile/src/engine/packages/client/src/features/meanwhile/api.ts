@@ -224,3 +224,11 @@ export const createNudge = (id: string, nudge: { cast: string[]; text: string; k
   api<NudgeItem>(`/circles/${id}/nudges`, "POST", nudge);
 export const deleteNudge = (id: string, nudgeId: string) =>
   api<{ ok: true }>(`/circles/${id}/nudges/${nudgeId}`, "DELETE");
+
+export interface PhoneThread {
+  a: string;
+  b: string;
+  texts: { from: string; text: string; time: string }[];
+}
+
+export const getPhone = (id: string) => api<{ threads: PhoneThread[] }>(`/circles/${id}/phone`);

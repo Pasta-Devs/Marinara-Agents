@@ -10,3 +10,4 @@
 - "Character status" (off by default) writes what a person does now to their chat. It runs at x1 only.
 - A Home card lists up to 3 new hooks.
 - A "Nudge" button plans one event you ask for, such as a job offer, inside 1 to 7 days.
+- A "Phone" button shows short texts the characters sent each other.
