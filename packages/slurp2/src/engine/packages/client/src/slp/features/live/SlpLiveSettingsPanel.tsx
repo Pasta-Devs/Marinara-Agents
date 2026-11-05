@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SLP_DEFAULT_LIVE_SETTINGS, type SlpLiveSettings } from "../../../../../shared/src/slp/slp-live.js";
 import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
@@ -6,6 +7,7 @@ import { SlpExtensionSwitch } from "../../modules/settings/SlpExtensionSwitch";
 import { BackstagePageHeader, SettingAnchor } from "../../modules/settings/SlpSettingsKit";
 import { AdvancedGroup, Field, NumberSetting, SettingsGroup } from "../../modules/settings/SlpSettingsControls";
 import { ChoiceSetting } from "../../modules/settings/SlpSettingsInputs";
+import { useCreatorAccounts } from "../creators/slp-creators-contract";
 
 /** Days between one Creator's shows, by name so the locale keys stay plain words. */
 const HOW_OFTEN = { twiceDaily: 0.5, daily: 1, often: 1.5, fewDays: 3, weekly: 7 } as const;
@@ -14,6 +16,8 @@ const LENGTHS = { short: [15, 30], normal: [30, 60], long: [60, 120] } as const;
 const PACES = ["short", "normal", "long"] as const;
 const PICTURES = ["off", "45", "60", "120", "300"] as const;
 const PRIVATE_MINUTES = ["5", "10", "15", "30"] as const;
+const GOAL_SCALES = { smaller: 0.5, normal: 1, bigger: 2, huge: 4 } as const;
+const GOAL_SCALE_KEYS = Object.keys(GOAL_SCALES) as (keyof typeof GOAL_SCALES)[];
 
 type Connection = { id: string; name?: string | null; model?: string | null; provider: string };
 
@@ -122,6 +126,17 @@ function SlpLiveSettings({ settings, update, updateSettings, connectionsQuery }:
             }
           />
         </SettingsGroup>
+        <SettingsGroup title={tx("groupGoals", "Tip goals")}>
+          <ChoiceSetting
+            label={tx("goalScale", "Goal size")}
+            detail={tx("goalScaleDetail", "Makes the room's goals and menu prices smaller or bigger.")}
+            options={GOAL_SCALE_KEYS.map((value) => ({ value, label: tx(`goalScale_${value}`, value) }))}
+            value={GOAL_SCALE_KEYS.find((key) => GOAL_SCALES[key] === live.goalScale) ?? null}
+            disabled={busy}
+            onChange={(value) => set({ goalScale: GOAL_SCALES[value] })}
+          />
+          <SlpLiveOwnGoals goals={live.goals} disabled={busy} onSave={(goals) => set({ goals })} />
+        </SettingsGroup>
         <SettingsGroup title={tx("groupPrivate", "Private shows")}>
           <ChoiceSetting
             label={tx("privateMinutes", "Private block")}
@@ -213,5 +228,112 @@ function SlpLiveSettings({ settings, update, updateSettings, connectionsQuery }:
         </AdvancedGroup>
       </div>
     </SettingAnchor>
+  );
+}
+
+type OwnGoals = SlpLiveSettings["goals"];
+type GoalRow = { target: string; text: string };
+
+/** Up to three own goals for one Creator: an amount and what happens when the room hits it. */
+function SlpLiveOwnGoals({
+  goals,
+  disabled,
+  onSave,
+}: {
+  goals: OwnGoals;
+  disabled: boolean;
+  onSave: (goals: OwnGoals) => void;
+}) {
+  const { t } = useTranslation();
+  const tx = (key: string, defaultValue: string) => t(`ui.slurp.live.settings.${key}`, { defaultValue });
+  const creators = (useCreatorAccounts().data ?? []).filter((account) => account.kind !== "viewer");
+  const [creatorId, setCreatorId] = useState("");
+  const rowsFor = (id: string): GoalRow[] =>
+    [0, 1, 2].map((index) => {
+      const goal = goals[id]?.[index];
+      return { target: goal ? String(goal.target) : "", text: goal?.text ?? "" };
+    });
+  const [rows, setRows] = useState<GoalRow[]>(() => rowsFor(""));
+  // Reload the rows whenever the saved goals change under them (Discard, Reset, another Creator).
+  const saved = JSON.stringify(goals[creatorId] ?? []);
+  // The list this panel saved last; an echo of it must not wipe half-typed rows.
+  const sent = useRef("");
+  useEffect(() => {
+    if (sent.current === `${creatorId}|${saved}`) return;
+    sent.current = "";
+    setRows(rowsFor(creatorId));
+  }, [creatorId, saved]); // eslint-disable-line react-hooks/exhaustive-deps
+  const edit = (index: number, patch: Partial<GoalRow>) =>
+    setRows((current) => current.map((row, at) => (at === index ? { ...row, ...patch } : row)));
+  // A row counts once it has both a whole amount and words; half-filled rows wait.
+  const save = () => {
+    if (!creatorId) return;
+    const list = rows
+      .map((row) => ({ target: Number(row.target), text: row.text.trim() }))
+      .filter((row) => row.text && Number.isInteger(row.target) && row.target >= 1 && row.target <= 1_000_000);
+    if (JSON.stringify(list) === saved) return;
+    const { [creatorId]: _old, ...rest } = goals;
+    sent.current = `${creatorId}|${JSON.stringify(list)}`;
+    onSave(list.length ? { ...rest, [creatorId]: list } : rest);
+  };
+  const inputClass =
+    "h-11 min-w-0 rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/30 disabled:opacity-50 sm:text-sm";
+  return (
+    <Field
+      wide
+      label={tx("ownGoals", "Own goals")}
+      detail={tx(
+        "ownGoalsDetail",
+        "Set up to three goals for one Creator. They replace the made goals in that Creator's next shows.",
+      )}
+    >
+      <div className="space-y-2">
+        <select
+          aria-label={tx("ownGoalsCreator", "Creator")}
+          value={creatorId}
+          disabled={disabled}
+          onChange={(event) => setCreatorId(event.target.value)}
+          className={`${inputClass} w-full`}
+        >
+          <option value="">{tx("ownGoalsPick", "Pick a Creator")}</option>
+          {creators.map((creator) => (
+            <option key={creator.id} value={creator.id}>
+              {creator.displayName}
+              {goals[creator.id]?.length ? ` (${goals[creator.id].length})` : ""}
+            </option>
+          ))}
+        </select>
+        {creatorId
+          ? rows.map((row, index) => (
+              <div key={index} className="flex gap-2">
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={1_000_000}
+                  aria-label={tx("ownGoalsAmount", "Amount")}
+                  placeholder={tx("ownGoalsAmount", "Amount")}
+                  value={row.target}
+                  disabled={disabled}
+                  onChange={(event) => edit(index, { target: event.target.value })}
+                  onBlur={save}
+                  className={`${inputClass} w-24 tabular-nums`}
+                />
+                <input
+                  type="text"
+                  maxLength={80}
+                  aria-label={tx("ownGoalsText", "What happens")}
+                  placeholder={tx("ownGoalsText", "What happens")}
+                  value={row.text}
+                  disabled={disabled}
+                  onChange={(event) => edit(index, { text: event.target.value })}
+                  onBlur={save}
+                  className={`${inputClass} flex-1`}
+                />
+              </div>
+            ))
+          : null}
+      </div>
+    </Field>
   );
 }

@@ -69,7 +69,7 @@ async function startDueShows(db: DB, settings: Settings, open: SlurpLiveShow[], 
       startedAt: new Date(slot.startAt).toISOString(),
       endsAt: new Date(slot.endsAt).toISOString(),
       endedAt: null,
-      state: slpLiveStart({ level: spice.level, fans }),
+      state: slpLiveStart({ level: spice.level, fans, priceScale: live.goalScale, goals: live.goals[creator.id] }),
       watchedAt: null,
       createdAt: at.toISOString(),
     };
@@ -216,6 +216,7 @@ export async function hostSlurpLiveShow(
   // The player picks the length; the Backstage show length only shapes Creator shows.
   const minutes = Math.min(240, Math.max(10, Math.round(input.minutes)));
   const spice = await resolveSlurpCreatorSpice(db, host);
+  const live = normalizeSlpLiveSettings((await noodle.getSettings()).live);
   const fans = (await createSlurpPopulationStorage(db).listTiesForCreator(host.id)).filter(
     (tie) => tie.stage !== "lapsed",
   ).length;
@@ -226,7 +227,10 @@ export async function hostSlurpLiveShow(
     startedAt: at.toISOString(),
     endsAt: new Date(at.getTime() + minutes * MINUTE).toISOString(),
     endedAt: null,
-    state: { ...slpLiveStart({ level: spice.level, fans }), hostPersona: input.personaId },
+    state: {
+      ...slpLiveStart({ level: spice.level, fans, priceScale: live.goalScale, goals: live.goals[host.id] }),
+      hostPersona: input.personaId,
+    },
     watchedAt: at.toISOString(),
     createdAt: at.toISOString(),
   };

@@ -20,6 +20,17 @@ export const slpLiveSettingsSchema = z.object({
   privateMinutes: z.number().int().min(5).max(30).default(10),
   privatePrice: z.number().int().min(10).max(99_999).default(300),
   connectionId: z.string().nullable().default(null),
+  /** Multiplies the room's goal amounts and menu prices. */
+  goalScale: z.number().min(0.25).max(4).default(1),
+  /** Per Creator id: up to three own goals that replace the made ones. */
+  goals: z
+    .record(
+      z.string(),
+      z
+        .array(z.object({ target: z.number().int().min(1).max(1_000_000), text: z.string().trim().min(1).max(80) }))
+        .max(3),
+    )
+    .default({}),
 });
 export type SlpLiveSettings = z.infer<typeof slpLiveSettingsSchema>;
 export const SLP_DEFAULT_LIVE_SETTINGS: SlpLiveSettings = slpLiveSettingsSchema.parse({});
@@ -60,6 +71,8 @@ export type SlpLiveMenuItem = {
   price: number;
   strip?: boolean;
   /** Model-made items only. */ label?: string;
+  /** A player-written goal reward: the goal unlocks it, nobody tips for it. */
+  goal?: boolean;
 };
 export type SlpLiveGoal = { reward: string; target: number; hitAt: number | null };
 export type SlpLiveOrder = { id: string; itemId: string; by: string; name: string; at: number; doneAt: number | null };
@@ -150,8 +163,17 @@ export function slpLiveMenuFor(level: SlpExplicitLevelName, priceScale = 1): Slp
 }
 
 /** A fresh show: the menu the Creator allows, and three goals that grow, each rewarding a menu item for free. */
-export function slpLiveStart(input: { level: SlpExplicitLevelName; fans: number; priceScale?: number }): SlpLiveState {
+export function slpLiveStart(input: {
+  level: SlpExplicitLevelName;
+  fans: number;
+  priceScale?: number;
+  /** The player's own goals for this Creator; they replace the made ones. */
+  goals?: readonly { target: number; text: string }[];
+}): SlpLiveState {
   const menu = slpLiveMenuFor(input.level, input.priceScale);
+  const own = [...(input.goals ?? [])]
+    .sort((a, b) => a.target - b.target)
+    .map((goal, index) => ({ id: `goal${index + 1}`, price: goal.target, label: goal.text, goal: true }));
   const base = Math.round((200 + Math.min(input.fans, 200) * 4) * (input.priceScale ?? 1));
   const pricey = [...menu].sort((a, b) => b.price - a.price);
   const rewards = [pricey[Math.min(2, pricey.length - 1)], pricey[Math.min(1, pricey.length - 1)], pricey[0]];
@@ -160,12 +182,14 @@ export function slpLiveStart(input: { level: SlpExplicitLevelName; fans: number;
     heat: 10,
     strip: 0,
     stripMax: STRIP_MAX[input.level],
-    goals: rewards.map((item, index) => ({
-      reward: item.id,
-      target: Math.round(base * [1, 2.2, 4][index]),
-      hitAt: null,
-    })),
-    menu,
+    goals: own.length
+      ? own.map((item) => ({ reward: item.id, target: item.price, hitAt: null }))
+      : rewards.map((item, index) => ({
+          reward: item.id,
+          target: Math.round(base * [1, 2.2, 4][index]),
+          hitAt: null,
+        })),
+    menu: [...menu, ...own],
     queue: [],
     room: [],
     names: {},
@@ -295,7 +319,7 @@ export function slpLiveMinute(
     if (!inRoom.has(fan.id) || slpLiveUnit(`${seed}:${fan.id}:tip`) >= fan.tipChance * 0.3 * pull) continue;
     const size = slpLiveUnit(`${seed}:${fan.id}:amount`);
     const amount = Math.max(5, Math.round((fan.maxTip * size * size) / 5) * 5);
-    const affordable = state.menu.filter((item) => item.price <= amount);
+    const affordable = state.menu.filter((item) => !item.goal && item.price <= amount);
     const item =
       affordable.length && slpLiveUnit(`${seed}:${fan.id}:order`) < 0.4
         ? affordable[Math.floor(slpLiveUnit(`${seed}:${fan.id}:pick`) * affordable.length)]
