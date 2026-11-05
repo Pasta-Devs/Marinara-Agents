@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SLP_DEFAULT_LIVE_SETTINGS, type SlpLiveSettings } from "../../../../../shared/src/slp/slp-live.js";
 import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
@@ -256,7 +256,13 @@ function SlpLiveOwnGoals({
   const [rows, setRows] = useState<GoalRow[]>(() => rowsFor(""));
   // Reload the rows whenever the saved goals change under them (Discard, Reset, another Creator).
   const saved = JSON.stringify(goals[creatorId] ?? []);
-  useEffect(() => setRows(rowsFor(creatorId)), [creatorId, saved]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The list this panel saved last; an echo of it must not wipe half-typed rows.
+  const sent = useRef("");
+  useEffect(() => {
+    if (sent.current === `${creatorId}|${saved}`) return;
+    sent.current = "";
+    setRows(rowsFor(creatorId));
+  }, [creatorId, saved]); // eslint-disable-line react-hooks/exhaustive-deps
   const edit = (index: number, patch: Partial<GoalRow>) =>
     setRows((current) => current.map((row, at) => (at === index ? { ...row, ...patch } : row)));
   // A row counts once it has both a whole amount and words; half-filled rows wait.
@@ -267,6 +273,7 @@ function SlpLiveOwnGoals({
       .filter((row) => row.text && Number.isInteger(row.target) && row.target >= 1 && row.target <= 1_000_000);
     if (JSON.stringify(list) === saved) return;
     const { [creatorId]: _old, ...rest } = goals;
+    sent.current = `${creatorId}|${JSON.stringify(list)}`;
     onSave(list.length ? { ...rest, [creatorId]: list } : rest);
   };
   const inputClass =
