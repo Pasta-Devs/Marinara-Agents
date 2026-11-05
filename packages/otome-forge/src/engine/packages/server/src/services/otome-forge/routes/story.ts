@@ -239,10 +239,7 @@ export const registerStoryRoutes: RegisterRoutes = (router, deps) => {
       const { segment } = parseBody(SegmentBody, request.body);
       const { runId } = runParam(request);
       const { key, i } = beatParams(request);
-      const { beat, ...rest } = await easeOff(deps, runId, key, i, segment, {
-        debugMode: debugModeOf(request),
-        review: reviewModeOf(request),
-      });
+      const { beat, ...rest } = await easeOff(deps, runId, key, i, segment, { debugMode: debugModeOf(request) });
       return { beat: beatView(runId, beat), ...rest };
     }),
   );
