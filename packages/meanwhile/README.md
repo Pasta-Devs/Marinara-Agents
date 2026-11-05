@@ -20,3 +20,5 @@ A Circle can also write the status of its characters (switch "Character status",
 ## Install
 
 Meanwhile is offered to Engine `staging` testers. Install it, restart Marinara Engine when prompted, then open Home -> Meanwhile.
+
+The Home screen has a Meanwhile card. It lists up to 3 hooks that no chat has used yet, or says how far each Circle is caught up. Tap it to open the tab.

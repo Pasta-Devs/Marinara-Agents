@@ -308,7 +308,8 @@
         },
         "contributions": {
           "slots": [
-            "home-browser-tab"
+            "home-browser-tab",
+            "home-widget"
           ],
           "homeBrowserTab": {
             "label": "Meanwhile",
@@ -316,7 +317,19 @@
             "iconPaths": [
               "meanwhile-icon.png"
             ]
-          }
+          },
+          "homeWidgets": [
+            {
+              "id": "meanwhile-hooks",
+              "label": "Meanwhile",
+              "description": "What your characters want to tell you, from the Circles where life went on",
+              "size": "compact",
+              "icon": "sparkles",
+              "accent": "violet",
+              "surface": "soft",
+              "header": "compact"
+            }
+          ]
         },
         "files": [
           {
@@ -326,13 +339,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "6215a96e61b95301ae39d07d704cd07503c626668189e3643976d61224727d42",
-            "bytes": 50925
+            "sha256": "402640c85863e8eba94d835e38cb7a341fa315403d988922400c7659708d9a88",
+            "bytes": 51543
           },
           {
             "path": "client.js",
-            "sha256": "5615a58e64aef646638c5d3d2976de11c411b0d58b42dab0519d7e706fb356bc",
-            "bytes": 28382
+            "sha256": "f96109435ce17c218467361ec610e60a85ac47d069d114a6d02404db5f2f5023",
+            "bytes": 29817
           },
           {
             "path": "meanwhile-icon.png",
@@ -354,8 +367,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/meanwhile.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/meanwhile-0.1.0.zip",
-        "sha256": "5a67cf029cf9da84db5c2a5052b73ec53080130395495ab69f5235a285c7ff23",
-        "bytes": 82598
+        "sha256": "b95f0b1523a15076a1ff7be493e87bc87ec269540f5eea59f2c1a47f8f1edabd",
+        "bytes": 85018
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#meanwhile"
     },

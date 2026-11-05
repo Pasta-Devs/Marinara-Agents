@@ -12,6 +12,8 @@ export const MEANWHILE_STYLES = `
 .mw-btn:hover:not(:disabled) { background: var(--secondary); }
 .mw-btn:focus-visible, .mw-input:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .mw-btn:disabled { opacity: 0.5; cursor: default; }
+.mw-widget { display: grid; gap: 0.5rem; }
+.mw-hook { display: grid; gap: 0.1rem; width: 100%; text-align: left; overflow-wrap: anywhere; }
 .mw-btn-primary { background: var(--primary); color: var(--primary-foreground); border-color: transparent; }
 .mw-btn-primary:hover:not(:disabled) { background: var(--primary); opacity: 0.9; }
 .mw-btn-on { background: var(--secondary); border-color: var(--ring); }
