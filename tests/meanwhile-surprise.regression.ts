@@ -20,7 +20,7 @@ const runtime: any = {
   resources: { listCharacters: async () => [{ id: "x", data: { name: "Lily" } }] },
   persistence: {
     listChats: async () => [],
-    getChat: async () => ({ characterIds: ["x"], lastMessageAt: new Date(NOW + 1000).toISOString() }),
+    getChat: async () => ({ characterIds: ["x", "y"], lastMessageAt: new Date(NOW + 1000).toISOString() }),
     listMessages: async () => messages,
     documents: {
       getById: async (_p: string, id: string) => docs.get(id) ?? null,
@@ -79,12 +79,15 @@ async function main() {
   const texts = [{ from: "x", to: "y", time: iso(90), text: "TEXT" }];
   await updateMeanwhile((d) => ({
     ...d,
-    circles: [circle],
+    circles: [circle, { ...circle, id: "k2", linkedChatIds: [] }],
     events: [
       event("routine", { weight: "routine", text: "Routine work" }),
       event("note", { text: "SECRET note" }),
       event("hooked", { text: "SECRET hooked", hook: { x: "SECRET job offer" }, diary: { x: "SECRET diary" } }),
       event("phone", { text: "SECRET phone", texts }),
+      event("gone", { visibility: "chat:gone", text: "Gone chat" }),
+      event("old", { start: iso(60 * 24 * 20 + 120), end: iso(60 * 24 * 20 + 60), text: "Old news" }),
+      event("nochat", { circleId: "k2", text: "No chat" }),
       event("review", { status: "proposed", weight: "major", text: "Needs review" }),
       event("routinePhone", { weight: "routine", text: "Routine phone", texts }),
     ],
@@ -104,7 +107,7 @@ async function main() {
 
   // Surprise on: the routes show routine and review events, nothing told.
   const timeline = (await call("GET", "/circles/k/timeline")).body;
-  assert.deepEqual(timeline.events.map((e: any) => e.id).sort(), ["review", "routine", "routinePhone"]);
+  assert.deepEqual(timeline.events.map((e: any) => e.id).sort(), ["gone", "review", "routine", "routinePhone"]);
   assert.equal(timeline.dealt.length, 0);
   const home = (await call("GET", "/circles/k/home")).body;
   assert.equal(home.hooks.length, 0);
@@ -114,6 +117,7 @@ async function main() {
   assert.equal(widget.hooks.length, 0);
   assert.equal(widget.quiet[0].toHear, 3);
   assert.equal((await call("GET", "/circles")).body.circles[0].toHear, 3);
+  assert.equal((await call("GET", "/circles")).body.circles[1].toHear, 0);
   assert.equal((await call("GET", "/circles/k/phone")).body.threads[0].texts.length, 1);
   assert.equal((await call("GET", "/circles/k/papers")).body.papers.length, 0);
   assert.equal((await call("GET", "/circles/k/nudges")).status, 200);
@@ -141,9 +145,25 @@ async function main() {
   assert.equal(after.diary.x.length, 1);
   assert.ok((await call("GET", "/circles/k/timeline")).body.events.some((e: any) => e.id === "note"));
 
+  // Group chat: only the character who replied has the event marked told.
+  await updateMeanwhile((d) => ({
+    ...d,
+    circles: [...d.circles, { ...circle, id: "g", linkedChatIds: ["c2"], castIds: ["x", "y"] }],
+    events: [
+      ...d.events,
+      event("gx", { circleId: "g", cast: ["x"], hook: { x: "x news" } }),
+      event("gy", { circleId: "g", cast: ["y"], hook: { y: "y news" } }),
+    ],
+  }));
+  messages = [{ role: "assistant", characterId: "x", createdAt: new Date(NOW + 9000).toISOString() } as any];
+  await markDelivered();
+  const grouped = (await readMeanwhile()).events;
+  assert.ok(Object.keys(grouped.find((e) => e.id === "gx")!.delivered ?? {}).length);
+  assert.ok(!Object.keys(grouped.find((e) => e.id === "gy")!.delivered ?? {}).length);
+
   // Surprise off: everything is visible and nothing is counted.
   await updateMeanwhile((d) => ({ ...d, circles: d.circles.map((c) => ({ ...c, surprise: false })) }));
-  assert.equal((await call("GET", "/circles/k/timeline")).body.events.length, 6);
+  assert.equal((await call("GET", "/circles/k/timeline")).body.events.length, 7);
   assert.equal((await call("GET", "/circles/k/papers")).body.papers.length, 1);
   assert.equal((await call("GET", "/circles")).body.circles[0].toHear, 0);
 

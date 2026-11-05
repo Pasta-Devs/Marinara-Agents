@@ -140,7 +140,7 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
       .filter(
         (e) =>
           circles.has(e.circleId) &&
-          !hiddenBySurprise(circles.get(e.circleId)!, e) &&
+          !hiddenBySurprise(doc, circles.get(e.circleId)!, e) &&
           e.status === "accepted" &&
           e.visibility === "circle" &&
           e.kind !== "spicy" &&
@@ -300,7 +300,7 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
         .filter(
           (e) =>
             e.circleId === circle.id &&
-            !hiddenBySurprise(circle, e) &&
+            !hiddenBySurprise(doc, circle, e) &&
             (e.status === "accepted" || e.status === "proposed") &&
             wall(e.start).slice(0, 10) >= oldest,
         )
@@ -352,7 +352,7 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
         e.status !== "accepted" ||
         e.visibility !== "circle" ||
         e.kind === "spicy" ||
-        hiddenBySurprise(circle, e)
+        hiddenBySurprise(doc, circle, e)
       )
         continue;
       for (const t of e.texts ?? []) {
@@ -376,7 +376,7 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
     const doc = await readMeanwhile();
     const circle = find(doc, request.params.id);
     if (!circle) return notFound(reply);
-    const status = new Map(doc.events.map((e) => [e.id, hiddenBySurprise(circle, e) ? "hidden" : e.status]));
+    const status = new Map(doc.events.map((e) => [e.id, hiddenBySurprise(doc, circle, e) ? "hidden" : e.status]));
     const papers = doc.papers
       .filter(
         (p) =>
@@ -397,7 +397,7 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
     if (!circle) return notFound(reply);
     const tz = circle.clock.timezone;
     const mine = doc.events
-      .filter((e) => e.circleId === circle.id && e.status === "accepted" && !hiddenBySurprise(circle, e))
+      .filter((e) => e.circleId === circle.id && e.status === "accepted" && !hiddenBySurprise(doc, circle, e))
       .sort((a, b) => Date.parse(b.start) - Date.parse(a.start));
     const chats = circle.linkedChatIds.length
       ? (await getMeanwhileRuntime().persistence.listChats()).filter((chat) => circle.linkedChatIds.includes(chat.id))
@@ -522,7 +522,7 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
       const doc = await readMeanwhile();
       const circle = find(doc, request.params.id);
       const event = doc.events.find((e) => e.id === request.params.eventId && e.circleId === request.params.id);
-      if (!circle || !event || hiddenBySurprise(circle, event)) return notFound(reply);
+      if (!circle || !event || hiddenBySurprise(doc, circle, event)) return notFound(reply);
       const next = await change(event, circle, body(request));
       if ("error" in next) return reply.code(next.code).send({ error: next.error });
       let moved = false;
@@ -590,7 +590,7 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
     return {
       nudges: nudges.map((n) => {
         const e = n.eventId ? events.get(n.eventId) : undefined;
-        return e && !hiddenBySurprise(circle, e)
+        return e && !hiddenBySurprise(doc, circle, e)
           ? { ...n, event: { text: e.text, day: msToWall(Date.parse(e.start), circle.clock.timezone).slice(0, 10) } }
           : n;
       }),
