@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.8.8 — 2026-11-05
+
+- **Enter no longer sends a message.** In Messages, Enter starts a new line, on a phone and on a computer alike, and only **Send** sends what you wrote.
+
 ## 0.8.7 — 2026-11-05
 
 - **The story knows what you're wearing**, like it does for love interests: the look you put on with Wear at home or picked for a date.

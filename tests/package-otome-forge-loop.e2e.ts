@@ -1390,7 +1390,7 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await expect(root.locator(".of-quote-chip")).toContainText(NOTE);
     await auditScreen(page, root, "phone: thread");
     await root.getByRole("textbox", { name: "Message Ilvar Thorne" }).fill("I left it on for you.");
-    await page.keyboard.press("Enter");
+    await root.getByRole("button", { name: "Send", exact: true }).click();
     const log = root.getByRole("list", { name: "Messages with Ilvar Thorne" });
     await expect(log.getByText(REPLY)).toBeVisible();
     // His reply is said in the thread's polite live region.

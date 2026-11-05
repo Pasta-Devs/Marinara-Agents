@@ -7,7 +7,7 @@
 // busy and reports `busy` in the history, polled until it clears). Each message carries its own id, so the server
 // never saves it twice. A failed send never goes again by itself: the thread is read back, the words return to the
 // box when the server never saved them, and "Ask again" appears when it saved them but no reply came.
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookHeart, ChevronLeft, Heart, RotateCcw, SendHorizontal, X } from "lucide-react";
@@ -328,11 +328,6 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
     if (!canSend) return;
     void send({ text: draft.trim(), id: messageId(), ...(quote ? { quote } : {}) }, true);
   };
-  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
-    event.preventDefault();
-    submit();
-  };
 
   const closed = (result: PhoneCloseResult) => {
     // Shown at once as the newest closed conversation; the server's page follows.
@@ -515,6 +510,7 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
               input.current?.focus({ preventScroll: true });
             }}
           />
+          {/* No Enter shortcut: Enter starts a new line on a phone and on a computer alike, and only Send sends. */}
           <textarea
             ref={input}
             className="of-input of-composer-input"
@@ -524,7 +520,6 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
             aria-label={t("ui.otomeForge.phone.inputLabel", { name: li.name })}
             placeholder={t("ui.otomeForge.phone.placeholder", { name: li.name })}
             onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={onKeyDown}
           />
           <button
             type="submit"
