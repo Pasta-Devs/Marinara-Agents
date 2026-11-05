@@ -129,6 +129,11 @@ export function CardScreen({ ctx, id }: { ctx: Ctx; id: string }) {
         <Waited card={card} />
       </p>
       {text?.line && <blockquote className="bc-quote bc-said">{text.line}</blockquote>}
+      {text?.advice?.map((a) => (
+        <p key={a.who} className="bc-row-meta">
+          {t("ui.bigCheese.advisors.says", { name: nameOf(kit, a.who), text: a.text })}
+        </p>
+      ))}
 
       {noHours && <p className="bc-note">{t("ui.bigCheese.card.noHours")}</p>}
       {promiseOpen ? (

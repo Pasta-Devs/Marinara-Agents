@@ -465,7 +465,7 @@ export function Hire({ ctx, onClose }: { ctx: Ctx; onClose: () => void }) {
             >
               {t("ui.bigCheese.cast.hireVisits")}
             </button>
-            {["old_flame", "rival_boss", "inspector"].map((role) => (
+            {["old_flame", "rival_boss", "inspector", "partner", "child", "parent"].map((role) => (
               <button
                 key={role}
                 type="button"

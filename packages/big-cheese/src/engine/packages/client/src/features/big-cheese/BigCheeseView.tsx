@@ -3,7 +3,18 @@
 // ──────────────────────────────────────────────
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { createRun, deleteRun, errorKey, listRuns, type RunSummary, type StartBody } from "./api";
+import {
+  createRun,
+  deleteRun,
+  errorKey,
+  getKit,
+  importKit,
+  listKits,
+  listRuns,
+  type KitSummary,
+  type RunSummary,
+  type StartBody,
+} from "./api";
 import { Cast } from "./Cast";
 import { dayKey } from "./parts";
 import { Preview } from "./Preview";
@@ -25,6 +36,10 @@ export function BigCheeseView() {
   const [doomed, setDoomed] = useState<RunSummary | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  const [kits, setKits] = useState<KitSummary[]>([]);
+  const [kitNote, setKitNote] = useState<string | null>(null);
+  const [kitReasons, setKitReasons] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const opener = useRef<HTMLElement | null>(null);
 
@@ -33,6 +48,7 @@ export function BigCheeseView() {
     const slow = setTimeout(() => setLoad((now) => (now === "loading" ? "slow" : now)), 8000);
     try {
       setRuns(await listRuns());
+      setKits(await listKits().catch(() => []));
       setLoad("ready");
     } catch (error) {
       setFailure(errorKey(error));
@@ -58,6 +74,62 @@ export function BigCheeseView() {
       setFailure(errorKey(error));
     } finally {
       setBusy(false);
+    }
+  }
+
+  // A saved kit starts a run at once, without a cast: its people are the kit's own.
+  async function startSaved(id: string) {
+    setBusy(true);
+    setFailure(null);
+    try {
+      const { run } = await createRun("hafenkai", {}, id);
+      setOpen(run.id);
+    } catch (error) {
+      setFailure(errorKey(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function exportKit(kit: KitSummary) {
+    setFailure(null);
+    try {
+      const url = URL.createObjectURL(
+        new Blob([JSON.stringify(await getKit(kit.id), null, 2)], { type: "application/json" }),
+      );
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${kit.id}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setFailure(errorKey(error));
+    }
+  }
+
+  async function importFile(file: File) {
+    setBusy(true);
+    setFailure(null);
+    setKitNote(null);
+    setKitReasons(null);
+    try {
+      let kit: unknown;
+      try {
+        kit = JSON.parse(await file.text());
+      } catch {
+        setKitReasons(t("ui.bigCheese.kits.notJson"));
+        return;
+      }
+      const saved = await importKit(kit);
+      setKitNote(t("ui.bigCheese.kits.imported", { name: saved.kit.name, count: saved.fixes.length }));
+      setKits(await listKits());
+    } catch (error) {
+      setFailure(errorKey(error));
+      // ponytail: the reasons come from the server in English; localise them when kit reasons get codes.
+      setKitReasons(error instanceof Error ? error.message : null);
+    } finally {
+      setBusy(false);
+      if (fileInput.current) fileInput.current.value = "";
     }
   }
 
@@ -198,6 +270,50 @@ export function BigCheeseView() {
               );
             })}
           </ul>
+          <section aria-labelledby="bc-kits-title">
+            <h2 id="bc-kits-title">{t("ui.bigCheese.kits.title")}</h2>
+            {load === "ready" && kits.length === 0 && <p>{t("ui.bigCheese.kits.empty")}</p>}
+            <ul className="bc-cards">
+              {kits.map((kit) => (
+                <li key={kit.id} className="bc-card">
+                  <span className="bc-card-name">{kit.name}</span>
+                  <span className="bc-muted">{kit.premise}</span>
+                  <button
+                    type="button"
+                    className="bc-btn"
+                    disabled={busy}
+                    aria-label={t("ui.bigCheese.kits.playLabel", { name: kit.name })}
+                    onClick={() => void startSaved(kit.id)}
+                  >
+                    {t("ui.bigCheese.kits.play")}
+                  </button>
+                  <button
+                    type="button"
+                    className="bc-btn bc-btn-quiet"
+                    aria-label={t("ui.bigCheese.kits.exportLabel", { name: kit.name })}
+                    onClick={() => void exportKit(kit)}
+                  >
+                    {t("ui.bigCheese.kits.export")}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <input
+              ref={fileInput}
+              type="file"
+              accept="application/json,.json"
+              hidden
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void importFile(file);
+              }}
+            />
+            <button type="button" className="bc-btn" disabled={busy} onClick={() => fileInput.current?.click()}>
+              {t("ui.bigCheese.kits.import")}
+            </button>
+            {kitNote && <p role="status">{kitNote}</p>}
+            {kitReasons && <p role="alert">{kitReasons}</p>}
+          </section>
         </>
       </main>
       {doomed && (

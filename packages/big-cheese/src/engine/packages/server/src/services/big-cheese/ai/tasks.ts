@@ -23,14 +23,36 @@ export interface CardSeed {
   need: Meter;
   severity: Severity;
   offer: { tier: Tier; stance: string }[]; // chosen by the code (design 4.2)
+  advisors?: { who: string; stance: string }[]; // inner circle, each with the stance the code picked for them
 }
+/** T5: prompt parts for the story layers Press, Rivals and Family. A layer with dial 0 adds nothing. */
+const LAYER_NOTES: Record<string, string> = {
+  press: "Press and gossip: the local paper, rumours and viral moments follow the boss.",
+  rivals: "Rivals: a rival boss with moles and sabotage works against this place.",
+  family: "Family and home: the boss has a home life, and evenings with family clash with work.",
+};
+export const layerNotes = (kit: PlaceKit, d?: Record<string, number>) =>
+  Object.entries(LAYER_NOTES)
+    .filter(([l]) => (d?.[l] ?? 0) > 0)
+    .map(
+      ([l, t]) =>
+        `${l === "rivals" ? t.replace("a rival boss", `a rival boss (${kit.outside?.find((o) => o.kind === "rival")?.name ?? "unnamed"})`) : t} Weight: ${d![l]! >= 70 ? "strong" : "light"}.\n`,
+    )
+    .join("");
+
 export interface CardsDayInput {
+  layers?: Record<string, number>;
   kit: PlaceKit;
   rng: number;
   seeds: CardSeed[];
 }
 export interface CardsDayOutput {
-  cards: { seed: string; text: string; answers: { stance: string; text: string }[] }[];
+  cards: {
+    seed: string;
+    text: string;
+    answers: { stance: string; text: string }[];
+    advice?: { who: string; stance: string; text: string }[];
+  }[];
 }
 
 export interface AnswerTagInput {
@@ -45,6 +67,7 @@ export interface AnswerTagOutput {
 }
 
 export interface ScenePartInput {
+  layers?: Record<string, number>;
   kit: PlaceKit;
   rng: number;
   blueprint: string;
@@ -158,21 +181,49 @@ interface Task<I, O> {
   lite(i: I): O;
 }
 
+const ADVICE_NOTE =
+  ' Cards with "advisors" also get "advice":[{"who":"","text":""}], one entry per advisor in the same order, one short line in that person\'s voice that leans to the given stance. Echo "who".';
+
+/** The advice lines of one card: the model words them, the code keeps the person and the stance. */
+const adviceOf = (c: Obj, s: CardSeed) => {
+  if (!s.advisors?.length) return {};
+  const a = Array.isArray(c.advice) ? c.advice : [];
+  return {
+    // A bad or missing advice line is dropped; the card and its other lines stay.
+    advice: s.advisors.flatMap((x, k) => {
+      try {
+        const e = obj(a[k]);
+        if (e.who !== x.who) return [];
+        return [{ who: x.who, stance: x.stance, text: str(e.text, 3, 160, "advice") }];
+      } catch {
+        return [];
+      }
+    }),
+  };
+};
+
+/** Lite advice is the card's own answer line for the advisor's stance. */
+const liteAdvice = (s: CardSeed, answers: { stance: string; text: string }[]) =>
+  s.advisors?.length
+    ? { advice: s.advisors.map((x) => ({ ...x, text: answers.find((a) => a.stance === x.stance)?.text ?? "" })) }
+    : {};
+
 const cardsDay: Task<CardsDayInput, CardsDayOutput> = {
   tokens: 1500,
   prompt: (i) =>
     msgs(
       i.kit,
-      `Write each card: the asker's line, then one short answer line per given stance, in the given order. Echo "seed" and every "stance" exactly.
+      `${layerNotes(i.kit, i.layers)}Write each card: the asker's line, then one short answer line per given stance, in the given order. Echo "seed" and every "stance" exactly.${i.seeds.some((s) => s.advisors?.length) ? ADVICE_NOTE : ""}
 Shape: {"cards":[{"seed":"","text":"","answers":[{"stance":"","text":""}]}]}
 Stances: ${stanceHelp(STANCES)}
-Voices:\n${voiceSheet(i.kit, [...new Set(i.seeds.map((s) => s.asker))])}`,
+Voices:\n${voiceSheet(i.kit, [...new Set(i.seeds.flatMap((s) => [s.asker, ...(s.advisors ?? []).map((a) => a.who)]))])}`,
       {
         cards: i.seeds.map((s) => ({
           seed: s.id,
           asker: s.asker,
           topic: s.need,
           stances: s.offer.map((o) => o.stance),
+          ...(s.advisors?.length ? { advisors: s.advisors } : {}),
         })),
       },
     ),
@@ -186,6 +237,7 @@ Voices:\n${voiceSheet(i.kit, [...new Set(i.seeds.map((s) => s.asker))])}`,
         return {
           seed: s.id,
           text: str(c.text, 3, 240, "ask"),
+          ...adviceOf(c, s),
           answers: s.offer.map((o, k) => {
             const x = obj(a[k]);
             if (x.stance !== o.stance) throw new Error("answer: stance out of order");
@@ -200,7 +252,8 @@ Voices:\n${voiceSheet(i.kit, [...new Set(i.seeds.map((s) => s.asker))])}`,
     return {
       cards: i.seeds.map((s) => {
         const t = pick(h, i.kit.templates.cards[s.need][s.severity]);
-        return { seed: s.id, text: t.ask, answers: s.offer.map((o) => ({ stance: o.stance, text: t[o.tier] })) };
+        const answers = s.offer.map((o) => ({ stance: o.stance, text: t[o.tier] }));
+        return { seed: s.id, text: t.ask, answers, ...liteAdvice(s, answers) };
       }),
     };
   },
@@ -272,7 +325,7 @@ const scenePart: Task<ScenePartInput, ScenePartOutput> = {
   prompt: (i) =>
     msgs(
       i.kit,
-      `Write one part of a scene in "${i.room}". Goal: ${i.goal}
+      `${layerNotes(i.kit, i.layers)}Write one part of a scene in "${i.room}". Goal: ${i.goal}
 Write 3 to 12 lines. "who" is a person id from the list, or "narrator" for a line of narration.
 ${i.offer.length ? `Then write one short line the boss could say for each stance, in the given order. Echo each "stance". Stances: ${stanceHelp(i.offer)}` : `Write "suggestions": [].`}
 Write "summary": one sentence, at most 120 characters.
@@ -697,6 +750,27 @@ const digestAway: Task<DigestAwayInput, DigestAwayOutput> = {
   lite: (i) => ({ text: i.facts.length ? i.facts.join(" ") : "Nothing much happened." }),
 };
 
+// kit.fix (design.md section 14): a broken import goes to the model once. The code checks the answer again.
+export interface KitFixInput {
+  kit: unknown;
+  reasons: string[];
+}
+export interface KitFixOutput {
+  kit: unknown;
+}
+const kitFix: Task<KitFixInput, KitFixOutput> = {
+  tokens: 6000,
+  prompt: (i) => [
+    {
+      role: "system",
+      content: `You repair a Place Kit, the JSON of a game place. Fix only what the reasons name and keep every other field as it is. Do not add new people or rooms beyond what the reasons need. Shape: {"kit":{...the whole kit...}}`,
+    },
+    { role: "user", content: JSON.stringify({ reasons: i.reasons, kit: i.kit }) },
+  ],
+  parse: (raw) => ({ kit: obj(raw).kit }),
+  lite: (i) => ({ kit: i.kit }), // no model: the kit goes back unchanged and fails the check again
+};
+
 export const tasks = {
   "digest.away": digestAway,
   "cast.read": castRead,
@@ -709,6 +783,7 @@ export const tasks = {
   "grapevine.batch": grapevineBatch,
   "meeting.turn": meetingTurn,
   "board.plan": boardPlan,
+  "kit.fix": kitFix,
 };
 type Tasks = typeof tasks;
 

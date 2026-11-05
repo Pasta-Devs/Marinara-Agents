@@ -6,6 +6,7 @@ import { dayIndex, spendHours } from "./clock.js";
 import { roll } from "./rng.js";
 import { endDay } from "./settle.js";
 import { METERS } from "./types.js";
+import type { PlaceKit } from "./kits/types.js";
 import type { Card, Run } from "./types.js";
 
 export const POLICIES = ["nobody", "deputy", "kind", "strict", "greedy", "chaotic"] as const;
@@ -99,7 +100,7 @@ export interface Opts {
  * when a day ends: the caller then starts the next day. A skip answers no card and ends days with the
  * inbox set aside in the saved `away` list, so cards wait unaged until Start the day puts them back.
  */
-export function runSlots(s: Run, n: number, o: Opts, w: Watch) {
+export function runSlots(s: Run, n: number, o: Opts, w: Watch, kit: PlaceKit) {
   const out = { used: 0, rolled: false, paused: null as string | null };
   while (out.used < n && s.status === "playing") {
     if (hearingDue(s)) return { ...out, paused: "hearing" };
@@ -109,7 +110,7 @@ export function runSlots(s: Run, n: number, o: Opts, w: Watch) {
     out.used++;
     if (s.clock.hoursLeft === 0) {
       if (o.skip) s.away = [...(s.away ?? []), ...s.inbox.splice(0)];
-      endDay(s);
+      endDay(s, kit);
       out.rolled = s.status === "playing";
       break;
     }

@@ -14,6 +14,7 @@ import { Scene } from "./Scene";
 import { Report, RunEnd } from "./Report";
 import { HearingPrep, MeetingScreen } from "./Meeting";
 import { Board } from "./Board";
+import { Rules } from "./Rules";
 
 const TABS = [
   { view: "office", key: "ui.bigCheese.dock.office" },
@@ -228,6 +229,7 @@ export function RunView({ id, onExit }: { id: string; onExit: () => void }) {
   else if (base === "people") screen = <People ctx={ctx} />;
   else if (base === "place") screen = <Place ctx={ctx} />;
   else if (base === "meeting") screen = <MeetingScreen ctx={ctx} />;
+  else if (base === "rules") screen = <Rules ctx={ctx} />;
   else screen = <Office ctx={ctx} canStart={canStart} />;
 
   const { clock } = game;

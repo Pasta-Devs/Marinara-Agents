@@ -3,7 +3,11 @@ import test from "node:test";
 import type { CapabilityDocumentRecord, CapabilityDocumentStore } from "@marinara-engine/shared";
 import { HAFENKAI_PLACE as kit } from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/core/kits/hafenkai.js";
 import { runTask } from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/ai/tasks.js";
-import { withCast } from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/cast.js";
+import * as core from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/core/index.js";
+import {
+  homeRoleOk,
+  withCast,
+} from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/cast.js";
 import { activate } from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/server-entry.js";
 
 const MARI = "__professor_mari__";
@@ -382,4 +386,13 @@ test("a story role opens its thread; a role needs the story mode", async () => {
   const t = Object.values<any>(game.threads).find((x) => x.people.includes(key));
   assert.equal(t.kind, "crisis");
   assert.ok(t.title.includes("Silas Marr"));
+});
+
+test("a home role (partner, child, parent) needs the Romance, Adult or Family layer", () => {
+  const run = (layers: object) => ({ ...core.newRun(kit, 1), layers }) as never;
+  const off = { drama: 100, romance: 0, family: 0 };
+  for (const role of ["partner", "child", "parent"]) assert.equal(homeRoleOk(run(off), role), false);
+  assert.equal(homeRoleOk(run({ ...off, family: 60 }), "child"), true);
+  assert.equal(homeRoleOk(run({ ...off, romance: 40 }), "parent"), true);
+  assert.equal(homeRoleOk(run(off), "inspector"), true);
 });

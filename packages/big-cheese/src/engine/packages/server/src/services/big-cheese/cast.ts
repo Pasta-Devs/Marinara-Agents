@@ -8,8 +8,9 @@ import { z } from "zod";
 import { engineModel, runTask } from "./ai/tasks.js";
 import type { PlaceKit } from "./core/kits/types.js";
 import { dayIndex } from "./core/index.js";
-import { STORY_ROLES, openStoryRole } from "./core/storyteller.js";
-import type { Clock, Person } from "./core/types.js";
+import { HOME_ROLES, STORY_ROLES, openStoryRole } from "./core/storyteller.js";
+import { dial } from "./core/layers.js";
+import type { Clock, Person, Run as Game } from "./core/types.js";
 import { TRAITS } from "./core/traits.js";
 import { BigCheeseError, type Run, type RunStore } from "./store.js";
 import { KITS, placeKitOf } from "./core/kits/index.js";
@@ -341,6 +342,10 @@ function open(r: Run) {
   if (r.game.meeting && !r.game.meeting.done) throw new BigCheeseError(409, "Finish the meeting first.", "wrong-phase");
 }
 
+/** Partner, child and parent need the Romance, Adult or Family layer. */
+export const homeRoleOk = (g: Game, role: string) =>
+  !HOME_ROLES.includes(role) || dial(g, "romance") > 0 || dial(g, "family") > 0 || !!g.adult;
+
 /** Reads the picked card, then writes through the run queue. A changed run is a 409, as for every action. */
 export async function midCast(
   runtime: CapabilityRuntimeHost,
@@ -353,6 +358,8 @@ export async function midCast(
   const { engineId, mode, replaces, days = 3, sheet, expectedRevision, storyRole } = b.data;
   if ((mode === "story") !== !!storyRole) throw bad("Pick a story role for a story card.");
   const run = await store.get(id);
+  if (storyRole && !homeRoleOk(run.game, storyRole))
+    throw bad("Turn on the Romance, Adult or Family layer for this role.");
   const kit = placeKitOf(run);
   const d = await readOne(runtime, "character", engineId);
   const age = checkAge(d);

@@ -2,9 +2,10 @@
 // onto a thread as a `big_scene` beat, keeps the weekly budget and settles the result.
 import { DAYS, dayIndex, WEEKS } from "./clock.js";
 import type { PlaceKit } from "./kits/types.js";
-import { newId } from "./run.js";
+import { applyDelta, newId } from "./run.js";
 import { closeThread } from "./threads.js";
-import { offer } from "./stances.js";
+import { K, offer } from "./stances.js";
+import { DIFFICULTY_FACTOR } from "./types.js";
 import type { Beat, Run, Thread } from "./types.js";
 
 export interface Blueprint {
@@ -62,6 +63,52 @@ export const BLUEPRINTS: Record<string, Blueprint> = {
       { id: "split", text: "Split the crew and save a bit of both." },
     ],
     outcome: ["The night is over. The place is still standing."],
+  },
+  // T5: a family evening. The choice costs no hours (decision 6); the stance is the whole cost.
+  family: {
+    end: "stance",
+    title: () => "A family evening",
+    room: () => "The family table",
+    people: (_k, g, t) => (t?.people.length ? t.people.slice(0, 3) : [g.deputy]),
+    goals: [
+      "You get home late. Dinner is already on the table.",
+      "Someone asks how work is going.",
+      "The phone buzzes. Work wants you back.",
+    ],
+    outcome: ["The evening ends. Your family remembers how you spent it."],
+  },
+  // T4: nights of the Season and Big event blocks (blocks.ts). The result is the check, not the end.
+  match_night: {
+    end: "check",
+    title: () => "Match night",
+    room: () => "The quay",
+    people: (_k, g, t) => (t?.people.length ? t.people.slice(0, 3) : [g.deputy]),
+    goals: [
+      "The squad waits on the quay in the cold.",
+      "The line-up goes up on the wall. Everyone has an opinion.",
+      "The race starts.",
+    ],
+    check: (g, t) => g.meters[t?.need ?? "standing"] >= 50,
+    outcome: ["The squad loses. The quay goes quiet.", "The squad wins. The whole quay cheers."],
+  },
+  party: {
+    end: "pick",
+    title: () => "The big night",
+    room: (k) => k.name,
+    people: (_k, g, t) => (t?.people.length ? t.people.slice(0, 3) : [g.deputy]),
+    goals: [
+      "The first guests arrive.",
+      "Someone expects a speech from you.",
+      "A quiet corner fills up with people who need a word.",
+      "The last drink is poured.",
+      "The evening ends. You decide how to close it.",
+    ],
+    picks: [
+      { id: "toast", text: "Raise a last glass with everyone." },
+      { id: "quiet", text: "Thank the staff and let the guests drift out." },
+    ],
+    check: (g, t) => g.meters[t?.need ?? "people"] >= 50,
+    outcome: ["The night falls flat. People leave early.", "The night is a success. People talk about it for weeks."],
   },
   accusation: {
     end: "check",
@@ -142,6 +189,20 @@ export function settleBig(s: Run, beat: Beat, result: "done" | "declined" | "mis
   beat.result = result;
   const week = beat.planned!.week;
   s.bigScenes = { week, used: (s.bigScenes.week === week ? s.bigScenes.used : 0) + 1 };
+  const t = Object.values(s.threads).find((x) => x.beats.includes(beat));
+  if (t?.system !== undefined && result !== "done") endNight(s, t, false);
+  // A family thread is only its evening, so the thread ends with the scene.
+  else if (t?.layer === "family") closeThread(s, t.id, result === "done" ? "won" : "dropped");
+}
+
+/** The live night of a block thread has a result: the need meter moves (content.md 1.1: half k for a win, k for a loss), the fixture is marked and the thread closes. */
+function endNight(s: Run, t: Thread, ok: boolean) {
+  const k = K[t.severity ?? 2];
+  const need = t.need ?? "standing";
+  s.meters = applyDelta(s.meters, { [need]: ok ? Math.round(k / 2) : -k }, DIFFICULTY_FACTOR[s.difficulty]);
+  const f = s.systems[t.system!]?.fixtures?.find((x) => x.week === (t.clock.dueWeek as number) - 1);
+  if (f) f.won = ok;
+  closeThread(s, t.id, ok ? "won" : "lost");
 }
 
 /** Morning: a booked scene whose day has passed was missed. */
@@ -166,6 +227,11 @@ export function finishBig(s: Run, beatId: string): string | undefined {
   if (!found) return undefined;
   const bp = BLUEPRINTS[found.beat!.blueprint ?? ""];
   settleBig(s, found.beat!, "done");
+  if (found.thread.system !== undefined) {
+    const ok = bp!.check!(s, found.thread);
+    endNight(s, found.thread, ok);
+    return bp!.outcome![ok ? 1 : 0];
+  }
   if (bp?.end !== "check") return bp?.outcome?.[0];
   const ok = bp.check!(s, found.thread);
   closeThread(s, found.thread.id, ok ? "won" : "lost");

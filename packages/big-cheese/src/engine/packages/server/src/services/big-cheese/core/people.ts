@@ -1,15 +1,10 @@
 // Big Cheese: who is where, who knows whom and who leaves (design.md section 6 and 8.2).
 // Plain functions that edit the run they get, like the rest of the core.
 import { dayIndex, slot } from "./clock.js";
-import { HAFENKAI_PLACE } from "./kits/hafenkai.js";
 import type { PlaceKit } from "./kits/types.js";
 import { clamp } from "./run.js";
 import { closeThread, openThread } from "./threads.js";
 import type { Relation, Run, Slot } from "./types.js";
-
-// shortcut: one built-in place, add the next one here (a kit is found by its people); not via kits/index (import cycle)
-const PLACES: PlaceKit[] = [HAFENKAI_PLACE];
-export const kitOf = (s: Run) => PLACES.find((k) => k.people.some((p) => Object.hasOwn(s.people, p.id))) ?? PLACES[0];
 
 const WANDER = 0.1; // share of slots a person is somewhere else than the routine says
 const STRESSED = 70;
@@ -37,8 +32,7 @@ function roomFor(s: Run, kit: PlaceKit, id: string, at: Slot): string {
 }
 
 /** Puts everyone where they are at the clock's slot, and rebuilds each room's list. */
-export function movePeople(s: Run) {
-  const kit = kitOf(s);
+export function movePeople(s: Run, kit: PlaceKit) {
   const at = slot(s.clock);
   const where = Object.fromEntries(Object.keys(s.people).map((id) => [id, roomFor(s, kit, id, at)]));
   // A working person with a strong crush goes where the crush is (a crush at home does not count).
@@ -130,8 +124,7 @@ function leaveCheck(s: Run, kit: PlaceKit) {
 }
 
 /** Once a week: use wears rooms, a worn room costs the meter it feeds 1 point (the worst one, at most 1), people leave. */
-function weekTurn(s: Run) {
-  const kit = kitOf(s);
+function weekTurn(s: Run, kit: PlaceKit) {
   for (const r of Object.values(s.rooms)) if (r.people.length >= 3) r.condition = clamp(r.condition - 1);
   const fed = kit.rooms
     .filter((r) => r.feeds && s.rooms[r.id]?.condition < LOW_ROOM)
@@ -141,12 +134,12 @@ function weekTurn(s: Run) {
 }
 
 /** The end-of-day call: a new week first runs its checks, then the new day's people go to their rooms. */
-export function dayTurn(s: Run) {
+export function dayTurn(s: Run, kit: PlaceKit) {
   for (const [id, p] of Object.entries(s.people)) {
     if (p.until === undefined || p.status !== "active" || dayIndex(s.clock) < p.until) continue;
     for (const t of Object.values(s.threads)) if (t.people.includes(id)) closeThread(s, t.id, "dropped");
     p.status = "quit"; // a visitor goes home
   }
-  if (s.clock.day === 0) weekTurn(s);
-  movePeople(s);
+  if (s.clock.day === 0) weekTurn(s, kit);
+  movePeople(s, kit);
 }

@@ -41,11 +41,12 @@ export function createAdvance(
       throw new BigCheeseError(409, "Start the day first.", "wrong-phase");
     const first = run;
     const w = watch(run.game);
+    const kit = withCast(placeKitOf(run), run.cast, run.game.clock);
     let used = 0;
     let paused: string | null = null;
     while (used < b.slots && !paused && run.game.status === "playing") {
       const g = structuredClone(run.game);
-      const r = runSlots(g, b.slots - used, b, w);
+      const r = runSlots(g, b.slots - used, b, w, kit);
       paused = r.paused;
       if (!r.used) break; // a due hearing or nothing to do: nothing changed, so nothing is written
       used += r.used;

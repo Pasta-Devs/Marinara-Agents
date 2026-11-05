@@ -97,6 +97,42 @@ export function People({ ctx }: { ctx: Ctx }) {
   );
 }
 
+/** T11: put one person in or out of the inner circle (up to 3) and the booked office hour (up to 4). */
+function Circle({ ctx, id }: { ctx: Ctx; id: string }) {
+  const { t } = useTranslation();
+  const { run, busy, act } = ctx;
+  const advisors = run.game.advisors ?? [];
+  const visitors = run.game.officeHours?.visitors ?? [];
+  const person = run.game.people[id];
+  if (person?.status !== "active") return null;
+  const toggle = (list: string[]) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
+  return (
+    <section className="bc-section" aria-label={t("ui.bigCheese.advisors.title")}>
+      {advisors.includes(id) && (
+        <p className="bc-row-meta">
+          <span className="bc-chip">{t("ui.bigCheese.advisors.influence", { value: person.influence ?? 50 })}</span>
+        </p>
+      )}
+      <button
+        type="button"
+        className="bc-btn"
+        disabled={busy || (!advisors.includes(id) && advisors.length >= 3)}
+        onClick={() => void act("advisors", { ids: toggle(advisors) })}
+      >
+        {t(advisors.includes(id) ? "ui.bigCheese.advisors.remove" : "ui.bigCheese.advisors.add")}
+      </button>
+      <button
+        type="button"
+        className="bc-btn bc-btn-quiet"
+        disabled={busy || (!visitors.includes(id) && visitors.length >= 4)}
+        onClick={() => void act("office-hours/book", { visitors: toggle(visitors) })}
+      >
+        {t(visitors.includes(id) ? "ui.bigCheese.advisors.unbook" : "ui.bigCheese.advisors.book")}
+      </button>
+    </section>
+  );
+}
+
 export function PersonSheet({ ctx, id }: { ctx: Ctx; id: string }) {
   const { t } = useTranslation();
   const { run, kit } = ctx;
@@ -130,6 +166,8 @@ export function PersonSheet({ ctx, id }: { ctx: Ctx; id: string }) {
         </p>
       )}
       {line && <blockquote className="bc-quote">{line}</blockquote>}
+      <Circle ctx={ctx} id={id} />
+
       {who && who.traits.length > 0 && (
         <p className="bc-row-meta" aria-label={t("ui.bigCheese.person.traits")}>
           {who.traits.map((trait) => (

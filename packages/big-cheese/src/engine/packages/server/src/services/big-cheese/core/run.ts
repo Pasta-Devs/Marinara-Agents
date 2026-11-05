@@ -4,9 +4,13 @@ import type { Meters, Run } from "./types.js";
 
 export const clamp = (v: number) => Math.max(0, Math.min(100, v));
 
-export function applyDelta(m: Meters, delta: Partial<Meters>): Meters {
+/** `hard` is the run's difficulty factor (design.md 4.1); it scales losses only, so Easy never shrinks a gain. */
+export function applyDelta(m: Meters, delta: Partial<Meters>, hard = 1): Meters {
   const out = { ...m };
-  for (const k of METERS) out[k] = clamp(out[k] + (delta[k] ?? 0));
+  for (const k of METERS) {
+    const d = delta[k] ?? 0;
+    out[k] = clamp(out[k] + (d < 0 ? Math.round(d * hard) : d));
+  }
   return out;
 }
 

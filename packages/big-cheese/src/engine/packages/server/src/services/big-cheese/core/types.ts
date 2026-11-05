@@ -49,6 +49,7 @@ export interface Person {
   room: string; // a room id, or "home"
   ambition: number; // 0-100, progress toward their own goal
   influence?: number; // advisors only, rises when the boss follows their advice
+  advisedWeek?: number; // advisors only, the last week the boss followed their advice (or joined)
   romance?: number; // 0-100, how they feel about the boss
   attraction?: number; // 0-100, how the boss feels about them
   name?: string; // set when a cast card replaces or adds this person
@@ -151,8 +152,10 @@ export interface Thread {
   origin: "deck" | "arc" | "block" | "own_answer" | "action" | "wish" | "guided" | "board";
   beats: Beat[];
   state: "open" | "won" | "lost" | "dropped";
+  rule?: { id: string; option: string }; // T7: a Manager proposal waiting for a vote
   promise?: { to: string; what: string; due: { week: number; day: number }; kept: boolean };
   layer?: Layer; // set when a story layer opened it (layers.ts)
+  system?: string; // the kit system (position as text) that opened it (blocks.ts)
 }
 
 export interface Member {
@@ -218,7 +221,17 @@ export interface Run {
   mutators: Mutator[]; // switched on
   power: { fear: number; love: number }; // legitimacy stays in extras (the tier is `authority`)
   adult: { intensity: number; themes: string[] } | null; // null = module off
-  systems: Record<string, { on: boolean; fixtures?: { week: number; won: boolean }[] }>; // the season table is fixtures
+  systems: Record<
+    string,
+    // kind, name and text are the kit's block, copied at the start (blocks.ts); fixtures are the season table
+    {
+      on: boolean;
+      kind?: "project" | "event" | "season";
+      name?: string;
+      text?: string;
+      fixtures?: { week: number; won?: boolean }[];
+    }
+  >;
   advisors: string[]; // person ids in the inner circle
   houseRules: Record<string, string>; // rule id -> chosen option
   officeHours: { day: number; slot: Slot; visitors: string[] }; // one booked hour, up to OFFICE_HOURS_CAP visitors

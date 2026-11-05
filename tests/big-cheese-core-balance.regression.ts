@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as core from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/core/index.js";
 
+import { HAFENKAI_PLACE } from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/core/kits/hafenkai.js";
 const RUNS = 200;
 type Bot = (card: core.Card, m: core.Meters, h: { rng: number }) => string;
 
@@ -35,7 +36,7 @@ function play(bot: Bot, seed: number) {
       const c = s.inbox[0]!;
       core.draft.answerCard(s, c.id, bot(c, s.meters, h));
     }
-    core.draft.endDay(s);
+    core.draft.endDay(s, HAFENKAI_PLACE);
     if (s.hearing) return { fired: true, week: s.clock.week, killer: s.hearing.meter, meters: s.meters };
   }
   return { fired: false, week: core.WEEKS, killer: null, meters: s.meters };

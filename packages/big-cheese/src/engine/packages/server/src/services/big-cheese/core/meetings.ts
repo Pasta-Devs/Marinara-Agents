@@ -1,9 +1,10 @@
-import { kitOf } from "./people.js";
+import type { PlaceKit } from "./kits/types.js";
+import { proposalVote } from "./authority.js";
 import { addTrust, applyDelta, pure, spendHour } from "./run.js";
 import { roll } from "./rng.js";
 import { effect, offer, type Stance } from "./stances.js";
 import { closeThread, planCardBeat, storyBeat } from "./threads.js";
-import { METERS } from "./types.js";
+import { DIFFICULTY_FACTOR, METERS } from "./types.js";
 import type { Authority, Meeting, MeetingItem, Run, Severity } from "./types.js";
 
 // Meetings (design.md section 7, content.md section 13). The code picks the people, the agenda,
@@ -58,8 +59,8 @@ const TASTE: Record<string, [Stance[], Stance[]]> = {
 };
 
 /** Stance fit, -3..+3, from the person's traits and ambition. */
-export function fit(s: Run, id: string, stance: string): number {
-  const traits = kitOf(s).people.find((p) => p.id === id)?.traits ?? [];
+export function fit(s: Run, id: string, stance: string, kit: PlaceKit): number {
+  const traits = kit.people.find((p) => p.id === id)?.traits ?? [];
   let f = 0;
   for (const t of traits) {
     const [like, dislike] = TASTE[t] ?? [[], []];
@@ -84,8 +85,7 @@ export const passes = (mode: Meeting["mode"], scores: number[]): boolean =>
 
 const ROOM_OK = (s: Run, id: string) => s.people[id]?.status === "active";
 
-function agenda(s: Run, kind: string): Omit<MeetingItem, "offer" | "base" | "lines" | "suggestions">[] {
-  const kit = kitOf(s);
+function agenda(s: Run, kind: string, kit: PlaceKit): Omit<MeetingItem, "offer" | "base" | "lines" | "suggestions">[] {
   const items: ReturnType<typeof agenda> = [];
   if (kind === "board" && s.deputyAmbition >= 100) {
     items.push({ id: "deputy", title: "The deputy's challenge", deputy: true, need: "standing", severity: 2 });
@@ -94,6 +94,7 @@ function agenda(s: Run, kind: string): Omit<MeetingItem, "offer" | "base" | "lin
     .filter((t) => t.state === "open" && t.kind !== "guided" && t.kind !== "hearing" && t.kind !== "promise")
     .sort(
       (a, b) =>
+        Number(!!b.rule) - Number(!!a.rule) || // T7: a rule proposal goes first
         Number(b.beats.some((x) => x.type === "meeting_item")) - Number(a.beats.some((x) => x.type === "meeting_item")),
     );
   for (const t of open) {
@@ -115,13 +116,13 @@ function agenda(s: Run, kind: string): Omit<MeetingItem, "offer" | "base" | "lin
 }
 
 /** Opens a meeting: attendees (3-6), agenda (2-3 items), three stances per item. Costs 1 hour. */
-export function startMeeting(s: Run, kind: string) {
+export function startMeeting(s: Run, kind: string, kit: PlaceKit) {
   if (!Object.hasOwn(MEETINGS, kind) || !MEETING_KINDS[s.authority].includes(kind))
     throw new Error("Not a meeting you can call");
   if (s.meeting && !s.meeting.done) throw new Error("A meeting is already open");
   spendHour(s);
   const def = MEETINGS[kind]!;
-  const items = agenda(s, kind);
+  const items = agenda(s, kind, kit);
   const want = def.size[0] + Math.floor(roll(s) * (def.size[1] - def.size[0] + 1));
   const first = [s.deputy, ...items.flatMap((i) => (i.thread ? s.threads[i.thread]!.people : []))];
   const rest = Object.keys(s.people).sort(() => roll(s) - 0.5);
@@ -151,14 +152,15 @@ export function meetingText(s: Run, lines: MeetingItem["lines"], suggestions: Me
 }
 
 /** The boss answers the item that is up: score every attendee, then apply the result. */
-export function meetingChoice(s: Run, stance: string) {
+export function meetingChoice(s: Run, stance: string, kit: PlaceKit) {
   const m = s.meeting;
   const item = m && !m.done ? m.items.find((i) => i.chosen === undefined) : undefined;
   if (!m || !item) throw new Error("No meeting is open");
   if (!item.offer.some((a) => a.stance === stance)) throw new Error(`Stance ${stance} is not offered`);
   item.chosen = stance;
-  item.scores = Object.fromEntries(m.people.map((id) => [id, support(s, id, fit(s, id, stance), faction(s, id))]));
+  item.scores = Object.fromEntries(m.people.map((id) => [id, support(s, id, fit(s, id, stance, kit), faction(s, id))]));
   item.passed = passes(m.mode, Object.values(item.scores));
+  proposalVote(s, kit, item.thread, item.passed); // T7
   for (const id of m.people) {
     const v = item.scores[id]!;
     addTrust(s, id, Math.sign(v));
@@ -170,7 +172,11 @@ export function meetingChoice(s: Run, stance: string) {
     if (!item.passed) s.meters = applyDelta(s.meters, { standing: -10, people: -5 });
     s.deputyAmbition = 0;
   } else if (item.passed) {
-    s.meters = applyDelta(s.meters, effect({ need: item.need, severity: item.severity }, stance));
+    s.meters = applyDelta(
+      s.meters,
+      effect({ need: item.need, severity: item.severity }, stance),
+      DIFFICULTY_FACTOR[s.difficulty],
+    );
   }
   const t = item.thread ? s.threads[item.thread] : undefined;
   if (t) {

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as core from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/core/index.js";
 
+import { HAFENKAI_PLACE } from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/core/kits/hafenkai.js";
 const { HAFENKAI, newRun, effect, seedDay, answerCard, endDay, settleWeek } = core;
 const fresh = (seed = 1, kit: core.Kit = HAFENKAI) => newRun(kit, seed);
 
@@ -35,7 +36,7 @@ test("rng: a snapshot replays exactly", () => {
     for (let i = 0; i < 12 && s.status === "playing"; i++) {
       s = seedDay(s);
       while (s.inbox.length && s.clock.hoursLeft > 0) s = answerCard(s, s.inbox[0]!.id, s.inbox[0]!.answers[1]!.stance);
-      s = endDay(s);
+      s = endDay(s, HAFENKAI_PLACE);
     }
     return s;
   };
@@ -129,7 +130,7 @@ test("ignored card: day 5 takes the full -k and the thread is lost", () => {
   const t = s.threads[c.thread]!;
   s.inbox = [{ ...c, age: 4, need: "money", severity: 3 }];
   s.meters.money = 50;
-  const e = endDay({ ...s, inbox: s.inbox });
+  const e = endDay({ ...s, inbox: s.inbox }, HAFENKAI_PLACE);
   assert.equal(e.inbox.length, 0);
   assert.equal(e.meters.money, 40);
   assert.ok(e.closed.some((x) => x.id === t.id && x.state === "lost"));
@@ -219,7 +220,7 @@ test("promise: kept closes won, broken costs trust 8", () => {
     [kept, 50, "won"],
   ] as const) {
     let r = run;
-    for (let d = 0; d < 3; d++) r = endDay(r);
+    for (let d = 0; d < 3; d++) r = endDay(r, HAFENKAI_PLACE);
     assert.equal(r.people.tomasz!.trust, trust);
     assert.equal(r.closed.find((c) => c.id === id)?.state, state);
   }
@@ -241,7 +242,7 @@ test("guided: letters unlock by day, thread is won when all are read", () => {
 test("a year ends 'complete' after Friday of week 24", () => {
   let s = fresh();
   s.clock = { week: 24, day: 4, hoursLeft: 5 };
-  s = endDay(s);
+  s = endDay(s, HAFENKAI_PLACE);
   assert.equal(s.status, "complete");
 });
 
@@ -251,7 +252,7 @@ test("a hearing still pending after Friday of week 24 is held, and losing it end
   s.clock = { week: 24, day: 4, hoursLeft: 5 };
   s.meters.money = 5;
   s.low.money = 1;
-  s = endDay(s);
+  s = endDay(s, HAFENKAI_PLACE);
   assert.equal(s.status, "ended");
   assert.equal(s.hearing, null);
 });
@@ -265,7 +266,7 @@ test("closed threads keep their title and need, so a memory can still name them"
   const s = seedDay(fresh(4));
   const c = s.inbox[0]!;
   const t = s.threads[c.thread]!;
-  const e = endDay({ ...s, inbox: [{ ...c, age: 4 }] });
+  const e = endDay({ ...s, inbox: [{ ...c, age: 4 }] }, HAFENKAI_PLACE);
   assert.deepEqual(
     e.closed.find((x) => x.id === t.id),
     { id: t.id, state: "lost", title: t.title, need: c.need },
@@ -274,12 +275,18 @@ test("closed threads keep their title and need, so a memory can still name them"
 
 test("Friday report: 'before' is the meters the Office showed when the week ended", () => {
   let s = fresh(5);
-  for (let d = 0; d < 4; d++) s = endDay(s);
+  for (let d = 0; d < 4; d++) s = endDay(s, HAFENKAI_PLACE);
   s = seedDay(s);
   const c = s.inbox[0]!;
   s = { ...s, inbox: [{ ...c, age: 4 }], meters: { money: 50, output: 50, people: 50, standing: 50 } };
   const shown = { ...s.meters };
-  const e = endDay(s);
+  const e = endDay(s, HAFENKAI_PLACE);
   assert.deepEqual(e.report!.before, shown, "the ignored card's loss shows in the change, not in 'before'");
   assert.ok(e.report!.after[c.need] < shown[c.need]);
+});
+
+test("difficulty scales losses only", () => {
+  const m = { money: 50, output: 50, people: 50, standing: 50 };
+  assert.deepEqual(core.applyDelta(m, { money: -8, output: 4 }, 1.25), { ...m, money: 40, output: 54 });
+  assert.deepEqual(core.applyDelta(m, { money: -8, output: 4 }, 0.75), { ...m, money: 44, output: 54 });
 });

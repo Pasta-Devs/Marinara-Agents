@@ -7,8 +7,8 @@ import { randomBytes } from "node:crypto";
 import type { CapabilityDocumentStore } from "@marinara-engine/shared";
 import type { Cast } from "./cast.js";
 import { z } from "zod";
-import { migrate, migrate3, newRun, type Run as Game } from "./core/index.js";
-import { KITS } from "./core/kits/index.js";
+import { migrate, migrate3, newRun, startSystems, type Run as Game } from "./core/index.js";
+import { KITS, placeKitOf, rulesOf } from "./core/kits/index.js";
 import type { PlaceKit } from "./core/kits/types.js";
 
 export const PACKAGE_ID = "big-cheese";
@@ -20,8 +20,11 @@ export function upgradeGame(game: Game, kitId: string): Game {
   const v = game.saveVersion as number;
   if (v >= SAVE_VERSION) return game;
   // Only the v1 step needs the kit's rules; v2 to v3 fills defaults without them.
-  if (v === 1) return kit ? migrate3(migrate(game, kit)) : game;
-  return migrate3(game);
+  const g = v === 1 ? (kit ? migrate3(migrate(game, kit)) : game) : migrate3(game);
+  // migrate3 leaves the system table empty; an old save gets its kit's blocks (Founders' day) here.
+  const place = kit ? KITS[kitId as keyof typeof KITS].place : null; // a custom kit has no place here
+  if (place && !Object.keys(g.systems).length) startSystems(g, place);
+  return g;
 }
 const upgrade = (data: unknown): unknown => {
   const d = data as { saveVersion?: unknown; kitId?: string; game?: Game } | null;
@@ -57,7 +60,15 @@ export interface PlaceText {
 }
 
 export interface RunText {
-  cards: Record<string, { line: string; answers: { stance: string; text: string }[]; source: "model" | "lite" }>;
+  cards: Record<
+    string,
+    {
+      line: string;
+      answers: { stance: string; text: string }[];
+      source: "model" | "lite";
+      advice?: { who: string; stance: string; text: string }[]; // T11: the inner circle's lines
+    }
+  >;
   scenes: Record<string, SceneText>;
   feelings: Record<string, { person: string; band: string; line: string }[]>;
   place?: PlaceText;
@@ -82,6 +93,11 @@ export const CreateRunBody = z.object({
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
     .max(40),
   lite: z.boolean().optional(),
+  savedKit: z
+    .string()
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+    .max(60)
+    .optional(),
 });
 
 // `game` is the rules-core state; the core owns its shape, so the store only checks it is an object.
@@ -151,12 +167,17 @@ export function createRunStore(documents: CapabilityDocumentStore) {
       lite = false,
       prepare?: (game: Game) => Promise<Pick<Run, "text" | "scene">>,
       cast?: Cast,
+      custom?: PlaceKit,
     ) {
-      const kit = Object.hasOwn(KITS, kitId) ? KITS[kitId as keyof typeof KITS].rules : undefined;
+      const kit = custom
+        ? rulesOf(custom)
+        : Object.hasOwn(KITS, kitId)
+          ? KITS[kitId as keyof typeof KITS].rules
+          : undefined;
       if (!kit) throw new BigCheeseError(400, "Unknown place.", "bad-request");
       const key = `r-${randomBytes(6).toString("hex")}`;
       const at = new Date().toISOString();
-      const game = newRun(kit, randomBytes(4).readUInt32LE(0));
+      const game = newRun(kit, randomBytes(4).readUInt32LE(0), placeKitOf({ kitId, kit: custom }));
       // Core text (thread titles) names a swapped slot by its cast name.
       for (const [pid, c] of Object.entries(cast?.people ?? {}))
         if (Object.hasOwn(game.people, pid)) game.people[pid].name = c.name;
@@ -169,6 +190,7 @@ export function createRunStore(documents: CapabilityDocumentStore) {
         lite,
         game,
         ...(cast && { cast }),
+        ...(custom && { kit: custom }),
         ...first,
       };
       await documents.create({

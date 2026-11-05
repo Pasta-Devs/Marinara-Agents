@@ -12,11 +12,23 @@ const METERS: Meter[] = ["money", "output", "people", "standing"];
 export const arrived = (letter: { day: number }, clock: { week: number; day: number }) =>
   clock.week > 1 || letter.day <= clock.day;
 
+/** The season table for a block story card: results so far and the next fixture week. */
+function fixtureLine(t: ReturnType<typeof useTranslation>["t"], fixtures: { week: number; won?: boolean }[] = []) {
+  const next = fixtures.find((f) => f.won === undefined);
+  if (fixtures.length < 2) return "";
+  return t("ui.bigCheese.office.season", {
+    won: fixtures.filter((f) => f.won).length,
+    lost: fixtures.filter((f) => f.won === false).length,
+    week: next?.week ?? "-",
+  });
+}
+
 export function Office({ ctx, canStart }: { ctx: Ctx; canStart: boolean }) {
   const { t } = useTranslation();
   const { run, kit, busy, act, go } = ctx;
   const { clock, meters, hearing } = run.game;
   const friday = clock.day === 4;
+  const hours = run.game.officeHours; // T11
   // Story cards, most urgent first (design.md 3.5). A secret thread shows once the boss learns of it.
   const due = (thread: { clock: { dueWeek: number | "open" } }) =>
     thread.clock.dueWeek === "open" ? Infinity : thread.clock.dueWeek;
@@ -81,6 +93,9 @@ export function Office({ ctx, canStart }: { ctx: Ctx; canStart: boolean }) {
         </button>
       )}
 
+      <button type="button" className="bc-btn bc-btn-quiet" onClick={() => go("rules")}>
+        {t("ui.bigCheese.rules.open")}
+      </button>
       <section className="bc-section" aria-labelledby="bc-threads">
         <h2 id="bc-threads" className="bc-subhead">
           {t("ui.bigCheese.office.threads")}
@@ -104,6 +119,7 @@ export function Office({ ctx, canStart }: { ctx: Ctx; canStart: boolean }) {
                           thread.people.map((id) => nameOf(kit, id)).join(", "),
                           t(`ui.bigCheese.story.pressure.${thread.clock.pressure}`, { defaultValue: "" }),
                           thread.stakes,
+                          thread.system !== undefined && fixtureLine(t, run.game.systems?.[thread.system]?.fixtures),
                         ]
                           .filter(Boolean)
                           .join(" · ")}
@@ -177,6 +193,30 @@ export function Office({ ctx, canStart }: { ctx: Ctx; canStart: boolean }) {
         >
           {t("ui.bigCheese.project.start")}
         </button>
+      )}
+
+      {hours && (
+        <section className="bc-section" aria-labelledby="bc-office-hours">
+          <h2 id="bc-office-hours" className="bc-subhead">
+            {t("ui.bigCheese.advisors.hoursTitle")}
+          </h2>
+          <p className="bc-muted">
+            {hours.visitors.length
+              ? t("ui.bigCheese.advisors.booked", {
+                  day: t(dayKey(hours.day)),
+                  names: hours.visitors.map((id) => nameOf(kit, id)).join(", "),
+                })
+              : t("ui.bigCheese.advisors.nobody", { day: t(dayKey(hours.day)) })}
+          </p>
+          <button
+            type="button"
+            className="bc-btn"
+            disabled={busy || canStart || clock.hoursLeft === 0 || clock.day !== hours.day || !hours.visitors.length}
+            onClick={() => void act("office-hours/hold")}
+          >
+            {t("ui.bigCheese.advisors.hold")}
+          </button>
+        </section>
       )}
 
       {coming.length > 0 && (

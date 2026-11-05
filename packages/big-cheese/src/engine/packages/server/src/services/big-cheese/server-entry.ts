@@ -5,10 +5,14 @@
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import { engineModel } from "./ai/tasks.js";
 import { createAdvance } from "./advance.js";
+import { createAdvisors } from "./advisors.js";
 import { createBoard } from "./board.js";
 import { CastRequest, ReadBody, castRead, listCast, midCast, refreshCast, resolveCast, systemsOf } from "./cast.js";
 import { createGame, kitView, view } from "./game.js";
+import { KITS } from "./core/kits/index.js";
+import { createKits } from "./kits.js";
 import { createMeetings } from "./meetings.js";
+import { createRules } from "./rules.js";
 import { createPlace } from "./place.js";
 import { BigCheeseError, CreateRunBody, createRunStore, type RunStore } from "./store.js";
 
@@ -50,7 +54,10 @@ export async function activate({ api }: ActivationContext) {
   const game = createGame(store, () => engineModel(runtime, null).catch(() => undefined));
   const place = createPlace(store, () => engineModel(runtime, null).catch(() => undefined));
   const advance = createAdvance(store, game, board, () => engineModel(runtime, null).catch(() => undefined));
+  const advisors = createAdvisors(store);
   const meetings = createMeetings(store, () => engineModel(runtime, null).catch(() => undefined));
+  const rules = createRules(store);
+  const kits = createKits(runtime.persistence.documents, () => engineModel(runtime, null).catch(() => undefined));
   const runId = (request: Request) => (request.params as { id?: unknown } | undefined)?.id;
 
   // Known failures go out as { error, code }; anything else is logged and hidden behind a 500.
@@ -77,8 +84,29 @@ export async function activate({ api }: ActivationContext) {
         handle(async (request) => {
           const body = CreateRunBody.merge(CastRequest).safeParse(request.body ?? {});
           if (!body.success) throw new BigCheeseError(400, "Invalid request.", "bad-request");
-          return game.create(body.data.kitId, body.data.lite, await resolveCast(runtime, body.data.kitId, body.data));
+          // A saved kit is frozen into the run. Its family's built-in id stays as the run's kitId.
+          const custom = body.data.savedKit ? await kits.get(body.data.savedKit) : undefined;
+          const kitId = custom
+            ? (Object.values(KITS).find((k) => k.place.family === custom.family)?.place.id ?? "hafenkai")
+            : body.data.kitId;
+          return game.create(kitId, body.data.lite, await resolveCast(runtime, kitId, body.data), custom);
         }),
+      );
+      router.get(
+        "/kits",
+        handle(async () => ({ kits: await kits.list() })),
+      );
+      router.get(
+        "/kits/:id",
+        handle((request) => kits.get(runId(request))),
+      );
+      router.post(
+        "/kits",
+        handle(async (request) => kits.save((request.body as { kit?: unknown } | undefined)?.kit)),
+      );
+      router.post(
+        "/kits/import",
+        handle(async (request) => kits.import((request.body as { kit?: unknown } | undefined)?.kit)),
       );
       router.get(
         "/cast",
@@ -159,9 +187,19 @@ export async function activate({ api }: ActivationContext) {
       action("rooms/:room/visit", (r) => place.visit(runId(r), param(r, "room"), r.body));
       // T8: viewer mode and skip ahead (design.md sections 11 and 12).
       action("advance", (r) => advance(runId(r), r.body));
+      // T11: advisors and office hours.
+      action("advisors", (r) => advisors.circle(runId(r), r.body));
+      action("office-hours/book", (r) => advisors.book(runId(r), r.body));
+      action("office-hours/hold", (r) => advisors.hold(runId(r), r.body));
       // T4: meetings (design.md section 7).
       action("meetings/start", (r) => meetings.start(runId(r), r.body));
       action("meetings/choose", (r) => meetings.choose(runId(r), r.body));
+      // T7: house rules and decrees (design.md section 9, 16).
+      router.get(
+        "/runs/:id/rules",
+        handle((r) => rules.list(runId(r))),
+      );
+      action("rule", (r) => rules.set(runId(r), r.body));
 
       router.delete(
         "/runs/:id",

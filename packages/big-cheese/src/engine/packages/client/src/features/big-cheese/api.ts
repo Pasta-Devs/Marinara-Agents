@@ -31,6 +31,8 @@ export interface Person {
   trust: number;
   stress: number;
   mood: string;
+  influence?: number; // T11: advisors only
+  status?: string; // T11: "active", "quit", ...
   room: string; // a room id, or "home"
   memories: { week: number; thread: string; stance: string }[];
 }
@@ -44,6 +46,7 @@ export interface Thread {
   stakes: string;
   clock: { dueWeek: number | "open"; pressure: string };
   secret?: boolean;
+  system?: string; // the kit system that opened it
   beats: {
     read?: boolean;
     type?: string;
@@ -88,10 +91,13 @@ export interface Game {
   people: Record<string, Person>;
   threads: Record<string, Thread>;
   closed: { id: string; state: string; title?: string; need?: Meter }[];
+  systems?: Record<string, { on: boolean; fixtures?: { week: number; won?: boolean }[] }>; // the season table
   inbox: Card[];
   rooms: Record<string, { condition: number; people: string[] }>;
   relations: { a: string; b: string; kind: string; level: number }[];
   grapevine: string[]; // ids of rumour lines in `text.place.grapevine`
+  advisors?: string[]; // T11: person ids in the inner circle (up to 3)
+  officeHours?: { day: number; slot: string; visitors: string[] }; // T11: one booked hour, up to 4 visitors
   hearing: Hearing | null;
   hearingBody: { id: string }[];
   meeting?: Meeting | null;
@@ -135,7 +141,10 @@ export interface RunDoc {
   lite: boolean;
   game: Game;
   text: {
-    cards: Record<string, { line: string; answers: { stance: string; text: string }[] }>;
+    cards: Record<
+      string,
+      { line: string; answers: { stance: string; text: string }[]; advice?: { who: string; text: string }[] }
+    >;
     scenes: Record<string, SceneText>;
     feelings: Record<string, { person: string; band: string; line: string }[]>;
     place?: PlaceText;
@@ -176,6 +185,7 @@ export interface RunState {
 // Each key is a literal, so the locale validator finds it.
 const ERROR_KEYS: Record<string, string> = {
   "bad-request": "ui.bigCheese.errors.badRequest",
+  "bad-kit": "ui.bigCheese.errors.badKit",
   "not-found": "ui.bigCheese.errors.notFound",
   conflict: "ui.bigCheese.errors.conflict",
   "newer-save": "ui.bigCheese.errors.newerSave",
@@ -200,8 +210,8 @@ export function errorKey(error: unknown): string {
 const runPath = (id: string) => `${PREFIX}/runs/${encodeURIComponent(id)}`;
 
 export const listRuns = () => api.get<{ runs: RunSummary[] }>(`${PREFIX}/runs`).then((r) => r.runs);
-export const createRun = (kitId: string, cast: StartBody = {}) =>
-  api.post<{ run: { id: string } }>(`${PREFIX}/runs`, { kitId, ...cast });
+export const createRun = (kitId: string, cast: StartBody = {}, savedKit?: string) =>
+  api.post<{ run: { id: string } }>(`${PREFIX}/runs`, { kitId, ...cast, savedKit });
 
 // The cast picker (server cast.ts): library lists, one casting sheet per picked card, and the run's cast.
 export interface CastItem {
@@ -249,3 +259,27 @@ export interface SystemEdit {
 export type PreviewKit = KitView & { systems: { kind: string; name: string; text: string }[] };
 export const previewKit = (kitId: string, cast: StartBody = {}) =>
   api.post<{ kit: PreviewKit }>(`${PREFIX}/preview`, { kitId, ...cast }).then((r) => r.kit);
+
+// T7: house rules and decrees (server rules.ts).
+export interface RulesState {
+  authority: string;
+  power: { fear: number; love: number };
+  legitimacy: number | null;
+  enforcer: boolean;
+  rules: { id: string; text: string; options: string[]; decree: boolean; current: string }[];
+  proposals: string[];
+}
+export const getRules = (id: string) => api.get<RulesState>(`${runPath(id)}/rules`);
+
+// T1: the saved kits library (design.md section 13 step 4).
+export interface KitSummary {
+  id: string;
+  name: string;
+  family: string;
+  premise: string;
+  updatedAt: string;
+}
+export const listKits = () => api.get<{ kits: KitSummary[] }>(`${PREFIX}/kits`).then((r) => r.kits);
+export const getKit = (id: string) => api.get<unknown>(`${PREFIX}/kits/${encodeURIComponent(id)}`);
+export const importKit = (kit: unknown) =>
+  api.post<{ kit: { id: string; name: string }; fixes: string[] }>(`${PREFIX}/kits/import`, { kit });

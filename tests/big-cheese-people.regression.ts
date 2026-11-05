@@ -7,7 +7,7 @@ import { runTask } from "../packages/big-cheese/src/engine/packages/server/src/s
 const fresh = () => core.newRun(core.HAFENKAI, 1);
 const at = (s: core.Run, week: number, day: number, hoursLeft: number) => {
   s.clock = { week, day, hoursLeft };
-  core.movePeople(s);
+  core.movePeople(s, HAFENKAI_PLACE);
 };
 const slots = [5, 4, 3, 2, 1]; // hoursLeft for morning .. night
 
@@ -67,12 +67,12 @@ test("leave: low trust warns, a second low week quits, recovery closes the warni
   const s = fresh();
   s.people.olga.trust = 5;
   s.clock = { week: 3, day: 0, hoursLeft: 5 };
-  core.dayTurn(s);
+  core.dayTurn(s, HAFENKAI_PLACE);
   const warning = Object.values(s.threads).find((t) => t.kind === "crisis" && t.people[0] === "olga");
   assert.ok(warning, "a warning thread opened");
   assert.equal(s.people.olga.status, "active");
   s.clock = { week: 4, day: 0, hoursLeft: 5 };
-  core.dayTurn(s);
+  core.dayTurn(s, HAFENKAI_PLACE);
   assert.equal(s.people.olga.status, "quit");
   assert.equal(s.people.olga.room, "home");
   assert.equal(
@@ -83,10 +83,10 @@ test("leave: low trust warns, a second low week quits, recovery closes the warni
   const r = fresh();
   r.people.olga.trust = 5;
   r.clock = { week: 3, day: 0, hoursLeft: 5 };
-  core.dayTurn(r);
+  core.dayTurn(r, HAFENKAI_PLACE);
   r.people.olga.trust = 40;
   r.clock = { week: 4, day: 0, hoursLeft: 5 };
-  core.dayTurn(r);
+  core.dayTurn(r, HAFENKAI_PLACE);
   assert.equal(r.people.olga.status, "active");
   assert.equal(Object.keys(r.threads).length, 0);
 });
@@ -96,7 +96,7 @@ test("rooms: a worn room costs its meter 1 point a week, never more", () => {
   for (const room of Object.values(s.rooms)) room.condition = 5;
   const before = { ...s.meters };
   s.clock = { week: 2, day: 0, hoursLeft: 5 };
-  core.dayTurn(s);
+  core.dayTurn(s, HAFENKAI_PLACE);
   const lost = core.METERS.map((m) => before[m] - s.meters[m]);
   assert.equal(
     lost.reduce((a, b) => a + b, 0),
@@ -156,11 +156,11 @@ test("visitor: goes home on their last day and gets a room before that", () => {
   const s = fresh();
   const p = HAFENKAI_PLACE.people.find((x) => !x.deputy)!;
   s.people.v1 = { ...s.people[p.id], name: "Visitor", routine: p.routine, until: core.dayIndex(s.clock) + 1 };
-  core.movePeople(s);
+  core.movePeople(s, HAFENKAI_PLACE);
   assert.notEqual(s.people.v1.room, "home", "a visitor works a kit routine");
-  core.dayTurn(s);
+  core.dayTurn(s, HAFENKAI_PLACE);
   assert.equal(s.people.v1.status, "active", "still here before the last day");
   s.clock = { ...s.clock, day: s.clock.day + 1 };
-  core.dayTurn(s);
+  core.dayTurn(s, HAFENKAI_PLACE);
   assert.equal(s.people.v1.status, "quit");
 });

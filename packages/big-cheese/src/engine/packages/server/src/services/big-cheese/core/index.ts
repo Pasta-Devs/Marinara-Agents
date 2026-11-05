@@ -51,3 +51,5 @@ export {
   pureMeetingText as meetingText,
   pureMeetingChoice as meetingChoice,
 } from "./meetings.js";
+export { blocks, setSystem, startSystems } from "./blocks.js";
+export { decreeCost, enforcerIn, plotChance, pureSetRule as setRule, ruleOption, stancePower } from "./authority.js";

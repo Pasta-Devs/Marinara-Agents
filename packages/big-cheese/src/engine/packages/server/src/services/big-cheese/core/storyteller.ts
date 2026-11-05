@@ -1,5 +1,6 @@
 // The storyteller (design.md section 5): tension, card budget, decks and the target number of open threads.
 // It runs once each morning from cards.seedDay and only plans; the model writes words.
+import { blocks } from "./blocks.js";
 import { dayIndex } from "./clock.js";
 import { bigToday, bookClimaxes, lapse } from "./bigscenes.js";
 import { pick, roll } from "./rng.js";
@@ -165,11 +166,16 @@ function fill(s: Run) {
 }
 
 /** A card cast into a story role (cast.md section 9): the role opens the thread it plays in. */
-export const STORY_ROLES = ["old_flame", "rival_boss", "inspector"] as const;
+export const STORY_ROLES = ["old_flame", "rival_boss", "inspector", "partner", "child", "parent"] as const;
+/** Roles for the boss's home. They need the Romance, Adult or Family layer (cast.ts). */
+export const HOME_ROLES: readonly string[] = ["partner", "child", "parent"];
 const ROLE_STORY = {
   old_flame: { kind: "personal_arc", need: "people", line: "{n} comes back into your life" },
   rival_boss: { kind: "personal_arc", need: "standing", line: "{n} runs the rival place" },
   inspector: { kind: "crisis", need: "standing", line: "{n} comes to inspect the place" },
+  partner: { kind: "personal_arc", need: "people", line: "{n} waits for you at home" },
+  child: { kind: "personal_arc", need: "people", line: "{n} wants some of your time" },
+  parent: { kind: "personal_arc", need: "people", line: "{n} asks when you will visit" },
 } as const;
 export function openStoryRole(s: Run, id: string, role: (typeof STORY_ROLES)[number]) {
   const r = ROLE_STORY[role];
@@ -191,6 +197,7 @@ export function morning(s: Run): number {
   if (s.clock.day === 0) {
     weekly(s);
     layerSeeds(s, PRESETS[s.storyteller].open);
+    blocks(s); // T4
   }
   surprise(s);
   fill(s);

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as core from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/core/index.js";
 import { openStory } from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/core/threads.js";
+import { HAFENKAI_PLACE } from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/core/kits/hafenkai.js";
 import { openStoryRole } from "../packages/big-cheese/src/engine/packages/server/src/services/big-cheese/core/storyteller.js";
 import type {
   Run,
@@ -20,7 +21,7 @@ function play(s: Run, id: string, idx: number) {
       const c = s.inbox[0]!;
       core.draft.answerCard(s, c.id, c.answers[c.thread === id ? idx : 0]!.stance);
     }
-    core.draft.endDay(s);
+    core.draft.endDay(s, HAFENKAI_PLACE);
   }
   return s.closed.find((c) => c.id === id)?.state;
 }
@@ -92,7 +93,7 @@ test("follow_up: invest wins it, an ignored card loses it", () => {
   const l = fresh();
   core.draft.seedDay(l);
   const id = l.inbox[0]!.thread;
-  for (let i = 0; i < 5; i++) core.draft.endDay(l);
+  for (let i = 0; i < 5; i++) core.draft.endDay(l, HAFENKAI_PLACE);
   assert.equal(l.closed.find((x) => x.id === id)?.state, "lost");
 });
 
@@ -100,12 +101,12 @@ test("revolt: Legitimacy 0 opens it, 25 wins it, a missed due week ends the reig
   const run = (legitimacy: number, after: number) => {
     const s = fresh();
     s.extras = [{ id: "legitimacy", main: "standing", value: 0 }];
-    while (s.clock.day !== 4) core.draft.endDay(s);
-    core.draft.endDay(s); // Friday settle opens the revolt
+    while (s.clock.day !== 4) core.draft.endDay(s, HAFENKAI_PLACE);
+    core.draft.endDay(s, HAFENKAI_PLACE); // Friday settle opens the revolt
     const r = Object.values(s.threads).find((t) => t.kind === "revolt")!;
     assert.ok(r);
     s.extras[0]!.value = legitimacy;
-    for (let i = 0; i < after && s.status === "playing"; i++) core.draft.endDay(s);
+    for (let i = 0; i < after && s.status === "playing"; i++) core.draft.endDay(s, HAFENKAI_PLACE);
     return { s, r };
   };
   const won = run(30, 5);
@@ -123,7 +124,7 @@ test("a year has a surprise every week", () => {
     while (s.inbox.length && s.clock.hoursLeft > 0)
       core.draft.answerCard(s, s.inbox[0]!.id, s.inbox[0]!.answers[0]!.stance);
     if (s.story.lastSurprise) weeks.add(s.story.lastSurprise.week);
-    core.draft.endDay(s);
+    core.draft.endDay(s, HAFENKAI_PLACE);
   }
   for (let w = 1; w < s.clock.week; w++) assert.ok(weeks.has(w), `week ${w} had no surprise`);
 });

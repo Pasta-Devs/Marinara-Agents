@@ -93,7 +93,7 @@ export function createPlace(store: RunStore, getModel: () => Promise<ModelCall |
       const model = await modelFor(run);
       const today = dayIndex(game.clock);
       const h = { rng: game.rng };
-      movePeople(game);
+      movePeople(game, kit);
 
       if (place.day !== today) {
         const rooms = kit.rooms.filter((r) => game.rooms[r.id]?.people.length).slice(0, MORNING_ROOMS);
@@ -134,7 +134,7 @@ export function createPlace(store: RunStore, getModel: () => Promise<ModelCall |
       if (run.game.clock.hoursLeft < 1) throw new BigCheeseError(409, "No hours left today.", "no-hours");
       const game = structuredClone(run.game);
       const place = structuredClone(run.text.place ?? empty());
-      movePeople(game);
+      movePeople(game, kit);
       const heard = overheard(game, room);
       if (!heard.people.length) throw new BigCheeseError(409, "Nobody is there.", "wrong-phase");
       const model = await modelFor(run);

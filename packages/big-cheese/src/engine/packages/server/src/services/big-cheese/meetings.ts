@@ -82,7 +82,7 @@ export function createMeetings(store: RunStore, getModel: () => Promise<ModelCal
         throw new BigCheeseError(409, "The day has not started.", "wrong-phase");
       let game: Game;
       try {
-        game = startMeeting(run.game, b.kind);
+        game = startMeeting(run.game, b.kind, kitOf(run));
       } catch (e) {
         if (e instanceof Error && /Not enough hours/.test(e.message))
           throw new BigCheeseError(409, e.message, "no-hours");
@@ -105,7 +105,7 @@ export function createMeetings(store: RunStore, getModel: () => Promise<ModelCal
       }
       if (!stance || !allowed.includes(stance))
         throw new BigCheeseError(400, "That answer is not offered.", "bad-request");
-      const game = meetingChoice(run.game, stance);
+      const game = meetingChoice(run.game, stance, kitOf(run));
       return save(id, run, await writeItem(run, game));
     },
   };

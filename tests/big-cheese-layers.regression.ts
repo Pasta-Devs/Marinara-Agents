@@ -18,14 +18,14 @@ const year = (s: Run, seen = new Map<string, string | undefined>()) => {
     for (const t of Object.values(s.threads)) seen.set(t.id, t.layer);
     while (s.inbox.length && s.clock.hoursLeft > 0)
       core.draft.answerCard(s, s.inbox[0]!.id, s.inbox[0]!.answers[0]!.stance);
-    core.draft.endDay(s);
+    core.draft.endDay(s, HAFENKAI_PLACE);
   }
   return seen;
 };
 
 test("dial 0 opens no layer thread", () => {
   for (const seed of [1, 2, 3]) {
-    const seen = year(fresh(seed, { drama: 0, romance: 0 }));
+    const seen = year(fresh(seed, { drama: 0, romance: 0, press: 0, rivals: 0, family: 0 }));
     assert.equal([...seen.values()].filter(Boolean).length, 0);
   }
 });
@@ -51,8 +51,25 @@ test("project wins on the reveal, with progress as a clock", () => {
         s.inbox[0]!.id,
         (s.inbox[0]!.answers.find((a) => a.stance === "invest") ?? s.inbox[0]!.answers[0]!).stance,
       );
-    core.draft.endDay(s);
+    core.draft.endDay(s, HAFENKAI_PLACE);
   }
   assert.ok(mid >= 1 && mid < 5);
   assert.equal(s.closed.find((c) => c.id === t.id)?.state, "won");
+});
+
+test("press, rivals and family: dial 0 opens nothing, dial 100 opens their threads", () => {
+  const off = { drama: 0, romance: 0, press: 0, rivals: 0, family: 0 };
+  for (const seed of [1, 2, 3]) {
+    const seen = year(fresh(seed, off));
+    assert.equal([...seen.values()].filter(Boolean).length, 0);
+  }
+  const tags = new Set(year(fresh(4, { ...off, press: 100, rivals: 100, family: 100 })).values());
+  assert.ok(tags.has("press") && tags.has("rivals") && tags.has("family"));
+});
+
+test("a family event is an evening scene booked on the thread, not a card", () => {
+  const s = fresh(5, { drama: 0, romance: 0, press: 0, rivals: 0, family: 100 } as never);
+  for (let i = 0; i < 50; i++) core.layerSeeds(s, 3);
+  const t = Object.values(s.threads).find((x) => x.layer === "family");
+  assert.ok(t?.beats.some((b) => b.type === "big_scene" && b.blueprint === "family"));
 });

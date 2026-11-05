@@ -25,10 +25,12 @@ import {
   trustChange,
   type Run as Game,
 } from "./core/index.js";
+import { advisorLeans, pureFollowAdvice } from "./core/advisors.js";
 import { placeKitOf } from "./core/kits/index.js";
 import type { PlaceKit } from "./core/kits/types.js";
 import { BLUEPRINTS, choices, dueBig, finishBig, settleBig } from "./core/bigscenes.js";
 import { addTrust } from "./core/run.js";
+import { layerDials } from "./core/layers.js";
 import { METERS, type Thread } from "./core/types.js";
 import { BigCheeseError, type Run, type RunStore, type SceneText } from "./store.js";
 
@@ -121,6 +123,7 @@ export function createGame(store: RunStore, getModel: () => Promise<ModelCall | 
         rng: h.rng,
         blueprint: s.blueprint,
         goal: BLUEPRINTS[s.blueprint].goals[s.parts.length],
+        layers: layerDials(game),
         room: s.room,
         people: s.people,
         offer: final && bp.end === "pick" ? [] : stances,
@@ -179,7 +182,7 @@ export function createGame(store: RunStore, getModel: () => Promise<ModelCall | 
   const withGame = (game: Game, h: Rng): Game => ({ ...game, rng: h.rng });
 
   return {
-    async create(kitId: string, lite = false, cast?: Cast) {
+    async create(kitId: string, lite = false, cast?: Cast, custom?: PlaceKit) {
       const model = await modelFor({ lite });
       return view(
         await store.create(
@@ -187,11 +190,18 @@ export function createGame(store: RunStore, getModel: () => Promise<ModelCall | 
           lite,
           async (game) => {
             const h = { rng: game.rng };
-            const arrival = await openScene(withCast(placeKitOf({ kitId }), cast), h, game, "arrival", model);
+            const arrival = await openScene(
+              withCast(placeKitOf({ kitId, kit: custom }), cast),
+              h,
+              game,
+              "arrival",
+              model,
+            );
             game.rng = h.rng;
             return { text: { cards: {}, scenes: { arrival }, feelings: {} }, scene: "arrival" };
           },
           cast,
+          custom,
         ),
       );
     },
@@ -284,18 +294,20 @@ export function createGame(store: RunStore, getModel: () => Promise<ModelCall | 
             {
               kit: placeOf(run),
               rng: h.rng,
+              layers: layerDials(game),
               seeds: seeds.map((c) => ({
                 id: c.id,
                 asker: c.asker,
                 need: c.need,
                 severity: c.severity,
                 offer: c.answers,
+                advisors: advisorLeans(game, placeOf(run), c.answers),
               })),
             },
             { model: await modelFor(run) },
           );
           roll(h);
-          for (const c of output.cards) cards[c.seed] = { line: c.text, answers: c.answers, source };
+          for (const c of output.cards) cards[c.seed] = { line: c.text, answers: c.answers, source, advice: c.advice };
         }
         return { game: withGame(game, h), text: { ...run.text, cards } };
       }),
@@ -323,12 +335,13 @@ export function createGame(store: RunStore, getModel: () => Promise<ModelCall | 
         const { week, day } = run.game.clock;
         // ponytail: a promise is due the same day next week, capped at the last week; real due dates come later.
         const due = { week: Math.min(week + 1, WEEKS), day };
-        return { game: answerCard(run.game, cardId, stance, promise ? [{ ...promise, due }] : []) };
+        const answered = answerCard(run.game, cardId, stance, promise ? [{ ...promise, due }] : []);
+        return { game: pureFollowAdvice(answered, run.text.cards[cardId]?.advice, stance) };
       }),
 
     dayEnd: (id: unknown, body: unknown) =>
       act(id, body, Base, "idle", async (run) => {
-        let game = endDay(run.game);
+        let game = endDay(run.game, placeOf(run));
         const { week } = run.game.clock;
         if (!isFriday(run.game.clock) || game.report?.week !== week) return { game };
         // A Friday settle: one feeling line per key person.

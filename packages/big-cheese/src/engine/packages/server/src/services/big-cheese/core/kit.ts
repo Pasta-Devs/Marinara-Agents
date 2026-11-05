@@ -1,5 +1,9 @@
+import { startSystems } from "./blocks.js";
 import { newClock } from "./clock.js";
+import { startAuthority } from "./authority.js";
 import { movePeople } from "./people.js";
+import { HAFENKAI_PLACE } from "./kits/hafenkai.js";
+import type { PlaceKit } from "./kits/types.js";
 import { openGuided } from "./threads.js";
 import { WISH_POINTS_PER_TERM } from "./types.js";
 import type { Authority, Letter, Member, Meter, Meters, Relation, Run, Storyteller } from "./types.js";
@@ -88,7 +92,7 @@ const m3Defaults = () => ({
   wishPoints: { term: 1, left: WISH_POINTS_PER_TERM },
 });
 
-export function newRun(kit: Kit, seed: number): Run {
+export function newRun(kit: Kit, seed: number, place: PlaceKit = HAFENKAI_PLACE): Run {
   const s: Run = {
     saveVersion: 3,
     ...m3Defaults(),
@@ -135,7 +139,9 @@ export function newRun(kit: Kit, seed: number): Run {
     report: null,
     meterHistory: [],
   };
-  movePeople(s);
+  movePeople(s, place);
+  startAuthority(s, place); // T7
+  startSystems(s, place); // T4
   if (kit.letters?.length) openGuided(s, kit.letters);
   return s;
 }

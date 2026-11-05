@@ -1,9 +1,10 @@
 import { pick, roll } from "./rng.js";
+import { stancePower } from "./authority.js";
 import { addTrust, applyDelta, newId, pure, spendHour } from "./run.js";
 import { FOLLOW, K, effect, offer, trustChange } from "./stances.js";
 import { severityCuts, morning } from "./storyteller.js";
 import { closeThread, openPromise, planCardBeat, openThread, storyBeat } from "./threads.js";
-import { METERS } from "./types.js";
+import { DIFFICULTY_FACTOR, METERS } from "./types.js";
 import type { Meter, Run, Severity, Thread } from "./types.js";
 
 export { meterTension } from "./storyteller.js";
@@ -62,8 +63,9 @@ export function answerCard(s: Run, id: string, stance: string, promises: Paramet
   if (!c.answers.some((a) => a.stance === stance)) throw new Error(`Stance ${stance} is not offered on ${id}`);
   spendHour(s);
   s.inbox.splice(i, 1);
-  s.meters = applyDelta(s.meters, effect(c, stance));
+  s.meters = applyDelta(s.meters, effect(c, stance), DIFFICULTY_FACTOR[s.difficulty]);
   addTrust(s, c.asker, trustChange(stance, c.severity));
+  stancePower(s, stance, c.severity); // T7: Fear and Love in absolute kits
   const mem = s.people[c.asker]?.memories;
   mem?.push({ week: s.clock.week, about: c.id, thread: c.thread, stance, weight: 1 });
   if (mem && mem.length > 5) mem.shift();
@@ -88,7 +90,7 @@ export function answerCard(s: Run, id: string, stance: string, promises: Paramet
 export function ageCards(s: Run) {
   for (const c of s.inbox) c.age++;
   for (const c of s.inbox.filter((c) => c.age >= 5)) {
-    s.meters = applyDelta(s.meters, { [c.need]: -K[c.severity] });
+    s.meters = applyDelta(s.meters, { [c.need]: -K[c.severity] }, DIFFICULTY_FACTOR[s.difficulty]);
     const t = s.threads[c.thread];
     if (t && t.kind !== "follow_up") storyBeat(s, t, c.id, false);
     else closeThread(s, c.thread, "lost");

@@ -11,19 +11,11 @@ import type { CapabilityDocumentRecord, CapabilityDocumentStore } from "@marinar
 import { z } from "zod";
 import { BOARD_PLAN_VERBS, runTask, type BoardPlanOutput, type ModelCall, type PlanBeat } from "./ai/tasks.js";
 import { addCard } from "./core/cards.js";
+import { placeKitOf } from "./core/kits/index.js";
+import type { PlaceKit } from "./core/kits/types.js";
+import { withCast } from "./cast.js";
 import { TERM_WEEKS, WEEKS } from "./core/clock.js";
-import {
-  DAYS,
-  HOURS,
-  K,
-  METERS,
-  clamp,
-  dayIndex,
-  draft,
-  kitOf,
-  shiftRelation,
-  type Run as Game,
-} from "./core/index.js";
+import { DAYS, HOURS, K, METERS, clamp, dayIndex, draft, shiftRelation, type Run as Game } from "./core/index.js";
 import { newId } from "./core/run.js";
 import { closeThread, openStory, openThread, planCardBeat } from "./core/threads.js";
 import { SLOTS, type Slot } from "./core/types.js";
@@ -40,6 +32,7 @@ const PAGE = 20;
 const bad = (message: string) => new BigCheeseError(400, message, "bad-request");
 const conflict = () => new BigCheeseError(409, "The run changed. Reload it.", "conflict");
 const wrongPhase = (message: string) => new BigCheeseError(409, message, "wrong-phase");
+const kitOf = (run: Run): PlaceKit => withCast(placeKitOf(run), run.cast, run.game.clock);
 const notFound = (message: string) => new BigCheeseError(404, message, "not-found");
 
 // ── Actions ──
@@ -267,7 +260,12 @@ const amount = (g: Game, path: string, a: { value?: number; delta?: number }) =>
   clamp(Math.round(a.value ?? (Number(getPath(g, path)) || 0) + a.delta!));
 
 /** Checks one action against the state and returns the paths it will touch and the change itself. */
-function prepare(g: Game, a: BoardAction, morning: (days: number) => Snapshot): { paths: string[]; go: () => void } {
+function prepare(
+  g: Game,
+  a: BoardAction,
+  morning: (days: number) => Snapshot,
+  kit: PlaceKit,
+): { paths: string[]; go: () => void } {
   if (a.verb.startsWith("time.") && a.when && a.when !== "now") throw bad("Time actions happen now.");
   switch (a.verb) {
     case "meter.set": {
@@ -335,7 +333,7 @@ function prepare(g: Game, a: BoardAction, morning: (days: number) => Snapshot): 
         paths: ["clock.week", "clock.day", "clock.hoursLeft"],
         go: () => {
           // The next morning waits for "Start the day", as in normal play.
-          for (let i = 0; i < Math.min(DAYS, a.input.days) && g.status === "playing"; i++) draft.endDay(g);
+          for (let i = 0; i < Math.min(DAYS, a.input.days) && g.status === "playing"; i++) draft.endDay(g, kit);
         },
       };
     case "time.rewind": {
@@ -474,12 +472,12 @@ const snapshotPaths = (g: Game, paths: string[]) =>
   Object.fromEntries(paths.map((p) => [p, structuredClone(getPath(g, p))]));
 
 /** Runs the actions on a copy of the game. Returns the new game and the facts for the journal. */
-function simulate(game: Game, actions: BoardAction[], morning: (days: number) => Snapshot) {
+function simulate(game: Game, actions: BoardAction[], morning: (days: number) => Snapshot, kit: PlaceKit) {
   const g = structuredClone(game);
   const facts: Fact[] = [];
   for (const a of actions) {
     if (g.status !== "playing") throw wrongPhase("This run is over.");
-    const { paths, go } = prepare(g, a, morning);
+    const { paths, go } = prepare(g, a, morning, kit);
     const base = {
       verb: a.verb,
       ...("target" in a ? { target: a.target } : {}),
@@ -506,10 +504,10 @@ const noMorning = (): Snapshot => {
 };
 
 /** Runs one scheduled fact on the game. A fact that no longer fits (the person left) is cancelled. */
-function runFact(g: Game, f: Fact) {
+function runFact(g: Game, f: Fact, kit: PlaceKit) {
   try {
     const a = BoardAction.parse({ verb: f.verb, target: f.target, input: f.input });
-    const { paths, go } = prepare(g, a, noMorning);
+    const { paths, go } = prepare(g, a, noMorning, kit);
     f.before = snapshotPaths(g, paths);
     go();
     f.after = snapshotPaths(g, paths);
@@ -529,8 +527,7 @@ const MOOD_LINE: Record<string, string> = {
 };
 
 /** One in-world reason line for each person a play changed. No model call: the next ambient batch reads `reasons`. */
-function addReasons(g: Game, facts: Fact[]) {
-  const kit = kitOf(g);
+function addReasons(g: Game, facts: Fact[], kit: PlaceKit) {
   const name = (id: string) => kit.people.find((p) => p.id === id)?.name ?? id;
   const add = (person: string, text: string) => {
     g.reasons = [...(g.reasons ?? []), { person, text }].slice(-8);
@@ -574,8 +571,7 @@ function addReasons(g: Game, facts: Fact[]) {
 // The model never writes a number: it picks a size and the code turns it into a number (cheese-board.md §4).
 const SIZE: Record<string, 1 | 2 | 3> = { small: 1, medium: 2, big: 3 };
 
-const world = (g: Game): Record<string, unknown> => {
-  const kit = kitOf(g);
+const world = (g: Game, kit: PlaceKit): Record<string, unknown> => {
   return {
     clock: { week: g.clock.week, day: g.clock.day },
     meters: g.meters,
@@ -921,15 +917,15 @@ export function createBoard(
   }
 
   /** Runs the scheduled facts whose day has come. Returns the journal with their new state. */
-  const runDue = (journal: Entry[], g: Game) => {
+  const runDue = (journal: Entry[], g: Game, kit: PlaceKit) => {
     const today = dayIndex(g.clock);
     return journal.map((e) => {
       if (e.state !== "scheduled") return e;
       const next = { ...e, actions: e.actions.map((f) => ({ ...f })) };
       for (const f of next.actions) {
         if (factState(f) !== "scheduled" || f.when === "now" || dayIndex(f.when) > today) continue;
-        runFact(g, f);
-        if (!next.silent) addReasons(g, [f]);
+        runFact(g, f, kit);
+        if (!next.silent) addReasons(g, [f], kit);
       }
       next.state = entryState(next);
       return next;
@@ -945,12 +941,11 @@ export function createBoard(
         ),
     );
 
-  const planOf = async (g: Game, text: string, target: string | null) => {
-    const kit = kitOf(g);
+  const planOf = async (g: Game, text: string, target: string | null, kit: PlaceKit) => {
     const rng = g.rng;
     const { output, source } = await runTask(
       "board.plan",
-      { kit, rng, text, target, world: world(g) },
+      { kit, rng, text, target, world: world(g, kit) },
       // ponytail: one model call; the spec's fix-up retry with the error list is not built, a refused plan just says so.
       { model: await getModel() },
     );
@@ -968,7 +963,7 @@ export function createBoard(
       let extra: Record<string, unknown> = {};
       if (b.text !== undefined) {
         if (b.target) known(run.game.people, b.target, "person");
-        const { output, offline } = await planOf(run.game, b.text, b.target ?? null);
+        const { output, offline } = await planOf(run.game, b.text, b.target ?? null, kitOf(run));
         const planned = planToActions(run.game, output);
         actions = planned.actions.length ? planned.actions : undefined;
         spin = { text: b.text, summary: output.summary };
@@ -984,7 +979,7 @@ export function createBoard(
       for (const [key, p] of previews) if (now - p.at > PREVIEW_MS) previews.delete(key);
       while (previews.size >= 100) previews.delete(previews.keys().next().value!);
       if (!actions) return { id: "", revision: run.revision, expiresAt: "", actions: [], ...extra };
-      const { facts } = simulate(run.game, actions, morningOf(data, run.game));
+      const { facts } = simulate(run.game, actions, morningOf(data, run.game), kitOf(run));
       const previewId = `v-${randomBytes(6).toString("hex")}`;
       previews.set(previewId, { runId: run.id, revision: run.revision, actions, at: now, ...(spin ? { spin } : {}) });
       return {
@@ -1009,10 +1004,10 @@ export function createBoard(
       const { record, data } = await load(run.id, run.kitId);
       const actions = b.edits ?? p.actions;
       const morning = morningOf(data, run.game);
-      const { game, facts } = simulate(run.game, actions, morning);
+      const { game, facts } = simulate(run.game, actions, morning, kitOf(run));
       const first = actions[0]!;
       const silent = b.silent ?? false;
-      if (!silent) addReasons(game, facts);
+      if (!silent) addReasons(game, facts, kitOf(run));
       const next = withPlay(
         first.verb === "time.rewind" ? rewindData(data, morning(first.input.days)) : data,
         run,
@@ -1132,8 +1127,8 @@ export function createBoard(
         if (b.op === "move") f.when = b.when!;
         else if (b.op === "cancel") f.state = "cancelled";
         else {
-          runFact(g, f);
-          if (!entry.silent) addReasons(g, [f]);
+          runFact(g, f, kitOf(run));
+          if (!entry.silent) addReasons(g, [f], kitOf(run));
         }
         entry.state = entryState(entry);
         // ponytail: a change to a Board action is not a play of its own; rewind the play that made it instead.
@@ -1179,7 +1174,7 @@ export function createBoard(
         // The snapshot is taken after today's due facts ran, so a rewind to this morning keeps them (see rearm).
         const due = isDue(data.journal, run.game);
         const g = structuredClone(run.game);
-        const journal = due ? runDue(data.journal, g) : data.journal;
+        const journal = due ? runDue(data.journal, g, kitOf(run)) : data.journal;
         const snap = { ...snapshotOf(data, { ...run, game: g }), id: `m${data.n}` };
         const mornings = [...data.mornings.filter((m) => dayIndex(m.at) !== dayIndex(snap.at)), snap].slice(
           -MAX_MORNINGS,
