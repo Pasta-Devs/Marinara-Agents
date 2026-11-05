@@ -25,6 +25,8 @@ export interface Circle {
   backgroundTimer: boolean;
   /** Slice 5: write what each character does now to their linked conversation chat. Off by default. */
   writeStatus: boolean;
+  /** Slice 6e: the dashboard hides hooks and notable events until a character told them in a chat. */
+  surprise: boolean;
   /** When writeStatus was turned on. The Circle that turned it on last owns a character's status. */
   statusSince: number;
   budgetCallsPerDay: number;
@@ -176,6 +178,7 @@ export function defaultCircle(id: string, now: number): Circle {
     connectionId: "",
     backgroundTimer: false,
     writeStatus: false,
+    surprise: false,
     statusSince: 0,
     budgetCallsPerDay: 12,
     connections: {},
@@ -238,6 +241,7 @@ export function applyCircleFields(base: Circle, src: Record<string, unknown>): C
     bigKindsAllowed: ids(src.bigKindsAllowed, 30, base.bigKindsAllowed),
     connectionId: text(src.connectionId, 200, base.connectionId),
     writeStatus: typeof src.writeStatus === "boolean" ? src.writeStatus : base.writeStatus,
+    surprise: typeof src.surprise === "boolean" ? src.surprise : base.surprise,
     backgroundTimer: typeof src.backgroundTimer === "boolean" ? src.backgroundTimer : base.backgroundTimer,
     budgetCallsPerDay: Number.isFinite(budget)
       ? Math.max(1, Math.min(200, Math.round(budget)))

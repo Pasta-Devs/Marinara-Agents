@@ -37,7 +37,10 @@ export function MeanwhileWidget({ open, active }: { open: () => void; active: bo
       ))}
       {quiet.map((circle) => (
         <p key={circle.id} className="mw-muted">
-          {circle.name}: caught up to {caughtUp(circle.lastRunCircle, circle.timezone)}
+          {circle.name}:{" "}
+          {circle.toHear > 0
+            ? `${circle.toHear} ${circle.toHear === 1 ? "thing" : "things"} to hear about`
+            : `caught up to ${caughtUp(circle.lastRunCircle, circle.timezone)}`}
         </p>
       ))}
       <button type="button" className="mw-btn" onClick={open}>

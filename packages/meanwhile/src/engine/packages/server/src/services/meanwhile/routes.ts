@@ -29,6 +29,7 @@ import {
 import { KINDS } from "./deck.js";
 import { currentBlock } from "./routine.js";
 import { statusOwner } from "./status.js";
+import { countHidden, hiddenBySurprise } from "./context.js";
 import { bannedWords, usageRow } from "./beats.js";
 import {
   applyCircleFields,
@@ -99,6 +100,7 @@ function statusOf(circle: Circle, mark: RunMark, now: number, calls: number) {
 const view = (doc: MeanwhileDocument, circle: Circle, now: number) => ({
   ...circle,
   status: statusOf(circle, markOf(doc, circle.id), now, usageRow(doc.usage, circle.id, now).calls),
+  toHear: countHidden(doc, circle),
   waiting: doc.events.filter((e) => e.circleId === circle.id && e.status === "proposed").length,
   // Characters whose status another Circle writes, with that Circle's name.
   statusElsewhere: circle.writeStatus
@@ -138,6 +140,7 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
       .filter(
         (e) =>
           circles.has(e.circleId) &&
+          !hiddenBySurprise(doc, circles.get(e.circleId)!, e) &&
           e.status === "accepted" &&
           e.visibility === "circle" &&
           e.kind !== "spicy" &&
@@ -159,7 +162,13 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
       hooks: all.slice(0, 3),
       quiet: doc.circles
         .filter((c) => !withHooks.has(c.id))
-        .map((c) => ({ id: c.id, name: c.name, lastRunCircle: c.lastRunCircle, timezone: c.clock.timezone })),
+        .map((c) => ({
+          id: c.id,
+          name: c.name,
+          lastRunCircle: c.lastRunCircle,
+          timezone: c.clock.timezone,
+          toHear: countHidden(doc, c),
+        })),
     };
   });
 
@@ -291,6 +300,7 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
         .filter(
           (e) =>
             e.circleId === circle.id &&
+            !hiddenBySurprise(doc, circle, e) &&
             (e.status === "accepted" || e.status === "proposed") &&
             wall(e.start).slice(0, 10) >= oldest,
         )
@@ -312,7 +322,7 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
         now,
         today,
         nowTime: msToWall(nowMs, tz).slice(11),
-        dealt: doc.seeds.filter((s) => s.circleId === circle.id && s.day === today),
+        dealt: circle.surprise ? [] : doc.seeds.filter((s) => s.circleId === circle.id && s.day === today),
         // Where and when the status was last written for each character.
         statusSent: Object.fromEntries(
           circle.castIds.flatMap((id) => {
@@ -337,7 +347,13 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
     const oldest = shiftDay(msToWall(circleNowMs(circle.clock, Date.now()), tz).slice(0, 10), 1 - days);
     const threads = new Map<string, { a: string; b: string; texts: { from: string; text: string; time: string }[] }>();
     for (const e of doc.events) {
-      if (e.circleId !== circle.id || e.status !== "accepted" || e.visibility !== "circle" || e.kind === "spicy")
+      if (
+        e.circleId !== circle.id ||
+        e.status !== "accepted" ||
+        e.visibility !== "circle" ||
+        e.kind === "spicy" ||
+        hiddenBySurprise(doc, circle, e)
+      )
         continue;
       for (const t of e.texts ?? []) {
         if (msToWall(Date.parse(t.time), tz).slice(0, 10) < oldest) continue;
@@ -358,13 +374,16 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
   // Monday papers, newest first. A paper is hidden once one of its events is vetoed or stale.
   app.get<{ Params: { id: string } }>("/circles/:id/papers", async (request, reply) => {
     const doc = await readMeanwhile();
-    if (!find(doc, request.params.id)) return notFound(reply);
-    const status = new Map(doc.events.map((e) => [e.id, e.status]));
+    const circle = find(doc, request.params.id);
+    if (!circle) return notFound(reply);
+    const status = new Map(doc.events.map((e) => [e.id, hiddenBySurprise(doc, circle, e) ? "hidden" : e.status]));
     const papers = doc.papers
       .filter(
         (p) =>
           p.circleId === request.params.id &&
-          !p.eventIds.some((id) => status.get(id) === "vetoed" || status.get(id) === "stale"),
+          !p.eventIds.some(
+            (id) => status.get(id) === "vetoed" || status.get(id) === "stale" || status.get(id) === "hidden",
+          ),
       )
       .sort((a, b) => b.weekStart.localeCompare(a.weekStart))
       .map(({ id, weekStart, title, items, createdAt }) => ({ id, weekStart, title, items, createdAt }));
@@ -378,7 +397,7 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
     if (!circle) return notFound(reply);
     const tz = circle.clock.timezone;
     const mine = doc.events
-      .filter((e) => e.circleId === circle.id && e.status === "accepted")
+      .filter((e) => e.circleId === circle.id && e.status === "accepted" && !hiddenBySurprise(doc, circle, e))
       .sort((a, b) => Date.parse(b.start) - Date.parse(a.start));
     const chats = circle.linkedChatIds.length
       ? (await getMeanwhileRuntime().persistence.listChats()).filter((chat) => circle.linkedChatIds.includes(chat.id))
@@ -503,7 +522,7 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
       const doc = await readMeanwhile();
       const circle = find(doc, request.params.id);
       const event = doc.events.find((e) => e.id === request.params.eventId && e.circleId === request.params.id);
-      if (!circle || !event) return notFound(reply);
+      if (!circle || !event || hiddenBySurprise(doc, circle, event)) return notFound(reply);
       const next = await change(event, circle, body(request));
       if ("error" in next) return reply.code(next.code).send({ error: next.error });
       let moved = false;
@@ -571,7 +590,7 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
     return {
       nudges: nudges.map((n) => {
         const e = n.eventId ? events.get(n.eventId) : undefined;
-        return e
+        return e && !hiddenBySurprise(doc, circle, e)
           ? { ...n, event: { text: e.text, day: msToWall(Date.parse(e.start), circle.clock.timezone).slice(0, 10) } }
           : n;
       }),

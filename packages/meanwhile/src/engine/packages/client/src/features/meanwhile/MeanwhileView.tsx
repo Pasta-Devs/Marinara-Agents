@@ -49,6 +49,10 @@ const COPY = {
   everyone: "Everyone",
   noEvents: "Nothing yet. Press Run now to fill the days.",
   statusSwitch: "Character status",
+  surpriseSwitch: "Surprise mode",
+  surpriseExplain:
+    "Off: the dashboard shows everything. On: hooks and notable events stay hidden until a character tells you in a chat. Routine, the Now card and big events that wait for you stay visible.",
+  toHear: (n: number) => `${n} ${n === 1 ? "thing" : "things"} to hear about`,
   statusExplain:
     "Writes what each person does now to their first linked Conversation chat, as their status. It only follows real time (x1). At other speeds, or paused, nothing is written. A status can stay up to 2 hours after you turn this off.",
   statusElsewhere: (name: string, circle: string, note: string) =>
@@ -131,6 +135,7 @@ function statusLine(circle: Circle) {
   if (clock.speed === 0) parts.push("Paused");
   else if (clock.speed !== 1) parts.push(`x${clock.speed}`);
   if (circle.status.paused) parts.push(COPY.paused);
+  if (circle.toHear > 0) parts.push(COPY.toHear(circle.toHear));
   return parts.join(" · ");
 }
 
@@ -275,6 +280,7 @@ function CircleForm({ circle, onDone }: { circle: Circle | null; onDone: () => v
     pace: circle?.pace ?? "cozy",
     backgroundTimer: circle?.backgroundTimer ?? false,
     writeStatus: circle?.writeStatus ?? false,
+    surprise: circle?.surprise ?? false,
     connectionId: circle?.connectionId ?? "",
     timezone: circle?.clock.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
   });
@@ -392,6 +398,18 @@ function CircleForm({ circle, onDone }: { circle: Circle | null; onDone: () => v
       </label>
       <div id={`mw-status-explain-${circle?.id ?? "new"}`} className="mw-muted">
         {COPY.statusExplain}
+      </div>
+      <label className="mw-check">
+        <input
+          type="checkbox"
+          aria-describedby={`mw-surprise-explain-${circle?.id ?? "new"}`}
+          checked={draft.surprise}
+          onChange={(e) => set({ surprise: e.target.checked })}
+        />
+        <span>{COPY.surpriseSwitch}</span>
+      </label>
+      <div id={`mw-surprise-explain-${circle?.id ?? "new"}`} className="mw-muted">
+        {COPY.surpriseExplain}
       </div>
       {circle?.statusElsewhere.map((s) => (
         <div key={s.characterId} className="mw-warn">

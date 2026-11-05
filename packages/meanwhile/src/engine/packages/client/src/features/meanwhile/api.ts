@@ -31,6 +31,9 @@ export interface Circle {
   bigKindsAllowed: string[];
   backgroundTimer: boolean;
   writeStatus: boolean;
+  surprise: boolean;
+  /** Hidden events a character has not told yet (surprise mode). */
+  toHear: number;
   /** Characters whose status another Circle writes. */
   statusElsewhere: { characterId: string; circle: string; note: string }[];
   connectionId: string;
@@ -50,6 +53,7 @@ export type CircleFields = Partial<
     | "pace"
     | "backgroundTimer"
     | "writeStatus"
+    | "surprise"
     | "connectionId"
   >
 > & { timezone?: string };
@@ -194,7 +198,7 @@ export const editEvent = (id: string, eventId: string, text: string) =>
 
 export interface WidgetData {
   hooks: { eventId: string; circleId: string; circleName: string; characterId: string; text: string }[];
-  quiet: { id: string; name: string; lastRunCircle: string; timezone: string }[];
+  quiet: { id: string; name: string; lastRunCircle: string; timezone: string; toHear: number }[];
 }
 export const getWidget = () => api<WidgetData>("/widget");
 
