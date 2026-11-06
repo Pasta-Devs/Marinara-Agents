@@ -13,7 +13,7 @@
 // screen, and no rail button covers the note, the nameplate, the top bar, the dock or his tap zones. Over his painted
 // look, in Midnight and Pearl, any label they show keeps 4.5:1 and each icon 3:1.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-remind.e2e.ts
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 

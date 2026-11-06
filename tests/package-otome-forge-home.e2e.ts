@@ -16,7 +16,7 @@
 // #2127: Your thoughts… beside Remind Me sends what the protagonist is thinking for the next chapter (Enter starts a new
 // line, a failure says so, the window opens with them to change, Clear lets them go), with a dot while they wait.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-home.e2e.ts
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { deflateSync } from "node:zlib";
