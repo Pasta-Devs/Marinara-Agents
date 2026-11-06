@@ -8,8 +8,9 @@
 // Engine. With the Engine's prompt review on, an open on the 5★ reveal hands focus to Continue, and the review a wish's
 // results open is the dialog on top, and it paints. The Shop tab (#2128) sells a gift once per tap, and a figurine
 // whose scene it then offers; one it cannot afford says how much Starlight is missing. A figurine's Buy says it paints
-// 1 image (#2138); once bought it shows Painting… while the Shop reads itself again, and a failed paint offers Try
-// again, whose one tap paints it and hands focus back to Play the scene.
+// 1 image (#2138), after a tap of Paint it under prompt review; once bought it shows Painting… while the Shop reads
+// itself again, and a failed paint offers Try again, held in place while its tap runs, so a double tap paints it once
+// and hands focus back to Play the scene; the painted figurine shows only cut out of its chroma matte.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-wish.e2e.ts
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
@@ -510,9 +511,10 @@ function wishStub(starlight = 2000): { stub: WishStub; answer: (call: Call) => A
     }
     const tapped = /^\/runs\/[^/]+\/shop\/figurines\/([^/]+)\/art$/u.exec(path)?.[1];
     if (tapped) {
-      const painted = ready(art("#9db8f0"));
-      stub.shop = figurine(decodeURIComponent(tapped), { art: painted, url: painted.url });
-      return { status: 200, json: { art: painted }, delay: 150 };
+      // Painted on a green matte, as figurinePrompt asks; the server's cut-out is not made yet.
+      const painted = ready(RAW_LOOK);
+      stub.shop = figurine(decodeURIComponent(tapped), { art: painted, url: painted.url, cutting: true });
+      return { status: 200, json: { art: painted }, delay: 500 };
     }
     const bought = /^\/runs\/[^/]+\/shop\/figurines\/([^/]+)$/u.exec(path)?.[1];
     if (path === `/runs/${RUN}/shop/gifts` || bought) {
@@ -1030,6 +1032,7 @@ test("Otome Hearth Shop: a gift is bought once per tap, a figurine offers its sc
   await page.emulateMedia({ reducedMotion: "reduce" });
   const calls: Call[] = [];
   const { answer } = wishStub(5600);
+  const cleanup = await stubLookCleanup(page);
   await stubRoutes(page, answer, calls);
   const root = await openOtome(page);
   await openDock(root, "Wish");
@@ -1051,8 +1054,8 @@ test("Otome Hearth Shop: a gift is bought once per tap, a figurine offers its sc
 
   const figurines = root.getByRole("list", { name: "Figurines" });
   const ilvar = figurines.getByRole("listitem").filter({ hasText: "Ilvar Thorne figurine" });
-  // With an image connection, a figurine's Buy says what it paints.
-  await expect(ilvar.getByText("Paints 1 image")).toBeVisible();
+  // With an image connection, a figurine's Buy says what it paints (by itself: neither Ask nor prompt review is on).
+  await expect(ilvar.locator(".of-cost")).toHaveText("Paints 1 image");
   await figurines.getByRole("button", { name: "Buy Ilvar Thorne figurine for 5,000 Starlight" }).click();
   await expect(starlight(root)).toHaveText(/^Starlight\s*300$/u);
   // The Buy button it was bought from is gone: keyboard focus moves to the scene it unlocked, not to the page.
@@ -1074,10 +1077,35 @@ test("Otome Hearth Shop: a gift is bought once per tap, a figurine offers its sc
   expect(posts(calls, `/shop/figurines/${ILVAR}/art`)).toHaveLength(0);
   await retry.focus();
   await page.keyboard.press("Enter");
-  await expect(ilvar.locator("img.of-figurine")).toHaveAttribute("src", /^data:image\/svg\+xml/u);
+  // The tap holds Try again in place, aria-disabled, so a second press (a double tap, a key repeat) does nothing and
+  // never reaches Play the scene.
+  await expect(retry).toHaveAttribute("aria-disabled", "true");
+  await expect(retry).toBeFocused();
+  await page.keyboard.press("Enter");
+  // The painted image is shown only once its chroma matte is cleaned off for display, never as it was painted.
+  await expect(ilvar.locator("img.of-figurine")).toHaveAttribute("src", CLEAN_LOOK);
+  await expect(root.locator(`img[src="${RAW_LOOK}"]`)).toHaveCount(0);
+  expect(cleanup.length).toBeGreaterThan(0);
   await expect(retry).toHaveCount(0);
   await expect(play).toBeFocused();
   expect(posts(calls, `/shop/figurines/${ILVAR}/art`)).toHaveLength(1);
+  // Still in the Shop: the second press did not open the figurine's scene in the reader.
+  await expect(root.getByRole("heading", { level: 1, name: "Wish", exact: true })).toBeVisible();
+});
+
+test("Otome Hearth Shop: with prompt review on, a figurine's Buy says its paint waits for Paint it", async ({
+  page,
+}) => {
+  const { answer } = wishStub(5600);
+  await stubRoutes(page, answer, []);
+  const root = await openOtome(page, { review: true });
+  await openDock(root, "Wish");
+  await root.getByRole("tab", { name: "Shop", exact: true }).click();
+  const ilvar = root
+    .getByRole("list", { name: "Figurines" })
+    .getByRole("listitem")
+    .filter({ hasText: "Ilvar Thorne figurine" });
+  await expect(ilvar.locator(".of-cost")).toHaveText("Paints 1 image · after you tap Paint it");
 });
 
 test("Otome Forge Wardrobe: the toggle moves between their looks and mine, wears one at home and shows one of mine", async ({

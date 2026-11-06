@@ -13,7 +13,8 @@
 // - A failure is kept and repainted only by a tap (POST .../shop/figurines/:li/art: consent, a reviewed prompt or
 //   Retry, which never pays twice); a `pending` record with no live paint in this process reads as `stopped`.
 // - Once painted it is cut out of its backdrop by Home's free cut-out queue (S/art/cutout.ts, `unit.cutouts`), queued
-//   right after the paint and again by a Shop or Home read that finds none; until then the painted image is shown.
+//   right after the paint and again by a Shop or Home read that finds none; until then the client shows the painted
+//   image only through its free display cleanup (C/components/LookImage.tsx), never with its chroma matte.
 // Opening the Shop or Home never paints one.
 import type { LiId, Paint, Unit } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import type { FigurinePicture } from "../../../../../client/src/features/otome-forge/shared/shop.js";

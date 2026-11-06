@@ -18,7 +18,7 @@ import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookOpen, Check, Heart, Paintbrush, RotateCcw, ShoppingBag, Sparkle } from "lucide-react";
 import { otomeErrorCode, useOtomeApi } from "../../api";
-import { CostHint } from "../../components/CostHint";
+import { CostHint, usePaintsByItself } from "../../components/CostHint";
 import { FigurineArt, GIFT_NAME_KEYS, GiftArt } from "../../components/GiftArt";
 import {
   figurinePaintTarget,
@@ -63,8 +63,9 @@ interface FigurinePaintProps {
 
 /**
  * A bought figurine's paint, in the Shop and the Wardrobe: "Painting…" while it paints; Paint (or Try again) with its
- * cost while it waits for a tap, failed, was stopped, or was bought before the story had an image connection; nothing
- * once painted. When the button leaves, focus goes to its slot's Play the scene.
+ * cost while it waits for a tap, failed, was stopped, or was bought before the story had an image connection, held in
+ * place (aria-disabled) while its tap runs, as an item card's; nothing once painted. When the button leaves, focus goes
+ * to its slot's Play the scene.
  */
 export function FigurinePaint({ runKey, view, li, name, picture, actions }: FigurinePaintProps) {
   const { t } = useTranslation();
@@ -73,9 +74,9 @@ export function FigurinePaint({ runKey, view, li, name, picture, actions }: Figu
   const busy = actions.busy.has(target.id);
   const { art } = picture;
   const painting = busy || art?.state === "pending";
-  const offered = !painting && imagesOn(view) && (!art || paintWaits(art));
+  const offered = imagesOn(view) && (!art || paintWaits(art));
   const retry = art?.state === "failed" || art?.state === "stopped";
-  const onFocus = useRefocus(`${painting}|${offered}`, () =>
+  const onFocus = useRefocus(`${offered}`, () =>
     rootRef.current?.closest(".of-shop-slot")?.querySelector<HTMLElement>(".of-shop-buy"),
   );
   const error = actions.errors[target.id];
@@ -151,6 +152,7 @@ export function ShopPanel({ runKey, view, headingId, unanswered, onOpenStory, ac
   const { locale } = useOtomeProps().localization;
   const number = new Intl.NumberFormat(locale);
   const shop = useShop(runKey);
+  const paintsByItself = usePaintsByItself(view.world.images);
   const [buying, setBuying] = useState<string | null>(null);
   const [error, setError] = useState<{ purchase: Purchase; text: string; retry: boolean } | null>(null);
   const [bought, setBought] = useState<string | null>(null);
@@ -242,7 +244,10 @@ export function ShopPanel({ runKey, view, headingId, unanswered, onOpenStory, ac
     </span>
   );
 
-  /** A Buy button; short of Starlight, it stays focusable and says how much is missing. A figurine's paints 1 image. */
+  /**
+   * A Buy button; short of Starlight, it stays focusable and says how much is missing. A figurine's paints 1 image, on a
+   * tap of Paint when Ask before painting or prompt review holds it (S/art/figurine.ts).
+   */
   const buyButton = (purchase: Purchase, price: number) => {
     const id = purchaseId(purchase);
     const short = Math.max(0, price - data.starlight);
@@ -268,7 +273,7 @@ export function ShopPanel({ runKey, view, headingId, unanswered, onOpenStory, ac
           </span>
         ) : null}
         {"figurine" in purchase && imagesOn(view) ? (
-          <CostHint images={1} note={view.world.images.ask ? t("ui.otomeForge.wish.costAskNote") : undefined} />
+          <CostHint images={1} note={paintsByItself ? undefined : t("ui.otomeForge.shop.paintHeldNote")} />
         ) : null}
       </>
     );
