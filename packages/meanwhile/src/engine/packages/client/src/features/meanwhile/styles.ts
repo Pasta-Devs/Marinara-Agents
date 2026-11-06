@@ -105,7 +105,7 @@ export const MEANWHILE_STYLES = `
 .mw-details summary { list-style: none; cursor: pointer; }
 .mw-details summary::-webkit-details-marker { display: none; }
 .mw-details[open] summary { margin-bottom: 0.5rem; }
-.mw-scrim { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-end; justify-content: center; background: rgba(0, 0, 0, 0.55); }
+.mw-scrim { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-end; justify-content: center; background: color-mix(in srgb, var(--background) 70%, transparent); }
 .mw-sheet { width: 100%; max-width: 32rem; max-height: 85dvh; overflow-y: auto; display: grid; gap: 0.75rem; padding: 1rem; border: 1px solid var(--border); border-radius: 1.25rem 1.25rem 0 0; background: var(--card); color: var(--foreground); box-sizing: border-box; }
 .mw-sheet:focus { outline: none; }
 .mw-setup { position: fixed; inset: 0; z-index: 60; display: flex; justify-content: center; background: var(--background); }
@@ -151,7 +151,7 @@ export const MEANWHILE_STYLES = `
 .mw-details summary.mw-sh { min-height: 2.75rem; display: flex; align-items: center; }
 .mw-details .mw-field { margin-top: 0.5rem; }
 @media (min-width: 640px) { .mw-choices { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (min-width: 900px) { .mw-setup { align-items: center; background: rgba(0, 0, 0, 0.55); } .mw-setup-box { height: auto; max-height: 90dvh; border-radius: 1.25rem; border: 1px solid var(--border); overflow: hidden; background: var(--card); } }
+@media (min-width: 900px) { .mw-setup { align-items: center; background: color-mix(in srgb, var(--background) 70%, transparent); } .mw-setup-box { height: auto; max-height: 90dvh; border-radius: 1.25rem; border: 1px solid var(--border); overflow: hidden; background: var(--card); } }
 .mw-widget { display: grid; gap: 0.5rem; }
 .mw-hook { display: flex; align-items: flex-start; gap: 0.6rem; width: 100%; text-align: start; overflow-wrap: anywhere; font-weight: 400; justify-content: flex-start; }
 .mw-hook > span:last-child { display: grid; gap: 0.1rem; min-width: 0; }

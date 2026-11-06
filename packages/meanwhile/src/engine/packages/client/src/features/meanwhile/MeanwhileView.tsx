@@ -1297,6 +1297,7 @@ export function MeanwhileView({ openChat }: { openChat?: OpenChat }) {
     const saved = recall(STORE_TAB);
     return (TABS as readonly string[]).includes(saved ?? "") ? (saved as Tab) : "today";
   });
+  const [notice, setNotice] = useState("");
   const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
   const wide = useWide();
   const queryClient = useQueryClient();
@@ -1322,8 +1323,9 @@ export function MeanwhileView({ openChat }: { openChat?: OpenChat }) {
     setTabState(next);
     remember(STORE_TAB, next);
   };
-  const done = (id?: string) => {
+  const done = (id?: string, note?: string) => {
     if (id) choose(id);
+    setNotice(note ?? "");
     setEditing(null);
   };
 
@@ -1351,6 +1353,11 @@ export function MeanwhileView({ openChat }: { openChat?: OpenChat }) {
           <Icon name="plus" />
         </button>
       </div>
+      {notice ? (
+        <span role="status" className="mw-warn">
+          {notice}
+        </span>
+      ) : null}
       {circles.isError ? (
         <span role="alert" className="mw-warn">
           {COPY.loadFailed} {errorText(circles.error)}

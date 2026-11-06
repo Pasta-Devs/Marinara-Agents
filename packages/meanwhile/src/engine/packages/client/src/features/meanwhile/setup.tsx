@@ -83,6 +83,7 @@ const S = {
   remove: "Delete Circle",
   confirmRemove: "Delete this Circle? This cannot be undone.",
   discard: "Throw away your changes?",
+  speedFailed: "The Circle is made, but its speed could not be set. Set it in Edit.",
 };
 
 const BIG_KINDS = ["death", "breakup", "pregnancy", "moving away", "job loss", "serious injury"];
@@ -107,8 +108,8 @@ function draftOf(circle: Circle | null): Draft {
     connectionId: circle?.connectionId ?? "",
     timezone: circle?.clock.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
     allowedKinds: circle?.allowedKinds ?? [],
-    // A new Circle asks first: big events are dealt and wait for the user.
-    bigKindsAllowed: circle ? circle.bigKindsAllowed : BIG_KINDS,
+    // Big events are off for a new Circle; "Ask me first" and "Let them happen" are opt-in.
+    bigKindsAllowed: circle?.bigKindsAllowed ?? [],
     bigAuto: circle?.bigAuto ?? false,
     budgetCallsPerDay: circle?.budgetCallsPerDay ?? 12,
   };
@@ -259,7 +260,13 @@ function ClockControls({ circle, onChanged }: { circle: Circle; onChanged: () =>
   );
 }
 
-export function CircleSetup({ circle, onDone }: { circle: Circle | null; onDone: (id?: string) => void }) {
+export function CircleSetup({
+  circle,
+  onDone,
+}: {
+  circle: Circle | null;
+  onDone: (id?: string, notice?: string) => void;
+}) {
   const editing = circle !== null;
   const queryClient = useQueryClient();
   const characters = useQuery({ queryKey: ["meanwhile", "characters"], queryFn: listCharacters });
@@ -301,12 +308,18 @@ export function CircleSetup({ circle, onDone }: { circle: Circle | null; onDone:
       const fields = { ...draft, name: draft.name.trim(), sharedWorld: shared };
       if (circle) return updateCircle(circle.id, fields);
       const made = await createCircle(fields);
-      if (speed !== 1) await setCircleSpeed(made.id, speed);
-      return made;
+      // The Circle exists now. A speed failure must not leave the form open for a second create.
+      const speedFailed =
+        speed !== 1 &&
+        (await setCircleSpeed(made.id, speed).then(
+          () => false,
+          () => true,
+        ));
+      return { ...made, speedFailed };
     },
     onSuccess: async (made) => {
       await queryClient.invalidateQueries({ queryKey: ["meanwhile"] });
-      onDone(made.id);
+      onDone(made.id, "speedFailed" in made && made.speedFailed ? S.speedFailed : undefined);
     },
   });
   const remove = useMutation({
