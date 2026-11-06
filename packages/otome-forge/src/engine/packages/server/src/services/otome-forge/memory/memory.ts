@@ -7,10 +7,11 @@
 // - Sources come from S/memory/sources.ts. Every chapter is summarized and folded into the shared overview
 //   (S/story/canon.ts: main, route and repair chapters are the kit's `chapter`, dates and Character Stories its
 //   `character-story`). A love interest's own source (audience [li]) reaches a prompt beyond the overview, as a recall
-//   or recent canon, only for that love interest's own reader or a scene whose cast includes them. A `chat` (a phone
-//   session, a Snapshot, a Read Him set, a Claw round) stays out of the overview. Recall always says who is present: a
-//   call that names neither `cast` nor `reader` recalls as a scene with nobody in it, so no private source can reach it
-//   by omission. Care data is never a source.
+//   or recent canon, only for that love interest's own reader or a scene whose cast includes them (but the last
+//   Character Story in the storyline chapters' prompts, below). A `chat` (a phone session, a Snapshot, a Read Him
+//   set, a Claw round) stays out of the overview. Recall always says who is present: a call that names neither `cast`
+//   nor `reader` recalls as a scene with nobody in it, so no private source can reach it by omission. Care data is
+//   never a source.
 // - Recall hands no recent canon to a story prompt: every story prompt reads the saved timeline and summaries itself
 //   (S/memory/timeline.ts savedStory), in every phase, and sends each chapter the timeline does not cover by its
 //   summary, or in full while it has none (S/story/canon.ts recallText). From recall it takes the recall pool, the
@@ -59,7 +60,11 @@
 // - A Character Story, Moment or first-wear beat (also the kit's `character-story`, a `story-<itemId>` chapter) joins
 //   the timeline in story order, as a route chapter does, titled and summarized as private to its love interest (the
 //   maintainer's, 2026-11-03: love interests must know what happened in them; as recalls they were often left out).
-//   The Home note, Read Him and Read Me carry no timeline, so they ask for them as recalls too (`ownStories`).
+//   The Home note, Read Him and Read Me carry no timeline, so they ask for them as recalls too (`ownStories`). The
+//   storyline chapters' plans and scenes also get the last one beside the timeline, whoever is in them, by its summary
+//   or in full while it has none, under a heading that says it is private between the protagonist and its love
+//   interest (#2126, S/story/canon.ts recallText `lastStory`): one led by another love interest no longer waits for
+//   its summary to be folded, and no longer contradicts it.
 //   ponytail: a run whose memory waits for Retry (a failed summary) when it moves to a new overview form sends its
 //   summaries as recent canon, the oldest giving way, until Retry rebuilds it: the kit holds every failure for
 //   Retry. The upgrade path is a form change that queues its rebuild whatever the saved status.
