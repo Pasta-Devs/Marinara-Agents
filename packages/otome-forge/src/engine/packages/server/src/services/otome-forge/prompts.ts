@@ -1661,7 +1661,7 @@ function thoughtsLines(player: Pick<Player, "name">, text: string | undefined, u
       `After what happened lately, ${name} is thinking, feeling or planning this:`,
       `"${thoughts}"`,
       use === "plan"
-        ? `Give these thoughts a real place in this chapter where the story allows, in its own way: something ${name} sets out to look into, something they can't let go of, a wish such as being held.`
+        ? `Give these thoughts a real place in this chapter where the story allows, in its own way: what ${name} means to do, they set out to do; what weighs on them shows; what they wish for (to be held, say) the story can answer.`
         : `Where this scene touches them, let them colour ${name}'s thought lines, words and choices; never force them in.`,
       `They never undo or contradict what was already played, and they are not events: nothing in them has happened unless the story so far shows it. They are ${name}'s private inner thoughts: a love interest knows only what ${name} says or does on the page.`,
     ].join("\n"),
