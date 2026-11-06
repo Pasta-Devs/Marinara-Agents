@@ -53,13 +53,18 @@ export const FigurineReplySchema = z.object({ svg: z.string() });
 export type FigurineReply = z.infer<typeof FigurineReplySchema>;
 
 /**
- * The reply as a figurine to keep, or why it is refused. It must name its own box: without one the allow-list keeps
- * the plush's square 0 0 64 64, which would cut a figure drawn on 0 0 64 96 off at the knees.
+ * The reply as a figurine to keep, or why it is refused. Its box is checked as the allow-list kept it: a box missing or
+ * malformed there becomes the plush's square 0 0 64 64, which would cut a figure drawn on 0 0 64 96 off at the knees,
+ * so only a tall 2:3 box is kept.
  */
 export function normalizeFigurineReply(reply: FigurineReply, at: string): FigurineArt | string {
-  if (!/\bviewBox\s*=/u.test(reply.svg)) return 'svg needs its viewBox, "0 0 64 96"';
   const clean = sanitizePlushSvg(reply.svg);
-  return "svg" in clean ? { svg: clean.svg, at } : clean.error;
+  if (!("svg" in clean)) return clean.error;
+  const box = /^<svg [^>]*\bviewBox="([^"]+)"/u.exec(clean.svg)?.[1]?.split(" ").map(Number) ?? [];
+  const [width = 0, height = 0] = box.slice(2);
+  if (!(width > 0 && height > 0 && Math.abs(width / height - 2 / 3) < 0.01))
+    return 'svg needs its viewBox, "0 0 64 96"';
+  return { svg: clean.svg, at };
 }
 
 export interface PlushDeps extends GenerationDeps {

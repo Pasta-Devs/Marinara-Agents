@@ -494,3 +494,18 @@ test("a figurine scene's key names its love interest; no other chapter key does"
     assert.equal(figurineLiOf(key), null, key);
   }
 });
+
+test("a figurine is kept only with a tall 2:3 box, as the allow-list keeps it", () => {
+  assert.ok(typeof normalizeFigurineReply({ svg: FIGURE }, "t") !== "string", "0 0 64 96 is kept");
+  const box = (viewBox: string) => FIGURE.replace(' viewBox="0 0 64 96"', viewBox);
+  assert.ok(typeof normalizeFigurineReply({ svg: box(' viewBox="0 0 128 192"') }, "t") !== "string", "any 2:3 box");
+  for (const bad of [
+    "",
+    ' viewBox="0 0 64 x96"',
+    ' viewBox="0 0 64 64"',
+    ' viewBox="0 0 100 100"',
+    ' viewBox="0 0 64"',
+  ]) {
+    assert.equal(normalizeFigurineReply({ svg: box(bad) }, "t"), 'svg needs its viewBox, "0 0 64 96"', bad || "none");
+  }
+});
