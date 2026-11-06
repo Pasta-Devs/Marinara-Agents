@@ -1,5 +1,9 @@
 # Calls release notes
 
+## 1.1.8 — 2026-11-06
+
+- A call video that has just finished generating no longer shows as missing. Before, a call's video tile could show the clip as missing right after it finished, and keep showing that until the clips were checked again. (#2132)
+
 ## 1.1.7 — 2026-10-20
 
 - When a character changes their status or activity during a call, the change now goes on their character card, as it does after a chat reply, so it shows in every chat and lasts for the time they gave. Before, the call changed only this chat's copy of their schedule, and the change was soon lost. (#1498)

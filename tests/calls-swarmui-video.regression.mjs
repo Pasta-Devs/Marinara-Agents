@@ -3,15 +3,23 @@ import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { registerHooks } from "node:module";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const server = join(root, "sources/engine/packages/server/src");
+const engine = join(root, "sources/engine");
+const callsEngine = join(root, "packages/conversation-calls/src/engine");
+const server = join(engine, "packages/server/src");
+const serviceUrl = pathToFileURL(
+  join(callsEngine, "packages/server/src/services/conversation/call-character-videos.service.ts"),
+).href;
+const fsGate = join(server, "services/conversation/__fs-promises-gate.js");
 const storage = await mkdtemp(join(tmpdir(), "calls-swarm-"));
 const requests = [];
 const mp4 = Buffer.from("000000186674797069736f6d0000020069736f6d69736f32", "hex");
 let output = `data:video/mp4;base64,${mp4.toString("base64")}`;
+let providerGate;
+let atProvider;
 globalThis.__callsSwarmFetch = async (url, options) => {
   assert.equal(options.policy.allowLocal, true);
   assert.equal(options.policy.allowLoopback, true);
@@ -23,6 +31,10 @@ globalThis.__callsSwarmFetch = async (url, options) => {
   if (String(url).endsWith("/Output/clip.mp4")) return new Response(mp4, { headers: { "Content-Type": "video/mp4" } });
   if (String(url).endsWith("/API/GetNewSession")) return Response.json({ session_id: "fixture-session" });
   assert.ok(String(url).endsWith("/API/GenerateText2Image"));
+  if (providerGate) {
+    atProvider();
+    await providerGate;
+  }
   return Response.json({ images: [output] });
 };
 
@@ -33,7 +45,7 @@ const mocks = new Map([
   [join(server, "utils/id-generator.js"), 'export { randomUUID as newId } from "node:crypto";'],
   [
     join(server, "lib/logger.js"),
-    "export const logger = {debug(){},info(){},warn(){},error(){}}; export function logDebugOverride(){}",
+    "export const logger = {debug(){},info(m){ if (String(m).includes('Finished call video generation')) globalThis.__callsJobFinished = true; },warn(){},error(){}}; export function logDebugOverride(){}",
   ],
   [join(server, "config/runtime-config.js"), "export function isDebugAgentsEnabled(){return false}"],
   [
@@ -56,14 +68,35 @@ const mocks = new Map([
     export async function loadPrompt(_storage, _definition, values){return JSON.stringify(values)}
   `,
   ],
+  // The service's own fs: a test can hold one manifest read open after its data was read.
+  [
+    fsGate,
+    `
+    import * as fs from "node:fs/promises";
+    export * from "node:fs/promises";
+    export async function readFile(path, ...rest) {
+      const data = await fs.readFile(path, ...rest);
+      const hook = globalThis.__afterManifestRead;
+      if (hook && String(path).endsWith("manifest.json")) { globalThis.__afterManifestRead = undefined; await hook(); }
+      return data;
+    }
+  `,
+  ],
 ]);
 const hooks = registerHooks({
   resolve(specifier, context, next) {
+    if (specifier === "node:fs/promises" && context.parentURL === serviceUrl) {
+      return { url: pathToFileURL(fsGate).href, shortCircuit: true };
+    }
     if (specifier === "@marinara-engine/shared") {
       return { url: pathToFileURL(join(root, "sources/package-shared.ts")).href, shortCircuit: true };
     }
     if (specifier.startsWith(".") && context.parentURL) {
-      const path = fileURLToPath(new URL(specifier, context.parentURL));
+      let path = fileURLToPath(new URL(specifier, context.parentURL));
+      // As in the build, Calls' own files sit over sources/engine: what Calls does not own resolves there.
+      if (path.startsWith(`${callsEngine}${sep}`) && !existsSync(path) && !existsSync(path.replace(/\.js$/u, ".ts"))) {
+        path = join(engine, relative(callsEngine, path));
+      }
       if (mocks.has(path)) return { url: pathToFileURL(path).href, shortCircuit: true };
       if (path.endsWith(".js") && !existsSync(path) && existsSync(path.replace(/\.js$/u, ".ts"))) {
         return { url: pathToFileURL(path.replace(/\.js$/u, ".ts")).href, shortCircuit: true };
@@ -78,8 +111,7 @@ const hooks = registerHooks({
 });
 try {
   const { generateVideo } = await import("../sources/engine/packages/server/src/services/video/video-generation.ts");
-  const calls =
-    await import("../sources/engine/packages/server/src/services/conversation/call-character-videos.service.ts");
+  const calls = await import(serviceUrl);
   const workflow = JSON.stringify({
     node: { inputs: { text: "%prompt%", fps: "%fps%", frames: "%length%", width: "%width%", lora: "%LORA_1%" } },
   });
@@ -177,7 +209,24 @@ try {
       }),
     },
   };
-  await calls.startConversationCallCharacterVideoGeneration(input);
+  const reached = new Promise((resolve) => (atProvider = resolve));
+  let releaseProvider;
+  providerGate = new Promise((resolve) => (releaseProvider = resolve));
+  assert.equal((await calls.startConversationCallCharacterVideoGeneration(input)).generating, true);
+  await reached;
+  // Hold one manifest read open while the job finishes (#2132): the read must not report the finished clip missing.
+  globalThis.__afterManifestRead = async () => {
+    releaseProvider();
+    const until = Date.now() + 500;
+    while (!globalThis.__callsJobFinished && Date.now() < until) await new Promise((resolve) => setTimeout(resolve, 1));
+    await new Promise((resolve) => setImmediate(resolve));
+  };
+  const overlapped = await calls.getConversationCallCharacterVideoManifest(input);
+  const overlappedIdle = overlapped.clips.find((clip) => clip.kind === "idle")?.status;
+  assert.ok(
+    overlapped.generating || overlappedIdle === "ready",
+    `finished generation reported idle '${overlappedIdle}'`,
+  );
   let manifest;
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
@@ -197,5 +246,7 @@ try {
 } finally {
   hooks.deregister();
   delete globalThis.__callsSwarmFetch;
+  delete globalThis.__callsJobFinished;
+  delete globalThis.__afterManifestRead;
   await rm(storage, { recursive: true, force: true });
 }
