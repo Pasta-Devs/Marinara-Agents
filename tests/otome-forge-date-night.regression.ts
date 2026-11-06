@@ -12,8 +12,9 @@
 // once; and the keepsake paints only on request, once, through the image client.
 // #2128: a gift from the Shop is spent once, by the write that saves a new date (never by a resumed one, a refused one
 // or a failed plan), refused before anything is asked of the model when she has none (or for the aphrodisiac under
-// SFW Heat), given in the date's first scene as P26 plans it and each scene's own task says, remembered on the
-// relationship ledger, and pays its own affection once, uncapped; a date without one keeps every prompt as it was.
+// SFW Heat), given in the date's first scene as P26 plans it and each scene's own task says, never written on the
+// relationship ledger (where Home, Read Him and Read Me would read it), and pays its own affection once, uncapped; a
+// date without one keeps every prompt as it was.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
@@ -1107,10 +1108,11 @@ test("a gift is spent once, given in the date's first scene, remembered, and pay
       `node ${node}: never in the cached story context or instructions`,
     );
   }
-  // Saved with the date's last scene: a line on what moved between them, private to Kai (a date's key names no owner).
+  // No ledger line: the date's played text carries the gift into memory, and a ledger line, as Kai's newest, would
+  // reach the Home note, Read Him and Read Me.
   assert.deepEqual(
     (await t.state()).ledgers.relationship.filter((row) => row.key === started.date.key),
-    [{ key: "date-1", li: KAI, line: "The protagonist gave Kai a bouquet of flowers on a date." }],
+    [],
   );
 
   const done = await finish(t, started.date.key);
@@ -1201,7 +1203,10 @@ test("the aphrodisiac is refused under SFW Heat; under Fade or Explicit desire b
     );
     // The gift adds no limit of its own (no consent line, softening or "non-graphic"): the contract's Heat decides.
     assert.doesNotMatch(rule, /consent|graphic|tasteful|fade|tease|imply|implied/i);
-    assert.ok(plan.indexOf("CONTENT CONTRACT") > plan.indexOf(rule), `${heat}: the contract follows it`);
+    assert.ok(
+      plan.indexOf("\nCONTENT CONTRACT", plan.indexOf(rule) + rule.length) > 0,
+      `${heat}: the contract's own block follows it`,
+    );
     await playDate(t, started.date.key, [1, 1, 1]);
     const first = beatCall(t, 0).messages.at(-1)!.content;
     const later = beatCall(t, 2).messages.at(-1)!.content;

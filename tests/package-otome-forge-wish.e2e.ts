@@ -1027,7 +1027,8 @@ test("Otome Hearth Shop: a gift is bought once per tap, a figurine offers its sc
   const figurines = root.getByRole("list", { name: "Figurines" });
   await figurines.getByRole("button", { name: "Buy Ilvar Thorne figurine for 5,000 Starlight" }).click();
   await expect(starlight(root)).toHaveText(/^Starlight\s*300$/u);
-  await expect(figurines.getByRole("button", { name: "Play the scene with Ilvar Thorne" })).toBeVisible();
+  // The Buy button it was bought from is gone: keyboard focus moves to the scene it unlocked, not to the page.
+  await expect(figurines.getByRole("button", { name: "Play the scene with Ilvar Thorne" })).toBeFocused();
   await expect(root.getByText("Ilvar Thorne figurine is yours.")).toBeVisible();
   const cassian = figurines.getByRole("button", { name: "Buy Cassian figurine for 5,000 Starlight" });
   await expect(cassian).toHaveAttribute("aria-disabled", "true");

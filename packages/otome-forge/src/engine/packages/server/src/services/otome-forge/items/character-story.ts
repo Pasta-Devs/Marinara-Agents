@@ -171,7 +171,8 @@ export function singleStoryChapter(
 
 /**
  * #2128: the one-node scene a figurine bought in the Shop unlocks, built with no model call: funny and cute, the love
- * interest finding out the protagonist bought a figurine of them. Its title is English, as its guide is.
+ * interest finding out the protagonist bought a figurine of them. Its title is English, as its guide is: the story's own,
+ * for prompts and memory. The player reads it in their language (C/screens/reader/ReaderControls.tsx chapterTitle).
  */
 export function figurineStoryChapter(unit: Pick<Unit, "id" | "name">, at: string): Chapter {
   const { name } = unit;

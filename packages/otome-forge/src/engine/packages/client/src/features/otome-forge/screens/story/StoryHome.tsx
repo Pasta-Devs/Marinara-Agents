@@ -56,7 +56,7 @@ import type {
 } from "../../shared/api-types";
 import { stageRow, type StageName } from "../../shared/arcs";
 import { PRESTIGE_POINTS_PER_STORY } from "../../shared/economy";
-import { chapterEyebrowKey } from "../reader/ReaderControls";
+import { chapterEyebrowKey, chapterTitle } from "../reader/ReaderControls";
 
 const MAX_LEVEL = 10;
 
@@ -277,7 +277,7 @@ function ContinueCard({
         <div className="of-chapter-heading">
           <p className="of-chapter-eyebrow">{eyebrow(t, entry, lead)}</p>
           <h2 id="of-story-continue" className="of-chapter-title">
-            {entry.title || t("ui.otomeForge.story.untitled")}
+            {chapterTitle(t, entry, view.lis)}
           </h2>
         </div>
       </div>
@@ -518,7 +518,7 @@ function ChapterList({
       <ol className="of-chapters">
         {chapters.map((entry, index) => {
           const lead = view.lis.find((li) => li.id === (entry.li ?? entry.lead)) ?? null;
-          const title = entry.title || t("ui.otomeForge.story.untitled");
+          const title = chapterTitle(t, entry, view.lis);
           const action =
             entry.state === "done"
               ? { key: "ui.otomeForge.story.replay", Icon: Repeat, primary: false }

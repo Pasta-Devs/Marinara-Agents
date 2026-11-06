@@ -25,9 +25,9 @@
 //   none left, 409 `locked` for the aphrodisiac under SFW), so a refusal costs nothing, and spent by the same write
 //   that registers the new date (giveGift): a resumed date spends nothing, and a refusal there removes the plan just
 //   saved. The plan keeps it (`chapter.date.gift`): P26 gives one scene (SH/dates.ts GIFT_BEAT) the giving, the
-//   scenes' tasks say it is given now or was given earlier tonight (S/prompts.ts dateFramingText), and the plan's
-//   ledger line on it (what moved between them) is saved with the date's last scene, private to them (S/prompts.ts
-//   knownTo).
+//   scenes' tasks say it is given now or was given earlier tonight (S/prompts.ts dateFramingText). Memory keeps it as
+//   the date's played text does (a date is its love interest's own memory source); it writes no ledger line, which as
+//   their newest one would reach surfaces kept SFW (the Home note, Read Him, Read Me).
 // - Finish (POST /dates/:key/finish): once the last scene is read, the total over the first-play picks gives the
 //   outcome (SH/dates.ts dateOutcome). One revision-checked write of `${R}:state` counts it exactly once: 120 Starlight
 //   and 100 affection within the day's activity caps, whatever the outcome (failure pays; caps limit rewards, never
@@ -86,12 +86,7 @@ import {
   STARLIGHT_EARNINGS,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import { sameName } from "../../../../../client/src/features/otome-forge/shared/faces.js";
-import {
-  GIFT_AFFECTION,
-  GIFT_PROMPT_NAMES,
-  giftsFor,
-  type GiftId,
-} from "../../../../../client/src/features/otome-forge/shared/shop.js";
+import { GIFT_AFFECTION, giftsFor, type GiftId } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import { cgReferences, cgSubjects } from "../art/cg.js";
 import { galleryRef, worldStyle, type ImageClient } from "../art/image-client.js";
 import { imagesOf, type ArtDeps } from "../art/paint.js";
@@ -521,12 +516,9 @@ export async function startDate(
         cast: [input.li],
         ...(i === 0 && plan.placeName ? { place: plan.placeName } : {}),
       })),
-      // A stumble's seed is planted for him when the date's last scene is read (S/state/rewards.ts saveLedger), and a
-      // gift's line saved then.
+      // A stumble's seed is planted for him when the date's last scene is read (S/state/rewards.ts saveLedger).
       ledger: {
-        relationship: gift
-          ? [{ li: input.li, line: `The protagonist gave ${unit.name} ${GIFT_PROMPT_NAMES[gift]} on a date.` }]
-          : [],
+        relationship: [],
         conflict: plan.seed ? [{ id: `c-${key}-1`, li: input.li, type: plan.seed.type, action: "plant" }] : [],
         offscreen: [],
       },

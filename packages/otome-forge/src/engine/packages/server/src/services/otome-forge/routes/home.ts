@@ -12,7 +12,8 @@
 // POST /runs/:run/home/note {li}       → {note}: today's note, written by the day's first call and read back after
 // GET  /runs/:run/lis/:li/lines        → LinesView: his pre-written lines (cold only during a rupture)
 // Reading Home queues what it is missing in the background and never waits for it: each love interest's line pack
-// (the first visit backfills every one), and the cut-outs of his worn look and its ready faces. A note may fail with
+// (the first visit backfills every one), the cut-outs of his worn look and its ready faces, and the drawing of a
+// figurine bought but not drawn yet (#2128: one whose drawing failed, or was lost to a restart, before it was bought). A note may fail with
 // 503 `no-connection`, 422 `declined` (nothing is saved) or 502 `bad-format`.
 import { forgeLocalAvatarPath } from "@forge-kit/image-avatar-references.mjs";
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
@@ -31,6 +32,7 @@ import { wornLookUrl } from "../../../../../client/src/features/otome-forge/shar
 import { cutoutView, queueCutouts, type CutoutClient } from "../art/cutout.js";
 import { plushSvgUrl } from "../art/plush-svg.js";
 import { ensureLinePacks, linesView, needsLines } from "../home/lines.js";
+import { ensureFigurineArt } from "../minigames/plush.js";
 import { noteFits, readNote, serveNote, toNoteView, todayKey } from "../home/note.js";
 import { readItems } from "../items/open.js";
 import { albumPhotos, listPhotos } from "../minigames/photo-shoot.js";
@@ -185,6 +187,16 @@ export function registerHomeRoutes(router: OtomeRouter, deps: HomeRouteDeps): vo
       void ensureLinePacks(deps, runId, order, { debugMode: debugModeOf(request) }).catch(
         warn("Line packs not queued"),
       );
+      // A bought figurine stands on Home once drawn: one not drawn yet is drawn now, within its cool-down after a
+      // failure (S/minigames/plush.ts).
+      const undrawn = run.units
+        .filter((entry) => run.state.owned.figurines[entry.id] && !entry.figurineArt)
+        .map((entry) => entry.id);
+      if (undrawn.length) {
+        void ensureFigurineArt(deps, runId, undrawn, { debugMode: debugModeOf(request) }).catch(
+          warn("Figurines not queued"),
+        );
+      }
 
       const view: HomeView = {
         li,

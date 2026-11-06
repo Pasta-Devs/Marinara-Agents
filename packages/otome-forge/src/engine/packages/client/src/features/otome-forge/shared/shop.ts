@@ -55,8 +55,14 @@ export function giftsFor(content: Pick<ContentSettings, "heat">): GiftId[] {
   return GIFT_IDS.filter((gift) => gift !== "aphrodisiac" || intimacyOpen(content));
 }
 
+const FIGURINE_SCENE = "story-figurine-";
+
 /** The chapter key of a love interest's figurine scene: a Character Story (`story-`), with no banner item behind it. */
-export const figurineSceneKey = (li: LiId) => `story-figurine-${li}`;
+export const figurineSceneKey = (li: LiId) => `${FIGURINE_SCENE}${li}`;
+
+/** The love interest whose figurine scene a chapter key is, or null for any other chapter. */
+export const figurineLiOf = (key: string): LiId | null =>
+  key.startsWith(FIGURINE_SCENE) ? key.slice(FIGURINE_SCENE.length) || null : null;
 
 // ── Wire shapes ──
 

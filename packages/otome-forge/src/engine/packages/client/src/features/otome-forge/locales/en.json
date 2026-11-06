@@ -1413,6 +1413,7 @@
   "ui.otomeForge.shop.ownedCount_other": "{{name}}: {{count}} owned",
   "ui.otomeForge.shop.playScene": "Play the scene",
   "ui.otomeForge.shop.playSceneLabel": "Play the scene with {{name}}",
+  "ui.otomeForge.shop.sceneTitle": "{{name}} in Miniature",
   "ui.otomeForge.story.affectionHint": "Hostile choices, and siding with someone else in an argument, can lower affection points, but never a level you've reached. Leading a chapter brings the most.",
   "ui.otomeForge.story.affectionProgress": "{{name}}: affection progress",
   "ui.otomeForge.story.affectionProgressCount": "{{current}} / {{required}}",

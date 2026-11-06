@@ -7,14 +7,15 @@
 // this panel reads it again while one is `drawing`); POST .../shop/gifts {gift, requestId} and POST
 // .../shop/figurines/:li {requestId} → ShopBuyResult. A purchase carries a request id kept until it is answered, so
 // Try again sends the same one, and one that landed while its answer was lost is not charged twice. One purchase at a
-// time. Buying never calls a model.
+// time. Buying never calls a model. A purchase that takes away the control it was made from (a figurine's Buy becomes
+// Play the scene; Try again goes with its notice) hands keyboard focus to that item's own button, else the heading.
 import { useRef, useState, type CSSProperties, type MutableRefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookOpen, Check, Heart, RotateCcw, ShoppingBag, Sparkle } from "lucide-react";
 import { otomeErrorCode, useOtomeApi } from "../../api";
 import { FigurineArt, GIFT_NAME_KEYS, GiftArt } from "../../components/GiftArt";
-import { invalidateCollection, newRequestId, shopQueryKey } from "../../hooks/use-items";
+import { invalidateCollection, newRequestId, shopQueryKey, useRefocus } from "../../hooks/use-items";
 import { runPath } from "../../hooks/use-reader";
 import { patchRun } from "../../hooks/use-run";
 import { accentOf } from "../../lib/accent";
@@ -70,6 +71,23 @@ export function ShopPanel({ runKey, view, headingId, unanswered, onOpenStory }: 
   const [error, setError] = useState<{ purchase: Purchase; text: string; retry: boolean } | null>(null);
   const [bought, setBought] = useState<string | null>(null);
   const lock = useRef(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const last = useRef<Purchase | null>(null);
+  const onFocus = useRefocus(
+    `${shop.data?.figurines.flatMap((entry) => (entry.owned ? [entry.li] : [])).join(",") ?? ""}|${error ? "error" : ""}`,
+    () => {
+      const done = last.current;
+      const slot = !done
+        ? ""
+        : "gift" in done
+          ? `[data-gift="${done.gift}"]`
+          : `[data-li="${CSS.escape(done.figurine)}"]`;
+      return (
+        (slot && rootRef.current?.querySelector<HTMLElement>(`${slot} .of-shop-buy`)) ||
+        document.getElementById(headingId)
+      );
+    },
+  );
 
   if (!shop.data) {
     return shop.isError ? (
@@ -99,6 +117,7 @@ export function ShopPanel({ runKey, view, headingId, unanswered, onOpenStory }: 
   const buy = async (purchase: Purchase) => {
     if (lock.current) return;
     lock.current = true;
+    last.current = purchase;
     const id = purchaseId(purchase);
     setBuying(id);
     setError(null);
@@ -170,7 +189,7 @@ export function ShopPanel({ runKey, view, headingId, unanswered, onOpenStory }: 
 
   const drawing = data.figurines.some((entry) => entry.drawing);
   return (
-    <div className="of-shop">
+    <div ref={rootRef} className="of-shop" onFocus={onFocus}>
       <section className="of-section of-glass" aria-labelledby={headingId}>
         <h2 id={headingId} className="of-section-title" tabIndex={-1}>
           <ShoppingBag size={18} strokeWidth={1.9} aria-hidden="true" />
@@ -181,7 +200,7 @@ export function ShopPanel({ runKey, view, headingId, unanswered, onOpenStory }: 
           {data.gifts.map((gift) => {
             const name = t(GIFT_NAME_KEYS[gift.id]);
             return (
-              <li key={gift.id} className="of-shop-slot">
+              <li key={gift.id} className="of-shop-slot" data-gift={gift.id}>
                 <span className="of-shop-stand">
                   <GiftArt gift={gift.id} className="of-shop-item" />
                   {gift.owned > 0 ? (
@@ -218,6 +237,7 @@ export function ShopPanel({ runKey, view, headingId, unanswered, onOpenStory }: 
                 <li
                   key={entry.li}
                   className="of-shop-slot"
+                  data-li={entry.li}
                   data-owned={entry.owned}
                   style={{ "--of-li-accent": accentOf(li ?? entry) } as CSSProperties}
                 >

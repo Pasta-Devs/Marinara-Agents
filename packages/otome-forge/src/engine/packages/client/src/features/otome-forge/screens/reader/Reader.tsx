@@ -64,7 +64,7 @@ import { ContentTagsCard } from "./ContentTagsCard";
 import { DialogueBox } from "./DialogueBox";
 import { EaseOffDialog } from "./EaseOffDialog";
 import { FACE_LABEL_KEYS, FacePlate, QuietCg } from "./FacePlate";
-import { ReaderControls } from "./ReaderControls";
+import { ReaderControls, chapterTitle } from "./ReaderControls";
 import { SpeakerPlate, useSpeakerSprite } from "./SpeakerPlate";
 import { WhoSaidWhat } from "./WhoSaidWhat";
 import { stageNameKey } from "../story/StoryHome";
@@ -388,6 +388,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
       {showUi ? (
         <ReaderControls
           chapter={chapter}
+          lis={view.lis}
           node={reader.node}
           nodeCount={reader.nodeCount}
           replay={!!reader.position?.replay && reading}
@@ -631,7 +632,7 @@ function BottomPanel(props: BottomPanelProps) {
   if (reader.finished && chapter) {
     return (
       <ChapterEnd
-        title={chapter.title}
+        title={chapterTitle(t, chapter, view.lis)}
         prologue={chapter.kind === "prologue"}
         grants={reader.chapterGrants}
         arcNews={reader.arcNews}

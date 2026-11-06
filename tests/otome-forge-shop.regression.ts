@@ -17,6 +17,7 @@ import {
   GIFT_IDS,
   GIFT_PRICES,
   GIFT_PROMPT_NAMES,
+  figurineLiOf,
   figurineSceneKey,
   giftsFor,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/shop.ts";
@@ -457,4 +458,39 @@ test("GET /shop draws each figurine once, in the background, and shows it once k
   assert.equal(t.figurineCalls().length, 5, "a kept figurine is never drawn again");
   const logged = t.logs.filter((entry) => entry.level === "debugOverride" && entry.args[0] === "figurine");
   assert.ok(logged.length >= 1, "the prompt is logged in debug mode");
+});
+
+test("Home draws a bought figurine that was never drawn, in the background, and then shows it", async () => {
+  // Kai's figurine is bought before it is ever drawn (its drawing failed, or a restart lost it): Home draws it.
+  // Home also queues each love interest's line pack: those calls get a reply that fails, so only the figurine lands.
+  const t = await shopWorld("r-shop05-eeeeee", {
+    replies: Array.from(
+      { length: 12 },
+      () => (messages: Array<{ content: string }>) => (isFigurine(messages) ? figurineReply() : "{}"),
+    ),
+  });
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+    ...state,
+    owned: { ...state.owned, figurines: { [KAI]: "2026-11-06T09:00:00.000Z" } },
+  }));
+  const before = await t.call("GET", "/runs/:run/home");
+  assert.equal(before.status, 200, JSON.stringify(before.body));
+  assert.deepEqual(before.body.figurines, [], "Home never waits for the drawing");
+  await t.settle();
+  assert.equal(t.figurineCalls().length, 1, "only the bought one is drawn");
+  assert.match(t.figurineCalls()[0]!.messages[1]!.content, /LOVE INTEREST: Kai/);
+  const after = await t.call("GET", "/runs/:run/home");
+  assert.deepEqual(
+    after.body.figurines.map((entry: { li: string }) => entry.li),
+    [KAI],
+  );
+  await t.settle();
+  assert.equal(t.figurineCalls().length, 1, "a drawn figurine is never drawn again");
+});
+
+test("a figurine scene's key names its love interest; no other chapter key does", () => {
+  assert.equal(figurineLiOf(figurineSceneKey(KAI)), KAI);
+  for (const key of ["story-memories-1-f", "main-3", "story-figurine-", "prestige-li-kai-0001-1"]) {
+    assert.equal(figurineLiOf(key), null, key);
+  }
 });
