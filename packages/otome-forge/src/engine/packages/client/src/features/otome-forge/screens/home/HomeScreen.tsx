@@ -614,13 +614,18 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenRemind }: HomeScre
           >
             <CalendarDays size={18} strokeWidth={1.9} aria-hidden="true" />
           </button>
+          {/* Opens only once Home has answered: before that, thoughts already waiting are unknown, and the window would
+              open empty and a Send would replace them unseen. */}
           <button
             type="button"
             className="of-icon-button of-glass of-glass--strong of-home-thoughts"
             aria-label={thoughtsLabel}
             aria-describedby={thoughts ? thoughtsWaitId : undefined}
+            aria-disabled={!data}
             title={thoughtsLabel}
-            onClick={() => setSheet("thoughts")}
+            onClick={() => {
+              if (data) setSheet("thoughts");
+            }}
           >
             <ThoughtBubbleIcon />
             {thoughts ? (

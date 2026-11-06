@@ -1301,6 +1301,8 @@ test("Otome Hearth Home: Your thoughts… wait for the next chapter, open to cha
   await expect(root.getByRole("article", { name: "A note from Ilvar Thorne" })).toContainText(NOTE);
   const button = root.getByRole("button", { name: "Your thoughts…", exact: true });
   await expect(button).toHaveAttribute("title", "Your thoughts…");
+  // It opens only once Home has answered, so waiting thoughts are never replaced unseen.
+  await expect(button).toHaveAttribute("aria-disabled", "false");
   await expect(button.locator(".of-tab-dot")).toHaveCount(0);
   await expect(button).not.toHaveAccessibleDescription(/./u);
 
