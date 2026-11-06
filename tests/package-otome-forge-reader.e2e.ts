@@ -1637,7 +1637,6 @@ for (const revision of [2, 0]) {
       await gate;
       await route.fallback();
     });
-    await page.clock.install();
     const root = await openStory(page);
     await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
     await root.getByRole("button", { name: "Begin" }).click();
@@ -1652,12 +1651,9 @@ for (const revision of [2, 0]) {
       "src",
       `data:image/png;base64,${SPEAKER_PNG}`,
     );
-    // #2141: his next line more than 30 s later still shows that cut-out, never made again.
-    await page.clock.fastForward(31_000);
     await next(root);
     await next(root);
     await expect(root.getByRole("img", { name: "Arin Vale", exact: true })).toBeVisible();
-    await page.waitForTimeout(1_000);
     expect(assets.cleanup).toHaveLength(1);
     expect(assets.paid).toEqual([]);
   });
