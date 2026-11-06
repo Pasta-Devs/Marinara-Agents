@@ -26,6 +26,7 @@ import { registerReadHimRoutes } from "./routes/read-him.js";
 import { registerReadMeRoutes } from "./routes/read-me.js";
 import { registerRunRoutes } from "./routes/runs.js";
 import { registerSetupRoutes } from "./routes/setup.js";
+import { registerShopRoutes } from "./routes/shop.js";
 import { registerStoryRoutes } from "./routes/story.js";
 import { registerWardrobeRoutes } from "./routes/wardrobe.js";
 import { registerWishRoutes } from "./routes/wish.js";
@@ -74,6 +75,7 @@ export async function activate({ api }: ActivationContext) {
       registerHomeRoutes(router, deps);
       registerPhoneRoutes(router, deps);
       registerWishRoutes(router, deps, { active });
+      registerShopRoutes(router, deps);
       registerItemRoutes(router, deps);
       registerWardrobeRoutes(router, deps);
       registerAlbumRoutes(router, deps);

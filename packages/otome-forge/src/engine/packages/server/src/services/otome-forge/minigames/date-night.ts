@@ -20,16 +20,26 @@
 // - The scenes are written and read through the story routes (S/story/beats.ts): each date beat has one choice whose
 //   options carry hidden scores, and the client never sees them before the date ends. A date's beats pay nothing on
 //   their own; its chapter still counts as read once its last scene is.
+// - A gift (#2128): the protagonist may bring one gift bought in the Shop (SH/shop.ts) that she still owns, the
+//   aphrodisiac only under NSFW Heat. It is refused before anything is worn or planned (checkGift: 409 `conflict` with
+//   none left, 409 `locked` for the aphrodisiac under SFW), so a refusal costs nothing, and spent by the same write
+//   that registers the new date (giveGift): a resumed date spends nothing, and a refusal there removes the plan just
+//   saved. The plan keeps it (`chapter.date.gift`): P26 gives one scene (SH/dates.ts GIFT_BEAT) the giving, the
+//   scenes' tasks say it is given now or was given earlier tonight (S/prompts.ts dateFramingText). Memory keeps it as
+//   the date's played text does (a date is its love interest's own memory source); it writes no ledger line, which as
+//   their newest one would reach surfaces kept SFW (the Home note, Read Him, Read Me).
 // - Finish (POST /dates/:key/finish): once the last scene is read, the total over the first-play picks gives the
 //   outcome (SH/dates.ts dateOutcome). One revision-checked write of `${R}:state` counts it exactly once: 120 Starlight
 //   and 100 affection within the day's activity caps, whatever the outcome (failure pays; caps limit rewards, never
-//   play), the "first date" timeline entry, and on a Make it right date whose rupture still stands, whose every scene
-//   had its choice made and whose outcome is good or great, the rupture's grievance addressed (whether it mends is the
-//   player's choices: a scene eased off before its choice decides nothing). The rupture then clears, or stands on the
-//   next rupture-severity grievance still owed, as a scene's resolve moves it, and the date mended it only when none is
-//   left. The once-only mark is the finish's own entry in `chapters[key].applied` (`${nodes}/finish`, applied through
-//   applyChoiceEffects); a Make it right finish leaves what it found beside it (`${nodes}/make-it-right-mended` or
-//   `-standing`). A replay answers with the same outcome, the same mend and no grants.
+//   play), a gift's own affection (SH/shop.ts GIFT_AFFECTION) beside it, never capped as it was paid for in
+//   Starlight (its own `gift` grant), the "first date" timeline entry, and on a Make it right date whose rupture still
+//   stands, whose every scene had its choice made and whose outcome is good or great, the rupture's grievance addressed
+//   (whether it mends is the player's choices: a scene eased off before its choice decides nothing). The rupture then
+//   clears, or stands on the next rupture-severity grievance still owed, as a scene's resolve moves it, and the date
+//   mended it only when none is left. The once-only mark is the finish's own entry in `chapters[key].applied`
+//   (`${nodes}/finish`, applied through applyChoiceEffects); a Make it right finish leaves what it found beside it
+//   (`${nodes}/make-it-right-mended` or `-standing`). A replay answers with the same outcome, the same mend and no
+//   grants.
 // - Privacy: a completed date is a `character-story` memory source with `audience: [li]` (S/story/canon.ts
 //   readStorySources), as GF's bond chapter: summarized and folded into the shared overview, titled private, while only
 //   that love interest's own readers and scenes he is in recall it in detail. It is never an Engine Scene.
@@ -52,7 +62,11 @@ import type {
   Unit,
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
-import { LIMIT_IDS, type LimitId } from "../../../../../client/src/features/otome-forge/shared/content.js";
+import {
+  LIMIT_IDS,
+  type ContentSettings,
+  type LimitId,
+} from "../../../../../client/src/features/otome-forge/shared/content.js";
 import {
   DATE_BEATS,
   STORY_PLACE,
@@ -72,6 +86,7 @@ import {
   STARLIGHT_EARNINGS,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import { sameName } from "../../../../../client/src/features/otome-forge/shared/faces.js";
+import { GIFT_AFFECTION, giftsFor, type GiftId } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import { cgReferences, cgSubjects } from "../art/cg.js";
 import { galleryRef, worldStyle, type ImageClient } from "../art/image-client.js";
 import { imagesOf, type ArtDeps } from "../art/paint.js";
@@ -306,6 +321,7 @@ function entryOf(runId: string, chapter: Chapter, state: RunState, outcome: Date
     plannedAt: chapter.plannedAt,
     completedAt: progress?.completed ?? null,
     keepsake: keepsakeView(runId, chapter.key, date.keepsake.art),
+    ...(date.gift ? { gift: date.gift } : {}),
   };
 }
 
@@ -362,6 +378,35 @@ function storyPlaceOf(world: Pick<World, "places">, input: Pick<DateStartInput, 
   return place;
 }
 
+/**
+ * `state` with one `gift` given (#2128), or the refusal: 409 `locked` for one the story's Heat does not offer (the
+ * aphrodisiac under SFW), 409 `conflict` for one she has none of. Pure, so a revision-checked write may run it again; a
+ * count left at 0 is dropped when the state is read.
+ */
+function giveGift(state: RunState, content: Pick<ContentSettings, "heat">, gift: GiftId): RunState {
+  if (!giftsFor(content).includes(gift)) {
+    throw new OtomeForgeError(409, "That gift is given only under NSFW Heat.", "locked");
+  }
+  const owned = state.owned.gifts[gift] ?? 0;
+  if (owned < 1) throw conflict("The protagonist has none of that gift left.");
+  return { ...state, owned: { ...state.owned, gifts: { ...state.owned.gifts, [gift]: owned - 1 } } };
+}
+
+/**
+ * POST /dates' first check (#2128): a gift she cannot give is refused before the route wears the looks or anything is
+ * planned. A date with them still open is resumed instead, and gives nothing, so it is never refused here.
+ */
+export async function checkGift(
+  deps: Pick<DateDeps, "store">,
+  runId: string,
+  { li, gift }: Pick<DateStartInput, "li" | "gift">,
+): Promise<void> {
+  if (!gift) return;
+  const run = await readRun(deps.store, runId);
+  if (!run) throw runNotFound();
+  if (!(await openDateWith(deps.store, runId, li))) giveGift(run.state, run.world.content, gift);
+}
+
 /** The next free `date-<n>`. */
 const nextDateKey = (chapters: readonly Chapter[]) =>
   `date-${chapters.reduce((max, chapter) => Math.max(max, Number(DATE_KEY.exec(chapter.key)?.[1] ?? 0)), 0) + 1}`;
@@ -398,6 +443,9 @@ export async function startDate(
     if (!run) throw runNotFound();
     const unit = partnerOf(run, input.li);
     const storyPlace = storyPlaceOf(run.world, input);
+    // Checked again here (another request may have given it while this one waited), before the model is asked.
+    const gift = input.gift;
+    if (gift) giveGift(run.state, run.world.content, gift);
     const liState = run.state.lis[input.li] ?? defaultLiState();
     const makeItRight = standingRupture(liState);
     const key = nextDateKey(await dateChapters(deps.store, runId));
@@ -427,6 +475,7 @@ export async function startDate(
         storyPlace,
         makeItRight,
         memory: memory.text,
+        gift: gift ?? null,
       }),
       memory,
       schema: DatePlanReplySchema,
@@ -450,6 +499,7 @@ export async function startDate(
       goesWrong: plan.goesWrong,
       makeItRight: makeItRight?.id ?? null,
       keepsake: { brief: plan.brief },
+      ...(gift ? { gift } : {}),
     };
     const chapter: Chapter = {
       key,
@@ -481,11 +531,22 @@ export async function startDate(
       normalizeChapter,
       (current) => current ?? chapter,
     );
-    const state = await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) =>
-      current.chapters[key]
-        ? current
-        : { ...current, chapters: { ...current.chapters, [key]: { beatsRead: 0, completed: null, applied: [] } } },
-    );
+    // The gift is spent by the write that registers the date, so a date is never saved without it, nor it given twice.
+    let state: RunState | null;
+    try {
+      state = await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) =>
+        current.chapters[key]
+          ? current
+          : {
+              ...(gift ? giveGift(current, run.world.content, gift) : current),
+              chapters: { ...current.chapters, [key]: { beatsRead: 0, completed: null, applied: [] } },
+            },
+      );
+    } catch (error) {
+      // The gift was given elsewhere while the date was planned: the plan goes, as it would with the run.
+      if (gift) await deps.store.removeDoc(chapterId(runId, key));
+      throw error;
+    }
     if (!state) {
       // The run was deleted while the date was planned: its plan goes too, rather than outlive the run.
       await deps.store.removeDoc(chapterId(runId, key));
@@ -526,6 +587,18 @@ function withFirstDate(state: RunState, li: LiId, chapter: Chapter, at: string):
       { at, li, kind: "first-date", text: chapter.title.slice(0, 600), ref: chapter.key },
     ]),
   };
+}
+
+/**
+ * `state` with the affection of the date's gift (#2128) added to its love interest, uncapped (paid for in Starlight,
+ * so the day's activity cap never eats it, as a story's earnings are never capped), and pushed onto `grants`.
+ */
+function withGiftAffection(state: RunState, plan: DatePlan, grants: ActivityGrant[]): RunState {
+  const current = state.lis[plan.li];
+  if (!plan.gift || !current) return state;
+  const affection = GIFT_AFFECTION[plan.gift];
+  grants.push({ source: "gift", li: plan.li, affection });
+  return { ...state, lis: { ...state.lis, [plan.li]: { ...current, points: current.points + affection } } };
 }
 
 /** POST /runs/:run/dates/:key/finish: the outcome, counted exactly once (see the header). */
@@ -576,7 +649,7 @@ export async function finishDate(deps: DateDeps, runId: string, key: string): Pr
     if (paid.granted.starlight) grants.push({ source: "date", starlight: paid.granted.starlight });
     if (paid.granted.affection) grants.push({ source: "date", li: plan.li, affection: paid.granted.affection });
     counted = true;
-    return withFirstDate(paid.state, plan.li, chapter, at);
+    return withFirstDate(withGiftAffection(paid.state, plan, grants), plan.li, chapter, at);
   });
   if (!state) throw runNotFound();
   return {

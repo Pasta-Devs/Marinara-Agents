@@ -37,6 +37,7 @@ import {
   type DateScore,
 } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { FACES, MUSIC_MOODS } from "../../../../../client/src/features/otome-forge/shared/faces.js";
+import { GIFT_IDS } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import { THOUGHTS_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
 import { isChapterKey } from "../ids.js";
 import { PaintSchema, isRecord, readFields, validItems } from "./common.js";
@@ -178,7 +179,10 @@ export const ConfrontationSchema: ZodType<Confrontation> = z.union([
   }),
 ]);
 
-/** A date's plan (M5, SH/dates.ts); a damaged one reads as none, so the chapter is not a playable date. */
+/**
+ * A date's plan (M5, SH/dates.ts); a damaged one reads as none, so the chapter is not a playable date. #2128's `gift`
+ * is optional, as every date planned before it has none.
+ */
 const DatePlanSchema: ZodType<DatePlan> = z.object({
   li: z.string(),
   place: z.enum(DATE_PLACE_KINDS as [DatePlan["place"], ...DatePlan["place"][]]),
@@ -188,6 +192,7 @@ const DatePlanSchema: ZodType<DatePlan> = z.object({
   goesWrong: z.boolean(),
   makeItRight: short(80).nullable(),
   keepsake: z.object({ brief: short(1200), art: PaintSchema.optional() }),
+  gift: z.enum(GIFT_IDS).optional(),
 });
 
 const SCORE_VALUES: ReadonlySet<unknown> = new Set([-1, 0, 1]);

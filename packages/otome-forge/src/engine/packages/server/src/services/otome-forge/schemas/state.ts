@@ -8,6 +8,8 @@
 // M6 adds none: the period tracker and caring messages never reach a server document (plan §1.9).
 // 0.5.0 (#1945): each love interest's notebook (`known`, what they know about the protagonist) and the newest paid
 // Read Me sets (`readMe.paid`), written in the same write.
+// 0.9.0 (#2128): the Shop's gifts and figurines (`owned.gifts`, `owned.figurines`) and the newest purchases by request
+// id (`purchases`), written in the same write as the Starlight they cost (S/routes/shop.ts).
 // 0.8.12 (#2127): Your thoughts… waiting for the next main chapter (`thoughts`, S/routes/home.ts writes them and
 // S/story/chapters.ts lets them go); a damaged or too long one reads as none.
 import { forgeStoryExpressionCast, forgeStoryExpressionsOn } from "@forge-kit/story-expressions-server.mjs";
@@ -24,6 +26,7 @@ import type {
   PlayerThoughts,
   RunState,
   RunView,
+  ShopPurchaseRecord,
   TimelineEntry,
   Unit,
   WishPullRecord,
@@ -65,6 +68,7 @@ import {
   prestigeOf,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import { FACES, type Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
+import { isGiftId } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import { THOUGHTS_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
 import {
   BANNER_KINDS,
@@ -96,6 +100,8 @@ const FAVORITES_MAX = 300;
 const ALBUM_MAX = 500;
 /** Pulls remembered for a retried request id (S/wish/pull.ts). */
 const PULLS_MAX = 20;
+/** Shop purchases remembered for a retried request id (S/routes/shop.ts). */
+const PURCHASES_MAX = 20;
 /** Tells are 3–5 per bible; the room covers a hand-edited one. */
 const TELLS_MAX = 20;
 
@@ -281,6 +287,8 @@ const PullRecordSchema: ZodType<WishPullRecord> = z.object({
     .max(10),
 });
 
+const PurchaseRecordSchema: ZodType<ShopPurchaseRecord> = z.object({ id: short(80), what: short(80), at: z.string() });
+
 /** Each banner kind's pity (M4): counts below the 5★ guarantee; a damaged counter starts again from 0. */
 function normalizePity(raw: unknown): Record<BannerKind, PityCounter> {
   const pity = {} as Record<BannerKind, PityCounter>;
@@ -295,8 +303,9 @@ function normalizePity(raw: unknown): Record<BannerKind, PityCounter> {
 }
 
 /**
- * The owned item ids (M4), each once, in the order won, and when each was won (kept only for an owned id), and the
- * plush shelf (M5): plush id → how many. Never capped: ownership is never dropped.
+ * The owned item ids (M4), each once, in the order won, and when each was won (kept only for an owned id), the plush
+ * shelf (M5): plush id → how many, and the Shop's (#2128): gift id → how many, and love interest → when their figurine
+ * was bought. Never capped: ownership is never dropped.
  */
 function normalizeOwned(raw: unknown): RunState["owned"] {
   const rawItems = field(raw, "items");
@@ -314,7 +323,22 @@ function normalizeOwned(raw: unknown): RunState["owned"] {
       if (isPlushId(id) && value > 0) plush[id] = value;
     }
   }
-  return { items, at, plush };
+  const gifts: RunState["owned"]["gifts"] = {};
+  const rawGifts = field(raw, "gifts");
+  if (isRecord(rawGifts)) {
+    for (const [id, count] of Object.entries(rawGifts)) {
+      const value = wholeNumber(count, 0, 0);
+      if (isGiftId(id) && value > 0) gifts[id] = value;
+    }
+  }
+  const figurines: RunState["owned"]["figurines"] = {};
+  const rawFigurines = field(raw, "figurines");
+  if (isRecord(rawFigurines)) {
+    for (const [li, bought] of Object.entries(rawFigurines)) {
+      if (isLiId(li) && typeof bought === "string" && bought.length <= 40) figurines[li] = bought;
+    }
+  }
+  return { items, at, plush, gifts, figurines };
 }
 
 /** Who Home shows (M3): a love interest of the run, else the first in cast order; him unless the player picked Me. */
@@ -398,6 +422,7 @@ export function normalizeState(data: unknown): RunState {
     owned: normalizeOwned(field(data, "owned")),
     selector,
     pulls: validItems(PullRecordSchema, field(data, "pulls"), PULLS_MAX),
+    purchases: keepNewest(validItems(PurchaseRecordSchema, field(data, "purchases")), PURCHASES_MAX),
     claw: { rounds: keepClawRounds(validItems(ClawRoundSchema, field(field(data, "claw"), "rounds"))) },
     readHim: {
       paid: keepNewest(validItems(ReadHimPaidSchema, field(field(data, "readHim"), "paid")), READ_HIM_PAID_KEPT),
@@ -444,6 +469,7 @@ export const STATE_LIMITS = {
   list: LIST_MAX,
   album: ALBUM_MAX,
   pulls: PULLS_MAX,
+  purchases: PURCHASES_MAX,
   /** A timeline entry's text and the other short texts, in UTF-16 units (clipText). */
   text: TEXT_MAX,
 };

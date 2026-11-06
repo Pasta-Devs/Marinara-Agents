@@ -6,13 +6,17 @@
 // The Dates hub picks who the evening is with and opens this screen with ActivityScreenProps. An unfinished date is
 // resumed, never planned twice: the server returns the open one, and leaving mid-date keeps it for later. The outcome
 // is counted once by the server; reopening a date read to its end counts it then.
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+// #2128: with a gift from the Shop in hand (the Wardrobe view's `gifts`, absent from an older server), the looks step
+// also offers Bring a gift; the gift is spent when the date is planned, and the ending names it.
+import { useCallback, useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CalendarHeart,
+  Check,
   ChevronLeft,
   Feather,
+  Gift,
   Heart,
   HeartCrack,
   HeartHandshake,
@@ -27,6 +31,7 @@ import { Avatar } from "../../components/Avatar";
 import { CostHint } from "../../components/CostHint";
 import { DeclinedPanel } from "../../components/DeclinedPanel";
 import { Dialog } from "../../components/Dialog";
+import { GIFT_NAME_KEYS, GiftArt } from "../../components/GiftArt";
 import { PromptReviewDialog, type ImagePrompt } from "../../components/PromptReviewDialog";
 import { cancelStoryWork, runPath } from "../../hooks/use-reader";
 import { patchRun, runQueryKey } from "../../hooks/use-run";
@@ -46,11 +51,12 @@ import {
   type DateScore,
   type DatesView,
 } from "../../shared/dates";
+import { giftsFor, type GiftId } from "../../shared/shop";
 import { Reader } from "../reader/Reader";
 import { playQueryKey, type ActivityScreenProps } from "./DatesHub";
 import { LookPicker, wornDateLook } from "./LookPicker";
 import { useWardrobe } from "../wardrobe/Wardrobe";
-import { wardrobeQueryKey } from "../../hooks/use-items";
+import { shopQueryKey, wardrobeQueryKey } from "../../hooks/use-items";
 import { PLACE_ICONS, PLACE_NAME_KEYS, PlacePicker, paintedPlaces, type PlacePick } from "./PlacePicker";
 
 export const datesQueryKey = (runKey: string) => ["otome-forge", "dates", runKey] as const;
@@ -141,6 +147,13 @@ export function DateNight({ runKey, view, li: picked, onExit, onHome = onExit, o
   useEffect(() => {
     if (!chosenLooks.current) setLooks({ hisLook: hisWorn, herLook: herWorn });
   }, [hisWorn, herWorn]);
+  // #2128: the gifts she can bring (owned, and offered under the story's Heat), and the one picked while she has it.
+  const [gift, setGift] = useState<GiftId | null>(null);
+  const gifts = giftsFor(view.world.content).flatMap((id) => {
+    const count = wardrobe.data?.gifts?.[id] ?? 0;
+    return count > 0 ? [{ id, count }] : [];
+  });
+  const given = gifts.some((entry) => entry.id === gift) ? gift : null;
   const rupture = !!dates.data?.lis.find((entry) => entry.li === partner.id)?.rupture;
 
   // Opens where this love interest's dates stand, once they are known. On a first visit that is after the loading
@@ -184,8 +197,10 @@ export function DateNight({ runKey, view, li: picked, onExit, onHome = onExit, o
 
   const refresh = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: datesQueryKey(runKey) });
-    // Starting a date wears its looks (S/routes/dates.ts): Home and the Wardrobe show them.
+    // Starting a date wears its looks (S/routes/dates.ts): Home and the Wardrobe show them, and they and the Shop
+    // count the gift it spent.
     void queryClient.invalidateQueries({ queryKey: wardrobeQueryKey(runKey) });
+    void queryClient.invalidateQueries({ queryKey: shopQueryKey(runKey) });
     void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
   }, [queryClient, runKey]);
 
@@ -204,6 +219,7 @@ export function DateNight({ runKey, view, li: picked, onExit, onHome = onExit, o
           place: place.place,
           ...(place.storyPlace ? { storyPlace: place.storyPlace.key } : {}),
           ...looks,
+          ...(given ? { gift: given } : {}),
         },
         { signal: controller.signal },
       );
@@ -211,9 +227,12 @@ export function DateNight({ runKey, view, li: picked, onExit, onHome = onExit, o
       refresh();
       go({ kind: date.state === "done" ? "ending" : "reading", key: date.key });
     } catch (error) {
-      if (!controller.signal.aborted) setPlanError(error);
+      if (controller.signal.aborted) return;
+      setPlanError(error);
+      // A gift given elsewhere meanwhile is refused: the picker reads her gifts again.
+      if (given) void queryClient.invalidateQueries({ queryKey: wardrobeQueryKey(runKey) });
     }
-  }, [go, looks, otome, partner.id, place, refresh, runKey]);
+  }, [given, go, looks, otome, partner.id, place, queryClient, refresh, runKey]);
 
   const cancelPlan = () => {
     abortRef.current?.abort();
@@ -316,6 +335,9 @@ export function DateNight({ runKey, view, li: picked, onExit, onHome = onExit, o
               setLooks(next);
             }}
           />
+          {gifts.length ? (
+            <GiftPicker partnerName={partner.name} gifts={gifts} value={given} onChange={setGift} />
+          ) : null}
           <section className="of-section of-glass of-date-summary" aria-labelledby="of-date-summary">
             <p className="of-eyebrow">{t("ui.otomeForge.dateNight.tonight")}</p>
             <h2 id="of-date-summary" className="of-section-title of-date-summary-title">
@@ -330,6 +352,14 @@ export function DateNight({ runKey, view, li: picked, onExit, onHome = onExit, o
               </span>
             </h2>
             <p className="of-body">{t("ui.otomeForge.dateNight.howItPlays", { name: partner.name })}</p>
+            {given ? (
+              <p className="of-notice of-date-gift-line">
+                <GiftArt gift={given} className="of-date-gift-icon" />
+                <span>
+                  {t("ui.otomeForge.dateNight.giftBring", { name: partner.name, gift: t(GIFT_NAME_KEYS[given]) })}
+                </span>
+              </p>
+            ) : null}
             {rupture ? (
               <p className="of-notice of-date-mend">
                 <HeartHandshake size={16} strokeWidth={2} aria-hidden="true" />
@@ -408,6 +438,67 @@ export function DateNight({ runKey, view, li: picked, onExit, onHome = onExit, o
 
 const accentStyle = (li: RunLiView) => ({ "--of-li-accent": accentOf(li) }) as CSSProperties;
 
+interface GiftPickerProps {
+  partnerName: string;
+  /** The gifts she can bring, each with how many she owns (shown only when there is one). */
+  gifts: Array<{ id: GiftId; count: number }>;
+  value: GiftId | null;
+  onChange: (gift: GiftId | null) => void;
+}
+
+/** #2128: Bring a gift: No gift, or one of hers, as a radio group of small cards. */
+function GiftPicker({ partnerName, gifts, value, onChange }: GiftPickerProps) {
+  const { t } = useTranslation();
+  const id = useId();
+  const options = [null, ...gifts];
+  return (
+    <section className="of-section of-glass of-date-gifts" aria-labelledby={`${id}-title`}>
+      <h2 id={`${id}-title`} className="of-section-title">
+        <Gift size={18} strokeWidth={1.9} aria-hidden="true" />
+        {t("ui.otomeForge.dateNight.giftTitle")}
+      </h2>
+      <p className="of-hint">{t("ui.otomeForge.dateNight.giftHint", { name: partnerName })}</p>
+      <div className="of-date-gift-options" role="radiogroup" aria-labelledby={`${id}-title`}>
+        {options.map((option) => {
+          const checked = value === (option?.id ?? null);
+          const name = option ? t(GIFT_NAME_KEYS[option.id]) : t("ui.otomeForge.dateNight.giftNone");
+          return (
+            <label key={option?.id ?? "none"} className="of-date-gift" data-checked={checked}>
+              <input
+                type="radio"
+                className="of-visually-hidden"
+                name={`${id}-gift`}
+                value={option?.id ?? ""}
+                checked={checked}
+                onChange={() => onChange(option?.id ?? null)}
+              />
+              <span className="of-date-gift-frame" aria-hidden="true">
+                {option ? (
+                  <>
+                    <GiftArt gift={option.id} className="of-date-gift-art" />
+                    <span className="of-shelf-count">×{option.count}</span>
+                  </>
+                ) : (
+                  <Gift className="of-date-gift-none" size={24} strokeWidth={1.6} />
+                )}
+              </span>
+              <span className="of-date-gift-name" aria-hidden={option ? true : undefined}>
+                {checked ? <Check size={14} strokeWidth={3} aria-hidden="true" /> : null}
+                {name}
+              </span>
+              {option ? (
+                <span className="of-visually-hidden">
+                  {t("ui.otomeForge.shop.ownedCount", { name, count: option.count })}
+                </span>
+              ) : null}
+            </label>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 interface StepHeadProps {
   partner: RunLiView;
   rupture: boolean;
@@ -484,6 +575,14 @@ function DateHistory({ view, partner, dates }: DateHistoryProps) {
                 {entry.placeName || t(PLACE_NAME_KEYS[entry.place], { name: partner.name })}
               </span>
             </span>
+            {entry.gift ? (
+              <span className="of-date-memory-gift">
+                <GiftArt gift={entry.gift} className="of-date-gift-icon" />
+                <span className="of-visually-hidden">
+                  {t("ui.otomeForge.dateNight.giftGiven", { name: partner.name, gift: t(GIFT_NAME_KEYS[entry.gift]) })}
+                </span>
+              </span>
+            ) : null}
             {entry.outcome ? (
               <span className="of-badge of-badge--soft">{t(OUTCOME_SHORT_KEYS[entry.outcome])}</span>
             ) : null}
@@ -579,6 +678,8 @@ function DateEnding({ runKey, view, partner, dateKey, onDone, onHome, onCounted 
   const { outcome, date } = result;
   const starlight = result.grants.reduce((sum, grant) => sum + (grant.starlight ?? 0), 0);
   const affection = result.grants.reduce((sum, grant) => sum + (grant.affection ?? 0), 0);
+  // #2128: the gift's own affection (in the sum above too), when this request counted the date.
+  const giftAffection = result.grants.find((grant) => grant.source === "gift")?.affection ?? 0;
   const level = view.lis.find((li) => li.id === partner.id)?.level ?? partner.level;
   const rose = level > levelBefore;
   // Make it right only when its rupture still stood as the date was counted (mended elsewhere first, it was an
@@ -629,6 +730,20 @@ function DateEnding({ runKey, view, partner, dateKey, onDone, onHome, onCounted 
           </figure>
         ) : null}
       </section>
+
+      {date.gift ? (
+        <p className="of-notice of-date-gift-line">
+          <GiftArt gift={date.gift} className="of-date-gift-icon" />
+          <span>
+            {t("ui.otomeForge.dateNight.giftGiven", { name: partner.name, gift: t(GIFT_NAME_KEYS[date.gift]) })}
+          </span>
+          {giftAffection ? (
+            <span className="of-badge of-badge--soft">
+              {t("ui.otomeForge.dateNight.giftEarned", { amount: number(giftAffection) })}
+            </span>
+          ) : null}
+        </p>
+      ) : null}
 
       {result.picks.length ? (
         <section className="of-section of-glass" aria-labelledby="of-date-picks">

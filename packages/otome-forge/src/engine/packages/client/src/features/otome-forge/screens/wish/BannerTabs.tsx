@@ -1,11 +1,12 @@
 // ──────────────────────────────────────────────
-// Otome Forge: Wish's tabs. Memories · {name}'s Wardrobe · My Wardrobe · Echoes. The love interest's wardrobe is
-// named after the one it features this fortnight (whoever they are), never "his". TabList is the tab row itself, which
-// the Album shares: arrow keys move between the tabs and select them, Home and End jump to the ends, as Settings' do.
+// Otome Forge: Wish's tabs. Memories · {name}'s Wardrobe · My Wardrobe · Echoes · Shop (#2128: ShopPanel.tsx, where
+// Starlight buys gifts and figurines). The love interest's wardrobe is named after the one it features this fortnight
+// (whoever they are), never "his". TabList is the tab row itself, which the Album shares: arrow keys move between the
+// tabs and select them, Home and End jump to the ends, as Settings' do.
 // ──────────────────────────────────────────────
 import { useRef, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { BookHeart, History, Shirt, Sparkles, type LucideIcon } from "lucide-react";
+import { BookHeart, History, Shirt, Sparkles, Store, type LucideIcon } from "lucide-react";
 import type { BannerKind } from "../../shared/wish";
 
 interface TabListProps<T extends string> {
@@ -94,14 +95,15 @@ export function TabList<T extends string>({
   );
 }
 
-export type WishTab = BannerKind | "echoes";
-export const WISH_TABS: readonly WishTab[] = ["memories", "his-wardrobe", "my-wardrobe", "echoes"];
+export type WishTab = BannerKind | "echoes" | "shop";
+export const WISH_TABS: readonly WishTab[] = ["memories", "his-wardrobe", "my-wardrobe", "echoes", "shop"];
 
 const TAB_ICONS: Record<WishTab, LucideIcon> = {
   memories: BookHeart,
   "his-wardrobe": Shirt,
   "my-wardrobe": Sparkles,
   echoes: History,
+  shop: Store,
 };
 
 export function tabLabel(t: ReturnType<typeof useTranslation>["t"], tab: WishTab, name: string | null): string {
@@ -113,7 +115,9 @@ export function tabLabel(t: ReturnType<typeof useTranslation>["t"], tab: WishTab
         : t("ui.otomeForge.wish.tabTheirWardrobe")
       : tab === "my-wardrobe"
         ? t("ui.otomeForge.wish.tabMyWardrobe")
-        : t("ui.otomeForge.wish.tabEchoes");
+        : tab === "shop"
+          ? t("ui.otomeForge.wish.tabShop")
+          : t("ui.otomeForge.wish.tabEchoes");
 }
 
 interface BannerTabsProps {

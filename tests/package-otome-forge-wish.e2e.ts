@@ -6,7 +6,8 @@
 // toggle moves between a love interest's looks and mine, wears a look at home (his line about it replaces the
 // "noticing" hint in one live region) and shows one of mine; the Album opens a CG large and saves it through the
 // Engine. With the Engine's prompt review on, an open on the 5★ reveal hands focus to Continue, and the review a wish's
-// results open is the dialog on top, and it paints.
+// results open is the dialog on top, and it paints. The Shop tab (#2128) sells a gift once per tap, and a figurine
+// whose scene it then offers; one it cannot afford says how much Starlight is missing.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-wish.e2e.ts
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
@@ -280,8 +281,27 @@ interface WishStub {
   view: Json;
   wish: Json;
   pullResponse: Json;
+  /** GET /runs/:run/shop (#2128). */
+  shop: Json;
   /** Answer the first pull with a dropped connection (the server applied it). */
   dropFirst?: boolean;
+}
+
+/** The Shop under SFW Heat: three gifts, and each love interest's figurine (Ilvar's drawn, Cassian's not yet). */
+function shopView(starlight: number): Json {
+  return {
+    starlight,
+    gifts: [
+      { id: "flowers", price: 200, owned: 0 },
+      { id: "chocolates", price: 300, owned: 0 },
+      { id: "wine", price: 600, owned: 0 },
+    ],
+    figurines: [
+      { li: ILVAR, name: "Ilvar Thorne", accent: "#9DB8F0", art: art("#9db8f0"), drawing: false, owned: false },
+      { li: CASSIAN, name: "Cassian", accent: "#E6C98A", drawing: false, owned: false },
+    ],
+    figurineCost: 5000,
+  };
 }
 
 function wishView(starlight: number): Json {
@@ -434,7 +454,12 @@ async function stubRoutes(page: Page, answer: (call: Call) => Answer | undefined
 }
 
 function wishStub(starlight = 2000): { stub: WishStub; answer: (call: Call) => Answer | undefined } {
-  const stub: WishStub = { view: runView(starlight), wish: wishView(starlight), pullResponse: {} };
+  const stub: WishStub = {
+    view: runView(starlight),
+    wish: wishView(starlight),
+    pullResponse: {},
+    shop: shopView(starlight),
+  };
   const seen = new Set<string>();
   const answer = (call: Call): Answer | undefined => {
     const path = call.path.replace("/api/otome-forge", "");
@@ -464,6 +489,33 @@ function wishStub(starlight = 2000): { stub: WishStub; answer: (call: Call) => A
       // The first answer of a dropped wish is lost on the way back, though the server applied it.
       if (stub.dropFirst && first) return { status: 0, abort: true };
       return { status: 200, json: stub.pullResponse, delay: 150 };
+    }
+    if (path === `/runs/${RUN}/shop` && call.method === "GET") return { status: 200, json: stub.shop };
+    const figurine = /^\/runs\/[^/]+\/shop\/figurines\/([^/]+)$/u.exec(path)?.[1];
+    if (path === `/runs/${RUN}/shop/gifts` || figurine) {
+      // The server's one write per request id: charged once, and a request sent again is answered as before.
+      const id = String(call.body?.requestId ?? "");
+      const li = figurine ? decodeURIComponent(figurine) : null;
+      const price = li
+        ? stub.shop.figurineCost
+        : stub.shop.gifts.find((gift: Json) => gift.id === call.body?.gift).price;
+      if (!seen.has(id)) {
+        seen.add(id);
+        const starlight = stub.shop.starlight - price;
+        stub.view.starlight = starlight;
+        stub.shop = {
+          ...stub.shop,
+          starlight,
+          gifts: stub.shop.gifts.map((gift: Json) =>
+            gift.id === call.body?.gift ? { ...gift, owned: gift.owned + 1 } : gift,
+          ),
+          figurines: stub.shop.figurines.map((entry: Json) =>
+            entry.li === li ? { ...entry, owned: true, story: { key: `story-figurine-${li}` } } : entry,
+          ),
+        };
+      }
+      const story = li ? { story: { key: `story-figurine-${li}` } } : {};
+      return { status: 200, json: { starlight: stub.shop.starlight, shop: stub.shop, ...story }, delay: 150 };
     }
     if (/\/items\/[^/]+\/open$/u.test(path)) {
       const id = decodeURIComponent(path.split("/").at(-2)!);
@@ -945,6 +997,45 @@ test("Otome Forge Wish: at reduced motion the keyboard alone opens the letter, a
   await page.keyboard.press("Escape");
   await expect(takeover).toBeHidden();
   await expect(banner.getByRole("button", { name: /^Wish ×1,/u })).toBeFocused();
+});
+
+test("Otome Hearth Shop: a gift is bought once per tap, a figurine offers its scene, and one out of reach says why", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const { answer } = wishStub(5600);
+  await stubRoutes(page, answer, calls);
+  const root = await openOtome(page);
+  await openDock(root, "Wish");
+  await root.getByRole("tab", { name: "Shop", exact: true }).click();
+  const gifts = root.getByRole("list", { name: "Gifts" });
+  await expect(gifts.getByRole("listitem")).toHaveCount(3);
+  await expect(gifts.getByText("Aphrodisiac")).toHaveCount(0);
+  // Nothing about banners shows in the Shop.
+  await expect(root.getByRole("button", { name: /^Wish ×1/u })).toHaveCount(0);
+
+  const chocolates = gifts.getByRole("button", { name: "Buy Box of chocolates for 300 Starlight" });
+  await chocolates.dblclick();
+  await expect(starlight(root)).toContainText("5,300");
+  await expect(gifts.getByText("Box of chocolates: 1 owned")).toBeAttached();
+  await expect(gifts.getByText("×1")).toBeVisible();
+  expect(posts(calls, "/shop/gifts").map((call) => call.body)).toEqual([
+    expect.objectContaining({ gift: "chocolates", requestId: expect.stringMatching(/^w-/u) }),
+  ]);
+
+  const figurines = root.getByRole("list", { name: "Figurines" });
+  await figurines.getByRole("button", { name: "Buy Ilvar Thorne figurine for 5,000 Starlight" }).click();
+  await expect(starlight(root)).toHaveText(/^Starlight\s*300$/u);
+  // The Buy button it was bought from is gone: keyboard focus moves to the scene it unlocked, not to the page.
+  await expect(figurines.getByRole("button", { name: "Play the scene with Ilvar Thorne" })).toBeFocused();
+  await expect(root.getByText("Ilvar Thorne figurine is yours.")).toBeVisible();
+  const cassian = figurines.getByRole("button", { name: "Buy Cassian figurine for 5,000 Starlight" });
+  await expect(cassian).toHaveAttribute("aria-disabled", "true");
+  await expect(cassian).toHaveAccessibleDescription("4,700 more Starlight");
+  await cassian.click({ force: true });
+  expect(posts(calls, `/shop/figurines/${CASSIAN}`)).toHaveLength(0);
+  expect(posts(calls, `/shop/figurines/${ILVAR}`)).toHaveLength(1);
 });
 
 test("Otome Forge Wardrobe: the toggle moves between their looks and mine, wears one at home and shows one of mine", async ({

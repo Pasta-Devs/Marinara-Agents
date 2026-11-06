@@ -1,6 +1,7 @@
 // ──────────────────────────────────────────────
 // Otome Forge: what Wish, the Wardrobe and the Album share about items (M4): their queries, an item's first open, and
-// a tap that paints (an item's art, a banner's, a couple set's pair portrait).
+// a tap that paints (an item's art, a banner's, a couple set's pair portrait), and the request id a wish or a Shop
+// purchase (#2128) keeps until it is answered.
 // ──────────────────────────────────────────────
 // Routes: POST /runs/:run/items/:item/open → ItemOpenResult (S/routes/items.ts) writes a Memory's Character Story, a
 // Moment or a first-wear beat and paints its art, once; the server holds the paint for a tap under Ask before painting
@@ -22,14 +23,32 @@ import { runQueryKey } from "./use-run";
 export const wishQueryKey = (runKey: string) => ["otome-forge", "wish", runKey] as const;
 export const wardrobeQueryKey = (runKey: string) => ["otome-forge", "wardrobe", runKey] as const;
 export const albumQueryKey = (runKey: string) => ["otome-forge", "album", runKey] as const;
+/** #2128: the Shop in Wish (C/screens/wish/ShopPanel.tsx). */
+export const shopQueryKey = (runKey: string) => ["otome-forge", "shop", runKey] as const;
 
 /**
- * Everything an item can change: what Wish, the Wardrobe, the Album, Home and the run view show. Resolves once the
- * screens on show have read it again, so a button that waited on the change never shows the old item in between.
+ * Everything an item can change: what Wish (and its Shop), the Wardrobe, the Album, Home and the run view show.
+ * Resolves once the screens on show have read it again, so a button that waited on the change never shows the old item
+ * in between.
  */
 export async function invalidateCollection(queryClient: QueryClient, runKey: string): Promise<void> {
-  const keys = [wishQueryKey(runKey), wardrobeQueryKey(runKey), albumQueryKey(runKey), homeQueryKey(runKey)];
+  const keys = [
+    wishQueryKey(runKey),
+    shopQueryKey(runKey),
+    wardrobeQueryKey(runKey),
+    albumQueryKey(runKey),
+    homeQueryKey(runKey),
+  ];
   await Promise.all([...keys, runQueryKey(runKey)].map((queryKey) => queryClient.invalidateQueries({ queryKey })));
+}
+
+/** A pull's or a purchase's id: kept until it is answered, so a retry is the same request and is never paid twice. */
+export function newRequestId(): string {
+  const random =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID().replace(/-/g, "").slice(0, 12)
+      : Math.random().toString(36).slice(2, 14);
+  return `w-${Date.now().toString(36)}-${random}`;
 }
 
 /** Kinds whose first open writes something: a Character Story, a Moment, a first-wear beat. */
