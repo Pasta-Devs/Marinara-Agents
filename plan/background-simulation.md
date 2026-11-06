@@ -3,6 +3,8 @@
 Status: concept for review, 2026-11-04. No code, no issue, no PR.
 Build plan: `plan/background-simulation-plan.md`.
 
+**2026-11-06: merged into Kitchens.** 0.1.0 is the prototype. Meanwhile becomes the "Time" feature of a Kitchen (Engine core, Marinara-Engine `feat/kitchens`, `docs/development/kitchens-plan.md` § "Time: Meanwhile in a Kitchen"). The Circle goes away; events become Kitchen memory scenes; Meanwhile 0.2 follows Kitchens slice 3. Add no more Circle features until then.
+
 Decided 2026-11-04:
 - Name **Meanwhile**, package id `meanwhile` (`background` is taken by the scene-background package).
 - Clock: real time, fast forward, and a time and speed you can set.
