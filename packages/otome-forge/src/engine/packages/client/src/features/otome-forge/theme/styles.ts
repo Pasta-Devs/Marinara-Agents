@@ -131,6 +131,13 @@ ${R} .of-scene-glow + .of-scene-glow {
   background: radial-gradient(circle, rgb(230 201 138 / 0.5) 0%, transparent 68%);
   animation-duration: 28s; animation-direction: alternate-reverse;
 }
+/* #2141: Home's room and the reader's scene are opaque and fill the stage, so under them the glows and stars hold still
+   instead of being drawn again every frame unseen. Paused, not stopped: they go on from where they were. A memory
+   banner takes a strip above the reader, where the scene shows, so they keep moving while one is there. */
+${R} .of-stage:has(.of-home) :is(.of-scene-glow, .of-scene-stars),
+${R} .of-stage:has(.of-reader):not(:has(.of-memory-banner)) :is(.of-scene-glow, .of-scene-stars) {
+  animation-play-state: paused;
+}
 ${R} .of-scene-veil {
   position: absolute; inset: 0;
   background:
@@ -2115,6 +2122,8 @@ ${R} .of-home-stars {
     radial-gradient(1.2px 1.2px at 47% 44%, var(--of-star) 50%, transparent 52%);
   animation: of-home-twinkle 7s ease-in-out infinite alternate;
 }
+/* #2141: at dawn and by day the stars are hidden (opacity 0), so their twinkle holds still until dusk. */
+${R} .of-home:is([data-sky="dawn"], [data-sky="day"]) .of-home-stars { animation-play-state: paused; }
 /* An arched window onto the sky: the room's only light, in the colour of the hour. */
 ${R} .of-home-window {
   position: absolute; top: 12%; inset-inline-end: 9%; width: 36%; aspect-ratio: 3 / 4.6; opacity: 0.5;

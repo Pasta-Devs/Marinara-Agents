@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.9.4 — 2026-11-06
+
+- **Otome Hearth uses a little less battery.** It stops work you can't see: the glows hidden behind Home and the reader hold still, and so do Home's stars at dawn and by day, when the sky hides them. A side character's picture is no longer loaded and cut out again on each of their lines after their first 30 seconds on stage. Nothing looks, moves or sounds different.
+
 ## 0.9.2 — 2026-11-06 [quiet]
 
 - **The aphrodisiac's bottle is whole.** Its neck now meets the heart-shaped body on the Shop's shelf and in the Wardrobe.

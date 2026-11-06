@@ -1637,6 +1637,7 @@ for (const revision of [2, 0]) {
       await gate;
       await route.fallback();
     });
+    await page.clock.install();
     const root = await openStory(page);
     await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
     await root.getByRole("button", { name: "Begin" }).click();
@@ -1651,9 +1652,12 @@ for (const revision of [2, 0]) {
       "src",
       `data:image/png;base64,${SPEAKER_PNG}`,
     );
+    // #2141: his next line more than 30 s later still shows that cut-out, never made again.
+    await page.clock.fastForward(31_000);
     await next(root);
     await next(root);
     await expect(root.getByRole("img", { name: "Arin Vale", exact: true })).toBeVisible();
+    await page.waitForTimeout(1_000);
     expect(assets.cleanup).toHaveLength(1);
     expect(assets.paid).toEqual([]);
   });
@@ -2584,6 +2588,10 @@ test("Otome Hearth a failed summary is never silent: every screen of the story s
   }
   // First on the full stage, the banner has taken the safe area: the reader's header does not take it again.
   await expect(root.locator(".of-reader-head")).toHaveCSS("padding-top", "6px");
+  // #2141: the stage's scene shows behind the banner's strip, so its glows and stars go on moving there.
+  const sceneLoops = root.locator(".of-scene :is(.of-scene-glow, .of-scene-stars)");
+  await expect(sceneLoops).toHaveCount(3);
+  for (const loop of await sceneLoops.all()) await expect(loop).toHaveCSS("animation-play-state", "running");
   await page.screenshot({ path: testInfo.outputPath(`memory-banner-reader-${mobile ? "phone" : "desktop"}.png`) });
   await setReaderControlsExpanded(root, false);
 
@@ -2595,6 +2603,8 @@ test("Otome Hearth a failed summary is never silent: every screen of the story s
   await expect(root.getByRole("status").filter({ hasText: "Trying the summary again…" })).toHaveCount(1);
   await expect.poll(() => posts(stub, "/memory/retry").length).toBe(1);
   await expect(banner).toHaveCount(0);
+  // Without the banner the reader's scene covers the stage whole: the stage's own scene holds still under it.
+  for (const loop of await sceneLoops.all()) await expect(loop).toHaveCSS("animation-play-state", "paused");
 
   // It fails again: the banner comes back with the new error and its buttons.
   const again = "Upstream 413: the request is larger than this model's 8192-token context.";
@@ -2602,6 +2612,7 @@ test("Otome Hearth a failed summary is never silent: every screen of the story s
   await expect(banner.getByRole("alert")).toHaveText(`${failed} The connection said: ${again}`);
   await expect(retry).toBeVisible();
   await expect(connection).toBeVisible();
+  for (const loop of await sceneLoops.all()) await expect(loop).toHaveCSS("animation-play-state", "running");
 
   // The Memory connection: Settings → Connections with More connections open and Memory focused, and the provider's
   // whole message beside it; from Settings too.

@@ -693,12 +693,22 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
     "none",
   );
   await reducedEffects(false);
+  // #2141: hidden by day and at dawn, they hold still until dusk rather than twinkle unseen.
+  const homeStars = root.locator(".of-home-stars");
   expect(await starsUnder("day")).toBe(0);
+  await expect(homeStars).toHaveCSS("animation-play-state", "paused");
   expect(await starsUnder("dawn")).toBe(0);
+  await expect(homeStars).toHaveCSS("animation-play-state", "paused");
   expect(await starsUnder("night")).toBeGreaterThan(0.4);
+  await expect(homeStars).toHaveCSS("animation-play-state", "running");
   await home.evaluate((element, phase) => {
     (element as HTMLElement).dataset.sky = phase;
   }, sky ?? "night");
+  // #2141: Home's room is opaque and fills the stage, so the stage's own scene holds still under it (his thread, at the
+  // end, shows that scene, and it moves again there).
+  const sceneLoops = root.locator(".of-scene :is(.of-scene-glow, .of-scene-stars)");
+  await expect(sceneLoops).toHaveCount(3);
+  for (const loop of await sceneLoops.all()) await expect(loop).toHaveCSS("animation-play-state", "paused");
   await expect(root.getByRole("button", { name: /Messages/ })).toContainText("1");
   await page.screenshot({ path: testInfo.outputPath("01-home.png") });
   expect(posts(stub, "/home/note")).toHaveLength(1);
@@ -803,6 +813,7 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
   await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeFocused();
   await expect(root.getByText("Barely. The data kept me company.")).toBeVisible();
   await expect(root.locator(".of-quote-chip")).toHaveCount(0);
+  for (const loop of await sceneLoops.all()) await expect(loop).toHaveCSS("animation-play-state", "running");
   const scrolled = await root.evaluate((element) =>
     [element, ...element.querySelectorAll(".of-frame, .of-stage, .of-stage-body")]
       .filter((box) => box.scrollTop || box.scrollLeft)

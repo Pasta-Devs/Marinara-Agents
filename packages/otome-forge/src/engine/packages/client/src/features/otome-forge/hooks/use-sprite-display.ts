@@ -5,6 +5,7 @@ import { speakerHasCutoutAlpha } from "../lib/speaker-sprites";
 
 const DISPLAY_KEY = ["otome-forge", "speaker-display"] as const;
 const DISPLAY_CACHE_MAX = 8;
+/** How long a derivative no screen shows is kept. */
 const CACHE_MS = 30_000;
 
 /** Images stay offstage until decoded; changing speakers aborts obsolete loads without retaining old pixels. */
@@ -75,7 +76,9 @@ export function useSpriteDisplay(source: string | null, enabled = true): string 
     queryKey: [...DISPLAY_KEY, enabled ? source : null],
     queryFn: ({ signal }) => displaySprite(source!, signal),
     enabled: enabled && !!source,
-    staleTime: CACHE_MS,
+    // #2141: a source's derivative never changes (a changed sprite or look has a new URL), so a kept one is not made
+    // again. At 30 s, each line a side character spoke after his first 30 s on stage loaded and cut his sprite anew.
+    staleTime: Infinity,
     gcTime: CACHE_MS,
     retry: false,
   });
