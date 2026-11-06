@@ -8,7 +8,9 @@
 import { useTranslation } from "react-i18next";
 import { Music, Pause, Play } from "lucide-react";
 import { useOtomeAudio } from "../../hooks/use-otome-audio";
+import type { RunLiView } from "../../shared/api-types";
 import type { MusicMood } from "../../shared/faces";
+import { chapterTitle } from "../reader/ReaderControls";
 import type { SoundtrackEntry } from "../../shared/wardrobe";
 
 const CUE_KEYS: Record<MusicMood, string> = {
@@ -25,9 +27,11 @@ interface SoundtrackProps {
   /** The cue of the row playing (a mood, or a chapter's `chapter-<key>`), or null. */
   playing: string | null;
   onPlay: (cue: string | null) => void;
+  /** The cast, to name a figurine scene's track (chapterTitle). */
+  lis: ReadonlyArray<Pick<RunLiView, "id" | "name">>;
 }
 
-export function Soundtrack({ entries, playing, onPlay }: SoundtrackProps) {
+export function Soundtrack({ entries, playing, onPlay, lis }: SoundtrackProps) {
   const { t } = useTranslation();
   const audio = useOtomeAudio();
   const muted = !!audio && (audio.audioSettings.muted || audio.audioSettings.musicVolume <= 0);
@@ -44,7 +48,7 @@ export function Soundtrack({ entries, playing, onPlay }: SoundtrackProps) {
       <ul className="of-songs">
         {entries.map((entry) => {
           const on = playing === entry.cue;
-          const name = "chapter" in entry ? entry.chapter.title : t(CUE_KEYS[entry.cue]);
+          const name = "chapter" in entry ? chapterTitle(t, entry.chapter, lis) : t(CUE_KEYS[entry.cue]);
           return (
             <li key={entry.cue} className="of-song of-glass" data-playing={on}>
               <button

@@ -507,7 +507,7 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenRemind }: HomeScre
       onPointerMove={parallax.onPointerMove}
       onPointerLeave={parallax.onPointerLeave}
     >
-      <HomeLayers backdrop={about?.backdrop ?? null}>
+      <HomeLayers backdrop={about?.backdrop ?? null} figurines={data?.figurines}>
         <div className="of-home-main">
           <div className="of-home-stage">
             {show === "him" ? (

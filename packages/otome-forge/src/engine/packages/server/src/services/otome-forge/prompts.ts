@@ -74,6 +74,7 @@
 //   readHimMessages: Read Him, P25 (S/minigames/read-him.ts)
 //   datePlanMessages: P26 Date Night plan (S/minigames/date-night.ts)
 //   plushMessages: a Claw Machine plush drawn as SVG, #1954 (S/minigames/plush.ts)
+//   figurineMessages: a Shop figurine drawn as SVG, #2128 (S/minigames/plush.ts)
 // (i) Stickers
 //   stickerSetMessages: a love interest's nine sticker designs, #2044 (S/art/stickers.ts)
 // (j) Wish banners
@@ -120,13 +121,15 @@
 //   (arcs), S/story/chapters.ts (P5), S/story/routes-plan.ts (P10, P11), S/story/beats.ts and S/story/prologue.ts
 //   prologueProblem (P6), S/story/confrontation.ts (P12, P12c), S/phone/replies.ts (P17, P18), S/home/lines.ts,
 //   S/home/note.ts, S/care/care-note.ts, S/minigames/read-me.ts, read-him.ts, date-night.ts and plush.ts (with
-//   S/art/plush-svg.ts), S/art/stickers.ts, S/wish/replies.ts, S/items/replies.ts checkLine, S/audio/music.ts.
+//   S/art/plush-svg.ts; the plush and the figurine), S/art/stickers.ts, S/wish/replies.ts, S/items/replies.ts
+//   checkLine, S/audio/music.ts.
 // - Text built inside non-prompt code, which moving would mean rewriting that code: S/story/canon.ts (EASE_OFF_MARKER,
 //   whose start C/lib/reader-state.ts matches; a climax pick's canon marker; titleOf, a private chapter's title;
 //   DECISIONS_HEADING and the decision lines; the recall block headings), the private titles and texts of memory
 //   records in S/phone/memory.ts, S/minigames/read-him.ts (readHimMemoryText), S/minigames/claw.ts (clawMemoryText)
 //   and S/wish/banners.ts, S/memory/memory.ts summaryJob (each summary's rules: the summary contract and
-//   SUMMARY_WORDING), S/items/character-story.ts singleStoryChapter (a Moment's and a first-wear beat's node guide),
+//   SUMMARY_WORDING), S/items/character-story.ts singleStoryChapter (a Moment's and a first-wear beat's node guide)
+//   and figurineStoryChapter (a figurine scene's, #2128),
 //   S/home/note.ts noteDay (the special-day lines), S/audio/music.ts chapterMusicBrief (the chapter theme's scene),
 //   S/art/outfits.ts (an older Snapshot's or Moment's fallback brief, and the pair portrait's brief) and
 //   S/story/introduce.ts (a newcomer's first web row).
@@ -192,6 +195,7 @@ import { MUSIC_MEDIUM, MUSIC_SCENES } from "../../../../client/src/features/otom
 import {
   DATE_BEATS,
   type DatePlace,
+  GIFT_BEAT,
   PARTNER_CHOICE,
   STORY_PLACE,
   stillToMend,
@@ -231,6 +235,7 @@ import {
   type NotebookEntry,
   READ_ME_GUESSES,
 } from "../../../../client/src/features/otome-forge/shared/read-me.js";
+import { GIFT_PROMPT_NAMES, type GiftId } from "../../../../client/src/features/otome-forge/shared/shop.js";
 import { STICKERS_PER_LI } from "../../../../client/src/features/otome-forge/shared/stickers.js";
 import { NOTICED_WORDS_MAX, SHOW_WORDS_MAX } from "../../../../client/src/features/otome-forge/shared/wardrobe.js";
 import {
@@ -2016,7 +2021,7 @@ export function beatMessages({
     chapter.kind === "prologue"
       ? prologueFraming(world.openingSituation, units)
       : arcFraming({ chapter, node, units, state, world });
-  const dateFraming = date && partner ? dateFramingText(date, partner, state) : "";
+  const dateFraming = date && partner ? dateFramingText(date, partner, state, node) : "";
   const side = sideWithCast(chapter, node, units);
   const opening =
     chapter.number === 1 && world.openingSituation
@@ -2100,9 +2105,16 @@ function choiceRules(instructions: string, terminal: boolean): { shared: string;
 /**
  * The user turn's framing for a date's node: where they are, and what a Make it right date is for while its rupture
  * still stands (stillToMend; mended elsewhere since, the scene is an ordinary date's), with who holds it. The rupture's
- * grievance is named only when it came from what they may know (ownView), as on their card.
+ * grievance is named only when it came from what they may know (ownView), as on their card. #2128: a gift the
+ * protagonist brought is given in scene GIFT_BEAT, its special exchange, and was given before every later one; this
+ * text is the node's own (the uncached last turn), never the shared story context or instructions.
  */
-function dateFramingText(date: NonNullable<Chapter["date"]>, partner: Unit, state: RunState): string {
+function dateFramingText(
+  date: NonNullable<Chapter["date"]>,
+  partner: Unit,
+  state: RunState,
+  node: Pick<ChapterNode, "i">,
+): string {
   const mending = stillToMend(date, state.lis);
   const grievance = mending
     ? ownView(state, partner.id).liState.grievances.find((item) => item.id === mending.id)
@@ -2115,9 +2127,20 @@ function dateFramingText(date: NonNullable<Chapter["date"]>, partner: Unit, stat
       : mending.by === "protagonist"
         ? `It is a MAKE IT RIGHT date: a rupture stands between them${named}. The protagonist is the one hurt, and ${partner.name} is trying to earn back the protagonist's trust. The protagonist's hurt is honest and does not melt for nothing; nothing in this scene resolves the rupture, and how the evening ends is decided by the protagonist's choices.`
         : `It is a MAKE IT RIGHT date: a rupture stands between them${named}. The protagonist is trying to mend it. ${partner.name}'s hurt is honest and does not melt for nothing; nothing in this scene resolves the rupture, and how the evening ends is decided by the protagonist's choices.`,
+    date.gift ? dateGiftText(date.gift, partner.name, node.i) : "",
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+/** #2128: a date scene's line on the gift the protagonist brought: given in this scene (GIFT_BEAT), or earlier. */
+function dateGiftText(gift: GiftId, name: string, i: number): string {
+  const what = GIFT_PROMPT_NAMES[gift];
+  if (i === GIFT_BEAT) {
+    return `THE GIFT: in this scene the protagonist gives ${name} ${what}. Write it as the evening's special moment: ${name}'s reaction in their own voice and a real exchange of dialogue between them. The gift may change how the evening goes, as ${name} would take it.${gift === "aphrodisiac" ? " It is an aphrodisiac, and it works: desire builds between them from here, as far as the content contract allows." : ""}`;
+  }
+  if (i < GIFT_BEAT) return "";
+  return `Earlier tonight the protagonist gave ${name} ${what}; it may still colour the evening.${gift === "aphrodisiac" ? " It was an aphrodisiac, and its effect is still building: desire between them rises, as far as the content contract allows." : ""}`;
 }
 
 // ── The prologue (P6's framing for it, and its hand-off to chapter 1) ──
@@ -3523,6 +3546,8 @@ export interface DatePlanInput {
   makeItRight: Grievance | null;
   /** Recalled memory (the kit's text), or "". */
   memory: string;
+  /** #2128: the gift the protagonist brings, given in scene GIFT_BEAT; absent or null leaves the prompt as before. */
+  gift?: GiftId | null;
 }
 
 /** P26: the date's plan. Messages in the plan's order (§1.7); the planner gets the full bible. */
@@ -3535,6 +3560,7 @@ export function datePlanMessages({
   storyPlace = null,
   makeItRight,
   memory,
+  gift = null,
 }: DatePlanInput): OtomeMessage[] {
   const name = unit.name;
   const { liState } = ownView(state, unit.id);
@@ -3568,6 +3594,11 @@ export function datePlanMessages({
             : `- This is a MAKE IT RIGHT date: a rupture stands between them. Plan the evening as the protagonist's attempt to mend it: each scene gives them a real chance to make amends in their own way, and ${name}'s hurt is honest. Whether it mends is decided by the player's choices, never by the guides: no guide resolves it.`,
         ]
       : []),
+    ...(gift
+      ? [
+          `- THE GIFT: the protagonist brings ${GIFT_PROMPT_NAMES[gift]} and gives it to ${name} during the evening. Scene ${GIFT_BEAT + 1}'s guide holds the giving as the evening's special moment: ${name}'s reaction in their own voice, a real exchange of dialogue between them. The gift may change how the date goes, as ${name} would take it.${gift === "aphrodisiac" ? " It is an aphrodisiac, and it works: desire builds between them through the evening, and where it leads follows the CONTENT CONTRACT below." : ""}`,
+        ]
+      : []),
     `- Write the title, the place and every guide in ${world.language}; the keepsake brief in English.`,
     "- Omit an optional field rather than writing null.",
     "",
@@ -3596,7 +3627,14 @@ export function datePlanMessages({
       : place === STORY_PLACE
         ? `"${storyPlace?.name ?? ""}", a place in this world${storyPlace?.tags.trim() ? ` (${storyPlace.tags.trim()})` : ""}. The date goes there: keep that name for it.`
         : `${PLACE_SPIRIT[place]}. Adapt it to this world's setting and era, keeping its spirit.`,
-    makeItRight ? `\nMAKE IT RIGHT\nThe rupture (${makeItRight.id})${mendText ? `: ${mendText}` : ""}` : "",
+    [
+      makeItRight ? `\nMAKE IT RIGHT\nThe rupture (${makeItRight.id})${mendText ? `: ${mendText}` : ""}` : "",
+      gift
+        ? `\nTHE GIFT\nThe protagonist brings ${name} ${GIFT_PROMPT_NAMES[gift]}, given in scene ${GIFT_BEAT + 1}.`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n"),
     "",
     memory.trim() ? `STORY MEMORY\n${memory.trim()}` : "",
     "",
@@ -3611,10 +3649,10 @@ export function datePlanMessages({
   ];
 }
 
-// ── The Claw Machine plush (#1954; structured, 0.7, background lane) ──
+// ── The Claw Machine plush (#1954) and the Shop figurine (#2128; structured, 0.7, background lane) ──
 
-/** The plush prompt: who they are and how they look, and the SVG the allow-list will take. */
-export function plushMessages({ unit }: { unit: Unit }): OtomeMessage[] {
+/** Who a drawn love interest is and how they look: the user message of the plush and the figurine prompts. */
+function drawnCard(unit: Unit, ask: string): string {
   const bible = unit.bible;
   const look = [unit.identityLine || bible?.look.identityLine, unit.outfitLine || bible?.look.outfitLine]
     .map((line) => line?.trim())
@@ -3629,6 +3667,24 @@ export function plushMessages({ unit }: { unit: Unit }): OtomeMessage[] {
         bible.voice.register && `Voice: ${bible.voice.register}`,
       ].filter(Boolean)
     : [];
+  return [
+    `LOVE INTEREST: ${unit.name} (${unit.pronouns.subject}/${unit.pronouns.object})`,
+    `Accent colour: ${unit.accent}`,
+    look ? `Look: ${look}` : "",
+    ...who,
+    "",
+    ask,
+  ]
+    .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
+    .join("\n");
+}
+
+/** The SVG the allow-list (S/art/plush-svg.ts) takes, for a drawing of `what` in `viewBox`. */
+const drawnSvgRule = (viewBox: string, what: string) =>
+  `- The SVG: viewBox "${viewBox}", the ${what} centred and filling most of it, with no background. Use only these elements: ${PLUSH_ELEMENTS.join(", ")}. Use only these attributes: ${Object.keys(PLUSH_ATTRIBUTES).join(", ")} (transform: translate, rotate or scale only). Colours as #rrggbb. No text, style, gradients, filters, ids, links, images or comments.`;
+
+/** The plush prompt: who they are and how they look, and the SVG the allow-list will take. */
+export function plushMessages({ unit }: { unit: Unit }): OtomeMessage[] {
   const system = [
     "You design one plush toy for the Claw Machine of an otome game: the love interest below as the animal that fits them best, made as a soft toy in their colours.",
     'Reply with ONLY a JSON object: {"animal": "...", "svg": "<svg ...>...</svg>"}',
@@ -3639,22 +3695,31 @@ export function plushMessages({ unit }: { unit: Unit }): OtomeMessage[] {
     "- Pick the animal from who they are: their personality, role and manner first, their look second. A fitting animal, never a pun on their name.",
     "- Colour it from their look: the main colours of their hair and clothes, eyes in their own eye colour, and their accent colour somewhere on it.",
     "- A plush, not a real animal: a seated chibi toy with a big round head on a small round body, stubby limbs, soft rounded shapes, simple eyes with a white glint, a little blush and dashed stitch seams. Cute, and still recognisably them.",
-    `- The SVG: viewBox "0 0 64 64", the plush centred and filling most of it, with no background. Use only these elements: ${PLUSH_ELEMENTS.join(", ")}. Use only these attributes: ${Object.keys(PLUSH_ATTRIBUTES).join(", ")} (transform: translate, rotate or scale only). Colours as #rrggbb. No text, style, gradients, filters, ids, links, images or comments.`,
+    drawnSvgRule("0 0 64 64", "plush"),
     `- Outline the shapes in ${PLUSH_INK} at a stroke-width of 1 to 1.5, as the machine's other plushies are. At most ${PLUSH_SVG_MAX} characters.`,
   ].join("\n");
-  const user = [
-    `LOVE INTEREST: ${unit.name} (${unit.pronouns.subject}/${unit.pronouns.object})`,
-    `Accent colour: ${unit.accent}`,
-    look ? `Look: ${look}` : "",
-    ...who,
-    "",
-    `Design ${unit.name}'s plush now.`,
-  ]
-    .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
-    .join("\n");
   return [
     { role: "system", content: system },
-    { role: "user", content: user },
+    { role: "user", content: drawnCard(unit, `Design ${unit.name}'s plush now.`) },
+  ];
+}
+
+/** The figurine prompt (#2128): the plush prompt's card, as a small collectible figure of them on a display base. */
+export function figurineMessages({ unit }: { unit: Unit }): OtomeMessage[] {
+  const system = [
+    "You design one small collectible figurine for the Shop of an otome game: the love interest below as a chibi figure of themselves, standing on a round display base.",
+    'Reply with ONLY a JSON object: {"svg": "<svg ...>...</svg>"}',
+    "FIELDS",
+    "- svg: the figurine, as one small SVG image.",
+    "RULES",
+    "- Chibi proportions: a big head on a small body, standing in a pose that fits their manner, on a round display base at the bottom. Simple eyes with a white glint and a little blush. Cute, and still recognisably them.",
+    "- Draw them in their look and colours: their hair colour and style, their eye colour, their signature outfit, and their accent colour on the base or somewhere on the outfit. Flat fills, soft rounded shapes and a small white shine.",
+    drawnSvgRule("0 0 64 96", "figurine"),
+    `- Outline the shapes in ${PLUSH_INK} at a stroke-width of 1 to 1.5, as the Shop's other items are. At most ${PLUSH_SVG_MAX} characters.`,
+  ].join("\n");
+  return [
+    { role: "system", content: system },
+    { role: "user", content: drawnCard(unit, `Design ${unit.name}'s figurine now.`) },
   ];
 }
 

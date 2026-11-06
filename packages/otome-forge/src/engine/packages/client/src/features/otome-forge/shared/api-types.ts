@@ -11,6 +11,7 @@ import type { ClawRound } from "./claw";
 import type { ReadHimPaid } from "./read-him";
 import type { NotebookEntry, ReadMePaid } from "./read-me";
 import type { ClawLineKind, TapZone, TimeOfDay } from "./home";
+import type { GiftId } from "./shop";
 import type { PlayerSticker } from "./stickers";
 import type { BannerKind, PityCounter, Rarity } from "./wish";
 
@@ -386,6 +387,8 @@ export interface Unit {
   cutouts: Record<string, Cutout>;
   /** Their Claw Machine plush (#1954): the animal that fits them, drawn as SVG in the background; absent until then. */
   plushArt?: PlushArt;
+  /** #2128: their Shop figurine, drawn as SVG in the background once the Shop is opened; absent until then. */
+  figurineArt?: FigurineArt;
   /** #2044: his nine chibi stickers, designed once he reaches level 2 with images on (S/art/stickers.ts). */
   stickers?: StickerSet;
 }
@@ -419,6 +422,12 @@ export interface StickerView {
 /** A love interest's own plush: the animal (English, one or two words) and its sanitized SVG (S/art/plush-svg.ts). */
 export interface PlushArt {
   animal: string;
+  svg: string;
+  at: string;
+}
+
+/** A love interest's Shop figurine (#2128): its SVG, sanitized by the plush allow-list (S/art/plush-svg.ts). */
+export interface FigurineArt {
   svg: string;
   at: string;
 }
@@ -550,6 +559,8 @@ export interface HomeView {
   noticed: Noticed | null;
   /** M4: a love interest is noticing her new look right now: Home asks again until the line lands. */
   noticing: boolean;
+  /** #2128: each figurine bought in the Shop and drawn, as a data URL, in cast order; they stand in L0. */
+  figurines?: Array<{ li: LiId; url: string }>;
   /** #2127: Your thoughts… waiting for the next main chapter, or null. */
   thoughts: PlayerThoughts | null;
 }
@@ -801,9 +812,16 @@ export interface RunState {
   pity: Record<BannerKind, PityCounter>;
   /**
    * What the player owns. M4: the item ids, in the order won, and when each was won (an ISO time, by item id). M5: the
-   * plush shelf, prize id → how many (SH/claw.ts).
+   * plush shelf, prize id → how many (SH/claw.ts). #2128: the Shop's gifts, gift id → how many (SH/shop.ts), and the
+   * figurines bought, love interest → when.
    */
-  owned: { items: string[]; at: Record<string, string>; plush: Record<string, number> };
+  owned: {
+    items: string[];
+    at: Record<string, string>;
+    plush: Record<string, number>;
+    gifts: Partial<Record<GiftId, number>>;
+    figurines: Record<LiId, string>;
+  };
   /**
    * M4: the love interests whose Memory Selector (affection 10) has been used, each with the Memory it claimed (`true`:
    * an early claim that did not record which).
@@ -811,6 +829,8 @@ export interface RunState {
   selector: Record<LiId, string | true>;
   /** M4: the newest pulls by request id, so a retried pull answers with the same results and charges once. */
   pulls: WishPullRecord[];
+  /** #2128: the newest Shop purchases by request id, so a retried purchase charges once. */
+  purchases: ShopPurchaseRecord[];
   /** Each LI's newest finished Claw Machine rounds (M5): a repeated finish is answered from here; each is his memory. */
   claw: { rounds: ClawRound[] };
   /** The newest paid Read Him sets (M5): the finish's once-only mark, in the same write as its pay. */
@@ -822,6 +842,13 @@ export interface RunState {
    * that registers it (S/story/chapters.ts). Null while none wait.
    */
   thoughts: PlayerThoughts | null;
+}
+
+/** One Shop purchase as the state keeps it (S/routes/shop.ts): what it bought, a gift id or `figurine:<li>`. */
+export interface ShopPurchaseRecord {
+  id: string;
+  what: string;
+  at: string;
 }
 
 /** One pull as the state keeps it (S/wish/pull.ts), for answering a retried request. */
@@ -1272,9 +1299,12 @@ export interface Grant {
   affection?: number;
 }
 
-/** What an activity (Read Him, a date, a Claw round) earned, within the day's caps. */
+/**
+ * What an activity (Read Him, a date, a Claw round) earned, within the day's caps. #2128: `gift` is the affection a
+ * gift given on a date earns beside the date's own, never capped (the gift was paid for in Starlight).
+ */
 export interface ActivityGrant {
-  source: "read-him" | "read-me" | "date" | "claw";
+  source: "read-him" | "read-me" | "date" | "claw" | "gift";
   starlight?: number;
   li?: LiId;
   affection?: number;

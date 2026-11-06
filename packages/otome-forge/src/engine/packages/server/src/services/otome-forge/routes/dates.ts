@@ -2,9 +2,10 @@
 // Otome Forge: the Date Night routes (plan M5 "Date Night")
 // ──────────────────────────────────────────────
 // GET  /runs/:run/dates                                         → DatesView
-// POST /runs/:run/dates {li, place, storyPlace?, herLook, hisLook} → {chapter: ChapterView, date: DateEntry, resumed}
-//                                                               each look is BASE_LOOK or a look item its wearer owns,
-//                                                               worn as Wear at home does before the date is planned
+// POST /runs/:run/dates {li, place, storyPlace?, herLook, hisLook, gift?} → {chapter: ChapterView, date: DateEntry,
+//                                                               resumed}: each look is BASE_LOOK or a look item its
+//                                                               wearer owns, worn as Wear at home does before the date
+//                                                               is planned; `gift` (#2128) one she owns from the Shop
 // POST /runs/:run/dates/:key/finish                             → DateFinishResult
 // POST /runs/:run/art/keepsake/prompt {key}                     → {prompt, negativePrompt}
 // POST /runs/:run/art/keepsake {key, prompt?, negativePrompt?}  → {paint}
@@ -14,19 +15,23 @@
 // A date's scenes are written and read through the story routes (chapter `date-<n>`). Starting while a date with that
 // love interest is open returns it (`resumed`). Place "story" goes to one of the story's painted places
 // (`storyPlace`, its key in world.places; 400 `bad-request` for a place the story does not have). Planning may fail with 503 `no-connection`, 422 `declined` or 502
-// `bad-format` (nothing is saved), and a Cancel while it runs is a 409 `conflict`. Finishing needs the last scene read
-// (409 `conflict`) and counts once; a replay answers the same outcome with no grants. The keepsake paints only on the
-// player's tap (+1 image), once the date is finished: 503 `no-connection` without an image connection, 409 `busy`
+// `bad-format` (nothing is saved), and a Cancel while it runs is a 409 `conflict`. A gift she does not own is a 409
+// `conflict`, and the aphrodisiac under SFW Heat a 409 `locked`, both before anything is planned; it is spent only by
+// the write that saves a new date, never by a resumed one (S/minigames/date-night.ts). Finishing needs the last scene
+// read (409 `conflict`) and counts once; a replay answers the same outcome with no grants. The keepsake paints only on
+// the player's tap (+1 image), once the date is finished: 503 `no-connection` without an image connection, 409 `busy`
 // while it is being painted, and a ready one is never painted again.
 // The Photo Shoot (S/minigames/photo-shoot.ts) paints one photo of the two of them on the tap and calls no model: a
 // resend with the same id waits for, or answers, the same photo. It wears nothing; a photo is deleted on request,
 // except while it paints (409 `busy`). The list is the Album's `photos` and Home's `photo`.
 import { z } from "zod";
 import { DATE_PLACE_KINDS, type DatePlace } from "../../../../../client/src/features/otome-forge/shared/dates.js";
+import { GIFT_IDS } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import { OtomeForgeError, debugModeOf, parseBody, runParam, type OtomeRequest, type RegisterRoutes } from "../http.js";
 import { isLiId } from "../ids.js";
 import { wearLook } from "./wardrobe.js";
 import {
+  checkGift,
   datesView,
   finishDate,
   isDateKey,
@@ -46,6 +51,7 @@ const StartBody = z.object({
   storyPlace: z.string().min(1).max(80).optional(),
   herLook: LOOK_ID,
   hisLook: LOOK_ID,
+  gift: z.enum(GIFT_IDS).optional(),
 });
 const NoFields = z.object({});
 const KeyBody = z.object({ key: z.string().min(1).max(40) });
@@ -92,6 +98,8 @@ export const registerDateRoutes: RegisterRoutes = (router, deps) => {
       const { runId } = runParam(request);
       if (!isLiId(input.li)) throw new OtomeForgeError(404, "No such love interest.", "not-found");
       const debugMode = debugModeOf(request);
+      // A gift she cannot give (#2128) is refused before anything is worn or planned.
+      await checkGift(deps, runId, input);
       // The looks picked for the date are worn, as Wear at home wears them (owned and painted, or a 4xx), so the
       // date's plan, scenes, faces, key images and keepsake all dress them in it. A resumed date keeps what it was
       // planned with; the looks stay worn afterwards.

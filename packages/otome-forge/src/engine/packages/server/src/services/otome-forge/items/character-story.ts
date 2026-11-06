@@ -11,6 +11,8 @@
 // - his-look5: one node, the first time he wears the look, with no planning call.
 // - her-look5: the same for the protagonist's 5★ look, with the love interest whose look it is a couple set with (the
 //   item's `li`, the wearer of the his-look5 it names), who sees it first.
+// - #2128, a figurine bought in the Shop: one node, `story-figurine-<li>` (SH/shop.ts figurineSceneKey), written on
+//   the purchase with no planning call and no banner item behind it: the love interest finds out about the figurine.
 // Every node holds only its love interest: the chapter is his own (kind "story", `li`), so its canon reaches only his
 // own prompts and scenes he is in (S/story/canon.ts), like a route chapter. Writing it is idempotent: planning runs
 // in the run's foreground queue, which reads the chapter again first, so two opens plan once, and the item's `story`
@@ -22,6 +24,7 @@ import type {
   RunState,
   Unit,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import { figurineSceneKey } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import { NOTICED_WORDS_MAX } from "../../../../../client/src/features/otome-forge/shared/wardrobe.js";
 import type { Item } from "../../../../../client/src/features/otome-forge/shared/wish.js";
 import { updateIfChanged } from "../art/paint.js";
@@ -164,6 +167,44 @@ export function singleStoryChapter(
     plannedAt: at,
     connectionId: "",
   };
+}
+
+/**
+ * #2128: the one-node scene a figurine bought in the Shop unlocks, built with no model call: funny and cute, the love
+ * interest finding out the protagonist bought a figurine of them. Its title is English, as its guide is: the story's own,
+ * for prompts and memory. The player reads it in their language (C/screens/reader/ReaderControls.tsx chapterTitle).
+ */
+export function figurineStoryChapter(unit: Pick<Unit, "id" | "name">, at: string): Chapter {
+  const { name } = unit;
+  const guide = `A FIGURINE SCENE between ${name} and the protagonist: ${name} finds out the protagonist bought a small collectible figurine of ${name} (a chibi ${name} on a round display base, in ${name}'s own look) and reacts in character. Make it funny and cute: how ${name} takes being made into a figurine, what ${name} thinks of the likeness, and where it ends up at home. One complete scene, with its own small turn.`;
+  return {
+    key: figurineSceneKey(unit.id),
+    kind: "story",
+    li: unit.id,
+    lead: unit.id,
+    title: `${name} in Miniature`,
+    tags: [],
+    summary: "",
+    nodes: singleNode(unit.id, guide),
+    ledger: { relationship: [], conflict: [], offscreen: [] },
+    plannedAt: at,
+    connectionId: "",
+  };
+}
+
+/** Saves a love interest's figurine scene, unless it is saved already (the first save wins); returns its key. */
+export async function ensureFigurineStory(
+  deps: Pick<ChapterDeps, "store">,
+  runId: string,
+  unit: Pick<Unit, "id" | "name">,
+): Promise<string> {
+  const chapter = figurineStoryChapter(unit, new Date().toISOString());
+  await deps.store.mutateDoc(
+    runDocTarget("chapter", chapterId(runId, chapter.key)),
+    normalizeChapter,
+    (current) => current ?? chapter,
+  );
+  return chapter.key;
 }
 
 /** The his-look5 of `li` a her-look5 is a couple set with, or null when it is not stored as one. */

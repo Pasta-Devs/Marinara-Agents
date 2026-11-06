@@ -212,7 +212,7 @@ export function Album({ runKey, view, onOpenStory }: AlbumProps) {
     ) : tab === "favorites" ? (
       <Favorites view={view} favorites={data.favorites} />
     ) : tab === "soundtrack" ? (
-      <Soundtrack entries={data.soundtrack} playing={playing} onPlay={setPlaying} />
+      <Soundtrack entries={data.soundtrack} playing={playing} onPlay={setPlaying} lis={view.lis} />
     ) : (
       <Tells view={view} tells={data.tells} />
     );

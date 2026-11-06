@@ -3,7 +3,8 @@
 // Echoes, each with the exact pity count; Starlight is the only currency, earned in play. A wish never calls a model:
 // the server charges and rolls in one write and answers with what arrived, which comes in a sealed letter, a 5★ reveal
 // for each 5★, and the results. Skip always goes straight to the results. A month's seasonal banners (SH/wish.ts
-// rotationSeason) wear a badge naming the month and its theme, here and in Echoes.
+// rotationSeason) wear a badge naming the month and its theme, here and in Echoes. The Shop tab (#2128, ShopPanel.tsx)
+// spends Starlight on gifts and figurines instead; it has no banner, so nothing about banners shows in it.
 // ──────────────────────────────────────────────
 // Routes (S/routes/wish.ts): GET /runs/:run/wish → WishView; POST .../wish/open → WishOpenResult (writes the banners
 // this fortnight is missing: one model call, and their art unless Ask before painting holds it); POST .../wish/pull
@@ -24,6 +25,7 @@ import {
   focusLost,
   imagesOn,
   invalidateCollection,
+  newRequestId,
   paintWaits,
   readyArt,
   useItemActions,
@@ -58,6 +60,7 @@ import {
   type WishView,
 } from "../../shared/wish";
 import { BannerTabs, tabLabel, type WishTab } from "./BannerTabs";
+import { ShopPanel, type UnansweredPurchase } from "./ShopPanel";
 import { PityCounter } from "./PityCounter";
 import { Reveal5 } from "./Reveal5";
 import { RARITY_NAMES, SealedLetter } from "./SealedLetter";
@@ -113,15 +116,6 @@ function SeasonBadge({ season }: { season: Season | undefined }) {
   return season ? <span className="of-badge of-banner-season">{t(SEASON_KEYS[season])}</span> : null;
 }
 
-/** A pull's id: kept until the pull is answered, so a retry is the same pull. */
-function newRequestId(): string {
-  const random =
-    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-      ? crypto.randomUUID().replace(/-/g, "").slice(0, 12)
-      : Math.random().toString(36).slice(2, 14);
-  return `w-${Date.now().toString(36)}-${random}`;
-}
-
 interface PullError {
   banner: string;
   count: PullCount;
@@ -173,6 +167,8 @@ export function WishScreen({ runKey, view, onOpenStory, onOpenWardrobe }: WishSc
   // The pull still waiting for an answer: the same wish again (Try again, or the button) sends it as it was, so one
   // that landed while its answer was lost is shown, not charged twice.
   const unanswered = useRef<{ banner: string; count: PullCount; requestId: string } | null>(null);
+  // The same for a Shop purchase (ShopPanel.tsx), across tab changes.
+  const unansweredPurchase: UnansweredPurchase = useRef(null);
 
   const head = (
     <div className="of-page-head of-page-head--tight">
@@ -248,7 +244,7 @@ export function WishScreen({ runKey, view, onOpenStory, onOpenWardrobe }: WishSc
   };
 
   const shownEcho = tab === "echoes" && echo ? (data.echoes.find((banner) => banner.key === echo) ?? null) : null;
-  const panelBanner = tab === "echoes" ? shownEcho : (byKind.get(tab) ?? null);
+  const panelBanner = tab === "echoes" ? shownEcho : tab === "shop" ? null : (byKind.get(tab) ?? null);
 
   return (
     <div className="of-page of-wishes" onFocus={onFocus}>
@@ -272,25 +268,37 @@ export function WishScreen({ runKey, view, onOpenStory, onOpenWardrobe }: WishSc
         aria-labelledby={`${id}-${tab}-tab`}
         tabIndex={0}
       >
-        {tab !== "echoes" && (data.missing.length > 0 || data.creating) ? (
-          <NewBanners view={view} wish={data} opening={opening} />
-        ) : null}
-        {panelBanner ? (
-          <BannerPanel
+        {tab === "shop" ? (
+          <ShopPanel
+            runKey={runKey}
             view={view}
-            banner={panelBanner}
-            wish={data}
-            actions={actions}
-            pulling={pulling}
-            error={pullError?.banner === panelBanner.key ? pullError : null}
-            onPull={(count) => void pull(panelBanner, count)}
-            onBack={shownEcho ? () => setEcho(null) : undefined}
+            headingId={`${id}-shop-title`}
+            unanswered={unansweredPurchase}
+            onOpenStory={onOpenStory}
           />
-        ) : tab === "echoes" ? (
-          <EchoList view={view} wish={data} onOpen={setEcho} />
-        ) : !data.missing.includes(tab) && !data.creating ? (
-          <p className="of-empty of-glass">{t("ui.otomeForge.wish.noBanner")}</p>
-        ) : null}
+        ) : (
+          <>
+            {tab !== "echoes" && (data.missing.length > 0 || data.creating) ? (
+              <NewBanners view={view} wish={data} opening={opening} />
+            ) : null}
+            {panelBanner ? (
+              <BannerPanel
+                view={view}
+                banner={panelBanner}
+                wish={data}
+                actions={actions}
+                pulling={pulling}
+                error={pullError?.banner === panelBanner.key ? pullError : null}
+                onPull={(count) => void pull(panelBanner, count)}
+                onBack={shownEcho ? () => setEcho(null) : undefined}
+              />
+            ) : tab === "echoes" ? (
+              <EchoList view={view} wish={data} onOpen={setEcho} />
+            ) : !data.missing.includes(tab) && !data.creating ? (
+              <p className="of-empty of-glass">{t("ui.otomeForge.wish.noBanner")}</p>
+            ) : null}
+          </>
+        )}
       </div>
       <Selectors runKey={runKey} view={view} selectors={Array.isArray(data.selectors) ? data.selectors : []} />
       <p className="of-hint of-wishes-foot">{t("ui.otomeForge.wish.neverExpires")}</p>

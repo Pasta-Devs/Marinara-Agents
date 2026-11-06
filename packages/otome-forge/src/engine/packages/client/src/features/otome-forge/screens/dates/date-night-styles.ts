@@ -4,7 +4,8 @@
 // Scoped under `.of-root`, on the look's tokens. Places wear their scene's mood gradient (`.of-mood`, READER_RULES),
 // so the screen needs no image; a place the story painted wears its picture over it. The cards are `.of-date-place`,
 // apart from M2b's `.of-place` (the reader's painted backdrop layer). Layout is one column at phone width (390 px): two place cards a row, the two looks
-// side by side. Every animation stops under prefers-reduced-motion (MOTION_RULES).
+// side by side, a gift's cards (#2128) as many a row as fit. Every animation stops under prefers-reduced-motion
+// (MOTION_RULES).
 import { PALETTE } from "../../theme/tokens";
 
 const R = ".of-root";
@@ -109,6 +110,35 @@ ${R} .of-look-name {
 }
 ${R} .of-look-name svg { color: var(--of-champagne-text); }
 ${R} .of-looks-note { display: flex; align-items: center; justify-content: center; gap: 6px; text-align: center; }
+
+/* #2128: Bring a gift: small cards in a row (No gift first), ringed like a look when picked. */
+${R} .of-date-gifts .of-section-title { display: flex; align-items: center; gap: 8px; }
+${R} .of-date-gifts .of-section-title svg { flex: none; color: var(--of-champagne-text); }
+${R} .of-date-gift-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 10px; }
+${R} .of-date-gift {
+  display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; cursor: pointer; text-align: center;
+}
+${R} .of-date-gift-frame {
+  position: relative; display: grid; place-items: center; width: 100%; aspect-ratio: 1; border-radius: 18px;
+  color: var(--of-text-faint); background: var(--of-surface-hover); border: 1px solid var(--of-border);
+  box-shadow: inset 0 1px 0 var(--of-highlight); transition: box-shadow 420ms var(--of-ease);
+}
+${R} .of-date-gift-art { width: 64%; height: 64%; filter: drop-shadow(0 3px 2px rgb(43 34 54 / 0.25)); }
+${R} .of-date-gift[data-checked="true"] .of-date-gift-frame {
+  box-shadow: 0 0 0 2px ${PALETTE.champagne}, 0 10px 26px var(--of-glow);
+}
+${R} .of-date-gift:has(input:focus-visible) .of-date-gift-frame { outline: 2px solid var(--of-focus); outline-offset: 3px; }
+${R} .of-date-gift-name {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px; max-width: 100%;
+  font-size: 0.78rem; font-weight: 700; line-height: 1.15; overflow-wrap: anywhere;
+}
+${R} .of-date-gift-name svg { flex: none; color: var(--of-champagne-text); }
+/* The gift in Tonight's summary and the ending, and its mark in the evenings so far. */
+${R} .of-date-gift-line { align-items: center; flex-wrap: wrap; }
+${R} .of-date-gift-line > span:not(.of-badge) { flex: 1 1 14ch; min-width: 0; }
+${R} .of-notice .of-date-gift-icon, ${R} .of-date-gift-icon { flex: none; width: 28px; height: 28px; margin: 0; }
+${R} .of-date-gift-line .of-badge { margin-inline-start: auto; }
+${R} .of-date-memory-gift { flex: none; display: grid; place-items: center; }
 
 /* Tonight, before it begins. */
 ${R} .of-date-summary {

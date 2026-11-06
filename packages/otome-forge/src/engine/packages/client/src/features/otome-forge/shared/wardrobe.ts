@@ -8,6 +8,7 @@
 // within the day's activity cap). A love interest may be any gender: the client names them or uses their pronouns.
 import type { Favorite, LiId, Noticed, Outfit, Paint, SoundtrackTrack, TimelineEntry } from "./api-types";
 import type { Face, MusicMood } from "./faces";
+import type { GiftId, OwnedFigurineView } from "./shop";
 import type { ItemKind, ItemView, Rarity } from "./wish";
 
 /** The look everyone starts in. A wardrobe look id is this, or the id of the look's item. */
@@ -91,6 +92,13 @@ export interface WardrobeView {
   noticed: Noticed | null;
   /** A love interest is noticing her new look right now (P19 is being written): read the wardrobe again shortly. */
   noticing: boolean;
+  /**
+   * #2128: the Shop's gifts she owns, gift id → how many: only those she has and the story's Heat offers (SH/shop.ts
+   * giftsFor). Date Night gives them from here.
+   */
+  gifts?: Partial<Record<GiftId, number>>;
+  /** #2128: the figurines she bought, in cast order, each with its scene. */
+  figurines?: OwnedFigurineView[];
 }
 
 /** POST /runs/:run/wardrobe/wear {owner: "me" | <li id>, look: BASE_LOOK | <item id>, li?: who notices her look}. */
