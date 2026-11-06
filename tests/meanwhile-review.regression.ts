@@ -193,7 +193,21 @@ async function main() {
   await fastForwardCases();
   await reviewCases();
   await promiseCases();
+  await chipCases();
   console.log("meanwhile review tests passed");
+}
+
+// The tab chip and the Today list read the same hook list, so a chat-visible or spicy hook counts in both.
+async function chipCases() {
+  await reset(circle(), [
+    event({ id: "h1", start: iso(T0 + 1 * HOUR), end: iso(T0 + 2 * HOUR) }),
+    event({ id: "h2", start: iso(T0 + 3 * HOUR), end: iso(T0 + 4 * HOUR), visibility: "chat:c1" }),
+    event({ id: "h3", start: iso(T0 + 5 * HOUR), end: iso(T0 + 6 * HOUR), kind: "spicy" }),
+  ]);
+  const home = (await call("GET", "/circles/:id/home", { id: "q" })).body;
+  const chip = (await call("GET", "/circles", {})).body.circles[0].newHooks;
+  assert.equal(home.hooks.length, 3, "Today lists the circle, chat and spicy hooks");
+  assert.equal(chip, home.hooks.filter((h: any) => !h.told).length, "the chip counts what Today counts");
 }
 
 async function fastForwardCases() {

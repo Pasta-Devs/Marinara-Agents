@@ -60,7 +60,7 @@ var et=Object.defineProperty;var tt=(e,a,n)=>a in e?et(e,a,{enumerable:!0,config
 .mw-tag { margin-inline-start: 0.375rem; padding: 0.1rem 0.5rem; border-radius: 999px; border: 1px solid var(--border); font-size: 0.6875rem; color: var(--muted-foreground); white-space: nowrap; }
 .mw-empty { padding: 1.5rem 1rem; text-align: center; color: var(--muted-foreground); }
 .mw-wait { border-color: color-mix(in srgb, #e0b45a 45%, var(--border)); background: color-mix(in srgb, #e0b45a 7%, var(--card)); }
-.mw-waittag { font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.06em; color: #e0b45a; }
+.mw-waittag { font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.06em; color: var(--muted-foreground); }
 .mw-hookcard { grid-template-columns: 2.5rem minmax(0, 1fr); gap: 0.75rem; }
 .mw-who { font-weight: 600; font-size: 0.8125rem; }
 .mw-who small { font-weight: 400; font-size: 0.6875rem; color: var(--muted-foreground); margin-inline-start: 0.375rem; }
