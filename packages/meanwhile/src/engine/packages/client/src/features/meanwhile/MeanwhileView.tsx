@@ -288,7 +288,7 @@ function CircleForm({ circle, onDone }: { circle: Circle | null; onDone: () => v
   const [sharedTouched, setSharedTouched] = useState(circle !== null);
   const shared = sharedTouched ? draft.sharedWorld : draft.linkedChatIds.length === 1;
   const set = (patch: Partial<typeof draft>) => setDraft((d) => ({ ...d, ...patch }));
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ["meanwhile", "circles"] });
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ["meanwhile"] });
   const save = useMutation({
     mutationFn: () => {
       const fields = { ...draft, sharedWorld: shared };
@@ -1058,7 +1058,7 @@ function PhonePanel({ circle }: { circle: Circle }) {
               <span className="mw-name">
                 {name(t.a)} and {name(t.b)}
               </span>{" "}
-              <span className="mw-muted">{t.texts.at(-1)?.text.slice(0, 60)}</span>
+              <span className="mw-muted mw-clip">{t.texts.at(-1)?.text}</span>
             </button>
           ))}
         </div>
@@ -1076,9 +1076,10 @@ function PhonePanel({ circle }: { circle: Circle }) {
               key={`${t.time}${t.from}${t.text}`}
               className={`mw-bubble${t.from === thread.b ? " mw-bubble-right" : ""}`}
             >
-              <span className="mw-sr">{name(t.from)}: </span>
+              <div className="mw-muted">
+                {name(t.from)} · {when(t.time, circle.clock.timezone)}
+              </div>
               <div>{t.text}</div>
-              <div className="mw-muted">{when(t.time, circle.clock.timezone)}</div>
             </div>
           ))}
         </div>

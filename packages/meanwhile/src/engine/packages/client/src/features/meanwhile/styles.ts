@@ -26,8 +26,8 @@ export const MEANWHILE_STYLES = `
 .mw-seg { display: flex; flex-wrap: wrap; gap: 0.375rem; }
 .mw-tag { padding: 0.1rem 0.5rem; border-radius: 999px; border: 1px solid var(--border); font-size: 0.75rem; color: var(--muted-foreground); }
 .mw-empty { padding: 1.5rem 1rem; text-align: center; color: var(--muted-foreground); }
-.mw-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .mw-bubble { max-width: 85%; padding: 0.4rem 0.7rem; border-radius: 0.75rem; background: var(--secondary); overflow-wrap: anywhere; }
+.mw-clip { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .mw-bubble-right { margin-inline-start: auto; background: var(--primary); color: var(--primary-foreground); }
 @media (prefers-reduced-motion: no-preference) { .mw-btn { transition: background-color 0.15s ease; } }
 `;
