@@ -11,6 +11,8 @@ class MeanwhileElement extends HTMLElement {
   private root: ReturnType<typeof createRoot> | null = null;
 
   connectedCallback() {
+    // A custom element is inline by default. The widget fills the card the Engine gives it and scrolls inside.
+    if (this.getAttribute("view") === "widget") Object.assign(this.style, { display: "block", height: "100%" });
     if (!this.root) this.root = createRoot(this);
     // The Engine sets the props after it creates the element, so they are read when the user taps.
     const props = () =>

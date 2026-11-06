@@ -159,8 +159,13 @@ function avatarSrc(path: unknown): string | undefined {
 const NON_TEXT_PROVIDERS = new Set(["image_generation", "video_generation", "audio", "decision"]);
 
 export async function listTextConnections(): Promise<Array<NamedItem & { model?: string }>> {
-  const rows = await request<Array<NamedItem & { provider: string; model?: string }>>("/api/connections");
-  return rows.filter((row) => !NON_TEXT_PROVIDERS.has(row.provider));
+  const [rows, accounts] = await Promise.all([
+    request<Array<NamedItem & { provider: string; model?: string; accountId?: string | null }>>("/api/connections"),
+    // A connection whose account is switched off cannot run. Without the account list, nothing is hidden.
+    request<Array<{ id: string; enabled: boolean }>>("/api/connection-accounts").catch(() => []),
+  ]);
+  const off = new Set(accounts.filter((account) => account.enabled === false).map((account) => account.id));
+  return rows.filter((row) => !NON_TEXT_PROVIDERS.has(row.provider) && !(row.accountId && off.has(row.accountId)));
 }
 
 export interface TimelineEvent {

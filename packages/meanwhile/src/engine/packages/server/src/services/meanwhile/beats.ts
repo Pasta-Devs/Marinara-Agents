@@ -318,7 +318,12 @@ export function attachTexts(raw: unknown, events: readonly LifeEvent[], c: BeatC
 async function beatDay(w: World, gate: Gate, day: string, seeds: Seed[], toMs: number): Promise<LifeEvent[]> {
   const circle = w.circle;
   const labels = new Map(seeds.map((s, n) => [`s${n + 1}`, s] as const));
-  const kinds = new Set([...(circle.allowedKinds.length ? circle.allowedKinds : KINDS), ...circle.bigKindsAllowed]);
+  const kinds = new Set([
+    ...(circle.allowedKinds.length ? circle.allowedKinds : KINDS),
+    ...circle.bigKindsAllowed,
+    // A nudge is the user's own request. Its kind stays allowed even if the Circle settings changed after it was made.
+    ...seeds.filter((s) => s.nudge).map((s) => s.kind),
+  ]);
   // Open promises that are due by this day, in the model's cast numbers.
   const due = w.promises.filter((p) => p.circleId === circle.id && p.status === "open" && p.due <= day);
   const base = beatMessages({

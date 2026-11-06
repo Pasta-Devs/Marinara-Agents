@@ -207,6 +207,9 @@ async function main() {
   const used = doc.nudges[0]!;
   assert.equal(used.status, "used");
   assert.equal(doc.events.find((e) => e.id === used.eventId)?.status, "accepted");
+  // The Circle only allows friends, but the user asked for a hobby: the nudge still happens and is used.
+  doc = await run({ withinDays: 2, kind: "hobbies" }, true);
+  assert.equal(doc.nudges[0]!.status, "used", "a nudge kind the Circle no longer allows is still carried out");
   doc = await run({ withinDays: 2 }, false);
   assert.equal(doc.nudges[0]!.status, "open", "routine only: stays open");
   doc = await run({ createdCircle: iso(T0 - DAY + HOUR) }, false);

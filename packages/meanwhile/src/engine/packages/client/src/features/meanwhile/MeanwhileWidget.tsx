@@ -29,28 +29,31 @@ export function MeanwhileWidget({ open, active }: { open: () => void; active: bo
 
   return (
     <div className="mw-widget">
-      {empty ? <p className="mw-muted">No Circles yet. Make one to let your characters live on.</p> : null}
-      {hooks.map((hook) => {
-        const person = people.get(hook.characterId);
-        return (
-          <button key={`${hook.eventId}:${hook.characterId}`} type="button" className="mw-btn mw-hook" onClick={open}>
-            <Avatar id={hook.characterId} name={person?.name ?? "?"} url={person?.avatarUrl} size={36} ring />
-            <span>
-              <span className="mw-name">{person?.name ?? "Someone"}</span>
-              <span>{hook.text}</span>
-              <span className="mw-muted">{hook.circleName}</span>
-            </span>
-          </button>
-        );
-      })}
-      {quiet.map((circle) => (
-        <p key={circle.id} className="mw-muted">
-          <span className="mw-name">{circle.name}</span>{" "}
-          {circle.toHear > 0
-            ? `${circle.toHear} ${circle.toHear === 1 ? "thing" : "things"} to hear about`
-            : `caught up to ${caughtUp(circle.lastRunCircle, circle.timezone)}`}
-        </p>
-      ))}
+      <div className="mw-widget-head">Meanwhile</div>
+      <div className="mw-widget-list">
+        {empty ? <p className="mw-muted">No Circles yet. Make one to let your characters live on.</p> : null}
+        {hooks.map((hook) => {
+          const person = people.get(hook.characterId);
+          return (
+            <button key={`${hook.eventId}:${hook.characterId}`} type="button" className="mw-btn mw-hook" onClick={open}>
+              <Avatar id={hook.characterId} name={person?.name ?? "?"} url={person?.avatarUrl} size={36} ring />
+              <span>
+                <span className="mw-name">{person?.name ?? "Someone"}</span>
+                <span>{hook.text}</span>
+                <span className="mw-muted">{hook.circleName}</span>
+              </span>
+            </button>
+          );
+        })}
+        {quiet.map((circle) => (
+          <p key={circle.id} className="mw-muted">
+            <span className="mw-name">{circle.name}</span>{" "}
+            {circle.toHear > 0
+              ? `${circle.toHear} ${circle.toHear === 1 ? "thing" : "things"} to hear about`
+              : `caught up to ${caughtUp(circle.lastRunCircle, circle.timezone)}`}
+          </p>
+        ))}
+      </div>
       <button type="button" className="mw-btn" onClick={open}>
         {empty ? "Set up a Circle" : "Open Meanwhile"}
       </button>
