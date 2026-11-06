@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.9.2 — 2026-11-06 [quiet]
+
+- **The aphrodisiac's bottle is whole.** Its neck now meets the heart-shaped body on the Shop's shelf and in the Wardrobe.
+
 ## 0.9.1 — 2026-11-06
 
 - **Less affection from activities each day.** Date Night, Read Them, Read Me, the Claw Machine, Close and remember and Show him now earn at most 150 affection per love interest a day, down from 300. Story chapters still earn without a limit, and so does a gift you give on a date.

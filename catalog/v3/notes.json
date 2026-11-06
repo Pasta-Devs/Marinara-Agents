@@ -670,6 +670,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.9.2",
+          "date": "2026-11-06",
+          "notes": "- **The aphrodisiac's bottle is whole.** Its neck now meets the heart-shaped body on the Shop's shelf and in the Wardrobe.",
+          "highlight": false
+        },
+        {
           "version": "0.9.1",
           "date": "2026-11-06",
           "notes": "- **Less affection from activities each day.** Date Night, Read Them, Read Me, the Claw Machine, Close and remember and Show him now earn at most 150 affection per love interest a day, down from 300. Story chapters still earn without a limit, and so does a gift you give on a date.",
@@ -781,12 +787,6 @@
           "version": "0.7.3",
           "date": "2026-11-03",
           "notes": "- **Love interests remember their Character Stories.** A Memory's Character Story, a Moment, and the scene the first time they wear a new look now join the story's timeline, marked private, as route chapters do. Its love interest always knows what happened there, and the others act only on what they could see. Before, it was one of the small memories that newer ones often pushed out. Stories in progress rebuild their timeline once, from the summaries they already have.",
-          "highlight": false
-        },
-        {
-          "version": "0.7.2",
-          "date": "2026-11-03",
-          "notes": "- **Long lines keep up on iPhone.** A line too long for the dialogue box now follows its typing smoothly and ends on its last row. Before, the box shook as it tried to scroll and fell back short of the end. Once a line is whole, typed out or shown with Next, you can scroll it.\n- **A fuller condensed timeline.** Once the story's timeline passes 14,000 tokens, its older part is condensed to about 5,000 words, half that size, instead of at most 3,000.\n- **Love interests who message you each day.** The Settings number now counts love interests, not messages. Each one who writes first does so once that day, in one or a few messages. Their messages spread over the day even when the number is higher than the love interests you've met.",
           "highlight": false
         }
       ]
