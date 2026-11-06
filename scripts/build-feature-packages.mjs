@@ -203,6 +203,7 @@ const conversationCallsOwnedSourcePaths = [
   "packages/client/src/lib/call-mic-segmenter.ts",
   "packages/client/src/lib/call-speech-queue.ts",
   "packages/server/src/routes/conversation-calls.routes.ts",
+  "packages/server/src/services/conversation/call-character-videos.service.ts",
   "packages/server/src/services/conversation/call-command.ts",
   "packages/server/src/services/conversation/call-transcription.ts",
   "packages/server/src/services/conversation/call-upload.ts",
@@ -725,7 +726,7 @@ const features = [
   {
     id: "conversation-calls",
     name: "Calls",
-    version: "1.1.7",
+    version: "1.1.8",
     minEngineVersion: "2.4.1",
     capabilityApi: PACKAGE_CAPABILITY_API,
     builtAgainst: PACKAGE_BUILT_AGAINST,
