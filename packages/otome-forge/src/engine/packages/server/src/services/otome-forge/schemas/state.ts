@@ -8,6 +8,8 @@
 // M6 adds none: the period tracker and caring messages never reach a server document (plan §1.9).
 // 0.5.0 (#1945): each love interest's notebook (`known`, what they know about the protagonist) and the newest paid
 // Read Me sets (`readMe.paid`), written in the same write.
+// 0.8.12 (#2127): Your thoughts… waiting for the next main chapter (`thoughts`, S/routes/home.ts writes them and
+// S/story/chapters.ts lets them go); a damaged or too long one reads as none.
 import { forgeStoryExpressionCast, forgeStoryExpressionsOn } from "@forge-kit/story-expressions-server.mjs";
 import { z, type ZodType } from "zod";
 import type {
@@ -19,6 +21,7 @@ import type {
   Ledgers,
   LiState,
   Player,
+  PlayerThoughts,
   RunState,
   RunView,
   TimelineEntry,
@@ -62,6 +65,7 @@ import {
   prestigeOf,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import { FACES, type Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
+import { THOUGHTS_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
 import {
   BANNER_KINDS,
   FOUR_STAR_EVERY,
@@ -111,6 +115,7 @@ const GrievanceSchema: ZodType<Grievance> = z.object({
 });
 
 const DisclosureSchema = z.object({ text: short(), at: z.string(), ref: short(120) });
+const ThoughtsSchema: ZodType<PlayerThoughts> = z.object({ text: z.string().min(1).max(THOUGHTS_MAX), at: short(40) });
 
 const RelationshipLineSchema = z.object({ key: short(120), li: z.string(), line: short() });
 const ConflictSchema: ZodType<Ledgers["conflicts"][number]> = z.object({
@@ -321,6 +326,12 @@ function normalizeHome(raw: unknown, lis: RunState["lis"]): HomeState {
   };
 }
 
+/** Your thoughts… waiting (#2127), or null: none, a damaged one, or one longer than the player may write. */
+function normalizeThoughts(raw: unknown): PlayerThoughts | null {
+  const parsed = ThoughtsSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
 export function normalizeState(data: unknown): RunState {
   const lis: RunState["lis"] = {};
   const rawLis = field(data, "lis");
@@ -394,6 +405,7 @@ export function normalizeState(data: unknown): RunState {
     readMe: {
       paid: keepNewest(validItems(ReadMePaidSchema, field(field(data, "readMe"), "paid")), READ_ME_PAID_KEPT),
     },
+    thoughts: normalizeThoughts(field(data, "thoughts")),
   };
 }
 
