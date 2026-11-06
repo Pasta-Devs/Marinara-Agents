@@ -1659,7 +1659,8 @@ function thoughtsLines(player: Pick<Player, "name">, text: string | undefined, u
     [
       "THE PROTAGONIST'S THOUGHTS (the player's own words, for this chapter)",
       `After what happened lately, ${name} is thinking, feeling or planning this:`,
-      `"${thoughts}"`,
+      // JSON-quoted, so a quote mark the player typed cannot end their words early (as notebookItem does).
+      JSON.stringify(thoughts),
       use === "plan"
         ? `Give these thoughts a real place in this chapter where the story allows, in its own way: what ${name} means to do, they set out to do; what weighs on them shows; what they wish for (to be held, say) the story can answer.`
         : `Where this scene touches them, let them colour ${name}'s thought lines, words and choices; never force them in.`,
