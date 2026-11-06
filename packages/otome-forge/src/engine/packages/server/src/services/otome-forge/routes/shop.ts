@@ -3,19 +3,24 @@
 // ──────────────────────────────────────────────
 // GET  /runs/:run/shop                            → ShopView: Starlight, the gifts offered under the story's Heat
 //                                                   (price, how many she owns) and each love interest's figurine
-//                                                   (drawn yet or `drawing`, bought, its scene). It queues, in the
-//                                                   background, the drawing of each figurine not drawn yet
-//                                                   (S/minigames/plush.ts), and never waits for one
+//                                                   (its paint and picture, bought, its scene). It queues the free
+//                                                   cut-out of a painted figurine that has none, and paints nothing
 // POST /runs/:run/shop/gifts {gift, requestId?}   → ShopBuyResult {starlight, shop}: one more of that gift
-// POST /runs/:run/shop/figurines/:li {requestId?} → ShopBuyResult {starlight, shop, story}: their figurine, once, and
-//                                                   the scene it unlocks (S/items/character-story.ts
-//                                                   figurineStoryChapter)
+// POST /runs/:run/shop/figurines/:li {requestId?, reviewImagePrompts?} → ShopBuyResult {starlight, shop, story}: their
+//                                                   figurine, once, the scene it unlocks (S/items/character-story.ts
+//                                                   figurineStoryChapter) and, with an image connection, its one
+//                                                   paid image (#2138, S/art/figurine.ts), claimed and then painted
+//                                                   in the background
+// POST /runs/:run/shop/figurines/:li/art {prompt?, negativePrompt?} → {art}; the tap: Ask's consent, a reviewed
+//                                                   prompt, or Retry. Waits for the paint; never pays twice
+// POST /runs/:run/shop/figurines/:li/art/prompt   → {prompt, negativePrompt}; for the prompt review
 // A purchase is one revision-checked write of the state (applyPurchase): 409 `insufficient` changes nothing, 409
 // `locked` refuses the aphrodisiac under SFW Heat (the client hides it too, but is never trusted), 409 `conflict` a
 // second figurine of the same love interest, and 404 an unknown gift or love interest. A request id seen before
-// answers as that purchase did and charges nothing, so a double tap or a lost answer pays once. Buying never calls a
-// model and never waits for a figurine's drawing: a figurine bought before it is drawn shows their plush frame until
-// it is.
+// answers as that purchase did and charges nothing, so a double tap or a lost answer pays once (and a figurine is
+// claimed once). Buying never calls a model and never waits for a figurine's paint: until it is painted, the shelf
+// shows their portrait frame. The art routes answer 404 for no such love interest, 409 `locked` before the figurine
+// is bought and 503 `no-connection` (the tap) without an image connection.
 // ponytail: a figurine's scene is saved just after the write that bought it; a process stopped between the two leaves a
 // bought figurine with no scene until the same request is sent again (the client keeps its id until answered). The
 // upgrade path is GET /shop saving any missing scene of a bought figurine.
@@ -32,13 +37,20 @@ import {
   type ShopBuyResult,
   type ShopView,
 } from "../../../../../client/src/features/otome-forge/shared/shop.js";
-import { plushSvgUrl } from "../art/plush-svg.js";
+import {
+  figurineArtPrompt,
+  figurinePicture,
+  paintFigurineNow,
+  queueFigurineArt,
+  queueFigurineCutouts,
+} from "../art/figurine.js";
 import { updateIfChanged } from "../art/paint.js";
 import {
   OtomeForgeError,
   debugModeOf,
   liParam,
   parseBody,
+  reviewModeOf,
   runParam,
   type OtomeRequest,
   type RegisterRoutes,
@@ -46,8 +58,8 @@ import {
 } from "../http.js";
 import { runDocTarget, stateId } from "../ids.js";
 import { ensureFigurineStory } from "../items/character-story.js";
-import { ensureFigurineArt } from "../minigames/plush.js";
 import { STATE_LIMITS, keepNewest, normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
+import { ArtBody } from "./items.js";
 
 const RequestId = z
   .string()
@@ -122,8 +134,8 @@ export function applyPurchase(
   };
 }
 
-/** The Shop as the client shows it; `drawing` names the love interests whose figurine waits or runs. */
-export function shopView(run: RunDocuments, state: RunState, drawing: readonly LiId[] = []): ShopView {
+/** The Shop as the client shows it. */
+export function shopView(runId: string, run: Pick<RunDocuments, "world" | "units">, state: RunState): ShopView {
   return {
     starlight: state.wallet.starlight,
     gifts: giftsFor(run.world.content).map((id) => ({ id, price: GIFT_PRICES[id], owned: state.owned.gifts[id] ?? 0 })),
@@ -131,14 +143,12 @@ export function shopView(run: RunDocuments, state: RunState, drawing: readonly L
     figurines: run.units
       .filter((unit) => !!unit.bible)
       .map((unit) => {
-        const art = plushSvgUrl(unit.figurineArt?.svg);
         const owned = !!state.owned.figurines[unit.id];
         return {
           li: unit.id,
           name: unit.name,
           accent: unit.accent,
-          ...(art ? { art } : {}),
-          drawing: !art && drawing.includes(unit.id),
+          ...figurinePicture(runId, unit),
           owned,
           ...(owned ? { story: { key: figurineSceneKey(unit.id) } } : {}),
         };
@@ -147,9 +157,12 @@ export function shopView(run: RunDocuments, state: RunState, drawing: readonly L
   };
 }
 
-/** One purchase in one write of the state, then (a figurine) its scene; the run is read first for its world and cast. */
+/**
+ * One purchase in one write of the state, then (a figurine) its scene and the claim of its paint, which then paints in
+ * the background; the run is read first for its world and cast.
+ */
 async function buy(
-  deps: Pick<RouteDeps, "store">,
+  deps: RouteDeps,
   request: OtomeRequest,
   purchase: (run: RunDocuments) => Purchase,
   requestId: string | undefined,
@@ -164,18 +177,35 @@ async function buy(
     return outcome.replayed ? undefined : outcome.state;
   });
   if (!saved) throw runNotFound();
-  // A figurine's scene is saved now (a replay saves it if the first answer was lost before it was).
+  // A figurine's scene is saved now, and its paint claimed (a replay does both if the first answer was lost first).
   const unit = "figurine" in bought ? run.units.find((entry) => entry.id === bought.figurine) : undefined;
   const story = unit ? { key: await ensureFigurineStory(deps, runId, unit) } : undefined;
+  let units = run.units;
+  if (unit) {
+    try {
+      const claimed = await queueFigurineArt(deps, runId, unit.id, {
+        debugMode: debugModeOf(request),
+        review: reviewModeOf(request),
+      });
+      if (claimed) units = units.map((entry) => (entry.id === claimed.id ? claimed : entry));
+    } catch (error) {
+      // Bought all the same: a tap on Paint in the Shop or the Wardrobe paints it.
+      deps.runtime.logger.warn(
+        "[otome-forge] The figurine of %s was not set to paint: %s",
+        unit.id,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
   return {
     starlight: saved.value.wallet.starlight,
-    shop: shopView(run, saved.value),
+    shop: shopView(runId, { ...run, units }, saved.value),
     ...(story ? { story } : {}),
   };
 }
 
 export const registerShopRoutes: RegisterRoutes = (router, deps) => {
-  const { store, handle, runtime } = deps;
+  const { store, handle } = deps;
 
   router.get(
     "/runs/:run/shop",
@@ -183,19 +213,8 @@ export const registerShopRoutes: RegisterRoutes = (router, deps) => {
       const { runId } = runParam(request);
       const run = await readRun(store, runId);
       if (!run) throw runNotFound();
-      // Each figurine is drawn once, in the background, so the shelf can show it before it is bought.
-      let drawing: LiId[] = [];
-      try {
-        drawing = await ensureFigurineArt(deps, runId, Object.keys(run.state.lis), {
-          debugMode: debugModeOf(request),
-        });
-      } catch (error) {
-        runtime.logger.warn(
-          "[otome-forge] Figurines not queued: %s",
-          error instanceof Error ? error.message : String(error),
-        );
-      }
-      return shopView(run, run.state, drawing);
+      const units = await queueFigurineCutouts(deps, runId, run.units);
+      return shopView(runId, { ...run, units }, run.state);
     }),
   );
 
@@ -222,6 +241,28 @@ export const registerShopRoutes: RegisterRoutes = (router, deps) => {
         },
         requestId,
       );
+    }),
+  );
+
+  router.post(
+    "/runs/:run/shop/figurines/:li/art",
+    handle(async (request) => {
+      const { prompt, negativePrompt } = parseBody(ArtBody, request.body);
+      const { runId } = runParam(request);
+      const art = await paintFigurineNow(deps, runId, liParam(request), {
+        debugMode: debugModeOf(request),
+        edited: { prompt, negativePrompt },
+      });
+      return { art };
+    }),
+  );
+
+  router.post(
+    "/runs/:run/shop/figurines/:li/art/prompt",
+    handle(async (request) => {
+      parseBody(z.object({}), request.body);
+      const { runId } = runParam(request);
+      return figurineArtPrompt(deps, runId, liParam(request));
     }),
   );
 };

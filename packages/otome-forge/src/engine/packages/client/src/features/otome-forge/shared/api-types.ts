@@ -11,7 +11,7 @@ import type { ClawRound } from "./claw";
 import type { ReadHimPaid } from "./read-him";
 import type { NotebookEntry, ReadMePaid } from "./read-me";
 import type { ClawLineKind, TapZone, TimeOfDay } from "./home";
-import type { GiftId } from "./shop";
+import type { FigurinePicture, GiftId } from "./shop";
 import type { PlayerSticker } from "./stickers";
 import type { BannerKind, PityCounter, Rarity } from "./wish";
 
@@ -387,8 +387,8 @@ export interface Unit {
   cutouts: Record<string, Cutout>;
   /** Their Claw Machine plush (#1954): the animal that fits them, drawn as SVG in the background; absent until then. */
   plushArt?: PlushArt;
-  /** #2128: their Shop figurine, drawn as SVG in the background once the Shop is opened; absent until then. */
-  figurineArt?: FigurineArt;
+  /** #2138: their Shop figurine's paint (S/art/figurine.ts), claimed once it is bought; absent until then. */
+  figurine?: Paint;
   /** #2044: his nine chibi stickers, designed once he reaches level 2 with images on (S/art/stickers.ts). */
   stickers?: StickerSet;
 }
@@ -422,12 +422,6 @@ export interface StickerView {
 /** A love interest's own plush: the animal (English, one or two words) and its sanitized SVG (S/art/plush-svg.ts). */
 export interface PlushArt {
   animal: string;
-  svg: string;
-  at: string;
-}
-
-/** A love interest's Shop figurine (#2128): its SVG, sanitized by the plush allow-list (S/art/plush-svg.ts). */
-export interface FigurineArt {
   svg: string;
   at: string;
 }
@@ -559,8 +553,11 @@ export interface HomeView {
   noticed: Noticed | null;
   /** M4: a love interest is noticing her new look right now: Home asks again until the line lands. */
   noticing: boolean;
-  /** #2128: each figurine bought in the Shop and drawn, as a data URL, in cast order; they stand in L0. */
-  figurines?: Array<{ li: LiId; url: string }>;
+  /**
+   * #2128: each figurine bought in the Shop, in cast order, once it is painted or while it paints (#2138); they stand
+   * in L0.
+   */
+  figurines?: Array<FigurinePicture & { li: LiId }>;
   /** #2127: Your thoughts… waiting for the next main chapter, or null. */
   thoughts: PlayerThoughts | null;
 }
