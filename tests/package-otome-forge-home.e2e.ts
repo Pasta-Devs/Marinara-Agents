@@ -13,6 +13,8 @@
 // noticed about hers arriving while Home is open; on a small phone the longest line stands beside the rail without
 // pushing it up, clear of the note, and at every phone size and on desktop it covers no rail button, the note (its Play
 // and Reply), her name, the top bar or the dock.
+// #2127: Your thoughts… beside Remind Me sends what the protagonist is thinking for the next chapter (Enter starts a new
+// line, a failure says so, the window opens with them to change, Clear lets them go), with a dot while they wait.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-home.e2e.ts
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
@@ -147,6 +149,9 @@ function createHomeStub({
     replying: false,
     sendFailures: 0,
     closeFailures: 0,
+    // #2127: Your thoughts… waiting for the next chapter, and how many sends fail first.
+    thoughts: null as Json | null,
+    thoughtsFailures: 0,
   };
   let homeReads = 0;
   // M4: the reads of Me before the line he noticed about her look lands (it is written in the background).
@@ -352,8 +357,18 @@ function createHomeStub({
           photo: photo && home.li === ILVAR ? { url: PHOTO, at: now() } : null,
           noticed: noticedNow ? { li: ILVAR, text: noticedLine, look: "my-wardrobe-0-f", at: now() } : null,
           noticing: worn && meReads >= 1 && !noticedNow,
+          thoughts: state.thoughts,
         },
       };
+    }
+    if (path === `${base}/home/thoughts`) {
+      if (state.thoughtsFailures > 0) {
+        state.thoughtsFailures -= 1;
+        return { status: 500, json: { error: "Otome Forge could not complete the request." } };
+      }
+      const text = String(call.body!.text ?? "").trim();
+      state.thoughts = text ? { text, at: now() } : null;
+      return { status: 200, json: { thoughts: state.thoughts } };
     }
     if (path === `${base}/home/set`) {
       if (call.body!.li) home.li = call.body!.li;
@@ -1273,6 +1288,72 @@ test("Otome Forge Home without images, at reduced motion, during a rupture: init
   expect(pageErrors).toEqual([]);
 });
 
+test("Otome Hearth Home: Your thoughts… wait for the next chapter, open to change, and Clear lets them go", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  const stub = createHomeStub({ images: false });
+  stub.state.thoughtsFailures = 1;
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await stubRoutes(page, stub, []);
+  const root = await openHome(page);
+  await expect(root.getByRole("article", { name: "A note from Ilvar Thorne" })).toContainText(NOTE);
+  const button = root.getByRole("button", { name: "Your thoughts…", exact: true });
+  await expect(button).toHaveAttribute("title", "Your thoughts…");
+  await expect(button.locator(".of-tab-dot")).toHaveCount(0);
+  await expect(button).not.toHaveAccessibleDescription(/./u);
+
+  // The window asks about what happened lately; Enter starts a new line and sends nothing.
+  await button.click();
+  const sheet = page.getByRole("dialog", { name: "Your thoughts…" });
+  const field = sheet.getByRole("textbox", { name: "What are your thoughts on what happened lately?" });
+  await expect(field).toBeFocused();
+  await expect(field).toHaveValue("");
+  await expect(sheet).toContainText(
+    "The next story chapter takes whatever you write here into account, then lets it go.",
+  );
+  await expect(sheet.getByRole("button", { name: "Clear" })).toHaveCount(0);
+  await expect(sheet.getByRole("button", { name: "Send" })).toHaveAttribute("aria-disabled", "true");
+  await field.pressSequentially("I want to look into the clock tower.");
+  await page.keyboard.press("Enter");
+  await field.pressSequentially("And I wish he would hug me.");
+  await expect(field).toHaveValue("I want to look into the clock tower.\nAnd I wish he would hug me.");
+  await expect(sheet).toContainText("64 / 1000");
+  expect(posts(stub, "/home/thoughts")).toHaveLength(0);
+
+  // The first Send fails: the window says so and keeps what was written.
+  await sheet.getByRole("button", { name: "Send" }).click();
+  await expect(sheet.getByRole("alert")).toContainText("Your thoughts were not saved.");
+  await expect(field).toHaveValue("I want to look into the clock tower.\nAnd I wish he would hug me.");
+  await sheet.getByRole("button", { name: "Send" }).click();
+  await expect(sheet).toHaveCount(0);
+  await expect(button).toBeFocused();
+  expect(posts(stub, "/home/thoughts").at(-1)!.body).toMatchObject({
+    text: "I want to look into the clock tower.\nAnd I wish he would hug me.",
+  });
+  await expect(root.locator("[aria-live=polite]").filter({ hasText: "Saved for the next story chapter." })).toHaveCount(
+    1,
+  );
+  await expect(button.locator(".of-tab-dot")).toBeVisible();
+  await expect(button).toHaveAccessibleDescription("Waiting for the next story chapter");
+  await page.screenshot({ path: testInfo.outputPath("thoughts-waiting.png") });
+
+  // Until the next chapter uses them, the window opens with them, and Clear lets them go.
+  await button.click();
+  await expect(field).toHaveValue("I want to look into the clock tower.\nAnd I wish he would hug me.");
+  await sheet.getByRole("button", { name: "Clear" }).click();
+  await expect(sheet).toHaveCount(0);
+  expect(posts(stub, "/home/thoughts").at(-1)!.body).toMatchObject({ text: "" });
+  await expect(button.locator(".of-tab-dot")).toHaveCount(0);
+  await button.click();
+  await expect(field).toHaveValue("");
+  await sheet.getByRole("button", { name: "Close" }).click();
+  await expect(sheet).toHaveCount(0);
+  expect(posts(stub, "/home/thoughts")).toHaveLength(3);
+  expect(pageErrors).toEqual([]);
+});
+
 /**
  * Phone sizes from 360 to 430 px wide and 600 to 900 px tall. At 390 × 664 without images the nameplate once covered
  * two of his three tap pills, and the rail covered the edge of a tap zone beside it at common heights.
@@ -1340,7 +1421,8 @@ function homeLayout(root: Locator) {
           boxRight: box.right,
         };
       })(),
-      // M6's round Remind Me and Caring message share a row at the rail's foot: each counts as a button of its own.
+      // M6's round Remind Me and Caring message share a row at the rail's foot with Your thoughts… (#2127): each counts
+      // as a button of its own.
       rail: named(".of-home-rail > :not(.of-home-rail-row), .of-home-rail-row > *", (node) => `rail: ${label(node)}`),
       covers: [
         ...named(".of-note", () => "note"),
@@ -1403,9 +1485,11 @@ for (const [images, photo] of [
           const layout = await homeLayout(root);
           const at = `${size.width}x${size.height}${caring ? " with Caring message" : ""}`;
           expect(layout.targets, at).toHaveLength(3);
-          expect(layout.rail, at).toHaveLength(caring ? 6 : 5);
+          expect(layout.rail, at).toHaveLength(caring ? 7 : 6);
           expect(layout.rail.map((button) => button.name).slice(4), at).toEqual(
-            caring ? ["rail: Remind Me", "rail: Caring message"] : ["rail: Remind Me"],
+            caring
+              ? ["rail: Remind Me", "rail: Your thoughts…", "rail: Caring message"]
+              : ["rail: Remind Me", "rail: Your thoughts…"],
           );
           // He shows, art or medallion: on the real Engine's 360 x 600 stage his cell once kept 128 px while its
           // cqh read 0, and he shrank to nothing.
@@ -1686,7 +1770,8 @@ for (const images of [true, false]) {
     await page.keyboard.press("ArrowRight");
     await expect(root.locator(".of-home-noticed .of-noticed")).toContainText(LONG_NOTICED, { timeout: 15_000 });
 
-    // M6's rail: Remind Me always, and Caring message beside it on a day the period tracker marks.
+    // M6's rail: Remind Me and Your thoughts… (#2127) always, and Caring message beside them on a day the period tracker
+    // marks.
     await expect(root.getByRole("button", { name: "Remind Me" })).toBeVisible();
     for (const caring of [false, true]) {
       if (caring) await showCaringMessage(page, root);
@@ -1696,9 +1781,11 @@ for (const images of [true, false]) {
         const layout = await homeLayout(root);
         const at = `${size.width}x${size.height}${caring ? " with Caring message" : ""}`;
         expect(layout.noticed, at).toHaveLength(1);
-        expect(layout.rail, at).toHaveLength(caring ? 6 : 5);
+        expect(layout.rail, at).toHaveLength(caring ? 7 : 6);
         expect(layout.rail.map((button) => button.name).slice(4), at).toEqual(
-          caring ? ["rail: Remind Me", "rail: Caring message"] : ["rail: Remind Me"],
+          caring
+            ? ["rail: Remind Me", "rail: Your thoughts…", "rail: Caring message"]
+            : ["rail: Remind Me", "rail: Your thoughts…"],
         );
         expect(layout.noteText, `the note's words at ${at}`).toBeGreaterThanOrEqual(24);
         const [line] = layout.noticed;

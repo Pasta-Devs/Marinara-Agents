@@ -2333,6 +2333,9 @@ ${R} .of-home-rail > * { max-width: 100%; }
 /* M6's Remind Me and Caring message: round, side by side at the rail's foot; only the buttons take the pointer. */
 ${R} .of-home-rail-row { display: flex; gap: 8px; pointer-events: none; }
 ${R} .of-home-rail-row > * { pointer-events: auto; }
+/* Your thoughts… (#2127): Wish's new-tab dot at its top end corner while thoughts wait for the next chapter. */
+${R} .of-home-thoughts { position: relative; }
+${R} .of-home-thoughts .of-tab-dot { position: absolute; top: 3px; inset-inline-end: 3px; }
 /* A short stage (a 360 × 600 phone under the Engine's own bars leaves about 500 px): the rail tightens by 30 px, every
    button still at least 30 px tall, so the note keeps a line of its words above M6's row. */
 @container of-frame (max-height: 540px) {

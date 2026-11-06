@@ -18,6 +18,9 @@
 // Side with (#2046): a side-with node's reply needs ONE small choice with an option backing each love interest present
 // (a repair turn names what is missing); its effects are the game's, never the reply's; the pick moves affection once
 // (+ for the one backed, − for each one passed over, never below a level reached), and the decisions name it.
+// Your thoughts… (#2127): every scene of the main chapter whose plan read them, its Confrontation included, carries
+// them with its task and nowhere else (each prompt is otherwise byte for byte the same); a route, repair, date or story
+// chapter's never does, nor a Closer's outside a main chapter.
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CapabilityLanguageModelMessage } from "@marinara-engine/shared";
@@ -37,6 +40,8 @@ import {
   NO_CHOICES_SENTENCE,
   SUMMARY_WORDING,
   beatMessages,
+  closerMessages,
+  confrontationMessages,
   sideWithInstruction,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import { createOtomeMemory } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/memory.ts";
@@ -51,6 +56,10 @@ import {
   normalizeBeat,
   normalizeChapter,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/story.ts";
+import {
+  normalizeBible,
+  normalizeUnit,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import {
   normalizeBeatReply,
@@ -802,6 +811,91 @@ test("a chapter's plan and scenes share their cached prefix byte for byte; only 
     assert.deepEqual(plain(scenes[i]!).slice(0, before.length), before, `node ${i + 1} reuses node ${i}'s prefix`);
     assert.equal(scenes[i]!.length, i + 2, "a message per settled scene");
     assert.equal(scenes[i]!.at(-2)!.cacheBreakpoint, true, "the newest settled scene carries the mark");
+  }
+});
+
+test("Your thoughts… (#2127): every scene of the main chapter that read them carries them with its task alone", async () => {
+  const words = "THOUGHTS-3: I keep thinking about the bell Kai would not ring.";
+  const play = async (runKey: string, thoughts: boolean) => {
+    const t = await storyWorld({ runKey, replies: router() });
+    if (thoughts) {
+      await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+        ...state,
+        thoughts: { text: words, at: "2026-11-06T09:00:00.000Z" },
+      }));
+    }
+    assert.equal((await t.call("POST", "/runs/:run/chapters/next", { lead: KAI })).status, 200);
+    await readThrough(t, 0, 6);
+    await t.settle();
+    const scenes = t.calls
+      .filter((call) => !isPlanner(call.messages) && !isArcPlan(call.messages))
+      .map((call) => call.messages.map(({ role, content }) => ({ role, content })));
+    return { t, scenes };
+  };
+  const [before, after] = [await play("r-plain-aaaaaa", false), await play("r-thinks-aaaaaa", true)];
+  assert.equal(after.scenes.length, 7, "six scenes and the Confrontation");
+  assert.equal(after.scenes.filter(isConfrontationPrompt).length, 1);
+  assert.equal(before.scenes.length, after.scenes.length);
+  for (const [index, messages] of after.scenes.entries()) {
+    const plain = before.scenes[index]!;
+    const last = messages.at(-1)!.content;
+    assert.deepEqual(messages.slice(0, -1), plain.slice(0, -1), `scene ${index}: the cached part is the same`);
+    assert.ok(last.includes(`After what happened lately, Ines is thinking, feeling or planning this:\n"${words}"`));
+    assert.match(last, /let them colour Ines's thought lines, words and choices; never force them in\./u);
+    assert.match(last, /a love interest knows only what Ines says or does on the page/u);
+    assert.equal(
+      last.replace(/\n\nTHE PROTAGONIST'S THOUGHTS[^]*?on the page\./u, ""),
+      plain.at(-1)!.content,
+      `scene ${index}: the thoughts are all that is added, with its task`,
+    );
+  }
+  // A Rewrite reads the chapter again, so it keeps them.
+  const stored = (await after.t.store.readDoc(chapterId(after.t.runId, "main-1"), normalizeChapter))!;
+  assert.equal(stored.thoughts, words);
+  assert.equal((await after.t.state()).thoughts, null, "and Home's are let go");
+});
+
+test("Your thoughts… (#2127): no route, repair, date or story chapter's scene carries them, and a Closer's does in a main one", () => {
+  const units = [KAI, MIR, SOL].map((id, index) => ({
+    ...normalizeUnit({}),
+    id,
+    name: ["Kai", "Mireille", "Sol"][index]!,
+    bible: normalizeBible({})!,
+  }));
+  const state = normalizeState({ lis: { [KAI]: {}, [MIR]: {}, [SOL]: {} } });
+  const world = normalizeWorld({ connections: { narration: "conn-text" } });
+  const player = normalizePlayer({ name: "Ines" });
+  const words = "THOUGHTS-4: I wish someone would hold me.";
+  const node = (kind: ChapterNode["kind"]) => ({ i: 0, kind, guide: "The lamp room.", cast: [KAI] }) as ChapterNode;
+  const chapter = (kind: Chapter["kind"], climax: ChapterNode["kind"] = "beat") => ({
+    kind,
+    number: kind === "main" ? 2 : undefined,
+    li: kind === "main" ? undefined : KAI,
+    stage: kind === "route" ? 2 : undefined,
+    title: "The Lamp",
+    lead: KAI,
+    nodes: [node(climax)],
+    thoughts: words,
+  });
+  const tail = (build: typeof beatMessages | typeof confrontationMessages, kind: Chapter["kind"], climax = "beat") =>
+    build({
+      world,
+      player,
+      units,
+      state,
+      chapter: chapter(kind, climax as ChapterNode["kind"]),
+      node: node(climax as ChapterNode["kind"]),
+      storySoFar: [],
+      memory: "",
+      li: KAI,
+    } as Parameters<typeof confrontationMessages>[0]).at(-1)!.content;
+  for (const kind of ["route", "repair", "date", "story", "prologue"] as const) {
+    assert.ok(!tail(beatMessages, kind).includes("THOUGHTS-4"), `${kind}: a scene`);
+    assert.ok(!tail(confrontationMessages, kind, "confrontation").includes("THOUGHTS-4"), `${kind}: a Confrontation`);
+    assert.ok(!tail(closerMessages, kind, "closer").includes("THOUGHTS-4"), `${kind}: a Closer`);
+  }
+  for (const build of [beatMessages, confrontationMessages, closerMessages]) {
+    assert.ok(tail(build, "main", build === beatMessages ? "beat" : "closer").includes(`"${words}"`));
   }
 });
 
