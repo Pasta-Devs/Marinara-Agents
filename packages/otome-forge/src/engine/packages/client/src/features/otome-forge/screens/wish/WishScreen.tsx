@@ -4,7 +4,8 @@
 // the server charges and rolls in one write and answers with what arrived, which comes in a sealed letter, a 5★ reveal
 // for each 5★, and the results. Skip always goes straight to the results. A month's seasonal banners (SH/wish.ts
 // rotationSeason) wear a badge naming the month and its theme, here and in Echoes. The Shop tab (#2128, ShopPanel.tsx)
-// spends Starlight on gifts and figurines instead; it has no banner, so nothing about banners shows in it.
+// spends Starlight on gifts and figurines instead: it runs no banner logic (no banner, pity or "write the new banners"),
+// and under it stay only what every tab shares, the Memory Selectors and the footer hint.
 // ──────────────────────────────────────────────
 // Routes (S/routes/wish.ts): GET /runs/:run/wish → WishView; POST .../wish/open → WishOpenResult (writes the banners
 // this fortnight is missing: one model call, and their art unless Ask before painting holds it); POST .../wish/pull

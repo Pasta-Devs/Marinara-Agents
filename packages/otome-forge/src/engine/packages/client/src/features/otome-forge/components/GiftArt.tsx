@@ -113,7 +113,7 @@ function GiftShape({ gift }: { gift: GiftId }) {
       return (
         <g>
           <rect x={27} y={6} width={10} height={6} rx={2} fill="#c79a6b" {...LINE} />
-          <rect x={28.5} y={12} width={7} height={9} fill="#f7d6e0" {...LINE} />
+          <rect x={28.5} y={12} width={7} height={17} fill="#f7d6e0" {...LINE} />
           <path
             d="M32 58 C19 49 13 42 13 34 C13 27.6 17.6 23 23.2 23 C27 23 30.2 25 32 28.4 C33.8 25 37 23 40.8 23 C46.4 23 51 27.6 51 34 C51 42 45 49 32 58 Z"
             fill="#ffb3c8"

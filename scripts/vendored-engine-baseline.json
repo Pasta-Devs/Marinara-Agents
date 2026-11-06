@@ -107,7 +107,6 @@
   "packages/server/src/routes/generate/illustrator-references.ts": "drifted:9658901e6e58c2594f7e419dd0d4b83d9d1d95edff4f1f1673563764144c8518:e50b9a6e22ff074d597278ae97496bbb28c4b40e3a1944597f8502a8c4b3662a",
   "packages/server/src/services/agents/agent-concurrency.ts": "drifted:5f167a0abbe0337559be8697f0ea44c64762e12849013554839c7013e07cbd15:6e9df576fa57faeeef06054d1a57b3dc290095a20b6e408ef487acc54fb4578a",
   "packages/server/src/services/capability-packages/capability-command-registry.service.ts": "drifted:388a0cfae249c4ccef82cb4e8ae47cf559690cacd2e73c86837a24281bcf9717:791441a6660d2747e4e136359a53e9719ba4af6a7b32bb3efc0faffab7cb0f2f",
-  "packages/server/src/services/conversation/call-character-videos.service.ts": "drifted:4ef5c76e39b0a0abf6e1e842f89eec9e30fe0f38b39b8b111e1b0ae4d45d1a28:7f573056287964f0f1604a4a4459efdbd8afca4bf3d4f1d1a13bee46644c5a37",
   "packages/server/src/services/conversation/call-summary-routing.ts": "orphaned:3f0b0344756eb6fa222d8e59b53067a7f4daba549b720348c82621f6ab72d919:orphaned",
   "packages/server/src/services/conversation/character-commands.ts": "drifted:7ba5791d4791d86182a4b0066fc9592f847b9a353adadb277febaed958484a9e:73f2cac3b07de90af2be1a1455114f2a6404ca08bc5d5a4c933275e846436df7",
   "packages/server/src/services/conversation/schedule.service.ts": "drifted:e30bc04b58ba92b9bca17ed04a2b96212d2b3ebdd076494f7f40eeca1525e0ed:6159ce4050b8980a60a9281b8eeeff3814955717c7475f91df3d3882eb471a28",

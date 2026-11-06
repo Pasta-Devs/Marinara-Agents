@@ -1054,8 +1054,12 @@ export async function getConversationCallCharacterVideoManifest(input: {
 }): Promise<ConversationCallCharacterVideoManifest> {
   assertSafeCharacterId(input.characterId);
   const avatar = await readAvatarIdentity(input.avatarPath);
-  const manifest = await readDiskManifest(input.characterId, input.characterName, input.avatarPath);
-  return toPublicManifest(manifest, avatar);
+  // Under the manifest lock: a job writes its last clip entry under this lock before it drops its generation lock, so the
+  // read and the generation state cannot disagree (Marinara-Agents#2132). The lock is not re-entrant: never call this
+  // from an updateDiskManifest callback.
+  return withManifestLock(input.characterId, async () =>
+    toPublicManifest(await readDiskManifest(input.characterId, input.characterName, input.avatarPath), avatar),
+  );
 }
 
 export async function startConversationCallCharacterVideoGeneration(input: {
