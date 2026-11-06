@@ -29,6 +29,10 @@ import {
   giftsFor,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/shop.ts";
 import {
+  wardrobeWorking,
+  type WardrobeView,
+} from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/wardrobe.ts";
+import {
   cutoutsSettled,
   type CutoutClient,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cutout.ts";
@@ -694,4 +698,15 @@ test("a figurine scene's key names its love interest; no other chapter key does"
   for (const key of ["story-memories-1-f", "main-3", "story-figurine-", "prestige-li-kai-0001-1"]) {
     assert.equal(figurineLiOf(key), null, key);
   }
+});
+
+test("the Wardrobe keeps reading while a figurine paints or is cut out, and stops once it is shown cut out", () => {
+  const base = { him: {}, me: [], couples: [], noticed: null, noticing: false } as unknown as WardrobeView;
+  const figurine = (art: unknown, cutting: boolean) =>
+    ({ ...base, figurines: [{ li: KAI, story: { key: figurineSceneKey(KAI) }, art, cutting }] }) as WardrobeView;
+  assert.equal(wardrobeWorking(base), false, "nothing on its way");
+  assert.equal(wardrobeWorking(figurine({ state: "pending" }, false)), true, "painting");
+  assert.equal(wardrobeWorking(figurine({ state: "ready" }, true)), true, "painted, its cut-out still being made");
+  assert.equal(wardrobeWorking(figurine({ state: "ready" }, false)), false, "cut out");
+  assert.equal(wardrobeWorking({ ...base, figurines: undefined } as WardrobeView), false, "an older server's view");
 });

@@ -39,28 +39,29 @@ import { accentOf, initialsOf } from "../../lib/accent";
 import type { LiId, RunLiView, RunView } from "../../shared/api-types";
 import { FACES } from "../../shared/faces";
 import { GIFT_IDS } from "../../shared/shop";
-import type { CoupleSet, LookView, ShowResult, WardrobeOwner, WardrobeView, WearResult } from "../../shared/wardrobe";
+import {
+  wardrobeWorking,
+  type CoupleSet,
+  type LookView,
+  type ShowResult,
+  type WardrobeOwner,
+  type WardrobeView,
+  type WearResult,
+} from "../../shared/wardrobe";
 import type { ItemView } from "../../shared/wish";
 import { FACE_LABEL_KEYS } from "../reader/FacePlate";
 import { FigurinePaint } from "../wish/ShopPanel";
 import { OpenCost, PaintReviewDialog, RarityStars } from "../wish/TenPullGrid";
 
-/** While a look or a figurine paints or a love interest is noticing hers, the wardrobe is read again this often. */
+/** While something in the wardrobe is still on its way (SH/wardrobe.ts wardrobeWorking), it is read again this often. */
 const POLL_MS = 3_000;
-
-const working = (wardrobe: WardrobeView | undefined) =>
-  !!wardrobe &&
-  (wardrobe.noticing ||
-    [...Object.values(wardrobe.him).flat(), ...wardrobe.me].some((look) => look.art?.state === "pending") ||
-    wardrobe.couples.some((couple) => couple.pair?.state === "pending") ||
-    !!wardrobe.figurines?.some((figurine) => figurine.art?.state === "pending"));
 
 export function useWardrobe(runKey: string) {
   const otome = useOtomeApi();
   return useQuery({
     queryKey: wardrobeQueryKey(runKey),
     queryFn: () => otome.get<WardrobeView>(`${runPath(runKey)}/wardrobe`),
-    refetchInterval: (query) => (working(query.state.data) ? POLL_MS : false),
+    refetchInterval: (query) => (wardrobeWorking(query.state.data) ? POLL_MS : false),
   });
 }
 
