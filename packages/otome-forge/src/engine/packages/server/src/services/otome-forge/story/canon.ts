@@ -45,11 +45,12 @@
 //   full;
 // - with `lastStory` (#2126: the storyline chapters' prompts, P5, P10, P11, and P6, P12 and P12c in a main, route or
 //   repair chapter), the last Character Story (lastStoryOf), for every cast, in story order, under its own heading
-//   ("# Last Character Story", lastStoryTitle): private between the protagonist and its love interest (and anyone who
-//   appears in it), nobody else knowing what happened in it. Without it, a chapter another love interest led lost the
-//   story until its summary was folded into the timeline, and could contradict it. By its summary, or in full while
-//   it has none, as above; it goes in even when the timeline covers it, its entry left out of the timeline, or beside
-//   the condensed head that holds it;
+//   ("# Last Character Story, by its summary" or "# Last Character Story in full", with lastStoryTitle): private
+//   between the protagonist and its love interest (and anyone who appears in it), nobody else knowing what happened
+//   in it. Without it, a chapter another love interest led lost the story until its summary was folded into the
+//   timeline, and could contradict it. By its summary (the kit's one record of it, pieces joined), or in full while it
+//   has none, as above; it goes in even when the timeline covers it, its entry left out of the timeline, or beside the
+//   condensed head that holds it;
 // - the recall pool (S/memory/memory.ts: the newest small memories this prompt may know, within 5k tokens, each date the
 //   timeline covers by its summary among them), after the timeline or, when `cached`, as a context of its own that the
 //   prompt sends after its cached part. A recall that fails is the same story context without it.
