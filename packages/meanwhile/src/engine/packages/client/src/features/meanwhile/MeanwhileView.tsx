@@ -26,7 +26,7 @@ import {
   type NamedItem,
   type Span,
 } from "./api.js";
-import { COPY } from "./copy.js";
+import { COPY, PLAIN_KINDS, kindLabel } from "./copy.js";
 import { Avatar, Icon, clockTime, errorText, friendlyDay, presence } from "./parts.js";
 import { CircleSetup } from "./setup.js";
 
@@ -256,7 +256,6 @@ const KIND_LABELS: Record<string, string> = {
   "job loss": "a job loss",
   "serious injury": "a serious injury",
 };
-const PLAIN_KINDS = ["work", "friends", "family", "romance", "conflict", "health", "luck", "hobbies"];
 
 /** "This week Lily gets a job offer": the deck turns the nudge into one planned event inside its window. */
 function NudgesPanel({ circle, people, today }: { circle: Circle; people: Map<string, NamedItem>; today: string }) {
@@ -271,7 +270,13 @@ function NudgesPanel({ circle, people, today }: { circle: Circle; people: Map<st
     queryFn: () => getNudges(circle.id),
     refetchInterval: 15_000,
   });
-  const kinds = [...(circle.allowedKinds.length ? circle.allowedKinds : PLAIN_KINDS), ...circle.bigKindsAllowed];
+  // The same kinds as the Circle setup. Kinds the Circle has switched off stay listed, greyed out.
+  const allowed = new Set([
+    ...(circle.allowedKinds.length ? circle.allowedKinds : PLAIN_KINDS),
+    ...circle.bigKindsAllowed,
+  ]);
+  const kinds = [...PLAIN_KINDS, ...circle.bigKindsAllowed.filter((k) => !PLAIN_KINDS.includes(k))];
+  const firstKind = kinds.find((k) => allowed.has(k)) ?? kinds[0]!;
   const name = (id: string) => people.get(id)?.name ?? "Someone";
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["meanwhile", "nudges", circle.id] });
   const add = useMutation({
@@ -279,7 +284,7 @@ function NudgesPanel({ circle, people, today }: { circle: Circle; people: Map<st
       createNudge(circle.id, {
         cast: [who || circle.castIds[0], also].filter((id): id is string => typeof id === "string" && !!id),
         text,
-        kind: kind || kinds[0],
+        kind: kind || firstKind,
         withinDays: days,
       }),
     onSuccess: () => {
@@ -332,10 +337,11 @@ function NudgesPanel({ circle, people, today }: { circle: Circle; people: Map<st
           </label>
           <label className="mw-field">
             <span className="mw-label">{COPY.nudgeKind}</span>
-            <select className="mw-input" value={kind || kinds[0]} onChange={(e) => setKind(e.target.value)}>
+            <select className="mw-input" value={kind || firstKind} onChange={(e) => setKind(e.target.value)}>
               {kinds.map((k) => (
-                <option key={k} value={k}>
-                  {KIND_LABELS[k] ?? k}
+                <option key={k} value={k} disabled={!allowed.has(k)}>
+                  {kindLabel(k)}
+                  {allowed.has(k) ? "" : ` (${COPY.kindOff})`}
                 </option>
               ))}
             </select>
@@ -1205,17 +1211,16 @@ function CircleHome({
       <div className="mw-cast">
         {circle.castIds.map((id) => {
           const now = timeline.data?.now[id];
+          const status = now
+            ? `${now.activity}${now.until ? ` until ${clockTime(now.until)}` : ""}`
+            : timeline.data
+              ? COPY.nothingYet
+              : "";
           return (
-            <div key={id} className="mw-person">
+            <div key={id} className="mw-person" title={`${people.get(id)?.name ?? "Someone"}: ${status}`}>
               {personAvatar(people, id, 56, { ring: hookFor.has(id), status: presence(now) })}
               <b>{people.get(id)?.name ?? "Someone"}</b>
-              <span>
-                {now
-                  ? `${now.activity}${now.until ? ` until ${clockTime(now.until)}` : ""}`
-                  : timeline.data
-                    ? COPY.nothingYet
-                    : ""}
-              </span>
+              <span className="mw-stat">{status}</span>
             </div>
           );
         })}

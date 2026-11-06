@@ -18,11 +18,11 @@ export const MEANWHILE_STYLES = `
 .mw-pop { position: absolute; inset-inline-end: 0; top: 3rem; z-index: 20; min-width: 11rem; display: grid; padding: 0.25rem; border: 1px solid var(--border); border-radius: 0.75rem; background: var(--card); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); }
 .mw-item { min-height: 2.75rem; padding: 0 0.75rem; border: 0; border-radius: 0.5rem; background: transparent; color: var(--foreground); font: inherit; text-align: start; cursor: pointer; }
 .mw-item:hover, .mw-item:focus-visible { background: var(--secondary); outline: none; }
-.mw-cast { display: flex; gap: 0.75rem; overflow-x: auto; padding: 0.5rem 0.125rem 0.375rem; scrollbar-width: none; }
-.mw-person { flex: 0 0 4.75rem; text-align: center; }
+.mw-cast { display: grid; grid-template-columns: repeat(auto-fill, 5.75rem); justify-content: start; gap: 0.75rem 0.5rem; padding: 0.5rem 0.125rem 0.375rem; }
+.mw-person { min-width: 0; text-align: center; }
 .mw-person b { display: block; font-size: 0.78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 0.3rem; }
-.mw-person span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; font-size: 0.6875rem; color: var(--muted-foreground); line-height: 1.25; }
-.mw-av { position: relative; flex: 0 0 auto; display: inline-grid; place-items: center; border-radius: 50%; color: #fff; font-weight: 700; box-shadow: 0 0 0 2px var(--background); }
+.mw-person .mw-stat { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.6875rem; color: var(--muted-foreground); line-height: 1.25; }
+.mw-av { position: relative; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; line-height: 1; border-radius: 50%; color: #fff; font-weight: 700; box-shadow: 0 0 0 2px var(--background); }
 .mw-av img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
 .mw-av-ring { box-shadow: 0 0 0 2px var(--background), 0 0 0 3.5px var(--primary); }
 .mw-person .mw-av { margin: 0 auto; }
@@ -33,7 +33,7 @@ export const MEANWHILE_STYLES = `
 .mw-cta { display: flex; gap: 0.5rem; }
 .mw-cta .mw-btn-primary { flex: 1; }
 .mw-tabs { display: flex; gap: 0.125rem; padding: 0.1875rem; background: var(--muted); border-radius: 0.75rem; overflow-x: auto; scrollbar-width: none; }
-.mw-tab { flex: 1 0 auto; min-height: 2.75rem; padding: 0 0.75rem; border: 0; border-radius: 0.5625rem; background: transparent; color: var(--muted-foreground); font: inherit; font-size: 0.8125rem; cursor: pointer; }
+.mw-tab { flex: 1 1 auto; min-height: 2.75rem; padding: 0 0.375rem; border: 0; border-radius: 0.5625rem; background: transparent; color: var(--muted-foreground); font: inherit; font-size: 0.78rem; white-space: nowrap; cursor: pointer; }
 .mw-tab-on { background: var(--card); color: var(--foreground); font-weight: 600; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); }
 .mw-card { display: grid; gap: 0.6rem; padding: 0.85rem; border: 1px solid var(--border); border-radius: 1rem; background: var(--card); text-align: start; color: inherit; font: inherit; }
 .mw-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
@@ -152,7 +152,11 @@ export const MEANWHILE_STYLES = `
 .mw-details .mw-field { margin-top: 0.5rem; }
 @media (min-width: 640px) { .mw-choices { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (min-width: 900px) { .mw-setup { align-items: center; background: color-mix(in srgb, var(--background) 70%, transparent); } .mw-setup-box { height: auto; max-height: 90dvh; border-radius: 1.25rem; border: 1px solid var(--border); overflow: hidden; background: var(--card); } }
-.mw-widget { display: grid; gap: 0.5rem; }
+.mw-widget { display: flex; flex-direction: column; gap: 0.5rem; height: 100%; min-height: 0; }
+.mw-widget-head { flex: none; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted-foreground); }
+.mw-widget-list { display: flex; flex-direction: column; gap: 0.5rem; flex: 1; min-height: 0; overflow-y: auto; }
+.mw-widget .mw-hook { flex: none; font-size: 0.875rem; }
+.mw-widget .mw-hook .mw-muted { font-size: 0.75rem; }
 .mw-hook { display: flex; align-items: flex-start; gap: 0.6rem; width: 100%; text-align: start; overflow-wrap: anywhere; font-weight: 400; justify-content: flex-start; }
 .mw-hook > span:last-child { display: grid; gap: 0.1rem; min-width: 0; }
 @media (min-width: 900px) { .mw-scrim { align-items: center; } .mw-sheet { border-radius: 1.25rem; } }

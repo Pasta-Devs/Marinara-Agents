@@ -1,5 +1,7 @@
 // One place for the copy, so it can move to a locale file later.
 export const COPY = {
+  kindOff: "off in settings",
+  settingPlaceholder: "A shared flat in a big city, early autumn. Everyone has a job and a small daily routine.",
   title: "Meanwhile",
   new: "New Circle",
   empty: "No Circles yet. Make one to start.",
@@ -104,3 +106,8 @@ export const COPY = {
   paperOf: (n: number, total: number) => `${n} of ${total}`,
   issue: (n: number) => `Issue ${n}`,
 };
+
+export const PLAIN_KINDS = ["work", "friends", "family", "romance", "conflict", "health", "luck", "hobbies"];
+export const BIG_KINDS = ["death", "breakup", "pregnancy", "moving away", "job loss", "serious injury"];
+/** One short label for an event kind, used by the setup and the nudge form. */
+export const kindLabel = (kind: string) => kind[0]!.toUpperCase() + kind.slice(1);

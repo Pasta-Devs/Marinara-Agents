@@ -14,7 +14,7 @@ import {
   type CircleFields,
   type NamedItem,
 } from "./api.js";
-import { COPY } from "./copy.js";
+import { BIG_KINDS, COPY, PLAIN_KINDS, kindLabel } from "./copy.js";
 import { Avatar, Icon, errorText, friendlyDay } from "./parts.js";
 
 // The setup, in three steps for a new Circle and as one scrollable page for an existing one.
@@ -46,7 +46,6 @@ const S = {
   done: "Done",
   noCast: "No characters yet. Add some.",
   setting: "Setting",
-  settingPlaceholder: "A shared flat in Berlin, early autumn. Lily works at a climbing gym, Mia studies.",
   world: "Chats and facts",
   shared: ["Shared world", "All linked chats share what happens."],
   separate: ["Separate chats", "Each chat only hears its own facts."],
@@ -86,8 +85,6 @@ const S = {
   speedFailed: "The Circle is made, but its speed could not be set. Set it in Edit.",
 };
 
-const BIG_KINDS = ["death", "breakup", "pregnancy", "moving away", "job loss", "serious injury"];
-const PLAIN_KINDS = ["work", "friends", "family", "romance", "conflict", "health", "luck", "hobbies"];
 const PACES: Circle["pace"][] = ["cozy", "eventful", "dramatic"];
 const MAX_CAST = 12;
 const CHEAP = /mini|flash|haiku|lite|nano|small|deepseek/i;
@@ -541,7 +538,7 @@ export function CircleSetup({
           className="mw-input"
           rows={4}
           maxLength={600}
-          placeholder={S.settingPlaceholder}
+          placeholder={COPY.settingPlaceholder}
           value={draft.setting}
           onChange={(e) => {
             setTouched((t) => ({ ...t, setting: true }));
@@ -630,7 +627,7 @@ export function CircleSetup({
               aria-pressed={kinds.includes(kind)}
               onClick={() => toggleKind(kind)}
             >
-              {kind[0]!.toUpperCase() + kind.slice(1)}
+              {kindLabel(kind)}
             </button>
           ))}
         </div>
