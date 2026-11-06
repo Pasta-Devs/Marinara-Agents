@@ -29,6 +29,9 @@ export interface Circle {
   pace: "cozy" | "eventful" | "dramatic";
   allowedKinds: string[];
   bigKindsAllowed: string[];
+  /** Big events count right away instead of waiting for the user. */
+  bigAuto?: boolean;
+  budgetCallsPerDay: number;
   backgroundTimer: boolean;
   writeStatus: boolean;
   surprise: boolean;
@@ -57,6 +60,10 @@ export type CircleFields = Partial<
     | "writeStatus"
     | "surprise"
     | "connectionId"
+    | "allowedKinds"
+    | "bigKindsAllowed"
+    | "bigAuto"
+    | "budgetCallsPerDay"
   >
 > & { timezone?: string };
 
@@ -104,6 +111,8 @@ export interface NamedItem {
   id: string;
   name: string;
   avatarUrl?: string;
+  /** A character card scenario, used to prefill the setting. */
+  scenario?: string;
 }
 
 export async function listCharacters(): Promise<NamedItem[]> {
@@ -117,17 +126,25 @@ export async function listCharacters(): Promise<NamedItem[]> {
         data = {};
       }
     }
-    const card = (data ?? {}) as { name?: unknown; data?: { name?: unknown } };
+    const card = (data ?? {}) as { name?: unknown; data?: { name?: unknown; scenario?: unknown } };
     const name = typeof card.name === "string" ? card.name : card.data?.name;
+    const scenario = card.data?.scenario;
     return {
       id: row.id,
       name: typeof name === "string" && name ? name : "Unnamed",
       avatarUrl: avatarSrc(row.avatarPath),
+      scenario: typeof scenario === "string" && scenario.trim() ? scenario.trim().slice(0, 600) : undefined,
     };
   });
 }
 
-export const listChats = () => request<NamedItem[]>("/api/chats");
+export interface ChatItem extends NamedItem {
+  characterIds?: unknown;
+  lastMessageAt?: string | null;
+  updatedAt?: string;
+}
+
+export const listChats = () => request<ChatItem[]>("/api/chats");
 
 /** The Engine serves an avatar from a path, a bare file name or a full URL. */
 function avatarSrc(path: unknown): string | undefined {
@@ -141,8 +158,8 @@ function avatarSrc(path: unknown): string | undefined {
 /** Providers that cannot write a line of text. */
 const NON_TEXT_PROVIDERS = new Set(["image_generation", "video_generation", "audio", "decision"]);
 
-export async function listTextConnections(): Promise<NamedItem[]> {
-  const rows = await request<Array<NamedItem & { provider: string }>>("/api/connections");
+export async function listTextConnections(): Promise<Array<NamedItem & { model?: string }>> {
+  const rows = await request<Array<NamedItem & { provider: string; model?: string }>>("/api/connections");
   return rows.filter((row) => !NON_TEXT_PROVIDERS.has(row.provider));
 }
 

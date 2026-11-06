@@ -260,7 +260,7 @@ export function checkBeat(raw: unknown, c: BeatCheck): { label: string; event: L
       source: "generated",
       // Big events wait for the user; the review queue itself is the next slice.
       // A nudge is the user's own request, so even a big kind needs no review.
-      status: major && !seed.nudge ? "proposed" : "accepted",
+      status: major && !seed.nudge && !c.circle.bigAuto ? "proposed" : "accepted",
       visibility: "circle",
       seedId: seed.id,
       ...(Object.keys(diary).length ? { diary } : {}),
