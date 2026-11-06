@@ -408,6 +408,19 @@ test("the Shop routes sell gifts and a figurine once, and the Wardrobe and Home 
   ]);
   assert.equal((await t.call("GET", "/runs/:run/wardrobe")).body.figurines[1].url, cut);
   assert.equal(t.paid.length, 0, "Home and the Shop never paint");
+
+  // A painted figurine whose cut-out was never queued (a restart between paint and cut-out): the Wardrobe queues it
+  // itself, for free, so it never reads as being cut out with nothing on the way (its poll waits on `cutting`).
+  const kaiPainted = "/api/global-gallery/file/kai.png";
+  await t.setUnit(KAI, (unit) => ({ ...unit, figurine: { ...ready, url: kaiPainted } }));
+  const first = await t.call("GET", "/runs/:run/wardrobe");
+  assert.equal(first.body.figurines[0].cutting, true, "being cut out");
+  await cutoutsSettled();
+  assert.deepEqual(t.cuts.slice(-1), [kaiPainted], "queued by the Wardrobe read, with no Shop or Home visit");
+  const kai = (await t.call("GET", "/runs/:run/wardrobe")).body.figurines[0];
+  assert.equal(kai.cutting, false, "cut out, so the Wardrobe stops polling");
+  assert.notEqual(kai.url, kaiPainted);
+  assert.equal(t.paid.length, 0, "the Wardrobe never paints");
 });
 
 test("under NSFW Heat the Shop sells the aphrodisiac; Heat lowered keeps it owned, unlisted and unsold", async () => {

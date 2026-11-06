@@ -63,7 +63,7 @@ import {
   pairView,
   paintPairNow,
 } from "../art/outfits.js";
-import { figurinePicture } from "../art/figurine.js";
+import { figurinePicture, queueFigurineCutouts, type FigurineDeps } from "../art/figurine.js";
 import { paintView, updateIfChanged } from "../art/paint.js";
 import { generateJson, runForeground } from "../generation.js";
 import { OtomeForgeError, debugModeOf, parseBody, runParam, type RegisterRoutes, type RouteDeps } from "../http.js";
@@ -165,7 +165,7 @@ const noticing = new Set<string>();
 export const noticingLooks = (runId: string) =>
   [...noticing].filter((key) => key.startsWith(`${runId}|`)).map((key) => key.slice(runId.length + 1));
 
-export async function wardrobeView(deps: Pick<RouteDeps, "store">, runId: string): Promise<WardrobeView> {
+export async function wardrobeView(deps: FigurineDeps, runId: string): Promise<WardrobeView> {
   // Asked before the reads: a line that lands while they run then answers "on its way", never "none and done".
   const noticingNow = noticingLooks(runId);
   const run = await readRun(deps.store, runId);
@@ -234,9 +234,15 @@ export async function wardrobeView(deps: Pick<RouteDeps, "store">, runId: string
         return count > 0 ? [[gift, count]] : [];
       }),
     ),
-    figurines: castOf(run)
-      .filter((unit) => run.state.owned.figurines[unit.id])
-      .map((unit) => ({ li: unit.id, ...figurinePicture(runId, unit), story: { key: figurineSceneKey(unit.id) } })),
+    // A painted figurine's cut-out is queued here too, as Home and the Shop do (no model or image call): without it a
+    // figurine whose cut-out was never queued reads as still being cut out, and the Wardrobe would poll for it.
+    figurines: (
+      await queueFigurineCutouts(
+        deps,
+        runId,
+        castOf(run).filter((unit) => run.state.owned.figurines[unit.id]),
+      )
+    ).map((unit) => ({ li: unit.id, ...figurinePicture(runId, unit), story: { key: figurineSceneKey(unit.id) } })),
   };
 }
 
