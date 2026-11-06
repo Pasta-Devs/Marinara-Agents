@@ -6,10 +6,14 @@
 //                                       home) and its cut-out, his ready faces with their cut-outs, whether his lines
 //                                       are ready, a rupture, unread replies, L0's picture (backdropOf), what a
 //                                       love interest noticed about her look (M4's P19, and whether it is on its way),
-//                                       and the newest Photo Shoot photo with him, taped into his note (#2087), and
-//                                       each figurine bought in the Shop and drawn (#2128), which stands in L0
+//                                       the newest Photo Shoot photo with him, taped into his note (#2087), Your
+//                                       thoughts… waiting for the next main chapter (#2127), and each figurine
+//                                       bought in the Shop and drawn (#2128), which stands in L0
 // POST /runs/:run/home/set {li?, show?} → {home}: the love interest Home is about, and Him or Me
 // POST /runs/:run/home/note {li}       → {note}: today's note, written by the day's first call and read back after
+// POST /runs/:run/home/thoughts {text} → {thoughts}: Your thoughts… (#2127), trimmed, wait with no model call for
+//                                       the next main chapter's plan (S/story/chapters.ts), which lets them go; ""
+//                                       lets them go now. 400 over THOUGHTS_MAX characters
 // GET  /runs/:run/lis/:li/lines        → LinesView: his pre-written lines (cold only during a rupture)
 // Reading Home queues what it is missing in the background and never waits for it: each love interest's line pack
 // (the first visit backfills every one), the cut-outs of his worn look and its ready faces, and the drawing of a
@@ -47,6 +51,7 @@ import {
 } from "../http.js";
 import { isLiId, runDocTarget, stateId, unitId } from "../ids.js";
 import { readThread, unreadCount } from "../phone/chat.js";
+import { THOUGHTS_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
 import { field } from "../schemas/common.js";
 import { normalizeState, readRun, readyFaces } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
@@ -58,6 +63,7 @@ const SetBody = z.object({
   show: z.enum(["him", "me"]).optional(),
 });
 const NoteBody = z.object({ li: z.string().min(1).max(80) });
+const ThoughtsBody = z.object({ text: z.string().max(THOUGHTS_MAX) });
 
 export interface HomeRouteDeps extends RouteDeps {
   /** The loopback cut-out client by default; tests pass a fake. */
@@ -213,6 +219,7 @@ export function registerHomeRoutes(router: OtomeRouter, deps: HomeRouteDeps): vo
         // Only a line about the look she wears now is kept (schemas/player.ts), so a changed look shows none.
         noticed: run.player.noticed,
         noticing: noticingNow.includes(run.player.wornOutfit ?? ""),
+        thoughts: run.state.thoughts,
         figurines: run.units.flatMap((entry) => {
           const url = run.state.owned.figurines[entry.id] ? plushSvgUrl(entry.figurineArt?.svg) : undefined;
           return url ? [{ li: entry.id, url }] : [];
@@ -235,6 +242,21 @@ export function registerHomeRoutes(router: OtomeRouter, deps: HomeRouteDeps): vo
       });
       if (!state) throw runNotFound();
       return { home: state.home };
+    }),
+  );
+
+  router.post(
+    "/runs/:run/home/thoughts",
+    handle(async (request) => {
+      const text = parseBody(ThoughtsBody, request.body).text.trim();
+      const { runId } = runParam(request);
+      const at = new Date().toISOString();
+      // The same words sent again keep their time, so a plan being written as they are sent still lets them go.
+      const state = await store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) =>
+        (current.thoughts?.text ?? "") === text ? current : { ...current, thoughts: text ? { text, at } : null },
+      );
+      if (!state) throw runNotFound();
+      return { thoughts: state.thoughts };
     }),
   );
 

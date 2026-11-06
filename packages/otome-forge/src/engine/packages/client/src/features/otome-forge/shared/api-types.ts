@@ -510,6 +510,15 @@ export interface HomeState {
 }
 
 /**
+ * #2127: Your thoughts… on Home, what the player wrote the protagonist is thinking, feeling or planning after what
+ * happened lately (trimmed, 1 to THOUGHTS_MAX characters), and when it was sent (an ISO time).
+ */
+export interface PlayerThoughts {
+  text: string;
+  at: string;
+}
+
+/**
  * What Home stands up: `look` is his worn look ("him") or the protagonist's ("me"): a painted full-body `look`, or the
  * persona's `avatar`. Null shows initials on a gradient. `cutoutState` "pending" means a cut-out is on its way (ask
  * again later); "uncut" means none will come, so Home pans slowly over the uncut image.
@@ -552,6 +561,8 @@ export interface HomeView {
   noticing: boolean;
   /** #2128: each figurine bought in the Shop and drawn, as a data URL, in cast order; they stand in L0. */
   figurines?: Array<{ li: LiId; url: string }>;
+  /** #2127: Your thoughts… waiting for the next main chapter, or null. */
+  thoughts: PlayerThoughts | null;
 }
 
 // ── Phone (M3): one private thread per love interest. S/phone/chat.ts reads and writes these shapes. ──
@@ -826,6 +837,11 @@ export interface RunState {
   readHim: { paid: ReadHimPaid[] };
   /** The newest paid Read Me sets (#1945): the once-only mark of the write that paid them and filled the notebook. */
   readMe: { paid: ReadMePaid[] };
+  /**
+   * #2127: Your thoughts… on Home, waiting for the next main chapter: its plan reads them and lets them go in the write
+   * that registers it (S/story/chapters.ts). Null while none wait.
+   */
+  thoughts: PlayerThoughts | null;
 }
 
 /** One Shop purchase as the state keeps it (S/routes/shop.ts): what it bought, a gift id or `figurine:<li>`. */
@@ -930,6 +946,11 @@ export interface Chapter {
    * premise frame every node.
    */
   prestige?: { kind: PrestigeKind; premise: string };
+  /**
+   * #2127: a main chapter's copy of the Your thoughts… its plan read, so each of its scenes carries them too (hidden
+   * from the client).
+   */
+  thoughts?: string;
 }
 
 /** A segment of a beat: one line of dialogue, one thought, or one piece of narration. */
@@ -1129,7 +1150,10 @@ export type ChapterState = "unplanned" | "in-progress" | "done";
 export type BeatState = "unwritten" | "ready" | "read";
 
 /** A chapter as the client sees it: no guides and no ledger (the plan is the hidden story). */
-export type ChapterView = Omit<Chapter, "nodes" | "ledger" | "connectionId" | "date" | "music" | "prestige"> & {
+export type ChapterView = Omit<
+  Chapter,
+  "nodes" | "ledger" | "connectionId" | "date" | "music" | "prestige" | "thoughts"
+> & {
   music?: Pick<ChapterMusic, "track">;
   nodes: Array<Pick<ChapterNode, "i" | "kind" | "moment" | "cg" | "gate">>;
 };

@@ -7,7 +7,9 @@
 // rupture that opens or is repaired later the same day replaces the day's note once; the note's recall is framed as
 // what he may know; the small hours are late night and the note's day is the request's own instant; P15 keeps no
 // question and its comfort lines are warmth only; a debug request folds into a line-pack job that waits; his face on
-// Home follows a tap, then his note, then a rupture, and a tap line is voiced under a ref of its own words.
+// Home follows a tap, then his note, then a rupture, and a tap line is voiced under a ref of its own words. Your
+// thoughts… (#2127) are saved trimmed with no model call, cleared by empty text, refused over THOUGHTS_MAX and for a
+// run that does not exist, and read back on Home.
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CapabilityLanguageModelMessage } from "@marinara-engine/shared";
@@ -20,6 +22,7 @@ import type {
 import { defaultContent } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/content.ts";
 import {
   LINE_COUNTS,
+  THOUGHTS_MAX,
   sentenceCount,
   timeOfDayOf,
   wordCount,
@@ -66,6 +69,7 @@ import {
   noteId,
   playerId,
   runDocTarget,
+  runIdOf,
   stateId,
   unitId,
   worldId,
@@ -1202,6 +1206,49 @@ test("Home shows the chosen love interest or the protagonist, and counts unread 
   }));
   assert.equal((await t.call("GET", "/runs/:run/home")).body.unread, 1, "his replies after the thread was seen");
   assert.equal((await t.call("POST", "/runs/:run/home/note", note("li-nobody-zz99", "UTC"))).status, 404);
+});
+
+test("Your thoughts… (#2127): saved trimmed with no model call, cleared by empty text, refused over the limit", async () => {
+  const t = await homeWorld("r-thought-aaaaaa");
+  const path = "/runs/:run/home/thoughts";
+  const state = async () => (await t.store.readDoc(stateId(t.runId), normalizeState))!;
+  const home = async () => (await t.call("GET", "/runs/:run/home")).body;
+  assert.equal((await home()).thoughts, null, "none wait at first");
+
+  const saved = await t.call("POST", path, { body: { text: "  I want to look into the north light.\n\n " } });
+  assert.equal(saved.status, 200, JSON.stringify(saved.body));
+  assert.equal(saved.body.thoughts.text, "I want to look into the north light.");
+  assert.ok(!Number.isNaN(Date.parse(saved.body.thoughts.at)), "with when they were sent");
+  assert.deepEqual((await state()).thoughts, saved.body.thoughts, "kept in the run's state");
+  assert.deepEqual((await home()).thoughts, saved.body.thoughts, "and shown on Home");
+  const same = await t.call("POST", path, { body: { text: "I want to look into the north light." } });
+  assert.deepEqual(same.body.thoughts, saved.body.thoughts, "the same words again keep their time");
+
+  const longest = "x".repeat(THOUGHTS_MAX);
+  assert.equal((await t.call("POST", path, { body: { text: longest } })).body.thoughts.text, longest);
+  const over = await t.call("POST", path, { body: { text: `${longest}x` } });
+  assert.equal(over.status, 400);
+  assert.equal(over.body.code, "bad-request");
+  assert.equal((await t.call("POST", path, { body: {} })).status, 400, "text is required");
+  assert.equal((await state()).thoughts?.text, longest, "a refused request changes nothing");
+
+  const cleared = await t.call("POST", path, { body: { text: " \n " } });
+  assert.equal(cleared.status, 200);
+  assert.equal(cleared.body.thoughts, null, "empty text lets them go");
+  assert.equal((await state()).thoughts, null);
+  assert.equal((await home()).thoughts, null);
+  assert.deepEqual(
+    t.calls.filter((entry) => !isPack(entry.messages)),
+    [],
+    "only Home's own line packs ask the model, never the thoughts",
+  );
+
+  // A run that does not exist (or a malformed key) is a 404, and creates nothing.
+  for (const runKey of ["r-nobody-aaaaaa", "not-a-run"]) {
+    const missing = await homeRoutes(t.deps, runKey)("POST", path, { body: { text: "Hello." } });
+    assert.equal(missing.status, 404, runKey);
+  }
+  assert.equal(await t.store.readDoc(stateId(runIdOf("r-nobody-aaaaaa")), normalizeState), null);
 });
 
 // ── Pure ──

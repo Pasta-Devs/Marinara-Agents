@@ -1,9 +1,10 @@
 // ──────────────────────────────────────────────
 // Otome Forge: Home's numbers and words shared by both bundles (plan M3 "Home server", P15, P16)
 // ──────────────────────────────────────────────
-// Pure TypeScript. The server writes line packs and notes by these counts and limits (S/home) and reads the time of day
-// with timeOfDayOf; the client picks a tap line by the same zones and times of day (C/lib/tap-mood.ts, which also holds
-// the catalog's fallback lines until his own pack exists).
+// Pure TypeScript. The server writes line packs and notes by these counts and limits (S/home), checks Your thoughts… by
+// THOUGHTS_MAX and reads the time of day with timeOfDayOf; the client picks a tap line by the same zones and times of
+// day (C/lib/tap-mood.ts, which also holds the catalog's fallback lines until his own pack exists), and counts the
+// thoughts' characters by THOUGHTS_MAX.
 
 export const TAP_ZONES = ["head", "hand", "heart"] as const;
 export type TapZone = (typeof TAP_ZONES)[number];
@@ -37,6 +38,11 @@ export const NOTE_TEXT_MAX = 600;
  * so any number above its cast means all of them (S/phone/daily.ts).
  */
 export const DAILY_MESSAGES_MAX = 24;
+/**
+ * Your thoughts… on Home (#2127): the most characters the player may write. The server refuses longer (S/routes/home.ts)
+ * and reads a longer stored one as none (S/schemas/state.ts); the next main chapter's plan and scenes carry them.
+ */
+export const THOUGHTS_MAX = 1000;
 /** The mood chip's reason: this many words or fewer. */
 export const MOOD_REASON_WORDS_MAX = 4;
 /** The notes before today that the note prompt sees, so he does not repeat himself. */

@@ -14,6 +14,10 @@
 // each, resolved within two chapters). A failed check is the generation core's one repair turn. A side-with mark
 // (#2046) is kept on the first beat node with two to four love interests while one may come (sideWithOpen), and every
 // other mark is dropped without a repair turn.
+// Your thoughts… (#2127): the thoughts the player left on Home are read as the plan is written, given to it after its
+// cached part, and copied onto the chapter for its scenes (S/story/beats.ts); the write that registers the chapter lets
+// them go, unless newer ones were sent meanwhile. A plan that fails, is cancelled or refused saves nothing and keeps
+// them.
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import type {
   ArcJudgment,
@@ -450,14 +454,18 @@ export async function planNextChapter(
     const units = cast.map((li) => run.units.find((unit) => unit.id === li)!);
     // ponytail: recalls for the Lead only, since the planner picks the Foil (plan M2a "Recall": cast [lead, foil]).
     // The Lead's own route and repair chapters reach the plan; the Foil's and everyone else's never do, in recall
-    // (S/story/canon.ts mayKnow) or in the ledgers (S/prompts.ts knownTo). Upgrade path: a second recall for the Foil
-    // after the plan names them, or keep [lead] so another love interest's private canon never reaches the node guides.
+    // (S/story/canon.ts mayKnow) or in the ledgers (S/prompts.ts knownTo), but for the last Character Story, whoever's
+    // it is, titled private between the protagonist and its love interest (#2126, `lastStory`). Upgrade path: a
+    // second recall for the Foil after the plan names them, or keep [lead] so another love interest's private canon
+    // never reaches the node guides.
     const memory = await recallText(deps, runId, {
       job: "structured",
       cast: [lead],
       continues: "main",
       // The recalls follow the Lead, so they go after the story context the chapter's scenes share (#2066, #2091).
       cached: {},
+      // As every scene of the chapter is, so the story context stays theirs (S/story/beats.ts generateBeat).
+      lastStory: true,
       query: { plan: units.find((unit) => unit.id === lead)?.bible?.want ?? "", speakers: units.map((u) => u.name) },
       signal,
       debugMode,
@@ -504,6 +512,8 @@ export async function planNextChapter(
         { debugMode, ...(signal ? { signal } : {}), memory: arcMemory! },
       ));
     const judgment = await judgmentFor(deps.store, runId, arc, mains, number);
+    // #2127: the thoughts waiting now, after the arc's plan: `run.state` was read before this task was queued.
+    const thoughts = (await deps.store.readDoc(stateId(runId), normalizeState))?.thoughts ?? null;
     const context: PlanContext = {
       units,
       state: run.state,
@@ -533,6 +543,7 @@ export async function planNextChapter(
         arc,
         sideWith,
         judgment: !!judgment,
+        thoughts: thoughts?.text ?? "",
         // The scenes read the story context it caches only on the same connection (#2091).
         sharesCache: resolveConnectionId(run.world, "structured") === resolveConnectionId(run.world, "narration"),
       }),
@@ -558,17 +569,24 @@ export async function planNextChapter(
       ...plan,
       plannedAt: new Date().toISOString(),
       connectionId,
+      ...(thoughts ? { thoughts: thoughts.text } : {}),
     };
     const saved = await deps.store.mutateDoc(
       runDocTarget("chapter", chapterId(runId, key)),
       normalizeChapter,
       (current) => current ?? chapter,
     );
-    await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (state) =>
-      state.chapters[key]
-        ? state
-        : { ...state, chapters: { ...state.chapters, [key]: { beatsRead: 0, completed: null, applied: [] } } },
-    );
+    // ponytail: the thoughts are let go only here, after the chapter is saved, so a state write that gives up on a
+    // conflict (409 after its retries) leaves them waiting for the following chapter too. Ceiling: a rare conflict.
+    // Upgrade path: let them go, by their time, wherever a saved main chapter that carries them is read back.
+    await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (state) => {
+      const chapters = state.chapters[key]
+        ? state.chapters
+        : { ...state.chapters, [key]: { beatsRead: 0, completed: null, applied: [] } };
+      // The ones this plan read, by their time: thoughts sent while it was written wait for the next chapter.
+      const used = !!thoughts && state.thoughts?.at === thoughts.at;
+      return chapters === state.chapters && !used ? state : { ...state, chapters, ...(used ? { thoughts: null } : {}) };
+    });
     return saved ?? chapter;
   });
 }

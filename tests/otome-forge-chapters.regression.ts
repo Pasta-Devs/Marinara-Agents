@@ -7,6 +7,10 @@
 // open grievance; the narrator the newest three, the rupture's and those its node may resolve. Side with (#2046): a
 // main chapter may hold one side-with scene only after three main chapters without one (chapter 4 at the earliest),
 // on a beat node with two to four love interests, and only when the planner marks it; any other mark is dropped.
+// Your thoughts… (#2127): the next main chapter's plan reads the thoughts waiting on Home with its task (never in its
+// cached part), keeps a copy on the chapter that the client never sees, and lets them go in the write that registers
+// it; a plan that fails or is refused keeps them, thoughts sent while it is written wait for the chapter after, and a
+// plan without thoughts gets the prompt it got before.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs";
@@ -517,4 +521,115 @@ test("Side with (#2046): POST /chapters/next lets chapter 4 keep its mark, and n
   assert.equal(fifth.key, "main-5");
   assert.doesNotMatch(fifth.planner, /SIDE WITH/, "only two main chapters completed since the last one");
   assert.deepEqual(fifth.sides, [], "and a mark the planner sets anyway is dropped");
+});
+
+test("Your thoughts… (#2127): the next main chapter's plan reads them with its task, keeps a copy and lets them go", async () => {
+  const words = "THOUGHTS-1: I want to look into the north light, and I wish Kai would just hold me.";
+  const later = "THOUGHTS-2: Mireille lied to me about the ledger. I can't let it go.";
+  const at = "2026-11-06T09:00:00.000Z";
+  const send = (text: string, when = at) => ({ text, at: when });
+  const t = await storyWorld({
+    runKey: "r-thought-aaaaaa",
+    replies: [
+      "not json",
+      "still not json",
+      "I can't help with planning this chapter.",
+      "I'm unable to continue this story.",
+      // While the plan is written the player sends newer thoughts: the plan's state write finds them there.
+      () => {
+        t.fake.interfere(stateId(t.runId), (data) => ({ ...data, thoughts: send(later, "2026-11-06T09:05:00.000Z") }));
+        return json(planReply());
+      },
+      json(planReply({ title: "The Second Night", ledger: { relationship: [], conflict: [], offscreen: [] } })),
+    ],
+  });
+  const state = async () => (await t.store.readDoc(stateId(t.runId), normalizeState))!;
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (current) => ({
+    ...current,
+    thoughts: send(words),
+  }));
+  const planners = () =>
+    t.calls.filter((entry) => entry.messages.some((message) => message.content.includes("chapter planner")));
+
+  // A plan that comes back in the wrong format twice, then one the model refuses: nothing is saved, the thoughts wait.
+  assert.equal((await t.call("POST", "/runs/:run/chapters/next", { lead: KAI })).status, 502);
+  assert.deepEqual((await state()).thoughts, send(words), "a failed plan keeps them");
+  assert.equal((await t.call("POST", "/runs/:run/chapters/next", { lead: KAI })).status, 422);
+  assert.deepEqual((await state()).thoughts, send(words), "and so does a refused one");
+
+  const planned = await t.call("POST", "/runs/:run/chapters/next", { lead: KAI });
+  assert.equal(planned.status, 200, JSON.stringify(planned.body));
+  const plan = planners().at(-1)!.messages;
+  const tail = plan.at(-1)!.content;
+  assert.ok(tail.includes(`THE PROTAGONIST'S THOUGHTS (the player's own words, for this chapter)`));
+  assert.ok(tail.includes(`After what happened lately, Ines is thinking, feeling or planning this:\n"${words}"`));
+  assert.match(tail, /Give these thoughts a real place in this chapter where the story allows, in its own way/u);
+  assert.match(tail, /a love interest knows only what Ines says or does on the page/u);
+  assert.ok(
+    tail.indexOf("THOUGHTS-1") < tail.indexOf("Plan main chapter 1 now"),
+    "they come before the task, after the recalls",
+  );
+  assert.ok(
+    plan.slice(0, -1).every((message) => !message.content.includes("THOUGHTS-1")),
+    "never in the cached story context or the instructions",
+  );
+  assert.ok(!plan.at(-1)!.cacheBreakpoint, "and never marked");
+  const stored = (await t.store.readDoc(chapterId(t.runId, "main-1"), normalizeChapter))!;
+  assert.equal(stored.thoughts, words, "the chapter keeps them for its scenes");
+  assert.equal(JSON.stringify(planned.body).includes("THOUGHTS"), false, "and the client never sees them");
+  assert.equal(toChapterView(stored).thoughts, undefined);
+  // Sent while the plan was written, the newer thoughts wait for the next chapter; the chapter is registered anyway.
+  assert.deepEqual((await state()).thoughts, send(later, "2026-11-06T09:05:00.000Z"));
+  assert.deepEqual((await state()).chapters["main-1"], { beatsRead: 0, completed: null, applied: [] });
+  assert.equal((await t.call("POST", "/runs/:run/chapters/next", { lead: KAI })).status, 409, "chapter 2 waits");
+  assert.equal(planners().length, 5, "with no model call");
+  assert.equal((await state()).thoughts?.text, later, "and the newer thoughts keep waiting for it");
+
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (current) => ({
+    ...current,
+    chapters: { ...current.chapters, "main-1": { beatsRead: 7, completed: at, applied: [] } },
+  }));
+  const second = await t.call("POST", "/runs/:run/chapters/next", { lead: KAI });
+  assert.equal(second.status, 200, JSON.stringify(second.body));
+  const next = planners().at(-1)!.messages.at(-1)!.content;
+  assert.ok(next.includes(later) && !next.includes("THOUGHTS-1"), "the next chapter reads the newer ones alone");
+  assert.equal((await t.store.readDoc(chapterId(t.runId, "main-2"), normalizeChapter))!.thoughts, later);
+  assert.equal((await state()).thoughts, null, "then lets them go");
+  assert.equal(
+    (await t.store.readDoc(chapterId(t.runId, "main-1"), normalizeChapter))!.thoughts,
+    words,
+    "while chapter 1 keeps its own",
+  );
+});
+
+test("Your thoughts… (#2127): a plan without thoughts gets the prompt it got before", () => {
+  const units = CAST.map((li) => ({ ...normalizeUnit({}), id: li.id, name: li.name, pronouns: HE, bible: bible() }));
+  const world = normalizeWorld({ connections: { narration: "conn-text" } });
+  const prompt = (thoughts?: string) =>
+    chapterPlanMessages({
+      world,
+      player: normalizePlayer({}),
+      units,
+      state: stateWith({}),
+      number: 2,
+      lead: KAI,
+      memory: "",
+      recalls: "",
+      ...(thoughts === undefined ? {} : { thoughts }),
+    });
+  const before = prompt();
+  assert.deepEqual(prompt(""), before);
+  assert.deepEqual(prompt(" \n "), before, "whitespace alone is no thoughts");
+  const after = prompt("I wish someone would hug me today.");
+  assert.deepEqual(after.slice(0, -1), before.slice(0, -1), "the cached part is the same");
+  const block = after.at(-1)!.content.replace(before.at(-1)!.content, "");
+  assert.equal(
+    after.at(-1)!.content.replace(/\n\nTHE PROTAGONIST'S THOUGHTS[^]*?on the page\./u, ""),
+    before.at(-1)!.content,
+    "the thoughts block is all that is added",
+  );
+  assert.ok(block.length > 0);
+  // Named "the protagonist" while the player document has no name, and never softened or filtered.
+  assert.match(after.at(-1)!.content, /After what happened lately, the protagonist is thinking/u);
+  assert.match(after.at(-1)!.content, /"I wish someone would hug me today\."/u);
 });

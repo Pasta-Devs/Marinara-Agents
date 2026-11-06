@@ -48,6 +48,7 @@
 //     story plan); the other story prompts read the setting alone (P2, P14 and P20 send the premise their own way)
 //   arcPlanMessages: the arc planner, #1980 (S/story/arc.ts)
 //   chapterPlanMessages: P5 chapter plan (S/story/chapters.ts)
+//   thoughtsLines: Your thoughts… from Home (#2127), in P5 and in its main chapter's P6, P12 and P12c, with the task
 //   beatMessages: P6 scene (beat) narrator, also for dates, Character Stories (P22, P23), extra stories and the
 //     prologue (S/story/beats.ts). Its NO_CHOICES_SENTENCE must stay the kit's sentence word for word (Elsewhere)
 //   GUIDE, prologueFraming, prologueEnding: the prologue's node, framing and hand-off (S/story/prologue.ts, beats.ts)
@@ -1646,6 +1647,33 @@ export function arcPlanMessages({
   ];
 }
 
+// ── Your thoughts… (#2127) ──
+
+/**
+ * What the player wrote on Home that the protagonist is thinking, feeling or planning after what happened lately: the
+ * next main chapter's plan (P5) gives it a place in the chapter, and that chapter's scenes (P6, P12, P12c, from the
+ * chapter's copy) let it colour the protagonist. It changes from chapter to chapter, so each prompt sends it with its
+ * task, after the cached part; without thoughts there are no lines, and the prompt is as it was.
+ */
+function thoughtsLines(player: Pick<Player, "name">, text: string | undefined, use: "plan" | "scene"): string[] {
+  const thoughts = text?.trim() ?? "";
+  if (!thoughts) return [];
+  const name = player.name || "the protagonist";
+  return [
+    "",
+    [
+      "THE PROTAGONIST'S THOUGHTS (the player's own words, for this chapter)",
+      `After what happened lately, ${name} is thinking, feeling or planning this:`,
+      // JSON-quoted, so a quote mark the player typed cannot end their words early (as notebookItem does).
+      JSON.stringify(thoughts),
+      use === "plan"
+        ? `Give these thoughts a real place in this chapter where the story allows, in its own way: what ${name} means to do, they set out to do; what weighs on them shows; what they wish for (to be held, say) the story can answer.`
+        : `Where this scene touches them, let them colour ${name}'s thought lines, words and choices; never force them in.`,
+      `They never undo or contradict what was already played, and they are not events: nothing in them has happened unless the story so far shows it. They are ${name}'s private inner thoughts: a love interest knows only what ${name} says or does on the page.`,
+    ].join("\n"),
+  ];
+}
+
 // ── P5: chapter plan (structured, 0.8, planner contract) ──
 
 export interface ChapterPlanInput {
@@ -1670,6 +1698,8 @@ export interface ChapterPlanInput {
   sideWith?: boolean;
   /** This chapter's end may close on the arc's judgment (#2047, judgmentFor): only that, never its question or truth. */
   judgment?: boolean;
+  /** Your thoughts… waiting on Home (#2127), or "": sent with the task, after the cached part. */
+  thoughts?: string;
   /**
    * Whether the chapter's scenes are written on this plan's connection (S/generation.ts resolveConnectionId), so they
    * can read the story context it caches. Otherwise nothing is marked: nothing would read it (#2091).
@@ -1694,6 +1724,7 @@ export function chapterPlanMessages({
   arc: plannedArc = null,
   sideWith = false,
   judgment = false,
+  thoughts = "",
   sharesCache = true,
 }: ChapterPlanInput): OtomeMessage[] {
   const leadUnit = units.find((unit) => unit.id === lead);
@@ -1802,6 +1833,7 @@ export function chapterPlanMessages({
     ledgerBlock(state, units, [lead]) || "(none yet)",
     "",
     recalls.trim(),
+    ...thoughtsLines(player, thoughts, "plan"),
     "",
     `Plan main chapter ${number} now, led by ${leadUnit?.name ?? lead} (id ${lead}).`,
     otomeContractReminder("planner"),
@@ -1908,7 +1940,18 @@ export interface BeatMessagesInput {
   state: RunState;
   chapter: Pick<
     Chapter,
-    "kind" | "number" | "title" | "lead" | "foil" | "nodes" | "li" | "stage" | "grievance" | "date" | "prestige"
+    | "kind"
+    | "number"
+    | "title"
+    | "lead"
+    | "foil"
+    | "nodes"
+    | "li"
+    | "stage"
+    | "grievance"
+    | "date"
+    | "prestige"
+    | "thoughts"
   >;
   node: ChapterNode;
   /** The canonical story so far in this chapter: each earlier node's scene, rendered ([] for its first node). */
@@ -2009,6 +2052,8 @@ export function beatMessages({
     groupIntimacyFor(world, present, state),
     "",
     recalls.trim(),
+    // A main chapter's own (#2127): no other chapter's scenes ever carry them.
+    ...thoughtsLines(player, chapter.kind === "main" ? chapter.thoughts : undefined, "scene"),
     "",
     `Narrate node ${node.i + 1} of ${chapter.nodes.length}${last ? ", the chapter's last" : ""}:`,
     `What happens: ${node.guide}`,
@@ -2521,6 +2566,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     groupIntimacyFor(world, present, state),
     "",
     recalls.trim(),
+    ...thoughtsLines(player, chapter.kind === "main" ? chapter.thoughts : undefined, "scene"),
     "",
     `Write the confrontation of node ${node.i + 1} of ${chapter.nodes.length}, between ${protagonist} and ${name} (id ${li}):`,
     `What happens: ${node.guide}`,
@@ -2604,6 +2650,7 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
     groupIntimacyFor(world, present, state),
     "",
     recalls.trim(),
+    ...thoughtsLines(player, chapter.kind === "main" ? chapter.thoughts : undefined, "scene"),
     "",
     `Write the closer of node ${node.i + 1} of ${chapter.nodes.length}, between ${protagonist} and ${name} (id ${li}):`,
     `What happens: ${node.guide}`,

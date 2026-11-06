@@ -3,8 +3,8 @@
 // node allows; a rupture never takes anything unlocked back, and moves to another rupture still owed instead of
 // closing; a pick applies once (first play only) and names whom it touched; reading pays each
 // beat and each chapter once; hostile first-play picks cost affection above the reached level's floor; a side-with
-// pick (#2046) gains uncapped and loses only above that floor, once; and the daily caps follow the player's own
-// midnight in each zone.
+// pick (#2046) gains uncapped and loses only above that floor, once; the daily caps follow the player's own
+// midnight in each zone; and Your thoughts… (#2127) survive a save, while a damaged or too long one reads as none.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { forgeTimeZoneRoutes } from "@forge-kit/time-zone-server.mjs";
@@ -14,6 +14,7 @@ import type {
   RunState,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import * as economy from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/economy.ts";
+import { THOUGHTS_MAX } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/home.ts";
 import {
   normalizeState,
   toRunView,
@@ -600,4 +601,24 @@ test("Side with (#2046): the one backed gains past the daily cap; one passed ove
   assert.deepEqual(replay.affection, []);
   assert.deepEqual(replay.state, saved(first.state), "a replay changes nothing");
   assert.equal(saved(first.state).lis[KAI]!.points, 320, "the next request reads it back");
+});
+
+test("Your thoughts… (#2127) survive a save; a damaged or too long one reads as none", () => {
+  assert.equal(fresh().thoughts, null, "none wait in a new story");
+  const thoughts = { text: "I can't stop thinking about the bell.", at: AT };
+  assert.deepEqual(saved({ ...fresh(), thoughts }).thoughts, thoughts);
+  const read = (value: unknown) => normalizeState({ lis: { [KAI]: {} }, thoughts: value }).thoughts;
+  assert.equal(read({ text: "x".repeat(THOUGHTS_MAX), at: AT })?.text.length, THOUGHTS_MAX, "the longest kept whole");
+  assert.deepEqual(read({ ...thoughts, extra: true }), thoughts, "an unknown field is dropped");
+  for (const value of [
+    { text: "x".repeat(THOUGHTS_MAX + 1), at: AT },
+    { text: "", at: AT },
+    { text: 7, at: AT },
+    { text: "Hello." },
+    "Hello.",
+    [thoughts],
+    null,
+  ]) {
+    assert.equal(read(value), null, JSON.stringify(value)?.slice(0, 40));
+  }
 });

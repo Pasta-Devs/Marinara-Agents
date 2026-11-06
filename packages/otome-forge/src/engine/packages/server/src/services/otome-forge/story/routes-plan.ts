@@ -218,6 +218,8 @@ export async function planRouteChapter(
       job: "structured",
       cast: [li],
       continues: li,
+      // The last Character Story, whoever's it is, as the route chapter's scenes are given it (#2126).
+      lastStory: true,
       query: {
         plan: unit.bible?.arc[String(next.stage) as ArcStageKey]?.seed ?? unit.bible?.want ?? "",
         speakers: [unit.name],
@@ -311,6 +313,8 @@ export async function planRepairChapter(
       job: "structured",
       cast: [li],
       continues: li,
+      // The last Character Story, whoever's it is, as the repair chapter's scenes are given it (#2126).
+      lastStory: true,
       query: { plan: grievance.text, speakers: [unit.name] },
       signal,
       debugMode,
