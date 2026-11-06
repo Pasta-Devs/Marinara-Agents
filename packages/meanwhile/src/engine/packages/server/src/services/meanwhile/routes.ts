@@ -97,10 +97,26 @@ function statusOf(circle: Circle, mark: RunMark, now: number, calls: number) {
   };
 }
 
+// Hooks no chat has told yet. Same rule as the Home widget, counted per Circle for the tab chips.
+const newHooks = (doc: MeanwhileDocument, circle: Circle) =>
+  doc.events
+    .filter(
+      (e) =>
+        e.circleId === circle.id &&
+        !hiddenBySurprise(doc, circle, e) &&
+        e.status === "accepted" &&
+        e.visibility === "circle" &&
+        e.kind !== "spicy" &&
+        e.hook &&
+        Object.keys(e.delivered ?? {}).length === 0,
+    )
+    .reduce((n, e) => n + Object.keys(e.hook!).length, 0);
+
 const view = (doc: MeanwhileDocument, circle: Circle, now: number) => ({
   ...circle,
   status: statusOf(circle, markOf(doc, circle.id), now, usageRow(doc.usage, circle.id, now).calls),
   toHear: countHidden(doc, circle),
+  newHooks: newHooks(doc, circle),
   waiting: doc.events.filter((e) => e.circleId === circle.id && e.status === "proposed").length,
   // Characters whose status another Circle writes, with that Circle's name.
   statusElsewhere: circle.writeStatus
@@ -410,6 +426,7 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
           characterId,
           text,
           day: msToWall(Date.parse(e.start), tz).slice(0, 10),
+          time: msToWall(Date.parse(e.start), tz).slice(11, 16),
           told: Object.keys(e.delivered ?? {}).length > 0,
           chats: chats
             .filter((chat) => chat.characterIds.includes(characterId))
@@ -422,7 +439,12 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
       diary[id] = mine
         .filter((e) => e.diary?.[id])
         .slice(0, 20)
-        .map((e) => ({ id: e.id, day: msToWall(Date.parse(e.start), tz).slice(0, 10), text: e.diary![id]! }));
+        .map((e) => ({
+          id: e.id,
+          day: msToWall(Date.parse(e.start), tz).slice(0, 10),
+          time: msToWall(Date.parse(e.start), tz).slice(11, 16),
+          text: e.diary![id]!,
+        }));
     }
     const waiting = doc.events
       .filter((e) => e.circleId === circle.id && e.status === "proposed")
@@ -433,6 +455,7 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
         kind: e.kind,
         text: e.text,
         day: msToWall(Date.parse(e.start), tz).slice(0, 10),
+        time: msToWall(Date.parse(e.start), tz).slice(11, 16),
       }));
     return { hooks, diary, waiting };
   });

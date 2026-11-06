@@ -305,6 +305,11 @@ async function reviewCases() {
 
   assert.ok(!(await shown("")).includes("Mia moves away"), "a proposed event stays out of the chat");
   assert.equal((await call("GET", "/circles/:id/home", { id: "q" })).body.waiting.length, 1);
+  assert.match(
+    (await call("GET", "/circles/:id/home", { id: "q" })).body.waiting[0].time,
+    /^\d\d:\d\d$/,
+    "cards carry a time of day for friendly dates",
+  );
   assert.equal((await call("GET", "/circles", {})).body.circles[0].waiting, 1);
 
   assert.equal((await call("POST", "/circles/:id/events/:eventId/accept", { ...p, eventId: "ok" })).status, 409);
