@@ -9,7 +9,7 @@
 // chapter is planned, and Who said what? while a scene is written, on a phone and a desktop; and a side-with choice
 // (#2046), marked as one, each option naming whom it backs, with the affection it moved for each love interest.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-reader.e2e.ts
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { normalizeForgeAudio } from "../sources/forge-kit/audio-settings.mjs";

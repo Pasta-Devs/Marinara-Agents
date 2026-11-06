@@ -2,7 +2,7 @@
 // and cards), the 18+ gate when Explicit is picked, forging with Retry and paint consent, the stage at desktop and phone
 // sizes, and one visit to the real package server (beside Gacha Forge when MARINARA_PACKAGE_IDS installs it).
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge.e2e.ts
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 

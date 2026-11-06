@@ -10,7 +10,7 @@
 // nothing answers only a pointer, nothing animates at reduced motion, new lines reach a polite live region, and dialogs
 // hold focus and give it back.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-loop.e2e.ts
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
