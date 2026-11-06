@@ -105,6 +105,13 @@ async function main() {
   const major = check({ seed: "s2", start: "10:05", end: "10:30", diary: undefined, hook: undefined });
   assert.ok(typeof major !== "string");
   if (typeof major !== "string") assert.deepEqual([major.event.weight, major.event.status], ["major", "proposed"]); // weight comes from the seed
+  // "Let them happen": a big beat counts right away when the Circle turns bigAuto on.
+  const auto = check(
+    { seed: "s2", start: "10:05", end: "10:30", diary: undefined, hook: undefined },
+    { circle: { ...circle, bigAuto: true } },
+  );
+  assert.ok(typeof auto !== "string");
+  if (typeof auto !== "string") assert.deepEqual([auto.event.weight, auto.event.status], ["major", "accepted"]);
   for (const [label, over] of [
     ["wrong seed", { seed: "s9" }],
     ["out-of-range cast", { diary: { "7": "x" } }],

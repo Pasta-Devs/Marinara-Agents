@@ -61,6 +61,12 @@ async function main() {
   assert.equal((await call("POST", "/circles", { name: "One", linkedChatIds: ["a"] })).body.sharedWorld, true);
   assert.equal((await call("POST", "/circles", { name: "Two", linkedChatIds: ["a", "b"] })).body.sharedWorld, false);
   assert.equal((await call("POST", "/circles", { name: "None" })).body.sharedWorld, false);
+  assert.equal(
+    (await call("POST", "/circles", { name: "Auto", bigAuto: true })).body.bigAuto,
+    true,
+    "bigAuto is an editable field",
+  );
+  assert.equal((await call("POST", "/circles", { name: "Plain" })).body.bigAuto, false, "big events wait by default");
   const made = (await call("POST", "/circles", { name: "Off", linkedChatIds: ["a"], sharedWorld: false })).body;
   assert.equal(made.sharedWorld, false);
   const id = made.id as string;

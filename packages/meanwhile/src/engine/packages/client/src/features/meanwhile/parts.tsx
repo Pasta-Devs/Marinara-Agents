@@ -6,6 +6,7 @@ const ICONS: Record<string, React.ReactNode> = {
   plus: <path d="M12 5v14M5 12h14" />,
   more: <path d="M12 5h.01M12 12h.01M12 19h.01" strokeWidth={3} />,
   forward: <path d="m6 17 5-5-5-5M13 17l5-5-5-5" />,
+  check: <path d="M20 6 9 17l-5-5" />,
   back: <path d="m15 18-6-6 6-6" />,
   paper: (
     <>
@@ -124,4 +125,8 @@ export function presence(now: { activity: string; place: string | null } | null 
   if (!now) return "offline" as const;
   if (/sleep|nap|\bbed\b/i.test(now.activity)) return "offline" as const;
   return now.place === "home" ? ("online" as const) : ("busy" as const);
+}
+
+export function errorText(error: unknown) {
+  return error instanceof Error ? error.message : "Something went wrong.";
 }

@@ -21,6 +21,8 @@ export interface Circle {
   pace: Pace;
   allowedKinds: string[];
   bigKindsAllowed: string[];
+  /** Big events count right away instead of waiting in the review queue. */
+  bigAuto: boolean;
   connectionId: string; // "" until chosen; no run without it (decision D1)
   backgroundTimer: boolean;
   /** Slice 5: write what each character does now to their linked conversation chat. Off by default. */
@@ -175,6 +177,7 @@ export function defaultCircle(id: string, now: number): Circle {
     pace: "cozy",
     allowedKinds: [],
     bigKindsAllowed: [],
+    bigAuto: false,
     connectionId: "",
     backgroundTimer: false,
     writeStatus: false,
@@ -239,6 +242,7 @@ export function applyCircleFields(base: Circle, src: Record<string, unknown>): C
     pace: PACES.find((p) => p === src.pace) ?? base.pace,
     allowedKinds: ids(src.allowedKinds, 30, base.allowedKinds),
     bigKindsAllowed: ids(src.bigKindsAllowed, 30, base.bigKindsAllowed),
+    bigAuto: typeof src.bigAuto === "boolean" ? src.bigAuto : base.bigAuto,
     connectionId: text(src.connectionId, 200, base.connectionId),
     writeStatus: typeof src.writeStatus === "boolean" ? src.writeStatus : base.writeStatus,
     surprise: typeof src.surprise === "boolean" ? src.surprise : base.surprise,
