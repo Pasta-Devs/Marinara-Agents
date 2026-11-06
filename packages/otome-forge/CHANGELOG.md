@@ -2,7 +2,7 @@
 
 ## 0.9.4 — 2026-11-06
 
-- **Otome Hearth uses a little less battery.** It stops work you can't see: the glows hidden behind Home and the reader hold still, and so do Home's stars at dawn and by day, when the sky hides them. A side character's picture is no longer loaded and cut out again on each of their lines after their first 30 seconds on stage. Nothing looks, moves or sounds different.
+- **Otome Hearth uses a little less battery.** It does less drawing on every screen, and stops work you can't see. The soft glows drifting behind each screen are blurred once instead of on every frame. Once Home has appeared, the scene hidden behind your room is no longer drawn at all, and in Midnight the window's light takes less work to draw. The glows hidden behind the reader hold still, and so do Home's stars at dawn and by day, when the sky hides them. A side character's picture is no longer loaded and cut out again on each of their lines after their first 30 seconds on stage. Nothing looks, moves or sounds different.
 
 ## 0.9.3 — 2026-11-06
 

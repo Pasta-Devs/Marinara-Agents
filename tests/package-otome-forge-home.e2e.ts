@@ -709,6 +709,31 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
   const sceneLoops = root.locator(".of-scene :is(.of-scene-glow, .of-scene-stars)");
   await expect(sceneLoops).toHaveCount(3);
   for (const loop of await sceneLoops.all()) await expect(loop).toHaveCSS("animation-play-state", "paused");
+  // #2141: once Home has faded in, that scene is not drawn at all (opacity 0), and not before: it shows through the fade.
+  const scene = root.locator(".of-scene");
+  await expect(scene).toHaveCSS("opacity", "0");
+  const [coveredAfter, fadeTakes] = await root.evaluate((element) => {
+    const timing = (selector: string, name: string) =>
+      element
+        .querySelector(selector)!
+        .getAnimations()
+        .find((animation) => (animation as CSSAnimation).animationName === name)!
+        .effect!.getTiming();
+    return [Number(timing(".of-scene", "of-covered").delay), Number(timing(".of-screen", "of-fade-in").duration)];
+  });
+  expect(coveredAfter).toBeGreaterThan(fadeTakes);
+  // Each drifting glow carries no blur of its own: its blur is on a still ::before, drawn once, not every frame.
+  for (const glow of await root.locator(".of-scene-glow").all()) {
+    const filters = await glow.evaluate((element) => [
+      getComputedStyle(element).filter,
+      getComputedStyle(element, "::before").filter,
+    ]);
+    expect(filters).toEqual(["blur(0px)", "blur(46px)"]);
+  }
+  // Midnight's light layer draws first in the front's own group, over nothing: it no longer blends (screen there is
+  // normal), and the front keeps a no-op filter so it is drawn as before.
+  await expect(root.locator(".of-home-l3")).toHaveCSS("mix-blend-mode", "normal");
+  await expect(root.locator(".of-home-front")).toHaveCSS("filter", "blur(0px)");
   await expect(root.getByRole("button", { name: /Messages/ })).toContainText("1");
   await page.screenshot({ path: testInfo.outputPath("01-home.png") });
   expect(posts(stub, "/home/note")).toHaveLength(1);
@@ -814,6 +839,7 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
   await expect(root.getByText("Barely. The data kept me company.")).toBeVisible();
   await expect(root.locator(".of-quote-chip")).toHaveCount(0);
   for (const loop of await sceneLoops.all()) await expect(loop).toHaveCSS("animation-play-state", "running");
+  await expect(scene).toHaveCSS("opacity", "1");
   const scrolled = await root.evaluate((element) =>
     [element, ...element.querySelectorAll(".of-frame, .of-stage, .of-stage-body")]
       .filter((box) => box.scrollTop || box.scrollLeft)
