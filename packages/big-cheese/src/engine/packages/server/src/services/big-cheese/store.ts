@@ -140,7 +140,9 @@ export function createRunStore(documents: CapabilityDocumentStore) {
     }
     const run = RunData.safeParse(upgrade(record.data));
     if (!run.success) throw new BigCheeseError(500, "This run cannot be read.", "unreadable");
-    return { record, run: run.data };
+    // Core code that has no kit argument (hidden rooms in horror and the inspection walk) finds the place by `game.kitId`.
+    const game: typeof run.data.game = { ...run.data.game, kitId: run.data.kitId };
+    return { record, run: { ...run.data, game } };
   }
 
   return {
@@ -192,6 +194,7 @@ export function createRunStore(documents: CapabilityDocumentStore) {
       const key = `r-${randomBytes(6).toString("hex")}`;
       const at = new Date().toISOString();
       const game = newRun(kit, randomBytes(4).readUInt32LE(0), placeKitOf({ kitId, kit: custom }));
+      game.kitId = kitId; // the same as on read
       // Core text (thread titles) names a swapped slot by its cast name.
       for (const [pid, c] of Object.entries(cast?.people ?? {}))
         if (Object.hasOwn(game.people, pid)) game.people[pid].name = c.name;

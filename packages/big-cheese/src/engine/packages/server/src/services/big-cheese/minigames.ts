@@ -6,26 +6,15 @@ import { runTask, withCallLog, type ModelCall } from "./ai/tasks.js";
 import { withCast } from "./cast.js";
 import { minigameText, playMinigame } from "./core/index.js";
 import { placeKitOf } from "./core/kits/index.js";
+import { MINIGAMES } from "./core/minigames.js";
 import { notStarted, view } from "./game.js";
 import { BigCheeseError, type RunStore } from "./store.js";
 
 const Body = z.object({
   expectedRevision: z.number().int().min(0),
   kind: z.string().max(40),
-  picks: z.array(z.string().max(40)).max(12),
+  picks: z.array(z.string().max(40)).max(40), // a big kit can show many rooms; minigamePlay checks the count
 });
-
-// What each step did, as a plain sentence the model's line has to keep to.
-const verdict = (kind: string, x: { value: number; trait?: string }) =>
-  kind === "interview"
-    ? x.trait
-      ? `The answer shows they are ${x.trait}.`
-      : "The answer shows nothing new."
-    : x.value > 0
-      ? "The crowd likes this line."
-      : x.value < 0
-        ? "The crowd does not like this line."
-        : "The crowd stays quiet.";
 
 export function createMinigames(store: RunStore, getModel: () => Promise<ModelCall | undefined>) {
   return {
@@ -59,9 +48,9 @@ export function createMinigames(store: RunStore, getModel: () => Promise<ModelCa
             kit,
             kind: g.kind,
             people: g.people,
-            steps: g.done!.steps.map((x) => ({ text: x.text, verdict: verdict(g.kind, x) })),
+            steps: g.done!.steps.map((x) => ({ text: x.text, verdict: MINIGAMES[g.kind]!.verdict(x) })),
           },
-          { model: run.lite ? undefined : withCallLog(await getModel(), String(id)) },
+          { model: run.lite || !g.done!.steps.length ? undefined : withCallLog(await getModel(), String(id)) },
         )
       ).output;
       // The Lite line is the verdict sentence; a model line may name a person who is in the mini-game.

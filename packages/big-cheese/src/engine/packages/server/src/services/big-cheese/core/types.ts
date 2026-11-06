@@ -198,6 +198,7 @@ export interface Report {
 
 export interface Run {
   saveVersion: 4;
+  kitId?: string; // set by the store on read, for core code that has no kit argument
   rng: number;
   nextId: number;
   storyteller: Storyteller;
@@ -318,7 +319,9 @@ export type MiniOutcome = "great" | "good" | "flat" | "bad";
 export interface Minigame {
   kind: string;
   people: string[]; // the crowd, or the one candidate
-  need: number;
+  need: number; // the most picks
+  min?: number; // the fewest picks, default = need
+  key?: string; // what `Run.minigames` records once played, default `<kind>:<week>`
   options: { id: string; tag: string; text: string }[];
   week: number;
   done: MiniResult | null;

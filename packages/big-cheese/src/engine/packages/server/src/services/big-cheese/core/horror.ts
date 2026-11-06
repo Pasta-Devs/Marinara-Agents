@@ -24,7 +24,7 @@ const NIGHTS = [
 ];
 
 // The saved game carries kitId (and a custom kit); a bare core run has neither, so it has no sealed rooms.
-const kitOf = (s: Run) => {
+export const kitOf = (s: Run) => {
   const r = s as Run & { kitId?: string; kit?: PlaceKit };
   return r.kitId ? placeKitOf({ kitId: r.kitId, kit: r.kit }) : undefined;
 };

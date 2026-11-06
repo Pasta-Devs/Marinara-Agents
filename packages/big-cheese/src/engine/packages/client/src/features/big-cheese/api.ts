@@ -305,6 +305,7 @@ export interface MiniGame {
   kind: string;
   people: string[];
   need: number;
+  min?: number;
   options: { id: string; tag: string; text: string }[];
   week: number;
   done: {

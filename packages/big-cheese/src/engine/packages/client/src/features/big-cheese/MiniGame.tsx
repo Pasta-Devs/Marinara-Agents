@@ -22,6 +22,18 @@ export const KINDS = {
     help: "ui.bigCheese.minigame.interview.help",
     go: "ui.bigCheese.minigame.interview.go",
   },
+  seating: {
+    open: "ui.bigCheese.minigame.seating.open",
+    title: "ui.bigCheese.minigame.seating.title",
+    help: "ui.bigCheese.minigame.seating.help",
+    go: "ui.bigCheese.minigame.seating.go",
+  },
+  inspection: {
+    open: "ui.bigCheese.minigame.inspection.open",
+    title: "ui.bigCheese.minigame.inspection.title",
+    help: "ui.bigCheese.minigame.inspection.help",
+    go: "ui.bigCheese.minigame.inspection.go",
+  },
 } as const;
 
 const OUTCOMES = {
@@ -35,7 +47,7 @@ const OUTCOMES = {
 export const miniOpen = (g: MiniGame | null | undefined): g is MiniGame =>
   !!g && !g.done && Object.hasOwn(KINDS, g.kind);
 
-/** Pick `need` options in order, then play. Used by Speech and Interview; T18 uses its own screens. */
+/** Pick `need` options in order (or `min` to `need` for Inspection), then play. */
 function PickGame({ ctx, g }: { ctx: Ctx; g: MiniGame }) {
   const { t } = useTranslation();
   const { run, kit, busy, act, go } = ctx;
@@ -83,8 +95,86 @@ function PickGame({ ctx, g }: { ctx: Ctx; g: MiniGame }) {
       <button
         type="button"
         className="bc-btn bc-btn-primary"
-        disabled={busy || noHours || picks.length !== g.need}
+        disabled={busy || noHours || picks.length < (g.min ?? g.need)}
         onClick={() => void act("minigame", { kind: g.kind, picks })}
+      >
+        {t(k.go)}
+      </button>
+      <button type="button" className="bc-btn bc-btn-quiet" onClick={() => go("office")}>
+        {t("ui.bigCheese.minigame.later")}
+      </button>
+    </>
+  );
+}
+
+/** Seating: tap a person, then tap a seat. Tap a taken seat to clear it. Picks are "person@seat". */
+function SeatingGame({ ctx, g }: { ctx: Ctx; g: MiniGame }) {
+  const { t } = useTranslation();
+  const { run, kit, busy, act, go } = ctx;
+  const [seats, setSeats] = useState<Record<string, string>>({}); // seat id -> person id
+  const [who, setWho] = useState<string | null>(null);
+  const k = KINDS.seating;
+  const noHours = run.game.clock.hoursLeft === 0;
+  const waiting = g.people.filter((p) => !Object.values(seats).includes(p));
+  const tapSeat = (seat: string) => {
+    if (Object.hasOwn(seats, seat))
+      return setSeats((s) => Object.fromEntries(Object.entries(s).filter(([k]) => k !== seat)));
+    if (who) {
+      setSeats((s) => ({ ...s, [seat]: who }));
+      setWho(null);
+    }
+  };
+  return (
+    <>
+      <h1 className="bc-heading" tabIndex={-1} data-focus>
+        {t(k.title)}
+      </h1>
+      <p className="bc-muted">{t(k.help)}</p>
+      <ul className="bc-list" aria-label={t("ui.bigCheese.minigame.seating.waiting")}>
+        {waiting.map((id) => (
+          <li key={id} className="bc-row bc-row-flat">
+            <button
+              type="button"
+              className="bc-btn"
+              aria-pressed={who === id}
+              disabled={busy}
+              onClick={() => setWho(id)}
+            >
+              <Face kit={kit} id={id} size="s" /> {nameOf(kit, id)}
+            </button>
+          </li>
+        ))}
+      </ul>
+      <ul className="bc-list" aria-label={t(k.title)}>
+        {g.options.map((o, i) => {
+          const sitter = Object.hasOwn(seats, o.id) ? seats[o.id] : undefined;
+          return (
+            <li key={o.id} className="bc-row bc-row-flat">
+              <button
+                type="button"
+                className="bc-btn"
+                disabled={busy || (!sitter && !who)}
+                onClick={() => tapSeat(o.id)}
+              >
+                {sitter
+                  ? t("ui.bigCheese.minigame.seating.taken", { n: i + 1, who: nameOf(kit, sitter) })
+                  : t("ui.bigCheese.minigame.seating.free", { n: i + 1 })}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="bc-muted" aria-live="polite">
+        {t("ui.bigCheese.minigame.picked", { n: Object.keys(seats).length, total: g.need })}
+      </p>
+      {noHours && <p className="bc-note">{t("ui.bigCheese.card.noHours")}</p>}
+      <button
+        type="button"
+        className="bc-btn bc-btn-primary"
+        disabled={busy || noHours || Object.keys(seats).length !== g.need}
+        onClick={() =>
+          void act("minigame", { kind: g.kind, picks: Object.entries(seats).map(([seat, p]) => `${p}@${seat}`) })
+        }
       >
         {t(k.go)}
       </button>
@@ -136,5 +226,7 @@ export function MiniGameScreen({ ctx }: { ctx: Ctx }) {
   const { t } = useTranslation();
   const g = ctx.run.game.minigame;
   if (!g || !Object.hasOwn(KINDS, g.kind)) return <p className="bc-muted">{t("ui.bigCheese.minigame.none")}</p>;
-  return g.done ? <Result ctx={ctx} g={g} /> : <PickGame key={`${g.kind}${g.week}`} ctx={ctx} g={g} />;
+  if (g.done) return <Result ctx={ctx} g={g} />;
+  const Game = g.kind === "seating" ? SeatingGame : PickGame;
+  return <Game key={`${g.kind}${g.week}`} ctx={ctx} g={g} />;
 }
