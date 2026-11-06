@@ -682,6 +682,12 @@
           "highlight": false
         },
         {
+          "version": "0.9.3",
+          "date": "2026-11-06",
+          "notes": "- **Figurines are painted.** A love interest's figurine is now a painted picture of them as a small collectible figure in the look they wear, standing on a display base, instead of a drawing. It is painted once, right after you buy it (1 image, with your image connection), then cut out so it stands on the Shop's shelf, in your Wardrobe and on Home. **Ask before painting** and prompt review wait for your tap, and a paint that fails shows **Try painting it again**. Opening the Shop no longer draws every figurine with your Planning model. A figurine you bought before 0.9.3 shows **Paint it** in the Shop and the Wardrobe.",
+          "highlight": false
+        },
+        {
           "version": "0.9.2",
           "date": "2026-11-06",
           "notes": "- **The aphrodisiac's bottle is whole.** Its neck now meets the heart-shaped body on the Shop's shelf and in the Wardrobe.",
@@ -787,12 +793,6 @@
           "version": "0.7.5",
           "date": "2026-11-03",
           "notes": "- **A slower burn.** Love interests no longer confess in stages 3 and 4. In stage 5 they may, once the story has earned it, and in stage 6 they say it if they haven't yet.",
-          "highlight": false
-        },
-        {
-          "version": "0.7.4",
-          "date": "2026-11-03",
-          "notes": "- **Stickers send on iPhone again.** Tapping a sticker in Messages sends it as a message. Before, the tap closed the sticker panel and nothing was sent.",
           "highlight": false
         }
       ]

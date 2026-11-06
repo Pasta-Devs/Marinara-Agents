@@ -91,10 +91,11 @@ const CUTOUT_POLL_MS = 10_000;
 /** While a love interest is noticing her new look (P19, written in the background), Home asks again this often. */
 const NOTICING_POLL_MS = 3_000;
 
-/** A cut-out Home shows is on its way: the look's, or (on him) one of his faces'. */
+/** A cut-out Home shows is on its way: the look's, (on him) one of his faces', or a figurine's or its paint (#2138). */
 const cutoutComing = (view: HomeView | undefined) =>
   view?.look?.cutoutState === "pending" ||
-  (view?.show === "him" && Object.values(view.faces).some((face) => face?.cutoutState === "pending"));
+  (view?.show === "him" && Object.values(view.faces).some((face) => face?.cutoutState === "pending")) ||
+  !!view?.figurines?.some((figurine) => figurine.cutting || figurine.art?.state === "pending");
 
 /**
  * Home, read again on every visit: the story changes it while Home is away (a rupture that opens or is repaired, a

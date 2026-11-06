@@ -4,12 +4,12 @@
 // Pure TypeScript shared by both bundles: the server charges by these numbers (S/routes/shop.ts applyPurchase) and the
 // client shows them. A gift is unlimited (bought one at a time, kept as a count per gift) and is given on a date; the
 // aphrodisiac is offered only under NSFW Heat (giftsFor), which the server enforces too. Each love interest has one
-// figurine, bought once: a small model-drawn SVG of them (S/minigames/plush.ts, as their plush is drawn) that then
-// stands on Home, and whose purchase writes a one-scene Character Story, `story-figurine-<li>`
-// (S/items/character-story.ts figurineStoryChapter). Buying never calls a model.
+// figurine, bought once, that then stands on Home and whose purchase writes a one-scene Character Story,
+// `story-figurine-<li>` (S/items/character-story.ts figurineStoryChapter). Buying never calls a model; with an image
+// connection it starts the figurine's one paid image (#2138, S/art/figurine.ts), cut out of its backdrop once painted.
 // The gift names here are English and model-facing (date prompts); the client names gifts through its own literal map
 // of ui.otomeForge.shop.* keys (C/components/GiftArt.tsx GIFT_NAME_KEYS).
-import type { LiId } from "./api-types";
+import type { LiId, Paint } from "./api-types";
 import { intimacyOpen, type ContentSettings } from "./content";
 
 export const GIFT_IDS = ["flowers", "chocolates", "wine", "aphrodisiac"] as const;
@@ -74,15 +74,24 @@ export interface ShopGiftView {
   owned: number;
 }
 
+/** A figurine's picture as the client shows it (#2138, S/art/figurine.ts figurinePicture). */
+export interface FigurinePicture {
+  /**
+   * Its paint, once bought with an image connection or painted by a tap: pending, waiting-consent (Ask before painting
+   * or prompt review), failed, stopped (a restart) or ready; null before.
+   */
+  art: Paint | null;
+  /** The figurine as shown: its cut-out once made, else the painted image; absent until it is painted. */
+  url?: string;
+  /** Its cut-out is being made: read again shortly. */
+  cutting: boolean;
+}
+
 /** A love interest's figurine on the Shop's shelf. */
-export interface ShopFigurineView {
+export interface ShopFigurineView extends FigurinePicture {
   li: LiId;
   name: string;
   accent: string;
-  /** The drawn figurine as a data URL (shown only as an <img>), once drawn. */
-  art?: string;
-  /** Its drawing waits or runs in the background: read the Shop again shortly. */
-  drawing: boolean;
   owned: boolean;
   /** Its scene, once bought. */
   story?: { key: string };
@@ -107,9 +116,7 @@ export interface ShopBuyResult {
 }
 
 /** The protagonist's gifts and figurines, as the Wardrobe lists them (WardrobeView `gifts`, `figurines`). */
-export interface OwnedFigurineView {
+export interface OwnedFigurineView extends FigurinePicture {
   li: LiId;
-  /** The drawn figurine as a data URL, once drawn. */
-  art?: string;
   story: { key: string };
 }

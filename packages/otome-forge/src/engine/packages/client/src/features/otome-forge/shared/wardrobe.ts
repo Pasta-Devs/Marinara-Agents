@@ -187,3 +187,18 @@ export interface ItemOpenResult {
   story: { key: string } | null;
   art: Paint | null;
 }
+
+/**
+ * Whether the wardrobe has something still on its way, so the client reads it again shortly: a look or a couple set
+ * painting, a love interest noticing her look, or a figurine painting or being cut out (#2138: a painted figurine is
+ * shown cut out, so the wardrobe keeps reading until its cut-out lands).
+ */
+export function wardrobeWorking(wardrobe: WardrobeView | undefined): boolean {
+  return (
+    !!wardrobe &&
+    (wardrobe.noticing ||
+      [...Object.values(wardrobe.him).flat(), ...wardrobe.me].some((look) => look.art?.state === "pending") ||
+      wardrobe.couples.some((couple) => couple.pair?.state === "pending") ||
+      !!wardrobe.figurines?.some((figurine) => figurine.art?.state === "pending" || figurine.cutting))
+  );
+}
