@@ -4,7 +4,7 @@ import { z } from "zod";
 import { runTask, withCallLog, type ModelCall } from "./ai/tasks.js";
 import { withCast } from "./cast.js";
 import { dayIndex, isLocked, pick, roll, slot, spendHours, type Run as Game } from "./core/index.js";
-import { dayFacts, isKnown, movePeople, overheard, relKey } from "./core/people.js";
+import { dayFacts, isKnown, knownMap, movePeople, overheard, relKey } from "./core/people.js";
 import { newId } from "./core/run.js";
 import { placeKitOf } from "./core/kits/index.js";
 import type { PlaceKit } from "./core/kits/types.js";
@@ -74,6 +74,12 @@ export function createPlace(store: RunStore, getModel: () => Promise<ModelCall |
           line: lines.find((l) => l.room === r.id)?.text ?? null,
         })),
       };
+    },
+
+    /** T19: the relation map. Relations the boss does not know never leave the server. */
+    async relations(id: unknown) {
+      const run = await store.get(id);
+      return { relations: knownMap(run.game, run.text.place?.known ?? []) };
     },
 
     /** Rumour lines, newest first, one page at a time. */

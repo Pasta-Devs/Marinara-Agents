@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import type { Meter } from "./api";
 import { WeekStrip } from "./WeekStrip";
 import { Invitation } from "./Outside";
+import { KINDS, miniOpen } from "./MiniGame"; // M4 T17
 import { dayKey, Face, nameOf, threadTitle, type Ctx } from "./parts";
 
 const METERS: Meter[] = ["money", "output", "people", "standing"];
@@ -119,6 +120,11 @@ export function Office({ ctx, canStart }: { ctx: Ctx; canStart: boolean }) {
       >
         {t(run.game.pendingTerm?.review.length ? "ui.bigCheese.yearbook.openReview" : "ui.bigCheese.yearbook.open")}
       </button>
+      {miniOpen(run.game.minigame) && (
+        <button type="button" className="bc-btn bc-btn-primary" onClick={() => go("minigame")}>
+          {t(KINDS[run.game.minigame.kind as keyof typeof KINDS].open)}
+        </button>
+      )}
       <section className="bc-section" aria-labelledby="bc-threads">
         <h2 id="bc-threads" className="bc-subhead">
           {t("ui.bigCheese.office.threads")}

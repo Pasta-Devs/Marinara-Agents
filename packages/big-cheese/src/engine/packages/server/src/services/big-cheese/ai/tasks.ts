@@ -1228,6 +1228,82 @@ const chronicleTerm: Task<ChronicleTermInput, ChronicleTermOutput> = {
   },
 };
 
+// call.line (M4 T21): one turn of a phone call with one person. The call is a scene inside
+// Big Cheese. It writes words only, so no number, trust or memory changes.
+export const CALL_TOPICS: Record<string, string> = {
+  feeling: "how they are doing",
+  work: "how work is going",
+  day: "what the day was like",
+};
+export interface CallLineInput {
+  kit: PlaceKit;
+  rng: number;
+  person: string;
+  band: Band;
+  topic: string;
+  earlier: { who: "you" | "them"; text: string }[];
+}
+export interface CallLineOutput {
+  line: string;
+}
+
+const LITE_CALL: Record<Band, string> = {
+  cold: "Make it quick.",
+  wary: "I can talk for a minute.",
+  neutral: "Sure, go on.",
+  warm: "Good to hear from you.",
+  loyal: "I was hoping you would call.",
+};
+
+const callLine: Task<CallLineInput, CallLineOutput> = {
+  tokens: 200,
+  prompt: (i) =>
+    msgs(
+      i.kit,
+      `The boss phones ${person(i.kit, i.person).name}. Write the one reply ${person(i.kit, i.person).name} says on the phone, in their own voice, one to three short sentences. They feel ${i.band} toward the boss. The boss asks about ${CALL_TOPICS[i.topic] ?? CALL_TOPICS.feeling}. Shape: {"line":""}\nVoice:\n${voiceSheet(i.kit, [i.person])}`,
+      { earlier: i.earlier.slice(-6) },
+    ),
+  parse: (raw) => ({ line: words(obj(raw).line, 3, 300, "line") }),
+  lite: (i) => {
+    const h = { rng: i.rng };
+    return { line: `${LITE_CALL[i.band]} ${pick(h, person(i.kit, i.person).voice.phrases)}` };
+  },
+};
+
+// minigame.lines (modules.md section 4, M4 T17): the words for a played mini-game, one line per step.
+// The code scored the picks already; `verdict` is a plain sentence the line must keep to.
+export interface MiniLinesInput {
+  kit: PlaceKit;
+  kind: string;
+  people: string[];
+  steps: { text: string; verdict: string }[];
+}
+export interface MiniLinesOutput {
+  lines: { who: string; text: string }[];
+}
+
+const miniLines: Task<MiniLinesInput, MiniLinesOutput> = {
+  tokens: 700,
+  prompt: (i) =>
+    msgs(
+      i.kit,
+      `Write one short line for each step of a ${i.kind}, in the same order. Each line shows what the step does and keeps to its verdict. Write no numbers. "who" is a person id from the list, or "" for the narrator. Shape: {"lines":[{"who":"","text":""}]}\nVoices:\n${voiceSheet(i.kit, i.people)}`,
+      { kind: i.kind, people: i.people, steps: i.steps },
+    ),
+  parse: (raw, i) => {
+    const o = obj(raw);
+    return {
+      lines: list(o.lines, i.steps.length, i.steps.length).map((l) => {
+        const x = obj(l);
+        const who = typeof x.who === "string" ? x.who : "";
+        if (who && !i.people.includes(who)) throw new Error("line: who is not in the mini-game");
+        return { who, text: words(x.text, 3, 200, "line") };
+      }),
+    };
+  },
+  lite: (i) => ({ lines: i.steps.map((x) => ({ who: "", text: x.verdict })) }),
+};
+
 export const tasks = {
   "wish.classify": wishClassify,
   "place.draft": placeDraft,
@@ -1245,6 +1321,8 @@ export const tasks = {
   "board.plan": boardPlan,
   "kit.fix": kitFix,
   "chronicle.term": chronicleTerm,
+  "minigame.lines": miniLines, // M4 T17
+  "call.line": callLine,
 };
 type Tasks = typeof tasks;
 

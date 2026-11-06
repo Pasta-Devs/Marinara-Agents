@@ -18,7 +18,7 @@ const Body = z.object({
 
 type Entry = { name: string; content: string; keys: string[]; enabled: true };
 
-const STANCE_TEXT: Record<string, string> = {
+export const STANCE_TEXT: Record<string, string> = {
   invest: "paid for a real fix",
   cheap_fix: "went for a cheap fix",
   delay: "put it off",
@@ -26,12 +26,12 @@ const STANCE_TEXT: Record<string, string> = {
   refuse: "refused",
   ask_others: "asked others first",
 };
-const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+export const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 const entry = (name: string, content: string, keys: string[]): Entry => ({ name, content, keys, enabled: true });
 
 /** Adult threads are the only adult scenes in a run. Without the tick (or the module) they are skipped. */
 const adultOk = (g: Game, ticked: boolean | undefined) => !!ticked && !!g.adult;
-const openToExport = (g: Game, id: string, adult: boolean) => {
+export const openToExport = (g: Game, id: string, adult: boolean) => {
   if (adult) return true;
   const t = g.threads[id];
   if (t) return t.layer !== "adult";
@@ -39,7 +39,7 @@ const openToExport = (g: Game, id: string, adult: boolean) => {
   const c = g.closed.find((x) => x.id === id);
   return c?.layer !== undefined && c.layer !== "adult";
 };
-const titleOf = (g: Game, id: string) => (g.threads[id] ?? g.closed.find((x) => x.id === id))?.title;
+export const titleOf = (g: Game, id: string) => (g.threads[id] ?? g.closed.find((x) => x.id === id))?.title;
 
 const PLACE = (run: Run) => withCast(placeKitOf(run), run.cast, run.game.clock);
 
@@ -108,6 +108,58 @@ export function noteText(run: Run, ticked?: boolean): string {
   ].join("\n");
 }
 
+const CardBody = z.object({ personId: z.string().max(60), adult: z.boolean().optional() });
+
+/**
+ * (d) A V2 character card for one generated person (cast.md section 6 d).
+ * The card keeps the voice, the traits and the public memories. The person's secret and every
+ * secret thread stay out. Adult threads are skipped unless the player ticked them.
+ */
+export function cardFromPerson(run: Run, id: string, ticked?: boolean) {
+  const g = run.game;
+  const kit = PLACE(run);
+  const p = kit.people.find((k) => k.id === id);
+  if (!p || run.cast?.people[id]?.engineId)
+    throw new BigCheeseError(400, "This person has no card to make.", "bad-request");
+  const name = g.people[id]?.name ?? p.name;
+  const traits = g.people[id]?.traits ?? p.traits;
+  const isSecret = (t: string) => !!(g.threads[t] ?? g.closed.find((x) => x.id === t))?.secret;
+  const memories = (g.people[id]?.memories ?? [])
+    .filter((m) => !isSecret(m.thread) && openToExport(g, m.thread, adultOk(g, ticked)))
+    .slice(-8)
+    .map(
+      (m) =>
+        `Week ${m.week}: ${titleOf(g, m.thread) ?? cut(run.text.cards[m.about]?.line ?? "a request", 80)}. ${STANCE_TEXT[m.stance] ?? m.stance}`,
+    );
+  const phrases = p.voice.phrases;
+  return {
+    spec: "chara_card_v2",
+    spec_version: "2.0",
+    data: {
+      name,
+      description: [
+        `${name} is the ${p.role} at ${kit.name}.`,
+        p.core,
+        memories.length ? `What happened:\n${memories.join("\n")}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      personality: `${p.voice.style}. ${traits.join(", ")}`,
+      scenario: `${kit.premise} The boss is the ${kit.bossTitle}.`,
+      first_mes: phrases[0] ?? "",
+      mes_example: phrases.map((x) => `<START>\n{{char}}: ${x}`).join("\n"),
+      creator_notes: "Made from a Big Cheese run.",
+      system_prompt: "",
+      post_history_instructions: "",
+      alternate_greetings: phrases.slice(1, 3),
+      tags: ["big-cheese"],
+      creator: "Big Cheese",
+      character_version: "1",
+      extensions: {},
+    },
+  };
+}
+
 /** Puts the note between this run's markers. A repeat replaces the old block, nothing else changes. */
 export function withNote(description: string, id: string, note: string): string {
   const block = `${START(id)}\n${note}\n${END(id)}`;
@@ -148,6 +200,14 @@ export function createExport(store: RunStore, runtime: CapabilityRuntimeHost) {
       if (!res.updatePersona) throw unsupported();
       await res.updatePersona(boss, { description });
       return { saved: true };
+    },
+
+    /** The card file is built here and downloaded by the client. Nothing goes to the Engine. */
+    async character(id: unknown, body: unknown) {
+      const p = CardBody.safeParse(body ?? {});
+      if (!p.success) throw new BigCheeseError(400, "Invalid request.", "bad-request");
+      const run = await store.get(id);
+      return { card: cardFromPerson(run, p.data.personId, p.data.adult) };
     },
   };
 }

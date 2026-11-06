@@ -195,6 +195,14 @@ ${R} .bc-choice { display: flex; flex-direction: column; gap: .75rem; }
 @container bc-frame (min-width: 560px) { ${R} .bc-veil { place-items: center; } }
 @keyframes bc-pulse { 50% { opacity: .55; } }
 @keyframes bc-rise { from { transform: translateY(1rem); opacity: 0; } }
+${R} .bc-map { width: 100%; max-width: 30rem; margin-inline: auto; display: block; }
+${R} .bc-map-line { stroke: var(--foreground); stroke-width: 2; opacity: .7; }
+${R} .bc-map-secret { stroke-dasharray: 5 6; opacity: .4; }
+${R} .bc-map-on { stroke: var(--primary); stroke-width: 4; opacity: 1; }
+${R} .bc-map-hit { stroke: transparent; stroke-width: 28; cursor: pointer; }
+${R} .bc-map-dot { fill: color-mix(in oklch, var(--bc-hue) 40%, var(--card, #26201b)); stroke: var(--bc-hue); stroke-width: 2; }
+${R} .bc-map-text { fill: var(--foreground); font-size: 16px; font-weight: 600; }
+${R} .bc-map-name { fill: var(--foreground); font-size: 16px; }
 @media (prefers-reduced-motion: reduce) { ${R} * { animation: none !important; transition: none !important; } }
 ${REDUCED} ${R} * { animation: none !important; transition: none !important; }
 `;

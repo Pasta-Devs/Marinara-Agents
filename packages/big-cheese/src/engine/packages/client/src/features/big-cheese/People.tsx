@@ -4,10 +4,12 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Hire } from "./Cast";
+import { CallSomeone } from "./CallSomeone"; // M4 T21
 import { EyesAsk, EyesHeard } from "./Eyes"; // T13
 import { DelegateArea } from "./Delegate"; // T11
 import { NameHeir } from "./Heir"; // M4 T6
 import { FavourList } from "./Favours"; // M4 T12
+import { RelationMap } from "./RelationMap";
 import { Face, initials, memoryKey, moodKey, nameOf, threadTitle, trustKey, type Ctx } from "./parts";
 
 /** The newest feeling line the Friday report wrote for this person. */
@@ -52,6 +54,7 @@ export function People({ ctx }: { ctx: Ctx }) {
   const { t } = useTranslation();
   const { run, kit, go } = ctx;
   const [hiring, setHiring] = useState(false);
+  const [map, setMap] = useState(false);
   if (hiring) return <Hire ctx={ctx} onClose={() => setHiring(false)} />;
   // A visitor is gone once their last day has passed (dayIndex: 5 days a week).
   const today = (run.game.clock.week - 1) * 5 + run.game.clock.day;
@@ -73,28 +76,46 @@ export function People({ ctx }: { ctx: Ctx }) {
           </span>
         </div>
       )}
-      <ul className="bc-list">
-        {kit.people
-          .filter((who) => (until(who.id) ?? today + 1) > today)
-          .map((who) => {
-            const state = run.game.people[who.id];
-            return (
-              <li key={who.id}>
-                <button type="button" className="bc-row" onClick={() => go(`person:${who.id}`)}>
-                  <Face kit={kit} id={who.id} />
-                  <span className="bc-row-text">
-                    <span className="bc-row-title">{who.name}</span>
-                    <span className="bc-muted">{who.role}</span>
-                    <span className="bc-muted">{whereLine(t, ctx, who.id)}</span>
-                    {who.library && <span className="bc-chip">{t("ui.bigCheese.cast.badge")}</span>}
-                    {until(who.id) !== undefined && <span className="bc-chip">{t("ui.bigCheese.people.visitor")}</span>}
-                    <span className="bc-clamp">{feeling(ctx, who.id) ?? (state && t(trustKey(state.trust)))}</span>
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-      </ul>
+      <button type="button" className="bc-btn bc-btn-quiet" aria-pressed={map} onClick={() => setMap(!map)}>
+        {t(map ? "ui.bigCheese.map.hide" : "ui.bigCheese.map.show")}
+      </button>
+      {map ? (
+        <RelationMap
+          ctx={ctx}
+          ids={kit.people.filter((who) => (until(who.id) ?? today + 1) > today).map((who) => who.id)}
+          story={(r) =>
+            t("ui.bigCheese.map.story", {
+              name: nameOf(kit, r.a),
+              what: t(RELATIONS[r.kind]?.[0] ?? RELATIONS.friend[0], { name: nameOf(kit, r.b) }),
+            })
+          }
+        />
+      ) : (
+        <ul className="bc-list">
+          {kit.people
+            .filter((who) => (until(who.id) ?? today + 1) > today)
+            .map((who) => {
+              const state = run.game.people[who.id];
+              return (
+                <li key={who.id}>
+                  <button type="button" className="bc-row" onClick={() => go(`person:${who.id}`)}>
+                    <Face kit={kit} id={who.id} />
+                    <span className="bc-row-text">
+                      <span className="bc-row-title">{who.name}</span>
+                      <span className="bc-muted">{who.role}</span>
+                      <span className="bc-muted">{whereLine(t, ctx, who.id)}</span>
+                      {who.library && <span className="bc-chip">{t("ui.bigCheese.cast.badge")}</span>}
+                      {until(who.id) !== undefined && (
+                        <span className="bc-chip">{t("ui.bigCheese.people.visitor")}</span>
+                      )}
+                      <span className="bc-clamp">{feeling(ctx, who.id) ?? (state && t(trustKey(state.trust)))}</span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+        </ul>
+      )}
       <button type="button" className="bc-btn" disabled={ctx.busy} onClick={() => setHiring(true)}>
         {t("ui.bigCheese.people.hire")}
       </button>
@@ -173,6 +194,7 @@ export function PersonSheet({ ctx, id }: { ctx: Ctx; id: string }) {
       {line && <blockquote className="bc-quote">{line}</blockquote>}
       <Circle ctx={ctx} id={id} />
       <EyesAsk ctx={ctx} id={id} />
+      <CallSomeone ctx={ctx} id={id} />
       <DelegateArea ctx={ctx} id={id} />
       <NameHeir ctx={ctx} id={id} />
       <FavourList ctx={ctx} id={id} />

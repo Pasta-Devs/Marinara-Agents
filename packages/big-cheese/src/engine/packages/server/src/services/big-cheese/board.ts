@@ -1753,7 +1753,8 @@ export function createBoard(
     /** Called after "Start the day": keeps one morning snapshot per day, the last 7, then runs what is due today. */
     async morning<V extends { run: Run }>(v: V): Promise<V> {
       try {
-        const run = v.run as Doc; // the store adds the id; `view` types the run without it
+        // The stored run, not `v.run`: `view` drops relations the boss does not know yet.
+        const run = (await store.get((v.run as Doc).id)) as Doc;
         const { record, data } = await load(run.id, run.kitId, run.kit);
         // The snapshot is taken after today's due facts ran, so a rewind to this morning keeps them (see rearm).
         const due = isDue(data.journal, run.game);

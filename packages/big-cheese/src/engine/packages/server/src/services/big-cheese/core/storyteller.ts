@@ -5,6 +5,7 @@ import { dayIndex } from "./clock.js";
 import { bigToday, bookClimaxes, lapse } from "./bigscenes.js";
 import { pick, roll } from "./rng.js";
 import { layerSeeds, projects } from "./layers.js";
+import { minigameOffer } from "./minigames.js"; // M4 T17
 import { dramaFactor } from "./mutators.js";
 import { K } from "./stances.js";
 import { closeThread, openStory, openThread } from "./threads.js";
@@ -209,6 +210,7 @@ export function morning(s: Run): number {
   fill(s);
   lapse(s);
   bookClimaxes(s);
+  minigameOffer(s); // M4 T17
   const [lo, hi] = PRESETS[s.storyteller].cards;
   return Math.max(0, lo + Math.floor(roll(s) * (hi - lo + 1)) - bigToday(s)); // a big scene takes one card off its day
 }

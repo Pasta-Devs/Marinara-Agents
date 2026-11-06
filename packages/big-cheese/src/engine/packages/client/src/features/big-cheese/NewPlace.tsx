@@ -56,6 +56,10 @@ const withBundle = (kit: unknown, id: string) => {
 const withMoney = (kit: unknown, on: boolean) =>
   on ? { ...(kit as object), depth: { ...(kit as { depth?: object }).depth, money: true } } : kit;
 
+/** Same for "detailed building" (M4 T16). */
+const withBuilding = (kit: unknown, on: boolean) =>
+  on ? { ...(kit as object), depth: { ...(kit as { depth?: object }).depth, building: true } } : kit;
+
 export function NewPlace({
   busy,
   failure,
@@ -75,6 +79,7 @@ export function NewPlace({
   const [boss, setBoss] = useState("");
   const [bundle, setBundle] = useState(""); // M4 T7: one-tap story mix, applied to the draft kit on take
   const [money, setMoney] = useState("off"); // M4 T15: detailed money, applied to the draft kit on take
+  const [building, setBuilding] = useState("off"); // M4 T16: detailed building, same way
   const [staff, setStaff] = useState<CastItem[]>([]);
   const [cast, setCast] = useState<CastList | null>(null);
   const [draft, setDraft] = useState<{ kit: unknown; view: PreviewKit } | null>(null);
@@ -110,7 +115,9 @@ export function NewPlace({
         failure={error ? t(error) : failure}
         rerolling={working}
         onReroll={(part) => void make(part)}
-        onTake={(body) => onTake(withMoney(withBundle(draft.kit, bundle), money === "on"), body)}
+        onTake={(body) =>
+          onTake(withBuilding(withMoney(withBundle(draft.kit, bundle), money === "on"), building === "on"), body)
+        }
         onCast={() => {}}
         onBack={() => setDraft(null)}
       />
@@ -232,6 +239,15 @@ export function NewPlace({
                 ["on", t("ui.bigCheese.ledger.switchOn")],
               ]}
               onChange={setMoney}
+            />
+            <Choice
+              label={t("ui.bigCheese.building.switch")}
+              value={building}
+              options={[
+                ["off", t("ui.bigCheese.ledger.switchOff")],
+                ["on", t("ui.bigCheese.ledger.switchOn")],
+              ]}
+              onChange={setBuilding}
             />
           </details>
           {working && (

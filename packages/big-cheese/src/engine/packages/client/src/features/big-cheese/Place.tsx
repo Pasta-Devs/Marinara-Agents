@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { Face, nameOf, type Ctx } from "./parts";
 import { Ticker } from "./Ticker";
 import { Adult } from "./Adult";
+import { Build } from "./Build"; // M4 T16
 import { Culture } from "./Culture";
 import { Trip, Walk } from "./Outside";
 
@@ -82,6 +83,7 @@ export function Place({ ctx }: { ctx: Ctx }) {
           {t("ui.bigCheese.place.visit", { count: 1 })}
         </button>
         <Walk ctx={ctx} room={open.id} here={here} />
+        <Build ctx={ctx} room={open.id} />
         {heard.length > 0 && (
           <section className="bc-section" aria-labelledby="bc-overheard">
             <h2 id="bc-overheard" className="bc-subhead">
@@ -168,6 +170,9 @@ export function Place({ ctx }: { ctx: Ctx }) {
               </li>
             );
           })}
+          <li>
+            <Build ctx={ctx} />
+          </li>
           <li>
             <Culture ctx={ctx} />
           </li>

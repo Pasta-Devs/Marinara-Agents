@@ -19,6 +19,7 @@ import { createLegacy } from "./legacy.js"; // M4 T6
 import { createCulture } from "./culture.js";
 import { createGoals } from "./goals.js";
 import { createLedger } from "./ledger.js"; // M4 T15
+import { createBuilding } from "./building.js"; // M4 T16
 import { createEndings } from "./endings.js"; // M4 T9
 import { createAdult } from "./adult.js";
 import { createThings } from "./things.js"; // T2
@@ -28,9 +29,11 @@ import { createInvestigate } from "./investigate.js"; // M4 T4
 import { createDelegation } from "./delegation.js"; // T11
 import { createFavours } from "./favours.js"; // M4 T12
 import { createExport } from "./export.js";
+import { createCall } from "./call.js"; // M4 T21
 import { createChronicle } from "./chronicle.js"; // M4 T10
 import { createPlace } from "./place.js";
 import { createOutside } from "./outside.js"; // T14
+import { createMinigames } from "./minigames.js"; // M4 T17
 import { BigCheeseError, CreateRunBody, createRunStore, type RunStore } from "./store.js";
 
 interface Request {
@@ -83,6 +86,8 @@ export async function activate({ api }: ActivationContext) {
   const culture = createCulture(store);
   const goals = createGoals(store); // M4 T8
   const ledger = createLedger(store); // M4 T15
+  const building = createBuilding(store); // M4 T16
+  const minigames = createMinigames(store, () => engineModel(runtime, null).catch(() => undefined)); // M4 T17
   const endings = createEndings(store); // M4 T9
   const adult = createAdult(store);
   const things = createThings(store); // T2
@@ -92,6 +97,7 @@ export async function activate({ api }: ActivationContext) {
   const favours = createFavours(store); // M4 T12
   const wish = createWish(store, () => engineModel(runtime, null).catch(() => undefined));
   const exporter = createExport(store, runtime);
+  const phone = createCall(store, () => engineModel(runtime, null).catch(() => undefined)); // M4 T21
   const chronicle = createChronicle(store, runtime.persistence.documents, () =>
     engineModel(runtime, null).catch(() => undefined),
   ); // M4 T10
@@ -247,6 +253,10 @@ export async function activate({ api }: ActivationContext) {
         "/runs/:id/grapevine",
         handle((r) => place.grapevine(runId(r), r.query)),
       );
+      router.get(
+        "/runs/:id/relations",
+        handle((r) => place.relations(runId(r))),
+      );
       action("rooms/refresh", (r) => place.refresh(runId(r), r.body));
       action("rooms/:room/visit", (r) => place.visit(runId(r), param(r, "room"), r.body));
       // T14: out of the office
@@ -257,6 +267,9 @@ export async function activate({ api }: ActivationContext) {
       action("walk", (r) => outside.walk(runId(r), r.body));
       action("trip", (r) => outside.trip(runId(r), r.body));
       action("after-work", (r) => outside.afterWork(runId(r), r.body));
+
+      // M4 T17: Speech and Interview. One route; the body names the kind and the picks in order.
+      action("minigame", (r) => minigames.play(runId(r), r.body));
       // T8: viewer mode and skip ahead (design.md sections 11 and 12).
       action("advance", (r) => advance(runId(r), r.body));
       // T11: advisors and office hours.
@@ -293,6 +306,12 @@ export async function activate({ api }: ActivationContext) {
       );
       action("loan", (r) => ledger.loan(runId(r), r.body));
       action("budget", (r) => ledger.budget(runId(r), r.body));
+      // M4 T16: detailed building. The rooms and the open orders, and an order for work.
+      router.get(
+        "/runs/:id/building",
+        handle((r) => building.list(runId(r))),
+      );
+      action("build", (r) => building.build(runId(r), r.body));
       // M4 T9: quit, sell or abdicate ends the run (content.md 10.1).
       action("quit", (r) => endings.quit(runId(r), r.body));
       // M4 T10: term reviews, the award and the yearbook (modules.md section 4)
@@ -338,6 +357,9 @@ export async function activate({ api }: ActivationContext) {
       // T14: save to the Engine library (cast.md section 6). Reads the run, so no revision.
       action("export/lorebook", (r) => exporter.lorebook(runId(r), r.body));
       action("export/persona-note", (r) => exporter.note(runId(r), r.body));
+      // M4 T21: a V2 card file for a generated person, and a short call with one person.
+      action("export/character", (r) => exporter.character(runId(r), r.body));
+      action("people/:pid/call", (r) => phone.call(runId(r), param(r, "pid"), r.body));
 
       router.delete(
         "/runs/:id",

@@ -82,7 +82,7 @@ const EvidenceBody = Base.extend({ threadId: z.string().min(1).max(40) });
 /** A part's summary plus what the player chose there, so the receipt names the choice. */
 const withChoice = (summary: string, stance: string) => `${summary} ${CHOSE[stance] ?? CHOSE.other}`;
 
-const band = (trust: number): Band =>
+export const band = (trust: number): Band =>
   trust < 25 ? "cold" : trust < 45 ? "wary" : trust < 60 ? "neutral" : trust < 80 ? "warm" : "loyal";
 
 export function kitView(r: { kitId: string; kit?: PlaceKit }, cast?: Cast) {
@@ -109,9 +109,18 @@ export function kitView(r: { kitId: string; kit?: PlaceKit }, cast?: Cast) {
     letters: k.guidedLetters,
   };
 }
+import { isKnown } from "./core/people.js";
 // M4 T9: a finished run carries its ending card (`run.end`), built here and never saved.
+// Relations the boss has not heard about never leave the server (T19).
+const shownRun = (run: Run): Run => {
+  const known = run.text.place?.known ?? [];
+  return { ...run, game: { ...run.game, relations: run.game.relations.filter((r) => isKnown(r, known)) } };
+};
 export const view = (run: Run) => ({
-  run: run.game.status === "playing" ? run : { ...run, end: endView(run.game, withCast(placeKitOf(run), run.cast)) },
+  run:
+    run.game.status === "playing"
+      ? shownRun(run)
+      : { ...shownRun(run), end: endView(run.game, withCast(placeKitOf(run), run.cast)) },
   kit: kitView(run, run.cast),
 });
 

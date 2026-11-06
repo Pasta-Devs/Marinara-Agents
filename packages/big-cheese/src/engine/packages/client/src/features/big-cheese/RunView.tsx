@@ -20,6 +20,7 @@ import { Ledger } from "./Ledger"; // M4 T15
 import { Wish } from "./Wish";
 import { Export } from "./Export";
 import { Yearbook } from "./Yearbook"; // M4 T10
+import { MiniGameScreen } from "./MiniGame"; // M4 T17
 import { Calls } from "./Calls";
 
 const TABS = [
@@ -247,6 +248,8 @@ export function RunView({ id, onExit, onOpen }: { id: string; onExit: () => void
     screen = <Leave ctx={ctx} />; // M4 T9
   else if (base === "yearbook")
     screen = <Yearbook ctx={ctx} />; // M4 T10
+  else if (base === "minigame")
+    screen = <MiniGameScreen ctx={ctx} />; // M4 T17
   else screen = <Office ctx={ctx} canStart={canStart} />;
 
   const { clock } = game;

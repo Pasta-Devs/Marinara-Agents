@@ -5,6 +5,7 @@
 // the advice raises influence, a week of ignored advice makes the advisor sulk. Pure and rng-free.
 
 import { HOURS } from "./clock.js";
+import { visitBonus } from "./building.js"; // M4 T16
 import { addTrust, clamp, pure, spendHour } from "./run.js";
 import { OFFICE_HOURS_CAP } from "./types.js";
 import type { PlaceKit } from "./kits/types.js";
@@ -91,7 +92,7 @@ export function holdHour(s: Run) {
   for (const id of o.visitors) {
     const p = s.people[id];
     if (p?.status !== "active") continue;
-    addTrust(s, id, VISIT_TRUST);
+    addTrust(s, id, VISIT_TRUST + visitBonus(s)); // M4 T16: decor
     p.stress = clamp(p.stress - 5);
   }
   o.visitors = [];

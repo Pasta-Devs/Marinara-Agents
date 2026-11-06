@@ -139,6 +139,7 @@ export interface Game {
     equipment: { id: string; name: string; room?: string; condition: number }[];
   }; // M4 T2
   openedRooms?: string[];
+  minigame?: MiniGame | null; // M4 T17
   ending: string | null;
   report: { week: number; income: number; before: Meters; after: Meters } | null;
 }
@@ -299,6 +300,23 @@ export const getRun = (id: string) => api.get<RunState>(runPath(id));
 export const postAction = (run: RunDoc, path: string, body: object = {}) =>
   api.post<RunState>(`${runPath(run.id)}/${path}`, { ...body, expectedRevision: run.revision });
 
+// M4 T17: mini-games (Speech and Interview). T18 reuses the same shape.
+export interface MiniGame {
+  kind: string;
+  people: string[];
+  need: number;
+  options: { id: string; tag: string; text: string }[];
+  week: number;
+  done: {
+    picks: string[];
+    steps: { id: string; tag: string; text: string; value: number; trait?: string }[];
+    score: number;
+    outcome: "great" | "good" | "flat" | "bad";
+    revealed: string[];
+    lines: { who: string; text: string }[];
+  } | null;
+}
+
 // T3: the wish and the kit draft (design.md section 13). `kit` is the whole draft; the client only holds it.
 export type DraftPart = "all" | "people" | "rooms" | "name";
 export interface WishBody {
@@ -373,6 +391,19 @@ export const exportLorebook = (id: string, kind: "memories" | "place", body: Exp
 export const exportNote = (id: string, body: ExportBody) =>
   api.post<{ description?: string; saved?: boolean }>(`${runPath(id)}/export/persona-note`, { kind: "note", ...body });
 
+/** M4 T21: a V2 character card for one generated person, and a call line with one person. */
+export const exportCard = (id: string, personId: string, adult: boolean) =>
+  api.post<{ card: { data: { name: string } } }>(`${runPath(id)}/export/character`, { personId, adult });
+export interface CallLine {
+  who: "you" | "them";
+  text: string;
+}
+export const callSomeone = (
+  id: string,
+  personId: string,
+  body: { expectedRevision: number; topic: string; earlier: CallLine[] },
+) => api.post<{ line: string }>(`${runPath(id)}/people/${encodeURIComponent(personId)}/call`, body);
+
 // T14: out of the office (server outside.ts).
 export interface OutsideState {
   invitation: { host: string; people: string[] } | null;
@@ -420,3 +451,26 @@ export interface LedgerState {
   offers: { amounts: number[]; weeks: number[] };
 }
 export const getLedger = (id: string) => api.get<LedgerState>(`${runPath(id)}/ledger`);
+
+/** M4 T16: detailed building (server building.ts). */
+export interface BuildingState {
+  on: boolean;
+  week: number;
+  money: number;
+  maxOpen: number;
+  maxUpgrades: number;
+  prices: Record<string, number>;
+  weeks: Record<string, number>;
+  open: { room: string; kind: "upgrade" | "decor" | "new"; doneWeek: number }[];
+  rooms: { id: string; condition: number; cap: number; upgrades: number; decor: boolean; name?: string }[];
+}
+export const getBuilding = (id: string) => api.get<BuildingState>(`${runPath(id)}/building`);
+
+/** T19: a line of the relationship map. The server sends only the relations the boss knows. */
+export interface MapRelation {
+  a: string;
+  b: string;
+  kind: string;
+  secret: boolean;
+}
+export const getRelations = (id: string) => api.get<{ relations: MapRelation[] }>(`${runPath(id)}/relations`);

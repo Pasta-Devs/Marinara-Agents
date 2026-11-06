@@ -21,6 +21,7 @@ import { weekThings } from "./things.js";
 import type { PlaceKit } from "./kits/types.js";
 import type { Run } from "./types.js";
 import { ledgerIncome } from "./ledger.js"; // M4 T15
+import { settleBuilding } from "./building.js"; // M4 T16
 
 // Sim numbers (content.md 1.5): income 2 + (O-50)/5, drift 10% toward 50, wear 2.
 const BASE = 2;
@@ -48,6 +49,7 @@ export function settleWeek(s: Run, before = { ...s.meters }, kit?: PlaceKit) {
   weekThings(s, kit); // T2: wear, secrets
   sulkAdvisors(s); // T11
   weekLeverage(s); // M4 T12
+  settleBuilding(s); // M4 T16
 }
 
 // End of day: promises due, waiting cards age, a pending hearing is held on its day, Friday

@@ -234,7 +234,9 @@ test("Rewind a day goes back to that morning, and refuses a day with no snapshot
   const h = await harness();
   const monday = await h.cur();
   await h.play([{ verb: "time.skip", input: { days: 1 } }]);
-  await h.startDay();
+  const shown = await h.startDay();
+  // the view hides relations the boss has not heard of; the store keeps them
+  assert.ok(shown.run.game.relations.length < (await h.cur()).relations.length);
   assert.equal((await h.cur()).clock.day, 1);
   await assert.rejects(() => h.play([{ verb: "time.rewind", input: { days: 3 } }]), code("not-found"));
   await h.play([{ verb: "time.rewind", input: { days: 1 } }]);

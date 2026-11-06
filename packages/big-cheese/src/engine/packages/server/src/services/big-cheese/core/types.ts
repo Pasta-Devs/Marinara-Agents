@@ -295,7 +295,7 @@ export interface Run {
     quarter: number;
     audit?: number;
   };
-  buildOrders: { room: string; kind: "upgrade" | "decor" | "new"; doneWeek: number }[];
+  buildOrders: { room: string; kind: "upgrade" | "decor" | "new"; doneWeek: number; name?: string; feeds?: Meter }[];
   legacy: { generation: number; heir?: string; from?: string; next?: string } | null; // from = the run id of the boss before
   yearbook: string[]; // child document ids, one per term
   pendingTerm: {
@@ -309,4 +309,25 @@ export interface Run {
   openedRooms: string[]; // hidden rooms the boss has opened
   boss: { stress: number; energy: number; peak: number; weeksAt100: number }; // see core/boss.ts
   lastTerm: number; // the last term whose end ran (endTerm fires once per term)
+  minigame?: Minigame | null; // M4 T17: the open (or last played) mini-game, see core/minigames.ts
+  minigames?: string[]; // M4 T17: keys of mini-games already played, `speech:<week>` or `interview:<id>`
+}
+
+export type MiniOutcome = "great" | "good" | "flat" | "bad";
+/** M4 T17: the frame T18 reuses. The code offers `options`, the boss picks `need` ids in order. */
+export interface Minigame {
+  kind: string;
+  people: string[]; // the crowd, or the one candidate
+  need: number;
+  options: { id: string; tag: string; text: string }[];
+  week: number;
+  done: MiniResult | null;
+}
+export interface MiniResult {
+  picks: string[];
+  steps: { id: string; tag: string; text: string; value: number; trait?: string }[];
+  score: number; // -1..1
+  outcome: MiniOutcome;
+  revealed: string[]; // interview: the traits the answers showed
+  lines: { who: string; text: string }[]; // the model's words, one per step
 }

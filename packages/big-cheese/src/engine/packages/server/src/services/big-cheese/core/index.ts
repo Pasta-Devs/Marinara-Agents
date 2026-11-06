@@ -71,3 +71,10 @@ export * from "./ledger.js"; // M4 T15
 export { legacyRun, legacyTerm, pureNameHeir as nameHeir } from "./legacy.js"; // M4 T6
 export { ENDINGS, endingIdOf, endView, judgeRun, leaveRun, wonYear } from "./endings.js"; // M4 T9
 export { ACHIEVEMENTS } from "./achievements.js";
+export * from "./building.js"; // M4 T16
+export {
+  MINIGAMES,
+  minigameOffer,
+  pureMinigamePlay as playMinigame,
+  pureMinigameText as minigameText,
+} from "./minigames.js"; // M4 T17

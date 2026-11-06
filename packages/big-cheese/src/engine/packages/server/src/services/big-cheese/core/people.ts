@@ -4,6 +4,7 @@ import { dayIndex, slot } from "./clock.js";
 import type { PlaceKit } from "./kits/types.js";
 import { clamp } from "./run.js";
 import { closeThread, openThread } from "./threads.js";
+import { wears } from "./building.js"; // M4 T16
 import type { Relation, Run, Slot } from "./types.js";
 
 const WANDER = 0.1; // share of slots a person is somewhere else than the routine says
@@ -68,6 +69,12 @@ export function overheard(s: Run, room: string) {
   return { people: [...people], pairs };
 }
 
+/** T19: the lines of the relation map. Only what the boss knows; `secret` lines are drawn faint. */
+export const knownMap = (s: Run, known: readonly string[]) =>
+  s.relations
+    .filter((r) => isKnown(r, known) && s.people[r.a] && s.people[r.b])
+    .map((r) => ({ a: r.a, b: r.b, kind: r.kind, secret: HIDDEN.includes(r.kind) }));
+
 export const PAIR_FACTS: Partial<Record<Relation["kind"], string>> = {
   friend: "{a} and {b} are good friends.",
   rival: "{a} and {b} compete for everything.",
@@ -127,7 +134,8 @@ function leaveCheck(s: Run, kit: PlaceKit) {
 
 /** Once a week: use wears rooms, a worn room costs the meter it feeds 1 point (the worst one, at most 1), people leave. */
 function weekTurn(s: Run, kit: PlaceKit) {
-  for (const r of Object.values(s.rooms)) if (r.people.length >= 3) r.condition = clamp(r.condition - 1);
+  for (const [id, r] of Object.entries(s.rooms))
+    if (r.people.length >= 3 && wears(s, id)) r.condition = clamp(r.condition - 1); // M4 T16: upgrades slow wear
   const fed = kit.rooms
     .filter((r) => r.feeds && s.rooms[r.id]?.condition < LOW_ROOM)
     .sort((a, b) => s.rooms[a.id].condition - s.rooms[b.id].condition)[0]?.feeds;

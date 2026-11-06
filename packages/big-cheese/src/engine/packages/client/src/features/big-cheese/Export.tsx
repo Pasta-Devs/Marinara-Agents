@@ -5,7 +5,7 @@
 // Adult scenes stay out unless the player ticks the box (only shown when the run has the module).
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { errorKey, exportLorebook, exportNote } from "./api";
+import { errorKey, exportCard, exportLorebook, exportNote } from "./api";
 import type { Ctx } from "./parts";
 
 type Item = "memories" | "place" | "note";
@@ -39,6 +39,27 @@ export function Export({ ctx }: { ctx: Ctx }) {
         if (preview) setShown({ item, text: (r.entries ?? []).map((e) => `${e.name}\n${e.content}`).join("\n\n") });
         else setStatus(t("ui.bigCheese.export.savedBook", { name: r.name, count: r.count }));
       }
+    } catch (error) {
+      setStatus(t(errorKey(error)));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // M4 T21: the card file is built by the server and saved by the browser. Nothing goes to the Engine.
+  const makeCard = async (personId: string) => {
+    if (busy) return;
+    setBusy(true);
+    setStatus(null);
+    try {
+      const { card } = await exportCard(run.id, personId, adult);
+      const url = URL.createObjectURL(new Blob([JSON.stringify(card, null, 2)], { type: "application/json" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${card.data.name}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setStatus(t("ui.bigCheese.export.cardMade", { name: card.data.name }));
     } catch (error) {
       setStatus(t(errorKey(error)));
     } finally {
@@ -82,6 +103,25 @@ export function Export({ ctx }: { ctx: Ctx }) {
             )}
           </li>
         ))}
+      </ul>
+      <h2 className="bc-subhead">{t("ui.bigCheese.export.card.title")}</h2>
+      <p className="bc-muted">{t("ui.bigCheese.export.card.help")}</p>
+      <ul className="bc-list bc-plain">
+        {kit.people
+          .filter((who) => !who.library)
+          .map((who) => (
+            <li key={who.id} className="bc-panel">
+              <p className="bc-row-title">{who.name}</p>
+              <button
+                type="button"
+                className="bc-btn bc-btn-quiet"
+                disabled={busy}
+                onClick={() => void makeCard(who.id)}
+              >
+                {t("ui.bigCheese.export.card.make", { name: who.name })}
+              </button>
+            </li>
+          ))}
       </ul>
       {status && (
         <p role="status" className="bc-muted">
