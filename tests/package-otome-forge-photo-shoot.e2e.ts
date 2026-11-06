@@ -9,7 +9,7 @@
 // asks never takes the shown one's place; Home tapes the newest photo into his note, its words wrapping around it in both looks, mirrored in
 // RTL, at reduced motion. Each test runs on both projects (desktop-chromium and mobile-chromium).
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-photo-shoot.e2e.ts
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 

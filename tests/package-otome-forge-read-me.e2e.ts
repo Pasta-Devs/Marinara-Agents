@@ -9,7 +9,7 @@
 // and reads a notebook opened from the intro. Each test runs Midnight on one project and Pearl on the other, at phone
 // width (mobile-chromium) and on the desktop (desktop-chromium).
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-read-me.e2e.ts
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
