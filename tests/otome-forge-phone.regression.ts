@@ -20,6 +20,7 @@ import type {
   PhoneMessage,
   PhoneThread,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
+import { OUTSIDE_AFFECTION_DAILY_CAP } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/economy.ts";
 import { NOTE_TEXT_MAX } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/home.ts";
 import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs";
 import { forgeTimeZoneRoutes } from "@forge-kit/time-zone-server.mjs";
@@ -396,7 +397,7 @@ test("Close and remember: one session, P18 on the summary contract, the capped a
   const today = localDay("UTC");
   await t.store.mutateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
     ...state,
-    daily: { dayKey: today, starlight: 0, affection: { [KAI]: 297 } },
+    daily: { dayKey: today, starlight: 0, affection: { [KAI]: OUTSIDE_AFFECTION_DAILY_CAP - 3 } },
   }));
   assert.equal((await t.phone("POST", send, { li: KAI, body: { text: "Are you awake?" } })).status, 200);
   const points = (await t.state()).lis[KAI]!.points;
@@ -407,7 +408,7 @@ test("Close and remember: one session, P18 on the summary contract, the capped a
   assert.deepEqual(
     closed.body.grants,
     [{ source: "close-and-remember", li: KAI, affection: 3 }],
-    "capped at 300 a day",
+    "capped at the day's limit",
   );
   assert.equal((await t.state()).lis[KAI]!.points, points + 3);
   const thread = (await t.thread(KAI))!;

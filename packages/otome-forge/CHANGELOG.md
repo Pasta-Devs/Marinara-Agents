@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.9.1 — 2026-11-06
+
+- **Less affection from activities each day.** Date Night, Read Them, Read Me, the Claw Machine, Close and remember and Show him now earn at most 150 affection per love interest a day, down from 300. Story chapters still earn without a limit, and so does a gift you give on a date.
+
 ## 0.9.0 — 2026-11-06
 
 - **A Shop in Wish.** Spend Starlight on gifts: flowers, chocolates, wine, and under NSFW Heat an aphrodisiac. They wait in your Wardrobe until a date.

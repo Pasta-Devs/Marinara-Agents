@@ -69,8 +69,11 @@ export const AFFECTION_EARNINGS = {
   /** The first Show him for a look (the maintainer's, 2026-11-03: 5, was 20). */
   showHim: 5,
 } as const;
-/** Affection from outside the story, per love interest per local day (proposal: the design's cap read as per LI). */
-export const OUTSIDE_AFFECTION_DAILY_CAP = 300;
+/**
+ * Affection from outside the story, per love interest per local day (the maintainer's, 2026-11-06, #2133: 150, was
+ * 300): one Date Night's 100 and a little more.
+ */
+export const OUTSIDE_AFFECTION_DAILY_CAP = 150;
 
 /**
  * #2046: what siding with one love interest in an argument moves (proposal). The one backed gains, as a story earning

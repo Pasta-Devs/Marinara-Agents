@@ -188,7 +188,7 @@ Wishes cost Starlight you earn by playing: 100 each, or 1,000 for ten. There is 
 
 ## Dates: Read Them, Read Me, Date Night, the Photo Shoot and the Claw Machine
 
-Dates is where you spend time with one love interest at a time. Every activity but the Photo Shoot pays, even when it goes badly. Only the rewards are capped each day: 400 Starlight from activities in all, and 300 affection per love interest from outside the story. Play is never capped, and the day ends at your own midnight.
+Dates is where you spend time with one love interest at a time. Every activity but the Photo Shoot pays, even when it goes badly. Only the rewards are capped each day: 400 Starlight from activities in all, and 150 affection per love interest from outside the story. Play is never capped, and the day ends at your own midnight.
 
 ### Read Them
 

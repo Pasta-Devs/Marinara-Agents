@@ -93,7 +93,8 @@ test("the economy's numbers are pinned", () => {
         closeAndRemember: 5,
         showHim: 5,
       },
-      outsideCap: 300,
+      // #2133: the maintainer lowered it from 300 (2026-11-06).
+      outsideCap: 150,
       sideWith: { backed: 30, passedOver: 10 },
       trust: [-3, 3],
       tension: [0, 3],
@@ -529,10 +530,11 @@ test("daily caps follow the player's own midnight in each time zone", (t) => {
         return result.granted;
       });
     const dates = [1, 2, 3, 4].map(() => earn({ source: "date", starlight: 120, li: KAI, affection: 100 }));
+    // Affection stops at the day's 150 (#2133), Starlight at its 400.
     assert.deepEqual(dates, [
       { starlight: 120, affection: 100 },
-      { starlight: 120, affection: 100 },
-      { starlight: 120, affection: 100 },
+      { starlight: 120, affection: 50 },
+      { starlight: 120, affection: 0 },
       { starlight: 40, affection: 0 },
     ]);
     assert.deepEqual(earn({ source: "read-him", starlight: 40, li: MIR, affection: 40 }), {
@@ -545,7 +547,7 @@ test("daily caps follow the player's own midnight in each time zone", (t) => {
       affection: 150,
     });
     assert.equal(state.wallet.starlight, 2000 + 400 + 160);
-    assert.equal(state.lis[KAI]!.points, 450);
+    assert.equal(state.lis[KAI]!.points, 300);
     assert.equal(state.daily.dayKey, zone === "America/New_York" ? "2026-10-27" : "2026-10-28");
 
     now = late + 60 * 60 * 1000; // 00:30 in New York, a new day; 13:30 in Tokyo, the same day
