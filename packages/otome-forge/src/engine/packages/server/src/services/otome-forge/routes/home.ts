@@ -6,7 +6,8 @@
 //                                       home) and its cut-out, his ready faces with their cut-outs, whether his lines
 //                                       are ready, a rupture, unread replies, L0's picture (backdropOf), what a
 //                                       love interest noticed about her look (M4's P19, and whether it is on its way),
-//                                       and the newest Photo Shoot photo with him, taped into his note (#2087)
+//                                       and the newest Photo Shoot photo with him, taped into his note (#2087), and
+//                                       each figurine bought in the Shop and drawn (#2128), which stands in L0
 // POST /runs/:run/home/set {li?, show?} → {home}: the love interest Home is about, and Him or Me
 // POST /runs/:run/home/note {li}       → {note}: today's note, written by the day's first call and read back after
 // GET  /runs/:run/lis/:li/lines        → LinesView: his pre-written lines (cold only during a rupture)
@@ -28,6 +29,7 @@ import type {
 import type { Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { wornLookUrl } from "../../../../../client/src/features/otome-forge/shared/wardrobe.js";
 import { cutoutView, queueCutouts, type CutoutClient } from "../art/cutout.js";
+import { plushSvgUrl } from "../art/plush-svg.js";
 import { ensureLinePacks, linesView, needsLines } from "../home/lines.js";
 import { noteFits, readNote, serveNote, toNoteView, todayKey } from "../home/note.js";
 import { readItems } from "../items/open.js";
@@ -199,6 +201,10 @@ export function registerHomeRoutes(router: OtomeRouter, deps: HomeRouteDeps): vo
         // Only a line about the look she wears now is kept (schemas/player.ts), so a changed look shows none.
         noticed: run.player.noticed,
         noticing: noticingNow.includes(run.player.wornOutfit ?? ""),
+        figurines: run.units.flatMap((entry) => {
+          const url = run.state.owned.figurines[entry.id] ? plushSvgUrl(entry.figurineArt?.svg) : undefined;
+          return url ? [{ li: entry.id, url }] : [];
+        }),
       };
       return view;
     }),

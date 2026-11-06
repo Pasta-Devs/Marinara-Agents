@@ -11,6 +11,7 @@ import type {
   BibleIntimacy,
   ArcStageKey,
   Bible,
+  FigurineArt,
   FixedLines,
   LinePacks,
   PlushArt,
@@ -223,6 +224,13 @@ export function normalizePlushArt(value: unknown): PlushArt | undefined {
   return { animal, svg: clean.svg, at: typeof value.at === "string" ? value.at : "" };
 }
 
+/** A stored Shop figurine (#2128), checked again on every read as a plush is; a damaged one is dropped and drawn again. */
+export function normalizeFigurineArt(value: unknown): FigurineArt | undefined {
+  if (!isRecord(value) || typeof value.svg !== "string") return undefined;
+  const clean = sanitizePlushSvg(value.svg);
+  return "svg" in clean ? { svg: clean.svg, at: typeof value.at === "string" ? value.at : "" } : undefined;
+}
+
 /** His sticker set's design, at most STICKERS_PER_LI. A label counts characters (code points), as the reply's check does. */
 export const STICKER_LABEL_MAX = 24;
 export const STICKER_LOOK_MAX = 160;
@@ -308,14 +316,17 @@ export function normalizeUnit(data: unknown): Unit {
       lines: normalizeLinePacks,
       cutouts: normalizeCutouts,
       plushArt: normalizePlushArt,
+      figurineArt: normalizeFigurineArt,
       stickers: normalizeStickerSet,
     },
     defaultUnit,
     isRecord(data) ? data : undefined,
   );
-  // An LI with no pack yet has no `lines` key at all, as before M3; one with no plush drawn, no `plushArt`.
+  // An LI with no pack yet has no `lines` key at all, as before M3; one with no plush drawn, no `plushArt` (nor a
+  // `figurineArt` before their figurine is drawn).
   if (!unit.lines) delete unit.lines;
   if (!unit.plushArt) delete unit.plushArt;
+  if (!unit.figurineArt) delete unit.figurineArt;
   if (!unit.stickers) delete unit.stickers;
   // A worn look that is not one of theirs (a damaged document) wears the base portrait.
   const { wornOutfit: _worn, ...rest } = unit;

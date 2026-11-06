@@ -131,6 +131,7 @@ Home shows the love interest you pick, or you when you switch from their name to
 - **Message of the day:** each love interest leaves one handwritten note, written on your first visit of your local day and kept for the rest of it, with their mood. **Reply** opens their thread with the note quoted. During a rift the note is curt. The newest photo you took with that love interest in the **Photo Shoot** is taped into their note, its words wrapping around it.
 - **Taps:** tap their head, hand or heart for a line written ahead in their own voice, so a tap never waits for the model. Too many pokes in a row annoy them, and during a rift every line is cold. The lines are written in the background on your first Home visit, and again when a love interest reaches a new stage. Until then, Home uses a few stock lines.
 - **Rough day?** offers comfort from lines written ahead, with no model call. Comfort lines never give medical advice or guess about your body.
+- **Figurines:** each figurine you buy in the Shop stands on a small shelf in the room, once it is drawn.
 - **Faces on Home:** their face follows the note's mood, each tap and a rift, once their five faces are painted (and cut out like the look). Before that, their look or initials name the face.
 - **Voices on Home:** **Play** reads the note aloud, and taps and **Rough day?** are spoken in the voice the story gives them. Home plays the story's home music.
 - **Reduced motion** turns off the parallax and the breathing.
@@ -161,6 +162,9 @@ Wishes cost Starlight you earn by playing: 100 each, or 1,000 for ten. There is 
   - The 5★ is always the featured item, with no 50/50.
   - Pity is kept per kind of banner and carries over, Echoes included.
 - **Paying:** a wish charges and rolls in one save, so it is never paid twice, and it never calls a model. A duplicate refunds 400, 60 or 10 Starlight by rarity.
+- **The Shop:** the last tab of Wish spends Starlight on gifts and figurines. Buying never calls a model, and a double tap pays once.
+  - **Gifts** to give on a date: a bouquet of flowers (200), a box of chocolates (300) and a bottle of wine (600), and under NSFW Heat an aphrodisiac (1,000). Buy as many as you like; they wait in your Wardrobe. An aphrodisiac bought under NSFW stays yours if you lower Heat, but the Shop, the Wardrobe and Date Night leave it out until Heat is NSFW again.
+  - **Figurines:** one of each love interest, 5,000 Starlight each. Your Planning model draws each one once, in the background, the first time you open the Shop; until then it shows their plush frame. Buying one unlocks a short, funny scene with them, a Character Story you play from the Shop, the Wardrobe or the Story screen, and the figurine joins you on Home.
 - **Art:** a banner's art is its featured item's picture, painted when the banner is created, or held for your tap. Tap a ready banner image to see the whole picture without making a wish. Wardrobe banner artwork is centered and shown whole, with its chroma backdrop removed for display. Other looks, Memories, Moments and Snapshots paint once on their first open. Moment and Snapshot artwork each costs **1 image** and respects **Ask before painting** and prompt review. Existing Moments can gain their illustration without rewriting their scene or changing reading progress; existing Snapshots illustrate their saved vignette without rerolling it. Both keep their illustrations in the Album. Opening lists or making a wish paints neither, and later opens reuse saved artwork.
 - **The Wardrobe:**
   - Looks, theirs and yours, are displayed with their chroma backdrop removed. The original paintings stay saved.
@@ -169,6 +173,7 @@ Wishes cost Starlight you earn by playing: 100 each, or 1,000 for ten. There is 
   - Your featured look and theirs from the same two weeks make a couple set.
   - A look they wear gets its own faces.
   - When you wear a new look of yours, the love interest on Home notices it, and Home's **Me** shows their line beside your look while you wear it.
+  - **Me** also lists your **Gifts**: each gift from the Shop with how many you have, and each figurine with **Play the scene**.
 - **Memory Selector:** at affection 10, each love interest gives you one. Claim any of their Memories from past banners that you do not have yet, at no cost.
 - **The Album** keeps:
   - **Memories** offers All, 3★, 4★ and 5★ filters. Unplayed Memories and Moments appear first; partially read and completed stories keep their saved progress. Snapshots are vignettes without a playable chapter.
@@ -205,6 +210,7 @@ Read Them in reverse: your love interest studies you and makes four guesses abou
 
 1. **Pick a place:** one of eight, one your love interest chooses, or a place your story has painted (shown with its picture).
 2. **Pick what you both wear:** your everyday looks, or any painted look either of you owns in the Wardrobe (4★ and 5★). The date's scenes, key images and keepsake dress you both in them, each look worn over that person's own appearance, and the looks stay on at Home afterwards. A look you own appears once it is painted: open it in the Wardrobe.
+   - **Bring a gift:** with a gift from the Shop in your Wardrobe, you can also bring one. You give it in the first scene, a special exchange where they react in their own voice, and it can change how the evening goes. An aphrodisiac is offered only under NSFW Heat: desire builds through the evening, as far as your content settings allow. The gift is used up once the date is planned, never on a resumed date or a plan that failed. When the date is counted it earns its own affection on top of the date's (40, 60, 120 or 200 by gift), even past the daily cap. Only that love interest remembers it.
 3. **Play three scenes of choices,** judged by what they like and voiced like any scene. You can ask for a keepsake image at the end.
 
 During a rift, Date Night becomes **Make it right**.
@@ -316,7 +322,7 @@ Each story has its own content settings:
 
 ## What costs what
 
-Anything that costs money to generate is labelled where you start it, and almost nothing paid is retried by itself. Text gets at most one automatic repair turn when a reply comes back in the wrong format, a love interest's lines written ahead that failed are tried again on a Home visit at least 10 minutes later, and a love interest's plush that failed is drawn again on a visit to Dates at least 10 minutes later. Images, music and voices never retry without a tap. "Call" means one request to a text connection.
+Anything that costs money to generate is labelled where you start it, and almost nothing paid is retried by itself. Text gets at most one automatic repair turn when a reply comes back in the wrong format, a love interest's lines written ahead that failed are tried again on a Home visit at least 10 minutes later, a love interest's plush that failed is drawn again on a visit to Dates at least 10 minutes later, and their figurine on a visit to the Shop at least 10 minutes later. Images, music and voices never retry without a tap. "Call" means one request to a text connection.
 
 If a text endpoint rejects the optional JSON-format parameter, Otome Hearth can make one additional request without that parameter, and leaves the parameter off that connection's later requests to the same model until Otome Hearth is reloaded or Marinara Engine restarts. The reply still has to pass the same validation, and any content repair keeps that compatible request format. Authentication, rate-limit, server and network failures do not trigger this compatibility retry.
 
@@ -343,6 +349,7 @@ If a text endpoint rejects the optional JSON-format parameter, Otome Hearth can 
 | Home's message of the day                                   | 1 call per love interest you see, per day (again when a rift opens or closes)                                                                                                     | —                                                                                                                          | —                                     | **Play**: once                                             |
 | Home's lines written ahead                                  | in the background: 1 call per love interest per stage (the first also writes their comfort and Claw Machine lines), and again on a Home visit at least 10 minutes after a failure | —                                                                                                                          | —                                     | each tap line once; comfort lines every time, never cached |
 | A love interest's plush                                     | in the background: 1 call per love interest, once (again 10+ minutes after a failure)                                                                                             | —                                                                                                                          | —                                     | —                                                          |
+| A love interest's figurine                                  | in the background: 1 call per love interest, once, when you first open the Shop (again 10+ minutes after a failure)                                                               | —                                                                                                                          | —                                     | —                                                          |
 | A Messages reply                                            | 1 call                                                                                                                                                                            | —                                                                                                                          | —                                     | —                                                          |
 | A message they write first (**Messages a day**)             | in the background: 1 call each, at most the number you set per day                                                                                                                | —                                                                                                                          | —                                     | —                                                          |
 | Stickers (images on)                                        | in the background: 1 call per love interest at level 2, for their nine                                                                                                            | yours: 5, once you open Messages; theirs: 1 per affection level from 2 to 10, one at a time (Ask before painting waits)    | —                                     | —                                                          |
@@ -371,13 +378,14 @@ These never call a model or paint anything. With voices on, their lines are voic
 - browsing the Album, Echoes and the Wardrobe;
 - **What happened so far…** while a chapter is planned, and **Who said what?** while a scene is written;
 - claiming with a Memory Selector (opening the Memory afterwards costs what any first open does);
+- buying in the Shop, a gift or a figurine (a figurine's scene costs 1 call as you read it, as any scene does);
 - cut-outs (a love interest without the backdrop), which are the Engine's own sprite cleanup.
 
 ## Privacy & data
 
 ### Where your stories live
 
-- **Package documents:** stories are kept in Marinara Engine's own database, on the computer that runs it, as documents whose ids start with `otome-forge:`. This covers the world, the cast and their bibles, chapters and scenes, progress, messages of the day, message threads, lines written ahead, banners, the items you win, the plush shelf, your latest Claw Machine rounds and each love interest's plush, your Read Me games, and each love interest's notebook of what they know about you, your own words included.
+- **Package documents:** stories are kept in Marinara Engine's own database, on the computer that runs it, as documents whose ids start with `otome-forge:`. This covers the world, the cast and their bibles, chapters and scenes, progress, messages of the day, message threads, lines written ahead, banners, the items you win, the plush shelf, your latest Claw Machine rounds and each love interest's plush and figurine, the gifts and figurines you bought in the Shop, your Read Me games, and each love interest's notebook of what they know about you, your own words included.
   - They travel with Engine backups and profile exports.
   - Package documents aren't isolated per package, so other installed packages could read them.
 - **The Global Gallery:** painted looks, places, faces, CGs, banner art and Home cut-outs are saved there, and deleting a story deletes them too.

@@ -9,6 +9,7 @@ import { REDUCED_EFFECTS, reducedRules } from "../lib/reduced-motion";
 import { DATE_NIGHT_RULES } from "../screens/dates/date-night-styles";
 import { READ_HIM_RULES } from "../screens/dates/ReadHim";
 import { READ_ME_RULES } from "../screens/dates/ReadMe";
+import { SHOP_RULES } from "../screens/wish/ShopPanel";
 import { fontFaceCss, FONT_STACKS } from "./fonts";
 import { LOOK_TOKENS, PALETTE, RARITY, type Look } from "./tokens";
 
@@ -2133,6 +2134,19 @@ ${R} .of-home-backdrop {
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: brightness(0.78) saturate(0.92);
 }
 ${R}[data-look="pearl"] .of-home-backdrop { filter: brightness(0.96) saturate(0.9); }
+/* #2128: the figurines bought in the Shop, on a small wall ledge of their own at the room's inline end, under the
+   window and over a painted backdrop alike: low enough to clear the note, high enough to clear the nameplate and the
+   dock, and behind him. */
+${R} .of-home-figurines {
+  position: absolute; inset-inline-end: calc(24px + 4%); bottom: calc(24px + 30%); max-width: 44%;
+  display: flex; align-items: flex-end; justify-content: flex-end; gap: 2px; padding: 0 8px 1px;
+  border-bottom: 6px solid color-mix(in srgb, ${PALETTE.champagne} 62%, #8a5a3c); border-radius: 0 0 3px 3px;
+  box-shadow: 0 8px 10px -7px rgb(10 8 26 / 0.55);
+}
+${R} .of-home-figurine {
+  display: block; flex: 0 1 auto; min-width: 0; width: clamp(30px, 9cqw, 52px); aspect-ratio: 2 / 3; height: auto;
+  object-fit: contain; filter: drop-shadow(0 3px 2px rgb(43 34 54 / 0.35));
+}
 ${R} .of-home-l1 { position: absolute; inset: 0; background: var(--of-home-tint); }
 ${R}[data-look="pearl"] .of-home[data-sky="night"] {
   --of-home-tint: linear-gradient(180deg, rgb(110 110 190 / 0.24) 0%, rgb(140 120 200 / 0.1) 62%, transparent 100%);
@@ -3459,6 +3473,7 @@ export function otomeForgeStyles(): string {
     FORM_RULES,
     SETUP_RULES,
     COLLECTION_RULES,
+    SHOP_RULES,
     STORY_RULES,
     READER_RULES,
     PRESENTATION_RULES,

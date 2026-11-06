@@ -2,7 +2,9 @@
 // Otome Forge: the Wardrobe (plan M4 "Wardrobe"): complete looks for each love interest and the protagonist, Wear at
 // home, Show {{name}}, couple sets and their pair portrait
 // ──────────────────────────────────────────────
-// GET  /runs/:run/wardrobe                                   → WardrobeView {him, me, couples, noticed, noticing}
+// GET  /runs/:run/wardrobe                                   → WardrobeView {him, me, couples, noticed, noticing,
+//                                                               gifts, figurines}: #2128, her Shop gifts (those her
+//                                                               Heat offers) and figurines
 // POST /runs/:run/wardrobe/wear {owner, look, li?}           → {wardrobe}; owner "me" or a love interest's id (also
 //                                                               "player" or "li:<id>"); look "base" or an owned,
 //                                                               painted look item. Her new look is noticed (P19, by `li`,
@@ -33,6 +35,7 @@ import type {
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { AFFECTION_EARNINGS } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import { FACES, isFace, type Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
+import { figurineSceneKey, giftsFor } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import {
   BASE_LOOK,
   NOTICED_WORDS_MAX,
@@ -60,6 +63,7 @@ import {
   paintPairNow,
 } from "../art/outfits.js";
 import { paintView, updateIfChanged } from "../art/paint.js";
+import { plushSvgUrl } from "../art/plush-svg.js";
 import { generateJson, runForeground } from "../generation.js";
 import { OtomeForgeError, debugModeOf, parseBody, runParam, type RegisterRoutes, type RouteDeps } from "../http.js";
 import { isLiId, playerId, runDocTarget, stateId, unitId } from "../ids.js";
@@ -222,6 +226,19 @@ export async function wardrobeView(deps: Pick<RouteDeps, "store">, runId: string
     couples,
     noticed: run.player.noticed,
     noticing: noticingNow.includes(run.player.wornOutfit ?? ""),
+    // An aphrodisiac bought under NSFW Heat stays owned, and is listed (and given) only while Heat is NSFW.
+    gifts: Object.fromEntries(
+      giftsFor(run.world.content).flatMap((gift) => {
+        const count = run.state.owned.gifts[gift] ?? 0;
+        return count > 0 ? [[gift, count]] : [];
+      }),
+    ),
+    figurines: castOf(run)
+      .filter((unit) => run.state.owned.figurines[unit.id])
+      .map((unit) => {
+        const art = plushSvgUrl(unit.figurineArt?.svg);
+        return { li: unit.id, ...(art ? { art } : {}), story: { key: figurineSceneKey(unit.id) } };
+      }),
   };
 }
 
