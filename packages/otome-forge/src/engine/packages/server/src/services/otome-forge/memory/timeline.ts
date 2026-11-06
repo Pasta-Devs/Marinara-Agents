@@ -79,12 +79,12 @@ export const serializeTimeline = ({ head, entries }: Timeline) => JSON.stringify
  */
 export const cleanSummary = (text: string) => text.trim().replace(/^#{1,6}\s+/gmu, "");
 
-/** The timeline as prompt text: the head, then each entry under its title, leaving out the entry for `without`. */
-export function renderTimeline({ head, entries }: Timeline, without?: string): string {
+/** The timeline as prompt text: the head, then each entry under its title, leaving out the entries for `without`. */
+export function renderTimeline({ head, entries }: Timeline, ...without: Array<string | undefined>): string {
   return [
     head.trim(),
     ...entries
-      .filter((entry) => entry.key !== without)
+      .filter((entry) => !without.includes(entry.key))
       .map((entry) => (entry.title ? `${entry.title}\n${entry.text.trim()}` : entry.text.trim())),
   ]
     .filter(Boolean)

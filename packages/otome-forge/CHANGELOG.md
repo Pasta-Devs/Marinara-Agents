@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.8.11 — 2026-11-06
+
+- **Chapters remember your last Character Story.** A main, route or repair chapter led by another love interest now always knows the Character Story you played last, even before its summary is written, so it no longer contradicts what happened there. That story stays private between you and its love interest: the others still don't know what happened in it.
+
 ## 0.8.10 — 2026-11-06 [highlight]
 
 - **Scenes are written as they were before 0.8.9**: each one when you reach it, and the next one ahead while you read. 0.8.9 wrote the rest of the chapter ahead, so later scenes missed the small choices you made along the way. The fixes for pictures that hung and for the Story connection stay.

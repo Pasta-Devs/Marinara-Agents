@@ -670,6 +670,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.8.11",
+          "date": "2026-11-06",
+          "notes": "- **Chapters remember your last Character Story.** A main, route or repair chapter led by another love interest now always knows the Character Story you played last, even before its summary is written, so it no longer contradicts what happened there. That story stays private between you and its love interest: the others still don't know what happened in it.",
+          "highlight": false
+        },
+        {
           "version": "0.8.10",
           "date": "2026-11-06",
           "notes": "- **Scenes are written as they were before 0.8.9**: each one when you reach it, and the next one ahead while you read. 0.8.9 wrote the rest of the chapter ahead, so later scenes missed the small choices you made along the way. The fixes for pictures that hung and for the Story connection stay.",
@@ -781,12 +787,6 @@
           "version": "0.6.28",
           "date": "2026-11-02",
           "notes": "- **Newest CGs first.** The Album's CGs now open on the newest, with the oldest at the bottom; the full-screen viewer steps through them in the same order.\n- **Chapter themes in the Soundtrack.** A chapter's own theme now appears in the Album's Soundtrack after the six moods, under the chapter's title, once you've reached that chapter, and plays like the others.",
-          "highlight": false
-        },
-        {
-          "version": "0.6.27",
-          "date": "2026-11-02",
-          "notes": "- **Fewer wasted calls.** Picking how the story goes on twice no longer plans the arc twice. A newcomer whose arc failed to plan keeps their character sheet for the next try. A scene written ahead paints its key moment only once you reach it. A connection that refuses JSON mode is asked without it from then on.\n- **Daily messages wait for chapter 1.** Love interests you haven't met yet no longer text you after the prologue.\n- **Stickers stay put.** While their backgrounds are cut out again, your stickers keep showing and never read as newly unlocked.\n- **Fixes.** Every Album tab can be reached with a mouse. A story delete that stops partway can be finished. Close says to wait for the reply while one is on its way. Cost notes count 2 calls where 2 are made.",
           "highlight": false
         }
       ]
