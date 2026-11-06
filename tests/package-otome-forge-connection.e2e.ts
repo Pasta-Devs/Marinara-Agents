@@ -1,7 +1,7 @@
 // Real Engine/provider boundary: Otome Hearth sends only the reply's size (0.7.1), never a JSON hint of its own, so an
 // endpoint that rejects JSON mode answers its first request. The connection's own settings (here the Engine's default
 // temperature) are the Engine's to send.
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/package-browser.ts";
 import { createServer } from "node:http";
 
 test("Otome Hearth real custom endpoint gets no JSON hint, only the reply's size", async ({
