@@ -10,6 +10,4 @@
 - "Character status" (off by default) writes what a person does now to their chat. It runs at x1 only.
 - A Home card lists up to 3 new hooks.
 - "Surprise mode" hides news until a character tells you.
-- A "Nudge" button plans one event you ask for, such as a job offer.
-- A "Phone" button shows short texts the characters sent each other.
-- A "Paper" button shows a weekly paper for the last full week.
+- Circle chips, a cast row and tabs for Today, Diary, Phone, Paper, Plans and Timeline. Plans has promises and "Nudge", which plans one event you ask for.

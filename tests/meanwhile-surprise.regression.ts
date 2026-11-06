@@ -117,6 +117,11 @@ async function main() {
   assert.equal(widget.hooks.length, 0);
   assert.equal(widget.quiet[0].toHear, 3);
   assert.equal((await call("GET", "/circles")).body.circles[0].toHear, 3);
+  assert.equal(
+    (await call("GET", "/circles")).body.circles[0].newHooks,
+    0,
+    "hidden hooks are not counted for the tab chip",
+  );
   assert.equal((await call("GET", "/circles")).body.circles[1].toHear, 0);
   assert.equal((await call("GET", "/circles/k/phone")).body.threads[0].texts.length, 1);
   assert.equal((await call("GET", "/circles/k/papers")).body.papers.length, 0);

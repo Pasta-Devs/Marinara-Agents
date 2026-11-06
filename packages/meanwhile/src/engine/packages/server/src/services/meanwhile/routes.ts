@@ -97,10 +97,31 @@ function statusOf(circle: Circle, mark: RunMark, now: number, calls: number) {
   };
 }
 
+// What the Circle home shows: accepted events the user may see, newest first.
+const acceptedEvents = (doc: MeanwhileDocument, circle: Circle) =>
+  doc.events
+    .filter((e) => e.circleId === circle.id && e.status === "accepted" && !hiddenBySurprise(doc, circle, e))
+    .sort((a, b) => Date.parse(b.start) - Date.parse(a.start));
+
+// The hook cards on Today, newest first, told ones included. The Home tab and the tab chip count both read this list.
+const homeHooks = (doc: MeanwhileDocument, circle: Circle) =>
+  acceptedEvents(doc, circle)
+    .filter((e) => e.hook)
+    .flatMap((e) =>
+      Object.entries(e.hook!).map(([characterId, text]) => ({
+        event: e,
+        characterId,
+        text,
+        told: Object.keys(e.delivered ?? {}).length > 0,
+      })),
+    )
+    .slice(0, 12);
+
 const view = (doc: MeanwhileDocument, circle: Circle, now: number) => ({
   ...circle,
   status: statusOf(circle, markOf(doc, circle.id), now, usageRow(doc.usage, circle.id, now).calls),
   toHear: countHidden(doc, circle),
+  newHooks: homeHooks(doc, circle).filter((h) => !h.told).length,
   waiting: doc.events.filter((e) => e.circleId === circle.id && e.status === "proposed").length,
   // Characters whose status another Circle writes, with that Circle's name.
   statusElsewhere: circle.writeStatus
@@ -396,33 +417,32 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
     const circle = find(doc, request.params.id);
     if (!circle) return notFound(reply);
     const tz = circle.clock.timezone;
-    const mine = doc.events
-      .filter((e) => e.circleId === circle.id && e.status === "accepted" && !hiddenBySurprise(doc, circle, e))
-      .sort((a, b) => Date.parse(b.start) - Date.parse(a.start));
+    const mine = acceptedEvents(doc, circle);
     const chats = circle.linkedChatIds.length
       ? (await getMeanwhileRuntime().persistence.listChats()).filter((chat) => circle.linkedChatIds.includes(chat.id))
       : [];
-    const hooks = mine
-      .filter((e) => e.hook)
-      .flatMap((e) =>
-        Object.entries(e.hook!).map(([characterId, text]) => ({
-          eventId: e.id,
-          characterId,
-          text,
-          day: msToWall(Date.parse(e.start), tz).slice(0, 10),
-          told: Object.keys(e.delivered ?? {}).length > 0,
-          chats: chats
-            .filter((chat) => chat.characterIds.includes(characterId))
-            .map((chat) => ({ id: chat.id, name: chat.name })),
-        })),
-      )
-      .slice(0, 12);
+    const hooks = homeHooks(doc, circle).map(({ event: e, characterId, text, told }) => ({
+      eventId: e.id,
+      characterId,
+      text,
+      day: msToWall(Date.parse(e.start), tz).slice(0, 10),
+      time: msToWall(Date.parse(e.start), tz).slice(11, 16),
+      told,
+      chats: chats
+        .filter((chat) => chat.characterIds.includes(characterId))
+        .map((chat) => ({ id: chat.id, name: chat.name })),
+    }));
     const diary: Record<string, { id: string; day: string; text: string }[]> = {};
     for (const id of circle.castIds) {
       diary[id] = mine
         .filter((e) => e.diary?.[id])
         .slice(0, 20)
-        .map((e) => ({ id: e.id, day: msToWall(Date.parse(e.start), tz).slice(0, 10), text: e.diary![id]! }));
+        .map((e) => ({
+          id: e.id,
+          day: msToWall(Date.parse(e.start), tz).slice(0, 10),
+          time: msToWall(Date.parse(e.start), tz).slice(11, 16),
+          text: e.diary![id]!,
+        }));
     }
     const waiting = doc.events
       .filter((e) => e.circleId === circle.id && e.status === "proposed")
@@ -433,6 +453,7 @@ export const meanwhileRoutes: FastifyPluginAsync = async (app) => {
         kind: e.kind,
         text: e.text,
         day: msToWall(Date.parse(e.start), tz).slice(0, 10),
+        time: msToWall(Date.parse(e.start), tz).slice(11, 16),
       }));
     return { hooks, diary, waiting };
   });

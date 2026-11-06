@@ -34,6 +34,8 @@ export interface Circle {
   surprise: boolean;
   /** Hidden events a character has not told yet (surprise mode). */
   toHear: number;
+  /** Hooks no chat has told yet. */
+  newHooks: number;
   /** Characters whose status another Circle writes. */
   statusElsewhere: { characterId: string; circle: string; note: string }[];
   connectionId: string;
@@ -101,10 +103,11 @@ export const pingTabOpened = () => api<{ ok: true }>("/tab-opened", "POST", {});
 export interface NamedItem {
   id: string;
   name: string;
+  avatarUrl?: string;
 }
 
 export async function listCharacters(): Promise<NamedItem[]> {
-  const rows = await request<Array<{ id: string; data: unknown }>>("/api/characters");
+  const rows = await request<Array<{ id: string; data: unknown; avatarPath?: unknown }>>("/api/characters");
   return rows.map((row) => {
     let data: unknown = row.data;
     if (typeof data === "string") {
@@ -116,11 +119,24 @@ export async function listCharacters(): Promise<NamedItem[]> {
     }
     const card = (data ?? {}) as { name?: unknown; data?: { name?: unknown } };
     const name = typeof card.name === "string" ? card.name : card.data?.name;
-    return { id: row.id, name: typeof name === "string" && name ? name : "Unnamed" };
+    return {
+      id: row.id,
+      name: typeof name === "string" && name ? name : "Unnamed",
+      avatarUrl: avatarSrc(row.avatarPath),
+    };
   });
 }
 
 export const listChats = () => request<NamedItem[]>("/api/chats");
+
+/** The Engine serves an avatar from a path, a bare file name or a full URL. */
+function avatarSrc(path: unknown): string | undefined {
+  if (typeof path !== "string" || !path.trim()) return undefined;
+  const trimmed = path.trim();
+  if (/^(\/api\/|https?:|data:|blob:)/i.test(trimmed)) return trimmed;
+  const file = trimmed.split(/[\\/]/u).filter(Boolean).pop();
+  return file ? `/api/avatars/file/${encodeURIComponent(file)}` : undefined;
+}
 
 /** Providers that cannot write a line of text. */
 const NON_TEXT_PROVIDERS = new Set(["image_generation", "video_generation", "audio", "decision"]);
@@ -137,6 +153,7 @@ export interface TimelineEvent {
   status: string;
   text: string;
   place?: string;
+  kind?: string;
   day: string;
   time: string;
   until: string;
@@ -158,14 +175,15 @@ export interface HookCard {
   characterId: string;
   text: string;
   day: string;
+  time: string;
   told: boolean;
   chats: NamedItem[];
 }
 
 export interface Home {
   hooks: HookCard[];
-  diary: Record<string, { id: string; day: string; text: string }[]>;
-  waiting: { id: string; cast: string[]; kind: string; text: string; day: string }[];
+  diary: Record<string, { id: string; day: string; time: string; text: string }[]>;
+  waiting: { id: string; cast: string[]; kind: string; text: string; day: string; time: string }[];
 }
 
 export const getHome = (id: string) => api<Home>(`/circles/${id}/home`);
