@@ -611,11 +611,17 @@ const posts = (stub: Stub, suffix: string) =>
  * Every request Otome Forge makes to its own routes from now on. The voice service's (a voiced line) and the Engine
  * shell's own traffic (its polls and late first loads) are left out.
  */
+/**
+ * The API requests a step makes. The memory banner's status poll (every 30 s, C/lib/memory-notice.ts memoryPollMs) runs
+ * on its own clock, not the step's, so it is left out: counted, it failed a "no request" step whenever it came due.
+ */
 function apiRequests(page: Page): string[] {
   const seen: string[] = [];
   page.on("request", (request) => {
     const url = new URL(request.url());
-    if (url.pathname.startsWith("/api/otome-forge/")) seen.push(`${request.method()} ${url.pathname}`);
+    if (url.pathname.startsWith("/api/otome-forge/") && !url.pathname.endsWith("/memory/status")) {
+      seen.push(`${request.method()} ${url.pathname}`);
+    }
   });
   return seen;
 }
@@ -1304,7 +1310,8 @@ test("Otome Hearth Home: Your thoughts… wait for the next chapter, open to cha
   // It opens only once Home has answered, so waiting thoughts are never replaced unseen.
   await expect(button).toHaveAttribute("aria-disabled", "false");
   await expect(button.locator(".of-tab-dot")).toHaveCount(0);
-  await expect(button).not.toHaveAccessibleDescription(/./u);
+  // With nothing waiting it says only its own title, never that thoughts wait.
+  await expect(button).toHaveAccessibleDescription("Your thoughts…");
 
   // The window asks about what happened lately; Enter starts a new line and sends nothing.
   await button.click();
@@ -1348,6 +1355,7 @@ test("Otome Hearth Home: Your thoughts… wait for the next chapter, open to cha
   await expect(sheet).toHaveCount(0);
   expect(posts(stub, "/home/thoughts").at(-1)!.body).toMatchObject({ text: "" });
   await expect(button.locator(".of-tab-dot")).toHaveCount(0);
+  await expect(button).toHaveAccessibleDescription("Your thoughts…");
   await button.click();
   await expect(field).toHaveValue("");
   await sheet.getByRole("button", { name: "Close" }).click();
