@@ -275,6 +275,7 @@ export function WishScreen({ runKey, view, onOpenStory, onOpenWardrobe }: WishSc
             headingId={`${id}-shop-title`}
             unanswered={unansweredPurchase}
             onOpenStory={onOpenStory}
+            actions={actions}
           />
         ) : (
           <>

@@ -74,7 +74,6 @@
 //   readHimMessages: Read Him, P25 (S/minigames/read-him.ts)
 //   datePlanMessages: P26 Date Night plan (S/minigames/date-night.ts)
 //   plushMessages: a Claw Machine plush drawn as SVG, #1954 (S/minigames/plush.ts)
-//   figurineMessages: a Shop figurine drawn as SVG, #2128 (S/minigames/plush.ts)
 // (i) Stickers
 //   stickerSetMessages: a love interest's nine sticker designs, #2044 (S/art/stickers.ts)
 // (j) Wish banners
@@ -92,6 +91,7 @@
 //   keepsakePrompt: a date's keepsake (S/minigames/date-night.ts)
 //   expressionPrompt: a face edit, the kit's instruction (S/art/expressions.ts)
 //   stickerPrompt: a chat sticker (S/art/stickers.ts)
+//   figurinePrompt: a love interest's Shop figurine, painted once it is bought, #2138 (S/art/figurine.ts)
 //   photoPrompt: a Photo Shoot photo (S/minigames/photo-shoot.ts)
 //
 // ELSEWHERE, and why
@@ -121,8 +121,7 @@
 //   (arcs), S/story/chapters.ts (P5), S/story/routes-plan.ts (P10, P11), S/story/beats.ts and S/story/prologue.ts
 //   prologueProblem (P6), S/story/confrontation.ts (P12, P12c), S/phone/replies.ts (P17, P18), S/home/lines.ts,
 //   S/home/note.ts, S/care/care-note.ts, S/minigames/read-me.ts, read-him.ts, date-night.ts and plush.ts (with
-//   S/art/plush-svg.ts; the plush and the figurine), S/art/stickers.ts, S/wish/replies.ts, S/items/replies.ts
-//   checkLine, S/audio/music.ts.
+//   S/art/plush-svg.ts), S/art/stickers.ts, S/wish/replies.ts, S/items/replies.ts checkLine, S/audio/music.ts.
 // - Text built inside non-prompt code, which moving would mean rewriting that code: S/story/canon.ts (EASE_OFF_MARKER,
 //   whose start C/lib/reader-state.ts matches; a climax pick's canon marker; titleOf, a private chapter's title;
 //   DECISIONS_HEADING and the decision lines; the recall block headings), the private titles and texts of memory
@@ -3649,10 +3648,10 @@ export function datePlanMessages({
   ];
 }
 
-// ── The Claw Machine plush (#1954) and the Shop figurine (#2128; structured, 0.7, background lane) ──
+// ── The Claw Machine plush (#1954; structured, 0.7, background lane) ──
 
-/** Who a drawn love interest is and how they look: the user message of the plush and the figurine prompts. */
-function drawnCard(unit: Unit, ask: string): string {
+/** The plush prompt: who they are and how they look, and the SVG the allow-list will take. */
+export function plushMessages({ unit }: { unit: Unit }): OtomeMessage[] {
   const bible = unit.bible;
   const look = [unit.identityLine || bible?.look.identityLine, unit.outfitLine || bible?.look.outfitLine]
     .map((line) => line?.trim())
@@ -3667,24 +3666,6 @@ function drawnCard(unit: Unit, ask: string): string {
         bible.voice.register && `Voice: ${bible.voice.register}`,
       ].filter(Boolean)
     : [];
-  return [
-    `LOVE INTEREST: ${unit.name} (${unit.pronouns.subject}/${unit.pronouns.object})`,
-    `Accent colour: ${unit.accent}`,
-    look ? `Look: ${look}` : "",
-    ...who,
-    "",
-    ask,
-  ]
-    .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
-    .join("\n");
-}
-
-/** The SVG the allow-list (S/art/plush-svg.ts) takes, for a drawing of `what` in `viewBox`. */
-const drawnSvgRule = (viewBox: string, what: string) =>
-  `- The SVG: viewBox "${viewBox}", the ${what} centred and filling most of it, with no background. Use only these elements: ${PLUSH_ELEMENTS.join(", ")}. Use only these attributes: ${Object.keys(PLUSH_ATTRIBUTES).join(", ")} (transform: translate, rotate or scale only). Colours as #rrggbb. No text, style, gradients, filters, ids, links, images or comments.`;
-
-/** The plush prompt: who they are and how they look, and the SVG the allow-list will take. */
-export function plushMessages({ unit }: { unit: Unit }): OtomeMessage[] {
   const system = [
     "You design one plush toy for the Claw Machine of an otome game: the love interest below as the animal that fits them best, made as a soft toy in their colours.",
     'Reply with ONLY a JSON object: {"animal": "...", "svg": "<svg ...>...</svg>"}',
@@ -3695,31 +3676,22 @@ export function plushMessages({ unit }: { unit: Unit }): OtomeMessage[] {
     "- Pick the animal from who they are: their personality, role and manner first, their look second. A fitting animal, never a pun on their name.",
     "- Colour it from their look: the main colours of their hair and clothes, eyes in their own eye colour, and their accent colour somewhere on it.",
     "- A plush, not a real animal: a seated chibi toy with a big round head on a small round body, stubby limbs, soft rounded shapes, simple eyes with a white glint, a little blush and dashed stitch seams. Cute, and still recognisably them.",
-    drawnSvgRule("0 0 64 64", "plush"),
+    `- The SVG: viewBox "0 0 64 64", the plush centred and filling most of it, with no background. Use only these elements: ${PLUSH_ELEMENTS.join(", ")}. Use only these attributes: ${Object.keys(PLUSH_ATTRIBUTES).join(", ")} (transform: translate, rotate or scale only). Colours as #rrggbb. No text, style, gradients, filters, ids, links, images or comments.`,
     `- Outline the shapes in ${PLUSH_INK} at a stroke-width of 1 to 1.5, as the machine's other plushies are. At most ${PLUSH_SVG_MAX} characters.`,
   ].join("\n");
+  const user = [
+    `LOVE INTEREST: ${unit.name} (${unit.pronouns.subject}/${unit.pronouns.object})`,
+    `Accent colour: ${unit.accent}`,
+    look ? `Look: ${look}` : "",
+    ...who,
+    "",
+    `Design ${unit.name}'s plush now.`,
+  ]
+    .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
+    .join("\n");
   return [
     { role: "system", content: system },
-    { role: "user", content: drawnCard(unit, `Design ${unit.name}'s plush now.`) },
-  ];
-}
-
-/** The figurine prompt (#2128): the plush prompt's card, as a small collectible figure of them on a display base. */
-export function figurineMessages({ unit }: { unit: Unit }): OtomeMessage[] {
-  const system = [
-    "You design one small collectible figurine for the Shop of an otome game: the love interest below as a chibi figure of themselves, standing on a round display base.",
-    'Reply with ONLY a JSON object: {"svg": "<svg ...>...</svg>"}',
-    "FIELDS",
-    "- svg: the figurine, as one small SVG image.",
-    "RULES",
-    "- Chibi proportions: a big head on a small body, standing in a pose that fits their manner, on a round display base at the bottom. Simple eyes with a white glint and a little blush. Cute, and still recognisably them.",
-    "- Draw them in their look and colours: their hair colour and style, their eye colour, their signature outfit, and their accent colour on the base or somewhere on the outfit. Flat fills, soft rounded shapes and a small white shine.",
-    drawnSvgRule("0 0 64 96", "figurine"),
-    `- Outline the shapes in ${PLUSH_INK} at a stroke-width of 1 to 1.5, as the Shop's other items are. At most ${PLUSH_SVG_MAX} characters.`,
-  ].join("\n");
-  return [
-    { role: "system", content: system },
-    { role: "user", content: drawnCard(unit, `Design ${unit.name}'s figurine now.`) },
+    { role: "user", content: user },
   ];
 }
 
@@ -4380,13 +4352,15 @@ export function showMessages(input: LookLineInput): OtomeMessage[] {
 // chroma matte for the cut-out, with the look's own tags (`clothed`); the sticker's English look sets the expression.
 // #2087 adds a Photo Shoot photo: the two of them posing for the camera, picked by the player with no model call;
 // `clothed`, a square print with the place and both looks as references.
+// #2138 adds a love interest's Shop figurine: a small collectible figure of them in their current look on a display
+// base, full figure on the look's chroma matte for the cut-out, with a look's own tags (`clothed`, never explicit).
 
 // ── An image's rating and adult tags ──
 
 /**
  * What an image is for. clothed: looks, faces, outfits, the pair portrait, Moment and Snapshot art, Memory and banner
- * art (painted before any story exists), and Photo Shoot photos; place: scenery with nobody in it; cg: a story CG,
- * painted from the brief its scene wrote, or a Memory's art whose brief P20 marked explicit (only where
+ * art (painted before any story exists), Photo Shoot photos and Shop figurines; place: scenery with nobody in it; cg:
+ * a story CG, painted from the brief its scene wrote, or a Memory's art whose brief P20 marked explicit (only where
  * explicitCgAllowed).
  */
 export type ImageUse = "clothed" | "place" | "cg";
@@ -4898,6 +4872,52 @@ export function stickerPrompt(input: StickerInput, edited: Partial<ImagePrompt> 
         .filter(Boolean)
         .join(", "),
       negativePrompt: mergeTags(STICKER_NEGATIVE, MATTE_NEGATIVE, negative, style.negativeTags),
+    }),
+    required,
+    negative,
+    edited,
+  );
+}
+
+// ── #2138: a Shop figurine ──
+
+/** A figurine as a product shot of one small figure; the matte and the pose stay plain for the cut-out. */
+export const FIGURINE_FRAMING =
+  "collectible PVC figurine, small scale figure, stylised chibi proportions, full figure, standing on a round display base, product photo lighting";
+const FIGURINE_NEGATIVE = "display case, packaging box, price tag, multiple figures, cropped base";
+
+/**
+ * A love interest's Shop figurine: the style, who they are, then the outfit they wear now, the figurine framing on the
+ * matte their look names least, and a look's rating and adult tags. An edited prompt keeps its wording with every
+ * required tag put back.
+ */
+export function figurinePrompt(input: Omit<LookInput, "matte">, edited: Partial<ImagePrompt> = {}): ImagePrompt {
+  const { world, style } = input;
+  const required = otomeImageTags({
+    world,
+    people: [{ name: input.name, presentation: input.presentation }],
+    use: "clothed",
+    tagged: style.tagged === true,
+  });
+  const negative = requiredNegative(world, "clothed");
+  const matte = lookMatte(`${input.identityLine} ${input.outfitLine}`);
+  return finish(
+    world,
+    () => ({
+      prompt: [
+        style.styleText,
+        input.identityLine.trim(),
+        mergeTags(
+          input.outfitLine,
+          FIGURINE_FRAMING,
+          `plain flat solid ${matte} background`,
+          required,
+          style.positiveTags,
+        ),
+      ]
+        .filter(Boolean)
+        .join(", "),
+      negativePrompt: mergeTags(LOOK_NEGATIVE, FIGURINE_NEGATIVE, MATTE_NEGATIVE, negative, style.negativeTags),
     }),
     required,
     negative,

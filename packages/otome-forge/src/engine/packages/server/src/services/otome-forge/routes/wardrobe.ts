@@ -4,7 +4,8 @@
 // ──────────────────────────────────────────────
 // GET  /runs/:run/wardrobe                                   → WardrobeView {him, me, couples, noticed, noticing,
 //                                                               gifts, figurines}: #2128, her Shop gifts (those her
-//                                                               Heat offers) and figurines
+//                                                               Heat offers) and figurines, each with its paint
+//                                                               and picture (#2138, S/art/figurine.ts)
 // POST /runs/:run/wardrobe/wear {owner, look, li?}           → {wardrobe}; owner "me" or a love interest's id (also
 //                                                               "player" or "li:<id>"); look "base" or an owned,
 //                                                               painted look item. Her new look is noticed (P19, by `li`,
@@ -62,8 +63,8 @@ import {
   pairView,
   paintPairNow,
 } from "../art/outfits.js";
+import { figurinePicture } from "../art/figurine.js";
 import { paintView, updateIfChanged } from "../art/paint.js";
-import { plushSvgUrl } from "../art/plush-svg.js";
 import { generateJson, runForeground } from "../generation.js";
 import { OtomeForgeError, debugModeOf, parseBody, runParam, type RegisterRoutes, type RouteDeps } from "../http.js";
 import { isLiId, playerId, runDocTarget, stateId, unitId } from "../ids.js";
@@ -235,10 +236,7 @@ export async function wardrobeView(deps: Pick<RouteDeps, "store">, runId: string
     ),
     figurines: castOf(run)
       .filter((unit) => run.state.owned.figurines[unit.id])
-      .map((unit) => {
-        const art = plushSvgUrl(unit.figurineArt?.svg);
-        return { li: unit.id, ...(art ? { art } : {}), story: { key: figurineSceneKey(unit.id) } };
-      }),
+      .map((unit) => ({ li: unit.id, ...figurinePicture(runId, unit), story: { key: figurineSceneKey(unit.id) } })),
   };
 }
 

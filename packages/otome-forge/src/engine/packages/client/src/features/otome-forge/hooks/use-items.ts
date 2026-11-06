@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // Otome Forge: what Wish, the Wardrobe and the Album share about items (M4): their queries, an item's first open, and
-// a tap that paints (an item's art, a banner's, a couple set's pair portrait), and the request id a wish or a Shop
-// purchase (#2128) keeps until it is answered.
+// a tap that paints (an item's art, a banner's, a couple set's pair portrait, a Shop figurine's, #2138), and the request
+// id a wish or a Shop purchase (#2128) keeps until it is answered.
 // ──────────────────────────────────────────────
 // Routes: POST /runs/:run/items/:item/open → ItemOpenResult (S/routes/items.ts) writes a Memory's Character Story, a
 // Moment or a first-wear beat and paints its art, once; the server holds the paint for a tap under Ask before painting
@@ -118,6 +118,12 @@ export interface PaintTarget {
 export const itemPaintTarget = (runKey: string, item: ItemView): PaintTarget => {
   const path = `${runPath(runKey)}/items/${encodeURIComponent(item.id)}/art`;
   return { id: item.id, subject: item.look?.name || item.title, paintPath: path, promptPath: `${path}/prompt` };
+};
+
+/** S/routes/shop.ts (#2138): POST .../shop/figurines/:li/art and .../art/prompt; `subject` names it in the review. */
+export const figurinePaintTarget = (runKey: string, li: string, subject: string): PaintTarget => {
+  const path = `${runPath(runKey)}/shop/figurines/${encodeURIComponent(li)}/art`;
+  return { id: `figurine:${li}`, subject, paintPath: path, promptPath: `${path}/prompt` };
 };
 
 /** S/routes/wish.ts: POST .../wish/art {banner} and .../wish/art/prompt {banner}. */

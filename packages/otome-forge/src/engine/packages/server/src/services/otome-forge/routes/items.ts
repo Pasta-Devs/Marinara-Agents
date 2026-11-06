@@ -25,7 +25,8 @@ import { openItem, readOwnedItem } from "../items/open.js";
 
 const PROMPT_MAX = 4000;
 const NoFields = z.object({});
-const ArtBody = z.object({
+/** A tap's body: the reviewed prompt, when the player edited it (also the Shop figurine's tap, S/routes/shop.ts). */
+export const ArtBody = z.object({
   prompt: z.string().max(PROMPT_MAX).optional(),
   negativePrompt: z.string().max(PROMPT_MAX).optional(),
 });

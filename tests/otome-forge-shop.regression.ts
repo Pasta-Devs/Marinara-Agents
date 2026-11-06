@@ -3,13 +3,20 @@
 // - applyPurchase charges once (a request id seen before replays), refuses before changing anything (not enough
 //   Starlight, the aphrodisiac under SFW, a second figurine, a love interest who is not in the story), and the state's
 //   gifts, figurines and purchases read back from older, partial and damaged documents.
-// - The routes answer with the Shop, the Wardrobe lists what was bought, Home stands the drawn figurines in L0, and
+// - The routes answer with the Shop, the Wardrobe lists what was bought, Home stands the painted figurines in L0, and
 //   buying a figurine writes its scene: a one-node Character Story that plays with no planning call and pays its beat.
-// - GET /shop draws each figurine once, in the background, through the plush allow-list, with the prompt logged in
-//   debug mode; a reply with no box of its own is repaired.
+// - #2138: a figurine is one paid image, painted once in the background right after it is bought, never on a Shop or
+//   Home read, with the debug prompt sent in debug mode; Ask before painting and prompt review hold it for the tap; a
+//   failure is kept and Retry repaints it once; the image is saved only onto the record that asked, and the record is
+//   checked again before the paid call; the cut-out follows and every view shows it; with no image connection nothing
+//   is painted; the art routes answer 404, 409 and 503 as the header of S/routes/shop.ts says. The prompt is a clothed
+//   collectible figure on the look's chroma matte, and an old 0.9.0 SVG is dropped on read.
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { RunState } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
+import type {
+  ImageSettings,
+  RunState,
+} from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import { defaultContent } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/content.ts";
 import {
   FIGURINE_COST,
@@ -21,8 +28,12 @@ import {
   figurineSceneKey,
   giftsFor,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/shop.ts";
-import { plushSvgUrl } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/plush-svg.ts";
-import { createBackgroundQueue } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/background-queue.ts";
+import {
+  cutoutsSettled,
+  type CutoutClient,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cutout.ts";
+import type { PortraitRequest } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/image-client.ts";
+import { paintSlot } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/paint.ts";
 import { runForeground } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/generation.ts";
 import type {
   OtomeReply,
@@ -37,8 +48,11 @@ import {
   unitId,
   worldId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
-import { normalizeFigurineReply } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/minigames/plush.ts";
 import { readMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/sources.ts";
+import {
+  FIGURINE_FRAMING,
+  figurinePrompt,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
 import { registerHomeRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/home.ts";
 import {
   applyPurchase,
@@ -50,16 +64,12 @@ import { normalizeState } from "../packages/otome-forge/src/engine/packages/serv
 import { normalizeChapter } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/story.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
+import { fakeImages, setImages, until, type PaidCall } from "./fixtures/otome-forge-art.ts";
 import { KAI, MIR, SOL, beatReply, json, storyWorld } from "./fixtures/otome-forge-story.ts";
 
-const FIGURE =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 96"><ellipse cx="32" cy="88" rx="20" ry="5" fill="#2ec4c4" stroke="#3b2a40" stroke-width="1.2"/>' +
-  '<rect x="24" y="48" width="16" height="36" rx="6" fill="#1f2a44" stroke="#3b2a40" stroke-width="1.2"/>' +
-  '<circle cx="32" cy="32" r="18" fill="#f3d6c6" stroke="#3b2a40" stroke-width="1.2"/></svg>';
-const figurineReply = (svg = FIGURE) => JSON.stringify({ svg });
-const isFigurine = (messages: Array<{ content: string }>) =>
-  messages[0]!.content.includes("You design one small collectible figurine");
 const NSFW = { ...defaultContent(), heat: "fade" as const };
+const PAINTED = "/api/global-gallery/file/img1.png";
+const STYLE = { styleText: "", positiveTags: "", negativeTags: "" };
 
 function code(error: unknown): string | undefined {
   return (error as { code?: string }).code;
@@ -210,10 +220,38 @@ function shopRoutes(deps: RouteDeps, runKey: string) {
   };
 }
 
-async function shopWorld(runKey: string, options: Partial<Parameters<typeof storyWorld>[0]> = {}) {
+interface ShopWorldOptions extends Partial<Parameters<typeof storyWorld>[0]> {
+  /** An image connection (`conn-image`) with these settings; none without. */
+  images?: Partial<ImageSettings>;
+  /** Runs before the n-th paid image answers (1-based): throw to fail it, or wait to hold it. */
+  before?: (call: PaidCall, n: number) => void | Promise<void>;
+}
+
+async function shopWorld(runKey: string, { images: settings, before, ...options }: ShopWorldOptions = {}) {
   const t = await storyWorld({ runKey, ...options });
-  const background = createBackgroundQueue(t.runtime);
-  const deps: RouteDeps = { ...t.deps, background };
+  if (settings) await setImages(t.store, t.runId, { connectionId: "conn-image", ...settings });
+  const fake = fakeImages({ before });
+  // A figurine is painted as a look is (generateOutfit); the fake counts it as a paid portrait.
+  const outfitCalls: PortraitRequest[] = [];
+  const cuts: string[] = [];
+  const cutouts: CutoutClient = {
+    async cutOut(url) {
+      cuts.push(url);
+      return { id: `cut${cuts.length}`, url: `/api/global-gallery/file/cut-${cuts.length}.png` };
+    },
+    deleteGalleryImage: async () => true,
+  };
+  const deps: RouteDeps = {
+    ...t.deps,
+    cutouts,
+    images: {
+      ...fake.images,
+      async generateOutfit(request) {
+        outfitCalls.push(request);
+        return fake.images.generatePortrait(request);
+      },
+    },
+  };
   const call = shopRoutes(deps, runKey);
   const setStarlight = (starlight: number) =>
     t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
@@ -221,21 +259,42 @@ async function shopWorld(runKey: string, options: Partial<Parameters<typeof stor
       wallet: { starlight },
     }));
   const unit = async (li: string) => (await t.store.readDoc(unitId(t.runId, li), normalizeUnit))!;
+  const setUnit = (li: string, change: (unit: ReturnType<typeof normalizeUnit>) => ReturnType<typeof normalizeUnit>) =>
+    t.store.updateDoc(runDocTarget("unit", unitId(t.runId, li)), normalizeUnit, change);
   const settle = async () => {
-    for (let round = 0; round < 200; round += 1) {
+    for (let round = 0; round < 50; round += 1) {
       await new Promise((resolve) => setImmediate(resolve));
       await runForeground(t.runId, async () => undefined);
     }
   };
-  const figurineCalls = () => t.calls.filter((entry) => isFigurine(entry.messages));
-  return { ...t, background, deps, call, setStarlight, unit, settle, figurineCalls };
+  const buy = (li: string, body: object = {}) => call("POST", "/runs/:run/shop/figurines/:li", body, { li });
+  const tap = (li: string, body: object = {}) => call("POST", "/runs/:run/shop/figurines/:li/art", body, { li });
+  const shown = async (li: string) =>
+    (await call("GET", "/runs/:run/shop")).body.figurines.find((entry: { li: string }) => entry.li === li);
+  const painted = (li: string, state = "ready") =>
+    until(async () => (await unit(li)).figurine?.state === state, `${li}'s figurine ${state}`);
+  return {
+    ...t,
+    ...fake,
+    deps,
+    call,
+    setStarlight,
+    unit,
+    setUnit,
+    settle,
+    buy,
+    tap,
+    shown,
+    painted,
+    outfitCalls,
+    cuts,
+  };
 }
 
 test("the Shop routes sell gifts and a figurine once, and the Wardrobe and Home show what was bought", async () => {
+  // No image connection: buying a figurine paints nothing, and the shelf keeps their portrait frame.
   const t = await shopWorld("r-shop01-aaaaaa");
   await t.setStarlight(5500);
-  // Hold the lane so no figurine is drawn in this test: the Shop answers without them.
-  t.background.ensure({ key: "blocker", connectionId: "conn-text", run: () => new Promise(() => undefined) });
   const shop = await t.call("GET", "/runs/:run/shop");
   assert.equal(shop.status, 200, JSON.stringify(shop.body));
   assert.equal(shop.body.starlight, 5500);
@@ -245,11 +304,17 @@ test("the Shop routes sell gifts and a figurine once, and the Wardrobe and Home 
     "no aphrodisiac under SFW Heat",
   );
   assert.deepEqual(
-    shop.body.figurines.map((entry: Record<string, unknown>) => [entry.li, entry.owned, entry.drawing, "art" in entry]),
+    shop.body.figurines.map((entry: Record<string, unknown>) => [
+      entry.li,
+      entry.owned,
+      entry.art,
+      entry.cutting,
+      "url" in entry,
+    ]),
     [
-      [KAI, false, true, false],
-      [MIR, false, true, false],
-      [SOL, false, true, false],
+      [KAI, false, null, false, false],
+      [MIR, false, null, false, false],
+      [SOL, false, null, false, false],
     ],
   );
   assert.equal(shop.body.figurineCost, 5000);
@@ -270,17 +335,19 @@ test("the Shop routes sell gifts and a figurine once, and the Wardrobe and Home 
     assert.equal(refused.body.code, errorCode);
   }
   for (const li of ["not-an-li", "li-nobody-zz99"]) {
-    const refused = await t.call("POST", "/runs/:run/shop/figurines/:li", {}, { li });
+    const refused = await t.buy(li);
     assert.equal(refused.status, 404, li);
   }
 
-  const figurine = await t.call("POST", "/runs/:run/shop/figurines/:li", { requestId: "s-fig-00001" }, { li: KAI });
+  const figurine = await t.buy(KAI, { requestId: "s-fig-00001" });
   assert.equal(figurine.status, 200, JSON.stringify(figurine.body));
   assert.equal(figurine.body.starlight, 200);
   const key = figurineSceneKey(KAI);
   assert.deepEqual(figurine.body.story, { key });
   assert.deepEqual(figurine.body.shop.figurines[0].story, { key });
   assert.equal(figurine.body.shop.figurines[0].owned, true);
+  assert.equal(figurine.body.shop.figurines[0].art, null, "no image connection: nothing is set to paint");
+  assert.equal((await t.unit(KAI)).figurine, undefined);
   const chapter = (await t.store.readDoc(chapterId(t.runId, key), normalizeChapter))!;
   assert.equal(chapter.kind, "story");
   assert.equal(chapter.li, KAI);
@@ -291,19 +358,23 @@ test("the Shop routes sell gifts and a figurine once, and the Wardrobe and Home 
   assert.match(chapter.nodes[0]!.guide, /FIGURINE SCENE between Kai and the protagonist/);
   assert.match(chapter.nodes[0]!.guide, /funny and cute/);
   assert.equal(t.calls.length, 0, "buying calls no model");
+  assert.equal(t.paid.length, 0, "and paints nothing without an image connection");
+  const noImages = await t.tap(KAI);
+  assert.equal(noImages.status, 503, JSON.stringify(noImages.body));
+  assert.equal(noImages.body.code, "no-connection");
 
-  const lost = await t.call("POST", "/runs/:run/shop/figurines/:li", { requestId: "s-fig-00001" }, { li: KAI });
+  const lost = await t.buy(KAI, { requestId: "s-fig-00001" });
   assert.equal(lost.status, 200, "the same request again is answered as before");
   assert.deepEqual(lost.body.story, { key });
   assert.equal(lost.body.starlight, 200);
   await t.setStarlight(9000);
-  const twice = await t.call("POST", "/runs/:run/shop/figurines/:li", {}, { li: KAI });
+  const twice = await t.buy(KAI);
   assert.equal(twice.status, 409);
   assert.equal(twice.body.code, "conflict");
-  const mireille = await t.call("POST", "/runs/:run/shop/figurines/:li", {}, { li: MIR });
+  const mireille = await t.buy(MIR);
   assert.equal(mireille.status, 200);
   await t.setStarlight(100);
-  const poor = await t.call("POST", "/runs/:run/shop/figurines/:li", {}, { li: SOL });
+  const poor = await t.buy(SOL);
   assert.equal(poor.status, 409);
   assert.equal(poor.body.code, "insufficient");
   assert.equal((await t.state()).owned.figurines[SOL], undefined);
@@ -312,25 +383,27 @@ test("the Shop routes sell gifts and a figurine once, and the Wardrobe and Home 
   assert.equal(wardrobe.status, 200, JSON.stringify(wardrobe.body));
   assert.deepEqual(wardrobe.body.gifts, { chocolates: 1 });
   assert.deepEqual(wardrobe.body.figurines, [
-    { li: KAI, story: { key } },
-    { li: MIR, story: { key: figurineSceneKey(MIR) } },
+    { li: KAI, art: null, cutting: false, story: { key } },
+    { li: MIR, art: null, cutting: false, story: { key: figurineSceneKey(MIR) } },
   ]);
   const home = await t.call("GET", "/runs/:run/home");
   assert.equal(home.status, 200, JSON.stringify(home.body));
-  assert.deepEqual(home.body.figurines, [], "a figurine not drawn yet does not stand on Home");
-  const drawn = normalizeFigurineReply({ svg: FIGURE }, "t");
-  assert.ok(typeof drawn !== "string");
-  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, MIR)), normalizeUnit, (unit) => ({
-    ...unit,
-    figurineArt: drawn,
-  }));
-  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, SOL)), normalizeUnit, (unit) => ({
-    ...unit,
-    figurineArt: drawn,
-  }));
+  assert.deepEqual(home.body.figurines, [], "a figurine not painted does not stand on Home");
+
+  // Painted ones (a story that had an image connection): only a bought one stands on Home, cut out once it is.
+  const ready = { state: "ready" as const, at: "2026-11-06T10:00:00.000Z", url: PAINTED };
+  await t.setUnit(MIR, (unit) => ({ ...unit, figurine: ready }));
+  await t.setUnit(SOL, (unit) => ({ ...unit, figurine: { ...ready, url: "/api/global-gallery/file/sol.png" } }));
   const after = await t.call("GET", "/runs/:run/home");
-  assert.deepEqual(after.body.figurines, [{ li: MIR, url: plushSvgUrl(drawn.svg) }], "only a bought one stands there");
-  assert.equal((await t.call("GET", "/runs/:run/wardrobe")).body.figurines[1].art, plushSvgUrl(drawn.svg));
+  assert.deepEqual(after.body.figurines, [{ li: MIR, art: ready, url: PAINTED, cutting: true }], "uncut meanwhile");
+  await cutoutsSettled();
+  assert.deepEqual(t.cuts, [PAINTED], "Home cuts out only the bought one, for free");
+  const cut = "/api/global-gallery/file/cut-1.png";
+  assert.deepEqual((await t.call("GET", "/runs/:run/home")).body.figurines, [
+    { li: MIR, art: ready, url: cut, cutting: false },
+  ]);
+  assert.equal((await t.call("GET", "/runs/:run/wardrobe")).body.figurines[1].url, cut);
+  assert.equal(t.paid.length, 0, "Home and the Shop never paint");
 });
 
 test("under NSFW Heat the Shop sells the aphrodisiac; Heat lowered keeps it owned, unlisted and unsold", async () => {
@@ -367,7 +440,6 @@ test("under NSFW Heat the Shop sells the aphrodisiac; Heat lowered keeps it owne
 test("a figurine's scene is a private Character Story that plays without a planning call and pays its beat", async () => {
   const t = await shopWorld("r-shop03-cccccc", { replies: [json(beatReply())] });
   await t.setStarlight(5000);
-  t.background.ensure({ key: "blocker", connectionId: "conn-text", run: () => new Promise(() => undefined) });
   const bought = await t.call("POST", "/runs/:run/shop/figurines/:li", {}, { li: MIR });
   assert.equal(bought.status, 200, JSON.stringify(bought.body));
   const key = bought.body.story.key as string;
@@ -399,113 +471,227 @@ test("a figurine's scene is a private Character Story that plays without a plann
   assert.equal(source.audience?.[0], MIR, "private to her (and anyone who speaks in it)");
 });
 
-test("GET /shop draws each figurine once, in the background, and shows it once kept", async () => {
-  const t = await shopWorld("r-shop04-dddddd", {
-    replies: [
-      figurineReply(FIGURE.replace(' viewBox="0 0 64 96"', "")),
-      (messages) => {
-        assert.match(messages.at(-1)!.content, /svg needs its viewBox/, "the repair says why");
-        return figurineReply();
-      },
-      figurineReply(),
-      figurineReply(`${FIGURE}<script>alert(1)</script>`),
-      figurineReply(`${FIGURE}<script>alert(1)</script>`),
-    ],
-  });
-  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
-    ...unit,
-    accent: "#2EC4C4",
-    identityLine: "tall man, cyan hair, red eyes",
-  }));
+test("buying a figurine paints it once in the background, never on a read, and its cut-out reaches every view", async () => {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => (release = resolve));
-  t.background.ensure({ key: "blocker", connectionId: "conn-text", run: () => gate });
-  const first = await t.call("GET", "/runs/:run/shop");
-  assert.ok(first.body.figurines.every((entry: Record<string, unknown>) => entry.drawing && !("art" in entry)));
+  const t = await shopWorld("r-shop04-dddddd", { images: {}, before: () => gate });
+  await t.setStarlight(6000);
+  const portrait = "/api/global-gallery/file/kai.png";
+  await t.setUnit(KAI, (unit) => ({
+    ...unit,
+    portrait,
+    identityLine: "tall man, cyan hair, red eyes",
+    outfitLine: "black greatcoat",
+    outfits: [
+      {
+        id: "his-look-0001",
+        name: "Dress uniform",
+        outfitLine: "white dress uniform with gold braid",
+        url: "/api/global-gallery/file/kai-uniform.png",
+        at: "2026-11-01T10:00:00.000Z",
+      },
+    ],
+    wornOutfit: "his-look-0001",
+  }));
+  for (const path of ["/runs/:run/shop", "/runs/:run/home", "/runs/:run/shop"]) {
+    assert.equal((await t.call("GET", path)).status, 200);
+  }
   await t.settle();
-  assert.equal(t.figurineCalls().length, 0, "the Shop never waits for a figurine");
-  release();
-  await t.settle();
-  assert.equal(t.figurineCalls().length, 5, "one call each, one repair, one refused twice");
-  const prompt = t.figurineCalls().find((call) => call.messages[1]!.content.includes("LOVE INTEREST: Kai"))!.messages;
-  assert.match(prompt[1]!.content, /Accent colour: #2EC4C4/);
-  assert.match(prompt[1]!.content, /Look: tall man, cyan hair, red eyes/);
-  assert.match(prompt[0]!.content, /viewBox "0 0 64 96"/);
-  assert.match(
-    prompt[0]!.content,
-    /Use only these elements: svg, g, path, circle, ellipse, rect, polygon, polyline, line\./,
-  );
+  assert.equal(t.paid.length, 0, "opening the Shop or Home paints nothing");
 
-  const drawn = await Promise.all([KAI, MIR, SOL].map(t.unit));
-  const kept = drawn.filter((unit) => unit.figurineArt);
-  assert.equal(kept.length, 2);
-  for (const unit of kept) {
-    assert.ok(unit.figurineArt!.svg.startsWith('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 96">'));
-  }
-  assert.equal("figurineArt" in drawn.find((unit) => !unit.figurineArt)!, false, "no figurine: no key at all");
-  assert.equal("figurineArt" in normalizeUnit({ id: KAI, figurineArt: { svg: "<svg><script/></svg>" } }), false);
-  const second = await t.call("GET", "/runs/:run/shop");
-  for (const entry of second.body.figurines as Array<Record<string, unknown>>) {
-    const unit = drawn.find((candidate) => candidate.id === entry.li)!;
-    if (unit.figurineArt) {
-      assert.equal(entry.art, plushSvgUrl(unit.figurineArt.svg));
-      assert.equal(entry.drawing, false);
-    } else {
-      assert.equal(entry.drawing, false, "a failed one is left alone for a while, and the shelf stops waiting");
-    }
-  }
+  const bought = await t.buy(KAI, { requestId: "s-fig-00004" });
+  assert.equal(bought.status, 200, JSON.stringify(bought.body));
+  assert.equal(bought.body.shop.figurines[0].art.state, "pending", "claimed before the paid call");
+  await until(() => t.paid.length === 1, "the paid call");
+  // The purchase answered while its one paid image is still being painted.
+  assert.equal((await t.shown(KAI)).art.state, "pending");
+  assert.equal((await t.buy(KAI, { requestId: "s-fig-00004" })).status, 200, "the same purchase again");
+  await t.call("GET", "/runs/:run/home");
   await t.settle();
-  assert.equal(t.figurineCalls().length, 5, "a kept figurine is never drawn again");
-  const logged = t.logs.filter((entry) => entry.level === "debugOverride" && entry.args[0] === "figurine");
-  assert.ok(logged.length >= 1, "the prompt is logged in debug mode");
+  assert.equal(t.paid.length, 1, "a replay, the Shop and Home never paint it again");
+
+  release();
+  await t.painted(KAI);
+  assert.equal(t.paid.length, 1);
+  const [request] = t.outfitCalls;
+  assert.equal(request!.connectionId, "conn-image");
+  assert.deepEqual([request!.width, request!.height], [832, 1216], "a look's portrait size");
+  assert.equal(request!.debugMode, true, "the Engine logs the prompt in debug mode");
+  assert.deepEqual(request!.unit, { kind: "character", portrait, outfits: [] }, "their likeness, as a look gets it");
+  assert.ok(request!.prompt.startsWith("tall man, cyan hair, red eyes, white dress uniform with gold braid"));
+  assert.ok(request!.prompt.includes(FIGURINE_FRAMING));
+  assert.ok(!request!.prompt.includes("black greatcoat"), "the look they wear now");
+  assert.match(request!.prompt, /plain flat solid chroma (green|magenta) #[0-9A-F]{6} background/);
+  assert.match(request!.prompt, /safe for work, fully clothed, adult person/);
+  assert.match(request!.negativePrompt, /child, childlike, minor/);
+  assert.match(request!.negativePrompt, /cast shadow, floor shadow/);
+
+  // The cut-out follows the paint (free), and the Shop, the Wardrobe and Home show it.
+  // (Home's read before cut out the look Kai wears; the figurine's is its own.)
+  await until(() => t.cuts.includes(PAINTED), "the cut-out");
+  await cutoutsSettled();
+  const cut = (await t.unit(KAI)).cutouts[PAINTED]!.url!;
+  assert.match(cut, /^\/api\/global-gallery\/file\/cut-\d\.png$/u);
+  const shelf = await t.shown(KAI);
+  assert.equal(shelf.art.state, "ready");
+  assert.equal(shelf.art.url, PAINTED);
+  assert.equal(shelf.url, cut);
+  assert.equal(shelf.cutting, false);
+  assert.equal((await t.call("GET", "/runs/:run/wardrobe")).body.figurines[0].url, cut);
+  assert.deepEqual(
+    (await t.call("GET", "/runs/:run/home")).body.figurines.map((entry: { li: string; url: string }) => [
+      entry.li,
+      entry.url,
+    ]),
+    [[KAI, cut]],
+  );
+  await t.call("GET", "/runs/:run/shop");
+  await t.settle();
+  assert.equal(t.paid.length, 1, "a painted figurine is never painted again");
+  assert.equal(t.cuts.filter((url) => url === PAINTED).length, 1, "nor cut out again");
 });
 
-test("Home draws a bought figurine that was never drawn, in the background, and then shows it", async () => {
-  // Kai's figurine is bought before it is ever drawn (its drawing failed, or a restart lost it): Home draws it.
-  // Home also queues each love interest's line pack: those calls get a reply that fails, so only the figurine lands.
-  const t = await shopWorld("r-shop05-eeeeee", {
-    replies: Array.from(
-      { length: 12 },
-      () => (messages: Array<{ content: string }>) => (isFigurine(messages) ? figurineReply() : "{}"),
-    ),
+test("Ask before painting and prompt review hold a bought figurine for the tap, which paints it once", async () => {
+  const t = await shopWorld("r-shop05-eeeeee", { images: { ask: true } });
+  await t.setStarlight(20000);
+  const kai = await t.buy(KAI);
+  assert.equal(kai.status, 200, JSON.stringify(kai.body));
+  assert.equal(kai.body.shop.figurines[0].art.state, "waiting-consent");
+  await setImages(t.store, t.runId, { ask: false });
+  const mir = await t.buy(MIR, { reviewImagePrompts: true });
+  assert.equal(mir.body.shop.figurines[1].art.state, "waiting-consent", "the Engine's prompt review holds it too");
+  await t.settle();
+  assert.equal(t.paid.length, 0, "nothing is painted before the tap");
+
+  for (const [li, status, code] of [
+    [SOL, 409, "locked"],
+    ["li-nobody-zz99", 404, "not-found"],
+    ["not-an-li", 404, "not-found"],
+  ] as const) {
+    const refused = await t.tap(li);
+    assert.equal(refused.status, status, `${li}: ${JSON.stringify(refused.body)}`);
+    assert.equal(refused.body.code, code);
+    const prompt = await t.call("POST", "/runs/:run/shop/figurines/:li/art/prompt", {}, { li });
+    assert.equal(prompt.status, status, li);
+  }
+  const review = await t.call("POST", "/runs/:run/shop/figurines/:li/art/prompt", {}, { li: KAI });
+  assert.equal(review.status, 200, JSON.stringify(review.body));
+  assert.ok(review.body.prompt.includes(FIGURINE_FRAMING));
+  assert.match(review.body.negativePrompt, /child, childlike/);
+  assert.equal(t.paid.length, 0, "the prompt to review costs nothing");
+
+  const tapped = await t.tap(KAI, { prompt: "a tiny Kai figure", negativePrompt: "" });
+  assert.equal(tapped.status, 200, JSON.stringify(tapped.body));
+  assert.equal(tapped.body.art.state, "ready", "the tap waits for its paint");
+  assert.equal(t.paid.length, 1);
+  assert.ok(t.outfitCalls[0]!.prompt.startsWith("a tiny Kai figure, "), "the reviewed prompt, as edited");
+  assert.match(t.outfitCalls[0]!.prompt, /safe for work, fully clothed/, "with its rating tags put back");
+  assert.equal((await t.tap(KAI)).body.art.state, "ready");
+  assert.equal(t.paid.length, 1, "a painted figurine answers a tap as it is");
+
+  const [one, two] = await Promise.all([t.tap(MIR), t.tap(MIR)]);
+  assert.deepEqual([one.body.art.state, two.body.art.state], ["ready", "ready"]);
+  assert.equal(t.paid.length, 2, "two taps at once pay once");
+  await cutoutsSettled();
+});
+
+test("a failed figurine paint is kept, never painted again by itself, and Retry paints it once", async () => {
+  const t = await shopWorld("r-shop06-ffffff", {
+    images: {},
+    before: (_call, n) => {
+      if (n === 1) throw new Error("the provider refused");
+    },
   });
-  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
-    ...state,
-    owned: { ...state.owned, figurines: { [KAI]: "2026-11-06T09:00:00.000Z" } },
-  }));
-  const before = await t.call("GET", "/runs/:run/home");
-  assert.equal(before.status, 200, JSON.stringify(before.body));
-  assert.deepEqual(before.body.figurines, [], "Home never waits for the drawing");
+  await t.setStarlight(5000);
+  await t.buy(SOL);
+  await t.painted(SOL, "failed");
+  const failed = await t.shown(SOL);
+  assert.equal(failed.art.state, "failed");
+  assert.equal(failed.art.error, "the provider refused");
+  assert.equal("url" in failed, false, "the portrait frame stands in");
+  assert.deepEqual((await t.call("GET", "/runs/:run/home")).body.figurines, [], "a failed one is not on Home");
+  await t.call("GET", "/runs/:run/wardrobe");
   await t.settle();
-  assert.equal(t.figurineCalls().length, 1, "only the bought one is drawn");
-  assert.match(t.figurineCalls()[0]!.messages[1]!.content, /LOVE INTEREST: Kai/);
-  const after = await t.call("GET", "/runs/:run/home");
-  assert.deepEqual(
-    after.body.figurines.map((entry: { li: string }) => entry.li),
-    [KAI],
+  assert.equal(t.paid.length, 1, "a failure is never painted again without a tap");
+
+  const retried = await t.tap(SOL);
+  assert.equal(retried.status, 200, JSON.stringify(retried.body));
+  assert.equal(retried.body.art.state, "ready");
+  assert.equal(t.paid.length, 2, "Retry paints it once");
+  await cutoutsSettled();
+});
+
+test("a figurine's image is saved only onto the record that asked, which is checked again before the paid call", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const t = await shopWorld("r-shop07-gggggg", { images: {}, before: (_call, n) => (n === 1 ? gate : undefined) });
+  await t.setStarlight(20000);
+  await t.buy(KAI);
+  await until(() => t.paid.length === 1, "the paid call");
+  // Another claim replaced the record while this one painted (a restart's, say): the image is not kept.
+  const other = { state: "pending" as const, at: "2026-11-06T09:00:00.000Z" };
+  await t.setUnit(KAI, (unit) => ({ ...unit, figurine: other }));
+  release();
+  await until(() => t.deleted.length === 1, "the image nothing keeps");
+  assert.deepEqual(t.deleted, ["img1"], "deleted from the gallery again");
+  assert.deepEqual((await t.unit(KAI)).figurine, other);
+  assert.equal((await t.shown(KAI)).art.state, "stopped", "a pending record nothing paints reads as stopped");
+  assert.equal((await t.tap(KAI)).body.art.state, "ready", "and its tap paints it");
+  assert.equal(t.paid.length, 2);
+
+  // The image connection changes while the figurine waits for its turn: it is stopped, and nothing is paid for.
+  let free!: () => void;
+  const busy = paintSlot("conn-image", () => new Promise<void>((resolve) => (free = resolve)));
+  await until(() => !!free, "the slot held");
+  await t.buy(MIR);
+  assert.equal((await t.shown(MIR)).art.state, "pending");
+  await setImages(t.store, t.runId, { connectionId: "conn-other" });
+  free();
+  await busy;
+  await t.painted(MIR, "stopped");
+  assert.equal(t.paid.length, 2);
+  await cutoutsSettled();
+});
+
+test("the figurine prompt is a clothed collectible figure on a chroma matte, whatever the image rating", () => {
+  const input = {
+    name: "Kai",
+    identityLine: "tall man, cyan hair, red eyes",
+    outfitLine: "black greatcoat",
+    presentation: "man" as const,
+    style: STYLE,
+  };
+  const images = normalizeWorld(undefined).images;
+  const sfw = figurinePrompt({ ...input, world: { content: defaultContent(), images } });
+  assert.equal(
+    sfw.prompt,
+    `tall man, cyan hair, red eyes, black greatcoat, ${FIGURINE_FRAMING}, plain flat solid chroma green #00FF00 background, safe for work, fully clothed, adult man`,
   );
-  await t.settle();
-  assert.equal(t.figurineCalls().length, 1, "a drawn figurine is never drawn again");
+  assert.match(sfw.negativePrompt, /nudity, nsfw, sexual content/);
+  const explicit = figurinePrompt({
+    ...input,
+    world: { content: { ...defaultContent(), heat: "explicit" }, images: { ...images, rating: "explicit" } },
+  });
+  assert.match(explicit.prompt, /, clothed, adult man$/u, "a look's own tags: never explicit");
+  assert.doesNotMatch(explicit.prompt, /explicit|nsfw/u);
+  assert.match(explicit.negativePrompt, /nudity, explicit sexual activity/);
+  const edited = figurinePrompt({ ...input, world: { content: defaultContent(), images } }, { prompt: "a small Kai" });
+  assert.equal(edited.prompt, "a small Kai, safe for work, fully clothed, adult man", "an edit keeps its tags");
+});
+
+test("a unit keeps its figurine's paint record and drops a 0.9.0 SVG figurine", () => {
+  const ready = { state: "ready", at: "t", url: PAINTED, ref: "global-gallery:img1" };
+  assert.deepEqual(normalizeUnit({ id: KAI, figurine: ready }).figurine, ready);
+  assert.equal("figurine" in normalizeUnit({ id: KAI }), false, "none yet: no key at all");
+  assert.equal("figurine" in normalizeUnit({ id: KAI, figurine: { state: "drawn" } }), false, "a damaged one goes");
+  const old = normalizeUnit({ id: KAI, figurineArt: { svg: "<svg/>", at: "t" } });
+  assert.equal("figurineArt" in old, false, "an old drawing is simply dropped");
+  assert.equal("figurine" in old, false);
 });
 
 test("a figurine scene's key names its love interest; no other chapter key does", () => {
   assert.equal(figurineLiOf(figurineSceneKey(KAI)), KAI);
   for (const key of ["story-memories-1-f", "main-3", "story-figurine-", "prestige-li-kai-0001-1"]) {
     assert.equal(figurineLiOf(key), null, key);
-  }
-});
-
-test("a figurine is kept only with a tall 2:3 box, as the allow-list keeps it", () => {
-  assert.ok(typeof normalizeFigurineReply({ svg: FIGURE }, "t") !== "string", "0 0 64 96 is kept");
-  const box = (viewBox: string) => FIGURE.replace(' viewBox="0 0 64 96"', viewBox);
-  assert.ok(typeof normalizeFigurineReply({ svg: box(' viewBox="0 0 128 192"') }, "t") !== "string", "any 2:3 box");
-  for (const bad of [
-    "",
-    ' viewBox="0 0 64 x96"',
-    ' viewBox="0 0 64 64"',
-    ' viewBox="0 0 100 100"',
-    ' viewBox="0 0 64"',
-  ]) {
-    assert.equal(normalizeFigurineReply({ svg: box(bad) }, "t"), 'svg needs its viewBox, "0 0 64 96"', bad || "none");
   }
 });

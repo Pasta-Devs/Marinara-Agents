@@ -7,7 +7,9 @@
 // "noticing" hint in one live region) and shows one of mine; the Album opens a CG large and saves it through the
 // Engine. With the Engine's prompt review on, an open on the 5★ reveal hands focus to Continue, and the review a wish's
 // results open is the dialog on top, and it paints. The Shop tab (#2128) sells a gift once per tap, and a figurine
-// whose scene it then offers; one it cannot afford says how much Starlight is missing.
+// whose scene it then offers; one it cannot afford says how much Starlight is missing. A figurine's Buy says it paints
+// 1 image (#2138); once bought it shows Painting… while the Shop reads itself again, and a failed paint offers Try
+// again, whose one tap paints it and hands focus back to Play the scene.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-wish.e2e.ts
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
@@ -283,11 +285,13 @@ interface WishStub {
   pullResponse: Json;
   /** GET /runs/:run/shop (#2128). */
   shop: Json;
+  /** #2138: Shop reads since a figurine was bought; its paint is pending for the first, failed from the second. */
+  shopReads: number;
   /** Answer the first pull with a dropped connection (the server applied it). */
   dropFirst?: boolean;
 }
 
-/** The Shop under SFW Heat: three gifts, and each love interest's figurine (Ilvar's drawn, Cassian's not yet). */
+/** The Shop under SFW Heat: three gifts, and each love interest's figurine, neither bought nor painted. */
 function shopView(starlight: number): Json {
   return {
     starlight,
@@ -297,8 +301,8 @@ function shopView(starlight: number): Json {
       { id: "wine", price: 600, owned: 0 },
     ],
     figurines: [
-      { li: ILVAR, name: "Ilvar Thorne", accent: "#9DB8F0", art: art("#9db8f0"), drawing: false, owned: false },
-      { li: CASSIAN, name: "Cassian", accent: "#E6C98A", drawing: false, owned: false },
+      { li: ILVAR, name: "Ilvar Thorne", accent: "#9DB8F0", art: null, cutting: false, owned: false },
+      { li: CASSIAN, name: "Cassian", accent: "#E6C98A", art: null, cutting: false, owned: false },
     ],
     figurineCost: 5000,
   };
@@ -459,8 +463,13 @@ function wishStub(starlight = 2000): { stub: WishStub; answer: (call: Call) => A
     wish: wishView(starlight),
     pullResponse: {},
     shop: shopView(starlight),
+    shopReads: 0,
   };
   const seen = new Set<string>();
+  const figurine = (li: string, change: Json) => ({
+    ...stub.shop,
+    figurines: stub.shop.figurines.map((entry: Json) => (entry.li === li ? { ...entry, ...change } : entry)),
+  });
   const answer = (call: Call): Answer | undefined => {
     const path = call.path.replace("/api/otome-forge", "");
     if (path === "/index" || path === "/index/opened") return { status: 200, json: { index: index() } };
@@ -490,12 +499,26 @@ function wishStub(starlight = 2000): { stub: WishStub; answer: (call: Call) => A
       if (stub.dropFirst && first) return { status: 0, abort: true };
       return { status: 200, json: stub.pullResponse, delay: 150 };
     }
-    if (path === `/runs/${RUN}/shop` && call.method === "GET") return { status: 200, json: stub.shop };
-    const figurine = /^\/runs\/[^/]+\/shop\/figurines\/([^/]+)$/u.exec(path)?.[1];
-    if (path === `/runs/${RUN}/shop/gifts` || figurine) {
+    if (path === `/runs/${RUN}/shop` && call.method === "GET") {
+      // A bought figurine paints in the background: the first read after the purchase finds it painting, the next
+      // (the Shop's own poll) finds that it failed.
+      const painting = stub.shop.figurines.find((entry: Json) => entry.art?.state === "pending");
+      if (painting && ++stub.shopReads > 1) {
+        stub.shop = figurine(painting.li, { art: { state: "failed", at: now(), error: "The provider refused." } });
+      }
+      return { status: 200, json: stub.shop };
+    }
+    const tapped = /^\/runs\/[^/]+\/shop\/figurines\/([^/]+)\/art$/u.exec(path)?.[1];
+    if (tapped) {
+      const painted = ready(art("#9db8f0"));
+      stub.shop = figurine(decodeURIComponent(tapped), { art: painted, url: painted.url });
+      return { status: 200, json: { art: painted }, delay: 150 };
+    }
+    const bought = /^\/runs\/[^/]+\/shop\/figurines\/([^/]+)$/u.exec(path)?.[1];
+    if (path === `/runs/${RUN}/shop/gifts` || bought) {
       // The server's one write per request id: charged once, and a request sent again is answered as before.
       const id = String(call.body?.requestId ?? "");
-      const li = figurine ? decodeURIComponent(figurine) : null;
+      const li = bought ? decodeURIComponent(bought) : null;
       const price = li
         ? stub.shop.figurineCost
         : stub.shop.gifts.find((gift: Json) => gift.id === call.body?.gift).price;
@@ -510,7 +533,9 @@ function wishStub(starlight = 2000): { stub: WishStub; answer: (call: Call) => A
             gift.id === call.body?.gift ? { ...gift, owned: gift.owned + 1 } : gift,
           ),
           figurines: stub.shop.figurines.map((entry: Json) =>
-            entry.li === li ? { ...entry, owned: true, story: { key: `story-figurine-${li}` } } : entry,
+            entry.li === li
+              ? { ...entry, owned: true, art: { state: "pending", at: now() }, story: { key: `story-figurine-${li}` } }
+              : entry,
           ),
         };
       }
@@ -1025,17 +1050,34 @@ test("Otome Hearth Shop: a gift is bought once per tap, a figurine offers its sc
   ]);
 
   const figurines = root.getByRole("list", { name: "Figurines" });
+  const ilvar = figurines.getByRole("listitem").filter({ hasText: "Ilvar Thorne figurine" });
+  // With an image connection, a figurine's Buy says what it paints.
+  await expect(ilvar.getByText("Paints 1 image")).toBeVisible();
   await figurines.getByRole("button", { name: "Buy Ilvar Thorne figurine for 5,000 Starlight" }).click();
   await expect(starlight(root)).toHaveText(/^Starlight\s*300$/u);
   // The Buy button it was bought from is gone: keyboard focus moves to the scene it unlocked, not to the page.
-  await expect(figurines.getByRole("button", { name: "Play the scene with Ilvar Thorne" })).toBeFocused();
+  const play = figurines.getByRole("button", { name: "Play the scene with Ilvar Thorne" });
+  await expect(play).toBeFocused();
   await expect(root.getByText("Ilvar Thorne figurine is yours.")).toBeVisible();
+  await expect(ilvar.getByRole("status")).toHaveText("Painting…");
   const cassian = figurines.getByRole("button", { name: "Buy Cassian figurine for 5,000 Starlight" });
   await expect(cassian).toHaveAttribute("aria-disabled", "true");
   await expect(cassian).toHaveAccessibleDescription("4,700 more Starlight");
   await cassian.click({ force: true });
   expect(posts(calls, `/shop/figurines/${CASSIAN}`)).toHaveLength(0);
   expect(posts(calls, `/shop/figurines/${ILVAR}`)).toHaveLength(1);
+
+  // The Shop reads itself again while it paints; this paint failed, and Try again paints it once, on the tap.
+  const retry = ilvar.getByRole("button", { name: "Try painting Ilvar Thorne figurine again" });
+  await expect(retry).toBeVisible({ timeout: 10_000 });
+  await expect(ilvar.getByText("Paints 1 image")).toBeVisible();
+  expect(posts(calls, `/shop/figurines/${ILVAR}/art`)).toHaveLength(0);
+  await retry.focus();
+  await page.keyboard.press("Enter");
+  await expect(ilvar.locator("img.of-figurine")).toHaveAttribute("src", /^data:image\/svg\+xml/u);
+  await expect(retry).toHaveCount(0);
+  await expect(play).toBeFocused();
+  expect(posts(calls, `/shop/figurines/${ILVAR}/art`)).toHaveLength(1);
 });
 
 test("Otome Forge Wardrobe: the toggle moves between their looks and mine, wears one at home and shows one of mine", async ({

@@ -2147,6 +2147,11 @@ ${R} .of-home-figurine {
   display: block; flex: 0 1 auto; min-width: 0; width: clamp(30px, 9cqw, 52px); aspect-ratio: 2 / 3; height: auto;
   object-fit: contain; filter: drop-shadow(0 3px 2px rgb(43 34 54 / 0.35));
 }
+/* #2138: a figurine that is still being painted holds its place as a faint, breathing stand-in. */
+${R} .of-home-figurine--painting {
+  border-radius: 40% 40% 12% 12%; background: color-mix(in srgb, ${PALETTE.champagne} 35%, transparent);
+  filter: none; animation: of-breathe 2.4s ease-in-out infinite;
+}
 ${R} .of-home-l1 { position: absolute; inset: 0; background: var(--of-home-tint); }
 ${R}[data-look="pearl"] .of-home[data-sky="night"] {
   --of-home-tint: linear-gradient(180deg, rgb(110 110 190 / 0.24) 0%, rgb(140 120 200 / 0.1) 62%, transparent 100%);

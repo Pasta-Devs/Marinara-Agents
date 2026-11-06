@@ -1,11 +1,12 @@
 // ──────────────────────────────────────────────
-// Otome Hearth: the Shop's gifts, drawn by hand in SVG, and a love interest's figurine (#2128)
+// Otome Hearth: the Shop's gifts, drawn by hand in SVG, and a love interest's figurine (#2128, painted since #2138)
 // ──────────────────────────────────────────────
 // Four gifts in the plush shelf's style (C/components/PlushShelf.tsx): a 64 × 64 box, flat fills, the plush ink outline
 // and a soft white shine. A heart-shaped box of chocolates, a wrapped bouquet, a bottle of wine with a glass, and a
 // small pink heart-shaped potion bottle for the aphrodisiac. Each is decorative: its name is the parent's to say.
-// A figurine is model-drawn (S/minigames/plush.ts), and shown only as an <img> from a data URL, which runs nothing; until
-// it is drawn, their plush frame stands in for it (their look in a round frame, or their initials).
+// A figurine is painted once it is bought (S/art/figurine.ts) and shown cut out of its backdrop once the cut-out is made,
+// the painted image until then; before it is painted, their plush frame stands in for it (their look in a round frame,
+// or their initials).
 import type { CSSProperties } from "react";
 import type { RunLiView } from "../shared/api-types";
 import { PLUSH_INK, liPlushId } from "../shared/claw";
@@ -147,20 +148,20 @@ export function GiftArt({ gift, className, style }: { gift: GiftId; className?: 
   );
 }
 
-/** A love interest's figurine, decorative: the drawn one, or until then their plush frame. */
+/** A love interest's figurine, decorative: the painted one, or until then their plush frame. */
 export function FigurineArt({
   li,
-  art,
+  url,
   className,
 }: {
   li: Pick<RunLiView, "id" | "name" | "accent" | "portrait">;
-  /** The drawn figurine's data URL. */
-  art?: string;
+  /** The figurine as shown (FigurinePicture `url`): its cut-out, else the painted image. */
+  url?: string;
   className?: string;
 }) {
   const classes = className ? `of-figurine ${className}` : "of-figurine";
-  return art ? (
-    <img className={classes} src={art} alt="" aria-hidden="true" decoding="async" />
+  return url ? (
+    <img className={classes} src={url} alt="" aria-hidden="true" decoding="async" />
   ) : (
     <PlushArt prize={liPlushId(li.id)} li={li} className={`${classes} of-figurine--waiting`} />
   );
