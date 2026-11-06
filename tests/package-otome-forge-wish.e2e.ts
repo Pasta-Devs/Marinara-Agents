@@ -9,7 +9,7 @@
 // results open is the dialog on top, and it paints. The Shop tab (#2128) sells a gift once per tap, and a figurine
 // whose scene it then offers; one it cannot afford says how much Starlight is missing.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-wish.e2e.ts
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { crc32, deflateSync } from "node:zlib";

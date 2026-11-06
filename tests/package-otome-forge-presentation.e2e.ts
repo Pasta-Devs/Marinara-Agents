@@ -11,7 +11,7 @@
 // only saved audio settings generate music (an unsaved Mute or music level never does), an unsaved Mute stays silent
 // when a cue's track lands, and a recorded track the Engine no longer lists is made again while stock music plays.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-presentation.e2e.ts
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { normalizeBible } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit";
