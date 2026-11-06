@@ -450,14 +450,18 @@ export async function planNextChapter(
     const units = cast.map((li) => run.units.find((unit) => unit.id === li)!);
     // ponytail: recalls for the Lead only, since the planner picks the Foil (plan M2a "Recall": cast [lead, foil]).
     // The Lead's own route and repair chapters reach the plan; the Foil's and everyone else's never do, in recall
-    // (S/story/canon.ts mayKnow) or in the ledgers (S/prompts.ts knownTo). Upgrade path: a second recall for the Foil
-    // after the plan names them, or keep [lead] so another love interest's private canon never reaches the node guides.
+    // (S/story/canon.ts mayKnow) or in the ledgers (S/prompts.ts knownTo), but for the last Character Story, whoever's
+    // it is, titled private between the protagonist and its love interest (#2126, `lastStory`). Upgrade path: a
+    // second recall for the Foil after the plan names them, or keep [lead] so another love interest's private canon
+    // never reaches the node guides.
     const memory = await recallText(deps, runId, {
       job: "structured",
       cast: [lead],
       continues: "main",
       // The recalls follow the Lead, so they go after the story context the chapter's scenes share (#2066, #2091).
       cached: {},
+      // As every scene of the chapter is, so the story context stays theirs (S/story/beats.ts generateBeat).
+      lastStory: true,
       query: { plan: units.find((unit) => unit.id === lead)?.bible?.want ?? "", speakers: units.map((u) => u.name) },
       signal,
       debugMode,

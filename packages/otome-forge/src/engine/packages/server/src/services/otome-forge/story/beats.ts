@@ -610,13 +610,16 @@ async function generateBeat(
   // The previous chapter in full is the one this chapter's storyline continues: the main story's for a main chapter,
   // his own for his route or repair chapter; a date or a story takes the newest the scene may know. The story context
   // is what every scene of the chapter may know (and a main chapter's plan, #2091): his own canon too in his own
-  // chapter, where he is in every node. What only some may know follows who is in this one, with the recalls.
+  // chapter, where he is in every node. What only some may know follows who is in this one, with the recalls. A
+  // storyline's chapter (main, route, repair) is also given the last Character Story, whoever is in the scene (#2126),
+  // as its plan is; a date's or a story's scenes are not.
   const memory = await recallText(deps, runId, {
     job: "narration",
     cast: node.cast,
     cached: chapter.kind === "main" ? {} : { li: chapter.li ?? chapter.lead },
     ...(chapter.kind === "main" ? { continues: "main" as const } : {}),
     ...((chapter.kind === "route" || chapter.kind === "repair") && chapter.li ? { continues: chapter.li } : {}),
+    lastStory: chapter.kind === "main" || chapter.kind === "route" || chapter.kind === "repair",
     query: {
       cues: [storySoFar.join("\n\n").slice(-2000), node.guide].filter(Boolean),
       plan: node.guide,
