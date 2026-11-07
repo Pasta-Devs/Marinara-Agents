@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.9.5 — 2026-11-07
+
+- **Scene pictures show your love interests and you.** In a picture of two or more people, such as a key image, a Memory's or a Character Story's art, or a date's keepsake, each person is now painted from their own picture, so their faces match even while they wear a look; the look they wear is still described. When the story names someone another way, with a title, as "you", by a surname or a fuller name, or without its accents, the picture still knows who it is. When a saved picture of someone can't be loaded, the painting stops before anything is paid for and lets you try again, instead of painting a stranger.
+
 ## 0.9.4 — 2026-11-06
 
 - **Otome Hearth uses a little less battery.** It does less drawing on every screen, and stops work you can't see. The soft glows drifting behind each screen are blurred once instead of on every frame. Once Home has appeared, the scene hidden behind your room is no longer drawn at all, and in Midnight the window's light takes less work to draw. The glows hidden behind the reader hold still, and so do Home's stars at dawn and by day, when the sky hides them. Nothing looks, moves or sounds different.

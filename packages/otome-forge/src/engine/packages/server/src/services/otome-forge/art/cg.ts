@@ -96,41 +96,229 @@ async function updateCg(
 
 // ── Who is in the frame ──
 
+/** Whom a cast entry names: a love interest, the protagonist, or someone only named (`ambiguous`: by several). */
+export type CastMember = { li: Unit } | { player: true } | { name: string; ambiguous?: true };
+
+/** Words a writer calls the protagonist by instead of her name. */
+const PROTAGONIST_WORDS = new Set([
+  "you",
+  "yourself",
+  "protagonist",
+  "the protagonist",
+  "heroine",
+  "the heroine",
+  "player",
+  "the player",
+  "mc",
+  "main character",
+  "the main character",
+]);
+/** Titles and articles before (or inside) a name: "Lord Kai", "Il Dottore". */
+const TITLE_WORDS = new Set(
+  (
+    "lord lady sir dame mr mrs ms miss dr doctor professor prof captain master mistress prince princess king queen " +
+    "il la le the el al von van de di da"
+  ).split(" "),
+);
+const HONORIFIC = /-(?:sama|san|kun|chan|dono|senpai|sensei|ssi|nim)$/u;
+/** Titles that never name someone of this subject pronoun ("Mrs. Ren" is not Kai Ren, who is "he"). */
+const TITLES_NOT_FOR: Partial<Record<string, ReadonlySet<string>>> = {
+  he: new Set("mrs ms miss lady dame mistress princess queen".split(" ")),
+  she: new Set("mr lord sir master prince king".split(" ")),
+};
+
+/**
+ * Folded for matching: accents on Latin, Greek and Cyrillic letters dropped ("Inès" is "ines"), compatibility forms
+ * unified, lower case. Marks in other scripts stay: a Devanagari vowel sign or a kana's dakuten makes another name.
+ */
+const fold = (text: string) =>
+  text
+    .normalize("NFKD")
+    .replace(/([\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}])\p{M}+/gu, "$1")
+    .normalize("NFKC")
+    .toLowerCase();
+/** A name's words, folded, without edge punctuation or an honorific suffix ("Kai-sama," is "kai"). A possessive stays. */
+const nameWords = (name: string) =>
+  fold(name)
+    .split(/\s+/u)
+    .map((word) => word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "").replace(HONORIFIC, ""))
+    .filter(Boolean);
+/** The words that name the person: without titles and articles, unless nothing else is left. */
+const coreOf = (words: readonly string[]) => {
+  const core = words.filter((word) => !TITLE_WORDS.has(word));
+  return core.length ? core : [...words];
+};
+const within = (words: readonly string[], of: readonly string[]) => words.every((word) => of.includes(word));
+/** Running text's words, split on anything that is not a letter or digit, so "Kai's hand" says Kai. */
+const textWords = (text: string) =>
+  fold(text)
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+
+/**
+ * Whom each entry of a cast names, in order, each person once. By id (`<id>` or `li:<id>`), a word for the protagonist
+ * ("you", "the heroine"), or a name: an exact match of the core words (no titles, articles, honorifics or accents)
+ * wins over a partial one (every core word is a word of the stored name, or the stored core is among the entry's
+ * words; whole words only, so "Ann" never names Anna). A title of the other gender is someone else ("Mrs. Ren" is not
+ * Kai Ren), and an entry with no letters ("???") names nobody known. Ids, role words and exact names are settled
+ * first, so the cast's order never decides whom a partial name means. Someone already in the frame answers again only
+ * to their exact core or their own words ("Ren" beside Kai Ren is him again). Several left: those `present` (the
+ * node's love interest ids) and the protagonist; one love interest and the protagonist sharing a name are him first,
+ * then her. Still several: only named, and `ambiguous`.
+ */
+export function resolveCast(
+  cast: readonly string[],
+  units: readonly Unit[],
+  player: Player,
+  present?: readonly string[],
+): CastMember[] {
+  const people = [
+    ...units.map((unit) => ({ unit, name: unit.name, pronoun: unit.pronouns?.subject })),
+    { unit: null, name: player.name, pronoun: player.pronouns?.subject },
+  ]
+    .map((person) => ({
+      ...person,
+      words: nameWords(person.name),
+      notFor: TITLES_NOT_FOR[fold(person.pronoun ?? "").trim()],
+    }))
+    .map((person) => ({ ...person, core: coreOf(person.words) }))
+    .filter((person) => person.words.length);
+  const entries = cast.flatMap((entry, at) => {
+    const text = entry.trim();
+    if (!text) return [];
+    const id = text.toLowerCase().replace(/^li:/u, "");
+    const words = nameWords(text);
+    // A love interest by id, the protagonist by a role word (null), else undefined: matched by name.
+    const direct =
+      units.find((unit) => unit.id.toLowerCase() === id) ?? (PROTAGONIST_WORDS.has(words.join(" ")) ? null : undefined);
+    const core = coreOf(words);
+    const matches =
+      direct !== undefined || !words.length
+        ? []
+        : people.flatMap((person) => {
+            if (words.some((word) => person.notFor?.has(word) && !person.words.includes(word))) return [];
+            const exact = core.join(" ") === person.core.join(" ");
+            return exact || within(core, person.words) || within(person.core, words) ? [{ ...person, exact }] : [];
+          });
+    return [{ at, text, words, direct, matches }];
+  });
+  type Entry = (typeof entries)[number];
+  const firm = (entry: Entry) => entry.direct !== undefined || entry.matches.some((match) => match.exact);
+  // Each entry's member (or none), in cast order. Who is in the frame already: a love interest, null for the
+  // protagonist, or the words of someone only named.
+  const slots: CastMember[][] = cast.map(() => []);
+  const taken = new Set<Unit | null | string>();
+  for (const { at, text, words, direct, matches } of [
+    ...entries.filter(firm),
+    ...entries.filter((entry) => !firm(entry)),
+  ]) {
+    const slot = slots[at]!;
+    const add = (unit: Unit | null) => {
+      if (taken.has(unit)) return;
+      taken.add(unit);
+      slot.push(unit ? { li: unit } : { player: true });
+    };
+    const named = (ambiguous?: true) => {
+      const key = words.join(" ") || fold(text);
+      if (taken.has(key)) return;
+      taken.add(key);
+      slot.push({ name: text, ...(ambiguous ? { ambiguous } : {}) });
+    };
+    if (direct !== undefined) {
+      add(direct);
+      continue;
+    }
+    const best = matches.some((match) => match.exact) ? matches.filter((match) => match.exact) : matches;
+    let fresh = best.filter((match) => !taken.has(match.unit));
+    if (!fresh.length) {
+      // Only people already in the frame: them again, or someone else who shares a word of their name.
+      if (!best.some((match) => match.exact || within(words, match.words))) named();
+      continue;
+    }
+    if (fresh.length > 1 && present) {
+      const near = fresh.filter((match) => !match.unit || present.includes(match.unit.id));
+      if (near.length) fresh = near;
+    }
+    const namesake = fresh.length === 2 && fresh.some((match) => !match.unit);
+    if (fresh.length === 1 || namesake) add(fresh.find((match) => match.unit)?.unit ?? null);
+    else named(true);
+  }
+  return slots.flat();
+}
+
+/**
+ * A key image whose cast names nobody: the love interests of its node (one or two) whose name the brief says, and the
+ * protagonist when it says "you", "your", "protagonist", "heroine" or her name, or someone's own pronoun no one else
+ * here uses. Nobody pointed at is nobody: a picture of a letter stays empty.
+ */
+function briefCast(brief: string, units: readonly Unit[], player: Player, present: readonly string[]): CastMember[] {
+  const lis = present.flatMap((id) => units.filter((unit) => unit.id === id));
+  if (lis.length < 1 || lis.length > 2) return [];
+  const said = new Set(textWords(brief));
+  const forms = (pronouns: Partial<Unit["pronouns"]> | undefined) =>
+    [pronouns?.subject, pronouns?.object, pronouns?.possessive].flatMap((form) => textWords(form ?? ""));
+  const people = [
+    ...lis.map((unit) => ({
+      member: { li: unit } as CastMember,
+      words: coreOf(textWords(unit.name)),
+      pronouns: forms(unit.pronouns),
+    })),
+    {
+      member: { player: true } as CastMember,
+      words: [...coreOf(textWords(player.name)), "you", "your", "protagonist", "heroine"],
+      pronouns: forms(player.pronouns),
+    },
+  ];
+  const unshared = (form: string) => people.filter((person) => person.pronouns.includes(form)).length === 1;
+  return people
+    .filter(
+      (person) =>
+        person.words.some((word) => said.has(word)) || person.pronouns.some((form) => said.has(form) && unshared(form)),
+    )
+    .map((person) => person.member);
+}
+
 export interface CgSubject {
   person: CgPerson;
   /** Whose likeness the reference keeps; none for someone the story only names. */
   image?: ImageSubject;
-  /** The painted look they wear, if any: their one reference beside others (cgSubjects). */
+  /** The painted look they wear, if any: their last-resort reference beside others (cgSubjects). */
   wornUrl?: string;
+  /** Only named, by a name several people share (resolveCast). */
+  ambiguous?: true;
 }
 
 /**
  * The CG's people, in the brief's order: a love interest, the protagonist, or someone only named (at most
- * CG_PEOPLE_MAX). Alone, a person is sent as who they are and the look they wear (two references). With others, each
- * person is ONE reference, their worn look when they have one: two full-body pictures of each person in the same
- * standing pose made the model merge bodies and draw extra limbs (the maintainer's report, 2026-11-03).
+ * CG_PEOPLE_MAX), each matched by resolveCast. A story key image (`scene`) whose cast names nobody takes them from its
+ * brief (briefCast). Alone, a person is sent as who they are and the look they wear (two references). With others,
+ * each person is ONE reference (two full-body pictures of each person in the same standing pose made the model merge
+ * bodies and draw extra limbs, the maintainer's report, 2026-11-03): who they are (their card or persona avatar, else
+ * their setup portrait), and only when none of that loads, the look they wear; the prompt dresses them in it
+ * (`outfitInText`).
  */
-export function cgSubjects(cast: readonly string[], units: readonly Unit[], player: Player): CgSubject[] {
-  const subjects = castSubjects(cast, units, player);
+export function cgSubjects(
+  cast: readonly string[],
+  units: readonly Unit[],
+  player: Player,
+  scene?: { present: readonly string[]; brief: string },
+): CgSubject[] {
+  const subjects = castSubjects(cast, units, player, scene);
   if (subjects.length < 2) return subjects;
-  return subjects.map((subject) =>
-    subject.image && subject.wornUrl
-      ? {
-          ...subject,
-          // Their setup portrait stands behind the look, should its file be gone.
-          image: {
-            kind: "character",
-            portrait: subject.wornUrl,
-            ...(subject.image.portrait ? { avatarPath: subject.image.portrait } : {}),
-          },
-        }
-      : subject,
-  );
+  return subjects.map((subject) => {
+    if (!subject.image?.wornOutfit) return subject;
+    const { wornOutfit: _worn, outfits: _outfits, ...identity } = subject.image;
+    return {
+      ...subject,
+      person: { ...subject.person, outfitInText: true },
+      image: { ...identity, ...(subject.wornUrl ? { avatarPath: subject.wornUrl } : {}) },
+    };
+  });
 }
 
 /** Whether the kit can find a picture of this subject for sure (a card, a portrait or a look), or only maybe. */
 const likenessOf = (image: ImageSubject): "sure" | "maybe" | "none" =>
-  image.cardId || image.portrait ? "sure" : image.personaId ? "maybe" : "none";
+  image.cardId || image.portrait || image.avatarPath ? "sure" : image.personaId || image.wornOutfit ? "maybe" : "none";
 
 /**
  * The references a CG of these subjects sends (`units`, for generateBannerArt) and whom each one shows (`labels`, for
@@ -157,24 +345,39 @@ export function cgReferences(subjects: readonly CgSubject[]): { units: ImageSubj
   return { units: ordered.map((subject) => subject.image!), labels };
 }
 
+/** Logs, at a paid paint, each person the brief names whom no love interest or the protagonist answers to. */
+export function warnUnmatched(
+  logger: Pick<ArtDeps["runtime"]["logger"], "warn">,
+  label: string,
+  subjects: readonly CgSubject[],
+): void {
+  for (const { image, ambiguous, person } of subjects) {
+    if (image) continue;
+    logger.warn(
+      ambiguous
+        ? '[otome-forge] %s: "%s" could be more than one person; painted without a reference'
+        : '[otome-forge] %s: "%s" is no love interest or protagonist; painted without a reference',
+      label,
+      person.name,
+    );
+  }
+}
+
 /** The CG's people as the brief names them, each with their likeness and the look they wear. */
-function castSubjects(cast: readonly string[], units: readonly Unit[], player: Player): CgSubject[] {
-  const subjects: CgSubject[] = [];
-  const seen = new Set<string>();
-  for (const name of cast) {
-    if (subjects.length >= CG_PEOPLE_MAX) break;
-    // A name a love interest already took that is also the protagonist's is her (a keepsake with a namesake persona).
-    const named = units.find((candidate) => sameName(name, candidate.name));
-    const playerToo = !!player.name && sameName(name, player.name);
-    const unit = named && !(playerToo && seen.has(`li:${named.id}`)) ? named : undefined;
-    const isPlayer = !unit && playerToo;
-    const id = unit ? `li:${unit.id}` : isPlayer ? "player" : `name:${name.trim().toLowerCase()}`;
-    if (!name.trim() || seen.has(id)) continue;
-    seen.add(id);
-    if (unit) {
+function castSubjects(
+  cast: readonly string[],
+  units: readonly Unit[],
+  player: Player,
+  scene?: { present: readonly string[]; brief: string },
+): CgSubject[] {
+  const resolved = resolveCast(cast, units, player, scene?.present);
+  const members = resolved.length || !scene ? resolved : briefCast(scene.brief, units, player, scene.present);
+  return members.slice(0, CG_PEOPLE_MAX).map((member): CgSubject => {
+    if ("li" in member) {
+      const unit = member.li;
       // The look worn now dresses them in the CG: its outfit line in the prompt, its image after the faces.
       const worn = unit.wornOutfit ? unit.outfits.find((outfit) => outfit.id === unit.wornOutfit) : undefined;
-      subjects.push({
+      return {
         person: {
           name: unit.name,
           identityLine: unit.identityLine || unit.bible?.look.identityLine || "",
@@ -187,14 +390,17 @@ function castSubjects(cast: readonly string[], units: readonly Unit[], player: P
           ...(unit.portrait ? { portrait: unit.portrait } : {}),
           outfits: unit.outfits,
           ...(worn ? { wornOutfit: worn.id } : {}),
+          who: unit.name,
         },
         ...(worn?.url ? { wornUrl: worn.url } : {}),
-      });
-    } else if (isPlayer) {
+      };
+    }
+    if ("player" in member) {
       const worn = player.wornOutfit ? player.outfits.find((outfit) => outfit.id === player.wornOutfit) : undefined;
-      subjects.push({
+      const name = player.name || "Protagonist";
+      return {
         person: {
-          name: player.name,
+          name,
           ...player.look,
           ...(worn?.outfitLine ? { outfitLine: worn.outfitLine } : {}),
           presentation: "person",
@@ -205,14 +411,16 @@ function castSubjects(cast: readonly string[], units: readonly Unit[], player: P
           ...(player.portrait ? { portrait: player.portrait } : {}),
           outfits: player.outfits,
           ...(worn ? { wornOutfit: worn.id } : {}),
+          who: name,
         },
         ...(worn?.url ? { wornUrl: worn.url } : {}),
-      });
-    } else {
-      subjects.push({ person: { name: name.trim(), identityLine: "", outfitLine: "", presentation: "person" } });
+      };
     }
-  }
-  return subjects;
+    return {
+      person: { name: member.name, identityLine: "", outfitLine: "", presentation: "person" },
+      ...(member.ambiguous ? { ambiguous: true as const } : {}),
+    };
+  });
 }
 
 /** The CG prompt for the stored beat, and who is in it. */
@@ -222,7 +430,9 @@ async function buildCg(deps: ArtDeps, runId: string, beat: Beat, edited: Partial
   run.player = await withPersonaImageAppearance(deps.runtime, run.player);
   const cg = beat.cg;
   if (!cg) throw noCg();
-  const subjects = cgSubjects(cg.cast, run.units, run.player);
+  // The node's love interests settle a name several share, and stand in for a cast that names nobody.
+  const present = (await readChapter(deps.store, runId, beat.key))?.nodes[beat.i]?.cast ?? [];
+  const subjects = cgSubjects(cg.cast, run.units, run.player, { present, brief: cg.brief });
   const style = await worldStyle(imagesOf(deps), run.world.images);
   const prompt = cgPrompt(
     {
@@ -285,6 +495,7 @@ async function paintCg(
     async paint() {
       // Built now, so the rating, the 18+ gate and everyone's looks are the ones in force at the paid call.
       const built = await buildCg(deps, runId, beat, options.edited);
+      warnUnmatched(deps.runtime.logger, `cg ${albumKey(beat.key, beat.i)}`, built.subjects);
       return images.generateBannerArt({
         connectionId,
         // The Engine matches the override as `avatar:<slug of the first person's first name>`.

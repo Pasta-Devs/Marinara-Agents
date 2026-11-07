@@ -501,7 +501,7 @@ function paintSticker(
       return imagesOf(deps).generatePortrait({
         connectionId,
         name: built.subject.name,
-        unit: built.subject.image,
+        unit: { ...built.subject.image, who: built.subject.name },
         prompt: built.prompt,
         negativePrompt: built.negativePrompt,
         ...STICKER_SIZE,
