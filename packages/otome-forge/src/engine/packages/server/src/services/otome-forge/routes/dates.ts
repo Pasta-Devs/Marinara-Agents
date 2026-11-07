@@ -24,6 +24,8 @@
 // The Photo Shoot (S/minigames/photo-shoot.ts) paints one photo of the two of them on the tap and calls no model: a
 // resend with the same id waits for, or answers, the same photo. It wears nothing; a photo is deleted on request,
 // except while it paints (409 `busy`). The list is the Album's `photos` and Home's `photo`.
+// #2156: while his grievance with her stands, starting or finishing a date with him and the Photo Shoot are a 409
+// `locked`, before anything is worn, given, planned or painted (S/minigames/date-night.ts assertFreeToDate).
 import { z } from "zod";
 import { DATE_PLACE_KINDS, type DatePlace } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { GIFT_IDS } from "../../../../../client/src/features/otome-forge/shared/shop.js";
@@ -31,6 +33,7 @@ import { OtomeForgeError, debugModeOf, parseBody, runParam, type OtomeRequest, t
 import { isLiId } from "../ids.js";
 import { wearLook } from "./wardrobe.js";
 import {
+  assertFreeToDate,
   checkGift,
   datesView,
   finishDate,
@@ -98,6 +101,8 @@ export const registerDateRoutes: RegisterRoutes = (router, deps) => {
       const { runId } = runParam(request);
       if (!isLiId(input.li)) throw new OtomeForgeError(404, "No such love interest.", "not-found");
       const debugMode = debugModeOf(request);
+      // #2156: nothing is worn, given or planned while his grievance with her stands.
+      await assertFreeToDate(deps.store, runId, input.li);
       // A gift she cannot give (#2128) is refused before anything is worn or planned.
       await checkGift(deps, runId, input);
       // The looks picked for the date are worn, as Wear at home wears them (owned and painted, or a 4xx), so the
@@ -149,6 +154,7 @@ export const registerDateRoutes: RegisterRoutes = (router, deps) => {
     "/runs/:run/photos/prompt",
     handle(async (request) => {
       const setup = parseBody(PhotoSetupSchema, request.body);
+      if (isLiId(setup.li)) await assertFreeToDate(deps.store, runParam(request).runId, setup.li);
       return photoPromptFor(deps, runParam(request).runId, setup);
     }),
   );
@@ -157,6 +163,7 @@ export const registerDateRoutes: RegisterRoutes = (router, deps) => {
     "/runs/:run/photos",
     handle(async (request) => {
       const input = parseBody(PhotoBody, request.body);
+      if (isLiId(input.li)) await assertFreeToDate(deps.store, runParam(request).runId, input.li);
       const photo = await takePhoto(deps, runParam(request).runId, input, { debugMode: debugModeOf(request) });
       return { photo };
     }),

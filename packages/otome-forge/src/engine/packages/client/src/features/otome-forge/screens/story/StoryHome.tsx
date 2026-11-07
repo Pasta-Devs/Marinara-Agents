@@ -3,11 +3,14 @@
 // which plans or opens the repair chapter), the chapter being read (Continue), the next main chapter ("Who walks with
 // you this chapter?": the server offers two Leads, the one least recently with her and the one with the ripest
 // conflict; the planner adds a Foil), each love interest's route (his next free chapter, open from an affection level
-// and shut while a rupture is open), each one's affection (past level 10, prestige and the extra story it unlocks:
-// #2025), and every chapter so far as a path of its scenes.
+// and shut while a rupture is open, with his side of a big moment waiting under it: #2155), each one's affection (past
+// level 10, prestige and the extra story it unlocks: #2025), and every chapter so far as a path of its scenes.
+// #2156: a rupture he holds is his grievance with her: the banner and his route say how much space he still needs
+// before Make it right opens, the Lead dialog says why he can't lead, and his affection shows as paused. Beside each
+// one's route, "I'm upset with them" (asked first, then POST /routes/:li/upset; tapping it again takes it back).
 // Planning a chapter is one model call with Cancel while it runs, with something to do meanwhile: the story so far to
 // read while an arc is planned (#2040), the personality quiz while any other chapter is (#2174). A chapter already
-// planned opens with none.
+// planned opens with none, and so does his side, which is written with no model call.
 // ──────────────────────────────────────────────
 import { Fragment, useEffect, useId, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
@@ -55,8 +58,8 @@ import type {
   StoryChapterEntry,
   StoryView,
 } from "../../shared/api-types";
-import { stageRow, type StageName } from "../../shared/arcs";
-import { PRESTIGE_POINTS_PER_STORY } from "../../shared/economy";
+import { hisSideLiOf, stageRow, type HisSideEntry, type StageName } from "../../shared/arcs";
+import { GRIEVANCE_CLEARED_AFFECTION, PRESTIGE_POINTS_PER_STORY } from "../../shared/economy";
 import { chapterEyebrowKey, chapterTitle } from "../reader/ReaderControls";
 import { PersonalityQuiz } from "./PersonalityQuiz";
 
@@ -100,6 +103,12 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
   const [choosing, setChoosing] = useState(false);
   const [arcPlan, setArcPlan] = useState<ArcTarget | null>(null);
   const arcPlanning = usePlanChapter(runKey);
+  // #2155: his side is written with no model call, so its Read shows the wait and the dialog opens only to say why it
+  // did not open; once open it stays through a Retry (which then shows the wait in it), so focus never drops.
+  const [sideDialog, setSideDialog] = useState<ArcTarget | null>(null);
+  if (arcPlan?.kind === "side" && sideDialog !== arcPlan && (arcPlanning.failed || arcPlanning.stopped)) {
+    setSideDialog(arcPlan);
+  }
 
   const head = (
     <div className="of-page-head">
@@ -140,19 +149,23 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
   const routes = Array.isArray(story.data.routes) ? story.data.routes : [];
   const repairs = Array.isArray(story.data.repairs) ? story.data.repairs : [];
   const prestige = Array.isArray(story.data.prestige) ? story.data.prestige : [];
-  // A main chapter in progress is the one to continue; a route or repair chapter has its own card.
+  // #2156: each love interest whose grievance with her stands (his repair carries the space it waits for).
+  const held = new Set(repairs.flatMap((repair) => (repair.space ? [repair.li] : [])));
+  const sides = Array.isArray(story.data.hisSides) ? story.data.hisSides : [];
+  // A main chapter in progress is the one to continue; a route or repair chapter, and his side, has its own card.
   const reading =
     chapters.find((chapter) => chapter.state === "in-progress" && chapter.kind === "main") ??
     chapters.find(
       (chapter) =>
         chapter.state === "in-progress" &&
         !routes.some((route) => route.next?.key === chapter.key) &&
-        !repairs.some((repair) => repair.key === chapter.key),
+        !repairs.some((repair) => repair.key === chapter.key) &&
+        !hisSideLiOf(chapter.key),
     ) ??
     null;
   /** Opens a route or repair chapter that is already planned; plans it (one model call) otherwise. */
   const planArc = (target: ArcTarget) =>
-    void arcPlanning.plan(target.key, arcPath(target), {}, (key) => {
+    void arcPlanning.plan(target.key, arcPath(target), target.kind === "side" ? { arc: target.arc } : {}, (key) => {
       setArcPlan(null);
       onOpenChapter(key);
     });
@@ -209,7 +222,9 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
       ) : null}
       {routes.length ? (
         <Routes
+          runKey={runKey}
           routes={routes}
+          repairs={repairs}
           view={view}
           chapters={chapters}
           onOpen={(route) => route.next && openArc({ kind: "route", li: route.li, key: route.next.key })}
@@ -217,16 +232,20 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
             const repair = repairs.find((item) => item.li === li);
             if (repair) openArc({ kind: "repair", li, key: repair.key });
           }}
+          sides={sides}
+          planning={arcPlanning.planning}
+          onReadSide={(entry) => openArc({ kind: "side", li: entry.li, key: entry.key, arc: entry.arc })}
         />
       ) : null}
       <Affection
         lis={view.lis}
+        held={held}
         images={view.world.images}
         prestige={prestige}
         onPrestige={(entry) => openArc({ kind: "prestige", li: entry.li, key: entry.key })}
       />
       {chapters.length ? <ChapterList chapters={chapters} view={view} onOpen={onOpenChapter} /> : null}
-      {arcPlan ? (
+      {arcPlan && (arcPlan.kind !== "side" || sideDialog === arcPlan) ? (
         <ArcPlanDialog
           view={view}
           target={arcPlan}
@@ -239,6 +258,7 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
         <LeadDialog
           runKey={runKey}
           view={view}
+          held={held}
           next={next}
           opensArc={!story.data.arc}
           onClose={() => setChoosing(false)}
@@ -355,11 +375,14 @@ function NodePath({
  */
 function Affection({
   lis,
+  held,
   images,
   prestige,
   onPrestige,
 }: {
   lis: RunLiView[];
+  /** #2156: whose affection is paused while their grievance with her stands. */
+  held: ReadonlySet<string>;
   images: RunView["world"]["images"];
   prestige: PrestigeEntry[];
   onPrestige: (entry: PrestigeEntry) => void;
@@ -431,6 +454,9 @@ function Affection({
                 >
                   {t("ui.otomeForge.story.affectionProgressCount", li.affectionProgress)}
                 </span>
+              ) : null}
+              {held.has(li.id) ? (
+                <span className="of-affection-paused">{t("ui.otomeForge.story.affectionPaused")}</span>
               ) : null}
               {level === MAX_LEVEL && li.prestige ? (
                 <PrestigeRow
@@ -587,6 +613,8 @@ function ChapterList({
 interface LeadDialogProps {
   runKey: string;
   view: RunView;
+  /** #2156: who can't lead while their grievance with her stands (the server leaves them out of the candidates). */
+  held: ReadonlySet<string>;
   next: NonNullable<StoryView["next"]>;
   /** No arc covers the next chapter yet (the story's first): the server plans the arc before the chapter. */
   opensArc: boolean;
@@ -598,7 +626,7 @@ interface LeadDialogProps {
  * "Who walks with you this chapter?": picking a Lead plans the chapter (one model call, two when its arc is planned
  * first), with Cancel while it runs.
  */
-function LeadDialog({ runKey, view, next, opensArc, onClose, onPlanned }: LeadDialogProps) {
+function LeadDialog({ runKey, view, held, next, opensArc, onClose, onPlanned }: LeadDialogProps) {
   const { t } = useTranslation();
   const actionRef = useRef<HTMLButtonElement>(null);
   const { planning, failed, stopped, plan: planChapter, cancel } = usePlanChapter(runKey);
@@ -675,6 +703,14 @@ function LeadDialog({ runKey, view, next, opensArc, onClose, onPlanned }: LeadDi
               );
             })}
           </ul>
+          {view.lis
+            .filter((li) => held.has(li.id) && !candidates.some((candidate) => candidate.li.id === li.id))
+            .map((li) => (
+              <p key={li.id} className="of-hint of-lead-held">
+                <HeartCrack size={13} strokeWidth={2.2} aria-hidden="true" />
+                <span>{t("ui.otomeForge.story.leadHeld", pronounValues(li))}</span>
+              </p>
+            ))}
           <p className="of-cost">
             <Feather size={14} strokeWidth={2} aria-hidden="true" />
             <span>
@@ -1006,18 +1042,22 @@ function useDialogFocus(
 
 // ── Arcs: routes, ruptures and repairs ──
 
-/** A route or repair chapter, or an extra story (#2025), to open, planning it first when it has no plan yet. */
-interface ArcTarget {
-  kind: "route" | "repair" | "prestige";
-  li: string;
-  key: string;
-}
+/**
+ * A route or repair chapter, an extra story (#2025) or his side of story arc `arc` (#2155), to open, planning it first
+ * when it has no plan yet.
+ */
+type ArcTarget =
+  | { kind: "route" | "repair" | "prestige"; li: string; key: string }
+  /** His side of story arc `arc` (#2155): the route always needs the arc it belongs to. */
+  | { kind: "side"; li: string; key: string; arc: number };
 
-/** POST /runs/:run/routes/:li/next, /repairs/:li or /prestige/:li. */
+const ARC_PATHS = { repair: "repairs", prestige: "prestige", side: "sides" } as const;
+
+/** POST /runs/:run/routes/:li/next, /repairs/:li, /prestige/:li or /sides/:li. */
 const arcPath = (target: ArcTarget) =>
   target.kind === "route"
     ? `/routes/${encodeURIComponent(target.li)}/next`
-    : `/${target.kind === "prestige" ? "prestige" : "repairs"}/${encodeURIComponent(target.li)}`;
+    : `/${ARC_PATHS[target.kind]}/${encodeURIComponent(target.li)}`;
 
 const ARC_DIALOG_KEYS: Record<ArcTarget["kind"], { title: string; planning: string; locked: string }> = {
   route: {
@@ -1034,6 +1074,11 @@ const ARC_DIALOG_KEYS: Record<ArcTarget["kind"], { title: string; planning: stri
     title: "ui.otomeForge.story.prestigeNew",
     planning: "ui.otomeForge.arcs.planningPrestige",
     locked: "ui.otomeForge.story.prestigeLocked",
+  },
+  side: {
+    title: "ui.otomeForge.arcs.sideTitle",
+    planning: "ui.otomeForge.arcs.planningSide",
+    locked: "ui.otomeForge.arcs.sideLocked",
   },
 };
 
@@ -1081,19 +1126,29 @@ function RuptureBanner({
           </h2>
         </div>
       </div>
-      <p className="of-body">{t("ui.otomeForge.arcs.ruptureText", pronounValues(li))}</p>
-      <button
-        type="button"
-        className="of-button of-button--primary"
-        aria-label={t("ui.otomeForge.arcs.makeItRightLabel", pronounValues(li))}
-        onClick={onMakeItRight}
-      >
-        <HeartHandshake size={16} strokeWidth={2} aria-hidden="true" />
-        {entry?.state === "in-progress"
-          ? t("ui.otomeForge.arcs.makeItRightContinue")
-          : t("ui.otomeForge.arcs.makeItRight")}
-      </button>
-      {entry ? null : (
+      <p className="of-body">
+        {t(repair.space ? "ui.otomeForge.arcs.heldText" : "ui.otomeForge.arcs.ruptureText", pronounValues(li))}
+      </p>
+      {repair.space ? (
+        <p className="of-hint">
+          {t("ui.otomeForge.arcs.clearReward", { ...pronounValues(li), amount: GRIEVANCE_CLEARED_AFFECTION })}
+        </p>
+      ) : null}
+      {needsSpace(repair) ? <SpaceMeter li={li} space={repair.space!} /> : null}
+      {needsSpace(repair) ? null : (
+        <button
+          type="button"
+          className="of-button of-button--primary"
+          aria-label={t("ui.otomeForge.arcs.makeItRightLabel", pronounValues(li))}
+          onClick={onMakeItRight}
+        >
+          <HeartHandshake size={16} strokeWidth={2} aria-hidden="true" />
+          {entry?.state === "in-progress"
+            ? t("ui.otomeForge.arcs.makeItRightContinue")
+            : t("ui.otomeForge.arcs.makeItRight")}
+        </button>
+      )}
+      {entry || needsSpace(repair) ? null : (
         <>
           <p className="of-cost">
             <Feather size={14} strokeWidth={2} aria-hidden="true" />
@@ -1106,18 +1161,57 @@ function RuptureBanner({
   );
 }
 
+/** #2156: his grievance with her has not had its space yet, so Make it right waits. */
+const needsSpace = (repair: RepairEntry | undefined) => !!repair?.space && repair.space.had < repair.space.needed;
+
+/** #2156: how much space his grievance still needs, in words and as a bar. */
+function SpaceMeter({ li, space }: { li: RunLiView; space: NonNullable<RepairEntry["space"]> }) {
+  const { t } = useTranslation();
+  const left = Math.max(0, space.needed - space.had);
+  const label = t("ui.otomeForge.arcs.spaceLeft", { ...pronounValues(li), count: left });
+  return (
+    <div className="of-meter of-space">
+      <p className="of-route-lock">
+        <HeartCrack size={13} strokeWidth={2.2} aria-hidden="true" />
+        <span>{label}</span>
+      </p>
+      <div
+        className="of-meter-bar"
+        role="progressbar"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={space.needed}
+        aria-valuenow={Math.min(space.had, space.needed)}
+      >
+        <span style={{ inlineSize: `${(Math.min(space.had, space.needed) / space.needed) * 100}%` }} />
+      </div>
+    </div>
+  );
+}
+
 function Routes({
+  runKey,
   routes,
+  repairs,
   view,
   chapters,
   onOpen,
   onMakeItRight,
+  sides,
+  planning,
+  onReadSide,
 }: {
+  runKey: string;
   routes: RouteEntry[];
+  repairs: RepairEntry[];
   view: RunView;
   chapters: StoryChapterEntry[];
   onOpen: (route: RouteEntry) => void;
   onMakeItRight: (li: string) => void;
+  sides: HisSideEntry[];
+  /** The key being opened (usePlanChapter's `planning`), so a side's Read shows the wait. */
+  planning: string | null;
+  onReadSide: (entry: HisSideEntry) => void;
 }) {
   const { t } = useTranslation();
   return (
@@ -1133,12 +1227,17 @@ function Routes({
           return (
             <RouteCard
               key={route.li}
+              runKey={runKey}
               route={route}
+              repair={repairs.find((repair) => repair.li === route.li)}
               li={li}
               entry={route.next ? (chapters.find((chapter) => chapter.key === route.next?.key) ?? null) : null}
               images={view.world.images}
               onOpen={() => onOpen(route)}
               onMakeItRight={() => onMakeItRight(route.li)}
+              sides={sides.filter((entry) => entry.li === route.li)}
+              planning={planning}
+              onReadSide={onReadSide}
             />
           );
         })}
@@ -1148,19 +1247,30 @@ function Routes({
 }
 
 function RouteCard({
+  runKey,
   route,
+  repair,
   li,
   entry,
   images,
   onOpen,
   onMakeItRight,
+  sides,
+  planning,
+  onReadSide,
 }: {
+  runKey: string;
   route: RouteEntry;
+  /** His repair on offer, while a rupture stands (#2156: with the space his own grievance still needs). */
+  repair?: RepairEntry;
   li: RunLiView;
   entry: StoryChapterEntry | null;
   images: RunView["world"]["images"];
   onOpen: () => void;
   onMakeItRight: () => void;
+  sides: HisSideEntry[];
+  planning: string | null;
+  onReadSide: (entry: HisSideEntry) => void;
 }) {
   const { t } = useTranslation();
   const accent = accentOf(li);
@@ -1240,12 +1350,207 @@ function RouteCard({
         <div className="of-route-lock">
           <HeartCrack size={13} strokeWidth={2.2} aria-hidden="true" />
           <span>{t("ui.otomeForge.arcs.blocked", values)}</span>
-          <button type="button" className="of-button of-button--text of-button--small" onClick={onMakeItRight}>
-            {t("ui.otomeForge.arcs.makeItRight")}
-          </button>
+          {needsSpace(repair) ? (
+            <span>
+              {t("ui.otomeForge.arcs.spaceLeft", { ...values, count: repair!.space!.needed - repair!.space!.had })}
+            </span>
+          ) : (
+            <button type="button" className="of-button of-button--text of-button--small" onClick={onMakeItRight}>
+              {t("ui.otomeForge.arcs.makeItRight")}
+            </button>
+          )}
         </div>
       ) : null}
+      {sides.map((side) => (
+        <SideRow
+          key={side.key}
+          entry={side}
+          li={li}
+          images={images}
+          opening={planning === side.key}
+          onRead={() => onReadSide(side)}
+        />
+      ))}
+      <UpsetToggle runKey={runKey} li={li} upset={!!route.upset} />
     </li>
+  );
+}
+
+/** #2155: the moment his side tells again, in the words the reader's chapter end and climaxes already use. */
+function sideMoment(t: ReturnType<typeof useTranslation>["t"], entry: HisSideEntry, li: RunLiView): string {
+  const values = pronounValues(li);
+  switch (entry.moment) {
+    case "stage":
+      return t("ui.otomeForge.arcs.stageUp", {
+        ...values,
+        stage: entry.stage,
+        stageName: t(stageNameKey(entry.stage)),
+      });
+    case "truth":
+      return t("ui.otomeForge.confrontation.truthTitle", values);
+    case "walkout":
+      return t("ui.otomeForge.confrontation.walkoutTitle", values);
+    case "opened":
+      return t("ui.otomeForge.closer.openedTitle", values);
+    case "shut":
+      return t("ui.otomeForge.closer.shutTitle", values);
+    default:
+      return t("ui.otomeForge.arcs.sideMomentRepair", values);
+  }
+}
+
+/**
+ * #2155: his side of a big moment, waiting under his route (or being read): the arc it belongs to, the moment and its
+ * chapter, and Read, which writes its chapter with no model call; its one call is its scene. It paints only a place
+ * with no picture yet. While it opens, Read is busy and the cost line (a status) says so.
+ */
+function SideRow({
+  entry,
+  li,
+  images,
+  opening,
+  onRead,
+}: {
+  entry: HisSideEntry;
+  li: RunLiView;
+  images: RunView["world"]["images"];
+  opening: boolean;
+  onRead: () => void;
+}) {
+  const { t } = useTranslation();
+  const values = pronounValues(li);
+  const title = entry.title || t("ui.otomeForge.story.untitled");
+  const titleId = `of-side-${entry.key}`;
+  return (
+    <div className="of-route-side" role="group" aria-labelledby={titleId}>
+      <p className="of-route-side-head">
+        <Eye size={15} strokeWidth={2} aria-hidden="true" />
+        <span id={titleId}>{t("ui.otomeForge.arcs.sideTitle", values)}</span>
+        <span className="of-badge of-badge--soft">
+          {entry.arc
+            ? t("ui.otomeForge.story.arcHeading", { number: entry.arc })
+            : t("ui.otomeForge.story.arcHeadingBefore")}
+        </span>
+      </p>
+      <p className="of-route-side-line">
+        {t("ui.otomeForge.arcs.sideMoment", { moment: sideMoment(t, entry, li), title })}
+      </p>
+      <div className="of-inline-actions">
+        <button
+          type="button"
+          className="of-button of-button--primary"
+          aria-label={t(entry.reading ? "ui.otomeForge.arcs.sideContinueLabel" : "ui.otomeForge.arcs.sideReadLabel", {
+            ...values,
+            title,
+          })}
+          aria-disabled={opening || undefined}
+          aria-busy={opening || undefined}
+          onClick={opening ? undefined : onRead}
+        >
+          <BookOpen size={16} strokeWidth={2} aria-hidden="true" />
+          {entry.reading ? t("ui.otomeForge.story.continue") : t("ui.otomeForge.arcs.sideRead")}
+        </button>
+        {entry.reading ? null : (
+          <>
+            <p className="of-cost" role="status">
+              <Feather size={14} strokeWidth={2} aria-hidden="true" />
+              <span>{opening ? t("ui.otomeForge.arcs.planningSide", values) : t("ui.otomeForge.arcs.sideCost")}</span>
+            </p>
+            <ChapterPaintCost images={images} cost="ui.otomeForge.arcs.sidePaintCost" />
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * #2156: "I'm upset with them", beside each one's route at every stage. Pressing it asks first, then tells them (they
+ * answer in Messages: 1 call); pressing it again takes it back at once. A toggle: its name stays, aria-pressed says it.
+ */
+function UpsetToggle({ runKey, li, upset }: { runKey: string; li: RunLiView; upset: boolean }) {
+  const { t } = useTranslation();
+  const otome = useOtomeApi();
+  const queryClient = useQueryClient();
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [said, setSaid] = useState("");
+  const values = pronounValues(li);
+  const send = async (next: boolean) => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await otome.post(`${runPath(runKey)}/routes/${encodeURIComponent(li.id)}/upset`, { upset: next });
+      setAsking(false);
+      setSaid(t(next ? "ui.otomeForge.arcs.upsetTold" : "ui.otomeForge.arcs.upsetLetGo", values));
+      await queryClient.invalidateQueries({ queryKey: storyQueryKey(runKey) });
+    } catch (failure) {
+      setError(failure);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="of-route-upset">
+      <button
+        type="button"
+        className="of-button of-button--quiet of-glass of-button--small of-upset-toggle"
+        aria-pressed={upset}
+        aria-disabled={busy}
+        onClick={() => (upset ? void send(false) : setAsking(true))}
+      >
+        <HeartCrack size={14} strokeWidth={2} aria-hidden="true" />
+        {t("ui.otomeForge.arcs.upsetButton", values)}
+      </button>
+      {upset ? <p className="of-hint">{t("ui.otomeForge.arcs.upsetOn", values)}</p> : null}
+      <p className="of-visually-hidden" role="status">
+        {said}
+      </p>
+      {error && !asking ? (
+        <p className="of-error" role="alert">
+          {otome.errorMessage(error)}
+        </p>
+      ) : null}
+      {asking ? (
+        <Dialog
+          title={t("ui.otomeForge.arcs.upsetTitle", values)}
+          onClose={busy ? undefined : () => setAsking(false)}
+          actions={
+            <>
+              <button
+                type="button"
+                className="of-button of-button--primary"
+                aria-disabled={busy}
+                onClick={() => void send(true)}
+              >
+                {t("ui.otomeForge.arcs.upsetConfirm", values)}
+              </button>
+              <button
+                type="button"
+                className="of-button of-button--quiet of-glass"
+                aria-disabled={busy}
+                onClick={() => !busy && setAsking(false)}
+              >
+                {t("ui.otomeForge.reader.notNow")}
+              </button>
+            </>
+          }
+        >
+          <p className="of-body">{t("ui.otomeForge.arcs.upsetText", values)}</p>
+          <p className="of-cost">
+            <Feather size={14} strokeWidth={2} aria-hidden="true" />
+            <span>{t("ui.otomeForge.arcs.upsetCost", values)}</span>
+          </p>
+          {error ? (
+            <p className="of-error" role="alert">
+              {otome.errorMessage(error)}
+            </p>
+          ) : null}
+        </Dialog>
+      ) : null}
+    </div>
   );
 }
 

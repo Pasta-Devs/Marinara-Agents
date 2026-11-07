@@ -10,12 +10,15 @@
 // The group chat (#2154) is this thread without `li`: "Everyone" with its members' portraits and names in the header,
 // each bubble in its speaker's accent with their name when the speaker changes and their portrait on the last of a run,
 // the protagonist's five stickers, no quote, and Close and remember for everyone in it (no affection).
+// #2156: his invitation to clear the air (PhoneMessage.invite) shows under his message with Accept and Decline while it
+// waits (POST .../invite), then what became of it; Accept opens Date Night with him (onDate).
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookHeart, ChevronLeft, Heart, RotateCcw, SendHorizontal, X } from "lucide-react";
+import { BookHeart, ChevronLeft, Heart, HeartHandshake, RotateCcw, SendHorizontal, X } from "lucide-react";
 import { useOtomeApi } from "../../api";
 import { Avatar, AvatarCluster } from "../../components/Avatar";
+import { storyQueryKey } from "../../hooks/use-reader";
 import { runQueryKey } from "../../hooks/use-run";
 import { accentOf } from "../../lib/accent";
 import { typingDelay } from "../../lib/typing-delay";
@@ -32,6 +35,7 @@ import type {
 } from "../../shared/api-types";
 import { isFace } from "../../shared/faces";
 import { GROUP_THREAD } from "../../shared/home";
+import { playQueryKey } from "../dates/DatesHub";
 import { homeQueryKey } from "../home/HomeScreen";
 import { CloseAndRemember } from "./CloseAndRemember";
 import { BUSY_POLL_MS, phonePath, phoneQueryKey, threadQueryKey } from "./PhoneScreen";
@@ -85,9 +89,20 @@ interface ThreadProps {
   onBack: () => void;
   /** The quote still waiting for her next message, or null once it went with one or she removed it. */
   onQuoteChange: (quote: string | null) => void;
+  /** #2156: she accepted his invitation to clear the air: Date Night with him opens. */
+  onDate?: (li: string) => void;
 }
 
-export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, onBack, onQuoteChange }: ThreadProps) {
+export function Thread({
+  runKey,
+  view,
+  li,
+  quote: initialQuote,
+  focusHeading,
+  onBack,
+  onQuoteChange,
+  onDate,
+}: ThreadProps) {
   const { t } = useTranslation();
   const stickers = useStickers(view, li);
   const otome = useOtomeApi();
@@ -501,6 +516,9 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
                 time={!joinsNext ? messageTime(row.at, localization.locale, timeZone) : ""}
                 group={!li && row.who === "li" ? { first: !joinsBefore, last: !joinsNext } : undefined}
               />
+              {li && row.invite && row.who === "li" ? (
+                <InviteCard runKey={runKey} li={li} row={row} onDate={onDate} />
+              ) : null}
               {session ? (
                 <li className="of-thread-divider">
                   <p className="of-thread-divider-title">
@@ -616,6 +634,99 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
         {announce}
       </p>
     </div>
+  );
+}
+
+const INVITE_KEYS = {
+  pending: "ui.otomeForge.phone.invitePending",
+  accepted: "ui.otomeForge.phone.inviteAccepted",
+  declined: "ui.otomeForge.phone.inviteDeclined",
+  lapsed: "ui.otomeForge.phone.inviteLapsed",
+} as const;
+
+/** #2156: his invitation to clear the air: Accept or Decline while it waits, then what became of it. */
+function InviteCard({
+  runKey,
+  li,
+  row,
+  onDate,
+}: {
+  runKey: string;
+  li: RunLiView;
+  row: Row;
+  onDate?: (li: string) => void;
+}) {
+  const { t } = useTranslation();
+  const otome = useOtomeApi();
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const status = row.invite!.status;
+  // Her answer takes the buttons away: focus moves to the card, whose status line announces what became of it.
+  const cardRef = useRef<HTMLDivElement>(null);
+  const answered = useRef(false);
+  useEffect(() => {
+    if (!answered.current || status === "pending") return;
+    answered.current = false;
+    cardRef.current?.focus();
+  }, [status]);
+  const answer = async (accept: boolean) => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await otome.post(`${phonePath(runKey, li.id)}/invite`, { message: row.id, accept });
+      answered.current = true;
+      void queryClient.invalidateQueries({ queryKey: playQueryKey(runKey) });
+      void queryClient.invalidateQueries({ queryKey: storyQueryKey(runKey) });
+      if (accept) onDate?.(li.id);
+    } catch (failure) {
+      setError(failure);
+    } finally {
+      setBusy(false);
+      void queryClient.invalidateQueries({ queryKey: threadQueryKey(runKey, li.id) });
+    }
+  };
+  return (
+    <li className="of-invite-row">
+      <div
+        ref={cardRef}
+        className="of-invite of-glass"
+        role="group"
+        tabIndex={-1}
+        aria-label={t("ui.otomeForge.phone.inviteLabel", { name: li.name })}
+      >
+        <p className="of-invite-text" role="status">
+          <HeartHandshake size={15} strokeWidth={2} aria-hidden="true" />
+          <span>{t(INVITE_KEYS[status], { name: li.name })}</span>
+        </p>
+        {status === "pending" ? (
+          <div className="of-invite-actions">
+            <button
+              type="button"
+              className="of-button of-button--primary of-button--small"
+              aria-disabled={busy}
+              onClick={() => void answer(true)}
+            >
+              {t("ui.otomeForge.phone.inviteAccept")}
+            </button>
+            <button
+              type="button"
+              className="of-button of-button--quiet of-glass of-button--small"
+              aria-disabled={busy}
+              onClick={() => void answer(false)}
+            >
+              {t("ui.otomeForge.phone.inviteDecline")}
+            </button>
+          </div>
+        ) : null}
+        {error ? (
+          <p className="of-error" role="alert">
+            {otome.errorMessage(error)}
+          </p>
+        ) : null}
+      </div>
+    </li>
   );
 }
 

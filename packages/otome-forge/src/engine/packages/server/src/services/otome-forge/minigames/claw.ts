@@ -41,6 +41,7 @@ import {
   type PlushSeries,
 } from "../../../../../client/src/features/otome-forge/shared/claw.js";
 import type { ContentSettings } from "../../../../../client/src/features/otome-forge/shared/content.js";
+import { heldAgainst } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import {
   ACTIVITY_STARLIGHT_DAILY_CAP,
   AFFECTION_EARNINGS,
@@ -192,8 +193,9 @@ export function plushArtOf(unit: Pick<Unit, "portrait" | "cutouts" | "outfits" |
 /**
  * GET /runs/:run/play: today's capped earnings (zero on a new local day), the shelf, and how each LI plays (the
  * picture their plush wears, and their claw and cold lines, from a pack the world's `content` allows: #2152). `dates`
- * is whether Date Night with each love interest is Make it right (S/minigames/date-night.ts makeItRightView); a rupture
- * stands for it where it says nothing.
+ * is whether Date Night with each love interest is Make it right, and whether one with them is open
+ * (S/minigames/date-night.ts dateNightView); a rupture stands for Make it right where it says nothing. #2156: his
+ * invitation to clear the air is `asked` only while no date with him is open (Play would resume that one).
  */
 export function playView(
   state: RunState,
@@ -202,7 +204,7 @@ export function playView(
   >,
   content: ContentSettings,
   dayKey: string,
-  dates: Record<LiId, boolean> = {},
+  dates: Record<LiId, { makeItRight: boolean; open: boolean }> = {},
 ): PlayView {
   const today = state.daily.dayKey === dayKey;
   const lis: PlayView["lis"] = {};
@@ -217,7 +219,9 @@ export function playView(
       cheat: cheatOf(unit),
       style: play?.style ?? "",
       rupture,
-      makeItRight: dates[id] ?? rupture,
+      makeItRight: dates[id]?.makeItRight ?? rupture,
+      held: heldAgainst(state.lis[id]),
+      asked: !!state.lis[id]!.asked && !dates[id]?.open,
       ...(plush ? { plush } : {}),
       ...(animal ? { animal } : {}),
       lines: { claw, cold },

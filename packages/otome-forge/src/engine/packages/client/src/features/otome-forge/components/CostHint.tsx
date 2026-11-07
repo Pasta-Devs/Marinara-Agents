@@ -43,9 +43,16 @@ export function usePaintsByItself(images: Pick<ImageSettings, "connectionId" | "
 
 /**
  * The paints reading a chapter may start (each new place, at most two key moments), shown before it is planned; with
- * Ask before painting or prompt review they wait for a tap instead. Nothing without an image connection.
+ * Ask before painting or prompt review they wait for a tap instead. Nothing without an image connection. `cost` names
+ * a chapter that paints less (#2155: his side paints only a place with no picture yet).
  */
-export function ChapterPaintCost({ images }: { images: Pick<ImageSettings, "connectionId" | "ask"> }) {
+export function ChapterPaintCost({
+  images,
+  cost = "ui.otomeForge.story.paintCost",
+}: {
+  images: Pick<ImageSettings, "connectionId" | "ask">;
+  cost?: string;
+}) {
   const { t } = useTranslation();
   const byItself = usePaintsByItself(images);
   if (!images.connectionId) return null;
@@ -53,7 +60,7 @@ export function ChapterPaintCost({ images }: { images: Pick<ImageSettings, "conn
     <p className="of-cost">
       <Paintbrush size={14} strokeWidth={2} aria-hidden="true" />
       <span>
-        {t("ui.otomeForge.story.paintCost")}
+        {t(cost)}
         <span className="of-cost-note">
           {" "}
           · {byItself ? t("ui.otomeForge.story.paintCostNote") : t("ui.otomeForge.story.paintCostHeld")}

@@ -133,6 +133,13 @@ export interface PlayView {
       style: string;
       rupture: boolean;
       makeItRight: boolean;
+      /** #2156: his grievance with her stands: every date with him waits until his repair (SH/dates.ts heldAgainst). */
+      held?: boolean;
+      /**
+       * #2156: she accepted his invitation to clear the air, which waits as the next Date Night with him, and no date
+       * with him is open (Play would resume that one first).
+       */
+      asked?: boolean;
       plush?: string;
       animal?: string;
       lines: Pick<LinesView, "claw" | "cold">;

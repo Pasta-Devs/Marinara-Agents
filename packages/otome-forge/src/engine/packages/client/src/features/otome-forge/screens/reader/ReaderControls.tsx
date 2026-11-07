@@ -25,6 +25,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { ChapterKind, ChapterView, MomentKind, NodeKind, RunLiView } from "../../shared/api-types";
+import { hisSideLiOf } from "../../shared/arcs";
 import { birthdayOfKey } from "../../shared/birthdays";
 import { figurineLiOf } from "../../shared/shop";
 import { FullscreenButton } from "../../components/Stage";
@@ -43,7 +44,8 @@ const KIND_KEYS: Record<Exclude<ChapterKind, "main">, string> = {
 /**
  * A chapter's title as the player reads it. A figurine scene (#2128) or a birthday scene (#2153) has no banner item to
  * name it, so it is titled in the player's language from its love interest's name (and the birthday's year); its saved
- * English title is the story's own, for prompts and memory (S/items/character-story.ts).
+ * English title is the story's own, for prompts and memory (S/items/character-story.ts). His side (#2155) keeps the
+ * title of the chapter it tells again, and is named as his side of it.
  */
 export function chapterTitle(
   t: ReturnType<typeof useTranslation>["t"],
@@ -54,7 +56,11 @@ export function chapterTitle(
   const li = birthday?.li ?? figurineLiOf(chapter.key);
   const name = li ? lis.find((entry) => entry.id === li)?.name : undefined;
   if (name && birthday) return t("ui.otomeForge.birthday.sceneTitle", { name, year: birthday.year });
-  return name ? t("ui.otomeForge.shop.sceneTitle", { name }) : chapter.title || t("ui.otomeForge.story.untitled");
+  if (name) return t("ui.otomeForge.shop.sceneTitle", { name });
+  const side = hisSideLiOf(chapter.key);
+  const his = side ? lis.find((entry) => entry.id === side)?.name : undefined;
+  const title = chapter.title || t("ui.otomeForge.story.untitled");
+  return his ? t("ui.otomeForge.arcs.sideChapterTitle", { name: his, title }) : title;
 }
 
 /** A chapter's eyebrow: "Chapter 3", or its kind. */

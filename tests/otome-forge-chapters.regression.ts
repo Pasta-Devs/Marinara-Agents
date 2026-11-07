@@ -102,12 +102,15 @@ test("Lead candidates: the least recent (never led first, ties by cast order) an
     { li: SOL, reason: "least-recent" },
     { li: MIR, reason: "ripe-conflict" },
   ]);
-  // A rupture adds 3; a forgiven grievance counts for nothing. When the ripest is also the least recent, the second
-  // candidate is the next least recent.
+  // A rupture adds 3 (here one the protagonist holds, from before #2156); a forgiven grievance counts for nothing. When
+  // the ripest is also the least recent, the second candidate is the next least recent.
   const ripeSol = stateWith({
     [KAI]: { lastLead: 1 },
     [MIR]: { lastLead: 2, grievances: [grievance("g1", MIR, "forgiven")] },
-    [SOL]: { rupture: { grievanceId: "g3", since: "2026-10-28" }, grievances: [grievance("g3", SOL)] },
+    [SOL]: {
+      rupture: { grievanceId: "g3", since: "2026-10-28" },
+      grievances: [{ ...grievance("g3", SOL), by: "protagonist" as const }],
+    },
   });
   assert.deepEqual(leadCandidates(ripeSol, cast), [
     { li: SOL, reason: "least-recent" },

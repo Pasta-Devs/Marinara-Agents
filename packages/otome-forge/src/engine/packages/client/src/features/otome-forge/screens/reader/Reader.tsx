@@ -11,7 +11,8 @@
 // same with no image, music or voice connection. While a scene is written, Who said what? may be played under the
 // panel (#2041, WhoSaidWhat.tsx). A side-with choice (#2046) is marked as one, each option names whom it backs, and its
 // pick shows the affection it moved with each love interest. A chapter's closing decision (its big choice, #2146) may be
-// answered in the player's own words (OwnAnswerDialog.tsx); the draft outlives the dialog until it is sent.
+// answered in the player's own words (OwnAnswerDialog.tsx); the draft outlives the dialog until it is sent. A big
+// moment's side (#2155) is announced at the chapter's end, waiting in Routes.
 // ──────────────────────────────────────────────
 import {
   useCallback,
@@ -877,6 +878,7 @@ function ChapterEnd({
   const { starlight, affection } = sumGrants(grants);
   const raised = arcNews.stageUp ? view.lis.find((li) => li.id === arcNews.stageUp?.li) : undefined;
   const mended = arcNews.repaired ? view.lis.find((li) => li.id === arcNews.repaired) : undefined;
+  const told = arcNews.hisSide ? view.lis.find((li) => li.id === arcNews.hisSide) : undefined;
   const number = (value: number) => new Intl.NumberFormat(locale).format(value);
   return (
     <section className="of-reader-panel of-chapter-end of-glass of-glass--strong" aria-labelledby="of-chapter-end">
@@ -903,6 +905,13 @@ function ChapterEnd({
         <p className="of-arc-news" style={{ "--of-li-accent": accentOf(mended) } as CSSProperties}>
           <HeartHandshake size={16} strokeWidth={2} aria-hidden="true" />
           <span>{t("ui.otomeForge.arcs.repaired", { name: mended.name })}</span>
+        </p>
+      ) : null}
+      {/* #2155: a big moment's side, told from the love interest's point of view, now waits in Routes. */}
+      {told ? (
+        <p className="of-arc-news" style={{ "--of-li-accent": accentOf(told) } as CSSProperties}>
+          <Eye size={16} strokeWidth={2} aria-hidden="true" />
+          <span>{t("ui.otomeForge.arcs.sideUnlocked", { name: told.name })}</span>
         </p>
       ) : null}
       {starlight || affection.length ? (

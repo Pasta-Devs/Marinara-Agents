@@ -682,6 +682,18 @@
           "highlight": true
         },
         {
+          "version": "0.16.0",
+          "date": "2026-11-07",
+          "notes": "- **Grievances.** Only a serious break now leaves a love interest with a grievance against you, at most once a story arc. Until you make it right they can't lead a chapter, their affection doesn't grow and your dates with them wait, with nothing lost. After two story chapters of space, **Make it right** in Routes plans the one chapter that clears it, for 300 affection. A grievance from before needs no space.\n- **I'm upset with them.** Tell a love interest from Routes that you're upset with them (1 call: they answer in Messages), and take it back any time. They know it in their messages and in the story, and may ask you out once to clear the air: accept, and it's your next Date Night with them, somewhere they choose.",
+          "highlight": true
+        },
+        {
+          "version": "0.15.0",
+          "date": "2026-11-07",
+          "notes": "- **Their side.** After a big moment with a love interest (a route chapter that moves your bond on a stage, a Closer that ends with them opening up or shutting you out, a confrontation that ends in the truth or a walkout, or a rift you mend), Routes offers their side of it: the same scene, told from their point of view, with their thoughts. The chapter's end tells you when one waits. There is one per story arc for each love interest; until you read it, it follows the arc's newest big moment. Opening it is free, writing it is 1 model call, it paints only a place that has no picture yet, and reading it pays 30 Starlight. It becomes part of that chapter: the next chapter is written knowing both.",
+          "highlight": true
+        },
+        {
           "version": "0.14.0",
           "date": "2026-11-07",
           "notes": "- **Touch your love interest on Home.** Tap their head, cheek, chest or hand for a line in their own voice, and their face answers where you touched. Their reactions grow bolder as you grow closer, from their mask at first to someone who is yours. Under NSFW Heat (Fade or Explicit) you can touch their crotch too, and a touch to their chest or crotch is an intimate one, as far as your Heat and Lines & Veils allow. A touch never waits for the model, earns nothing, and is voiced when voices are on. Without a picture of them, the places are labelled buttons under their initials.\n- **Stories in progress catch up once.** On your next Home visit, each love interest's lines are written again in the background, 1 call each, to add the new places; until then Cheek plays a few stock lines. Under NSFW Heat, changing Heat, Darkness, Lines & Veils or your role writes them once more.",
@@ -782,18 +794,6 @@
           "date": "2026-11-05",
           "notes": "- **A chapter's art is painted ahead.** Opening a chapter, a date or a story now writes its scenes ahead in the background and paints each one's places and key image as soon as it is written, so the art is waiting when you get there. Writing ahead stops at a big choice or a Confrontation, because what comes next depends on what you pick, and goes on once you have picked. Ease off and Rewrite still let go of the scenes they replace.\n- **No more endless \"Painting this moment…\".** A picture the image service never finishes now stops after 10 minutes and shows Retry, and the pictures waiting behind it carry on.\n- **Dates, banners and Character Stories are written with your Story connection**, like the chapters: Date Night, Read Them, Read Me, the banners' scenes and Memories, Character Stories and the extra stories that unlock past level 10.",
           "highlight": true
-        },
-        {
-          "version": "0.8.8",
-          "date": "2026-11-05",
-          "notes": "- **Enter no longer sends a message.** In Messages, Enter starts a new line, on a phone and on a computer alike, and only **Send** sends what you wrote.",
-          "highlight": false
-        },
-        {
-          "version": "0.8.7",
-          "date": "2026-11-05",
-          "notes": "- **The story knows what you're wearing**, like it does for love interests: the look you put on with Wear at home or picked for a date.\n- **Chapters keep the world you chose.** The planner reads your premise for its genre, era and technology whenever it plans an arc or a chapter, instead of drifting to a period look you never picked. A new story's world keeps them from the start.\n- **Your 5★ look gets a first-wear scene** with the love interest of its couple set, like theirs does. A 5★ look you already own gets it the next time you open it, at no cost.\n- **Story memory no longer fails while condensing** a long story on thinking models such as Claude Opus 5.5, and **Retry the summary** runs at once: the banner goes, and comes back only if it fails again.\n- **Couple set looks line up** at the top, and the premise box shows a new example.",
-          "highlight": false
         }
       ]
     },

@@ -3020,6 +3020,36 @@ ${R} .of-route-lock {
 }
 ${R} .of-route-lock svg { flex: none; }
 ${R} .of-route[data-state="rupture"] .of-route-lock svg { color: var(--of-danger); }
+/* #2156: "I'm upset with them" under each route, the space his grievance still needs, and his invitation in Messages. */
+${R} .of-route-upset { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+${R} .of-upset-toggle { min-height: 44px; }
+${R} .of-upset-toggle svg { color: var(--of-text-soft); }
+${R} .of-upset-toggle[aria-pressed="true"] {
+  color: var(--of-text); border-color: var(--of-danger); background: color-mix(in srgb, var(--of-danger) 18%, var(--of-surface));
+}
+${R} .of-upset-toggle[aria-pressed="true"] svg { color: var(--of-danger); }
+${R} .of-space .of-route-lock svg, ${R} .of-lead-held svg { color: var(--of-danger); }
+${R} .of-lead-held { display: flex; align-items: flex-start; gap: 6px; }
+${R} .of-lead-held svg { flex: none; margin-top: 3px; }
+${R} .of-affection-paused { grid-column: 2 / -1; font-size: 0.72rem; font-weight: 700; color: var(--of-text-soft); }
+${R} .of-invite-row { display: flex; justify-content: flex-start; }
+${R} .of-invite {
+  display: flex; flex-direction: column; gap: 8px; max-width: min(100%, 320px); padding: 10px 12px; border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--of-li-accent) 52%, transparent);
+}
+${R} .of-invite-text { display: flex; align-items: flex-start; gap: 6px; margin: 0; font-size: 0.88rem; font-weight: 700; }
+${R} .of-invite-text svg { flex: none; margin-top: 2px; color: var(--of-champagne-text); }
+${R} .of-invite-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+${R} .of-invite-actions .of-button { min-height: 44px; }
+/* #2155: his side of a big moment, waiting under his route; never greyed with a locked or broken route. */
+${R} .of-route-side {
+  display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 14px;
+  border: 1px dashed color-mix(in srgb, var(--of-li-accent, ${PALETTE.rose}) 50%, var(--of-border));
+  background: color-mix(in srgb, var(--of-li-accent, ${PALETTE.rose}) 9%, transparent);
+}
+${R} .of-route-side-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; font-weight: 800; }
+${R} .of-route-side-head svg { flex: none; color: color-mix(in srgb, var(--of-li-accent, ${PALETTE.rose}) 60%, var(--of-text)); }
+${R} .of-route-side-line { margin: 0; font-size: 0.84rem; color: var(--of-text-soft); overflow-wrap: anywhere; }
 /* Settings → Audio: volume sliders with a filled track. */
 ${R} .of-volume-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 ${R} .of-volume-value { font-size: 0.8rem; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--of-accent-text); }

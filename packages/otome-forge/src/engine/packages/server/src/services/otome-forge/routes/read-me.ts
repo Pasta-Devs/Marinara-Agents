@@ -28,6 +28,7 @@ import {
   type RegisterRoutes,
 } from "../http.js";
 import { isLiId } from "../ids.js";
+import { assertFreeToDate } from "../minigames/date-night.js";
 import { answerReadMe, changeNotebook, finishReadMe, readNotebook, startReadMe } from "../minigames/read-me.js";
 
 /** The player's words as sent: room for whitespace and quotes, which are cleaned before the READ_ME_WORDS_MAX cap. */
@@ -68,6 +69,8 @@ export const registerReadMeRoutes: RegisterRoutes = (router, deps) => {
       const { li } = parseBody(StartBody, request.body);
       const { runId } = runParam(request);
       if (!isLiId(li)) throw new OtomeForgeError(404, "No such love interest.", "not-found");
+      // #2156: a set waits (unfinished ones too) while their grievance with her stands.
+      await assertFreeToDate(deps.store, runId, li);
       return startReadMe(deps, runId, li, { debugMode: debugModeOf(request) });
     }),
   );

@@ -37,6 +37,7 @@ import {
   type RegisterRoutes,
 } from "../http.js";
 import { isLiId } from "../ids.js";
+import { assertFreeToDate } from "../minigames/date-night.js";
 import { answerTarot, finishTarot, readTarot, startTarot } from "../minigames/tarot.js";
 
 const Li = z.string().min(1).max(80);
@@ -102,6 +103,8 @@ export const registerTarotRoutes: RegisterRoutes = (router, deps) => {
     handle(async (request) => {
       const { li, mode, question, picks } = parseBody(StartBody, request.body);
       const { runId } = runParam(request);
+      // #2156: a reading waits (an unfinished one too) while their grievance with her stands.
+      await assertFreeToDate(deps.store, runId, liOf(li));
       return startTarot(
         deps,
         runId,

@@ -44,15 +44,18 @@
 //     P19, P21, P24, P26 and S/story/chapters.ts) and ownView (also P19, P24, P26, and the view S/home/note.ts gives
 //     P16, S/phone/chat.ts P17, S/minigames/read-me.ts Read Me and read-him.ts Read Him). The rules after them are the
 //     story prompts' own (briefRule is P20's too)
+//   upsetLine: #2156, the protagonist upset with him, beside his card or bible in P5, P6, P12, P12c, P10, P11 and P17
+//     only (never Home, a date's plan or scenes, Read Me, Read Him or the banners)
 //   plannerPremise: the player's premise line, in the planners only (the arc planner, P5, P10, P11, P21 and the extra
 //     story plan); the other story prompts read the setting alone (P2, P14 and P20 send the premise their own way)
 //   arcPlanMessages: the arc planner, #1980 (S/story/arc.ts)
 //   chapterPlanMessages: P5 chapter plan (S/story/chapters.ts)
 //   thoughtsLines: Your thoughts… from Home (#2127), in P5 and in its main chapter's P6, P12 and P12c, with the task
-//   beatMessages: P6 scene (beat) narrator, also for dates, Character Stories (P22, P23), extra stories and the
-//     prologue (S/story/beats.ts). Its NO_CHOICES_SENTENCE must stay the kit's sentence word for word (Elsewhere)
+//   beatMessages: P6 scene (beat) narrator, also for dates, Character Stories (P22, P23), extra stories, his side
+//     (#2155) and the prologue (S/story/beats.ts). Its NO_CHOICES_SENTENCE must stay the kit's sentence word for word
+//     (Elsewhere)
 //   GUIDE, prologueFraming, prologueEnding: the prologue's node, framing and hand-off (S/story/prologue.ts, beats.ts)
-//   stageGoal, arcFraming: what a route stage is for, and P6's route, repair, story and extra-story framing
+//   stageGoal, arcFraming: what a route stage is for, and P6's route, repair, story, extra-story and his side's framing
 //   routePlanMessages, repairPlanMessages: P10 route plan, P11 repair plan (S/story/routes-plan.ts)
 //   confrontationMessages: P12 Confrontation (S/story/beats.ts)
 //   closerMessages: P12c Closer, #1938 (S/story/beats.ts)
@@ -1101,6 +1104,9 @@ export function musicBriefMessages(world: Pick<World, "premise" | "setting">, cu
 // #2046 (Side with): while a side-with scene may come (S/story/chapters.ts sideWithOpen), P5 may mark one beat node
 // where two to four love interests disagree; P6 on that node offers ONE choice with an option per love interest present,
 // each naming whom it backs, and the game, never the reply, sets what siding changes. Other prompts are unchanged.
+// #2155 (his side): P6 tells one scene again from a love interest's point of view (hisSideFraming): its instructions let
+// only him think and carry no choice rules, its card is as things stood at the moment (the caller's state), and the
+// scene as the protagonist lived it goes in the last turn, after the cached part. Its story context and every other chapter's messages are unchanged.
 
 // ── The blocks and rules the story prompts share ──
 // Most other prompts carry these blocks too (betweenYou, knowsAboutYou, protagonistBlock, appearanceLine, bibleBlock,
@@ -1274,6 +1280,17 @@ export function betweenYou(unit: Pick<Unit, "name">, liState: LiState, also: rea
   const told = liState.disclosures.slice(-3).map((item) => item.text);
   if (told.length) lines.push(`The protagonist has told ${unit.name}: ${told.join(" ")}`);
   return lines.join("\n");
+}
+
+/**
+ * #2156: the protagonist told him from Routes that she is upset with him (LiState.upset). Only his messages (P17) and
+ * the story's plans and scenes (P5, P6 but a date's, P12, P12c, P10, P11) carry it, beside his card or bible, after the
+ * cache breakpoint; "" while she isn't. Why is his to work out from what has happened: the button takes no reason.
+ */
+export function upsetLine(unit: Pick<Unit, "name">, liState: Pick<LiState, "upset">): string {
+  if (!liState.upset) return "";
+  const name = unit.name;
+  return `The protagonist is upset with ${name} and has said so to ${name}. ${name} knows it, and why, from what has happened between them; it stands between them until the protagonist lets it go.`;
 }
 
 /** The newest notebook entries a prompt may carry, and the line's budget. */
@@ -1868,6 +1885,7 @@ export function chapterPlanMessages({
       ? [
           `THE LEAD (stage ${stageOf(state, lead)}; this chapter does not move the stage)`,
           bibleBlock(leadUnit, state, [lead], world),
+          upsetLine(leadUnit, liStateOf(state, lead)),
           // The Lead's notebook only: never the Foil's or the others' (their bibles below are a planner's view).
           knowsAboutYou(leadUnit, liStateOf(state, lead)),
         ]
@@ -1876,7 +1894,11 @@ export function chapterPlanMessages({
       : "",
     "",
     "THE OTHERS (full bibles; pick the Foil from these)",
-    others.map((unit) => bibleBlock(unit, state, [lead], world)).join("\n\n"),
+    others
+      .map((unit) =>
+        [bibleBlock(unit, state, [lead], world), upsetLine(unit, liStateOf(state, unit.id))].filter(Boolean).join("\n"),
+      )
+      .join("\n\n"),
     world.web.length ? `\nTHE WEB BETWEEN THEM\n${webBlock(world, units)}` : "",
     "",
     "LEDGERS",
@@ -2003,6 +2025,7 @@ export interface BeatMessagesInput {
     | "date"
     | "prestige"
     | "thoughts"
+    | "hisSide"
   >;
   node: ChapterNode;
   /** The canonical story so far in this chapter: each earlier node's scene, rendered ([] for its first node). */
@@ -2015,6 +2038,8 @@ export interface BeatMessagesInput {
   recalls?: string;
   /** A main chapter's arc (#1980), for the story context, or null. */
   arc?: StoryArc | null;
+  /** #2155: his side's scene as the protagonist lived it (S/story/his-side.ts hisSideSource), or none. */
+  hisSide?: string;
 }
 
 export function beatMessages({
@@ -2029,8 +2054,12 @@ export function beatMessages({
   recalls = "",
   arc = null,
   prologue = "",
+  hisSide = "",
 }: BeatMessagesInput): OtomeMessage[] {
   const backgrounds = savedBackgrounds(world);
+  // #2155: his side tells one scene again from his point of view: only he thinks, and it offers no choice. Only his
+  // side's own messages change; every other chapter's stay as they were.
+  const pov = chapter.hisSide ? units.find((unit) => unit.id === chapter.li) : undefined;
   const present = units.filter((unit) => node.cast.includes(unit.id));
   const thinkers = present.filter((unit) => stageOf(state, unit.id) >= 2).map((unit) => unit.name);
   const last = node.i === chapter.nodes.length - 1;
@@ -2050,7 +2079,9 @@ export function beatMessages({
     `{"musicMood": "${MUSIC_MOODS.join("|")}", "places": [{"name": "...", "tags": "..."}], "segments": [{"speaker": "", "text": "...", "thought": false, "expression": "", "place": "..."}]}`,
     '- speaker: who speaks the segment, written as their exact name every time; "" for narration. When the protagonist speaks, write their exact name; the prose still addresses them as "you".',
     "- Each segment is one speaker's line or one piece of narration: a sentence or a few. Never put dialogue inside narration, and never mark it with dashes or quotes as prose.",
-    `- thought: true for an inner line, in the thinker's own words, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in this node, and only one the task names as far enough along.`,
+    pov
+      ? `- thought: true for an inner line by ${pov.name} only, in ${pov.name}'s own words, with "speaker" set to ${pov.name}, as often as the scene needs; nobody else, the protagonist included, has thought lines in this scene.`
+      : `- thought: true for an inner line, in the thinker's own words, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in this node, and only one the task names as far enough along.`,
     `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}, when the face shows it. A face may contradict the words. Omit it for a neutral line and for narration.`,
     EXITS_RULE,
     `- musicMood: the soundtrack cue for this node, one of ${MUSIC_MOODS.join(", ")}.`,
@@ -2059,7 +2090,7 @@ export function beatMessages({
     "- Stay within this node's guide; do not skip ahead to later nodes.",
     `- Write every segment's text and every place name in ${world.language}; tags and any cg brief in English.`,
   ].join("\n");
-  const choices = choiceRules(instructions, last && !date);
+  const choices = pov ? { shared: instructions, own: [] } : choiceRules(instructions, last && !date);
   const framing =
     node.kind === "confrontation"
       ? CONFRONTATION_FRAMING
@@ -2092,6 +2123,8 @@ export function beatMessages({
       .map((unit) =>
         [
           sceneCardBlock(unit, cardState(unit.id), node.resolves ?? []),
+          // #2156: never a date's scenes, as never its plan (P26).
+          date ? "" : upsetLine(unit, cardState(unit.id)),
           knowsAboutYou(unit, cardState(unit.id)),
           intimacyLine(world, unit),
         ]
@@ -2105,6 +2138,9 @@ export function beatMessages({
     recalls.trim(),
     // A main chapter's own (#2127): no other chapter's scenes ever carry them.
     ...thoughtsLines(player, chapter.kind === "main" ? chapter.thoughts : undefined, "scene"),
+    ...(pov && hisSide.trim()
+      ? ["", `THE SCENE AS THE PROTAGONIST LIVED IT ("${chapter.title}"):\n${hisSide.trim()}`]
+      : []),
     "",
     `Narrate node ${node.i + 1} of ${chapter.nodes.length}${last ? ", the chapter's last" : ""}:`,
     `What happens: ${node.guide}`,
@@ -2113,10 +2149,13 @@ export function beatMessages({
     ...arcLines,
     dateFraming,
     node.resolves?.length ? `Grievances this node may resolve: ${node.resolves.join(", ")}.` : "",
-    `- Thought lines: ${thinkers.length ? `of the love interests, only these are far enough along to have one: ${thinkers.join(", ")}` : "no love interest present may have one: they are still behind their masks"}.`,
+    pov
+      ? `- Thought lines: ${pov.name} only.`
+      : `- Thought lines: ${thinkers.length ? `of the love interests, only these are far enough along to have one: ${thinkers.join(", ")}` : "no love interest present may have one: they are still behind their masks"}.`,
     ...choices.own,
-    // A planned chapter's last node; the prologue offers its own choices, and a date never ends on a big one.
-    ...(last && !date && chapter.kind !== "prologue"
+    // A planned chapter's last node; the prologue offers its own choices, a date never ends on a big one, and his side
+    // offers none.
+    ...(last && !date && !pov && chapter.kind !== "prologue"
       ? [
           `- This is the chapter's last node: if it ends on a big choice, make it ${VARIED_DECISION}.`,
           ...(node.judgment ? [judgmentLine(node.judgment)] : []),
@@ -2134,9 +2173,11 @@ export function beatMessages({
   ];
   return storyMessages(
     storyContext({ world, player, units, number: chapter.kind === "main" ? chapter.number : null, arc, memory }),
-    choices.shared + CHOICE_EFFECTS_INSTRUCTION + VOICES_INSTRUCTION,
+    pov ? choices.shared + VOICES_INSTRUCTION : choices.shared + CHOICE_EFFECTS_INSTRUCTION + VOICES_INSTRUCTION,
     chapterTexts(chapter, units, storySoFar, opening),
     rest,
+    // Only a Rewrite of his side shares its instructions, so they are no cache write of their own (#2091).
+    pov ? { marks: "context" } : undefined,
   );
 }
 
@@ -2179,9 +2220,15 @@ function dateFramingText(
         ? `It is a MAKE IT RIGHT date: a rupture stands between them${named}. The protagonist is the one hurt, and ${partner.name} is trying to earn back the protagonist's trust. The protagonist's hurt is honest and does not melt for nothing; nothing in this scene resolves the rupture, and how the evening ends is decided by the protagonist's choices.`
         : `It is a MAKE IT RIGHT date: a rupture stands between them${named}. The protagonist is trying to mend it. ${partner.name}'s hurt is honest and does not melt for nothing; nothing in this scene resolves the rupture, and how the evening ends is decided by the protagonist's choices.`,
     date.gift ? dateGiftText(date.gift, partner.name, node.i) : "",
+    date.clearAir ? clearAirText(partner.name) : "",
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+/** #2156: a date he asked her out on to clear the air after she told him she was upset with him (P26, and P6's dates). */
+function clearAirText(name: string): string {
+  return `${name} asked the protagonist out tonight to clear the air, after the protagonist said they were upset with ${name}, and the protagonist said yes. ${name} tries to make it up in their own way; the protagonist's feelings are honest.`;
 }
 
 /** #2128: a date scene's line on the gift the protagonist brought: given in this scene (GIFT_BEAT), or earlier. */
@@ -2270,6 +2317,7 @@ function chapterLabel(chapter: BeatMessagesInput["chapter"], units: readonly Uni
   }
   if (chapter.kind === "repair") return `a repair chapter with ${owner}`;
   if (chapter.kind === "story") {
+    if (chapter.hisSide) return `${owner}'s side of it: the same events, told again from ${owner}'s point of view`;
     return chapter.prestige ? `${owner}'s extra story, imagined together (not canon)` : `${owner}'s Character Story`;
   }
   return `${chapter.kind} chapter`;
@@ -2304,6 +2352,19 @@ function prestigeFraming(name: string, prestige: NonNullable<Chapter["prestige"]
   return [
     `This is an EXTRA STORY of ${name}'s, ${PRESTIGE_FRAMES[prestige.kind]}: ${prestige.premise} It is something ${name} and the protagonist imagine or play out together, for fun, and both of them know it. It is NOT canon: nothing in it happens in the main story, and it changes nothing there.`,
     `It is a ${nodes}-scene story with its own small arc, ending on its last. It is private: no other love interest appears in it. Whatever the frame, both stay themselves at heart; it reveals no secret and resolves nothing of the main story.`,
+  ];
+}
+
+/**
+ * #2155: what P6 adds to his side (`side-<li>-<arc>`, S/story/his-side.ts) in place of the Character Story's framing: the
+ * scene above, told again from his point of view, as things stood at the moment (the caller's state).
+ */
+function hisSideFraming(name: string): string[] {
+  return [
+    `This is ${name.toUpperCase()}'S SIDE: the scene above, told again from ${name}'s point of view. The same events in the same order, condensed to this node's length: the lines that matter are said again word for word, every choice and action of the protagonist's stays exactly as it was, nothing new happens, nothing is undone, and it ends where that scene ended. Never repeat the bracketed game markers.`,
+    `The narration stays with ${name}: what ${name} sees, notices and feels in their body. The protagonist is still "you", seen through ${name}'s eyes; where the writing rules speak of what the protagonist feels, write what ${name} feels, and let the protagonist's feelings show only as ${name} reads them. Keep everything How it's written asks but the point of view.`,
+    `${name}'s thoughts show what ${name} wanted, feared and kept back then, in ${name}'s own voice, and only what ${name} knew at that moment, nothing that happened later. How far ${name} admits their feelings, even to themselves, keeps to the romance line on ${name}'s card.`,
+    `A Hidden line on the card is never stated, even in thought; it presses on ${name} only as the tells do. The protagonist never learns any of this.`,
   ];
 }
 
@@ -2342,7 +2403,13 @@ function arcFraming({
   }
   if (chapter.kind === "story") {
     const nodes = chapter.nodes.length;
-    lines.push(...(chapter.prestige ? prestigeFraming(name, chapter.prestige, nodes) : storyFraming(name, nodes)));
+    lines.push(
+      ...(chapter.hisSide
+        ? hisSideFraming(name)
+        : chapter.prestige
+          ? prestigeFraming(name, chapter.prestige, nodes)
+          : storyFraming(name, nodes)),
+    );
   }
   // #1980: the arc's planned reveal, and its big event on the last chapter. Only a stamped node gets a reveal, so the
   // planner's schedule (normalizeChapterPlan) decides what may come out here; everything else stays hidden.
@@ -2416,7 +2483,12 @@ function arcPlanUser(input: ArcPlanInput, heading: string, task: string[]): stri
     protagonistBlock(player),
     "",
     unit
-      ? [heading, bibleBlock(unit, state, [li], input.world), knowsAboutYou(unit, liStateOf(state, li))]
+      ? [
+          heading,
+          bibleBlock(unit, state, [li], input.world),
+          upsetLine(unit, liStateOf(state, li)),
+          knowsAboutYou(unit, liStateOf(state, li)),
+        ]
           .filter(Boolean)
           .join("\n")
       : "",
@@ -2607,6 +2679,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
       .map((unit) =>
         [
           sceneCardBlock(unit, liStateOf(state, unit.id), node.resolves ?? []),
+          upsetLine(unit, liStateOf(state, unit.id)),
           unit.id === li ? knowsAboutYou(unit, liStateOf(state, li)) : "",
         ]
           .filter(Boolean)
@@ -2689,6 +2762,7 @@ export function closerMessages(input: ConfrontationMessagesInput): OtomeMessage[
       .map((unit) =>
         [
           sceneCardBlock(unit, liStateOf(state, unit.id), node.resolves ?? []),
+          upsetLine(unit, liStateOf(state, unit.id)),
           // The partner's notebook (#1945), as P12 gives the opponent theirs; a bystander's is never here.
           unit.id === li ? knowsAboutYou(unit, liStateOf(state, li)) : "",
           intimacyLine(world, unit),
@@ -2907,6 +2981,10 @@ const CHAT_STAGE: Record<number, string> = {
 const RUPTURE_LINE =
   "A rupture stands between you. Answer curt and cold, at a distance, within your red lines. Do not pretend it is fine, and do not mend it here.";
 
+/** #2156: the one meeting a message may set up, kept by the Dates screen (constant, so the system prefix never varies). */
+const CLEAR_AIR_RULE =
+  "- The one exception: when you are told below that you may, you may ask them out to clear the air. That evening is kept by the game, not by your message.";
+
 export interface ChatReplyInput {
   world: Pick<World, "language" | "content" | "images" | "writingStyle" | "bannedPhrases">;
   player: Pick<Player, "name" | "pronouns" | "traits" | "about">;
@@ -2924,6 +3002,10 @@ export interface ChatReplyInput {
   first?: boolean;
   /** #2044: the stickers he may send, and the thread's sticker names; without it no sticker is offered. */
   stickers?: ReplyStickers;
+  /** #2156: he may ask her out to clear the air in this reply (S/phone/chat.ts inviteOffered). */
+  invite?: boolean;
+  /** #2156: he writes first because she has just told him she is upset with him (S/phone/upset.ts). */
+  reason?: "upset";
 }
 
 export function chatReplyMessages({
@@ -2937,6 +3019,8 @@ export function chatReplyMessages({
   offscreen = "",
   first = false,
   stickers,
+  invite = false,
+  reason,
 }: ChatReplyInput): OtomeMessage[] {
   const name = unit.name;
   const them = player.name || "the protagonist";
@@ -2968,6 +3052,7 @@ export function chatReplyMessages({
     `- Write ONLY your own messages. Never write ${them}'s reply, and never narrate what they do or feel.`,
     "- It is a message, not a chapter: no scene headings, no narration, no third person about yourself, no actions in asterisks.",
     "- Nothing happens in the story because of this conversation. You can talk about what has happened and what you feel; you cannot decide events, hand over items, set up a meeting the story must keep, or give away a secret you are still hiding. No grievance or rupture is settled by text: only the story settles it.",
+    CLEAR_AIR_RULE,
     "- Never invent shared history: what you two share is only what the story and these conversations hold.",
     `- Never mention how long it has been since ${them} last wrote, that they were away, or anything about their life outside the story, and never ask where they have been.`,
     `- If ${them} says they feel unwell or had a hard day, answer with comfort only. ${COMFORT_RULE}`,
@@ -2983,6 +3068,7 @@ export function chatReplyMessages({
     "WHO YOU ARE",
     otomeSceneCard(unit, liState),
     betweenYou(unit, liState),
+    upsetLine(unit, liState),
     // An empty notebook adds no line (a "" here would leave a blank one before the off-screen line).
     ...(known ? [known] : []),
     offscreen.trim()
@@ -3012,9 +3098,14 @@ export function chatReplyMessages({
     "THE THREAD NOW (oldest first)",
     tail.length ? renderThread(tail, { li: name, player: them }, "his", stickers?.name) : "(no messages yet)",
     "",
-    first
-      ? `Write ${name}'s next message now: you are writing to ${them} first, on your own, and it answers nothing they sent. Make it natural, in your own voice: something from the story you were there for or heard about, how they are, or a small thought of yours. One or two short messages.`
-      : `Write ${name}'s next message now, answering ${them}.`,
+    invite
+      ? `You may ask ${them} out to clear the air. If, as ${name}, you would, write that invitation as your last message and add "invite": true to the JSON object. Whether you ask is yours, from who you are.`
+      : "",
+    reason === "upset"
+      ? `Write ${name}'s next message now: ${them} has just told you they are upset with you, and you write to them about it first, on your own, in your own voice. One or two short messages.`
+      : first
+        ? `Write ${name}'s next message now: you are writing to ${them} first, on your own, and it answers nothing they sent. Make it natural, in your own voice: something from the story you were there for or heard about, how they are, or a small thought of yours. One or two short messages.`
+        : `Write ${name}'s next message now, answering ${them}.`,
     otomeContractReminder("chat"),
   ]
     .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
@@ -4030,6 +4121,8 @@ export interface DatePlanInput {
   memory: string;
   /** #2128: the gift the protagonist brings, given in scene GIFT_BEAT; absent or null leaves the prompt as before. */
   gift?: GiftId | null;
+  /** #2156: he asked her out on this evening to clear the air (DatePlan.clearAir); absent leaves the prompt as before. */
+  clearAir?: boolean;
 }
 
 /** P26: the date's plan. Messages in the plan's order (§1.7); the planner gets the full bible. */
@@ -4043,6 +4136,7 @@ export function datePlanMessages({
   makeItRight,
   memory,
   gift = null,
+  clearAir = false,
 }: DatePlanInput): OtomeMessage[] {
   const name = unit.name;
   const { liState } = ownView(state, unit.id);
@@ -4114,6 +4208,7 @@ export function datePlanMessages({
       gift
         ? `\nTHE GIFT\nThe protagonist brings ${name} ${GIFT_PROMPT_NAMES[gift]}, given in scene ${GIFT_BEAT + 1}.`
         : "",
+      clearAir ? `\nCLEARING THE AIR\n${clearAirText(name)}` : "",
     ]
       .filter(Boolean)
       .join("\n"),

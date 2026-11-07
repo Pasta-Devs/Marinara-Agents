@@ -547,7 +547,8 @@ test("P25 carries the boundary and the home contract, his tells by index, never 
 test("P25 sees him as his own reader may: nothing another love interest's own chapter left on his rows", async () => {
   const t = await readHimWorld("r-readhim9-aaaaaa");
   await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) =>
-    withMireillesPrivateRows(state, { rupture: true }),
+    // One the protagonist holds (from before #2156): his own grievance would keep the set waiting.
+    withMireillesPrivateRows(state, { rupture: true, holder: "protagonist" }),
   );
   assert.equal((await t.start()).status, 200);
   const [call] = t.setCalls();

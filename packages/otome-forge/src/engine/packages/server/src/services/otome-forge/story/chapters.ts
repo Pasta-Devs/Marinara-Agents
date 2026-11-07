@@ -5,7 +5,9 @@
 // lastLead; never led counts lowest; ties by cast order), and the one with the ripest open conflict (highest
 // ripeness above 0: tension + 2 × unresolved grievances + 3 for a rupture; ties by cast order). When nobody's conflict
 // is ripe, or the ripest is also the least recent, the second candidate is the next least recent. The player picks
-// one; the planner picks the Foil.
+// one; the planner picks the Foil. #2156: a love interest whose grievance with her stands is never offered or accepted
+// as the Lead (he may still be in the chapter); in a story where every one of them holds one (only from before #2156)
+// the usual pair is offered.
 // A plan is checked before it is saved (normalizeChapterPlan): 6–9 nodes, 1–2 moments, exactly one climax node (a
 // Confrontation, or a Closer with the Lead in it: #1938) as the second-to-last or last node, the other kind after two
 // main chapters in a row ended with the same one (requiredClimax), at most two CG nodes, the Lead and the Foil each in at least one node, every love interest in chapter 1,
@@ -37,6 +39,7 @@ import type {
 import type { ClimaxKind } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { LIS_MAX } from "../../../../../client/src/features/otome-forge/shared/cast.js";
 import { LIMIT_IDS, type LimitId } from "../../../../../client/src/features/otome-forge/shared/content.js";
+import { heldAgainst } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { nextPrestige } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import {
   generateJson,
@@ -65,6 +68,7 @@ import { repairOffers, routeEntries } from "../state/stages.js";
 import type { OtomeStore } from "../store.js";
 import { withPersonaStoryAbout } from "../setup/cast.js";
 import { cancellable } from "./beats.js";
+import { hisSideOffers } from "./his-side.js";
 import { removeLoveInterest } from "./introduce.js";
 import { readBeat, recallText, type StoryMemory } from "./canon.js";
 import { chapterPlanMessages, knownRows } from "../prompts.js";
@@ -97,10 +101,17 @@ export function ripeness(liState: LiState): number {
   return liState.tension + 2 * unresolved(liState).length + (liState.rupture ? 3 : 0);
 }
 
-/** The two Lead candidates for the next main chapter, from `cast` (LI ids in cast order). */
-export function leadCandidates(state: RunState, cast: readonly LiId[]): Array<{ li: LiId; reason: LeadReason }> {
+/** #2156: who may lead the next main chapter: everyone in `cast` whose grievance with her doesn't stand, else all. */
+export function leaders(state: RunState, cast: readonly LiId[]): LiId[] {
+  const free = cast.filter((li) => !heldAgainst(state.lis[li]));
+  return free.length ? free : [...cast];
+}
+
+/** The two Lead candidates for the next main chapter, from `cast` (LI ids in cast order) as leaders() allows. */
+export function leadCandidates(state: RunState, all: readonly LiId[]): Array<{ li: LiId; reason: LeadReason }> {
   const lastLead = (li: LiId) => state.lis[li]?.lastLead ?? -1;
   const ripe = (li: LiId) => ripeness(state.lis[li] ?? defaultLiState());
+  const cast = leaders(state, all);
   const byRecency = cast
     .map((li, order) => ({ li, order }))
     .sort((a, b) => lastLead(a.li) - lastLead(b.li) || a.order - b.order)
@@ -187,14 +198,21 @@ export const clean = (value: unknown, max = 4000) => (typeof value === "string" 
 
 export type PlannedChapter = Pick<Chapter, "title" | "tags" | "foil" | "summary" | "nodes" | "ledger">;
 
-/** The reply's nodes in the chapter's shape: casts resolved to ids, and `resolves` kept only for grievances still owed. */
+/**
+ * The reply's nodes in the chapter's shape: casts resolved to ids, and `resolves` kept only for grievances still owed,
+ * never his grievance with her (#2156: only his repair clears it, and normalizeRepairPlan gives its last node that).
+ */
 export function planNodes(
   reply: Pick<ChapterPlanReply, "nodes">,
   context: Pick<PlanContext, "units" | "state">,
 ): ChapterNode[] {
   const { units, state } = context;
   const grievanceIds = new Set(
-    units.flatMap((unit) => unresolved(state.lis[unit.id] ?? defaultLiState()).map((item) => item.id)),
+    units.flatMap((unit) => {
+      const liState = state.lis[unit.id] ?? defaultLiState();
+      const held = heldAgainst(liState) ? liState.rupture?.grievanceId : undefined;
+      return unresolved(liState).flatMap((item) => (item.id === held ? [] : [item.id]));
+    }),
   );
   return reply.nodes.map((raw, i) => {
     const cast = [...new Set(raw.cast.map((value) => resolveLi(units, value)).filter((li): li is LiId => !!li))];
@@ -429,7 +447,8 @@ function nextMain(chapters: readonly Chapter[], state: RunState): { number: numb
 
 /**
  * Plans the next main chapter with `lead` (POST /chapters/next). Idempotent: the chapter that number already has is
- * returned as it is. 409 `conflict` while the latest chapter is unfinished, 404 for a love interest not in the run.
+ * returned as it is. 409 `conflict` while the latest chapter is unfinished, 404 for a love interest not in the run,
+ * and 409 `locked` for one leaders() refuses (#2156).
  */
 export async function planNextChapter(
   deps: ChapterDeps,
@@ -442,6 +461,9 @@ export async function planNextChapter(
   if (run.world.forge.phase !== "ready") throw new OtomeForgeError(409, "The world is still being forged.", "conflict");
   const cast = Object.keys(run.state.lis).filter((li) => run.units.some((unit) => unit.id === li && unit.bible));
   if (!cast.includes(lead)) throw notFound("love interest");
+  if (!leaders(run.state, cast).includes(lead)) {
+    throw new OtomeForgeError(409, "They need space, and can't lead a chapter until you make it right.", "locked");
+  }
   const mains = await mainChapters(deps.store, runId);
   const { number, open } = nextMain(mains, run.state);
   const key = mainChapterKey(number);
@@ -684,7 +706,7 @@ export async function startArc(
 
 /**
  * GET /runs/:run/story: every chapter planned so far but dates, the next main chapter's candidates when it may start,
- * each love interest's stage and next route chapter, and a repair for each rupture.
+ * each love interest's stage and next route chapter, a repair for each rupture, and each side waiting (#2155).
  */
 /** The prologue first, then main chapters by number, then every other chapter. */
 const storyOrder = (key: string) => (key === PROLOGUE_KEY ? 0 : (mainChapterNumber(key) ?? Infinity));
@@ -750,6 +772,8 @@ export async function storyView(deps: { store: OtomeStore }, runId: string): Pro
           return n ? [{ li, key: prestigeKey(li, n) }] : [];
         })
       : [],
+    // #2155: each love interest's side waiting in Routes, or being read (S/story/his-side.ts).
+    hisSides: ready ? hisSideOffers(chapters, run.state, cast) : [],
   };
 }
 

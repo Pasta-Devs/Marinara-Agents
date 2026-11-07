@@ -8,6 +8,8 @@
 // is counted once by the server; reopening a date read to its end counts it then.
 // #2128: with a gift from the Shop in hand (the Wardrobe view's `gifts`, absent from an older server), the looks step
 // also offers Bring a gift; the gift is spent when the date is planned, and the ending names it.
+// #2156: once she has accepted his invitation to clear the air (DatesView `asked`), a new date opens on the looks step
+// with his choice of place picked, and the plan makes it that evening.
 import { useCallback, useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -155,6 +157,8 @@ export function DateNight({ runKey, view, li: picked, onExit, onHome = onExit, o
   });
   const given = gifts.some((entry) => entry.id === gift) ? gift : null;
   const rupture = !!dates.data?.lis.find((entry) => entry.li === partner.id)?.rupture;
+  // #2156: she accepted his invitation to clear the air: this evening is it, at the place he chooses.
+  const asked = !!dates.data?.lis.find((entry) => entry.li === partner.id)?.asked;
 
   // Opens where this love interest's dates stand, once they are known. On a first visit that is after the loading
   // state, which has no heading for the router to focus, so focus goes to the step's heading as it would after a move.
@@ -162,7 +166,12 @@ export function DateNight({ runKey, view, li: picked, onExit, onHome = onExit, o
   // the player left, and Begin would then resume that date unannounced.
   if (step === null && dates.data && dates.isFetchedAfterMount && !dates.isError) {
     moved.current = true;
-    setStep(stepFor(dates.data, partner.id));
+    const first = stepFor(dates.data, partner.id);
+    // #2156: his invitation's evening opens on what you wear, his choice of place picked (Back still reaches places).
+    if (first.kind === "place" && asked) {
+      setPlace({ place: PARTNER_CHOICE });
+      setStep({ kind: "looks" });
+    } else setStep(first);
   }
 
   const go = useCallback((next: Step) => {
@@ -364,6 +373,12 @@ export function DateNight({ runKey, view, li: picked, onExit, onHome = onExit, o
               <p className="of-notice of-date-mend">
                 <HeartHandshake size={16} strokeWidth={2} aria-hidden="true" />
                 <span>{t("ui.otomeForge.dateNight.makeItRightText", { name: partner.name })}</span>
+              </p>
+            ) : null}
+            {asked ? (
+              <p className="of-notice of-date-mend">
+                <HeartHandshake size={16} strokeWidth={2} aria-hidden="true" />
+                <span>{t("ui.otomeForge.dateNight.clearAirText", { name: partner.name })}</span>
               </p>
             ) : null}
           </section>

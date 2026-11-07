@@ -358,8 +358,9 @@ const STAGING_OTHERS: Record<string, string> = {
   confrontation: "646929977ecd71b2",
   closer: "07ddfbafd6578c00",
   bible: "0e8da543f0ac13bf",
-  chat: "737cde4c51f826e8",
-  daily: "c25471977dd29aa5",
+  // #2156: P17's one exception to "no meeting the story must keep", his invitation to clear the air.
+  chat: "61022c566041871d",
+  daily: "ecbf4de70469ea5e",
   note: "77c2dd85e08f8023",
   // Retaken 2026-11-05 when the outfit and world fixes shipped together in 0.8.7: the date plan lost its WHAT THEY
   // WEAR block (now in protagonistBlock), its only change from staging; it still never reads the premise (above).

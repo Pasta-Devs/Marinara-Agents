@@ -18,6 +18,9 @@
 //                              its summary as a small memory of his (#2066, S/memory/memory.ts), never in the
 //                              timeline; a Character Story joins the timeline (0.7.3)
 //   an extra story (#2025)   → none: it is imagined together for fun, never canon
+//   his side (#2155)         → kind "chapter", his own (audience [li], no cameos): the chapter it follows told again
+//                              from his point of view, summarized into the timeline when it is read, titled as that
+//                              chapter's other side, whose thoughts are his alone
 // Every chapter but a main one has audience [its love interest's id]: as recent canon, as a recall and in full it
 // reaches only a prompt for his own reader or a scene he is in (mayKnow), but for the last Character Story in the
 // storyline chapters' prompts (`lastStory`, below). Another love interest knows his route or repair chapter only
@@ -44,6 +47,16 @@
 //   cover: by its saved summary when it has one ("# Recent canon summary"), and in full only while it has none, being
 //   summarized, its summary failed or never written ("# Canon in full"). A chapter that has a summary never goes in
 //   full;
+// - his side of the previous chapter (#2155, the maintainer's: it is part of the chapter it follows), once read: right
+//   after that chapter, in full, titled as private to him, in the storyline chapters' prompts (`lastStory`: the next
+//   chapter built) whoever they are for, and in any other prompt only where it may be known (mayKnow: his own reader,
+//   or a scene he is in; in a `cached` one, only when it is the chapter's own love interest's), so another love
+//   interest's messages, Home, Tarot night, dates and stories never get his thoughts. Its timeline entry is left out
+//   while it goes in full. Otherwise, and once older, it goes as any of his own chapters (by the timeline, or by summary
+//   or in full while it does not cover them), named for its chapter.
+//   ponytail: a side joins the timeline when it is read, not beside its chapter's entry (placing it there would fold the
+//   timeline again from the start); its title names that chapter. The upgrade path is the kit inserting a late source
+//   after its chapter's entry;
 // - with `lastStory` (#2126: the storyline chapters' prompts, P5, P10, P11, and P6, P12 and P12c in a main, route or
 //   repair chapter), the last Character Story (lastStoryOf), for every cast, in story order, under its own heading
 //   ("# Last Character Story, by its summary" or "# Last Character Story in full", with lastStoryTitle): private
@@ -246,7 +259,7 @@ async function cameosOf(
   chapter: Chapter,
   others: ReadonlyMap<string, string>,
 ): Promise<string[]> {
-  if (chapter.kind !== "story" || !others.size) return [];
+  if (chapter.kind !== "story" || chapter.hisSide || !others.size) return [];
   const speakers = new Set<string>();
   for (let i = 0; i < chapter.nodes.length; i += 1) {
     const beat = await readBeat(store, runId, chapter.key, i);
@@ -255,12 +268,15 @@ async function cameosOf(
   return [...others].filter(([, name]) => speakers.has(name)).map(([li]) => li);
 }
 
-/** The kit's kind of a chapter (see the header): a storyline's chapter, or a side story (GF's bond chapter). */
+/**
+ * The kit's kind of a chapter (see the header): a storyline's chapter, or a side story (GF's bond chapter). His side
+ * (#2155) is part of a storyline's chapter, so it joins the timeline as one.
+ */
 const kindOf = (chapter: Chapter): ForgeMemorySource["kind"] =>
-  chapter.kind === "date" || chapter.kind === "story" ? "character-story" : "chapter";
+  chapter.kind === "date" || (chapter.kind === "story" && !chapter.hisSide) ? "character-story" : "chapter";
 
-/** A storyline's chapter (main, route, repair): what the previous chapter in full may be. */
-const storyline = (chapter: Chapter) => kindOf(chapter) === "chapter";
+/** A storyline's chapter (main, route, repair): what the previous chapter in full may be. His side never is. */
+const storyline = (chapter: Chapter) => kindOf(chapter) === "chapter" && !chapter.hisSide;
 
 /**
  * Every completed chapter of the run in story order: a main chapter at its number, any other kind just after the main
@@ -319,6 +335,10 @@ export async function completedChapters(
 function titleOf({ chapter, owner, guests }: Completed & { guests?: string[] }): string {
   const title = chapter.title || chapter.key;
   if (owner === undefined) return title;
+  // #2155: the chapter it follows, told again; what the protagonist did there they know, his thoughts are his.
+  if (chapter.hisSide) {
+    return `${owner}'s side of "${title}" (the same events, told again from ${owner}'s point of view; private: ${owner}'s thoughts in it are ${owner}'s alone, and nobody else, the protagonist included, knows them)`;
+  }
   const also = guests?.length ? `; ${guests.join(" and ")} also appear${guests.length === 1 ? "s" : ""} in it` : "";
   return `${owner}'s own ${chapter.kind} chapter "${title}" (private: only the people in its scenes know what happened in it${also})`;
 }
@@ -571,6 +591,29 @@ export async function recallText(
       : [];
   const previousKey = previous.length ? last!.chapter.key : undefined;
   const earliestScenes = previous.slice(1, -1);
+  // #2155: his side of the previous chapter, once read, right after it in full: in a storyline chapter's prompt for
+  // every call, elsewhere only where it may be known and, in a `cached` prompt, only when every call of its chapter may
+  // (its timeline entry goes with the cached part). Otherwise it goes as his own chapter (see the header).
+  const sides = previousKey
+    ? chapters.filter(
+        ({ chapter, audience }) =>
+          chapter.hisSide?.ref.startsWith(`${previousKey}/`) &&
+          (withLastStory || (mayKnow(recall, audience) && !own(chapter))),
+      )
+    : [];
+  const sideBlocks: Block[] = [];
+  const sideKeys: string[] = [];
+  for (const side of sides) {
+    const text = (
+      await chapterSoFar(deps.store, runId, side.chapter.key, side.chapter.nodes.length, protagonist).catch(() => null)
+    )?.trim();
+    if (!text) continue;
+    sideKeys.push(side.chapter.key);
+    sideBlocks.push({
+      order: last!.order,
+      text: block("The previous chapter's other side, in full", titleOf(side), text),
+    });
+  }
 
   // The recall pool. Memory that fell behind catches up in the background; a failed summary waits for Retry.
   const memory = deps.memory;
@@ -579,7 +622,7 @@ export async function recallText(
         .recall({
           ...recall,
           runId,
-          excludeChapterIds: [...(recall.excludeChapterIds ?? []), ...(previousKey ? [previousKey] : [])],
+          excludeChapterIds: [...(recall.excludeChapterIds ?? []), ...(previousKey ? [previousKey] : []), ...sideKeys],
         })
         .then((recalled) => {
           const phase = recalled.status?.phase;
@@ -605,7 +648,9 @@ export async function recallText(
     const { chapter, order } = completed;
     const key = JSON.stringify([kindOf(chapter), chapter.key]);
     const isLastStory = completed === lastStory;
-    if (chapter.key === previousKey || (!isLastStory && saved?.covered.has(key))) continue;
+    if (chapter.key === previousKey || sideKeys.includes(chapter.key) || (!isLastStory && saved?.covered.has(key))) {
+      continue;
+    }
     const summary = saved?.summaries.get(key);
     const content = summary ?? (await chapterCanon(deps.store, runId, chapter, protagonist).catch(() => null))?.trim();
     if (!content) continue;
@@ -631,13 +676,14 @@ export async function recallText(
     parseTimeline(saved?.timeline),
     previousKey ? JSON.stringify(["chapter", previousKey]) : undefined,
     lastStoryKey,
+    ...sideKeys.map((key) => JSON.stringify(["chapter", key])),
   );
   const recalls = (result?.recalls ?? [])
     .map(({ id, title, content }) => ({ id, kind: "recall", title, content }))
     .reverse();
   return storyContext(
     { overview, details: recalls, maxContext: result?.maxContext ?? null },
-    [...previous, ...others],
+    [...previous, ...sideBlocks, ...others],
     [...full, ...earliestScenes],
     summaries,
   );

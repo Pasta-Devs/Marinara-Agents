@@ -6,6 +6,15 @@
 - **Your love interests answer it once.** A new story writes their answers in the background after their bibles, in one call on your Planning connection. A story you started before this update gets theirs in the background the next time you open it, and someone new who joins later gets theirs the same way.
 - **What happened so far… now shows while an arc is planned.** Planning any other chapter offers the quiz instead, and **Who said what?** still plays while a scene is written.
 
+## 0.16.0 — 2026-11-07
+
+- **Grievances.** Only a serious break now leaves a love interest with a grievance against you, at most once a story arc. Until you make it right they can't lead a chapter, their affection doesn't grow and your dates with them wait, with nothing lost. After two story chapters of space, **Make it right** in Routes plans the one chapter that clears it, for 300 affection. A grievance from before needs no space.
+- **I'm upset with them.** Tell a love interest from Routes that you're upset with them (1 call: they answer in Messages), and take it back any time. They know it in their messages and in the story, and may ask you out once to clear the air: accept, and it's your next Date Night with them, somewhere they choose.
+
+## 0.15.0 — 2026-11-07
+
+- **Their side.** After a big moment with a love interest (a route chapter that moves your bond on a stage, a Closer that ends with them opening up or shutting you out, a confrontation that ends in the truth or a walkout, or a rift you mend), Routes offers their side of it: the same scene, told from their point of view, with their thoughts. The chapter's end tells you when one waits. There is one per story arc for each love interest; until you read it, it follows the arc's newest big moment. Opening it is free, writing it is 1 model call, it paints only a place that has no picture yet, and reading it pays 30 Starlight. It becomes part of that chapter: the next chapter is written knowing both.
+
 ## 0.14.0 — 2026-11-07
 
 - **Touch your love interest on Home.** Tap their head, cheek, chest or hand for a line in their own voice, and their face answers where you touched. Their reactions grow bolder as you grow closer, from their mask at first to someone who is yours. Under NSFW Heat (Fade or Explicit) you can touch their crotch too, and a touch to their chest or crotch is an intimate one, as far as your Heat and Lines & Veils allow. A touch never waits for the model, earns nothing, and is voiced when voices are on. Without a picture of them, the places are labelled buttons under their initials.
