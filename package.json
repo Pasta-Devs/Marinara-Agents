@@ -38,5 +38,8 @@
     "test:saucelings": "tsx --tsconfig tests/tsconfig.regressions.json tests/saucelings-simulation.regression.ts && tsx --tsconfig tests/tsconfig.regressions.json tests/saucelings-friendly-error.regression.ts",
     "test:security": "node scripts/tests/catalog-path-safety.regression.mjs && tsx tests/long-term-memory-index-keys.regression.ts",
     "typecheck:packages": "node scripts/typecheck-packages.mjs noodle slurp2 long-term-memory memory-nag conversation-calls hierarchical-maps blackjack story-writer games saucelings otome-forge"
+  },
+  "overrides": {
+    "minimatch": "11.0.4"
   }
 }
