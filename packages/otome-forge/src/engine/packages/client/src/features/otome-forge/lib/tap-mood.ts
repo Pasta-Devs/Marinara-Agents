@@ -3,10 +3,13 @@
 // (SH/home.ts timeOfDayOf, as the server writes the packs) and his mood pick the pool: more than 5 taps in 20 s and he
 // is annoyed; during a rupture every line is cold. His own lines (GET .../lis/:li/lines) are used once they exist,
 // the catalog's fallback lines until then. Pure: a tap never waits for a request.
+// Touch (#2152): head, cheek, chest and hand always show; the crotch only under NSFW Heat, once his pack holds lines
+// for it. A fond touch brings the face his pack names for that zone, else the zone's own default.
 // ──────────────────────────────────────────────
 import type { LinesView } from "../shared/api-types";
+import { intimacyOpen, type ContentSettings } from "../shared/content";
 import type { Face } from "../shared/faces";
-import { soundsMedical, type TapZone, type TimeOfDay } from "../shared/home";
+import { INTIMATE_ZONES, TAP_ZONES, soundsMedical, type TapZone, type TimeOfDay } from "../shared/home";
 
 /** Home's time-of-day tint, a little finer than the packs' three parts of the day. */
 export type SkyPhase = "dawn" | "day" | "dusk" | "night";
@@ -34,15 +37,38 @@ export function tapMode(taps: readonly number[], now: number, rupture: boolean):
   return rupture ? "cold" : isAnnoyed(taps, now) ? "annoyed" : "fond";
 }
 
-/** The face he shows while a tap's line is on screen (one of his five, SH/faces.ts). */
+/** The face he shows while an annoyed or cold tap's line is on screen (one of his five, SH/faces.ts). */
 export const TAP_FACES: Record<TapMode, Face> = { fond: "tender", annoyed: "flustered", cold: "cold" };
+
+/** #2152: a fond touch's face in each zone until his pack names one. */
+export const ZONE_FACE: Record<TapZone, Face> = {
+  head: "tender",
+  cheek: "flustered",
+  heart: "flustered",
+  hand: "tender",
+  crotch: "flustered",
+};
+
+/** The face a tap brings: fond, the one his pack names for the zone (else ZONE_FACE); annoyed or cold, TAP_FACES. */
+export function tapFace(lines: LinesView | null, zone: TapZone, mode: TapMode): Face {
+  return mode === "fond" ? (lines?.faces?.[zone] ?? ZONE_FACE[zone]) : TAP_FACES[mode];
+}
+
+/**
+ * The zones Home shows (#2152), top to bottom: head, cheek, chest and hand always (the catalog's lines until his own
+ * exist); the crotch only while the world's Heat is NSFW and his pack holds lines for it, so a cached pack never brings
+ * it back after Heat was lowered, and a rupture (no warm lines) hides it.
+ */
+export function shownZones(lines: LinesView | null, content: Pick<ContentSettings, "heat">): TapZone[] {
+  return TAP_ZONES.filter((zone) => !INTIMATE_ZONES.includes(zone) || (intimacyOpen(content) && !!lines?.tap?.[zone]));
+}
 
 /**
  * His face on Home: the tap's while its line shows, else the one his note was written with, else cold while a rupture
  * stands, else his plain look (""). Home shows it painted once M2b has painted it, and names it either way.
  */
-export function homeFace(note: Face | "", tap: TapMode | null, rupture: boolean): Face | "" {
-  return tap ? TAP_FACES[tap] : note || (rupture ? "cold" : "");
+export function homeFace(note: Face | "", tap: Face | null, rupture: boolean): Face | "" {
+  return tap ?? (note || (rupture ? "cold" : ""));
 }
 
 /** The hour (0–23) in `timeZone`; the device's own hour when the zone can't be read. */
@@ -95,8 +121,10 @@ export function comfortPool(lines: LinesView | null): string[] {
 // The catalog's lines (ui.otomeForge.fallback.*) until his own exist, as many as a pack holds (SH/home.ts
 // LINE_COUNTS). Written for anyone: no pronouns, no question that waits for an answer, nothing about time apart.
 // Literal keys, so the locale validator sees each one.
-const FALLBACK_TAP_KEYS: Record<TapZone, readonly string[]> = {
+// The crotch has none: it shows only once his own pack holds lines for it (shownZones).
+const FALLBACK_TAP_KEYS: Partial<Record<TapZone, readonly string[]>> = {
   head: ["ui.otomeForge.fallback.tapHead1", "ui.otomeForge.fallback.tapHead2", "ui.otomeForge.fallback.tapHead3"],
+  cheek: ["ui.otomeForge.fallback.tapCheek1", "ui.otomeForge.fallback.tapCheek2", "ui.otomeForge.fallback.tapCheek3"],
   hand: ["ui.otomeForge.fallback.tapHand1", "ui.otomeForge.fallback.tapHand2", "ui.otomeForge.fallback.tapHand3"],
   heart: ["ui.otomeForge.fallback.tapHeart1", "ui.otomeForge.fallback.tapHeart2", "ui.otomeForge.fallback.tapHeart3"],
 };
@@ -126,7 +154,11 @@ export const FALLBACK_COMFORT_KEYS = [
 ] as const;
 
 export function fallbackTapKeys(zone: TapZone, mode: TapMode): readonly string[] {
-  return mode === "cold" ? FALLBACK_COLD_KEYS : mode === "annoyed" ? FALLBACK_ANNOYED_KEYS : FALLBACK_TAP_KEYS[zone];
+  return mode === "cold"
+    ? FALLBACK_COLD_KEYS
+    : mode === "annoyed"
+      ? FALLBACK_ANNOYED_KEYS
+      : (FALLBACK_TAP_KEYS[zone] ?? []);
 }
 
 /** One line of the pool, never the one just shown while there is another; null for an empty pool. */

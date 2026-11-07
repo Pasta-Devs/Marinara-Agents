@@ -2294,16 +2294,17 @@ ${R} .of-figure[data-art="look"][data-cut="false"] .of-figure-img {
 ${R} .of-figure[data-mood="cold"] .of-figure-breathe { filter: saturate(0.7) brightness(0.93); }
 ${R} .of-figure[data-mood="annoyed"] .of-figure-drift { animation: of-pout 420ms ease-in-out 2; }
 /* Without a full-body look the medallion or cameo and its pills fill the cell's middle: the medallion leaves room for
-   its ring above (12 px), the 18 px gap its ring reaches into and the pills (54 px), 84 px in all. */
+   its ring above (12 px), the 18 px gap its ring reaches into and up to two rows of pills (#2152: four or five of
+   them, 30 px a row, 6 px apart), 96 px in all. */
 ${R} .of-figure:is([data-art="none"], [data-art="avatar"]) {
-  --of-medallion: min(220px, 100cqw - 32px, 100cqh - 84px);
+  --of-medallion: min(220px, 100cqw - 32px, 100cqh - 96px);
   inset: 0; width: auto; aspect-ratio: auto;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
 }
 ${R} .of-figure:is([data-art="none"], [data-art="avatar"]) :is(.of-figure-parallax, .of-figure-drift, .of-figure-breathe) {
   position: relative; inset: auto; width: 100%;
 }
-${R} .of-figure[data-art="avatar"] { --of-medallion: min(220px, 100cqw - 32px, (100cqh - 84px) * 0.8); }
+${R} .of-figure[data-art="avatar"] { --of-medallion: min(220px, 100cqw - 32px, (100cqh - 96px) * 0.8); }
 ${R} .of-figure:is([data-art="none"], [data-art="avatar"]) .of-figure-parallax { flex: none; width: var(--of-medallion); }
 ${R} .of-figure[data-art="none"] .of-figure-breathe { aspect-ratio: 1; }
 ${R} .of-figure[data-art="avatar"] .of-figure-breathe { aspect-ratio: 4 / 5; }
@@ -2335,7 +2336,13 @@ ${R} .of-figure[data-art="avatar"] .of-figure-img {
   box-shadow: 0 0 0 3px var(--of-wish-ring), 0 0 0 9px rgb(230 201 138 / 0.22), 0 24px 50px rgb(0 0 0 / 0.3);
 }
 /* His tap zones: invisible over the art (a soft glow on hover, a dashed ring on focus), labelled pills without it.
-   A zone stops at the cell's inline start (--of-cell-start, in the art's own box), so the rail never covers one. */
+   A zone stops at the cell's inline start (--of-cell-start, in the art's own box), so the rail never covers one.
+   #2152: head and cheek split the head down to the chest, each tall enough for a 24 px target on the smallest stage
+   (11 % of a 230 px figure); the crotch (NSFW Heat only) sits over the middle of the hand band and
+   takes the taps there, so Hand takes its two sides (and every keyboard or assistive press). All stay above the art's
+   58 % line. ponytail: fixed regions of the 832 × 1216 art, right for Otome's looks (always painted standing, LOOK_POSE)
+   and not for a look painted another way; the upgrade is per-look hotspots, or measuring the plain look's cut-out
+   alpha box (never a face's, which changes under the finger on each tap). */
 ${R} .of-tap-zones {
   position: absolute; inset: 0;
   --of-cell-start: max((100% - 100cqw) / 2, 100% - 100cqw - 12px);
@@ -2344,23 +2351,27 @@ ${R} .of-tap-zone {
   position: absolute; padding: 0; border: 0; border-radius: 46%; background: transparent; cursor: pointer;
   pointer-events: auto;
 }
-${R} .of-tap-zone[data-zone="head"] { inset-inline: max(33%, var(--of-cell-start)) 33%; top: 2%; height: 16%; }
+${R} .of-tap-zone[data-zone="head"] { inset-inline: max(33%, var(--of-cell-start)) 33%; top: 1%; height: 11%; }
+${R} .of-tap-zone[data-zone="cheek"] { inset-inline: max(33%, var(--of-cell-start)) 33%; top: 12%; height: 11%; }
 ${R} .of-tap-zone[data-zone="heart"] { inset-inline: max(34%, var(--of-cell-start)) 34%; top: 23%; height: 15%; }
 ${R} .of-tap-zone[data-zone="hand"] { inset-inline: max(14%, var(--of-cell-start)) 14%; top: 42%; height: 14%; }
+${R} .of-tap-zone[data-zone="crotch"] {
+  inset-inline: max(37%, var(--of-cell-start)) 37%; top: 45%; height: 11%; z-index: 1;
+}
 ${R} .of-tap-zone:hover { background: radial-gradient(closest-side, rgb(255 255 255 / 0.14), transparent); }
 ${R} .of-tap-zone:focus-visible {
   outline: 2px dashed var(--of-focus); outline-offset: 0;
   background: radial-gradient(closest-side, var(--of-glow-soft), transparent);
 }
+/* #2152: labelled chips, so four or five fit the narrowest cell (156 px, on a desktop) in at most two rows. */
 ${R} .of-tap-pills {
-  position: relative; display: flex; justify-content: center; gap: 6px; max-width: 100%; pointer-events: auto;
+  position: relative; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 4px; max-width: 100%;
+  pointer-events: auto;
 }
 ${R} .of-tap-pill {
-  display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-  width: 60px; min-width: 0; min-height: 54px; padding: 6px 4px; border-radius: 18px; overflow-wrap: anywhere;
-  font-weight: 700; font-size: 0.72rem; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; min-width: 42px; min-height: 30px;
+  padding: 4px 6px; border-radius: 999px; font-weight: 700; font-size: 0.72rem; cursor: pointer;
 }
-${R} .of-tap-pill svg { color: var(--of-accent-text); }
 ${R} .of-tap-pill:hover { background: var(--of-surface-strong); }
 /* Hidden at rest (opacity 0): the animation shows it, so with motion reduced it never stays over him. */
 ${R} .of-tap-burst {
@@ -2369,8 +2380,11 @@ ${R} .of-tap-burst {
   box-shadow: 0 0 18px rgb(255 182 202 / 0.8), inset 0 0 12px rgb(255 214 228 / 0.6);
   animation: of-tap-burst 900ms var(--of-ease) both;
 }
+${R} .of-tap-burst[data-zone="head"] { top: 6%; }
+${R} .of-tap-burst[data-zone="cheek"] { top: 17%; }
 ${R} .of-tap-burst[data-zone="heart"] { top: 30%; }
 ${R} .of-tap-burst[data-zone="hand"] { top: 49%; }
+${R} .of-tap-burst[data-zone="crotch"] { top: 50%; }
 ${R} .of-tap-pills .of-tap-burst { top: -60%; }
 
 /* The note, the rail and the nameplate sit over the art; only what they hold takes the pointer. */

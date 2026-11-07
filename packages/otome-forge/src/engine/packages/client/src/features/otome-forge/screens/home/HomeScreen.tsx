@@ -1,8 +1,9 @@
 // ──────────────────────────────────────────────
 // Otome Forge: Home. The love interest the player chose (or the player, in her own look) stands in a layered scene
-// tinted by the time of day, breathing, with a handwritten message of the day, his mood, tap zones that answer at once
-// from lines written in advance, the phone, Rough day?, Remind Me, Him / Me, and (M6) Caring message on a day the
-// period tracker has something to say. His face is M2b's: the tap's while its line shows, else his note's, else cold
+// tinted by the time of day, breathing, with a handwritten message of the day, his mood, touch zones (#2152: head,
+// cheek, chest, hand, and the crotch under NSFW Heat) that answer at once from lines written in advance, the phone,
+// Rough day?, Remind Me, Him / Me, and (M6) Caring message on a day the period tracker has something to say. His face
+// is M2b's: the tap's (a fond touch's face for its zone) while its line shows, else his note's, else cold
 // during a rupture, painted once his faces are (cut out when they can be). His lines are voiced as the reader voices
 // his story, when Settings → Audio voices him, and the home music plays beneath (OtomeForgeView's audio). Everything
 // works without images or audio.
@@ -47,7 +48,9 @@ import {
   localHour,
   pickLine,
   recordTap,
+  shownZones,
   skyPhase,
+  tapFace,
   tapMode,
   tapPool,
   type TapMode,
@@ -65,6 +68,7 @@ import type {
   RunLiView,
   RunView,
 } from "../../shared/api-types";
+import type { Face } from "../../shared/faces";
 import { timeOfDayOf, type TapZone } from "../../shared/home";
 import { wornLookUrl } from "../../shared/wardrobe";
 import { PALETTE } from "../../theme/tokens";
@@ -393,7 +397,7 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenRemind }: HomeScre
   const taps = useRef<number[]>([]);
   const lastLine = useRef<string | null>(null);
   const voice = useLineVoice();
-  const [bubble, setBubble] = useState<{ id: number; li: LiId; text: string; mode: TapMode } | null>(null);
+  const [bubble, setBubble] = useState<{ id: number; li: LiId; text: string; mode: TapMode; face: Face } | null>(null);
   const tapsFor = li?.id;
   useEffect(() => {
     taps.current = [];
@@ -421,7 +425,9 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenRemind }: HomeScre
     const line = pickLine(pool, lastLine.current);
     if (!line) return;
     lastLine.current = line;
-    setBubble((current) => ({ id: (current?.id ?? 0) + 1, li: li.id, text: line, mode }));
+    // #2152: a fond touch shows the face his pack names for the zone.
+    const face = tapFace(ownLines, zone, mode);
+    setBubble((current) => ({ id: (current?.id ?? 0) + 1, li: li.id, text: line, mode, face }));
     setAnnounce(t("ui.otomeForge.home.said", { name: li.name, line }));
     // Voiced in his voice when the settings voice him; the next tap cuts it short. Cached by its words.
     const spoken = { speaker: li.name, text: line };
@@ -472,7 +478,7 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenRemind }: HomeScre
   // still cached, so each side checks the URL before using it. His face (homeFace) when painted, cut-out first. ──
   const cached = data?.look ?? null;
   const pictures = (url: string | undefined) => !!url && (cached?.url === url || cached?.cutout === url);
-  const face = homeFace(note?.face ?? "", said?.mode ?? null, rupture);
+  const face = homeFace(note?.face ?? "", said?.face ?? null, rupture);
   const painted = face ? faceArt(li, face) : null;
   // The look each side wears (the Wardrobe's Wear at home, else the base portrait), as the server names it.
   const himUrl = li.worn?.url ?? li.portrait;
@@ -521,6 +527,7 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenRemind }: HomeScre
                 label={figureLabel}
                 face={face}
                 mood={rupture ? "cold" : (said?.mode ?? "fond")}
+                zones={shownZones(ownLines, view.world.content)}
                 onTap={onTap}
               />
             ) : (

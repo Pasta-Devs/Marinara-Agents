@@ -214,7 +214,9 @@ import {
   MOOD_REASON_WORDS_MAX,
   NOTE_CURT_WORDS_MAX,
   NOTE_WORDS_MAX,
+  type TapZone,
   type TimeOfDay,
+  tapZonesFor,
   timeOfDayOf,
 } from "../../../../client/src/features/otome-forge/shared/home.js";
 import {
@@ -307,7 +309,8 @@ import {
 // The world's Heat, Darkness, Lines & Veils and image rating, written for the kind of prompt that receives them:
 //   planner, scene  the full contract (world plan, bibles, chapters, beats, Confrontation, Character Stories, dates)
 //   chat            the full contract for the one LI in the thread
-//   home            SFW wording plus Lines and Veils, whatever the Heat (notes, line packs, Snapshots, Read Him)
+//   home            SFW wording plus Lines and Veils, whatever the Heat (notes, Snapshots, Read Him; line packs
+//                   outside NSFW Heat)
 //   summary         the story's own Heat and Darkness, recorded plainly; Lines never, Veils only as having happened
 //                   off the page (memory summaries, chat memory)
 //   care            SFW plus the comfort rule; Heat and Darkness never apply
@@ -319,7 +322,9 @@ import {
 // `planner`, `scene` and `chat` it writes out what the player opted into: romance that escalates without
 // out-of-character pauses, unsanitized language, the Heat's and the Darkness's full wording, what the player allowed
 // on the page, and, only while a consent limit is not a Line, the consent framing whose real stop is Ease off. The
-// Lines and Veils still come last and win. `home` and `care` never change. `summary` (0.3.0, the maintainer's call)
+// Lines and Veils still come last and win. `home` and `care` never change; P15 (#2152) is the one prompt that picks
+// its kind by setting: under NSFW Heat a line pack is written under `chat`, so touch on Home follows the Heat (its
+// comfort lines still keep the care rule's warmth only). `summary` (0.3.0, the maintainer's call)
 // records an NSFW story's intimacy and darkness as they were written, never SFW by itself. A world that raised nothing
 // (the SFW defaults) gets a fixed contract (tests/otome-forge-sfw-defaults.regression.ts).
 // The stored world is enforced on every write and lowered when the gate is revoked (S/routes/runs.ts enforceContent),
@@ -3019,11 +3024,13 @@ export function chatMemoryMessages({ world, names, conversation }: ChatMemoryInp
 // ──────────────────────────────────────────────
 // Both write a love interest's own words, so both carry the knowledge boundary and the writing rules, and both use the
 // `home` content contract: SFW wording plus Lines and Veils whatever the Heat (in Dark, sharp or possessive about
-// story events only). P15 also carries the comfort rule word for word, for the comfort lines, which are warmth only:
-// Darkness never reaches them (plan §1.7 gives the comfort pool the `care` contract; P15 writes it in the same call as
-// the rest of the pack, so its field says so). Neither may mention the protagonist's absence, how long it has been, or
-// their real life, and neither asks a question that demands an answer (P15's lines carry no question mark at all,
-// except an annoyed line's rhetorical one).
+// story events only). Touch (#2152): under NSFW Heat P15 uses the `chat` contract instead, with his tastes beside his
+// card, and adds the crotch zone, so his touch lines follow the Heat. P15 also carries the comfort rule word for word,
+// for the comfort lines, which are warmth only: Darkness (and under NSFW Heat, the Heat) never reaches them (plan §1.7
+// gives the comfort pool the `care` contract; P15 writes it in the same call as the rest of the pack, so its field
+// says so). Neither may mention the protagonist's absence, how long it has been, or their real life, and neither asks
+// a question that demands an answer (P15's lines carry no question mark at all, except an annoyed line's rhetorical
+// one).
 // Order (plan §1.7): system (role, JSON shape, rules, boundary and writing rules, contract), then the user turn
 // (world, protagonist, his scene card, what he knows and remembers, the task, the contract reminder). Prompts are
 // English and never localized; the lines and the note are written in the world's language.
@@ -3058,7 +3065,16 @@ function protagonistLine(player: Pick<Player, "name" | "pronouns" | "about">): s
     .join("\n");
 }
 
-// ── P15: line pack (structured, 0.9, home contract, background lane) ──
+// ── P15: line pack (structured, 0.9, home contract, or chat under NSFW Heat (#2152), background lane) ──
+
+/** Where each touch zone is on him, as the prompt names it (the stored `heart` is the chest). */
+const ZONE_GLOSS: Record<TapZone, string> = {
+  head: "hair or head",
+  cheek: "cheek or face",
+  heart: "chest",
+  hand: "hand",
+  crotch: "the groin, between the legs",
+};
 
 /** How each claw cheat style reads in the prompt (bible.play.cheat), without a pronoun. */
 const CHEAT_TEXT: Record<ClawCheat, string> = {
@@ -3081,27 +3097,47 @@ export interface LinePackInput {
 export function linePackMessages({ world, player, unit, stage, withFixed }: LinePackInput): OtomeMessage[] {
   const name = unit.name;
   const counts = LINE_COUNTS;
-  const shape = withFixed
-    ? '{"tap": {"head": {"morning": ["..."], "day": ["..."], "night": ["..."]}, "hand": {...}, "heart": {...}}, "annoyed": ["..."], "cold": ["..."], "comfort": ["..."], "claw": {"cheer": ["..."], "cheat": ["..."], "win": ["..."], "miss": ["..."], "plush": ["..."]}}'
-    : '{"tap": {"head": {"morning": ["..."], "day": ["..."], "night": ["..."]}, "hand": {...}, "heart": {...}}, "annoyed": ["..."], "cold": ["..."]}';
+  // #2152: NSFW Heat writes the pack under the full contract and opens the intimate zones; any other world keeps the
+  // `home` contract word for word (Dark romance with SFW Heat included).
+  const intimate = intimacyOpen(world.content);
+  const kind = intimate ? "chat" : "home";
+  const zones = tapZonesFor(world.content);
+  const tapShape = zones
+    .map(
+      (zone, index) => `"${zone}": ${index === 0 ? '{"morning": ["..."], "day": ["..."], "night": ["..."]}' : "{...}"}`,
+    )
+    .join(", ");
+  const facesShape = zones.map((zone) => `"${zone}": "..."`).join(", ");
+  const fixedShape = withFixed
+    ? ', "comfort": ["..."], "claw": {"cheer": ["..."], "cheat": ["..."], "win": ["..."], "miss": ["..."], "plush": ["..."]}'
+    : "";
+  const shape = `{"tap": {${tapShape}}, "faces": {${facesShape}}, "annoyed": ["..."], "cold": ["..."]${fixedShape}}`;
+  const places = zones.map((zone) => `${zone}: ${ZONE_GLOSS[zone]}`).join("; ");
   const cheat = CHEAT_TEXT[unit.bible?.play.cheat ?? "steady"];
   const system = [
-    `You write the pre-written Home lines of ${name}, a love interest in an otome visual novel. On the Home screen the protagonist taps ${name} (head, hand or heart) and hears one of these lines at once, so each line must stand on its own.`,
+    `You write the pre-written Home lines of ${name}, a love interest in an otome visual novel. On the Home screen the protagonist touches ${name} in one of the places below and hears one of these lines at once, so each line must stand on its own.`,
     "Reply with ONLY a JSON object of this shape:",
     shape,
     "FIELDS",
-    `- tap: for each place the protagonist touches (head: hair or head; hand: hand; heart: chest), ${counts.tap} lines for the morning, ${counts.tap} for the day and ${counts.tap} for the night, each fitting that time.`,
+    `- tap: for each place the protagonist touches (${places}), ${counts.tap} lines for the morning, ${counts.tap} for the day and ${counts.tap} for the night, each fitting that time.`,
+    `- faces: for each place, the one face ${name} shows when touched there at this stage: ${FACES.join(", ")}. Every line for that place fits it.`,
     `- annoyed: ${counts.annoyed} lines for when the protagonist pokes ${name} too many times in a row: exasperated and still in character, never cruel.`,
     `- cold: ${counts.cold} lines for while a rupture stands between them: distant and clipped, but within ${name}'s red lines; never cruel, threatening or contemptuous of the protagonist.`,
     ...(withFixed
       ? [
-          `- comfort: ${counts.comfort} lines of generic comfort for a rough day, said in ${name}'s own register. ${COMFORT_RULE} Never guess why the day was hard. These lines are warmth only, whatever the stage and the rules below: no darkness, possessiveness, jealousy, sharpness, menace or cost.`,
+          `- comfort: ${counts.comfort} lines of generic comfort for a rough day, said in ${name}'s own register. ${COMFORT_RULE} Never guess why the day was hard. These lines are warmth only, whatever the stage${intimate ? ", the Heat" : ""} and the rules below: no darkness, possessiveness, jealousy, sharpness, menace or cost.`,
           `- claw: lines for a claw machine the two of them play together: cheer (${counts.claw.cheer}, while the protagonist plays), cheat (${counts.claw.cheat}, when ${name} cheats for them by ${cheat}), win (${counts.claw.win}, when they win), miss (${counts.claw.miss}, when the claw misses), plush (${counts.claw.plush}, when a plush joins their shelf).`,
         ]
       : []),
     "RULES",
     `- Every line is ${LINE_WORDS_MAX} words or fewer, spoken by ${name} to the protagonist, in ${name}'s own voice: the register, tics and never-list on the scene card.`,
     `- Fit stage ${stage}: only what ${name} lets show at this stage.`,
+    `- Touch draws a bolder answer as they grow closer: at stage 1 it meets ${name}'s mask; by stage 6 ${name} answers it as someone who is theirs. Through stage ${SLOW_BURN_LAST_STAGE} ${name} never says what they feel outright.`,
+    ...(intimate
+      ? [
+          `- A touch to the chest or the crotch is an intimate one, and ${name} answers it as the content contract allows.`,
+        ]
+      : []),
     "- No question that demands an answer: no line has a question mark, except an annoyed line's rhetorical one.",
     `- ${NO_ABSENCE_RULE}`,
     "- No spoilers: never state a hidden secret; it may show only as a tell.",
@@ -3110,7 +3146,7 @@ export function linePackMessages({ world, player, unit, stage, withFixed }: Line
     "",
     otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
-    otomeContentContract({ world, lis: [{ name }], kind: "home" }),
+    otomeContentContract({ world, lis: [{ name }], kind }),
   ].join("\n");
   const samples = unit.bible?.voice.samples;
   const sampleLines = samples
@@ -3132,9 +3168,11 @@ export function linePackMessages({ world, player, unit, stage, withFixed }: Line
     otomeSceneCard(unit, { stage }),
     sampleLines.length ? `How ${name} sounds:\n${sampleLines.join("\n")}` : "",
     tics.length ? `Tics: ${tics.slice(0, 4).join("; ")}` : "",
+    // His tastes (#1936) under NSFW Heat only; "" otherwise.
+    intimacyLine(world, unit),
     "",
     `Write ${name}'s Home lines for stage ${stage} now.`,
-    otomeContractReminder("home"),
+    otomeContractReminder(kind),
   ]
     .filter((text, index, all) => text !== "" || all[index - 1] !== "")
     .join("\n");
