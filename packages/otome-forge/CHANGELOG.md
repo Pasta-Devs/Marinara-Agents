@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.9.4 — 2026-11-06
+
+- **Otome Hearth uses a little less battery.** It does less drawing on every screen, and stops work you can't see. The soft glows drifting behind each screen are blurred once instead of on every frame. Once Home has appeared, the scene hidden behind your room is no longer drawn at all, and in Midnight the window's light takes less work to draw. The glows hidden behind the reader hold still, and so do Home's stars at dawn and by day, when the sky hides them. Nothing looks, moves or sounds different.
+
 ## 0.9.3 — 2026-11-06
 
 - **Figurines are painted.** A love interest's figurine is now a painted picture of them as a small collectible figure in the look they wear, standing on a display base, instead of a drawing. It is painted once, right after you buy it (1 image, with your image connection), then cut out so it stands on the Shop's shelf, in your Wardrobe and on Home. **Ask before painting** and prompt review wait for your tap, and a paint that fails shows **Try painting it again**. Opening the Shop no longer draws every figurine with your Planning model. A figurine you bought before 0.9.3 shows **Paint it** in the Shop and the Wardrobe.

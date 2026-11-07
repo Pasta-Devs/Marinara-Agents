@@ -538,17 +538,36 @@ ${n} .of-scene-stars {
     radial-gradient(1.4px 1.4px at 60% 74%, var(--of-star) 50%, transparent 52%);
   animation: of-twinkle 7s ease-in-out infinite alternate;
 }
-/* Two slow, soft glows drifting behind everything. */
+/* Two slow, soft glows drifting behind everything. #2141: each glow's blur is on a still ::before inside it, so it is
+   drawn once with the glow and the drift only moves the result; on the drifting glow itself the 46px blur was redone
+   every frame. The glow keeps a blur(0px), which draws nothing: with no filter on it at all, Chromium layers the
+   Engine's own header another way and its 1-px borders shift by a few shades. */
 ${n} .of-scene-glow {
-  position: absolute; width: 85%; aspect-ratio: 1; border-radius: 50%; filter: blur(46px); opacity: 0.55;
-  background: radial-gradient(circle, var(--of-glow) 0%, transparent 68%);
+  position: absolute; width: 85%; aspect-ratio: 1; opacity: 0.55; filter: blur(0px);
   inset-inline-start: -30%; top: 6%; animation: of-drift 22s ease-in-out infinite alternate;
+}
+${n} .of-scene-glow::before {
+  content: ""; position: absolute; inset: 0; border-radius: 50%; filter: blur(46px);
+  background: radial-gradient(circle, var(--of-glow) 0%, transparent 68%);
 }
 ${n} .of-scene-glow + .of-scene-glow {
   inset-inline-start: auto; inset-inline-end: -34%; top: 48%; opacity: 0.4;
-  background: radial-gradient(circle, rgb(230 201 138 / 0.5) 0%, transparent 68%);
   animation-duration: 28s; animation-direction: alternate-reverse;
 }
+${n} .of-scene-glow + .of-scene-glow::before {
+  background: radial-gradient(circle, rgb(230 201 138 / 0.5) 0%, transparent 68%);
+}
+/* #2141: Home's room and the reader's scene are opaque and fill the stage, so under them the glows and stars hold still
+   instead of being drawn again every frame unseen. Paused, not stopped: they go on from where they were. A memory
+   banner takes a strip above the reader, where the scene shows, so they keep moving while one is there. */
+${n} .of-stage:has(.of-home) :is(.of-scene-glow, .of-scene-stars),
+${n} .of-stage:has(.of-reader):not(:has(.of-memory-banner)) :is(.of-scene-glow, .of-scene-stars) {
+  animation-play-state: paused;
+}
+/* Once Home has faded in (--of-fade), the scene under its room is not drawn at all: opacity 0, which leaves the layers
+   as they were (hiding them makes Chromium layer the Engine's header another way, shifting its 1-px borders). */
+${n} .of-stage:has(.of-home) .of-scene { animation: of-covered 0s calc(var(--of-fade) + 100ms) forwards; }
+@keyframes of-covered { to { opacity: 0; } }
 ${n} .of-scene-veil {
   position: absolute; inset: 0;
   background:
@@ -2414,6 +2433,8 @@ ${n} .of-home-stars {
     radial-gradient(1.2px 1.2px at 47% 44%, var(--of-star) 50%, transparent 52%);
   animation: of-home-twinkle 7s ease-in-out infinite alternate;
 }
+/* #2141: at dawn and by day the stars are hidden (opacity 0), so their twinkle holds still until dusk. */
+${n} .of-home:is([data-sky="dawn"], [data-sky="day"]) .of-home-stars { animation-play-state: paused; }
 /* An arched window onto the sky: the room's only light, in the colour of the hour. */
 ${n} .of-home-window {
   position: absolute; top: 12%; inset-inline-end: 9%; width: 36%; aspect-ratio: 3 / 4.6; opacity: 0.5;
@@ -2456,11 +2477,15 @@ ${n}[data-look="pearl"] .of-home[data-sky="night"] {
   --of-home-tint: linear-gradient(180deg, rgb(110 110 190 / 0.24) 0%, rgb(140 120 200 / 0.1) 62%, transparent 100%);
 }
 ${n} .of-home-l3 {
-  position: absolute; inset: -30px; mix-blend-mode: screen;
+  position: absolute; inset: -30px;
   transform: translate3d(calc(var(--of-px) * 20px), calc(var(--of-py) * 12px), 0);
   transition: transform 900ms var(--of-ease);
 }
-${n}[data-look="pearl"] .of-home-l3 { mix-blend-mode: normal; opacity: 0.8; }
+${n}[data-look="pearl"] .of-home-l3 { opacity: 0.8; }
+/* #2141: Midnight's light layer screen-blended, but it is the first thing drawn in the front's own group (a stacking
+   context), over nothing, where screen draws the same as normal; the blend cost a compositing pass every frame. The
+   front keeps the no-op filter that stands in for the group the blend gave it, so its edges are drawn as before. */
+${n}[data-look="midnight"] .of-home-front { filter: blur(0px); }
 ${n} .of-home-beam {
   position: absolute; top: -6%; inset-inline-end: 2%; width: 66%; height: 92%; filter: blur(22px);
   background: linear-gradient(196deg, var(--of-home-light) 0%, transparent 58%); transform: skewX(-12deg);
