@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.13.1 — 2026-11-07
+
+- **Starting a new arc no longer fails on wordy chapter outlines.** When the model described a chapter of the next arc in more than a short sentence, the plan was refused and you saw "The model's reply wasn't in the expected format." Longer chapter descriptions are now accepted, so going on with the story works with models that write more, such as thinking models on high effort.
+- **Later arcs no longer fail on mystery reveals you already know.** In a longer story, planning the next arc could fail with the same error when the model scheduled a piece of the mystery, or its truth, that earlier arcs had already revealed. The planner is now told what you already know, and a repeated reveal is skipped instead of failing the arc.
+
 ## 0.13.0 — 2026-11-07
 
 - **Everyone, a group chat with your love interests.** Messages now starts with **Everyone**, one thread with every love interest you've met. Write there and someone always answers: whoever you name, and the others when it suits them, each in their own colour. **Close and remember** turns the conversation into a memory that everyone in it recalls, and earns no affection.
