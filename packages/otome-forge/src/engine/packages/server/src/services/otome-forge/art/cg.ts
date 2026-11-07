@@ -44,6 +44,7 @@ import {
 } from "./paint.js";
 import { paintBeatPlaces, type PaintOptions } from "./places.js";
 import { CG_PEOPLE_MAX, imageNames, type CgPerson, type ImagePrompt, SCENE_SIZE, cgPrompt } from "../prompts.js";
+import { coreOf, fold, nameWords } from "../names.js";
 
 type BeatCg = NonNullable<Beat["cg"]>;
 
@@ -113,41 +114,12 @@ const PROTAGONIST_WORDS = new Set([
   "main character",
   "the main character",
 ]);
-/** Titles and articles before (or inside) a name: "Lord Kai", "Il Dottore". */
-const TITLE_WORDS = new Set(
-  (
-    "lord lady sir dame mr mrs ms miss dr doctor professor prof captain master mistress prince princess king queen " +
-    "il la le the el al von van de di da"
-  ).split(" "),
-);
-const HONORIFIC = /-(?:sama|san|kun|chan|dono|senpai|sensei|ssi|nim)$/u;
 /** Titles that never name someone of this subject pronoun ("Mrs. Ren" is not Kai Ren, who is "he"). */
 const TITLES_NOT_FOR: Partial<Record<string, ReadonlySet<string>>> = {
   he: new Set("mrs ms miss lady dame mistress princess queen".split(" ")),
   she: new Set("mr lord sir master prince king".split(" ")),
 };
 
-/**
- * Folded for matching: accents on Latin, Greek and Cyrillic letters dropped ("Inès" is "ines"), compatibility forms
- * unified, lower case. Marks in other scripts stay: a Devanagari vowel sign or a kana's dakuten makes another name.
- */
-const fold = (text: string) =>
-  text
-    .normalize("NFKD")
-    .replace(/([\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}])\p{M}+/gu, "$1")
-    .normalize("NFKC")
-    .toLowerCase();
-/** A name's words, folded, without edge punctuation or an honorific suffix ("Kai-sama," is "kai"). A possessive stays. */
-const nameWords = (name: string) =>
-  fold(name)
-    .split(/\s+/u)
-    .map((word) => word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "").replace(HONORIFIC, ""))
-    .filter(Boolean);
-/** The words that name the person: without titles and articles, unless nothing else is left. */
-const coreOf = (words: readonly string[]) => {
-  const core = words.filter((word) => !TITLE_WORDS.has(word));
-  return core.length ? core : [...words];
-};
 const within = (words: readonly string[], of: readonly string[]) => words.every((word) => of.includes(word));
 /** Running text's words, split on anything that is not a letter or digit, so "Kai's hand" says Kai. */
 const textWords = (text: string) =>

@@ -39,6 +39,11 @@ export const NOTE_TEXT_MAX = 600;
  */
 export const DAILY_MESSAGES_MAX = 24;
 /**
+ * #2154: the group chat's thread name (`${R}:chat:group`, and the phone's `open` for it). LI ids always start with
+ * "li-", so it never names a love interest. Settings → Connections' squabbles a day share DAILY_MESSAGES_MAX.
+ */
+export const GROUP_THREAD = "group";
+/**
  * Your thoughts… on Home (#2127): the most characters the player may write. The server refuses longer (S/routes/home.ts)
  * and reads a longer stored one as none (S/schemas/state.ts); the next main chapter's plan and scenes carry them.
  */

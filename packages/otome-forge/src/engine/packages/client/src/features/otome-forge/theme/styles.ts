@@ -2665,6 +2665,30 @@ ${R} .of-bubble-quote {
   background: rgb(255 255 255 / 0.22); font-family: var(--of-font-hand); font-size: 1.1rem; line-height: 1.12; opacity: 0.9;
 }
 ${R} .of-bubble-time { padding: 0 6px; font-size: 0.68rem; color: var(--of-text-faint); font-variant-numeric: tabular-nums; }
+/* #2154: the group chat. Its portraits overlap in one slot; each member's bubble sits beside a 24 px portrait gap, the
+   portrait on the last of their run, their name over the first, in the column of the time under it (gap + 6 px). */
+${R} .of-avatar-cluster { position: relative; flex: none; display: block; }
+${R} .of-avatar-cluster-item { position: absolute; display: block; }
+${R} .of-avatar-cluster-more {
+  position: absolute; inset-inline-end: -4px; bottom: -4px; min-width: 20px; height: 20px; padding: 0 5px;
+  display: grid; place-items: center; border-radius: 999px; font-size: 0.66rem; font-weight: 800;
+  color: var(--of-text); background: var(--of-surface-solid); box-shadow: 0 0 0 2px var(--of-wish-ring);
+}
+${R} .of-thread-titles { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+${R} .of-thread-titles .of-thread-title { flex: none; }
+${R} .of-thread-subtitle {
+  margin: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 0.78rem;
+  color: var(--of-text-soft);
+}
+${R} .of-bubble-name {
+  padding-inline-start: 38px; font-size: 0.74rem; font-weight: 700; color: var(--of-text-soft);
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 88%;
+}
+${R} .of-bubble-line { display: flex; align-items: flex-end; gap: 8px; max-width: 88%; min-width: 0; }
+${R} .of-bubble-line .of-bubble { max-width: calc(100% - 32px); }
+${R} .of-bubble-line > .of-avatar, ${R} .of-bubble-gap { flex: none; width: 24px; }
+${R} .of-bubble-row[data-group="true"] { margin-top: 2px; }
+${R} .of-bubble-row[data-group="true"] .of-bubble-time { padding-inline-start: 38px; }
 ${R} .of-sticker {
   display: block; width: 112px; height: 112px; object-fit: cover; object-position: 50% 12%; border-radius: 22px;
   box-shadow: 0 0 0 3px var(--of-wish-ring), 0 8px 18px rgb(0 0 0 / 0.2);

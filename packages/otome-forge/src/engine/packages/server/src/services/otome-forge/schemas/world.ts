@@ -218,6 +218,8 @@ export function normalizeWorld(data: unknown): World {
       places: normalizePlaces,
       dailyMessages: z.number().int().min(0).max(DAILY_MESSAGES_MAX).optional(),
       phoneDaily: PhoneDailySchema.optional(),
+      groupSquabbles: z.number().int().min(0).max(DAILY_MESSAGES_MAX).optional(),
+      groupDaily: PhoneDailySchema.optional(),
     },
     defaultWorld,
     isRecord(data) ? data : undefined,
@@ -226,10 +228,10 @@ export function normalizeWorld(data: unknown): World {
 
 /**
  * The world without its hidden story (no mystery truth or pieces, no web secrets), and without the music briefs or the
- * daily messages' quota.
+ * daily messages' and the group chat's quotas.
  */
 export function toWorldView(world: World): WorldView {
-  const { mystery, web, audio, phoneDaily: _phoneDaily, ...rest } = world;
+  const { mystery, web, audio, phoneDaily: _phoneDaily, groupDaily: _groupDaily, ...rest } = world;
   const { briefs: _briefs, ...shownAudio } = audio;
   return {
     ...rest,

@@ -1,17 +1,19 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the phone's threads, one private thread per love interest in his accent colour, newest first, with
 // the last message (or "typing…" while his reply is being written) and how many are unread. Every love interest has
-// a row, written to or not.
+// a row, written to or not. #2154: once two love interests are met, the group chat, "Everyone", is pinned first, with
+// its members' portraits, the last message with who sent it, and its unread count.
 // ──────────────────────────────────────────────
 import { type CSSProperties, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { Heart, MessageCircleHeart, RotateCcw } from "lucide-react";
 import { useOtomeApi } from "../../api";
-import { Avatar } from "../../components/Avatar";
+import { Avatar, AvatarCluster } from "../../components/Avatar";
 import { accentOf } from "../../lib/accent";
 import { useOtomeProps } from "../../props";
 import type { LiId, PhoneListView, PhoneMessage, RunView } from "../../shared/api-types";
+import { GROUP_THREAD } from "../../shared/home";
 import { BUSY_POLL_MS, phonePath, phoneQueryKey } from "./PhoneScreen";
 import { stickerLabel, useStickers } from "./StickerPicker";
 
@@ -50,8 +52,11 @@ export function ThreadList({ runKey, view, onOpen, rowRef, headingRef }: ThreadL
     queryKey: phoneQueryKey(runKey),
     queryFn: () => otome.get<PhoneListView>(phonePath(runKey)),
     refetchOnMount: "always",
-    refetchInterval: (query) => (query.state.data?.threads.some((thread) => thread.busy) ? BUSY_POLL_MS : false),
+    refetchInterval: (query) =>
+      query.state.data?.threads.some((thread) => thread.busy) || query.state.data?.group?.busy ? BUSY_POLL_MS : false,
   });
+  // A server before #2154 sends no group.
+  const group = threads.data?.group ?? null;
   const byLi = new Map((threads.data?.threads ?? []).map((thread) => [thread.li, thread]));
   const order = (id: LiId) => view.lis.findIndex((li) => li.id === id);
   const rows = [...view.lis].sort((a, b) => {
@@ -62,13 +67,23 @@ export function ThreadList({ runKey, view, onOpen, rowRef, headingRef }: ThreadL
   const preview = (name: string, last: PhoneMessage | null | undefined, busy: boolean) => {
     if (busy) return t("ui.otomeForge.phone.typing", { name });
     if (!last) return t("ui.otomeForge.phone.empty");
-    const said = last.text.trim()
+    const said = saidIn(last);
+    return last.who === "player" ? t("ui.otomeForge.phone.youSaid", { text: said }) : said;
+  };
+  const saidIn = (last: PhoneMessage) =>
+    last.text.trim()
       ? last.text
       : last.sticker
         ? t("ui.otomeForge.phone.sticker", { face: stickerLabel(t, stickers, last.sticker) })
         : "";
-    return last.who === "player" ? t("ui.otomeForge.phone.youSaid", { text: said }) : said;
+  const groupPreview = (last: PhoneMessage | null, busy: boolean) => {
+    if (busy) return t("ui.otomeForge.phone.groupTyping");
+    if (!last) return t("ui.otomeForge.phone.empty");
+    if (last.who === "player") return t("ui.otomeForge.phone.youSaid", { text: saidIn(last) });
+    const name = view.lis.find((li) => li.id === last.li)?.name ?? t("ui.otomeForge.phone.groupSomeone");
+    return t("ui.otomeForge.phone.said", { name, text: saidIn(last) });
   };
+  const members = (group?.members ?? []).flatMap((id) => view.lis.filter((li) => li.id === id));
 
   return (
     <div className="of-page of-phone">
@@ -96,6 +111,42 @@ export function ThreadList({ runKey, view, onOpen, rowRef, headingRef }: ThreadL
         </div>
       ) : (
         <ul className="of-threads">
+          {group ? (
+            <li key={GROUP_THREAD}>
+              <button
+                ref={(element) => rowRef(GROUP_THREAD, element)}
+                type="button"
+                className="of-thread-row of-glass"
+                data-unread={group.unread > 0 ? "true" : undefined}
+                style={{ "--of-li-accent": "var(--of-rose)" } as CSSProperties}
+                onClick={() => onOpen(GROUP_THREAD)}
+              >
+                <AvatarCluster
+                  people={members.map((li) => ({ name: li.name, url: li.portrait, accent: accentOf(li) }))}
+                  size={48}
+                />
+                <span className="of-thread-text">
+                  <span className="of-thread-name">{t("ui.otomeForge.phone.groupName")}</span>
+                  <span className="of-thread-last">{groupPreview(group.last, group.busy)}</span>
+                </span>
+                <span className="of-thread-meta">
+                  {group.last ? (
+                    <time className="of-thread-time" dateTime={group.last.at}>
+                      {messageTime(group.last.at, localization.locale, timeZone)}
+                    </time>
+                  ) : null}
+                  {group.unread > 0 ? (
+                    <span className="of-home-badge">
+                      <span aria-hidden="true">{group.unread}</span>
+                      <span className="of-visually-hidden">
+                        {t("ui.otomeForge.phone.unread", { count: group.unread })}
+                      </span>
+                    </span>
+                  ) : null}
+                </span>
+              </button>
+            </li>
+          ) : null}
           {rows.map((li) => {
             const thread = byLi.get(li.id);
             const unread = thread?.unread ?? 0;
