@@ -3,11 +3,12 @@
 // when it changes something between them "{name} will remember that." rises over the scene ("They'll remember that."
 // when it touched more than one). A big choice says it lasts. A side-with choice (#2046) says so, in the group's name
 // too (focus lands on an option, so a screen reader would skip the note), and each option names whom it backs. On a
-// replay the first pick is marked, and any option shows its branch with nothing changed.
+// replay the first pick is marked, and any option shows its branch with nothing changed. A chapter's closing decision
+// (its big choice, #2146) ends on "Write your own…", which opens the dialog for the player's own words.
 // ──────────────────────────────────────────────
 import { forwardRef, useId } from "react";
 import { useTranslation } from "react-i18next";
-import { Heart, HeartHandshake, Lock, Scale } from "lucide-react";
+import { Heart, HeartHandshake, Lock, PencilLine, Scale } from "lucide-react";
 import type { ChoiceOption, ForgeChoice } from "../../shared/api-types";
 
 interface ChoicePillsProps {
@@ -19,11 +20,13 @@ interface ChoicePillsProps {
   /** #2046: a side-with choice, with the name of the love interest each option backs (optionId → name). */
   backs?: Record<string, string>;
   onChoose: (option: ChoiceOption) => void;
+  /** #2146: opens "Write your own…" (offered on a big choice only). */
+  onOwn?: () => void;
 }
 
 /** The ref is the first option's, so focus can land there when the choice appears. */
 export const ChoicePills = forwardRef<HTMLButtonElement, ChoicePillsProps>(function ChoicePills(
-  { choice, firstChoice, busy, error, backs, onChoose },
+  { choice, firstChoice, busy, error, backs, onChoose, onOwn },
   firstRef,
 ) {
   const { t } = useTranslation();
@@ -76,6 +79,23 @@ export const ChoicePills = forwardRef<HTMLButtonElement, ChoicePillsProps>(funct
             </button>
           </li>
         ))}
+        {big && onOwn ? (
+          <li>
+            <button
+              type="button"
+              className="of-choice-pill"
+              aria-haspopup="dialog"
+              aria-disabled={busy}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (!busy) onOwn();
+              }}
+            >
+              <PencilLine className="of-choice-pill-mark" size={13} strokeWidth={2} aria-hidden="true" />
+              <span className="of-choice-pill-text">{t("ui.otomeForge.reader.ownAnswer")}</span>
+            </button>
+          </li>
+        ) : null}
       </ul>
       <p className="of-choices-status" role="status" aria-live="polite">
         {busy ? t("ui.otomeForge.reader.choiceSaving") : (error ?? "")}

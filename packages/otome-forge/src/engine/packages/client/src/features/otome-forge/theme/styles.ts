@@ -1962,6 +1962,10 @@ ${R} .of-choices-panel[data-side="true"] .of-choice-first { margin-inline-start:
 ${R} .of-choices-panel[data-kind="big"] .of-choice-pill {
   border-color: rgb(230 201 138 / 0.85); box-shadow: inset 0 0 0 1px rgb(230 201 138 / 0.35), 0 0 20px rgb(230 201 138 / 0.22);
 }
+/* #2146: a closing decision's four options and Write your own… sit a little closer, so on a 375 × 667 phone the
+   heading stays clear of the header (the pills keep a 44px tap target). */
+${R} .of-choices-panel[data-kind="big"] .of-choice-pills:has(> li:nth-child(5)) { gap: 6px; }
+${R} .of-choices-panel[data-kind="big"] .of-choice-pills:has(> li:nth-child(5)) .of-choice-pill { min-height: 44px; padding-block: 8px; }
 ${R} .of-choices-status { min-height: 1.2em; margin: 0; font-size: 0.8rem; text-align: center; color: var(--of-text-soft); }
 ${R} .of-choices-status:empty { min-height: 0; }
 ${R} .of-reader-panel {
