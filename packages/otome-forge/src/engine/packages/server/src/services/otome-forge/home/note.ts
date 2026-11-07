@@ -27,6 +27,7 @@ import type {
   Unit,
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import { birthdayIn } from "../../../../../client/src/features/otome-forge/shared/birthdays.js";
 import { isFace } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import {
   MOOD_REASON_WORDS_MAX,
@@ -111,7 +112,10 @@ export function noteDay(
   const wall = forgeWallDate(now);
   const today = forgeDayKey(now);
   const special: string[] = [];
-  if (unit.bible?.birthday === today.slice(5)) special.push(`Today is ${unit.name}'s birthday.`);
+  // #2153: on the day Remind Me shows and celebrates (02-29 on 02-28 in a common year).
+  if (unit.bible && birthdayIn(unit.bible.birthday, Number(today.slice(0, 4))) === today) {
+    special.push(`Today is ${unit.name}'s birthday.`);
+  }
   const began = Date.parse(world.createdAt);
   if (Number.isFinite(began)) {
     const start = forgeDayKey(began);

@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.12.0 — 2026-11-07
+
+- **Celebrate their birthdays.** On a love interest's birthday, a dot on Home's **Remind Me** points you to **Birthdays to celebrate**. **Celebrate** opens a scene for the two of you, where you can give one of your Shop gifts: they react in their own voice, and the gift earns its affection when you finish the scene, even past the daily cap. Missed the day? You can still celebrate for 7 days after, and they'll know you're late. You can celebrate each birthday once.
+
 ## 0.11.0 — 2026-11-07
 
 - **Tarot night.** A new date in Dates: three cards of the Major Arcana, as Past, Present and Future. A love interest reads your cards and answers your question, or you read theirs, choosing how to read each card, spoken in your persona's voice. A reading pays 40 Starlight and 40 affection within the day's caps, costs 1 model call, changes nothing in the story, and only they remember it. A reading you leave opens again: when they read your cards, from its start; when you read theirs, at the card you still have to read.

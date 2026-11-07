@@ -2,12 +2,12 @@
 // Otome Hearth: the Shop in Wish (#2128): its gifts, the love interests' figurines, their prices and wire shapes
 // ──────────────────────────────────────────────
 // Pure TypeScript shared by both bundles: the server charges by these numbers (S/routes/shop.ts applyPurchase) and the
-// client shows them. A gift is unlimited (bought one at a time, kept as a count per gift) and is given on a date; the
-// aphrodisiac is offered only under NSFW Heat (giftsFor), which the server enforces too. Each love interest has one
+// client shows them. A gift is unlimited (bought one at a time, kept as a count per gift) and is given on a date or a
+// birthday (#2153); the aphrodisiac is offered only under NSFW Heat (giftsFor), which the server enforces too. Each love interest has one
 // figurine, bought once, that then stands on Home and whose purchase writes a one-scene Character Story,
 // `story-figurine-<li>` (S/items/character-story.ts figurineStoryChapter). Buying never calls a model; with an image
 // connection it starts the figurine's one paid image (#2138, S/art/figurine.ts), cut out of its backdrop once painted.
-// The gift names here are English and model-facing (date prompts); the client names gifts through its own literal map
+// The gift names here are English and model-facing (date and birthday prompts); the client names gifts through its own literal map
 // of ui.otomeForge.shop.* keys (C/components/GiftArt.tsx GIFT_NAME_KEYS).
 import type { LiId, Paint } from "./api-types";
 import { intimacyOpen, type ContentSettings } from "./content";
@@ -23,7 +23,7 @@ export const GIFT_PRICES: Readonly<Record<GiftId, number>> = {
   aphrodisiac: 1000,
 };
 
-/** The extra affection a gift given on a date earns: a fifth of its price. */
+/** The extra affection a gift given on a date or a birthday earns: a fifth of its price. */
 export const GIFT_AFFECTION: Readonly<Record<GiftId, number>> = {
   flowers: 40,
   chocolates: 60,
