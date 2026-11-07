@@ -279,6 +279,31 @@ test("Take picture paints one photo with no model call: his look, her look, then
   );
   assert.doesNotMatch(t.paid[2]!.request.prompt, /in this outfit/u);
   assert.match(t.paid[2]!.request.prompt, /Kai: tall, dark hair, grey eyes; black wool coat\./u);
+  // #2147: Engine art as a base look is who they are too (his card, her persona), and a place in an Engine background
+  // sends that background.
+  const background = "/api/backgrounds/file/harbour.png";
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    portrait: "/api/sprites/card-kai/file/full_neutral.png",
+  }));
+  await t.store.updateDoc(runDocTarget("player", playerId(t.runId)), normalizePlayer, (player) => ({
+    ...player,
+    portrait: "/api/avatars/file/ines-persona.png",
+  }));
+  await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+    ...world,
+    places: { ...world.places, [PLACE]: { ...world.places[PLACE]!, art: { state: "ready", at, url: background } } },
+  }));
+  await take(t, { id: newPhotoId(), ...setup({ hisLook: "base", herLook: "base" }) });
+  assert.deepEqual(decoded(t.paid[3]!), [
+    "/api/avatars/file/kai-card.png",
+    "/api/avatars/file/ines-persona.png",
+    background,
+  ]);
+  assert.match(
+    t.paid[3]!.request.prompt,
+    /Reference images, in order: Kai's face; Ines's face; the place behind them\./u,
+  );
   assert.equal(t.calls.length, 0, "still no model call");
 });
 

@@ -192,7 +192,13 @@ export function ImageControls({ value, onChange, connections, lis }: ImageContro
         connections={connections}
         emptyLabel={t("ui.otomeForge.setup.noImages")}
         onChange={(connectionId) => onChange({ ...value, connectionId: connectionId || null })}
-        hint={connections.length === 0 ? t("ui.otomeForge.setup.noImageConnections") : undefined}
+        hint={
+          connections.length === 0
+            ? t("ui.otomeForge.setup.noImageConnections")
+            : value.connectionId
+              ? t("ui.otomeForge.setup.engineArtFirst")
+              : undefined
+        }
       />
       {value.connectionId ? (
         <>

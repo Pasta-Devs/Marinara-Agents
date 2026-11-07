@@ -28,6 +28,7 @@
 import { forgeSubjectReference, type ImageIdentitySubject } from "@forge-kit/image-avatar-references.mjs";
 import { z, type ZodType } from "zod";
 import type { Paint, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import { isEngineArt } from "../../../../../client/src/features/otome-forge/shared/engine-art.js";
 import {
   PHOTO_CUSTOM,
   PHOTO_EXPRESSIONS,
@@ -210,7 +211,7 @@ async function resolveSetup(deps: Pick<PhotoDeps, "store">, runId: string, setup
     setup.hisLook === BASE_LOOK
       ? {
           outfitLine: unit.outfitLine || unit.bible.look.outfitLine,
-          ...(unit.portrait
+          ...(unit.portrait && !isEngineArt(unit.portrait)
             ? { likeness: { portrait: unit.portrait } }
             : { likeness: unit.cardId ? { cardId: unit.cardId } : {}, face: true as const }),
         }
@@ -222,7 +223,7 @@ async function resolveSetup(deps: Pick<PhotoDeps, "store">, runId: string, setup
     setup.herLook === BASE_LOOK
       ? {
           outfitLine: run.player.look.outfitLine,
-          ...(run.player.portrait
+          ...(run.player.portrait && !isEngineArt(run.player.portrait)
             ? { likeness: { portrait: run.player.portrait } }
             : { likeness: { personaId: run.player.personaId }, face: true as const }),
         }
@@ -264,7 +265,12 @@ async function buildPhoto(
   // The first of them whose picture exists but did not load: paint() stops before paying for a stranger.
   let missing: string | undefined;
   for (const [who, likeness, name] of sources) {
-    const image = await forgeSubjectReference(images, likeness).catch(() => null);
+    // #2147: an Engine background chosen for the place is read as it is (the kit reads only avatars and the gallery).
+    const image = await (
+      who === "place" && isEngineArt(place.url)
+        ? images.cardAvatarImage(place.url).then((found) => found && `data:${found.mime};base64,${found.base64}`)
+        : forgeSubjectReference(images, likeness)
+    ).catch(() => null);
     if (image) resolved.push({ who, image });
     else if (name && !missing && (await hasLikenessSource(images, likeness))) missing = name;
   }

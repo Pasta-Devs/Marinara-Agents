@@ -40,6 +40,7 @@ import {
   X,
 } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
+import { BackgroundPicker } from "../../components/BackgroundPicker";
 import { CgTakeover } from "../../components/CgTakeover";
 import { usePaintsByItself } from "../../components/CostHint";
 import { DeclinedPanel } from "../../components/DeclinedPanel";
@@ -134,7 +135,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
   );
   // The last beat's music, kept while the next beat opens; none until the first beat is ready.
   const lastMood = useRef<MusicMood | undefined>(undefined);
-  const [dialog, setDialog] = useState<"log" | "ease" | null>(null);
+  const [dialog, setDialog] = useState<"log" | "ease" | "background" | null>(null);
   // Each love interest's level (and extra stories unlocked, #2025) when the chapter opened, so the end card can say
   // which one rose.
   const [levelsBefore] = useState<LevelsBefore>(() => new Map(view.lis.map((li) => [li.id, li])));
@@ -209,7 +210,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
     advance();
   };
 
-  const openDialog = (next: "log" | "ease") => {
+  const openDialog = (next: "log" | "ease" | "background") => {
     reader.setAuto(false);
     setDialog(next);
   };
@@ -403,6 +404,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
               : undefined
           }
           placePaint={placePaint}
+          onPlaceBackground={() => openDialog("background")}
           tags={reader.tags}
           reading={reading}
           auto={reader.auto}
@@ -527,6 +529,13 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
                 }
               : undefined
           }
+          onClose={() => setDialog(null)}
+        />
+      ) : null}
+      {dialog === "background" && place ? (
+        <BackgroundPicker
+          place={place}
+          onChoose={(url) => reader.chooseBackground(place, url)}
           onClose={() => setDialog(null)}
         />
       ) : null}

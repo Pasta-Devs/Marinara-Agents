@@ -14,7 +14,6 @@
 // beat is served, queueScenePaints for a beat's places and CG once written and prepareSceneCg for a CG still without
 // a record once served (art/cg.ts), dispose on teardown, after which nothing more is paid for. queueStickers (#2044, art/stickers.ts) runs
 // each run's sticker chain from GET /runs/:run.
-import { forgeLocalAvatarPath } from "@forge-kit/image-avatar-references.mjs";
 import { createForgeStoryExpressions, type ForgeStoryExpressions } from "@forge-kit/story-expressions-server.mjs";
 import type { Beat, Paint, Unit, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { FACE_LOOKS, FACES, type Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
@@ -25,6 +24,7 @@ import { normalizeUnit } from "../schemas/unit.js";
 import { readCastUnits } from "../schemas/state.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { queueScenePaints, releaseBeatArt, startBeatCg } from "./cg.js";
+import { engineArtPath } from "./engine-art.js";
 import { galleryRef, worldStyle, type GeneratedImage } from "./image-client.js";
 import { imagesOf, paintSlot, updateIfChanged, type ArtDeps } from "./paint.js";
 import { paintBeatPlaces, type PaintOptions } from "./places.js";
@@ -43,7 +43,7 @@ export async function expressionPromptsFor(deps: ArtDeps, runId: string, li: str
   if (!world.images.connectionId) throw new OtomeForgeError(503, "Choose an image connection first.", "no-connection");
   if (!world.images.expressions) throw new OtomeForgeError(409, "Turn expressions on first.", "conflict");
   const base = baseOf(unit);
-  if (!base || !forgeLocalAvatarPath(base)) throw new OtomeForgeError(409, "Paint this look first.", "conflict");
+  if (!base || !engineArtPath(base)) throw new OtomeForgeError(409, "Paint this look first.", "conflict");
   const style = await worldStyle(imagesOf(deps), world.images);
   return {
     base,
@@ -203,7 +203,8 @@ export function createOtomeArt(deps: ArtDeps): OtomeArt {
       debug: () => debugMode.get(runId) === true || runtime.isDebugAgentsEnabled(),
       names: FACES,
       looks: FACE_LOOKS,
-      localAvatarPath: forgeLocalAvatarPath,
+      // #2147: an Engine sprite base too, so only its missing faces are painted (S/art/engine-art.ts).
+      localAvatarPath: engineArtPath,
       logPrefix: "[otome-forge]",
       scopeName: "otome-forge-expressions",
     });

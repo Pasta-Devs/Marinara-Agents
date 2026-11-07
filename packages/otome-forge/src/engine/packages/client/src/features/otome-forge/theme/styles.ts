@@ -1729,8 +1729,9 @@ ${R} .of-reader-tool[aria-pressed="true"] {
 ${R} .of-reader-tool[aria-disabled="true"] { opacity: 0.45; cursor: default; }
 ${R} .of-reader-tool[aria-disabled="true"]:hover { background: var(--of-surface); color: inherit; }
 /* The scene's chips stay on one line and scroll sideways, fading at the end. */
+/* #2147: its 10px of padding (taken back by the margin, so the row keeps its place) holds the action chips' 44px taps. */
 ${R} .of-reader-chips {
-  flex: 1; min-width: 0; display: flex; gap: 5px; margin: 0; padding: 4px 0; overflow-x: auto; list-style: none;
+  flex: 1; min-width: 0; display: flex; gap: 5px; margin: -6px 0; padding: 10px 0; overflow-x: auto; list-style: none;
   scrollbar-width: none; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
   mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
 }
@@ -2808,6 +2809,31 @@ ${R} .of-reader-chip--paint {
 }
 ${R} .of-reader-chip--paint:hover { background: var(--of-surface-strong); }
 ${R} .of-reader-chip--paint[aria-disabled="true"] { opacity: 0.6; cursor: progress; }
+${R} .of-reader-chip--background { cursor: pointer; font-family: inherit; }
+${R} .of-reader-chip--background:hover { background: var(--of-surface-strong); }
+${R} :is(.of-reader-chip--paint, .of-reader-chip--background) { position: relative; min-height: 24px; }
+${R} :is(.of-reader-chip--paint, .of-reader-chip--background)::before { content: ""; position: absolute; inset: -11px 0; }
+/* #2147: the Engine's backgrounds for a place, two across in a phone-sized stage and four in a wide one (the stage, not
+   the window: a desktop's stage can be phone-sized). The picker keeps its width while loading, empty or unmatched.
+   16px keeps iOS from zooming into the search field. */
+${R} .of-dialog:has(.of-bg-note) { width: min(100%, 640px); }
+${R} .of-dialog-body:has(> .of-bg-grid) { container-type: inline-size; }
+${R} .of-bg-search.of-input { font-size: 16px; }
+${R} .of-bg-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none;
+}
+@container (min-width: 520px) { ${R} .of-bg-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+${R} .of-bg-tile {
+  display: flex; flex-direction: column; gap: 4px; width: 100%; min-height: 44px; padding: 4px; border-radius: 12px;
+  border: 1px solid var(--of-border); background: var(--of-surface); color: var(--of-text); font: inherit;
+  text-align: start; cursor: pointer;
+}
+${R} .of-bg-tile:hover { border-color: var(--of-border-strong); }
+${R} .of-bg-tile[aria-disabled="true"] { opacity: 0.6; cursor: progress; }
+${R} .of-bg-tile img {
+  display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; background: var(--of-tint);
+}
+${R} .of-bg-name { overflow: hidden; padding: 0 2px; font-size: 0.75rem; font-weight: 700; white-space: nowrap; text-overflow: ellipsis; }
 /* The Confrontation: four stances in his colour, a round marker, and the ending's card. */
 ${R} .of-stances { display: flex; flex-direction: column; gap: 8px; padding: 0 4px; animation: of-rise 480ms var(--of-ease) both; }
 ${R} .of-stances-round {

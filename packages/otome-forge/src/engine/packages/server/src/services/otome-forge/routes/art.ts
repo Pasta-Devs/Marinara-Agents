@@ -7,6 +7,8 @@
 //                                                            first-wear scene, him in that look (`looks`), and
 //                                                            `lookComing` while that look paints or is cut out
 // POST /runs/:run/art/place {place, prompt?, negativePrompt?} → {place, world}; paints that place now (the tap)
+// POST /runs/:run/art/place/background {place, url}        → {place, world}; #2147: a background from the Engine's
+//                                                            library as that place's picture, painting nothing
 // POST /runs/:run/art/place/prompt {place}                 → {prompt, negativePrompt}; for the prompt review dialog
 // POST /runs/:run/art/cg {key, i, prompt?, negativePrompt?}  → {art}; paints that beat's CG now (the tap)
 // POST /runs/:run/art/cg/prompt {key, i}                   → {prompt, negativePrompt}
@@ -36,7 +38,7 @@ import { cgPromptFor, cgView, markCgSeen, paintCgNow } from "../art/cg.js";
 import { itemArtView, outfitOf } from "../art/outfits.js";
 import { paintStickerNow, startPlayerStickers, stickerPromptFor } from "../art/stickers.js";
 import { STICKER_ID } from "../../../../../client/src/features/otome-forge/shared/stickers.js";
-import { paintPlaceNow, placePromptFor, readPlace, withPlaceViews } from "../art/places.js";
+import { chooseBackground, paintPlaceNow, placePromptFor, readPlace, withPlaceViews } from "../art/places.js";
 import { OtomeForgeError, debugModeOf, parseBody, runParam, type OtomeRequest, type RegisterRoutes } from "../http.js";
 import { isChapterKey, isItemStoryKey } from "../ids.js";
 import { readItem } from "../items/open.js";
@@ -54,6 +56,7 @@ const Edited = {
 };
 const PlaceBody = z.object({ place: z.string().min(1).max(120), ...Edited });
 const PlacePromptBody = z.object({ place: z.string().min(1).max(120) });
+const BackgroundBody = z.object({ place: z.string().min(1).max(120), url: z.string().min(1).max(2000) });
 const BeatRef = { key: z.string().min(1).max(120), i: z.number().int().min(0).max(BEAT_MAX) };
 const CgBody = z.object({ ...BeatRef, ...Edited });
 const CgRefBody = z.object(BeatRef);
@@ -152,6 +155,18 @@ export const registerArtRoutes: RegisterRoutes = (router, deps) => {
       const run = await readRun(store, runId);
       if (!run) throw runNotFound();
       return { place: painted, world: toWorldView(withPlaceViews(runId, run.world)) };
+    }),
+  );
+
+  router.post(
+    "/runs/:run/art/place/background",
+    handle(async (request) => {
+      const { place, url } = parseBody(BackgroundBody, request.body);
+      const { runId } = runParam(request);
+      const chosen = await chooseBackground(deps, runId, place, url);
+      const run = await readRun(store, runId);
+      if (!run) throw runNotFound();
+      return { place: chosen, world: toWorldView(withPlaceViews(runId, run.world)) };
     }),
   );
 

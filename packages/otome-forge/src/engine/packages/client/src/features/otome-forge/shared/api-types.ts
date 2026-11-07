@@ -181,6 +181,8 @@ export interface PlaceArt {
   name: string;
   tags: string;
   art?: Paint;
+  /** #2147: the painting a chosen Engine background replaced, kept, so it leaves the gallery only with the story. */
+  painted?: Paint;
 }
 
 /** `${R}:world`. `mystery.truth`, `mystery.pieces` and web secrets never leave the server. */

@@ -16,6 +16,7 @@
 // the expressions kit's stale sets.
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import type { Cutout, LiId, Unit } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import { isEngineAvatar } from "../../../../../client/src/features/otome-forge/shared/engine-art.js";
 import { playerId, runDocTarget, unitId } from "../ids.js";
 import { normalizePlayer } from "../schemas/player.js";
 import { normalizeUnit } from "../schemas/unit.js";
@@ -169,6 +170,8 @@ export function cutoutView(
   unit: Pick<Unit, "id" | "cutouts">,
   url: string,
 ): { state: CutoutState; cutout?: string } {
+  // #2147: a card or persona avatar is shown as the player made it, never cut out.
+  if (isEngineAvatar(url)) return { state: "uncut" };
   const record = unit.cutouts[url];
   if (record?.state === "ready" && record.url) return { state: "ready", cutout: record.url };
   if (!record) return { state: "pending" };
@@ -277,7 +280,7 @@ export async function queueCutouts<T extends Pick<Unit, "id" | "cutouts">>(
   const cutouts = { ...unit.cutouts };
   for (const url of new Set(urls)) {
     const key = liveKey(runId, unit.id, url);
-    if (!url || !needsCutout(unit.cutouts[url], revision)) continue;
+    if (!url || isEngineAvatar(url) || !needsCutout(unit.cutouts[url], revision)) continue;
     const refreshKey = `${key}|${revision}`;
     if (unit.cutouts[url] && refreshAttempts.has(refreshKey) && !live.has(key)) continue;
     // The response must show pending while an obsolete cached image is replaced, so Home and the reader keep polling.

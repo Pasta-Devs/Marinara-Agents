@@ -1287,8 +1287,8 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
       connections: { narration: "conn-text" },
     });
     await expect(root.getByRole("heading", { name: "Your story is ready" })).toBeVisible({ timeout: 30_000 });
-    // Without an image connection the cast stays as initials, and the ready world says so.
-    await expect(root.getByText(/No image connection: your cast appears as initials/u)).toBeVisible();
+    // Without an image connection the cast keeps their Engine art or initials, and the ready world says so.
+    await expect(root.getByText(/Not painting: your cast appears in their Engine avatars and sprites/u)).toBeVisible();
     await auditScreen(page, root, "forge: ready");
     await expect(root.getByText(/Begin plays your prologue first/u)).toBeVisible();
     await root.getByRole("button", { name: "Begin" }).click();
