@@ -10,6 +10,7 @@
 // Read Me sets (`readMe.paid`), written in the same write.
 // 0.9.0 (#2128): the Shop's gifts and figurines (`owned.gifts`, `owned.figurines`) and the newest purchases by request
 // id (`purchases`), written in the same write as the Starlight they cost (S/routes/shop.ts).
+// 0.11.0 (#2151): the newest paid Tarot night readings (`tarot.paid`), written in the same write as their pay.
 // 0.8.12 (#2127): Your thoughts… waiting for the next main chapter (`thoughts`, S/routes/home.ts writes them and
 // S/story/chapters.ts lets them go); a damaged or too long one reads as none.
 import { forgeStoryExpressionCast, forgeStoryExpressionsOn } from "@forge-kit/story-expressions-server.mjs";
@@ -56,6 +57,11 @@ import {
   type NotebookEntry,
   type ReadMePaid,
 } from "../../../../../client/src/features/otome-forge/shared/read-me.js";
+import {
+  TAROT_PAID_KEPT,
+  TAROT_READING_ID,
+  type TarotPaid,
+} from "../../../../../client/src/features/otome-forge/shared/tarot.js";
 import {
   STARTING_STARLIGHT,
   TENSION_MAX,
@@ -178,6 +184,12 @@ const ReadHimPaidSchema: ZodType<ReadHimPaid> = z.object({
 });
 const ReadMePaidSchema: ZodType<ReadMePaid> = z.object({
   setId: z.string().regex(READ_ME_SET_ID),
+  li: z.string(),
+  starlight: z.number().int().min(0),
+  affection: z.number().int().min(0),
+});
+const TarotPaidSchema: ZodType<TarotPaid> = z.object({
+  id: z.string().regex(TAROT_READING_ID),
   li: z.string(),
   starlight: z.number().int().min(0),
   affection: z.number().int().min(0),
@@ -430,6 +442,9 @@ export function normalizeState(data: unknown): RunState {
     },
     readMe: {
       paid: keepNewest(validItems(ReadMePaidSchema, field(field(data, "readMe"), "paid")), READ_ME_PAID_KEPT),
+    },
+    tarot: {
+      paid: keepNewest(validItems(TarotPaidSchema, field(field(data, "tarot"), "paid")), TAROT_PAID_KEPT),
     },
     thoughts: normalizeThoughts(field(data, "thoughts")),
   };

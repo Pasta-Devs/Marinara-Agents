@@ -27,6 +27,10 @@ import {
   type ChoiceContext,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/state/relationship.ts";
 import {
+  applyTarot,
+  type TarotReading,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/minigames/tarot.ts";
+import {
   grant,
   readBeatToEnd,
   type ReadChapter,
@@ -75,6 +79,7 @@ test("the economy's numbers are pinned", () => {
         date: 120,
         readHim: 40,
         readMe: 40,
+        tarot: 40,
         clawRound: 20,
         clawPlush: 30,
       },
@@ -89,6 +94,7 @@ test("the economy's numbers are pinned", () => {
         readMe: 20,
         readMeRight: 10,
         readMeClose: 5,
+        tarot: 40,
         clawRound: 30,
         closeAndRemember: 5,
         showHim: 5,
@@ -106,6 +112,7 @@ test("the economy's numbers are pinned", () => {
         "date",
         "read-him",
         "read-me",
+        "tarot",
         "claw",
         "close-and-remember",
         "show-him",
@@ -392,6 +399,27 @@ test("reading pays each beat once and the chapter once, saves its ledger and rec
   );
   assert.equal(after.state.ledgers.conflicts[0]!.status, "resolved");
   assert.equal(after.state.lis[KAI]!.lastLead, 1);
+});
+
+test("Tarot night (#2151) is an activity: its pay shares the day's caps with every other activity", () => {
+  let state = fresh();
+  // Read Me and a claw round have used up today's affection with Kai, and all but 30 of today's Starlight.
+  state = grant(state, { source: "read-me", li: KAI, starlight: 340, affection: 100 }, DAY).state;
+  state = grant(state, { source: "claw", li: KAI, starlight: 30, affection: 50 }, DAY).state;
+  const reading = {
+    id: "tr-abc123-aaaaaa",
+    li: KAI,
+    context: "Kai lays three cards on the sea wall.",
+    names: { li: "Kai", player: "Ines" },
+  } as TarotReading;
+  const outcome = applyTarot(state, reading, { at: AT, dayKey: DAY });
+  assert.deepEqual(outcome.grants, [{ source: "tarot", starlight: 30 }]);
+  assert.equal(outcome.state.daily.starlight, economy.ACTIVITY_STARLIGHT_DAILY_CAP);
+  assert.equal(outcome.state.daily.affection[KAI], economy.OUTSIDE_AFFECTION_DAILY_CAP);
+  assert.equal(outcome.state.lis[KAI]!.points, 150);
+  // Mireille still earns her affection; the day's Starlight is spent.
+  const other = applyTarot(outcome.state, { ...reading, li: MIR }, { at: AT, dayKey: DAY });
+  assert.deepEqual(other.grants, [{ source: "tarot", li: MIR, affection: economy.AFFECTION_EARNINGS.tarot }]);
 });
 
 test("reward grants remain earning-only", () => {
