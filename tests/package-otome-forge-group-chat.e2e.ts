@@ -166,6 +166,8 @@ function createGroupStub() {
       const count = messages.length - archived();
       const memory = { text: "They argued about the lamps; Ines asked who was awake.", quote: "Liar." };
       sessions.push({ start: archived(), count, memory, closedAt: now(), members: [KAI, MIR, SOL] });
+      // A squabble right after the close, by the speaker who ended it: his run restarts after the divider.
+      messages.push({ id: `m-after${messages.length}`, who: "li", text: "Again, then?", at: now(), li: KAI });
       return { status: 200, json: { memory, grants: [] } };
     }
     if (path === `${base}/phone/due`) {
@@ -367,6 +369,12 @@ test("Otome Hearth group chat: Everyone pinned first, speakers in the thread, Cl
   await expect(log).toContainText("Liar.");
   await expect(log).not.toContainText("affection");
   await expect(log).not.toContainText("They argued about the lamps");
+  // A speaker's run never crosses the divider: his last line before it keeps his portrait, his first after it his name.
+  const beforeDivider = log.locator(".of-bubble-row", { hasText: "Liar." });
+  const afterDivider = log.locator(".of-bubble-row", { hasText: "Again, then?" });
+  await expect(afterDivider).toBeVisible();
+  await expect(beforeDivider.locator(".of-bubble-gap")).toHaveCount(0);
+  await expect(afterDivider.locator(".of-bubble-name")).toHaveText("Kai Ardent");
   await page.screenshot({ path: testInfo.outputPath("04-remembered.png") });
 
   // Back: focus returns to its row.

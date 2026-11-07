@@ -483,8 +483,13 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
           const before = messages[at - 1];
           const index = indexOf.get(row.id);
           const session = index === undefined ? undefined : sessionEnds.get(index);
-          // A run is one sender's messages in a row (in the group chat, one speaker's).
+          // A run is one sender's messages in a row (in the group chat, one speaker's), and never crosses a Close and
+          // remember divider: the row that ends a session closes its run, and the row after it starts one (Dottore, #2168).
           const same = (other: PhoneMessage | undefined) => !!other && other.who === row.who && other.li === row.li;
+          const endsSession = (other: PhoneMessage | undefined) =>
+            !!other && sessionEnds.has(indexOf.get(other.id) ?? -1);
+          const joinsNext = !session && same(next);
+          const joinsBefore = !endsSession(before) && same(before);
           return (
             <Fragment key={row.id}>
               <Bubble
@@ -493,8 +498,8 @@ export function Thread({ runKey, view, li, quote: initialQuote, focusHeading, on
                 name={nameOf(row)}
                 stickers={stickers}
                 pending={!incoming && outgoing?.local?.id === row.id}
-                time={!same(next) ? messageTime(row.at, localization.locale, timeZone) : ""}
-                group={!li && row.who === "li" ? { first: !same(before), last: !same(next) } : undefined}
+                time={!joinsNext ? messageTime(row.at, localization.locale, timeZone) : ""}
+                group={!li && row.who === "li" ? { first: !joinsBefore, last: !joinsNext } : undefined}
               />
               {session ? (
                 <li className="of-thread-divider">
