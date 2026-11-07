@@ -754,12 +754,21 @@ export interface LiState {
   hisSide: HisSideNote[];
 }
 
-/** #2155: a big moment his side may retell. `ref` is `${key}/${i}`, the beat it happened in; `stage` his stage then. */
+/**
+ * #2155: a big moment his side may retell. `ref` is `${key}/${i}`, the beat it happened in. The rest is how things
+ * stood once it had landed, so his side is told at that moment (S/story/his-side.ts stateAtMoment): his stage, trust
+ * and tension, the ids of the grievances open then, the rupture standing then, and when (`at`) it was noted.
+ */
 export interface HisSideNote {
   arc: number;
   ref: string;
   moment: HisSideMoment;
   stage: number;
+  trust: number;
+  tension: number;
+  open: string[];
+  rupture: LiState["rupture"];
+  at: string;
 }
 
 /** A chapter's reading progress. `applied` holds `${i}/${choiceId}` for every pick whose effects reached the state. */
@@ -1358,7 +1367,10 @@ export interface ReadResult {
   stageUp?: { li: LiId; stage: number };
   /** M2b: this read finished a repair chapter, and the rupture with him is closed. */
   repaired?: LiId;
-  /** #2155: this read was a big moment his side of this arc will retell. */
+  /**
+   * #2155: this read was a big moment his side of this arc will retell, or it finished a chapter where one came, whose
+   * side now waits in Routes.
+   */
   hisSide?: LiId;
 }
 

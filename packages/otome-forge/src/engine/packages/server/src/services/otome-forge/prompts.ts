@@ -1088,8 +1088,8 @@ export function musicBriefMessages(world: Pick<World, "premise" | "setting">, cu
 // where two to four love interests disagree; P6 on that node offers ONE choice with an option per love interest present,
 // each naming whom it backs, and the game, never the reply, sets what siding changes. Other prompts are unchanged.
 // #2155 (his side): P6 tells one scene again from a love interest's point of view (hisSideFraming): its instructions let
-// only him think and carry no choice rules, its card is at the moment's stage, and the scene as the protagonist lived it
-// goes in the last turn, after the cached part. Its story context and every other chapter's messages are unchanged.
+// only him think and carry no choice rules, its card is as things stood at the moment (the caller's state), and the
+// scene as the protagonist lived it goes in the last turn, after the cached part. Its story context and every other chapter's messages are unchanged.
 
 // ── The blocks and rules the story prompts share ──
 // Most other prompts carry these blocks too (betweenYou, knowsAboutYou, protagonistBlock, appearanceLine, bibleBlock,
@@ -2290,7 +2290,7 @@ function prestigeFraming(name: string, prestige: NonNullable<Chapter["prestige"]
 
 /**
  * #2155: what P6 adds to his side (`side-<li>-<arc>`, S/story/his-side.ts) in place of the Character Story's framing: the
- * scene above, told again from his point of view, at the moment's stage (the caller's state).
+ * scene above, told again from his point of view, as things stood at the moment (the caller's state).
  */
 function hisSideFraming(name: string): string[] {
   return [

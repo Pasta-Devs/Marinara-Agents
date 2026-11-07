@@ -98,6 +98,12 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
   const [choosing, setChoosing] = useState(false);
   const [arcPlan, setArcPlan] = useState<ArcTarget | null>(null);
   const arcPlanning = usePlanChapter(runKey);
+  // #2155: his side is written with no model call, so its Read shows the wait and the dialog opens only to say why it
+  // did not open; once open it stays through a Retry (which then shows the wait in it), so focus never drops.
+  const [sideDialog, setSideDialog] = useState<ArcTarget | null>(null);
+  if (arcPlan?.kind === "side" && sideDialog !== arcPlan && (arcPlanning.failed || arcPlanning.stopped)) {
+    setSideDialog(arcPlan);
+  }
 
   const head = (
     <div className="of-page-head">
@@ -218,6 +224,7 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
             if (repair) openArc({ kind: "repair", li, key: repair.key });
           }}
           sides={sides}
+          planning={arcPlanning.planning}
           onReadSide={(entry) => openArc({ kind: "side", li: entry.li, key: entry.key, arc: entry.arc })}
         />
       ) : null}
@@ -228,8 +235,7 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
         onPrestige={(entry) => openArc({ kind: "prestige", li: entry.li, key: entry.key })}
       />
       {chapters.length ? <ChapterList chapters={chapters} view={view} onOpen={onOpenChapter} /> : null}
-      {/* His side is written with no model call: its dialog only says why it did not open. */}
-      {arcPlan && (arcPlan.kind !== "side" || arcPlanning.failed || arcPlanning.stopped) ? (
+      {arcPlan && (arcPlan.kind !== "side" || sideDialog === arcPlan) ? (
         <ArcPlanDialog
           view={view}
           target={arcPlan}
@@ -1106,6 +1112,7 @@ function Routes({
   onOpen,
   onMakeItRight,
   sides,
+  planning,
   onReadSide,
 }: {
   routes: RouteEntry[];
@@ -1114,6 +1121,8 @@ function Routes({
   onOpen: (route: RouteEntry) => void;
   onMakeItRight: (li: string) => void;
   sides: HisSideEntry[];
+  /** The key being opened (usePlanChapter's `planning`), so a side's Read shows the wait. */
+  planning: string | null;
   onReadSide: (entry: HisSideEntry) => void;
 }) {
   const { t } = useTranslation();
@@ -1137,6 +1146,7 @@ function Routes({
               onOpen={() => onOpen(route)}
               onMakeItRight={() => onMakeItRight(route.li)}
               sides={sides.filter((entry) => entry.li === route.li)}
+              planning={planning}
               onReadSide={onReadSide}
             />
           );
@@ -1154,6 +1164,7 @@ function RouteCard({
   onOpen,
   onMakeItRight,
   sides,
+  planning,
   onReadSide,
 }: {
   route: RouteEntry;
@@ -1163,6 +1174,7 @@ function RouteCard({
   onOpen: () => void;
   onMakeItRight: () => void;
   sides: HisSideEntry[];
+  planning: string | null;
   onReadSide: (entry: HisSideEntry) => void;
 }) {
   const { t } = useTranslation();
@@ -1249,7 +1261,14 @@ function RouteCard({
         </div>
       ) : null}
       {sides.map((side) => (
-        <SideRow key={side.key} entry={side} li={li} images={images} onRead={() => onReadSide(side)} />
+        <SideRow
+          key={side.key}
+          entry={side}
+          li={li}
+          images={images}
+          opening={planning === side.key}
+          onRead={() => onReadSide(side)}
+        />
       ))}
     </li>
   );
@@ -1281,17 +1300,19 @@ function sideMoment(t: ReturnType<typeof useTranslation>["t"], entry: HisSideEnt
 /**
  * #2155: his side of a big moment, waiting under his route (or being read): the arc it belongs to, the moment and its
  * chapter, and Read, which writes its chapter with no model call; its one call is its scene. It paints only a place
- * with no picture yet.
+ * with no picture yet. While it opens, Read is busy and the cost line (a status) says so.
  */
 function SideRow({
   entry,
   li,
   images,
+  opening,
   onRead,
 }: {
   entry: HisSideEntry;
   li: RunLiView;
   images: RunView["world"]["images"];
+  opening: boolean;
   onRead: () => void;
 }) {
   const { t } = useTranslation();
@@ -1320,16 +1341,18 @@ function SideRow({
             ...values,
             title,
           })}
-          onClick={onRead}
+          aria-disabled={opening || undefined}
+          aria-busy={opening || undefined}
+          onClick={opening ? undefined : onRead}
         >
           <BookOpen size={16} strokeWidth={2} aria-hidden="true" />
           {entry.reading ? t("ui.otomeForge.story.continue") : t("ui.otomeForge.arcs.sideRead")}
         </button>
         {entry.reading ? null : (
           <>
-            <p className="of-cost">
+            <p className="of-cost" role="status">
               <Feather size={14} strokeWidth={2} aria-hidden="true" />
-              <span>{t("ui.otomeForge.arcs.sideCost")}</span>
+              <span>{opening ? t("ui.otomeForge.arcs.planningSide", values) : t("ui.otomeForge.arcs.sideCost")}</span>
             </p>
             <ChapterPaintCost images={images} cost="ui.otomeForge.arcs.sidePaintCost" />
           </>

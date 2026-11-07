@@ -15,13 +15,16 @@
 //   with no model call (ensureHisSide, the first save wins, so two taps make one): kind "story", his own, one node with
 //   him and the other love interests who were there, opening in the place the scene played in, so nothing new is
 //   painted. No key image. Its one call is its scene, written by P6 as his side (S/prompts.ts beatMessages): only he
-//   thinks, no choice is offered, his card is as it was at the moment's stage, and the scene as the protagonist lived it
-//   goes in the uncached last turn. It pays as any story beat (30 Starlight) and moves nothing else.
+//   thinks, no choice is offered, his card and what stands between them are as they were then (stateAtMoment, from what
+//   the note kept), and the scene as the protagonist lived it goes in the uncached last turn. It pays as any story beat
+//   (30 Starlight) and moves nothing else.
 // - It is part of the chapter it follows (the maintainer's): once read, the next chapter built after that one is given
-//   it in full right after it, and afterwards it is summarized as that chapter's other side (S/story/canon.ts).
+//   it in full right after it, and afterwards it is summarized as that chapter's other side (S/story/canon.ts). The
+//   read that finishes that chapter says it waits (S/story/beats.ts finishBeat).
 import type {
   Beat,
   Chapter,
+  Grievance,
   HisSideNote,
   LiId,
   RunState,
@@ -82,18 +85,45 @@ export function hisSideArc(chapter: Pick<Chapter, "kind" | "arc" | "number">, ar
   return chapter.arc ?? (chapter.number ? arcCovering(arcs, chapter.number)?.number : undefined) ?? 0;
 }
 
-/** The state with `note` as his moment of its arc, in place of an earlier one of that arc. */
-export function noteHisSide(state: RunState, li: LiId, note: HisSideNote): RunState {
+const isOpen = (grievance: Grievance) => grievance.status === "open" || grievance.status === "festering";
+
+/**
+ * The state with this moment as his of its arc, in place of an earlier one of that arc, with how things stood between
+ * them once it had landed (`state` is the read's new state): his stage, trust, tension, open grievances and rupture.
+ */
+export function noteHisSide(
+  state: RunState,
+  li: LiId,
+  moment: Pick<HisSideNote, "arc" | "ref" | "moment" | "at">,
+): RunState {
   const current = state.lis[li];
   if (!current) return state;
+  const { stage, trust, tension, rupture } = current;
+  const open = current.grievances.filter(isOpen).map((grievance) => grievance.id);
+  const note: HisSideNote = { ...moment, stage, trust, tension, open, rupture };
   const hisSide = [...current.hisSide.filter((entry) => entry.arc !== note.arc), note];
   return { ...state, lis: { ...state.lis, [li]: { ...current, hisSide } } };
 }
 
-/** The state P6 writes his side with: his stage as it was at the moment, so his card and slow burn are its own. */
-export function stateAtMoment(state: RunState, li: LiId, stage: number): RunState {
+/**
+ * The state P6 writes his side with: his card and what stands between them as they were at the moment, so nothing
+ * later reaches it: his stage (his card and slow burn), trust and tension, the grievances open then (as open, though
+ * since mended), the rupture standing then, and only what he had been told and had noted about the protagonist by then.
+ */
+export function stateAtMoment(state: RunState, li: LiId, note: HisSideNote): RunState {
   const current = state.lis[li];
-  return current ? { ...state, lis: { ...state.lis, [li]: { ...current, stage } } } : state;
+  if (!current) return state;
+  const then = ({ at }: { at: string }) => at <= note.at;
+  const grievances = current.grievances
+    .filter((grievance) => note.open.includes(grievance.id))
+    .map((grievance): Grievance => (isOpen(grievance) ? grievance : { ...grievance, status: "open" }));
+  const { stage, trust, tension, rupture } = note;
+  const known = current.known.filter(then);
+  const disclosures = current.disclosures.filter(then);
+  return {
+    ...state,
+    lis: { ...state.lis, [li]: { ...current, stage, trust, tension, rupture, grievances, disclosures, known } },
+  };
 }
 
 /**

@@ -47,9 +47,12 @@
 //   summarized, its summary failed or never written ("# Canon in full"). A chapter that has a summary never goes in
 //   full;
 // - his side of the previous chapter (#2155, the maintainer's: it is part of the chapter it follows), once read: right
-//   after that chapter, in full, whoever the prompt is for, titled as private to him; its timeline entry is left out
-//   while it goes in full. Older sides go as any of his own chapters (by the timeline, or by summary or in full while
-//   it does not cover them), named for the chapter they belong to.
+//   after that chapter, in full, titled as private to him, in the storyline chapters' prompts (`lastStory`: the next
+//   chapter built) whoever they are for, and in any other prompt only where it may be known (mayKnow: his own reader,
+//   or a scene he is in; in a `cached` one, only when it is the chapter's own love interest's), so another love
+//   interest's messages, Home, Tarot night, dates and stories never get his thoughts. Its timeline entry is left out
+//   while it goes in full. Otherwise, and once older, it goes as any of his own chapters (by the timeline, or by summary
+//   or in full while it does not cover them), named for its chapter.
 //   ponytail: a side joins the timeline when it is read, not beside its chapter's entry (placing it there would fold the
 //   timeline again from the start); its title names that chapter. The upgrade path is the kit inserting a late source
 //   after its chapter's entry;
@@ -587,20 +590,29 @@ export async function recallText(
       : [];
   const previousKey = previous.length ? last!.chapter.key : undefined;
   const earliestScenes = previous.slice(1, -1);
-  // #2155: his side of the previous chapter, once read, right after it in full (see the header).
-  const sides = previousKey ? chapters.filter(({ chapter }) => chapter.hisSide?.ref.startsWith(`${previousKey}/`)) : [];
+  // #2155: his side of the previous chapter, once read, right after it in full: in a storyline chapter's prompt for
+  // every call, elsewhere only where it may be known and, in a `cached` prompt, only when every call of its chapter may
+  // (its timeline entry goes with the cached part). Otherwise it goes as his own chapter (see the header).
+  const sides = previousKey
+    ? chapters.filter(
+        ({ chapter, audience }) =>
+          chapter.hisSide?.ref.startsWith(`${previousKey}/`) &&
+          (withLastStory || (mayKnow(recall, audience) && !own(chapter))),
+      )
+    : [];
   const sideBlocks: Block[] = [];
+  const sideKeys: string[] = [];
   for (const side of sides) {
     const text = (
       await chapterSoFar(deps.store, runId, side.chapter.key, side.chapter.nodes.length, protagonist).catch(() => null)
     )?.trim();
-    if (text)
-      sideBlocks.push({
-        order: last!.order,
-        text: block("The previous chapter's other side, in full", titleOf(side), text),
-      });
+    if (!text) continue;
+    sideKeys.push(side.chapter.key);
+    sideBlocks.push({
+      order: last!.order,
+      text: block("The previous chapter's other side, in full", titleOf(side), text),
+    });
   }
-  const sideKeys = sideBlocks.length ? sides.map(({ chapter }) => chapter.key) : [];
 
   // The recall pool. Memory that fell behind catches up in the background; a failed summary waits for Retry.
   const memory = deps.memory;

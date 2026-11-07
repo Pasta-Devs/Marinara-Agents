@@ -22,7 +22,6 @@ import type {
   ChapterProgress,
   Favorite,
   Grievance,
-  HisSideNote,
   HomeState,
   Ledgers,
   LiState,
@@ -36,11 +35,7 @@ import type {
   WishPullRecord,
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
-import {
-  FIRST_STAGE,
-  HIS_SIDE_MOMENTS,
-  LAST_STAGE,
-} from "../../../../../client/src/features/otome-forge/shared/arcs.js";
+import { FIRST_STAGE, LAST_STAGE } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import {
   CLAW_MAX_CATCHES,
   CLAW_ROUNDS_KEPT,
@@ -98,6 +93,7 @@ import type { OtomeStore } from "../store.js";
 import { field, isRecord, readFields, validItems, wornLookUrl } from "./common.js";
 import { normalizePlayer } from "./player.js";
 import { ARCS_MAX } from "./story-arc.js";
+import { HisSideNoteSchema } from "./story.js";
 import { normalizeUnit } from "./unit.js";
 import { normalizeWorld, toWorldView } from "./world.js";
 
@@ -136,12 +132,6 @@ const GrievanceSchema: ZodType<Grievance> = z.object({
 });
 
 const DisclosureSchema = z.object({ text: short(), at: z.string(), ref: short(120) });
-const HisSideNoteSchema: ZodType<HisSideNote> = z.object({
-  arc: z.number().int().min(0).max(ARCS_MAX),
-  ref: short(120),
-  moment: z.enum(HIS_SIDE_MOMENTS),
-  stage: z.number().int().min(FIRST_STAGE).max(LAST_STAGE),
-});
 const ThoughtsSchema: ZodType<PlayerThoughts> = z.object({ text: z.string().min(1).max(THOUGHTS_MAX), at: short(40) });
 
 const RelationshipLineSchema = z.object({ key: short(120), li: z.string(), line: short() });

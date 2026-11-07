@@ -48,8 +48,9 @@
 //   gateShut); a beat already on screen can still be finished, and what was read still replays. A stage-5 gate must
 //   end on one big choice.
 // - #2155, his side (S/story/his-side.ts): a read that counts a big moment notes it for his side of the arc, in that
-//   same state write, unless that side is written already. His side's own scene (a story chapter with `hisSide`) is
-//   written against what he may know, at his stage then, from the scene it retells; only he thinks and it has no choice.
+//   same state write, unless that side is written already, and the read that finishes its chapter says it waits. His
+//   side's own scene (a story chapter with `hisSide`) is written against what he may know, as things stood between them
+//   then, from the scene it retells; only he thinks and it has no choice.
 // - The art (RouteDeps.art, S/art/expressions.ts createOtomeArt): each beat served queues its speakers' faces; each
 //   beat written queues its places and CG (which wait for a tap under Ask before painting, or while the player
 //   reviews image prompts); a beat replaced by a rewrite, or removed after it, releases its CG. All of it in the
@@ -118,7 +119,15 @@ import {
   toConfrontationView,
   type SegmentLists,
 } from "./confrontation.js";
-import { hisSideArc, hisSideMomentOf, hisSideSource, momentCandidate, noteHisSide, stateAtMoment } from "./his-side.js";
+import {
+  hisSideArc,
+  hisSideMomentOf,
+  hisSideSource,
+  momentCandidate,
+  momentChapterKey,
+  noteHisSide,
+  stateAtMoment,
+} from "./his-side.js";
 import {
   BEAT_PLACES_MAX,
   BEAT_SEGMENTS_MAX,
@@ -691,7 +700,7 @@ async function generateBeat(
     world: run.world,
     player: run.player,
     units,
-    state: pov && chapter.hisSide ? stateAtMoment(run.state, pov, chapter.hisSide.stage) : run.state,
+    state: pov && chapter.hisSide ? stateAtMoment(run.state, pov, chapter.hisSide) : run.state,
     chapter,
     node,
     storySoFar,
@@ -1328,11 +1337,17 @@ async function finishBeat(
       const his = moment?.li === candidate ? next.lis[moment.li] : undefined;
       if (moment && his) {
         const ref = `${chapter.key}/${beat.i}`;
-        next = noteHisSide(next, moment.li, { arc, ref, moment: moment.moment, stage: his.stage });
+        next = noteHisSide(next, moment.li, { arc, ref, moment: moment.moment, at });
         hisSide = moment.li;
       }
     }
     completedNow = !current.chapters[chapter.key]?.completed && !!next.chapters[chapter.key]?.completed;
+    // #2155: the read that finishes the chapter says when a side of it waits, though its moment came on an earlier node
+    // (the reader may have been left in between). A side is written only once its chapter is finished, so none is yet.
+    if (completedNow && !hisSide) {
+      const notes = Object.entries(next.lis);
+      hisSide = notes.find(([, his]) => his.hisSide.some(({ ref }) => momentChapterKey(ref) === chapter.key))?.[0];
+    }
     return next;
   });
   if (!state) throw runNotFound();

@@ -1,9 +1,10 @@
 // Otome Hearth's his side (#2155) in the Engine's Home tab, with /api/otome-forge/** stubbed by the server's rules
 // (S/story/his-side.ts): the chapter whose Closer opened Kai up ends with "Kai Ardent’s side of this now waits in
 // Routes"; Routes shows his side under his route (its arc, the moment and the chapter, Read at 44 px or more and its
-// one call); Read opens the reader with no dialog, even while the claim is slow; the scene is titled as his side, with
-// his thoughts and no choice; read, it leaves Routes and stays in the chapter list. At phone width (mobile-chromium,
-// touch, 390 × 844, and 375 wide) and on the desktop, with no horizontal scroll.
+// one call); a slow Read shows no dialog but is busy and says it is opening, and a second tap claims nothing more; a
+// failed claim opens the dialog, whose Try again keeps it open (showing the wait, focus inside) until the reader opens;
+// the scene is titled as his side, with his thoughts and no choice; read, it leaves Routes and stays in the chapter
+// list. At phone width (mobile-chromium, touch, 390 × 844, and 375 wide) and on the desktop, with no horizontal scroll.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-his-side.e2e.ts
 import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
@@ -91,6 +92,8 @@ const BEATS: Record<string, Json> = {
 function createSideStub() {
   const calls: Call[] = [];
   const now = () => new Date().toISOString();
+  // The first claim fails, as a dropped connection would.
+  let claimFails = 1;
   const he = { subject: "he", object: "him", possessive: "his" };
   const she = { subject: "she", object: "her", possessive: "her" };
   const view: Json = {
@@ -206,6 +209,10 @@ function createSideStub() {
     if (path === `${base}/sides/${KAI}`) {
       if (call.body?.arc !== 1 || !progress["main-1"]!.completed) {
         return { status: 409, json: { error: "This side is not ready to read yet.", code: "locked" } };
+      }
+      if (claimFails > 0) {
+        claimFails -= 1;
+        return { status: 500, json: { error: "The connection dropped." } };
       }
       planned.add(SIDE);
       progress[SIDE] ??= { beatsRead: 0, completed: null };
@@ -378,15 +385,37 @@ test("Otome Hearth his side: announced at the chapter's end, waiting in Routes, 
     await page.screenshot({ path: testInfo.outputPath("03-routes-375.png") });
   }
 
-  // Read writes its chapter with no model call: no planning dialog shows, even while the request is slow.
-  const release = await hold(page, `**/api/otome-forge/runs/${RUN}/sides/${KAI}`);
+  // Read writes its chapter with no model call: no planning dialog shows while the request is slow, but Read is busy,
+  // its status says it is opening, and a second tap claims nothing more.
+  const claimUrl = `**/api/otome-forge/runs/${RUN}/sides/${KAI}`;
+  const claims = () => stub.calls.filter((call) => call.method === "POST" && call.path.endsWith(`/sides/${KAI}`));
+  const release = await hold(page, claimUrl);
   await press(read);
+  await expect(read).toHaveAttribute("aria-busy", "true");
+  await expect(read).toHaveAttribute("aria-disabled", "true");
+  await expect(side.getByRole("status")).toHaveText("Opening Kai Ardent’s side…");
+  // Forced, as a quick second tap lands whatever the button says.
+  await (mobile ? read.tap({ force: true }) : read.click({ force: true }));
   await page.waitForTimeout(400);
   await expect(root.getByRole("dialog")).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath("04-opening.png") });
   release();
-  const claims = () => stub.calls.filter((call) => call.method === "POST" && call.path.endsWith(`/sides/${KAI}`));
+
+  // That claim fails: the dialog says so; Try again keeps it open, showing the wait with focus inside, until it opens.
+  const dialog = root.getByRole("dialog", { name: "Kai Ardent’s side" });
+  await expect(dialog.getByText("Something went wrong. Try again.")).toBeVisible();
   await expect.poll(() => claims().length).toBe(1);
-  expect(claims()[0]!.body).toMatchObject({ arc: 1 });
+  await expect(read).not.toHaveAttribute("aria-busy", "true");
+  const releaseRetry = await hold(page, claimUrl);
+  await press(dialog.getByRole("button", { name: "Try again" }));
+  await expect(dialog.getByText("Opening Kai Ardent’s side…")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+  await noWider(page);
+  await page.screenshot({ path: testInfo.outputPath("05-retrying.png") });
+  releaseRetry();
+  await expect(dialog).toHaveCount(0);
+  await expect.poll(() => claims().length).toBe(2);
+  expect(claims().map((call) => call.body?.arc)).toEqual([1, 1]);
 
   // The reader names it as his side, his thought shows, and it offers no choice.
   await expect(root.getByText("Kai Ardent’s side of “The Observatory”").first()).toBeVisible();
@@ -394,7 +423,7 @@ test("Otome Hearth his side: announced at the chapter's end, waiting in Routes, 
   await readToEnd(root, press);
   expect(stub.calls.some((call) => call.path.endsWith("/choose"))).toBe(false);
   await expect(root.locator(".of-arc-news")).toHaveCount(0);
-  await page.screenshot({ path: testInfo.outputPath("04-side-end.png") });
+  await page.screenshot({ path: testInfo.outputPath("06-side-end.png") });
   await press(root.getByRole("button", { name: "Back to the story" }));
 
   // Read, it leaves Routes and stays in the chapter list, to replay.

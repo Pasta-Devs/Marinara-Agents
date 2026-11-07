@@ -18,6 +18,7 @@ import type {
   ConfrontationOption,
   Effect,
   ForgeChoice,
+  HisSideNote,
   Segment,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import {
@@ -31,7 +32,13 @@ import {
   STANCES,
 } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { LIMIT_IDS } from "../../../../../client/src/features/otome-forge/shared/content.js";
-import { PRESTIGE_KINDS } from "../../../../../client/src/features/otome-forge/shared/economy.js";
+import {
+  PRESTIGE_KINDS,
+  TENSION_MAX,
+  TENSION_MIN,
+  TRUST_MAX,
+  TRUST_MIN,
+} from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import {
   DATE_PLACE_KINDS,
   type DatePlan,
@@ -46,6 +53,19 @@ import { ARCS_MAX, JUDGMENT_ANSWER, JUDGMENT_QUESTION } from "./story-arc.js";
 import { TrackSchema } from "./world.js";
 
 const short = (max = 600) => z.string().max(max);
+
+/** #2155: a big moment his side may retell (LiState.hisSide, and the side chapter's own copy). */
+export const HisSideNoteSchema: ZodType<HisSideNote> = z.object({
+  arc: z.number().int().min(0).max(ARCS_MAX),
+  ref: short(120),
+  moment: z.enum(HIS_SIDE_MOMENTS),
+  stage: z.number().int().min(FIRST_STAGE).max(LAST_STAGE),
+  trust: z.number().int().min(TRUST_MIN).max(TRUST_MAX),
+  tension: z.number().int().min(TENSION_MIN).max(TENSION_MAX),
+  open: z.array(short(80)).max(200),
+  rupture: z.object({ grievanceId: short(80), since: z.string() }).nullable(),
+  at: short(40),
+});
 
 export const SegmentSchema: ZodType<Segment> = z.object({
   speaker: short(120),
@@ -247,14 +267,7 @@ export function normalizeChapter(data: unknown): Chapter | null {
       prestige: z.object({ kind: z.enum(PRESTIGE_KINDS), premise: short(600) }).optional(),
       thoughts: z.string().min(1).max(THOUGHTS_MAX).optional(),
       gift: z.enum(GIFT_IDS).optional(),
-      hisSide: z
-        .object({
-          arc: z.number().int().min(0).max(ARCS_MAX),
-          ref: short(120),
-          moment: z.enum(HIS_SIDE_MOMENTS),
-          stage: z.number().int().min(FIRST_STAGE).max(LAST_STAGE),
-        })
-        .optional(),
+      hisSide: HisSideNoteSchema.optional(),
     },
     () => ({
       key: data.key as string,
