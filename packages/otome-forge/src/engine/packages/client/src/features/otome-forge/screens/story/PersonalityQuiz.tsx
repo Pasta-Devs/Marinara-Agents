@@ -6,8 +6,12 @@
 // each love interest's own answer to it is revealed in a polite live region, with how alike the two of you are so far
 // (SH/quiz.ts quizAgreement), then Next statement. The quiz is read only once Play is pressed (GET /runs/:run/quiz,
 // which queues what it is missing in the background: their answers, or new statements once every one is answered),
-// and read again now and then while something it shows is still being written. Focus moves only after the player's
-// own Play, answer or Next, never on open. The planning dialog unmounts it the moment the chapter is planned.
+// and read again now and then while something it shows is still being written, or slowly while the statement on
+// screen has none of their answers and nothing is being written (a call that failed waits out the server's cool-down).
+// Play stays the same button until that first read lands, as Try again when it failed, so focus never falls out of the
+// dialog. Focus moves only after the player's own Play, answer or Next, never on open; new statements that arrive
+// while the player waits take focus only from the waiting message, and are otherwise said in the live region. The
+// planning dialog unmounts it the moment the chapter is planned.
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -21,6 +25,20 @@ import { QUIZ_SCALE, quizAgreement, type QuizScore, type QuizView } from "../../
 
 /** How often the quiz is read again while their answers or new statements are being written. */
 const REFRESH_MS = 15_000;
+/** How often it is read while the statement on screen has none of their answers and nothing is being written. */
+const STALLED_MS = 60_000;
+
+const SCALE_KEYS: Record<QuizScore, string> = {
+  1: "ui.otomeForge.quiz.scale1",
+  2: "ui.otomeForge.quiz.scale2",
+  3: "ui.otomeForge.quiz.scale3",
+  4: "ui.otomeForge.quiz.scale4",
+  5: "ui.otomeForge.quiz.scale5",
+};
+
+/** The statement on screen: the one just answered (`shown`), else the first still open. */
+const onScreen = (view: QuizView, shown: string | null) =>
+  (shown && [...view.open, ...view.answered].find((entry) => entry.id === shown)) || view.open[0] || null;
 
 export function PersonalityQuiz({ runKey, lis }: { runKey: string; lis: readonly RunLiView[] }) {
   const { t } = useTranslation();
@@ -33,8 +51,10 @@ export function PersonalityQuiz({ runKey, lis }: { runKey: string; lis: readonly
   const [shown, setShown] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [failed, setFailed] = useState<unknown>(null);
+  /** New statements arrived while the player waited with focus elsewhere: the live region says so. */
+  const [arrived, setArrived] = useState(false);
   const queryKey = ["otome-forge", "quiz", runKey];
-  const { data, error } = useQuery({
+  const { data, error, isFetching, refetch } = useQuery({
     queryKey,
     queryFn: () => otome.get<QuizView>(`${runPath(runKey)}/quiz`),
     enabled: playing,
@@ -43,12 +63,28 @@ export function PersonalityQuiz({ runKey, lis }: { runKey: string; lis: readonly
     retry: false,
     refetchInterval: (query) => {
       const view = query.state.data;
-      return view && (view.scoring || (view.refilling && !view.open.length)) ? REFRESH_MS : false;
+      if (!view) return false;
+      if (view.scoring || (view.refilling && !view.open.length)) return REFRESH_MS;
+      const current = onScreen(view, shown);
+      return current && !Object.keys(current.scores).length ? STALLED_MS : false;
     },
   });
+  const statement = data ? onScreen(data, shown) : null;
   const pendingFocus = useRef<"statement" | "next" | null>(null);
   const statementRef = useRef<HTMLParagraphElement>(null);
   const nextRef = useRef<HTMLButtonElement>(null);
+  /** The waiting message was on screen at the last render. */
+  const waited = useRef(false);
+  useEffect(() => {
+    if (data && !statement) waited.current = true;
+    else if (waited.current && statement) {
+      // New statements replaced the waiting message: focus goes to the first only if it fell out with that message.
+      waited.current = false;
+      const active = document.activeElement;
+      if (!active || active === document.body) pendingFocus.current = "statement";
+      else setArrived(true);
+    }
+  }, [data, statement]);
   useEffect(() => {
     const target = pendingFocus.current;
     const element = target === "statement" ? statementRef.current : target === "next" ? nextRef.current : null;
@@ -58,21 +94,33 @@ export function PersonalityQuiz({ runKey, lis }: { runKey: string; lis: readonly
     element.scrollIntoView({ block: "nearest" });
   });
 
-  const scaleLabel = (score: QuizScore) => t(`ui.otomeForge.quiz.scale${score}`);
+  const scaleLabel = (score: QuizScore) => t(SCALE_KEYS[score]);
 
-  if (!playing) {
+  if (!data) {
+    // The same button until the first read lands, so focus stays on it; Try again once that read failed.
+    const reading = playing && (isFetching || !error);
     return (
-      <button
-        type="button"
-        className="of-button of-button--quiet of-glass of-quiz-play"
-        onClick={() => {
-          pendingFocus.current = "statement";
-          setPlaying(true);
-        }}
-      >
-        <Sparkles size={16} strokeWidth={2} aria-hidden="true" />
-        {t("ui.otomeForge.quiz.play")}
-      </button>
+      <>
+        <button
+          type="button"
+          className="of-button of-button--quiet of-glass of-quiz-play"
+          aria-disabled={reading}
+          onClick={() => {
+            if (!playing) {
+              pendingFocus.current = "statement";
+              setPlaying(true);
+            } else if (!reading) void refetch();
+          }}
+        >
+          <Sparkles size={16} strokeWidth={2} aria-hidden="true" />
+          {error ? t("ui.otomeForge.common.retry") : t("ui.otomeForge.quiz.play")}
+        </button>
+        {error && !isFetching ? (
+          <p className="of-notice of-notice--error" role="alert">
+            {otome.errorMessage(error)}
+          </p>
+        ) : null}
+      </>
     );
   }
 
@@ -81,33 +129,22 @@ export function PersonalityQuiz({ runKey, lis }: { runKey: string; lis: readonly
       <h3 id={titleId} className="of-eyebrow">
         {t("ui.otomeForge.quiz.title")}
       </h3>
-      {data?.answered.length ? (
+      {data.answered.length ? (
         <p className="of-hint">{t("ui.otomeForge.quiz.answeredCount", { count: data.answered.length })}</p>
       ) : null}
     </div>
   );
-  if (error || !data) {
-    return (
-      <section className="of-quiz" aria-labelledby={titleId} aria-busy={!error}>
-        {head}
-        {error ? (
-          <p className="of-notice of-notice--error" role="alert">
-            {otome.errorMessage(error)}
-          </p>
-        ) : null}
-      </section>
-    );
-  }
-
-  const statement =
-    (shown && [...data.open, ...data.answered].find((entry) => entry.id === shown)) || data.open[0] || null;
   if (!statement) {
+    // The waiting message sits in the live region the statement's view keeps (the same element, by its key), so the
+    // new statements' arrival can be said there; keyed, it is never reused as the statement itself.
     return (
       <section className="of-quiz" aria-labelledby={titleId}>
         {head}
-        <p ref={statementRef} className="of-hint" tabIndex={-1} role="status">
-          {data.refilling ? t("ui.otomeForge.quiz.refilling") : t("ui.otomeForge.quiz.allDone")}
-        </p>
+        <div key="live" className="of-live" role="status" aria-live="polite">
+          <p key="waiting" ref={statementRef} className="of-hint" tabIndex={-1}>
+            {data.refilling ? t("ui.otomeForge.quiz.refilling") : t("ui.otomeForge.quiz.allDone")}
+          </p>
+        </div>
       </section>
     );
   }
@@ -123,6 +160,7 @@ export function PersonalityQuiz({ runKey, lis }: { runKey: string; lis: readonly
         answer: score,
       });
       pendingFocus.current = "next";
+      setArrived(false);
       setShown(statement.id);
       queryClient.setQueryData(queryKey, view);
     } catch (caught) {
@@ -133,6 +171,7 @@ export function PersonalityQuiz({ runKey, lis }: { runKey: string; lis: readonly
   };
   const next = () => {
     pendingFocus.current = "statement";
+    setArrived(false);
     setShown(null);
   };
   return (
@@ -165,7 +204,7 @@ export function PersonalityQuiz({ runKey, lis }: { runKey: string; lis: readonly
           {otome.errorMessage(failed)}
         </p>
       ) : null}
-      <div className="of-live" role="status" aria-live="polite">
+      <div key="live" className="of-live" role="status" aria-live="polite">
         {answer ? (
           <>
             <p className="of-quiz-you">{t("ui.otomeForge.quiz.you", { answer: scaleLabel(answer) })}</p>
@@ -188,9 +227,14 @@ export function PersonalityQuiz({ runKey, lis }: { runKey: string; lis: readonly
                 })}
               </ul>
             ) : (
-              <p className="of-hint">{t("ui.otomeForge.quiz.noScores")}</p>
+              // Being written only while a call runs; one that failed waits out the cool-down (the slow read above).
+              <p className="of-hint">
+                {data.scoring ? t("ui.otomeForge.quiz.noScores") : t("ui.otomeForge.quiz.noScoresYet")}
+              </p>
             )}
           </>
+        ) : arrived ? (
+          <p className="of-hint">{t("ui.otomeForge.quiz.arrived")}</p>
         ) : null}
       </div>
       {answer ? (

@@ -4,7 +4,8 @@
 // The player answers statements on a 1–5 scale (strongly disagree to strongly agree) and then sees how each love
 // interest answered the same one (SH/quiz.ts counts how alike they are; no model call). The statements are the 100
 // starters (S/minigames/quiz-statements.ts) and those refills wrote since; one about sex or kinks (`adult`) is shown,
-// scored and written only while the story's Heat is NSFW (SH/content.ts intimacyOpen).
+// scored and written only while the story's Heat is NSFW (SH/content.ts intimacyOpen), and every statement a refill
+// writes under NSFW Heat counts as one (the model may leave its tag off), so none of them shows once Heat is SFW.
 //
 // `${R}:quiz` (kind "quiz", one per story) keeps what changes: the statements refills wrote, each love interest's
 // score per statement, and the player's answers (the first is final). It is never read by any other prompt: a love
@@ -21,7 +22,8 @@
 //   raised later), one call answers what is missing, at most QUIZ_SCORE_BATCH statements at a time. Existing scores
 //   are never replaced, and once every score exists nothing is queued.
 // - Refill: once the player has answered every statement they can see, one call writes QUIZ_REFILL new ones with every
-//   current love interest's score, given every statement already asked so none repeats (a repeat is dropped anyway).
+//   current love interest's score, given every statement they can see so none repeats (an 18+ one is never listed
+//   under SFW; a repeat of any statement, shown or hidden, is dropped anyway).
 // Each kind runs at most once at a time per story (the background queue's key), and one that failed, or a scoring
 // call whose reply left some of what it asked unanswered, is left alone for QUIZ_RETRY_MS, so a statement the model
 // keeps skipping never costs a call on every read. A story deleted while a job ran keeps no quiz.
@@ -165,13 +167,17 @@ export function quizView(
 
 export interface QuizLine {
   statement: string;
-  /** The line began with an [18+] tag. */
+  /** The statement carried an [18+] tag, anywhere before the scores. */
   adult: boolean;
   scores: Array<{ name: string; score: number }>;
 }
 
 /** A name and its score: "Kai 5", "Kai: 5", "Kai = 5", "Kai (5)", "Kai 5/5", "**Kai** – 5". */
 const SCORE_PART = /^(.*?[^\s:=(–—-])\s*(?:[:=–—-]\s*)?\(?\s*(\d{1,2}(?:[.,]\d+)?)\s*(?:\/\s*5)?\s*\)?\.?$/u;
+
+/** The 18+ tag a statement may carry: bracketed or parenthesized, spaces allowed inside. */
+const ADULT_TAG = /[[(]\s*18\s*\+\s*[\])]/u;
+const ADULT_TAGS = new RegExp(ADULT_TAG.source, "gu");
 
 /** One line of the reply, or null when it is not "<statement>: <name> <score> | …" (see the header). */
 export function parseQuizLine(raw: string): QuizLine | null {
@@ -189,18 +195,24 @@ export function parseQuizLine(raw: string): QuizLine | null {
       .filter(Boolean);
     const scores = parts.map((part) => SCORE_PART.exec(part));
     if (!parts.length || scores.some((match) => !match)) continue;
-    let statement = line.slice(0, at).trim();
-    const tagged = /^[[(]\s*18\s*\+\s*[\])]\s*/u.exec(statement);
-    if (tagged) statement = statement.slice(tagged[0].length);
-    statement = statement
-      .replace(/^\*\*(.*)\*\*$/u, "$1")
-      .replace(/^\[(.*)\]$/u, "$1")
-      .replace(/^["“](.*)["”]$/u, "$1")
+    const left = line.slice(0, at);
+    // An [18+] or (18+) tag wherever it sits ("**[18+]** …", "\"[18+] …\"", "… [18+]", "[18+]: …"), never a bare 18+ in
+    // the prose; it goes first, with a bold pair it leaves empty and a stray leading colon, then the wrappers.
+    const adult = ADULT_TAG.test(left);
+    const statement = left
+      .replace(ADULT_TAGS, "")
+      .replace(/\*\*\s*\*\*/gu, "")
+      .replace(/^[\s:]+/u, "")
+      .trim()
+      .replace(/^\*\*\s*(.*?)\s*\*\*$/u, "$1")
+      .replace(/^\[\s*(.*?)\s*\]$/u, "$1")
+      .replace(/^["“]\s*(.*?)\s*["”]$/u, "$1")
+      .replace(/^\*+\s*|\s*\*+$/gu, "")
       .trim();
     if (!statement) return null;
     return {
       statement,
-      adult: !!tagged,
+      adult,
       scores: scores.map((match) => ({
         name: match![1]!.replace(/\*+/gu, "").trim(),
         score: Number(match![2]!.replace(",", ".")),
@@ -295,7 +307,8 @@ export function matchQuizScores(
 
 /**
  * The new statements a refill reply holds, with their scores: not one already asked or written twice (by its folded
- * text), not an [18+] one while Heat is SFW, never too long or too short; at most QUIZ_REFILL.
+ * text), not an [18+] one while Heat is SFW, never too long or too short; at most QUIZ_REFILL. While Heat is NSFW
+ * every one is 18+, tagged or not (see the header).
  */
 export function newQuizStatements(
   reply: QuizLines,
@@ -311,7 +324,7 @@ export function newQuizStatements(
     if (seen.has(key) || (line.adult && !adultAllowed)) continue;
     if (text.length > QUIZ_TEXT_MAX || (key.match(/[\p{L}\p{N}]/gu)?.length ?? 0) < 8) continue;
     seen.add(key);
-    fresh.push({ text, adult: line.adult, scores: scoresOf(line, units) });
+    fresh.push({ text, adult: line.adult || adultAllowed, scores: scoresOf(line, units) });
     if (fresh.length >= QUIZ_REFILL) break;
   }
   return fresh;
@@ -398,6 +411,7 @@ export async function writeQuizRefill(
   // Asked again when it runs: the player may have left statements open again (Heat raised), or a refill landed.
   if (!units.length || quizView(run, doc, { scoring: false, refilling: false }).open.length) return;
   if (doc.written.length >= QUIZ_WRITTEN_MAX) return;
+  // The prompt lists what the player can see (no 18+ statement under SFW); a repeat of any, hidden too, is dropped.
   const asked = [...QUIZ_STARTERS, ...doc.written];
   const { value } = await generateJson(deps, {
     runId,
@@ -406,7 +420,7 @@ export async function writeQuizRefill(
     messages: quizRefillMessages({
       world: run.world,
       units,
-      asked: asked.map((statement) => statement.text),
+      asked: visibleStatements(run, doc).map((statement) => statement.text),
       count: QUIZ_REFILL,
     }),
     schema: QuizLinesSchema,

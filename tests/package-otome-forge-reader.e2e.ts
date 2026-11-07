@@ -886,6 +886,7 @@ test("Otome Hearth waits: the personality quiz while a chapter inside an arc is 
   const press = (target: Locator) => (mobile ? target.tap() : target.click());
   const tall = async (target: Locator) => expect((await target.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   let ended = false;
+  let newcomer = false;
   const arc = { number: 1, kind: "story", label: "The drowned bell", from: 1, endsAt: 10, read: 0, done: false };
   await page.route(
     (url) => url.pathname.endsWith(`/runs/${RUN}/story`),
@@ -906,34 +907,56 @@ test("Otome Hearth waits: the personality quiz while a chapter inside an arc is 
                   { li: ILVAR, reason: "ripe-conflict" },
                 ],
               },
-          arcChoice: ended ? { options: ["breathe", "continue"], castFull: false } : null,
+          arcChoice: ended
+            ? { options: newcomer ? ["breathe", "continue", "newcomer"] : ["breathe", "continue"], castFull: false }
+            : null,
         },
       }),
   );
-  // The quiz: two statements open; the answer moves one to answered, with each love interest's own answer.
+  // The quiz: two statements open, the second with no love interest's answer yet; the answer moves one to answered.
+  // The first read fails; later reads answer in turn (the last again): the second's answers, then new statements.
   const open = [
     { id: "p01", text: "I recharge by being around people.", scores: { [ILVAR]: 5, [CASSIAN]: 2 } },
-    { id: "l01", text: "Hearing “I love you” means more to me than any gift.", scores: { [ILVAR]: 1, [CASSIAN]: 4 } },
+    { id: "l01", text: "Hearing “I love you” means more to me than any gift.", scores: {} },
+  ];
+  const fresh = [
+    { id: "w1", text: "I would rather plan a date than improvise one.", scores: { [ILVAR]: 2, [CASSIAN]: 5 } },
+    { id: "w2", text: "I keep every letter I am sent.", scores: { [ILVAR]: 4, [CASSIAN]: 3 } },
   ];
   const quizCalls: Array<{ method: string; body?: Json }> = [];
+  let answered: Json[] = [];
+  /** What an answer's reply says of new statements: none while the refill cools down, then being written. */
+  let refilling = false;
+  const reads: Array<() => Json | null> = [
+    () => null,
+    () => ({ open, answered: [], refilling: false, scoring: false }),
+  ];
   await page.route(
     (url) => url.pathname.includes(`/runs/${RUN}/quiz`),
     (route) => {
       const request = route.request();
       const body = request.method() === "POST" ? (request.postDataJSON() as Json) : undefined;
       quizCalls.push({ method: request.method(), body });
-      if (request.method() === "GET")
-        return route.fulfill({ json: { open, answered: [], refilling: false, scoring: false } });
+      if (request.method() === "GET") {
+        const view = (reads.length > 1 ? reads.shift()! : reads[0]!)();
+        return view
+          ? route.fulfill({ json: view })
+          : route.fulfill({ status: 500, json: { error: "The quiz could not be read." } });
+      }
+      const all = [...open, ...fresh];
+      answered = [...answered, { ...all.find((entry) => entry.id === body!.statement)!, answer: body!.answer }];
       return route.fulfill({
         json: {
-          open: open.slice(1),
-          answered: [{ ...open[0], answer: body!.answer }],
-          refilling: false,
+          open: all.filter((entry) => !answered.some((done) => done.id === entry.id) && !fresh.includes(entry)),
+          answered,
+          refilling,
           scoring: false,
         },
       });
     },
   );
+  // The page's clock runs as usual, and jumps ahead to the quiz's next read.
+  await page.clock.install();
   const root = await openStory(page);
 
   // A chapter inside the arc: the quiz waits under the status, and takes no focus.
@@ -951,8 +974,15 @@ test("Otome Hearth waits: the personality quiz while a chapter inside an arc is 
   await tall(play);
   expect(quizCalls, "nothing is read before Play").toHaveLength(0);
 
-  // Play: the statement takes focus, the scale names each point, and the answer reveals theirs.
+  // Play: the first read fails, and Play stays the same button, focused, as Try again; the next read shows the quiz.
+  const playButton = await play.elementHandle();
   await press(play);
+  await expect(lead.getByRole("alert")).toBeVisible();
+  const retry = lead.getByRole("button", { name: "Try again" });
+  await expect(retry).toBeFocused();
+  expect(await playButton!.evaluate((button) => button.isConnected && button === document.activeElement)).toBe(true);
+  // Then the statement takes focus, the scale names each point, and the answer reveals theirs.
+  await press(retry);
   const quiz = lead.getByRole("region", { name: "Personality quiz" });
   const statement = quiz.locator(".of-quiz-statement");
   await expect(statement).toBeFocused();
@@ -989,6 +1019,46 @@ test("Otome Hearth waits: the personality quiz while a chapter inside an arc is 
   await expect(statement).toBeFocused();
   await expect(statement).toHaveText(open[1]!.text);
   await expect(revealed).toHaveText("");
+
+  // No one has answered the second yet and nothing is being written (a call that failed waits out its cool-down): it
+  // says so, and the quiz is read again a minute later, when their answers have come.
+  reads.splice(0, reads.length, () => ({
+    open: [],
+    answered: answered.map((entry) =>
+      entry.id === "l01" ? { ...entry, scores: { [ILVAR]: 1, [CASSIAN]: 4 } } : entry,
+    ),
+    refilling: true,
+    scoring: false,
+  }));
+  await press(quiz.getByRole("button", { name: "2: Disagree" }));
+  await expect(revealed).toContainText("They haven’t answered this one yet.");
+  await expect(revealed).not.toContainText("still being written");
+  await page.clock.fastForward(60_000);
+  await expect(revealed).toContainText("Ilvar Thorne: Strongly disagree");
+  await expect(revealed).toContainText("Cassian: Agree");
+
+  // Every statement answered: Next waits on the new ones, which take focus from the waiting message when they come.
+  reads.splice(0, reads.length, () => ({ open: [fresh[0]], answered, refilling: false, scoring: false }));
+  await press(next);
+  const waiting = quiz.getByText("New statements are being written…");
+  await expect(waiting).toBeFocused();
+  await page.clock.fastForward(15_000);
+  await expect(statement).toHaveText(fresh[0]!.text);
+  await expect(statement).toBeFocused();
+  await expect(revealed).toHaveText("");
+
+  // Waiting again with focus moved away (Cancel): it stays there, and the live region says the new ones are ready.
+  refilling = true;
+  await press(quiz.getByRole("button", { name: "5: Strongly agree" }));
+  await expect(next).toBeFocused();
+  reads.splice(0, reads.length, () => ({ open: [fresh[1]], answered, refilling: false, scoring: false }));
+  await press(next);
+  await expect(waiting).toBeFocused();
+  await cancel.focus();
+  await page.clock.fastForward(15_000);
+  await expect(statement).toHaveText(fresh[1]!.text);
+  await expect(revealed).toHaveText("New statements are ready.");
+  await expect(cancel).toBeFocused();
   expect(pageErrors).toEqual([]);
 
   // The arc ends: planning the next arc shows the story so far, and no quiz.
@@ -1002,6 +1072,25 @@ test("Otome Hearth waits: the personality quiz while a chapter inside an arc is 
   const soFar = choice.getByRole("region", { name: "What happened so far…" });
   await expect(soFar).toContainText(SO_FAR[0]!);
   await expect(again.getByRole("button", { name: "Play the personality quiz" })).toHaveCount(0);
+
+  // Meeting someone new: the dialog itself shows the planning status and the story so far, with no copy behind it.
+  newcomer = true;
+  await page.goto("about:blank");
+  const third = await openStory(page);
+  await third.getByRole("button", { name: /Meet someone new/ }).click();
+  const arrives = page.getByRole("dialog", { name: "Who arrives?" });
+  await arrives.getByLabel("Someone new, invented for this story").check();
+  await arrives.getByLabel("Their name").fill("Noor");
+  await arrives.getByText("he/him", { exact: true }).click();
+  await arrives.getByRole("button", { name: "Bring them in" }).click();
+  await expect(arrives.getByRole("status")).toContainText("Planning the next arc…");
+  await expect(arrives.getByRole("region", { name: "What happened so far…" })).toContainText(SO_FAR[0]!);
+  await expect(page.locator(".of-so-far")).toHaveCount(1);
+  await expect(third.getByRole("region", { name: "How does the story go on?" })).not.toContainText(
+    "Planning the next arc…",
+  );
+  // openStory's init scripts also run on about:blank, where localStorage is denied; the app itself throws nothing.
+  expect(pageErrors.filter((message) => !message.includes("'localStorage' property"))).toEqual([]);
 });
 
 // Meaningful alpha silhouettes replace the old 2x2 any-transparent-pixel fixture.

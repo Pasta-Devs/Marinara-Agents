@@ -1,12 +1,15 @@
 // Otome Hearth (#2174): the personality quiz, played while a chapter is planned.
 // - The 100 starting statements: stable ids, a category and an 18+ flag each, interleaved by category.
-// - The maintainer's line format, "<statement>: <name> <score> | …", read leniently: numbering, brackets, an [18+] tag,
-//   a colon inside the statement, "Kai: 5" or "Kai (5)", titles and honorifics; a score outside 1–5 or a name that
-//   is no one (or two namesakes) is skipped, and a statement the model reworded a little still matches.
+// - The maintainer's line format, "<statement>: <name> <score> | …", read leniently: numbering, brackets, an [18+] tag
+//   wherever it sits (inside bold or quotes, at the end, before a colon; never a bare 18+), a colon inside the
+//   statement, "Kai: 5" or "Kai (5)", titles and honorifics; a score outside 1–5 or a name that is no one (or two
+//   namesakes) is skipped, and a statement the model reworded a little still matches.
 // - GET /quiz queues one background call for the love interests' missing answers (the starters at first; a newcomer's
 //   later, for them alone) and never waits for it; with Heat SFW an 18+ statement is never shown, sent or answered.
 // - POST /quiz/answer keeps the first answer; the last open statement queues one refill of 50, given every statement
-//   asked, whose repeats and (under SFW) [18+] lines are dropped; the new ones are open next, with their answers.
+//   the player can see (under SFW no 18+ starter or written one), whose repeats (of hidden ones too) and (under SFW)
+//   [18+] lines are dropped; the new ones are open next, with their answers. Under NSFW every one a refill writes is
+//   18+, tagged or not.
 // - A love interest's answers never reach another prompt (the chapter plan here; only the quiz's module reads its
 //   document or sends its prompts), and the quiz's prompts are logged in debug mode.
 import assert from "node:assert/strict";
@@ -162,6 +165,29 @@ test("the line format is read leniently, and what cannot be read is skipped", ()
     { name: "Kai", score: 5 },
     { name: "Sol", score: 1 },
   ]);
+  // The tag wherever the model put it: inside bold or quotes, bold of its own, at the end, or before a colon.
+  for (const variant of [
+    "**[18+] I like rough sex.**: Kai 5",
+    '"[18+] I like rough sex.": Kai 5',
+    "“[18+] I like rough sex.”: Kai 5",
+    "**[18+]** I like rough sex.: Kai 5",
+    "I like rough sex. [18+]: Kai 5",
+    "[18+]: I like rough sex.: Kai 5",
+    "**[18+]**: I like rough sex.: Kai 5",
+    "(18+) I like rough sex.: Kai 5",
+    "[ 18 + ] I like rough sex.: Kai 5",
+    "[[18+] I like rough sex.]: Kai 5",
+  ]) {
+    assert.deepEqual(
+      parseQuizLine(variant),
+      { statement: "I like rough sex.", adult: true, scores: [{ name: "Kai", score: 5 }] },
+      variant,
+    );
+  }
+  const prose = parseQuizLine("I'd date someone 18+ years older than me: Kai 1")!;
+  assert.equal(prose.adult, false, "a bare 18+ in the prose is no tag");
+  assert.equal(prose.statement, "I'd date someone 18+ years older than me");
+  assert.equal(parseQuizLine("[18+]: Kai 5"), null, "a tag alone is no statement");
   assert.equal(parseQuizLine("Here are the answers:"), null, "a preamble is no line");
   assert.equal(parseQuizLine("I like taking risks. Kai 5"), null, "no colon, no line");
   assert.equal(parseQuizLines("Sure! Here you go."), undefined, "nothing readable is a format failure");
@@ -210,6 +236,22 @@ test("scores match the statements asked, even reworded a little; one out of rang
     false,
   );
   assert.deepEqual(fresh, [{ text: "I hum when I cook", adult: false, scores: { [KAI]: 4 } }]);
+  // Under NSFW Heat every new statement is 18+, tagged or not, so none shows once Heat is SFW; under SFW a tagged one
+  // is dropped and an untagged one is kept as it is.
+  const mixed = parseQuizLines(
+    ["[18+] I like being told what to do in bed: Kai 5", "I like being kissed slowly at dawn: Kai 3"].join("\n"),
+  )!;
+  assert.deepEqual(
+    newQuizStatements(mixed, QUIZ_STARTERS, units, true).map(({ text, adult }) => ({ text, adult })),
+    [
+      { text: "I like being told what to do in bed", adult: true },
+      { text: "I like being kissed slowly at dawn", adult: true },
+    ],
+  );
+  assert.deepEqual(
+    newQuizStatements(mixed, QUIZ_STARTERS, units, false).map(({ text, adult }) => ({ text, adult })),
+    [{ text: "I like being kissed slowly at dawn", adult: false }],
+  );
 });
 
 test("GET /quiz queues the love interests' answers once, never waits, and keeps 18+ statements out under SFW", async () => {
@@ -343,13 +385,23 @@ test("answers: the first is final; an unseen statement is a 404 and an answer ou
 });
 
 test("the last open statement queues one refill of 50, whose repeats and 18+ lines under SFW are dropped", async () => {
+  // Written once while Heat was NSFW: hidden now, never listed, and still never written again.
+  const HIDDEN = "I want to be pinned down and teased slowly";
+  const adultStarter = QUIZ_STARTERS.find((statement) => statement.adult)!;
   const refill = (messages: Array<{ content: string }>) => {
     assert.match(messages[0]!.content, /You write 50 new statements/u);
     assert.match(messages[0]!.content, /This story keeps sex, kinks and intimacy out of the quiz/u);
     assert.match(messages[1]!.content, /STATEMENTS ALREADY ASKED \(never again\)\n/u);
-    assert.ok(messages[1]!.content.includes(QUIZ_STARTERS[0]!.text), "every statement asked so far is listed");
+    assert.ok(messages[1]!.content.includes(QUIZ_STARTERS[0]!.text), "every statement the player can see is listed");
+    const adultListed = QUIZ_STARTERS.filter(
+      (statement) => statement.adult && messages[1]!.content.includes(statement.text),
+    );
+    assert.deepEqual(adultListed, [], "no 18+ starter is sent under SFW");
+    assert.ok(!messages[1]!.content.includes(HIDDEN), "nor an 18+ statement written earlier");
     return [
       `${QUIZ_STARTERS[0]!.text}: Kai 3`,
+      `${adultStarter.text}: Kai 4`,
+      `${HIDDEN}: Sol 2`,
       "[18+] I'd like a partner to take charge tonight: Kai 5 | Sol 2",
       ...Array.from(
         { length: 12 },
@@ -367,6 +419,7 @@ test("the last open statement queues one refill of 50, whose repeats and 18+ lin
   const visible = QUIZ_STARTERS.filter((statement) => !statement.adult);
   await t.store.mutateDoc(runDocTarget("quiz", quizId(t.runId)), normalizeQuiz, (quiz) => ({
     ...quiz,
+    written: [{ id: "w1", text: HIDDEN, adult: true }],
     answers: Object.fromEntries(visible.slice(1).map((statement) => [statement.id, 3 as const])),
   }));
   const last = await t.ask("POST", "/runs/:run/quiz/answer", { statement: visible[0]!.id, answer: 5 });
@@ -376,8 +429,8 @@ test("the last open statement queues one refill of 50, whose repeats and 18+ lin
   await t.settle();
   assert.equal(t.calls.filter((entry) => isRefill(entry.messages)).length, 1, "one refill");
   const quiz = await t.quiz();
-  assert.equal(quiz.written.length, 12, "the repeat and the 18+ line are dropped");
-  assert.deepEqual(quiz.written[0], { id: "w1", text: "I collect postcards from place number 1", adult: false });
+  assert.equal(quiz.written.length, 13, "the repeats (of hidden ones too) and the 18+ line are dropped");
+  assert.deepEqual(quiz.written[1], { id: "w2", text: "I collect postcards from place number 1", adult: false });
   const after = await t.ask("GET", "/runs/:run/quiz");
   assert.equal(after.body.refilling, false);
   assert.equal(after.body.open.length, 12, "the new ones are open next");

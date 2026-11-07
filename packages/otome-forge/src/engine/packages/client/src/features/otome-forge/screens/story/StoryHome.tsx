@@ -798,7 +798,8 @@ function ArcChoiceCard({ runKey, options }: { runKey: string; options: { options
           </button>
         ))}
       </div>
-      {busy ? (
+      {/* Someone new's wait shows these in their dialog, never a second copy behind its scrim. */}
+      {busy && busy !== "newcomer" ? (
         <>
           <p className="of-hint of-planning">{t("ui.otomeForge.story.arcPlanning")}</p>
           <StorySoFar runKey={runKey} />
@@ -816,7 +817,10 @@ function ArcChoiceCard({ runKey, options }: { runKey: string; options: { options
   );
 }
 
-/** Who arrives (#1983 M3): one of the player's cards, or someone invented. */
+/**
+ * Who arrives (#1983 M3): one of the player's cards, or someone invented. While they and their arc are written, the
+ * dialog shows the arc's planning status and what happened so far (#2040) in place of the choices.
+ */
 function NewcomerDialog({
   runKey,
   busy,
@@ -837,7 +841,6 @@ function NewcomerDialog({
   // A card carries no pronouns of its own: the player picks them, as setup asks (#1985 review).
   const [pronouns, setPronouns] = useState<PronounChoice>(emptyPronouns());
   const resolved = resolvePronouns(pronouns);
-  void runKey;
   return (
     <Dialog
       title={t("ui.otomeForge.story.newcomerTitle")}
@@ -869,52 +872,63 @@ function NewcomerDialog({
         </>
       }
     >
-      <p className="of-hint">{t("ui.otomeForge.story.newcomerCost")}</p>
-      <fieldset className="of-field">
-        <label>
-          <input type="radio" checked={mode === "card"} onChange={() => setMode("card")} />{" "}
-          {t("ui.otomeForge.story.newcomerCard")}
-        </label>
-        <label>
-          <input type="radio" checked={mode === "archetype"} onChange={() => setMode("archetype")} />{" "}
-          {t("ui.otomeForge.story.newcomerScratch")}
-        </label>
-      </fieldset>
-      <PronounPicker legend={t("ui.otomeForge.story.newcomerPronouns")} value={pronouns} onChange={setPronouns} />
-      {mode === "card" ? (
-        <ul className="of-cast-picks">
-          {cards.items.map((card) => (
-            <li key={card.id}>
-              <button
-                type="button"
-                className="of-cast-pick of-glass"
-                aria-pressed={cardId === card.id}
-                data-chosen={cardId === card.id}
-                onClick={() => setCardId(card.id)}
-              >
-                <Avatar name={card.name} url={card.avatarUrl} accent="var(--of-champagne)" size={32} />
-                <span>{card.name}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+      {busy ? (
+        <>
+          <p className="of-hint of-planning" role="status">
+            {t("ui.otomeForge.story.arcPlanning")}
+          </p>
+          <StorySoFar runKey={runKey} />
+        </>
       ) : (
         <>
-          <label className="of-field">
-            <span>{t("ui.otomeForge.story.newcomerName")}</span>
-            <input value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />
-            <span className="of-hint">{t("ui.otomeForge.story.newcomerNameHint")}</span>
-          </label>
-          <label className="of-field">
-            <span>{t("ui.otomeForge.story.newcomerArchetype")}</span>
-            <select value={archetype} onChange={(event) => setArchetype(event.target.value as typeof archetype)}>
-              {ARCHETYPE_IDS.map((id) => (
-                <option key={id} value={id}>
-                  {ARCHETYPES[id].name}
-                </option>
+          <p className="of-hint">{t("ui.otomeForge.story.newcomerCost")}</p>
+          <fieldset className="of-field">
+            <label>
+              <input type="radio" checked={mode === "card"} onChange={() => setMode("card")} />{" "}
+              {t("ui.otomeForge.story.newcomerCard")}
+            </label>
+            <label>
+              <input type="radio" checked={mode === "archetype"} onChange={() => setMode("archetype")} />{" "}
+              {t("ui.otomeForge.story.newcomerScratch")}
+            </label>
+          </fieldset>
+          <PronounPicker legend={t("ui.otomeForge.story.newcomerPronouns")} value={pronouns} onChange={setPronouns} />
+          {mode === "card" ? (
+            <ul className="of-cast-picks">
+              {cards.items.map((card) => (
+                <li key={card.id}>
+                  <button
+                    type="button"
+                    className="of-cast-pick of-glass"
+                    aria-pressed={cardId === card.id}
+                    data-chosen={cardId === card.id}
+                    onClick={() => setCardId(card.id)}
+                  >
+                    <Avatar name={card.name} url={card.avatarUrl} accent="var(--of-champagne)" size={32} />
+                    <span>{card.name}</span>
+                  </button>
+                </li>
               ))}
-            </select>
-          </label>
+            </ul>
+          ) : (
+            <>
+              <label className="of-field">
+                <span>{t("ui.otomeForge.story.newcomerName")}</span>
+                <input value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />
+                <span className="of-hint">{t("ui.otomeForge.story.newcomerNameHint")}</span>
+              </label>
+              <label className="of-field">
+                <span>{t("ui.otomeForge.story.newcomerArchetype")}</span>
+                <select value={archetype} onChange={(event) => setArchetype(event.target.value as typeof archetype)}>
+                  {ARCHETYPE_IDS.map((id) => (
+                    <option key={id} value={id}>
+                      {ARCHETYPES[id].name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          )}
         </>
       )}
     </Dialog>
