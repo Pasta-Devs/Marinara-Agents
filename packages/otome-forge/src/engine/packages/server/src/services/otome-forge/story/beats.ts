@@ -15,6 +15,13 @@
 //   `${R}:state` (S/state/relationship.ts applyChoiceEffects), whose `applied` entry makes it exactly once. A replay
 //   changes nothing, and a big choice never changes. A pick whose effects never landed (its request stopped between
 //   the two writes) is applied when the beat is counted as read, in that same write.
+// - Your own words (#2146): a chapter's closing decision (its one big choice, on its last node's last segment, after
+//   which nothing is written) may be answered in the player's own words instead of an offered option. The same write
+//   that makes it canon appends them to that choice as one more option (OWN_OPTION, labelled OWN_ANSWER_LABEL, the
+//   words as its selection, no branch), so its canon, the next chapter's prompts and story memory carry them as any
+//   pick. It has no effects (no trust, tension, grievance, disclosure, resolve or affection); the rest of the read
+//   (Starlight, ledgers, a gate, a repair, memory upkeep) is as for any pick. Every other choice takes only its
+//   options.
 // - Reading a beat to its end for the first time grants its Starlight; reading the chapter's last node completes it
 //   (Starlight, Lead and Foil affection, ledgers, lastLead), then starts memory upkeep in the background.
 // - Ease off: no model call. The beat's canon is cut at the segment on screen and closed with EASE_OFF_MARKER, the
@@ -53,6 +60,7 @@ import type {
   Beat,
   Chapter,
   ChapterNode,
+  ChoiceOption,
   Effect,
   ForgeChoice,
   LiId,
@@ -63,7 +71,7 @@ import type {
   Unit,
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
-import { stageRow, type ClimaxMove } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
+import { OWN_OPTION, stageRow, type ClimaxMove } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import type { DateScore } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { SIDE_WITH_AFFECTION } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import { LIMIT_IDS, type LimitId } from "../../../../../client/src/features/otome-forge/shared/content.js";
@@ -88,7 +96,7 @@ import { readBeatToEnd } from "../state/rewards.js";
 import { countedNow, gateShut, healRupture, passGate } from "../state/stages.js";
 import { arcCovering, listArcs } from "./arc.js";
 import type { ChapterDeps } from "./chapters.js";
-import { chapterScenes, chapterSoFar, readBeat, readChapter, recallText } from "./canon.js";
+import { OWN_ANSWER_LABEL, chapterScenes, chapterSoFar, readBeat, readChapter, recallText } from "./canon.js";
 import { prologueProblem } from "./prologue.js";
 import {
   afterRound,
@@ -1056,8 +1064,10 @@ async function applyPick(
 }
 
 /**
- * POST .../beats/:i/choose {choice, option}. The first pick of the first pending choice on the beat being read is
- * canon; its effects reach the state once. A replay of a small choice changes nothing; a big choice never changes.
+ * POST .../beats/:i/choose {choice, option, own?}. The first pick of the first pending choice on the beat being read
+ * is canon; its effects reach the state once. A replay of a small choice changes nothing; a big choice never changes.
+ * `own` (#2146, with option OWN_OPTION) answers a big choice in the player's own words: a 400 on any other choice or
+ * when blank, appended to the choice as its own option in the write that makes it canon, with no effects.
  */
 export async function chooseOption(
   deps: BeatDeps,
@@ -1066,12 +1076,25 @@ export async function chooseOption(
   i: number,
   choiceId: string,
   optionId: string,
+  own?: ChoiceOption["selection"],
 ): Promise<{ beat: Beat } & Picked> {
   const { run, chapter } = await load(deps, runId, key);
   let beat = await readBeat(deps.store, runId, key, i);
   if (!beat) throw beatNotFound();
   const choice = beat.choices.find((entry) => entry.id === choiceId);
-  if (!choice || !choice.options.some((option) => option.id === optionId)) {
+  if (choice && own && choice.kind !== "big") {
+    throw new OtomeForgeError(400, "Only a chapter's closing decision takes your own words.", "bad-request");
+  }
+  const words: ChoiceOption | null = own
+    ? {
+        id: OWN_OPTION,
+        text: OWN_ANSWER_LABEL,
+        selection: { kind: own.kind, text: own.text.replace(/\s+/gu, " ").trim() },
+        segments: [],
+      }
+    : null;
+  if (words && !words.selection.text) throw new OtomeForgeError(400, "Write what you say or do.", "bad-request");
+  if (!choice || (!words && !choice.options.some((option) => option.id === optionId))) {
     throw new OtomeForgeError(404, "No such choice.", "not-found");
   }
   const progress = run.state.chapters[key];
@@ -1098,9 +1121,13 @@ export async function chooseOption(
       if (!current) throw beatNotFound();
       // A rewrite saved since this beat was read has other choices: the pick was made on a scene that is gone.
       if (current.written.at !== checked.written.at) throw conflict("This scene changed. Open it again.");
-      return current.choiceCanon[choiceId] || pastCut(current)
-        ? current
-        : { ...current, choiceCanon: { ...current.choiceCanon, [choiceId]: optionId } };
+      if (current.choiceCanon[choiceId] || pastCut(current)) return current;
+      const choices = words
+        ? current.choices.map((entry) =>
+            entry.id === choiceId ? { ...entry, options: [...entry.options, words] } : entry,
+          )
+        : current.choices;
+      return { ...current, choices, choiceCanon: { ...current.choiceCanon, [choiceId]: optionId } };
     })) ?? beat;
   const picked = beat.choiceCanon[choiceId];
   // No pick saved: an Ease off cut the scene before this choice meanwhile, and the choice is closed as above.
