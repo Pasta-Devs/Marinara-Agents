@@ -55,6 +55,7 @@ import type {
   WorldView,
 } from "../shared/api-types";
 import { useOtomeProps } from "../props";
+import { OWN_OPTION } from "../shared/arcs";
 import { LIMIT_IDS, type LimitId } from "../shared/content";
 import { placeKey } from "../shared/places";
 import { memoryQueryKey } from "./use-memory";
@@ -843,16 +844,18 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
 
   // ── Choices ──
 
-  // Two quick presses share the render's `choosing`: the ref lets only the first one through.
+  // Two quick presses share the render's `choosing`: the ref lets only the first one through. Resolves whether the
+  // pick went through (#2146: the own-words dialog closes only then). An option OWN_OPTION carries the player's own
+  // words as its selection (a chapter's closing decision), which the server appends to the choice.
   const choosingRef = useRef(false);
   const choose = useCallback(
-    async (choice: ForgeChoice, option: ChoiceOption) => {
-      if (preparingBackground || !beat || !position || node === null || choosing || choosingRef.current) return;
+    async (choice: ForgeChoice, option: ChoiceOption): Promise<boolean> => {
+      if (preparingBackground || !beat || !position || node === null || choosing || choosingRef.current) return false;
       setChoiceError(null);
       // Picked on an earlier read: this read shows the other branch, and nothing changes.
       if (canonOption(beat, choice)) {
         setPosition({ ...position, picks: { ...position.picks, [choice.id]: option.id }, line: lineIndex + 1 });
-        return;
+        return true;
       }
       setChoosing(choice.id);
       choosingRef.current = true;
@@ -872,13 +875,14 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
           );
           const by = Array.isArray(result.rememberedBy) ? result.rememberedBy : [];
           if (result.remembered) pushToast({ kind: "remember", li: by.length === 1 ? by[0]! : null });
+          return true;
         } catch (error) {
           setChoiceError(otome.errorMessage(error));
+          return false;
         } finally {
           choosingRef.current = false;
           setChoosing(null);
         }
-        return;
       }
       try {
         const result = await otome.post<{
@@ -886,7 +890,11 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
           remembered: boolean;
           rememberedBy?: LiId[];
           affection?: AffectionChange[];
-        }>(`${base}/beats/${node}/choose`, { choice: choice.id, option: option.id });
+        }>(`${base}/beats/${node}/choose`, {
+          choice: choice.id,
+          option: option.id,
+          ...(option.id === OWN_OPTION ? { own: option.selection } : {}),
+        });
         const picked = result.beat.choiceCanon[choice.id] ?? option.id;
         setLoad({ status: "ready", node, beat: result.beat });
         // A big choice at the last line adds its selection after it: the new end is reported again.
@@ -903,8 +911,10 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
         // Named only when the pick touched one love interest; "They'll remember that." otherwise.
         const by = Array.isArray(result.rememberedBy) ? result.rememberedBy : [];
         if (result.remembered && !moved.length) pushToast({ kind: "remember", li: by.length === 1 ? by[0]! : null });
+        return true;
       } catch (error) {
         setChoiceError(otome.errorMessage(error));
+        return false;
       } finally {
         choosingRef.current = false;
         setChoosing(null);

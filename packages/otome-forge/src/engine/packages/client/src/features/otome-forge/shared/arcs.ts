@@ -168,3 +168,11 @@ export const ALL_CLIMAX_MOVES = [...STANCES, ...CLOSER_MOVES] as const;
 
 /** A stored game's climax: a game stored before the Closer has no `kind` and is a Confrontation. */
 export const climaxOf = (game: { kind?: "closer" }): ClimaxKind => game.kind ?? "confrontation";
+
+/**
+ * #2146: the option a chapter's closing decision (its one big choice, after which nothing is written) saves when the
+ * player answers it in their own words instead (S/story/beats.ts chooseOption), and how long those words may be (the
+ * kit's cap on a selection).
+ */
+export const OWN_OPTION = "own";
+export const OWN_ANSWER_MAX = 280;

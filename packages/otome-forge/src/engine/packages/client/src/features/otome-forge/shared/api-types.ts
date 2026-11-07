@@ -972,7 +972,10 @@ export interface Segment {
 }
 
 export interface ChoiceOption {
-  /** `option-<n>`, from the option's place in the model's reply. */
+  /**
+   * `option-<n>`, from the option's place in the model's reply; `own` (shared/arcs.ts OWN_OPTION) for the player's own
+   * words at a chapter's closing decision, appended once picked (#2146).
+   */
   id: string;
   /** The pill's short intent label. */
   text: string;

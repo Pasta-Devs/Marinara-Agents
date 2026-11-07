@@ -6,6 +6,10 @@
 - **Choose a background for any place.** **Background** beside a story location opens your Engine backgrounds: the one you pick shows there, on Home, on dates and in photos, and nothing is painted. A painting it replaces is kept. Turn on **Ask before painting** to choose before a place is painted.
 - **Don't paint**, the first choice of the image connection in **Settings → Images**, turns painting off and keeps to your Engine art.
 
+## 0.9.6 — 2026-11-07
+
+- **Answer a chapter's last decision in your own words.** When a chapter ends on a choice that lasts, **Write your own…** now waits under the offered answers: write something you say or something you do instead, and it becomes your choice, as lasting as any other. The story carries on from it, and the next chapter of that storyline starts from your words. Every other choice keeps its offered answers, because the scenes after them are already written ahead. Choosing your own words costs nothing extra.
+
 ## 0.9.5 — 2026-11-07
 
 - **Scene pictures show your love interests and you.** In a picture of two or more people, such as a key image, a Memory's or a Character Story's art, or a date's keepsake, each person is now painted from their own picture, so their faces match even while they wear a look; the look they wear is still described. When the story names someone another way, with a title, as "you", by a surname or a fuller name, or without its accents, the picture still knows who it is. When a saved picture of someone can't be loaded, the painting stops before anything is paid for and lets you try again, instead of painting a stranger.

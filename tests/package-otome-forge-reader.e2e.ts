@@ -7,7 +7,8 @@
 // reduced motion that changes nothing, whose Ease off on a branch puts no line it skips in the backlog, and a chapter
 // with no title in the reader and on the Story screen; and the waits (#2040, #2041): "What happened so far…" while a
 // chapter is planned, and Who said what? while a scene is written, on a phone and a desktop; and a side-with choice
-// (#2046), marked as one, each option naming whom it backs, with the affection it moved for each love interest.
+// (#2046), marked as one, each option naming whom it backs, with the affection it moved for each love interest; and
+// Write your own… (#2146) at a chapter's closing decision only, its draft kept until sent, on a phone and a desktop.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-reader.e2e.ts
 import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
@@ -201,6 +202,8 @@ function createStoryStub({
   storyBeats = BEATS,
   waits = false,
   memory = null as Json | null,
+  /** The chapter opened and read up to this node (its first unread one), as when the player comes back to it. */
+  startAt = 0,
 } = {}) {
   const calls: Call[] = [];
   const now = () => new Date().toISOString();
@@ -283,10 +286,10 @@ function createStoryStub({
     ageGate: null,
     lastOpenedAt: null,
   };
-  let chapter: Json | null = done ? { ...structuredClone(CHAPTER), title } : null;
+  let chapter: Json | null = done || startAt ? { ...structuredClone(CHAPTER), title } : null;
   const beats = new Map<number, Json>();
-  const progress = { beatsRead: done ? 3 : 0, completed: done ? now() : (null as string | null) };
-  let declined = done;
+  const progress = { beatsRead: done ? 3 : startAt, completed: done ? now() : (null as string | null) };
+  let declined = done || startAt > 1;
   // The first report of beat 0's end fails, as when the Engine restarts.
   let endFails = !done;
   let favorites: Json[] = [];
@@ -417,7 +420,13 @@ function createStoryStub({
       }
       const beat = beats.get(i)!;
       if (match[2] === "choose") {
-        const remembered = !beat.choiceCanon[call.body!.choice];
+        // #2146: the player's own words become the closing decision's own option, with no effects.
+        const own = call.body!.own;
+        const remembered = !beat.choiceCanon[call.body!.choice] && !own;
+        if (own && !beat.choiceCanon[call.body!.choice]) {
+          const choice = beat.choices.find((item: Json) => item.id === call.body!.choice);
+          choice.options.push({ id: "own", text: "Answered in their own words.", selection: own, segments: [] });
+        }
         beat.choiceCanon[call.body!.choice] ??= call.body!.option;
         // #2046: a side-with pick moves affection (S/state/relationship.ts): +30 for the one backed, −10 for the others.
         const side = remembered && beat.sideWith?.choice === call.body!.choice ? beat.sideWith : null;
@@ -2535,6 +2544,188 @@ test("Otome Hearth Side with on a replay: the first pick's label keeps its room 
     );
     await page.screenshot({ path: testInfo.outputPath(`side-with-replay-${width}.png`) });
   }
+});
+
+/**
+ * #2146: the closing scene (node 2): a small choice on its first line, then the chapter's closing decision, a big
+ * choice with `count` offered options, on its last.
+ */
+function closingBeat(count = 2): Json {
+  const offered: Array<[string, "dialogue" | "action", string]> = [
+    ["Stay with him.", "dialogue", "I’m still here."],
+    ["Walk away.", "action", "You leave the key."],
+    ["Ask him why he never told you.", "dialogue", "Why didn’t you tell me?"],
+    ["Wait for him to speak first.", "action", "You hold his gaze and wait."],
+  ];
+  const small = (id: string, text: string, did: string, answer: string) => ({
+    id,
+    text,
+    selection: { kind: "action", text: did },
+    segments: [seg("Ilvar", answer, { expression: "tender" })],
+  });
+  return {
+    ...BEATS[2],
+    choices: [
+      {
+        id: "choice-1",
+        kind: "small",
+        at: 0,
+        options: [
+          small("option-1", "Sit beside him.", "You sit on the cold step beside him.", "You’re letting the cold in."),
+          small("option-2", "Stay by the door.", "You keep your back to the door.", "Afraid I’ll keep you?"),
+        ],
+      },
+      {
+        id: "choice-2",
+        kind: "big",
+        at: 1,
+        options: offered.slice(0, count).map(([text, kind, said], index) => ({
+          id: `option-${index + 1}`,
+          text,
+          selection: { kind, text: said },
+          segments: [],
+        })),
+      },
+    ],
+  };
+}
+
+/** Opens the chapter at its closing scene and plays its small choice (by touch on a phone), up to the decision. */
+async function toClosingDecision(page: Page, stub: ReturnType<typeof createStoryStub>, mobile: boolean) {
+  await stubRoutes(page, stub);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Continue", exact: true }).first().click();
+  await expect(line(root)).toContainText("The dome again.");
+  // A small choice keeps to its offered options.
+  const small = root.getByRole("group", { name: "What do you do?" });
+  await expect(small.getByRole("button")).toHaveText(["Sit beside him.", "Stay by the door."]);
+  await expect(root.getByRole("button", { name: "Write your own…" })).toHaveCount(0);
+  const sit = small.getByRole("button", { name: "Sit beside him." });
+  if (mobile) await sit.tap();
+  else await sit.click();
+  await expect(line(root)).toContainText("You sit on the cold step beside him.");
+  await next(root);
+  await expect(line(root)).toContainText("You’re letting the cold in.");
+  await next(root);
+  await expect(line(root)).toContainText("I would rather hear it from you than guess.");
+  return root;
+}
+
+test("Otome Hearth Write your own… (#2146): a chapter's closing decision takes the player's own words", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  const mobile = testInfo.project.name.includes("mobile");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const stub = createStoryStub({ startAt: 2, storyBeats: [...BEATS.slice(0, 2), closingBeat()] });
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  const root = await toClosingDecision(page, stub, mobile);
+
+  // The closing decision ends on Write your own…, which opens its dialog with focus in the words, said by default.
+  const big = root.getByRole("group", { name: "A choice that lasts" });
+  const write = big.getByRole("button", { name: "Write your own…" });
+  await expect(big.getByRole("button")).toHaveText(["Stay with him.", "Walk away.", "Write your own…"]);
+  await expect(write).toHaveAttribute("aria-haspopup", "dialog");
+  await write.click();
+  const dialog = page.getByRole("dialog", { name: "In your own words" });
+  const words = dialog.getByRole("textbox", { name: "What do you say or do?" });
+  await expect(words).toBeFocused();
+  await expect(dialog.getByRole("radio", { name: "Something you say" })).toBeChecked();
+  await expect(dialog).toContainText("Like any lasting choice, it can’t be undone.");
+  const send = dialog.getByRole("button", { name: "Choose this" });
+  await expect(send).toHaveAttribute("aria-disabled", "true");
+  await words.fill("I’ll stay");
+  await expect(send).toHaveAttribute("aria-disabled", "false");
+  // Escape closes it with no pick, and the words wait for it to open again.
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  expect(posts(stub, "/choose"), "only the small choice was sent").toHaveLength(1);
+  await write.click();
+  await expect(words).toHaveValue("I’ll stay");
+  await expect(words).toBeFocused();
+  // Something done instead; Space in the words types a space and never goes on with the story.
+  await dialog.getByText("Something you do").click();
+  await expect(dialog.getByRole("radio", { name: "Something you do" })).toBeChecked();
+  const reads = posts(stub, "/read").length;
+  await words.focus();
+  await words.evaluate((field: HTMLTextAreaElement) => field.setSelectionRange(field.value.length, field.value.length));
+  await page.keyboard.press("Space");
+  await expect(words).toHaveValue("I’ll stay ");
+  await expect(dialog).toBeVisible();
+  await expect(line(root)).toContainText("I would rather hear it from you than guess.");
+  expect(posts(stub, "/read").length).toBe(reads);
+  const text = "You take his hand and don’t let go.";
+  await words.fill(text);
+  await page.screenshot({ path: testInfo.outputPath("own-answer-dialog.png") });
+  await send.click();
+  await expect(dialog).toBeHidden();
+  expect(posts(stub, "/choose").at(-1)!.body).toMatchObject({
+    choice: "choice-2",
+    option: "own",
+    own: { kind: "action", text },
+  });
+  // Something done is narration, with no nameplate; Next then ends the chapter.
+  await expect(line(root)).toContainText(text);
+  await expect(root.locator(".of-nameplate")).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath("own-answer-line.png") });
+  await next(root);
+  await expect(root.getByRole("heading", { name: "Chapter complete" })).toBeFocused();
+  expect(pageErrors).toEqual([]);
+});
+
+test("Otome Hearth Write your own… (#2146) on a 375 × 667 phone: four options, it and Next stay in reach", async ({
+  page,
+}, testInfo) => {
+  test.skip(!testInfo.project.name.includes("mobile"), "a small phone's screen");
+  test.setTimeout(120_000);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 375, height: 667 });
+  const stub = createStoryStub({ startAt: 2, storyBeats: [...BEATS.slice(0, 2), closingBeat(4)] });
+  const root = await toClosingDecision(page, stub, true);
+  /** Wholly on screen, with nothing over it where a tap lands. */
+  const inReach = async (target: Locator, what: string) => {
+    const box = (await target.boundingBox())!;
+    expect(box.y, `${what}: its top`).toBeGreaterThanOrEqual(0);
+    expect(box.y + box.height, `${what}: its bottom`).toBeLessThanOrEqual(667);
+    expect(box.x, `${what}: its start`).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width, `${what}: its end`).toBeLessThanOrEqual(375);
+    await target.tap({ trial: true });
+  };
+  const noSideways = async () =>
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+  const pills = root.getByRole("group", { name: "A choice that lasts" }).getByRole("button");
+  await expect(pills).toHaveCount(5);
+  for (const [index, pill] of (await pills.all()).entries()) await inReach(pill, `pill ${index + 1}`);
+  // The decision's heading stays clear of the reader's header (its title and the chapter's tags).
+  const [head, heading] = await Promise.all(
+    [root.locator(".of-reader-head"), root.locator(".of-choices-heading")].map((box) => box.boundingBox()),
+  );
+  // ponytail: logs the room left, so a font that renders taller in CI shows how close it came; remove once stable.
+  console.info(
+    "own-answer 375x667: heading clears the header by %spx",
+    (heading!.y - head!.y - head!.height).toFixed(1),
+  );
+  expect(heading!.y, "the heading starts below the header").toBeGreaterThanOrEqual(head!.y + head!.height);
+  await noSideways();
+  await page.screenshot({ path: testInfo.outputPath("own-answer-375.png") });
+  await pills.last().tap();
+  const dialog = page.getByRole("dialog", { name: "In your own words" });
+  await dialog.getByRole("textbox", { name: "What do you say or do?" }).fill("I’ll stay. Whatever it costs.");
+  const send = dialog.getByRole("button", { name: "Choose this" });
+  await inReach(send, "Choose this");
+  await noSideways();
+  await page.screenshot({ path: testInfo.outputPath("own-answer-dialog-375.png") });
+  await send.tap();
+  await expect(dialog).toBeHidden();
+  // Something said is the protagonist's line.
+  await expect(line(root)).toContainText("I’ll stay. Whatever it costs.");
+  await expect(root.locator(".of-nameplate")).toContainText("Mira Vale");
+  await setReaderControlsExpanded(root, false);
+  await inReach(root.locator(".of-next"), "Next");
+  await noSideways();
+  await next(root);
+  await expect(root.getByRole("heading", { name: "Chapter complete" })).toBeVisible();
 });
 
 test("Otome Hearth a failed summary is never silent: every screen of the story shows it, with Retry and the Memory connection", async ({

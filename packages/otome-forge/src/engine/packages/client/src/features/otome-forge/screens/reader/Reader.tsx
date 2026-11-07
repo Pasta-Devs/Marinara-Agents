@@ -10,7 +10,8 @@
 // plays and each spoken line is voiced (hooks/use-otome-audio.ts), and Auto waits for the voice. Everything works the
 // same with no image, music or voice connection. While a scene is written, Who said what? may be played under the
 // panel (#2041, WhoSaidWhat.tsx). A side-with choice (#2046) is marked as one, each option names whom it backs, and its
-// pick shows the affection it moved with each love interest.
+// pick shows the affection it moved with each love interest. A chapter's closing decision (its big choice, #2146) may be
+// answered in the player's own words (OwnAnswerDialog.tsx); the draft outlives the dialog until it is sent.
 // ──────────────────────────────────────────────
 import {
   useCallback,
@@ -57,6 +58,7 @@ import { accentOf } from "../../lib/accent";
 import { canonOption, readyUrl, sumGrants, voiceOf, type Voice } from "../../lib/reader-state";
 import { useOtomeProps } from "../../props";
 import type { Grant, LiId, RunLiView, RunView } from "../../shared/api-types";
+import { OWN_OPTION } from "../../shared/arcs";
 import { FACES, MUSIC_MOODS, type MusicMood } from "../../shared/faces";
 import { Backlog } from "./Backlog";
 import { ChoicePills, RememberToast } from "./ChoicePills";
@@ -64,6 +66,7 @@ import { ConfrontationEnd, StancePills } from "./Confrontation";
 import { ContentTagsCard } from "./ContentTagsCard";
 import { DialogueBox } from "./DialogueBox";
 import { EaseOffDialog } from "./EaseOffDialog";
+import { OwnAnswerDialog, type OwnAnswer } from "./OwnAnswerDialog";
 import { FACE_LABEL_KEYS, FacePlate, QuietCg } from "./FacePlate";
 import { ReaderControls, chapterTitle } from "./ReaderControls";
 import { SpeakerPlate, useSpeakerSprite } from "./SpeakerPlate";
@@ -135,7 +138,9 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
   );
   // The last beat's music, kept while the next beat opens; none until the first beat is ready.
   const lastMood = useRef<MusicMood | undefined>(undefined);
-  const [dialog, setDialog] = useState<"log" | "ease" | "background" | null>(null);
+  const [dialog, setDialog] = useState<"log" | "ease" | "own" | "background" | null>(null);
+  // #2146: the player's own words for a closing decision, kept until sent (`at`: the choice they answer).
+  const [ownDraft, setOwnDraft] = useState<OwnAnswer & { at: string }>({ at: "", kind: "dialogue", text: "" });
   // Each love interest's level (and extra stories unlocked, #2025) when the chapter opened, so the end card can say
   // which one rose.
   const [levelsBefore] = useState<LevelsBefore>(() => new Map(view.lis.map((li) => [li.id, li])));
@@ -160,6 +165,8 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
   const reading = !!current && !!beat && !reader.finished && !reader.askTags;
   const showUi = !hidden || !reading;
   const pending = reader.pendingChoice;
+  const ownAt = `${chapterKey}/${reader.node}/${pending?.id ?? ""}`;
+  const ownAnswer: OwnAnswer = ownDraft.at === ownAt ? ownDraft : { kind: "dialogue", text: "" };
 
   // When the focused control leaves (Next gives way to the choices, a panel is replaced), focus lands on what took
   // its place, so a keyboard or screen reader never falls out of the story. Only while focus was in the reader. A CG's
@@ -210,7 +217,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
     advance();
   };
 
-  const openDialog = (next: "log" | "ease" | "background") => {
+  const openDialog = (next: "log" | "ease" | "own" | "background") => {
     reader.setAuto(false);
     setDialog(next);
   };
@@ -504,6 +511,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
             onHome={onHome}
             ownEnding={!!onFinished}
             onEaseOff={() => openDialog("ease")}
+            onOwnAnswer={() => openDialog("own")}
           />
         )}
       </div>
@@ -541,6 +549,22 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
       ) : null}
       {dialog === "ease" ? (
         <EaseOffDialog onEaseOff={reader.easeOff} onVeil={reader.veil} onClose={() => setDialog(null)} />
+      ) : null}
+      {dialog === "own" && pending?.kind === "big" ? (
+        <OwnAnswerDialog
+          draft={ownAnswer}
+          onDraft={(next) => setOwnDraft({ ...next, at: ownAt })}
+          busy={reader.choosing === pending.id}
+          error={reader.choiceError}
+          onSend={(selection) =>
+            void reader.choose(pending, { id: OWN_OPTION, text: "", selection, segments: [] }).then((chosen) => {
+              if (!chosen) return;
+              setDialog(null);
+              setOwnDraft({ at: "", kind: "dialogue", text: "" });
+            })
+          }
+          onClose={() => setDialog(null)}
+        />
       ) : null}
       {reader.review ? (
         <PromptReviewDialog
@@ -606,6 +630,8 @@ interface BottomPanelProps {
   /** The screen that opened the reader shows the ending itself. */
   ownEnding: boolean;
   onEaseOff: () => void;
+  /** #2146: opens Write your own… for a closing decision. */
+  onOwnAnswer: () => void;
 }
 
 /** The bottom third: the dialogue box and its choices, or the panel that stands in for them. */
@@ -795,6 +821,7 @@ function BottomPanel(props: BottomPanelProps) {
           error={reader.choiceError}
           backs={beat.sideWith?.choice === pending.id ? sideWithNames(beat.sideWith.backs, view) : undefined}
           onChoose={(option) => void reader.choose(pending, option)}
+          onOwn={props.onOwnAnswer}
         />
       ) : null}
       <div className="of-dialogue-wrap" onClick={props.onAdvance}>
