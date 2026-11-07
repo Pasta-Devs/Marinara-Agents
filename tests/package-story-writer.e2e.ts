@@ -263,6 +263,15 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
     await row.hover();
     await page.mouse.wheel(0, 120);
     await expect.poll(() => row.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+    // A wheel that counts lines, as Firefox's does (deltaMode 1, three lines a notch), moves it as far.
+    const lines = await row.evaluate((element) => {
+      element.scrollLeft = 0;
+      element.dispatchEvent(new WheelEvent("wheel", { deltaY: 3, deltaMode: 1, bubbles: true, cancelable: true }));
+      return { moved: element.scrollLeft, room: element.scrollWidth - element.clientWidth };
+    });
+    // Three lines are ~48px, not 3: the row moves as far as it can go, up to that (Dottore on #2160).
+    expect(lines.room).toBeGreaterThan(10);
+    expect(lines.moved).toBeGreaterThanOrEqual(Math.min(40, lines.room));
     await row.evaluate((element) => {
       element.style.maxWidth = "";
     });

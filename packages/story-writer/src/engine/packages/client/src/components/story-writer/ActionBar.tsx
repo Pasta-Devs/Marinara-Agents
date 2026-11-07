@@ -226,7 +226,10 @@ export function QuickReplyBar(props: {
         className="sw-quickbar-list"
         // The row has no scrollbar: an ordinary mouse wheel scrolls it sideways.
         onWheel={(event) => {
-          if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.currentTarget.scrollLeft += event.deltaY;
+          if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+          // A wheel that counts lines (Firefox) or pages moves the row as far as one that counts pixels.
+          const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? event.currentTarget.clientWidth : 1;
+          event.currentTarget.scrollLeft += event.deltaY * unit;
         }}
       >
         {props.replies.map((reply) => (
