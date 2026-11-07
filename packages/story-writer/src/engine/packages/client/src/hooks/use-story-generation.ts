@@ -19,12 +19,13 @@ import {
   buildChapterMessages,
   buildSummaryMessages,
   buildTimelineMessages,
+  chapterRequest,
   chapterTokenBudget,
-  continueMessageOf,
   createClientId,
   endsMidSentence,
   findBannedPhrases,
   joinContinuation,
+  loreScanText,
   parseTimelineResponse,
   tokenBudget,
   visibleStreamingText,
@@ -59,7 +60,6 @@ export interface StoryGenerationApi {
 const SUMMARY_MAX_TOKENS = 1_200;
 const TIMELINE_MAX_TOKENS = 3_000;
 const SAVE_EVERY_MS = 3_000;
-const LORE_SCAN_CHARS = 150_000;
 
 interface Run {
   storyId: string;
@@ -106,17 +106,6 @@ function scheduleFrame(callback: () => void): () => void {
 function pickConnection(connections: ConnectionOption[], settings: StorySettings): ConnectionOption | null {
   const id = resolveDefaultConnectionId(connections, settings.connectionId);
   return connections.find((connection) => connection.id === id) ?? null;
-}
-
-/**
- * Text the Engine's lorebook scanner reads: the overview, the note, the latest chapters and a quick reply, newest text
- * kept.
- */
-function loreScanText(settings: StorySettings, chapters: StoryChapter[], request: string): string {
-  return [settings.overview, settings.authorNote, ...chapters.slice(-3).map((chapter) => chapter.text), request]
-    .filter((part) => part.trim())
-    .join("\n\n")
-    .slice(-LORE_SCAN_CHARS);
 }
 
 /** Older chapters (outside the last N the next chapter sees in full) that have text but no summary yet. */
@@ -262,20 +251,14 @@ async function writeChapter(
   // A rewrite is written from an emptied last chapter, so the prompt treats it as a new chapter.
   const promptChapters = original ? [...chapters.slice(0, -1), { ...original, text: "", summary: "" }] : chapters;
   const chapterNumber = mode === "next" ? chapters.length + 1 : chapters.length;
-  const continueMessage = continueMessageOf(settings);
-  // A quick reply; a rewrite asks again for what the chapter was written from (which may have been a quick reply).
   // Continuing a draft sends a quick reply once: the draft keeps the request it was started with.
-  const request = override?.trim() ? override : original?.request.trim() ? original.request : continueMessage;
+  const request = chapterRequest(settings, override, original);
 
   // Cast and lore load before the story changes, so a failure here leaves it as it was.
   const [characters, personas, lore] = await Promise.all([
     loadPromptCharacters(context.queryClient, settings.characterIds),
     loadPromptPersonas(context.queryClient, settings.personaIds),
-    // A quick reply's words pick lorebook entries, as the note's do; the plain continue message never did.
-    loadPromptLore(
-      settings.lorebookIds,
-      loreScanText(settings, promptChapters, request === continueMessage ? "" : request),
-    ),
+    loadPromptLore(settings.lorebookIds, loreScanText(settings, promptChapters, request)),
   ]);
   if (run.controller.signal.aborted) return;
   const messages = buildChapterMessages({

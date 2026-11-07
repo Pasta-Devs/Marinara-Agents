@@ -752,8 +752,8 @@ ${R} .sw-quickbar {
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2);
 }
-/* ponytail: the row hides its scrollbar, which would not fit the pill; a mouse without sideways scrolling reaches the
-   rest with Shift+wheel or Tab. Upgrade: turn vertical wheel turns into scrollLeft if that is not enough. */
+/* ponytail: the row hides its scrollbar, which would not fit the pill; a vertical wheel scrolls it sideways (QuickReplyBar)
+   and Tab reaches every chip, but only the clipped last chip hints at more. Upgrade: fade the overflowing edge. */
 ${R} .sw-quickbar-list {
   display: flex; gap: 4px; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
 }

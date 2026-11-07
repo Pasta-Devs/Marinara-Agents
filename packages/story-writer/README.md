@@ -70,7 +70,7 @@ A new chapter remembers the quick reply it was written from, so the model sees i
 - **Stop**: shown while the model writes, with a live word count.
 - **Continue the last chapter**: asks the model for more of a finished chapter, for example when it ended too soon.
 - **Finish this chapter** (shown while the last chapter is a draft): marks it finished and writes the next chapter, for when a draft is done as it is.
-- **Rewrite the last chapter**: throws the last chapter away and writes it again from the same request (your continue message, or the quick reply it was written from). Story Writer asks first.
+- **Rewrite the last chapter**: throws the last chapter away and writes it again from the request it was written from: the quick reply, or your continue message as it was then, even if you have changed it since. To steer a rewrite, change the author's note first. Story Writer asks first.
 - **Your stories**: opens your story list.
 - **Fullscreen**: hides the rest of Marinara Engine.
 - The word count of the whole story, with a progress bar when you have set a story length target.
@@ -110,7 +110,7 @@ The same list as **Your stories**: open, start, duplicate, delete and download s
 
 **Characters**, **Personas** and **Lorebooks**, each a searchable list you tick. Nothing is selected in a new story.
 
-For each character and persona the model gets its description, personality, backstory, appearance, scenario and example dialogue. From lorebooks it gets only the entries that matter right now: the Engine's own keyword scanner checks your overview, author's note, the quick reply you clicked and the last few chapters, and always-on entries are always included.
+For each character and persona the model gets its description, personality, backstory, appearance, scenario and example dialogue. From lorebooks it gets only the entries that matter right now: the Engine's own keyword scanner checks your overview, author's note, the last few chapters, and the quick reply you clicked (or the older request a rewrite sends again), and always-on entries are always included.
 
 ### Writing
 
@@ -170,7 +170,7 @@ Each time you ask for a chapter, Story Writer puts together the same kind of con
 1. **One system message** with, in this order: your prompt; the story details (title, fandom, genre, rating, relationships, content warnings, tags, author and style); the overview; the lorebook entries that matter right now; your characters; your personas; your story notes; the timeline; summaries of earlier chapters; where the story is in length; your banned phrases; the language; and how to format the chapter. `{{char}}` and `{{user}}` in cards and lorebooks become the character's name and your first persona's name.
 2. **The chapters it reads in full**, oldest first (see Summaries below). Each one is sent as your request (a user message) followed by the chapter itself (an assistant message), just as if the model had written it in a chat.
 3. **Your author's note** as a user message at its depth (right before the final message at depth 0).
-4. **Your continue message**, or the quick reply you clicked, as the final user message.
+4. **Your continue message**, or the quick reply you clicked, as the final user message. A rewrite sends the request the chapter was written from instead.
 
 When the model continues an unfinished chapter, that chapter is the last assistant message and the model is asked to pick up exactly where it stops, without repeating anything or adding a heading.
 

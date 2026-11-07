@@ -222,7 +222,13 @@ export function QuickReplyBar(props: {
   const { t } = useTranslation();
   return (
     <div className="sw-quickbar" role="toolbar" aria-label={t("quickReplies.label")}>
-      <div className="sw-quickbar-list">
+      <div
+        className="sw-quickbar-list"
+        // The row has no scrollbar: an ordinary mouse wheel scrolls it sideways.
+        onWheel={(event) => {
+          if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.currentTarget.scrollLeft += event.deltaY;
+        }}
+      >
         {props.replies.map((reply) => (
           // The whole label is the button's name; CSS shortens what is shown.
           <button

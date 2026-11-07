@@ -10,11 +10,13 @@ import {
   buildChapterMessages,
   buildSummaryMessages,
   buildTimelineMessages,
+  chapterRequest,
   chapterTokenBudget,
   endsMidSentence,
   findBannedPhrases,
   formatCharacterCard,
   joinContinuation,
+  loreScanText,
   parseTimelineResponse,
   stripLeadingThinking,
   visibleStreamingText,
@@ -277,6 +279,33 @@ test("a quick reply replaces the continue message as the final request, after th
   assert.equal(plain.at(-1)?.content, "Go on, please.");
   assert.deepEqual(build({ settings: settings(note), chapters, request: "  " }), plain);
   assert.deepEqual(build({ settings: settings(note), chapters, request: undefined }), plain);
+});
+
+test("a run asks for the quick reply, else what a rewrite was written from, and scans only a request that differs", () => {
+  const story = settings({ continueMessage: "Slow down." });
+  const poured = chapter(2, { request: "Make it pour." });
+  // Next and continue (no rewritten chapter); a blank reply is no reply.
+  assert.equal(chapterRequest(story, "Make it pour.", null), "Make it pour.");
+  assert.equal(chapterRequest(story, "  ", null), "Slow down.");
+  assert.equal(chapterRequest(story), "Slow down.");
+  assert.equal(chapterRequest(settings({ continueMessage: " " })), "Continue.");
+  // A rewrite sends its stored request (an old continue message too), a typed draft's empty one gives today's.
+  assert.equal(chapterRequest(story, undefined, poured), "Make it pour.");
+  assert.equal(chapterRequest(story, undefined, chapter(2, { request: "Continue." })), "Continue.");
+  assert.equal(chapterRequest(story, undefined, chapter(2)), "Slow down.");
+  assert.equal(chapterRequest(story, "Rain.", poured), "Rain.");
+
+  const lore = settings({ overview: "A wet city.", authorNote: "Make it rain.", continueMessage: "Slow down." });
+  const chapters = [1, 2, 3, 4].map((index) => chapter(index));
+  const before = ["A wet city.", "Make it rain.", ...chapters.slice(-3).map((item) => item.text)].join("\n\n");
+  assert.equal(loreScanText(lore, chapters, ""), before);
+  assert.equal(loreScanText(lore, chapters, "Slow down."), before);
+  assert.equal(loreScanText(lore, chapters, "Bring in the Librarian."), `${before}\n\nBring in the Librarian.`);
+  // The reply is the newest text, so the length cap never cuts it.
+  const long = [chapter(1, { text: "rain ".repeat(40_000) })];
+  const scanned = loreScanText(lore, long, "Bring in the Librarian.");
+  assert.equal(scanned.length, 150_000);
+  assert.ok(scanned.endsWith("\n\nBring in the Librarian."));
 });
 
 test("the length section reports progress against the target and asks for an ending near it", () => {

@@ -24,7 +24,7 @@ export function QuickRepliesSection(props: { preferences: StoryWriterPreferences
     );
   const full = replies.length >= LIMITS.quickReplies;
   const add = () => {
-    if (!text.trim() || full) return;
+    if (!text.trim()) return;
     replace([...replies, { id: createClientId("reply"), label: label.trim(), text: text.trim() }]);
     setLabel("");
     setText("");
@@ -72,44 +72,46 @@ export function QuickRepliesSection(props: { preferences: StoryWriterPreferences
           ))}
         </ol>
       )}
-      <form
-        className="sw-quick-add"
-        onSubmit={(event) => {
-          event.preventDefault();
-          add();
-        }}
-      >
-        <label className="sw-label" htmlFor={`${id}-label`}>
-          {t("quickReplies.labelField")}
-        </label>
-        <input
-          id={`${id}-label`}
-          type="text"
-          className="sw-input"
-          value={label}
-          maxLength={LIMITS.quickReplyLabel}
-          placeholder={t("quickReplies.labelPlaceholder")}
-          onChange={(event) => setLabel(event.target.value)}
-        />
-        <label className="sw-label" htmlFor={`${id}-text`}>
-          {t("quickReplies.text")}
-        </label>
-        <textarea
-          id={`${id}-text`}
-          className="sw-textarea"
-          rows={2}
-          value={text}
-          maxLength={LIMITS.shortText}
-          placeholder={t("quickReplies.textPlaceholder")}
-          onChange={(event) => setText(event.target.value)}
-        />
-        <div className="sw-button-row">
-          <button type="submit" className="sw-button" disabled={!text.trim() || full}>
-            <Plus size={15} aria-hidden="true" />
-            {t("quickReplies.add")}
-          </button>
-        </div>
-      </form>
+      {full ? null : (
+        <form
+          className="sw-quick-add"
+          onSubmit={(event) => {
+            event.preventDefault();
+            add();
+          }}
+        >
+          <label className="sw-label" htmlFor={`${id}-label`}>
+            {t("quickReplies.labelField")}
+          </label>
+          <input
+            id={`${id}-label`}
+            type="text"
+            className="sw-input"
+            value={label}
+            maxLength={LIMITS.quickReplyLabel}
+            placeholder={t("quickReplies.labelPlaceholder")}
+            onChange={(event) => setLabel(event.target.value)}
+          />
+          <label className="sw-label" htmlFor={`${id}-text`}>
+            {t("quickReplies.text")}
+          </label>
+          <textarea
+            id={`${id}-text`}
+            className="sw-textarea"
+            rows={2}
+            value={text}
+            maxLength={LIMITS.shortText}
+            placeholder={t("quickReplies.textPlaceholder")}
+            onChange={(event) => setText(event.target.value)}
+          />
+          <div className="sw-button-row">
+            <button type="submit" className="sw-button" disabled={!text.trim()}>
+              <Plus size={15} aria-hidden="true" />
+              {t("quickReplies.add")}
+            </button>
+          </div>
+        </form>
+      )}
     </>
   );
 }

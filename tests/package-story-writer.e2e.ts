@@ -254,6 +254,19 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
     expect(quickBox.y + quickBox.height).toBeLessThanOrEqual(actionBox.y);
     expect(slotBefore.height - slotAfter.height).toBeCloseTo(quickBox.height + 6, 0);
   }
+  if (!mobile) {
+    // The row shows no scrollbar, so an ordinary mouse wheel scrolls it sideways when it overflows.
+    const row = quickBar.locator(".sw-quickbar-list");
+    await row.evaluate((element) => {
+      element.style.maxWidth = "40px";
+    });
+    await row.hover();
+    await page.mouse.wheel(0, 120);
+    await expect.poll(() => row.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+    await row.evaluate((element) => {
+      element.style.maxWidth = "";
+    });
+  }
   await page.waitForTimeout(500);
   await page.screenshot({ path: testInfo.outputPath("03b-quick-replies.png") });
 
