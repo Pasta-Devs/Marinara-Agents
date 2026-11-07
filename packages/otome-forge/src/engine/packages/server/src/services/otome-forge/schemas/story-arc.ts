@@ -202,8 +202,11 @@ export const ArcPlanSchema = z.object({
         what: text().min(1),
       }),
     )
-    .max(24),
-  antagonist: z.object({ name: text(200).min(1), want: text(400), whyNow: text(400) }).nullable(),
+    .max(24)
+    // Missing means none, as null does: the prompt asks for an optional field to be omitted rather than null, and a
+    // planner told to leave reveals empty (or with no antagonist) may leave the key out (#2172).
+    .nullish(),
+  antagonist: z.object({ name: text(200).min(1), want: text(400), whyNow: text(400) }).nullish(),
   newcomer: z
     .object({ how: text(600) })
     .nullable()
@@ -249,7 +252,7 @@ export function normalizeArcPlan(reply: z.infer<typeof ArcPlanSchema>, context: 
   const how = (reply.newcomer?.how ?? "").trim();
   if (context.newcomer && !how) return "say how the newcomer meets the protagonist, in one sentence (newcomer.how)";
   if (kind === "breathing") {
-    if (reply.reveals.length) return "a breathing arc reveals nothing: leave reveals empty";
+    if (reply.reveals?.length) return "a breathing arc reveals nothing: leave reveals empty";
     if (reply.antagonist) return "a breathing arc has no antagonist";
     return {
       version: 1,
@@ -282,7 +285,7 @@ export function normalizeArcPlan(reply: z.infer<typeof ArcPlanSchema>, context: 
   const seenChapters = new Set<number>();
   const scheduled = new Set<LiId>();
   let sawTruth = false;
-  for (const reveal of [...reply.reveals].sort((a, b) => a.chapter - b.chapter)) {
+  for (const reveal of [...(reply.reveals ?? [])].sort((a, b) => a.chapter - b.chapter)) {
     const n = from + reveal.chapter - 1;
     if (reveal.chapter > count)
       return `a reveal is scheduled past the arc's last chapter (in chapter ${reveal.chapter})`;

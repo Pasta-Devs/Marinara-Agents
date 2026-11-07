@@ -252,6 +252,20 @@ test("a spent reveal is dropped, never refused: an old piece, a told truth, the 
   );
 });
 
+test("a plan with no reveals or antagonist key plans the arc: missing means none (#2172)", () => {
+  // The prompt says to omit an optional field rather than write null, and asks for no reveals once all are spent.
+  const { reveals: _reveals, antagonist: _antagonist, ...bare } = arcReply();
+  const planned = normalizeArcPlan(parse(bare), context({ revealed: new Set([KAI]), truthTold: true }));
+  assert.equal(typeof planned, "object", `planned, not refused: ${String(planned)}`);
+  assert.deepEqual((planned as StoryArc).reveals, []);
+  assert.equal((planned as StoryArc).antagonist, null);
+  const breathing = normalizeArcPlan(
+    parse({ ...bare, kind: "breathing", chapters: purposes(4) }),
+    context({ choice: "breathe" }),
+  );
+  assert.equal(typeof breathing, "object", `a breathing arc with neither key plans: ${String(breathing)}`);
+});
+
 test("a nameless label is refused, and the ending is always the arc's last chapter", () => {
   assert.match(String(normalizeArcPlan(parse(arcReply({ label: "   " })), context())), /needs a short label/u);
   // The big event lands in the arc's last chapter whatever position the reply gives it (0 means the last).
