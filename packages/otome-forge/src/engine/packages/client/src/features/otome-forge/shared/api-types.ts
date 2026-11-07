@@ -3,6 +3,7 @@
 // ──────────────────────────────────────────────
 // Imported by both bundles, so a code or field added on one side has to be handled on the other.
 import type { ClimaxEnding, ClimaxMove, RouteEntry } from "./arcs";
+import type { BirthdayOffer } from "./birthdays";
 import type { ContentSettings, ImageRating, LimitId } from "./content";
 import type { DatePlan, DateScore } from "./dates";
 import type { Prestige, PrestigeKind } from "./economy";
@@ -570,6 +571,8 @@ export interface HomeView {
   figurines?: Array<FigurinePicture & { li: LiId }>;
   /** #2127: Your thoughts… waiting for the next main chapter, or null. */
   thoughts: PlayerThoughts | null;
+  /** #2153: love interests whose birthday can be celebrated now and is not yet; absent for none. */
+  celebrate?: LiId[];
 }
 
 // ── Phone (M3): one private thread per love interest. S/phone/chat.ts reads and writes these shapes. ──
@@ -692,6 +695,8 @@ export interface CalendarView {
   anniversaries: Array<{ md: string; label: string; li?: LiId; year?: number }>;
   /** Wish banners' last days (M4); empty before any banner exists. */
   bannerEnds: Array<{ day: string; banner: string }>;
+  /** #2153: the birthdays that can be celebrated now, a scene started and not yet read included; absent for none. */
+  celebrate?: BirthdayOffer[];
 }
 
 /**
@@ -973,6 +978,11 @@ export interface Chapter {
    * from the client).
    */
   thoughts?: string;
+  /**
+   * #2153: the Shop gift given in a birthday scene (`story-birthday-<li>-<year>`), spent when it was celebrated; its
+   * affection is paid when the scene is read to its end (hidden from the client).
+   */
+  gift?: GiftId;
 }
 
 /** A segment of a beat: one line of dialogue, one thought, or one piece of narration. */
@@ -1177,7 +1187,7 @@ export type BeatState = "unwritten" | "ready" | "read";
 /** A chapter as the client sees it: no guides and no ledger (the plan is the hidden story). */
 export type ChapterView = Omit<
   Chapter,
-  "nodes" | "ledger" | "connectionId" | "date" | "music" | "prestige" | "thoughts"
+  "nodes" | "ledger" | "connectionId" | "date" | "music" | "prestige" | "thoughts" | "gift"
 > & {
   music?: Pick<ChapterMusic, "track">;
   nodes: Array<Pick<ChapterNode, "i" | "kind" | "moment" | "cg" | "gate">>;
@@ -1318,7 +1328,8 @@ export interface ChapterDetail {
 
 /** What one request earned. */
 export interface Grant {
-  source: "beat" | "chapter" | "lead" | "foil";
+  /** #2153: `gift` is a birthday scene's gift, paid when it is read to its end, never capped. */
+  source: "beat" | "chapter" | "lead" | "foil" | "gift";
   starlight?: number;
   li?: LiId;
   affection?: number;

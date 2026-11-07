@@ -25,6 +25,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { ChapterKind, ChapterView, MomentKind, NodeKind, RunLiView } from "../../shared/api-types";
+import { birthdayOfKey } from "../../shared/birthdays";
 import { figurineLiOf } from "../../shared/shop";
 import { FullscreenButton } from "../../components/Stage";
 import { ImageDescription } from "../../components/ImageDescription";
@@ -40,17 +41,19 @@ const KIND_KEYS: Record<Exclude<ChapterKind, "main">, string> = {
 };
 
 /**
- * A chapter's title as the player reads it. A figurine scene (#2128) has no banner item to name it, so it is titled in
- * the player's language from its love interest's name; its saved English title is the story's own, for prompts and
- * memory (S/items/character-story.ts figurineStoryChapter).
+ * A chapter's title as the player reads it. A figurine scene (#2128) or a birthday scene (#2153) has no banner item to
+ * name it, so it is titled in the player's language from its love interest's name (and the birthday's year); its saved
+ * English title is the story's own, for prompts and memory (S/items/character-story.ts).
  */
 export function chapterTitle(
   t: ReturnType<typeof useTranslation>["t"],
   chapter: Pick<ChapterView, "key" | "title">,
   lis: ReadonlyArray<Pick<RunLiView, "id" | "name">>,
 ): string {
-  const li = figurineLiOf(chapter.key);
+  const birthday = birthdayOfKey(chapter.key);
+  const li = birthday?.li ?? figurineLiOf(chapter.key);
   const name = li ? lis.find((entry) => entry.id === li)?.name : undefined;
+  if (name && birthday) return t("ui.otomeForge.birthday.sceneTitle", { name, year: birthday.year });
   return name ? t("ui.otomeForge.shop.sceneTitle", { name }) : chapter.title || t("ui.otomeForge.story.untitled");
 }
 

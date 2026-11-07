@@ -9,12 +9,17 @@
 //                                       the newest Photo Shoot photo with him, taped into his note (#2087), Your
 //                                       thoughts… waiting for the next main chapter (#2127), and each figurine
 //                                       bought in the Shop (#2128) once painted or while it paints (#2138), which
-//                                       stands in L0
+//                                       stands in L0, and (#2153) the love interests whose birthday can be
+//                                       celebrated now and is not yet (`celebrate`, absent for none)
 // POST /runs/:run/home/set {li?, show?} → {home}: the love interest Home is about, and Him or Me
 // POST /runs/:run/home/note {li}       → {note}: today's note, written by the day's first call and read back after
 // POST /runs/:run/home/thoughts {text} → {thoughts}: Your thoughts… (#2127), trimmed, wait with no model call for
 //                                       the next main chapter's plan (S/story/chapters.ts), which lets them go; ""
 //                                       lets them go now. 400 over THOUGHTS_MAX characters
+// POST /runs/:run/home/birthday {li, gift?} → {key, resumed}: celebrates his birthday (#2153, S/home/birthday.ts):
+//                                       his birthday scene, with no model call, and the Shop gift given. 404 for no
+//                                       birthday to celebrate (or an unknown love interest or gift), 409 `conflict`
+//                                       for a gift she has none of, 409 `locked` for the aphrodisiac under SFW Heat
 // GET  /runs/:run/lis/:li/lines        → LinesView: his pre-written lines (cold only during a rupture)
 // Reading Home queues what it is missing in the background and never waits for it: each love interest's line pack
 // (the first visit backfills every one), and the cut-outs of his worn look and its ready faces and of each painted
@@ -36,6 +41,7 @@ import { wornLookUrl } from "../../../../../client/src/features/otome-forge/shar
 import { cutoutView, queueCutouts, type CutoutClient } from "../art/cutout.js";
 import { personaAvatarPath } from "../art/engine-art.js";
 import { figurinePicture, queueFigurineCutouts } from "../art/figurine.js";
+import { birthdayOffers, celebrateBirthday } from "../home/birthday.js";
 import { ensureLinePacks, linesView, needsLines } from "../home/lines.js";
 import { noteFits, readNote, serveNote, toNoteView, todayKey } from "../home/note.js";
 import { readItems } from "../items/open.js";
@@ -52,6 +58,7 @@ import {
 import { isLiId, runDocTarget, stateId, unitId } from "../ids.js";
 import { readThread, unreadCount } from "../phone/chat.js";
 import { GROUP_THREAD, THOUGHTS_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
+import { isGiftId } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import { normalizeState, readRun, readyFaces } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import { albumCgs } from "./album.js";
@@ -63,6 +70,7 @@ const SetBody = z.object({
 });
 const NoteBody = z.object({ li: z.string().min(1).max(80) });
 const ThoughtsBody = z.object({ text: z.string().max(THOUGHTS_MAX) });
+const BirthdayBody = z.object({ li: z.string().min(1).max(80), gift: z.string().min(1).max(40).optional() });
 
 export interface HomeRouteDeps extends RouteDeps {
   /** The loopback cut-out client by default; tests pass a fake. */
@@ -191,6 +199,7 @@ export function registerHomeRoutes(router: OtomeRouter, deps: HomeRouteDeps): vo
         runId,
         run.units.filter((entry) => run.state.owned.figurines[entry.id]),
       );
+      const celebrate = birthdayOffers(run, todayKey()).flatMap((offer) => (offer.started ? [] : [offer.li]));
 
       const view: HomeView = {
         li,
@@ -212,6 +221,7 @@ export function registerHomeRoutes(router: OtomeRouter, deps: HomeRouteDeps): vo
           const picture = figurinePicture(runId, entry);
           return picture.url || picture.art?.state === "pending" ? [{ li: entry.id, ...picture }] : [];
         }),
+        ...(celebrate.length ? { celebrate } : {}),
       };
       return view;
     }),
@@ -245,6 +255,17 @@ export function registerHomeRoutes(router: OtomeRouter, deps: HomeRouteDeps): vo
       );
       if (!state) throw runNotFound();
       return { thoughts: state.thoughts };
+    }),
+  );
+
+  router.post(
+    "/runs/:run/home/birthday",
+    handle(async (request) => {
+      const { li, gift } = parseBody(BirthdayBody, request.body);
+      const { runId } = runParam(request);
+      if (!isLiId(li)) throw liNotFound();
+      if (gift !== undefined && !isGiftId(gift)) throw new OtomeForgeError(404, "No such gift.", "not-found");
+      return celebrateBirthday(deps, runId, li, gift);
     }),
   );
 
