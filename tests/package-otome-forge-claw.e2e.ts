@@ -505,7 +505,7 @@ test("Otome Forge Dates and a Claw round at phone width: the cheer meter, his ch
   await expect(activities.getByRole("heading", { name: "Read Kai Ardent" })).toBeVisible();
   await expect(activities.getByRole("heading", { name: "Date Night with Kai Ardent" })).toBeVisible();
   await expect(activities.getByRole("heading", { name: "Claw Machine with Kai Ardent" })).toBeVisible();
-  await expect(activities.getByRole("button", { name: /^Play: / })).toHaveCount(4);
+  await expect(activities.getByRole("button", { name: /^Play: / })).toHaveCount(5);
   await expect(activities).toContainText("No model calls");
   // Date Night's card says what it may paint besides the keepsake: its scenes paint places and faces as any scene does.
   await expect(activities).toContainText(

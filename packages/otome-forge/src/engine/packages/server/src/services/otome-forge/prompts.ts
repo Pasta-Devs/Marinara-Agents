@@ -235,6 +235,17 @@ import {
   READ_ME_GUESSES,
 } from "../../../../client/src/features/otome-forge/shared/read-me.js";
 import { GIFT_PROMPT_NAMES, type GiftId } from "../../../../client/src/features/otome-forge/shared/shop.js";
+import {
+  ARCANA_FIGURES,
+  type Arcana,
+  TAROT_CARDS,
+  TAROT_POSITIONS,
+  TAROT_READINGS,
+  type TarotChip,
+  type TarotMode,
+  type TarotPosition,
+  type TarotQuestion,
+} from "../../../../client/src/features/otome-forge/shared/tarot.js";
 import { STICKERS_PER_LI } from "../../../../client/src/features/otome-forge/shared/stickers.js";
 import { NOTICED_WORDS_MAX, SHOW_WORDS_MAX } from "../../../../client/src/features/otome-forge/shared/wardrobe.js";
 import {
@@ -3421,6 +3432,251 @@ export function readMeMessages({ world, player, unit, liState, recalled, lately 
   ];
 }
 
+// ── Tarot night (#2151; structured, chat contract, foreground lane) ──
+// One call writes a whole reading (S/minigames/tarot.ts). The system message is the same for both modes and every
+// reading with a love interest; what varies comes last: the recalls the question cues inside STORY MEMORY, then THE
+// SPREAD (the mode, the question and the cards). No cache mark: a reading is a one-off call, and a mark buys the hour
+// cache at twice a write (#2091); a provider's own prefix caching still reuses the stable part between readings.
+
+/** Word limits a reading's fields keep; a reply over them gets the repair turn. */
+export const TAROT_WORDS = { context: 60, opening: 40, line: 60, reading: 30, reaction: 40, closing: 50 } as const;
+
+/** Each card's English name and traditional meanings, upright and reversed (prompt text, never localized). */
+export const ARCANA_MEANINGS: Record<Arcana, { name: string; upright: string; reversed: string }> = {
+  fool: {
+    name: "The Fool",
+    upright: "beginnings, a leap of faith, innocence, spontaneity",
+    reversed: "recklessness, hesitation, a leap not taken",
+  },
+  magician: {
+    name: "The Magician",
+    upright: "will, skill, making something happen with what is at hand",
+    reversed: "trickery, untapped talent, manipulation",
+  },
+  "high-priestess": {
+    name: "The High Priestess",
+    upright: "intuition, secrets, the unspoken, inner knowing",
+    reversed: "secrets kept too long, intuition ignored, withdrawal",
+  },
+  empress: {
+    name: "The Empress",
+    upright: "abundance, nurture, sensuality, creation",
+    reversed: "smothering, self-neglect, dependence",
+  },
+  emperor: {
+    name: "The Emperor",
+    upright: "authority, structure, protection, control",
+    reversed: "rigidity, domination, the fear of losing control",
+  },
+  hierophant: {
+    name: "The Hierophant",
+    upright: "tradition, vows, belonging, a guide",
+    reversed: "breaking convention, rebellion, rules that no longer fit",
+  },
+  lovers: {
+    name: "The Lovers",
+    upright: "union, choice, desire, values in harmony",
+    reversed: "imbalance, a hard choice, values at odds, temptation",
+  },
+  chariot: {
+    name: "The Chariot",
+    upright: "drive, willpower, victory through control",
+    reversed: "lost direction, force without aim, a scattered will",
+  },
+  strength: {
+    name: "Strength",
+    upright: "courage, gentle strength, patience, taming what is wild",
+    reversed: "self-doubt, fear, strength turned inward",
+  },
+  hermit: {
+    name: "The Hermit",
+    upright: "solitude, introspection, a guiding light",
+    reversed: "isolation, loneliness, help refused",
+  },
+  wheel: {
+    name: "The Wheel of Fortune",
+    upright: "turning fortune, cycles, fate, a turning point",
+    reversed: "bad luck, change resisted, a cycle repeating",
+  },
+  justice: {
+    name: "Justice",
+    upright: "fairness, truth, cause and effect, accountability",
+    reversed: "unfairness, dishonesty, accountability avoided",
+  },
+  "hanged-man": {
+    name: "The Hanged Man",
+    upright: "surrender, a pause, seeing from a new angle, sacrifice",
+    reversed: "stalling, a needless sacrifice, refusing to let go",
+  },
+  death: {
+    name: "Death",
+    upright: "an ending, transformation, clearing the way",
+    reversed: "clinging to the past, the fear of change, stagnation",
+  },
+  temperance: {
+    name: "Temperance",
+    upright: "balance, patience, blending, moderation",
+    reversed: "excess, imbalance, haste",
+  },
+  devil: {
+    name: "The Devil",
+    upright: "temptation, bondage, obsession, the shadow self",
+    reversed: "release, breaking free, facing the shadow",
+  },
+  tower: {
+    name: "The Tower",
+    upright: "sudden upheaval, revelation, a truth that breaks things open",
+    reversed: "a disaster averted, the fear of change, a slow collapse",
+  },
+  star: {
+    name: "The Star",
+    upright: "hope, healing, renewal, calm after the storm",
+    reversed: "despair, lost faith, disconnection",
+  },
+  moon: {
+    name: "The Moon",
+    upright: "illusion, fear, the unconscious, what is hidden",
+    reversed: "confusion lifting, truths surfacing, fear let go",
+  },
+  sun: {
+    name: "The Sun",
+    upright: "joy, warmth, success, being seen",
+    reversed: "dimmed joy, sadness, too much exposure",
+  },
+  judgement: {
+    name: "Judgement",
+    upright: "awakening, reckoning, a calling, absolution",
+    reversed: "self-doubt, a call refused, harsh self-judgement",
+  },
+  world: {
+    name: "The World",
+    upright: "completion, fulfilment, wholeness, a journey's end",
+    reversed: "something unfinished, a missing piece, delay",
+  },
+};
+
+/** A question chip as the prompt and memory word it (English; the UI shows its own label). */
+export const TAROT_CHIP_TEXT: Record<TarotChip, string> = {
+  us: "What is there between us?",
+  coming: "What is coming for me?",
+  heart: "What does my heart really want?",
+};
+
+/** The protagonist's question in English words ("" for none asked). */
+export function tarotQuestionText(question: TarotQuestion | null): string {
+  if (!question) return "";
+  return "chip" in question ? TAROT_CHIP_TEXT[question.chip] : question.own.trim();
+}
+
+/** A card as THE SPREAD and memory give it: its English name and orientation. */
+export function arcanaLabel(card: Arcana, reversed: boolean): string {
+  return `${ARCANA_MEANINGS[card].name}${reversed ? ", reversed" : ""}`;
+}
+
+export interface TarotPromptInput {
+  world: Pick<World, "content" | "images" | "language" | "setting" | "premise" | "writingStyle" | "bannedPhrases">;
+  player: Player;
+  unit: Pick<Unit, "name" | "pronouns" | "bible">;
+  /** Their state as their own reader may know it (ownView), their own notebook with it. */
+  liState: LiState;
+  /** Their newest relationship and off-screen ledger lines among those they may know (ownView). */
+  lately: string[];
+  /** THE ROAD AHEAD (S/minigames/tarot.ts roadAhead); [] for none. */
+  road: readonly string[];
+  /** recallText's text, as their own reader may know the story; "" before anything is completed. */
+  memory: string;
+  mode: TarotMode;
+  question: TarotQuestion | null;
+  cards: ReadonlyArray<{ card: Arcana; reversed: boolean }>;
+}
+
+const TAROT_POSITION_NAMES: Record<TarotPosition, string> = { past: "Past", present: "Present", future: "Future" };
+
+/** The Tarot night prompt: one reading, as `messages` (system, then the user turn with THE SPREAD last). */
+export function tarotMessages(input: TarotPromptInput): OtomeMessage[] {
+  const { world, player, unit, liState, lately, road, memory, mode, cards } = input;
+  const name = unit.name;
+  const face = `"${FACES.join("|")}|"`;
+  const line = `{"line": "...", "face": ${face}}`;
+  const system = [
+    `You write one "Tarot night" in an otome visual novel: the love interest (LOVE INTEREST) and the protagonist lay out ${TAROT_CARDS} cards of the Major Arcana together, as Past, Present and Future. MODE in THE SPREAD says who reads whose cards:`,
+    "- reads-you: the love interest reads the protagonist's cards one by one, and closes by answering the protagonist's question.",
+    "- you-read: the love interest asks the cards a question of their own, and the protagonist reads the love interest's cards: for each card the protagonist picks one of three readings, and the love interest reacts to the one picked.",
+    "Reply with ONLY a JSON object of the shape for the MODE.",
+    `reads-you: {"context": "...", "opening": ${line}, "cards": [${line}], "closing": ${line}}`,
+    `you-read: {"context": "...", "opening": ${line}, "cards": [{"line": "...", "face": ${face}, "readings": [{"text": "...", "reaction": "...", "face": ${face}}]}], "closing": ${line}}`,
+    "FIELDS",
+    `- context: where and how the cards are laid out, in one or two sentences of narration to "you", present tense, at most ${TAROT_WORDS.context} words.`,
+    `- opening: the love interest's first line, at most ${TAROT_WORDS.opening} words. reads-you: they take up the protagonist's question, or with none asked, what the cards may show. you-read: they ask the cards their question.`,
+    `- cards: exactly ${TAROT_CARDS}, in THE SPREAD's order. line: reads-you, the love interest's reading of the card; you-read, what the love interest says as the card turns. At most ${TAROT_WORDS.line} words.`,
+    `- readings (you-read only): exactly ${TAROT_READINGS} different readings of the card for the protagonist to pick from: a tender one, a teasing one and an unflinching one, in that order and never labelled. text: the reading in the protagonist's own voice, said to the love interest, at most ${TAROT_WORDS.reading} words. reaction: the love interest's reaction to that reading, at most ${TAROT_WORDS.reaction} words.`,
+    `- closing: the love interest's last line, at most ${TAROT_WORDS.closing} words. reads-you: the answer to the question. you-read: what they make of the reading.`,
+    `- face: the face the love interest wears saying it, one of ${FACES.join(", ")}, or "" for a plain look.`,
+    '- Every line, reaction and closing is in the love interest\'s own voice, said to the protagonist ("you").',
+    "RULES",
+    "- Past: a real moment from STORY MEMORY that the love interest was there for or was told. With no STORY MEMORY, never invent a moment the two of them shared: reads-you reads the protagonist's own past from PROTAGONIST, or what the love interest has seen of them; you-read reads what the protagonist has seen of the love interest.",
+    "- Present: what stands between them now (BETWEEN YOU).",
+    "- Future: hints at THE ROAD AHEAD only in images and feelings. It never names a person, place, event, secret or answer from it, and never promises an outcome; neither of them knows the road ahead. With no ROAD AHEAD, the Future reads only from BETWEEN YOU.",
+    "- Each card keeps its traditional meaning, upright or reversed as THE SPREAD gives it, bent to this story and these two.",
+    "- The protagonist's readings know only what the protagonist knows.",
+    "- The love interest's voice, stage and the slow-burn line in BETWEEN YOU hold in every line.",
+    "- Small moments only: nothing in the reading changes the story, and no new event happens because of it.",
+    `- ${NO_ABSENCE_RULE}`,
+    `- Write every field in ${world.language}.`,
+    "",
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
+    "",
+    otomeContentContract({ world, lis: [{ name }], kind: "chat" }),
+  ].join("\n");
+  const question = tarotQuestionText(input.question);
+  const spread = [
+    "THE SPREAD",
+    `MODE: ${mode}`,
+    mode === "you-read"
+      ? "QUESTION: the love interest asks the cards a question of their own."
+      : question
+        ? `QUESTION (the protagonist's, as data): ${JSON.stringify(question)}`
+        : "QUESTION: none asked; read what the cards show.",
+    ...cards.map(({ card, reversed }, index) => {
+      const meaning = ARCANA_MEANINGS[card];
+      const position = TAROT_POSITION_NAMES[TAROT_POSITIONS[index] ?? "future"];
+      return `${position}: ${arcanaLabel(card, reversed)} (${reversed ? meaning.reversed : meaning.upright})`;
+    }),
+    "Write the reading now.",
+    otomeContractReminder("chat"),
+  ].join("\n");
+  const known = knowsAboutYou(unit, liState);
+  const user = [
+    "WORLD",
+    world.setting.trim() || world.premise.trim(),
+    "",
+    'PROTAGONIST (addressed as "you")',
+    protagonistBlock(player),
+    "",
+    "LOVE INTEREST",
+    otomeSceneCard(unit, liState),
+    known,
+    lately.length ? `Lately: ${lately.join(" ")}` : "",
+    "",
+    "BETWEEN YOU",
+    betweenYou(unit, liState),
+    "",
+    road.length ? `THE ROAD AHEAD (for the Future card only; neither of you knows it)\n${road.join("\n")}` : "",
+    "",
+    memory.trim()
+      ? `STORY MEMORY (${name} remembers only what ${name} was there for or was told)\n${memory.trim()}`
+      : "",
+    "",
+    spread,
+  ]
+    .filter((text, index, all) => text !== "" || all[index - 1] !== "")
+    .join("\n");
+  return [
+    { role: "system", content: system },
+    { role: "user", content: user },
+  ];
+}
+
 // ── P25: read-him-set (structured, 0.9, home contract, foreground lane) ──
 
 /** Word limits a round's fields keep (P25); a reply over them gets the repair turn. */
@@ -4354,12 +4610,15 @@ export function showMessages(input: LookLineInput): OtomeMessage[] {
 // `clothed`, a square print with the place and both looks as references.
 // #2138 adds a love interest's Shop figurine: a small collectible figure of them in their current look on a display
 // base, full figure on the look's chroma matte for the cut-out, with a look's own tags (`clothed`, never explicit).
+// #2151 adds a Tarot card: the card's iconography with its people (`clothed`, never explicit) or, for a card of
+// nobody, scenery as a place is painted; the illustration only, full-bleed, with no border or lettering.
 
 // ── An image's rating and adult tags ──
 
 /**
  * What an image is for. clothed: looks, faces, outfits, the pair portrait, Moment and Snapshot art, Memory and banner
- * art (painted before any story exists), Photo Shoot photos and Shop figurines; place: scenery with nobody in it; cg:
+ * art (painted before any story exists), Photo Shoot photos, Shop figurines and Tarot cards with people in them; place:
+ * scenery with nobody in it (a Tarot card of nobody too); cg:
  * a story CG, painted from the brief its scene wrote, or a Memory's art whose brief P20 marked explicit (only where
  * explicitCgAllowed).
  */
@@ -4928,6 +5187,114 @@ export function figurinePrompt(input: Omit<LookInput, "matte">, edited: Partial<
     negative,
     edited,
   );
+}
+
+// ── #2151: a Tarot card ──
+
+/**
+ * Each card's picture as classical iconography, with no gender words: the protagonist and the love interests can be
+ * any presentation, and cgPrompt names each person as an adult of theirs. A card of one person says "a figure", a card
+ * of the two of them "two people", and a card of nobody (ARCANA_FIGURES "none") shows scenery only.
+ */
+export const ARCANA_BRIEFS: Record<Arcana, string> = {
+  fool: "a carefree traveller stepping toward the edge of a sunlit cliff, a small bundle over one shoulder, a white rose in hand, a little dog leaping at their heels",
+  magician:
+    "a figure raising a wand toward the sky with one hand and pointing to the earth with the other, a table with a cup, a sword, a coin and a wand, roses and lilies, a ribbon of light in an infinity sign overhead",
+  "high-priestess":
+    "a figure seated between a black pillar and a white pillar, a veil of pomegranates behind, a crescent moon at their feet, a half-hidden scroll in their lap",
+  empress:
+    "a figure resting on a cushioned throne among ripening wheat, a crown of twelve stars, a waterfall and a forest behind, a heart-shaped shield",
+  emperor:
+    "a figure on a stone throne carved with rams' heads, holding a sceptre and an orb, barren mountains behind, armour beneath a red robe",
+  hierophant:
+    "a robed figure on a throne between two stone pillars, one hand raised in blessing, a triple crown, two crossed keys at their feet",
+  lovers:
+    "two people facing each other in a garden beneath a radiant sun with wings of light, a tree of fruit behind one and a tree of flames behind the other",
+  chariot:
+    "a figure standing in a chariot under a canopy of stars, a black sphinx and a white sphinx before it, a walled city behind",
+  strength:
+    "a figure gently closing the jaws of a lion with bare hands, a garland of flowers, a ribbon of light in an infinity sign overhead",
+  hermit:
+    "a cloaked figure on a snowy peak at night holding up a lantern with a six-pointed star inside, leaning on a staff",
+  wheel:
+    "a great golden wheel inscribed with symbols turning among clouds, a sphinx on its rim, a serpent winding down one side, open books in the four corners",
+  justice:
+    "a figure seated between two pillars holding level scales in one hand and an upright double-edged sword in the other, a purple veil behind",
+  "hanged-man":
+    "a figure hanging calmly upside down by one ankle from a living tree, a halo of light around the head, hands behind the back",
+  death:
+    "a black banner bearing a white rose standing alone in a misty field at dawn, the sun rising between two distant towers, a river carrying an empty boat",
+  temperance:
+    "two people at the edge of a still pool, pouring water between two cups held between them, irises at their feet, a sunlit path toward distant mountains",
+  devil:
+    "a figure seated on a dark pedestal beneath an inverted star, an inverted torch in one hand, loose chains draped across the pedestal, horns of smoke behind",
+  tower:
+    "a tall stone tower on a crag struck by lightning, its crown blown off, flames from the windows, sparks falling against a night sky",
+  star: "a figure kneeling by a pool under one great star and seven small ones, pouring water from two jugs, one onto the land and one into the pool, an ibis on a tree",
+  moon: "a full moon with a calm face between two towers, a path winding from a pool to the mountains, a dog and a wolf howling at it, a crayfish climbing from the water",
+  sun: "two people riding a white horse together beneath a great radiant sun, sunflowers over a stone wall, a red banner streaming",
+  judgement:
+    "two people rising with open arms from a misty valley toward a golden trumpet sounding from the clouds, snowy mountains behind",
+  world:
+    "a figure dancing within a laurel wreath tied with red ribbons, a wand in each hand, clouds in the four corners of the sky",
+};
+
+/** A card is the illustration only: our SVG frame draws the border, the numeral and the name over it. */
+export const TAROT_FRAMING =
+  "vertical symbolic tarot illustration, centered composition, ornamental symbolism, full-bleed";
+const TAROT_NEGATIVE = "text, letters, numbers, caption, watermark, border, frame";
+
+export interface TarotCardInput {
+  card: Arcana;
+  /** Who the card shows (S/art/tarot-deck.ts, by ARCANA_FIGURES): none for a card of nobody. */
+  people: readonly CgPerson[];
+  /** Whom each reference shows, in order (S/art/cg.ts cgReferences). */
+  references?: readonly string[];
+  world: Pick<World, "content" | "images">;
+  style: StyleProfile;
+}
+
+/**
+ * A card of the Tarot deck (S/art/tarot-deck.ts): its people as a picture kept outside the story is (`clothed`, at
+ * most Suggestive), with the card's iconography and framing, or for a card of nobody a place's rules (scenery only).
+ * No border, frame or lettering: the client's frame adds them. An edited prompt keeps its wording with every required
+ * tag put back.
+ */
+export function tarotCardPrompt(input: TarotCardInput, edited: Partial<ImagePrompt> = {}): ImagePrompt {
+  const { card, world, style } = input;
+  const brief = ARCANA_BRIEFS[card];
+  if (ARCANA_FIGURES[card] === "none" || !input.people.length) {
+    const required = otomeImageTags({ world, people: [], use: "place", tagged: style.tagged === true });
+    const negative = requiredNegative(world, "place");
+    return finish(
+      world,
+      () => ({
+        prompt: [style.styleText, mergeTags(brief, "scenery, no humans", TAROT_FRAMING, required, style.positiveTags)]
+          .filter(Boolean)
+          .join(", "),
+        negativePrompt: mergeTags(PLACE_NEGATIVE, TAROT_NEGATIVE, negative, style.negativeTags),
+      }),
+      required,
+      negative,
+      edited,
+    );
+  }
+  const names = imageNames(input.people.map((person) => person.name));
+  const built = cgPrompt(
+    {
+      brief: `A tarot card of ${names.join(" and ")}: ${brief}`,
+      people: input.people,
+      world,
+      style,
+      use: "clothed",
+      framing: TAROT_FRAMING,
+      ...(input.references ? { references: input.references } : {}),
+    },
+    edited,
+  );
+  return edited.negativePrompt?.trim()
+    ? built
+    : { ...built, negativePrompt: mergeTags(built.negativePrompt, TAROT_NEGATIVE) };
 }
 
 // ── #2087: a Photo Shoot photo ──

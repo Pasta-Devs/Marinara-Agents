@@ -10,6 +10,7 @@ import type { Face, MusicMood } from "./faces";
 import type { ClawRound } from "./claw";
 import type { ReadHimPaid } from "./read-him";
 import type { NotebookEntry, ReadMePaid } from "./read-me";
+import type { TarotPaid } from "./tarot";
 import type { ClawLineKind, TapZone, TimeOfDay } from "./home";
 import type { FigurinePicture, GiftId } from "./shop";
 import type { PlayerSticker } from "./stickers";
@@ -834,6 +835,8 @@ export interface RunState {
   readHim: { paid: ReadHimPaid[] };
   /** The newest paid Read Me sets (#1945): the once-only mark of the write that paid them and filled the notebook. */
   readMe: { paid: ReadMePaid[] };
+  /** The newest paid Tarot night readings (#2151): the once-only mark of the write that paid them. */
+  tarot: { paid: TarotPaid[] };
   /**
    * #2127: Your thoughts… on Home, waiting for the next main chapter: its plan reads them and lets them go in the write
    * that registers it (S/story/chapters.ts). Null while none wait.
@@ -1301,7 +1304,7 @@ export interface Grant {
  * gift given on a date earns beside the date's own, never capped (the gift was paid for in Starlight).
  */
 export interface ActivityGrant {
-  source: "read-him" | "read-me" | "date" | "claw" | "gift";
+  source: "read-him" | "read-me" | "tarot" | "date" | "claw" | "gift";
   starlight?: number;
   li?: LiId;
   affection?: number;

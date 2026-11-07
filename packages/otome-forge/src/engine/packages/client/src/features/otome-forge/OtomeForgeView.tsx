@@ -33,6 +33,7 @@ import { DatesHub, type DateActivity } from "./screens/dates/DatesHub";
 import { PhotoShoot } from "./screens/dates/PhotoShoot";
 import { ReadHim } from "./screens/dates/ReadHim";
 import { ReadMe } from "./screens/dates/ReadMe";
+import { TarotNight } from "./screens/dates/TarotNight";
 import { ForgeProgress } from "./screens/ForgeProgress";
 import { HomeScreen, useHomeLi } from "./screens/home/HomeScreen";
 import { PhoneScreen, useDailyMessages, type PhoneOpen } from "./screens/phone/PhoneScreen";
@@ -63,6 +64,7 @@ const DOCKED: ReadonlySet<ScreenId> = new Set<ScreenId>(["home", ...DOCK_SCREENS
 const ACTIVITIES: ReadonlySet<DateActivity> = new Set<DateActivity>([
   "read-him",
   "read-me",
+  "tarot",
   "date-night",
   "photo-shoot",
   "claw",
@@ -253,6 +255,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     remind: "home",
     "read-him": "dates",
     "read-me": "dates",
+    tarot: "dates",
     "date-night": "dates",
     "photo-shoot": "dates",
     claw: "dates",
@@ -353,6 +356,8 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
       <ReadHim runKey={activeRun} view={view} li={datesOf} onExit={() => go("dates")} />
     ) : screen === "read-me" && activeRun && view && datesOf ? (
       <ReadMe runKey={activeRun} view={view} li={datesOf} onExit={() => go("dates")} />
+    ) : screen === "tarot" && activeRun && view && datesOf ? (
+      <TarotNight runKey={activeRun} view={view} li={datesOf} onExit={() => go("dates")} />
     ) : screen === "date-night" && activeRun && view && datesOf ? (
       <DateNight
         runKey={activeRun}
@@ -407,6 +412,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
               ? `reader-${chapterKey}`
               : screen === "read-him" ||
                   screen === "read-me" ||
+                  screen === "tarot" ||
                   screen === "date-night" ||
                   screen === "photo-shoot" ||
                   screen === "claw"

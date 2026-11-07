@@ -23,12 +23,14 @@ export const STARLIGHT_EARNINGS = {
   readHim: 40,
   /** A finished Read Me set, whatever was guessed (#1945, proposal). */
   readMe: 40,
+  /** A finished Tarot night reading (#2151, proposal: as Read Them). */
+  tarot: 40,
   /** proposal */
   clawRound: 20,
   /** Per plush caught (proposal). */
   clawPlush: 30,
 } as const;
-/** Starlight from activities (dates, Read Him, Claw, Show him) per local day. */
+/** Starlight from activities (dates, Read Him, Read Me, Tarot night, Claw, Show him) per local day. */
 export const ACTIVITY_STARLIGHT_DAILY_CAP = 400;
 
 /** Affection points for each prestige point past level 10 (the maintainer's, 2026-11-04: kept at 300). */
@@ -62,6 +64,8 @@ export const AFFECTION_EARNINGS = {
   readMe: 20,
   readMeRight: 10,
   readMeClose: 5,
+  /** A finished Tarot night reading (#2151, proposal: as Read Them). */
+  tarot: 40,
   /** proposal */
   clawRound: 30,
   /** A phone thread closed with "Close and remember", for an exchange with words from both of them (the maintainer's). */
@@ -160,6 +164,7 @@ export const REWARD_SOURCES = [
   "date",
   "read-him",
   "read-me",
+  "tarot",
   "claw",
   "close-and-remember",
   "show-him",
