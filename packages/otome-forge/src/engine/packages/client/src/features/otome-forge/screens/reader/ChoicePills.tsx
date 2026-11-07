@@ -79,7 +79,7 @@ export const ChoicePills = forwardRef<HTMLButtonElement, ChoicePillsProps>(funct
             </button>
           </li>
         ))}
-        {big && onOwn ? (
+        {big && onOwn && !firstChoice ? (
           <li>
             <button
               type="button"
