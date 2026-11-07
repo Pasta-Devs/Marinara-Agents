@@ -9,6 +9,8 @@
 // POST .../seen {last?} → {}; POST /runs/:run/phone/due {open?} → PhoneDueResult (useDailyMessages, #2044).
 // #2044: the first time the phone opens with images on, POST /runs/:run/stickers starts the protagonist's five chibi
 // stickers (S/art/stickers.ts), and the run view is read again so it polls until they land.
+// #2154: the group chat, "Everyone", opens as the thread named GROUP_THREAD (GET .../phone/group, and so on); the same
+// heartbeat answers for its squabbles.
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useOtomeApi } from "../../api";
@@ -16,6 +18,7 @@ import { imagesOn } from "../../hooks/use-items";
 import { runPath } from "../../hooks/use-reader";
 import { runQueryKey } from "../../hooks/use-run";
 import type { LiId, PhoneDueResult, RunView } from "../../shared/api-types";
+import { GROUP_THREAD } from "../../shared/home";
 import { homeQueryKey } from "../home/HomeScreen";
 import { Thread } from "./Thread";
 import { ThreadList } from "./ThreadList";
@@ -36,11 +39,22 @@ export const phonePath = (runKey: string, li?: LiId) =>
 export const DAILY_POLL_MS = 60_000;
 /** Each run's newest daily message as this page last heard it, kept across remounts and restarts of the heartbeat. */
 const heardDaily = new Map<string, string | null>();
+/** The same for each run's newest group chat squabble (#2154). */
+const heardGroup = new Map<string, string | null>();
+
+/** Whether `latest` is new beside the mark `heard` keeps for this run (see useDailyMessages); keeps it as the mark. */
+function heardNew(heard: Map<string, string | null>, runKey: string, latest: { li: LiId; at: string } | null) {
+  const key = latest ? `${latest.li} ${latest.at}` : null;
+  const before = heard.get(runKey);
+  heard.set(runKey, key);
+  return !!latest && before !== undefined && key !== before;
+}
 
 /**
- * Settings → Connections' daily messages (S/phone/daily.ts): while the story is forged, its daily number is above 0
- * and the page is visible, asks POST .../phone/due every minute (the first a minute after it starts), naming the thread
- * the player has open, which never gets one. When a new daily message has landed, the thread list, Home's unread count
+ * Settings → Connections' daily messages (S/phone/daily.ts) and group chat squabbles (#2154, S/phone/group.ts): while
+ * the story is forged, either number is above 0 and the page is visible, asks POST .../phone/due every minute (the first
+ * a minute after it starts), naming the thread the player has open, which never gets one. A new squabble reads the
+ * list, Home's unread count and the group chat again, as a daily message does his thread. When a new daily message has landed, the thread list, Home's unread count
  * and his thread are read again, so it shows unread like a reply that landed after she left. A message is new when it
  * differs from the newest this page heard (heardDaily), so a remount or a restart (a language or debug change) reads
  * nothing again for one it already heard.
@@ -53,7 +67,10 @@ export function useDailyMessages(runKey: string | null, view: RunView | null, op
   const queryClient = useQueryClient();
   const openRef = useRef(open);
   openRef.current = open;
-  const on = !!runKey && view?.forge.phase === "ready" && (view.world.dailyMessages ?? 0) > 0;
+  const on =
+    !!runKey &&
+    view?.forge.phase === "ready" &&
+    ((view.world.dailyMessages ?? 0) > 0 || (view.world.groupSquabbles ?? 0) > 0);
   useEffect(() => {
     if (!on || !runKey) return;
     let stopped = false;
@@ -62,13 +79,16 @@ export function useDailyMessages(runKey: string | null, view: RunView | null, op
       if (document.visibilityState === "visible") {
         try {
           const due = await otome.post<PhoneDueResult>(`${phonePath(runKey)}/due`, { open: openRef.current });
-          const key = due.latest ? `${due.latest.li} ${due.latest.at}` : null;
-          const heard = heardDaily.get(runKey);
-          if (!stopped) heardDaily.set(runKey, key);
-          if (!stopped && due.latest && heard !== undefined && key !== heard) {
+          if (stopped) return;
+          const landed = [
+            heardNew(heardDaily, runKey, due.latest) ? due.latest!.li : null,
+            heardNew(heardGroup, runKey, due.group?.latest ?? null) ? GROUP_THREAD : null,
+          ].filter((thread) => thread !== null);
+          if (landed.length) {
             void queryClient.invalidateQueries({ queryKey: phoneQueryKey(runKey) });
             void queryClient.invalidateQueries({ queryKey: homeQueryKey(runKey) });
-            void queryClient.invalidateQueries({ queryKey: threadQueryKey(runKey, due.latest.li) });
+            for (const thread of landed)
+              void queryClient.invalidateQueries({ queryKey: threadQueryKey(runKey, thread) });
           }
         } catch {
           // The server spends an attempt before any work, so a failed heartbeat simply waits for the next one.
@@ -135,6 +155,21 @@ export function PhoneScreen({ runKey, view, open, onOpenChange }: PhoneScreenPro
     } else heading.current?.focus({ preventScroll: true });
   }, [open]);
 
+  if (open?.li === GROUP_THREAD) {
+    return (
+      <Thread
+        key={GROUP_THREAD}
+        runKey={runKey}
+        view={view}
+        focusHeading={openedHere.current}
+        onBack={() => {
+          returnTo.current = GROUP_THREAD;
+          onOpenChange(null);
+        }}
+        onQuoteChange={() => undefined}
+      />
+    );
+  }
   const li = open ? (view.lis.find((item) => item.id === open.li) ?? null) : null;
   if (open && li) {
     return (

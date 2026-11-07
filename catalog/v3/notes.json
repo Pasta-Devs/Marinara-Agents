@@ -676,6 +676,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.13.0",
+          "date": "2026-11-07",
+          "notes": "- **Everyone, a group chat with your love interests.** Messages now starts with **Everyone**, one thread with every love interest you've met. Write there and someone always answers: whoever you name, and the others when it suits them, each in their own colour. **Close and remember** turns the conversation into a memory that everyone in it recalls, and earns no affection.\n- **Let them squabble.** **Settings → Connections** sets how many times a day they may start squabbling in Everyone on their own, while Otome Hearth is open. Each squabble is 1 call with your Messages connection; 0, the default, keeps it off.",
+          "highlight": true
+        },
+        {
           "version": "0.12.0",
           "date": "2026-11-07",
           "notes": "- **Celebrate their birthdays.** On a love interest's birthday, a dot on Home's **Remind Me** points you to **Birthdays to celebrate**. **Celebrate** opens a scene for the two of you, where you can give one of your Shop gifts: they react in their own voice, and the gift earns its affection when you finish the scene, even past the daily cap. Missed the day? You can still celebrate for 7 days after, and they'll know you're late. You can celebrate each birthday once.",
@@ -787,12 +793,6 @@
           "version": "0.8.4",
           "date": "2026-11-04",
           "notes": "- **The cast keeps your earlier chapters in mind.** Story prompts now always keep the summaries of earlier chapters, with the last chapter in full, and send a chapter in full only while it has no summary yet. Before, while any summary was still being written or had failed, the summaries were left out and only the most recent chapters went in full.\n- **Memory no longer waits on a model's context size.** Summaries are written with any connection, even one that reports no context size. If its model is too small for a summary, you see its error and can switch to a connection with a larger context.\n- **A failed summary shows on every screen.** When a summary fails, every screen of the open story says so at the top, with what the connection answered, Retry the summary and Change connection. Before, it showed only in Settings.",
-          "highlight": false
-        },
-        {
-          "version": "0.8.3",
-          "date": "2026-11-03",
-          "notes": "- **A new 5★ look's scene shows the new look.** The short scene that comes with a love interest's 5★ look now shows them on stage in that look, not in what they wear on Home, and keeps it when you replay the scene after they change. If you open the scene while the look is still painting, they change into it as soon as it is ready. Its expressions show once that look has them. Reading the scene paints none: a look's expressions are still painted when they first wear it.\n- **Fewer meals forced on you.** The story planners no longer tell the cast that you eat; they remember you're human, resting, sleeping, washing and seeing to a day's small needs in passing.",
           "highlight": false
         }
       ]

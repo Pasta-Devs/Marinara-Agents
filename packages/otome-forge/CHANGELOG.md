@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.13.0 — 2026-11-07
+
+- **Everyone, a group chat with your love interests.** Messages now starts with **Everyone**, one thread with every love interest you've met. Write there and someone always answers: whoever you name, and the others when it suits them, each in their own colour. **Close and remember** turns the conversation into a memory that everyone in it recalls, and earns no affection.
+- **Let them squabble.** **Settings → Connections** sets how many times a day they may start squabbling in Everyone on their own, while Otome Hearth is open. Each squabble is 1 call with your Messages connection; 0, the default, keeps it off.
+
 ## 0.12.0 — 2026-11-07
 
 - **Celebrate their birthdays.** On a love interest's birthday, a dot on Home's **Remind Me** points you to **Birthdays to celebrate**. **Celebrate** opens a scene for the two of you, where you can give one of your Shop gifts: they react in their own voice, and the gift earns its affection when you finish the scene, even past the daily cap. Missed the day? You can still celebrate for 7 days after, and they'll know you're late. You can celebrate each birthday once.

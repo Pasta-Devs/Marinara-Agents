@@ -62,7 +62,8 @@
 // (f) Phone
 //   renderThread: the thread as prompt text (P17, S/phone/memory.ts)
 //   chatReplyMessages: P17 chat reply, with stickers (#2044) and daily messages (S/phone/chat.ts, S/phone/daily.ts)
-//   chatMemoryMessages: P18 what he remembers of a closed conversation (S/phone/memory.ts)
+//   chatMemoryMessages: P18 what he remembers of a closed conversation (S/phone/memory.ts), and the group chat's
+//   groupChatMessages: P17g the group chat's reply and squabble (#2154, S/phone/group.ts)
 // (g) Home and care
 //   NO_ABSENCE_RULE: Home never mentions the player's absence (P15, P16, P27, Read Me, Read Him)
 //   linePackMessages: P15 Home line pack (S/home/lines.ts)
@@ -263,7 +264,14 @@ import type { OtomeMessage } from "./generation.js";
 import { chapterOwner, mainChapterNumber } from "./ids.js";
 import { STORY_NODES_MAX, STORY_NODES_MIN, prestigeKindsFor } from "./items/replies.js";
 import type { SummaryJob, SummaryRequest } from "./memory/memory.js";
-import { REPLY_MESSAGES_MAX, type ReplySticker, type ReplyStickers, type ThreadNames } from "./phone/replies.js";
+import {
+  GROUP_REPLY_MAX,
+  GROUP_SQUABBLE_MAX,
+  REPLY_MESSAGES_MAX,
+  type ReplySticker,
+  type ReplyStickers,
+  type ThreadNames,
+} from "./phone/replies.js";
 import { defaultLiState } from "./schemas/state.js";
 import {
   ARC_LENGTH_MAX,
@@ -1401,13 +1409,20 @@ export function bibleBlock(unit: Unit, state: RunState, knows: readonly LiId[], 
   ].join("\n");
 }
 
-/** The ties between love interests (the planner may see their secrets). */
-function webBlock(world: World, units: readonly Unit[]): string {
+/**
+ * The ties between love interests (the planner may see their secrets; the group chat, #2154, gets the rows between its
+ * members without them, as the client's WorldView shows them).
+ */
+function webBlock(
+  world: Pick<World, "web">,
+  units: readonly Pick<Unit, "id" | "name">[],
+  { secrets = true }: { secrets?: boolean } = {},
+): string {
   const name = (li: LiId) => units.find((unit) => unit.id === li)?.name ?? li;
   return world.web
     .map(
       (row) =>
-        `- ${name(row.a)} and ${name(row.b)}: ${row.stance}. ${row.history} Debt: ${row.debt}${row.secret ? ` Secret: ${row.secret}` : ""}`,
+        `- ${name(row.a)} and ${name(row.b)}: ${row.stance}. ${row.history} Debt: ${row.debt}${secrets && row.secret ? ` Secret: ${row.secret}` : ""}`,
     )
     .join("\n");
 }
@@ -2826,13 +2841,15 @@ function stickerText(
 /**
  * The thread as prompt text, oldest first: `Name: text`, with a sticker and a quoted note in brackets. `voice: "his"`
  * writes them for him (your note, [kai_smug]), `"told"` for the summarizer (Kai's note, [sticker: Kai, smug]).
- * `stickers` names #2044 stickers (S/art/stickers.ts stickerLookup).
+ * `stickers` names #2044 stickers (S/art/stickers.ts stickerLookup). In the group chat (#2154) `speaker` names who sent
+ * each love interest's message, and `names.li` stands for one whose speaker is unknown.
  */
 export function renderThread(
   messages: readonly PhoneMessage[],
   names: ThreadNames,
   voice: "his" | "told",
   stickers?: StickerLookup,
+  speaker?: (message: PhoneMessage) => string | undefined,
 ): string {
   const own = voice === "his" ? "your" : `${names.li}'s`;
   return messages
@@ -2841,7 +2858,7 @@ export function renderThread(
       if (message.quote) parts.push(`(replying to ${own} note: "${message.quote}")`);
       if (message.text) parts.push(message.text);
       if (message.sticker) parts.push(stickerText(message, own, voice, stickers));
-      return `${message.who === "player" ? names.player : names.li}: ${parts.join(" ")}`;
+      return `${message.who === "player" ? names.player : (speaker?.(message) ?? names.li)}: ${parts.join(" ")}`;
     })
     .join("\n");
 }
@@ -2989,11 +3006,19 @@ export interface ChatMemoryInput {
   names: ThreadNames;
   /** The closed conversation, rendered for the summarizer (renderThread with `"told"`). */
   conversation: string;
+  /** #2154: the group chat's members by name: what they all will remember of it. */
+  group?: readonly string[];
 }
 
-export function chatMemoryMessages({ world, names, conversation }: ChatMemoryInput): OtomeMessage[] {
+/** "A", "A and B", "A, B and C". */
+export const nameList = (names: readonly string[]) =>
+  names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : (names[0] ?? "");
+
+export function chatMemoryMessages({ world, names, conversation, group }: ChatMemoryInput): OtomeMessage[] {
   const system = [
-    `Two people have just finished exchanging messages: ${names.li} and ${names.player}. Write what ${names.li} will remember of it.`,
+    group
+      ? `A group chat between ${nameList([...group, names.player])} has just ended. Write what they will all remember of it.`
+      : `Two people have just finished exchanging messages: ${names.li} and ${names.player}. Write what ${names.li} will remember of it.`,
     "Reply with ONLY a JSON object of this shape:",
     '{"memory": "...", "quote": "..."}',
     `- memory: 2 to 4 sentences in the third person about what passed between them: what was said that matters, what changed, what was left unsaid. Not a transcript. Written in ${world.language}.`,
@@ -3002,7 +3027,7 @@ export function chatMemoryMessages({ world, names, conversation }: ChatMemoryInp
     "- It already happened: write it as a memory, never as a scene that is going on.",
     "- Invent nothing: only what is in the conversation below.",
     "",
-    otomeContentContract({ world, lis: [{ name: names.li }], kind: "summary" }),
+    otomeContentContract({ world, lis: (group ?? [names.li]).map((name) => ({ name })), kind: "summary" }),
     SUMMARY_WORDING,
   ].join("\n");
   const user = ["The conversation:", conversation, "", "Write the memory now.", otomeContractReminder("summary")].join(
@@ -3011,6 +3036,140 @@ export function chatMemoryMessages({ world, names, conversation }: ChatMemoryInp
   return [
     { role: "system", content: system },
     { role: "user", content: user },
+  ];
+}
+
+// ── P17g: the group chat (#2154; chat, chat contract) ──
+// One thread with every love interest the protagonist has met (S/phone/group.ts). One call writes every member's
+// messages: a reply when the protagonist writes, or a squabble they start on their own. P17's role, hard rules and
+// knowledge boundary in the plural; each member's scene card and what stands between them and the protagonist as the
+// whole cast may know it (sharedState: no grievance or disclosure from their own chapters, which everyone in the group
+// would read; a rupture by its line), but no notebook (one member's would steer the others' lines) and no off-screen
+// line; the ties between members without their secrets (new to a prompt that is not a
+// planner's, and shown to the player already); the story as the group may know it (recall with reader "group": shared
+// canon and the group's own closed conversations, never a love interest's own). The system message is the same for a
+// set of members; the first user message too between calls, until the story moves, and a reply marks it for the cache
+// (a squabble does not: they come an hour apart at the least, past the cache, #2091). Everything that changes from call
+// to call (the thread now and the task) comes after it. No content rule of its own: the contract decides, as in P17.
+
+export interface GroupChatInput {
+  world: Pick<World, "language" | "content" | "images" | "writingStyle" | "bannedPhrases" | "web">;
+  player: Pick<Player, "name" | "pronouns" | "traits" | "about">;
+  /** The members in cast order: each one's unit, state as the whole cast may know it (sharedState), own stickers. */
+  members: ReadonlyArray<{ unit: Unit; liState: LiState; stickers: readonly ReplySticker[] }>;
+  /** The protagonist's stickers, which any of them may send too. */
+  yours: readonly ReplySticker[];
+  /** Names the thread's stickers (S/art/stickers.ts stickerLookup). */
+  stickerName?: StickerLookup;
+  /** The open conversation's newest messages, oldest first. */
+  tail: readonly PhoneMessage[];
+  /** The group's conversations that are over, oldest first. */
+  memories: readonly PhoneSession[];
+  /** The story as the group may know it (recall for reader "group"), or "". */
+  story: string;
+  /** A squabble: the two who start it, by name; absent, a reply to the protagonist. */
+  squabble?: readonly string[];
+}
+
+export function groupChatMessages({
+  world,
+  player,
+  members,
+  yours,
+  stickerName,
+  tail,
+  memories,
+  story,
+  squabble,
+}: GroupChatInput): OtomeMessage[] {
+  const them = player.name || "the protagonist";
+  const names = members.map(({ unit }) => unit.name);
+  const everyone = nameList(names);
+  const system = [
+    `This is the group chat of an otome visual novel, a character-driven romance: ${nameList([...names, them])}, all in one thread, by whatever carries messages in this world (never a phone or a screen unless the world has them). These are MESSAGES, not a scene: each is written by one of ${everyone}, in the first person, in their own voice.`,
+    "Reply with ONLY a JSON object of this shape:",
+    `{"messages": [{"speaker": "<exact name>", "text": "..."}]}`,
+    `- speaker: the exact name of the one who sends it, one of ${everyone}. Never ${them}.`,
+    "- text: each message short, a line or a few, the way people text.",
+    `- Stickers: one of them may send a sticker by writing its name in square brackets in a message, their own or ${them}'s, only from the lists under STICKERS. At most one sticker from each of them in a reply, when a picture says it better than words; it may stand alone.`,
+    `- Write every message in ${world.language}.`,
+    "",
+    "HARD RULES",
+    `- Write ONLY their messages. Never write ${them}'s messages, and never narrate what anyone does or feels.`,
+    "- These are messages, not a chapter: no scene headings, no narration, no one in the third person about themselves, no actions in asterisks.",
+    "- Nothing happens in the story because of this conversation. They can talk about what has happened and what they feel; they cannot decide events, hand over items, set up a meeting the story must keep, or give away a secret they are still hiding. No grievance or rupture is settled by text: only the story settles it.",
+    "- Never invent shared history: what they share is only what the story and these conversations hold.",
+    `- Never mention how long it has been since ${them} last wrote, that they were away, or anything about their life outside the story, and never ask where they have been.`,
+    `- If ${them} says they feel unwell or had a hard day, answer with comfort only. ${COMFORT_RULE}`,
+    "- Never repeat a line already sent in this thread.",
+    "",
+    "WHO KNOWS WHAT",
+    `- Everyone in the group reads everything said here. Each of them knows only what the story showed them, what they were told, and this chat. What one card says ${them} knows of them, or what they hide, is theirs alone: the others do not know it, and nobody says it for them.`,
+    "",
+    otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
+    "",
+    otomeContentContract({ world, lis: names.map((name) => ({ name })), kind: "chat" }),
+  ]
+    .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
+    .join("\n");
+  const ids = new Set(members.map(({ unit }) => unit.id));
+  const ties = webBlock(
+    { web: world.web.filter((row) => ids.has(row.a) && ids.has(row.b)) },
+    members.map(({ unit }) => unit),
+    { secrets: false },
+  );
+  const own = members.filter(({ stickers }) => stickers.length);
+  const context = [
+    "WHO IS IN IT",
+    members
+      .map(({ unit, liState }) => [otomeSceneCard(unit, liState), betweenYou(unit, liState)].join("\n"))
+      .join("\n\n"),
+    "",
+    ties ? `THEIR TIES\n${ties}` : "",
+    "",
+    "THE PROTAGONIST",
+    `${them} (${pronounText(player.pronouns)}). Never assume a gender the pronouns do not state.`,
+    player.traits.length ? `Traits: ${player.traits.join("; ")}` : "",
+    aboutLine(player),
+    "",
+    story.trim()
+      ? `WHAT EVERYONE KNOWS OF THE STORY\nEach of them remembers what they were there for or were told; anything else they know only as news that reached them, so none of them claims they were there.\n${story.trim()}`
+      : "",
+    "",
+    memories.length
+      ? [
+          "CONVERSATIONS THAT ARE OVER (in this group chat)",
+          ...memories.map(
+            (session) =>
+              `- ${session.memory.text}${session.memory.quote ? ` One line from it: "${session.memory.quote}"` : ""}`,
+          ),
+          "They already happened. Bring one up only where it fits; never replay it or start from it again.",
+        ].join("\n")
+      : "",
+    "",
+    "STICKERS",
+    ...own.map(({ unit, stickers }) => `${unit.name}'s own: ${stickerList(stickers)}.`),
+    yours.length ? `${them}'s, which any of them may send too: ${stickerList(yours)}.` : "",
+  ]
+    .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
+    .join("\n");
+  const speaker = (message: PhoneMessage) => members.find(({ unit }) => unit.id === message.li)?.unit.name;
+  const task = squabble
+    ? `On their own, with nothing from ${them} to answer, ${nameList(squabble)} start squabbling in the group chat; the others may join where it is in character. Pick something from the story they share, their ties, or ${them}. Write 3 to ${GROUP_SQUABBLE_MAX} messages from at least two of them. They may draw ${them} in, but never write for ${them}. Never a topic already in the thread.`
+    : `Write the next messages now, answering ${them}'s newest message: whoever it is addressed to, or concerns most, answers first; anyone ${them} names answers; the others join only where it is in character. 1 to ${GROUP_REPLY_MAX} messages in all.`;
+  const now = [
+    "THE GROUP CHAT NOW (oldest first)",
+    tail.length
+      ? renderThread(tail, { li: "Someone", player: them }, "his", stickerName, speaker)
+      : "(no messages yet)",
+    "",
+    task,
+    otomeContractReminder("chat"),
+  ].join("\n");
+  return [
+    { role: "system", content: system },
+    squabble ? { role: "user", content: context } : { role: "user", content: context, cacheBreakpoint: true },
+    { role: "user", content: now },
   ];
 }
 
@@ -4128,10 +4287,11 @@ export const explicitMemoryArt = (kind: BannerKind, world: Pick<World, "content"
 const relabel = (contract: string, heading: string) => contract.replace(/^CONTENT CONTRACT/, heading);
 
 /**
- * What stands between them that the whole cast may know: grievances and disclosures from main chapters only, and never
- * a notebook (Read Me, #1945): what one love interest has come to know is theirs alone, and a banner plans for all.
+ * What stands between them that the whole cast may know: grievances and disclosures from main chapters only (a rupture
+ * keeps its line), and never a notebook (Read Me, #1945): what one love interest has come to know is theirs alone, and
+ * a banner plans for all, as P17g writes for every member of the group chat (#2154).
  */
-function sharedState(liState: LiState): LiState {
+export function sharedState(liState: LiState): LiState {
   const shared = (ref: string) => mainChapterNumber(ref.split("/")[0] ?? "") !== null;
   return {
     ...liState,
