@@ -304,6 +304,19 @@ test("Take picture paints one photo with no model call: his look, her look, then
     t.paid[3]!.request.prompt,
     /Reference images, in order: Kai's face; Ines's face; the place behind them\./u,
   );
+  // A card unlinked after it gave him his sprite: the sprite he still stands in is his reference (CodeRabbit, #2161).
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => {
+    const { cardId: _unlinked, ...rest } = unit;
+    return rest;
+  });
+  await take(t, { id: newPhotoId(), ...setup({ hisLook: "base", herLook: "base" }) });
+  assert.equal(decoded(t.paid[4]!)[0], "/api/sprites/card-kai/file/full_neutral.png");
+  // ...and when that sprite won't load, nothing is paid for a stranger.
+  const read = t.images.cardAvatarImage;
+  t.images.cardAvatarImage = async (path) => (path.startsWith("/api/sprites/") ? null : read(path));
+  await take(t, { id: newPhotoId(), ...setup({ hisLook: "base", herLook: "base" }) });
+  assert.equal(t.paid.length, 5, "a sprite that won't load pays for no photo");
+  t.images.cardAvatarImage = read;
   assert.equal(t.calls.length, 0, "still no model call");
 });
 
