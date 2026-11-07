@@ -853,14 +853,14 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
   await expect(root.locator(".of-quote-chip")).toContainText(WARM_AGAIN);
   await root.getByRole("textbox", { name: "Message Ilvar Thorne" }).fill("I left it on for you.");
   await root.getByRole("button", { name: "Send", exact: true }).click();
-  await expect(root.getByText("Barely. The data kept me company.")).toBeVisible();
+  await expect(root.getByText("Barely. The data kept me company.", { exact: true })).toBeVisible();
   expect(posts(stub, "/send")[0]!.body).toMatchObject({ text: "I left it on for you.", quote: WARM_AGAIN });
   await expect(root.locator(".of-quote-chip")).toHaveCount(0);
   // Settings and back: the phone opens on his thread again, and the quote that went with her message stays spent.
   await root.getByRole("button", { name: "Settings", exact: true }).click();
   await root.getByRole("button", { name: "Back", exact: true }).click();
   await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeFocused();
-  await expect(root.getByText("Barely. The data kept me company.")).toBeVisible();
+  await expect(root.getByText("Barely. The data kept me company.", { exact: true })).toBeVisible();
   await expect(root.locator(".of-quote-chip")).toHaveCount(0);
   for (const loop of await sceneLoops.all()) await expect(loop).toHaveCSS("animation-play-state", "running");
   await expect(scene).toHaveCSS("opacity", "1");
