@@ -1561,21 +1561,28 @@ const plannerPremise = (world: Pick<World, "premise" | "setting">, keep = "which
 /**
  * The arc planner's prompt: the world, the mystery in full (this is the only writer that always sees the truth), what
  * each love interest wants, the arcs before this one so it does not repeat them, and the rule that keeps it brief.
+ * `revealed` is what the run already told (revealedSoFar): a spent piece or truth is marked, so the planner never
+ * schedules it again (#2172).
  */
-export function arcPlanMessages({
-  world,
-  player,
-  units,
-  state,
-  memory,
-  previous,
-  chapters: _chapters,
-  number,
-  from,
-  choice = "continue",
-  newcomer = null,
-}: StoryArcPlanInput) {
+export function arcPlanMessages(
+  {
+    world,
+    player,
+    units,
+    state,
+    memory,
+    previous,
+    chapters: _chapters,
+    number,
+    from,
+    choice = "continue",
+    newcomer = null,
+  }: StoryArcPlanInput,
+  revealed: { pieces: ReadonlySet<LiId>; truth: boolean } = { pieces: new Set(), truth: false },
+) {
   const breathing = choice === "breathe";
+  const hidden = units.filter((unit) => world.mystery.pieces[unit.id] && !revealed.pieces.has(unit.id));
+  const nothingLeft = revealed.truth && !hidden.length;
   const count = breathing
     ? `${BREATHING_LENGTH_MIN} to ${BREATHING_LENGTH_MAX}`
     : `${ARC_LENGTH_MIN} to ${ARC_LENGTH_MAX}`;
@@ -1588,7 +1595,9 @@ export function arcPlanMessages({
     "FIELDS",
     `- chapters: ${count} short purposes, in play order. Each is one sentence of about 12 words and must not exceed ${ARC_PURPOSE_WORDS}. Say what happens in that chapter, not how it is written.`,
     "- chapter positions are 1-based within this arc (1 is its first chapter): endsWith.chapter, each reveals[].chapter and judgment.chapters. Never write a chapter number of your own.",
-    "- reveals: 1 to 4, in the order they land. kind piece reveals one love interest's part of the mystery (name them by id); kind truth reveals the whole answer, only in the last chapter and only once.",
+    nothingLeft
+      ? "- reveals: leave it empty. Every piece of the mystery and its truth are already revealed."
+      : "- reveals: 1 to 4, in the order they land. kind piece reveals one love interest's part of the mystery (name them by id); kind truth reveals the whole answer, only in the last chapter and only once. Never schedule a piece marked ALREADY REVEALED, or the truth once it is told.",
     "- antagonist: a person or force standing against the protagonist this arc; null when the arc's trouble is not a person.",
     // #2047: only this writer knows which answer is true, so only it can promise the true one is among the options;
     // the narrator sees the question and the answers alone.
@@ -1608,7 +1617,9 @@ export function arcPlanMessages({
           `- Set newcomer.how to one sentence naming the scene they are met in: where, and who is with the protagonist when it happens.`,
         ]
       : []),
-    "- The mystery's truth is yours to schedule, never to spend early: it is revealed in the last chapter, after the pieces.",
+    revealed.truth
+      ? "- The mystery's truth was already told in an earlier arc: never schedule it again."
+      : "- The mystery's truth is yours to schedule, never to spend early: it is revealed in the last chapter, after the pieces.",
     `- Be brief. One sentence per field. No preamble, no restating the world, no explaining the outline. Every purpose over ${ARC_PURPOSE_WORDS} words is refused.`,
     `- Write the label, theme, goal, purposes, endsWith, reveals and the judgment's question and answers in ${world.language}.`,
     "- Omit an optional field rather than writing null.",
@@ -1623,13 +1634,21 @@ export function arcPlanMessages({
     world.setting.trim() || world.premise.trim(),
     ...plannerPremise(world),
     questionOf(world) ? `The mystery: ${questionOf(world)}` : "",
-    world.mystery.truth ? `The hidden truth (reveal it only where you schedule it): ${world.mystery.truth}` : "",
+    world.mystery.truth
+      ? revealed.truth
+        ? `The truth (ALREADY TOLD: the protagonist knows it): ${world.mystery.truth}`
+        : `The hidden truth (reveal it only where you schedule it): ${world.mystery.truth}`
+      : "",
     "",
     "WHAT THE MYSTERY HOLDS, PER LOVE INTEREST",
     units
       .map((unit) =>
         world.mystery.pieces[unit.id]
-          ? `${unit.id}: ${world.mystery.pieces[unit.id]!.piece} (hidden because ${world.mystery.pieces[unit.id]!.reasonToHide})`
+          ? `${unit.id}: ${world.mystery.pieces[unit.id]!.piece} (${
+              revealed.pieces.has(unit.id)
+                ? "ALREADY REVEALED: the protagonist knows this"
+                : `hidden because ${world.mystery.pieces[unit.id]!.reasonToHide}`
+            })`
           : "",
       )
       .filter(Boolean)
