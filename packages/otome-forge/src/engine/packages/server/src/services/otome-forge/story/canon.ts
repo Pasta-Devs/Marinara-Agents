@@ -102,6 +102,13 @@ export const EASE_OFF_MARKER =
   "[The scene was cut short by the player. Continue from its aftermath without depicting it.]";
 
 /**
+ * #2146: the label of the option a chapter's closing decision saves when the player answers it in their own words
+ * (S/story/beats.ts chooseOption). Its canon marker reads "[Canonical player choice by <name>: Answered in their own
+ * words.]", then their words as any selection.
+ */
+export const OWN_ANSWER_LABEL = "Answered in their own words.";
+
+/**
  * A climax game's canon (a Confrontation's or a Closer's): what was played, then its ending; null until it ends (unless
  * it was eased off).
  */

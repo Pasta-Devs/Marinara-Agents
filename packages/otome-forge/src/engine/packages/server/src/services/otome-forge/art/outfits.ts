@@ -11,7 +11,8 @@
 // kept and repainted only on a tap; a `pending` record with no live paint in this process reads as `stopped`.
 // - memory5: the CG from the item's English brief (P20), with each person in it as a reference (the protagonist's
 //   persona avatar when she is in it; art/cg.ts cgSubjects), 768×1344, through generateBannerArt.
-// - moment4: its saved premise (or title), with its own love interest and protagonist, without another text call.
+// - moment4: its saved premise (or title), with its own love interest and protagonist (when its saved cast names her
+//   in any way art/cg.ts resolveCast knows), without another text call.
 // - his-look5, his-look4: his new look (generateOutfit, 832×1216 full body on grey), keeping his card or portrait as
 //   the likeness reference. her-look5, her-look4: the protagonist's.
 // A look's image, once ready, is added to its wearer's `outfits` (the kit's outfit shape), which is what makes it
@@ -41,7 +42,7 @@ import { normalizeBanner, normalizeItem } from "../schemas/wish.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { withPersonaImageAppearance } from "../setup/cast.js";
 import type { OtomeArt } from "./expressions.js";
-import { cgReferences, cgSubjects } from "./cg.js";
+import { cgReferences, cgSubjects, resolveCast, warnUnmatched } from "./cg.js";
 import { galleryRef, worldStyle, type ImageSubject, type PaintedImage } from "./image-client.js";
 import {
   imagesOf,
@@ -212,10 +213,11 @@ async function buildItemArt(
             (item.kind === "snapshot3"
               ? `Illustrate this saved everyday moment without adding events or people. Snapshot text: ${item.text}`
               : `Illustrate this saved Moment's premise without adding plot turns or people. Moment premise: ${item.premise?.trim() || item.title}`),
+          // The protagonist when the saved cast names her in any way it may ("You", a title, her first name).
           cast: [
-            li!.name,
-            ...(run.player.name && (!item.cg || item.cg.cast.some((name) => name === run.player.name))
-              ? [run.player.name]
+            li!.id,
+            ...(!item.cg || resolveCast(item.cg.cast, [li!], run.player).some((member) => "player" in member)
+              ? ["protagonist"]
               : []),
           ],
         }
@@ -242,8 +244,9 @@ async function buildItemArt(
     return {
       ...prompt,
       world: run.world,
-      paint: (connectionId, debug) =>
-        images.generateBannerArt({
+      paint: (connectionId, debug) => {
+        warnUnmatched(deps.runtime.logger, `item ${item.id}`, subjects);
+        return images.generateBannerArt({
           connectionId,
           // The Engine matches the override as `avatar:<slug of the first person's first name>`.
           name: subjects[0]?.person.name.split(/\s+/)[0] || "Memory",
@@ -252,7 +255,8 @@ async function buildItemArt(
           negativePrompt: prompt.negativePrompt,
           ...SCENE_SIZE,
           debugMode: debug,
-        }),
+        });
+      },
     };
   }
   const wearer = lookWearer(item);
@@ -270,7 +274,7 @@ async function buildItemArt(
         connectionId,
         name: subject.name,
         // The likeness, never a look he wears: the card or persona avatar, else the base portrait.
-        unit: { ...subject.image, outfits: [] },
+        unit: { ...subject.image, outfits: [], who: subject.name },
         prompt: prompt.prompt,
         negativePrompt: prompt.negativePrompt,
         ...LOOK_SIZE,
@@ -509,10 +513,11 @@ async function buildPair(deps: ArtDeps, runId: string, hers: string, edited: Par
     edited,
   );
   // One reference each, the pair's looks (each painted from its wearer's likeness): with his card's full body beside
-  // his look, the model got two standing pictures of him and merged bodies (2026-11-03).
+  // his look, the model got two standing pictures of him and merged bodies (2026-11-03). A look that does not load
+  // stops the paint: the labels say each picture is them in this outfit.
   const units: ImageSubject[] = [
-    { kind: "character", portrait: hisOutfit.url },
-    { kind: "character", portrait: herOutfit.url },
+    { kind: "character", portrait: hisOutfit.url, who: unit.name },
+    { kind: "character", portrait: herOutfit.url, who: run.player.name || "Protagonist" },
   ];
   return { ...pair, ...prompt, units, name: first(unit.name, "Couple") };
 }

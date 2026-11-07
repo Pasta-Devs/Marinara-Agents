@@ -691,10 +691,20 @@ async function keepsakeSubject(deps: DateDeps, runId: string, key: string) {
     },
   ];
   // Both of them, one reference each in that order, as a story CG sends them: with only his two pictures, the model
-  // drew him twice or gave her his body (the maintainer's report, 2026-11-03).
-  const subjects = cgSubjects([unit.name, run.player.name], [unit], run.player);
+  // drew him twice or gave her his body (the maintainer's report, 2026-11-03). By id and role, so a namesake or a
+  // protagonist without a name is still each of them.
+  const subjects = cgSubjects([unit.id, "protagonist"], [unit], run.player);
   const { units, labels } = cgReferences(subjects);
-  return { run, chapter, plan: chapter.date, unit, people, units, references: labels };
+  const outfitInText = subjects.some((subject) => subject.person.outfitInText);
+  return {
+    run,
+    chapter,
+    plan: chapter.date,
+    unit,
+    people: outfitInText ? people.map((person) => ({ ...person, outfitInText })) : people,
+    units,
+    references: labels,
+  };
 }
 
 /** POST /runs/:run/art/keepsake/prompt: the prompt the paint would send (the review dialog shows it). */

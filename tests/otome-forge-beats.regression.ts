@@ -25,6 +25,9 @@
 // whoever leads it and whoever is in the scene, in the story context they share, titled private between the
 // protagonist and its love interest (and anyone who speaks in it): by its summary, in full while it has none, once
 // even when the timeline holds it, and beside a head that condensed it; without the option, nothing changes.
+// #2146: a chapter's closing decision takes the player's own words: saved as one more option of that big choice, with no
+// effects, carried into the next chapter's cached story context; every other choice, a blank, too long or mismatched
+// body, and a beat not being read are refused and save nothing.
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CapabilityLanguageModelMessage } from "@marinara-engine/shared";
@@ -37,6 +40,10 @@ import type {
   Segment,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import type { NotebookEntry } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/read-me.ts";
+import {
+  OWN_ANSWER_MAX,
+  OWN_OPTION,
+} from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/arcs.ts";
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
 import { z } from "zod";
 import { generateJson } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/generation.ts";
@@ -72,6 +79,7 @@ import {
 import { normalizeConfrontationReply } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/confrontation.ts";
 import {
   EASE_OFF_MARKER,
+  OWN_ANSWER_LABEL,
   canonicalSegments,
   readChapter,
   readStorySources,
@@ -1053,6 +1061,113 @@ test("a chapter whose summary failed goes in full in every story prompt, with it
     // with Night 2, so it sorts before it: Night 2 is the previous chapter in full, and it the canon before.
     assert.equal(text.includes(`# Canon in full: ${MIREILLE_LEDGER}\nPRIVATE-LEDGER`), sees, "its heading");
   }
+});
+
+test("a chapter's closing decision takes the player's own words (#2146)", async () => {
+  const branch = (text: string, said: string) => ({
+    text,
+    selection: { kind: "dialogue", text: said },
+    segments: [{ speaker: "Kai", text: "Hm." }],
+  });
+  const small = beatReply({
+    choices: [{ kind: "small", at: 1, options: [branch("Greet him", "Evening."), branch("Tease him", "Still here?")] }],
+  });
+  // A plan with no ledger, so the next chapter's plan may follow it.
+  const replies = Array.from({ length: 60 }, () => (messages: CapabilityLanguageModelMessage[]) => {
+    if (isPlanner(messages)) return json(planReply({ ledger: { relationship: [], conflict: [], offscreen: [] } }));
+    if (isConfrontationPrompt(messages)) return json(confrontationReply());
+    const i = Number(/Narrate node (\d+) of/.exec(messages.at(-1)!.content)?.[1] ?? 1) - 1;
+    return json(i === 0 ? small : markedBeat(1, i, i === 6));
+  });
+  const t = await storyWorld({ runKey: "r-own-aaaaaa", replies });
+  assert.equal((await t.call("POST", "/runs/:run/chapters/next", { lead: KAI })).status, 200);
+  const choose = (body: object, i: number) => t.call("POST", `${beatPath}/choose`, body, node(i));
+  const own = (text: string, kind = "dialogue", option = OWN_OPTION) => ({
+    choice: "choice-1",
+    option,
+    own: { kind, text },
+  });
+  const stored = async (i: number) => (await t.store.readDoc(beatId(t.runId, "main-1", i), normalizeBeat))!;
+
+  // A small choice never takes them; its offered options do.
+  assert.equal((await t.call("POST", beatPath, {}, node(0))).status, 200);
+  assert.equal((await choose(own("Evening, keeper."), 0)).status, 400);
+  assert.deepEqual((await stored(0)).choiceCanon, {}, "nothing saved");
+  assert.equal((await choose({ choice: "choice-1", option: "option-1" }, 0)).status, 200);
+  assert.equal((await t.call("POST", `${beatPath}/read`, { segment: 99 }, node(0))).status, 200);
+  await readThrough(t, 1, 4);
+  // The Confrontation played to its ending writes the closing scene ahead: its decision waits for the beat being read.
+  const climax = await t.call("POST", beatPath, {}, node(5));
+  for (let round = 1; climax.body.confrontation && round <= 3; round += 1) {
+    assert.equal((await t.call("POST", `${beatPath}/stance`, { round, stance: "hold" }, node(5))).status, 200);
+  }
+  await t.settle();
+  assert.equal((await choose(own("I'll stay."), 6)).status, 409, "the closing scene is not being read yet");
+  assert.equal((await t.call("POST", `${beatPath}/read`, { segment: 99 }, node(5))).status, 200);
+  const served = await t.call("POST", beatPath, {}, node(6));
+  assert.equal(served.status, 200);
+  assert.equal(served.body.beat.choices[0].kind, "big");
+
+  // Refused, saving nothing: blank words, too many, "own" without them, words with another option.
+  const before = await t.state();
+  const unpicked = await stored(6);
+  for (const [body, why] of [
+    [own(" \n\t "), "blank"],
+    [own("a".repeat(OWN_ANSWER_MAX + 1)), "too long"],
+    [{ choice: "choice-1", option: OWN_OPTION }, "own with no words"],
+    [own("I'll stay.", "dialogue", "option-1"), "words with an offered option"],
+  ] as const) {
+    const refused = await choose(body, 6);
+    assert.equal(refused.status, 400, why);
+    assert.equal(refused.body.code, "bad-request", why);
+  }
+  assert.deepEqual(await stored(6), unpicked, "the beat is as it was");
+  assert.deepEqual(await t.state(), before, "and the state");
+
+  // Their words, whitespace and all, become the choice's own option: canon, with no effects.
+  const picked = await choose(own("  I'll stay.\n\n  Whatever   it costs. "), 6);
+  assert.equal(picked.status, 200, JSON.stringify(picked.body));
+  assert.deepEqual(picked.body.beat.choiceCanon, { "choice-1": OWN_OPTION });
+  const options = picked.body.beat.choices[0].options;
+  assert.equal(options.length, 3, "both offered options stay");
+  assert.deepEqual(options.at(-1), {
+    id: OWN_OPTION,
+    text: OWN_ANSWER_LABEL,
+    selection: { kind: "dialogue", text: "I'll stay. Whatever it costs." },
+    segments: [],
+  });
+  assert.equal(picked.body.remembered, false);
+  assert.deepEqual(picked.body.rememberedBy, []);
+  assert.deepEqual(picked.body.affection, []);
+  const after = await t.state();
+  assert.deepEqual(after.lis, before.lis, "no love interest's state moves");
+  assert.deepEqual(after.wallet, before.wallet);
+  assert.ok(after.chapters["main-1"]!.applied.includes("6/choice-1"), "the pick is applied once");
+  // A big choice never changes: their words again keep the first ones, and an offered option is locked out.
+  const again = await choose(own("I'm leaving.", "action"), 6);
+  assert.equal(again.status, 200);
+  assert.deepEqual(again.body.beat.choices, picked.body.beat.choices, "the first words stay");
+  const locked = await choose({ choice: "choice-1", option: "option-1" }, 6);
+  assert.equal(locked.status, 409);
+  assert.equal(locked.body.code, "locked");
+  assert.deepEqual(await t.state(), after);
+  const done = await t.call("POST", `${beatPath}/read`, { segment: 99 }, node(6));
+  assert.equal(done.body.chapterDone, true);
+
+  // The next chapter's plan and its scenes follow from them: the closing scene in full, in the cached story context.
+  assert.equal((await t.call("POST", "/runs/:run/chapters/next", { lead: KAI })).status, 200);
+  assert.equal((await t.call("POST", beatPath, {}, { key: "main-2", i: "0" })).status, 200);
+  const plan = t.calls.filter((call) => isPlanner(call.messages)).at(-1)!.messages;
+  const scene = t.calls.filter((call) => /Narrate node 1 of/.test(call.messages.at(-1)!.content)).at(-1)!.messages;
+  assert.ok(
+    plan[0]!.content.includes(
+      "[Canonical player choice by Ines: Answered in their own words.]\nInes: I'll stay. Whatever it costs.",
+    ),
+    "the plan's story context",
+  );
+  assert.equal(scene[0]!.cacheBreakpoint, true);
+  assert.equal(scene[0]!.content, plan[0]!.content, "the scene's cached story context is the plan's");
+  await t.settle();
 });
 
 /** The fake summarizer: a detail keeps only its source's MARKERS (never the prose around them), a condensing joins. */

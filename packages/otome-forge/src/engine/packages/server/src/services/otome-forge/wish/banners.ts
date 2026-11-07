@@ -50,7 +50,7 @@ import {
   type WishOpenResult,
   type WishView,
 } from "../../../../../client/src/features/otome-forge/shared/wish.js";
-import { cgReferences, cgSubjects } from "../art/cg.js";
+import { cgReferences, cgSubjects, warnUnmatched } from "../art/cg.js";
 import { worldStyle, type ImageSubject, type PaintedImage } from "../art/image-client.js";
 import { bannerArtOwner, itemArtOwner } from "../art/outfits.js";
 import {
@@ -575,8 +575,9 @@ async function buildBannerArt(deps: WishDeps, runId: string, banner: Banner, edi
     );
     return {
       ...prompt,
-      paint: (connectionId: string, debugMode: boolean): Promise<PaintedImage> =>
-        images.generateBannerArt({
+      paint: (connectionId: string, debugMode: boolean): Promise<PaintedImage> => {
+        warnUnmatched(deps.runtime.logger, `banner ${banner.key}`, subjects);
+        return images.generateBannerArt({
           connectionId,
           // The Engine matches the override as `avatar:<slug of the first person's first name>`.
           name: subjects[0]?.person.name.split(/\s+/)[0] || "Memory",
@@ -585,7 +586,8 @@ async function buildBannerArt(deps: WishDeps, runId: string, banner: Banner, edi
           negativePrompt: prompt.negativePrompt,
           ...SCENE_SIZE,
           debugMode,
-        }),
+        });
+      },
     };
   }
   // A look on its wearer: his (His Wardrobe) or the protagonist's (My Wardrobe), with the look's outfit line.
@@ -623,7 +625,7 @@ async function buildBannerArt(deps: WishDeps, runId: string, banner: Banner, edi
       images.generatePortrait({
         connectionId,
         name: person.name,
-        unit: subject,
+        unit: { ...subject, who: person.name },
         prompt: prompt.prompt,
         negativePrompt: prompt.negativePrompt,
         ...LOOK_SIZE,

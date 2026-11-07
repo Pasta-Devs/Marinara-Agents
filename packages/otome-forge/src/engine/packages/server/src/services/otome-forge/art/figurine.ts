@@ -110,7 +110,7 @@ async function buildFigurine(deps: FigurineDeps, runId: string, li: LiId, edited
         connectionId,
         name: subject.name,
         // Their likeness, as a look gets it: the card or the base portrait, never a look they wear.
-        unit: { ...subject.image, outfits: [] },
+        unit: { ...subject.image, outfits: [], who: subject.name },
         prompt: prompt.prompt,
         negativePrompt: prompt.negativePrompt,
         ...LOOK_SIZE,
