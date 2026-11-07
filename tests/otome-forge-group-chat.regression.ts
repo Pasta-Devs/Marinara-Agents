@@ -504,6 +504,23 @@ test("P17g's parser: whoever the newest message names answers, by name or first 
   for (const unnamed of ["Is anyone up?", "Solstice tonight", "Mireilles", ""]) {
     assert.equal(typeof answer(unnamed, "Kai"), "object", unnamed);
   }
+  // A title or article is no one's name: "il" never names Il Dottore, "Mr." never names Mr. Darcy (CodeRabbit, #2168).
+  const titled = [
+    ...members,
+    { id: "li-dottore-zz99", name: "Il Dottore", stickers: [] },
+    { id: "li-darcy-zz98", name: "Mr. Darcy", stickers: [] },
+  ];
+  const titledAnswer = (answering: string, ...who: string[]) =>
+    normalizeGroupReply(
+      { messages: who.map((speaker) => ({ speaker, text: "Here." })) },
+      { player: "Ines", members: titled, yours },
+      { answering },
+    );
+  for (const unnamed of ["il treno è in ritardo", "Mr. nobody called", "the moon is out"]) {
+    assert.equal(typeof titledAnswer(unnamed, "Kai"), "object", unnamed);
+  }
+  assert.match(titledAnswer("Dottore, sei sveglio?", "Kai") as string, /^Ines named Il Dottore:/);
+  assert.match(titledAnswer("Darcy?", "Kai") as string, /^Ines named Mr\. Darcy:/);
   // A squabble answers no one.
   assert.equal(
     typeof normalizeGroupReply(

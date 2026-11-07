@@ -13,6 +13,7 @@ import { z, type ZodType } from "zod";
 import { sameName } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { NOTE_TEXT_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
 import type { StickerLookup } from "../art/stickers.js";
+import { fold, nameCore } from "../names.js";
 
 /** A message's text, the player's or his (the route's body limit, and the cut on his). */
 export const MESSAGE_TEXT_MAX = 1000;
@@ -217,9 +218,11 @@ export interface GroupSpeaker {
  * Intl.Segmenter's words.
  */
 function namedIn(text: string, members: readonly GroupSpeaker[]): GroupSpeaker[] {
-  const said = text.normalize("NFKC").toLocaleLowerCase();
+  const said = fold(text);
   return members.filter((member) => {
-    const first = member.name.normalize("NFKC").toLocaleLowerCase().trim().split(/\s+/u)[0];
+    // The first word that names them, past titles and articles: "Il Dottore" is named by "Dottore", never by any "il"
+    // (CodeRabbit on #2168).
+    const first = nameCore(member.name)[0];
     if (!first) return false;
     const name = first.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
     return new RegExp(`(?<![\\p{L}\\p{N}\\p{M}])${name}(?![\\p{L}\\p{N}\\p{M}])`, "u").test(said);
