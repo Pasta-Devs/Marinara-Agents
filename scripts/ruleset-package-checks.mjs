@@ -2647,6 +2647,20 @@ function deepFreeze(value) {
   return value;
 }
 
+// assertRulesetSheetHooks walks every catalog file several times in one pass, so each text is parsed once.
+// The parse is frozen on purpose: every walk shares it, and this module is strict, so a check that wrote to
+// it would throw rather than leak into the next walk; no check the regression suite exercises does.
+const parsedCatalogFiles = new Map();
+function parsedCatalogFile(text) {
+  const key = String(text);
+  if (parsedCatalogFiles.has(key)) return parsedCatalogFiles.get(key);
+  const parsed = deepFreeze(JSON.parse(key));
+  if (parsedCatalogFiles.size >= PARSED_CATALOG_CACHE_SIZE)
+    parsedCatalogFiles.delete(parsedCatalogFiles.keys().next().value);
+  parsedCatalogFiles.set(key, parsed);
+  return parsed;
+}
+
 /** Why this value reference cannot be resolved against the sheet beside it, or null when it can.
  *  A reference to a field that is not there, or to a text field where a number is needed, reads as
  *  nothing and would quietly leave the column at whatever the row was picked with. */
@@ -7397,6 +7411,8 @@ const madeLastsOk = (lasts) =>
   new Set(lasts.map((one) => one.label)).size === lasts.length;
 
 export function assertRulesetSheetHooks(manifest, document, catalogSources = new Map()) {
+  // 1.239's counter names, gathered once per call on the first usesOf.
+  let countedNames;
   // A zone of over 1000 rounds (1.637), gated with the newest.
   let longZone;
   // 1.628 to 1.641, gated after every older check and shape.
@@ -10519,13 +10535,13 @@ export function assertRulesetSheetHooks(manifest, document, catalogSources = new
         }
         // 1.239: spends the uses of the counter row another entry writes, by its name.
         if (carrier.usesOf !== undefined) {
-          const counted = new Set(
+          const counted = (countedNames ??= new Set(
             [...(document?.catalogs ?? [])].flatMap((one) =>
               (catalogEntryList(one, catalogSources) ?? []).flatMap((other) =>
                 (other?.rows ?? []).filter((row) => row?.list === "counters").map((row) => row?.values?.name),
               ),
             ),
-          );
+          ));
           if (carrier !== entry?.mechanics || typeof carrier.usesOf !== "string" || !counted.has(carrier.usesOf))
             throw new Error(`${id} ${cureAt} usesOf names a counter another entry writes`);
           sharing ??= `${cureAt} usesOf`;
@@ -11871,7 +11887,7 @@ export function assertRulesetSheetHooks(manifest, document, catalogSources = new
     for (const [path, text] of catalogSources) {
       let parsed;
       try {
-        parsed = JSON.parse(String(text));
+        parsed = parsedCatalogFile(text);
       } catch {
         continue;
       }
@@ -11982,7 +11998,7 @@ export function assertRulesetSheetHooks(manifest, document, catalogSources = new
     for (const [path, text] of catalogSources) {
       let parsed;
       try {
-        parsed = JSON.parse(String(text));
+        parsed = parsedCatalogFile(text);
       } catch {
         continue;
       }
@@ -12015,7 +12031,7 @@ export function assertRulesetSheetHooks(manifest, document, catalogSources = new
     for (const [path, text] of catalogSources) {
       let parsed;
       try {
-        parsed = JSON.parse(String(text));
+        parsed = parsedCatalogFile(text);
       } catch {
         continue;
       }
@@ -12131,7 +12147,7 @@ export function assertRulesetSheetHooks(manifest, document, catalogSources = new
     for (const [path, text] of catalogSources) {
       let parsed;
       try {
-        parsed = JSON.parse(String(text));
+        parsed = parsedCatalogFile(text);
       } catch {
         continue;
       }
@@ -13769,7 +13785,7 @@ export function assertRulesetSheetHooks(manifest, document, catalogSources = new
   for (const [path, text] of catalogSources) {
     let parsed;
     try {
-      parsed = JSON.parse(String(text));
+      parsed = parsedCatalogFile(text);
     } catch {
       continue;
     }
@@ -13852,7 +13868,7 @@ export function assertRulesetSheetHooks(manifest, document, catalogSources = new
   for (const [path, text] of catalogSources) {
     let parsed;
     try {
-      parsed = JSON.parse(String(text));
+      parsed = parsedCatalogFile(text);
     } catch {
       continue;
     }
@@ -13980,7 +13996,7 @@ export function assertRulesetSheetHooks(manifest, document, catalogSources = new
   for (const [path, text] of catalogSources) {
     let parsed;
     try {
-      parsed = JSON.parse(String(text));
+      parsed = parsedCatalogFile(text);
     } catch {
       continue;
     }
@@ -14097,7 +14113,7 @@ export function assertRulesetSheetHooks(manifest, document, catalogSources = new
   for (const [path, text] of catalogSources) {
     let parsed;
     try {
-      parsed = JSON.parse(String(text));
+      parsed = parsedCatalogFile(text);
     } catch {
       continue;
     }
@@ -14334,7 +14350,7 @@ export function assertRulesetSheetHooks(manifest, document, catalogSources = new
     for (const [path, text] of catalogSources) {
       let parsed;
       try {
-        parsed = JSON.parse(String(text));
+        parsed = parsedCatalogFile(text);
       } catch {
         continue;
       }

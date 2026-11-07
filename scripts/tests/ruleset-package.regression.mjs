@@ -383,6 +383,11 @@ import { buildStartingGear } from "../ruleset-5e-starting-gear.mjs";
 // "it threw": a check that silently stopped covering one of these would otherwise
 // still pass.
 
+// shippedUpTo's result per minor: it rebuilds the whole package each time, and hundreds of checks ask for
+// the same few minors. VERIFY_MEMO=1 rebuilds anyway and checks the memo still matches.
+const shippedUpToMemo = new Map();
+let memoChecks = 0;
+
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const packageRoot = join(repoRoot, "packages/ruleset-5e-2014");
 const shippedManifest = JSON.parse(await readFile(join(packageRoot, "manifest.json"), "utf8"));
@@ -15585,6 +15590,18 @@ console.log("ruleset 0.192.0 ally and hurt-target regression checks passed");
 // The shipped package without what an Engine newer than `minor` reads, so a gate is checked on its own:
 // each check stops at the first gate it meets, which may be a newer one.
 function shippedUpTo(minor) {
+  if (!shippedUpToMemo.has(minor)) shippedUpToMemo.set(minor, shippedUpToFresh(minor));
+  const [doc, sources] = shippedUpToMemo.get(minor);
+  if (process.env.VERIFY_MEMO) {
+    const [freshDoc, freshSources] = shippedUpToFresh(minor);
+    assert.ok(isDeepStrictEqual(freshDoc, doc), `shippedUpTo(${minor}) doc drifted from its memo`);
+    assert.ok(isDeepStrictEqual(freshSources, sources), `shippedUpTo(${minor}) sources drifted from its memo`);
+    memoChecks += 1;
+  }
+  // Each caller edits its own copy.
+  return [structuredClone(doc), new Map(sources)];
+}
+function shippedUpToFresh(minor) {
   /** The sheet's derived values as they stood before 1.0.1 gave shortswords to any Monk level. */
   function withoutShortswordHelpers(sheet) {
     const training = sheet.derived.find((one) => one.id === "prof_shortsword_training");
@@ -29768,3 +29785,5 @@ console.log("ruleset 1.0.2 low magic layer regression checks passed");
   }
 }
 console.log("ruleset 1.0.3 low magic translations regression checks passed");
+
+if (process.env.VERIFY_MEMO) console.log("memo checks:", memoChecks);
