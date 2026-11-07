@@ -1,8 +1,13 @@
 # Otome Hearth release notes
 
-## 0.12.1 — 2026-11-07
+## 0.13.1 — 2026-11-07
 
 - **Starting a new arc no longer fails on wordy chapter outlines.** When the model described a chapter of the next arc in more than a short sentence, the plan was refused and you saw "The model's reply wasn't in the expected format." Longer chapter descriptions are now accepted, so going on with the story works with models that write more, such as thinking models on high effort.
+
+## 0.13.0 — 2026-11-07
+
+- **Everyone, a group chat with your love interests.** Messages now starts with **Everyone**, one thread with every love interest you've met. Write there and someone always answers: whoever you name, and the others when it suits them, each in their own colour. **Close and remember** turns the conversation into a memory that everyone in it recalls, and earns no affection.
+- **Let them squabble.** **Settings → Connections** sets how many times a day they may start squabbling in Everyone on their own, while Otome Hearth is open. Each squabble is 1 call with your Messages connection; 0, the default, keeps it off.
 
 ## 0.12.0 — 2026-11-07
 

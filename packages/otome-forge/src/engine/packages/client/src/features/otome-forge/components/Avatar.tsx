@@ -75,3 +75,34 @@ export function Avatar({ name, url, accent, size = 44, className, crop }: Avatar
     </span>
   );
 }
+
+/**
+ * #2154: the group chat's portraits in one `size` slot: up to three overlapping circles, and "+N" for the rest.
+ * Decorative: the row or header beside it names everyone.
+ */
+export function AvatarCluster({
+  people,
+  size,
+}: {
+  people: ReadonlyArray<{ name: string; url?: string | null; accent?: string }>;
+  size: number;
+}) {
+  const shown = people.slice(0, 3);
+  const more = people.length - shown.length;
+  const each = Math.round(size * 0.58);
+  const step = shown.length > 1 ? (size - each) / (shown.length - 1) : (size - each) / 2;
+  return (
+    <span className="of-avatar-cluster" style={{ width: size, height: size }} aria-hidden="true">
+      {shown.map((person, index) => (
+        <span
+          key={`${index} ${person.name}`}
+          className="of-avatar-cluster-item"
+          style={{ insetInlineStart: index * step, top: index % 2 ? 0 : size - each }}
+        >
+          <Avatar name={person.name} url={person.url} accent={person.accent} size={each} />
+        </span>
+      ))}
+      {more > 0 ? <span className="of-avatar-cluster-more">+{more}</span> : null}
+    </span>
+  );
+}

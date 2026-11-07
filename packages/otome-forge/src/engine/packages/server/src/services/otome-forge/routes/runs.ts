@@ -8,9 +8,9 @@
 //                                             sets and paints it queues in the background
 // POST /runs/:run/activate                 → {index}
 // POST /runs/:run/delete {confirmTitle}    → {index}; removes every `${R}:*` document and the run's gallery images
-// POST /runs/:run/settings {content?, images?, connections?, language?, dailyMessages?} → {world: WorldView}; with an
-//      image connection, each paint step the world lacks is added, waiting for the tap. dailyMessages is 0–24
-//      (Settings → Connections, S/phone/daily.ts)
+// POST /runs/:run/settings {content?, images?, connections?, language?, dailyMessages?, groupSquabbles?}
+//      → {world: WorldView}; with an image connection, each paint step the world lacks is added, waiting for the tap.
+//      dailyMessages and groupSquabbles are 0–24 (Settings → Connections, S/phone/daily.ts, S/phone/group.ts)
 // GET  /runs/:run/lis/:li/bible?spoilers=1 → {bible}
 // POST /runs/:run/lis/:li/bible {bible}    → {bible}
 // POST /runs/:run/lis/:li/intimacy          → {intimacy: true}; writes his missing intimacy block only (1 call;
@@ -161,6 +161,7 @@ const SettingsBody = z.object({
   writingStyle: z.string().optional(),
   bannedPhrases: z.string().max(OWN_BANNED_PHRASES_MAX).optional(),
   dailyMessages: z.number().int().min(0).max(DAILY_MESSAGES_MAX).optional(),
+  groupSquabbles: z.number().int().min(0).max(DAILY_MESSAGES_MAX).optional(),
 });
 const BibleBody = z.object({ bible: BibleSchema });
 const AppearanceBody = z.object({ identityLine: z.string() });
@@ -479,6 +480,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
           writingStyle: body.writingStyle !== undefined ? body.writingStyle.trim() : current.writingStyle,
           bannedPhrases: body.bannedPhrases !== undefined ? body.bannedPhrases.trim() : current.bannedPhrases,
           ...(body.dailyMessages !== undefined ? { dailyMessages: body.dailyMessages } : {}),
+          ...(body.groupSquabbles !== undefined ? { groupSquabbles: body.groupSquabbles } : {}),
           connections: body.connections ? normalizeConnections(body.connections) : current.connections,
           content: enforceContent(content, ageGate),
           images: { ...images, rating: ageGate ? images.rating : DEFAULT_IMAGE_RATING },
