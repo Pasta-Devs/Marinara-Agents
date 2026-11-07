@@ -3,9 +3,9 @@
 // ──────────────────────────────────────────────
 // Both are written once by the story (S/story/*) and only ever read here, so a damaged list item is dropped and a
 // damaged field takes its default; a document with no key or no index reads as missing (null), and is written again.
-// The hidden parts (node guides, the ledger, a node's side-with mark, a main chapter's copy of Your thoughts…, the
-// moment his side retells, a beat's effects, a date's plan and its scores) are stripped by toChapterView and
-// toBeatView before anything reaches the client.
+// The hidden parts (node guides, the ledger, a node's side-with mark, a main chapter's copy of Your thoughts…, a
+// birthday scene's gift, the moment his side retells, a beat's effects, a date's plan and its scores) are stripped by
+// toChapterView and toBeatView before anything reaches the client.
 import { z, type ZodType } from "zod";
 import type {
   Beat,
@@ -246,6 +246,7 @@ export function normalizeChapter(data: unknown): Chapter | null {
       },
       prestige: z.object({ kind: z.enum(PRESTIGE_KINDS), premise: short(600) }).optional(),
       thoughts: z.string().min(1).max(THOUGHTS_MAX).optional(),
+      gift: z.enum(GIFT_IDS).optional(),
       hisSide: z
         .object({
           arc: z.number().int().min(0).max(ARCS_MAX),
@@ -338,7 +339,7 @@ export function normalizeBeat(data: unknown): Beat | null {
 /**
  * The plan as the client sees it: no guides, casts, reveals, ledger, the grievance a repair is for, a date's plan
  * (GET .../dates shows a date), an extra story's premise (#2025), the Your thoughts… its plan read (#2127; Home shows
- * the player only the ones still waiting) or the moment his side retells (#2155).
+ * the player only the ones still waiting), a birthday scene's gift (#2153) or the moment his side retells (#2155).
  */
 export function toChapterView(chapter: Chapter): ChapterView {
   const {
@@ -349,6 +350,7 @@ export function toChapterView(chapter: Chapter): ChapterView {
     date: _date,
     prestige: _prestige,
     thoughts: _thoughts,
+    gift: _gift,
     hisSide: _hisSide,
     music,
     ...rest

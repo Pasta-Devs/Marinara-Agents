@@ -4,6 +4,10 @@
 
 - **Their side.** After a big moment with a love interest (a route chapter that moves your bond on a stage, a Closer that ends with them opening up or shutting you out, a confrontation that ends in the truth or a walkout, or a rift you mend), Routes offers their side of it: the same scene, told from their point of view, with their thoughts. The chapter's end tells you when one waits. There is one per story arc for each love interest; until you read it, it follows the arc's newest big moment. Opening it is free, writing it is 1 model call, it paints only a place that has no picture yet, and reading it pays 30 Starlight. It becomes part of that chapter: the next chapter is written knowing both.
 
+## 0.12.0 — 2026-11-07
+
+- **Celebrate their birthdays.** On a love interest's birthday, a dot on Home's **Remind Me** points you to **Birthdays to celebrate**. **Celebrate** opens a scene for the two of you, where you can give one of your Shop gifts: they react in their own voice, and the gift earns its affection when you finish the scene, even past the daily cap. Missed the day? You can still celebrate for 7 days after, and they'll know you're late. You can celebrate each birthday once.
+
 ## 0.11.0 — 2026-11-07
 
 - **Tarot night.** A new date in Dates: three cards of the Major Arcana, as Past, Present and Future. A love interest reads your cards and answers your question, or you read theirs, choosing how to read each card, spoken in your persona's voice. A reading pays 40 Starlight and 40 affection within the day's caps, costs 1 model call, changes nothing in the story, and only they remember it. A reading you leave opens again: when they read your cards, from its start; when you read theirs, at the card you still have to read.

@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import type { ChapterKind, ChapterView, MomentKind, NodeKind, RunLiView } from "../../shared/api-types";
 import { hisSideLiOf } from "../../shared/arcs";
+import { birthdayOfKey } from "../../shared/birthdays";
 import { figurineLiOf } from "../../shared/shop";
 import { FullscreenButton } from "../../components/Stage";
 import { ImageDescription } from "../../components/ImageDescription";
@@ -41,18 +42,20 @@ const KIND_KEYS: Record<Exclude<ChapterKind, "main">, string> = {
 };
 
 /**
- * A chapter's title as the player reads it. A figurine scene (#2128) has no banner item to name it, so it is titled in
- * the player's language from its love interest's name; its saved English title is the story's own, for prompts and
- * memory (S/items/character-story.ts figurineStoryChapter). His side (#2155) keeps the title of the chapter it tells
- * again, and is named as his side of it.
+ * A chapter's title as the player reads it. A figurine scene (#2128) or a birthday scene (#2153) has no banner item to
+ * name it, so it is titled in the player's language from its love interest's name (and the birthday's year); its saved
+ * English title is the story's own, for prompts and memory (S/items/character-story.ts). His side (#2155) keeps the
+ * title of the chapter it tells again, and is named as his side of it.
  */
 export function chapterTitle(
   t: ReturnType<typeof useTranslation>["t"],
   chapter: Pick<ChapterView, "key" | "title">,
   lis: ReadonlyArray<Pick<RunLiView, "id" | "name">>,
 ): string {
-  const li = figurineLiOf(chapter.key);
+  const birthday = birthdayOfKey(chapter.key);
+  const li = birthday?.li ?? figurineLiOf(chapter.key);
   const name = li ? lis.find((entry) => entry.id === li)?.name : undefined;
+  if (name && birthday) return t("ui.otomeForge.birthday.sceneTitle", { name, year: birthday.year });
   if (name) return t("ui.otomeForge.shop.sceneTitle", { name });
   const side = hisSideLiOf(chapter.key);
   const his = side ? lis.find((entry) => entry.id === side)?.name : undefined;
