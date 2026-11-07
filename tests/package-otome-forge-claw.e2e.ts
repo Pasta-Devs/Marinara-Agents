@@ -708,9 +708,10 @@ test("Otome Forge Claw Machine in motion: held arrows steer, the claw swings, dr
   const clawX = async () =>
     Number(await glass.evaluate((element) => getComputedStyle(element).getPropertyValue("--cx")));
   const start = await clawX();
-  // Holding → moves the claw; letting go, it swings on its cable.
+  // Holding → moves the claw; letting go, it swings on its cable. Held until it has gone far enough, not for a fixed
+  // time: ClawMachine.tsx caps each frame's step, so a runner drawing fewer frames covers less ground per second (#2140).
   await page.keyboard.down("ArrowRight");
-  await page.waitForTimeout(700);
+  await expect.poll(clawX, { timeout: 5_000, intervals: [50] }).toBeGreaterThan(start + 0.15);
   await page.keyboard.up("ArrowRight");
   const moved = await clawX();
   expect(moved).toBeGreaterThan(start + 0.15);
