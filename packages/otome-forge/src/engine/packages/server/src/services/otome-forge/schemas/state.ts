@@ -125,6 +125,8 @@ const GrievanceSchema: ZodType<Grievance> = z.object({
   severity: z.enum(["minor", "major", "rupture"]),
   opened: short(120),
   status: z.enum(["open", "addressed", "forgiven", "festering"]),
+        // #2156: the chapter whose resolve closed it (see Grievance in api-types).
+        closedBy: z.string().max(160).optional(),
 });
 
 const DisclosureSchema = z.object({ text: short(), at: z.string(), ref: short(120) });

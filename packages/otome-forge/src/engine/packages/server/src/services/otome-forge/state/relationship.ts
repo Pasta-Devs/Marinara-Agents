@@ -248,7 +248,9 @@ export function applyChoiceEffects(state: RunState, effects: readonly Effect[], 
     const target = resolve && resolvable.has(resolve.id) ? li.grievances.find((item) => item.id === resolve.id) : null;
     // Never in the beat that opened it, and only once (a closed grievance stays closed).
     if (resolve && target && isUnresolved(target) && target.opened !== here && target.status !== resolve.status) {
-      li.grievances = li.grievances.map((item) => (item === target ? { ...item, status: resolve.status } : item));
+      li.grievances = li.grievances.map((item) =>
+        item === target ? { ...item, status: resolve.status, closedBy: key } : item,
+      );
       if (resolve.status !== "festering" && li.rupture?.grievanceId === target.id) {
         // Another rupture still owed keeps his gates shut (grievances carry no time, so it stands from this pick).
         const next = li.grievances.find((item) => item.severity === "rupture" && isUnresolved(item));

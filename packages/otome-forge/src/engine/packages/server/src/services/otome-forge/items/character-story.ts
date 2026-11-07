@@ -13,6 +13,8 @@
 //   item's `li`, the wearer of the his-look5 it names), who sees it first.
 // - #2128, a figurine bought in the Shop: one node, `story-figurine-<li>` (SH/shop.ts figurineSceneKey), written on
 //   the purchase with no planning call and no banner item behind it: the love interest finds out about the figurine.
+// - #2153, a birthday celebrated from Remind Me: one node, `story-birthday-<li>-<year>` (SH/birthdays.ts), built the
+//   same way (S/home/birthday.ts): his birthday, how late it is, and the Shop gift given, if any.
 // Every node holds only its love interest: the chapter is his own (kind "story", `li`), so its canon reaches only his
 // own prompts and scenes he is in (S/story/canon.ts), like a route chapter. Writing it is idempotent: planning runs
 // in the run's foreground queue, which reads the chapter again first, so two opens plan once, and the item's `story`
@@ -24,7 +26,12 @@ import type {
   RunState,
   Unit,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
-import { figurineSceneKey } from "../../../../../client/src/features/otome-forge/shared/shop.js";
+import { birthdaySceneKey } from "../../../../../client/src/features/otome-forge/shared/birthdays.js";
+import {
+  GIFT_PROMPT_NAMES,
+  figurineSceneKey,
+  type GiftId,
+} from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import { NOTICED_WORDS_MAX } from "../../../../../client/src/features/otome-forge/shared/wardrobe.js";
 import type { Item } from "../../../../../client/src/features/otome-forge/shared/wish.js";
 import { updateIfChanged } from "../art/paint.js";
@@ -205,6 +212,41 @@ export async function ensureFigurineStory(
     (current) => current ?? chapter,
   );
   return chapter.key;
+}
+
+/**
+ * #2153: the one-node scene a birthday celebrated from Remind Me opens, built with no model call: his birthday (or how
+ * many days ago it was), and its special moment, the gift given (or none). Its title is English, as its guide is, and
+ * the player reads it in their language (C/screens/reader/ReaderControls.tsx chapterTitle). `gift` stays on the
+ * chapter, so its affection is paid when the scene is read to its end (S/state/rewards.ts).
+ */
+export function birthdayStoryChapter(
+  unit: Pick<Unit, "id" | "name">,
+  { year, daysLate, gift }: { year: number; daysLate: number; gift?: GiftId },
+  at: string,
+): Chapter {
+  const { name } = unit;
+  const day = daysLate
+    ? `${name}'s birthday was ${daysLate} ${daysLate === 1 ? "day" : "days"} ago, and the protagonist celebrates it late; ${name} takes that as ${name} would.`
+    : `today is ${name}'s birthday.`;
+  const given = gift
+    ? `THE GIFT: the protagonist gives ${name} ${GIFT_PROMPT_NAMES[gift]}. Write it as the scene's special moment: ${name}'s reaction in their own voice and a real exchange of dialogue between them.${gift === "aphrodisiac" ? " It is an aphrodisiac, and it works: desire builds between them from here, as far as the content contract allows." : ""}`
+    : `The protagonist brings no gift; remembering the day is the gift, and ${name} reacts to that in character.`;
+  const guide = `A BIRTHDAY SCENE between ${name} and the protagonist: ${day} The protagonist marks the day with ${name}: how ${name} feels about birthdays, in character, and what the day becomes between them. ${given} One complete scene, with its own small turn.`;
+  return {
+    key: birthdaySceneKey(unit.id, year),
+    kind: "story",
+    li: unit.id,
+    lead: unit.id,
+    title: `${name}'s Birthday`,
+    tags: [],
+    summary: "",
+    nodes: singleNode(unit.id, guide),
+    ledger: { relationship: [], conflict: [], offscreen: [] },
+    plannedAt: at,
+    connectionId: "",
+    ...(gift ? { gift } : {}),
+  };
 }
 
 /** The his-look5 of `li` a her-look5 is a couple set with, or null when it is not stored as one. */

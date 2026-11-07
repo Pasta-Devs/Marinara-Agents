@@ -11,7 +11,7 @@
 //
 // The model never writes a chapter number: a reply gives purposes and reveal positions as 1-based indices and
 // normalizeArcPlan stamps `from + index - 1`. Off-by-one in a twelve-chapter schedule is the likeliest structural
-// failure, and this removes it. Brevity is part of the shape: one short sentence per purpose, and the schema caps it.
+// failure, and this removes it. The prompt asks for one short sentence per purpose; a longer one is kept, not refused.
 import { z, type ZodType } from "zod";
 import type {
   ArcJudgment,
@@ -28,9 +28,13 @@ export const ARC_LENGTH_MAX = 12;
 export const BREATHING_LENGTH_MIN = 3;
 export const BREATHING_LENGTH_MAX = 5;
 
-/** A purpose is a moment, not prose: one short sentence (the cap keeps a planner from writing a chapter in the outline). */
+/** A purpose is a moment, not prose: the prompt asks for one short sentence of at most this many words. */
 export const ARC_PURPOSE_WORDS = 20;
-const PURPOSE = 240;
+/**
+ * The longest purpose kept, in characters. Far above what the prompt asks for: a planner that writes a few sentences
+ * still plans the arc, because refusing it cost the player the whole arc (a thinking model often runs long).
+ */
+const PURPOSE = 1200;
 
 /** The three ways a player may ask for the next arc (S/story/arcs #1983 M2). */
 export const ARC_CHOICES = ["continue", "breathe", "newcomer"] as const;
@@ -198,8 +202,11 @@ export const ArcPlanSchema = z.object({
         what: text().min(1),
       }),
     )
-    .max(24),
-  antagonist: z.object({ name: text(200).min(1), want: text(400), whyNow: text(400) }).nullable(),
+    .max(24)
+    // Missing means none, as null does: the prompt asks for an optional field to be omitted rather than null, and a
+    // planner told to leave reveals empty (or with no antagonist) may leave the key out (#2172).
+    .nullish(),
+  antagonist: z.object({ name: text(200).min(1), want: text(400), whyNow: text(400) }).nullish(),
   newcomer: z
     .object({ how: text(600) })
     .nullable()
@@ -207,11 +214,6 @@ export const ArcPlanSchema = z.object({
   // Checked by normalizeArcPlan, never here: a broken judgment is dropped, not a reason to plan the arc again.
   judgment: z.unknown().optional(),
 });
-
-/** The words a string holds (the purpose cap, the same counting the pack's prompts use). */
-export function wordCountOf(value: string): number {
-  return value.trim().split(/\s+/u).filter(Boolean).length;
-}
 
 export interface ArcPlanContext {
   number: number;
@@ -242,9 +244,7 @@ export function normalizeArcPlan(reply: z.infer<typeof ArcPlanSchema>, context: 
     kind === "breathing" ? [BREATHING_LENGTH_MIN, BREATHING_LENGTH_MAX] : [ARC_LENGTH_MIN, ARC_LENGTH_MAX];
   if (count < min || count > max) return `a ${kind} arc needs ${min} to ${max} chapters, not ${count}`;
   const endsAt = context.from + count - 1;
-  const long = chapters.findIndex((purpose) => wordCountOf(purpose) > ARC_PURPOSE_WORDS);
   if (!reply.label.trim()) return "the arc needs a short label the player will see";
-  if (long >= 0) return `chapter purposes must be ${ARC_PURPOSE_WORDS} words or fewer (chapter ${context.from + long})`;
   const from = context.from;
 
   const plan = chapters.map((purpose, index) => ({ n: from + index, purpose }));
@@ -252,7 +252,7 @@ export function normalizeArcPlan(reply: z.infer<typeof ArcPlanSchema>, context: 
   const how = (reply.newcomer?.how ?? "").trim();
   if (context.newcomer && !how) return "say how the newcomer meets the protagonist, in one sentence (newcomer.how)";
   if (kind === "breathing") {
-    if (reply.reveals.length) return "a breathing arc reveals nothing: leave reveals empty";
+    if (reply.reveals?.length) return "a breathing arc reveals nothing: leave reveals empty";
     if (reply.antagonist) return "a breathing arc has no antagonist";
     return {
       version: 1,
@@ -275,6 +275,9 @@ export function normalizeArcPlan(reply: z.infer<typeof ArcPlanSchema>, context: 
   }
 
   // Story arc: one ending, scheduled reveals in order, no repeat, nothing before its chapter, at most one per chapter.
+  // A reveal the run already holds (a piece told before, the truth once told, the same piece or the truth twice in this
+  // arc) is dropped, never refused: the player already knows it, so the arc loses nothing, and refusing it cost the
+  // player the whole arc when the planner could not fix it in its one repair turn (#2172).
   // The big event is always the arc's last chapter (chapters.ts carries it there), so its position is not the model's.
   const endsWith = reply.endsWith?.what.trim() ? { n: endsAt, what: reply.endsWith.what.trim() } : null;
   if (!endsWith) return "a story arc needs endsWith: how the arc ends, in one sentence";
@@ -282,24 +285,24 @@ export function normalizeArcPlan(reply: z.infer<typeof ArcPlanSchema>, context: 
   const seenChapters = new Set<number>();
   const scheduled = new Set<LiId>();
   let sawTruth = false;
-  for (const reveal of [...reply.reveals].sort((a, b) => a.chapter - b.chapter)) {
+  for (const reveal of [...(reply.reveals ?? [])].sort((a, b) => a.chapter - b.chapter)) {
     const n = from + reveal.chapter - 1;
     if (reveal.chapter > count)
       return `a reveal is scheduled past the arc's last chapter (in chapter ${reveal.chapter})`;
-    if (seenChapters.has(n)) return `chapter ${n} is scheduled to reveal twice; one reveal per chapter`;
-    seenChapters.add(n);
     if (reveal.kind === "truth") {
-      if (context.truthTold) return "the mystery's truth was already told: a new arc cannot reveal it again";
-      if (sawTruth) return "the truth is revealed once per arc";
+      if (context.truthTold || sawTruth) continue;
+      if (seenChapters.has(n)) return `chapter ${n} is scheduled to reveal twice; one reveal per chapter`;
+      seenChapters.add(n);
       sawTruth = true;
       reveals.push({ n, kind: "truth", what: reveal.what.trim() });
       continue;
     }
     const li = context.resolveLi(reveal.li);
     if (!li) return `a piece reveal must name one of the cast (got ${JSON.stringify(reveal.li ?? null)})`;
-    if (context.revealed.has(li)) return `${li}'s piece of the mystery was already revealed; schedule another piece`;
-    // A love interest holds one piece: scheduling it twice in the same arc would ask two chapters to say it once.
-    if (scheduled.has(li)) return `${li}'s piece is already scheduled in this arc`;
+    // A love interest holds one piece: told before, or already scheduled earlier in this arc, it is said once.
+    if (context.revealed.has(li) || scheduled.has(li)) continue;
+    if (seenChapters.has(n)) return `chapter ${n} is scheduled to reveal twice; one reveal per chapter`;
+    seenChapters.add(n);
     scheduled.add(li);
     reveals.push({ n, kind: "piece", li, what: reveal.what.trim() });
   }

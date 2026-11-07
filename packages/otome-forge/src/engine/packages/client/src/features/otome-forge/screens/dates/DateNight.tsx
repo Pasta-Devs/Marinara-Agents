@@ -459,10 +459,13 @@ interface GiftPickerProps {
   gifts: Array<{ id: GiftId; count: number }>;
   value: GiftId | null;
   onChange: (gift: GiftId | null) => void;
+  /** #2153: the heading and hint where it is not a date's (a birthday's); a date's by default. */
+  title?: string;
+  hint?: string;
 }
 
 /** #2128: Bring a gift: No gift, or one of hers, as a radio group of small cards. */
-function GiftPicker({ partnerName, gifts, value, onChange }: GiftPickerProps) {
+export function GiftPicker({ partnerName, gifts, value, onChange, title, hint }: GiftPickerProps) {
   const { t } = useTranslation();
   const id = useId();
   const options = [null, ...gifts];
@@ -470,9 +473,9 @@ function GiftPicker({ partnerName, gifts, value, onChange }: GiftPickerProps) {
     <section className="of-section of-glass of-date-gifts" aria-labelledby={`${id}-title`}>
       <h2 id={`${id}-title`} className="of-section-title">
         <Gift size={18} strokeWidth={1.9} aria-hidden="true" />
-        {t("ui.otomeForge.dateNight.giftTitle")}
+        {title ?? t("ui.otomeForge.dateNight.giftTitle")}
       </h2>
-      <p className="of-hint">{t("ui.otomeForge.dateNight.giftHint", { name: partnerName })}</p>
+      <p className="of-hint">{hint ?? t("ui.otomeForge.dateNight.giftHint", { name: partnerName })}</p>
       <div className="of-date-gift-options" role="radiogroup" aria-labelledby={`${id}-title`}>
         {options.map((option) => {
           const checked = value === (option?.id ?? null);

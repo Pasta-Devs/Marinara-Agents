@@ -3,6 +3,7 @@
 // ──────────────────────────────────────────────
 // Imported by both bundles, so a code or field added on one side has to be handled on the other.
 import type { ClimaxEnding, ClimaxMove, RouteEntry } from "./arcs";
+import type { BirthdayOffer } from "./birthdays";
 import type { ContentSettings, ImageRating, LimitId } from "./content";
 import type { DatePlan, DateScore } from "./dates";
 import type { Prestige, PrestigeKind } from "./economy";
@@ -215,6 +216,13 @@ export interface World {
   dailyMessages?: number;
   /** The daily messages' quota and the newest one sent (S/phone/daily.ts); never sent to the client. */
   phoneDaily?: PhoneDaily;
+  /**
+   * Settings → Connections (#2154): how many times each local day the love interests in the group chat may start
+   * squabbling there on their own (DAILY_MESSAGES_MAX at most); absent or 0: never.
+   */
+  groupSquabbles?: number;
+  /** The squabbles' quota and the newest one (S/phone/group.ts), `last.li` the group's; never sent to the client. */
+  groupDaily?: PhoneDaily;
 }
 
 /**
@@ -563,6 +571,8 @@ export interface HomeView {
   figurines?: Array<FigurinePicture & { li: LiId }>;
   /** #2127: Your thoughts… waiting for the next main chapter, or null. */
   thoughts: PlayerThoughts | null;
+  /** #2153: love interests whose birthday can be celebrated now and is not yet; absent for none. */
+  celebrate?: LiId[];
 }
 
 // ── Phone (M3): one private thread per love interest. S/phone/chat.ts reads and writes these shapes. ──
@@ -582,6 +592,8 @@ export interface PhoneMessage {
   at: string;
   /** The note of the day this message replies to (Reply on Home). */
   quote?: string;
+  /** #2154: in the group chat, the love interest who sent it (absent: the speaker is unknown). */
+  li?: LiId;
   /**
    * #2156: his invitation to clear the air, on his last message of a reply while she is upset with him: waiting for her
    * Accept or Decline, or what became of it (lapsed when she took it back first).
@@ -597,11 +609,16 @@ export interface PhoneSession {
   count: number;
   memory: { text: string; quote: string };
   closedAt: string;
-  /** His name when it closed, so a later rename does not rewrite the memory's title. */
+  /**
+   * His name when it closed, so a later rename does not rewrite the memory's title; in the group chat, its members'
+   * names.
+   */
   name?: string;
+  /** #2154: in the group chat, the love interests in it when it closed: only they recall it. */
+  members?: LiId[];
 }
 
-/** `${R}:chat:${li}`. */
+/** `${R}:chat:${li}`, and the group chat's `${R}:chat:group` (#2154, li "group"). */
 export interface PhoneThread {
   version: 1;
   li: LiId;
@@ -613,6 +630,8 @@ export interface PhoneThread {
 /** GET /runs/:run/phone */
 export interface PhoneListView {
   threads: Array<{ li: LiId; last: PhoneMessage | null; unread: number; busy: boolean }>;
+  /** #2154: the group chat, with its members in cast order; null until two love interests are met. */
+  group: { members: LiId[]; last: PhoneMessage | null; unread: number; busy: boolean } | null;
 }
 
 /**
@@ -622,6 +641,8 @@ export interface PhoneListView {
 export interface PhoneDueResult {
   status: "disabled" | "no-connection" | "busy" | "no-eligible" | "quota" | "scheduled" | "waiting" | "queued";
   latest: { li: LiId; at: string } | null;
+  /** #2154: the group chat's squabbles (S/phone/group.ts), the same way; `latest` is the newest squabble's. */
+  group?: { status: PhoneDueResult["status"]; latest: { li: LiId; at: string } | null };
 }
 
 /** GET /runs/:run/phone/:li?page= : the kit's forgeChatHistoryPage, plus what the thread screen shows around it. */
@@ -643,6 +664,8 @@ export interface PhoneHistoryPage {
   retry: boolean;
   sessions: PhoneSession[];
   seenAt: string | null;
+  /** #2154: in the group chat, its members now, in cast order. */
+  members?: LiId[];
 }
 
 /** POST .../send */
@@ -679,6 +702,8 @@ export interface CalendarView {
   anniversaries: Array<{ md: string; label: string; li?: LiId; year?: number }>;
   /** Wish banners' last days (M4); empty before any banner exists. */
   bannerEnds: Array<{ day: string; banner: string }>;
+  /** #2153: the birthdays that can be celebrated now, a scene started and not yet read included; absent for none. */
+  celebrate?: BirthdayOffer[];
 }
 
 /**
@@ -707,6 +732,8 @@ export interface Grievance {
   /** `${chapterKey}/${beatIndex}`: where it was opened. */
   opened: string;
   status: GrievanceStatus;
+  /** #2156: the key of the chapter whose resolve closed it: a repair pays its clearing only for its own closing. */
+  closedBy?: string;
 }
 
 /** How far trust and tension moved in one chapter, and in its beat `beat.i` (the per-beat cap). */
@@ -974,6 +1001,11 @@ export interface Chapter {
    * from the client).
    */
   thoughts?: string;
+  /**
+   * #2153: the Shop gift given in a birthday scene (`story-birthday-<li>-<year>`), spent when it was celebrated; its
+   * affection is paid when the scene is read to its end (hidden from the client).
+   */
+  gift?: GiftId;
 }
 
 /** A segment of a beat: one line of dialogue, one thought, or one piece of narration. */
@@ -1178,7 +1210,7 @@ export type BeatState = "unwritten" | "ready" | "read";
 /** A chapter as the client sees it: no guides and no ledger (the plan is the hidden story). */
 export type ChapterView = Omit<
   Chapter,
-  "nodes" | "ledger" | "connectionId" | "date" | "music" | "prestige" | "thoughts"
+  "nodes" | "ledger" | "connectionId" | "date" | "music" | "prestige" | "thoughts" | "gift"
 > & {
   music?: Pick<ChapterMusic, "track">;
   nodes: Array<Pick<ChapterNode, "i" | "kind" | "moment" | "cg" | "gate">>;
@@ -1324,7 +1356,8 @@ export interface ChapterDetail {
 
 /** What one request earned. */
 export interface Grant {
-  source: "beat" | "chapter" | "lead" | "foil";
+  /** #2153: `gift` is a birthday scene's gift, paid when it is read to its end, never capped. */
+  source: "beat" | "chapter" | "lead" | "foil" | "gift";
   starlight?: number;
   li?: LiId;
   affection?: number;
@@ -1389,8 +1422,8 @@ export interface MemoryStatus {
 
 // ── Wire shapes ──
 
-/** The world as the client sees it: no mystery truth or pieces, no web secrets, no music briefs, no message quota. */
-export type WorldView = Omit<World, "mystery" | "web" | "audio" | "phoneDaily"> & {
+/** The world as the client sees it: no mystery truth or pieces, no web secrets, no music briefs, no message quotas. */
+export type WorldView = Omit<World, "mystery" | "web" | "audio" | "phoneDaily" | "groupDaily"> & {
   mystery: { question: string };
   web: Omit<WebRow, "secret">[];
   audio: Omit<WorldAudio, "briefs">;
@@ -1476,4 +1509,6 @@ export interface SettingsInput {
   bannedPhrases?: string;
   /** 0 to DAILY_MESSAGES_MAX (SH/home.ts). */
   dailyMessages?: number;
+  /** #2154: the group chat's squabbles a day, 0 to DAILY_MESSAGES_MAX. */
+  groupSquabbles?: number;
 }

@@ -11,11 +11,12 @@
 //
 // readBeatToEnd() is the whole state change of reading a beat to its end: +30 the first time, and when that beat is the
 // chapter's last node, the chapter's Starlight, the Lead's and Foil's affection, the planner's ledger and the Lead's
-// `lastLead`. `chapters[key]` records the beat and the completion in the same write, so each lands once. Everything here
-// is pure; the read route applies it inside one revision-checked write of `${R}:state`. #2156: a main chapter read to
-// its end counts toward the space each grievance he holds waits for, and the repair of a grievance he holds pays no Lead
-// affection: its clearing (payClearing) pays GRIEVANCE_CLEARED_AFFECTION once the repair has closed the grievance, in
-// the same write. The repair of one she holds pays its Lead as before.
+// `lastLead`. A birthday scene's gift (#2153) pays its affection then too, never capped, as a date's gift does.
+// `chapters[key]` records the beat and the completion in the same write, so each lands once. Everything here is pure;
+// the read route applies it inside one revision-checked write of `${R}:state`.
+// #2156: a main chapter read to its end counts toward the space each grievance he holds waits for, and the repair of a
+// grievance he holds pays no Lead affection: its clearing (payClearing) pays GRIEVANCE_CLEARED_AFFECTION once the
+// repair has closed the grievance, in the same write. The repair of one she holds pays its Lead as before.
 import { forgeDayKey } from "@forge-kit/time-zone-server.mjs";
 import type {
   Chapter,
@@ -35,6 +36,7 @@ import {
   isStoryReward,
   type RewardSource,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
+import { GIFT_AFFECTION } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import { mainChapterNumber } from "../ids.js";
 import { STATE_LIMITS, keepNewest } from "../schemas/state.js";
 
@@ -99,7 +101,10 @@ export function grant(
 }
 
 /** The chapter fields reading a beat needs. */
-export type ReadChapter = Pick<Chapter, "key" | "kind" | "number" | "lead" | "foil" | "nodes" | "ledger" | "grievance">;
+export type ReadChapter = Pick<
+  Chapter,
+  "key" | "kind" | "number" | "lead" | "foil" | "nodes" | "ledger" | "gift" | "grievance"
+>;
 
 export interface ReadOutcome {
   state: RunState;
@@ -191,11 +196,16 @@ const hisToClear = (state: RunState, chapter: Pick<Chapter, "kind" | "lead" | "g
  */
 export function payClearing(
   state: RunState,
-  chapter: Pick<Chapter, "kind" | "lead" | "grievance">,
+  chapter: Pick<Chapter, "key" | "kind" | "lead" | "grievance">,
 ): { state: RunState; grants: Grant[] } {
   const li = state.lis[chapter.lead];
   const grievance = hisToClear(state, chapter);
   if (!grievance || grievance.status === "open" || grievance.status === "festering") return { state, grants: [] };
+  // Only the repair that closed it pays: one closed elsewhere since it was planned (a main chapter's resolve, a date)
+  // leaves it closed, and paid nothing here.
+  if (grievance.closedBy && grievance.closedBy !== chapter.key) {
+    return { state, grants: [] };
+  }
   return {
     state: {
       ...state,
@@ -240,6 +250,8 @@ export function readBeatToEnd(
   if (PAYS_BEATS.has(chapter.kind)) pay("beat", { source: "beat", starlight: STARLIGHT_EARNINGS.beat });
   if (!finishing) return { state: next, grants, chapterDone: progress.completed !== null };
 
+  // #2153: a birthday scene's gift, paid for in Starlight, so as a story earning it is never capped (as on a date).
+  if (chapter.gift) pay("gift", { source: "chapter", li: chapter.lead, affection: GIFT_AFFECTION[chapter.gift] });
   const completion = COMPLETION[chapter.kind];
   if (completion) {
     pay("chapter", { source: completion.source, starlight: completion.starlight });

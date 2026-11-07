@@ -348,7 +348,12 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
         }}
       />
     ) : screen === "remind" && activeRun && view ? (
-      <RemindMe runKey={activeRun} view={view} onOpenTracker={() => openSettings("tracker")} />
+      <RemindMe
+        runKey={activeRun}
+        view={view}
+        onOpenTracker={() => openSettings("tracker")}
+        onOpenStory={openReader("remind")}
+      />
     ) : screen === "dates" && activeRun && view ? (
       <DatesHub
         runKey={activeRun}

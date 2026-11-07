@@ -407,9 +407,9 @@ function storyPlaceOf(world: Pick<World, "places">, input: Pick<DateStartInput, 
 /**
  * `state` with one `gift` given (#2128), or the refusal: 409 `locked` for one the story's Heat does not offer (the
  * aphrodisiac under SFW), 409 `conflict` for one she has none of. Pure, so a revision-checked write may run it again; a
- * count left at 0 is dropped when the state is read.
+ * count left at 0 is dropped when the state is read. A birthday's gift is given the same way (#2153, S/home/birthday.ts).
  */
-function giveGift(state: RunState, content: Pick<ContentSettings, "heat">, gift: GiftId): RunState {
+export function giveGift(state: RunState, content: Pick<ContentSettings, "heat">, gift: GiftId): RunState {
   if (!giftsFor(content).includes(gift)) {
     throw new OtomeForgeError(409, "That gift is given only under NSFW Heat.", "locked");
   }
@@ -647,7 +647,6 @@ export async function finishDate(deps: DateDeps, runId: string, key: string): Pr
   if (!chapter || chapter.kind !== "date" || !chapter.date) throw dateNotFound();
   const plan = chapter.date;
   const unit = partnerOf(run, plan.li);
-  assertNotHeld(run.state, plan.li);
   if (!run.state.chapters[key]?.completed) throw conflict("The date's last scene is not read yet.");
   // The canon is settled: a completed chapter's beats never change again.
   const beats = await readBeats(deps.store, runId, chapter);
@@ -673,7 +672,10 @@ export async function finishDate(deps: DateDeps, runId: string, key: string): Pr
       mend ? [{ li: plan.li, resolve: { id: mend, status: "addressed" } }] : [],
       { key, i: chapter.nodes.length, choice: FINISH_CHOICE, resolves: mend ? [mend] : [], at },
     );
+    // A date already counted is returned as it stands, whatever came between (#2156): only a first counting waits
+    // out a grievance that stands.
     if (applied.replay) return current;
+    assertNotHeld(current, plan.li);
     const after = mend ? applied.state.lis[plan.li] : undefined;
     // Mended as M2b's repair reports it (S/state/stages.ts healRupture): only when no rupture is left with them.
     repaired = !!after && !after.rupture && after.grievances.find((item) => item.id === mend)?.status === "addressed";

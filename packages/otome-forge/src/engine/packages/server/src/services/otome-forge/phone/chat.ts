@@ -23,6 +23,9 @@
 // Stickers (#2044): a message names a sticker by id (SH/stickers.ts); one saved before names his face and still reads.
 // The player may send the protagonist's five and, with images on, his painted ones (S/art/stickers.ts
 // sendableStickers); P17 offers him the same, and his bracketed sticker becomes the message's id.
+// The group chat (#2154, S/phone/group.ts) is one more thread of this shape, `${R}:chat:group`: its messages name their
+// speaker (`li`) and its sessions their members, both display fields. It sends, answers and pages through the same
+// helpers (sendIn, answerIn, historyPage, saveSeen) with its own checks and its own prompt.
 // #2156: while she is upset with him (LiState.upset, S/phone/upset.ts), P17 tells him so, and offers him once, until
 // she takes it back and tells him again, to ask her out to clear the air (inviteOffered): only while he holds no
 // grievance of his own and no evening she accepted waits. Whether he asks is his; his invitation rides on his last
@@ -42,13 +45,14 @@ import type {
   PhoneThread,
   Unit,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import { LIS_MAX } from "../../../../../client/src/features/otome-forge/shared/cast.js";
 import { heldAgainst } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { FACES } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { STICKER_ID } from "../../../../../client/src/features/otome-forge/shared/stickers.js";
 import { sendableStickers, stickerBook, stickerLookup } from "../art/stickers.js";
 import { generateJson, runForeground, type GenerationDeps } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
-import { chatId, runDocTarget, worldId } from "../ids.js";
+import { chatId, isLiId, runDocTarget, worldId } from "../ids.js";
 import { isRecord, readFields, validItems } from "../schemas/common.js";
 import { readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeWorld } from "../schemas/world.js";
@@ -81,12 +85,14 @@ export const SESSION_NAME_MAX = 200;
 // The display fields: one that fails its schema is left out on its own (dropBadFields), so a message or a session is
 // never lost to one. A lost message or session would move the closed conversations' boundary, reopen what was
 // remembered and forget it.
+const LI = z.string().refine(isLiId);
 const MESSAGE_DISPLAY = {
   sticker: z.union([z.enum(FACES), z.string().regex(STICKER_ID)]),
   quote: z.string().max(STORED_QUOTE_MAX),
+  li: LI,
   invite: z.object({ status: z.enum(["pending", "accepted", "declined", "lapsed"]) }),
 };
-const SESSION_DISPLAY = { name: z.string().max(SESSION_NAME_MAX) };
+const SESSION_DISPLAY = { name: z.string().max(SESSION_NAME_MAX), members: z.array(LI).max(LIS_MAX) };
 
 const MessageSchema: ZodType<PhoneMessage> = z.object({
   id: z.string().min(1).max(60),
@@ -95,6 +101,7 @@ const MessageSchema: ZodType<PhoneMessage> = z.object({
   sticker: MESSAGE_DISPLAY.sticker.optional(),
   at: z.string().min(1),
   quote: MESSAGE_DISPLAY.quote.optional(),
+  li: MESSAGE_DISPLAY.li.optional(),
   invite: MESSAGE_DISPLAY.invite.optional(),
 });
 
@@ -104,6 +111,7 @@ const SessionSchema: ZodType<PhoneSession> = z.object({
   memory: z.object({ text: z.string().max(STORED_TEXT_MAX), quote: z.string().max(STORED_QUOTE_MAX) }),
   closedAt: z.string(),
   name: SESSION_DISPLAY.name.optional(),
+  members: SESSION_DISPLAY.members.optional(),
 });
 
 /** Each stored item without the display fields that fail their schema (common.ts keeps to zod 3 and 4's shared API). */
@@ -230,8 +238,14 @@ export async function inThreadLock<T>(runId: string, li: LiId, operation: () => 
 
 // ── Reading ──
 
-/** GET /runs/:run/phone: each love interest's thread in cast order, with its last message and unread count. */
-export async function phoneList(deps: Pick<PhoneDeps, "store">, runId: string): Promise<PhoneListView> {
+/**
+ * GET /runs/:run/phone: each love interest's thread in cast order, with its last message and unread count (the route
+ * adds the group chat's, S/phone/group.ts groupList).
+ */
+export async function phoneList(
+  deps: Pick<PhoneDeps, "store">,
+  runId: string,
+): Promise<Pick<PhoneListView, "threads">> {
   const run = await readRun(deps.store, runId);
   if (!run) throw notFound("Otome Forge run");
   const cast = Object.keys(run.state.lis).filter((li) => run.units.some((unit) => unit.id === li));
@@ -257,8 +271,18 @@ export async function threadPage(
   page: unknown,
 ): Promise<PhoneHistoryPage> {
   await loadThreadRun(deps, runId, li, { forged: false });
-  const thread = (await readThread(deps.store, runId, li)) ?? emptyThread(li);
-  const view = forgeChatHistoryPage(thread, page, PAGE_SIZE, forgeChatReplyBusy(runId, li));
+  return historyPage(deps, runId, li, page);
+}
+
+/** A history page of thread `key` (a love interest's, or the group chat's), once its caller has checked it. */
+export async function historyPage(
+  deps: Pick<PhoneDeps, "store">,
+  runId: string,
+  key: string,
+  page: unknown,
+): Promise<PhoneHistoryPage> {
+  const thread = (await readThread(deps.store, runId, key)) ?? emptyThread(key);
+  const view = forgeChatHistoryPage(thread, page, PAGE_SIZE, forgeChatReplyBusy(runId, key));
   const end = thread.messages.length - (view.page - 1) * PAGE_SIZE;
   return {
     ...view,
@@ -271,7 +295,12 @@ export async function threadPage(
 /** POST .../seen {last?}: marks his messages up to `last` (default: the newest) seen. Never moves back. */
 export async function markSeen(deps: Pick<PhoneDeps, "store">, runId: string, li: LiId, last?: string): Promise<void> {
   await loadThreadRun(deps, runId, li, { forged: false });
-  await deps.store.updateDoc(chatTarget(runId, li), normalizeThread, (current) => {
+  await saveSeen(deps, runId, li, last);
+}
+
+/** markSeen's write on thread `key`, once its caller has checked it. */
+export async function saveSeen(deps: Pick<PhoneDeps, "store">, runId: string, key: string, last?: string) {
+  await deps.store.updateDoc(chatTarget(runId, key), normalizeThread, (current) => {
     const message = last ? current.messages.find((entry) => entry.id === last) : current.messages.at(-1);
     if (!message) return current;
     const seenAt = later(current.seenAt, message.at);
@@ -294,7 +323,7 @@ export interface SendInput {
 }
 
 /** His reply to message `index`: the run of his messages after it, past any more of hers. */
-function replyAfter(thread: PhoneThread, index: number): PhoneMessage[] {
+export function replyAfter(thread: PhoneThread, index: number): PhoneMessage[] {
   const rest = thread.messages.slice(index + 1);
   const first = rest.findIndex((message) => message.who === "li");
   if (first < 0) return [];
@@ -392,21 +421,28 @@ async function writeReply(
 }
 
 /**
- * Writes his reply to the open conversation (P17) in the run's foreground queue and appends it, unless a reply to the
- * same message landed first (then that one is returned). The open conversation must end on the player's message.
+ * Writes the reply to the open conversation of thread `key` (`write`, with what `load` read) in the run's foreground
+ * queue and appends it, unless a reply to the same message landed first (then that one is returned). The open
+ * conversation must end on the player's message.
  */
-async function answer(deps: PhoneDeps, runId: string, li: LiId, debugMode: boolean): Promise<PhoneMessage[]> {
+export function answerIn<T>(
+  deps: PhoneDeps,
+  runId: string,
+  key: string,
+  load: () => Promise<T>,
+  write: (loaded: T, thread: PhoneThread) => Promise<PhoneMessage[]>,
+): Promise<PhoneMessage[]> {
   // ponytail: the reply waits behind the run's story writes (the plan's one foreground lane per run); the ceiling is a
   // reply that waits for a lookahead beat, and the upgrade path is a lane of the phone's own.
   return runForeground(runId, async () => {
     // Read once it is this task's turn: his stage or a rupture may have changed while it waited.
-    const { run, unit } = await loadThreadRun(deps, runId, li);
-    const thread = (await readThread(deps.store, runId, li)) ?? emptyThread(li);
+    const loaded = await load();
+    const thread = (await readThread(deps.store, runId, key)) ?? emptyThread(key);
     const last = openMessages(thread).at(-1);
     if (!last || last.who !== "player") throw conflict("Nothing in this thread is waiting for a reply.");
-    const written = await writeReply(deps, runId, li, { run, unit, thread }, { debugMode });
+    const written = await write(loaded, thread);
     let kept = written;
-    await saveThread(deps, runId, li, (current) => {
+    await saveThread(deps, runId, key, (current) => {
       const index = current.messages.findIndex((message) => message.id === last.id);
       if (index < 0 || index < archivedCount(current))
         throw conflict("The thread changed while the reply was written.");
@@ -422,6 +458,16 @@ async function answer(deps: PhoneDeps, runId: string, li: LiId, debugMode: boole
   });
 }
 
+/** His reply (P17) to the open conversation, through answerIn. */
+const answer = (deps: PhoneDeps, runId: string, li: LiId, debugMode: boolean) =>
+  answerIn(
+    deps,
+    runId,
+    li,
+    () => loadThreadRun(deps, runId, li),
+    ({ run, unit }, thread) => writeReply(deps, runId, li, { run, unit, thread }, { debugMode }),
+  );
+
 /**
  * A daily message (S/phone/daily.ts): he writes first, in a background job on `connectionId`, inside the thread's lock
  * (the caller's inThreadLock). Null, before anything is sent, when the open conversation waits on her message. The
@@ -429,24 +475,39 @@ async function answer(deps: PhoneDeps, runId: string, li: LiId, debugMode: boole
  * and the player's seenAt is left alone, so it counts as unread. `reason` "upset" (#2156, S/phone/upset.ts): his
  * answer to her telling him she is upset with him, the same way.
  */
-export async function writeFirstMessage(
+export const writeFirstMessage = (
   deps: PhoneDeps,
   runId: string,
   li: LiId,
   { connectionId, debugMode, reason }: { connectionId: string; debugMode: boolean; reason?: "upset" },
-): Promise<PhoneMessage[] | null> {
-  const { run, unit } = await loadThreadRun(deps, runId, li);
-  const thread = (await readThread(deps.store, runId, li)) ?? emptyThread(li);
-  if (openMessages(thread).at(-1)?.who === "player") return null;
-  const newest = thread.messages.at(-1)?.id ?? null;
-  const written = await writeReply(
+): Promise<PhoneMessage[] | null> =>
+  writeFirstIn(
     deps,
     runId,
     li,
-    { run, unit, thread },
-    { debugMode, first: true, connectionId, reason },
+    () => loadThreadRun(deps, runId, li),
+    ({ run, unit }, thread) =>
+      writeReply(deps, runId, li, { run, unit, thread }, { debugMode, first: true, connectionId, reason }),
   );
-  await saveThread(deps, runId, li, (current) => {
+
+/**
+ * writeFirstMessage's rule for thread `key` (the group chat's squabbles too, S/phone/group.ts): null when the open
+ * conversation waits on her message; otherwise what `write` wrote, appended only while the thread still ends where it
+ * was read.
+ */
+export async function writeFirstIn<T>(
+  deps: PhoneDeps,
+  runId: string,
+  key: string,
+  load: () => Promise<T>,
+  write: (loaded: T, thread: PhoneThread) => Promise<PhoneMessage[]>,
+): Promise<PhoneMessage[] | null> {
+  const loaded = await load();
+  const thread = (await readThread(deps.store, runId, key)) ?? emptyThread(key);
+  if (openMessages(thread).at(-1)?.who === "player") return null;
+  const newest = thread.messages.at(-1)?.id ?? null;
+  const written = await write(loaded, thread);
+  await saveThread(deps, runId, key, (current) => {
     if ((current.messages.at(-1)?.id ?? null) !== newest) {
       throw conflict("The thread changed while his message was written.");
     }
@@ -463,7 +524,35 @@ async function send(
   debugMode: boolean,
 ): Promise<PhoneSendResult> {
   const { run } = await loadThreadRun(deps, runId, li);
-  const thread = (await readThread(deps.store, runId, li)) ?? emptyThread(li);
+  return sendIn(deps, runId, li, input, {
+    stickers: () => {
+      const { his, yours } = sendableStickers(stickerBook(runId, run), run.world, li);
+      return [...his, ...yours].map((sticker) => sticker.id);
+    },
+    answer: () => answer(deps, runId, li, debugMode),
+  });
+}
+
+/** What a send to thread `key` may carry and how it is answered (the group chat's, S/phone/group.ts, too). */
+export interface SendTo {
+  /** The sticker ids the player may send there. */
+  stickers: () => readonly string[];
+  /** Writes the reply to the open conversation (answerIn). */
+  answer: () => Promise<PhoneMessage[]>;
+}
+
+/**
+ * The player's message in thread `key`, once its caller has checked the thread, then its reply (`answer`); the same id
+ * again returns what was saved, or answers it if its reply never landed.
+ */
+export async function sendIn(
+  deps: PhoneDeps,
+  runId: string,
+  key: string,
+  input: SendInput,
+  { stickers, answer }: SendTo,
+): Promise<PhoneSendResult> {
+  const thread = (await readThread(deps.store, runId, key)) ?? emptyThread(key);
   const named = input.id ? thread.messages.findIndex((message) => message.id === input.id) : -1;
   if (named >= 0) {
     // The same message again (a retried request): what was saved, or his reply now if it never landed.
@@ -471,16 +560,13 @@ async function send(
     if (message.who !== "player") throw conflict("That message id belongs to another message.");
     const reply = replyAfter(thread, named);
     if (reply.length || named < archivedCount(thread)) return { messages: [message, ...reply] };
-    return { messages: [message, ...(await answer(deps, runId, li, debugMode))] };
+    return { messages: [message, ...(await answer())] };
   }
-  if (input.retry) return { messages: await answer(deps, runId, li, debugMode) };
+  if (input.retry) return { messages: await answer() };
   const text = (input.text ?? "").trim();
   if (!text && !input.sticker) throw new OtomeForgeError(400, "Write a message or pick a sticker.", "bad-request");
-  if (input.sticker) {
-    const { his, yours } = sendableStickers(stickerBook(runId, run), run.world, li);
-    if (![...his, ...yours].some((sticker) => sticker.id === input.sticker))
-      throw new OtomeForgeError(400, "That sticker is not one you can send here.", "bad-request");
-  }
+  if (input.sticker && !stickers().includes(input.sticker))
+    throw new OtomeForgeError(400, "That sticker is not one you can send here.", "bad-request");
   const quote = input.quote?.trim();
   const message: PhoneMessage = {
     id: input.id ?? newMessageId(),
@@ -490,7 +576,7 @@ async function send(
     at: new Date().toISOString(),
     ...(quote ? { quote } : {}),
   };
-  await saveThread(deps, runId, li, (current) =>
+  await saveThread(deps, runId, key, (current) =>
     current.messages.some((entry) => entry.id === message.id)
       ? current
       : {
@@ -499,7 +585,7 @@ async function send(
           seenAt: later(current.seenAt, message.at),
         },
   );
-  return { messages: [message, ...(await answer(deps, runId, li, debugMode))] };
+  return { messages: [message, ...(await answer())] };
 }
 
 /** POST .../send: the player's message, then his reply (P17). One send or close per thread at a time (409 `busy`). */

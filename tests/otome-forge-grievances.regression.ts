@@ -306,6 +306,33 @@ test("his repair waits for two main chapters read to the end, not the one it ope
   const cleared = payClearing(addressed, repair);
   assert.deepEqual(cleared.grants, [{ source: "lead", li: KAI, affection: GRIEVANCE_CLEARED_AFFECTION }]);
   assert.equal(cleared.state.lis[KAI]!.points, addressed.lis[KAI]!.points + 300);
+  // #2156: a grievance another chapter closed since the repair was planned pays nothing when that repair is read.
+  const elsewhere: RunState = {
+    ...addressed,
+    lis: {
+      ...addressed.lis,
+      [KAI]: {
+        ...addressed.lis[KAI]!,
+        grievances: addressed.lis[KAI]!.grievances.map((item) => ({ ...item, closedBy: "main-2" })),
+      },
+    },
+  };
+  assert.deepEqual(payClearing(elsewhere, repair).grants, [], "closed elsewhere: no clearing");
+  assert.equal(payClearing(elsewhere, repair).state, elsewhere, "and nothing written");
+  // Closed by this repair's own read: it pays once.
+  const byRepair: RunState = {
+    ...addressed,
+    lis: {
+      ...addressed.lis,
+      [KAI]: {
+        ...addressed.lis[KAI]!,
+        grievances: addressed.lis[KAI]!.grievances.map((item) => ({ ...item, closedBy: repair.key })),
+      },
+    },
+  };
+  assert.deepEqual(payClearing(byRepair, repair).grants, [
+    { source: "lead", li: KAI, affection: GRIEVANCE_CLEARED_AFFECTION },
+  ]);
 
   // The repair of a rupture she holds (from before #2156) pays its Lead's 150 as before, and no clearing.
   const mended = readBeatToEnd(hers, repair, 0, { at, dayKey: DAY });

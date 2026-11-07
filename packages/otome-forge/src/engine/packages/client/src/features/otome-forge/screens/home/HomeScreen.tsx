@@ -465,7 +465,9 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenRemind }: HomeScre
 
   if (!li) return null;
   const said = bubble?.li === li.id ? bubble : null;
-  const remindLabel = t("ui.otomeForge.common.screenRemind");
+  // #2153: a birthday to celebrate puts a dot on Remind Me (absent from an older server, and when there is none).
+  const birthdays = !!data?.celebrate?.length;
+  const remindLabel = birthdays ? t("ui.otomeForge.home.remindBirthday") : t("ui.otomeForge.common.screenRemind");
   const thoughtsLabel = t("ui.otomeForge.home.thoughts");
 
   // ── The figure. The cached look belongs to whoever it pictures: right after Him / Me flips, the other one's look is
@@ -608,12 +610,13 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenRemind }: HomeScre
           <button
             ref={remindRef}
             type="button"
-            className="of-icon-button of-glass of-glass--strong"
+            className="of-icon-button of-glass of-glass--strong of-home-remind"
             aria-label={remindLabel}
             title={remindLabel}
             onClick={onOpenRemind}
           >
             <CalendarDays size={18} strokeWidth={1.9} aria-hidden="true" />
+            {birthdays ? <span className="of-tab-dot" aria-hidden="true" /> : null}
           </button>
           {/* Opens only once Home has answered: before that, thoughts already waiting are unknown, and the window would
               open empty and a Send would replace them unseen. */}

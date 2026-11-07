@@ -108,7 +108,7 @@ export interface RepairOutcome {
  */
 export function healRupture(
   state: RunState,
-  chapter: Pick<Chapter, "kind" | "li" | "grievance" | "nodes">,
+  chapter: Pick<Chapter, "key" | "kind" | "li" | "grievance" | "nodes">,
   i: number,
   at: string,
   picked: readonly Effect[] = [],
@@ -121,9 +121,10 @@ export function healRupture(
   const closedByPick = picked.some(
     (effect) => effect.li === li && effect.resolve?.id === grievanceId && effect.resolve.status !== "festering",
   );
+  const chapterKey = chapter.key;
   const grievances = current.grievances.map((grievance) =>
     grievance.id === grievanceId && isUnresolved(grievance)
-      ? { ...grievance, status: "addressed" as const }
+      ? { ...grievance, status: "addressed" as const, closedBy: chapterKey }
       : grievance,
   );
   let rupture = current.rupture;
