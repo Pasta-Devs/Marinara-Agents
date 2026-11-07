@@ -30,6 +30,13 @@
       "bannerPath": "../store/banners/beholder.webp",
       "bannerSmallPath": "../store/banners/beholder-1200.webp"
     },
+    "big-cheese": {
+      "section": "apps",
+      "tagline": "Run any place as the boss.",
+      "iconPath": "../store/icons/big-cheese.webp",
+      "bannerPath": "../store/banners/big-cheese.webp",
+      "bannerSmallPath": "../store/banners/big-cheese-1200.webp"
+    },
     "card-evolution-auditor": {
       "section": "writing",
       "tagline": "Suggests card updates as characters change.",

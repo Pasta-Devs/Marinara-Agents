@@ -46,7 +46,6 @@ export const INCOMPLETE_PACKAGE_IDS = new Set(["pixelforge"]);
 export const STAGING_ONLY_PACKAGE_IDS = new Set([
   "blackjack",
   "modern-life-sim",
-  "big-cheese",
   "otome-forge",
   "ruleset-5e-2014",
   "saucelings",
