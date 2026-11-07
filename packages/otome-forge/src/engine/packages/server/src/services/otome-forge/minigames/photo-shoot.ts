@@ -21,7 +21,8 @@
 // - The references are exactly the three the issue names, people first (a provider that keeps fewer still gets both
 //   likenesses): his chosen look, hers, then the place's picture, each fetched as a data URL; a base look with no
 //   portrait falls back to his card's or her persona's avatar, labelled as their face (it may wear something else).
-//   Only the label `photo <id>` is ever logged.
+//   When one of them has a picture that does not load, the paint fails before the paid call (Try again), rather than
+//   paying for a stranger. Only the label `photo <id>` is ever logged.
 // - The Album lists the ready photos (newest first) apart from `cgs`, which Home's back layer reads, and Home tapes the
 //   newest with its love interest into his note. A photo can be deleted, except while it paints (409 `busy`).
 import { forgeSubjectReference, type ImageIdentitySubject } from "@forge-kit/image-avatar-references.mjs";
@@ -39,7 +40,7 @@ import {
   type PhotoView,
 } from "../../../../../client/src/features/otome-forge/shared/photos.js";
 import { BASE_LOOK, type AlbumImage } from "../../../../../client/src/features/otome-forge/shared/wardrobe.js";
-import { galleryRefIds, worldStyle } from "../art/image-client.js";
+import { galleryRefIds, hasLikenessSource, MissingLikenessError, worldStyle } from "../art/image-client.js";
 import {
   imagesOf,
   paintIsLive,
@@ -250,19 +251,22 @@ async function buildPhoto(
   runId: string,
   setup: PhotoSetup,
   edited: Partial<ImagePrompt> = {},
-): Promise<ImagePrompt & { name: string; references: string[] }> {
+): Promise<ImagePrompt & { name: string; references: string[]; missing?: string }> {
   const { run, unit, place, his, her, hisLook, herLook } = await resolveSetup(deps, runId, setup);
   const player = await withPersonaImageAppearance(deps.runtime, run.player);
   const images = imagesOf(deps);
-  const sources: Array<[PhotoInput["references"][number], ImageIdentitySubject]> = [
-    [hisLook.face ? "li-face" : "li", hisLook.likeness],
-    [herLook.face ? "her-face" : "her", herLook.likeness],
+  const sources: Array<[PhotoInput["references"][number], ImageIdentitySubject, string?]> = [
+    [hisLook.face ? "li-face" : "li", hisLook.likeness, unit.name],
+    [herLook.face ? "her-face" : "her", herLook.likeness, player.name || "Protagonist"],
     ["place", { portrait: place.url }],
   ];
   const resolved: Array<{ who: PhotoInput["references"][number]; image: string }> = [];
-  for (const [who, likeness] of sources) {
+  // The first of them whose picture exists but did not load: paint() stops before paying for a stranger.
+  let missing: string | undefined;
+  for (const [who, likeness, name] of sources) {
     const image = await forgeSubjectReference(images, likeness).catch(() => null);
     if (image) resolved.push({ who, image });
+    else if (name && !missing && (await hasLikenessSource(images, likeness))) missing = name;
   }
   const li: CgPerson = {
     name: unit.name,
@@ -291,7 +295,12 @@ async function buildPhoto(
     edited,
   );
   const first = unit.name.trim().split(/\s+/)[0] || "Couple";
-  return { ...prompt, name: `${first} photo`, references: resolved.map((entry) => entry.image) };
+  return {
+    ...prompt,
+    name: `${first} photo`,
+    references: resolved.map((entry) => entry.image),
+    ...(missing ? { missing } : {}),
+  };
 }
 
 /** POST /runs/:run/photos/prompt: the prompt Take picture would send (the review dialog shows it). No write; 503 too. */
@@ -329,6 +338,7 @@ function paintPhoto(
     async paint() {
       const photo = latest!;
       const built = await buildPhoto(deps, runId, { ...photo, place: photo.place.key }, edited);
+      if (built.missing) throw new MissingLikenessError(built.missing);
       sent = { prompt: built.prompt, negativePrompt: built.negativePrompt };
       const image = await images.generateImage({
         connectionId,

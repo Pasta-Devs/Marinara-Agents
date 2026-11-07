@@ -627,6 +627,7 @@ test("a date wears the owned looks picked for it, a 4★ included, and its plan 
   assert.match(keepsake, /Kai: tall man, salt-white hair, grey eyes; HIS-LOOK: navy greatcoat, brass buttons/);
   assert.match(keepsake, /HER-LOOK: amber silk dress/);
   assert.doesNotMatch(keepsake, /dark keeper's coat/, "never his everyday coat over the date look");
+  assert.match(keepsake, /face, hair and build, never/);
 });
 
 test("during a rupture the date is Make it right: a good or great outcome mends it, an awkward one does not", async () => {
@@ -1026,6 +1027,22 @@ test("the keepsake paints only when asked, once the date is over, and never twic
   assert.equal(none.status, 503);
   assert.equal(none.body.code, "no-connection");
   assert.equal(t2.art.paid.length, 0);
+});
+
+test("a keepsake still draws a protagonist with no name, from her persona (#2145)", async () => {
+  const t = await dateWorld("r-mg5date-aa0011", { images: true });
+  const { date } = await startDate(t);
+  await playDate(t, date.key, [1, 2, 1]);
+  await finish(t, date.key);
+  await t.store.updateDoc(runDocTarget("player", playerId(t.runId)), normalizePlayer, (player) => ({
+    ...player,
+    name: "",
+  }));
+  const painted = await t.call("POST", "/runs/:run/art/keepsake", { key: date.key });
+  assert.equal(painted.body.paint.state, "ready");
+  const units = (t.art.paid[0] as unknown as { units: Array<{ personaId?: string; who?: string }> }).units;
+  assert.deepEqual(units, [{ kind: "character", personaId: "persona-ines", outfits: [], who: "Protagonist" }]);
+  assert.match(t.art.paid[0]!.prompt, /Reference images, in order: Protagonist\./u);
 });
 
 test("a run deleted while its date is planned keeps no date", async () => {

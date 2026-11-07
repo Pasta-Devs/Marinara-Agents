@@ -534,7 +534,11 @@ test("buying a figurine paints it once in the background, never on a read, and i
   assert.equal(request!.connectionId, "conn-image");
   assert.deepEqual([request!.width, request!.height], [832, 1216], "a look's portrait size");
   assert.equal(request!.debugMode, true, "the Engine logs the prompt in debug mode");
-  assert.deepEqual(request!.unit, { kind: "character", portrait, outfits: [] }, "their likeness, as a look gets it");
+  assert.deepEqual(
+    request!.unit,
+    { kind: "character", portrait, outfits: [], who: "Kai" },
+    "their likeness, as a look gets it, never painted as a stranger",
+  );
   assert.ok(request!.prompt.startsWith("tall man, cyan hair, red eyes, white dress uniform with gold braid"));
   assert.ok(request!.prompt.includes(FIGURINE_FRAMING));
   assert.ok(!request!.prompt.includes("black greatcoat"), "the look they wear now");

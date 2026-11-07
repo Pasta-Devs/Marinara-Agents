@@ -337,7 +337,7 @@ test("an existing owned Snapshot paints its saved vignette once without rewritin
   // card, portrait or look, so only her persona goes (2026-11-03).
   assert.deepEqual(
     t.paid[0]!.request.units,
-    [{ kind: "character", personaId: "persona-ines", outfits: [] }],
+    [{ kind: "character", personaId: "persona-ines", outfits: [], who: "Ines" }],
     "only its love interest and protagonist are references",
   );
   const saved = await t.stored(original.id);

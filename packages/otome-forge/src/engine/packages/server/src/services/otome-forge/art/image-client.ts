@@ -10,7 +10,11 @@
 // wrapper also needs characterCard, personaAvatar and cardAvatarImage. generateImage is one paid image with exactly the
 // references it is given (a place has none; an expression edit has its base) and saves nothing: uploadToGallery keeps
 // it, in the shape the kit's expressions module calls.
-import { forgeSubjectReference, forgeWrapImageReferenceClient } from "@forge-kit/image-avatar-references.mjs";
+import {
+  forgeLocalAvatarPath,
+  forgeSubjectReference,
+  forgeWrapImageReferenceClient,
+} from "@forge-kit/image-avatar-references.mjs";
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 
 /** Whose likeness a look keeps: the fields forgeWrapImageReferenceClient reads to find a reference image. */
@@ -19,11 +23,57 @@ export interface ImageSubject {
   cardId?: string;
   personaId?: string;
   portrait?: string;
-  /** A second likeness the kit tries after `portrait` (cgSubjects: the setup portrait behind a worn look). */
+  /** The last likeness the kit tries, after the card or persona avatar and `portrait` (cgSubjects: a worn look). */
   avatarPath?: string;
   outfits?: unknown[];
   /** The look worn now: the kit sends its image after the faces for scene and banner art. */
   wornOutfit?: string;
+  /**
+   * The person this paint must show as themselves (their name, for the error). When they have a picture to send but
+   * none of it loads, the paint stops before the paid call (MissingLikenessError) instead of painting a stranger.
+   */
+  who?: string;
+}
+
+/** A person's pictures exist but none could be loaded: thrown before the paid call, so the paint fails with Retry. */
+export class MissingLikenessError extends Error {
+  constructor(who: string) {
+    super(`No picture of ${who} could be loaded to send as a reference, so nothing was painted or paid for.`);
+    this.name = "MissingLikenessError";
+  }
+}
+
+/** The look the subject wears, as the kit finds it (sent only with scene art). */
+function wornLookPath(subject: Pick<ImageSubject, "wornOutfit" | "outfits">): string {
+  const id = str(subject.wornOutfit);
+  const outfits = (Array.isArray(subject.outfits) ? subject.outfits : []) as Array<{
+    id?: unknown;
+    url?: unknown;
+  } | null>;
+  return id ? forgeLocalAvatarPath(outfits.find((item) => str(item?.id) === id)?.url) : "";
+}
+
+/**
+ * Whether the subject has a picture the kit could send: a portrait, avatarPath or (for scene art) worn look the Engine
+ * serves, or a card or persona whose avatar it serves. Reads the card or persona only; no image is fetched.
+ */
+export async function hasLikenessSource(
+  client: Pick<ImageClient, "characterCard" | "personaAvatar">,
+  subject: Omit<ImageSubject, "kind">,
+  scene = false,
+): Promise<boolean> {
+  if ([subject.portrait, subject.avatarPath].some((path) => forgeLocalAvatarPath(path))) return true;
+  if (scene && wornLookPath(subject)) return true;
+  try {
+    const avatar = str(subject.cardId)
+      ? (await client.characterCard(str(subject.cardId)))?.avatarPath
+      : str(subject.personaId)
+        ? await client.personaAvatar(str(subject.personaId))
+        : "";
+    return !!forgeLocalAvatarPath(avatar);
+  } catch {
+    return false;
+  }
 }
 
 export interface PortraitRequest {
@@ -437,44 +487,63 @@ export function createImageClient({
       }
     },
   };
+  /**
+   * Who he is. A card's neutral full body is the best likeness there is, but the avatar is only replaced by it when one
+   * of the two is all we have: a portrait gets BOTH (the full body first, then the avatar), so the paint has his build
+   * and his face. Scenes keep one per subject, because the four-reference budget is shared across the whole cast.
+   * Never a URL from sprite metadata: the file route is derived from the selected id and a verified filename.
+   */
+  async function likeness(client: ImageClient, subject: Omit<ImageSubject, "kind">, method?: string) {
+    const cardId = str(subject.cardId);
+    const both = method === "generatePortrait" || method === "generateOutfit";
+    if (cardId && !cardId.includes("..") && !/[\\/]/u.test(cardId)) {
+      try {
+        const sprites: unknown = await request(`/api/sprites/${encodeURIComponent(cardId)}`);
+        const neutral = Array.isArray(sprites)
+          ? sprites.find(
+              (sprite) =>
+                str(sprite?.expression).toLowerCase() === "full_neutral" &&
+                /^full_neutral\.(?:png|jpe?g|gif|webp|avif)$/iu.test(str(sprite?.filename)),
+            )
+          : undefined;
+        if (neutral) {
+          const image = await client.cardAvatarImage(
+            `/api/sprites/${encodeURIComponent(cardId)}/file/${encodeURIComponent(str(neutral.filename))}`,
+          );
+          if (image) {
+            const full = `data:${image.mime};base64,${image.base64}`;
+            if (!both) return full;
+            const avatar = await forgeSubjectReference(client, subject);
+            return avatar && avatar !== full ? [full, avatar] : full;
+          }
+        }
+      } catch (error) {
+        // A missing card or sprite does not prevent a paint with this love interest's other retained likenesses.
+        logger?.debug?.("[otome-forge] no neutral full body for %s: %s", cardId, String(error));
+      }
+    }
+    return forgeSubjectReference(client, subject);
+  }
+
   return forgeWrapImageReferenceClient(client, logger, {
     logPrefix: "[otome-forge]",
     /**
-     * Who he is. A card's neutral full body is the best likeness there is, but the avatar is only replaced by it when one
-     * of the two is all we have: a portrait gets BOTH (the full body first, then the avatar), so the paint has his build
-     * and his face. Scenes keep one per subject, because the four-reference budget is shared across the whole cast.
-     * Never a URL from sprite metadata: the file route is derived from the selected id and a verified filename.
+     * Their likeness. A subject with `who` whose pictures exist but none loads stops the paint before the paid call;
+     * with no picture at all it is painted from the description, as before.
      */
     async subjectReference(client, subject, { method } = {}) {
-      const cardId = str(subject.cardId);
-      const both = method === "generatePortrait" || method === "generateOutfit";
-      if (cardId && !cardId.includes("..") && !/[\\/]/u.test(cardId)) {
-        try {
-          const sprites: unknown = await request(`/api/sprites/${encodeURIComponent(cardId)}`);
-          const neutral = Array.isArray(sprites)
-            ? sprites.find(
-                (sprite) =>
-                  str(sprite?.expression).toLowerCase() === "full_neutral" &&
-                  /^full_neutral\.(?:png|jpe?g|gif|webp|avif)$/iu.test(str(sprite?.filename)),
-              )
-            : undefined;
-          if (neutral) {
-            const image = await client.cardAvatarImage(
-              `/api/sprites/${encodeURIComponent(cardId)}/file/${encodeURIComponent(str(neutral.filename))}`,
-            );
-            if (image) {
-              const full = `data:${image.mime};base64,${image.base64}`;
-              if (!both) return full;
-              const avatar = await forgeSubjectReference(client, subject);
-              return avatar && avatar !== full ? [full, avatar] : full;
-            }
-          }
-        } catch (error) {
-          // A missing card or sprite does not prevent a paint with this love interest's other retained likenesses.
-          logger?.debug?.("[otome-forge] no neutral full body for %s: %s", cardId, String(error));
-        }
-      }
-      return forgeSubjectReference(client, subject);
+      const found = await likeness(client, subject, method);
+      const { who, ...rest } = subject as Omit<ImageSubject, "kind">;
+      if (found || !who) return found;
+      // Alone in a scene, the look they wear may still show them (the kit adds it too; one picture is sent once).
+      const scene = method === "generateBannerArt";
+      const worn = scene ? wornLookPath(rest) : "";
+      const image = worn ? await client.cardAvatarImage(worn) : null;
+      if (image?.base64 && /^image\//u.test(image.mime)) return `data:${image.mime};base64,${image.base64}`;
+      // A picture that did not load (a deleted file): a stranger would be painted and paid for instead.
+      if (await hasLikenessSource(client, rest, scene)) throw new MissingLikenessError(who);
+      logger?.warn("[otome-forge] %s: %s has no picture to send; painted from the description", method, who);
+      return null;
     },
   });
 }
