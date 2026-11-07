@@ -6,12 +6,12 @@
   },
   "package": {
     "name": "Virtual Phone",
-    "description": "Adds persistent in-story phones for personas and configured characters, with Engine-backed calls, apps, notifications, and a polished docked device shell. Add the Agent in Chat Settings → Agents → Misc Agents, then open the phone from the chat toolbar."
+    "description": "Open a character's saved phone from Home → Phones, or use a story-aware phone inside a chat. Includes messages, browsing, notes, photos, and other phone apps. Add the Agent in Chat Settings → Agents → Misc Agents, then open the phone from the chat toolbar."
   },
   "agents": {
     "virtual-phone": {
       "name": "Virtual Phone",
-      "description": "Adds persistent in-story phones for personas and configured characters, with Engine-backed calls, apps, notifications, and a polished docked device shell."
+      "description": "Open a character's saved phone from Home → Phones, or use a story-aware phone inside a chat. Includes messages, browsing, notes, photos, and other phone apps."
     }
   }
 }

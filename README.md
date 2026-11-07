@@ -64,7 +64,7 @@ Across its Engine compatibility lanes, the stable catalog currently contains **4
 | Storyboard | [`storyboard`](packages/storyboard/manifest.json) | Turns Game and Roleplay scenes into storyboards of still images or short animations. |
 | Tic-Tac-Toe | [`tic-tac-toe`](packages/tic-tac-toe/manifest.json) | Adds one-on-one Conversation matches and the `/tictactoe` command. |
 | UNO | [`uno`](packages/uno/manifest.json) | Adds a complete Conversation-mode UNO table and `/uno` command. |
-| Virtual Phone | [`virtual-phone`](packages/virtual-phone/manifest.json) | Adds persistent in-story phones with Engine-backed calls, apps, notifications, and character actions. |
+| Virtual Phone | [`virtual-phone`](packages/virtual-phone/manifest.json) | Open a character's saved phone from **Home → Phones**, or use a story-aware phone inside a chat. Home phones keep their own apps and data apart from your stories. |
 
 For complete mode, lifecycle, and settings documentation for every package, see the Engine's [Downloadable Agents Reference](https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md).
 

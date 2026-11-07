@@ -6,7 +6,7 @@ import { PhonesSettings, type Phone, type ProvisioningResponse } from "./system/
 import { phoneThemeTokens } from "./device/theme";
 import { phoneStylesheet } from "./device/styles";
 import { initialDeviceSession, unlockDevice } from "./device/surfaces";
-import { grantPhoneAccess, phoneRequest, releasePhoneAccess, setActiveChatId, waitForPhoneWrites } from "./platform/api";
+import { grantPhoneAccess, markHomePhone, phoneRequest, releasePhoneAccess, setActiveChatId, waitForPhoneWrites } from "./platform/api";
 import { defaultDeviceSettings, storyNow } from "./device/settings";
 import { StoryClockProvider } from "./platform/story-clock";
 import { conditionOpacity, patternBackground } from "./device/effects";
@@ -237,9 +237,10 @@ function batteryIcon(level: number) {
   return BatteryFull;
 }
 
-function PhoneOverlay({ chatId }: { chatId: string | null }) {
-  const [open, setOpen] = React.useState(false);
-  const [phones, setPhones] = React.useState<Phone[]>([]);
+/** `home` opens one saved Home phone directly: no chat, no toolbar events, closing hands back to the picker. */
+function PhoneOverlay({ chatId, home }: { chatId: string | null; home?: { phone: Phone; onClose: () => void } }) {
+  const [open, setOpen] = React.useState(Boolean(home));
+  const [phones, setPhones] = React.useState<Phone[]>(() => (home ? [home.phone] : []));
   const [session, setSession] = React.useState(() => initialDeviceSession());
   const [switcherOpen, setSwitcherOpen] = React.useState(false);
   /** Set when the model refused access to another character's phone, shown on the lock screen. */
@@ -279,9 +280,12 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
     });
   }, [chatId, open]);
 
-  React.useEffect(() => { setActiveChatId(chatId); }, [chatId]);
+  React.useEffect(() => {
+    if (!home) setActiveChatId(chatId);
+  }, [chatId, home]);
 
   React.useEffect(() => {
+    if (home) return;
     const handleOpen = () => setOpen(true);
     const handleClose = () => closeSessionRef.current();
     window.addEventListener(PHONE_OPEN_EVENT, handleOpen);
@@ -290,7 +294,7 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
       window.removeEventListener(PHONE_OPEN_EVENT, handleOpen);
       window.removeEventListener(PHONE_CLOSE_EVENT, handleClose);
     };
-  }, []);
+  }, [home]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -383,7 +387,8 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
     setNotificationCenterOpen(false);
     setSwitcherOpen(false);
     setAccessDenied(null);
-    setOpen(false);
+    if (home) home.onClose();
+    else setOpen(false);
   };
   closeSessionRef.current = () => { void close(); };
   const phoneRouteStacks = selectedPhone
@@ -492,11 +497,13 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
     if (phoneAppRegistry.get(notification.appId) && deviceSettings.installedApps.includes(notification.appId)) openApp(notification.appId);
   };
   /** An app is available when it is installed (or not removable) and has the chat it needs. */
+  /** Apps on a Home phone get the Home scope as their chat; the server keeps it apart from every story. */
+  const appChatId = home ? (home.phone as Phone & { chatScope?: string[] }).chatScope?.[0] ?? null : chatId;
   const isAvailable = (app: InstalledApp) =>
     (!app.manifest.removable || deviceSettings.installedApps.includes(app.manifest.id))
-    && (!app.requiresChat || Boolean(chatId));
+    && (!app.requiresChat || Boolean(appChatId));
   const appContext: Omit<AppRenderContext, "phone"> = {
-    chatId,
+    chatId: appChatId,
     settings: deviceSettings,
     pendingSearch,
     setPendingSearch,
@@ -690,7 +697,9 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
           <button ref={closeButtonRef} type="button" onClick={close} className="vp-dock-btn vp-dock-btn--primary">
             <X size="0.875rem" aria-hidden="true" /> Put down
           </button>
-          <button type="button" disabled={!chatId || !selectedPhone || showState === "pending"} title="Perform the user action of showing this phone screen in the scene" aria-label="Show phone in scene" onClick={() => {
+          {/* Show and Context write into a story; a Home phone has none. */}
+        {home ? null : (<>
+        <button type="button" disabled={!chatId || !selectedPhone || showState === "pending"} title="Perform the user action of showing this phone screen in the scene" aria-label="Show phone in scene" onClick={() => {
             if (!chatId || !selectedPhone) return;
             setShowState("pending");
             const label = notificationCenterOpen ? "the notification center"
@@ -726,12 +735,143 @@ function PhoneOverlay({ chatId }: { chatId: string | null }) {
           }} className="vp-dock-btn">
             <Quote size="0.875rem" aria-hidden="true" /> {refState === "done" ? "Added ✓" : "Context"}
           </button>
+        </>)}
         </div>
         </div>
       </section>
     </div>
     </StoryClockProvider>,
     document.body,
+  );
+}
+
+interface HomeCharacter { id: string; name: string; phoneId: string | null }
+
+const homePickerStyles = `
+.vp-home-picker { box-sizing: border-box; height: 100%; overflow-y: auto; padding: 1.5rem 1rem calc(1.5rem + env(safe-area-inset-bottom)); color: var(--foreground); }
+.vp-home-picker-inner { max-width: 40rem; margin: 0 auto; display: flex; flex-direction: column; gap: 1rem; }
+.vp-home-picker h2 { margin: 0; font-size: 1.25rem; font-weight: 600; }
+.vp-home-picker p { margin: 0; color: var(--muted-foreground); font-size: 0.875rem; line-height: 1.4; }
+.vp-home-filter { min-height: 2.75rem; padding: 0 0.75rem; border: 1px solid var(--border); border-radius: 0.5rem; background: var(--card); color: var(--foreground); font: inherit; }
+.vp-home-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.vp-home-row { display: flex; align-items: center; gap: 0.75rem; min-height: 3.5rem; padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 0.75rem; background: var(--card); }
+.vp-home-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.vp-home-row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.vp-home-row-state { color: var(--muted-foreground); font-size: 0.75rem; }
+.vp-home-btn { flex: none; min-height: 2.75rem; min-width: 2.75rem; padding: 0 1rem; border: 1px solid var(--border); border-radius: 0.5rem; background: var(--secondary); color: var(--foreground); font: inherit; font-weight: 500; cursor: pointer; }
+.vp-home-btn--primary { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground, var(--background)); }
+.vp-home-btn:disabled { opacity: 0.6; cursor: default; }
+.vp-home-btn:focus-visible, .vp-home-filter:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.vp-home-state { display: flex; flex-direction: column; align-items: flex-start; gap: 0.75rem; padding: 1rem; border: 1px dashed var(--border); border-radius: 0.75rem; }
+.vp-home-error { color: var(--destructive); font-size: 0.875rem; }
+`;
+
+/** Home tab: pick a character and open their own saved phone. Nothing here reads or writes a chat. */
+function HomePhones() {
+  const [characters, setCharacters] = React.useState<HomeCharacter[] | null>(null);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
+  const [filter, setFilter] = React.useState("");
+  const [busyId, setBusyId] = React.useState<string | null>(null);
+  const [openError, setOpenError] = React.useState<string | null>(null);
+  const [openPhone, setOpenPhone] = React.useState<Phone | null>(null);
+  // Only the newest request may change state, and none after the tab unmounts.
+  const latest = React.useRef(0);
+  React.useEffect(() => () => { latest.current = -1; }, []);
+  /** `quiet` refreshes the list in place so the row (and its focus) survives closing a phone. */
+  const load = React.useCallback((quiet = false) => {
+    const request = ++latest.current;
+    if (!quiet) {
+      setLoadError(null);
+      setCharacters(null);
+    }
+    phoneRequest<{ characters: HomeCharacter[] }>("/home")
+      .then((response) => { if (latest.current === request) setCharacters(response.characters); })
+      .catch((cause) => {
+        if (latest.current === request && !quiet) setLoadError(cause instanceof Error ? cause.message : "Characters could not be loaded.");
+      });
+  }, []);
+  React.useEffect(() => load(), [load]);
+  const openFor = async (character: HomeCharacter, opener: HTMLElement) => {
+    const request = ++latest.current;
+    setBusyId(character.id);
+    setOpenError(null);
+    try {
+      const { phone } = await phoneRequest<{ phone: Phone }>("/home/phones", {
+        method: "POST",
+        body: JSON.stringify({ characterId: character.id }),
+      });
+      if (latest.current !== request) return;
+      markHomePhone(phone.phoneId);
+      setCharacters((current) => current?.map((entry) => entry.id === character.id ? { ...entry, phoneId: phone.phoneId } : entry) ?? null);
+      phoneOpener = opener;
+      setOpenPhone(phone);
+    } catch (cause) {
+      if (latest.current === request) setOpenError(`${character.name}'s phone could not be opened. ${cause instanceof Error ? cause.message : ""}`.trim());
+    } finally {
+      if (latest.current === request) setBusyId(null);
+    }
+  };
+  const closePhone = React.useCallback(() => {
+    setOpenPhone(null);
+    load(true);
+  }, [load]);
+  const home = React.useMemo(() => (openPhone ? { phone: openPhone, onClose: closePhone } : undefined), [openPhone, closePhone]);
+  const query = filter.trim().toLocaleLowerCase();
+  const visible = characters?.filter((character) => !query || character.name.toLocaleLowerCase().includes(query)) ?? [];
+  return (
+    <div className="vp-home-picker">
+      <style>{homePickerStyles}</style>
+      <div className="vp-home-picker-inner">
+        <h2>Phones</h2>
+        <p>Pick a character to open their phone. It is kept apart from the phones in your chats, so nothing you do here changes a story.</p>
+        {loadError ? (
+          <div className="vp-home-state" role="alert">
+            <span className="vp-home-error">Characters could not be loaded. {loadError}</span>
+            <button type="button" className="vp-home-btn" onClick={() => load()}>Try again</button>
+          </div>
+        ) : characters === null ? (
+          <div className="vp-home-state" role="status">Loading characters…</div>
+        ) : characters.length === 0 ? (
+          <div className="vp-home-state">
+            <strong>No characters yet</strong>
+            <p>Create a character first. Their phone then appears here.</p>
+          </div>
+        ) : (
+          <>
+            <input
+              type="search"
+              className="vp-home-filter"
+              aria-label="Find a character"
+              placeholder="Find a character"
+              value={filter}
+              onChange={(event) => setFilter(event.target.value)}
+            />
+            {openError ? <p role="alert" className="vp-home-error">{openError}</p> : null}
+            {visible.length === 0 ? <p role="status">No character matches “{filter.trim()}”.</p> : null}
+            <ul className="vp-home-list" aria-label="Characters">
+              {visible.map((character) => (
+                <li key={character.id} className="vp-home-row">
+                  <span className="vp-home-row-text">
+                    <span className="vp-home-row-name">{character.name}</span>
+                    <span className="vp-home-row-state">{character.phoneId ? "Saved phone" : "No phone yet"}</span>
+                  </span>
+                  <button
+                    type="button"
+                    className={`vp-home-btn${character.phoneId ? " vp-home-btn--primary" : ""}`}
+                    disabled={busyId !== null}
+                    aria-label={`${character.phoneId ? "Open" : "Create"} ${character.name}'s phone`}
+                    onClick={(event) => void openFor(character, event.currentTarget)}
+                  >
+                    {busyId === character.id ? "Opening…" : character.phoneId ? "Open phone" : "Create phone"}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
+      {home ? <PhoneOverlay key={home.phone.phoneId} chatId={null} home={home} /> : null}
+    </div>
   );
 }
 
@@ -804,7 +944,8 @@ class VirtualPhoneElement extends HTMLElement implements CapabilityElement {
     this.__root.render(
       this.getAttribute("view") === "detail" ? <PhonesSettings chatId={this.capabilityProps?.chatId ?? null} /> :
         this.getAttribute("view") === "toolbar" ? <VirtualPhoneToolbar className={this.capabilityProps?.toolbarButtonClass} chatId={this.capabilityProps?.chatId ?? null} /> :
-          this.getAttribute("view") === "surface" ? <PhoneOverlay chatId={this.capabilityProps?.chatId ?? null} /> : null,
+          this.getAttribute("view") === "surface" ? <PhoneOverlay chatId={this.capabilityProps?.chatId ?? null} /> :
+          this.getAttribute("view") === "browser" ? <HomePhones /> : null,
     );
   };
 }

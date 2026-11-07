@@ -12,7 +12,9 @@ const developmentCatalog = JSON.parse(await readFile(join(repoRoot, "test-catalo
 const developmentEntry = developmentCatalog.packages.find((entry) => entry.manifest.id === "virtual-phone");
 
 assert.equal(manifest.id, "virtual-phone");
-assert.equal(manifest.version, "2.10.1");
+assert.equal(manifest.version, "2.10.2");
+assert.ok(manifest.contributions.slots.includes("home-browser-tab"));
+assert.equal(manifest.contributions.homeBrowserTab.label, "Phones");
 assert.equal(manifest.entrypoints.server, "server.mjs");
 assert.equal(manifest.restartRequired, true);
 assert.deepEqual(manifest.permissions, ["conversation-actions", "chat-read", "prompt-context", "routes", "storage", "ui"]);

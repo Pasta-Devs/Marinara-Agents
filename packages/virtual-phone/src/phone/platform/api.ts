@@ -45,6 +45,12 @@ export async function waitForPhoneWrites(phoneId: string) {
   if (pending?.size) await Promise.allSettled([...pending]);
 }
 
+/** Home phones have no story: nothing they do is narrated or remembered as a world fact. */
+const homePhoneIds = new Set<string>();
+export function markHomePhone(phoneId: string) {
+  homePhoneIds.add(phoneId);
+}
+
 export function setActiveChatId(chatId: string | null) {
   activeChatId = chatId;
 }
@@ -59,7 +65,12 @@ export async function phoneRequest<T>(path: string, init: RequestInit = {}): Pro
   for (const [name, value] of Object.entries(adminHeaders())) headers.set(name, value);
   if (init.method && init.method !== "GET") headers.set(CSRF_HEADER, "1");
   if (init.body) headers.set("Content-Type", "application/json");
-  const url = activeChatId && !path.includes("chatId=") && !path.startsWith("/api/")
+  // A Home phone never carries the open story chat along.
+  const [pathname, query = ""] = path.split("?");
+  const requestPhoneId = encodedPhoneId ? decodeURIComponent(encodedPhoneId) : new URLSearchParams(query).get("phoneId");
+  const homeRequest = pathname === "/home" || pathname.startsWith("/home/")
+    || Boolean(requestPhoneId && homePhoneIds.has(requestPhoneId));
+  const url = activeChatId && !homeRequest && !path.includes("chatId=") && !path.startsWith("/api/")
     ? `${path}${path.includes("?") ? "&" : "?"}chatId=${encodeURIComponent(activeChatId)}`
     : path;
   const response = await fetch(url.startsWith("/api/") ? url : `${API_ROOT}${url}`, { ...init, headers, cache: "no-store" });
@@ -81,6 +92,7 @@ export async function phoneRequest<T>(path: string, init: RequestInit = {}): Pro
  * here. Explicit Show/Reference actions are the only bridge for private content.
  */
 export function recordActivity(phoneId: string, text: string) {
+  if (homePhoneIds.has(phoneId)) return Promise.resolve();
   return trackPhoneWrite(phoneId, phoneRequest(`/phones/${encodeURIComponent(phoneId)}/activity`, {
     method: "POST",
     body: JSON.stringify({ text }),
@@ -88,6 +100,7 @@ export function recordActivity(phoneId: string, text: string) {
 }
 
 export async function rememberWorldFact(phoneId: string, text: string, source: string) {
+  if (homePhoneIds.has(phoneId)) return;
   return trackPhoneWrite(phoneId, phoneRequest(`/phones/${encodeURIComponent(phoneId)}/world-facts`, {
     method: "POST",
     body: JSON.stringify({ text, source }),

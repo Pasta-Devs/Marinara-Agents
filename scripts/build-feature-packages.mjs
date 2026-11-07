@@ -706,7 +706,7 @@ const features = [
   },
   {
     id: "virtual-phone",
-    version: "2.10.1",
+    version: "2.10.2",
     // 2.5.0 is the host-namespace baseline every package built here needs (see PACKAGE_BUILT_AGAINST).
     minEngineVersion: "2.5.0",
     capabilityApi: PACKAGE_CAPABILITY_API,
@@ -714,7 +714,7 @@ const features = [
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Virtual Phone",
     description:
-      "Adds persistent in-story phones for personas and configured characters, with Engine-backed calls, apps, notifications, and a polished docked device shell.",
+      "Open a character's saved phone from Home → Phones, or use a story-aware phone inside a chat. Includes messages, browsing, notes, photos, and other phone apps.",
     category: "misc",
     kind: ["agent"],
     modes: ["conversation", "roleplay", "game"],
@@ -727,7 +727,8 @@ const features = [
     ownedSourcePaths: ["phone"],
     agentDetail: { agentIds: ["virtual-phone"] },
     contributions: {
-      slots: ["conversation-toolbar", "conversation-surface", "chat-settings"],
+      slots: ["conversation-toolbar", "conversation-surface", "chat-settings", "home-browser-tab"],
+      homeBrowserTab: { label: "Phones", ariaLabel: "Open character phones" },
     },
   },
   {

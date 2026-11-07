@@ -4767,8 +4767,8 @@
         },
         "id": "virtual-phone",
         "name": "Virtual Phone",
-        "version": "2.10.1",
-        "description": "Adds persistent in-story phones for personas and configured characters, with Engine-backed calls, apps, notifications, and a polished docked device shell. Add the Agent in Chat Settings → Agents → Misc Agents, then open the phone from the chat toolbar.",
+        "version": "2.10.2",
+        "description": "Open a character's saved phone from Home → Phones, or use a story-aware phone inside a chat. Includes messages, browsing, notes, photos, and other phone apps. Add the Agent in Chat Settings → Agents → Misc Agents, then open the phone from the chat toolbar.",
         "engine": {
           "min": "2.5.0",
           "maxExclusive": "4.0.0"
@@ -4785,24 +4785,29 @@
           "slots": [
             "conversation-toolbar",
             "conversation-surface",
-            "chat-settings"
-          ]
+            "chat-settings",
+            "home-browser-tab"
+          ],
+          "homeBrowserTab": {
+            "label": "Phones",
+            "ariaLabel": "Open character phones"
+          }
         },
         "files": [
           {
             "path": "agents.json",
-            "sha256": "88157d6ae05d46c0336b67744e9b0d4ea00c0f4498dcc027004141f6965c6a10",
-            "bytes": 582
+            "sha256": "570b2e15ef6c8a96c35cc629848b5a5869ca6a9c2cc12f5d96c16cfa7682e780",
+            "bytes": 588
           },
           {
             "path": "server.mjs",
-            "sha256": "8d111c6945f74a00033f32703f6c938a73e5280f40aab283396ac9cb8480e7af",
-            "bytes": 149607
+            "sha256": "4b92ec2fe381d47ed9b78cb97525561bbb60c61c79e97d4b48efd1fc49821ead",
+            "bytes": 152729
           },
           {
             "path": "client.js",
-            "sha256": "75545422f5c17719321e9eed859714f48669029472bd5755b9604aee2aac9535",
-            "bytes": 434473
+            "sha256": "bccec3725c66f5d2b3f9de366efabf15435497a0b57aaee8f4ed0e66acaa9830",
+            "bytes": 439746
           }
         ],
         "permissions": [
@@ -4818,9 +4823,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/virtual-phone.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/virtual-phone-2.10.1.zip",
-        "sha256": "8e64bedd320d04a8b52b17f3ea1332c950aae54e4bf69d6a8b2ff332be9585dc",
-        "bytes": 586571
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/virtual-phone-2.10.2.zip",
+        "sha256": "80bda221ff568fe48d38cd1fdbde780402f4cb004b4ab44b1ca292c61ba4d782",
+        "bytes": 595103
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#virtual-phone"
     },

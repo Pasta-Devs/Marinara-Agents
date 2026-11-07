@@ -24,6 +24,8 @@ export interface PhoneIdentity {
   ownerName: string;
   chatScope: string[];
   deviceName: string | null;
+  /** "home" = opened from Home, never joined to a story. Absent on story phones. */
+  world?: "home";
   createdAt: string;
   updatedAt: string;
 }
@@ -123,6 +125,16 @@ function ownerKey(ownerType: PhoneOwnerType, ownerId: string) {
   return `${ownerType}:${ownerId}`;
 }
 
+/** A Home phone is keyed apart from the same owner's story phone, so neither can resolve to the other. */
+function phoneKey(identity: Pick<PhoneIdentity, "ownerType" | "ownerId" | "world">) {
+  const key = ownerKey(identity.ownerType, identity.ownerId);
+  return identity.world === "home" ? `home:${key}` : key;
+}
+
+export const HOME_SCOPE_PREFIX = "home:";
+export const homeScopeFor = (characterId: string) => `${HOME_SCOPE_PREFIX}${characterId}`;
+export const isHomePhone = (document: PhoneDocument) => document.identity.world === "home";
+
 function normalizeRequiredString(value: unknown, field: string) {
   if (typeof value !== "string" || !value.trim()) throw new Error(`${field} is required`);
   return value.trim();
@@ -141,6 +153,7 @@ function isPhoneDocument(value: unknown): value is PhoneDocument {
     typeof identity.ownerName === "string" &&
     Array.isArray(identity.chatScope) &&
     identity.chatScope.every((chatId) => typeof chatId === "string") &&
+    (identity.world === undefined || identity.world === "home") &&
     !!document.provisioning &&
     typeof document.provisioning.enabled === "boolean" &&
     ["system", "light", "dark"].includes(document.provisioning.baselineTheme ?? "") &&
@@ -294,10 +307,10 @@ export class PhoneIdentityService {
 
   async migrateLegacyDocuments() {
     const current = await this.list();
-    const currentOwners = new Set(current.map(({ document }) => ownerKey(document.identity.ownerType, document.identity.ownerId)));
+    const currentOwners = new Set(current.map(({ document }) => phoneKey(document.identity)));
     for (const legacyRecord of await this.documents.list(LEGACY_PACKAGE_ID, PHONE_KIND)) {
       const legacy = parsePhoneRecord(legacyRecord);
-      const key = ownerKey(legacy.document.identity.ownerType, legacy.document.identity.ownerId);
+      const key = phoneKey(legacy.document.identity);
       if (!currentOwners.has(key)) {
         await this.documents.create({
           id: `${PACKAGE_ID}:${legacyRecord.id}`,
@@ -317,7 +330,7 @@ export class PhoneIdentityService {
 
   async get(ownerType: PhoneOwnerType, ownerId: string) {
     const key = ownerKey(ownerType, normalizeRequiredString(ownerId, "ownerId"));
-    return (await this.list()).find(({ document }) => ownerKey(document.identity.ownerType, document.identity.ownerId) === key) ?? null;
+    return (await this.list()).find(({ document }) => phoneKey(document.identity) === key) ?? null;
   }
 
   async ensure(input: EnsurePhoneInput) {
@@ -332,10 +345,58 @@ export class PhoneIdentityService {
     }
   }
 
+  /** Opens (or first creates) the character's Home phone. Never touches the story phone or its chats. */
+  async ensureHome(input: { characterId: string; ownerName: string }) {
+    const ownerId = normalizeRequiredString(input.characterId, "characterId");
+    const ownerName = normalizeRequiredString(input.ownerName, "ownerName");
+    const key = phoneKey({ ownerType: "character", ownerId, world: "home" });
+    const previous = this.ownerLocks.get(key) ?? Promise.resolve();
+    const pending = previous.then(async () => {
+      const existing = (await this.list()).find(({ document }) => phoneKey(document.identity) === key);
+      if (existing) return existing;
+      const timestamp = this.now();
+      const phoneId = this.createId();
+      const document: PhoneDocument = {
+        schemaVersion: 1,
+        identity: {
+          phoneId,
+          ownerId,
+          ownerType: "character",
+          ownerName,
+          chatScope: [homeScopeFor(ownerId)],
+          deviceName: null,
+          world: "home",
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        },
+        provisioning: { enabled: true, baselineTheme: "dark" },
+        namespaces: { phone: { settings: defaultDeviceSettings("dark") } },
+      };
+      const record = await this.documents.create({
+        id: `phone:${phoneId}`,
+        packageId: PACKAGE_ID,
+        kind: PHONE_KIND,
+        name: key,
+        description: ownerName,
+        data: document,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      });
+      return parsePhoneRecord(record);
+    });
+    this.ownerLocks.set(key, pending);
+    try {
+      return await pending;
+    } finally {
+      if (this.ownerLocks.get(key) === pending) this.ownerLocks.delete(key);
+    }
+  }
+
   private async ensureUnlocked(input: EnsurePhoneInput) {
     const ownerId = normalizeRequiredString(input.ownerId, "ownerId");
     const ownerName = normalizeRequiredString(input.ownerName, "ownerName");
     const chatId = normalizeRequiredString(input.chatId, "chatId");
+    if (chatId.startsWith(HOME_SCOPE_PREFIX)) throw new Error("A story phone cannot join a Home phone");
     const existing = await this.get(input.ownerType, ownerId);
     if (!existing) {
       const timestamp = this.now();
@@ -444,7 +505,7 @@ export class PhoneIdentityService {
       id: phone.record.id,
       packageId: PACKAGE_ID,
       expectedRevision: phone.record.revision,
-      name: ownerKey(document.identity.ownerType, document.identity.ownerId),
+      name: phoneKey(document.identity),
       description: document.identity.ownerName,
       data: document,
       updatedAt,
@@ -470,7 +531,7 @@ export class PhoneIdentityService {
       id: phone.record.id,
       packageId: PACKAGE_ID,
       expectedRevision: phone.record.revision,
-      name: ownerKey(document.identity.ownerType, document.identity.ownerId),
+      name: phoneKey(document.identity),
       description: document.identity.ownerName,
       data: document,
       updatedAt,
@@ -505,7 +566,7 @@ export class PhoneIdentityService {
       id: phone.record.id,
       packageId: PACKAGE_ID,
       expectedRevision: phone.record.revision,
-      name: ownerKey(document.identity.ownerType, document.identity.ownerId),
+      name: phoneKey(document.identity),
       description: document.identity.ownerName,
       data: document,
       updatedAt: this.now(),
@@ -525,7 +586,7 @@ export class PhoneIdentityService {
       id: phone.record.id,
       packageId: PACKAGE_ID,
       expectedRevision: phone.record.revision,
-      name: ownerKey(document.identity.ownerType, document.identity.ownerId),
+      name: phoneKey(document.identity),
       description: document.identity.ownerName,
       data: document,
       updatedAt: this.now(),
@@ -557,7 +618,7 @@ export class PhoneIdentityService {
       id: phone.record.id,
       packageId: PACKAGE_ID,
       expectedRevision: phone.record.revision,
-      name: ownerKey(document.identity.ownerType, document.identity.ownerId),
+      name: phoneKey(document.identity),
       description: document.identity.ownerName,
       data: document,
       updatedAt: entry.at,
@@ -591,7 +652,7 @@ export class PhoneIdentityService {
       id: phone.record.id,
       packageId: PACKAGE_ID,
       expectedRevision: phone.record.revision,
-      name: ownerKey(document.identity.ownerType, document.identity.ownerId),
+      name: phoneKey(document.identity),
       description: document.identity.ownerName,
       data: document,
       updatedAt: fact.at,
@@ -713,7 +774,7 @@ export class PhoneIdentityService {
       id: phone.record.id,
       packageId: PACKAGE_ID,
       expectedRevision: phone.record.revision,
-      name: ownerKey(document.identity.ownerType, document.identity.ownerId),
+      name: phoneKey(document.identity),
       description: document.identity.ownerName,
       data: document,
       updatedAt: this.now(),
@@ -749,7 +810,7 @@ export class PhoneIdentityService {
         id: phone.record.id,
         packageId: PACKAGE_ID,
         expectedRevision: phone.record.revision,
-        name: ownerKey(document.identity.ownerType, document.identity.ownerId),
+        name: phoneKey(document.identity),
         description: document.identity.ownerName,
         data: document,
         updatedAt,
@@ -785,7 +846,7 @@ export class PhoneIdentityService {
       id: phone.record.id,
       packageId: PACKAGE_ID,
       expectedRevision: phone.record.revision,
-      name: ownerKey(document.identity.ownerType, document.identity.ownerId),
+      name: phoneKey(document.identity),
       description: document.identity.ownerName,
       data: document,
       updatedAt: this.now(),

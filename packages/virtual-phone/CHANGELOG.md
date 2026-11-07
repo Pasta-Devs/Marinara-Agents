@@ -1,5 +1,11 @@
 # Virtual Phone release notes
 
+## 2.10.2 — 2026-11-08
+
+- New Phones tab on Home. Pick any character, then create or open their own phone without a chat. The phone uses the same device and apps.
+- A Home phone is saved apart from the phones in your chats. Nothing you do on it is written to a story, and it does not appear in a chat's phone list.
+- Story actions such as Show and Context are not on a Home phone. Apps that still need a chat say so instead of failing quietly.
+
 ## 2.10.1 — 2026-10-28
 
 - New Calls app with recents and contacts. Live calls stay unavailable until the phone can hand off to Conversation Calls.
