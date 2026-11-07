@@ -2700,6 +2700,11 @@ test("Otome Hearth Write your own… (#2146) on a 375 × 667 phone: four options
   const [head, heading] = await Promise.all(
     [root.locator(".of-reader-head"), root.locator(".of-choices-heading")].map((box) => box.boundingBox()),
   );
+  // ponytail: logs the room left, so a font that renders taller in CI shows how close it came; remove once stable.
+  console.info(
+    "own-answer 375x667: heading clears the header by %spx",
+    (heading!.y - head!.y - head!.height).toFixed(1),
+  );
   expect(heading!.y, "the heading starts below the header").toBeGreaterThanOrEqual(head!.y + head!.height);
   await noSideways();
   await page.screenshot({ path: testInfo.outputPath("own-answer-375.png") });

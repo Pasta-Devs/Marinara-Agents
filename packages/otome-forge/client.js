@@ -2317,6 +2317,13 @@ ${n} .of-choices-panel[data-kind="big"] .of-choice-pill {
    heading stays clear of the header (the pills keep a 44px tap target). */
 ${n} .of-choices-panel[data-kind="big"] .of-choice-pills:has(> li:nth-child(5)) { gap: 6px; }
 ${n} .of-choices-panel[data-kind="big"] .of-choice-pills:has(> li:nth-child(5)) .of-choice-pill { min-height: 44px; padding-block: 8px; }
+/* On a short phone the line above the decision keeps only its own height and the panel tightens, so the five pills fit
+   under the header whatever the system font (CI's taller Linux fonts overlapped it by 18px). */
+@container of-frame (max-height: 760px) {
+  ${n} .of-reader-bottom:has(.of-choices-panel[data-kind="big"] .of-choice-pills > li:nth-child(5)) { gap: 6px; padding-top: 6px; }
+  ${n} .of-reader-bottom:has(.of-choices-panel[data-kind="big"] .of-choice-pills > li:nth-child(5)) .of-dialogue { min-height: 0; }
+  ${n} .of-choices-panel[data-kind="big"]:has(.of-choice-pills > li:nth-child(5)) { gap: 4px; }
+}
 ${n} .of-choices-status { min-height: 1.2em; margin: 0; font-size: 0.8rem; text-align: center; color: var(--of-text-soft); }
 ${n} .of-choices-status:empty { min-height: 0; }
 ${n} .of-reader-panel {
