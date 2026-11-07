@@ -19,12 +19,13 @@ import {
   type ClawFinishResult,
 } from "../../../../../client/src/features/otome-forge/shared/claw.js";
 import { OtomeForgeError, debugModeOf, parseBody, runParam, type OtomeRouter, type RouteDeps } from "../http.js";
-import { isLiId, runDocTarget, stateId, unitId } from "../ids.js";
+import { isLiId, runDocTarget, stateId, unitId, worldId } from "../ids.js";
 import { finishClawRound, playView } from "../minigames/claw.js";
 import { assertFreeToDate, dateNightView } from "../minigames/date-night.js";
 import { ensurePlushArt } from "../minigames/plush.js";
 import { normalizeState, readRun } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
+import { normalizeWorld } from "../schemas/world.js";
 
 const ClawPlayer = z.enum(["me", "partner"]);
 const FinishBody = z.object({
@@ -58,7 +59,7 @@ export function registerClawRoutes(
           ),
       );
       const dates = await dateNightView(store, runId, run.state);
-      return playView(run.state, run.units, forgeDayKey(Date.now()), dates);
+      return playView(run.state, run.units, run.world.content, forgeDayKey(Date.now()), dates);
     }),
   );
 
@@ -68,8 +69,13 @@ export function registerClawRoutes(
       const body = parseBody(FinishBody, request.body);
       const { runId } = runParam(request);
       if (!isLiId(body.li)) throw liNotFound();
-      const unit = await store.readDoc(unitId(runId, body.li), normalizeUnit);
+      const [unit, world] = await Promise.all([
+        store.readDoc(unitId(runId, body.li), normalizeUnit),
+        // #2152: the world's Heat decides whether his own plush line may be said.
+        store.readDoc(worldId(runId), normalizeWorld),
+      ]);
       if (!unit) throw liNotFound();
+      if (!world) throw runNotFound();
       // #2156: a round pays nothing, and is not counted, while his grievance with her stands.
       await assertFreeToDate(store, runId, body.li);
       const at = new Date().toISOString();
@@ -78,7 +84,7 @@ export function registerClawRoutes(
       let result = null as ClawFinishResult | null;
       const saved = await store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) => {
         if (!current.lis[body.li]) throw liNotFound();
-        const finished = finishClawRound(current, unit, body, { at, dayKey });
+        const finished = finishClawRound(current, unit, body, { at, dayKey, content: world.content });
         result = finished.result;
         return finished.state;
       });

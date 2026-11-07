@@ -6,7 +6,8 @@
 // Lines come only from what the player read along the path they played: the first-play canon (S/story/canon.ts
 // canonicalSegments: picked options and their branches, the stances taken and the ending reached; never an option not
 // taken) of every completed chapter (completedChapters: never the prologue, an extra story or a chapter still being
-// read or written). A chapter whose canon is not settled is left out whole, as the memory leaves it out.
+// read or written), but his side (#2155), which says the lines of the scene it follows again. A chapter whose canon is
+// not settled is left out whole, as the memory leaves it out.
 // A line counts when it is spoken (no thought, no narration), not by the protagonist, and by exactly one love interest
 // under their current name or its first word (SH/faces.ts sameName, as the reader and the narrator's checks match
 // speakers); a line under an old name or a first name two of them share is skipped, never guessed. Lines too short to
@@ -106,7 +107,7 @@ export async function whoSaidWhat(
   const run = await readRun(store, runId);
   if (!run) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
   const protagonist = run.player.name;
-  const chapters = await completedChapters(store, runId, run.state);
+  const chapters = (await completedChapters(store, runId, run.state)).filter(({ chapter }) => !chapter.hisSide);
   const canon = await Promise.all(
     chapters.map(async ({ chapter }) => {
       const beats = await Promise.all(chapter.nodes.map((_, i) => readBeat(store, runId, chapter.key, i)));

@@ -40,6 +40,7 @@ import {
   type PlayView,
   type PlushSeries,
 } from "../../../../../client/src/features/otome-forge/shared/claw.js";
+import type { ContentSettings } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import { heldAgainst } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import {
   ACTIVITY_STARLIGHT_DAILY_CAP,
@@ -48,7 +49,7 @@ import {
   STARLIGHT_EARNINGS,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import { plushSvgUrl } from "../art/plush-svg.js";
-import { linesView } from "../home/lines.js";
+import { linesView, servableFixed } from "../home/lines.js";
 import { OtomeForgeError } from "../http.js";
 import { wornLookUrl } from "../schemas/common.js";
 import { STATE_LIMITS, clipText, keepClawRounds, keepTimeline } from "../schemas/state.js";
@@ -106,13 +107,14 @@ function resultOf(round: ClawRound, state: RunState, replay: boolean): ClawFinis
 /**
  * The state after the round `input` is finished with `unit` (his name, his cheat, his plush line), and the answer.
  * Throws a 400 for a catch list that is not this machine's, and a 409 for a round id already used with another love
- * interest. `dayKey` is the request's local day.
+ * interest. `dayKey` is the request's local day; `content` is the world's, which decides whether his own plush line
+ * may be said (#2152).
  */
 export function finishClawRound(
   state: RunState,
   unit: Pick<Unit, "id" | "name" | "bible" | "lines">,
   input: ClawFinishInput,
-  { at, dayKey }: { at: string; dayKey: string },
+  { at, dayKey, content }: { at: string; dayKey: string; content: ContentSettings },
 ): { state: RunState; result: ClawFinishResult } {
   const kept = state.claw.rounds.find((round) => round.id === input.round);
   if (kept) {
@@ -154,8 +156,10 @@ export function finishClawRound(
     };
   }
 
-  // During a rupture only his cold lines are his to say (S/home/lines.ts linesView), so the plush comes with none.
-  const line = firstPlush && !liState?.rupture ? lineFor(unit.lines?.fixed?.claw.plush, input.round) : undefined;
+  // During a rupture only his cold lines are his to say (S/home/lines.ts linesView), so the plush comes with none; nor
+  // does it when his claw lines were written under NSFW settings the world has left (#2152).
+  const line =
+    firstPlush && !liState?.rupture ? lineFor(servableFixed(unit, content)?.claw.plush, input.round) : undefined;
   const round: ClawRound = {
     id: input.round,
     li,
@@ -188,16 +192,17 @@ export function plushArtOf(unit: Pick<Unit, "portrait" | "cutouts" | "outfits" |
 
 /**
  * GET /runs/:run/play: today's capped earnings (zero on a new local day), the shelf, and how each LI plays (the
- * picture their plush wears, and their claw and cold lines). `dates` is whether Date Night with each love interest is
- * Make it right, and whether one with them is open (S/minigames/date-night.ts dateNightView); a rupture stands for Make
- * it right where it says nothing. #2156: his invitation to clear the air is `asked` only while no date with him is open
- * (Play would resume that one).
+ * picture their plush wears, and their claw and cold lines, from a pack the world's `content` allows: #2152). `dates`
+ * is whether Date Night with each love interest is Make it right, and whether one with them is open
+ * (S/minigames/date-night.ts dateNightView); a rupture stands for Make it right where it says nothing. #2156: his
+ * invitation to clear the air is `asked` only while no date with him is open (Play would resume that one).
  */
 export function playView(
   state: RunState,
   units: ReadonlyArray<
     Pick<Unit, "id" | "bible" | "portrait" | "cutouts" | "outfits" | "wornOutfit" | "lines" | "plushArt">
   >,
+  content: ContentSettings,
   dayKey: string,
   dates: Record<LiId, { makeItRight: boolean; open: boolean }> = {},
 ): PlayView {
@@ -209,7 +214,7 @@ export function playView(
     const rupture = state.lis[id]!.rupture !== null;
     const plush = unit ? plushArtOf(unit) : undefined;
     const animal = plushSvgUrl(unit?.plushArt?.svg);
-    const { claw, cold } = unit ? linesView(unit, state.lis[id]!) : { claw: null, cold: [] };
+    const { claw, cold } = unit ? linesView(unit, state.lis[id]!, content) : { claw: null, cold: [] };
     lis[id] = {
       cheat: cheatOf(unit),
       style: play?.style ?? "",

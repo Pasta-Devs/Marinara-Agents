@@ -1065,7 +1065,8 @@ for (const layout of LAYOUTS) {
     // His tap zones: no tap meant for one ever lands on the rail (every point of each zone's own rounded shape, every
     // 3 px, is checked by hit testing), M6's buttons included, whatever his name.
     const zones = root.getByRole("group", { name: `Touch ${name}` }).getByRole("button");
-    await expect(zones).toHaveCount(3);
+    // #2152: head, cheek, chest and hand (an SFW story has no fifth).
+    await expect(zones).toHaveCount(4);
     const taken = await root.evaluate((element) => {
       const scope = element.getRootNode() as Document | ShadowRoot;
       const found: string[] = [];

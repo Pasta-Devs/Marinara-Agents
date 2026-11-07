@@ -4,8 +4,8 @@
 // Both are written once by the story (S/story/*) and only ever read here, so a damaged list item is dropped and a
 // damaged field takes its default; a document with no key or no index reads as missing (null), and is written again.
 // The hidden parts (node guides, the ledger, a node's side-with mark, a main chapter's copy of Your thoughts…, a
-// birthday scene's gift, a beat's effects, a date's plan and its scores) are stripped by toChapterView and toBeatView
-// before anything reaches the client.
+// birthday scene's gift, the moment his side retells, a beat's effects, a date's plan and its scores) are stripped by
+// toChapterView and toBeatView before anything reaches the client.
 import { z, type ZodType } from "zod";
 import type {
   Beat,
@@ -18,6 +18,7 @@ import type {
   ConfrontationOption,
   Effect,
   ForgeChoice,
+  HisSideNote,
   Segment,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import {
@@ -26,11 +27,18 @@ import {
   CONFRONTATION_ENDINGS,
   CONFRONTATION_ROUNDS,
   FIRST_STAGE,
+  HIS_SIDE_MOMENTS,
   LAST_STAGE,
   STANCES,
 } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { LIMIT_IDS } from "../../../../../client/src/features/otome-forge/shared/content.js";
-import { PRESTIGE_KINDS } from "../../../../../client/src/features/otome-forge/shared/economy.js";
+import {
+  PRESTIGE_KINDS,
+  TENSION_MAX,
+  TENSION_MIN,
+  TRUST_MAX,
+  TRUST_MIN,
+} from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import {
   DATE_PLACE_KINDS,
   type DatePlan,
@@ -41,10 +49,23 @@ import { GIFT_IDS } from "../../../../../client/src/features/otome-forge/shared/
 import { THOUGHTS_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
 import { isChapterKey } from "../ids.js";
 import { PaintSchema, isRecord, readFields, validItems } from "./common.js";
-import { JUDGMENT_ANSWER, JUDGMENT_QUESTION } from "./story-arc.js";
+import { ARCS_MAX, JUDGMENT_ANSWER, JUDGMENT_QUESTION } from "./story-arc.js";
 import { TrackSchema } from "./world.js";
 
 const short = (max = 600) => z.string().max(max);
+
+/** #2155: a big moment his side may retell (LiState.hisSide, and the side chapter's own copy). */
+export const HisSideNoteSchema: ZodType<HisSideNote> = z.object({
+  arc: z.number().int().min(0).max(ARCS_MAX),
+  ref: short(120),
+  moment: z.enum(HIS_SIDE_MOMENTS),
+  stage: z.number().int().min(FIRST_STAGE).max(LAST_STAGE),
+  trust: z.number().int().min(TRUST_MIN).max(TRUST_MAX),
+  tension: z.number().int().min(TENSION_MIN).max(TENSION_MAX),
+  open: z.array(short(80)).max(200),
+  rupture: z.object({ grievanceId: short(80), since: z.string() }).nullable(),
+  at: short(40),
+});
 
 export const SegmentSchema: ZodType<Segment> = z.object({
   speaker: short(120),
@@ -247,6 +268,7 @@ export function normalizeChapter(data: unknown): Chapter | null {
       prestige: z.object({ kind: z.enum(PRESTIGE_KINDS), premise: short(600) }).optional(),
       thoughts: z.string().min(1).max(THOUGHTS_MAX).optional(),
       gift: z.enum(GIFT_IDS).optional(),
+      hisSide: HisSideNoteSchema.optional(),
     },
     () => ({
       key: data.key as string,
@@ -331,7 +353,7 @@ export function normalizeBeat(data: unknown): Beat | null {
 /**
  * The plan as the client sees it: no guides, casts, reveals, ledger, the grievance a repair is for, a date's plan
  * (GET .../dates shows a date), an extra story's premise (#2025), the Your thoughts… its plan read (#2127; Home shows
- * the player only the ones still waiting) or a birthday scene's gift (#2153).
+ * the player only the ones still waiting), a birthday scene's gift (#2153) or the moment his side retells (#2155).
  */
 export function toChapterView(chapter: Chapter): ChapterView {
   const {
@@ -343,6 +365,7 @@ export function toChapterView(chapter: Chapter): ChapterView {
     prestige: _prestige,
     thoughts: _thoughts,
     gift: _gift,
+    hisSide: _hisSide,
     music,
     ...rest
   } = chapter;

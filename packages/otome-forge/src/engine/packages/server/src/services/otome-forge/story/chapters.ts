@@ -68,6 +68,7 @@ import { repairOffers, routeEntries } from "../state/stages.js";
 import type { OtomeStore } from "../store.js";
 import { withPersonaStoryAbout } from "../setup/cast.js";
 import { cancellable } from "./beats.js";
+import { hisSideOffers } from "./his-side.js";
 import { removeLoveInterest } from "./introduce.js";
 import { readBeat, recallText, type StoryMemory } from "./canon.js";
 import { chapterPlanMessages, knownRows } from "../prompts.js";
@@ -705,7 +706,7 @@ export async function startArc(
 
 /**
  * GET /runs/:run/story: every chapter planned so far but dates, the next main chapter's candidates when it may start,
- * each love interest's stage and next route chapter, and a repair for each rupture.
+ * each love interest's stage and next route chapter, a repair for each rupture, and each side waiting (#2155).
  */
 /** The prologue first, then main chapters by number, then every other chapter. */
 const storyOrder = (key: string) => (key === PROLOGUE_KEY ? 0 : (mainChapterNumber(key) ?? Infinity));
@@ -771,6 +772,8 @@ export async function storyView(deps: { store: OtomeStore }, runId: string): Pro
           return n ? [{ li, key: prestigeKey(li, n) }] : [];
         })
       : [],
+    // #2155: each love interest's side waiting in Routes, or being read (S/story/his-side.ts).
+    hisSides: ready ? hisSideOffers(chapters, run.state, cast) : [],
   };
 }
 

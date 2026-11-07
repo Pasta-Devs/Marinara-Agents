@@ -2,7 +2,7 @@
 // Otome Forge: the wire contract between the package's routes and its client (types only)
 // ──────────────────────────────────────────────
 // Imported by both bundles, so a code or field added on one side has to be handled on the other.
-import type { ClimaxEnding, ClimaxMove, RouteEntry } from "./arcs";
+import type { ClimaxEnding, ClimaxMove, HisSideEntry, HisSideMoment, RouteEntry } from "./arcs";
 import type { BirthdayOffer } from "./birthdays";
 import type { ContentSettings, ImageRating, LimitId } from "./content";
 import type { DatePlan, DateScore } from "./dates";
@@ -24,6 +24,8 @@ export type {
   CloserEnding,
   CloserMove,
   ConfrontationEnding,
+  HisSideEntry,
+  HisSideMoment,
   RouteEntry,
   RouteNext,
   Stance,
@@ -439,8 +441,12 @@ export interface PlushArt {
 
 // ── Home (M3): line packs, the message of the day, and what Home shows ──
 
-/** Tap lines: three per zone and time of day. */
-export type TapLines = Record<TapZone, Record<TimeOfDay, string[]>>;
+/**
+ * Tap lines: three per zone and time of day. A pack written before 0.14.0 holds no cheek (#2152), and only a pack
+ * written under NSFW Heat holds crotch.
+ */
+export type TapLines = Record<"head" | "hand" | "heart", Record<TimeOfDay, string[]>> &
+  Partial<Record<"cheek" | "crotch", Record<TimeOfDay, string[]>>>;
 
 /** One stage's lines (P15): taps, the lines for too many pokes, and the cold lines a rupture shows instead. */
 export interface StageLines {
@@ -449,15 +455,24 @@ export interface StageLines {
   annoyed: string[];
   cold: string[];
   at: string;
+  /**
+   * #2152: the content it was written under (S/home/lines.ts contentStamp): absent or "home" for the SFW `home`
+   * contract, else "nsfw:" and a hash of the settings it was written for.
+   */
+  contract?: string;
+  /** #2152: the face he shows when touched in each zone at this stage. */
+  faces?: Partial<Record<TapZone, Face>>;
 }
 
 export type ClawLines = Record<ClawLineKind, string[]>;
 
-/** Lines written once (with his first stage pack): generic rough-day comfort, and the Claw Machine's. */
+/** Lines written with his first stage pack: generic rough-day comfort, and the Claw Machine's. */
 export interface FixedLines {
   comfort: string[];
   claw: ClawLines;
   at: string;
+  /** #2152: the content it was written under, as StageLines.contract; its claw lines serve by the same rule. */
+  contract?: string;
 }
 
 export interface LinePacks {
@@ -472,10 +487,13 @@ export interface LinesView {
   stage: number;
   rupture: boolean;
   tap: TapLines | null;
+  /** #2152: the face each zone's touch brings (empty during a rupture, or for a pack without them). */
+  faces: Partial<Record<TapZone, Face>>;
   annoyed: string[];
   cold: string[];
   /** Empty until his fixed lines exist (Rough day? then uses the catalog's comfort lines). */
   comfort: string[];
+  /** Null until his fixed lines exist, or while they were written under NSFW settings the world has left (#2152). */
   claw: ClawLines | null;
 }
 
@@ -788,6 +806,28 @@ export interface LiState {
    * them carry it (S/prompts.ts knowsAboutYou); the player reads, rewrites and deletes it.
    */
   known: NotebookEntry[];
+  /**
+   * #2155: the big moment of each story arc his side may retell, one per arc (the newest replaces it until his side of
+   * that arc is written). Never sent to the client.
+   */
+  hisSide: HisSideNote[];
+}
+
+/**
+ * #2155: a big moment his side may retell. `ref` is `${key}/${i}`, the beat it happened in. The rest is how things
+ * stood once it had landed, so his side is told at that moment (S/story/his-side.ts stateAtMoment): his stage, trust
+ * and tension, the ids of the grievances open then, the rupture standing then, and when (`at`) it was noted.
+ */
+export interface HisSideNote {
+  arc: number;
+  ref: string;
+  moment: HisSideMoment;
+  stage: number;
+  trust: number;
+  tension: number;
+  open: string[];
+  rupture: LiState["rupture"];
+  at: string;
 }
 
 /** A chapter's reading progress. `applied` holds `${i}/${choiceId}` for every pick whose effects reached the state. */
@@ -1006,6 +1046,11 @@ export interface Chapter {
    * affection is paid when the scene is read to its end (hidden from the client).
    */
   gift?: GiftId;
+  /**
+   * #2155: his side (kind "story", key `side-<li>-<arc>`): the moment it tells again from his point of view (hidden from
+   * the client).
+   */
+  hisSide?: HisSideNote;
 }
 
 /** A segment of a beat: one line of dialogue, one thought, or one piece of narration. */
@@ -1210,7 +1255,7 @@ export type BeatState = "unwritten" | "ready" | "read";
 /** A chapter as the client sees it: no guides and no ledger (the plan is the hidden story). */
 export type ChapterView = Omit<
   Chapter,
-  "nodes" | "ledger" | "connectionId" | "date" | "music" | "prestige" | "thoughts" | "gift"
+  "nodes" | "ledger" | "connectionId" | "date" | "music" | "prestige" | "thoughts" | "gift" | "hisSide"
 > & {
   music?: Pick<ChapterMusic, "track">;
   nodes: Array<Pick<ChapterNode, "i" | "kind" | "moment" | "cg" | "gate">>;
@@ -1340,6 +1385,8 @@ export interface StoryView {
    * /runs/:run/prestige/:li writes it). Optional while an older view is cached.
    */
   prestige?: PrestigeEntry[];
+  /** #2155: each love interest's side waiting in Routes, or being read. Optional while an older view is cached. */
+  hisSides?: HisSideEntry[];
 }
 
 /** An unlocked extra story waiting to be written (#2025). */
@@ -1384,6 +1431,11 @@ export interface ReadResult {
   stageUp?: { li: LiId; stage: number };
   /** M2b: this read finished a repair chapter, and the rupture with him is closed. */
   repaired?: LiId;
+  /**
+   * #2155: this read was a big moment his side of this arc will retell, or it finished a chapter where one came, whose
+   * side now waits in Routes.
+   */
+  hisSide?: LiId;
 }
 
 /**

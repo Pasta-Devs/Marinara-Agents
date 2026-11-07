@@ -51,10 +51,11 @@
 //   arcPlanMessages: the arc planner, #1980 (S/story/arc.ts)
 //   chapterPlanMessages: P5 chapter plan (S/story/chapters.ts)
 //   thoughtsLines: Your thoughts… from Home (#2127), in P5 and in its main chapter's P6, P12 and P12c, with the task
-//   beatMessages: P6 scene (beat) narrator, also for dates, Character Stories (P22, P23), extra stories and the
-//     prologue (S/story/beats.ts). Its NO_CHOICES_SENTENCE must stay the kit's sentence word for word (Elsewhere)
+//   beatMessages: P6 scene (beat) narrator, also for dates, Character Stories (P22, P23), extra stories, his side
+//     (#2155) and the prologue (S/story/beats.ts). Its NO_CHOICES_SENTENCE must stay the kit's sentence word for word
+//     (Elsewhere)
 //   GUIDE, prologueFraming, prologueEnding: the prologue's node, framing and hand-off (S/story/prologue.ts, beats.ts)
-//   stageGoal, arcFraming: what a route stage is for, and P6's route, repair, story and extra-story framing
+//   stageGoal, arcFraming: what a route stage is for, and P6's route, repair, story, extra-story and his side's framing
 //   routePlanMessages, repairPlanMessages: P10 route plan, P11 repair plan (S/story/routes-plan.ts)
 //   confrontationMessages: P12 Confrontation (S/story/beats.ts)
 //   closerMessages: P12c Closer, #1938 (S/story/beats.ts)
@@ -217,7 +218,9 @@ import {
   MOOD_REASON_WORDS_MAX,
   NOTE_CURT_WORDS_MAX,
   NOTE_WORDS_MAX,
+  type TapZone,
   type TimeOfDay,
+  tapZonesFor,
   timeOfDayOf,
 } from "../../../../client/src/features/otome-forge/shared/home.js";
 import {
@@ -317,7 +320,8 @@ import {
 // The world's Heat, Darkness, Lines & Veils and image rating, written for the kind of prompt that receives them:
 //   planner, scene  the full contract (world plan, bibles, chapters, beats, Confrontation, Character Stories, dates)
 //   chat            the full contract for the one LI in the thread
-//   home            SFW wording plus Lines and Veils, whatever the Heat (notes, line packs, Snapshots, Read Him)
+//   home            SFW wording plus Lines and Veils, whatever the Heat (notes, Snapshots, Read Him; line packs
+//                   outside NSFW Heat)
 //   summary         the story's own Heat and Darkness, recorded plainly; Lines never, Veils only as having happened
 //                   off the page (memory summaries, chat memory)
 //   care            SFW plus the comfort rule; Heat and Darkness never apply
@@ -329,7 +333,9 @@ import {
 // `planner`, `scene` and `chat` it writes out what the player opted into: romance that escalates without
 // out-of-character pauses, unsanitized language, the Heat's and the Darkness's full wording, what the player allowed
 // on the page, and, only while a consent limit is not a Line, the consent framing whose real stop is Ease off. The
-// Lines and Veils still come last and win. `home` and `care` never change. `summary` (0.3.0, the maintainer's call)
+// Lines and Veils still come last and win. `home` and `care` never change; P15 (#2152) is the one prompt that picks
+// its kind by setting: under NSFW Heat a line pack is written under `chat`, so touch on Home follows the Heat (its
+// comfort lines still keep the care rule's warmth only). `summary` (0.3.0, the maintainer's call)
 // records an NSFW story's intimacy and darkness as they were written, never SFW by itself. A world that raised nothing
 // (the SFW defaults) gets a fixed contract (tests/otome-forge-sfw-defaults.regression.ts).
 // The stored world is enforced on every write and lowered when the gate is revoked (S/routes/runs.ts enforceContent),
@@ -1096,6 +1102,9 @@ export function musicBriefMessages(world: Pick<World, "premise" | "setting">, cu
 // #2046 (Side with): while a side-with scene may come (S/story/chapters.ts sideWithOpen), P5 may mark one beat node
 // where two to four love interests disagree; P6 on that node offers ONE choice with an option per love interest present,
 // each naming whom it backs, and the game, never the reply, sets what siding changes. Other prompts are unchanged.
+// #2155 (his side): P6 tells one scene again from a love interest's point of view (hisSideFraming): its instructions let
+// only him think and carry no choice rules, its card is as things stood at the moment (the caller's state), and the
+// scene as the protagonist lived it goes in the last turn, after the cached part. Its story context and every other chapter's messages are unchanged.
 
 // ── The blocks and rules the story prompts share ──
 // Most other prompts carry these blocks too (betweenYou, knowsAboutYou, protagonistBlock, appearanceLine, bibleBlock,
@@ -2014,6 +2023,7 @@ export interface BeatMessagesInput {
     | "date"
     | "prestige"
     | "thoughts"
+    | "hisSide"
   >;
   node: ChapterNode;
   /** The canonical story so far in this chapter: each earlier node's scene, rendered ([] for its first node). */
@@ -2026,6 +2036,8 @@ export interface BeatMessagesInput {
   recalls?: string;
   /** A main chapter's arc (#1980), for the story context, or null. */
   arc?: StoryArc | null;
+  /** #2155: his side's scene as the protagonist lived it (S/story/his-side.ts hisSideSource), or none. */
+  hisSide?: string;
 }
 
 export function beatMessages({
@@ -2040,8 +2052,12 @@ export function beatMessages({
   recalls = "",
   arc = null,
   prologue = "",
+  hisSide = "",
 }: BeatMessagesInput): OtomeMessage[] {
   const backgrounds = savedBackgrounds(world);
+  // #2155: his side tells one scene again from his point of view: only he thinks, and it offers no choice. Only his
+  // side's own messages change; every other chapter's stay as they were.
+  const pov = chapter.hisSide ? units.find((unit) => unit.id === chapter.li) : undefined;
   const present = units.filter((unit) => node.cast.includes(unit.id));
   const thinkers = present.filter((unit) => stageOf(state, unit.id) >= 2).map((unit) => unit.name);
   const last = node.i === chapter.nodes.length - 1;
@@ -2061,7 +2077,9 @@ export function beatMessages({
     `{"musicMood": "${MUSIC_MOODS.join("|")}", "places": [{"name": "...", "tags": "..."}], "segments": [{"speaker": "", "text": "...", "thought": false, "expression": "", "place": "..."}]}`,
     '- speaker: who speaks the segment, written as their exact name every time; "" for narration. When the protagonist speaks, write their exact name; the prose still addresses them as "you".',
     "- Each segment is one speaker's line or one piece of narration: a sentence or a few. Never put dialogue inside narration, and never mark it with dashes or quotes as prose.",
-    `- thought: true for an inner line, in the thinker's own words, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in this node, and only one the task names as far enough along.`,
+    pov
+      ? `- thought: true for an inner line by ${pov.name} only, in ${pov.name}'s own words, with "speaker" set to ${pov.name}, as often as the scene needs; nobody else, the protagonist included, has thought lines in this scene.`
+      : `- thought: true for an inner line, in the thinker's own words, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in this node, and only one the task names as far enough along.`,
     `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}, when the face shows it. A face may contradict the words. Omit it for a neutral line and for narration.`,
     EXITS_RULE,
     `- musicMood: the soundtrack cue for this node, one of ${MUSIC_MOODS.join(", ")}.`,
@@ -2070,7 +2088,7 @@ export function beatMessages({
     "- Stay within this node's guide; do not skip ahead to later nodes.",
     `- Write every segment's text and every place name in ${world.language}; tags and any cg brief in English.`,
   ].join("\n");
-  const choices = choiceRules(instructions, last && !date);
+  const choices = pov ? { shared: instructions, own: [] } : choiceRules(instructions, last && !date);
   const framing =
     node.kind === "confrontation"
       ? CONFRONTATION_FRAMING
@@ -2118,6 +2136,9 @@ export function beatMessages({
     recalls.trim(),
     // A main chapter's own (#2127): no other chapter's scenes ever carry them.
     ...thoughtsLines(player, chapter.kind === "main" ? chapter.thoughts : undefined, "scene"),
+    ...(pov && hisSide.trim()
+      ? ["", `THE SCENE AS THE PROTAGONIST LIVED IT ("${chapter.title}"):\n${hisSide.trim()}`]
+      : []),
     "",
     `Narrate node ${node.i + 1} of ${chapter.nodes.length}${last ? ", the chapter's last" : ""}:`,
     `What happens: ${node.guide}`,
@@ -2126,10 +2147,13 @@ export function beatMessages({
     ...arcLines,
     dateFraming,
     node.resolves?.length ? `Grievances this node may resolve: ${node.resolves.join(", ")}.` : "",
-    `- Thought lines: ${thinkers.length ? `of the love interests, only these are far enough along to have one: ${thinkers.join(", ")}` : "no love interest present may have one: they are still behind their masks"}.`,
+    pov
+      ? `- Thought lines: ${pov.name} only.`
+      : `- Thought lines: ${thinkers.length ? `of the love interests, only these are far enough along to have one: ${thinkers.join(", ")}` : "no love interest present may have one: they are still behind their masks"}.`,
     ...choices.own,
-    // A planned chapter's last node; the prologue offers its own choices, and a date never ends on a big one.
-    ...(last && !date && chapter.kind !== "prologue"
+    // A planned chapter's last node; the prologue offers its own choices, a date never ends on a big one, and his side
+    // offers none.
+    ...(last && !date && !pov && chapter.kind !== "prologue"
       ? [
           `- This is the chapter's last node: if it ends on a big choice, make it ${VARIED_DECISION}.`,
           ...(node.judgment ? [judgmentLine(node.judgment)] : []),
@@ -2147,9 +2171,11 @@ export function beatMessages({
   ];
   return storyMessages(
     storyContext({ world, player, units, number: chapter.kind === "main" ? chapter.number : null, arc, memory }),
-    choices.shared + CHOICE_EFFECTS_INSTRUCTION + VOICES_INSTRUCTION,
+    pov ? choices.shared + VOICES_INSTRUCTION : choices.shared + CHOICE_EFFECTS_INSTRUCTION + VOICES_INSTRUCTION,
     chapterTexts(chapter, units, storySoFar, opening),
     rest,
+    // Only a Rewrite of his side shares its instructions, so they are no cache write of their own (#2091).
+    pov ? { marks: "context" } : undefined,
   );
 }
 
@@ -2289,6 +2315,7 @@ function chapterLabel(chapter: BeatMessagesInput["chapter"], units: readonly Uni
   }
   if (chapter.kind === "repair") return `a repair chapter with ${owner}`;
   if (chapter.kind === "story") {
+    if (chapter.hisSide) return `${owner}'s side of it: the same events, told again from ${owner}'s point of view`;
     return chapter.prestige ? `${owner}'s extra story, imagined together (not canon)` : `${owner}'s Character Story`;
   }
   return `${chapter.kind} chapter`;
@@ -2323,6 +2350,19 @@ function prestigeFraming(name: string, prestige: NonNullable<Chapter["prestige"]
   return [
     `This is an EXTRA STORY of ${name}'s, ${PRESTIGE_FRAMES[prestige.kind]}: ${prestige.premise} It is something ${name} and the protagonist imagine or play out together, for fun, and both of them know it. It is NOT canon: nothing in it happens in the main story, and it changes nothing there.`,
     `It is a ${nodes}-scene story with its own small arc, ending on its last. It is private: no other love interest appears in it. Whatever the frame, both stay themselves at heart; it reveals no secret and resolves nothing of the main story.`,
+  ];
+}
+
+/**
+ * #2155: what P6 adds to his side (`side-<li>-<arc>`, S/story/his-side.ts) in place of the Character Story's framing: the
+ * scene above, told again from his point of view, as things stood at the moment (the caller's state).
+ */
+function hisSideFraming(name: string): string[] {
+  return [
+    `This is ${name.toUpperCase()}'S SIDE: the scene above, told again from ${name}'s point of view. The same events in the same order, condensed to this node's length: the lines that matter are said again word for word, every choice and action of the protagonist's stays exactly as it was, nothing new happens, nothing is undone, and it ends where that scene ended. Never repeat the bracketed game markers.`,
+    `The narration stays with ${name}: what ${name} sees, notices and feels in their body. The protagonist is still "you", seen through ${name}'s eyes; where the writing rules speak of what the protagonist feels, write what ${name} feels, and let the protagonist's feelings show only as ${name} reads them. Keep everything How it's written asks but the point of view.`,
+    `${name}'s thoughts show what ${name} wanted, feared and kept back then, in ${name}'s own voice, and only what ${name} knew at that moment, nothing that happened later. How far ${name} admits their feelings, even to themselves, keeps to the romance line on ${name}'s card.`,
+    `A Hidden line on the card is never stated, even in thought; it presses on ${name} only as the tells do. The protagonist never learns any of this.`,
   ];
 }
 
@@ -2361,7 +2401,13 @@ function arcFraming({
   }
   if (chapter.kind === "story") {
     const nodes = chapter.nodes.length;
-    lines.push(...(chapter.prestige ? prestigeFraming(name, chapter.prestige, nodes) : storyFraming(name, nodes)));
+    lines.push(
+      ...(chapter.hisSide
+        ? hisSideFraming(name)
+        : chapter.prestige
+          ? prestigeFraming(name, chapter.prestige, nodes)
+          : storyFraming(name, nodes)),
+    );
   }
   // #1980: the arc's planned reveal, and its big event on the last chapter. Only a stamped node gets a reveal, so the
   // planner's schedule (normalizeChapterPlan) decides what may come out here; everything else stays hidden.
@@ -3247,11 +3293,13 @@ export function groupChatMessages({
 // ──────────────────────────────────────────────
 // Both write a love interest's own words, so both carry the knowledge boundary and the writing rules, and both use the
 // `home` content contract: SFW wording plus Lines and Veils whatever the Heat (in Dark, sharp or possessive about
-// story events only). P15 also carries the comfort rule word for word, for the comfort lines, which are warmth only:
-// Darkness never reaches them (plan §1.7 gives the comfort pool the `care` contract; P15 writes it in the same call as
-// the rest of the pack, so its field says so). Neither may mention the protagonist's absence, how long it has been, or
-// their real life, and neither asks a question that demands an answer (P15's lines carry no question mark at all,
-// except an annoyed line's rhetorical one).
+// story events only). Touch (#2152): under NSFW Heat P15 uses the `chat` contract instead, with his tastes beside his
+// card, and adds the crotch zone, so his touch lines follow the Heat. P15 also carries the comfort rule word for word,
+// for the comfort lines, which are warmth only: Darkness (and under NSFW Heat, the Heat) never reaches them (plan §1.7
+// gives the comfort pool the `care` contract; P15 writes it in the same call as the rest of the pack, so its field
+// says so). Neither may mention the protagonist's absence, how long it has been, or their real life, and neither asks
+// a question that demands an answer (P15's lines carry no question mark at all, except an annoyed line's rhetorical
+// one).
 // Order (plan §1.7): system (role, JSON shape, rules, boundary and writing rules, contract), then the user turn
 // (world, protagonist, his scene card, what he knows and remembers, the task, the contract reminder). Prompts are
 // English and never localized; the lines and the note are written in the world's language.
@@ -3286,7 +3334,16 @@ function protagonistLine(player: Pick<Player, "name" | "pronouns" | "about">): s
     .join("\n");
 }
 
-// ── P15: line pack (structured, 0.9, home contract, background lane) ──
+// ── P15: line pack (structured, 0.9, home contract, or chat under NSFW Heat (#2152), background lane) ──
+
+/** Where each touch zone is on him, as the prompt names it (the stored `heart` is the chest). */
+const ZONE_GLOSS: Record<TapZone, string> = {
+  head: "hair or head",
+  cheek: "cheek or face",
+  heart: "chest",
+  hand: "hand",
+  crotch: "the groin, between the legs",
+};
 
 /** How each claw cheat style reads in the prompt (bible.play.cheat), without a pronoun. */
 const CHEAT_TEXT: Record<ClawCheat, string> = {
@@ -3309,27 +3366,47 @@ export interface LinePackInput {
 export function linePackMessages({ world, player, unit, stage, withFixed }: LinePackInput): OtomeMessage[] {
   const name = unit.name;
   const counts = LINE_COUNTS;
-  const shape = withFixed
-    ? '{"tap": {"head": {"morning": ["..."], "day": ["..."], "night": ["..."]}, "hand": {...}, "heart": {...}}, "annoyed": ["..."], "cold": ["..."], "comfort": ["..."], "claw": {"cheer": ["..."], "cheat": ["..."], "win": ["..."], "miss": ["..."], "plush": ["..."]}}'
-    : '{"tap": {"head": {"morning": ["..."], "day": ["..."], "night": ["..."]}, "hand": {...}, "heart": {...}}, "annoyed": ["..."], "cold": ["..."]}';
+  // #2152: NSFW Heat writes the pack under the full contract and opens the intimate zones; any other world keeps the
+  // `home` contract word for word (Dark romance with SFW Heat included).
+  const intimate = intimacyOpen(world.content);
+  const kind = intimate ? "chat" : "home";
+  const zones = tapZonesFor(world.content);
+  const tapShape = zones
+    .map(
+      (zone, index) => `"${zone}": ${index === 0 ? '{"morning": ["..."], "day": ["..."], "night": ["..."]}' : "{...}"}`,
+    )
+    .join(", ");
+  const facesShape = zones.map((zone) => `"${zone}": "..."`).join(", ");
+  const fixedShape = withFixed
+    ? ', "comfort": ["..."], "claw": {"cheer": ["..."], "cheat": ["..."], "win": ["..."], "miss": ["..."], "plush": ["..."]}'
+    : "";
+  const shape = `{"tap": {${tapShape}}, "faces": {${facesShape}}, "annoyed": ["..."], "cold": ["..."]${fixedShape}}`;
+  const places = zones.map((zone) => `${zone}: ${ZONE_GLOSS[zone]}`).join("; ");
   const cheat = CHEAT_TEXT[unit.bible?.play.cheat ?? "steady"];
   const system = [
-    `You write the pre-written Home lines of ${name}, a love interest in an otome visual novel. On the Home screen the protagonist taps ${name} (head, hand or heart) and hears one of these lines at once, so each line must stand on its own.`,
+    `You write the pre-written Home lines of ${name}, a love interest in an otome visual novel. On the Home screen the protagonist touches ${name} in one of the places below and hears one of these lines at once, so each line must stand on its own.`,
     "Reply with ONLY a JSON object of this shape:",
     shape,
     "FIELDS",
-    `- tap: for each place the protagonist touches (head: hair or head; hand: hand; heart: chest), ${counts.tap} lines for the morning, ${counts.tap} for the day and ${counts.tap} for the night, each fitting that time.`,
+    `- tap: for each place the protagonist touches (${places}), ${counts.tap} lines for the morning, ${counts.tap} for the day and ${counts.tap} for the night, each fitting that time.`,
+    `- faces: for each place, the one face ${name} shows when touched there at this stage: ${FACES.join(", ")}. Every line for that place fits it.`,
     `- annoyed: ${counts.annoyed} lines for when the protagonist pokes ${name} too many times in a row: exasperated and still in character, never cruel.`,
     `- cold: ${counts.cold} lines for while a rupture stands between them: distant and clipped, but within ${name}'s red lines; never cruel, threatening or contemptuous of the protagonist.`,
     ...(withFixed
       ? [
-          `- comfort: ${counts.comfort} lines of generic comfort for a rough day, said in ${name}'s own register. ${COMFORT_RULE} Never guess why the day was hard. These lines are warmth only, whatever the stage and the rules below: no darkness, possessiveness, jealousy, sharpness, menace or cost.`,
+          `- comfort: ${counts.comfort} lines of generic comfort for a rough day, said in ${name}'s own register. ${COMFORT_RULE} Never guess why the day was hard. These lines are warmth only, whatever the stage${intimate ? ", the Heat" : ""} and the rules below: no darkness, possessiveness, jealousy, sharpness, menace or cost.`,
           `- claw: lines for a claw machine the two of them play together: cheer (${counts.claw.cheer}, while the protagonist plays), cheat (${counts.claw.cheat}, when ${name} cheats for them by ${cheat}), win (${counts.claw.win}, when they win), miss (${counts.claw.miss}, when the claw misses), plush (${counts.claw.plush}, when a plush joins their shelf).`,
         ]
       : []),
     "RULES",
     `- Every line is ${LINE_WORDS_MAX} words or fewer, spoken by ${name} to the protagonist, in ${name}'s own voice: the register, tics and never-list on the scene card.`,
     `- Fit stage ${stage}: only what ${name} lets show at this stage.`,
+    `- Touch draws a bolder answer as they grow closer: at stage 1 it meets ${name}'s mask; by stage 6 ${name} answers it as someone who is theirs. Through stage ${SLOW_BURN_LAST_STAGE} ${name} never says what they feel outright.`,
+    ...(intimate
+      ? [
+          `- A touch to the chest or the crotch is an intimate one, and ${name} answers it as the content contract allows.`,
+        ]
+      : []),
     "- No question that demands an answer: no line has a question mark, except an annoyed line's rhetorical one.",
     `- ${NO_ABSENCE_RULE}`,
     "- No spoilers: never state a hidden secret; it may show only as a tell.",
@@ -3338,7 +3415,7 @@ export function linePackMessages({ world, player, unit, stage, withFixed }: Line
     "",
     otomeWritingRules({ story: true, style: world.writingStyle, banned: world.bannedPhrases }),
     "",
-    otomeContentContract({ world, lis: [{ name }], kind: "home" }),
+    otomeContentContract({ world, lis: [{ name }], kind }),
   ].join("\n");
   const samples = unit.bible?.voice.samples;
   const sampleLines = samples
@@ -3360,9 +3437,11 @@ export function linePackMessages({ world, player, unit, stage, withFixed }: Line
     otomeSceneCard(unit, { stage }),
     sampleLines.length ? `How ${name} sounds:\n${sampleLines.join("\n")}` : "",
     tics.length ? `Tics: ${tics.slice(0, 4).join("; ")}` : "",
+    // His tastes (#1936) under NSFW Heat only; "" otherwise.
+    intimacyLine(world, unit),
     "",
     `Write ${name}'s Home lines for stage ${stage} now.`,
-    otomeContractReminder("home"),
+    otomeContractReminder(kind),
   ]
     .filter((text, index, all) => text !== "" || all[index - 1] !== "")
     .join("\n");

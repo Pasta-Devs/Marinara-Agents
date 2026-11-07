@@ -107,6 +107,34 @@ export function routeStatus(
   };
 }
 
+// ── His side (#2155): one big moment retold from the love interest's point of view, once per story arc each ──
+
+/**
+ * The big moments a love interest's side may retell (S/story/his-side.ts): a route gate that moved his stage, a climax
+ * ending in the truth, a walkout, Opened up or Shut out, and a rift a repair chapter mended.
+ */
+export const HIS_SIDE_MOMENTS = ["stage", "truth", "walkout", "opened", "shut", "repair"] as const;
+export type HisSideMoment = (typeof HIS_SIDE_MOMENTS)[number];
+
+/** `side-<li>-<arc>`: his side for story arc `arc` (0 before the story's first arc). Its chapter spends the arc. */
+export const hisSideKey = (li: LiId, arc: number) => `side-${li}-${arc}`;
+/** The love interest whose side a chapter key is, or null for any other chapter. */
+export const hisSideLiOf = (key: string): LiId | null => /^side-(li-[a-z0-9-]+)-\d+$/u.exec(key)?.[1] ?? null;
+
+/** His side on offer in Routes (GET /runs/:run/story `hisSides`): waiting to be read, or being read. */
+export interface HisSideEntry {
+  li: LiId;
+  arc: number;
+  key: string;
+  moment: HisSideMoment;
+  /** His stage at the moment. */
+  stage: number;
+  /** The title of the chapter the moment happened in. */
+  title: string;
+  /** True once its chapter is written and not finished. */
+  reading: boolean;
+}
+
 // ── The Confrontation (a story node): three rounds of Press, Hold, Yield or Reveal ──
 
 export const STANCES = ["press", "hold", "yield", "reveal"] as const;

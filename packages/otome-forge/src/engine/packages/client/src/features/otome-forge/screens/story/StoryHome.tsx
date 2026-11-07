@@ -3,13 +3,13 @@
 // which plans or opens the repair chapter), the chapter being read (Continue), the next main chapter ("Who walks with
 // you this chapter?": the server offers two Leads, the one least recently with her and the one with the ripest
 // conflict; the planner adds a Foil), each love interest's route (his next free chapter, open from an affection level
-// and shut while a rupture is open), each one's affection (past level 10, prestige and the extra story it unlocks:
-// #2025), and every chapter so far as a path of its scenes.
+// and shut while a rupture is open, with his side of a big moment waiting under it: #2155), each one's affection (past
+// level 10, prestige and the extra story it unlocks: #2025), and every chapter so far as a path of its scenes.
 // #2156: a rupture he holds is his grievance with her: the banner and his route say how much space he still needs
 // before Make it right opens, the Lead dialog says why he can't lead, and his affection shows as paused. Beside each
 // one's route, "I'm upset with them" (asked first, then POST /routes/:li/upset; tapping it again takes it back).
 // Planning a chapter is one model call with Cancel while it runs, with the story so far to read meanwhile (#2040); a
-// chapter already planned opens with none.
+// chapter already planned opens with none, and so does his side, which is written with no model call.
 // ──────────────────────────────────────────────
 import { Fragment, useEffect, useId, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
@@ -57,7 +57,7 @@ import type {
   StoryChapterEntry,
   StoryView,
 } from "../../shared/api-types";
-import { stageRow, type StageName } from "../../shared/arcs";
+import { hisSideLiOf, stageRow, type HisSideEntry, type StageName } from "../../shared/arcs";
 import { GRIEVANCE_CLEARED_AFFECTION, PRESTIGE_POINTS_PER_STORY } from "../../shared/economy";
 import { chapterEyebrowKey, chapterTitle } from "../reader/ReaderControls";
 
@@ -101,6 +101,12 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
   const [choosing, setChoosing] = useState(false);
   const [arcPlan, setArcPlan] = useState<ArcTarget | null>(null);
   const arcPlanning = usePlanChapter(runKey);
+  // #2155: his side is written with no model call, so its Read shows the wait and the dialog opens only to say why it
+  // did not open; once open it stays through a Retry (which then shows the wait in it), so focus never drops.
+  const [sideDialog, setSideDialog] = useState<ArcTarget | null>(null);
+  if (arcPlan?.kind === "side" && sideDialog !== arcPlan && (arcPlanning.failed || arcPlanning.stopped)) {
+    setSideDialog(arcPlan);
+  }
 
   const head = (
     <div className="of-page-head">
@@ -143,19 +149,21 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
   const prestige = Array.isArray(story.data.prestige) ? story.data.prestige : [];
   // #2156: each love interest whose grievance with her stands (his repair carries the space it waits for).
   const held = new Set(repairs.flatMap((repair) => (repair.space ? [repair.li] : [])));
-  // A main chapter in progress is the one to continue; a route or repair chapter has its own card.
+  const sides = Array.isArray(story.data.hisSides) ? story.data.hisSides : [];
+  // A main chapter in progress is the one to continue; a route or repair chapter, and his side, has its own card.
   const reading =
     chapters.find((chapter) => chapter.state === "in-progress" && chapter.kind === "main") ??
     chapters.find(
       (chapter) =>
         chapter.state === "in-progress" &&
         !routes.some((route) => route.next?.key === chapter.key) &&
-        !repairs.some((repair) => repair.key === chapter.key),
+        !repairs.some((repair) => repair.key === chapter.key) &&
+        !hisSideLiOf(chapter.key),
     ) ??
     null;
   /** Opens a route or repair chapter that is already planned; plans it (one model call) otherwise. */
   const planArc = (target: ArcTarget) =>
-    void arcPlanning.plan(target.key, arcPath(target), {}, (key) => {
+    void arcPlanning.plan(target.key, arcPath(target), target.kind === "side" ? { arc: target.arc } : {}, (key) => {
       setArcPlan(null);
       onOpenChapter(key);
     });
@@ -222,6 +230,9 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
             const repair = repairs.find((item) => item.li === li);
             if (repair) openArc({ kind: "repair", li, key: repair.key });
           }}
+          sides={sides}
+          planning={arcPlanning.planning}
+          onReadSide={(entry) => openArc({ kind: "side", li: entry.li, key: entry.key, arc: entry.arc })}
         />
       ) : null}
       <Affection
@@ -232,7 +243,7 @@ export function StoryHome({ runKey, view, onOpenChapter }: StoryHomeProps) {
         onPrestige={(entry) => openArc({ kind: "prestige", li: entry.li, key: entry.key })}
       />
       {chapters.length ? <ChapterList chapters={chapters} view={view} onOpen={onOpenChapter} /> : null}
-      {arcPlan ? (
+      {arcPlan && (arcPlan.kind !== "side" || sideDialog === arcPlan) ? (
         <ArcPlanDialog
           view={view}
           target={arcPlan}
@@ -1008,18 +1019,22 @@ function useDialogFocus(
 
 // ── Arcs: routes, ruptures and repairs ──
 
-/** A route or repair chapter, or an extra story (#2025), to open, planning it first when it has no plan yet. */
-interface ArcTarget {
-  kind: "route" | "repair" | "prestige";
-  li: string;
-  key: string;
-}
+/**
+ * A route or repair chapter, an extra story (#2025) or his side of story arc `arc` (#2155), to open, planning it first
+ * when it has no plan yet.
+ */
+type ArcTarget =
+  | { kind: "route" | "repair" | "prestige"; li: string; key: string }
+  /** His side of story arc `arc` (#2155): the route always needs the arc it belongs to. */
+  | { kind: "side"; li: string; key: string; arc: number };
 
-/** POST /runs/:run/routes/:li/next, /repairs/:li or /prestige/:li. */
+const ARC_PATHS = { repair: "repairs", prestige: "prestige", side: "sides" } as const;
+
+/** POST /runs/:run/routes/:li/next, /repairs/:li, /prestige/:li or /sides/:li. */
 const arcPath = (target: ArcTarget) =>
   target.kind === "route"
     ? `/routes/${encodeURIComponent(target.li)}/next`
-    : `/${target.kind === "prestige" ? "prestige" : "repairs"}/${encodeURIComponent(target.li)}`;
+    : `/${ARC_PATHS[target.kind]}/${encodeURIComponent(target.li)}`;
 
 const ARC_DIALOG_KEYS: Record<ArcTarget["kind"], { title: string; planning: string; locked: string }> = {
   route: {
@@ -1036,6 +1051,11 @@ const ARC_DIALOG_KEYS: Record<ArcTarget["kind"], { title: string; planning: stri
     title: "ui.otomeForge.story.prestigeNew",
     planning: "ui.otomeForge.arcs.planningPrestige",
     locked: "ui.otomeForge.story.prestigeLocked",
+  },
+  side: {
+    title: "ui.otomeForge.arcs.sideTitle",
+    planning: "ui.otomeForge.arcs.planningSide",
+    locked: "ui.otomeForge.arcs.sideLocked",
   },
 };
 
@@ -1154,6 +1174,9 @@ function Routes({
   chapters,
   onOpen,
   onMakeItRight,
+  sides,
+  planning,
+  onReadSide,
 }: {
   runKey: string;
   routes: RouteEntry[];
@@ -1162,6 +1185,10 @@ function Routes({
   chapters: StoryChapterEntry[];
   onOpen: (route: RouteEntry) => void;
   onMakeItRight: (li: string) => void;
+  sides: HisSideEntry[];
+  /** The key being opened (usePlanChapter's `planning`), so a side's Read shows the wait. */
+  planning: string | null;
+  onReadSide: (entry: HisSideEntry) => void;
 }) {
   const { t } = useTranslation();
   return (
@@ -1185,6 +1212,9 @@ function Routes({
               images={view.world.images}
               onOpen={() => onOpen(route)}
               onMakeItRight={() => onMakeItRight(route.li)}
+              sides={sides.filter((entry) => entry.li === route.li)}
+              planning={planning}
+              onReadSide={onReadSide}
             />
           );
         })}
@@ -1202,6 +1232,9 @@ function RouteCard({
   images,
   onOpen,
   onMakeItRight,
+  sides,
+  planning,
+  onReadSide,
 }: {
   runKey: string;
   route: RouteEntry;
@@ -1212,6 +1245,9 @@ function RouteCard({
   images: RunView["world"]["images"];
   onOpen: () => void;
   onMakeItRight: () => void;
+  sides: HisSideEntry[];
+  planning: string | null;
+  onReadSide: (entry: HisSideEntry) => void;
 }) {
   const { t } = useTranslation();
   const accent = accentOf(li);
@@ -1302,8 +1338,106 @@ function RouteCard({
           )}
         </div>
       ) : null}
+      {sides.map((side) => (
+        <SideRow
+          key={side.key}
+          entry={side}
+          li={li}
+          images={images}
+          opening={planning === side.key}
+          onRead={() => onReadSide(side)}
+        />
+      ))}
       <UpsetToggle runKey={runKey} li={li} upset={!!route.upset} />
     </li>
+  );
+}
+
+/** #2155: the moment his side tells again, in the words the reader's chapter end and climaxes already use. */
+function sideMoment(t: ReturnType<typeof useTranslation>["t"], entry: HisSideEntry, li: RunLiView): string {
+  const values = pronounValues(li);
+  switch (entry.moment) {
+    case "stage":
+      return t("ui.otomeForge.arcs.stageUp", {
+        ...values,
+        stage: entry.stage,
+        stageName: t(stageNameKey(entry.stage)),
+      });
+    case "truth":
+      return t("ui.otomeForge.confrontation.truthTitle", values);
+    case "walkout":
+      return t("ui.otomeForge.confrontation.walkoutTitle", values);
+    case "opened":
+      return t("ui.otomeForge.closer.openedTitle", values);
+    case "shut":
+      return t("ui.otomeForge.closer.shutTitle", values);
+    default:
+      return t("ui.otomeForge.arcs.sideMomentRepair", values);
+  }
+}
+
+/**
+ * #2155: his side of a big moment, waiting under his route (or being read): the arc it belongs to, the moment and its
+ * chapter, and Read, which writes its chapter with no model call; its one call is its scene. It paints only a place
+ * with no picture yet. While it opens, Read is busy and the cost line (a status) says so.
+ */
+function SideRow({
+  entry,
+  li,
+  images,
+  opening,
+  onRead,
+}: {
+  entry: HisSideEntry;
+  li: RunLiView;
+  images: RunView["world"]["images"];
+  opening: boolean;
+  onRead: () => void;
+}) {
+  const { t } = useTranslation();
+  const values = pronounValues(li);
+  const title = entry.title || t("ui.otomeForge.story.untitled");
+  const titleId = `of-side-${entry.key}`;
+  return (
+    <div className="of-route-side" role="group" aria-labelledby={titleId}>
+      <p className="of-route-side-head">
+        <Eye size={15} strokeWidth={2} aria-hidden="true" />
+        <span id={titleId}>{t("ui.otomeForge.arcs.sideTitle", values)}</span>
+        <span className="of-badge of-badge--soft">
+          {entry.arc
+            ? t("ui.otomeForge.story.arcHeading", { number: entry.arc })
+            : t("ui.otomeForge.story.arcHeadingBefore")}
+        </span>
+      </p>
+      <p className="of-route-side-line">
+        {t("ui.otomeForge.arcs.sideMoment", { moment: sideMoment(t, entry, li), title })}
+      </p>
+      <div className="of-inline-actions">
+        <button
+          type="button"
+          className="of-button of-button--primary"
+          aria-label={t(entry.reading ? "ui.otomeForge.arcs.sideContinueLabel" : "ui.otomeForge.arcs.sideReadLabel", {
+            ...values,
+            title,
+          })}
+          aria-disabled={opening || undefined}
+          aria-busy={opening || undefined}
+          onClick={opening ? undefined : onRead}
+        >
+          <BookOpen size={16} strokeWidth={2} aria-hidden="true" />
+          {entry.reading ? t("ui.otomeForge.story.continue") : t("ui.otomeForge.arcs.sideRead")}
+        </button>
+        {entry.reading ? null : (
+          <>
+            <p className="of-cost" role="status">
+              <Feather size={14} strokeWidth={2} aria-hidden="true" />
+              <span>{opening ? t("ui.otomeForge.arcs.planningSide", values) : t("ui.otomeForge.arcs.sideCost")}</span>
+            </p>
+            <ChapterPaintCost images={images} cost="ui.otomeForge.arcs.sidePaintCost" />
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 

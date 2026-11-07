@@ -244,8 +244,13 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
   const [auto, setAuto] = useState(false);
   const [finished, setFinished] = useState(false);
   const [chapterGrants, setChapterGrants] = useState<Grant[]>([]);
-  /** What this read changed in the arcs: a stage a route chapter's gate opened, a rupture a repair closed. */
-  const [arcNews, setArcNews] = useState<{ stageUp?: { li: LiId; stage: number }; repaired?: LiId }>({});
+  /**
+   * What this read changed in the arcs: a stage a route chapter's gate opened, a rupture a repair closed, a big moment
+   * whose side waits in Routes (#2155).
+   */
+  const [arcNews, setArcNews] = useState<{ stageUp?: { li: LiId; stage: number }; repaired?: LiId; hisSide?: LiId }>(
+    {},
+  );
   const [toasts, setToasts] = useState<ReaderToast[]>([]);
   const [choosing, setChoosing] = useState<string | null>(null);
   const [choiceError, setChoiceError] = useState<string | null>(null);
@@ -474,10 +479,15 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
       if (beatStarlight > 0) pushToast({ kind: "starlight", amount: beatStarlight });
       const chapterOnes = grants.filter((grant) => grant.source !== "beat");
       if (chapterOnes.length) setChapterGrants((list) => [...list, ...chapterOnes]);
-      const { stageUp, repaired } = result;
-      if (stageUp || repaired) {
-        setArcNews((news) => ({ ...news, ...(stageUp ? { stageUp } : {}), ...(repaired ? { repaired } : {}) }));
-        // The story screen's routes and repairs follow from it.
+      const { stageUp, repaired, hisSide } = result;
+      if (stageUp || repaired || hisSide) {
+        setArcNews((news) => ({
+          ...news,
+          ...(stageUp ? { stageUp } : {}),
+          ...(repaired ? { repaired } : {}),
+          ...(hisSide ? { hisSide } : {}),
+        }));
+        // The story screen's routes, repairs and sides follow from it.
         void queryClient.invalidateQueries({ queryKey: storyQueryKey(runKey) });
       }
       if (typeof result.starlight === "number") {
