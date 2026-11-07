@@ -1,9 +1,14 @@
 # Otome Hearth release notes
 
-## 0.14.0 — 2026-11-07
+## 0.13.0 — 2026-11-07
 
 - **Everyone, a group chat with your love interests.** Messages now starts with **Everyone**, one thread with every love interest you've met. Write there and someone always answers: whoever you name, and the others when it suits them, each in their own colour. **Close and remember** turns the conversation into a memory that everyone in it recalls, and earns no affection.
 - **Let them squabble.** **Settings → Connections** sets how many times a day they may start squabbling in Everyone on their own, while Otome Hearth is open. Each squabble is 1 call with your Messages connection; 0, the default, keeps it off.
+
+## 0.11.0 — 2026-11-07
+
+- **Tarot night.** A new date in Dates: three cards of the Major Arcana, as Past, Present and Future. A love interest reads your cards and answers your question, or you read theirs, choosing how to read each card, spoken in your persona's voice. A reading pays 40 Starlight and 40 affection within the day's caps, costs 1 model call, changes nothing in the story, and only they remember it. A reading you leave opens again: when they read your cards, from its start; when you read theirs, at the card you still have to read.
+- **A Tarot deck painted for your story.** With an image connection, each card is painted the first time it is drawn and kept: your cards show you, theirs show them, and the Lovers, the Sun, Temperance and Judgement show you both. At most 3 images a reading, only for cards not painted yet; Ask before painting and prompt review wait for your tap. Without one, the cards are Otome Hearth's own gold line art.
 
 ## 0.10.0 — 2026-11-07
 

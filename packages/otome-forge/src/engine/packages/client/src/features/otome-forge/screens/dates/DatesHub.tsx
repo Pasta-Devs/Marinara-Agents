@@ -1,8 +1,8 @@
 // ──────────────────────────────────────────────
-// Otome Forge: Dates. Pick who to spend time with, then one of the five activities: Read {{name}}, Read Me (#1945),
-// Date Night (Make it right during a rupture), the Photo Shoot (#2087: only with an image connection, and it pays
-// nothing) and the Claw Machine, each with what it pays and what it costs; today's capped rewards; and the plush
-// shelf. Play is never limited, only the day's rewards are (plan M5, design: Mini-games).
+// Otome Forge: Dates. Pick who to spend time with, then one of the six activities: Read {{name}}, Read Me (#1945),
+// Tarot night (#2151), Date Night (Make it right during a rupture), the Photo Shoot (#2087: only with an image
+// connection, and it pays nothing) and the Claw Machine, each with what it pays and what it costs; today's capped
+// rewards; and the plush shelf. Play is never limited, only the day's rewards are (plan M5, design: Mini-games).
 // ──────────────────────────────────────────────
 // GET /runs/:run/play → PlayView (S/routes/claw.ts). Each activity is a screen of its own that OtomeForgeView opens
 // with ActivityScreenProps; one that has not arrived yet in this build shows its card without a Play button, and so
@@ -17,6 +17,7 @@ import {
   Feather,
   Heart,
   Image as ImageIcon,
+  MoonStar,
   NotebookPen,
   RotateCcw,
   Sparkles,
@@ -34,7 +35,7 @@ import type { RunLiView, RunView } from "../../shared/api-types";
 import { PLUSH_SERIES, liPlushId, type PlayView } from "../../shared/claw";
 import { AFFECTION_EARNINGS, STARLIGHT_EARNINGS } from "../../shared/economy";
 
-export const DATE_ACTIVITIES = ["read-him", "read-me", "date-night", "photo-shoot", "claw"] as const;
+export const DATE_ACTIVITIES = ["read-him", "read-me", "tarot", "date-night", "photo-shoot", "claw"] as const;
 export type DateActivity = (typeof DATE_ACTIVITIES)[number];
 
 /** What OtomeForgeView gives each activity's screen: the run, the love interest it is played with, and the way back. */
@@ -64,6 +65,8 @@ interface ActivityCopy {
   text: string;
   repairText?: string;
   cost: string;
+  /** The cost with an image connection, when it differs (Tarot night paints the cards it draws). */
+  costImages?: string;
   CostIcon: LucideIcon;
 }
 
@@ -81,6 +84,14 @@ const ACTIVITY_COPY: Record<DateActivity, ActivityCopy> = {
     title: "ui.otomeForge.dates.readMeTitle",
     text: "ui.otomeForge.dates.readMeText",
     cost: "ui.otomeForge.dates.readMeCost",
+    CostIcon: Feather,
+  },
+  tarot: {
+    Icon: MoonStar,
+    title: "ui.otomeForge.dates.tarotTitle",
+    text: "ui.otomeForge.dates.tarotText",
+    cost: "ui.otomeForge.dates.tarotCost",
+    costImages: "ui.otomeForge.dates.tarotCostImages",
     CostIcon: Feather,
   },
   "date-night": {
@@ -123,6 +134,10 @@ const REWARDS: Record<DateActivity, { key: string; values: Record<string, number
       right: AFFECTION_EARNINGS.readMeRight,
       close: AFFECTION_EARNINGS.readMeClose,
     },
+  },
+  tarot: {
+    key: "ui.otomeForge.dates.rewardFlat",
+    values: { starlight: STARLIGHT_EARNINGS.tarot, affection: AFFECTION_EARNINGS.tarot },
   },
   "date-night": {
     key: "ui.otomeForge.dates.rewardFlat",
@@ -313,7 +328,7 @@ export function DatesHub({ runKey, view, li, onPickLi, available, onPlay }: Date
                     </p>
                     <p className="of-cost">
                       <copy.CostIcon size={13} strokeWidth={2} aria-hidden="true" />
-                      <span>{t(copy.cost)}</span>
+                      <span>{t(copy.costImages && imagesOn(view) ? copy.costImages : copy.cost)}</span>
                     </p>
                   </div>
                   {ready ? (
