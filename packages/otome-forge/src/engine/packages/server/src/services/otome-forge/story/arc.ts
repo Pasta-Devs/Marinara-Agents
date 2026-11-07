@@ -134,7 +134,7 @@ export async function planArc(
     runId,
     job: "structured",
     label: `arc-plan/${input.number}`,
-    messages: arcPlanMessages(input),
+    messages: arcPlanMessages(input, { pieces, truth }),
     ...(memory ? { memory } : {}),
     schema: ArcPlanSchema,
     normalize: (reply) => {

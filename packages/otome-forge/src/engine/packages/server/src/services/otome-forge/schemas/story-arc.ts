@@ -272,6 +272,9 @@ export function normalizeArcPlan(reply: z.infer<typeof ArcPlanSchema>, context: 
   }
 
   // Story arc: one ending, scheduled reveals in order, no repeat, nothing before its chapter, at most one per chapter.
+  // A reveal the run already holds (a piece told before, the truth once told, the same piece or the truth twice in this
+  // arc) is dropped, never refused: the player already knows it, so the arc loses nothing, and refusing it cost the
+  // player the whole arc when the planner could not fix it in its one repair turn (#2172).
   // The big event is always the arc's last chapter (chapters.ts carries it there), so its position is not the model's.
   const endsWith = reply.endsWith?.what.trim() ? { n: endsAt, what: reply.endsWith.what.trim() } : null;
   if (!endsWith) return "a story arc needs endsWith: how the arc ends, in one sentence";
@@ -283,20 +286,20 @@ export function normalizeArcPlan(reply: z.infer<typeof ArcPlanSchema>, context: 
     const n = from + reveal.chapter - 1;
     if (reveal.chapter > count)
       return `a reveal is scheduled past the arc's last chapter (in chapter ${reveal.chapter})`;
-    if (seenChapters.has(n)) return `chapter ${n} is scheduled to reveal twice; one reveal per chapter`;
-    seenChapters.add(n);
     if (reveal.kind === "truth") {
-      if (context.truthTold) return "the mystery's truth was already told: a new arc cannot reveal it again";
-      if (sawTruth) return "the truth is revealed once per arc";
+      if (context.truthTold || sawTruth) continue;
+      if (seenChapters.has(n)) return `chapter ${n} is scheduled to reveal twice; one reveal per chapter`;
+      seenChapters.add(n);
       sawTruth = true;
       reveals.push({ n, kind: "truth", what: reveal.what.trim() });
       continue;
     }
     const li = context.resolveLi(reveal.li);
     if (!li) return `a piece reveal must name one of the cast (got ${JSON.stringify(reveal.li ?? null)})`;
-    if (context.revealed.has(li)) return `${li}'s piece of the mystery was already revealed; schedule another piece`;
-    // A love interest holds one piece: scheduling it twice in the same arc would ask two chapters to say it once.
-    if (scheduled.has(li)) return `${li}'s piece is already scheduled in this arc`;
+    // A love interest holds one piece: told before, or already scheduled earlier in this arc, it is said once.
+    if (context.revealed.has(li) || scheduled.has(li)) continue;
+    if (seenChapters.has(n)) return `chapter ${n} is scheduled to reveal twice; one reveal per chapter`;
+    seenChapters.add(n);
     scheduled.add(li);
     reveals.push({ n, kind: "piece", li, what: reveal.what.trim() });
   }
