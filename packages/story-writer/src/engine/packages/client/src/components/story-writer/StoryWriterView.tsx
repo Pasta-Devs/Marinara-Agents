@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────
-// Story Writer: the full-page view (stage, book, sticky note, action bar, settings drawer)
+// Story Writer: the full-page view (stage, book, chapter bar, sticky note, action and quick bars, settings drawer)
 // ──────────────────────────────────────────────
 import {
   useCallback,
@@ -24,7 +24,7 @@ import { downloadTextFile, storyFileName, storyToMarkdown, storyToPlainText } fr
 import { countWords, storyDisplayTitle, type StoryChapter, type StorySummary } from "../../lib/story-writer/model";
 import { storyThemeVariables, type ResolvedColorMode } from "../../lib/story-writer/styles-shell";
 import { generateClientId } from "../../lib/utils";
-import { ActionBar, type FullscreenControl } from "./ActionBar";
+import { ActionBar, QuickReplyBar, type FullscreenControl } from "./ActionBar";
 import { StickyNote } from "./StickyNote";
 import { StoryReader, type StoryReaderHandle } from "./StoryReader";
 import { StorySidebar, type SidebarSectionId } from "./StorySidebar";
@@ -133,6 +133,7 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sectionRequest, setSectionRequest] = useState<{ id: SidebarSectionId; nonce: number } | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
+  const [chapterBarHost, setChapterBarHost] = useState<HTMLDivElement | null>(null);
   const [ghostChapterId, setGhostChapterId] = useState(generateClientId);
   const [firstStoryFailed, setFirstStoryFailed] = useState(false);
   const readerRef = useRef<StoryReaderHandle>(null);
@@ -210,6 +211,7 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
         .filter(Boolean)
         .join(" · ")
     : "";
+  const showQuickReplies = preferences.showQuickReplies && preferences.quickReplies.length > 0;
   const fullscreen = readFullscreen(capabilityProps.browserFullscreen, {
     enter: t("actions.enterFullscreen"),
     exit: t("actions.exitFullscreen"),
@@ -299,9 +301,9 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
     if (await flush()) toast.success(t("stories.savedToast"));
     else toast.warning(t("stories.saveFailed"));
   };
-  const openLibrary = () => {
+  const openSection = (id: SidebarSectionId) => {
     setSidebarOpen(true);
-    setSectionRequest((current) => ({ id: "stories", nonce: (current?.nonce ?? 0) + 1 }));
+    setSectionRequest((current) => ({ id, nonce: (current?.nonce ?? 0) + 1 }));
   };
   const onKeyDown = (event: KeyboardEvent) => {
     // Ctrl/Cmd+S saves the story instead of opening the browser's "Save page" dialog.
@@ -374,6 +376,7 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
       data-sw-sidebar={preferences.sidebarSide}
       data-sw-note={preferences.noteSide}
       data-sw-sidebar-open={sidebarOpen ? "true" : "false"}
+      data-sw-quick={showQuickReplies ? "true" : "false"}
       style={themeStyle}
       onKeyDown={onKeyDown}
     >
@@ -393,6 +396,7 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
               ghostChapterId={ghostChapterId}
               editable={generation.status === "idle"}
               mariImageUrl={assetUrl(STORY_WRITER_ASSETS.mari)}
+              chapterBarHost={chapterBarHost}
               onChapterChange={onChapterChange}
               onStartChapter={onStartChapter}
             />
@@ -411,6 +415,7 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
         </div>
         {data && settings ? (
           <>
+            <div ref={setChapterBarHost} className="sw-chapterbar" />
             <StickyNote
               key={data.story.id}
               side={preferences.noteSide}
@@ -422,24 +427,35 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
               onChange={(authorNote) => doc.updateSettings({ authorNote })}
               onDepthChange={(authorNoteDepth) => doc.updateSettings({ authorNoteDepth })}
             />
-            <ActionBar
-              status={generation.status}
-              canWrite={generation.canWrite}
-              hasConnection={hasConnection || connectionsLoading}
-              chapterCount={chapters.length}
-              lastChapterDraft={lastChapter?.status === "draft"}
-              generatingChapterNumber={generatingIndex >= 0 ? generatingIndex + 1 : null}
-              liveWords={generation.liveWords}
-              totalWords={totalWords}
-              targetWords={settings.targetWords}
-              fullscreen={fullscreen}
-              onWrite={() => void generation.write("next")}
-              onContinue={() => void generation.write("continue")}
-              onRewrite={() => void rewriteLastChapter()}
-              onStop={generation.stop}
-              onOpenLibrary={openLibrary}
-              onFinishChapter={() => void finishChapter()}
-            />
+            <div className="sw-dock">
+              <ActionBar
+                status={generation.status}
+                canWrite={generation.canWrite}
+                hasConnection={hasConnection || connectionsLoading}
+                chapterCount={chapters.length}
+                lastChapterDraft={lastChapter?.status === "draft"}
+                generatingChapterNumber={generatingIndex >= 0 ? generatingIndex + 1 : null}
+                liveWords={generation.liveWords}
+                totalWords={totalWords}
+                targetWords={settings.targetWords}
+                fullscreen={fullscreen}
+                onWrite={() => void generation.write("next")}
+                onContinue={() => void generation.write("continue")}
+                onRewrite={() => void rewriteLastChapter()}
+                onStop={generation.stop}
+                onOpenLibrary={() => openSection("stories")}
+                onFinishChapter={() => void finishChapter()}
+              />
+              {showQuickReplies ? (
+                <QuickReplyBar
+                  replies={preferences.quickReplies}
+                  canWrite={generation.canWrite}
+                  hasConnection={hasConnection || connectionsLoading}
+                  onSend={(request) => void generation.write("next", request)}
+                  onEdit={() => openSection("quickReplies")}
+                />
+              ) : null}
+            </div>
           </>
         ) : null}
         <StorySidebar

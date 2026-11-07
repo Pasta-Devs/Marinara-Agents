@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────
-// Story Writer: the floating bar under the book (write, stop, continue, rewrite, fullscreen, word count)
+// Story Writer: the floating bars under the book (write, stop, continue, rewrite, fullscreen, word count; quick replies)
 // ──────────────────────────────────────────────
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
@@ -10,11 +10,13 @@ import {
   Loader2,
   Maximize2,
   Minimize2,
+  Pencil,
   RotateCcw,
   Square,
   StepForward,
 } from "lucide-react";
 import type { GenerationStatus } from "../../hooks/use-story-generation";
+import type { QuickReply } from "../../lib/story-writer/model";
 import { useNumberFormat } from "./sidebar/fields";
 
 export interface FullscreenControl {
@@ -205,6 +207,54 @@ export function ActionBar(props: {
           </span>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+/** The saved quick replies: each one writes like the primary button, sending its instruction instead. */
+export function QuickReplyBar(props: {
+  replies: QuickReply[];
+  canWrite: boolean;
+  hasConnection: boolean;
+  onSend(request: string): void;
+  onEdit(): void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="sw-quickbar" role="toolbar" aria-label={t("quickReplies.label")}>
+      <div
+        className="sw-quickbar-list"
+        // The row has no scrollbar: an ordinary mouse wheel scrolls it sideways.
+        onWheel={(event) => {
+          if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+          // A wheel that counts lines (Firefox) or pages moves the row as far as one that counts pixels.
+          const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? event.currentTarget.clientWidth : 1;
+          event.currentTarget.scrollLeft += event.deltaY * unit;
+        }}
+      >
+        {props.replies.map((reply) => (
+          // The whole label is the button's name; CSS shortens what is shown.
+          <button
+            key={reply.id}
+            type="button"
+            className="sw-quick-reply"
+            disabled={!props.canWrite}
+            title={props.hasConnection ? reply.text : t("actions.noConnection")}
+            onClick={() => props.onSend(reply.text)}
+          >
+            {reply.label || reply.text}
+          </button>
+        ))}
+      </div>
+      <button
+        type="button"
+        className="sw-action-icon"
+        aria-label={t("quickReplies.edit")}
+        title={t("quickReplies.edit")}
+        onClick={props.onEdit}
+      >
+        <Pencil size={16} aria-hidden="true" />
+      </button>
     </div>
   );
 }

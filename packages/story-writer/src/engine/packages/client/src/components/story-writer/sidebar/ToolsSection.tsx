@@ -14,7 +14,7 @@ import {
   type StorySettings,
   type TimelineEvent,
 } from "../../../lib/story-writer/model";
-import { NumberField, TextField, Toggle, useDraftText, useNumberFormat } from "./fields";
+import { EntryText, NumberField, TextField, Toggle, useNumberFormat } from "./fields";
 
 type SettingsChange = (patch: Partial<StorySettings>, options?: { immediate?: boolean }) => void;
 
@@ -252,9 +252,10 @@ function TimelineEditor(props: { events: TimelineEvent[]; onChange: SettingsChan
                   replace(events.map((item) => (item.id === event.id ? { ...item, done: !item.done } : item)))
                 }
               />
-              <EventText
+              <EntryText
                 value={event.text}
                 label={t("tools.eventText", { number: index + 1 })}
+                maxLength={LIMITS.timelineEventText}
                 onChange={(text) =>
                   replace(
                     events.map((item) => (item.id === event.id ? { ...item, text } : item)),
@@ -317,32 +318,5 @@ function TimelineEditor(props: { events: TimelineEvent[]; onChange: SettingsChan
         </form>
       ) : null}
     </>
-  );
-}
-
-/**
- * An event's text. Stored events are trimmed and never empty, so clearing the field keeps the old text (delete has its
- * own button) and a trailing space being typed is not an outside change.
- */
-function EventText(props: { value: string; label: string; onChange(text: string): void }) {
-  const [draft, update] = useDraftText(
-    props.value,
-    (text) => {
-      if (text.trim() && text.trim() !== props.value) props.onChange(text);
-    },
-    (text) => text.trim().slice(0, LIMITS.timelineEventText),
-  );
-  return (
-    <input
-      type="text"
-      className="sw-input"
-      value={draft}
-      maxLength={LIMITS.timelineEventText}
-      aria-label={props.label}
-      onChange={(event) => update(event.target.value)}
-      onBlur={() => {
-        if (!draft.trim()) update(props.value);
-      }}
-    />
   );
 }

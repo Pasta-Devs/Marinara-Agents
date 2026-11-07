@@ -35,7 +35,7 @@ To move around:
 - the ‹ and › arrows beside the book,
 - the ← and → keys (or Page Up and Page Down) when you are not typing,
 - a sideways swipe on a touch screen when you are not editing,
-- the chapter buttons and the "Chapter 2 · Page 5 of 18" line under the book,
+- the chapter buttons and the "Chapter 2 · Page 5 of 18" bar above the book (on a phone it sits beside the sticky note and reads "Ch. 2 · 5/18"),
 - or a chapter's name in **Author tools → Chapters**, which jumps straight to it.
 
 While the model writes, the book follows along and turns pages for you, unless you have moved somewhere else in the meantime.
@@ -56,16 +56,25 @@ The sticky note in the top corner holds your instructions for the next chapter, 
 
 The note works like **Author's Notes** in Roleplay: it is sent as one of your messages, at the **Depth** you set on the note. Depth **0** (the default) puts it right before your continue message, so the model reads it last. Depth **1** puts it before the latest chapter, **2** one message further back, and so on; it never goes above the system prompt.
 
+## Quick replies
+
+Quick replies are instructions you use again and again, such as "More dialogue" or "Slow down and describe the place", saved as buttons next to **Write next chapter**. Clicking one does what **Write next chapter** would (it writes the next chapter, or continues a draft), but sends that instruction in place of your continue message. Your author's note still goes with it.
+
+Add them in the sidebar under **Quick replies**: an **Instruction**, and optionally a short **Button label** (without one, the button shows the instruction). You can change or delete them there at any time, and **Edit quick replies** (the pencil at the end of the row) takes you there. **Show quick replies** hides the row when you want the room for the book. Every story shares the same quick replies, and the row only appears once you have added one.
+
+A new chapter remembers the quick reply it was written from, so the model sees it again in the story's history and **Rewrite the last chapter** asks for the same thing. Continuing a draft with a quick reply sends it once; the draft keeps the request it was started with.
+
 ## The buttons at the bottom
 
 - **Write next chapter**: writes a new chapter. When the last chapter is a draft, it reads **Continue chapter N** and finishes that chapter instead.
 - **Stop**: shown while the model writes, with a live word count.
 - **Continue the last chapter**: asks the model for more of a finished chapter, for example when it ended too soon.
 - **Finish this chapter** (shown while the last chapter is a draft): marks it finished and writes the next chapter, for when a draft is done as it is.
-- **Rewrite the last chapter**: throws the last chapter away and writes it again. Story Writer asks first.
+- **Rewrite the last chapter**: throws the last chapter away and writes it again from the request it was written from: the quick reply, or your continue message as it was then, even if you have changed it since. To steer a rewrite, change the author's note first. Story Writer asks first.
 - **Your stories**: opens your story list.
 - **Fullscreen**: hides the rest of Marinara Engine.
 - The word count of the whole story, with a progress bar when you have set a story length target.
+- Your **quick replies**, when you have some: beside these buttons on a wide screen, just above them on a narrower one.
 
 On small screens the buttons shrink to icons.
 
@@ -79,7 +88,7 @@ Press the **Your stories** button (the bookshelf icon) at the bottom of the scre
 
 ## The sidebar
 
-Every change saves on its own after a moment. A small "Saving…" or "All changes saved" shows how it is going. The **Appearance** settings and **Stream text** apply to all your stories; everything else belongs to the story you have open.
+Every change saves on its own after a moment. A small "Saving…" or "All changes saved" shows how it is going. The **Appearance** settings, your **Quick replies** and **Stream text** apply to all your stories; everything else belongs to the story you have open.
 
 ### Stories
 
@@ -101,7 +110,7 @@ The same list as **Your stories**: open, start, duplicate, delete and download s
 
 **Characters**, **Personas** and **Lorebooks**, each a searchable list you tick. Nothing is selected in a new story.
 
-For each character and persona the model gets its description, personality, backstory, appearance, scenario and example dialogue. From lorebooks it gets only the entries that matter right now: the Engine's own keyword scanner checks your overview, author's note and the last few chapters, and always-on entries are always included.
+For each character and persona the model gets its description, personality, backstory, appearance, scenario and example dialogue. From lorebooks it gets only the entries that matter right now: the Engine's own keyword scanner checks your overview, author's note, the last few chapters, and the quick reply you clicked (or the older request a rewrite sends again), and always-on entries are always included.
 
 ### Writing
 
@@ -134,6 +143,13 @@ After each chapter, Story Writer tells you if any of your banned words or phrase
 | Clear after the next chapter | Empties the author's note once the next chapter is written. | off |
 | Depth (on the sticky note) | Where the author's note goes among the messages: 0 = right before your continue message. | 0 |
 
+### Quick replies
+
+| Setting | What it does | Default |
+| --- | --- | --- |
+| Show quick replies | Shows the row of quick replies next to **Write next chapter**. | on |
+| Quick replies | Up to 24 instructions, each with an optional button label, shared by every story. | none |
+
 ### Appearance
 
 | Setting | Choices | Default |
@@ -153,8 +169,8 @@ Each time you ask for a chapter, Story Writer puts together the same kind of con
 
 1. **One system message** with, in this order: your prompt; the story details (title, fandom, genre, rating, relationships, content warnings, tags, author and style); the overview; the lorebook entries that matter right now; your characters; your personas; your story notes; the timeline; summaries of earlier chapters; where the story is in length; your banned phrases; the language; and how to format the chapter. `{{char}}` and `{{user}}` in cards and lorebooks become the character's name and your first persona's name.
 2. **The chapters it reads in full**, oldest first (see Summaries below). Each one is sent as your request (a user message) followed by the chapter itself (an assistant message), just as if the model had written it in a chat.
-3. **Your author's note** as a user message at its depth (right before the continue message at depth 0).
-4. **Your continue message** as the final user message.
+3. **Your author's note** as a user message at its depth (right before the final message at depth 0).
+4. **Your continue message**, or the quick reply you clicked, as the final user message. A rewrite sends the request the chapter was written from instead.
 
 When the model continues an unfinished chapter, that chapter is the last assistant message and the model is asked to pick up exactly where it stops, without repeating anything or adding a heading.
 
@@ -184,7 +200,7 @@ Stories, chapters and settings are saved on your Marinara Engine server with its
 
 ## On a phone or tablet
 
-Story Writer works in portrait and landscape. In portrait, the book shows a single page at a time; turn the device sideways for a two-page spread. Swipe sideways to turn pages, and tap the text when you want to edit it. The sidebar covers most of the screen while it is open; close it with its arrow. **Fullscreen** gives the book the whole screen.
+Story Writer works in portrait and landscape. In portrait, the book shows a single page at a time; turn the device sideways for a two-page spread. Sideways, the buttons stand upright at the side and your quick replies sit at the bottom of the screen. Swipe sideways to turn pages, and tap the text when you want to edit it. The sidebar covers most of the screen while it is open; close it with its arrow. **Fullscreen** gives the book the whole screen.
 
 ## Privacy
 

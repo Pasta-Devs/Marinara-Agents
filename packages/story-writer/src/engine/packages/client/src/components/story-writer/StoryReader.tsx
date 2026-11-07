@@ -13,7 +13,7 @@ import {
   type TouchEvent as ReactTouchEvent,
   type WheelEvent as ReactWheelEvent,
 } from "react";
-import { flushSync } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { chapterTitle, type StoryChapter, type StoryTheme } from "../../lib/story-writer/model";
@@ -56,6 +56,8 @@ export interface StoryReaderProps {
   /** False while any generation is running. */
   editable: boolean;
   mariImageUrl: string;
+  /** Where the chapter bar goes: the shell's band above the book. */
+  chapterBarHost: HTMLElement | null;
   onChapterChange(chapterId: string, markdown: string): void;
   onStartChapter(chapterId: string, markdown: string): void;
 }
@@ -169,8 +171,17 @@ const TitlePage = memo(function TitlePage({
  */
 export const StoryReader = forwardRef<StoryReaderHandle, StoryReaderProps>(function StoryReader(props, ref) {
   // pageAnimation is read at navigation time through `live`.
-  const { theme, storyTitle, storyDetails, chapters, generatingChapterId, ghostChapterId, editable, mariImageUrl } =
-    props;
+  const {
+    theme,
+    storyTitle,
+    storyDetails,
+    chapters,
+    generatingChapterId,
+    ghostChapterId,
+    editable,
+    mariImageUrl,
+    chapterBarHost,
+  } = props;
   const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement>(null);
   const probeRef = useRef<HTMLSpanElement>(null);
@@ -753,11 +764,13 @@ export const StoryReader = forwardRef<StoryReaderHandle, StoryReaderProps>(funct
     const visible = sides.map((_, index) => blockAtPage(blocks, first + index));
     const shownChapterIndex = visible.findIndex((block) => block?.kind === "chapter");
     const shownChapter = shownChapterIndex >= 0 ? visible[shownChapterIndex] : null;
-    const indicator = shownChapter
-      ? t("reader.indicator", { chapter: shownChapter.number, page: first + shownChapterIndex, total: numberedPages })
+    const pageInfo = { chapter: shownChapter?.number, page: first + shownChapterIndex, total: numberedPages };
+    const nextInfo = { chapter: chapters.length + 1 };
+    const [indicator, indicatorShort] = shownChapter
+      ? [t("reader.indicator", pageInfo), t("reader.indicatorShort", pageInfo)]
       : visible[0]?.kind === "ghost"
-        ? t("reader.indicatorNext", { chapter: chapters.length + 1 })
-        : t("reader.indicatorTitle");
+        ? [t("reader.indicatorNext", nextInfo), t("reader.indicatorNextShort", nextInfo)]
+        : [t("reader.indicatorTitle"), t("reader.indicatorTitle")];
     let previousChapterSpread: number | null = null;
     let nextChapterSpread: number | null = null;
     for (const block of blocks) {
@@ -931,31 +944,38 @@ export const StoryReader = forwardRef<StoryReaderHandle, StoryReaderProps>(funct
         >
           <ChevronRight aria-hidden="true" size={24} strokeWidth={1.75} />
         </button>
-        <div className="sw-reader-footer" style={{ top: layout.footerTop, height: layout.footerHeight }}>
-          <div className="sw-reader-footer-bar">
-            <button
-              type="button"
-              disabled={previousChapterSpread === null}
-              aria-label={t("reader.previousChapter")}
-              title={t("reader.previousChapter")}
-              onClick={() => previousChapterSpread !== null && navigate(previousChapterSpread, { user: true })}
-            >
-              <ChevronsLeft aria-hidden="true" size={18} />
-            </button>
-            <span className="sw-indicator" aria-live="polite">
-              {indicator}
-            </span>
-            <button
-              type="button"
-              disabled={nextChapterSpread === null}
-              aria-label={t("reader.nextChapter")}
-              title={t("reader.nextChapter")}
-              onClick={() => nextChapterSpread !== null && navigate(nextChapterSpread, { user: true })}
-            >
-              <ChevronsRight aria-hidden="true" size={18} />
-            </button>
-          </div>
-        </div>
+        {chapterBarHost
+          ? // Above the book, in the shell's top band: the reader keeps its whole height for the pages.
+            createPortal(
+              <nav className="sw-chapterbar-pill" aria-label={t("tools.chapters")}>
+                <button
+                  type="button"
+                  disabled={previousChapterSpread === null}
+                  aria-label={t("reader.previousChapter")}
+                  title={t("reader.previousChapter")}
+                  onClick={() => previousChapterSpread !== null && navigate(previousChapterSpread, { user: true })}
+                >
+                  <ChevronsLeft aria-hidden="true" size={18} />
+                </button>
+                <span className="sw-indicator" aria-live="polite">
+                  <span className="sw-indicator-long">{indicator}</span>
+                  <span className="sw-indicator-short" aria-hidden="true">
+                    {indicatorShort}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  disabled={nextChapterSpread === null}
+                  aria-label={t("reader.nextChapter")}
+                  title={t("reader.nextChapter")}
+                  onClick={() => nextChapterSpread !== null && navigate(nextChapterSpread, { user: true })}
+                >
+                  <ChevronsRight aria-hidden="true" size={18} />
+                </button>
+              </nav>,
+              chapterBarHost,
+            )
+          : null}
       </>
     );
   }

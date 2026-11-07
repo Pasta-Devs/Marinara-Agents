@@ -335,11 +335,14 @@ ${R} .sw-root {
   font-family: var(--sw-ui-font); color: var(--sw-panel-fg); background: #120d09;
   -webkit-tap-highlight-color: transparent;
   --sw-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* The bars' heights; the book's slot is inset by them, so a bar never covers the book. */
+  --sw-chapterbar-h: 38px;
+  --sw-quickbar-h: 48px;
 }
 ${R} .sw-frame {
   position: absolute; inset: 0;
-  --sw-slot-top: 22px;
-  --sw-slot-bottom: calc(92px + ${SAFE_BOTTOM});
+  --sw-slot-top: calc(10px + var(--sw-chapterbar-h));
+  --sw-slot-bottom: calc(84px + ${SAFE_BOTTOM});
   --sw-slot-left: 48px;
   --sw-slot-right: 48px;
 }
@@ -355,7 +358,7 @@ ${R} .sw-slot-message {
 ${R} .sw-slot-message p { margin: 0; max-width: 34ch; }
 ${R} .sw-spin { animation: sw-spin 1s linear infinite; }
 @keyframes sw-spin { to { transform: rotate(360deg); } }
-${R} :is(.sw-drawer, .sw-note-anchor, .sw-actionbar, .sw-slot-message) :focus-visible {
+${R} :is(.sw-drawer, .sw-note-anchor, .sw-dock, .sw-chapterbar, .sw-slot-message) :focus-visible {
   outline: 2px solid var(--sw-accent); outline-offset: 2px;
 }
 ${R} .sw-visually-hidden {
@@ -622,7 +625,15 @@ ${R} .sw-event .sw-input { flex: 1; min-height: 34px; padding: 6px 8px; }
 ${R} .sw-event[data-done="true"] .sw-input { text-decoration: line-through; opacity: 0.7; }
 ${R} .sw-event .sw-icon-button { width: 30px; height: 30px; }
 ${R} .sw-event-add { display: flex; gap: 8px; }
-${R} .sw-event-add .sw-input { flex: 1; }`;
+${R} .sw-event-add .sw-input { flex: 1; }
+${R} .sw-quick-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+${R} .sw-quick-item {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px; padding: 8px;
+  border-radius: 10px; background: var(--sw-control-bg);
+}
+${R} .sw-quick-item .sw-textarea { grid-column: 1 / -1; min-height: 60px; }
+${R} .sw-quick-add { display: grid; gap: 6px; }
+${R} .sw-quick-add .sw-button-row { margin-top: 4px; }`;
 
 const NOTE_RULES = `
 ${R} .sw-note-anchor { position: absolute; top: 14px; z-index: 25; width: 0; height: 0; }
@@ -697,14 +708,65 @@ ${R} .sw-root[data-sw-theme="ebook"] :is(.sw-note-title, .sw-note-head h2) { fon
 ${R} .sw-root[data-sw-theme="ebook"] .sw-note-title { font-size: 14px; }
 ${R} .sw-root[data-sw-theme="ebook"] .sw-note-head h2 { font-size: 17px; }`;
 
+// The chapter bar above the book, and the dock under it: the action bar and the quick replies, side by side on wide
+// screens and stacked (quick replies on top) on narrower ones.
 const ACTION_RULES = `
-${R} .sw-actionbar {
+${R} .sw-chapterbar {
+  position: absolute; top: 8px; left: 50%; z-index: 20; translate: -50% 0; width: max-content; max-width: calc(100% - 360px);
+}
+${R} .sw-chapterbar-pill {
+  display: flex; align-items: center; gap: 2px; box-sizing: border-box; height: var(--sw-chapterbar-h); padding: 2px;
+  border: 1px solid var(--sw-panel-border); border-radius: 999px; color: var(--sw-panel-fg);
+  background: color-mix(in srgb, var(--sw-panel-bg) 70%, transparent); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  font-size: 12.5px; line-height: 1; user-select: none; -webkit-user-select: none;
+}
+${R} .sw-chapterbar-pill button {
+  display: grid; flex: none; place-items: center; width: calc(var(--sw-chapterbar-h) - 6px);
+  height: calc(var(--sw-chapterbar-h) - 6px); padding: 0; border: 0; border-radius: 999px;
+  background: transparent; color: inherit; cursor: pointer;
+}
+${R} .sw-chapterbar-pill button:disabled { opacity: 0.3; cursor: default; }
+@media (hover: hover) {
+  ${R} .sw-chapterbar-pill button:not(:disabled):hover { background: color-mix(in srgb, currentColor 12%, transparent); }
+}
+${R} .sw-indicator {
+  min-width: 0; padding: 0 0.5em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  letter-spacing: 0.02em; font-variant-numeric: tabular-nums;
+}
+${R} .sw-indicator-short { display: none; }
+${R} .sw-dock {
   position: absolute; left: 50%; bottom: calc(16px + ${SAFE_BOTTOM}); z-index: 20; translate: -50% 0;
-  display: flex; align-items: center; gap: 4px; max-width: calc(100% - 96px); padding: 6px;
+  display: flex; align-items: center; gap: 6px; width: max-content; max-width: calc(100% - 96px);
+}
+${R} .sw-actionbar {
+  display: flex; flex: none; align-items: center; gap: 4px; max-width: 100%; padding: 6px;
   border: 1px solid var(--sw-bar-border); border-radius: 999px; background: var(--sw-bar-bg); color: var(--sw-bar-fg);
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2);
 }
+${R} .sw-quickbar {
+  display: flex; flex: 0 1 auto; align-items: center; gap: 2px; min-width: 0; max-width: 100%;
+  box-sizing: border-box; height: var(--sw-quickbar-h); padding: 5px;
+  border: 1px solid var(--sw-bar-border); border-radius: 999px; background: var(--sw-bar-bg); color: var(--sw-bar-fg);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2);
+}
+/* ponytail: the row hides its scrollbar, which would not fit the pill; a vertical wheel scrolls it sideways (QuickReplyBar)
+   and Tab reaches every chip, but only the clipped last chip hints at more. Upgrade: fade the overflowing edge. */
+${R} .sw-quickbar-list {
+  display: flex; gap: 4px; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
+}
+${R} .sw-quickbar-list::-webkit-scrollbar { display: none; }
+${R} .sw-quick-reply {
+  flex: none; box-sizing: border-box; height: calc(var(--sw-quickbar-h) - 12px); max-width: calc(16ch + 28px);
+  padding: 0 14px; overflow: hidden; border: 1px solid var(--sw-bar-border); border-radius: 999px;
+  background: transparent; color: inherit; font: inherit; font-size: 13.5px; font-weight: 600;
+  white-space: nowrap; text-overflow: ellipsis; cursor: pointer; transition: background-color 160ms ease, opacity 160ms ease;
+}
+${R} .sw-quick-reply:hover:not(:disabled) { background: var(--sw-bar-hover); }
+${R} .sw-quick-reply:disabled { opacity: 0.45; cursor: not-allowed; }
+${R} .sw-quickbar .sw-action-icon { width: calc(var(--sw-quickbar-h) - 12px); height: calc(var(--sw-quickbar-h) - 12px); }
 ${R} .sw-action-primary {
   display: inline-flex; flex: none; align-items: center; gap: 8px; min-height: 44px; padding: 0 20px 0 16px;
   border: 0; border-radius: 999px; background: var(--sw-primary-bg); color: var(--sw-primary-fg);
@@ -742,6 +804,10 @@ ${R} .sw-action-hint { max-width: 230px; padding: 0 12px 0 4px; font-size: 12.5p
 const LAYOUT_RULES = `
 @container sw-root (max-width: 1099px) {
   ${R} .sw-frame { --sw-slot-top: 72px; }
+  ${R} .sw-root[data-sw-quick="true"] .sw-frame { --sw-slot-bottom: calc(90px + var(--sw-quickbar-h) + ${SAFE_BOTTOM}); }
+  /* The chapter bar sits between the note and the edge of the band the note already takes. */
+  ${R} .sw-chapterbar { top: calc((72px - var(--sw-chapterbar-h)) / 2); }
+  ${R} .sw-dock { flex-direction: column-reverse; }
   ${R} .sw-note-collapsed { width: 156px; height: 54px; gap: 2px; padding: 9px 12px 8px 14px; justify-content: center; }
   ${R} .sw-note-collapsed .sw-note-tape { top: -9px; width: 46px; height: 18px; margin-left: -23px; }
   ${R} .sw-note-collapsed .sw-note-preview { -webkit-line-clamp: 1; font-size: 12px; }
@@ -756,12 +822,25 @@ const LAYOUT_RULES = `
     --sw-slot-left: 30px;
     --sw-slot-right: 30px;
   }
+  ${R} .sw-root[data-sw-quick="true"] .sw-frame { --sw-slot-bottom: calc(82px + var(--sw-quickbar-h) + ${SAFE_BOTTOM}); }
+  /* Beside the note, not under it: on the other side of the band, with the short "Ch. 2 · 5/18". */
+  ${R} .sw-chapterbar { top: 12px; translate: none; max-width: calc(100% - 190px); }
+  ${R} .sw-root[data-sw-note="right"] .sw-chapterbar { left: 12px; }
+  ${R} .sw-root[data-sw-note="left"] .sw-chapterbar { left: auto; right: 12px; }
+  ${R} .sw-indicator-long {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+  }
+  ${R} .sw-chapterbar-pill { gap: 0; }
+  ${R} .sw-chapterbar-pill button { width: 36px; }
+  ${R} .sw-indicator { padding: 0; letter-spacing: 0; }
+  ${R} .sw-indicator-short { display: inline; }
   ${R} .sw-handle { width: 28px; height: 68px; margin-top: -34px; }
   ${R} .sw-handle:hover { width: 28px; }
   ${R} .sw-note-anchor { top: 10px; }
   ${R} .sw-note-anchor[data-side="left"] { left: 12px; }
   ${R} .sw-note-anchor[data-side="right"] { right: 12px; }
-  ${R} .sw-actionbar { bottom: calc(12px + ${SAFE_BOTTOM}); max-width: calc(100% - 20px); gap: 2px; padding: 5px; }
+  ${R} .sw-dock { bottom: calc(12px + ${SAFE_BOTTOM}); max-width: calc(100% - 20px); }
+  ${R} .sw-actionbar { gap: 2px; padding: 5px; }
   ${R} .sw-action-primary { min-height: 44px; padding: 0 16px 0 13px; font-size: 14px; }
   ${R} .sw-action-label-long, ${R} .sw-action-status .sw-status-long { display: none; }
   ${R} .sw-action-label-short, ${R} .sw-action-status .sw-status-short { display: inline; }
@@ -771,10 +850,14 @@ const LAYOUT_RULES = `
 }
 @container sw-root (max-height: 520px) and (min-aspect-ratio: 4 / 3) {
   ${R} .sw-frame {
-    --sw-slot-top: 8px;
+    --sw-slot-top: calc(6px + var(--sw-chapterbar-h));
     --sw-slot-bottom: calc(8px + ${SAFE_BOTTOM});
     --sw-slot-left: 78px;
     --sw-slot-right: 78px;
+  }
+  ${R} .sw-root[data-sw-quick="true"] .sw-frame { --sw-slot-bottom: calc(14px + var(--sw-quickbar-h) + ${SAFE_BOTTOM}); }
+  ${R} .sw-root[data-sw-note] .sw-chapterbar {
+    top: 6px; left: 50%; right: auto; translate: -50% 0; max-width: calc(100% - 300px);
   }
   ${R} .sw-note-anchor { top: 10px; }
   ${R} .sw-note-collapsed {
@@ -785,9 +868,15 @@ const LAYOUT_RULES = `
   ${R} .sw-note-collapsed .sw-note-tape { width: 34px; height: 14px; margin-left: -17px; top: -7px; }
   ${R} .sw-note-open { max-height: calc(100cqh - 24px); }
   ${R} .sw-note-text { min-height: 72px; }
+  /* The dock lets go of its bars: the actions stand upright at the side, the quick replies stay at the bottom. */
+  ${R} .sw-dock { display: contents; }
   ${R} .sw-actionbar {
-    top: 50%; bottom: auto; translate: 0 -50%; flex-direction: column; max-width: none; max-height: calc(100% - 16px);
-    border-radius: 28px;
+    position: absolute; z-index: 20; top: 50%; translate: 0 -50%; flex-direction: column; max-width: none;
+    max-height: calc(100% - 16px); border-radius: 28px;
+  }
+  ${R} .sw-quickbar {
+    position: absolute; z-index: 20; left: 50%; bottom: calc(8px + ${SAFE_BOTTOM}); translate: -50% 0;
+    width: max-content; max-width: calc(100% - 156px);
   }
   ${R} .sw-root[data-sw-sidebar="left"] .sw-actionbar { left: auto; right: 10px; }
   ${R} .sw-root[data-sw-sidebar="right"] .sw-actionbar { left: 10px; }
@@ -811,12 +900,14 @@ const DEVICE_RULES = `
   ${R} .sw-drawer-body { padding-bottom: 48px; }
 }
 @media (any-pointer: coarse) {
+  ${R} .sw-root { --sw-chapterbar-h: 46px; --sw-quickbar-h: 56px; }
   /* 16 px keeps iOS from zooming into a focused field. */
   ${R} :is(.sw-input, .sw-textarea, .sw-select, .sw-note-text) { font-size: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
   ${R} :is(.sw-drawer, .sw-drawer-panel, .sw-handle, .sw-handle svg, .sw-scrim, .sw-note-collapsed, .sw-section-chevron,
-    .sw-switch, .sw-switch::after, .sw-progress > span, .sw-wordcount-bar > span, .sw-action-primary, .sw-button) { transition: none; }
+    .sw-switch, .sw-switch::after, .sw-progress > span, .sw-wordcount-bar > span, .sw-action-primary, .sw-button,
+    .sw-quick-reply) { transition: none; }
   ${R} :is(.sw-section-body, .sw-save-state .sw-save-dot) { animation: none; }
 }`;
 
