@@ -148,6 +148,12 @@ export const itemId = (runId: string, item: string) => `${runId}:item:${item}`;
 export const itemStoryKey = (item: string) => `story-${item}`;
 export const isItemStoryKey = (key: string) => key.startsWith("story-");
 
+/**
+ * `${R}:quiz` (#2174): the personality quiz's generated statements, each love interest's scores and the player's
+ * answers (S/minigames/quiz.ts). Never read by a prompt.
+ */
+export const quizId = (runId: string) => `${runId}:quiz`;
+
 /** Every kind a run's documents have. Deleting a run removes each; a milestone that adds a kind adds it here. */
 export const RUN_DOC_KINDS = [
   "world",
@@ -167,6 +173,7 @@ export const RUN_DOC_KINDS = [
   "photo",
   "tarot",
   "deck",
+  "quiz",
 ] as const;
 export type RunDocKind = (typeof RUN_DOC_KINDS)[number];
 /** The `{id, kind, name}` mutateDoc creates a run document with. */

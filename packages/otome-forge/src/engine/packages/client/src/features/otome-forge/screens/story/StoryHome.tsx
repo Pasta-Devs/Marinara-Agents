@@ -8,8 +8,9 @@
 // #2156: a rupture he holds is his grievance with her: the banner and his route say how much space he still needs
 // before Make it right opens, the Lead dialog says why he can't lead, and his affection shows as paused. Beside each
 // one's route, "I'm upset with them" (asked first, then POST /routes/:li/upset; tapping it again takes it back).
-// Planning a chapter is one model call with Cancel while it runs, with the story so far to read meanwhile (#2040); a
-// chapter already planned opens with none, and so does his side, which is written with no model call.
+// Planning a chapter is one model call with Cancel while it runs, with something to do meanwhile: the story so far to
+// read while an arc is planned (#2040), the personality quiz while any other chapter is (#2174). A chapter already
+// planned opens with none, and so does his side, which is written with no model call.
 // ──────────────────────────────────────────────
 import { Fragment, useEffect, useId, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
@@ -60,6 +61,7 @@ import type {
 import { hisSideLiOf, stageRow, type HisSideEntry, type StageName } from "../../shared/arcs";
 import { GRIEVANCE_CLEARED_AFFECTION, PRESTIGE_POINTS_PER_STORY } from "../../shared/economy";
 import { chapterEyebrowKey, chapterTitle } from "../reader/ReaderControls";
+import { PersonalityQuiz } from "./PersonalityQuiz";
 
 const MAX_LEVEL = 10;
 
@@ -670,7 +672,8 @@ function LeadDialog({ runKey, view, held, next, opensArc, onClose, onPlanned }: 
             </p>
             <p className="of-hint">{t("ui.otomeForge.story.planningHint")}</p>
           </div>
-          <StorySoFar runKey={runKey} />
+          {/* #2174: the story so far while an arc is planned too; otherwise the personality quiz. */}
+          {opensArc ? <StorySoFar runKey={runKey} /> : <PersonalityQuiz runKey={runKey} lis={view.lis} />}
         </>
       ) : failed ? (
         <DeclinedPanel error={failed.error} run={view} job="structured" onRetry={() => void plan(failed.id)} />
@@ -731,7 +734,8 @@ function LeadDialog({ runKey, view, held, next, opensArc, onClose, onPlanned }: 
 
 /**
  * "What happened so far…" (#2040): the story's running summary (the memory's saved overview, as written) to read while
- * a chapter is planned. Read afresh on each wait and never kept; nothing shows before the first summary, or when it
+ * an arc is planned (#2174: the next arc, or a chapter that opens one; any other chapter's wait has the personality
+ * quiz). Read afresh on each wait and never kept; nothing shows before the first summary, or when it
  * cannot be read. It scrolls on its own (a named, tabbable region, as the backlog's list is) under the planning status,
  * outside its live region, so the long text is never announced as status.
  */
@@ -830,7 +834,13 @@ function ArcChoiceCard({ runKey, options }: { runKey: string; options: { options
           </button>
         ))}
       </div>
-      {busy ? <p className="of-hint of-planning">{t("ui.otomeForge.story.arcPlanning")}</p> : null}
+      {/* Someone new's wait shows these in their dialog, never a second copy behind its scrim. */}
+      {busy && busy !== "newcomer" ? (
+        <>
+          <p className="of-hint of-planning">{t("ui.otomeForge.story.arcPlanning")}</p>
+          <StorySoFar runKey={runKey} />
+        </>
+      ) : null}
       {arriving ? (
         <NewcomerDialog
           runKey={runKey}
@@ -843,7 +853,10 @@ function ArcChoiceCard({ runKey, options }: { runKey: string; options: { options
   );
 }
 
-/** Who arrives (#1983 M3): one of the player's cards, or someone invented. */
+/**
+ * Who arrives (#1983 M3): one of the player's cards, or someone invented. While they and their arc are written, the
+ * dialog shows the arc's planning status and what happened so far (#2040) in place of the choices.
+ */
 function NewcomerDialog({
   runKey,
   busy,
@@ -864,7 +877,6 @@ function NewcomerDialog({
   // A card carries no pronouns of its own: the player picks them, as setup asks (#1985 review).
   const [pronouns, setPronouns] = useState<PronounChoice>(emptyPronouns());
   const resolved = resolvePronouns(pronouns);
-  void runKey;
   return (
     <Dialog
       title={t("ui.otomeForge.story.newcomerTitle")}
@@ -896,52 +908,63 @@ function NewcomerDialog({
         </>
       }
     >
-      <p className="of-hint">{t("ui.otomeForge.story.newcomerCost")}</p>
-      <fieldset className="of-field">
-        <label>
-          <input type="radio" checked={mode === "card"} onChange={() => setMode("card")} />{" "}
-          {t("ui.otomeForge.story.newcomerCard")}
-        </label>
-        <label>
-          <input type="radio" checked={mode === "archetype"} onChange={() => setMode("archetype")} />{" "}
-          {t("ui.otomeForge.story.newcomerScratch")}
-        </label>
-      </fieldset>
-      <PronounPicker legend={t("ui.otomeForge.story.newcomerPronouns")} value={pronouns} onChange={setPronouns} />
-      {mode === "card" ? (
-        <ul className="of-cast-picks">
-          {cards.items.map((card) => (
-            <li key={card.id}>
-              <button
-                type="button"
-                className="of-cast-pick of-glass"
-                aria-pressed={cardId === card.id}
-                data-chosen={cardId === card.id}
-                onClick={() => setCardId(card.id)}
-              >
-                <Avatar name={card.name} url={card.avatarUrl} accent="var(--of-champagne)" size={32} />
-                <span>{card.name}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+      {busy ? (
+        <>
+          <p className="of-hint of-planning" role="status">
+            {t("ui.otomeForge.story.arcPlanning")}
+          </p>
+          <StorySoFar runKey={runKey} />
+        </>
       ) : (
         <>
-          <label className="of-field">
-            <span>{t("ui.otomeForge.story.newcomerName")}</span>
-            <input value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />
-            <span className="of-hint">{t("ui.otomeForge.story.newcomerNameHint")}</span>
-          </label>
-          <label className="of-field">
-            <span>{t("ui.otomeForge.story.newcomerArchetype")}</span>
-            <select value={archetype} onChange={(event) => setArchetype(event.target.value as typeof archetype)}>
-              {ARCHETYPE_IDS.map((id) => (
-                <option key={id} value={id}>
-                  {ARCHETYPES[id].name}
-                </option>
+          <p className="of-hint">{t("ui.otomeForge.story.newcomerCost")}</p>
+          <fieldset className="of-field">
+            <label>
+              <input type="radio" checked={mode === "card"} onChange={() => setMode("card")} />{" "}
+              {t("ui.otomeForge.story.newcomerCard")}
+            </label>
+            <label>
+              <input type="radio" checked={mode === "archetype"} onChange={() => setMode("archetype")} />{" "}
+              {t("ui.otomeForge.story.newcomerScratch")}
+            </label>
+          </fieldset>
+          <PronounPicker legend={t("ui.otomeForge.story.newcomerPronouns")} value={pronouns} onChange={setPronouns} />
+          {mode === "card" ? (
+            <ul className="of-cast-picks">
+              {cards.items.map((card) => (
+                <li key={card.id}>
+                  <button
+                    type="button"
+                    className="of-cast-pick of-glass"
+                    aria-pressed={cardId === card.id}
+                    data-chosen={cardId === card.id}
+                    onClick={() => setCardId(card.id)}
+                  >
+                    <Avatar name={card.name} url={card.avatarUrl} accent="var(--of-champagne)" size={32} />
+                    <span>{card.name}</span>
+                  </button>
+                </li>
               ))}
-            </select>
-          </label>
+            </ul>
+          ) : (
+            <>
+              <label className="of-field">
+                <span>{t("ui.otomeForge.story.newcomerName")}</span>
+                <input value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />
+                <span className="of-hint">{t("ui.otomeForge.story.newcomerNameHint")}</span>
+              </label>
+              <label className="of-field">
+                <span>{t("ui.otomeForge.story.newcomerArchetype")}</span>
+                <select value={archetype} onChange={(event) => setArchetype(event.target.value as typeof archetype)}>
+                  {ARCHETYPE_IDS.map((id) => (
+                    <option key={id} value={id}>
+                      {ARCHETYPES[id].name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          )}
         </>
       )}
     </Dialog>
@@ -1558,6 +1581,8 @@ function ArcPlanDialog({
     <Dialog
       wide
       title={t(ARC_DIALOG_KEYS[target.kind].title, values)}
+      // Opened while it plans: focus starts on Cancel, never on the quiz under it (#2174).
+      initialFocus={planning ? actionRef : undefined}
       onClose={planning ? undefined : onClose}
       actions={
         planning ? (
@@ -1592,7 +1617,7 @@ function ArcPlanDialog({
             <p className="of-body">{t(ARC_DIALOG_KEYS[target.kind].planning, values)}</p>
             <p className="of-hint">{t("ui.otomeForge.story.planningHint")}</p>
           </div>
-          <StorySoFar runKey={view.runKey} />
+          <PersonalityQuiz runKey={view.runKey} lis={view.lis} />
         </>
       ) : locked ? (
         <p className="of-notice" role="alert">

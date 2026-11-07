@@ -3742,7 +3742,7 @@ test("Otome Hearth affection shows per-level progress below Level beside its hea
   ).toEqual([]);
 });
 
-/** The story so far (#2040), as GET /runs/:run/memory/overview serves it. */
+/** The story so far (#2040), as GET /runs/:run/memory/overview serves it: never shown here, where no arc is planned. */
 const SO_FAR = ["Marin taught you to read the tide tables.", "You kept the lighthouse key he left on the sill."];
 
 test("Otome Hearth shows prestige past level 10 and writes an unlocked extra story on its tap (#2025)", async ({
@@ -3809,13 +3809,15 @@ test("Otome Hearth shows prestige past level 10 and writes an unlocked extra sto
   await row.getByRole("button", { name: "A new story with Marin", exact: true }).click();
   const dialog = root.getByRole("dialog", { name: "A new story with Marin", exact: true });
   await expect(dialog.getByText("Imagining something new with Marin…", { exact: true })).toBeVisible();
-  // What happened so far… (#2040) in the planning dialog every route, repair and extra story shares; Cancel keeps focus.
-  const soFar = dialog.getByRole("region", { name: "What happened so far…", exact: true });
-  await expect(soFar.locator("p")).toHaveText(SO_FAR);
+  // The personality quiz (#2174) in the planning dialog every route, repair and extra story shares (the story so far
+  // waits for an arc); Cancel keeps focus.
+  const play = dialog.getByRole("button", { name: "Play the personality quiz", exact: true });
+  await expect(play).toBeVisible();
+  await expect(dialog.getByRole("region", { name: "What happened so far…", exact: true })).toHaveCount(0);
   await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
   release();
   await expect(dialog.getByRole("alert")).toContainText("No new story with Marin is unlocked yet.");
-  await expect(soFar).toHaveCount(0);
+  await expect(play).toHaveCount(0);
   expect(posts(calls, `/prestige/${MARIN}`)).toHaveLength(1);
 });
 

@@ -154,6 +154,8 @@ export interface FakeRuntimeOptions {
   replies?: FakeReply[];
   /** The arc plan the fake writes for the arc planner's calls (#1980); the default is fakeArcReply. */
   arcReply?: (prompt: string) => string;
+  /** The lines the fake writes for the personality quiz's calls (#2174); the default is fakeQuizReply. */
+  quizReply?: (messages: CapabilityLanguageModelMessage[]) => string;
   debugAgents?: boolean;
   /** Levels the logger reports as enabled through isLevelEnabled; default none. */
   enabledLevels?: string[];
@@ -167,6 +169,26 @@ export interface FakeRuntimeOptions {
   maxOutputTokens?: number | null;
   /** The connection's context window (the resolved model's maxContext); 32768 by default, null for unknown. */
   maxContext?: number | null;
+}
+
+/** True for a personality quiz call (#2174): the love interests' answers, or new statements with theirs. */
+export const isQuizCall = (messages: ReadonlyArray<{ content: string }>) =>
+  !!messages[0] &&
+  (messages[0].content.startsWith("You answer a personality quiz") ||
+    messages[0].content.includes("new statements for a personality quiz"));
+
+/**
+ * The lines the fake model writes for a personality quiz call (#2174), in its line format: a 3 from every love interest
+ * the prompt lists for each statement it asks, or for twelve new statements when it asks for new ones. Opening a story
+ * queues the answers in the background, so a test that never looks at the quiz never spends a scripted reply on it.
+ */
+export function fakeQuizReply(messages: ReadonlyArray<{ content: string }>): string {
+  const user = messages[1]?.content ?? "";
+  const names = [...user.matchAll(/^(.+?) \([^()\n/]+\/[^()\n/]+\/[^()\n/]+\)$/gmu)].map((match) => match[1]!);
+  const asked = user.includes("THE STATEMENTS\n")
+    ? user.split("THE STATEMENTS\n")[1]!.split("\n\n")[0]!.split("\n")
+    : Array.from({ length: 12 }, (_, index) => `A fake new statement, number ${index + 1}.`);
+  return asked.map((statement) => `${statement}: ${names.map((name) => `${name} 3`).join(" | ")}`).join("\n");
 }
 
 /**
@@ -228,6 +250,9 @@ export function createFakeRuntime(options: FakeRuntimeOptions = {}) {
         const prompt = messages.map((message) => message.content).join("\n");
         return { content: (options.arcReply ?? fakeArcReply)(prompt), finishReason: "stop" };
       }
+      // #2174: opening a story queues its love interests' quiz answers; the fake answers those calls itself too.
+      if (isQuizCall(messages))
+        return { content: (options.quizReply ?? fakeQuizReply)(messages), finishReason: "stop" };
       const reply = replies.shift();
       if (reply === undefined) throw new Error("The Otome Forge fake model has no scripted reply left");
       if (reply instanceof Error) throw reply;

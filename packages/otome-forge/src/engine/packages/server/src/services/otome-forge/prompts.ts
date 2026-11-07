@@ -78,6 +78,8 @@
 //   readHimMessages: Read Him, P25 (S/minigames/read-him.ts)
 //   datePlanMessages: P26 Date Night plan (S/minigames/date-night.ts)
 //   plushMessages: a Claw Machine plush drawn as SVG, #1954 (S/minigames/plush.ts)
+//   quizScoreMessages, quizRefillMessages: the personality quiz's love-interest answers and its new statements, in the
+//     quiz's own line format, #2174 (S/minigames/quiz.ts)
 // (i) Stickers
 //   stickerSetMessages: a love interest's nine sticker designs, #2044 (S/art/stickers.ts)
 // (j) Wish banners
@@ -124,7 +126,7 @@
 //   S/setup/cast.ts (P1, P2), S/setup/bible.ts (P3), S/schemas/unit.ts normalizeIntimacy, S/schemas/story-arc.ts
 //   (arcs), S/story/chapters.ts (P5), S/story/routes-plan.ts (P10, P11), S/story/beats.ts and S/story/prologue.ts
 //   prologueProblem (P6), S/story/confrontation.ts (P12, P12c), S/phone/replies.ts (P17, P18), S/home/lines.ts,
-//   S/home/note.ts, S/care/care-note.ts, S/minigames/read-me.ts, read-him.ts, date-night.ts and plush.ts (with
+//   S/home/note.ts, S/care/care-note.ts, S/minigames/read-me.ts, read-him.ts, date-night.ts, quiz.ts and plush.ts (with
 //   S/art/plush-svg.ts), S/art/stickers.ts, S/wish/replies.ts, S/items/replies.ts checkLine, S/audio/music.ts.
 // - Text built inside non-prompt code, which moving would mean rewriting that code: S/story/canon.ts (EASE_OFF_MARKER,
 //   whose start C/lib/reader-state.ts matches; a climax pick's canon marker; titleOf, a private chapter's title;
@@ -3649,7 +3651,7 @@ export function careNoteMessages({ world, player, unit, careLine }: CareNoteInpu
 }
 
 // ──────────────────────────────────────────────
-// (h) Mini-games: Read Me, Read Him, Date Night, plush
+// (h) Mini-games: Read Me, Read Him, Date Night, plush, the personality quiz
 // ──────────────────────────────────────────────
 // Each mini-game's feature file says what its prompt sees and why (S/minigames/read-me.ts, read-him.ts,
 // date-night.ts, plush.ts): the state as that love interest's own reader may know it (ownView), their own notebook
@@ -4265,6 +4267,122 @@ export function plushMessages({ unit }: { unit: Unit }): OtomeMessage[] {
   ]
     .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
     .join("\n");
+  return [
+    { role: "system", content: system },
+    { role: "user", content: user },
+  ];
+}
+
+// ── The personality quiz (#2174; structured, planner contract, background lane) ──
+// Each love interest answers statements from their bible, as who they truly are, in the line format the maintainer
+// chose ("<statement>: <name> <score> | …", S/minigames/quiz.ts parses it). The bible is everything the quiz knows of
+// them, and these answers are never sent with any other prompt. Statements about sex and kinks only reach a story
+// whose Heat is NSFW, with the love interest's own tastes beside the bible.
+
+const QUIZ_SCALE_TEXT =
+  "Each statement is answered on a scale of 1 to 5: 1 strongly disagree, 2 disagree, 3 neither agree nor disagree, 4 agree, 5 strongly agree.";
+const QUIZ_LINE_FORMAT = "<statement>: <name> <score> | <name> <score> | …";
+
+/** A love interest as the quiz sees them: their bible without the drawing and claw fields, and their tastes in NSFW. */
+function quizCharacter(world: Pick<World, "content">, unit: Unit): string {
+  const { look: _look, play: _play, intimacy, ...bible } = unit.bible ?? ({} as NonNullable<Unit["bible"]>);
+  const tastes =
+    intimacyOpen(world.content) && intimacy
+      ? [
+          intimacy.preferences.length ? `into ${intimacy.preferences.join("; ")}` : "",
+          intimacy.attractions.length ? `drawn to ${intimacy.attractions.join("; ")}` : "",
+        ].filter(Boolean)
+      : [];
+  return [
+    `${unit.name} (${pronounText(unit.pronouns)})`,
+    `BIBLE: ${JSON.stringify(bible)}`,
+    tastes.length ? `${unit.name}'s tastes in sex and intimacy: ${tastes.join("; ")}.` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function quizAnswerRules(units: readonly Unit[]): string[] {
+  return [
+    `- After the colon, every love interest below by their name exactly as written (${units.map((unit) => unit.name).join(", ")}), each followed by their score from 1 to 5, separated by " | ". Every love interest answers every statement.`,
+    '- Answer as each of them truly is in their bible (their wants, fears, flaws, habits and what they hide), not as they present themselves. Let them differ where they would: 3 is a real "neither", never a safe default.',
+    "- No preamble, numbering, headings, notes or explanations: only the lines.",
+  ];
+}
+
+export interface QuizScoreInput {
+  world: Pick<World, "content" | "images">;
+  units: readonly Unit[];
+  /** The statements to answer, in order, word for word. */
+  statements: readonly string[];
+}
+
+/** The love interests' answers to statements already asked (at story setup, or for someone missing them). */
+export function quizScoreMessages({ world, units, statements }: QuizScoreInput): OtomeMessage[] {
+  const system = [
+    "You answer a personality quiz in an otome visual novel as each of its love interests would answer it.",
+    QUIZ_SCALE_TEXT,
+    "Reply with ONLY one line per statement, in the order given, in exactly this format:",
+    QUIZ_LINE_FORMAT,
+    "RULES",
+    "- Copy each statement word for word before the colon.",
+    ...quizAnswerRules(units),
+    "",
+    otomeContentContract({ world, lis: units.map((unit) => ({ name: unit.name })), kind: "planner" }),
+  ].join("\n");
+  const user = [
+    "THE LOVE INTERESTS",
+    units.map((unit) => quizCharacter(world, unit)).join("\n\n"),
+    "",
+    "THE STATEMENTS",
+    ...statements,
+    "",
+    `Answer all ${statements.length} statements, one line each, in the format above.`,
+    otomeContractReminder("planner"),
+  ].join("\n");
+  return [
+    { role: "system", content: system },
+    { role: "user", content: user },
+  ];
+}
+
+export interface QuizRefillInput {
+  world: Pick<World, "content" | "images" | "language">;
+  units: readonly Unit[];
+  /** Every statement already in the quiz, so nothing is asked twice. */
+  asked: readonly string[];
+  count: number;
+}
+
+/** New statements, each with every love interest's answer, once the player has answered every one they can see. */
+export function quizRefillMessages({ world, units, asked, count }: QuizRefillInput): OtomeMessage[] {
+  const adult = intimacyOpen(world.content);
+  const system = [
+    `You write ${count} new statements for a personality quiz in an otome visual novel, and answer each one as every love interest below would answer it.`,
+    QUIZ_SCALE_TEXT,
+    "Reply with ONLY one line per new statement, in exactly this format:",
+    adult ? `${QUIZ_LINE_FORMAT}   (or [18+] <statement>: … for a statement about sex or kinks)` : QUIZ_LINE_FORMAT,
+    "RULES",
+    `- A statement is one short first-person sentence a person agrees or disagrees with, for example "I'd rather plan a date than improvise one." Cover love and affection, relationships and conflict, values and everyday temperament${adult ? ", and sex, kinks and intimacy" : ""}.`,
+    "- Never repeat or rephrase a statement already asked (listed below), and never write two that ask the same thing.",
+    adult
+      ? "- Statements about sex, kinks and intimacy are welcome, as frank as the content contract allows: begin each of those lines with [18+]."
+      : "- This story keeps sex, kinks and intimacy out of the quiz: write no statement about them.",
+    `- Write the statements in ${world.language}.`,
+    ...quizAnswerRules(units),
+    "",
+    otomeContentContract({ world, lis: units.map((unit) => ({ name: unit.name })), kind: "planner" }),
+  ].join("\n");
+  const user = [
+    "THE LOVE INTERESTS",
+    units.map((unit) => quizCharacter(world, unit)).join("\n\n"),
+    "",
+    "STATEMENTS ALREADY ASKED (never again)",
+    ...asked,
+    "",
+    `Write ${count} new statements now, each with every love interest's answer, one line each, in the format above.`,
+    otomeContractReminder("planner"),
+  ].join("\n");
   return [
     { role: "system", content: system },
     { role: "user", content: user },

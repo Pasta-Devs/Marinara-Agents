@@ -151,7 +151,8 @@ export function ReviewStep({ draft, onEdit }: ReviewStepProps) {
         <h3 id={costId} className="of-section-title">
           {t("ui.otomeForge.setup.costTitle")}
         </h3>
-        <p className="of-body">{t("ui.otomeForge.setup.costText", { count: count + 1 })}</p>
+        {/* The world, each bible, and the personality quiz's answers in the background (#2174). */}
+        <p className="of-body">{t("ui.otomeForge.setup.costText", { count: count ? count + 2 : 1 })}</p>
         {imageConnection ? (
           <>
             <CostHint images={count + 1} note={t("ui.otomeForge.setup.costLooksNote")} />

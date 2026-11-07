@@ -22,6 +22,7 @@ import { registerIndexRoutes } from "./routes/index.js";
 import { registerItemRoutes } from "./routes/items.js";
 import { registerMemoryRoutes } from "./routes/memory.js";
 import { registerPhoneRoutes } from "./routes/phone.js";
+import { registerQuizRoutes } from "./routes/quiz.js";
 import { registerReadHimRoutes } from "./routes/read-him.js";
 import { registerReadMeRoutes } from "./routes/read-me.js";
 import { registerRunRoutes } from "./routes/runs.js";
@@ -85,6 +86,7 @@ export async function activate({ api }: ActivationContext) {
       registerReadHimRoutes(router, deps);
       registerReadMeRoutes(router, deps);
       registerTarotRoutes(router, deps);
+      registerQuizRoutes(router, deps);
       registerDateRoutes(router, deps);
     },
     { prefix: "/api/otome-forge" },

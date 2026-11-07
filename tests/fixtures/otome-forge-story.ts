@@ -97,6 +97,7 @@ export async function storyWorld({
   cancellation = false,
   personas = [],
   arcReply,
+  quizReply,
   model = {},
 }: {
   runKey: string;
@@ -107,6 +108,8 @@ export async function storyWorld({
   personas?: Array<{ id: string; data: unknown }>;
   /** #1983 M4: the arc plan the fake writes, when a test needs one that differs from the default. */
   arcReply?: (prompt: string) => string;
+  /** #2174: the personality quiz lines the fake writes, when a test needs other ones than fakeQuizReply's. */
+  quizReply?: FakeRuntimeOptions["quizReply"];
   /** The fake connection's context window, output cap and background admission (#2039). */
   model?: Pick<FakeRuntimeOptions, "maxContext" | "maxOutputTokens" | "admissionRun">;
 }) {
@@ -117,6 +120,7 @@ export async function storyWorld({
     replies,
     personas,
     ...(arcReply ? { arcReply } : {}),
+    ...(quizReply ? { quizReply } : {}),
     ...model,
   });
   const runId = runIdOf(runKey);

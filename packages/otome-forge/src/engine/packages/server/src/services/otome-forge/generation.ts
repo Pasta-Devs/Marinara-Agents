@@ -1,5 +1,6 @@
 // ──────────────────────────────────────────────
-// Otome Forge: the generation core. Every model call that expects JSON goes through generateJson.
+// Otome Forge: the generation core. Every model call that expects JSON goes through generateJson, and so does a call
+// that asks for its own plain-text shape (`parse`, the personality quiz's lines, S/minigames/quiz.ts).
 // ──────────────────────────────────────────────
 // 1. Connection: the request's own, else world.connections[job], else world.connections.narration; none is a 503.
 // 2. Model: runtime.languageModels.resolveForRequest({connectionId}).
@@ -25,7 +26,8 @@
 //    connection's own cache time), so a chapter's plan, scenes and climax, minutes apart, read what the first wrote. A
 //    background call holds its job's connection admission slot throughout; it names that connection and never takes a
 //    second slot here.
-// 6. Parse: parseJsonish, then the schema, then `normalize`. On failure exactly one repair turn (fitted the same way);
+// 6. Parse: parseJsonish (or the request's own `parse` for a plain-text shape), then the schema, then `normalize`. On
+//    failure exactly one repair turn (fitted the same way);
 //    if that fails too, two declines are a 422 `declined` and anything else a 502 `bad-format`. A decline is an empty
 //    reply, a content filter, or refusal wording in a reply that is not a JSON object (inside one it is a character's
 //    own words). A reply cut off at the token limit is never parsed and never a decline. Text is never retried in any
@@ -78,6 +80,13 @@ export interface GenerateJsonRequest<T extends object> {
    */
   memory?: ForgeMemoryContext & { recalls?: ForgeMemoryContext };
   schema: ZodType<T>;
+  /**
+   * A reply in a plain-text shape of its own: turns the text into the value the schema checks, or undefined when none
+   * of it is in that shape (a format failure, or a decline when it reads as a refusal). `replyShape` names the shape in
+   * the repair turn ("Reply again with ONLY …"). Without it the reply is one JSON object.
+   */
+  parse?: (text: string) => object | undefined;
+  replyShape?: string;
   /**
    * What the schema cannot check (an adult age, no school role…): return the value, possibly fixed, or a string naming
    * the problem, or null. A string or null sends the one repair turn.
@@ -171,14 +180,15 @@ function check<T extends object>(
   if (!text) return fail("the reply was empty", true);
   let raw: unknown;
   try {
-    raw = parseJsonish(text);
+    raw = (request.parse ?? parseJsonish)(text);
   } catch {
     raw = undefined;
   }
   // Refusal wording counts only outside a JSON object: inside one it is the character's own voice ("I can't let anyone
   // help me"), and a reply that parsed but fails its checks is a format problem.
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return fail("the reply was not one JSON object", filtered || REFUSAL.test(text.slice(0, 600)));
+    const issue = request.parse ? "the reply was not in the required format" : "the reply was not one JSON object";
+    return fail(issue, filtered || REFUSAL.test(text.slice(0, 600)));
   }
   const parsed = request.schema.safeParse(raw);
   if (!parsed.success) {
@@ -320,7 +330,8 @@ export async function generateJson<T extends object>(
   const first = await complete(messages, request.label);
   if (first.ok) return { value: first.value, connectionId, model: model.model };
 
-  const note = `That reply did not match the required format: ${first.issues}. Reply again with ONLY the JSON object.`;
+  const shape = request.replyShape ?? "the JSON object";
+  const note = `That reply did not match the required format: ${first.issues}. Reply again with ONLY ${shape}.`;
   const repair: OtomeMessage[] = first.content
     ? [...messages, { role: "assistant", content: first.content }, { role: "user", content: note }]
     : [...messages, { role: "user", content: note }];

@@ -46,6 +46,7 @@ import {
   INDEX_ID,
   INDEX_TARGET,
   playerId,
+  quizId,
   runDocTarget,
   runIdOf,
   stateId,
@@ -72,6 +73,8 @@ import {
   startForge,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/setup/forge.ts";
 import { createOtomeStore } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/store.ts";
+import { createBackgroundQueue } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/background-queue.ts";
+import { normalizeQuiz } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/minigames/quiz.ts";
 import { createFakeDocuments, createFakeRuntime, type FakeReply } from "./fixtures/otome-forge-fakes.ts";
 
 const at = "2026-10-28T10:00:00.000Z";
@@ -423,6 +426,38 @@ test("the forge writes the world plan and every bible from the cards and archety
     if (row.packageId === "gacha-forge") assert.equal(id, "index");
     else assert.ok(id.startsWith("otome-forge:"), id);
   }
+});
+
+test("once every bible is written, the personality quiz's answers are queued as one background call (#2174)", async () => {
+  const t = await setup({
+    runKey: "r-forgequiz-aaaaaa",
+    replies: [
+      JSON.stringify(plan),
+      JSON.stringify(bible()),
+      JSON.stringify(
+        bible({ pronouns: SHE, look: { identityLine: "red hair", outfitLine: "gown", presentation: "woman" } }),
+      ),
+      JSON.stringify(
+        bible({ pronouns: THEY, look: { identityLine: "freckles", outfitLine: "coat", presentation: "person" } }),
+      ),
+    ],
+  });
+  const background = createBackgroundQueue(t.runtime);
+  startForge({ ...t.deps, background }, t.runId, { debugMode: false });
+  await forgeSettled(t.runId);
+  assert.equal((await t.world()).forge.phase, "ready", "the story never waits for the quiz");
+  for (let round = 0; round < 200 && t.calls.length < 5; round += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  for (let round = 0; round < 50; round += 1) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(t.calls.length, 5, "the world, three bibles, then the quiz's answers");
+  const quizCall = t.calls[4]!;
+  assert.match(quizCall.messages[0]!.content, /^You answer a personality quiz/u);
+  for (const name of ["Kai", "Mireille", "Sol"])
+    assert.match(quizCall.messages[1]!.content, new RegExp(`\n${name} \\(`, "u"));
+  const quiz = (await t.store.readDoc(quizId(t.runId), normalizeQuiz)) ?? normalizeQuiz(undefined);
+  assert.deepEqual(quiz.scores.p01, { [KAI]: 3, [MIR]: 3, [SOL]: 3 }, "the fake's answers (fakeQuizReply)");
+  assert.equal(Object.keys(quiz.scores).length, 68, "every statement an SFW story shows");
 });
 
 test("a bible under 18 or in a school role gets one repair turn, then fails its step until Retry", async () => {
