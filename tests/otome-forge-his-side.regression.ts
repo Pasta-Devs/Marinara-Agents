@@ -483,6 +483,16 @@ test("a gate notes his side in the read's write, once; Read writes it with no ca
   assert.ok(!turn.includes("TOLD-LATER") && !turn.includes("A rupture stands between them"), "nothing later");
   assert.ok(turn.includes("- Thought lines: Kai only."));
   assert.ok(!turn.includes("big choice"), "no closing decision");
+  // #2155: the story's memory is the story as it is now, so his side goes without it rather than read chapters that came
+  // after the moment it retells; the scene as the protagonist lived it is what it has.
+  await saveStoryMemory(t.store, t.runId, {
+    head: "LATER-MEMORY: the harbour after everything.",
+    entries: [{ key: JSON.stringify(["chapter", "main-9"]), title: "main-9", text: "LATER-MEMORY: a later chapter." }],
+  });
+  assert.equal((await t.call("POST", beatPath, { rewrite: true }, params)).status, 200);
+  const laterTurn = t.calls.filter((call) => isSidePrompt(call.messages)).at(-1)!.messages;
+  assert.ok(!(system(laterTurn) + user(laterTurn)).includes("STORY MEMORY"), "no story memory in his side");
+  assert.ok(!(system(laterTurn) + user(laterTurn)).includes("LATER-MEMORY"), "nothing from after the moment");
   assert.ok(!system(prompt).includes("THE SCENE AS THE PROTAGONIST LIVED IT"), "the scene is never cached");
   // No content wording of its own: what the content contract says, and nothing more.
   const gatePrompt = t.calls.find((call) => /Narrate node 4 of 4/u.test(user(call.messages)))!.messages;
@@ -558,7 +568,9 @@ test("his side is part of the chapter it follows: the next chapter's prompts get
     maintain: async () => true,
   };
   assert.equal((await t.call("POST", beatPath, { rewrite: true }, params)).status, 200);
-  assert.equal((recalled.at(-1) as { reader?: string }).reader, KAI);
+  // #2155: his side gets the scene itself and no story memory, so nothing recalls what the cast may know, nor what he
+  // learned after the moment it retells (which his own recalls would carry).
+  assert.deepEqual(recalled, [], "his side's scene reads no memory");
   t.deps.memory = undefined;
   assert.equal((await t.call("POST", `${beatPath}/read`, { segment: 99 }, params)).status, 200);
 

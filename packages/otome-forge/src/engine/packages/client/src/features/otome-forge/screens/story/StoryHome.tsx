@@ -998,12 +998,10 @@ function useDialogFocus(
  * A route or repair chapter, an extra story (#2025) or his side of story arc `arc` (#2155), to open, planning it first
  * when it has no plan yet.
  */
-interface ArcTarget {
-  kind: "route" | "repair" | "prestige" | "side";
-  li: string;
-  key: string;
-  arc?: number;
-}
+type ArcTarget =
+  | { kind: "route" | "repair" | "prestige"; li: string; key: string }
+  /** His side of story arc `arc` (#2155): the route always needs the arc it belongs to. */
+  | { kind: "side"; li: string; key: string; arc: number };
 
 const ARC_PATHS = { repair: "repairs", prestige: "prestige", side: "sides" } as const;
 

@@ -105,7 +105,15 @@ import { readBeatToEnd } from "../state/rewards.js";
 import { countedNow, gateShut, healRupture, passGate } from "../state/stages.js";
 import { arcCovering, listArcs } from "./arc.js";
 import type { ChapterDeps } from "./chapters.js";
-import { OWN_ANSWER_LABEL, chapterScenes, chapterSoFar, readBeat, readChapter, recallText } from "./canon.js";
+import {
+  OWN_ANSWER_LABEL,
+  type StoryContext,
+  chapterScenes,
+  chapterSoFar,
+  readBeat,
+  readChapter,
+  recallText,
+} from "./canon.js";
 import { prologueProblem } from "./prologue.js";
 import {
   afterRound,
@@ -654,22 +662,26 @@ async function generateBeat(
   // chapter, where he is in every node. What only some may know follows who is in this one, with the recalls. A
   // storyline's chapter (main, route, repair) is also given the last Character Story, whoever is in the scene (#2126),
   // as its plan is; a date's or a story's scenes are not.
-  const memory = await recallText(deps, runId, {
-    job: "narration",
-    cast: node.cast,
-    ...(pov ? { reader: pov } : {}),
-    cached: chapter.kind === "main" ? {} : { li: chapter.li ?? chapter.lead },
-    ...(chapter.kind === "main" ? { continues: "main" as const } : {}),
-    ...((chapter.kind === "route" || chapter.kind === "repair") && chapter.li ? { continues: chapter.li } : {}),
-    lastStory: chapter.kind === "main" || chapter.kind === "route" || chapter.kind === "repair",
-    query: {
-      cues: [storySoFar.join("\n\n").slice(-2000), node.guide].filter(Boolean),
-      plan: node.guide,
-      speakers: [run.player.name, ...present.map((unit) => unit.name)].filter(Boolean),
-    },
-    signal,
-    debugMode,
-  });
+  // A side chapter tells a scene of a chapter before it again, so the story's memory, which is the story as it is now,
+  // would hand it chapters that came after the moment it retells: it gets the scene itself (hisSideSource) and none.
+  const memory: StoryContext = told
+    ? { text: "", overview: "", details: [], maxContext: null, prefix: "", fate: "", optional: [] }
+    : await recallText(deps, runId, {
+        job: "narration",
+        cast: node.cast,
+        ...(pov ? { reader: pov } : {}),
+        cached: chapter.kind === "main" ? {} : { li: chapter.li ?? chapter.lead },
+        ...(chapter.kind === "main" ? { continues: "main" as const } : {}),
+        ...((chapter.kind === "route" || chapter.kind === "repair") && chapter.li ? { continues: chapter.li } : {}),
+        lastStory: chapter.kind === "main" || chapter.kind === "route" || chapter.kind === "repair",
+        query: {
+          cues: [storySoFar.join("\n\n").slice(-2000), node.guide].filter(Boolean),
+          plan: node.guide,
+          speakers: [run.player.name, ...present.map((unit) => unit.name)].filter(Boolean),
+        },
+        signal,
+        debugMode,
+      });
   const last = i === chapter.nodes.length - 1;
   const mustChoose =
     chapter.kind === "route" && !!node.gate && !!chapter.stage && stageRow(chapter.stage).gate === "confrontation";
