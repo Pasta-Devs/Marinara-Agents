@@ -4676,6 +4676,11 @@ export interface CgPerson {
   identityLine: string;
   outfitLine: string;
   presentation: Presentation;
+  /**
+   * Their reference is who they are, not the look they wear (a picture of several people, S/art/cg.ts cgSubjects):
+   * only the outfit line dresses them, so the references are not used for clothing.
+   */
+  outfitInText?: boolean;
 }
 
 export interface CgInput {
@@ -4722,7 +4727,7 @@ export function cgPrompt(input: CgInput, edited: Partial<ImagePrompt> = {}): Ima
     : [
         input.references?.length
           ? sentence(
-              `Reference images, in order: ${input.references.join("; ")}. Use them only for each person's face, hair${bare ? " and build" : ", build and clothing"}, never for the pose, framing or background`,
+              `Reference images, in order: ${input.references.join("; ")}. Use them only for each person's face, hair${bare || people.some((person) => person.outfitInText) ? " and build" : ", build and clothing"}, never for the pose, framing or background`,
             )
           : "",
         people.length
