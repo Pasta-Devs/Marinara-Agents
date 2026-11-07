@@ -5,9 +5,21 @@
 // THOUGHTS_MAX and reads the time of day with timeOfDayOf; the client picks a tap line by the same zones and times of
 // day (C/lib/tap-mood.ts, which also holds the catalog's fallback lines until his own pack exists), and counts the
 // thoughts' characters by THOUGHTS_MAX.
+import { intimacyOpen, type ContentSettings } from "./content";
 
-export const TAP_ZONES = ["head", "hand", "heart"] as const;
+/**
+ * Home's touch zones (#2152), top to bottom, which is also their Tab order. The chest keeps its stored key `heart`, so
+ * packs written before 0.14.0 still read.
+ */
+export const TAP_ZONES = ["head", "cheek", "heart", "hand", "crotch"] as const;
 export type TapZone = (typeof TAP_ZONES)[number];
+/** The zones only NSFW Heat opens (intimacyOpen, which enforceContent keeps behind the 18+ confirmation). */
+export const INTIMATE_ZONES: readonly TapZone[] = ["crotch"];
+
+/** The zones a world's Heat opens: all of them under NSFW Heat, the rest otherwise. */
+export function tapZonesFor(content: Pick<ContentSettings, "heat">): TapZone[] {
+  return TAP_ZONES.filter((zone) => intimacyOpen(content) || !INTIMATE_ZONES.includes(zone));
+}
 
 export const TIMES_OF_DAY = ["morning", "day", "night"] as const;
 export type TimeOfDay = (typeof TIMES_OF_DAY)[number];

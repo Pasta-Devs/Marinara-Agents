@@ -441,8 +441,12 @@ export interface PlushArt {
 
 // ── Home (M3): line packs, the message of the day, and what Home shows ──
 
-/** Tap lines: three per zone and time of day. */
-export type TapLines = Record<TapZone, Record<TimeOfDay, string[]>>;
+/**
+ * Tap lines: three per zone and time of day. A pack written before 0.14.0 holds no cheek (#2152), and only a pack
+ * written under NSFW Heat holds crotch.
+ */
+export type TapLines = Record<"head" | "hand" | "heart", Record<TimeOfDay, string[]>> &
+  Partial<Record<"cheek" | "crotch", Record<TimeOfDay, string[]>>>;
 
 /** One stage's lines (P15): taps, the lines for too many pokes, and the cold lines a rupture shows instead. */
 export interface StageLines {
@@ -451,15 +455,24 @@ export interface StageLines {
   annoyed: string[];
   cold: string[];
   at: string;
+  /**
+   * #2152: the content it was written under (S/home/lines.ts contentStamp): absent or "home" for the SFW `home`
+   * contract, else "nsfw:" and a hash of the settings it was written for.
+   */
+  contract?: string;
+  /** #2152: the face he shows when touched in each zone at this stage. */
+  faces?: Partial<Record<TapZone, Face>>;
 }
 
 export type ClawLines = Record<ClawLineKind, string[]>;
 
-/** Lines written once (with his first stage pack): generic rough-day comfort, and the Claw Machine's. */
+/** Lines written with his first stage pack: generic rough-day comfort, and the Claw Machine's. */
 export interface FixedLines {
   comfort: string[];
   claw: ClawLines;
   at: string;
+  /** #2152: the content it was written under, as StageLines.contract; its claw lines serve by the same rule. */
+  contract?: string;
 }
 
 export interface LinePacks {
@@ -474,10 +487,13 @@ export interface LinesView {
   stage: number;
   rupture: boolean;
   tap: TapLines | null;
+  /** #2152: the face each zone's touch brings (empty during a rupture, or for a pack without them). */
+  faces: Partial<Record<TapZone, Face>>;
   annoyed: string[];
   cold: string[];
   /** Empty until his fixed lines exist (Rough day? then uses the catalog's comfort lines). */
   comfort: string[];
+  /** Null until his fixed lines exist, or while they were written under NSFW settings the world has left (#2152). */
   claw: ClawLines | null;
 }
 
