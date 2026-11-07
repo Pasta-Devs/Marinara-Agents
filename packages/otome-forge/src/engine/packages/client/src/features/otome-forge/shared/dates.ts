@@ -81,6 +81,14 @@ export function standingRupture(liState: Pick<LiState, "rupture" | "grievances">
 }
 
 /**
+ * #2156: his grievance with her stands (a rupture he holds): he can't lead a chapter, earns no affection, and his
+ * dates wait until his repair clears it.
+ */
+export function heldAgainst(liState: Pick<LiState, "rupture" | "grievances"> | undefined): boolean {
+  return standingRupture(liState)?.by === "li";
+}
+
+/**
  * The rupture a Make it right date still tries to mend: its grievance while the rupture stands on it, else null. A
  * date's scenes are written as they are read, so one whose rupture was mended (or moved on) elsewhere since it was
  * planned goes on as an ordinary date: its later scenes, the hub and its finish all follow this.
@@ -109,6 +117,8 @@ export interface DatePlan {
   keepsake: { brief: string; art?: Paint };
   /** #2128: the gift the protagonist brought and gives in scene GIFT_BEAT; absent on a date without one. */
   gift?: GiftId;
+  /** #2156: the evening he asked her out on to clear the air, after she told him she was upset with him. */
+  clearAir?: true;
 }
 
 /** One date as the client sees it. */
@@ -139,7 +149,13 @@ export interface DateEntry {
 /** GET /runs/:run/dates */
 export interface DatesView {
   /** Each love interest with a bible, in cast order: a rupture makes the next date "Make it right". */
-  lis: Array<{ li: LiId; rupture: boolean; open: DateEntry | null }>;
+  lis: Array<{
+    li: LiId;
+    rupture: boolean;
+    open: DateEntry | null;
+    /** #2156: she accepted his invitation to clear the air: the next date with him is that evening (his choice of place). */
+    asked?: boolean;
+  }>;
   /** Finished dates, newest first. */
   dates: DateEntry[];
 }

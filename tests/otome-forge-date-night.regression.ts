@@ -327,11 +327,15 @@ async function playDate(t: DateWorld, key: string, picks: number[], from = 0) {
 
 const finish = (t: DateWorld, key: string) => t.call("POST", "/runs/:run/dates/:key/finish", {}, { key });
 
+/**
+ * A rupture the protagonist holds (from before #2156): Make it right dates are hers alone now, since one he holds keeps
+ * every date with him waiting.
+ */
 const rupture = (): Partial<LiState> => {
   const grievance: Grievance = {
     id: "g-main-1-4-0",
     li: KAI,
-    by: "li",
+    by: "protagonist",
     text: "She read the letters he burned.",
     severity: "rupture",
     opened: "main-1/4",
@@ -640,8 +644,8 @@ test("during a rupture the date is Make it right: a good or great outcome mends 
     assert.equal(started.date.makeItRight, true);
     const plan = t.calls[0]!.messages;
     assert.ok(system(plan).includes("MAKE IT RIGHT"));
-    // Kai holds it: the evening is the protagonist's attempt to mend it.
-    assert.ok(system(plan).includes("Plan the evening as the protagonist's attempt to mend it"));
+    // She holds it: the evening is Kai's attempt to earn back her trust.
+    assert.ok(system(plan).includes("Plan the evening as Kai's attempt to earn back the protagonist's trust"));
     assert.ok(plan.at(-1)!.content.includes("She read the letters he burned."));
     await playDate(t, started.date.key, [...picks]);
     assert.ok(t.calls[1]!.messages.at(-1)!.content.includes("MAKE IT RIGHT date"));
@@ -699,7 +703,7 @@ test("easing off a Make it right date's scenes before their choices never mends 
 const secondRupture: Grievance = {
   id: "g-main-2-5-0",
   li: KAI,
-  by: "li",
+  by: "protagonist",
   text: "She walked out on him at the pier.",
   severity: "rupture",
   opened: "main-2/5",
@@ -881,7 +885,8 @@ test("a date is his own memory: a Character Story source for its love interest, 
 test("a date sees the state as its love interest may know it: nothing another love interest's own chapter left", async () => {
   const t = await dateWorld("r-mg5date-aa0008");
   await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) =>
-    withMireillesPrivateRows(state, { rupture: true }),
+    // One the protagonist holds (from before #2156): his own grievance would keep his dates waiting.
+    withMireillesPrivateRows(state, { rupture: true, holder: "protagonist" }),
   );
   const { date } = await startDate(t);
   assert.equal(date.makeItRight, true, "the rupture still makes it Make it right");

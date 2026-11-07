@@ -7,15 +7,17 @@
 // POST /runs/:run/phone/:li/send {text?, quote?, sticker?, id?, retry?} → PhoneSendResult {messages, suggestions}
 // POST /runs/:run/phone/:li/close                                    → PhoneCloseResult {memory, grants}
 // POST /runs/:run/phone/:li/seen {last?}                             → {}
-// POST /runs/:run/phone/due {open?}                                  → PhoneDueResult {status, latest, group}: the daily
-//      messages' heartbeat (S/phone/daily.ts) and the group chat's squabbles' (S/phone/group.ts groupDue), with the
-//      thread the player has open, if any
 // The group chat (#2154, S/phone/group.ts), registered before `:li`, which is a 404 for anything but a love interest:
 // GET  /runs/:run/phone/group?page=                                  → PhoneHistoryPage with its members
 // POST /runs/:run/phone/group/send {text?, sticker?, id?, retry?}    → PhoneSendResult (the members' reply)
 // POST /runs/:run/phone/group/close                                  → PhoneCloseResult (no grants)
 // POST /runs/:run/phone/group/seen {last?}                           → {}
 // Until two love interests are met its routes are a 409 `conflict`.
+// POST /runs/:run/phone/:li/invite {message, accept}                 → {status} (#2156): her answer to his invitation
+//      to clear the air (S/phone/upset.ts): 409 `locked` while he needs space, 409 `conflict` once it lapsed
+// POST /runs/:run/phone/due {open?}                                  → PhoneDueResult {status, latest, group}: the daily
+//      messages' heartbeat (S/phone/daily.ts) and the group chat's squabbles' (S/phone/group.ts groupDue), with the
+//      thread the player has open, if any
 // A thread has one send or close in flight at a time: another is a 409 `busy`. Writing his reply or the memory may fail
 // with 503 `no-connection`, 422 `declined` or 502 `bad-format`; the player's message stays saved and the history page
 // offers Retry. Sending and closing wait for a forged world (409 `conflict`); an unknown run or love interest is a 404.
@@ -27,6 +29,7 @@ import { MESSAGE_ID, markSeen, phoneList, sendMessage, threadPage } from "../pho
 import { noteOpenThread, phoneDue } from "../phone/daily.js";
 import { closeGroup, groupDue, groupList, groupPage, groupSeen, sendToGroup } from "../phone/group.js";
 import { closeAndRemember } from "../phone/memory.js";
+import { answerInvite } from "../phone/upset.js";
 import { MESSAGE_TEXT_MAX, NOTE_QUOTE_MAX } from "../phone/replies.js";
 
 const SendBody = z.object({
@@ -40,6 +43,7 @@ const GroupSendBody = SendBody.omit({ quote: true });
 const SeenBody = z.object({ last: z.string().max(60).optional() });
 const DueBody = z.object({ open: z.string().max(80).nullable().optional() });
 const NoFields = z.object({});
+const InviteBody = z.object({ message: z.string().min(1).max(60), accept: z.boolean() });
 
 export const registerPhoneRoutes: RegisterRoutes = (router, deps) => {
   const { handle } = deps;
@@ -136,6 +140,15 @@ export const registerPhoneRoutes: RegisterRoutes = (router, deps) => {
       const { runId } = runParam(request);
       await markSeen(deps, runId, liParam(request), last);
       return {};
+    }),
+  );
+
+  router.post(
+    "/runs/:run/phone/:li/invite",
+    handle(async (request) => {
+      const body = parseBody(InviteBody, request.body);
+      const { runId } = runParam(request);
+      return answerInvite(deps, runId, liParam(request), body);
     }),
   );
 };

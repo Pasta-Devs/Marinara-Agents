@@ -83,6 +83,7 @@ import {
 } from "../schemas/state.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { grant } from "../state/rewards.js";
+import { assertFreeToDate, assertNotHeld } from "./date-night.js";
 import { recallText } from "../story/canon.js";
 import { listArcs, arcCovering } from "../story/arc.js";
 import type { OtomeStore } from "../store.js";
@@ -603,8 +604,12 @@ export async function answerTarot(
   { card, pick }: { card: number; pick: number },
 ): Promise<TarotAnswer> {
   const at = new Date().toISOString();
+  const target = tarotTarget(runId, id);
+  // #2156: an open reading waits too while their grievance with her stands (S/minigames/date-night.ts assertFreeToDate).
+  const open = await deps.store.readDoc(target.id, normalizeReading);
+  if (open) await assertFreeToDate(deps.store, runId, open.li);
   // An answer given before writes nothing.
-  const saved = await updateIfChanged(deps.store, tarotTarget(runId, id), normalizeReading, (current) => {
+  const saved = await updateIfChanged(deps.store, target, normalizeReading, (current) => {
     if (!current) throw readingNotFound();
     if (current.mode !== "you-read") throw badRequest("only a reading of their cards is answered");
     if (!current.cards[card]?.readings?.[pick]) throw badRequest("no such card or reading");
@@ -694,6 +699,8 @@ export async function finishTarot(
   const saved = await updateIfChanged(deps.store, runDocTarget("state", stateId(runId)), normalizeState, (current) => {
     paid = current.tarot.paid.find((entry) => entry.id === id) ?? null;
     if (paid) return undefined;
+    // #2156: a reading waits, unpaid and open, while their grievance with her stands.
+    assertNotHeld(current, reading.li);
     const outcome = applyTarot(current, reading, { at });
     const amount = (key: "starlight" | "affection") =>
       outcome.grants.reduce((sum, entry) => sum + (entry[key] ?? 0), 0);

@@ -34,7 +34,7 @@ import { OtomeForgeError } from "../http.js";
 import { chapterId, mainChapterNumber, runDocTarget, stateId } from "../ids.js";
 import { defaultLiState, normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeChapter } from "../schemas/story.js";
-import { repairOffers } from "../state/stages.js";
+import { needsSpace, repairOffers } from "../state/stages.js";
 import { withPersonaStoryAbout } from "../setup/cast.js";
 import { recallText } from "./canon.js";
 import {
@@ -285,7 +285,8 @@ async function repairChapters(deps: Pick<ChapterDeps, "store">, runId: string): 
 
 /**
  * POST /runs/:run/repairs/:li ("Make it right"): the repair for the rupture with him. The unfinished one already
- * planned for that grievance is returned as it is; 409 `conflict` when no rupture stands.
+ * planned for that grievance is returned as it is; 409 `conflict` when no rupture stands, and 409 `locked` while his
+ * grievance with her still needs its space (#2156, S/state/stages.ts needsSpace).
  */
 export async function planRepairChapter(
   deps: ChapterDeps,
@@ -300,6 +301,7 @@ export async function planRepairChapter(
   const read = () => deps.store.readDoc(chapterId(runId, offer.key), normalizeChapter);
   const stored = await read();
   if (stored) return stored;
+  if (needsSpace(run.state.lis[li])) throw new OtomeForgeError(409, `${unit.name} needs space first.`, "locked");
   return readOrGenerate(runId, read, async () => {
     signal?.throwIfAborted();
     const state = (await deps.store.readDoc(stateId(runId), normalizeState)) ?? run.state;

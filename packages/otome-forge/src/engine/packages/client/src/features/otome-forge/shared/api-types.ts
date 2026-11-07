@@ -612,7 +612,14 @@ export interface PhoneMessage {
   quote?: string;
   /** #2154: in the group chat, the love interest who sent it (absent: the speaker is unknown). */
   li?: LiId;
+  /**
+   * #2156: his invitation to clear the air, on his last message of a reply while she is upset with him: waiting for her
+   * Accept or Decline, or what became of it (lapsed when she took it back first).
+   */
+  invite?: { status: PhoneInviteStatus };
 }
+
+export type PhoneInviteStatus = "pending" | "accepted" | "declined" | "lapsed";
 
 /** A closed conversation: messages `start`..`start + count - 1`, and what he remembers of it. */
 export interface PhoneSession {
@@ -743,6 +750,8 @@ export interface Grievance {
   /** `${chapterKey}/${beatIndex}`: where it was opened. */
   opened: string;
   status: GrievanceStatus;
+  /** #2156: the key of the chapter whose resolve closed it: a repair pays its clearing only for its own closing. */
+  closedBy?: string;
 }
 
 /** How far trust and tension moved in one chapter, and in its beat `beat.i` (the per-beat cap). */
@@ -764,8 +773,22 @@ export interface LiState {
   /** Per unfinished chapter key, how far trust and tension moved in it (the per-chapter cap); let go once it is done. */
   chapterDelta: Record<string, ChapterShift>;
   grievances: Grievance[];
-  /** An open rupture shuts his gates until a repair scene. Nothing unlocked is taken back. */
-  rupture: { grievanceId: string; since: string } | null;
+  /**
+   * An open rupture shuts his gates until a repair scene. Nothing unlocked is taken back. #2156: one he holds is his
+   * grievance with her; `space` counts the main chapters read to the end since it began (the chapter it opened in
+   * aside), and his repair waits for GRIEVANCE_SPACE_CHAPTERS of them. A rupture saved without it (from before #2156,
+   * or one still owed that it moved to) has its space waived.
+   */
+  rupture: { grievanceId: string; since: string; space?: number } | null;
+  /** #2156: the story arc his last grievance with her opened in (0 before arcs), so at most one opens an arc; null for none. */
+  grievanceArc: number | null;
+  /**
+   * #2156: the protagonist told him she is upset with him (Routes), since when; null while she isn't. He knows it in
+   * his messages and in the story's scenes; it clears when she takes it back or accepts his invitation to clear the air.
+   */
+  upset: { since: string } | null;
+  /** #2156: when she accepted his invitation to clear the air: the next Date Night with him is that evening (null after). */
+  asked: string | null;
   /** What the protagonist has told him (he may know it; scene cards carry it). `ref` is `${key}/${i}`. */
   disclosures: Array<{ text: string; at: string; ref: string }>;
   /** Ids of his bible secrets the protagonist has learned. */
@@ -1289,6 +1312,11 @@ export type LeadReason = "least-recent" | "ripe-conflict";
 export interface RepairEntry {
   li: LiId;
   key: string;
+  /**
+   * #2156: his own grievance with her: he can't lead a chapter and his repair waits until `had` main chapters reach
+   * `needed`. Absent for a rupture she holds (from before #2156).
+   */
+  space?: { had: number; needed: number };
 }
 
 /** One story arc (#1980): the long-term plan a run of main chapters follows. Its hidden text never leaves the server. */

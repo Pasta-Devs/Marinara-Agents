@@ -93,11 +93,14 @@ export function stickerMatcher(listed: readonly ReplySticker[]): (token: string)
 /** P17's reply as the model sends it (nulls allowed); normalizeChatReply makes it a ChatReply. */
 export interface ChatReplyRaw {
   messages: Array<{ text?: string | null; sticker?: string | null }>;
+  invite?: boolean | null;
 }
 
 export interface ChatReply {
   /** `sticker` is a listed sticker's id (S/art/stickers.ts). */
   messages: Array<{ text: string; sticker?: string }>;
+  /** #2156: his last message asks her out to clear the air (kept only when P17 offered it). */
+  invite?: true;
 }
 
 export const ChatReplySchema: ZodType<ChatReplyRaw> = z.object({
@@ -107,6 +110,7 @@ export const ChatReplySchema: ZodType<ChatReplyRaw> = z.object({
     )
     .min(1)
     .max(8),
+  invite: z.boolean().nullable().optional(),
 });
 
 /**
@@ -114,12 +118,14 @@ export const ChatReplySchema: ZodType<ChatReplyRaw> = z.object({
  * MESSAGE_TEXT_MAX). A message
  * written as the protagonist, or a reply with nothing in it, is refused (the repair turn names why). A sticker is the
  * first bracketed name of `listed` in the reply (either order; a `sticker` field is read the same way); every other
- * sticker-shaped bracketed name is taken out of the text, and other bracketed text stays.
+ * sticker-shaped bracketed name is taken out of the text, and other bracketed text stays. `invite` (#2156) is kept
+ * only when P17 offered it (`offered`).
  */
 export function normalizeChatReply(
   raw: ChatReplyRaw,
   names: ThreadNames,
   listed: readonly ReplySticker[] = [],
+  offered = false,
 ): ChatReply | string {
   const messages: ChatReply["messages"] = [];
   const match = stickerMatcher(listed);
@@ -134,7 +140,10 @@ export function normalizeChatReply(
     messages.push(message);
   }
   if (!messages.length) return `the reply had no message from ${names.li}`;
-  return { messages: messages.slice(0, REPLY_MESSAGES_MAX) };
+  return {
+    messages: messages.slice(0, REPLY_MESSAGES_MAX),
+    ...(offered && raw.invite === true ? { invite: true } : {}),
+  };
 }
 
 const AS_PLAYER = "as-player";

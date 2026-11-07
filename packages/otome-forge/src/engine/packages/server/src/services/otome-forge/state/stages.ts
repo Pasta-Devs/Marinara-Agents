@@ -12,6 +12,9 @@
 // `addressed` and closes the rupture, or moves it to another rupture still owed (a pick in it that forgave the
 // grievance closed it already: the read still reports the repair). Nothing unlocked is ever taken back: nothing here
 // lowers a stage, points or a level, and what was read still replays.
+// #2156: a rupture he holds is his grievance with her. His repair waits until GRIEVANCE_SPACE_CHAPTERS main chapters
+// have been read to the end since it began (needsSpace; S/state/rewards.ts counts them), and only it clears the
+// grievance (S/story/beats.ts keeps every other node's `resolves` off it).
 //
 // Every function is pure; a step that does not apply returns the state it was given.
 import type {
@@ -20,15 +23,18 @@ import type {
   Effect,
   Grievance,
   LiId,
+  LiState,
   RepairEntry,
   RunState,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import {
+  GRIEVANCE_SPACE_CHAPTERS,
   LAST_STAGE,
   repairChapterKey,
   routeStatus,
   type RouteEntry,
 } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
+import { heldAgainst } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { STATE_LIMITS, defaultLiState, keepNewest, keepTimeline } from "../schemas/state.js";
 
 const isUnresolved = (grievance: Grievance) => grievance.status === "open" || grievance.status === "festering";
@@ -102,7 +108,7 @@ export interface RepairOutcome {
  */
 export function healRupture(
   state: RunState,
-  chapter: Pick<Chapter, "kind" | "li" | "grievance" | "nodes">,
+  chapter: Pick<Chapter, "key" | "kind" | "li" | "grievance" | "nodes">,
   i: number,
   at: string,
   picked: readonly Effect[] = [],
@@ -115,9 +121,10 @@ export function healRupture(
   const closedByPick = picked.some(
     (effect) => effect.li === li && effect.resolve?.id === grievanceId && effect.resolve.status !== "festering",
   );
+  const chapterKey = chapter.key;
   const grievances = current.grievances.map((grievance) =>
     grievance.id === grievanceId && isUnresolved(grievance)
-      ? { ...grievance, status: "addressed" as const }
+      ? { ...grievance, status: "addressed" as const, closedBy: chapterKey }
       : grievance,
   );
   let rupture = current.rupture;
@@ -137,9 +144,18 @@ export function routeEntries(state: RunState, cast: readonly LiId[]): RouteEntry
   return cast.map((li) => routeStatus(li, state.lis[li] ?? defaultLiState()));
 }
 
+/** #2156: how many main chapters of space his grievance with her has had (a rupture saved without a count: all of it). */
+const spaceHad = (rupture: NonNullable<LiState["rupture"]>) => rupture.space ?? GRIEVANCE_SPACE_CHAPTERS;
+
+/** #2156: his grievance with her stands and has not had its space yet: his repair waits. */
+export function needsSpace(liState: Pick<LiState, "rupture" | "grievances"> | undefined): boolean {
+  return heldAgainst(liState) && spaceHad(liState!.rupture!) < GRIEVANCE_SPACE_CHAPTERS;
+}
+
 /**
  * The repair on offer for each love interest a rupture stands with (GET /story `repairs`): the unfinished repair for
- * that rupture's grievance when one is planned, else the key the next one takes (`chapters`: the run's chapters).
+ * that rupture's grievance when one is planned, else the key the next one takes (`chapters`: the run's chapters), and
+ * for his own grievance with her the space it has had (#2156).
  */
 export function repairOffers(
   chapters: ReadonlyArray<Pick<Chapter, "key" | "kind" | "li" | "grievance">>,
@@ -153,6 +169,9 @@ export function repairOffers(
     const open = his.find(
       (chapter) => chapter.grievance === rupture.grievanceId && !state.chapters[chapter.key]?.completed,
     );
-    return [{ li, key: open?.key ?? repairChapterKey(li, his.length + 1) }];
+    const space = heldAgainst(state.lis[li])
+      ? { space: { had: Math.min(spaceHad(rupture), GRIEVANCE_SPACE_CHAPTERS), needed: GRIEVANCE_SPACE_CHAPTERS } }
+      : {};
+    return [{ li, key: open?.key ?? repairChapterKey(li, his.length + 1), ...space }];
   });
 }

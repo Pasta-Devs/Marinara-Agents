@@ -63,6 +63,7 @@ import { normalizeWorld } from "../schemas/world.js";
 import { grant } from "../state/rewards.js";
 import type { OtomeStore } from "../store.js";
 import { READ_ME_WORDS, ownView, readMeMessages } from "../prompts.js";
+import { assertFreeToDate, assertNotHeld } from "./date-night.js";
 import { clean, recalledLine } from "./read-him.js";
 
 export const READ_ME_MAX_TOKENS = 2400;
@@ -421,7 +422,11 @@ export async function answerReadMe(
 ): Promise<ReadMeAnswer> {
   const own = playerWords(words);
   const at = new Date().toISOString();
-  const saved = await deps.store.updateDoc(readMeTarget(runId, setId), normalizeSet, (current) => {
+  const target = readMeTarget(runId, setId);
+  // #2156: an open set waits too while their grievance with her stands (S/minigames/date-night.ts assertFreeToDate).
+  const open = await deps.store.readDoc(target.id, normalizeSet);
+  if (open) await assertFreeToDate(deps.store, runId, open.li);
+  const saved = await deps.store.updateDoc(target, normalizeSet, (current) => {
     if (!current) throw setNotFound();
     if (!current.guesses[guess]) throw new OtomeForgeError(400, "Invalid request: no such guess", "bad-request");
     if (current.answers[guess]) return current;
@@ -550,6 +555,8 @@ export async function finishReadMe(
   const state = await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) => {
     paid = current.readMe.paid.find((entry) => entry.setId === setId) ?? null;
     if (paid) return current;
+    // #2156: a set waits, unpaid and open, while their grievance with her stands.
+    assertNotHeld(current, set.li);
     const outcome = applyReadMe(current, set, { at });
     const amount = (key: "starlight" | "affection") =>
       outcome.grants.reduce((sum, entry) => sum + (entry[key] ?? 0), 0);

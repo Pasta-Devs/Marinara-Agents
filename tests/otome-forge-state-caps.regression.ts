@@ -303,21 +303,28 @@ test("a grievance never closes in its own beat, and closes only where its node l
 
 test("a rupture opens with its grievance, holds while it festers, and never takes anything unlocked back", () => {
   const before = fresh();
-  before.lis[KAI] = { ...before.lis[KAI]!, points: economy.levelFloor(5), stage: 3 };
+  // #2156: a serious break, his trust falling to −2 with it.
+  before.lis[KAI] = { ...before.lis[KAI]!, points: economy.levelFloor(5), stage: 3, trust: -1 };
   const broken = pick(
     before,
     [{ li: KAI, trust: -1, grievance: { by: "li", text: "She sold him out.", severity: "rupture" } }],
     { i: 1 },
   ).state;
   const id = "g-main-1-1-0";
-  assert.deepEqual(broken.lis[KAI]!.rupture, { grievanceId: id, since: AT });
+  assert.deepEqual(broken.lis[KAI]!.rupture, { grievanceId: id, since: AT, space: 0 });
   assert.deepEqual([broken.lis[KAI]!.points, broken.lis[KAI]!.stage], [economy.levelFloor(5), 3]);
-  // A second rupture-grade grievance does not replace the open rupture.
+  // A second rupture-grade grievance does not replace the open rupture: #2156 saves it as a major one.
   let state = pick(broken, [{ li: KAI, grievance: { by: "li", text: "Again.", severity: "rupture" } }], {
     i: 1,
     choice: "choice-2",
   }).state;
   assert.equal(state.lis[KAI]!.rupture?.grievanceId, id);
+  assert.equal(state.lis[KAI]!.grievances[1]!.severity, "major");
+  // A save from before #2156 may owe a second rupture: here it does.
+  const owed = state.lis[KAI]!.grievances.map((item, n) =>
+    n === 1 ? { ...item, severity: "rupture" as const } : item,
+  );
+  state = { ...state, lis: { ...state.lis, [KAI]: { ...state.lis[KAI]!, grievances: owed } } };
   state = pick(state, [{ li: KAI, resolve: { id, status: "festering" } }], { i: 2, resolves: [id] }).state;
   assert.equal(state.lis[KAI]!.rupture?.grievanceId, id);
   // Repairing the first leaves the second owed: the rupture moves to it, and his gates stay shut.

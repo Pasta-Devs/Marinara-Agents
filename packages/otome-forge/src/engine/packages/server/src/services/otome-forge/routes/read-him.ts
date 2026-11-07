@@ -15,6 +15,7 @@ import {
 } from "../../../../../client/src/features/otome-forge/shared/read-him.js";
 import { OtomeForgeError, debugModeOf, parseBody, runParam, type OtomeRequest, type RegisterRoutes } from "../http.js";
 import { isLiId } from "../ids.js";
+import { assertFreeToDate } from "../minigames/date-night.js";
 import { answerReadHim, finishReadHim, startReadHim } from "../minigames/read-him.js";
 
 const StartBody = z.object({ li: z.string().min(1).max(80) });
@@ -49,6 +50,8 @@ export const registerReadHimRoutes: RegisterRoutes = (router, deps) => {
       const { li } = parseBody(StartBody, request.body);
       const { runId } = runParam(request);
       if (!isLiId(li)) throw new OtomeForgeError(404, "No such love interest.", "not-found");
+      // #2156: a set waits (unfinished ones too) while his grievance with her stands.
+      await assertFreeToDate(deps.store, runId, li);
       return startReadHim(deps, runId, li, { debugMode: debugModeOf(request) });
     }),
   );

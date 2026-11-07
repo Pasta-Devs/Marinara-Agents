@@ -80,6 +80,12 @@ export const AFFECTION_EARNINGS = {
 export const OUTSIDE_AFFECTION_DAILY_CAP = 150;
 
 /**
+ * #2156 (the maintainer's): what clearing his grievance with her pays, once, as a story earning: his repair chapter
+ * read to its end pays this in place of its Lead's affection. While it stands, he earns no affection at all.
+ */
+export const GRIEVANCE_CLEARED_AFFECTION = 300;
+
+/**
  * #2046: what siding with one love interest in an argument moves (proposal). The one backed gains, as a story earning
  * (never capped; twice what a hostile pick costs); each one passed over loses less than a hostile pick, since backing
  * someone else is not hostile, and never below the level reached.

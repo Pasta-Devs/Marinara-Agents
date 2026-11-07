@@ -47,6 +47,10 @@
 //   stands, none of his route chapters opens a beat (409 `locked`) and his gate is not counted read (stages.ts
 //   gateShut); a beat already on screen can still be finished, and what was read still replays. A stage-5 gate must
 //   end on one big choice.
+// - #2156: a pick lands in a story arc (the main chapter's own, else the newest; 0 before arcs), looked up only when it
+//   may open his grievance with her, which opens once an arc (S/state/relationship.ts). Only his repair clears that
+//   grievance: any other node's `resolves`, planned before #2156 too, never closes it. His repair read to its end pays
+//   its clearing (S/state/rewards.ts payClearing) in the read's write, once the grievance is closed.
 // - #2155, his side (S/story/his-side.ts): a read that counts a big moment notes it for his side of the arc, in that
 //   same state write, unless that side is written already, and the read that finishes its chapter says it waits. His
 //   side's own scene (a story chapter with `hisSide`) is written against what he may know, as things stood between them
@@ -81,7 +85,7 @@ import {
   stageRow,
   type ClimaxMove,
 } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
-import type { DateScore } from "../../../../../client/src/features/otome-forge/shared/dates.js";
+import { heldAgainst, type DateScore } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { SIDE_WITH_AFFECTION } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import { LIMIT_IDS, type LimitId } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import {
@@ -101,7 +105,7 @@ import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { withPersonaStoryAbout } from "../setup/cast.js";
 import { applyChoiceEffects } from "../state/relationship.js";
-import { readBeatToEnd } from "../state/rewards.js";
+import { payClearing, readBeatToEnd } from "../state/rewards.js";
 import { countedNow, gateShut, healRupture, passGate } from "../state/stages.js";
 import { arcCovering, listArcs } from "./arc.js";
 import type { ChapterDeps } from "./chapters.js";
@@ -1071,15 +1075,47 @@ interface Picked extends Remembered {
 
 const NOTHING_PICKED: Picked = { ...NOTHING_REMEMBERED, affection: [] };
 
+/** #2156: the node's `resolves`, without a grievance he holds against her unless this is that grievance's repair. */
+function resolvesIn(state: RunState, chapter: Chapter, i: number): string[] {
+  const held = Object.values(state.lis).flatMap((li) => (heldAgainst(li) ? [li.rupture!.grievanceId] : []));
+  return (chapter.nodes[i]?.resolves ?? []).filter(
+    (id) => !held.includes(id) || (chapter.kind === "repair" && id === chapter.grievance),
+  );
+}
+
 /** A pick's effects on the state, in its chapter and beat (applyChoiceEffects; a pick already applied is a no-op). */
-const applyPickTo = (state: RunState, chapter: Chapter, beat: Beat, choice: string, option: string, at: string) =>
+const applyPickTo = (
+  state: RunState,
+  chapter: Chapter,
+  beat: Beat,
+  choice: string,
+  option: string,
+  at: string,
+  arc?: number,
+) =>
   applyChoiceEffects(state, beat.effects[choice]?.[option] ?? [], {
     key: chapter.key,
     i: beat.i,
     choice,
-    resolves: chapter.nodes[beat.i]?.resolves ?? [],
+    resolves: resolvesIn(state, chapter, beat.i),
     at,
+    arc,
   });
+
+/** #2156: a rupture-severity grievance he would hold, which may open his grievance with her. */
+const mayOpenGrievance = (effects: readonly Effect[]) =>
+  effects.some((effect) => effect.grievance?.by === "li" && effect.grievance.severity === "rupture");
+
+/**
+ * #2156: the story arc a pick in `chapter` lands in (his grievance opens once an arc): a main chapter's own, else the
+ * newest arc, 0 before arcs. Looked up only when `may` (a pick could open one), so every other pick reads no arcs.
+ */
+async function arcOfPick(deps: BeatDeps, runId: string, chapter: Chapter, may: boolean): Promise<number | undefined> {
+  if (!may) return undefined;
+  const arcs = await listArcs(deps.store, runId);
+  const own = chapter.arc ?? (chapter.number != null ? arcCovering(arcs, chapter.number)?.number : undefined);
+  return own ?? arcs.at(-1)?.number ?? 0;
+}
 
 /** Applies a canonical pick's effects to the state once (the pick's `applied` entry). */
 async function applyPick(
@@ -1092,13 +1128,14 @@ async function applyPick(
 ): Promise<Picked> {
   let outcome = NOTHING_PICKED;
   const at = new Date().toISOString();
+  const arc = await arcOfPick(deps, runId, chapter, mayOpenGrievance(beat.effects[choiceId]?.[optionId] ?? []));
   const state = await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) => {
     const {
       state: next,
       remembered,
       rememberedBy,
       affection,
-    } = applyPickTo(current, chapter, beat, choiceId, optionId, at);
+    } = applyPickTo(current, chapter, beat, choiceId, optionId, at, arc);
     outcome = { remembered, rememberedBy, affection };
     return next;
   });
@@ -1193,8 +1230,9 @@ export async function chooseOption(
 async function applyStances(deps: BeatDeps, runId: string, chapter: Chapter, beat: Beat): Promise<Remembered> {
   let outcome = NOTHING_REMEMBERED;
   const at = new Date().toISOString();
+  const arc = await arcOfPick(deps, runId, chapter, beat.confrontation?.ending === "walkout");
   const state = await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) => {
-    const { state: next, remembered, rememberedBy } = applyConfrontation(current, chapter, beat, at);
+    const { state: next, remembered, rememberedBy } = applyConfrontation(current, chapter, beat, at, arc);
     outcome = { remembered, rememberedBy };
     return next;
   });
@@ -1316,6 +1354,15 @@ async function finishBeat(
   const at = new Date().toISOString();
   // His secrets, for the gate (the stage it opens reveals each secret due by then). Bibles are not edited mid-read.
   const owner = chapter.kind === "route" && chapter.li ? await readUnit(deps, runId, chapter.li) : null;
+  const canon = canonPicks(beat);
+  // #2156: the arc a pick here opens a grievance in (none when a walkout or a grievance pick may open one).
+  const arcOfGrievance = await arcOfPick(
+    deps,
+    runId,
+    chapter,
+    beat.confrontation?.ending === "walkout" ||
+      mayOpenGrievance(canon.flatMap(([choice, option]) => beat.effects[choice]?.[option] ?? [])),
+  );
   // #2155: the arc a big moment here would be his side's, and whether that side is written already (it spends the arc).
   const candidate = momentCandidate(chapter, beat);
   const arc = candidate ? hisSideArc(chapter, await listArcs(deps.store, runId)) : 0;
@@ -1324,11 +1371,11 @@ async function finishBeat(
     // A pick saved on the beat whose effects never reached the state (its request stopped between the two writes, and
     // a reload shows it as made) lands in this same write, so no beat counts as read with a canon pick unapplied.
     // The pick's `applied` entry makes this a no-op for every other pick; the same goes for a Confrontation's stances.
-    const picked = canonPicks(beat).reduce(
-      (state, [choice, option]) => applyPickTo(state, chapter, beat, choice, option, at).state,
+    const picked = canon.reduce(
+      (state, [choice, option]) => applyPickTo(state, chapter, beat, choice, option, at, arcOfGrievance).state,
       current,
     );
-    const caughtUp = applyConfrontation(picked, chapter, beat, at).state;
+    const caughtUp = applyConfrontation(picked, chapter, beat, at, arcOfGrievance).state;
     // A rupture shuts his gate: it is not counted (no stage, no chapter grants) until a repair, whichever way it was
     // reached (a lookahead written before the rupture, an Ease off), unless the rupture opened in this very scene.
     if (gateShut(caughtUp, chapter, beat.i)) throw locked(ROUTE_LOCKED);
@@ -1340,11 +1387,17 @@ async function finishBeat(
     hisSide = undefined;
     if (countedNow(caughtUp, read, chapter.key, beat.i)) {
       const gate = passGate(next, chapter, beat.i, { secrets: owner?.bible?.secrets ?? [], at });
-      const picks = canonPicks(beat).flatMap(([choice, option]) => beat.effects[choice]?.[option] ?? []);
+      const picks = canon.flatMap(([choice, option]) => beat.effects[choice]?.[option] ?? []);
       const heal = healRupture(gate.state, chapter, beat.i, at, picks);
       next = heal.state;
       if (gate.stageUp) stageUp = gate.stageUp;
       if (heal.repaired) repaired = heal.repaired;
+      // #2156: a repair completed now pays its clearing, after the heal has closed his grievance.
+      if (!caughtUp.chapters[chapter.key]?.completed && next.chapters[chapter.key]?.completed) {
+        const cleared = payClearing(next, chapter);
+        next = cleared.state;
+        outcome = { ...outcome, grants: [...outcome.grants, ...cleared.grants] };
+      }
       const moment = spent ? null : hisSideMomentOf(chapter, beat, { stageUp: gate.stageUp, repaired: heal.repaired });
       const his = moment?.li === candidate ? next.lis[moment.li] : undefined;
       if (moment && his) {

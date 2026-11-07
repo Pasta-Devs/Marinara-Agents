@@ -8,7 +8,7 @@
 //   check runs again inside the run's foreground queue, so two requests never plan two dates. While a rupture stands
 //   between them the date is "Make it right": the plan targets the rupture's grievance, and P26 and the scenes are told
 //   who holds it (the love interest's hurt, or the protagonist's). One already open when a rupture starts stays an
-//   ordinary date (it was planned as one), and the Dates hub labels Date Night by the open date (makeItRightView), so
+//   ordinary date (it was planned as one), and the Dates hub labels Date Night by the open date (dateNightView), so
 //   the next one is Make it right. A Make it right date stays one only while its rupture stands (SH/dates.ts
 //   stillToMend): mended or moved on elsewhere meanwhile, its later scenes, the hub and its finish are an ordinary
 //   date's. The place is one of the picker's, the love interest's own pick, or one the story has painted (M2b's
@@ -40,6 +40,13 @@
 //   (`${nodes}/finish`, applied through applyChoiceEffects); a Make it right finish leaves what it found beside it
 //   (`${nodes}/make-it-right-mended` or `-standing`). A replay answers with the same outcome, the same mend and no
 //   grants.
+// - #2156: while his grievance with her stands (SH/dates.ts heldAgainst) every date with him waits: the Dates hub opens
+//   none, and starting (or resuming) a date and finishing one, starting, answering or finishing Read Them, Read Me or
+//   Tarot night, finishing a Claw round, and the Photo Shoot are a 409 `locked` before anything is worn, spent,
+//   planned, painted, saved or paid (assertFreeToDate, or assertNotHeld inside the write that pays). Nothing is lost:
+//   an open one goes on once his repair has cleared it. Once she accepts his invitation to clear the air
+//   (LiState.asked, S/phone/upset.ts), the next date planned with him is that evening (DatePlan.clearAir), and the
+//   write that registers it lets the invitation go; it pays as any date.
 // - Privacy: a completed date is a `character-story` memory source with `audience: [li]` (S/story/canon.ts
 //   readStorySources), as GF's bond chapter: summarized and folded into the shared overview, titled private, while only
 //   that love interest's own readers and scenes he is in recall it in detail. It is never an Engine Scene.
@@ -71,6 +78,7 @@ import {
   DATE_BEATS,
   STORY_PLACE,
   dateOutcome,
+  heldAgainst,
   standingRupture,
   stillToMend,
   type DateEntry,
@@ -133,6 +141,19 @@ const liNotFound = () => new OtomeForgeError(404, "No such love interest.", "not
 const conflict = (message: string) => new OtomeForgeError(409, message, "conflict");
 
 const clean = (value: unknown, max = TEXT_MAX) => (typeof value === "string" ? value.trim().slice(0, max) : "");
+
+/** #2156: 409 `locked` while his grievance with her stands: every date with him waits until his repair clears it. */
+export function assertNotHeld(state: Pick<RunState, "lis">, li: LiId): void {
+  if (heldAgainst(state.lis[li])) {
+    throw new OtomeForgeError(409, "They need space: your dates wait until you make it right in Routes.", "locked");
+  }
+}
+
+/** #2156: assertNotHeld on the run's state as it is now, the first thing a date route does (nothing else is read). */
+export async function assertFreeToDate(store: Pick<OtomeStore, "readDoc">, runId: string, li: LiId): Promise<void> {
+  const state = await store.readDoc(stateId(runId), normalizeState);
+  if (state) assertNotHeld(state, li);
+}
 
 export const isDateKey = (value: unknown): value is string => typeof value === "string" && DATE_KEY.test(value);
 
@@ -343,26 +364,31 @@ export async function datesView(deps: Pick<DateDeps, "store">, runId: string): P
     return chapter ? entryOf(runId, chapter, run.state, null) : null;
   };
   return {
-    lis: castOf(run).map((li) => ({ li, rupture: !!run.state.lis[li]?.rupture, open: open(li) })),
+    lis: castOf(run).map((li) => ({
+      li,
+      rupture: !!run.state.lis[li]?.rupture,
+      open: open(li),
+      asked: !!run.state.lis[li]?.asked,
+    })),
     dates,
   };
 }
 
 /**
- * Whether Date Night with each love interest is Make it right now (GET /play, the Dates hub's label): the open date's
- * own plan while its rupture stands (stillToMend) when one is open, else whether a rupture stands that a new date
- * would try to mend.
+ * Date Night with each love interest now (GET /play, the Dates hub's label): whether it is Make it right, by the open
+ * date's own plan while its rupture stands (stillToMend) when one is open, else by whether a rupture stands that a new
+ * date would try to mend; and whether a date with them is open (#2156: Play resumes it before his invitation's evening).
  */
-export async function makeItRightView(
+export async function dateNightView(
   store: Pick<OtomeStore, "listRun">,
   runId: string,
   state: RunState,
-): Promise<Record<LiId, boolean>> {
+): Promise<Record<LiId, { makeItRight: boolean; open: boolean }>> {
   const chapters = await dateChapters(store, runId);
-  const view: Record<LiId, boolean> = {};
+  const view: Record<LiId, { makeItRight: boolean; open: boolean }> = {};
   for (const [li, liState] of Object.entries(state.lis)) {
     const open = chapters.find((item) => item.date!.li === li && !isFinished(state, item));
-    view[li] = !!(open ? stillToMend(open.date!, state.lis) : standingRupture(liState));
+    view[li] = { makeItRight: !!(open ? stillToMend(open.date!, state.lis) : standingRupture(liState)), open: !!open };
   }
   return view;
 }
@@ -407,6 +433,12 @@ export async function checkGift(
   if (!(await openDateWith(deps.store, runId, li))) giveGift(run.state, run.world.content, gift);
 }
 
+/** #2156: `state` with his invitation to clear the air let go, now that its evening is planned (`li`: whose, or none). */
+function withAskedSpent(state: RunState, li: LiId | null): RunState {
+  const current = li ? state.lis[li] : undefined;
+  return current?.asked ? { ...state, lis: { ...state.lis, [li!]: { ...current, asked: null } } } : state;
+}
+
 /** The next free `date-<n>`. */
 const nextDateKey = (chapters: readonly Chapter[]) =>
   `date-${chapters.reduce((max, chapter) => Math.max(max, Number(DATE_KEY.exec(chapter.key)?.[1] ?? 0)), 0) + 1}`;
@@ -448,6 +480,8 @@ export async function startDate(
     if (gift) giveGift(run.state, run.world.content, gift);
     const liState = run.state.lis[input.li] ?? defaultLiState();
     const makeItRight = standingRupture(liState);
+    // #2156: the evening he asked her out on to clear the air, once she accepted.
+    const clearAir = liState.asked ? (true as const) : undefined;
     const key = nextDateKey(await dateChapters(deps.store, runId));
     const job: ForgeMemoryJob = "narration";
     const memory = await recallText(deps, runId, {
@@ -476,6 +510,7 @@ export async function startDate(
         makeItRight,
         memory: memory.text,
         gift: gift ?? null,
+        clearAir: !!clearAir,
       }),
       memory,
       schema: DatePlanReplySchema,
@@ -500,6 +535,7 @@ export async function startDate(
       makeItRight: makeItRight?.id ?? null,
       keepsake: { brief: plan.brief },
       ...(gift ? { gift } : {}),
+      ...(clearAir ? { clearAir } : {}),
     };
     const chapter: Chapter = {
       key,
@@ -537,10 +573,13 @@ export async function startDate(
       state = await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) =>
         current.chapters[key]
           ? current
-          : {
-              ...(gift ? giveGift(current, run.world.content, gift) : current),
-              chapters: { ...current.chapters, [key]: { beatsRead: 0, completed: null, applied: [] } },
-            },
+          : withAskedSpent(
+              {
+                ...(gift ? giveGift(current, run.world.content, gift) : current),
+                chapters: { ...current.chapters, [key]: { beatsRead: 0, completed: null, applied: [] } },
+              },
+              clearAir ? input.li : null,
+            ),
       );
     } catch (error) {
       // The gift was given elsewhere while the date was planned: the plan goes, as it would with the run.
@@ -633,7 +672,10 @@ export async function finishDate(deps: DateDeps, runId: string, key: string): Pr
       mend ? [{ li: plan.li, resolve: { id: mend, status: "addressed" } }] : [],
       { key, i: chapter.nodes.length, choice: FINISH_CHOICE, resolves: mend ? [mend] : [], at },
     );
+    // A date already counted is returned as it stands, whatever came between (#2156): only a first counting waits
+    // out a grievance that stands.
     if (applied.replay) return current;
+    assertNotHeld(current, plan.li);
     const after = mend ? applied.state.lis[plan.li] : undefined;
     // Mended as M2b's repair reports it (S/state/stages.ts healRupture): only when no rupture is left with them.
     repaired = !!after && !after.rupture && after.grievances.find((item) => item.id === mend)?.status === "addressed";

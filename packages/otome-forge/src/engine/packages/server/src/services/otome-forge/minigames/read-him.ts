@@ -61,6 +61,7 @@ import { normalizeWorld } from "../schemas/world.js";
 import { grant } from "../state/rewards.js";
 import type { OtomeStore } from "../store.js";
 import { READ_HIM_WORDS, ownView, readHimMessages } from "../prompts.js";
+import { assertFreeToDate, assertNotHeld } from "./date-night.js";
 
 export const READ_HIM_MAX_TOKENS = 2400;
 /** His earlier sets whose moments P25 sees, so a new set never repeats them. */
@@ -461,7 +462,11 @@ export async function answerReadHim(
   round: number,
   pick: number,
 ): Promise<ReadHimAnswer> {
-  const saved = await deps.store.updateDoc(readHimTarget(runId, setId), normalizeSet, (current) => {
+  const target = readHimTarget(runId, setId);
+  // #2156: an open set waits too while his grievance with her stands (S/minigames/date-night.ts assertFreeToDate).
+  const open = await deps.store.readDoc(target.id, normalizeSet);
+  if (open) await assertFreeToDate(deps.store, runId, open.li);
+  const saved = await deps.store.updateDoc(target, normalizeSet, (current) => {
     if (!current) throw setNotFound();
     const shown = current.rounds[round];
     if (!shown || pick >= shown.readings.length) {
@@ -572,6 +577,8 @@ export async function finishReadHim(
   const state = await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) => {
     paid = current.readHim.paid.find((entry) => entry.setId === setId) ?? null;
     if (paid) return current;
+    // #2156: a set waits, unpaid and open, while his grievance with her stands.
+    assertNotHeld(current, set.li);
     const outcome = applyReadHim(current, set, currentTells, { at });
     const amount = (key: "starlight" | "affection") =>
       outcome.grants.reduce((sum, entry) => sum + (entry[key] ?? 0), 0);

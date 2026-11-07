@@ -273,12 +273,16 @@ export const MIREILLE_ONLY = [
   "MIR-REPAIR-OFFSCREEN",
 ];
 export const RUPTURE_ID = "g-3";
-export function withMireillesPrivateRows(state: RunState, { rupture = false } = {}): RunState {
+/** `holder` "protagonist": the rupture is one she holds (from before #2156), so his dates stay open. */
+export function withMireillesPrivateRows(
+  state: RunState,
+  { rupture = false, holder = "li" as "li" | "protagonist" } = {},
+): RunState {
   const kai = state.lis[KAI]!;
   const grievance = (id: string, text: string, opened: string, severity: "minor" | "rupture" = "minor") => ({
     id,
     li: KAI,
-    by: "li" as const,
+    by: severity === "rupture" ? holder : ("li" as const),
     text,
     severity,
     opened,

@@ -242,6 +242,7 @@ test("a route chapter opens at its level, plans once, and only its gate moves th
     li: KAI,
     stage: 1,
     next: { stage: 2, key: `route-${KAI}-2`, unlocked: true, requires: { level: 3 }, blockedBy: null },
+    upset: false,
   });
   assert.deepEqual(story.body.repairs, []);
 
@@ -468,10 +469,11 @@ test("a rupture locks his route chapters until a repair chapter's resolving node
   const story = await t.call("GET", "/runs/:run/story");
   assert.equal(story.body.routes[0].next.blockedBy, "rupture");
   assert.equal(story.body.routes[0].next.unlocked, false);
-  assert.deepEqual(story.body.repairs, [{ li: KAI, key: `repair-${KAI}-1` }]);
+  // #2156: his grievance with her, saved before its space was counted: waived, so Make it right is open at once.
+  assert.deepEqual(story.body.repairs, [{ li: KAI, key: `repair-${KAI}-1`, space: { had: 2, needed: 2 } }]);
   assert.ok(
-    story.body.next.candidates.some((candidate: { li: string; reason: string }) => candidate.li === KAI),
-    "main chapters go on, and his conflict is the ripest",
+    !story.body.next.candidates.some((candidate: { li: string; reason: string }) => candidate.li === KAI),
+    "main chapters go on, and he can't lead them while it stands",
   );
 
   // Make it right: P11, two nodes, the last resolving the rupture; two taps plan it once.
@@ -544,9 +546,10 @@ const ruptureChoiceBeat = () =>
   });
 
 test("a rupture keeps a gate the lookahead wrote shut, Ease off included, and still replays what was read", async () => {
+  // #2156: his trust is already at −2, so the scene's rupture is a serious break.
   const t = await arcWorld(
     "r-shut-aaaaaa",
-    { points: POINTS_FOR_LEVEL(3) },
+    { points: POINTS_FOR_LEVEL(3), trust: -2 },
     router({ beat: (i) => (i === 2 ? ruptureChoiceBeat() : beatReply()) }),
   );
   const planned = await t.call("POST", "/runs/:run/routes/:li/next", {}, { li: KAI });
@@ -591,7 +594,7 @@ test("a rupture keeps a gate the lookahead wrote shut, Ease off included, and st
   // A rupture opened in the gate's own scene lets that scene be finished: the stage it reached is not taken back.
   const own = await arcWorld(
     "r-owng-aaaaaa",
-    { points: POINTS_FOR_LEVEL(3) },
+    { points: POINTS_FOR_LEVEL(3), trust: -2 },
     router({ beat: (i) => (i === 3 ? ruptureChoiceBeat() : beatReply()) }),
   );
   const { reads } = await playRoute(own);
@@ -643,9 +646,10 @@ test("a repair plan keeps its shape; a rupture that moves on is offered its own 
   const state = await t.state();
   assert.deepEqual(state.lis[KAI]!.rupture?.grievanceId, "g-b", "another rupture still owed keeps the gates shut");
   assert.equal(state.lis[KAI]!.stage, 3);
-  assert.equal(state.lis[KAI]!.points, POINTS_FOR_LEVEL(6) + 150, "the repair pays; nothing is taken back");
+  // #2156: its clearing, even while the rupture still owed holds him (a save from before #2156).
+  assert.equal(state.lis[KAI]!.points, POINTS_FOR_LEVEL(6) + 300, "the repair pays; nothing is taken back");
   const story = await t.call("GET", "/runs/:run/story");
-  assert.deepEqual(story.body.repairs, [{ li: KAI, key: `repair-${KAI}-2` }]);
+  assert.deepEqual(story.body.repairs, [{ li: KAI, key: `repair-${KAI}-2`, space: { had: 2, needed: 2 } }]);
   assert.equal(story.body.routes[0].next.blockedBy, "rupture");
 });
 
