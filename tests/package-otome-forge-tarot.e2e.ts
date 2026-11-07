@@ -3,9 +3,10 @@
 // question; three of 22 face-down cards are picked by tap or click (or Let fate choose, or the keyboard's roving
 // tabindex on the desktop), numbered in order; the cards turn one at a time, each line voiced once and focus moving to
 // each new one; in "you-read" the player picks a reading (button or keys 1–3), spoken in the persona's voice, and the
-// reaction shows only then; the finish pays once; a reading left half-way opens again at the card it stopped on; with
-// no image connection the cards are our SVG and offer no paint, and with Ask before painting the Paint these cards bar
-// paints and the card swaps to its picture. Each test runs Midnight on one project and Pearl on the other, at phone
+// reaction shows only then (never from a key pressed in a dialog); the finish pays once; a "you-read" reading left
+// half-way opens again at the card it stopped on; with no image connection the cards are our SVG and offer no paint,
+// and with Ask before painting the Paint these cards bar (for the turned cards only) paints and the card swaps to its
+// picture. Each test runs Midnight on one project and Pearl on the other, at phone
 // width (mobile-chromium, touch) and on the desktop (desktop-chromium, mouse and keyboard), with no horizontal scroll.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-tarot.e2e.ts
 import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
@@ -487,9 +488,10 @@ test("Otome Hearth Tarot night: Kai Ardent reads my cards, picked by tap or clic
   await noWider(page);
   await page.screenshot({ path: testInfo.outputPath("07-done.png"), fullPage: true });
 
-  // Another reading starts at the intro again.
+  // Another reading starts at the intro again, focus on its heading.
   await press(root.getByRole("button", { name: "Another reading" }));
   await expect(root.getByRole("radio", { name: /Kai Ardent reads my cards/u })).toBeVisible();
+  await expect(root.getByRole("heading", { level: 1, name: "Tarot night with Kai Ardent" })).toBeFocused();
   expect(pageErrors).toEqual([]);
 });
 
@@ -554,6 +556,16 @@ test("Otome Hearth Tarot night: I read Kai Ardent's cards, by fate or keys, in m
   await expect(root.getByRole("button", { name: "Turn the next card" })).toHaveCount(0);
   await noWider(page);
   await page.screenshot({ path: testInfo.outputPath("01-readings.png") });
+  // A key pressed in the large card's dialog never answers the card behind it.
+  const pastCard = root.getByRole("button", { name: "Past: The Tower, reversed" });
+  await press(pastCard);
+  const large = page.getByRole("dialog", { name: "Past: The Tower, reversed" });
+  await expect(large).toBeVisible();
+  await page.keyboard.press("3");
+  await page.keyboard.press("Escape");
+  await expect(large).toHaveCount(0);
+  await expect(pastCard).toBeFocused();
+  await expect(readings).toHaveCount(3);
   if (mobile) await readings.nth(1).tap();
   else await page.keyboard.press("2");
   const next = root.getByRole("button", { name: "Turn the next card" });
@@ -621,20 +633,26 @@ test("Otome Hearth Tarot night: with Ask before painting, Paint these cards pain
     "1 model call · up to 3 images, only for cards not painted yet",
   );
   await press(root.getByRole("button", { name: "Play: Tarot night with Kai Ardent" }));
-  await expect(root.getByText("Paints 3 images")).toBeVisible();
+  await expect(root.locator(".of-tarot-intro .of-cost")).toHaveText(
+    "Paints up to 3 images, only for cards not painted yet, each painted once and kept",
+  );
   await press(root.getByRole("button", { name: "Choose your cards" }));
   await press(root.getByRole("button", { name: "Let fate choose" }));
   await press(root.getByRole("button", { name: "Turn the cards" }));
   await expect(root.getByRole("heading", { name: "The reading begins" })).toBeFocused();
 
-  // The drawn cards wait for the tap: one bar for all three, with what it costs; nothing is painted yet.
+  // The drawn cards wait for the tap: one bar for the cards turned so far, with what it costs (a face-down card is
+  // never named, by its review either); nothing is painted yet.
   const bar = root.locator(".of-tarot-paint");
+  await expect(bar).toHaveCount(0);
+  await press(root.getByRole("button", { name: "Turn the Past card" }));
   await expect(bar.getByRole("button", { name: "Paint these cards" })).toBeVisible();
-  await expect(bar).toContainText("Paints 3 images");
-  expect(posts(stub, "/art/tarot")).toHaveLength(0);
-  for (const turn of ["Turn the Past card", "Turn the Present card", "Turn the Future card"]) {
+  await expect(bar).toContainText("Paints 1 image");
+  for (const turn of ["Turn the Present card", "Turn the Future card"]) {
     await press(root.getByRole("button", { name: turn }));
   }
+  await expect(bar).toContainText("Paints 3 images");
+  expect(posts(stub, "/art/tarot")).toHaveLength(0);
   await expect(root.locator(".of-tarot-art")).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath("01-waiting.png") });
   await press(bar.getByRole("button", { name: "Paint these cards" }));

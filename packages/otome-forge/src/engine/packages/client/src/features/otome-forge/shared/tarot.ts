@@ -40,10 +40,6 @@ export const ARCANA = [
 ] as const;
 export type Arcana = (typeof ARCANA)[number];
 
-export function isArcana(value: unknown): value is Arcana {
-  return typeof value === "string" && (ARCANA as readonly string[]).includes(value);
-}
-
 /** Who a card's picture shows: the protagonist, the love interest, the two of them, or nobody (scenery only). */
 export type ArcanaFigure = "you" | "him" | "both" | "none";
 

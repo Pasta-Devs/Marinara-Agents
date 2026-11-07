@@ -17,8 +17,9 @@
 //   to each new line, then to the result. The finish is posted as the closing line shows.
 // - The deck: each card shows its painting once it is ready (crossfading in), our SVG card until then with a small
 //   "Painting…" badge while it paints (this screen reads the deck again every few seconds meanwhile, the Done screen
-//   too); cards held for consent offer one Paint these cards bar, a failed or stopped one Try painting it again. Without
-//   an image connection the cards are ours, with no paint controls.
+//   too); turned cards held for consent offer one Paint these cards bar, a failed or stopped one Try painting it again
+//   (a face-down card is never named, by its prompt review either). Without an image connection the cards are ours,
+//   with no paint controls.
 import {
   useEffect,
   useId,
@@ -84,7 +85,7 @@ type Phase =
   | { kind: "play"; step: number }
   | { kind: "done"; result: TarotFinishResult };
 
-type FocusTarget = "line" | "next" | "pick" | "done" | "retry";
+type FocusTarget = "title" | "line" | "next" | "pick" | "done" | "retry";
 
 const MODE_KEYS: Record<TarotMode, { title: string; text: string }> = {
   "reads-you": { title: "ui.otomeForge.tarot.modeReadsYou", text: "ui.otomeForge.tarot.modeReadsYouText" },
@@ -159,6 +160,7 @@ export function TarotNight({ runKey, view, li: picked, onExit }: ActivityScreenP
 
   // Focus moves only after the player's own action here (the router focuses the <h1> on arrival).
   const pendingFocus = useRef<FocusTarget | null>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const lineRef = useRef<HTMLHeadingElement>(null);
   const nextRef = useRef<HTMLButtonElement>(null);
   const pickRef = useRef<HTMLHeadingElement>(null);
@@ -171,7 +173,7 @@ export function TarotNight({ runKey, view, li: picked, onExit }: ActivityScreenP
     const element =
       target === "retry"
         ? (retryRef.current ?? failedRef.current?.querySelector<HTMLElement>("[data-autofocus]"))
-        : { line: lineRef, next: nextRef, pick: pickRef, done: doneRef }[target].current;
+        : { title: titleRef, line: lineRef, next: nextRef, pick: pickRef, done: doneRef }[target].current;
     if (!element) return;
     pendingFocus.current = null;
     element.focus({ preventScroll: true });
@@ -311,6 +313,8 @@ export function TarotNight({ runKey, view, li: picked, onExit }: ActivityScreenP
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!reading || step === null || step === 0 || reading.mode !== "you-read") return;
+    // Keys pressed in a dialog (portalled, so its events still bubble here through React) never answer the card behind.
+    if (!event.currentTarget.contains(event.target as Node)) return;
     if (event.altKey || event.ctrlKey || event.metaKey || typing(event.target)) return;
     const card = reading.cards[step - 1];
     if (!/^[1-3]$/u.test(event.key) || !card || card.answer) return;
@@ -322,6 +326,7 @@ export function TarotNight({ runKey, view, li: picked, onExit }: ActivityScreenP
     setReading(null);
     setPicks([]);
     setAnnouncement("");
+    pendingFocus.current = "title";
     setPhase({ kind: "intro" });
   };
 
@@ -346,7 +351,7 @@ export function TarotNight({ runKey, view, li: picked, onExit }: ActivityScreenP
       <header className="of-rh-head">
         <div className="of-rh-heading">
           <p className="of-rh-eyebrow">{t("ui.otomeForge.common.screenDates")}</p>
-          <h1 className="of-rh-title" tabIndex={-1}>
+          <h1 ref={titleRef} className="of-rh-title" tabIndex={-1}>
             {t("ui.otomeForge.tarot.title", { name })}
           </h1>
         </div>
@@ -587,7 +592,13 @@ function Intro({ view, li, mode, chip, own, onMode, onChip, onOwn, onBegin }: In
           </span>
         </p>
         <p className="of-hint">{t("ui.otomeForge.tarot.modelNote")}</p>
-        {imagesOn(view) ? <CostHint images={TAROT_CARDS} note={t("ui.otomeForge.tarot.paintNote")} /> : null}
+        {imagesOn(view) ? (
+          // At most, as the Dates hub says: a card painted before is never painted again.
+          <p className="of-cost">
+            <Paintbrush size={14} strokeWidth={2} aria-hidden="true" />
+            <span>{t("ui.otomeForge.tarot.paintCost", { images: TAROT_CARDS })}</span>
+          </p>
+        ) : null}
       </section>
       <div className="of-actions">
         <button type="button" className="of-button of-button--primary" onClick={onBegin}>
@@ -736,12 +747,8 @@ function Spread({ runKey, view, li, reading, deck, turned, next, actions, onTurn
     const name = t(ARCANA_NAME_KEYS[card.card]);
     return { card, index, entry, name, target: tarotPaintTarget(runKey, li.id, card.card, name) };
   });
-  // One bar for every card held for consent (a card drawn twice in a reading is painted once).
-  const waiting = entries.filter(
-    (item, index) =>
-      item.entry?.art.state === "waiting-consent" &&
-      entries.findIndex((other) => other.target.id === item.target.id) === index,
-  );
+  // One bar for the turned cards held for consent: a face-down card is never named, by its review either.
+  const waiting = entries.filter((item) => item.index < turned && item.entry?.art.state === "waiting-consent");
   const paintAll = () => {
     // With prompt review, one review at a time: the bar stays for the rest.
     const targets = waiting.map((item) => item.target).filter((target) => !actions.busy.has(target.id));

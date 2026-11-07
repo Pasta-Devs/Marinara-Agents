@@ -65,6 +65,7 @@ import {
   type TarotReadingView,
   type TarotView,
 } from "../../../../../client/src/features/otome-forge/shared/tarot.js";
+import { updateIfChanged } from "../art/paint.js";
 import { claimDeckCards, readDeck, deckView } from "../art/tarot-deck.js";
 import type { ItemArtDeps } from "../art/outfits.js";
 import { generateJson, readOrGenerate } from "../generation.js";
@@ -85,7 +86,15 @@ import { grant } from "../state/rewards.js";
 import { recallText } from "../story/canon.js";
 import { listArcs, arcCovering } from "../story/arc.js";
 import type { OtomeStore } from "../store.js";
-import { TAROT_WORDS, arcanaLabel, ownView, stageGoal, tarotMessages, tarotQuestionText } from "../prompts.js";
+import {
+  TAROT_POSITION_NAMES,
+  TAROT_WORDS,
+  arcanaLabel,
+  ownView,
+  stageGoal,
+  tarotMessages,
+  tarotQuestionText,
+} from "../prompts.js";
 import { clean, orderOf } from "./read-him.js";
 
 /** A reading is about a date plan's size: it carries the story memory. */
@@ -486,6 +495,9 @@ export async function startTarot(
       const memory = await recallText(deps, runId, {
         job: "narration",
         reader: li,
+        // The recalls (cued by the question) come apart from the rest, which stays the same between readings with
+        // them, so the prompt sends them after it. With `reader` this leaves out nothing they may know.
+        cached: { li },
         query: {
           cues: [tarotQuestionText(question), relationship, unit.bible?.want ?? ""].filter((cue) => !!cue.trim()),
           speakers: [run.player.name, unit.name].filter(Boolean),
@@ -505,6 +517,7 @@ export async function startTarot(
           lately,
           road,
           memory: memory.text,
+          recalls: memory.recalls?.text ?? "",
           mode: start.mode,
           question,
           cards,
@@ -590,16 +603,17 @@ export async function answerTarot(
   { card, pick }: { card: number; pick: number },
 ): Promise<TarotAnswer> {
   const at = new Date().toISOString();
-  const saved = await deps.store.updateDoc(tarotTarget(runId, id), normalizeReading, (current) => {
+  // An answer given before writes nothing.
+  const saved = await updateIfChanged(deps.store, tarotTarget(runId, id), normalizeReading, (current) => {
     if (!current) throw readingNotFound();
     if (current.mode !== "you-read") throw badRequest("only a reading of their cards is answered");
     if (!current.cards[card]?.readings?.[pick]) throw badRequest("no such card or reading");
-    if (current.answers[card]) return current;
+    if (current.answers[card]) return undefined;
     const answers = [...current.answers];
     answers[card] = { pick, at };
     return { ...current, answers };
   });
-  const answer = saved && answerOf(saved, card);
+  const answer = saved?.value && answerOf(saved.value, card);
   if (!answer) throw readingNotFound();
   return answer;
 }
@@ -673,30 +687,31 @@ export async function finishTarot(
     throw new OtomeForgeError(409, "Read every card before finishing.", "conflict");
   }
   const at = new Date().toISOString();
-  // Set by the write that was saved (updateDoc applies the change again after a stale revision).
+  // Set by the write that was saved (updateDoc applies the change again after a stale revision). What was done
+  // before writes nothing.
   let paid = null as TarotPaid | null;
   let finishedNow = false as boolean;
-  const state = await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) => {
+  const saved = await updateIfChanged(deps.store, runDocTarget("state", stateId(runId)), normalizeState, (current) => {
     paid = current.tarot.paid.find((entry) => entry.id === id) ?? null;
-    if (paid) return current;
+    if (paid) return undefined;
     const outcome = applyTarot(current, reading, { at });
     const amount = (key: "starlight" | "affection") =>
       outcome.grants.reduce((sum, entry) => sum + (entry[key] ?? 0), 0);
     paid = { id, li: reading.li, starlight: amount("starlight"), affection: amount("affection") };
     return { ...outcome.state, tarot: { paid: keepNewest([...outcome.state.tarot.paid, paid], TAROT_PAID_KEPT) } };
   });
-  if (!state || !paid) throw runNotFound();
+  if (!saved || !paid) throw runNotFound();
   const grants = grantsOf(paid);
   // Then the reading: finished, with what it paid. A failure here is retried by the next finish, which the state's
   // mark keeps from paying again.
-  await deps.store.updateDoc(target, normalizeReading, (current) => {
+  await updateIfChanged(deps.store, target, normalizeReading, (current) => {
     if (!current) throw readingNotFound();
     finishedNow = !current.finished;
-    return current.finished ? current : { ...current, finished: { at, grants } };
+    return current.finished ? undefined : { ...current, finished: { at, grants } };
   });
   // A finished reading is new canon for their memory.
   if (finishedNow) void Promise.resolve(deps.memory?.maintain({ runId, debugMode })).catch(() => undefined);
-  return { grants, starlight: state.wallet.starlight };
+  return { grants, starlight: saved.value.wallet.starlight };
 }
 
 /**
@@ -713,8 +728,6 @@ export async function readTarot(deps: Pick<TarotDeps, "store">, runId: string, l
 
 // ── Private memory ──
 
-const POSITION_NAMES = { past: "Past", present: "Present", future: "Future" } as const;
-
 /** What they remember of a finished reading: who read whose cards, the question, each card and the closing. English. */
 export function tarotMemoryText(reading: TarotReading): string {
   const name = reading.names.li || "The love interest";
@@ -728,7 +741,7 @@ export function tarotMemoryText(reading: TarotReading): string {
         ]
       : [`${player} read ${name}'s tarot cards. ${name} asked the cards: "${reading.opening.line}"`];
   reading.cards.forEach((card, index) => {
-    const position = POSITION_NAMES[TAROT_POSITIONS[index] ?? "future"];
+    const position = TAROT_POSITION_NAMES[TAROT_POSITIONS[index] ?? "future"];
     const answer = answerOf(reading, index);
     lines.push(
       `- ${position}: ${arcanaLabel(card.card, card.reversed)}. ${name}: "${card.line}"${

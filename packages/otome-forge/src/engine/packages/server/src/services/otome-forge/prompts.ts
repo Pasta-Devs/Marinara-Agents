@@ -3434,9 +3434,10 @@ export function readMeMessages({ world, player, unit, liState, recalled, lately 
 
 // ── Tarot night (#2151; structured, chat contract, foreground lane) ──
 // One call writes a whole reading (S/minigames/tarot.ts). The system message is the same for both modes and every
-// reading with a love interest; what varies comes last: the recalls the question cues inside STORY MEMORY, then THE
-// SPREAD (the mode, the question and the cards). No cache mark: a reading is a one-off call, and a mark buys the hour
-// cache at twice a write (#2091); a provider's own prefix caching still reuses the stable part between readings.
+// reading with a love interest; what varies comes last: STORY MEMORY's stable part (the timeline, the previous chapter
+// in full, the canon summaries: recallText with `cached`), then the recalls the question cues, then THE SPREAD (the
+// mode, the question and the cards). No cache mark: a reading is a one-off call, and a mark buys the hour cache at
+// twice a write (#2091); a provider's own prefix caching still reuses everything before the recalls between readings.
 
 /** Word limits a reading's fields keep; a reply over them gets the repair turn. */
 export const TAROT_WORDS = { context: 60, opening: 40, line: 60, reading: 30, reaction: 40, closing: 50 } as const;
@@ -3583,18 +3584,25 @@ export interface TarotPromptInput {
   lately: string[];
   /** THE ROAD AHEAD (S/minigames/tarot.ts roadAhead); [] for none. */
   road: readonly string[];
-  /** recallText's text, as their own reader may know the story; "" before anything is completed. */
+  /** recallText's text (with `cached`), as their own reader may know the story; "" before anything is completed. */
   memory: string;
+  /** The recalls' text (recallText with `cached`), cued by the question, so it goes after `memory`; or "". */
+  recalls?: string;
   mode: TarotMode;
   question: TarotQuestion | null;
   cards: ReadonlyArray<{ card: Arcana; reversed: boolean }>;
 }
 
-const TAROT_POSITION_NAMES: Record<TarotPosition, string> = { past: "Past", present: "Present", future: "Future" };
+/** The positions' English names, for THE SPREAD and the reading's memory (S/minigames/tarot.ts tarotMemoryText). */
+export const TAROT_POSITION_NAMES: Record<TarotPosition, string> = {
+  past: "Past",
+  present: "Present",
+  future: "Future",
+};
 
 /** The Tarot night prompt: one reading, as `messages` (system, then the user turn with THE SPREAD last). */
 export function tarotMessages(input: TarotPromptInput): OtomeMessage[] {
-  const { world, player, unit, liState, lately, road, memory, mode, cards } = input;
+  const { world, player, unit, liState, lately, road, memory, recalls = "", mode, cards } = input;
   const name = unit.name;
   const face = `"${FACES.join("|")}|"`;
   const line = `{"line": "...", "face": ${face}}`;
@@ -3663,8 +3671,9 @@ export function tarotMessages(input: TarotPromptInput): OtomeMessage[] {
     "",
     road.length ? `THE ROAD AHEAD (for the Future card only; neither of you knows it)\n${road.join("\n")}` : "",
     "",
-    memory.trim()
-      ? `STORY MEMORY (${name} remembers only what ${name} was there for or was told)\n${memory.trim()}`
+    // The stable part first, then the recalls the question cues (they change from reading to reading).
+    memory.trim() || recalls.trim()
+      ? `STORY MEMORY (${name} remembers only what ${name} was there for or was told)\n${[memory.trim(), recalls.trim()].filter(Boolean).join("\n\n")}`
       : "",
     "",
     spread,

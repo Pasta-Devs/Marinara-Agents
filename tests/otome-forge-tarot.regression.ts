@@ -66,7 +66,9 @@ import {
   checkPicks,
   drawCards,
   finishTarot,
+  normalizeReading,
   roadAhead,
+  tarotTarget,
   type TarotReply,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/minigames/tarot.ts";
 import {
@@ -191,11 +193,13 @@ async function tarotWorld(
     images,
     before,
     personas,
+    memory,
   }: {
     content?: ReturnType<typeof defaultContent>;
     images?: { ask?: boolean };
     before?: (call: PaidCall, n: number) => void | Promise<void>;
     personas?: Array<{ id: string; data: unknown }>;
+    memory?: RouteDeps["memory"];
   } = {},
 ) {
   const base = await storyWorld({
@@ -206,7 +210,12 @@ async function tarotWorld(
   });
   if (images) await setImages(base.store, base.runId, { connectionId: "conn-image", ...images });
   const fake = fakeImages({ before });
-  const deps: RouteDeps = { ...base.deps, images: fake.images, handle: createHandle(base.runtime.logger) };
+  const deps: RouteDeps = {
+    ...base.deps,
+    images: fake.images,
+    handle: createHandle(base.runtime.logger),
+    ...(memory ? { memory } : {}),
+  };
   const call = tarotRoutes(deps, runKey);
   const start = (body: object = {}) => call("POST", START, { li: KAI, mode: "reads-you", picks: [0, 7, 21], ...body });
   const answer = (reading: string, card: number, pick: number) => call("POST", ANSWER, { card, pick }, { reading });
@@ -529,6 +538,43 @@ test("story memory is his own reader's, with the fallbacks when there is no memo
   assert.ok(user.indexOf("THE ROAD AHEAD") < user.indexOf("STORY MEMORY"), "the stable parts first");
 });
 
+test("story memory's stable part goes first, then the recalls the question cues, then THE SPREAD", async () => {
+  // A recall pool that answers to the question (its first cue), as the real one ranks by the cues.
+  const memory = {
+    recall: async (options: { query?: { cues?: string[] } }) => ({
+      overview: "",
+      details: [],
+      text: "",
+      maxContext: null,
+      status: { phase: "ready" },
+      lagging: false,
+      recalls: [{ id: "recall-1", title: "Lanterns", content: `RECALL-FOR: ${options.query?.cues?.[0]}`, order: 0 }],
+    }),
+    maintain: async () => false,
+  } as unknown as RouteDeps["memory"];
+  const users: string[] = [];
+  for (const [runKey, chip] of [
+    ["r-tarotm-aaaaaa", "heart"],
+    ["r-tarotm-bbbbbb", "us"],
+  ] as const) {
+    const t = await tarotWorld(runKey, model(reply()), { memory });
+    await complete(t, { key: "main-1", kind: "main", number: 1, lead: KAI }, "SHARED-QUAY: the lanterns go dark.");
+    assert.equal((await t.start({ question: { chip } })).status, 200);
+    users.push(userOf(t.tarotCalls()[0]!.messages));
+  }
+  for (const user of users) {
+    const previous = user.indexOf("# Previous chapter in full");
+    const recalled = user.indexOf("# Recalled memory: Lanterns");
+    assert.ok(user.indexOf("STORY MEMORY") < previous, user);
+    assert.ok(previous > 0 && previous < recalled && recalled < user.indexOf("THE SPREAD"), user);
+  }
+  // Everything before the recalls is the same whatever the question, so a provider's prefix cache reuses it.
+  const [a, b] = users.map((user) => user.indexOf("# Recalled memory"));
+  assert.equal(users[0]!.slice(0, a), users[1]!.slice(0, b));
+  assert.match(users[0]!.slice(a), /RECALL-FOR: What does my heart really want\?/u);
+  assert.ok(!users[1]!.slice(b).includes("my heart"));
+});
+
 test("THE ROAD AHEAD: the covering arc's goal, the next two purposes and his next step, never what the arc hides", async () => {
   const t = await tarotWorld("r-tarot7-aaaaaa", model(reply()));
   await t.store.mutateDoc(runDocTarget("arc", arcId(t.runId, 1)), normalizeArc, () => arc());
@@ -672,7 +718,9 @@ test("you-read: no reaction before its card is answered, the first answer is fin
     reaction: "REACTION-A01: Do I?",
     face: "flustered",
   });
+  const version = t.store.version();
   assert.deepEqual((await t.answer(view.id, 0, 2)).body, first.body, "the first answer is final");
+  assert.equal(t.store.version(), version, "an answer sent again writes nothing");
   const reopened = (await t.view()).body.open as TarotReadingView;
   assert.deepEqual(reopened.cards[0]!.answer, first.body);
   assert.ok(!JSON.stringify(reopened).includes("REACTION-A1"), "only the answered card's reaction");
@@ -713,6 +761,18 @@ test("finish pays once within the shared caps, writes the first Tarot night once
   });
   assert.deepEqual(replay, finished, "a finish sent again returns what was paid");
   assert.equal(maintained, 1, "memory upkeep is queued once");
+  // A finish whose state write landed but whose mark on the reading did not: the next one writes only that mark.
+  await t.store.updateDoc(tarotTarget(t.runId, view.id), normalizeReading, (current) => ({
+    ...current!,
+    finished: null,
+  }));
+  const marked = t.store.version();
+  const recovered = await finishTarot({ store: t.store, memory: memory as never }, t.runId, view.id, {
+    debugMode: false,
+  });
+  assert.deepEqual(recovered.grants, finished.grants, "nothing paid again");
+  assert.equal(t.store.version(), marked + 1, "the state is not written again");
+  assert.equal(maintained, 2, "the reading is new canon once it is marked");
   const state = await t.state();
   assert.equal(state.wallet.starlight, before + 40);
   assert.equal(state.lis[KAI]!.points, 40);

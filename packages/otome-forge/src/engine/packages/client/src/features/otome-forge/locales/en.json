@@ -1569,7 +1569,7 @@
   "ui.otomeForge.tarot.ownHint": "Optional. A chip or your own words.",
   "ui.otomeForge.tarot.ownLabel": "Or ask in your own words",
   "ui.otomeForge.tarot.paintCards": "Paint these cards",
-  "ui.otomeForge.tarot.paintNote": "only for cards not painted yet, each painted once and kept",
+  "ui.otomeForge.tarot.paintCost": "Paints up to {{images}} images, only for cards not painted yet, each painted once and kept",
   "ui.otomeForge.tarot.paintRetryLabel": "Try painting {{name}} again",
   "ui.otomeForge.tarot.pickHint": "Pick three, in the order they call to you.",
   "ui.otomeForge.tarot.pickTitle": "Choose three cards",
