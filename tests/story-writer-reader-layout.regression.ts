@@ -13,7 +13,8 @@ import {
 
 const fixtures = [
   { name: "portrait phone book", theme: "book", width: 390, height: 700, pages: 1 },
-  { name: "landscape phone book", theme: "book", width: 844, height: 330, pages: 2 },
+  // The reader box of an 844×390 phone on its side, under the 52 px chapter bar.
+  { name: "landscape phone book", theme: "book", width: 844, height: 286, pages: 2 },
   { name: "desktop book", theme: "book", width: 1400, height: 820, pages: 2 },
   { name: "portrait tablet book", theme: "book", width: 820, height: 1100, pages: 1 },
   { name: "narrow e-book", theme: "ebook", width: 600, height: 800, pages: 1 },
@@ -67,8 +68,9 @@ test("the book and the device fit the reader and keep a page shape", () => {
     const layout = computeReaderLayout(fixture);
     assert.ok(layout.frameLeft >= 0 && layout.frameTop >= 0, `${fixture.name}: frame starts inside the reader`);
     assert.ok(layout.frameLeft + layout.frameWidth <= fixture.width, `${fixture.name}: frame fits horizontally`);
-    assert.ok(layout.footerTop + layout.footerHeight <= fixture.height, `${fixture.name}: the footer fits`);
-    assert.equal(layout.footerTop, layout.frameTop + layout.frameHeight);
+    // The chapter bar sits outside the reader now: the frame takes the whole height, centred.
+    assert.ok(layout.frameTop + layout.frameHeight <= fixture.height, `${fixture.name}: frame fits vertically`);
+    assert.ok(Math.abs(2 * layout.frameTop + layout.frameHeight - fixture.height) <= 1, `${fixture.name}: centred`);
     if (layout.arrowsOutside) assert.ok(layout.frameLeft >= 52, `${fixture.name}: room for the arrows`);
     if (fixture.theme === "book") {
       const aspect = layout.pageWidth / layout.pageHeight;
@@ -79,6 +81,13 @@ test("the book and the device fit the reader and keep a page shape", () => {
       assert.equal(layout.spine, 0, `${fixture.name}: an e-reader screen has no spine`);
     }
   }
+});
+
+test("the room the chapter bar used to take under the book goes to the pages", () => {
+  const page = (width: number, height: number) => computeReaderLayout({ theme: "book", width, height }).pageHeight;
+  assert.ok(page(1400, 820) >= 770, `desktop page height ${page(1400, 820)}`);
+  // A sideways phone gives the bar's room back at the top: the page keeps its height.
+  assert.equal(page(844, 286), 259);
 });
 
 test("degenerate sizes still produce a usable, positive grid", () => {

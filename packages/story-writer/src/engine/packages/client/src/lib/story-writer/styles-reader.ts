@@ -585,7 +585,7 @@ ${EBOOK} .sw-body h1 {
   font-weight: 600;
 }
 
-/* ── Arrows and the chapter indicator ── */
+/* ── The page arrows (the chapter bar is the shell's, in styles-shell.ts) ── */
 ${R} .sw-nav-arrow {
   position: absolute;
   z-index: 8;
@@ -627,74 +627,11 @@ ${R}[data-arrows="inside"] .sw-nav-arrow:disabled {
     transform: scale(1.06);
   }
 }
-${R} :is(.sw-nav-arrow, .sw-reader-footer-bar button, .sw-title-start-button):focus-visible {
+${R} :is(.sw-nav-arrow, .sw-title-start-button):focus-visible {
   outline: 2px solid var(--sw-r-accent);
   outline-offset: 2px;
   opacity: 1;
 }
-${R} .sw-reader-footer {
-  position: absolute;
-  left: 0;
-  right: 0;
-  z-index: 7;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 8px;
-  pointer-events: none;
-}
-${R} .sw-reader-footer-bar {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  max-width: 100%;
-  padding: 2px;
-  border: 1px solid var(--sw-panel-border, rgba(255, 255, 255, 0.12));
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--sw-panel-bg, #1c1611) 70%, transparent);
-  color: var(--sw-panel-fg, #f1e6d2);
-  font-family: var(--sw-ui-font, system-ui, sans-serif);
-  font-size: 12.5px;
-  line-height: 1;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  pointer-events: auto;
-  user-select: none;
-  -webkit-user-select: none;
-}
-${R} .sw-reader-footer-bar button {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
-${R} .sw-reader-footer-bar button:disabled {
-  opacity: 0.3;
-  cursor: default;
-}
-@media (hover: hover) {
-  ${R} .sw-reader-footer-bar button:not(:disabled):hover {
-    background: color-mix(in srgb, currentColor 12%, transparent);
-  }
-}
-${R} .sw-indicator {
-  min-width: 0;
-  padding: 0 0.5em;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  letter-spacing: 0.02em;
-  font-variant-numeric: tabular-nums;
-}
-
 /* ── The page turn (see page-flip.ts) ── */
 ${R} .sw-flip-layer {
   position: absolute;

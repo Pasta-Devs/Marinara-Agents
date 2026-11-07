@@ -5,6 +5,12 @@
 - **Tarot night.** A new date in Dates: three cards of the Major Arcana, as Past, Present and Future. A love interest reads your cards and answers your question, or you read theirs, choosing how to read each card, spoken in your persona's voice. A reading pays 40 Starlight and 40 affection within the day's caps, costs 1 model call, changes nothing in the story, and only they remember it. A reading you leave opens again: when they read your cards, from its start; when you read theirs, at the card you still have to read.
 - **A Tarot deck painted for your story.** With an image connection, each card is painted the first time it is drawn and kept: your cards show you, theirs show them, and the Lovers, the Sun, Temperance and Judgement show you both. At most 3 images a reading, only for cards not painted yet; Ask before painting and prompt review wait for your tap. Without one, the cards are Otome Hearth's own gold line art.
 
+## 0.10.0 — 2026-11-07
+
+- **Your Engine art comes first.** A love interest from a character card now appears in the card's sprites (Full Body → Neutral, else Neutral) or, without sprites, its avatar, and you in your persona's avatar, from the moment the story is made, before anything is painted. Their sprites for love, blushing, smirk, sad, angry and the like become their faces, and only the faces they lack are painted, never while **Ask before painting** is on. A story in progress gives Engine art to anyone who has no portrait yet; looks already painted stay.
+- **Choose a background for any place.** **Background** beside a story location opens your Engine backgrounds: the one you pick shows there, on Home, on dates and in photos, and nothing is painted. A painting it replaces is kept. Turn on **Ask before painting** to choose before a place is painted.
+- **Don't paint**, the first choice of the image connection in **Settings → Images**, turns painting off and keeps to your Engine art.
+
 ## 0.9.6 — 2026-11-07
 
 - **Answer a chapter's last decision in your own words.** When a chapter ends on a choice that lasts, **Write your own…** now waits under the offered answers: write something you say or something you do instead, and it becomes your choice, as lasting as any other. The story carries on from it, and the next chapter of that storyline starts from your words. Every other choice keeps its offered answers, because the scenes after them are already written ahead. Choosing your own words costs nothing extra.

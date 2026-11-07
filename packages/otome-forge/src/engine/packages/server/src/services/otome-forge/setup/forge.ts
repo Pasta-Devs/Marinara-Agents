@@ -18,16 +18,20 @@ import type {
   ForgeStep,
   LiId,
   Paint,
+  Player,
+  Unit,
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import { isEngineArt } from "../../../../../client/src/features/otome-forge/shared/engine-art.js";
 import { forgePrerequisite } from "../../../../../client/src/features/otome-forge/shared/forge.js";
 import { claimPaint, paintClaimed, paintIsLive, type ArtDeps, type LookOwner } from "../art/paint.js";
 import { type ImagePrompt, bibleMessages, worldPlanMessages } from "../prompts.js";
 import { generateJson, runForeground } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
-import { ID_PREFIX, INDEX_ID, INDEX_TARGET, runDocTarget, unitId, worldId } from "../ids.js";
+import { ID_PREFIX, INDEX_ID, INDEX_TARGET, playerId, runDocTarget, unitId, worldId } from "../ids.js";
 import { normalizeIndex } from "../schemas/index.js";
 import { readRun } from "../schemas/state.js";
+import { normalizePlayer } from "../schemas/player.js";
 import { BibleSchema, normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { checkBible } from "./bible.js";
@@ -80,6 +84,32 @@ export function withPaintSteps(forge: ForgeStatus): ForgeStatus {
   const have = new Set(forge.steps.map((step) => step.id));
   const missing = paintSteps(liIds).filter((step) => !have.has(step.id));
   return missing.length ? { ...forge, steps: [...forge.steps, ...missing] } : forge;
+}
+
+/**
+ * #2147: the forge with each paint step done that waits for consent or failed while its owner already wears Engine art
+ * (S/art/engine-art.ts), so nothing offers to pay for it. A failed Repaint keeps its Engine portrait but leaves no url
+ * on the record, so it stays failed, with Retry.
+ */
+export function withEngineSteps(
+  forge: ForgeStatus,
+  { player, units }: { player: Pick<Player, "art">; units: ReadonlyArray<Pick<Unit, "id" | "art">> },
+): ForgeStatus {
+  const engine = new Set([
+    ...(isEngineArt(player.art?.url) ? [PLAYER_PAINT_STEP] : []),
+    ...units.filter((unit) => isEngineArt(unit.art?.url)).map((unit) => paintStepId(`li:${unit.id}`)),
+  ]);
+  const settles = (step: ForgeStep) =>
+    engine.has(step.id) && (step.state === "waiting-consent" || step.state === "failed");
+  if (!forge.steps.some(settles)) return forge;
+  return {
+    ...forge,
+    steps: forge.steps.map((step): ForgeStep => {
+      if (!settles(step)) return step;
+      const { error: _error, ...rest } = step;
+      return { ...rest, state: "done" };
+    }),
+  };
 }
 
 // ── Jobs and owners alive in this process ──
@@ -394,6 +424,18 @@ async function runPaintSteps(deps: ForgeDeps, runId: string, debugMode: boolean)
     const owner = next && paintOwner(next.id);
     if (!next || !owner) return;
     tried.add(next.id);
+    // #2147: an owner who took Engine art since the tap (S/art/engine-art.ts) is not painted by itself.
+    const art = (
+      owner === "player"
+        ? await deps.store.readDoc(playerId(runId), normalizePlayer)
+        : await deps.store.readDoc(unitId(runId, owner.slice(3)), normalizeUnit)
+    )?.art;
+    if (isEngineArt(art?.url)) {
+      await updateWorld(deps, runId, (current) =>
+        stepOf(current, next.id)?.state === "pending" ? withStep(current, next.id, { state: "done" }) : current,
+      );
+      continue;
+    }
     try {
       await paintWithStep(deps, runId, owner, { debugMode });
     } catch (error) {

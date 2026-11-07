@@ -21,6 +21,8 @@ export const LIMITS = {
   summary: 20_000,
   timelineEvents: 200,
   timelineEventText: 1_000,
+  quickReplies: 24,
+  quickReplyLabel: 40,
   selectedIds: 200,
   chapterWords: { min: 100, max: 20_000 },
   targetWords: { min: 1_000, max: 2_000_000 },
@@ -34,7 +36,15 @@ export type StoryTheme = "book" | "ebook";
 export type StoryColorMode = "app" | "light" | "dark";
 export type StorySide = "left" | "right";
 
-/** Reading and layout preferences. One document per Engine install, shared by every story. */
+/** A saved instruction the quick bar sends in place of the continue message. */
+export interface QuickReply {
+  id: string;
+  /** What the button shows; empty = the instruction itself. */
+  label: string;
+  text: string;
+}
+
+/** Reading and layout preferences and the quick replies. One document per Engine install, shared by every story. */
 export interface StoryWriterPreferences {
   theme: StoryTheme;
   colorMode: StoryColorMode;
@@ -49,6 +59,8 @@ export interface StoryWriterPreferences {
   streaming: boolean;
   pageAnimation: boolean;
   lastStoryId: string | null;
+  showQuickReplies: boolean;
+  quickReplies: QuickReply[];
 }
 
 export interface TimelineEvent {
@@ -198,6 +210,8 @@ export function defaultPreferences(): StoryWriterPreferences {
     streaming: true,
     pageAnimation: true,
     lastStoryId: null,
+    showQuickReplies: true,
+    quickReplies: [],
   };
 }
 
@@ -279,25 +293,41 @@ export function normalizePreferences(patch: unknown, base: StoryWriterPreference
     streaming: typeof input.streaming === "boolean" ? input.streaming : base.streaming,
     pageAnimation: typeof input.pageAnimation === "boolean" ? input.pageAnimation : base.pageAnimation,
     lastStoryId: typeof lastStoryId === "string" && lastStoryId.length <= 200 ? lastStoryId : null,
+    showQuickReplies: typeof input.showQuickReplies === "boolean" ? input.showQuickReplies : base.showQuickReplies,
+    quickReplies: normalizeEntries(input.quickReplies, base.quickReplies, "reply", LIMITS.quickReplies, (item) => ({
+      label: text(item.label, LIMITS.quickReplyLabel, "").trim(),
+      text: text(item.text, LIMITS.shortText, "").trim(),
+    })),
   };
   return preferences;
 }
 
-function normalizeTimeline(value: unknown, fallback: TimelineEvent[]): TimelineEvent[] {
+/**
+ * A list of entries with a required text (timeline events, quick replies): entries without text are dropped, each
+ * keeps a valid unique id or gets one, and the list is capped. A non-array keeps the fallback.
+ */
+function normalizeEntries<T extends { text: string }>(
+  value: unknown,
+  fallback: Array<T & { id: string }>,
+  prefix: string,
+  limit: number,
+  read: (item: Record<string, unknown>) => T,
+): Array<T & { id: string }> {
   if (!Array.isArray(value)) return fallback;
-  const events: TimelineEvent[] = [];
+  const entries: Array<T & { id: string }> = [];
   const seen = new Set<string>();
   for (const item of value) {
     if (!isRecord(item)) continue;
-    const eventText = text(item.text, LIMITS.timelineEventText, "").trim();
-    if (!eventText) continue;
+    const entry = read(item);
+    if (!entry.text) continue;
     let id = typeof item.id === "string" && CLIENT_ID_PATTERN.test(item.id) ? item.id : "";
-    if (!id || seen.has(id)) id = `event-${events.length.toString(36)}-${eventText.length.toString(36)}-${seen.size}`;
+    if (!id || seen.has(id))
+      id = `${prefix}-${entries.length.toString(36)}-${entry.text.length.toString(36)}-${seen.size}`;
     seen.add(id);
-    events.push({ id, text: eventText, done: item.done === true });
-    if (events.length >= LIMITS.timelineEvents) break;
+    entries.push({ id, ...entry });
+    if (entries.length >= limit) break;
   }
-  return events;
+  return entries;
 }
 
 /** Merges a partial settings `patch` over `base` and returns complete, valid settings. */
@@ -335,7 +365,10 @@ export function normalizeStorySettings(patch: unknown, base: StorySettings = def
     clearNoteAfterChapter:
       typeof input.clearNoteAfterChapter === "boolean" ? input.clearNoteAfterChapter : base.clearNoteAfterChapter,
     chapterTitles: typeof input.chapterTitles === "boolean" ? input.chapterTitles : base.chapterTitles,
-    timeline: normalizeTimeline(input.timeline, base.timeline),
+    timeline: normalizeEntries(input.timeline, base.timeline, "event", LIMITS.timelineEvents, (item) => ({
+      text: text(item.text, LIMITS.timelineEventText, "").trim(),
+      done: item.done === true,
+    })),
     autoTimeline: typeof input.autoTimeline === "boolean" ? input.autoTimeline : base.autoTimeline,
     keepFullChapters: integer(input.keepFullChapters, LIMITS.keepFullChapters, base.keepFullChapters),
     autoSummarize: typeof input.autoSummarize === "boolean" ? input.autoSummarize : base.autoSummarize,

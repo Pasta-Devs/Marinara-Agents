@@ -20,8 +20,6 @@
 // (the first visit backfills every one), and the cut-outs of his worn look and its ready faces and of each painted
 // figurine (S/art/figurine.ts). It never paints a figurine. A note may fail with 503 `no-connection`, 422 `declined`
 // (nothing is saved) or 502 `bad-format`.
-import { forgeLocalAvatarPath } from "@forge-kit/image-avatar-references.mjs";
-import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import { z } from "zod";
 import type {
   AlbumCg,
@@ -32,9 +30,11 @@ import type {
   Unit,
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import { isEngineAvatar } from "../../../../../client/src/features/otome-forge/shared/engine-art.js";
 import type { Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { wornLookUrl } from "../../../../../client/src/features/otome-forge/shared/wardrobe.js";
 import { cutoutView, queueCutouts, type CutoutClient } from "../art/cutout.js";
+import { personaAvatarPath } from "../art/engine-art.js";
 import { figurinePicture, queueFigurineCutouts } from "../art/figurine.js";
 import { ensureLinePacks, linesView, needsLines } from "../home/lines.js";
 import { noteFits, readNote, serveNote, toNoteView, todayKey } from "../home/note.js";
@@ -52,7 +52,6 @@ import {
 import { isLiId, runDocTarget, stateId, unitId } from "../ids.js";
 import { readThread, unreadCount } from "../phone/chat.js";
 import { THOUGHTS_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
-import { field } from "../schemas/common.js";
 import { normalizeState, readRun, readyFaces } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import { albumCgs } from "./album.js";
@@ -73,18 +72,6 @@ export interface HomeRouteDeps extends RouteDeps {
 const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
 const liNotFound = () => new OtomeForgeError(404, "No such love interest.", "not-found");
 
-/** The persona's Engine avatar, when it is a file the Engine serves; "" otherwise. */
-async function personaAvatar(runtime: Pick<CapabilityRuntimeHost, "resources">, personaId: string): Promise<string> {
-  if (!personaId) return "";
-  try {
-    const [record] = await runtime.resources.listPersonas([personaId]);
-    const data = typeof record?.data === "string" ? JSON.parse(record.data) : record?.data;
-    return forgeLocalAvatarPath(field(data, "avatarPath"));
-  } catch {
-    return "";
-  }
-}
-
 /**
  * Him: the look he wears (Wear at home, else his portrait) with its cut-out. Me: the look she wears, else the
  * persona's avatar. Generated looks share the same cleanup; the avatar stays as supplied by the player.
@@ -98,18 +85,22 @@ async function lookOf(
 ): Promise<HomeLook | null> {
   if (show === "me") {
     const worn = wornLookUrl(player);
-    if (worn) {
+    // #2147: her persona avatar (her look adopted from it too) is read live, so a new one shows here at once.
+    if (worn && !isEngineAvatar(worn)) {
       const { state, cutout } = cutoutView(runId, { id: "player", cutouts: player.cutouts ?? {} }, worn);
       return { url: worn, source: "look", cutoutState: state, ...(cutout ? { cutout } : {}) };
     }
-    const avatar = await personaAvatar(deps.runtime, player.personaId);
+    const avatar = (await personaAvatarPath(deps.runtime, player.personaId).catch(() => "")) || worn;
     return avatar ? { url: avatar, source: "avatar", cutoutState: "uncut" } : null;
   }
   const worn = unit ? wornLookUrl(unit) : "";
   if (!unit || !worn) return null;
   const { state, cutout } = cutoutView(runId, unit, worn);
-  return { url: worn, source: "look", cutoutState: state, ...(cutout ? { cutout } : {}) };
+  return { url: worn, source: sourceOf(worn), cutoutState: state, ...(cutout ? { cutout } : {}) };
 }
+
+/** #2147: a look that is a card or persona avatar (S/art/engine-art.ts) stands as an avatar, uncut. */
+const sourceOf = (url: string): HomeLook["source"] => (isEngineAvatar(url) ? "avatar" : "look");
 
 /** The item of `items` with the latest `at`, or undefined for none. */
 const newest = <T>(items: T[], at: (item: T) => string) =>

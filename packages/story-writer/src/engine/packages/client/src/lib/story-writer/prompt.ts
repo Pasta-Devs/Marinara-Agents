@@ -40,6 +40,7 @@ const MAX_MESSAGES = 200;
 // /generate/raw refuses a message over 500,000 characters before it fits the prompt to the model; stay under it.
 const MAX_MESSAGE_CHARS = 490_000;
 const MAX_TOKENS = 200_000;
+const LORE_SCAN_CHARS = 150_000;
 const PROTAGONIST = "the protagonist";
 const TIMELINE_INTRO =
   "Planned events in order; [x] = already happened, [ ] = still to come. Move the story toward the next unchecked " +
@@ -226,6 +227,27 @@ function keepTail(text: string, limit = MAX_MESSAGE_CHARS): string {
   return text.length > limit ? text.slice(text.length - limit) : text;
 }
 
+/**
+ * What a chapter run asks for: the quick reply clicked, else what a rewritten chapter was written from (a quick reply,
+ * or the continue message as it was then), else the continue message.
+ */
+export function chapterRequest(settings: StorySettings, quickReply?: string, rewritten?: StoryChapter | null): string {
+  if (quickReply?.trim()) return quickReply;
+  return rewritten?.request.trim() ? rewritten.request : continueMessageOf(settings);
+}
+
+/**
+ * Text the Engine's lorebook scanner reads: the overview, the note, the latest chapters and the request, newest text
+ * kept. The current continue message is left out, as it always was.
+ */
+export function loreScanText(settings: StorySettings, chapters: StoryChapter[], request: string): string {
+  const scanned = request === continueMessageOf(settings) ? "" : request;
+  return [settings.overview, settings.authorNote, ...chapters.slice(-3).map((chapter) => chapter.text), scanned]
+    .filter((part) => part.trim())
+    .join("\n\n")
+    .slice(-LORE_SCAN_CHARS);
+}
+
 export function buildChapterMessages(input: {
   settings: StorySettings;
   chapters: StoryChapter[];
@@ -233,6 +255,8 @@ export function buildChapterMessages(input: {
   characters: PromptCharacter[];
   personas: PromptCharacter[];
   lore: PromptLoreEntry[];
+  /** The final user message (a quick reply, or a rewritten chapter's own request); empty = the continue message. */
+  request?: string;
 }): ChatMessage[] {
   const { settings, chapters, characters, personas, lore } = input;
   const names = storyNames(characters, personas);
@@ -302,7 +326,7 @@ export function buildChapterMessages(input: {
       { role: "assistant", content: partial.text.trimEnd() },
     );
   }
-  messages.push({ role: "user", content: continueMessage });
+  messages.push({ role: "user", content: input.request?.trim() ? input.request : continueMessage });
   if (authorNote) injectAuthorNote(messages, authorNote, settings.authorNoteDepth);
   return messages;
 }

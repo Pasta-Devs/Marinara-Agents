@@ -682,6 +682,12 @@
           "highlight": true
         },
         {
+          "version": "0.10.0",
+          "date": "2026-11-07",
+          "notes": "- **Your Engine art comes first.** A love interest from a character card now appears in the card's sprites (Full Body → Neutral, else Neutral) or, without sprites, its avatar, and you in your persona's avatar, from the moment the story is made, before anything is painted. Their sprites for love, blushing, smirk, sad, angry and the like become their faces, and only the faces they lack are painted, never while **Ask before painting** is on. A story in progress gives Engine art to anyone who has no portrait yet; looks already painted stay.\n- **Choose a background for any place.** **Background** beside a story location opens your Engine backgrounds: the one you pick shows there, on Home, on dates and in photos, and nothing is painted. A painting it replaces is kept. Turn on **Ask before painting** to choose before a place is painted.\n- **Don't paint**, the first choice of the image connection in **Settings → Images**, turns painting off and keeps to your Engine art.",
+          "highlight": true
+        },
+        {
           "version": "0.9.6",
           "date": "2026-11-07",
           "notes": "- **Answer a chapter's last decision in your own words.** When a chapter ends on a choice that lasts, **Write your own…** now waits under the offered answers: write something you say or something you do instead, and it becomes your choice, as lasting as any other. The story carries on from it, and the next chapter of that storyline starts from your words. Every other choice keeps its offered answers, because the scenes after them are already written ahead. Choosing your own words costs nothing extra.",
@@ -787,12 +793,6 @@
           "version": "0.8.2",
           "date": "2026-11-03",
           "notes": "- **Key images are ready when you reach them again.** The next scene's key image now starts painting as soon as that scene is written ahead, as it did before 0.6.27, so it is usually waiting when its moment comes. If you use Ease off or Rewrite on the scene you are reading, the scene written ahead is written again and its key image painted again (1 image); the buttons say so.\n- **Showing off a look earns 5 affection**, down from 20, the first time you show it to a love interest.\n- **Fewer extra limbs in pictures of two or more people.** Key images, Memory art, pair portraits and date keepsakes now send one picture of each person, say whose each one is and how many people to draw. A date keepsake now has a picture of you too. Photo Shoot poses say where every hand and leg goes.\n- **Pick the image prompt style.** Settings → Images and setup now let you choose which Engine image style profile your pictures follow. Pick one that writes sentences for GPT Image.",
-          "highlight": false
-        },
-        {
-          "version": "0.8.1",
-          "date": "2026-11-03",
-          "notes": "- **Love interests keep their own side stories while memory catches up.** When the story memory is still summarizing, a scene now keeps the dates and private chapters played since the last main chapter for the love interests who were there, newest first, within the usual length limit. Before, only the newest of them could make it in.\n- **No hour-long cache paid for nothing.** When chapter plans run on a different connection from the scenes, the plan no longer asks for a cache the scenes could never read.",
           "highlight": false
         }
       ]
@@ -1193,6 +1193,12 @@
     },
     "story-writer": {
       "versions": [
+        {
+          "version": "0.2.0",
+          "date": "2026-11-07",
+          "notes": "- Quick replies: save instructions such as \"More dialogue\" or \"Slow down\" as buttons next to Write. Click one to write the next chapter (or continue a draft) with that instruction instead of your continue message. Add and edit them under **Quick replies** in the sidebar; **Show quick replies** hides the row. Every story shares the same list.\n- A quick reply's words also pick lorebook entries, like the author's note's do.\n- The chapter bar (\"Chapter 2 · Page 5 of 18\") moved above the book and got smaller, so the book itself is bigger.\n- Rewriting the last chapter now sends the request it was written from: the quick reply, or your continue message as it was then, even if you have changed it since. A chapter written from a quick reply keeps that instruction; to steer a rewrite, change the author's note.",
+          "highlight": true
+        },
         {
           "version": "0.1.1",
           "date": "2026-10-26",
