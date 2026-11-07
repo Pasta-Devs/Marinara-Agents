@@ -9,6 +9,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The ruleset package regression is its own workflow (ruleset-package-regression.yml) and runs only when a ruleset
+  # input changes. Keep this workflow free of `paths` filters: Catalog validation is a required check and must report
+  # on every pull request.
   catalog-validate:
     name: Catalog validation
     runs-on: ubuntu-latest
@@ -22,7 +25,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          # The merge commit and its first parent (current staging, which strict mode keeps up to date) are all the
+          # whitespace check below needs.
+          fetch-depth: 2
           persist-credentials: false
 
       - name: Set up Node.js
@@ -243,36 +248,4 @@ jobs:
           COMMANDS
 
       - name: Check whitespace
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        run: git diff --check "origin/${BASE_REF}...HEAD"
-
-  ruleset-package-regression:
-    name: Ruleset package regression
-    runs-on: ubuntu-latest
-    # The ruleset regression replays every shipped Capability API minor of every ruleset package; with the 5e SRD
-    # package it takes about 21 minutes alone, past the catalog job's 15-minute stall guard, so it runs here in
-    # parallel with that job. A ruleset package ships no Agent, so the catalog's agent-definition checks are
-    # skipped for it and this contract is the only thing holding its shape.
-    timeout-minutes: 45
-    permissions:
-      contents: read
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24
-          cache: npm
-
-      - name: Install locked test dependencies
-        run: npm ci
-
-      - name: Test the ruleset packages
-        run: node scripts/tests/ruleset-package.regression.mjs
+        run: git diff --check HEAD^1 HEAD

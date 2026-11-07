@@ -1,0 +1,55 @@
+name: Ruleset Package Regression
+
+# Runs only when a ruleset input changes: nothing else touches these files, and the regression takes 10-17 minutes
+# on a runner. The push trigger is the safety net, because no other workflow runs this test and a break that slipped
+# past the filter would otherwise never be caught. A pull request that touches no ruleset path shows no check from
+# this workflow; it is not a required check. GitHub reads at most the first 300 changed files of a pull request
+# against `paths`, which the staging push run also covers.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+    paths:
+      - "packages/ruleset-*/**"
+      - "artifacts/ruleset-*"
+      - "scripts/package-file.mjs"
+      - "scripts/ruleset-*.mjs"
+      - "scripts/catalog-path-safety.mjs"
+      - "scripts/build-5e-srd-catalogs.mjs"
+      - "scripts/build-ruleset-packages.mjs"
+      - "scripts/build-agent-catalog.mjs"
+      - "scripts/tests/ruleset-package.regression.mjs"
+      - ".github/workflows/ruleset-package-regression.yml"
+  push:
+    branches: [staging]
+
+concurrency:
+  group: ruleset-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ruleset-package-regression:
+    name: Ruleset package regression
+    runs-on: ubuntu-latest
+    # The ruleset regression replays every shipped Capability API minor of every ruleset package; with the 5e SRD
+    # package it takes 10-21 minutes alone, past the catalog job's 15-minute stall guard, so it has its own job. A
+    # ruleset package ships no Agent, so the catalog's agent-definition checks are skipped for it and this contract is
+    # the only thing holding its shape.
+    timeout-minutes: 45
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      # No `npm ci`: the test and the scripts it imports use only Node built-ins.
+      - name: Test the ruleset packages
+        run: node scripts/tests/ruleset-package.regression.mjs
