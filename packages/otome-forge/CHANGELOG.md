@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.12.1 — 2026-11-07
+
+- **Starting a new arc no longer fails on wordy chapter outlines.** When the model described a chapter of the next arc in more than a short sentence, the plan was refused and you saw "The model's reply wasn't in the expected format." Longer chapter descriptions are now accepted, so going on with the story works with models that write more, such as thinking models on high effort.
+
 ## 0.12.0 — 2026-11-07
 
 - **Celebrate their birthdays.** On a love interest's birthday, a dot on Home's **Remind Me** points you to **Birthdays to celebrate**. **Celebrate** opens a scene for the two of you, where you can give one of your Shop gifts: they react in their own voice, and the gift earns its affection when you finish the scene, even past the daily cap. Missed the day? You can still celebrate for 7 days after, and they'll know you're late. You can celebrate each birthday once.

@@ -11,7 +11,7 @@
 //
 // The model never writes a chapter number: a reply gives purposes and reveal positions as 1-based indices and
 // normalizeArcPlan stamps `from + index - 1`. Off-by-one in a twelve-chapter schedule is the likeliest structural
-// failure, and this removes it. Brevity is part of the shape: one short sentence per purpose, and the schema caps it.
+// failure, and this removes it. The prompt asks for one short sentence per purpose; a longer one is kept, not refused.
 import { z, type ZodType } from "zod";
 import type {
   ArcJudgment,
@@ -28,9 +28,13 @@ export const ARC_LENGTH_MAX = 12;
 export const BREATHING_LENGTH_MIN = 3;
 export const BREATHING_LENGTH_MAX = 5;
 
-/** A purpose is a moment, not prose: one short sentence (the cap keeps a planner from writing a chapter in the outline). */
+/** A purpose is a moment, not prose: the prompt asks for one short sentence of at most this many words. */
 export const ARC_PURPOSE_WORDS = 20;
-const PURPOSE = 240;
+/**
+ * The longest purpose kept, in characters. Far above what the prompt asks for: a planner that writes a few sentences
+ * still plans the arc, because refusing it cost the player the whole arc (a thinking model often runs long).
+ */
+const PURPOSE = 1200;
 
 /** The three ways a player may ask for the next arc (S/story/arcs #1983 M2). */
 export const ARC_CHOICES = ["continue", "breathe", "newcomer"] as const;
@@ -208,11 +212,6 @@ export const ArcPlanSchema = z.object({
   judgment: z.unknown().optional(),
 });
 
-/** The words a string holds (the purpose cap, the same counting the pack's prompts use). */
-export function wordCountOf(value: string): number {
-  return value.trim().split(/\s+/u).filter(Boolean).length;
-}
-
 export interface ArcPlanContext {
   number: number;
   from: number;
@@ -242,9 +241,7 @@ export function normalizeArcPlan(reply: z.infer<typeof ArcPlanSchema>, context: 
     kind === "breathing" ? [BREATHING_LENGTH_MIN, BREATHING_LENGTH_MAX] : [ARC_LENGTH_MIN, ARC_LENGTH_MAX];
   if (count < min || count > max) return `a ${kind} arc needs ${min} to ${max} chapters, not ${count}`;
   const endsAt = context.from + count - 1;
-  const long = chapters.findIndex((purpose) => wordCountOf(purpose) > ARC_PURPOSE_WORDS);
   if (!reply.label.trim()) return "the arc needs a short label the player will see";
-  if (long >= 0) return `chapter purposes must be ${ARC_PURPOSE_WORDS} words or fewer (chapter ${context.from + long})`;
   const from = context.from;
 
   const plan = chapters.map((purpose, index) => ({ n: from + index, purpose }));

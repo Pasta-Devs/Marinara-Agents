@@ -136,11 +136,14 @@ test("the arc's length, range and schedule are stamped by the server, never writ
   );
 });
 
-test("a plan's length and brevity are checked: 8–12 story chapters, 3–5 breathing ones, a purpose of 20 words or fewer", () => {
+test("a plan's length is checked (8–12 story chapters, 3–5 breathing ones), and a long purpose is kept, not refused", () => {
   assert.match(String(normalizeArcPlan(parse(arcReply({ chapters: purposes(7) })), context())), /8 to 12/u);
   assert.match(String(normalizeArcPlan(parse(arcReply({ chapters: purposes(13) })), context())), /8 to 12/u);
-  const long = [...purposes(9), "word ".repeat(25).trim()];
-  assert.match(String(normalizeArcPlan(parse(arcReply({ chapters: long })), context())), /20 words or fewer/u);
+  // The prompt asks for 20 words; a thinking model often writes a few sentences, and that must not cost the arc.
+  const wordy = `Mira finds the bell tower unlocked at midnight, ${"and the stairs keep going up past where they should end, ".repeat(6)}until Kai calls her name from below.`;
+  const planned = normalizeArcPlan(parse(arcReply({ chapters: [...purposes(9), wordy] })), context());
+  assert.equal(typeof planned, "object", `an 81-word purpose plans the arc, not ${String(planned)}`);
+  assert.equal((planned as StoryArc).plan.at(-1)?.purpose, wordy, "the long purpose is kept whole");
   const breathing = normalizeArcPlan(
     parse(
       arcReply({
