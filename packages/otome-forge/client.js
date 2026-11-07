@@ -2715,14 +2715,15 @@ ${n} .of-tap-zone:focus-visible {
   outline: 2px dashed var(--of-focus); outline-offset: 0;
   background: radial-gradient(closest-side, var(--of-glow-soft), transparent);
 }
-/* #2152: labelled chips, so four or five fit the narrowest cell (156 px, on a desktop) in at most two rows. */
+/* #2152: labelled chips, so four or five fit the narrowest cell (about 150 px, on a desktop) in at most two rows: three
+   to a row even with Linux's wider fonts, where "Head", "Cheek" and "Chest" at 6 px padding needed 155 px. */
 ${n} .of-tap-pills {
-  position: relative; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 4px; max-width: 100%;
+  position: relative; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 3px; max-width: 100%;
   pointer-events: auto;
 }
 ${n} .of-tap-pill {
   display: inline-flex; align-items: center; justify-content: center; min-width: 42px; min-height: 30px;
-  padding: 4px 6px; border-radius: 999px; font-weight: 700; font-size: 0.72rem; cursor: pointer;
+  padding: 4px; border-radius: 999px; font-weight: 700; font-size: 0.72rem; cursor: pointer;
 }
 ${n} .of-tap-pill:hover { background: var(--of-surface-strong); }
 /* Hidden at rest (opacity 0): the animation shows it, so with motion reduced it never stays over him. */
