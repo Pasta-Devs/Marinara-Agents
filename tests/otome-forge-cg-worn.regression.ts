@@ -237,6 +237,12 @@ test("a cast's names resolve at paint time: ids, the protagonist's role words, t
   assert.deepEqual(members(resolveCast(["ガイ"], [gai], ines)), [gai.id]);
   assert.deepEqual(members(resolveCast(["राम"], [rama], ines)), ["राम"]);
   assert.deepEqual(members(resolveCast(["Inès"], [gai], ines)), ["player"]);
+  // The protagonist named like a love interest of this node: him first, then her; elsewhere, her (Dottore, #2148).
+  const kaiPlayer = { ...player(), name: "Kai" } as unknown as Player;
+  assert.deepEqual(members(resolveCast(["Kai"], [kaiRen], kaiPlayer, [kaiRen.id])), [kai.id]);
+  assert.deepEqual(members(resolveCast(["Kai", "Kai"], [kaiRen], kaiPlayer, [kaiRen.id])), [kai.id, "player"]);
+  assert.deepEqual(members(resolveCast(["Kai"], [kaiRen], kaiPlayer)), ["player"]);
+  assert.deepEqual(members(resolveCast(["Kai"], [kaiRen], kaiPlayer, [])), ["player"]);
   // ...unless the title is part of their own name.
   const ladyMir = { ...unit(), id: "li-mir-cd34", name: "Lady Mireille" } as unknown as Unit;
   assert.deepEqual(members(resolveCast(["Lady Mireille"], [ladyMir], ines)), [ladyMir.id]);

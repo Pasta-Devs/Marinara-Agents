@@ -228,7 +228,14 @@ export function resolveCast(
       add(direct);
       continue;
     }
-    const best = matches.some((match) => match.exact) ? matches.filter((match) => match.exact) : matches;
+    const exact = matches.filter((match) => match.exact);
+    let best = exact.length ? exact : matches;
+    // The protagonist's own name that a love interest of this node starts with ("Kai" for her and Kai Ren): both
+    // stay, so the namesake rule below gives him first, then her (Dottore, #2148).
+    const nodeLis = present
+      ? matches.filter((match) => !match.exact && match.unit && present.includes(match.unit.id))
+      : [];
+    if (exact.length && exact.every((match) => !match.unit) && nodeLis.length) best = [...exact, ...nodeLis];
     let fresh = best.filter((match) => !taken.has(match.unit));
     if (!fresh.length) {
       // Only people already in the frame: them again, or someone else who shares a word of their name.
