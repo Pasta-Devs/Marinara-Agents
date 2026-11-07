@@ -1,5 +1,12 @@
 # Story Writer release notes
 
+## 0.2.0 — 2026-11-07
+
+- Quick replies: save instructions such as "More dialogue" or "Slow down" as buttons next to Write. Click one to write the next chapter (or continue a draft) with that instruction instead of your continue message. Add and edit them under **Quick replies** in the sidebar; **Show quick replies** hides the row. Every story shares the same list.
+- A quick reply's words also pick lorebook entries, like the author's note's do.
+- The chapter bar ("Chapter 2 · Page 5 of 18") moved above the book and got smaller, so the book itself is bigger.
+- Rewriting the last chapter now sends the request it was written from: the quick reply, or your continue message as it was then, even if you have changed it since. A chapter written from a quick reply keeps that instruction; to steer a rewrite, change the author's note.
+
 ## 0.1.1 — 2026-10-26
 
 - On a phone turned sideways, the closed settings drawer now hides completely behind its arrow, and the book no longer loses extra room beside the camera.

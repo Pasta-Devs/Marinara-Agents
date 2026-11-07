@@ -20,6 +20,7 @@
       "cast": "Cast & world",
       "writing": "Writing",
       "tools": "Author tools",
+      "quickReplies": "Quick replies",
       "appearance": "Appearance"
     }
   },
@@ -204,6 +205,21 @@
     "clearNote": "Clear after the next chapter",
     "clearNoteHint": "Empty the sticky note once the model has written the chapter."
   },
+  "quickReplies": {
+    "label": "Quick replies",
+    "show": "Show quick replies",
+    "showHint": "Buttons next to Write that send their instruction instead of your continue message. Every story shares them.",
+    "empty": "No quick replies yet.",
+    "labelField": "Button label (optional)",
+    "labelPlaceholder": "e.g. More dialogue",
+    "text": "Instruction",
+    "textPlaceholder": "e.g. Write the next part with more dialogue and less description.",
+    "add": "Add quick reply",
+    "edit": "Edit quick replies",
+    "replyLabel": "Button label of quick reply {{number}}",
+    "replyText": "Instruction of quick reply {{number}}",
+    "delete": "Delete quick reply {{number}}"
+  },
   "appearance": {
     "theme": "Theme",
     "themeBook": "Book",
@@ -262,7 +278,9 @@
     "nextChapter": "Next chapter",
     "indicator": "Chapter {{chapter}} · Page {{page}} of {{total}}",
     "indicatorTitle": "Title page",
-    "indicatorNext": "Chapter {{chapter}} · A blank page"
+    "indicatorNext": "Chapter {{chapter}} · A blank page",
+    "indicatorShort": "Ch. {{chapter}} · {{page}}/{{total}}",
+    "indicatorNextShort": "Ch. {{chapter}} · Blank page"
   },
   "generation": {
     "bannedPhrases": "The new text uses banned words or phrases: {{phrases}}",

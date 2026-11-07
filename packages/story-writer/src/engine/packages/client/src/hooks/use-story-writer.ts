@@ -415,10 +415,13 @@ function useReportQueryError(error: unknown, key: string) {
 
 // ── Hooks ──
 
+export type PreferencesUpdate = (patch: Partial<StoryWriterPreferences>, options?: { debounce?: boolean }) => void;
+
 export function usePreferences(): {
   preferences: StoryWriterPreferences;
   isLoading: boolean;
-  update(patch: Partial<StoryWriterPreferences>): void;
+  /** Saves at once; `debounce` waits for a pause in typing, like the story settings. */
+  update: PreferencesUpdate;
 } {
   useErrorText();
   const qc = useQueryClient();
@@ -435,15 +438,16 @@ export function usePreferences(): {
   });
   useReportQueryError(query.error, "errors.loadPreferences");
   const preferences = useMemo(() => normalizePreferences(query.data ?? {}), [query.data]);
-  const update = useCallback(
-    (patch: Partial<StoryWriterPreferences>) => {
+  const update = useCallback<PreferencesUpdate>(
+    (patch, options) => {
       const next = normalizePreferences(
         patch,
         normalizePreferences(qc.getQueryData(storyWriterKeys.preferences) ?? {}),
       );
       bump(PREFERENCES_KEY);
       qc.setQueryData(storyWriterKeys.preferences, next);
-      void scheduleSave(PREFERENCES_KEY, preferencesTarget(qc), pickKeys(next, patch), null);
+      const delay = options?.debounce ? SETTINGS_SAVE_DELAY : null;
+      void scheduleSave(PREFERENCES_KEY, preferencesTarget(qc), pickKeys(next, patch), delay);
     },
     [qc],
   );

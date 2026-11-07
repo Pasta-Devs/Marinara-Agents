@@ -50,8 +50,6 @@ export interface ReaderLayout {
   spreadStride: number;
   /** False on narrow screens: the arrows sit over the page edges instead of beside the book. */
   arrowsOutside: boolean;
-  footerTop: number;
-  footerHeight: number;
 }
 
 const MARGIN = 8;
@@ -137,9 +135,8 @@ export function computeReaderLayout({ theme, width, height }: ReaderLayoutInput)
   const areaWidth = Math.max(0, Math.round(width));
   const areaHeight = Math.max(0, Math.round(height));
   const arrowsOutside = areaWidth >= 640;
-  const footerHeight = areaHeight < 460 ? 44 : 48;
   const availW = Math.max(1, areaWidth - 2 * ((arrowsOutside ? ARROW_SPACE : 0) + MARGIN));
-  const availH = Math.max(1, areaHeight - footerHeight - 2 * MARGIN);
+  const availH = Math.max(1, areaHeight - 2 * MARGIN);
   const pagesPerSpread = choosePagesPerSpread(theme, availW, availH);
   const geometry =
     theme === "book" ? bookGeometry(pagesPerSpread, availW, availH) : deviceGeometry(pagesPerSpread, availW, availH);
@@ -150,12 +147,11 @@ export function computeReaderLayout({ theme, width, height }: ReaderLayoutInput)
   const textHeight = pageHeight - padTop - padBottom;
   // The paper between two text columns of a spread: both inner margins and the spine.
   const gap = 2 * padX + spine;
-  const frameTop = Math.max(0, Math.round((areaHeight - geometry.frameHeight - footerHeight) / 2));
   return {
     theme,
     pagesPerSpread,
     frameLeft: Math.round((areaWidth - geometry.frameWidth) / 2),
-    frameTop,
+    frameTop: Math.max(0, Math.round((areaHeight - geometry.frameHeight) / 2)),
     frameWidth: geometry.frameWidth,
     frameHeight: geometry.frameHeight,
     pagesLeft: geometry.pagesLeft,
@@ -175,8 +171,6 @@ export function computeReaderLayout({ theme, width, height }: ReaderLayoutInput)
     spreadWidth: pagesPerSpread * textWidth + (pagesPerSpread - 1) * gap,
     spreadStride: pagesPerSpread * (textWidth + gap),
     arrowsOutside,
-    footerTop: frameTop + geometry.frameHeight,
-    footerHeight,
   };
 }
 
