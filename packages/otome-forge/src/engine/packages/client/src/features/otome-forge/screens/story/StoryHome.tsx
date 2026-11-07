@@ -5,8 +5,9 @@
 // conflict; the planner adds a Foil), each love interest's route (his next free chapter, open from an affection level
 // and shut while a rupture is open), each one's affection (past level 10, prestige and the extra story it unlocks:
 // #2025), and every chapter so far as a path of its scenes.
-// Planning a chapter is one model call with Cancel while it runs, with the story so far to read meanwhile (#2040); a
-// chapter already planned opens with none.
+// Planning a chapter is one model call with Cancel while it runs, with something to do meanwhile: the story so far to
+// read while an arc is planned (#2040), the personality quiz while any other chapter is (#2174). A chapter already
+// planned opens with none.
 // ──────────────────────────────────────────────
 import { Fragment, useEffect, useId, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
@@ -57,6 +58,7 @@ import type {
 import { stageRow, type StageName } from "../../shared/arcs";
 import { PRESTIGE_POINTS_PER_STORY } from "../../shared/economy";
 import { chapterEyebrowKey, chapterTitle } from "../reader/ReaderControls";
+import { PersonalityQuiz } from "./PersonalityQuiz";
 
 const MAX_LEVEL = 10;
 
@@ -642,7 +644,8 @@ function LeadDialog({ runKey, view, next, opensArc, onClose, onPlanned }: LeadDi
             </p>
             <p className="of-hint">{t("ui.otomeForge.story.planningHint")}</p>
           </div>
-          <StorySoFar runKey={runKey} />
+          {/* #2174: the story so far while an arc is planned too; otherwise the personality quiz. */}
+          {opensArc ? <StorySoFar runKey={runKey} /> : <PersonalityQuiz runKey={runKey} lis={view.lis} />}
         </>
       ) : failed ? (
         <DeclinedPanel error={failed.error} run={view} job="structured" onRetry={() => void plan(failed.id)} />
@@ -695,7 +698,8 @@ function LeadDialog({ runKey, view, next, opensArc, onClose, onPlanned }: LeadDi
 
 /**
  * "What happened so far…" (#2040): the story's running summary (the memory's saved overview, as written) to read while
- * a chapter is planned. Read afresh on each wait and never kept; nothing shows before the first summary, or when it
+ * an arc is planned (#2174: the next arc, or a chapter that opens one; any other chapter's wait has the personality
+ * quiz). Read afresh on each wait and never kept; nothing shows before the first summary, or when it
  * cannot be read. It scrolls on its own (a named, tabbable region, as the backlog's list is) under the planning status,
  * outside its live region, so the long text is never announced as status.
  */
@@ -794,7 +798,12 @@ function ArcChoiceCard({ runKey, options }: { runKey: string; options: { options
           </button>
         ))}
       </div>
-      {busy ? <p className="of-hint of-planning">{t("ui.otomeForge.story.arcPlanning")}</p> : null}
+      {busy ? (
+        <>
+          <p className="of-hint of-planning">{t("ui.otomeForge.story.arcPlanning")}</p>
+          <StorySoFar runKey={runKey} />
+        </>
+      ) : null}
       {arriving ? (
         <NewcomerDialog
           runKey={runKey}
@@ -1253,6 +1262,8 @@ function ArcPlanDialog({
     <Dialog
       wide
       title={t(ARC_DIALOG_KEYS[target.kind].title, values)}
+      // Opened while it plans: focus starts on Cancel, never on the quiz under it (#2174).
+      initialFocus={planning ? actionRef : undefined}
       onClose={planning ? undefined : onClose}
       actions={
         planning ? (
@@ -1287,7 +1298,7 @@ function ArcPlanDialog({
             <p className="of-body">{t(ARC_DIALOG_KEYS[target.kind].planning, values)}</p>
             <p className="of-hint">{t("ui.otomeForge.story.planningHint")}</p>
           </div>
-          <StorySoFar runKey={view.runKey} />
+          <PersonalityQuiz runKey={view.runKey} lis={view.lis} />
         </>
       ) : locked ? (
         <p className="of-notice" role="alert">

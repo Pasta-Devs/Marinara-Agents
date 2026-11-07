@@ -63,6 +63,7 @@ import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/serve
 import { createOtomeArt } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/expressions.ts";
 import { paintSlot } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/paint.ts";
 import { artWorld, routesOf, setImages, until } from "./fixtures/otome-forge-art.ts";
+import { isQuizCall } from "./fixtures/otome-forge-fakes.ts";
 import { KAI, MIR, SOL, at, json, storyWorld } from "./fixtures/otome-forge-story.ts";
 
 const EMOTIONS = ["guarded", "smug", "pensive", "flustered", "sulking", "teasing", "proud", "tender", "devoted"];
@@ -386,7 +387,9 @@ test("images off: nothing is designed or painted, and the book holds her built-i
   );
   await queueStickers(t.deps, t.runId, { debugMode: false });
   await t.settle();
-  assert.deepEqual([t.calls.length, t.paid.length], [0, 0]);
+  // Opening the story queues the personality quiz's answers (#2174), which are no sticker.
+  const stickerCalls = t.calls.filter((entry) => !isQuizCall(entry.messages));
+  assert.deepEqual([stickerCalls.length, t.paid.length], [0, 0]);
   assert.equal((await t.unit()).stickers, undefined);
 });
 

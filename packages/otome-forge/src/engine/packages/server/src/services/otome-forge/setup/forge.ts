@@ -13,6 +13,8 @@
 //   left to run it, is shown and stored as `failed` (error "stopped"), with Retry.
 // A step's `error` is an OtomeErrorCode when the failure has one, "stopped" after a restart, else "failed"; the
 // English detail goes to the logs, and a failed paint keeps it on its paint record.
+// Once every bible is done, the personality quiz's love-interest answers are queued as one background call (#2174,
+// S/minigames/quiz.ts); the story never waits for it, and the quiz asks again for whatever is still missing.
 import type {
   ForgeStatus,
   ForgeStep,
@@ -25,6 +27,8 @@ import type {
 import { isEngineArt } from "../../../../../client/src/features/otome-forge/shared/engine-art.js";
 import { forgePrerequisite } from "../../../../../client/src/features/otome-forge/shared/forge.js";
 import { claimPaint, paintClaimed, paintIsLive, type ArtDeps, type LookOwner } from "../art/paint.js";
+import type { BackgroundQueue } from "../background-queue.js";
+import { ensureQuiz } from "../minigames/quiz.js";
 import { type ImagePrompt, bibleMessages, worldPlanMessages } from "../prompts.js";
 import { generateJson, runForeground } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
@@ -38,7 +42,8 @@ import { checkBible } from "./bible.js";
 import { castOf, normalizeWorldPlan, withPersonaStoryAbout, WorldPlanSchema, type WorldPlan } from "./cast.js";
 import { intimacyOpen } from "../../../../../client/src/features/otome-forge/shared/content.js";
 
-export type ForgeDeps = ArtDeps;
+/** The background lane, when there is one, takes the personality quiz's answers once every bible is written. */
+export type ForgeDeps = ArtDeps & { background?: BackgroundQueue };
 
 export const WORLD_PLAN_STEP = "world-plan";
 export const PLAYER_PAINT_STEP = "paint:player";
@@ -364,6 +369,15 @@ async function runTextSteps(deps: ForgeDeps, runId: string, debugMode: boolean):
   }
   // Paints the player consented to while the text was being written.
   const after = await readWorld(deps, runId);
+  const bibles = after?.forge.steps.filter((step) => step.id.startsWith("bible:")) ?? [];
+  if (bibles.length && bibles.every((step) => step.state === "done")) {
+    void ensureQuiz(deps, runId, { debugMode }).catch((error: unknown) =>
+      deps.runtime.logger.warn(
+        "[otome-forge] The quiz's answers were not queued: %s",
+        error instanceof Error ? error.message : String(error),
+      ),
+    );
+  }
   if (after?.forge.steps.some((step) => step.state === "pending" && paintReady(after, step.id))) {
     schedulePaints(deps, runId, debugMode);
   }

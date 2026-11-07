@@ -5,8 +5,9 @@
 // Retry, Ease off with "Veil this from now on" (neither closes while its request runs), a big choice, Ease off gone
 // once the scene's end is saved, the chapter's Starlight and affection with focus on its heading; then a replay at
 // reduced motion that changes nothing, whose Ease off on a branch puts no line it skips in the backlog, and a chapter
-// with no title in the reader and on the Story screen; and the waits (#2040, #2041): "What happened so far…" while a
-// chapter is planned, and Who said what? while a scene is written, on a phone and a desktop; and a side-with choice
+// with no title in the reader and on the Story screen; and the waits (#2040, #2041, #2174): "What happened so far…"
+// while an arc is planned, the personality quiz while a chapter inside an arc is, and Who said what? while a scene is
+// written, on a phone and a desktop; and a side-with choice
 // (#2046), marked as one, each option naming whom it backs, with the affection it moved for each love interest; and
 // Write your own… (#2146) at a chapter's closing decision only, its draft kept until sent, on a phone and a desktop.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-reader.e2e.ts
@@ -870,6 +871,137 @@ test("Otome Hearth waits: What happened so far… while a chapter is planned, Wh
   await expect(root.locator(".of-next")).toBeFocused();
   expect(stub.calls.filter((call) => call.path.endsWith("/who-said-what"))).toHaveLength(1);
   expect(pageErrors).toEqual([]);
+});
+
+test("Otome Hearth waits: the personality quiz while a chapter inside an arc is planned, the story so far while an arc is", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  const mobile = testInfo.project.name.includes("mobile");
+  await page.emulateMedia({ colorScheme: mobile ? "light" : "dark", reducedMotion: "reduce" });
+  const stub = createStoryStub({ waits: true });
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await stubRoutes(page, stub);
+  const press = (target: Locator) => (mobile ? target.tap() : target.click());
+  const tall = async (target: Locator) => expect((await target.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  let ended = false;
+  const arc = { number: 1, kind: "story", label: "The drowned bell", from: 1, endsAt: 10, read: 0, done: false };
+  await page.route(
+    (url) => url.pathname.endsWith(`/runs/${RUN}/story`),
+    (route) =>
+      route.fulfill({
+        json: {
+          chapters: [],
+          routes: [],
+          repairs: [],
+          arc: ended ? { ...arc, read: 10, done: true } : arc,
+          next: ended
+            ? null
+            : {
+                kind: "main",
+                number: 1,
+                candidates: [
+                  { li: CASSIAN, reason: "least-recent" },
+                  { li: ILVAR, reason: "ripe-conflict" },
+                ],
+              },
+          arcChoice: ended ? { options: ["breathe", "continue"], castFull: false } : null,
+        },
+      }),
+  );
+  // The quiz: two statements open; the answer moves one to answered, with each love interest's own answer.
+  const open = [
+    { id: "p01", text: "I recharge by being around people.", scores: { [ILVAR]: 5, [CASSIAN]: 2 } },
+    { id: "l01", text: "Hearing “I love you” means more to me than any gift.", scores: { [ILVAR]: 1, [CASSIAN]: 4 } },
+  ];
+  const quizCalls: Array<{ method: string; body?: Json }> = [];
+  await page.route(
+    (url) => url.pathname.includes(`/runs/${RUN}/quiz`),
+    (route) => {
+      const request = route.request();
+      const body = request.method() === "POST" ? (request.postDataJSON() as Json) : undefined;
+      quizCalls.push({ method: request.method(), body });
+      if (request.method() === "GET")
+        return route.fulfill({ json: { open, answered: [], refilling: false, scoring: false } });
+      return route.fulfill({
+        json: {
+          open: open.slice(1),
+          answered: [{ ...open[0], answer: body!.answer }],
+          refilling: false,
+          scoring: false,
+        },
+      });
+    },
+  );
+  const root = await openStory(page);
+
+  // A chapter inside the arc: the quiz waits under the status, and takes no focus.
+  await hold(page, "**/chapters/next");
+  await root.getByRole("button", { name: "Choose who leads" }).click();
+  const lead = page.getByRole("dialog", { name: "Who walks with you this chapter?" });
+  await lead.getByRole("button", { name: /Ilvar Thorne/ }).click();
+  await expect(lead.getByRole("status").first()).toContainText("Planning chapter 1 with Ilvar Thorne…");
+  const cancel = lead.getByRole("button", { name: "Cancel" });
+  await expect(cancel).toBeFocused();
+  await expect(lead.getByRole("region", { name: "What happened so far…" })).toHaveCount(0);
+  const play = lead.getByRole("button", { name: "Play the personality quiz" });
+  await expect(play).toBeVisible();
+  await expect(play).not.toBeFocused();
+  await tall(play);
+  expect(quizCalls, "nothing is read before Play").toHaveLength(0);
+
+  // Play: the statement takes focus, the scale names each point, and the answer reveals theirs.
+  await press(play);
+  const quiz = lead.getByRole("region", { name: "Personality quiz" });
+  const statement = quiz.locator(".of-quiz-statement");
+  await expect(statement).toBeFocused();
+  await expect(statement).toHaveText(open[0]!.text);
+  const scale = quiz.getByRole("group", { name: open[0]!.text });
+  await expect(scale.getByRole("button")).toHaveCount(5);
+  for (const point of await scale.getByRole("button").all()) await tall(point);
+  await expect(quiz.getByText("Strongly disagree", { exact: true })).toBeVisible();
+  await expect(quiz.getByText("Strongly agree", { exact: true })).toBeVisible();
+  await press(scale.getByRole("button", { name: "4: Agree" }));
+  const revealed = quiz.getByRole("status");
+  await expect(revealed).toContainText("You: Agree");
+  await expect(revealed).toContainText("Ilvar Thorne: Strongly agree");
+  await expect(revealed).toContainText("Cassian: Disagree");
+  await expect(revealed.getByRole("listitem").filter({ hasText: "Ilvar Thorne" })).toContainText("75% alike");
+  await expect(revealed.getByRole("listitem").filter({ hasText: "Cassian" })).toContainText("50% alike");
+  await expect(scale.getByRole("button", { name: "4: Agree" })).toHaveAttribute("aria-pressed", "true");
+  expect(quizCalls.filter((call) => call.method === "POST").map((call) => call.body)).toEqual([
+    expect.objectContaining({ statement: "p01", answer: 4 }),
+  ]);
+  const next = quiz.getByRole("button", { name: "Next statement" });
+  await expect(next).toBeFocused();
+  await tall(next);
+  await expect(quiz).toContainText("1 answered");
+  await page.screenshot({ path: testInfo.outputPath("quiz-answered.png") });
+  // A narrow phone: nothing scrolls sideways, and Cancel stays on screen.
+  const size = page.viewportSize()!;
+  await page.setViewportSize({ width: 320, height: 568 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+  await expect(cancel).toBeInViewport({ ratio: 1 });
+  await page.screenshot({ path: testInfo.outputPath("quiz-320.png") });
+  await page.setViewportSize(size);
+  await page.keyboard.press("Enter");
+  await expect(statement).toBeFocused();
+  await expect(statement).toHaveText(open[1]!.text);
+  await expect(revealed).toHaveText("");
+  expect(pageErrors).toEqual([]);
+
+  // The arc ends: planning the next arc shows the story so far, and no quiz.
+  ended = true;
+  await page.goto("about:blank");
+  const again = await openStory(page);
+  await hold(page, "**/arcs");
+  await again.getByRole("button", { name: /Go on with the story/ }).click();
+  const choice = again.getByRole("region", { name: "How does the story go on?" });
+  await expect(choice).toContainText("Planning the next arc…");
+  const soFar = choice.getByRole("region", { name: "What happened so far…" });
+  await expect(soFar).toContainText(SO_FAR[0]!);
+  await expect(again.getByRole("button", { name: "Play the personality quiz" })).toHaveCount(0);
 });
 
 // Meaningful alpha silhouettes replace the old 2x2 any-transparent-pixel fixture.

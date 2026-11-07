@@ -5,7 +5,8 @@
 // POST /age-gate/revoke                    → {ageGate:null}; every world drops to SFW Heat, Angst at most, SFW images
 // POST /runs {setup}                      → {run, view: RunView}; writes the run's documents and starts the forge
 // GET  /runs/:run                          → {view: RunView}; with the stickers the player has (#2044), whose owed
-//                                             sets and paints it queues in the background
+//                                             sets and paints it queues in the background, as it queues the love
+//                                             interests' missing personality quiz answers (#2174)
 // POST /runs/:run/activate                 → {index}
 // POST /runs/:run/delete {confirmTitle}    → {index}; removes every `${R}:*` document and the run's gallery images
 // POST /runs/:run/settings {content?, images?, connections?, language?, dailyMessages?, groupSquabbles?}
@@ -42,6 +43,7 @@ import { galleryRefIds } from "../art/image-client.js";
 import { imagesOf, paintView, updateIfChanged } from "../art/paint.js";
 import { withPlaceViews } from "../art/places.js";
 import { runForeground } from "../generation.js";
+import { ensureQuizScores } from "../minigames/quiz.js";
 import {
   OtomeForgeError,
   debugModeOf,
@@ -350,6 +352,14 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       await settleForge(deps, runId);
       const read = await readRun(store, runId);
       if (!read) throw runNotFound();
+      // #2174: the love interests' personality quiz answers, once, in the background (a story from before the quiz
+      // gets them here, by its first chapter-planning wait); nothing here waits for them.
+      void ensureQuizScores(deps, runId, read, { debugMode: debugModeOf(request) }).catch((error: unknown) =>
+        deps.runtime.logger.warn(
+          "[otome-forge] The quiz's answers were not queued: %s",
+          error instanceof Error ? error.message : String(error),
+        ),
+      );
       const run = await withPersonaAbout(await withEngineLooks(read, runId), runId);
       // Each image he stands on stage in, and each painted sticker (#2044), is cut out of its backdrop in the
       // background, once (free: the Engine's sprite cleanup); the view shows the cut-out from the read after it is ready.

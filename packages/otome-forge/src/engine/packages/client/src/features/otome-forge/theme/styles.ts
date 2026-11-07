@@ -1600,7 +1600,34 @@ ${R} .of-so-far-text {
   border: 1px solid var(--of-border); background: var(--of-surface-hover); color: var(--of-text);
   font-size: 0.92rem; line-height: 1.55; overflow-wrap: anywhere;
 }
-${R} .of-so-far-text > p + p { margin-top: 0.7em; }`;
+${R} .of-so-far-text > p + p { margin-top: 0.7em; }
+/* The personality quiz while a chapter that opens no arc is planned (#2174): it scrolls on its own, like the story so
+   far, so the status and Cancel stay on screen; the scale is five equal points with its two ends named under it. */
+${R} .of-dialog-body:has(> .of-quiz) { min-height: 0; }
+${R} .of-quiz {
+  display: flex; flex-direction: column; align-items: stretch; gap: 10px; min-height: 0; overflow-y: auto;
+  overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--of-border-strong) transparent;
+  text-align: center;
+}
+${R} .of-quiz-play { align-self: center; }
+${R} .of-quiz-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 4px 10px; }
+${R} .of-quiz-statement { margin: 0; font-size: 1.05rem; font-weight: 700; overflow-wrap: anywhere; }
+${R} .of-quiz-scale { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+${R} .of-quiz-point {
+  min-width: 0; min-height: 44px; border-radius: 14px; border: 1px solid var(--of-border-strong);
+  background: var(--of-surface-strong); color: var(--of-text); font: inherit; font-weight: 800; cursor: pointer;
+  transition: border-color 240ms var(--of-ease), background-color 240ms var(--of-ease);
+}
+${R} .of-quiz-point:hover:not([aria-disabled="true"]) { border-color: rgb(230 201 138 / 0.85); }
+${R} .of-quiz-point[aria-pressed="true"] { border-color: rgb(230 201 138 / 0.85); background: var(--of-tint-strong); color: var(--of-accent-text); }
+${R} .of-quiz-point[aria-disabled="true"] { cursor: default; }
+${R} .of-quiz-point[aria-disabled="true"]:not([aria-pressed="true"]) { opacity: 0.6; }
+${R} .of-quiz-ends { display: flex; justify-content: space-between; gap: 8px; margin-top: -4px; font-size: 0.75rem; color: var(--of-text-soft); }
+${R} .of-quiz-you { margin: 0; font-weight: 700; }
+${R} .of-quiz-answers { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 0; padding: 0; list-style: none; text-align: start; }
+${R} .of-quiz-answer { display: flex; align-items: center; gap: 10px; }
+${R} .of-quiz-answer-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+${R} .of-quiz-alike { flex: none; font-size: 0.78rem; font-weight: 700; color: var(--of-text-soft); }`;
 
 // Moods: each music cue's scene, until M2b paints places. Midnight's are deep; Pearl's are light.
 const MOODS: Record<Look, Record<string, string>> = {
