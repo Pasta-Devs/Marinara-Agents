@@ -177,12 +177,19 @@ test("the line format is read leniently, and what cannot be read is skipped", ()
     "(18+) I like rough sex.: Kai 5",
     "[ 18 + ] I like rough sex.: Kai 5",
     "[[18+] I like rough sex.]: Kai 5",
+    "*[18+]* I like rough sex.: Kai 5",
+    "*[18+] I like rough sex.*: Kai 5",
+    "**[18+] I like rough sex.: Kai 5",
   ]) {
     assert.deepEqual(
       parseQuizLine(variant),
       { statement: "I like rough sex.", adult: true, scores: [{ name: "Kai", score: 5 }] },
       variant,
     );
+  }
+  // Emphasis inside a statement is the model's own and stays: only the tag's emphasis, or a run left unpaired, goes.
+  for (const statement of ["I love **bold** **moves**", "I love *italic words*", "**this** and **that**"]) {
+    assert.equal(parseQuizLine(`${statement}: Kai 5`)!.statement, statement, statement);
   }
   const prose = parseQuizLine("I'd date someone 18+ years older than me: Kai 1")!;
   assert.equal(prose.adult, false, "a bare 18+ in the prose is no tag");

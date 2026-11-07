@@ -178,6 +178,8 @@ const SCORE_PART = /^(.*?[^\s:=(–—-])\s*(?:[:=–—-]\s*)?\(?\s*(\d{1,2}(?:
 /** The 18+ tag a statement may carry: bracketed or parenthesized, spaces allowed inside. */
 const ADULT_TAG = /[[(]\s*18\s*\+\s*[\])]/u;
 const ADULT_TAGS = new RegExp(ADULT_TAG.source, "gu");
+/** The tag in its own emphasis ("**[18+]**", "*[18+]*"), which goes with it. */
+const WRAPPED_ADULT_TAGS = new RegExp(`(\\*{1,2})\\s*${ADULT_TAG.source}\\s*\\1`, "gu");
 
 /** One line of the reply, or null when it is not "<statement>: <name> <score> | …" (see the header). */
 export function parseQuizLine(raw: string): QuizLine | null {
@@ -197,18 +199,21 @@ export function parseQuizLine(raw: string): QuizLine | null {
     if (!parts.length || scores.some((match) => !match)) continue;
     const left = line.slice(0, at);
     // An [18+] or (18+) tag wherever it sits ("**[18+]** …", "\"[18+] …\"", "… [18+]", "[18+]: …"), never a bare 18+ in
-    // the prose; it goes first, with a bold pair it leaves empty and a stray leading colon, then the wrappers.
+    // the prose; it goes first, with its own emphasis and a stray leading colon, then a wrapper around the whole line
+    // (only one nothing inside reopens, so "**this** and **that**" keeps its emphasis).
     const adult = ADULT_TAG.test(left);
-    const statement = left
+    let statement = left
+      .replace(WRAPPED_ADULT_TAGS, "")
       .replace(ADULT_TAGS, "")
-      .replace(/\*\*\s*\*\*/gu, "")
       .replace(/^[\s:]+/u, "")
       .trim()
-      .replace(/^\*\*\s*(.*?)\s*\*\*$/u, "$1")
+      .replace(/^\*\*\s*((?:(?!\*\*).)*?)\s*\*\*$/u, "$1")
+      .replace(/^\*\s*([^*]*?)\s*\*$/u, "$1")
       .replace(/^\[\s*(.*?)\s*\]$/u, "$1")
       .replace(/^["“]\s*(.*?)\s*["”]$/u, "$1")
-      .replace(/^\*+\s*|\s*\*+$/gu, "")
       .trim();
+    // A run of asterisks left unpaired at either end ("**[18+] text" with no closing pair) goes; paired emphasis stays.
+    if ((statement.match(/\*+/gu)?.length ?? 0) % 2) statement = statement.replace(/^\*+\s*|\s*\*+$/gu, "").trim();
     if (!statement) return null;
     return {
       statement,
