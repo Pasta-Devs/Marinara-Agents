@@ -7,6 +7,7 @@
 // None of it is ever written to a package document, a memory, a ledger or a log. Browser storage may be missing or
 // throw (private windows, blocked site data, a full quota), so every access is guarded: a read falls back to the
 // defaults and a write reports whether it was kept. Each function takes the storage to use, so tests pass their own.
+import { realMonthDay } from "../shared/birthdays";
 import { cleanStarts, isDayKey, normalizeCycle, type CycleData } from "./cycle";
 
 export const CYCLE_STORAGE_KEY = "otome-forge:cycle:v1";
@@ -237,14 +238,8 @@ export function dropStaleCareNotes(todayKey: string, storage: StorageLike | null
 
 // ── The player's own birthday (opt-in, this device only) ──
 
-const MONTH_DAY = /^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/u;
-const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-
-/** "MM-DD" for a day some year has (02-29 included). */
-export function isMonthDay(value: unknown): value is string {
-  const match = typeof value === "string" ? MONTH_DAY.exec(value) : null;
-  return !!match && Number(match[2]) <= DAYS_IN_MONTH[Number(match[1]) - 1]!;
-}
+/** "MM-DD" for a day some year has (02-29 included): the love interests' birthdays' own check (SH/birthdays.ts). */
+export const isMonthDay = realMonthDay;
 
 export interface PlayerProfile {
   version: 1;

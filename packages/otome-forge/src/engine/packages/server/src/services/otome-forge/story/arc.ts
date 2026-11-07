@@ -22,14 +22,7 @@ import type {
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { generateJson, type GenerationDeps } from "../generation.js";
 import { arcId, runDocTarget } from "../ids.js";
-import {
-  ARC_PURPOSE_WORDS,
-  ArcPlanSchema,
-  normalizeArc,
-  normalizeArcPlan,
-  type ArcPlanContext,
-  wordCountOf,
-} from "../schemas/story-arc.js";
+import { ArcPlanSchema, normalizeArc, normalizeArcPlan, type ArcPlanContext } from "../schemas/story-arc.js";
 import type { OtomeStore } from "../store.js";
 import { arcPlanMessages } from "../prompts.js";
 
@@ -141,7 +134,7 @@ export async function planArc(
     runId,
     job: "structured",
     label: `arc-plan/${input.number}`,
-    messages: arcPlanMessages(input),
+    messages: arcPlanMessages(input, { pieces, truth }),
     ...(memory ? { memory } : {}),
     schema: ArcPlanSchema,
     normalize: (reply) => {
@@ -159,7 +152,3 @@ export async function planArc(
   const saved = await deps.store.mutateDoc(target, normalizeArc, (current) => current ?? arc);
   return saved ?? arc;
 }
-
-/** The longest purpose the arc planner may write, for the normalizer's message. */
-export const PURPOSE_WORDS = ARC_PURPOSE_WORDS;
-export const overLongPurpose = (value: string) => wordCountOf(value) > ARC_PURPOSE_WORDS;

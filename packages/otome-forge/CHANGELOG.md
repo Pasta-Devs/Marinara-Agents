@@ -5,6 +5,20 @@
 - **Touch your love interest on Home.** Tap their head, cheek, chest or hand for a line in their own voice, and their face answers where you touched. Their reactions grow bolder as you grow closer, from their mask at first to someone who is yours. Under NSFW Heat (Fade or Explicit) you can touch their crotch too, and a touch to their chest or crotch is an intimate one, as far as your Heat and Lines & Veils allow. A touch never waits for the model, earns nothing, and is voiced when voices are on. Without a picture of them, the places are labelled buttons under their initials.
 - **Stories in progress catch up once.** On your next Home visit, each love interest's lines are written again in the background, 1 call each, to add the new places; until then Cheek plays a few stock lines. Under NSFW Heat, changing Heat, Darkness, Lines & Veils or your role writes them once more.
 
+## 0.13.1 — 2026-11-07
+
+- **Starting a new arc no longer fails on wordy chapter outlines.** When the model described a chapter of the next arc in more than a short sentence, the plan was refused and you saw "The model's reply wasn't in the expected format." Longer chapter descriptions are now accepted, so going on with the story works with models that write more, such as thinking models on high effort.
+- **Later arcs no longer fail on mystery reveals you already know.** In a longer story, planning the next arc could fail with the same error when the model scheduled a piece of the mystery, or its truth, that earlier arcs had already revealed. The planner is now told what you already know, and a repeated reveal is skipped instead of failing the arc.
+
+## 0.13.0 — 2026-11-07
+
+- **Everyone, a group chat with your love interests.** Messages now starts with **Everyone**, one thread with every love interest you've met. Write there and someone always answers: whoever you name, and the others when it suits them, each in their own colour. **Close and remember** turns the conversation into a memory that everyone in it recalls, and earns no affection.
+- **Let them squabble.** **Settings → Connections** sets how many times a day they may start squabbling in Everyone on their own, while Otome Hearth is open. Each squabble is 1 call with your Messages connection; 0, the default, keeps it off.
+
+## 0.12.0 — 2026-11-07
+
+- **Celebrate their birthdays.** On a love interest's birthday, a dot on Home's **Remind Me** points you to **Birthdays to celebrate**. **Celebrate** opens a scene for the two of you, where you can give one of your Shop gifts: they react in their own voice, and the gift earns its affection when you finish the scene, even past the daily cap. Missed the day? You can still celebrate for 7 days after, and they'll know you're late. You can celebrate each birthday once.
+
 ## 0.11.0 — 2026-11-07
 
 - **Tarot night.** A new date in Dates: three cards of the Major Arcana, as Past, Present and Future. A love interest reads your cards and answers your question, or you read theirs, choosing how to read each card, spoken in your persona's voice. A reading pays 40 Starlight and 40 affection within the day's caps, costs 1 model call, changes nothing in the story, and only they remember it. A reading you leave opens again: when they read your cards, from its start; when you read theirs, at the card you still have to read.

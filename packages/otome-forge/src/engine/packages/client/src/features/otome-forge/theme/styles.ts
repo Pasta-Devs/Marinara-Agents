@@ -2405,8 +2405,11 @@ ${R} .of-home-rail > * { max-width: 100%; }
 ${R} .of-home-rail-row { display: flex; gap: 8px; pointer-events: none; }
 ${R} .of-home-rail-row > * { pointer-events: auto; }
 /* Your thoughts… (#2127): Wish's new-tab dot at its top end corner while thoughts wait for the next chapter. */
-${R} .of-home-thoughts { position: relative; }
-${R} .of-home-thoughts .of-tab-dot { position: absolute; top: 3px; inset-inline-end: 3px; }
+${R} :is(.of-home-thoughts, .of-home-remind) { position: relative; }
+${R} :is(.of-home-thoughts, .of-home-remind) .of-tab-dot { position: absolute; top: 3px; inset-inline-end: 3px; }
+/* #2153: Remind Me's dot is its only visible sign of a birthday: on Pearl's pale glass it takes the deeper accent ink,
+   for 3:1 or more (tests/package-otome-forge-birthday.e2e.ts). */
+${R}[data-look="pearl"] .of-home-remind .of-tab-dot { background: var(--of-accent-text); }
 /* A short stage (a 360 × 600 phone under the Engine's own bars leaves about 500 px): the rail tightens by 30 px, every
    button still at least 30 px tall, so the note keeps a line of its words above M6's row. */
 @container of-frame (max-height: 540px) {
@@ -2676,6 +2679,30 @@ ${R} .of-bubble-quote {
   background: rgb(255 255 255 / 0.22); font-family: var(--of-font-hand); font-size: 1.1rem; line-height: 1.12; opacity: 0.9;
 }
 ${R} .of-bubble-time { padding: 0 6px; font-size: 0.68rem; color: var(--of-text-faint); font-variant-numeric: tabular-nums; }
+/* #2154: the group chat. Its portraits overlap in one slot; each member's bubble sits beside a 24 px portrait gap, the
+   portrait on the last of their run, their name over the first, in the column of the time under it (gap + 6 px). */
+${R} .of-avatar-cluster { position: relative; flex: none; display: block; }
+${R} .of-avatar-cluster-item { position: absolute; display: block; }
+${R} .of-avatar-cluster-more {
+  position: absolute; inset-inline-end: -4px; bottom: -4px; min-width: 20px; height: 20px; padding: 0 5px;
+  display: grid; place-items: center; border-radius: 999px; font-size: 0.66rem; font-weight: 800;
+  color: var(--of-text); background: var(--of-surface-solid); box-shadow: 0 0 0 2px var(--of-wish-ring);
+}
+${R} .of-thread-titles { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+${R} .of-thread-titles .of-thread-title { flex: none; }
+${R} .of-thread-subtitle {
+  margin: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 0.78rem;
+  color: var(--of-text-soft);
+}
+${R} .of-bubble-name {
+  padding-inline-start: 38px; font-size: 0.74rem; font-weight: 700; color: var(--of-text-soft);
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 88%;
+}
+${R} .of-bubble-line { display: flex; align-items: flex-end; gap: 8px; max-width: 88%; min-width: 0; }
+${R} .of-bubble-line .of-bubble { max-width: calc(100% - 32px); }
+${R} .of-bubble-line > .of-avatar, ${R} .of-bubble-gap { flex: none; width: 24px; }
+${R} .of-bubble-row[data-group="true"] { margin-top: 2px; }
+${R} .of-bubble-row[data-group="true"] .of-bubble-time { padding-inline-start: 38px; }
 ${R} .of-sticker {
   display: block; width: 112px; height: 112px; object-fit: cover; object-position: 50% 12%; border-radius: 22px;
   box-shadow: 0 0 0 3px var(--of-wish-ring), 0 8px 18px rgb(0 0 0 / 0.2);
@@ -3054,6 +3081,17 @@ ${R} :is(.of-day-events, .of-upcoming) li {
 }
 ${R} .of-day-events li > span, ${R} .of-upcoming-what { overflow-wrap: anywhere; font-weight: 600; }
 ${R} .of-upcoming-when { font-size: 0.78rem; font-weight: 800; white-space: nowrap; color: var(--of-champagne-text); }
+/* #2153: Celebrate, a birthday to a row: his cake, the words, and its button beside them, or under them full width
+   (44 px, a touch target) on a phone. */
+${R} .of-celebrate { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+${R} .of-celebrate li {
+  display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 10px; font-size: 0.92rem;
+}
+${R} .of-celebrate-text { overflow-wrap: anywhere; font-weight: 600; }
+@container of-stage (max-width: 420px) {
+  ${R} .of-celebrate li { grid-template-columns: 18px minmax(0, 1fr); }
+  ${R} .of-celebrate li > .of-button { grid-column: 1 / -1; width: 100%; min-height: 44px; }
+}
 ${R} .of-cycle-card .of-section-title { display: flex; align-items: center; gap: 8px; }
 ${R} .of-cycle-card .of-section-title svg, ${R} .of-cycle-today svg { flex: none; color: var(--of-accent-text); }
 ${R} .of-cycle-card > .of-button { align-self: flex-start; }

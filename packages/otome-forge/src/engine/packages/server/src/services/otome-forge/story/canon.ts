@@ -24,7 +24,8 @@
 // through the timeline (0.6.17: before it such a chapter was a `chat`, out of the overview, so long routes lost their
 // history), where its summary opens by saying whose it is and that it is private (titleOf,
 // S/prompts.ts CHAPTER_SUMMARY_WORDING), and the knowledge boundary keeps him from claiming he was there. Audience entries are plain LI ids, so recall's `cast` and `reader` are LI ids too. Care data is
-// never a source.
+// never a source. The group chat's sessions add "group" to their members, and its prompt reads as reader "group" (#2154,
+// S/phone/group.ts): shared canon and its own sessions only.
 //
 // recallText gives every story prompt (P5, P6, P10, P11, P12, P12c, the date, Character Story, extra story and banner
 // plans) and the chat reply (P17, as its love interest's own reader) the story before it, built from what exists and

@@ -381,9 +381,9 @@ function storyPlaceOf(world: Pick<World, "places">, input: Pick<DateStartInput, 
 /**
  * `state` with one `gift` given (#2128), or the refusal: 409 `locked` for one the story's Heat does not offer (the
  * aphrodisiac under SFW), 409 `conflict` for one she has none of. Pure, so a revision-checked write may run it again; a
- * count left at 0 is dropped when the state is read.
+ * count left at 0 is dropped when the state is read. A birthday's gift is given the same way (#2153, S/home/birthday.ts).
  */
-function giveGift(state: RunState, content: Pick<ContentSettings, "heat">, gift: GiftId): RunState {
+export function giveGift(state: RunState, content: Pick<ContentSettings, "heat">, gift: GiftId): RunState {
   if (!giftsFor(content).includes(gift)) {
     throw new OtomeForgeError(409, "That gift is given only under NSFW Heat.", "locked");
   }
