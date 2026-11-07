@@ -676,6 +676,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.14.0",
+          "date": "2026-11-07",
+          "notes": "- **Everyone, a group chat with your love interests.** Messages now starts with **Everyone**, one thread with every love interest you've met. Write there and someone always answers: whoever you name, and the others when it suits them, each in their own colour. **Close and remember** turns the conversation into a memory that everyone in it recalls, and earns no affection.\n- **Let them squabble.** **Settings → Connections** sets how many times a day they may start squabbling in Everyone on their own, while Otome Hearth is open. Each squabble is 1 call with your Messages connection; 0, the default, keeps it off.",
+          "highlight": true
+        },
+        {
           "version": "0.10.0",
           "date": "2026-11-07",
           "notes": "- **Your Engine art comes first.** A love interest from a character card now appears in the card's sprites (Full Body → Neutral, else Neutral) or, without sprites, its avatar, and you in your persona's avatar, from the moment the story is made, before anything is painted. Their sprites for love, blushing, smirk, sad, angry and the like become their faces, and only the faces they lack are painted, never while **Ask before painting** is on. A story in progress gives Engine art to anyone who has no portrait yet; looks already painted stay.\n- **Choose a background for any place.** **Background** beside a story location opens your Engine backgrounds: the one you pick shows there, on Home, on dates and in photos, and nothing is painted. A painting it replaces is kept. Turn on **Ask before painting** to choose before a place is painted.\n- **Don't paint**, the first choice of the image connection in **Settings → Images**, turns painting off and keeps to your Engine art.",
@@ -787,12 +793,6 @@
           "version": "0.8.2",
           "date": "2026-11-03",
           "notes": "- **Key images are ready when you reach them again.** The next scene's key image now starts painting as soon as that scene is written ahead, as it did before 0.6.27, so it is usually waiting when its moment comes. If you use Ease off or Rewrite on the scene you are reading, the scene written ahead is written again and its key image painted again (1 image); the buttons say so.\n- **Showing off a look earns 5 affection**, down from 20, the first time you show it to a love interest.\n- **Fewer extra limbs in pictures of two or more people.** Key images, Memory art, pair portraits and date keepsakes now send one picture of each person, say whose each one is and how many people to draw. A date keepsake now has a picture of you too. Photo Shoot poses say where every hand and leg goes.\n- **Pick the image prompt style.** Settings → Images and setup now let you choose which Engine image style profile your pictures follow. Pick one that writes sentences for GPT Image.",
-          "highlight": false
-        },
-        {
-          "version": "0.8.1",
-          "date": "2026-11-03",
-          "notes": "- **Love interests keep their own side stories while memory catches up.** When the story memory is still summarizing, a scene now keeps the dates and private chapters played since the last main chapter for the love interests who were there, newest first, within the usual length limit. Before, only the newest of them could make it in.\n- **No hour-long cache paid for nothing.** When chapter plans run on a different connection from the scenes, the plan no longer asks for a cache the scenes could never read.",
           "highlight": false
         }
       ]

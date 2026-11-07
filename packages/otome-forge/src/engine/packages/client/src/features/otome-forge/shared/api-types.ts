@@ -214,6 +214,13 @@ export interface World {
   dailyMessages?: number;
   /** The daily messages' quota and the newest one sent (S/phone/daily.ts); never sent to the client. */
   phoneDaily?: PhoneDaily;
+  /**
+   * Settings → Connections (#2154): how many times each local day the love interests in the group chat may start
+   * squabbling there on their own (DAILY_MESSAGES_MAX at most); absent or 0: never.
+   */
+  groupSquabbles?: number;
+  /** The squabbles' quota and the newest one (S/phone/group.ts), `last.li` the group's; never sent to the client. */
+  groupDaily?: PhoneDaily;
 }
 
 /**
@@ -581,6 +588,8 @@ export interface PhoneMessage {
   at: string;
   /** The note of the day this message replies to (Reply on Home). */
   quote?: string;
+  /** #2154: in the group chat, the love interest who sent it (absent: the speaker is unknown). */
+  li?: LiId;
 }
 
 /** A closed conversation: messages `start`..`start + count - 1`, and what he remembers of it. */
@@ -589,11 +598,16 @@ export interface PhoneSession {
   count: number;
   memory: { text: string; quote: string };
   closedAt: string;
-  /** His name when it closed, so a later rename does not rewrite the memory's title. */
+  /**
+   * His name when it closed, so a later rename does not rewrite the memory's title; in the group chat, its members'
+   * names.
+   */
   name?: string;
+  /** #2154: in the group chat, the love interests in it when it closed: only they recall it. */
+  members?: LiId[];
 }
 
-/** `${R}:chat:${li}`. */
+/** `${R}:chat:${li}`, and the group chat's `${R}:chat:group` (#2154, li "group"). */
 export interface PhoneThread {
   version: 1;
   li: LiId;
@@ -605,6 +619,8 @@ export interface PhoneThread {
 /** GET /runs/:run/phone */
 export interface PhoneListView {
   threads: Array<{ li: LiId; last: PhoneMessage | null; unread: number; busy: boolean }>;
+  /** #2154: the group chat, with its members in cast order; null until two love interests are met. */
+  group: { members: LiId[]; last: PhoneMessage | null; unread: number; busy: boolean } | null;
 }
 
 /**
@@ -614,6 +630,8 @@ export interface PhoneListView {
 export interface PhoneDueResult {
   status: "disabled" | "no-connection" | "busy" | "no-eligible" | "quota" | "scheduled" | "waiting" | "queued";
   latest: { li: LiId; at: string } | null;
+  /** #2154: the group chat's squabbles (S/phone/group.ts), the same way; `latest` is the newest squabble's. */
+  group?: { status: PhoneDueResult["status"]; latest: { li: LiId; at: string } | null };
 }
 
 /** GET /runs/:run/phone/:li?page= : the kit's forgeChatHistoryPage, plus what the thread screen shows around it. */
@@ -635,6 +653,8 @@ export interface PhoneHistoryPage {
   retry: boolean;
   sessions: PhoneSession[];
   seenAt: string | null;
+  /** #2154: in the group chat, its members now, in cast order. */
+  members?: LiId[];
 }
 
 /** POST .../send */
@@ -1360,8 +1380,8 @@ export interface MemoryStatus {
 
 // ── Wire shapes ──
 
-/** The world as the client sees it: no mystery truth or pieces, no web secrets, no music briefs, no message quota. */
-export type WorldView = Omit<World, "mystery" | "web" | "audio" | "phoneDaily"> & {
+/** The world as the client sees it: no mystery truth or pieces, no web secrets, no music briefs, no message quotas. */
+export type WorldView = Omit<World, "mystery" | "web" | "audio" | "phoneDaily" | "groupDaily"> & {
   mystery: { question: string };
   web: Omit<WebRow, "secret">[];
   audio: Omit<WorldAudio, "briefs">;
@@ -1447,4 +1467,6 @@ export interface SettingsInput {
   bannedPhrases?: string;
   /** 0 to DAILY_MESSAGES_MAX (SH/home.ts). */
   dailyMessages?: number;
+  /** #2154: the group chat's squabbles a day, 0 to DAILY_MESSAGES_MAX. */
+  groupSquabbles?: number;
 }

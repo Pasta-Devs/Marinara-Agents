@@ -51,7 +51,7 @@ import {
 } from "../http.js";
 import { isLiId, runDocTarget, stateId, unitId } from "../ids.js";
 import { readThread, unreadCount } from "../phone/chat.js";
-import { THOUGHTS_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
+import { GROUP_THREAD, THOUGHTS_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
 import { normalizeState, readRun, readyFaces } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import { albumCgs } from "./album.js";
@@ -158,11 +158,12 @@ export function registerHomeRoutes(router: OtomeRouter, deps: HomeRouteDeps): vo
           player = { ...player, cutouts: queued.cutouts };
         }
       }
-      // Each love interest's thread by id, as the phone list reads them: listing would load every world's threads.
+      // Each love interest's thread by id, as the phone list reads them (listing would load every world's threads),
+      // and the group chat's (#2154).
       const [note, look, threads, items, photos] = await Promise.all([
         li ? readNote(store, runId, todayKey(), li) : null,
         lookOf(deps, runId, show, unit, player),
-        Promise.all(order.map((id) => readThread(store, runId, id))),
+        Promise.all([...order, GROUP_THREAD].map((id) => readThread(store, runId, id))),
         readItems(store, runId),
         listPhotos(store, runId),
       ]);

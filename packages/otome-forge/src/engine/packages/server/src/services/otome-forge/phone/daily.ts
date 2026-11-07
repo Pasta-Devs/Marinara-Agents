@@ -73,7 +73,10 @@ export function noteOpenThread(runId: string, li: LiId | null): void {
   openThreads.set(runId, li);
 }
 
-function shuffled<T>(items: readonly T[], random: () => number): T[] {
+/** The thread the player has open (null: none), as last noted; the group chat's squabbles skip it too. */
+export const openThread = (runId: string): string | null => openThreads.get(runId) ?? null;
+
+export function shuffled<T>(items: readonly T[], random: () => number): T[] {
   const result = [...items];
   for (let index = result.length - 1; index > 0; index -= 1) {
     const other = Math.floor(random() * (index + 1));
@@ -83,7 +86,7 @@ function shuffled<T>(items: readonly T[], random: () => number): T[] {
 }
 
 /** The love interests the player has met, in cast order (see the header). */
-const metLis = (run: RunDocuments) =>
+export const metLis = (run: RunDocuments) =>
   Object.keys(run.state.lis).filter((li) => run.units.some((unit) => unit.id === li && !!unit.bible));
 
 /** The love interests who may write first now, in cast order (see the header). */

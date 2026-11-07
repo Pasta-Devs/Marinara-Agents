@@ -5,11 +5,12 @@
 //   M2a  story chapters (S/story/canon.ts readStorySources): main, route and repair chapters (a Confrontation as the
 //        rounds played and its ending) are the kit's `chapter`; a date, and a Memory's Character Story or Moment (a
 //        `story-<itemId>` chapter), its `character-story`. Each is summarized and folded into the shared overview
-//   M3   phone sessions (S/phone/memory.ts phoneMemorySources: `chat`, audience [their id])
+//   M3   phone sessions (S/phone/memory.ts phoneMemorySources: `chat`, audience [their id]; the group chat's, #2154,
+//        audience [...its members, "group"])
 //   M4   owned Snapshots (S/wish/banners.ts itemMemorySources: `chat`, audience [their love interest])
 //   M5   Read Him sets (S/minigames/read-him.ts readHimMemorySources) and Claw Machine rounds (S/minigames/claw.ts
 //        clawMemorySources), each `chat` with audience [their id] and titled private, as a phone session is
-// Audience entries are plain LI ids. A `chat` is a short record kept as written, never in the shared overview; it and a
+// Audience entries are plain LI ids (and the group chat's "group"). A `chat` is a short record kept as written, never in the shared overview; it and a
 // love interest's own chapter reach a prompt beyond the overview only for that LI's own readers and scenes whose cast
 // includes them (S/memory/memory.ts). Read Me is never a source: its notebook joins the recall pool live on each recall
 // (S/memory/memory.ts recallPool), so a deleted entry never comes back. Care data is never a source.

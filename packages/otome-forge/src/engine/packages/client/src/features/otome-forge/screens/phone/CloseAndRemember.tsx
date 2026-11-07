@@ -5,25 +5,27 @@
 // little affection (capped per day). One close at a time: the confirm button is inert while it runs, and the trigger
 // while a reply is on its way or nothing is open to remember, its tooltip and description saying which. The server
 // holds one send or close per thread (409 busy), and a close sent again after it landed gets the same memory and earns
-// nothing.
+// nothing. In the group chat (#2154) the memory is everyone's in it, and it earns nothing (no affection badge follows).
 // ──────────────────────────────────────────────
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BookHeart } from "lucide-react";
 import { useOtomeApi } from "../../api";
 import { Dialog } from "../../components/Dialog";
-import type { PhoneCloseResult, RunLiView } from "../../shared/api-types";
-import { phonePath } from "./PhoneScreen";
+import type { PhoneCloseResult } from "../../shared/api-types";
 
 interface CloseAndRememberProps {
-  runKey: string;
-  li: RunLiView;
+  /** The thread's path (PhoneScreen phonePath). */
+  path: string;
+  /** What the dialog says becomes of the conversation, and why the trigger waits while a reply is on its way. */
+  text: string;
+  waitText: string;
   /** Why it is inert: a reply is still on its way (`waiting`), or there is no open conversation (`empty`). */
   blocked: "waiting" | "empty" | null;
   onClosed: (result: PhoneCloseResult) => void;
 }
 
-export function CloseAndRemember({ runKey, li, blocked, onClosed }: CloseAndRememberProps) {
+export function CloseAndRemember({ path, text, waitText, blocked, onClosed }: CloseAndRememberProps) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const [asking, setAsking] = useState(false);
@@ -31,19 +33,14 @@ export function CloseAndRemember({ runKey, li, blocked, onClosed }: CloseAndReme
   const [error, setError] = useState<string | null>(null);
   const label = t("ui.otomeForge.phone.closeRemember");
   const reasonId = useId();
-  const reason =
-    blocked === "waiting"
-      ? t("ui.otomeForge.phone.closeWait", { name: li.name })
-      : blocked === "empty"
-        ? t("ui.otomeForge.phone.closeNothing")
-        : null;
+  const reason = blocked === "waiting" ? waitText : blocked === "empty" ? t("ui.otomeForge.phone.closeNothing") : null;
 
   const close = async () => {
     if (closing) return;
     setClosing(true);
     setError(null);
     try {
-      const result = await otome.post<PhoneCloseResult>(`${phonePath(runKey, li.id)}/close`);
+      const result = await otome.post<PhoneCloseResult>(`${path}/close`);
       setAsking(false);
       onClosed(result);
     } catch (failure) {
@@ -103,7 +100,7 @@ export function CloseAndRemember({ runKey, li, blocked, onClosed }: CloseAndReme
             </>
           }
         >
-          <p className="of-body">{t("ui.otomeForge.phone.closeText", { name: li.name })}</p>
+          <p className="of-body">{text}</p>
           {error ? (
             <p className="of-notice of-notice--error" role="alert">
               {error}
