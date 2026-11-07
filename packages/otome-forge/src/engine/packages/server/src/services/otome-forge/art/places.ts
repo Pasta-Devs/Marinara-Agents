@@ -8,13 +8,19 @@
 // a ready one is never repainted. Without an image connection the place is kept with no art, and the reader shows its
 // gradient. Painting goes through paintRecord (art/paint.ts): one paid image at a time per connection, the record
 // re-checked right before the call, and the image saved only onto the record that asked for it.
+// #2147: the player may instead choose a background from the Engine's library for any place (chooseBackground), which
+// paints nothing. With a connection and Ask before painting off, a new place is painted as soon as its beat is written,
+// so the choice replaces it; Ask before painting lets places wait, to choose before anything is paid for.
+// ponytail: the painting a background replaces is kept on the place (`painted`) and leaves the gallery only with the
+// story, so a stray tap in the picker never loses a paid image; nothing shows it again yet. The upgrade path is a
+// "Your painting" tile in the picker that sets it back.
 import type { Paint, PlaceArt, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { placeKey } from "../../../../../client/src/features/otome-forge/shared/places.js";
 import { runForeground } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
 import { runDocTarget, worldId } from "../ids.js";
 import { PLACES_MAX, normalizeWorld } from "../schemas/world.js";
-import { worldStyle } from "./image-client.js";
+import { GALLERY_REF_PREFIX, worldStyle } from "./image-client.js";
 import { type ImagePrompt, SCENE_SIZE, placePrompt } from "../prompts.js";
 import {
   imagesOf,
@@ -308,4 +314,34 @@ export async function paintPlaceNow(
       return read();
     },
   );
+}
+
+/**
+ * POST /runs/:run/art/place/background (#2147): a background from the Engine's library (the player's or a Game Assets
+ * one) as the place's picture, chosen by the player; nothing is painted, and a place with no description can have one
+ * too. A painting it replaces is kept as `painted` (the header). 400 for a url the library does not list, 409 `busy`
+ * while the place paints, 404 for a place the story has not been to.
+ */
+export async function chooseBackground(deps: ArtDeps, runId: string, name: string, url: string): Promise<PlaceArt> {
+  const images = imagesOf(deps);
+  if (!((await images.backgrounds?.()) ?? []).some((background) => background.url === url)) {
+    throw new OtomeForgeError(400, "That background is not in your Engine library.", "bad-request");
+  }
+  const key = placeKey(name);
+  const release = startPaint(runId, ownerOf(key));
+  if (!release) throw new OtomeForgeError(409, "This place is being painted.", "busy");
+  try {
+    const art: Paint = { state: "ready", at: new Date().toISOString(), url };
+    const world = await deps.store.updateDoc(worldTarget(runId), normalizeWorld, (current) => {
+      const place = current.places[key];
+      if (!place) throw notFound();
+      // A ready place is never painted again, so it has at most this one painting to keep.
+      const painted = place.art?.ref?.startsWith(GALLERY_REF_PREFIX) ? place.art : place.painted;
+      return { ...current, places: { ...current.places, [key]: { ...place, art, ...(painted ? { painted } : {}) } } };
+    });
+    if (!world) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+    return placeView(runId, key, world.places[key]!);
+  } finally {
+    release();
+  }
 }

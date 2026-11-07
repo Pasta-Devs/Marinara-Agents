@@ -1,5 +1,11 @@
 # Otome Hearth release notes
 
+## 0.10.0 — 2026-11-07
+
+- **Your Engine art comes first.** A love interest from a character card now appears in the card's sprites (Full Body → Neutral, else Neutral) or, without sprites, its avatar, and you in your persona's avatar, from the moment the story is made, before anything is painted. Their sprites for love, blushing, smirk, sad, angry and the like become their faces, and only the faces they lack are painted, never while **Ask before painting** is on. A story in progress gives Engine art to anyone who has no portrait yet; looks already painted stay.
+- **Choose a background for any place.** **Background** beside a story location opens your Engine backgrounds: the one you pick shows there, on Home, on dates and in photos, and nothing is painted. A painting it replaces is kept. Turn on **Ask before painting** to choose before a place is painted.
+- **Don't paint**, the first choice of the image connection in **Settings → Images**, turns painting off and keeps to your Engine art.
+
 ## 0.9.6 — 2026-11-07
 
 - **Answer a chapter's last decision in your own words.** When a chapter ends on a choice that lasts, **Write your own…** now waits under the offered answers: write something you say or something you do instead, and it becomes your choice, as lasting as any other. The story carries on from it, and the next chapter of that storyline starts from your words. Every other choice keeps its offered answers, because the scenes after them are already written ahead. Choosing your own words costs nothing extra.

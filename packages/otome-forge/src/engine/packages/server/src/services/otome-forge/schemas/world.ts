@@ -137,6 +137,7 @@ const PlaceSchema: ZodType<PlaceArt> = z.object({
   name: z.string().min(1).max(120),
   tags: z.string().max(600),
   art: PaintSchema.optional(),
+  painted: PaintSchema.optional(),
 });
 
 /** The kit's audio settings, each cue's brief and the generated tracks; a bad entry is dropped, the rest kept. */

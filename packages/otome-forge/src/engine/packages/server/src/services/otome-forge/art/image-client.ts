@@ -167,6 +167,10 @@ export interface ImageClient {
   styleProfile(profileId?: string): Promise<StyleProfile>;
   /** The Engine's image style profiles and its default, for the picker (empty when they cannot be read). */
   styleProfiles?(): Promise<{ defaultProfileId: string; profiles: StyleProfileOption[] }>;
+  /** #2147: the card's or persona's Engine sprites, as file paths built here (S/art/engine-art.ts). Throws. */
+  sprites?(ownerId: string): Promise<Array<{ expression: string; url: string }>>;
+  /** #2147: the Engine's background library, the player's and Game Assets' (art/places.ts chooseBackground). Throws. */
+  backgrounds?(): Promise<Array<{ url: string; filename: string; tags: string[] }>>;
   deleteGalleryImage(id: string): Promise<boolean>;
   characterCard(cardId: string): Promise<{ avatarPath: string } | null>;
   personaAvatar(personaId: string): Promise<string>;
@@ -303,7 +307,10 @@ export function createImageClient({
       } catch {
         reason = "";
       }
-      throw new Error(`engine ${path} -> ${response.status}${reason ? `: ${reason}` : ""}`);
+      // #2147: with its status, so a card that is gone (404) is told from a failed read (S/art/engine-art.ts).
+      throw Object.assign(new Error(`engine ${path} -> ${response.status}${reason ? `: ${reason}` : ""}`), {
+        status: response.status,
+      });
     }
     return response.json();
   }
@@ -444,6 +451,41 @@ export function createImageClient({
         logger?.warn("[otome-forge] could not read the image style profiles: %s", String(error));
         return { defaultProfileId: "", profiles: [] };
       }
+    },
+
+    async sprites(ownerId) {
+      const id = str(ownerId);
+      if (!id || id.includes("..") || /[\\/]/u.test(id)) return [];
+      const rows: unknown = await request(`/api/sprites/${encodeURIComponent(id)}`);
+      // Never a URL from the metadata: the file path is built from the id and a filename of a plain stem, never SVG.
+      return (Array.isArray(rows) ? rows : []).flatMap((row) => {
+        const filename = str(row?.filename);
+        const stem = /^([a-z0-9_-]+)\.(?:png|jpe?g|webp|gif|avif)$/iu.exec(filename)?.[1];
+        return stem && str(row?.expression) === stem
+          ? [
+              {
+                expression: stem.toLowerCase(),
+                url: `/api/sprites/${encodeURIComponent(id)}/file/${encodeURIComponent(filename)}`,
+              },
+            ]
+          : [];
+      });
+    },
+
+    async backgrounds() {
+      const rows: unknown = await request("/api/backgrounds");
+      return (Array.isArray(rows) ? rows : []).flatMap((row) => {
+        const url = str(row?.url);
+        const file = /^\/api\/(?:backgrounds|game-assets)\/file\/[^?#\\]+\.(?:png|jpe?g|webp|gif|avif)$/iu.test(url);
+        if (!file || url.split("/").some((part) => part === "." || part === "..")) return [];
+        return [
+          {
+            url,
+            filename: str(row?.filename),
+            tags: Array.isArray(row?.tags) ? row.tags.map(str).filter(Boolean) : [],
+          },
+        ];
+      });
     },
 
     async deleteGalleryImage(id) {

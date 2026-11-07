@@ -30,6 +30,8 @@ import { accentOf } from "../lib/accent";
 import { useOtomeProps } from "../props";
 import type { ForgeStatus, ForgeStep, ForgeStepState, Paint, RunLiView, RunView } from "../shared/api-types";
 import { intimacyOpen } from "../shared/content";
+import { isEngineArt } from "../shared/engine-art";
+import { forgePrerequisite } from "../shared/forge";
 import { FACES, type Face } from "../shared/faces";
 import { TextField } from "./setup/parts";
 import { SaveBar } from "./settings/ContentSettings";
@@ -133,6 +135,9 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
   };
   const waiting = steps.filter((step) => isPaint(step) && step.state === "waiting-consent");
   const hasImages = !!view.world.images.connectionId;
+  // #2147: a look adopted from Engine art is done before its bible is written; Repaint waits for that, as the server does.
+  const lookWritten = (step: ForgeStep) =>
+    !steps.some((before) => before.id === forgePrerequisite(step.id) && before.state !== "done");
   const doneCount = steps.filter((step) => step.state === "done").length;
 
   const applyForge = (forge: ForgeStatus) => patchRun(queryClient, runKey, (current) => ({ ...current, forge }));
@@ -353,7 +358,13 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
               </span>
               <span className="of-forge-text">
                 <span className="of-forge-name">{name}</span>
-                <span className="of-forge-state">{t(STATE_LABEL_KEYS[step.state])}</span>
+                <span className="of-forge-state">
+                  {t(
+                    step.state === "done" && isEngineArt(paintOf(step)?.url)
+                      ? "ui.otomeForge.setup.forgeStateEngineArt"
+                      : STATE_LABEL_KEYS[step.state],
+                  )}
+                </span>
                 {step.state === "failed" ? (
                   <span className="of-forge-why">{t(forgeStepErrorKey(step.error))}</span>
                 ) : null}
@@ -375,7 +386,7 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
                   </button>
                   {isPaint(step) ? <CostHint images={1} /> : null}
                 </span>
-              ) : step.state === "done" && isPaint(step) && hasImages ? (
+              ) : step.state === "done" && isPaint(step) && hasImages && lookWritten(step) ? (
                 <span className={`of-forge-retry${expressionLi ? " of-forge-retry--paints" : ""}`}>
                   <span className="of-forge-retry">
                     <button

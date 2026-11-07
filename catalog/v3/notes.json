@@ -676,6 +676,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.10.0",
+          "date": "2026-11-07",
+          "notes": "- **Your Engine art comes first.** A love interest from a character card now appears in the card's sprites (Full Body → Neutral, else Neutral) or, without sprites, its avatar, and you in your persona's avatar, from the moment the story is made, before anything is painted. Their sprites for love, blushing, smirk, sad, angry and the like become their faces, and only the faces they lack are painted, never while **Ask before painting** is on. A story in progress gives Engine art to anyone who has no portrait yet; looks already painted stay.\n- **Choose a background for any place.** **Background** beside a story location opens your Engine backgrounds: the one you pick shows there, on Home, on dates and in photos, and nothing is painted. A painting it replaces is kept. Turn on **Ask before painting** to choose before a place is painted.\n- **Don't paint**, the first choice of the image connection in **Settings → Images**, turns painting off and keeps to your Engine art.",
+          "highlight": true
+        },
+        {
           "version": "0.9.6",
           "date": "2026-11-07",
           "notes": "- **Answer a chapter's last decision in your own words.** When a chapter ends on a choice that lasts, **Write your own…** now waits under the offered answers: write something you say or something you do instead, and it becomes your choice, as lasting as any other. The story carries on from it, and the next chapter of that storyline starts from your words. Every other choice keeps its offered answers, because the scenes after them are already written ahead. Choosing your own words costs nothing extra.",
@@ -788,12 +794,6 @@
           "date": "2026-11-03",
           "notes": "- **Love interests keep their own side stories while memory catches up.** When the story memory is still summarizing, a scene now keeps the dates and private chapters played since the last main chapter for the love interests who were there, newest first, within the usual length limit. Before, only the newest of them could make it in.\n- **No hour-long cache paid for nothing.** When chapter plans run on a different connection from the scenes, the plan no longer asks for a cache the scenes could never read.",
           "highlight": false
-        },
-        {
-          "version": "0.8.0",
-          "date": "2026-11-03",
-          "notes": "- **A Photo Shoot in Dates.** With a love interest picked in Dates, choose a place your story has painted, what you both wear, and an expression and a pose for each of you: shared poses like kissing, hugging, play-fighting or a piggyback, solo poses, or your own words. **Take picture** paints one photo of you two posing for the camera, sent the place and both outfits as references, with no model call. It follows your image connection, Ask before painting, prompt review and image rating, costs no Starlight and pays nothing. Photos are kept in the Album's new **Photos**, to view, save or delete, and the newest is taped into that love interest's note on Home. Without an image connection it shows as unavailable.",
-          "highlight": true
         }
       ]
     },
