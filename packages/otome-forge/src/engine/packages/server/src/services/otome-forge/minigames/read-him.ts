@@ -601,7 +601,7 @@ export async function finishReadHim(
  * Where a finished set sits in story order: after the main chapters completed before it, among the side stories by
  * time (S/phone/memory.ts orders a closed phone session the same way).
  */
-function orderOf(state: RunState, finishedAt: string): number {
+export function orderOf(state: RunState, finishedAt: string): number {
   const mainDone = Object.entries(state.chapters).filter(
     ([key, progress]) => key.startsWith("main-") && progress.completed && progress.completed < finishedAt,
   ).length;

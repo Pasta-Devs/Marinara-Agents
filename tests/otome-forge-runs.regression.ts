@@ -697,6 +697,29 @@ test("delete: the typed title must match; then every document of the run and its
   );
 });
 
+test("delete sweeps Tarot night's readings and deck, and the deck's painted cards (#2151)", async () => {
+  const { call, fake, run, deleted, store } = await setup();
+  const runId = runIdOf(RUN_KEY);
+  const card = { state: "ready", at, url: "/api/global-gallery/file/card-1.png", ref: "global-gallery:card-1" };
+  await store.mutateDoc(
+    runDocTarget("deck", `${runId}:deck`),
+    (data) => data,
+    () => ({ version: 1, cards: { fool: { card: "fool", figure: "you", art: card } } }),
+  );
+  await store.mutateDoc(
+    runDocTarget("tarot", `${runId}:tarot:tr-abc123-aaaaaa`),
+    (data) => data,
+    () => ({ id: "tr-abc123-aaaaaa" }),
+  );
+  const removed = await call("POST", "/runs/:run/delete", { params: run, body: { confirmTitle: "Moonlit Court" } });
+  assert.equal(removed.status, 200);
+  assert.deepEqual(
+    [...fake.rows.keys()].filter((id) => id.startsWith(`${runId}:`)),
+    [],
+  );
+  assert.deepEqual(deleted.sort(), ["card-1", "kai-1", "player-1"]);
+});
+
 for (const stop of ["a storage error", "a restart"]) {
   test(`delete: one that stops part-way (${stop}) has deleted the images it let go of, and the next delete finishes it`, async () => {
     const { call, fake, run, deleted } = await setup();

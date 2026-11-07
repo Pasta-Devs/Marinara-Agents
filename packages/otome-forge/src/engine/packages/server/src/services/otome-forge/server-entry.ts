@@ -28,6 +28,7 @@ import { registerRunRoutes } from "./routes/runs.js";
 import { registerSetupRoutes } from "./routes/setup.js";
 import { registerShopRoutes } from "./routes/shop.js";
 import { registerStoryRoutes } from "./routes/story.js";
+import { registerTarotRoutes } from "./routes/tarot.js";
 import { registerWardrobeRoutes } from "./routes/wardrobe.js";
 import { registerWishRoutes } from "./routes/wish.js";
 import { normalizeIndex } from "./schemas/index.js";
@@ -83,6 +84,7 @@ export async function activate({ api }: ActivationContext) {
       registerClawRoutes(router, deps);
       registerReadHimRoutes(router, deps);
       registerReadMeRoutes(router, deps);
+      registerTarotRoutes(router, deps);
       registerDateRoutes(router, deps);
     },
     { prefix: "/api/otome-forge" },

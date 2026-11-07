@@ -3,9 +3,11 @@
 // ──────────────────────────────────────────────
 // One document per arc, read only by the arc path and storyView, never sent raw. The hidden story lives here (goal, the
 // big event, the reveal schedule, the antagonist), so only toArcView may describe it, and only with the few fields a
-// player may see. Chapter numbers are absolute main chapter numbers and never reset: an arc says which it covers, and
-// nothing is renumbered. An arc has ended when main chapter `endsAt` is completed in the state; that is derived, never
-// written here, so the plan and the progress cannot drift.
+// player may see. Outside the story, only Tarot night's roadAhead (S/minigames/tarot.ts) reads it: the covering arc's
+// goal and the next two chapters' purposes, as hints for the Future card, never a reveal, the ending, the antagonist,
+// the judgment or a newcomer. Chapter numbers are absolute main chapter numbers and never reset: an arc says which it
+// covers, and nothing is renumbered. An arc has ended when main chapter `endsAt` is completed in the state; that is
+// derived, never written here, so the plan and the progress cannot drift.
 //
 // The model never writes a chapter number: a reply gives purposes and reveal positions as 1-based indices and
 // normalizeArcPlan stamps `from + index - 1`. Off-by-one in a twelve-chapter schedule is the likeliest structural
