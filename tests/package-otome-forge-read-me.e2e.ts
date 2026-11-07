@@ -378,7 +378,7 @@ test("Otome Hearth Read Me: four guesses answered by button, key and words, paid
   // Dates lists Read Me beside Read Kai Ardent, with its pay (more for each guess spot on or close) and its one call.
   await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Dates" }).click();
   const activities = root.getByRole("list", { name: "Things to do with Kai Ardent" });
-  await expect(activities.getByRole("button", { name: /^Play: / })).toHaveCount(4);
+  await expect(activities.getByRole("button", { name: /^Play: / })).toHaveCount(5);
   const card = root.locator('.of-activity[data-activity="read-me"]');
   await expect(card.getByRole("heading", { name: "Let Kai Ardent read you" })).toBeVisible();
   await expect(card).toContainText(
@@ -389,8 +389,8 @@ test("Otome Hearth Read Me: four guesses answered by button, key and words, paid
     await activities
       .locator(".of-activity")
       .evaluateAll((items) => items.map((item) => (item as HTMLElement).dataset.activity)),
-  ).toEqual(["read-him", "read-me", "date-night", "photo-shoot", "claw"]);
-  // Without an image connection the Photo Shoot is shown as unavailable: the four Play buttons above stand.
+  ).toEqual(["read-him", "read-me", "tarot", "date-night", "photo-shoot", "claw"]);
+  // Without an image connection the Photo Shoot is shown as unavailable: the five Play buttons above stand.
   await expect(activities.locator('.of-activity[data-activity="photo-shoot"]')).toContainText(
     "Needs an image connection",
   );

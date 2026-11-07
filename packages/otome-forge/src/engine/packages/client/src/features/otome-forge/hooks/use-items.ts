@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // Otome Forge: what Wish, the Wardrobe and the Album share about items (M4): their queries, an item's first open, and
-// a tap that paints (an item's art, a banner's, a couple set's pair portrait, a Shop figurine's, #2138), and the request
-// id a wish or a Shop purchase (#2128) keeps until it is answered.
+// a tap that paints (an item's art, a banner's, a couple set's pair portrait, a Shop figurine's, #2138, a Tarot card's,
+// #2151), and the request id a wish or a Shop purchase (#2128) keeps until it is answered.
 // ──────────────────────────────────────────────
 // Routes: POST /runs/:run/items/:item/open → ItemOpenResult (S/routes/items.ts) writes a Memory's Character Story, a
 // Moment or a first-wear beat and paints its art, once; the server holds the paint for a tap under Ask before painting
@@ -25,9 +25,12 @@ export const wardrobeQueryKey = (runKey: string) => ["otome-forge", "wardrobe", 
 export const albumQueryKey = (runKey: string) => ["otome-forge", "album", runKey] as const;
 /** #2128: the Shop in Wish (C/screens/wish/ShopPanel.tsx). */
 export const shopQueryKey = (runKey: string) => ["otome-forge", "shop", runKey] as const;
+/** #2151: Tarot night's deck and open reading (C/screens/dates/TarotNight.tsx), one query per love interest under it. */
+export const tarotQueryKey = (runKey: string) => ["otome-forge", "tarot", runKey] as const;
 
 /**
- * Everything an item can change: what Wish (and its Shop), the Wardrobe, the Album, Home and the run view show.
+ * Everything an item can change: what Wish (and its Shop), the Wardrobe, the Album, Home, Tarot night's deck and the run
+ * view show.
  * Resolves once the screens on show have read it again, so a button that waited on the change never shows the old item
  * in between.
  */
@@ -38,6 +41,7 @@ export async function invalidateCollection(queryClient: QueryClient, runKey: str
     wardrobeQueryKey(runKey),
     albumQueryKey(runKey),
     homeQueryKey(runKey),
+    tarotQueryKey(runKey),
   ];
   await Promise.all([...keys, runQueryKey(runKey)].map((queryKey) => queryClient.invalidateQueries({ queryKey })));
 }
