@@ -5,6 +5,10 @@
 - **Tarot night.** A new date in Dates: three cards of the Major Arcana, as Past, Present and Future. A love interest reads your cards and answers your question, or you read theirs, choosing how to read each card, spoken in your persona's voice. A reading pays 40 Starlight and 40 affection within the day's caps, costs 1 model call, changes nothing in the story, and only they remember it. A reading you leave opens where you were.
 - **A Tarot deck painted for your story.** With an image connection, each card is painted the first time it is drawn and kept: your cards show you, theirs show them, and the Lovers, the Sun, Temperance and Judgement show you both. At most 3 images a reading, only for cards not painted yet; Ask before painting and prompt review wait for your tap. Without one, the cards are Otome Hearth's own gold line art.
 
+## 0.9.6 — 2026-11-07
+
+- **Answer a chapter's last decision in your own words.** When a chapter ends on a choice that lasts, **Write your own…** now waits under the offered answers: write something you say or something you do instead, and it becomes your choice, as lasting as any other. The story carries on from it, and the next chapter of that storyline starts from your words. Every other choice keeps its offered answers, because the scenes after them are already written ahead. Choosing your own words costs nothing extra.
+
 ## 0.9.5 — 2026-11-07
 
 - **Scene pictures show your love interests and you.** In a picture of two or more people, such as a key image, a Memory's or a Character Story's art, or a date's keepsake, each person is now painted from their own picture, so their faces match even while they wear a look; the look they wear is still described. When the story names someone another way, with a title, as "you", by a surname or a fuller name, or without its accents, the picture still knows who it is. When a saved picture of someone can't be loaded, the painting stops before anything is paid for and lets you try again, instead of painting a stranger.
