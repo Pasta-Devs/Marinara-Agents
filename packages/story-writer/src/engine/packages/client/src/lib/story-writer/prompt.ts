@@ -233,6 +233,8 @@ export function buildChapterMessages(input: {
   characters: PromptCharacter[];
   personas: PromptCharacter[];
   lore: PromptLoreEntry[];
+  /** The final user message (a quick reply, or a rewritten chapter's own request); empty = the continue message. */
+  request?: string;
 }): ChatMessage[] {
   const { settings, chapters, characters, personas, lore } = input;
   const names = storyNames(characters, personas);
@@ -302,7 +304,7 @@ export function buildChapterMessages(input: {
       { role: "assistant", content: partial.text.trimEnd() },
     );
   }
-  messages.push({ role: "user", content: continueMessage });
+  messages.push({ role: "user", content: input.request?.trim() ? input.request : continueMessage });
   if (authorNote) injectAuthorNote(messages, authorNote, settings.authorNoteDepth);
   return messages;
 }

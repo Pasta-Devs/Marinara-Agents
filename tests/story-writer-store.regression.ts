@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import {
+  CLIENT_ID_PATTERN,
   DEFAULT_SYSTEM_PROMPT,
+  PREFERENCES_DOCUMENT_ID,
   chapterDocumentId,
   countWords,
   defaultPreferences,
@@ -116,6 +118,55 @@ test("preferences start at the defaults and every patch is normalized over the s
   assert.equal(next.fontColor, "#AABBCC");
   assert.deepEqual(await store.getPreferences(), next);
   await assert.rejects(store.patchPreferences("dark"), { statusCode: 400 });
+});
+
+test("quick replies are kept for every story, normalized, and old preference documents get the defaults", async () => {
+  const { store, row, setData } = setup();
+  const fresh = await store.getPreferences();
+  assert.equal(fresh.showQuickReplies, true);
+  assert.deepEqual(fresh.quickReplies, []);
+
+  // A document saved by 0.1.1 has neither key.
+  await store.patchPreferences({ theme: "ebook" });
+  const {
+    showQuickReplies: _show,
+    quickReplies: _replies,
+    ...legacy
+  } = row(PREFERENCES_DOCUMENT_ID)!.data as Record<string, unknown>;
+  setData(PREFERENCES_DOCUMENT_ID, legacy);
+  const upgraded = await store.getPreferences();
+  assert.equal(upgraded.theme, "ebook");
+  assert.equal(upgraded.showQuickReplies, true);
+  assert.deepEqual(upgraded.quickReplies, []);
+
+  const saved = await store.patchPreferences({
+    showQuickReplies: "yes",
+    quickReplies: [
+      { id: "reply-blank-0001", label: "Blank", text: "   " },
+      { id: "reply-pour-00001", label: "L".repeat(60), text: "  Make it pour.  " },
+      { id: "Not An Id", label: "", text: "x".repeat(2_500) },
+      { id: "reply-pour-00001", label: "Twin", text: "Same id." },
+      "not a reply",
+      ...Array.from({ length: 30 }, (_, index) => ({
+        id: `reply-many-${index}-0000`,
+        label: "",
+        text: `Reply ${index}`,
+      })),
+    ],
+  });
+  assert.equal(saved.showQuickReplies, true, "a non-boolean keeps the saved value");
+  assert.equal(saved.quickReplies.length, 24);
+  assert.deepEqual(saved.quickReplies[0], { id: "reply-pour-00001", label: "L".repeat(40), text: "Make it pour." });
+  assert.equal(saved.quickReplies[1]!.text.length, 2_000);
+  assert.equal(saved.quickReplies[2]!.text, "Same id.");
+  assert.equal(new Set(saved.quickReplies.map((reply) => reply.id)).size, 24, "ids are unique");
+  for (const reply of saved.quickReplies) assert.match(reply.id, CLIENT_ID_PATTERN);
+  assert.ok(!saved.quickReplies.some((reply) => reply.label === "Blank"), "a reply without text is dropped");
+
+  const later = await store.patchPreferences({ showQuickReplies: false, fontSize: 20 });
+  assert.equal(later.showQuickReplies, false);
+  assert.deepEqual(later.quickReplies, saved.quickReplies, "a patch without the list keeps it");
+  assert.deepEqual(await store.getPreferences(), later);
 });
 
 test("stories are created normalized, listed newest first and patched without losing settings", async () => {

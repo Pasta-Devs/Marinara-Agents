@@ -48,7 +48,8 @@ export interface StoryGenerationApi {
   liveWords: number;
   /** A connection is selected or available and nothing is running. */
   canWrite: boolean;
-  write(mode: "next" | "continue" | "rewrite"): Promise<void>;
+  /** `request` (a quick reply) is sent in place of the continue message; a new chapter stores it as its request. */
+  write(mode: "next" | "continue" | "rewrite", request?: string): Promise<void>;
   stop(): void;
   summarizeChapter(chapterId: string): Promise<void>;
   summarizeOlderChapters(): Promise<void>;
@@ -107,9 +108,12 @@ function pickConnection(connections: ConnectionOption[], settings: StorySettings
   return connections.find((connection) => connection.id === id) ?? null;
 }
 
-/** Text the Engine's lorebook scanner reads: the overview, the note and the latest chapters, newest text kept. */
-function loreScanText(settings: StorySettings, chapters: StoryChapter[]): string {
-  return [settings.overview, settings.authorNote, ...chapters.slice(-3).map((chapter) => chapter.text)]
+/**
+ * Text the Engine's lorebook scanner reads: the overview, the note, the latest chapters and a quick reply, newest text
+ * kept.
+ */
+function loreScanText(settings: StorySettings, chapters: StoryChapter[], request: string): string {
+  return [settings.overview, settings.authorNote, ...chapters.slice(-3).map((chapter) => chapter.text), request]
     .filter((part) => part.trim())
     .join("\n\n")
     .slice(-LORE_SCAN_CHARS);
@@ -241,7 +245,11 @@ async function refreshTimeline(context: OperationContext): Promise<number | null
   return events.length;
 }
 
-async function writeChapter(context: OperationContext, requested: "next" | "continue" | "rewrite"): Promise<void> {
+async function writeChapter(
+  context: OperationContext,
+  requested: "next" | "continue" | "rewrite",
+  override?: string,
+): Promise<void> {
   const { run, connection, t } = context;
   const doc = run.doc;
   const story = context.readStory();
@@ -254,16 +262,31 @@ async function writeChapter(context: OperationContext, requested: "next" | "cont
   // A rewrite is written from an emptied last chapter, so the prompt treats it as a new chapter.
   const promptChapters = original ? [...chapters.slice(0, -1), { ...original, text: "", summary: "" }] : chapters;
   const chapterNumber = mode === "next" ? chapters.length + 1 : chapters.length;
+  const continueMessage = continueMessageOf(settings);
+  // A quick reply; a rewrite asks again for what the chapter was written from (which may have been a quick reply).
+  // Continuing a draft sends a quick reply once: the draft keeps the request it was started with.
+  const request = override?.trim() ? override : original?.request.trim() ? original.request : continueMessage;
 
   // Cast and lore load before the story changes, so a failure here leaves it as it was.
   const [characters, personas, lore] = await Promise.all([
     loadPromptCharacters(context.queryClient, settings.characterIds),
     loadPromptPersonas(context.queryClient, settings.personaIds),
-    loadPromptLore(settings.lorebookIds, loreScanText(settings, promptChapters)),
+    // A quick reply's words pick lorebook entries, as the note's do; the plain continue message never did.
+    loadPromptLore(
+      settings.lorebookIds,
+      loreScanText(settings, promptChapters, request === continueMessage ? "" : request),
+    ),
   ]);
   if (run.controller.signal.aborted) return;
-  const messages = buildChapterMessages({ settings, chapters: promptChapters, mode, characters, personas, lore });
-  const request = continueMessageOf(settings);
+  const messages = buildChapterMessages({
+    settings,
+    chapters: promptChapters,
+    mode,
+    characters,
+    personas,
+    lore,
+    request,
+  });
 
   let target: StoryChapter;
   if (mode === "next") {
@@ -448,7 +471,8 @@ export function useStoryGeneration(args: {
   );
 
   const write = useCallback(
-    (mode: "next" | "continue" | "rewrite") => operate("writing", (context) => writeChapter(context, mode)),
+    (mode: "next" | "continue" | "rewrite", request?: string) =>
+      operate("writing", (context) => writeChapter(context, mode, request)),
     [operate],
   );
 

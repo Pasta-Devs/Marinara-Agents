@@ -238,6 +238,47 @@ test("continue mode sends the partial chapter, then the continue message", () =>
   assert.match(rewrite[0]!.content, /Write chapter 3 at about/);
 });
 
+test("a quick reply replaces the continue message as the final request, after the note", () => {
+  const note = { authorNote: "Make it rain.", continueMessage: "Go on, please.", keepFullChapters: 5 };
+  const chapters = [chapter(1, { request: "Start with a storm." }), chapter(2)];
+  const next = build({ settings: settings(note), chapters, request: "Make it pour." });
+  assert.deepEqual(next.slice(-2), [
+    { role: "user", content: "Make it rain." },
+    { role: "user", content: "Make it pour." },
+  ]);
+  // History still replays each chapter's own request, and the continue message for one without.
+  assert.equal(next[1]?.content, "Start with a storm.");
+  assert.equal(next[3]?.content, "Go on, please.");
+
+  // Continuing a draft: the draft keeps its request; the quick reply asks for the rest once.
+  const draft = chapter(3, { text: "She opened the door and", status: "draft", request: "Write the reunion." });
+  const continued = build({
+    mode: "continue",
+    settings: settings(note),
+    chapters: [...chapters, draft],
+    request: "Make it pour.",
+  });
+  assert.deepEqual(continued.slice(-4), [
+    { role: "user", content: "Write the reunion." },
+    { role: "assistant", content: "She opened the door and" },
+    { role: "user", content: "Make it rain." },
+    { role: "user", content: "Make it pour." },
+  ]);
+  const unrequested = build({
+    mode: "continue",
+    settings: settings(note),
+    chapters: [...chapters, { ...draft, request: "" }],
+    request: "Make it pour.",
+  });
+  assert.equal(unrequested.at(-4)?.content, "Go on, please.");
+
+  // No request, or a blank one: exactly the prompt without quick replies.
+  const plain = build({ settings: settings(note), chapters });
+  assert.equal(plain.at(-1)?.content, "Go on, please.");
+  assert.deepEqual(build({ settings: settings(note), chapters, request: "  " }), plain);
+  assert.deepEqual(build({ settings: settings(note), chapters, request: undefined }), plain);
+});
+
 test("the length section reports progress against the target and asks for an ending near it", () => {
   const chapters = [chapter(1, { text: "word ".repeat(4_000) })];
   const midway = build({ settings: settings({ targetWords: 10_000 }), chapters })[0]!.content;
