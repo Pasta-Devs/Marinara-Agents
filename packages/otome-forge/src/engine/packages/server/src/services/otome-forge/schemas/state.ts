@@ -11,6 +11,8 @@
 // 0.9.0 (#2128): the Shop's gifts and figurines (`owned.gifts`, `owned.figurines`) and the newest purchases by request
 // id (`purchases`), written in the same write as the Starlight they cost (S/routes/shop.ts).
 // 0.11.0 (#2151): the newest paid Tarot night readings (`tarot.paid`), written in the same write as their pay.
+// 0.15.0 (#2155): each love interest's big moment of each story arc his side may retell (`hisSide`, S/story/his-side.ts),
+// written in the same write as the read that made it.
 // 0.8.12 (#2127): Your thoughts… waiting for the next main chapter (`thoughts`, S/routes/home.ts writes them and
 // S/story/chapters.ts lets them go); a damaged or too long one reads as none.
 import { forgeStoryExpressionCast, forgeStoryExpressionsOn } from "@forge-kit/story-expressions-server.mjs";
@@ -90,6 +92,8 @@ import { readChapterDelta } from "../state/relationship.js";
 import type { OtomeStore } from "../store.js";
 import { field, isRecord, readFields, validItems, wornLookUrl } from "./common.js";
 import { normalizePlayer } from "./player.js";
+import { ARCS_MAX } from "./story-arc.js";
+import { HisSideNoteSchema } from "./story.js";
 import { normalizeUnit } from "./unit.js";
 import { normalizeWorld, toWorldView } from "./world.js";
 
@@ -257,6 +261,7 @@ export const defaultLiState = (): LiState => ({
   firsts: {},
   tellsLearned: [],
   known: [],
+  hisSide: [],
 });
 
 function normalizeLiState(raw: unknown): LiState {
@@ -276,6 +281,7 @@ function normalizeLiState(raw: unknown): LiState {
       firsts: z.record(z.string(), z.string()),
       tellsLearned: normalizeTells,
       known: (value) => keepNewest(validItems(NotebookEntrySchema, value), NOTEBOOK_MAX),
+      hisSide: (value) => keepNewest(validItems(HisSideNoteSchema, value), ARCS_MAX + 1),
     },
     defaultLiState,
     isRecord(raw) ? raw : undefined,

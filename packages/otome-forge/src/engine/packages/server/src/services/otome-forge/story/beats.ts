@@ -47,6 +47,10 @@
 //   stands, none of his route chapters opens a beat (409 `locked`) and his gate is not counted read (stages.ts
 //   gateShut); a beat already on screen can still be finished, and what was read still replays. A stage-5 gate must
 //   end on one big choice.
+// - #2155, his side (S/story/his-side.ts): a read that counts a big moment notes it for his side of the arc, in that
+//   same state write, unless that side is written already, and the read that finishes its chapter says it waits. His
+//   side's own scene (a story chapter with `hisSide`) is written against what he may know, as things stood between them
+//   then, from the scene it retells; only he thinks and it has no choice.
 // - The art (RouteDeps.art, S/art/expressions.ts createOtomeArt): each beat served queues its speakers' faces; each
 //   beat written queues its places and CG (which wait for a tap under Ask before painting, or while the player
 //   reviews image prompts); a beat replaced by a rewrite, or removed after it, releases its CG. All of it in the
@@ -71,7 +75,12 @@ import type {
   Unit,
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
-import { OWN_OPTION, stageRow, type ClimaxMove } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
+import {
+  OWN_OPTION,
+  hisSideKey,
+  stageRow,
+  type ClimaxMove,
+} from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import type { DateScore } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { SIDE_WITH_AFFECTION } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import { LIMIT_IDS, type LimitId } from "../../../../../client/src/features/otome-forge/shared/content.js";
@@ -96,7 +105,15 @@ import { readBeatToEnd } from "../state/rewards.js";
 import { countedNow, gateShut, healRupture, passGate } from "../state/stages.js";
 import { arcCovering, listArcs } from "./arc.js";
 import type { ChapterDeps } from "./chapters.js";
-import { OWN_ANSWER_LABEL, chapterScenes, chapterSoFar, readBeat, readChapter, recallText } from "./canon.js";
+import {
+  OWN_ANSWER_LABEL,
+  type StoryContext,
+  chapterScenes,
+  chapterSoFar,
+  readBeat,
+  readChapter,
+  recallText,
+} from "./canon.js";
 import { prologueProblem } from "./prologue.js";
 import {
   afterRound,
@@ -110,6 +127,15 @@ import {
   toConfrontationView,
   type SegmentLists,
 } from "./confrontation.js";
+import {
+  hisSideArc,
+  hisSideMomentOf,
+  hisSideSource,
+  momentCandidate,
+  momentChapterKey,
+  noteHisSide,
+  stateAtMoment,
+} from "./his-side.js";
 import {
   BEAT_PLACES_MAX,
   BEAT_SEGMENTS_MAX,
@@ -167,6 +193,8 @@ export interface BeatContext {
   date?: { goesWrong: boolean };
   /** #2046: a side-with node's love interests (S/story/replies.ts sideWithCast): one small choice, an option backing each. */
   sideWith?: ReadonlyArray<Pick<Unit, "id" | "name">>;
+  /** #2155: his side: told from this love interest's point of view, so only he has thoughts, and no choice is offered. */
+  pov?: LiId;
 }
 
 interface NormalizeOptions {
@@ -238,8 +266,9 @@ function exitsOf(context: BeatContext, raw: unknown): LiId[] {
 }
 
 /**
- * Why the reply's thoughts break the rules (a love interest's thought before stage 2, or two in one scene), or "".
- * `counts` holds each love interest's thoughts read on the way to these segments, and gets theirs added.
+ * Why the reply's thoughts break the rules (a love interest's thought before stage 2, or two in one scene; in his side,
+ * anyone's thought but his), or "". `counts` holds each love interest's thoughts read on the way to these segments, and
+ * gets theirs added.
  */
 function thoughtProblem(context: BeatContext, segments: unknown[], counts = new Map<string, number>()): string {
   for (const raw of segments) {
@@ -247,6 +276,13 @@ function thoughtProblem(context: BeatContext, segments: unknown[], counts = new 
     const segment = raw as Record<string, unknown>;
     if (segment.thought !== true && segment.thought !== "true") continue;
     const li = speakerLi(context, str(segment.speaker, NAME_MAX));
+    // #2155: his thoughts, as many as the scene needs. A thought with no speaker is the protagonist's
+    // (C/lib/reader-state.ts), so it is refused too.
+    if (context.pov) {
+      if (li?.id === context.pov) continue;
+      const name = context.units.find((unit) => unit.id === context.pov)?.name ?? "the love interest";
+      return `only ${name} thinks in this scene: every thought line has "speaker" set to ${name}, and nobody else, the protagonist included, has one`;
+    }
     if (!li) continue;
     if ((context.state.lis[li.id]?.stage ?? 1) < 2)
       return `${li.name} is still behind their mask: no thought lines yet`;
@@ -337,7 +373,8 @@ export function normalizeBeatReply(reply: BeatReply, context: BeatContext): Norm
   let counts = new Map<string, number>();
   const thoughts = thoughtProblem(context, reply.segments, counts);
   if (thoughts) return thoughts;
-  for (const choice of Array.isArray(reply.choices) ? reply.choices : []) {
+  // His side offers no choice (#2155): its options are dropped, so their thoughts never count.
+  for (const choice of !context.pov && Array.isArray(reply.choices) ? reply.choices : []) {
     const most = new Map(counts);
     for (const option of Array.isArray((choice as { options?: unknown })?.options)
       ? (choice as { options: unknown[] }).options
@@ -354,7 +391,7 @@ export function normalizeBeatReply(reply: BeatReply, context: BeatContext): Norm
     reply,
     { start: context.node.place, cgOpen: !!context.node.cg, context } as NormalizeOptions,
     normalizeBeatBody,
-    { enabled: true, terminal: context.last && !context.date, label: forgeChoiceLabel },
+    { enabled: !context.pov, terminal: context.last && !context.date, label: forgeChoiceLabel },
   );
   if (!beat) {
     return "the segments or choices did not follow the format (check the PLAYER CHOICES rules: 2-4 options, a selection each, branches of 1-8 segments, distinct `at` indexes)";
@@ -615,27 +652,36 @@ async function generateBeat(
   if (storySoFar === null) throw conflict("An earlier beat of this chapter is not settled yet.");
   const units = castUnits(run);
   const present = units.filter((unit) => node.cast.includes(unit.id));
+  // #2155: his side tells one scene again, from his point of view, with only what he may know.
+  const pov = chapter.hisSide && chapter.li ? chapter.li : undefined;
+  const told = chapter.hisSide && pov ? await hisSideSource(deps.store, runId, chapter.hisSide, run.player.name) : null;
+  if (chapter.hisSide && !told) throw conflict("The scene this side tells again cannot be read.");
   // The previous chapter in full is the one this chapter's storyline continues: the main story's for a main chapter,
   // his own for his route or repair chapter; a date or a story takes the newest the scene may know. The story context
   // is what every scene of the chapter may know (and a main chapter's plan, #2091): his own canon too in his own
   // chapter, where he is in every node. What only some may know follows who is in this one, with the recalls. A
   // storyline's chapter (main, route, repair) is also given the last Character Story, whoever is in the scene (#2126),
   // as its plan is; a date's or a story's scenes are not.
-  const memory = await recallText(deps, runId, {
-    job: "narration",
-    cast: node.cast,
-    cached: chapter.kind === "main" ? {} : { li: chapter.li ?? chapter.lead },
-    ...(chapter.kind === "main" ? { continues: "main" as const } : {}),
-    ...((chapter.kind === "route" || chapter.kind === "repair") && chapter.li ? { continues: chapter.li } : {}),
-    lastStory: chapter.kind === "main" || chapter.kind === "route" || chapter.kind === "repair",
-    query: {
-      cues: [storySoFar.join("\n\n").slice(-2000), node.guide].filter(Boolean),
-      plan: node.guide,
-      speakers: [run.player.name, ...present.map((unit) => unit.name)].filter(Boolean),
-    },
-    signal,
-    debugMode,
-  });
+  // A side chapter tells a scene of a chapter before it again, so the story's memory, which is the story as it is now,
+  // would hand it chapters that came after the moment it retells: it gets the scene itself (hisSideSource) and none.
+  const memory: StoryContext = told
+    ? { text: "", overview: "", details: [], maxContext: null, prefix: "", fate: "", optional: [] }
+    : await recallText(deps, runId, {
+        job: "narration",
+        cast: node.cast,
+        ...(pov ? { reader: pov } : {}),
+        cached: chapter.kind === "main" ? {} : { li: chapter.li ?? chapter.lead },
+        ...(chapter.kind === "main" ? { continues: "main" as const } : {}),
+        ...((chapter.kind === "route" || chapter.kind === "repair") && chapter.li ? { continues: chapter.li } : {}),
+        lastStory: chapter.kind === "main" || chapter.kind === "route" || chapter.kind === "repair",
+        query: {
+          cues: [storySoFar.join("\n\n").slice(-2000), node.guide].filter(Boolean),
+          plan: node.guide,
+          speakers: [run.player.name, ...present.map((unit) => unit.name)].filter(Boolean),
+        },
+        signal,
+        debugMode,
+      });
   const last = i === chapter.nodes.length - 1;
   const mustChoose =
     chapter.kind === "route" && !!node.gate && !!chapter.stage && stageRow(chapter.stage).gate === "confrontation";
@@ -651,6 +697,7 @@ async function generateBeat(
     cgExplicit,
     ...(chapter.kind === "date" ? { date: { goesWrong: chapter.date?.goesWrong ?? false } } : {}),
     ...(side ? { sideWith: side } : {}),
+    ...(pov ? { pov } : {}),
   };
   const opponent = confrontationOpponent(chapter, node, units);
   // Chapter 1 opens where the prologue ended, with the choices taken in it.
@@ -665,7 +712,7 @@ async function generateBeat(
     world: run.world,
     player: run.player,
     units,
-    state: run.state,
+    state: pov && chapter.hisSide ? stateAtMoment(run.state, pov, chapter.hisSide) : run.state,
     chapter,
     node,
     storySoFar,
@@ -677,6 +724,7 @@ async function generateBeat(
         ? (arcCovering(await listArcs(deps.store, runId), chapter.number) ?? null)
         : null,
     prologue,
+    ...(told ? { hisSide: told.text } : {}),
   };
   let body: Omit<Beat, "key" | "i" | "kind" | "choiceCanon" | "applied" | "readThrough" | "written" | "rewrites">;
   let written: { connectionId: string; model: string };
@@ -1263,10 +1311,15 @@ async function finishBeat(
   let outcome: Omit<ReturnType<typeof readBeatToEnd>, "state"> = { grants: [], chapterDone: false };
   let stageUp: ReadResult["stageUp"];
   let repaired: ReadResult["repaired"];
+  let hisSide: ReadResult["hisSide"];
   let completedNow = false;
   const at = new Date().toISOString();
   // His secrets, for the gate (the stage it opens reveals each secret due by then). Bibles are not edited mid-read.
   const owner = chapter.kind === "route" && chapter.li ? await readUnit(deps, runId, chapter.li) : null;
+  // #2155: the arc a big moment here would be his side's, and whether that side is written already (it spends the arc).
+  const candidate = momentCandidate(chapter, beat);
+  const arc = candidate ? hisSideArc(chapter, await listArcs(deps.store, runId)) : 0;
+  const spent = !candidate || !!(await readChapter(deps.store, runId, hisSideKey(candidate, arc)));
   const state = await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) => {
     // A pick saved on the beat whose effects never reached the state (its request stopped between the two writes, and
     // a reload shows it as made) lands in this same write, so no beat counts as read with a canon pick unapplied.
@@ -1284,6 +1337,7 @@ async function finishBeat(
     let next = read;
     stageUp = undefined;
     repaired = undefined;
+    hisSide = undefined;
     if (countedNow(caughtUp, read, chapter.key, beat.i)) {
       const gate = passGate(next, chapter, beat.i, { secrets: owner?.bible?.secrets ?? [], at });
       const picks = canonPicks(beat).flatMap(([choice, option]) => beat.effects[choice]?.[option] ?? []);
@@ -1291,8 +1345,21 @@ async function finishBeat(
       next = heal.state;
       if (gate.stageUp) stageUp = gate.stageUp;
       if (heal.repaired) repaired = heal.repaired;
+      const moment = spent ? null : hisSideMomentOf(chapter, beat, { stageUp: gate.stageUp, repaired: heal.repaired });
+      const his = moment?.li === candidate ? next.lis[moment.li] : undefined;
+      if (moment && his) {
+        const ref = `${chapter.key}/${beat.i}`;
+        next = noteHisSide(next, moment.li, { arc, ref, moment: moment.moment, at });
+        hisSide = moment.li;
+      }
     }
     completedNow = !current.chapters[chapter.key]?.completed && !!next.chapters[chapter.key]?.completed;
+    // #2155: the read that finishes the chapter says when a side of it waits, though its moment came on an earlier node
+    // (the reader may have been left in between). A side is written only once its chapter is finished, so none is yet.
+    if (completedNow && !hisSide) {
+      const notes = Object.entries(next.lis);
+      hisSide = notes.find(([, his]) => his.hisSide.some(({ ref }) => momentChapterKey(ref) === chapter.key))?.[0];
+    }
     return next;
   });
   if (!state) throw runNotFound();
@@ -1311,6 +1378,7 @@ async function finishBeat(
     chapterDone: outcome.chapterDone,
     ...(stageUp ? { stageUp } : {}),
     ...(repaired ? { repaired } : {}),
+    ...(hisSide ? { hisSide } : {}),
   };
 }
 

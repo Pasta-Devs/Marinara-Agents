@@ -86,11 +86,12 @@ export const stateId = (runId: string) => `${runId}:state`;
 // ── The story (M2a). Kinds: "chapter", "beat", "memory". ──
 
 /**
- * `prologue`, `main-<n>`, `route-<li>-<stage>`, `repair-<li>-<n>`, `story-<itemId>`, `prestige-<li>-<n>` (#2025) or
+ * `prologue`, `main-<n>`, `route-<li>-<stage>`, `repair-<li>-<n>`, `story-<itemId>`, `prestige-<li>-<n>` (#2025),
+ * `side-<li>-<arc>` (#2155, his side of a story arc; arc 0 before the first, at most ARCS_MAX, which its route checks) or
  * `date-<n>`.
  */
 const CHAPTER_KEY =
-  /^(?:prologue|main-[1-9]\d{0,5}|route-li-[a-z0-9-]{3,40}-[1-6]|repair-li-[a-z0-9-]{3,40}-[1-9]\d{0,5}|story-[a-z0-9-]{1,60}|prestige-li-[a-z0-9-]{3,40}-[1-9]\d{0,5}|date-[1-9]\d{0,5})$/;
+  /^(?:prologue|main-[1-9]\d{0,5}|route-li-[a-z0-9-]{3,40}-[1-6]|repair-li-[a-z0-9-]{3,40}-[1-9]\d{0,5}|story-[a-z0-9-]{1,60}|prestige-li-[a-z0-9-]{3,40}-[1-9]\d{0,5}|side-li-[a-z0-9-]{3,40}-(?:0|[1-9]\d?)|date-[1-9]\d{0,5})$/;
 
 export function isChapterKey(value: unknown): value is string {
   return typeof value === "string" && CHAPTER_KEY.test(value);
