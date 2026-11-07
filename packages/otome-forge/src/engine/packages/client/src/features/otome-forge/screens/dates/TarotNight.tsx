@@ -430,7 +430,6 @@ export function TarotNight({ runKey, view, li: picked, onExit }: ActivityScreenP
         </div>
       ) : phase.kind === "play" && reading ? (
         <Play
-          key={phase.step}
           view={view}
           li={li}
           reading={reading}
@@ -899,8 +898,12 @@ function Play({
   const readsMine = reading.mode === "you-read" && !!card;
   const last = step >= TAROT_CARDS;
 
-  // Opened lines only: a card answered before (a reading picked up again) is never voiced twice.
-  const [opened] = useState(() => !answer);
+  // Opened lines only: a card answered before (a reading picked up again) is never voiced twice. Remembered per step
+  // rather than by remounting Play on each turn, so the spread stays mounted and a turned card's flip animates
+  // (Dottore on #2162).
+  const openedRef = useRef(new Map<number, boolean>());
+  if (!openedRef.current.has(step)) openedRef.current.set(step, !answer);
+  const opened = openedRef.current.get(step)!;
   const said = (text: string, expression: Face | "" = face): Segment => ({
     speaker: name,
     text,

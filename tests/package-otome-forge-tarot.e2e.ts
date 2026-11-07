@@ -548,8 +548,14 @@ test("Otome Hearth Tarot night: I read Kai Ardent's cards, by fate or keys, in m
   await expect(root.getByRole("heading", { name: "The reading begins" })).toBeFocused();
   await expect(line(root)).toHaveText("Read mine, then. Will I ever stop running?");
   await heard(page, "0");
+  // The spread stays mounted as cards turn, so the Past card flips in place rather than being rebuilt face up.
+  const pastFace = await root.locator(".of-tarot-spread .of-tarot-card").first().elementHandle();
+  expect(await pastFace!.evaluate((element) => element.getAttribute("data-turned"))).toBe("false");
   await press(root.getByRole("button", { name: "Turn the first card" }));
   await expect(root.getByRole("heading", { name: "Past: The Tower, reversed" })).toBeFocused();
+  expect(await pastFace!.evaluate((element) => element.isConnected && element.getAttribute("data-turned"))).toBe(
+    "true",
+  );
   const readings = root.getByRole("group", { name: "How do you read it?" }).getByRole("button");
   await expect(readings).toHaveCount(3);
   await expect(root.getByText(/Reaction \d/u)).toHaveCount(0);
