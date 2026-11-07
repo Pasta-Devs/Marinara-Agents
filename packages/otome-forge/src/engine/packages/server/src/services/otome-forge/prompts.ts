@@ -49,10 +49,11 @@
 //   arcPlanMessages: the arc planner, #1980 (S/story/arc.ts)
 //   chapterPlanMessages: P5 chapter plan (S/story/chapters.ts)
 //   thoughtsLines: Your thoughts… from Home (#2127), in P5 and in its main chapter's P6, P12 and P12c, with the task
-//   beatMessages: P6 scene (beat) narrator, also for dates, Character Stories (P22, P23), extra stories and the
-//     prologue (S/story/beats.ts). Its NO_CHOICES_SENTENCE must stay the kit's sentence word for word (Elsewhere)
+//   beatMessages: P6 scene (beat) narrator, also for dates, Character Stories (P22, P23), extra stories, his side
+//     (#2155) and the prologue (S/story/beats.ts). Its NO_CHOICES_SENTENCE must stay the kit's sentence word for word
+//     (Elsewhere)
 //   GUIDE, prologueFraming, prologueEnding: the prologue's node, framing and hand-off (S/story/prologue.ts, beats.ts)
-//   stageGoal, arcFraming: what a route stage is for, and P6's route, repair, story and extra-story framing
+//   stageGoal, arcFraming: what a route stage is for, and P6's route, repair, story, extra-story and his side's framing
 //   routePlanMessages, repairPlanMessages: P10 route plan, P11 repair plan (S/story/routes-plan.ts)
 //   confrontationMessages: P12 Confrontation (S/story/beats.ts)
 //   closerMessages: P12c Closer, #1938 (S/story/beats.ts)
@@ -1086,6 +1087,9 @@ export function musicBriefMessages(world: Pick<World, "premise" | "setting">, cu
 // #2046 (Side with): while a side-with scene may come (S/story/chapters.ts sideWithOpen), P5 may mark one beat node
 // where two to four love interests disagree; P6 on that node offers ONE choice with an option per love interest present,
 // each naming whom it backs, and the game, never the reply, sets what siding changes. Other prompts are unchanged.
+// #2155 (his side): P6 tells one scene again from a love interest's point of view (hisSideFraming): its instructions let
+// only him think and carry no choice rules, its card is at the moment's stage, and the scene as the protagonist lived it
+// goes in the last turn, after the cached part. Its story context and every other chapter's messages are unchanged.
 
 // ── The blocks and rules the story prompts share ──
 // Most other prompts carry these blocks too (betweenYou, knowsAboutYou, protagonistBlock, appearanceLine, bibleBlock,
@@ -1962,6 +1966,7 @@ export interface BeatMessagesInput {
     | "date"
     | "prestige"
     | "thoughts"
+    | "hisSide"
   >;
   node: ChapterNode;
   /** The canonical story so far in this chapter: each earlier node's scene, rendered ([] for its first node). */
@@ -1974,6 +1979,8 @@ export interface BeatMessagesInput {
   recalls?: string;
   /** A main chapter's arc (#1980), for the story context, or null. */
   arc?: StoryArc | null;
+  /** #2155: his side's scene as the protagonist lived it (S/story/his-side.ts hisSideSource), or none. */
+  hisSide?: string;
 }
 
 export function beatMessages({
@@ -1988,8 +1995,12 @@ export function beatMessages({
   recalls = "",
   arc = null,
   prologue = "",
+  hisSide = "",
 }: BeatMessagesInput): OtomeMessage[] {
   const backgrounds = savedBackgrounds(world);
+  // #2155: his side tells one scene again from his point of view: only he thinks, and it offers no choice. Only his
+  // side's own messages change; every other chapter's stay as they were.
+  const pov = chapter.hisSide ? units.find((unit) => unit.id === chapter.li) : undefined;
   const present = units.filter((unit) => node.cast.includes(unit.id));
   const thinkers = present.filter((unit) => stageOf(state, unit.id) >= 2).map((unit) => unit.name);
   const last = node.i === chapter.nodes.length - 1;
@@ -2009,7 +2020,9 @@ export function beatMessages({
     `{"musicMood": "${MUSIC_MOODS.join("|")}", "places": [{"name": "...", "tags": "..."}], "segments": [{"speaker": "", "text": "...", "thought": false, "expression": "", "place": "..."}]}`,
     '- speaker: who speaks the segment, written as their exact name every time; "" for narration. When the protagonist speaks, write their exact name; the prose still addresses them as "you".',
     "- Each segment is one speaker's line or one piece of narration: a sentence or a few. Never put dialogue inside narration, and never mark it with dashes or quotes as prose.",
-    `- thought: true for an inner line, in the thinker's own words, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in this node, and only one the task names as far enough along.`,
+    pov
+      ? `- thought: true for an inner line by ${pov.name} only, in ${pov.name}'s own words, with "speaker" set to ${pov.name}, as often as the scene needs; nobody else, the protagonist included, has thought lines in this scene.`
+      : `- thought: true for an inner line, in the thinker's own words, with "speaker" set to the thinker. The protagonist may think freely. ${PROTAGONIST_THOUGHTS} A love interest gets at most ONE thought line in this node, and only one the task names as far enough along.`,
     `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}, when the face shows it. A face may contradict the words. Omit it for a neutral line and for narration.`,
     EXITS_RULE,
     `- musicMood: the soundtrack cue for this node, one of ${MUSIC_MOODS.join(", ")}.`,
@@ -2018,7 +2031,7 @@ export function beatMessages({
     "- Stay within this node's guide; do not skip ahead to later nodes.",
     `- Write every segment's text and every place name in ${world.language}; tags and any cg brief in English.`,
   ].join("\n");
-  const choices = choiceRules(instructions, last && !date);
+  const choices = pov ? { shared: instructions, own: [] } : choiceRules(instructions, last && !date);
   const framing =
     node.kind === "confrontation"
       ? CONFRONTATION_FRAMING
@@ -2064,6 +2077,9 @@ export function beatMessages({
     recalls.trim(),
     // A main chapter's own (#2127): no other chapter's scenes ever carry them.
     ...thoughtsLines(player, chapter.kind === "main" ? chapter.thoughts : undefined, "scene"),
+    ...(pov && hisSide.trim()
+      ? ["", `THE SCENE AS THE PROTAGONIST LIVED IT ("${chapter.title}"):\n${hisSide.trim()}`]
+      : []),
     "",
     `Narrate node ${node.i + 1} of ${chapter.nodes.length}${last ? ", the chapter's last" : ""}:`,
     `What happens: ${node.guide}`,
@@ -2072,10 +2088,13 @@ export function beatMessages({
     ...arcLines,
     dateFraming,
     node.resolves?.length ? `Grievances this node may resolve: ${node.resolves.join(", ")}.` : "",
-    `- Thought lines: ${thinkers.length ? `of the love interests, only these are far enough along to have one: ${thinkers.join(", ")}` : "no love interest present may have one: they are still behind their masks"}.`,
+    pov
+      ? `- Thought lines: ${pov.name} only.`
+      : `- Thought lines: ${thinkers.length ? `of the love interests, only these are far enough along to have one: ${thinkers.join(", ")}` : "no love interest present may have one: they are still behind their masks"}.`,
     ...choices.own,
-    // A planned chapter's last node; the prologue offers its own choices, and a date never ends on a big one.
-    ...(last && !date && chapter.kind !== "prologue"
+    // A planned chapter's last node; the prologue offers its own choices, a date never ends on a big one, and his side
+    // offers none.
+    ...(last && !date && !pov && chapter.kind !== "prologue"
       ? [
           `- This is the chapter's last node: if it ends on a big choice, make it ${VARIED_DECISION}.`,
           ...(node.judgment ? [judgmentLine(node.judgment)] : []),
@@ -2093,9 +2112,11 @@ export function beatMessages({
   ];
   return storyMessages(
     storyContext({ world, player, units, number: chapter.kind === "main" ? chapter.number : null, arc, memory }),
-    choices.shared + CHOICE_EFFECTS_INSTRUCTION + VOICES_INSTRUCTION,
+    pov ? choices.shared + VOICES_INSTRUCTION : choices.shared + CHOICE_EFFECTS_INSTRUCTION + VOICES_INSTRUCTION,
     chapterTexts(chapter, units, storySoFar, opening),
     rest,
+    // Only a Rewrite of his side shares its instructions, so they are no cache write of their own (#2091).
+    pov ? { marks: "context" } : undefined,
   );
 }
 
@@ -2229,6 +2250,7 @@ function chapterLabel(chapter: BeatMessagesInput["chapter"], units: readonly Uni
   }
   if (chapter.kind === "repair") return `a repair chapter with ${owner}`;
   if (chapter.kind === "story") {
+    if (chapter.hisSide) return `${owner}'s side of it: the same events, told again from ${owner}'s point of view`;
     return chapter.prestige ? `${owner}'s extra story, imagined together (not canon)` : `${owner}'s Character Story`;
   }
   return `${chapter.kind} chapter`;
@@ -2263,6 +2285,19 @@ function prestigeFraming(name: string, prestige: NonNullable<Chapter["prestige"]
   return [
     `This is an EXTRA STORY of ${name}'s, ${PRESTIGE_FRAMES[prestige.kind]}: ${prestige.premise} It is something ${name} and the protagonist imagine or play out together, for fun, and both of them know it. It is NOT canon: nothing in it happens in the main story, and it changes nothing there.`,
     `It is a ${nodes}-scene story with its own small arc, ending on its last. It is private: no other love interest appears in it. Whatever the frame, both stay themselves at heart; it reveals no secret and resolves nothing of the main story.`,
+  ];
+}
+
+/**
+ * #2155: what P6 adds to his side (`side-<li>-<arc>`, S/story/his-side.ts) in place of the Character Story's framing: the
+ * scene above, told again from his point of view, at the moment's stage (the caller's state).
+ */
+function hisSideFraming(name: string): string[] {
+  return [
+    `This is ${name.toUpperCase()}'S SIDE: the scene above, told again from ${name}'s point of view. The same events in the same order, condensed to this node's length: the lines that matter are said again word for word, every choice and action of the protagonist's stays exactly as it was, nothing new happens, nothing is undone, and it ends where that scene ended. Never repeat the bracketed game markers.`,
+    `The narration stays with ${name}: what ${name} sees, notices and feels in their body. The protagonist is still "you", seen through ${name}'s eyes; where the writing rules speak of what the protagonist feels, write what ${name} feels, and let the protagonist's feelings show only as ${name} reads them. Keep everything How it's written asks but the point of view.`,
+    `${name}'s thoughts show what ${name} wanted, feared and kept back then, in ${name}'s own voice, and only what ${name} knew at that moment, nothing that happened later. How far ${name} admits their feelings, even to themselves, keeps to the romance line on ${name}'s card.`,
+    `A Hidden line on the card is never stated, even in thought; it presses on ${name} only as the tells do. The protagonist never learns any of this.`,
   ];
 }
 
@@ -2301,7 +2336,13 @@ function arcFraming({
   }
   if (chapter.kind === "story") {
     const nodes = chapter.nodes.length;
-    lines.push(...(chapter.prestige ? prestigeFraming(name, chapter.prestige, nodes) : storyFraming(name, nodes)));
+    lines.push(
+      ...(chapter.hisSide
+        ? hisSideFraming(name)
+        : chapter.prestige
+          ? prestigeFraming(name, chapter.prestige, nodes)
+          : storyFraming(name, nodes)),
+    );
   }
   // #1980: the arc's planned reveal, and its big event on the last chapter. Only a stamped node gets a reveal, so the
   // planner's schedule (normalizeChapterPlan) decides what may come out here; everything else stays hidden.

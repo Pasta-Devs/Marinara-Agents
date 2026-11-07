@@ -3,9 +3,9 @@
 // ──────────────────────────────────────────────
 // Both are written once by the story (S/story/*) and only ever read here, so a damaged list item is dropped and a
 // damaged field takes its default; a document with no key or no index reads as missing (null), and is written again.
-// The hidden parts (node guides, the ledger, a node's side-with mark, a main chapter's copy of Your thoughts…, a
-// beat's effects, a date's plan and its scores) are stripped by toChapterView and toBeatView before anything reaches
-// the client.
+// The hidden parts (node guides, the ledger, a node's side-with mark, a main chapter's copy of Your thoughts…, the
+// moment his side retells, a beat's effects, a date's plan and its scores) are stripped by toChapterView and
+// toBeatView before anything reaches the client.
 import { z, type ZodType } from "zod";
 import type {
   Beat,
@@ -26,6 +26,7 @@ import {
   CONFRONTATION_ENDINGS,
   CONFRONTATION_ROUNDS,
   FIRST_STAGE,
+  HIS_SIDE_MOMENTS,
   LAST_STAGE,
   STANCES,
 } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
@@ -41,7 +42,7 @@ import { GIFT_IDS } from "../../../../../client/src/features/otome-forge/shared/
 import { THOUGHTS_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
 import { isChapterKey } from "../ids.js";
 import { PaintSchema, isRecord, readFields, validItems } from "./common.js";
-import { JUDGMENT_ANSWER, JUDGMENT_QUESTION } from "./story-arc.js";
+import { ARCS_MAX, JUDGMENT_ANSWER, JUDGMENT_QUESTION } from "./story-arc.js";
 import { TrackSchema } from "./world.js";
 
 const short = (max = 600) => z.string().max(max);
@@ -245,6 +246,14 @@ export function normalizeChapter(data: unknown): Chapter | null {
       },
       prestige: z.object({ kind: z.enum(PRESTIGE_KINDS), premise: short(600) }).optional(),
       thoughts: z.string().min(1).max(THOUGHTS_MAX).optional(),
+      hisSide: z
+        .object({
+          arc: z.number().int().min(0).max(ARCS_MAX),
+          ref: short(120),
+          moment: z.enum(HIS_SIDE_MOMENTS),
+          stage: z.number().int().min(FIRST_STAGE).max(LAST_STAGE),
+        })
+        .optional(),
     },
     () => ({
       key: data.key as string,
@@ -328,8 +337,8 @@ export function normalizeBeat(data: unknown): Beat | null {
 
 /**
  * The plan as the client sees it: no guides, casts, reveals, ledger, the grievance a repair is for, a date's plan
- * (GET .../dates shows a date), an extra story's premise (#2025) or the Your thoughts… its plan read (#2127; Home shows
- * the player only the ones still waiting).
+ * (GET .../dates shows a date), an extra story's premise (#2025), the Your thoughts… its plan read (#2127; Home shows
+ * the player only the ones still waiting) or the moment his side retells (#2155).
  */
 export function toChapterView(chapter: Chapter): ChapterView {
   const {
@@ -340,6 +349,7 @@ export function toChapterView(chapter: Chapter): ChapterView {
     date: _date,
     prestige: _prestige,
     thoughts: _thoughts,
+    hisSide: _hisSide,
     music,
     ...rest
   } = chapter;

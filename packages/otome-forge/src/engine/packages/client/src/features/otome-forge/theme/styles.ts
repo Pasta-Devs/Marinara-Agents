@@ -2951,6 +2951,15 @@ ${R} .of-route-lock {
 }
 ${R} .of-route-lock svg { flex: none; }
 ${R} .of-route[data-state="rupture"] .of-route-lock svg { color: var(--of-danger); }
+/* #2155: his side of a big moment, waiting under his route; never greyed with a locked or broken route. */
+${R} .of-route-side {
+  display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 14px;
+  border: 1px dashed color-mix(in srgb, var(--of-li-accent, ${PALETTE.rose}) 50%, var(--of-border));
+  background: color-mix(in srgb, var(--of-li-accent, ${PALETTE.rose}) 9%, transparent);
+}
+${R} .of-route-side-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; font-weight: 800; }
+${R} .of-route-side-head svg { flex: none; color: color-mix(in srgb, var(--of-li-accent, ${PALETTE.rose}) 60%, var(--of-text)); }
+${R} .of-route-side-line { margin: 0; font-size: 0.84rem; color: var(--of-text-soft); overflow-wrap: anywhere; }
 /* Settings → Audio: volume sliders with a filled track. */
 ${R} .of-volume-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 ${R} .of-volume-value { font-size: 0.8rem; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--of-accent-text); }

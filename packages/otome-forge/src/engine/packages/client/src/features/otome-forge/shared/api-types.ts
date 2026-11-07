@@ -2,7 +2,7 @@
 // Otome Forge: the wire contract between the package's routes and its client (types only)
 // ──────────────────────────────────────────────
 // Imported by both bundles, so a code or field added on one side has to be handled on the other.
-import type { ClimaxEnding, ClimaxMove, RouteEntry } from "./arcs";
+import type { ClimaxEnding, ClimaxMove, HisSideEntry, HisSideMoment, RouteEntry } from "./arcs";
 import type { ContentSettings, ImageRating, LimitId } from "./content";
 import type { DatePlan, DateScore } from "./dates";
 import type { Prestige, PrestigeKind } from "./economy";
@@ -23,6 +23,8 @@ export type {
   CloserEnding,
   CloserMove,
   ConfrontationEnding,
+  HisSideEntry,
+  HisSideMoment,
   RouteEntry,
   RouteNext,
   Stance,
@@ -740,6 +742,19 @@ export interface LiState {
    * them carry it (S/prompts.ts knowsAboutYou); the player reads, rewrites and deletes it.
    */
   known: NotebookEntry[];
+  /**
+   * #2155: the big moment of each story arc his side may retell, one per arc (the newest replaces it until his side of
+   * that arc is written). Never sent to the client.
+   */
+  hisSide: HisSideNote[];
+}
+
+/** #2155: a big moment his side may retell. `ref` is `${key}/${i}`, the beat it happened in; `stage` his stage then. */
+export interface HisSideNote {
+  arc: number;
+  ref: string;
+  moment: HisSideMoment;
+  stage: number;
 }
 
 /** A chapter's reading progress. `applied` holds `${i}/${choiceId}` for every pick whose effects reached the state. */
@@ -953,6 +968,11 @@ export interface Chapter {
    * from the client).
    */
   thoughts?: string;
+  /**
+   * #2155: his side (kind "story", key `side-<li>-<arc>`): the moment it tells again from his point of view (hidden from
+   * the client).
+   */
+  hisSide?: HisSideNote;
 }
 
 /** A segment of a beat: one line of dialogue, one thought, or one piece of narration. */
@@ -1157,7 +1177,7 @@ export type BeatState = "unwritten" | "ready" | "read";
 /** A chapter as the client sees it: no guides and no ledger (the plan is the hidden story). */
 export type ChapterView = Omit<
   Chapter,
-  "nodes" | "ledger" | "connectionId" | "date" | "music" | "prestige" | "thoughts"
+  "nodes" | "ledger" | "connectionId" | "date" | "music" | "prestige" | "thoughts" | "hisSide"
 > & {
   music?: Pick<ChapterMusic, "track">;
   nodes: Array<Pick<ChapterNode, "i" | "kind" | "moment" | "cg" | "gate">>;
@@ -1282,6 +1302,8 @@ export interface StoryView {
    * /runs/:run/prestige/:li writes it). Optional while an older view is cached.
    */
   prestige?: PrestigeEntry[];
+  /** #2155: each love interest's side waiting in Routes, or being read. Optional while an older view is cached. */
+  hisSides?: HisSideEntry[];
 }
 
 /** An unlocked extra story waiting to be written (#2025). */
@@ -1325,6 +1347,8 @@ export interface ReadResult {
   stageUp?: { li: LiId; stage: number };
   /** M2b: this read finished a repair chapter, and the rupture with him is closed. */
   repaired?: LiId;
+  /** #2155: this read was a big moment his side of this arc will retell. */
+  hisSide?: LiId;
 }
 
 /**
