@@ -11,7 +11,7 @@
 //
 // Resolution: composure starts at 2 and moves by each picked option's own −1, 0 or +1 within 0–4 (SH/arcs.ts). After
 // round 3, 0 is the truth (trust +1), 4 a walkout (a major grievance he holds, or a rupture when trust is at −2 or
-// below), anything else a standoff (tension +1). Each Reveal records her disclosure. All of it is first play only:
+// below, as long as #2156's once-an-arc rule allows: S/state/relationship.ts), anything else a standoff (tension +1). Each Reveal records her disclosure. All of it is first play only:
 // every stance is saved on the beat once, and its effects reach `${R}:state` through applyChoiceEffects, whose
 // `applied` entries (`${i}/stance-<k>`, `${i}/confrontation`) make each land exactly once, with the per-beat and
 // per-chapter clamps. Everything here is pure.
@@ -482,13 +482,14 @@ function withOpenedUp(state: RunState, li: LiId, chapter: Pick<Chapter, "key" | 
  * Every effect the beat's saved moves have earned and the state does not have yet: each Reveal's (Mirror's)
  * disclosure, and the ending's effects once it is reached, with an Opened up Closer's first. A replay, or an effect
  * that already landed, changes nothing. The walkout reads trust from the state it lands on, so the rupture rule sees
- * the trust of that moment.
+ * the trust of that moment. `arc` is the story arc it lands in (#2156: his grievance opens once an arc).
  */
 export function applyConfrontation(
   state: RunState,
   chapter: Pick<Chapter, "key" | "nodes" | "title">,
   beat: Pick<Beat, "i" | "confrontation">,
   at: string,
+  arc?: number,
 ): ConfrontationOutcome {
   const confrontation = beat.confrontation;
   if (!confrontation) return { state, remembered: false, rememberedBy: [] };
@@ -502,6 +503,7 @@ export function applyConfrontation(
       choice,
       resolves: chapter.nodes[beat.i]?.resolves ?? [],
       at,
+      arc,
     });
     next = outcome.state;
     for (const li of outcome.rememberedBy) rememberedBy.add(li);

@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.16.0 — 2026-11-07
+
+- **Grievances.** Only a serious break now leaves a love interest with a grievance against you, at most once a story arc. Until you make it right they can't lead a chapter, their affection doesn't grow and your dates with them wait, with nothing lost. After two story chapters of space, **Make it right** in Routes plans the one chapter that clears it, for 300 affection. A grievance from before needs no space.
+- **I'm upset with them.** Tell a love interest from Routes that you're upset with them (1 call: they answer in Messages), and take it back any time. They know it in their messages and in the story, and may ask you out once to clear the air: accept, and it's your next Date Night with them, somewhere they choose.
+
 ## 0.11.0 — 2026-11-07
 
 - **Tarot night.** A new date in Dates: three cards of the Major Arcana, as Past, Present and Future. A love interest reads your cards and answers your question, or you read theirs, choosing how to read each card, spoken in your persona's voice. A reading pays 40 Starlight and 40 affection within the day's caps, costs 1 model call, changes nothing in the story, and only they remember it. A reading you leave opens again: when they read your cards, from its start; when you read theirs, at the card you still have to read.

@@ -21,7 +21,7 @@ import {
 import { OtomeForgeError, debugModeOf, parseBody, runParam, type OtomeRouter, type RouteDeps } from "../http.js";
 import { isLiId, runDocTarget, stateId, unitId } from "../ids.js";
 import { finishClawRound, playView } from "../minigames/claw.js";
-import { makeItRightView } from "../minigames/date-night.js";
+import { assertFreeToDate, dateNightView } from "../minigames/date-night.js";
 import { ensurePlushArt } from "../minigames/plush.js";
 import { normalizeState, readRun } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
@@ -57,7 +57,7 @@ export function registerClawRoutes(
             error instanceof Error ? error.message : String(error),
           ),
       );
-      const dates = await makeItRightView(store, runId, run.state);
+      const dates = await dateNightView(store, runId, run.state);
       return playView(run.state, run.units, forgeDayKey(Date.now()), dates);
     }),
   );
@@ -70,6 +70,8 @@ export function registerClawRoutes(
       if (!isLiId(body.li)) throw liNotFound();
       const unit = await store.readDoc(unitId(runId, body.li), normalizeUnit);
       if (!unit) throw liNotFound();
+      // #2156: a round pays nothing, and is not counted, while his grievance with her stands.
+      await assertFreeToDate(store, runId, body.li);
       const at = new Date().toISOString();
       const dayKey = forgeDayKey(Date.now());
       // Set by the change that was saved (updateDoc applies it again after a stale revision).

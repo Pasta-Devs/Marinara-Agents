@@ -250,6 +250,9 @@ export const defaultLiState = (): LiState => ({
   chapterDelta: {},
   grievances: [],
   rupture: null,
+  grievanceArc: null,
+  upset: null,
+  asked: null,
   disclosures: [],
   revealed: [],
   lastLead: null,
@@ -268,7 +271,13 @@ function normalizeLiState(raw: unknown): LiState {
       tension: (value) => wholeNumber(value, 0, TENSION_MIN, TENSION_MAX),
       chapterDelta: readChapterDelta,
       grievances: (value) => validItems(GrievanceSchema, value, LIST_MAX),
-      rupture: z.object({ grievanceId: short(80), since: z.string() }).nullable(),
+      // #2156: a rupture without `space` (saved before it) has its space waived.
+      rupture: z
+        .object({ grievanceId: short(80), since: z.string(), space: z.number().int().min(0).optional() })
+        .nullable(),
+      grievanceArc: z.number().int().min(0).nullable(),
+      upset: z.object({ since: z.string().max(40) }).nullable(),
+      asked: z.string().max(40).nullable(),
       disclosures: (value) => validItems(DisclosureSchema, value, LIST_MAX),
       revealed: (value) => validItems(short(80), value, LIST_MAX),
       lastLead: z.number().int().min(0).nullable(),

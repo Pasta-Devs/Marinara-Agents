@@ -23,12 +23,17 @@
 // Stickers (#2044): a message names a sticker by id (SH/stickers.ts); one saved before names his face and still reads.
 // The player may send the protagonist's five and, with images on, his painted ones (S/art/stickers.ts
 // sendableStickers); P17 offers him the same, and his bracketed sticker becomes the message's id.
+// #2156: while she is upset with him (LiState.upset, S/phone/upset.ts), P17 tells him so, and offers him once, until
+// she takes it back and tells him again, to ask her out to clear the air (inviteOffered): only while he holds no
+// grievance of his own and no evening she accepted waits. Whether he asks is his; his invitation rides on his last
+// message (`invite`, pending until she answers it in the thread).
 import { randomBytes } from "node:crypto";
 import { forgeChatHistoryPage, forgeChatReplyBusy, withForgeChatSend } from "@forge-kit/chat-continuity-server.mjs";
 import { forgeChatRecallQuery } from "@forge-kit/story-memory-integration.mjs";
 import { z, type ZodType } from "zod";
 import type {
   LiId,
+  LiState,
   PhoneHistoryPage,
   PhoneListView,
   PhoneMessage,
@@ -37,6 +42,7 @@ import type {
   PhoneThread,
   Unit,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import { heldAgainst } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { FACES } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { STICKER_ID } from "../../../../../client/src/features/otome-forge/shared/stickers.js";
 import { sendableStickers, stickerBook, stickerLookup } from "../art/stickers.js";
@@ -78,6 +84,7 @@ export const SESSION_NAME_MAX = 200;
 const MESSAGE_DISPLAY = {
   sticker: z.union([z.enum(FACES), z.string().regex(STICKER_ID)]),
   quote: z.string().max(STORED_QUOTE_MAX),
+  invite: z.object({ status: z.enum(["pending", "accepted", "declined", "lapsed"]) }),
 };
 const SESSION_DISPLAY = { name: z.string().max(SESSION_NAME_MAX) };
 
@@ -88,6 +95,7 @@ const MessageSchema: ZodType<PhoneMessage> = z.object({
   sticker: MESSAGE_DISPLAY.sticker.optional(),
   at: z.string().min(1),
   quote: MESSAGE_DISPLAY.quote.optional(),
+  invite: MESSAGE_DISPLAY.invite.optional(),
 });
 
 const SessionSchema: ZodType<PhoneSession> = z.object({
@@ -303,6 +311,19 @@ export function replyStickers(runId: string, run: RunDocuments, li: LiId): Reply
 }
 
 /**
+ * #2156: whether P17 offers him the invitation to clear the air: she is upset with him, he holds no grievance of his
+ * own, no evening she accepted waits, and he has not asked since she told him (once an upset: a decline ends it).
+ */
+export function inviteOffered(
+  liState: Pick<LiState, "upset" | "asked" | "rupture" | "grievances">,
+  thread: PhoneThread,
+) {
+  const since = liState.upset ? Date.parse(liState.upset.since) : NaN;
+  if (Number.isNaN(since) || liState.asked || heldAgainst(liState)) return false;
+  return !thread.messages.some((message) => message.invite && Date.parse(message.at) >= since);
+}
+
+/**
  * P17 for his thread as read (`thread`, with `run` and his `unit`): his messages, not saved yet.
  * The reply to her waits in the run's foreground queue (answer); a daily message (`first`) runs in a background job on
  * that job's connection (`connectionId`, S/phone/daily.ts). Both recall as his own reader, with his knowledge boundary.
@@ -312,9 +333,15 @@ async function writeReply(
   runId: string,
   li: LiId,
   { run, unit, thread }: { run: RunDocuments; unit: Unit; thread: PhoneThread },
-  { debugMode, first = false, connectionId }: { debugMode: boolean; first?: boolean; connectionId?: string },
+  {
+    debugMode,
+    first = false,
+    connectionId,
+    reason,
+  }: { debugMode: boolean; first?: boolean; connectionId?: string; reason?: "upset" },
 ): Promise<PhoneMessage[]> {
   const names = { li: unit.name, player: run.player.name || "the protagonist" };
+  const invite = inviteOffered(run.state.lis[li]!, thread);
   const tail = openMessages(thread).slice(-TAIL_MESSAGES);
   const memories = thread.sessions.slice(-LISTED_SESSIONS);
   const story = await recallText(deps, runId, {
@@ -341,10 +368,12 @@ async function writeReply(
       offscreen,
       first,
       stickers,
+      invite,
+      reason,
     }),
     memory: story,
     schema: ChatReplySchema,
-    normalize: (raw) => normalizeChatReply(raw, names, [...stickers.his, ...stickers.yours]),
+    normalize: (raw) => normalizeChatReply(raw, names, [...stickers.his, ...stickers.yours], invite),
     maxTokens: 1200,
     debugMode,
     ...(connectionId ? { lane: "background" as const, connectionId } : { lane: "foreground" as const }),
@@ -352,12 +381,13 @@ async function writeReply(
   // generateJson returns what normalizeChatReply made of the reply.
   const written = value as ChatReply;
   const at = new Date().toISOString();
-  return written.messages.map((message) => ({
+  return written.messages.map((message, index, all) => ({
     id: newMessageId(),
     who: "li",
     text: message.text,
     ...(message.sticker ? { sticker: message.sticker } : {}),
     at,
+    ...(written.invite && index === all.length - 1 ? { invite: { status: "pending" as const } } : {}),
   }));
 }
 
@@ -396,19 +426,26 @@ async function answer(deps: PhoneDeps, runId: string, li: LiId, debugMode: boole
  * A daily message (S/phone/daily.ts): he writes first, in a background job on `connectionId`, inside the thread's lock
  * (the caller's inThreadLock). Null, before anything is sent, when the open conversation waits on her message. The
  * message lands after his newest one only while the thread still ends where it was read (a 409 `conflict` drops it),
- * and the player's seenAt is left alone, so it counts as unread.
+ * and the player's seenAt is left alone, so it counts as unread. `reason` "upset" (#2156, S/phone/upset.ts): his
+ * answer to her telling him she is upset with him, the same way.
  */
 export async function writeFirstMessage(
   deps: PhoneDeps,
   runId: string,
   li: LiId,
-  { connectionId, debugMode }: { connectionId: string; debugMode: boolean },
+  { connectionId, debugMode, reason }: { connectionId: string; debugMode: boolean; reason?: "upset" },
 ): Promise<PhoneMessage[] | null> {
   const { run, unit } = await loadThreadRun(deps, runId, li);
   const thread = (await readThread(deps.store, runId, li)) ?? emptyThread(li);
   if (openMessages(thread).at(-1)?.who === "player") return null;
   const newest = thread.messages.at(-1)?.id ?? null;
-  const written = await writeReply(deps, runId, li, { run, unit, thread }, { debugMode, first: true, connectionId });
+  const written = await writeReply(
+    deps,
+    runId,
+    li,
+    { run, unit, thread },
+    { debugMode, first: true, connectionId, reason },
+  );
   await saveThread(deps, runId, li, (current) => {
     if ((current.messages.at(-1)?.id ?? null) !== newest) {
       throw conflict("The thread changed while his message was written.");

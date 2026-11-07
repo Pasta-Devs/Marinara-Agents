@@ -337,7 +337,16 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
         onOpenRemind={() => go("remind")}
       />
     ) : screen === "phone" && activeRun && view ? (
-      <PhoneScreen runKey={activeRun} view={view} open={phoneOpen} onOpenChange={setPhoneOpen} />
+      <PhoneScreen
+        runKey={activeRun}
+        view={view}
+        open={phoneOpen}
+        onOpenChange={setPhoneOpen}
+        onDate={(li) => {
+          setDatesLi(li);
+          go("date-night");
+        }}
+      />
     ) : screen === "remind" && activeRun && view ? (
       <RemindMe runKey={activeRun} view={view} onOpenTracker={() => openSettings("tracker")} />
     ) : screen === "dates" && activeRun && view ? (

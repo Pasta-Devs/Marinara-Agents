@@ -6,6 +6,8 @@
 // POST /runs/:run/phone/:li/send {text?, quote?, sticker?, id?, retry?} → PhoneSendResult {messages, suggestions}
 // POST /runs/:run/phone/:li/close                                    → PhoneCloseResult {memory, grants}
 // POST /runs/:run/phone/:li/seen {last?}                             → {}
+// POST /runs/:run/phone/:li/invite {message, accept}                 → {status} (#2156): her answer to his invitation
+//      to clear the air (S/phone/upset.ts): 409 `locked` while he needs space, 409 `conflict` once it lapsed
 // POST /runs/:run/phone/due {open?}                                  → PhoneDueResult {status, latest}: the daily
 //      messages' heartbeat (S/phone/daily.ts), with the thread the player has open, if any
 // A thread has one send or close in flight at a time: another is a 409 `busy`. Writing his reply or the memory may fail
@@ -18,6 +20,7 @@ import { field } from "../schemas/common.js";
 import { MESSAGE_ID, markSeen, phoneList, sendMessage, threadPage } from "../phone/chat.js";
 import { noteOpenThread, phoneDue } from "../phone/daily.js";
 import { closeAndRemember } from "../phone/memory.js";
+import { answerInvite } from "../phone/upset.js";
 import { MESSAGE_TEXT_MAX, NOTE_QUOTE_MAX } from "../phone/replies.js";
 
 const SendBody = z.object({
@@ -30,6 +33,7 @@ const SendBody = z.object({
 const SeenBody = z.object({ last: z.string().max(60).optional() });
 const DueBody = z.object({ open: z.string().max(80).nullable().optional() });
 const NoFields = z.object({});
+const InviteBody = z.object({ message: z.string().min(1).max(60), accept: z.boolean() });
 
 export const registerPhoneRoutes: RegisterRoutes = (router, deps) => {
   const { handle } = deps;
@@ -88,6 +92,15 @@ export const registerPhoneRoutes: RegisterRoutes = (router, deps) => {
       const { runId } = runParam(request);
       await markSeen(deps, runId, liParam(request), last);
       return {};
+    }),
+  );
+
+  router.post(
+    "/runs/:run/phone/:li/invite",
+    handle(async (request) => {
+      const body = parseBody(InviteBody, request.body);
+      const { runId } = runParam(request);
+      return answerInvite(deps, runId, liParam(request), body);
     }),
   );
 };

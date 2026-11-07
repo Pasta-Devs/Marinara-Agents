@@ -70,6 +70,8 @@ export interface RouteEntry {
   li: LiId;
   stage: number;
   next: RouteNext | null;
+  /** #2156: the protagonist has told him she is upset with him (LiState.upset), at any stage. */
+  upset: boolean;
 }
 
 /** `route-<li>-<stage>`: the route chapter that opens `stage` for him. */
@@ -81,9 +83,13 @@ export const repairChapterKey = (li: LiId, n: number) => `repair-${li}-${n}`;
  * Where his arc stands (plan M2b "Stage logic"): his stage, and the route chapter for the next one, unlocked once his
  * affection level reaches the stage's level and no rupture stands.
  */
-export function routeStatus(li: LiId, liState: { stage: number; points: number; rupture: unknown | null }): RouteEntry {
+export function routeStatus(
+  li: LiId,
+  liState: { stage: number; points: number; rupture: unknown | null; upset?: unknown | null },
+): RouteEntry {
   const stage = stageRow(liState.stage).stage;
-  if (stage >= LAST_STAGE) return { li, stage, next: null };
+  const upset = !!liState.upset;
+  if (stage >= LAST_STAGE) return { li, stage, next: null, upset };
   const row = stageRow(stage + 1);
   const level = row.unlockLevel ?? 1;
   const blockedBy: RouteBlock | null = liState.rupture ? "rupture" : null;
@@ -97,6 +103,7 @@ export function routeStatus(li: LiId, liState: { stage: number; points: number; 
       requires: { level },
       blockedBy,
     },
+    upset,
   };
 }
 
@@ -129,8 +136,13 @@ export function endingFor(composure: number): ConfrontationEnding {
   return composure <= COMPOSURE_MIN ? "truth" : composure >= COMPOSURE_MAX ? "walkout" : "standoff";
 }
 
-/** A walkout opens a rupture instead of a major grievance when trust is at or below this. */
+/**
+ * A walkout opens a rupture instead of a major grievance when trust is at or below this. #2156: so does a scene's
+ * rupture only when his trust after that pick is at or below it (S/state/relationship.ts), at most once a story arc.
+ */
 export const WALKOUT_RUPTURE_TRUST = -2;
+/** #2156: the main chapters read to the end, after his grievance began, before his repair opens. */
+export const GRIEVANCE_SPACE_CHAPTERS = 2;
 
 // ── The Closer (#1938, a story node): the warm climax, three rounds of Reassure, Tease, Mirror or Ask ──
 
