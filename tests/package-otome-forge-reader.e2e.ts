@@ -3199,8 +3199,20 @@ test("Otome Hearth real Engine card's sprite is a new story's portrait without a
       async (route) => {
         const response = await route.fetch();
         const body = await response.json();
-        body.view.forge.phase = "ready";
-        body.view.world.forge.phase = "ready";
+        if (body?.view) {
+          body.view.forge.phase = "ready";
+          body.view.world.forge.phase = "ready";
+        }
+        await route.fulfill({ response, json: body });
+      },
+    );
+    // Other tests on this server make stories too, and Otome opens the index's active one: keep it this story.
+    await page.route(
+      (url) => url.pathname === "/api/otome-forge/index" || url.pathname === "/api/otome-forge/index/opened",
+      async (route) => {
+        const response = await route.fetch();
+        const body = await response.json();
+        if (body?.index) body.index.activeRun = runKey;
         await route.fulfill({ response, json: body });
       },
     );
