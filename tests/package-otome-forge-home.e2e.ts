@@ -15,6 +15,9 @@
 // and Reply), her name, the top bar or the dock.
 // #2127: Your thoughts… beside Remind Me sends what the protagonist is thinking for the next chapter (Enter starts a new
 // line, a failure says so, the window opens with them to change, Clear lets them go), with a dot while they wait.
+// #2152: touch on Home at 1280x800 and 390x844: head, cheek, chest and hand, Cheek bringing its own face, voiced; under
+// NSFW Heat a Crotch zone by Tab and Enter and by pointer over the middle of the hand band, with Hand on its side, gone
+// during a rupture and for a cached pack once Heat is SFW; four or five zones or pills at every phone size.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-home.e2e.ts
 import { expect, test, type Locator, type Page } from "./fixtures/package-browser.ts";
 import { readFileSync } from "node:fs";
@@ -51,9 +54,14 @@ const CURT_NOTE = "The audit will not wait.";
 const WARM_AGAIN = "The lab is quiet again. Come by when you can.";
 const HIS_LINES = {
   head: ["Careful with the hair.", "Again. Fine.", "You are bold today."],
+  cheek: ["My face is not a canvas.", "Warm hands. Noted.", "Do not look so pleased."],
   hand: ["Cold hands. Stay a moment.", "Hold on, then.", "Fine. Just this once."],
   heart: ["That is my heart.", "Steady. It only beats.", "Too close. Stay."],
+  // #2152: written only under NSFW Heat.
+  crotch: ["Bold. Keep going and see.", "Your hand is wandering.", "Lower and I stop pretending."],
 };
+/** #2152: the face his pack names for each zone (his cheek's is not painted, so his figure names it). */
+const HIS_FACES = { head: "tender", cheek: "hurt", heart: "flustered", hand: "tender", crotch: "flustered" };
 const ANNOYED = ["Enough. I mean it.", "I am not a bell.", "Patience. Mine is thinning.", "One more and I leave."];
 
 /** A tiny solid PNG as a data: URL (the CSP allows data: images). */
@@ -140,6 +148,11 @@ function createHomeStub({
   photo = false,
   // The story memory's status (GET .../memory/status); without it the route is a 404 and no memory banner shows.
   memory = null as Json | null,
+  // #2152: the world's Heat; his lines hold crotch under NSFW Heat, or with `crotchLines` (a pack cached from before
+  // Heat was lowered). `cameo` stands his look as an Engine card avatar (a cameo with pills).
+  heat = "sfw" as "sfw" | "fade" | "explicit",
+  crotchLines = false,
+  cameo = false,
 } = {}) {
   const calls: Call[] = [];
   const state = {
@@ -171,7 +184,7 @@ function createHomeStub({
       mystery: { question: "Who stopped the clocks?" },
       web: [],
       openingSituation: "",
-      content: { heat: "sfw", darkness: "angst", limits: {}, custom: [] },
+      content: { heat, darkness: "angst", limits: {}, custom: [] },
       images: { connectionId: images ? "conn-image" : null, rating: "sfw", ask: false, expressions: true },
       connections: { narration: "conn-text" },
       forge: { phase: "ready", steps: [] },
@@ -324,9 +337,11 @@ function createHomeStub({
           : worn && home.li === ILVAR
             ? { url: HIS_WORN, source: "look", cutout: HIS_WORN_CUT, cutoutState: "ready" }
             : images && home.li === ILVAR
-              ? faceCutouts
-                ? { url: PORTRAIT, source: "look", cutout: PORTRAIT_CUT, cutoutState: "ready" }
-                : { url: PORTRAIT, source: "look", cutoutState: "uncut" }
+              ? cameo
+                ? { url: PORTRAIT, source: "avatar", cutoutState: "uncut" }
+                : faceCutouts
+                  ? { url: PORTRAIT, source: "look", cutout: PORTRAIT_CUT, cutoutState: "ready" }
+                  : { url: PORTRAIT, source: "look", cutoutState: "uncut" }
               : null;
       homeReads += 1;
       if (home.show === "me") meReads += 1;
@@ -400,6 +415,7 @@ function createHomeStub({
     const lines = /^\/runs\/[^/]+\/lis\/([^/]+)\/lines$/u.exec(path);
     if (lines) {
       const tap = (pool: string[]) => ({ morning: pool, day: pool, night: pool });
+      const crotch = heat !== "sfw" || crotchLines;
       return {
         status: 200,
         json: images
@@ -409,7 +425,14 @@ function createHomeStub({
               rupture: state.rupture,
               tap: state.rupture
                 ? null
-                : { head: tap(HIS_LINES.head), hand: tap(HIS_LINES.hand), heart: tap(HIS_LINES.heart) },
+                : {
+                    head: tap(HIS_LINES.head),
+                    cheek: tap(HIS_LINES.cheek),
+                    hand: tap(HIS_LINES.hand),
+                    heart: tap(HIS_LINES.heart),
+                    ...(crotch ? { crotch: tap(HIS_LINES.crotch) } : {}),
+                  },
+              faces: state.rupture ? {} : HIS_FACES,
               annoyed: state.rupture ? [] : ANNOYED,
               cold: ["Not now.", "Leave it."],
               comfort: ["Sit. Tea first, then everything else."],
@@ -420,6 +443,7 @@ function createHomeStub({
               stage: 1,
               rupture: state.rupture,
               tap: null,
+              faces: {},
               annoyed: [],
               cold: [],
               comfort: [],
@@ -755,11 +779,11 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
   expect(tapVoice.cacheKey).toMatch(new RegExp(`^otome-forge:${RUN}:tap:${ILVAR}:[0-9a-z]+$`, "u"));
   // A real pointer on his chest (he breathes, so the zone never holds still for a locator click): the rows over him
   // let the tap through.
-  const heart = (await zones.getByRole("button", { name: "Heart" }).boundingBox())!;
+  const heart = (await zones.getByRole("button", { name: "Chest" }).boundingBox())!;
   await page.mouse.click(heart.x + heart.width / 2, heart.y + heart.height / 2);
   await expect(bubble).toHaveText(anyOf(HIS_LINES.heart));
-  await zones.getByRole("button", { name: "Heart" }).focus();
-  await expect(zones.getByRole("button", { name: "Heart" })).toBeFocused();
+  await zones.getByRole("button", { name: "Chest" }).focus();
+  await expect(zones.getByRole("button", { name: "Chest" })).toBeFocused();
   for (let tap = 0; tap < 4; tap++) await page.keyboard.press("Enter");
   await expect(bubble).toHaveAttribute("data-mode", "annoyed");
   expect(ANNOYED).toContain(await bubble.textContent());
@@ -829,14 +853,14 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
   await expect(root.locator(".of-quote-chip")).toContainText(WARM_AGAIN);
   await root.getByRole("textbox", { name: "Message Ilvar Thorne" }).fill("I left it on for you.");
   await root.getByRole("button", { name: "Send", exact: true }).click();
-  await expect(root.getByText("Barely. The data kept me company.")).toBeVisible();
+  await expect(root.getByText("Barely. The data kept me company.", { exact: true })).toBeVisible();
   expect(posts(stub, "/send")[0]!.body).toMatchObject({ text: "I left it on for you.", quote: WARM_AGAIN });
   await expect(root.locator(".of-quote-chip")).toHaveCount(0);
   // Settings and back: the phone opens on his thread again, and the quote that went with her message stays spent.
   await root.getByRole("button", { name: "Settings", exact: true }).click();
   await root.getByRole("button", { name: "Back", exact: true }).click();
   await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeFocused();
-  await expect(root.getByText("Barely. The data kept me company.")).toBeVisible();
+  await expect(root.getByText("Barely. The data kept me company.", { exact: true })).toBeVisible();
   await expect(root.locator(".of-quote-chip")).toHaveCount(0);
   for (const loop of await sceneLoops.all()) await expect(loop).toHaveCSS("animation-play-state", "running");
   await expect(scene).toHaveCSS("opacity", "1");
@@ -847,6 +871,85 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
   );
   expect(scrolled).toEqual([]);
   expect(pageErrors).toEqual([]);
+});
+
+// #2152: touch on Home on a desktop and an iPhone-sized window. Cheek by pointer brings his pack's face for it, voiced;
+// under NSFW Heat a Crotch zone stands over the middle of the hand band, reached by Tab and Enter and by a pointer,
+// while Hand still takes its sides; a pack cached from before Heat was lowered brings no Crotch, nor does a rupture.
+for (const size of [
+  { width: 1280, height: 800 },
+  { width: 390, height: 844 },
+]) {
+  test(`Otome Hearth Home touch at ${size.width}x${size.height}: Cheek with its face, and Crotch only under NSFW Heat`, async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize(size);
+    const stub = createHomeStub({ heat: "explicit" });
+    const pageErrors: string[] = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    await stubRoutes(page, stub, []);
+    const root = await openHome(page);
+    await recordSpeech(page);
+    await expect(root.getByRole("article", { name: "A note from Ilvar Thorne" })).toContainText(NOTE);
+    const zones = root.getByRole("group", { name: "Touch Ilvar Thorne" });
+    await expect(zones.getByRole("button")).toHaveCount(5);
+    expect(await zones.getByRole("button").evaluateAll((nodes) => nodes.map((node) => node.ariaLabel))).toEqual([
+      "Head",
+      "Cheek",
+      "Chest",
+      "Hand",
+      "Crotch",
+    ]);
+    const requests = apiRequests(page);
+    const bubble = root.locator(".of-home-bubble");
+    const figure = root.locator(".of-figure");
+    // A real pointer on his cheek (he breathes, so the zone never holds still for a locator click).
+    const cheek = (await zones.getByRole("button", { name: "Cheek" }).boundingBox())!;
+    await page.mouse.click(cheek.x + cheek.width / 2, cheek.y + cheek.height / 2);
+    await expect(bubble).toHaveText(anyOf(HIS_LINES.cheek));
+    await expect(figure).toHaveAttribute("data-face", HIS_FACES.cheek);
+    await expect(root.getByRole("img", { name: "Ilvar Thorne, hurt" })).toBeVisible();
+    await expect.poll(async () => (await voiced(page)).at(-1)?.text).toBe(await bubble.textContent());
+    expect((await voiced(page)).at(-1)!.cacheKey).toMatch(new RegExp(`:tap:${ILVAR}:`, "u"));
+
+    // Tab from Hand reaches Crotch, and Enter touches it.
+    await zones.getByRole("button", { name: "Hand" }).focus();
+    await page.keyboard.press("Tab");
+    await expect(zones.getByRole("button", { name: "Crotch" })).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(bubble).toHaveText(anyOf(HIS_LINES.crotch));
+    await expect(figure).toHaveAttribute("data-face", HIS_FACES.crotch);
+    await page.screenshot({ path: testInfo.outputPath("touch-crotch.png") });
+    // A pointer in the middle of the hand band touches the crotch; one on its side touches his hand.
+    const hand = (await zones.getByRole("button", { name: "Hand" }).boundingBox())!;
+    await page.mouse.click(hand.x + hand.width / 2, hand.y + hand.height / 2);
+    await expect(bubble).toHaveText(anyOf(HIS_LINES.crotch));
+    await page.mouse.click(hand.x + hand.width * 0.9, hand.y + hand.height / 2);
+    await expect(bubble).toHaveText(anyOf(HIS_LINES.hand));
+    expect(requests).toEqual([]);
+
+    // A rupture: no warm lines, so no Crotch, and the others answer coldly.
+    stub.state.rupture = true;
+    await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Story" }).click();
+    await root.getByRole("button", { name: "Home with Ilvar Thorne" }).click();
+    await expect(zones.getByRole("button")).toHaveCount(4);
+    await expect(zones.getByRole("button", { name: "Crotch" })).toHaveCount(0);
+    expect(pageErrors).toEqual([]);
+  });
+}
+
+test("Otome Hearth Home touch: a pack cached from before Heat was lowered brings no Crotch in an SFW story", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const stub = createHomeStub({ heat: "sfw", crotchLines: true });
+  await stubRoutes(page, stub, []);
+  const root = await openHome(page);
+  await expect(root.getByRole("article", { name: "A note from Ilvar Thorne" })).toContainText(NOTE);
+  const zones = root.getByRole("group", { name: "Touch Ilvar Thorne" });
+  await expect(zones.getByRole("button")).toHaveCount(4);
+  await expect(zones.getByRole("button", { name: "Crotch" })).toHaveCount(0);
 });
 
 test("Otome Forge phone: a thread with typing, his sticker, her sticker and Close and remember", async ({
@@ -1438,9 +1541,13 @@ function homeLayout(root: Locator) {
     const named = (selector: string, name: (node: Element) => string) =>
       [...element.querySelectorAll(selector)].map((node) => ({ name: name(node), box: box(node) }));
     const label = (node: Element) => (node.getAttribute("aria-label") ?? node.textContent ?? "").trim().slice(0, 24);
+    // #2152: the crotch zone sits over the middle of the hand band, so Hand is probed on its exposed inline end (its
+    // start may stop at the cell's edge, beside the rail).
+    const crotch = !!element.querySelector('.of-tap-zone[data-zone="crotch"]');
     const targets = [...element.querySelectorAll(".of-tap-zone, .of-tap-pill")].map((node) => {
       const rect = node.getBoundingClientRect();
-      const hit = scope.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+      const across = crotch && node.matches('.of-tap-zone[data-zone="hand"]') ? 0.9 : 0.5;
+      const hit = scope.elementFromPoint(rect.x + rect.width * across, rect.y + rect.height / 2);
       return { name: label(node), box: box(node), hit: !!hit && node.contains(hit) };
     });
     return {
@@ -1504,23 +1611,41 @@ async function showCaringMessage(page: Page, root: Locator) {
   await expect(root.getByRole("button", { name: "Caring message" })).toBeVisible();
 }
 
-// #2087: the same sweep again with a Photo Shoot photo taped into the note.
-for (const [images, photo] of [
-  [true, false],
-  [false, false],
-  [true, true],
+// #2087: the same sweep again with a Photo Shoot photo taped into the note. #2152: and under NSFW Heat, with his
+// fifth zone (the crotch), over his art, under his initials and under an Engine card's avatar cameo.
+for (const [images, photo, nsfw, cameo] of [
+  [true, false, false, false],
+  [false, false, false, false],
+  [true, true, false, false],
+  [true, false, true, false],
+  [false, false, true, false],
+  [true, false, true, true],
 ] as const) {
-  for (const look of ["dark", "light"] as const) {
-    test(`Otome Forge Home at phone sizes (${images ? "painted" : "no images"}${photo ? ", a photo in the note" : ""}, ${look === "dark" ? "Midnight" : "Pearl"}): nothing covers a tap zone or pill`, async ({
+  for (const look of nsfw ? (["dark"] as const) : (["dark", "light"] as const)) {
+    test(`Otome Forge Home at phone sizes (${cameo ? "card avatar" : images ? "painted" : "no images"}${photo ? ", a photo in the note" : ""}${nsfw ? ", NSFW Heat" : ""}, ${look === "dark" ? "Midnight" : "Pearl"}): nothing covers a tap zone or pill`, async ({
       page,
     }) => {
       test.setTimeout(120_000);
       await page.emulateMedia({ colorScheme: look });
-      const stub = createHomeStub({ images, photo });
+      const stub = createHomeStub({ images, photo, heat: nsfw ? "explicit" : "sfw", cameo });
+      // Without images his lines are the catalog's, so the crotch needs a pack of his own.
+      if (nsfw && !images) {
+        const answer = stub.answer;
+        stub.answer = async (call) => {
+          const response = await answer(call);
+          if (/\/lis\/[^/]+\/lines$/u.test(call.path)) {
+            const pool = { morning: HIS_LINES.crotch, day: HIS_LINES.crotch, night: HIS_LINES.crotch };
+            (response.json as Json).tap = { crotch: pool };
+          }
+          return response;
+        };
+      }
       await stubRoutes(page, stub, []);
       const root = await openHome(page);
       await expect(root.getByRole("article", { name: "A note from Ilvar Thorne" })).toContainText(NOTE);
-      await expect(root.locator(images ? ".of-tap-zone" : ".of-tap-pill")).toHaveCount(3);
+      const count = nsfw ? 5 : 4;
+      const pills = !images || cameo;
+      await expect(root.locator(pills ? ".of-tap-pill" : ".of-tap-zone")).toHaveCount(count);
 
       await expect(root.getByRole("button", { name: "Remind Me" })).toBeVisible();
       await expect(root.getByRole("button", { name: "Caring message" })).toHaveCount(0);
@@ -1531,7 +1656,12 @@ for (const [images, photo] of [
           await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
           const layout = await homeLayout(root);
           const at = `${size.width}x${size.height}${caring ? " with Caring message" : ""}`;
-          expect(layout.targets, at).toHaveLength(3);
+          expect(layout.targets, at).toHaveLength(count);
+          // Four or five pills wrap to two rows at most (the medallion keeps room for two), never more.
+          if (pills) {
+            const rows = new Set(layout.targets.map((target) => Math.round(target.box.y))).size;
+            expect(rows, `pill rows at ${at}`).toBeLessThanOrEqual(2);
+          }
           expect(layout.rail, at).toHaveLength(caring ? 7 : 6);
           expect(layout.rail.map((button) => button.name).slice(4), at).toEqual(
             caring

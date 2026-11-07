@@ -28,8 +28,16 @@ const lines = z.array(line).max(16);
 const times = z.object({ morning: lines, day: lines, night: lines });
 const claw = z.object({ cheer: lines, cheat: lines, win: lines, miss: lines, plush: lines });
 
+type Times = Record<TimeOfDay, string[]>;
+
 export interface LinePackReply {
-  tap: { head: Record<TimeOfDay, string[]>; hand: Record<TimeOfDay, string[]>; heart: Record<TimeOfDay, string[]> };
+  /** #2152: cheek in every pack and crotch under NSFW Heat; normalizeLinePack asks for the zones the world opens. */
+  tap: { head: Times; cheek?: Times; heart: Times; hand: Times; crotch?: Times };
+  /**
+   * #2152: a face per zone, decoration only (C/lib/tap-mood.ts ZONE_FACE stands in), so any value parses and
+   * normalizeLinePack keeps the faces that are one of the five: an odd one never costs a repair turn.
+   */
+  faces?: unknown;
   annoyed: string[];
   cold: string[];
   comfort?: string[] | null;
@@ -37,7 +45,8 @@ export interface LinePackReply {
 }
 
 export const LinePackReplySchema: ZodType<LinePackReply> = z.object({
-  tap: z.object({ head: times, hand: times, heart: times }),
+  tap: z.object({ head: times, cheek: times.optional(), heart: times, hand: times, crotch: times.optional() }),
+  faces: z.unknown().optional(),
   annoyed: lines,
   cold: lines,
   comfort: lines.nullable().optional(),

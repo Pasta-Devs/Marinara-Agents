@@ -20,7 +20,8 @@
 //                                       his birthday scene, with no model call, and the Shop gift given. 404 for no
 //                                       birthday to celebrate (or an unknown love interest or gift), 409 `conflict`
 //                                       for a gift she has none of, 409 `locked` for the aphrodisiac under SFW Heat
-// GET  /runs/:run/lis/:li/lines        → LinesView: his pre-written lines (cold only during a rupture)
+// GET  /runs/:run/lis/:li/lines        → LinesView: his pre-written lines (cold only during a rupture), from a pack
+//                                       the world's content allows (#2152)
 // Reading Home queues what it is missing in the background and never waits for it: each love interest's line pack
 // (the first visit backfills every one), and the cut-outs of his worn look and its ready faces and of each painted
 // figurine (S/art/figurine.ts). It never paints a figurine. A note may fail with 503 `no-connection`, 422 `declined`
@@ -55,12 +56,13 @@ import {
   type OtomeRouter,
   type RouteDeps,
 } from "../http.js";
-import { isLiId, runDocTarget, stateId, unitId } from "../ids.js";
+import { isLiId, runDocTarget, stateId, unitId, worldId } from "../ids.js";
 import { readThread, unreadCount } from "../phone/chat.js";
 import { GROUP_THREAD, THOUGHTS_MAX } from "../../../../../client/src/features/otome-forge/shared/home.js";
 import { isGiftId } from "../../../../../client/src/features/otome-forge/shared/shop.js";
 import { normalizeState, readRun, readyFaces } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
+import { normalizeWorld } from "../schemas/world.js";
 import { albumCgs } from "./album.js";
 import { noticingLooks } from "./wardrobe.js";
 
@@ -208,7 +210,7 @@ export function registerHomeRoutes(router: OtomeRouter, deps: HomeRouteDeps): vo
         note: note && noteFits(note, liState) ? toNoteView(note) : null,
         look,
         faces,
-        lines: { ready: !!unit && !!liState && !needsLines(unit, liState.stage) },
+        lines: { ready: !!unit && !!liState && !needsLines(unit, liState.stage, run.world.content) },
         rupture: !!liState?.rupture,
         unread: threads.reduce((sum, thread) => sum + (thread ? unreadCount(thread) : 0), 0),
         backdrop: backdropOf(albumCgs(run, items), run.world, li),
@@ -285,13 +287,15 @@ export function registerHomeRoutes(router: OtomeRouter, deps: HomeRouteDeps): vo
     handle(async (request) => {
       const { runId } = runParam(request);
       const li = liParam(request);
-      const [unit, state] = await Promise.all([
+      const [unit, state, world] = await Promise.all([
         store.readDoc(unitId(runId, li), normalizeUnit),
         store.readDoc(stateId(runId), normalizeState),
+        // #2152: the world's Heat decides which packs Home may serve and which zones they hold.
+        store.readDoc(worldId(runId), normalizeWorld),
       ]);
       const liState = state?.lis[li];
-      if (!unit || !liState) throw liNotFound();
-      const view = linesView(unit, liState);
+      if (!unit || !liState || !world) throw liNotFound();
+      const view = linesView(unit, liState, world.content);
       if (!view.ready) {
         void ensureLinePacks(deps, runId, [li], { debugMode: debugModeOf(request) }).catch(
           warn("Line pack not queued"),

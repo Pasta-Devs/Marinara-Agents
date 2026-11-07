@@ -76,7 +76,7 @@ function reply(messages: Messages): string {
       });
     case "pack":
       return json({
-        tap: { head: times("Head"), hand: times("Hand"), heart: times("Heart") },
+        tap: { head: times("Head"), cheek: times("Cheek"), hand: times("Hand"), heart: times("Heart") },
         annoyed: many("Enough", 4),
         cold: many("Cold", 6),
         comfort: many("Rest", 8),

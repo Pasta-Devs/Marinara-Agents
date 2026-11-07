@@ -19,6 +19,7 @@ import type {
   Unit,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { STICKER_EMOTION, STICKERS_PER_LI } from "../../../../../client/src/features/otome-forge/shared/stickers.js";
+import { FACES } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import {
   BIRTHDAY_PATTERN,
   MASK_TELLS_MAX,
@@ -197,19 +198,30 @@ export function normalizeBible(data: unknown): Bible | null {
 const LineList = z.array(z.string().min(1).max(300)).max(12);
 
 const TimesSchema = z.object({ morning: LineList, day: LineList, night: LineList });
+const ZoneFace = z.enum(FACES).optional();
 
+// #2152: cheek, crotch, the contract and faces are optional, so a pack written before 0.14.0 still reads.
 export const StageLinesSchema: ZodType<StageLines> = z.object({
   stage: z.number().int().min(1).max(6),
-  tap: z.object({ head: TimesSchema, hand: TimesSchema, heart: TimesSchema }),
+  tap: z.object({
+    head: TimesSchema,
+    cheek: TimesSchema.optional(),
+    heart: TimesSchema,
+    hand: TimesSchema,
+    crotch: TimesSchema.optional(),
+  }),
   annoyed: LineList,
   cold: LineList,
   at: z.string(),
+  contract: z.string().max(40).optional(),
+  faces: z.object({ head: ZoneFace, cheek: ZoneFace, heart: ZoneFace, hand: ZoneFace, crotch: ZoneFace }).optional(),
 });
 
 export const FixedLinesSchema: ZodType<FixedLines> = z.object({
   comfort: LineList,
   claw: z.object({ cheer: LineList, cheat: LineList, win: LineList, miss: LineList, plush: LineList }),
   at: z.string(),
+  contract: z.string().max(40).optional(),
 });
 
 const STAGE_KEYS: readonly ArcStageKey[] = ["1", "2", "3", "4", "5", "6"];
